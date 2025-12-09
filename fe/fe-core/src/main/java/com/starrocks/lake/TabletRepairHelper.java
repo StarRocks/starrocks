@@ -26,6 +26,7 @@ import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.system.ComputeNode;
+import com.starrocks.thrift.TStatusCode;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -88,7 +89,7 @@ public class TabletRepairHelper {
                 GetTabletMetadatasResponse response = responses.get(i).get(LakeService.TIMEOUT_GET_TABLET_STATS,
                         TimeUnit.MILLISECONDS);
 
-                if (response.status.statusCode != 0) {
+                if (response.status.statusCode != TStatusCode.OK.getValue()) {
                     List<String> errMsgs = response.status.errorMsgs;
                     throw new StarRocksException(errMsgs != null && !errMsgs.isEmpty() ? errMsgs.get(0) : "unknown error");
                 }
@@ -96,11 +97,10 @@ public class TabletRepairHelper {
                 for (TabletMetadatas tm : response.tabletMetadatas) {
                     long tabletId = tm.tabletId;
                     int statusCode = tm.status.statusCode;
-                    if (statusCode == 0) {
+                    if (statusCode == TStatusCode.OK.getValue()) {
                         Map<Long, TabletMetadataPB> versionMetadatas = tm.versionMetadatas;
                         tabletVersionMetadatas.put(tabletId, versionMetadatas);
-                    } else if (statusCode != 31) {
-                        // status code 31 is not found
+                    } else if (statusCode != TStatusCode.NOT_FOUND.getValue()) {
                         List<String> errMsgs = tm.status.errorMsgs;
                         throw new StarRocksException(errMsgs != null && !errMsgs.isEmpty() ? errMsgs.get(0) : "unknown error");
                     }
@@ -109,7 +109,7 @@ public class TabletRepairHelper {
                 if (LOG.isDebugEnabled()) {
                     Map<Long, List<Long>> tabletVersions = Maps.newHashMap();
                     for (TabletMetadatas tm : response.tabletMetadatas) {
-                        if (tm.status.statusCode == 0) {
+                        if (tm.status.statusCode == TStatusCode.OK.getValue()) {
                             tabletVersions.put(tm.tabletId, Lists.newArrayList(tm.versionMetadatas.keySet()));
                         }
                     }
