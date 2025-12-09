@@ -397,7 +397,7 @@ ALTER MATERIALIZED VIEW <mv_name> SET ("bloom_filter_columns" = "");
 
   有关通用分区表达式 TTL 和 `force_mv` 语义的详细指导，参考 [示例六](#示例)。
 
-- `refresh_mode`：在 StarRocks v4.1 中引入，`refresh_mode` 参数用于控制物化视图（MV）的刷新方式。默认值为 `PCT`。可用模式包括：
+- `refresh_mode`：控制物化视图的刷新方式。StarRocks v4.1 中引入。有效值：
 
   - `PCT`：（默认）对于分区物化视图，当基表数据发生变化时，仅刷新受影响的分区，保证该分区的数据一致性。对于非分区物化视图，基表任何数据变化都会触发全量刷新。
   - `AUTO`：如果可能，会尝试使用增量刷新。如果物化视图的查询定义不支持增量刷新，则会自动回退到 `PCT` 模式进行本次操作。在进行了一次 PCT 刷新后，如果条件允许，后续刷新有可能再次回到增量刷新模式。
@@ -476,14 +476,14 @@ ALTER MATERIALIZED VIEW <mv_name> SET ("bloom_filter_columns" = "");
 
 ## 增量物化视图
 
-StarRocks v4.1 引入了 `refresh_mode` 参数，用于控制物化视图（MV）的刷新行为。您可以在创建每个物化视图时指定 `refresh_mode`。如果在创建物化视图时未设置 `refresh_mode`，系统将使用由配置参数 `Config.default_mv_refresh_mode`（默认值为 `pct`）决定的默认刷新模式。请注意以下使用说明：
+StarRocks v4.1 引入了 `refresh_mode` 参数，用于控制物化视图的刷新行为。您可以在创建每个物化视图时指定 `refresh_mode`。如果在创建物化视图时未设置 `refresh_mode`，系统将使用由配置参数 `Config.default_mv_refresh_mode`（默认值为 `pct`）决定的默认刷新模式。请注意以下使用说明：
 
 - 调整 `refresh_mode` 时存在以下限制：
-  - 不能将传统物化视图（即类型为 `pct` 的视图）更改为 `auto` 或 `incremental` 刷新模式。如需更改，必须重建该物化视图。
-  - 当将物化视图从 `auto` 或 `incremental` 类型修改时，系统会检查是否支持增量刷新。如果不支持，则操作失败。
+  - 不能将传统物化视图（即类型为 `PCT` 的视图）更改为 `AUTO` 或 `INCREMENTAL` 刷新模式。如需更改，必须重建该物化视图。
+  - 当将物化视图从 `AUTO` 或 `INCREMENTAL` 类型修改时，系统会检查是否支持增量刷新。如果不支持，则操作失败。
 - 增量物化视图不支持指定分区刷新：
-  - 对于 `INCREMENTAL` 类型的 MV，如果尝试指定分区刷新，会抛出异常。
-  - 对于 `AUTO` 类型的 MV，StarRocks 会自动切换到 `PCT` 模式执行刷新操作。
+  - 对于 `INCREMENTAL` 类型的物化视图，如果尝试指定分区刷新，会抛出异常。
+  - 对于 `AUTO` 类型的物化视图，StarRocks 会自动切换到 `PCT` 模式执行刷新操作。
 
 ### 支持的增量算子
 
@@ -498,17 +498,19 @@ StarRocks v4.1 引入了 `refresh_mode` 参数，用于控制物化视图（MV�
 | Select                          | 支持                                                                                                              |
 | From `<Table>`                  | 仅支持 Iceberg/Paimon 表，不支持其他类型表                                                                              |
 | Filter                          | 支持                                                                                                              |
-| Group By 聚合                   | 支持  <br> - 暂不支持含有 `distinct` 的聚合函数。<br> - 暂不支持无 GROUP BY 的聚合。     |
+| Group By 聚合                   | 支持  <ul><li>暂不支持含有 `distinct` 的聚合函数。</li><li>暂不支持无 GROUP BY 的聚合。</li></ul>     |
 | Inner Join                      | 支持                                                                                                              |
 | Union All                       | 支持                                                                                                              |
 | Left/Right/Full Outer Join      | 暂不支持                                                                                                          |
 
-**注意：**
+:::note
 - 虽然上述大部分操作符支持增量刷新，但某些操作符组合当前存在以下限制：  
   - 支持 join 后聚合和 union 后聚合的增量计算。
   - 但不支持聚合后做 join 或聚合后做 union all 的增量计算。
+:::
 
 ### 示例
+
 ```
 CREATE MATERIALIZED VIEW test_mv1 PARTITION BY dt 
 REFRESH DEFERRED MANUAL 
@@ -534,7 +536,7 @@ FROM
  
 REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
 ```
-information_schema.task_runs 表中的 EXTRA_MESSAGE 列已新增 refreshMode 字段，用于标识该 TaskRun 的刷新模式。更多细节请参考 [materialized_view_task_run_details](../../../using_starrocks/async_mv/materialized_view_task_run_details.md)。
+`information_schema.task_runs` 表中的 `EXTRA_MESSAGE` 列已新增 `refreshMode` 字段，用于标识该 `TaskRun` 的刷新模式。更多细节请参考 [materialized_view_task_run_details](../../../using_starrocks/async_mv/materialized_view_task_run_details.md)。
 ```
 mysql> select * from information_schema.task_runs order by CREATE_TIME desc limit 1\G;
      QUERY_ID: 0199f00e-2152-70a8-83da-26d6a8321ac6
@@ -552,7 +554,6 @@ ERROR_MESSAGE: NULL
 EXTRA_MESSAGE: {"forceRefresh":false,"mvPartitionsToRefresh":["p20250718000000","p20250715000000","p20250721000000","p20250615000000","p20250618000000","p20250524000000","p20250621000000","p20250518000000"],"refBasePartitionsToRefreshMap":{"t1":["p20250718000000","p20250721000000","p20250618000000","p20250524000000","p20250621000000","p20250518000000","p20250715000000","p20250615000000","pNULL","p20250521000000","p20250624000000","p20250724000000","p20250515000000"]},"basePartitionsToRefreshMap":{},"processStartTime":1760669082430,"executeOption":{"priority":80,"taskRunProperties":{"FORCE":"false","mvId":"78190","warehouse":"default_warehouse"},"isMergeRedundant":false,"isManual":true,"isSync":true,"isReplay":false},"planBuilderMessage":{},"refreshMode":"INCREMENTAL"}
    PROPERTIES: {"FORCE":"false","mvId":"78190","warehouse":"default_warehouse"}
        JOB_ID: 0199f00e-2152-76b0-987c-76a9a19e77f9
-
 ```
 
 ## 示例
