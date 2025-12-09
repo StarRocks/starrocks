@@ -429,10 +429,10 @@ public class LoadJobTest {
         loadJob.setWarehouseId(1L);
 
         List<Comparable> showInfo = loadJob.getShowInfo();
-        Assertions.assertEquals("Warehouse id: 1 not exist.", showInfo.get(showInfo.size() - 1));
+        Assert.assertEquals("Warehouse id: 1 not exist.", showInfo.get(showInfo.size() - 1));
 
         TLoadInfo loadInfo = loadJob.toThrift();
-        Assertions.assertEquals("Warehouse id: 1 not exist.", loadInfo.getWarehouse());
+        Assert.assertEquals("Warehouse id: 1 not exist.", loadInfo.getWarehouse());
     }
 
     @Test
