@@ -529,7 +529,8 @@ inline std::string cancel_reason_to_string(::starrocks::PPlanFragmentCancelReaso
 // Normal cancellations (LIMIT_REACH, QUERY_FINISHED) should not be logged to reduce log noise.
 // Exceptional cancellations (INTERNAL_ERROR, TIMEOUT, USER_CANCEL, UnknownReason) should be logged.
 inline bool should_log_cancel_reason(::starrocks::PPlanFragmentCancelReason reason) {
-    return reason != LIMIT_REACH && reason != QUERY_FINISHED;
+    return reason != ::starrocks::PPlanFragmentCancelReason::LIMIT_REACH &&
+           reason != ::starrocks::PPlanFragmentCancelReason::QUERY_FINISHED;
 }
 
 template <typename T>
