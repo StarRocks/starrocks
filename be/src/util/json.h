@@ -12,8 +12,8 @@
 #include "common/statusor.h"
 #include "fmt/format.h"
 #include "glog/logging.h"
-#include "util/slice.h"
 #include "simdjson.h"
+#include "util/slice.h"
 
 namespace arangodb::velocypack {
 class Slice;
@@ -21,7 +21,6 @@ class Builder;
 class Exception;
 enum class ValueType : uint8_t;
 } // namespace arangodb::velocypack
-
 
 namespace starrocks {
 
