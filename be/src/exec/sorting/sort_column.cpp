@@ -639,7 +639,7 @@ Status stable_sort_and_tie_columns(const std::atomic<bool>& cancel, const Column
     std::pair<int, int> range{0, num_rows};
 
     for (int col_index = 0; col_index < columns.size(); col_index++) {
-        const ColumnPtr& column = columns[col_index];
+        ColumnPtr column = columns[col_index];
         RETURN_IF_ERROR(sort_and_tie_column(cancel, column, sort_desc.get_column_desc(col_index), *small_perm, tie,
                                             range, true));
     }

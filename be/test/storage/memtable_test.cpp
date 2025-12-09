@@ -422,34 +422,21 @@ TEST_F(MemTableTest, testPrimaryKeysNullableSortKey) {
     rs_opts.sorted = false;
     rs_opts.use_page_cache = false;
     rs_opts.stats = &stats;
-    std::unordered_map<int64_t, size_t> expected_rows;
-    expected_rows.reserve(expected_chunk->num_rows());
-    auto expected_pk_col = expected_chunk->get_column_by_index(0);
-    for (size_t i = 0; i < expected_chunk->num_rows(); ++i) {
-        expected_rows.emplace(expected_pk_col->get(i).get_int64(), i);
-    }
     auto itr = rowset->new_iterator(read_schema, rs_opts);
     ChunkPtr read_chunk = ChunkHelper::new_chunk(read_schema, 4096);
     size_t pkey_read = 0;
-    std::unordered_set<int64_t> seen_pks;
     while (true) {
         Status st = (*itr)->get_next(read_chunk.get());
         if (st.is_end_of_file()) {
             break;
         }
         for (auto i = 0; i < read_chunk->num_rows(); ++i) {
-            auto pk = read_chunk->get_column_by_index(0)->get(i).get_int64();
-            auto it = expected_rows.find(pk);
-            ASSERT_TRUE(it != expected_rows.end()) << "unexpected pk: " << pk;
-            EXPECT_TRUE(seen_pks.insert(pk).second) << "duplicate pk: " << pk;
-            EXPECT_EQ(expected_chunk->get(it->second).compare((*itr)->schema(), read_chunk->get(i)), 0)
-                    << ", expected pk: " << pk << ", actual index: " << i;
+            EXPECT_EQ(expected_chunk->get(pkey_read + i).compare((*itr)->schema(), read_chunk->get(i)), 0);
         }
         pkey_read += read_chunk->num_rows();
         read_chunk->reset();
     }
     ASSERT_EQ(n, pkey_read);
-    ASSERT_EQ(expected_rows.size(), seen_pks.size());
 }
 
 TEST_F(MemTableTest, testPrimaryKeysSizeLimitSinglePK) {

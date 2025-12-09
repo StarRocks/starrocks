@@ -198,10 +198,6 @@ protected:
         ImmutPtr() = default;
         ImmutPtr(std::nullptr_t) {}
 
-        const T* get() const { return this->_t; }
-        const T* operator->() const { return this->_t; }
-        const T& operator*() const { return *get(); }
-
     private:
         using Base = RCPtr<const T>;
 
@@ -235,8 +231,8 @@ protected:
         const T& operator*() const { return *value; }
         T& operator*() { return *get(); }
 
-        operator const ImmutPtr<T>&() const { return value; }
-        operator ImmutPtr<T>&() { return value; }
+        operator const ImmutPtr<T> &() const { return value; }
+        operator ImmutPtr<T> &() { return value; }
 
         operator bool() const { return value.get() != nullptr; }
         bool operator!() const { return value.get() == nullptr; }

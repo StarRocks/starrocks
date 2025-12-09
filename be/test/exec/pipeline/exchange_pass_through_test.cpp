@@ -133,14 +133,14 @@ TEST_F(ExchangePassThroughTest, test_exchange_pass_through) {
     while (sent_bytes + chunk_bytes < config::max_transmit_batched_bytes) {
         sent_bytes += chunk_bytes;
         exchange_sink->push_chunk(_runtime_state.get(), _chunk_builder.get_next());
-        std::unique_ptr<Chunk> received_chunk = nullptr;
+        ChunkUniquePtr received_chunk = nullptr;
         std::ignore = _recvr->get_chunk_for_pipeline(&received_chunk, driver_sequence);
         EXPECT_TRUE(received_chunk == nullptr);
     }
 
     // once the sent bytes exceeds max_transmit_batched_bytes, the data is sent.
     exchange_sink->push_chunk(_runtime_state.get(), _chunk_builder.get_next());
-    std::unique_ptr<Chunk> received_chunk = nullptr;
+    ChunkUniquePtr received_chunk = nullptr;
     std::ignore = _recvr->get_chunk_for_pipeline(&received_chunk, driver_sequence);
     EXPECT_TRUE(received_chunk != nullptr);
 

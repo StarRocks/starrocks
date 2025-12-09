@@ -32,7 +32,6 @@ class ChunkPB;
 class DatumTuple;
 class ChunkExtraData;
 using ChunkExtraDataPtr = std::shared_ptr<ChunkExtraData>;
-
 /**
  * ChunkExtraData is an extra data which can be used to extend Chunk and 
  * attach extra infos beside the schema. eg, In Stream MV scenes, 
