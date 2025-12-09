@@ -533,8 +533,8 @@ Status RowsetColumnUpdateState::_fill_default_columns(const TabletSchemaCSPtr& t
                                                                  type_info, tablet_column.length(), row_cnt);
             ColumnIteratorOptions iter_opts;
             RETURN_IF_ERROR(default_value_iter->init(iter_opts));
-            RETURN_IF_ERROR(
-                    default_value_iter->fetch_values_by_rowid(nullptr, row_cnt, (*columns)[column_ids[i]]->as_mutable_raw_ptr()));
+            RETURN_IF_ERROR(default_value_iter->fetch_values_by_rowid(nullptr, row_cnt,
+                                                                      (*columns)[column_ids[i]]->as_mutable_raw_ptr()));
         } else {
             TRY_CATCH_BAD_ALLOC((*columns)[column_ids[i]]->as_mutable_raw_ptr()->append_default(row_cnt));
         }
