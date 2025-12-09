@@ -2570,6 +2570,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
                     Set<String> mvRefreshProfileKeys = ImmutableSet.of(
                             "MVRefreshPrepare",
                             "MVTextRewrite",
+                            "MVRefreshInitSnapshotBaseTables",
                             "MVRefreshDoWholeRefresh",
                             "MVRefreshComputeCandidatePartitions",
                             "MVRefreshSyncAndCheckPartitions",

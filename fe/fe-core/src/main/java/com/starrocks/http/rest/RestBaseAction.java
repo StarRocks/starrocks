@@ -229,7 +229,7 @@ public class RestBaseAction extends BaseAction {
     public void redirectTo(BaseRequest request, BaseResponse response, TNetworkAddress addr)
             throws DdlException {
         URI resultUriObj = getRedirectToUri(request, addr);
-        response.updateHeader(HttpHeaderNames.LOCATION.toString(), resultUriObj.toString());
+        response.updateHeader(HttpHeaderNames.LOCATION.toString(), resultUriObj.toASCIIString());
         writeResponse(request, response, HttpResponseStatus.TEMPORARY_REDIRECT);
     }
 

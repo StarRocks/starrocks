@@ -172,10 +172,8 @@ public class Log4jConfig extends XmlConfiguration {
             "      </DefaultRolloverStrategy>\n" +
             "    </RollingFile>\n" +
 
-            "   <RollingFile name=\"LoadsHistoryFile\" fileName=\"${loads_history_log_dir}/fe.loads_history.log\" filePattern=\"${loads_history_log_dir}/fe.loads_history.log.${loads_history_file_pattern}-%i\">\n" +
-            "      <PatternLayout charset=\"UTF-8\">\n" +
-            "        <Pattern>%d{yyyy-MM-dd HH:mm:ss.SSSXXX} [%c{1}] %m%n</Pattern>\n" +
-            "      </PatternLayout>\n" +
+            "   <RollingFile name=\"LoadsHistoryFile\" fileName=\"${loads_history_log_dir}/fe.loads_history.log\" " +
+            "       filePattern=\"${loads_history_log_dir}/fe.loads_history.log.${loads_history_file_pattern}-%i\">\n" +
             "      <Policies>\n" +
             "        <TimeBasedTriggeringPolicy/>\n" +
             "        <SizeBasedTriggeringPolicy size=\"${loads_history_log_roll_size_mb}MB\"/>\n" +
