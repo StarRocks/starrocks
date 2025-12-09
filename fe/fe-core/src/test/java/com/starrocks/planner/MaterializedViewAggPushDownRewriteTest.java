@@ -1372,9 +1372,6 @@ public class MaterializedViewAggPushDownRewriteTest extends MaterializedViewTest
                 "        AND event_type = 'TYPE_A'\n" +
                 "        AND channel IN ('mobile'))\n" +
                 "GROUP BY 1";
-        connectContext.getSessionVariable().setOptimizerExecuteTimeout(30000000);
-        isOutputTraceLog = true;
-        isOutputSystemOut = true;
         String plan = getFragmentPlan(sql);
         PlanTestBase.assertContains(plan, "mv_hourly_events");
     }
