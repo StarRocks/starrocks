@@ -31,6 +31,7 @@ jobs:
       TEST_PR: ${{ steps.check_test_case.outputs.TEST_PR }}
       PRE_COMMIT: ${{ steps.check_blacklist.outputs.pre_commit }}
       PRE_COMMIT_CONCLUSION: ${{ steps.check_blacklist.outputs.pre_commit_conclusion }}
+      PRE_COMMIT_JOB_STATUS_DICT: ${{ steps.check_blacklist.outputs.pre_commit_job_status_dict }}
       ONLY_BE_TEST: ${{ steps.check_blacklist.outputs.ONLY_BE_TEST }}
       ONLY_FE_TEST: ${{ steps.check_blacklist.outputs.ONLY_FE_TEST }}
     steps:
@@ -91,6 +92,7 @@ jobs:
           AUTHOR: ${{ github.event.pull_request.user.login }}
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull >/dev/null
+          git checkout commit-pipeline && git pull
           ./scripts/check-blacklist.sh
 
       - name: Check Test Case
@@ -223,12 +225,12 @@ jobs:
             be:
               - 'be/!(test)**'
               - 'gensrc/**'
-              - 'run-be-ut.sh'
               - 'build.sh'
               - 'thirdparty/**'
               - 'docker/dockerfiles/dev-env/dev-env.Dockerfile'
             ut:
               - 'be/test/**'
+              - 'run-be-ut.sh'
             thirdparty:
               - 'thirdparty/**'
               - 'docker/dockerfiles/dev-env/dev-env.Dockerfile'
@@ -247,32 +249,6 @@ jobs:
           path: ./be-path-filter/
           retention-days: 3
           overwrite: true
-
-      - uses: dorny/paths-filter@v3
-        id: path-filter-commit
-        with:
-          list-files: shell
-          base: ${{ github.event.pull_request.head.sha }}~1
-          ref: ${{ github.event.pull_request.head.sha }}
-          filters: |
-            be:
-              - 'be/!(test)**'
-              - 'gensrc/**'
-              - 'run-be-ut.sh'
-              - 'build.sh'
-              - 'thirdparty/**'
-              - 'docker/dockerfiles/dev-env/dev-env.Dockerfile'
-            ut:
-              - 'be/test/**'
-            thirdparty:
-              - 'thirdparty/**'
-              - 'docker/dockerfiles/dev-env/dev-env.Dockerfile'
-      - name: test
-        run: |
-          echo ${{ steps.path-filter-commit.outputs.be }}
-          echo ${{ steps.path-filter-commit.outputs.ut }}
-          echo ${{ steps.path-filter-commit.outputs.thirdparty }}
-          exit 1
 
   clang-format:
     runs-on: [self-hosted, light]
@@ -780,6 +756,10 @@ jobs:
       IMAGE_CACHE_ID: ${{ needs.thirdparty-info.outputs.ubuntu_image_cache_id }}
       LINUX_DISTRO: ubuntu
       GH_TOKEN: ${{ github.token }}
+      ONLY_BE_TEST: ${{ needs.basic-checker.outputs.ONLY_BE_TEST }}
+      ONLY_FE_TEST: ${{ needs.basic-checker.outputs.ONLY_FE_TEST }}
+      PRE_COMMIT: ${{ needs.basic-checker.outputs.PRE_COMMIT }}
+      PRE_COMMIT_CONCLUSION: ${{ needs.basic-checker.outputs.PRE_COMMIT_CONCLUSION }}
     outputs:
       build_output_tar: ${{ steps.run_build.outputs.OUTPUT_TAR }}
       base_version: ${{ steps.run_build.outputs.BASE_VERSION }}
@@ -790,12 +770,12 @@ jobs:
       always() && 
       needs.thirdparty-info.result != 'failure' && 
       needs.fe-codestyle-check.result != 'failure' && 
-      (needs.thirdparty-info.result == 'success' || needs.fe-codestyle-check.result == 'success' || needs.test-checker.result == 'success')
+      (needs.thirdparty-info.result == 'success' || needs.fe-codestyle-check.result == 'success' || needs.test-checker.result == 'success') &&
+      (needs.basic-checker.outputs.ONLY_BE_TEST != 'true' || needs.basic-checker.outputs.ONLY_FE_TEST != 'true' || needs.basic-checker.outputs.PRE_COMMIT_CONCLUSION != 'success')
     steps:
       - name: CLEAN
         run: |
           rm -rf ${{ github.workspace }} && mkdir -p ${{ github.workspace }}
-          exit 1
 
       - name: check sync
         id: check-sync
