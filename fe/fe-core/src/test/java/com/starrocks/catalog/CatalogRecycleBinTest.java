@@ -28,6 +28,7 @@ import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.VariableMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.thrift.TStorageMedium;
@@ -38,6 +39,8 @@ import com.starrocks.type.TypeFactory;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
+import mockit.Mock;
+import mockit.MockUp;
 import mockit.Mocked;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
@@ -232,6 +235,7 @@ public class CatalogRecycleBinTest {
                 result = null;
 
                 globalStateMgr.getCurrentState().getClusterSnapshotMgr();
+                minTimes = 0;
                 result = clusterSnapshotMgr;
             }
         };
@@ -429,6 +433,36 @@ public class CatalogRecycleBinTest {
     }
 
     @Test
+    public void testCheckValidDeletionByClusterSnapshotSharedNothingMode(@Mocked ClusterSnapshotMgr clusterSnapshotMgr) {
+        CatalogRecycleBin recycleBin = new CatalogRecycleBin();
+        long dbId = 12345L;
+        // put a recycle time to make sure the old logic would call ClusterSnapshotMgr
+        recycleBin.idToRecycleTime.put(dbId, System.currentTimeMillis());
+
+        new MockUp<RunMode>() {
+            @Mock
+            public boolean isSharedNothingMode() {
+                return true;
+            }
+
+            @Mock
+            public boolean isSharedDataMode() {
+                return false;
+            }
+        };
+
+        new Expectations() {
+            {
+                clusterSnapshotMgr.isDeletionSafeToExecute(anyLong);
+                times = 0;
+            }
+        };
+
+        boolean result = Deencapsulation.invoke(recycleBin, "checkValidDeletionByClusterSnapshot", dbId);
+        Assertions.assertTrue(result);
+    }
+
+    @Test
     public void testRecycleDb(@Mocked GlobalStateMgr globalStateMgr, @Mocked EditLog editLog) {
         Database db1 = new Database(111, "uno");
         Database db2SameName = new Database(22, "dos"); // samename
@@ -478,6 +512,7 @@ public class CatalogRecycleBinTest {
         new Expectations() {
             {
                 globalStateMgr.getCurrentState().getClusterSnapshotMgr();
+                minTimes = 0;
                 result = clusterSnapshotMgr;
             }
         };
@@ -543,6 +578,7 @@ public class CatalogRecycleBinTest {
         new Expectations() {
             {
                 globalStateMgr.getCurrentState().getClusterSnapshotMgr();
+                minTimes = 0;
                 result = clusterSnapshotMgr;
             }
         };
@@ -587,6 +623,7 @@ public class CatalogRecycleBinTest {
         new Expectations() {
             {
                 globalStateMgr.getCurrentState().getClusterSnapshotMgr();
+                minTimes = 0;
                 result = clusterSnapshotMgr;
             }
         };
@@ -676,6 +713,7 @@ public class CatalogRecycleBinTest {
         new Expectations() {
             {
                 globalStateMgr.getCurrentState().getClusterSnapshotMgr();
+                minTimes = 0;
                 result = clusterSnapshotMgr;
             }
         };
@@ -1068,6 +1106,7 @@ public class CatalogRecycleBinTest {
                 result = globalStateMgr;
 
                 globalStateMgr.getClusterSnapshotMgr();
+                minTimes = 0;
                 result = clusterSnapshotMgr;
 
                 globalStateMgr.getEditLog();
