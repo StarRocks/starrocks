@@ -39,6 +39,15 @@ Status fromVPackException(const vpack::Exception& e) {
     return Status::JsonFormatError(Slice(e.what()));
 }
 
+template <class Ret, class Fn>
+static inline StatusOr<Ret> callVPack(Fn fn) {
+    try {
+        return fn();
+    } catch (const vpack::Exception& e) {
+        return fromVPackException(e);
+    }
+}
+
 JsonType fromVPackType(vpack::ValueType type) {
     switch (type) {
     case vpack::ValueType::Null:

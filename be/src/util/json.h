@@ -143,12 +143,6 @@ public:
     int64_t hash() const;
 
 private:
-    template <class Ret, class Fn>
-    StatusOr<Ret> callVPack(Fn fn);
-
-    template <class Ret, class Fn>
-    StatusOr<Ret> callVPack(Fn fn) const;
-
     // serialized binary of json
     // TODO(mofei) store vpack::Slice
     std::string binary_;
@@ -159,24 +153,6 @@ JsonType fromVPackType(vpack::ValueType type);
 vpack::Slice noneJsonSlice();
 vpack::Slice nullJsonSlice();
 vpack::Slice emptyStringJsonSlice();
-
-template <class Ret, class Fn>
-inline StatusOr<Ret> JsonValue::callVPack(Fn fn) {
-    try {
-        return fn();
-    } catch (const std::exception& e) {
-        return Status::JsonFormatError(Slice(e.what()));
-    }
-}
-
-template <class Ret, class Fn>
-inline StatusOr<Ret> JsonValue::callVPack(Fn fn) const {
-    try {
-        return fn();
-    } catch (const std::exception& e) {
-        return Status::JsonFormatError(Slice(e.what()));
-    }
-}
 
 // output
 std::ostream& operator<<(std::ostream& os, const JsonValue& json);
