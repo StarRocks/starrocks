@@ -294,4 +294,11 @@ public class ExpressionAnalyzerTest extends PlanTestBase {
         verifyFail.accept("date_part(123, '2023-01-01')", "must be a constant string literal");
         verifyFail.accept("date_part('invalid_unit', '2023-01-01')", "Unsupported unit for DATE_PART");
     }
+
+    @Test
+    public void testCurrentWarehouse() throws Exception {
+        String currentWarehouseName = connectContext.getCurrentWarehouseName();
+        String plan = getFragmentPlan("select current_warehouse()");
+        assertContains(plan, currentWarehouseName);
+    }
 }
