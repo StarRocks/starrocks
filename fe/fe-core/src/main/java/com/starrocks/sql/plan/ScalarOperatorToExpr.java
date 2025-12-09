@@ -517,6 +517,7 @@ public class ScalarOperatorToExpr {
                 case "current_user":
                 case "current_role":
                 case "current_group":
+                case "current_warehouse":
                 case "session_id":
                     callExpr = new InformationFunction(fnName,
                             ((ConstantOperator) call.getChild(0)).getVarchar(),

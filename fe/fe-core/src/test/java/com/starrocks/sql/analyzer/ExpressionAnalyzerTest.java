@@ -239,4 +239,11 @@ public class ExpressionAnalyzerTest extends PlanTestBase {
         Assertions.assertThrows(SemanticException.class, () -> visitor.visitLikePredicate(likePredicate,
                 new Scope(RelationId.anonymous(), new RelationFields())));
     }
+
+    @Test
+    public void testCurrentWarehouse() throws Exception {
+        String currentWarehouseName = connectContext.getCurrentWarehouseName();
+        String plan = getFragmentPlan("select current_warehouse()");
+        assertContains(plan, currentWarehouseName);
+    }
 }
