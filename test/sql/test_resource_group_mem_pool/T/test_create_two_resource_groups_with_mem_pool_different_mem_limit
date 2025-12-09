@@ -20,7 +20,6 @@ with (
 );
 
 show verbose resource groups all;
-show verbose resource groups all;
 
 [UC] drop resource group shared_resource_group_for_alex;
 [UC] drop resource group shared_resource_group_for_brad;
