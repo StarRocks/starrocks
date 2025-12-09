@@ -4,8 +4,7 @@ ffund_union string,
  famt bigint, 
   fuser_id string,
   fdate bigint
-)
-PARTITION BY range(fdate) (
+)PARTITION BY range(fdate) (
     PARTITION p1 VALUES LESS THAN ("20230703"),
     PARTITION p2 VALUES LESS THAN ("20230706"),
     PARTITION p3 VALUES LESS THAN ("20230716")
@@ -14,19 +13,22 @@ PARTITION BY range(fdate) (
   PROPERTIES (
     "replication_num" = "1"
 );
-
+-- result:
+-- !result
 insert into  dal_aaaa (ffund_union,famt,fuser_id,fdate)
 values ('xfdfdf',100,'xxxxx',20230702);
+-- result:
+-- !result
 insert into  dal_aaaa (ffund_union,famt,fuser_id,fdate)
 values ('xfdafdf',100,'xxxdxx',20230715);
-
+-- result:
+-- !result
 create table dal_bbb(
     ffund_union string, 
     famt bigint, 
     fuser_id string,
     fdate bigint
-)
-PARTITION BY range(fdate) (
+)PARTITION BY range(fdate) (
     PARTITION p1 VALUES LESS THAN ("20230703"),
     PARTITION p2 VALUES LESS THAN ("20230706"),
     PARTITION p3 VALUES LESS THAN ("20230716")
@@ -35,7 +37,8 @@ PARTITION BY range(fdate) (
  PROPERTIES (
     "replication_num" = "1"
 );
-
+-- result:
+-- !result
 create table dim_ccc(
      fdate bigint,
      `lvl1` string,
@@ -44,7 +47,8 @@ create table dim_ccc(
 PROPERTIES (
     "replication_num" = "1"
 );
-
+-- result:
+-- !result
 create MATERIALIZED VIEW join_mv1
 DISTRIBUTED BY HASH(a_ds, dim_1_ffund_union_5061_lvl1)
 REFRESH MANUAL
@@ -78,7 +82,8 @@ SELECT `fdate` AS a_ds, a.`ffund_union_5061_lvl1` AS `dim_1_ffund_union_5061_lvl
                 ON t1.`ffund_union` = t3.`ffund_union`
         ) a
         GROUP BY a_ds, `dim_1_ffund_union_5061_lvl1`;
-
+-- result:
+-- !result
 create MATERIALIZED VIEW join_mv2
 DISTRIBUTED BY HASH(a_ds, dim_1_ffund_union_5061_lvl1)
 REFRESH MANUAL
@@ -111,7 +116,8 @@ SELECT `fdate` AS a_ds, a.`ffund_union_5061_lvl1` AS `dim_1_ffund_union_5061_lvl
                     ON t12.`ffund_union` = t14.`ffund_union`
             ) a
             GROUP BY a_ds, `dim_1_ffund_union_5061_lvl1`;
-
+-- result:
+-- !result
 create MATERIALIZED VIEW join_mv3
 DISTRIBUTED BY HASH(a_ds, dim_1_ffund_union_5061_lvl1)
 REFRESH MANUAL
@@ -132,12 +138,11 @@ AS
         FULL JOIN join_mv2 t_join1
         ON coalesce(CAST(t_join0.a_ds AS string), '无值') = coalesce(CAST(t_join1.a_ds AS string), '无值')
             AND coalesce(CAST(t_join0.`dim_1_ffund_union_5061_lvl1` AS string), '无值') = coalesce(CAST(t_join1.`dim_1_ffund_union_5061_lvl1` AS string), '无值');
- 
-
+-- result:
+-- !result
 refresh materialized view join_mv1 with sync mode;
 refresh materialized view join_mv2 with sync mode;
 refresh materialized view join_mv3 with sync mode;
-
 explain logical
   SELECT CASE 
             WHEN t_join0.a_ds IS NOT NULL THEN t_join0.a_ds
@@ -213,7 +218,6 @@ explain logical
         ) t_join1
         ON coalesce(CAST(t_join0.a_ds AS string), '无值') = coalesce(CAST(t_join1.a_ds AS string), '无值')
             AND coalesce(CAST(t_join0.`dim_1_ffund_union_5061_lvl1` AS string), '无值') = coalesce(CAST(t_join1.`dim_1_ffund_union_5061_lvl1` AS string), '无值');
--- result:
 -- !result
 -- name: test_nested_mv_with_partial_compensation
 CREATE TABLE t1 (
@@ -306,13 +310,13 @@ insert into t1 values (4,1,1);
 019aed92-982c-7502-ad24-8e7a292be34a
 -- !result
 select count(1) from (
-    select k1, v1, v2 from mv1 where k1 = 1
+    select k1, from mv1 where k1 = 1
     union all
-    select k1, v1, v2 from t1 where k1 = 2
+    select k1, from t1 where k1 = 2
     union all
-    select k1, v1, v2 from mv1 where k1 = 3
+    select k1, from mv1 where k1 = 3
     union all
-    select k1, v1, v2 from mv1 where k1 = 4
+    select k1, from mv1 where k1 = 4
 ) as t;
 -- result:
 E: (1064, "Getting analyzing error. Detail message: Column 'v1' cannot be resolved.")

@@ -26,7 +26,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.extension.ExtendWith;
 
 import java.util.List;
 import java.util.Set;
@@ -34,7 +33,6 @@ import java.util.Set;
 /**
  * Basic test class for StarRocks.
  */
-@ExtendWith(StarRocksTestExtension.class)
 public abstract class StarRocksTestBase {
     protected static final Logger LOG = LogManager.getLogger(StarRocksTestBase.class);
 
