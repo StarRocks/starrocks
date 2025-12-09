@@ -50,11 +50,7 @@ None
 -- !result
 [UC]task_name=SELECT TASK_NAME FROM information_schema.materialized_views WHERE TABLE_SCHEMA = 'db_${uuid0}' AND TABLE_NAME='user_tags_mv1';
 -- result:
-<<<<<<< HEAD
-mv-12445
-=======
 mv-30251
->>>>>>> 61b8cb9ec7 ([UT] Fix conflicted test cases (#66527))
 -- !result
 SELECT count(1) FROM information_schema.task_runs WHERE TASK_NAME = '${task_name}';
 -- result:

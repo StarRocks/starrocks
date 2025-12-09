@@ -49,12 +49,6 @@ SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 GROUP BY d
 -- result:
 -- !result
 REFRESH MATERIALIZED VIEW mv1 WITH SYNC MODE;
-<<<<<<< HEAD
-=======
--- result:
-019b0304-097c-7dad-a549-a9283324dc46
--- !result
->>>>>>> 61b8cb9ec7 ([UT] Fix conflicted test cases (#66527))
 function: print_hit_materialized_view("SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 where dt='2020-06-15' GROUP BY dt;", "mv1")
 -- result:
 True
