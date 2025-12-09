@@ -227,10 +227,9 @@ public class AuthenticationMgr {
                 userProperty = new UserProperty();
             }
 
+            UserProperty.UpdateInfo updateInfo = null;
             if (stmt.getProperties() != null) {
-                // If we create the user with properties, we need to call userProperty.update to check and update userProperty.
-                // If there are failures, update method will throw an exception
-                userProperty.update(UserProperty.changeToPairList(stmt.getProperties()));
+                updateInfo = userProperty.checkUpdate(UserProperty.changeToPairList(stmt.getProperties()));
             }
 
             GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
@@ -242,10 +241,14 @@ public class AuthenticationMgr {
             short pluginId = authorizationManager.getProviderPluginId();
             short pluginVersion = authorizationManager.getProviderPluginVersion();
             final UserProperty finalUserProperty = userProperty;
+            final UserProperty.UpdateInfo finalUpdateInfo = updateInfo;
             globalStateMgr.getEditLog().logCreateUser(
                     new CreateUserInfo(userIdentity, info, userProperty, collection, pluginId, pluginVersion),
                     wal -> {
                         userToAuthenticationInfo.put(userIdentity, info);
+                        if (finalUpdateInfo != null) {
+                            finalUserProperty.update(finalUpdateInfo);
+                        }
                         userNameToProperty.put(userName, finalUserProperty);
                         authorizationManager.setUserPrivilegeCollection(userIdentity, collection);
                     });
@@ -338,10 +341,6 @@ public class AuthenticationMgr {
         writeLock();
         try {
             UserIdentity userIdentity = new UserIdentity(user.getUser(), user.getHost(), user.isDomain());
-            if (!userToAuthenticationInfo.containsKey(userIdentity)) {
-                LOG.info("Operation DROP USER failed for {} : user {} not exists", userIdentity, userIdentity);
-                return;
-            }
             GlobalStateMgr.getCurrentState().getEditLog().logDropUser(userIdentity, wal -> {
                 dropUserNoLock(userIdentity);
                 // drop user privilege as well
@@ -365,6 +364,10 @@ public class AuthenticationMgr {
 
     private void dropUserNoLock(UserIdentity userIdentity) {
         // 1. remove from userToAuthenticationInfo
+        if (!userToAuthenticationInfo.containsKey(userIdentity)) {
+            LOG.info("Operation DROP USER failed for {} : user {} not exists", userIdentity, userIdentity);
+            return;
+        }
         userToAuthenticationInfo.remove(userIdentity);
         LOG.info("user {} is dropped", userIdentity);
         // 2. remove from userNameToProperty
