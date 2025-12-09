@@ -38,7 +38,7 @@ public class ShowTabletStmt extends ShowStmt {
     private String dbName;
     private String tableName;
     private long tabletId;
-    private PartitionNames partitionNames;
+    private PartitionRef partitionNames;
     private Expr whereClause;
 
     private long version;
@@ -55,12 +55,12 @@ public class ShowTabletStmt extends ShowStmt {
         this(dbTableName, tabletId, null, null, null, null, pos);
     }
 
-    public ShowTabletStmt(TableName dbTableName, long tabletId, PartitionNames partitionNames,
+    public ShowTabletStmt(TableName dbTableName, long tabletId, PartitionRef partitionNames,
                           Expr whereClause, List<OrderByElement> orderByElements, LimitElement limitElement) {
         this(dbTableName, tabletId, partitionNames, whereClause, orderByElements, limitElement, NodePosition.ZERO);
     }
 
-    public ShowTabletStmt(TableName dbTableName, long tabletId, PartitionNames partitionNames,
+    public ShowTabletStmt(TableName dbTableName, long tabletId, PartitionRef partitionNames,
                           Expr whereClause, List<OrderByElement> orderByElements, LimitElement limitElement,
                           NodePosition pos) {
         super(pos);
@@ -120,7 +120,7 @@ public class ShowTabletStmt extends ShowStmt {
         return partitionNames != null;
     }
 
-    public PartitionNames getPartitionNames() {
+    public PartitionRef getPartitionNames() {
         return partitionNames;
     }
 

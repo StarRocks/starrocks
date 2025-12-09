@@ -15,8 +15,9 @@
 
 package com.starrocks.analysis;
 
-import com.starrocks.sql.ast.PartitionNames;
+import com.starrocks.sql.ast.PartitionRef;
 import com.starrocks.sql.ast.TruncatePartitionClause;
+import com.starrocks.sql.parser.NodePosition;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -26,7 +27,7 @@ public class TruncatePartitionClauseTest {
 
     @Test
     public void testInitTruncatePartitionClause() {
-        PartitionNames partitionNames = new PartitionNames(true, Arrays.asList("p1"));
+        PartitionRef partitionNames = new PartitionRef(Arrays.asList("p1"), true, NodePosition.ZERO);
         TruncatePartitionClause clause2 = new TruncatePartitionClause(partitionNames);
         Assertions.assertEquals("p1", clause2.getPartitionNames().getPartitionNames().get(0));
     }
