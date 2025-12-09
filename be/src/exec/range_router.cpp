@@ -29,7 +29,7 @@ namespace starrocks {
 
 Status RangeRouter::init(const std::vector<TTabletRange>& tablet_ranges, size_t num_columns) {
     if (!_boundaries.empty()) {
-        DCHECK((_boundaries[0] == nullptr) ||  (_boundaries[0]->size() + 1 == _lower_bound_inclusive.size()));
+        DCHECK((_boundaries[0] == nullptr) || (_boundaries[0]->size() + 1 == _lower_bound_inclusive.size()));
         return Status::OK();
     }
 
