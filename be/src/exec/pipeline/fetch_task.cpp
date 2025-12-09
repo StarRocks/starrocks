@@ -125,7 +125,7 @@ Status FetchTask::_submit_remote_task(RuntimeState* state) {
         }
     });
 
-    closure->addFailedHandler([this](const FetchTaskContextPtr& ctx, std::string_view rpc_error_msg) noexcept {
+    closure->addFailureHandler([this](const FetchTaskContextPtr& ctx, std::string_view rpc_error_msg) noexcept {
         DeferOp defer([&]() {
             if (++ctx->unit->finished_request_num == ctx->unit->total_request_num) {
                 DLOG(INFO) << "all request finished, notify fetch processor, " << (void*)ctx->processor;
