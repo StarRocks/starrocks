@@ -2534,8 +2534,33 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         }
     }
 
+<<<<<<< HEAD
     @Override
     public Pair<Table, MaterializedIndexMeta> getMaterializedViewIndex(String dbName, String indexName) {
+=======
+    /**
+     * @param mvId mv's mvid
+     * @return a checked mv by input mvid.
+     */
+    public MaterializedView getMaterializedView(MvId mvId) {
+        long dbId = mvId.getDbId();
+        long tableId = mvId.getId();
+        Table table = getTable(dbId, tableId);
+        if (table == null || !(table instanceof MaterializedView)) {
+            return null;
+        }
+        return (MaterializedView) table;
+    }
+
+    /**
+     * Get Table descriptor and materialized index for the materialized view index specific by `dbName`.`tblName`
+     *
+     * @param dbName  - the string represents the database name
+     * @param tblName - the string represents the table name
+     * @return a Table instance
+     */
+    public Pair<Table, MaterializedIndexMeta> getMaterializedViewIndex(String dbName, String tblName) {
+>>>>>>> 389a104e27 ([BugFix] Refresh mv's metadata in getting mvs by ast keys (backport #66472) (#66492))
         Database database = getDb(dbName);
         if (database == null) {
             return null;
