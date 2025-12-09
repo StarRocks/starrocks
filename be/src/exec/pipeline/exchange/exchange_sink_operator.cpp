@@ -592,14 +592,15 @@ Status ExchangeSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chu
 
             // Compute hash for each partition column
             if (_part_type == TPartitionType::HASH_PARTITIONED) {
-                _hash_values.assign(num_rows, HashUtil::FNV_SEED);
                 if (_exchange_hash_function_version == 1) {
                     // Use xxh3_hash for better performance
+                    _hash_values.assign(num_rows, HashUtil::XXH3_SEED_32);
                     for (const ColumnPtr& column : _partitions_columns) {
                         column->xxh3_hash(&_hash_values[0], 0, num_rows);
                     }
                 } else {
                     // Default: use fnv_hash for backward compatibility
+                    _hash_values.assign(num_rows, HashUtil::FNV_SEED);
                     for (const ColumnPtr& column : _partitions_columns) {
                         column->fnv_hash(&_hash_values[0], 0, num_rows);
                     }

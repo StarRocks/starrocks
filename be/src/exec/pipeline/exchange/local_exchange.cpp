@@ -84,14 +84,15 @@ Status ShufflePartitioner::shuffle_channel_ids(const ChunkPtr& chunk, int32_t nu
 
     // Compute hash for each partition column
     if (_part_type == TPartitionType::HASH_PARTITIONED) {
-        _hash_values.assign(num_rows, HashUtil::FNV_SEED);
         if (_exchange_hash_function_version == 1) {
             // Use xxh3_hash for better performance
+            _hash_values.assign(num_rows, HashUtil::XXH3_SEED_32);
             for (const ColumnPtr& column : _partitions_columns) {
                 column->xxh3_hash(&_hash_values[0], 0, num_rows);
             }
         } else {
             // Default: use fnv_hash for backward compatibility
+            _hash_values.assign(num_rows, HashUtil::FNV_SEED);
             for (const ColumnPtr& column : _partitions_columns) {
                 column->fnv_hash(&_hash_values[0], 0, num_rows);
             }
@@ -368,11 +369,13 @@ Status KeyPartitionExchanger::accept(const ChunkPtr& chunk, const int32_t sink_d
     std::vector<uint32_t> hash_values(chunk->num_rows(), HashUtil::FNV_SEED);
     if (_exchange_hash_function_version == 1) {
         // Use xxh3_hash for better performance
+        hash_values.assign(chunk->num_rows(), HashUtil::XXH3_SEED_32);
         for (auto& column : partition_columns) {
             column->xxh3_hash(hash_values.data(), 0, num_rows);
         }
     } else {
         // Default: use fnv_hash for backward compatibility
+        hash_values.assign(chunk->num_rows(), HashUtil::FNV_SEED);
         for (auto& column : partition_columns) {
             column->fnv_hash(hash_values.data(), 0, num_rows);
         }

@@ -263,10 +263,11 @@ public:
     virtual void compute_partition_index(const RuntimeFilterLayout& layout, const std::vector<const Column*>& columns,
                                          RunningContext* ctx) const {}
     virtual void compute_partition_index(const RuntimeFilterLayout& layout, const std::vector<const Column*>& columns,
-                                         uint16_t* sel, uint16_t sel_size, std::vector<uint32_t>& hash_values) const {}
+                                         uint16_t* sel, uint16_t sel_size, std::vector<uint32_t>& hash_values,
+                                         RunningContext* ctx) const {}
     virtual void compute_partition_index(const RuntimeFilterLayout& layout, const std::vector<const Column*>& columns,
                                          uint8_t* selection, uint16_t from, uint16_t to,
-                                         std::vector<uint32_t>& hash_values) const {}
+                                         std::vector<uint32_t>& hash_values, RunningContext* ctx) const {}
 
     /// Evaluate in the vectorized way.
     virtual void evaluate(const Column* input_column, RunningContext* ctx) const = 0;
@@ -498,7 +499,7 @@ struct WithModuloArg {
             // 0: FNV (default for backward compatibility), 1: XXH3
             typename IteratorType::HashFuncType hash_func =
                     (exchange_hash_function_version == 1) ? IteratorType::XXH3_HASH : IteratorType::FNV_HASH;
-            uint32_t hash_seed = (exchange_hash_function_version == 1) ? 0 : HashUtil::FNV_SEED;
+            uint32_t hash_seed = (exchange_hash_function_version == 1) ? HashUtil::XXH3_SEED_32 : HashUtil::FNV_SEED;
 
             iterator.for_each([&](size_t i, uint32_t& hash_value) { hash_value = hash_seed; });
             iterator.compute_hash(columns, hash_func);
@@ -1365,8 +1366,10 @@ public:
             }
         }
     }
+
     void compute_partition_index(const RuntimeFilterLayout& layout, const std::vector<const Column*>& columns,
-                                 uint16_t* sel, uint16_t sel_size, std::vector<uint32_t>& hash_values) const override {
+                                 uint16_t* sel, uint16_t sel_size, std::vector<uint32_t>& hash_values,
+                                 RunningContext* ctx) const override {
         if (columns.empty() || _join_mode == TRuntimeFilterBuildJoinMode::NONE) return;
 
         size_t num_rows = columns[0]->size();
@@ -1374,7 +1377,7 @@ public:
 
         // For SelectedIndexIterator, default to FNV (version 0) for backward compatibility
         // XXH3 selection/selective variants may not be implemented yet
-        int32_t exchange_hash_function_version = 0;
+        int32_t exchange_hash_function_version = ctx->exchange_hash_function_version;
         auto use_reduce = (_join_mode == TRuntimeFilterBuildJoinMode::PARTITIONED ||
                            _join_mode == TRuntimeFilterBuildJoinMode::SHUFFLE_HASH_BUCKET);
         if (use_reduce) {
@@ -1389,15 +1392,15 @@ public:
     }
 
     void compute_partition_index(const RuntimeFilterLayout& layout, const std::vector<const Column*>& columns,
-                                 uint8_t* selection, uint16_t from, uint16_t to,
-                                 std::vector<uint32_t>& hash_values) const override {
+                                 uint8_t* selection, uint16_t from, uint16_t to, std::vector<uint32_t>& hash_values,
+                                 RunningContext* ctx) const override {
         if (columns.empty() || _join_mode == TRuntimeFilterBuildJoinMode::NONE) return;
         size_t num_rows = columns[0]->size();
         DCHECK_EQ(hash_values.size(), num_rows);
 
         // For SelectionIterator, default to FNV (version 0) for backward compatibility
         // XXH3 selection/selective variants may not be implemented yet
-        int32_t exchange_hash_function_version = 0;
+        int32_t exchange_hash_function_version = ctx->exchange_hash_function_version;
         auto use_reduce = (_join_mode == TRuntimeFilterBuildJoinMode::PARTITIONED ||
                            _join_mode == TRuntimeFilterBuildJoinMode::SHUFFLE_HASH_BUCKET);
         if (use_reduce) {
@@ -1965,13 +1968,14 @@ public:
         membership_filter().compute_partition_index(layout, columns, ctx);
     }
     void compute_partition_index(const RuntimeFilterLayout& layout, const std::vector<const Column*>& columns,
-                                 uint16_t* sel, uint16_t sel_size, std::vector<uint32_t>& hash_values) const override {
-        membership_filter().compute_partition_index(layout, columns, sel, sel_size, hash_values);
+                                 uint16_t* sel, uint16_t sel_size, std::vector<uint32_t>& hash_values,
+                                 RunningContext* ctx) const override {
+        membership_filter().compute_partition_index(layout, columns, sel, sel_size, hash_values, ctx);
     }
     void compute_partition_index(const RuntimeFilterLayout& layout, const std::vector<const Column*>& columns,
-                                 uint8_t* selection, uint16_t from, uint16_t to,
-                                 std::vector<uint32_t>& hash_values) const override {
-        membership_filter().compute_partition_index(layout, columns, selection, from, to, hash_values);
+                                 uint8_t* selection, uint16_t from, uint16_t to, std::vector<uint32_t>& hash_values,
+                                 RunningContext* ctx) const override {
+        membership_filter().compute_partition_index(layout, columns, selection, from, to, hash_values, ctx);
     }
 
 private:

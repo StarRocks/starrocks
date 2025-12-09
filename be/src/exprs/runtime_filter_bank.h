@@ -231,6 +231,7 @@ public:
 
     void set_has_push_down_to_storage(bool v) { _has_push_down_to_storage = v; }
     bool has_push_down_to_storage() const { return _has_push_down_to_storage; }
+    int32_t exchange_hash_function_version() const { return _exchange_hash_function_version; }
 
 #ifdef FIU_ENABLE
     failpoint::OneToAnyBarrier barrier;
@@ -262,6 +263,8 @@ private:
     RuntimeState* _runtime_state = nullptr;
     pipeline::Observable _observable;
     bool _has_push_down_to_storage = false;
+    // Exchange hash function version: 0 for FNV (for backward compatibility), 1 for XXH3
+    int32_t _exchange_hash_function_version = 0;
 };
 
 // RuntimeFilterProbeCollector::do_evaluate function apply runtime bloom filter to Operators to filter chunk.

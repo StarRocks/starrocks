@@ -3116,8 +3116,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private boolean enablePipelineLevelShuffle = true;
 
     // Hash function version for exchange shuffle
-    // 0: fnv_hash (default, for backward compatibility)
-    // 1: xxh3_hash (faster)
+    // 0: fnv_hash (reserved for backward compatibility)
+    // 1: xxh3_hash (default, faster)
     @VarAttr(name = EXCHANGE_HASH_FUNCTION_VERSION, flag = VariableMgr.INVISIBLE)
     private int exchangeHashFunctionVersion = 1;
 
