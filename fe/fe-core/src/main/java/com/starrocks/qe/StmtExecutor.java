@@ -552,8 +552,8 @@ public class StmtExecutor {
         }
 
         final boolean shouldMarkIdleCheck = shouldMarkIdleCheck(parsedStmt);
-        final long originWarehouseId = context.getCurrentWarehouseId();
-        if (shouldMarkIdleCheck) {
+        final Long originWarehouseId = context.getCurrentWarehouseIdAllowNull();
+        if (shouldMarkIdleCheck && originWarehouseId != null) {
             WarehouseIdleChecker.increaseRunningSQL(originWarehouseId);
         }
         try {
@@ -863,7 +863,7 @@ public class StmtExecutor {
             // restore session variable in connect context
             context.setSessionVariable(sessionVariableBackup);
 
-            if (shouldMarkIdleCheck) {
+            if (shouldMarkIdleCheck && originWarehouseId != null) {
                 WarehouseIdleChecker.decreaseRunningSQL(originWarehouseId);
             }
 
