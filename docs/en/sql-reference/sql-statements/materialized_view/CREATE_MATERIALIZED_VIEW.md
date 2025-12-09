@@ -285,14 +285,6 @@ From v3.5.0 onwards, asynchronous materialized views support multi-column partit
 
 See [Example -5](#examples) for detailed instructions on multi-column partition expressions.
 
-> **CAUTION**
->
-> From v3.3.3 onwards, StarRocks supports creating asynchronous materialized views with the List Partitioning strategy.
->
-> - You can create list-partitioned materialized views based on tables that are created with the List Partitioning or Expression partitioning strategy.
-> - Currently, you can only specify one Partition Key when creating materialized views with the List Partitioning strategy. You must choose one Partition Key if the base table has more than one Partition Key.
-> - The refresh behavior and query rewrite logic of materialized views with the List Partitioning strategy are consistent with those with the Range Partitioning strategy.
-
 **order_by_expression** (optional)
 
 The sort key of the asynchronous materialized view. If you do not specify the sort key, StarRocks chooses some of the prefix columns from SELECT columns as the sort keys. For example, in `select a, b, c, d`, sort keys can be `a` and `b`. This parameter is supported from StarRocks v3.0 onwards.
@@ -409,12 +401,12 @@ Properties of the asynchronous materialized view. You can modify the properties 
 
   See [Example 6](#examples) for detailed instructions on the `force_mv` semantic and `partition_retention_condition`.
 
-- `refresh_mode`: Introduced in StarRocks v4.1, the `refresh_mode` parameter allows you to control how a materialized view (MV) is refreshed. The default setting is `PCT`. The available modes are:
+- `refresh_mode`: Controls how a materialized view is refreshed. Introduced in StarRocks v4.1. Valid values:
 
-  - `PCT`: (Default) For partitioned MVs, only the affected partition is refreshed when there is a data change, ensuring result consistency for that partition. For non-partitioned MVs, any data change in the base table triggers a full refresh of the MV.
-  - `AUTO`: Attempts to use incremental refresh whenever possible. If the MV's query definition does not support incremental refresh, it will automatically fall back to `PCT` mode for that operation. After a PCT refresh, future refreshes may switch back to incremental refresh if conditions allow.
-  - `INCREMENTAL`: Ensures that only incremental refreshes are performed. If the MV does not support incremental refresh based on its definition or encounters non-incremental data, creation or refresh will fail.
-  - `FULL`: Forces a full refresh of all data every time, regardless of whether the MV supports incremental or partition-level refresh.
+  - `PCT`: (Default) For partitioned materialized views, only the affected partition is refreshed when there is a data change, ensuring result consistency for that partition. For non-partitioned materialized views, any data change in the base table triggers a full refresh of the materialized view.
+  - `AUTO`: Attempts to use incremental refresh whenever possible. If the materialized view's query definition does not support incremental refresh, it will automatically fall back to `PCT` mode for that operation. After a PCT refresh, future refreshes may switch back to incremental refresh if conditions allow.
+  - `INCREMENTAL`: Ensures that only incremental refreshes are performed. If the materialized view does not support incremental refresh based on its definition or encounters non-incremental data, creation or refresh will fail.
+  - `FULL`: Forces a full refresh of all data every time, regardless of whether the materialized view supports incremental or partition-level refresh.
 
 **query_statement** (required)
 
@@ -469,14 +461,14 @@ See [Asynchronous materialized view -  Rewrite queries with the asynchronous mat
 
 ## Incremental Materialized View
 
-StarRocks v4.1 introduced the `refresh_mode` parameter to control the refresh behavior of materialized views (MVs). You can specify `refresh_mode` when creating each MV. If `refresh_mode` is not set during MV creation, the system uses the default, governed by the `Config.default_mv_refresh_mode` parameter (default: `pct`). Please note the following usage guidance:
+StarRocks v4.1 introduced the `refresh_mode` parameter to control the refresh behavior of materialized views. You can specify `refresh_mode` when creating each materialized view. If `refresh_mode` is not set during materialized view creation, the system uses the default value `PCT`, governed by the `default_mv_refresh_mode` parameter (Default: `pct`). Please note the following usage guidance:
 
 - There are restrictions when adjusting `refresh_mode`:
-  - You cannot change legacy materialized views (i.e., those of type `pct`) to use `auto` or `incremental` refresh modes. To do so, you must rebuild the MV.
-  - When modifying an MV from `auto` or `incremental` types, the system will check if incremental refresh is possible. If not, the operation fails.
+  - You cannot change legacy materialized views (for example, those of type `PCT`) to use `AUTO` or `INCREMENTAL` refresh modes. To do so, you must rebuild the materialized view.
+  - When modifying a materialized view from `AUTO` or `INCREMENTAL` types, the system will check if incremental refresh is possible. If not, the operation fails.
 - Incremental materialized views do not support specifying partition refresh:
-  - For `INCREMENTAL` MVs, an exception is thrown if you attempt a partition refresh.
-  - For `AUTO` MVs, StarRocks will automatically switch to `PCT` mode for the refresh operation.
+  - For `INCREMENTAL` materialized views, an exception is thrown if you attempt a partition refresh.
+  - For `AUTO` materialized views, StarRocks will automatically switch to `PCT` mode for the refresh operation.
 
 ### Supported Incremental Operators
 
@@ -491,18 +483,20 @@ The following operators are currently supported for incremental refresh:
 | Select                     | Supported                                                                                                                |
 | From `<Table>`             | Supported only for Iceberg/Paimon tables; not yet available for other table types.                                              |
 | Filter                     | Supported                                                                                                                |
-| Aggregate with Group By    | Supported  <br> - Aggregation functions with `distinct` are not yet supported.<br> - Aggregation without GROUP BY is not supported yet. |
+| Aggregate with Group By    | Supported  <ul><li>Aggregation functions with `distinct` are not yet supported.</li><li>Aggregation without GROUP BY is not supported yet.</li></ul> |
 | Inner Join                 | Supported                                                                                                                |
 | Union All                  | Supported                                                                                                                |
 | Left/Right/Full Outer Join | Not supported yet                                                                                                        |
 
-**Notes:**
-- While operators listed above generally support incremental refresh, certain operator combinations currently have limitations:  
-  - Incremental computation is supported for aggregation after join and aggregation after union.
-  - However, incremental computation is **not** supported when performing join after aggregation or union all after aggregation.
+:::note
+While operators listed above generally support incremental refresh, certain operator combinations currently have limitations:  
+- Incremental computation is supported for aggregation after Join and aggregation after UNION.
+- However, incremental computation is **not** supported when performing Join after aggregation or UNION ALL after aggregation.
+:::
 
 ### Examples
-```
+
+```SQL
 CREATE MATERIALIZED VIEW test_mv1 PARTITION BY dt 
 REFRESH DEFERRED MANUAL 
 properties
@@ -527,8 +521,10 @@ FROM
  
 REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
 ```
+
 The refreshMode field has been added to the EXTRA_MESSAGE column in information_schema.task_runs to indicate the refresh mode of the TaskRun. For more details, you can find more details in [materialized_view_task_run_details](../../../using_starrocks/async_mv/materialized_view_task_run_details.md).
-```
+
+```SQL
 mysql> select * from information_schema.task_runs order by CREATE_TIME desc limit 1\G;
      QUERY_ID: 0199f00e-2152-70a8-83da-26d6a8321ac6
     TASK_NAME: mv-78190
@@ -545,7 +541,6 @@ ERROR_MESSAGE: NULL
 EXTRA_MESSAGE: {"forceRefresh":false,"mvPartitionsToRefresh":["p20250718000000","p20250715000000","p20250721000000","p20250615000000","p20250618000000","p20250524000000","p20250621000000","p20250518000000"],"refBasePartitionsToRefreshMap":{"t1":["p20250718000000","p20250721000000","p20250618000000","p20250524000000","p20250621000000","p20250518000000","p20250715000000","p20250615000000","pNULL","p20250521000000","p20250624000000","p20250724000000","p20250515000000"]},"basePartitionsToRefreshMap":{},"processStartTime":1760669082430,"executeOption":{"priority":80,"taskRunProperties":{"FORCE":"false","mvId":"78190","warehouse":"default_warehouse"},"isMergeRedundant":false,"isManual":true,"isSync":true,"isReplay":false},"planBuilderMessage":{},"refreshMode":"INCREMENTAL"}
    PROPERTIES: {"FORCE":"false","mvId":"78190","warehouse":"default_warehouse"}
        JOB_ID: 0199f00e-2152-76b0-987c-76a9a19e77f9
-
 ```
 
 ## Usage notes
