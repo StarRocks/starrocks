@@ -1338,7 +1338,7 @@ public class FunctionAnalyzer {
                                                            FunctionCallExpr node,
                                                            Type[] argumentTypes,
                                                            List<String> exprsNames) {
-        String fnName = node.getFnName().getFunction();
+        String fnName = node.getFunctionName();
         // Find function using named arguments directly
         // Validation is done separately in validateNamedArguments()
         String[] argNames = exprsNames.toArray(new String[0]);
