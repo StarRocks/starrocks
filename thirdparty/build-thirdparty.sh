@@ -1101,14 +1101,14 @@ build_breakpad() {
 }
 
 #hadoop
-build_hadoop() {
-    check_if_source_exist $HADOOP_SOURCE
-    cp -r $TP_SOURCE_DIR/$HADOOP_SOURCE $TP_INSTALL_DIR/hadoop
-    # remove unnecessary doc and logs
-    rm -rf $TP_INSTALL_DIR/hadoop/logs/* $TP_INSTALL_DIR/hadoop/share/doc/hadoop
+build_hadoop_src() {
+    check_if_source_exist $HADOOPSRC_SOURCE
+    cd $TP_SOURCE_DIR/$HADOOPSRC_SOURCE
+    cd hadoop-hdfs-project/hadoop-hdfs-native-client/src/main/native/libhdfs
+    make
     mkdir -p $TP_INSTALL_DIR/include/hdfs
-    cp $TP_SOURCE_DIR/$HADOOP_SOURCE/include/hdfs.h $TP_INSTALL_DIR/include/hdfs
-    cp $TP_SOURCE_DIR/$HADOOP_SOURCE/lib/native/libhdfs.a $TP_INSTALL_DIR/lib
+    cp $TP_SOURCE_DIR/$HADOOPSRC_SOURCE/hadoop-hdfs-project/hadoop-hdfs-native-client/src/main/native/libhdfs/include/hdfs/hdfs.h $TP_INSTALL_DIR/include/hdfs
+    cp $TP_SOURCE_DIR/$HADOOPSRC_SOURCE/hadoop-hdfs-project/hadoop-hdfs-native-client/src/main/native/libhdfs/libhdfs.a $TP_INSTALL_DIR/lib
 }
 
 #jdk
@@ -1691,7 +1691,7 @@ declare -a all_packages=(
     cctz
     fmt
     ryu
-    hadoop
+    hadoop_src
     jdk
     ragel
     hyperscan
