@@ -90,7 +90,7 @@ public class NamedArgumentValidatorTest {
      * @return Mock FunctionCallExpr for testing
      */
     private FunctionCallExpr createMockFunctionCallExpr(List<Expr> argExprs) {
-        FunctionCallExpr node = new FunctionCallExpr(new FunctionName("test_function"), argExprs);
+        FunctionCallExpr node = new FunctionCallExpr("test_function", argExprs);
         return node;
     }
 

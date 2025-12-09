@@ -369,7 +369,7 @@ public class FunctionParamsTest {
         FunctionParams params = new FunctionParams(false, exprs);
 
         // After reordering, we can get the named arg string representation
-        String argStr = params.getNamedArgStr();
+        String argStr = FunctionAnalyzer.getNamedArgStr(params);
 
         // Should contain both parameters in named format
         Assertions.assertTrue(argStr.contains("url=>"),
