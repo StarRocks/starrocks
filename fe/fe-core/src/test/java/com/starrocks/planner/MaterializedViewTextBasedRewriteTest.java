@@ -14,12 +14,8 @@
 
 package com.starrocks.planner;
 
-<<<<<<< HEAD
 import com.starrocks.analysis.ParseNode;
-=======
 import com.starrocks.catalog.MaterializedView;
-import com.starrocks.sql.ast.ParseNode;
->>>>>>> c4ee9c34c5 ([BugFix] Refresh mv's metadata in getting mvs by ast keys (#66472))
 import com.starrocks.sql.common.QueryDebugOptions;
 import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
