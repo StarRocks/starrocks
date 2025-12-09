@@ -1353,13 +1353,16 @@ public class FunctionAnalyzer {
      * - No duplicate parameter names
      * - All parameter names are valid
      * - All required parameters (without defaults) are provided
+     * - Required parameters (without defaults) cannot be NULL
      *
      * @param fnName      function name for error messages
      * @param fn          the function definition
      * @param paramNames  list of parameter names provided by user
+     * @param node        function call expression to check argument values
      * @throws SemanticException if validation fails
      */
-    public static void validateNamedArguments(String fnName, Function fn, List<String> paramNames) {
+    public static void validateNamedArguments(String fnName, Function fn, List<String> paramNames,
+                                              FunctionCallExpr node) {
         if (fn == null || !fn.hasNamedArg()) {
             throw new SemanticException(fnName + "() does not support named parameters");
         }
@@ -1395,6 +1398,104 @@ public class FunctionAnalyzer {
                         "%s() required parameter '%s' is missing", fnName, requiredParam));
             }
         }
+
+        // Check required parameters (without defaults) cannot be NULL
+        // Skip NULL validation if node is not provided (for testing)
+        if (node != null) {
+            // Required parameters are those without default values, indicated by index < requiredCount
+            for (int i = 0; i < requiredCount && i < node.getChildren().size(); i++) {
+                com.starrocks.sql.ast.expression.Expr argExpr = node.getChild(i);
+                if (argExpr instanceof com.starrocks.sql.ast.expression.NullLiteral) {
+                    throw new SemanticException(String.format(
+                            "%s() required parameter '%s' cannot be NULL", fnName, validParamNames[i]));
+                }
+            }
+        }
+    }
+
+    /**
+     * Reorder named arguments and append defaults according to function definition.
+     * This method modifies the FunctionParams to match the function's parameter order.
+     *
+     * @param params FunctionParams containing the named arguments
+     * @param fn     Function definition with named arguments
+     */
+    public static void reorderNamedArgAndAppendDefaults(com.starrocks.sql.ast.expression.FunctionParams params, Function fn) {
+        String[] names = fn.getArgNames();
+        List<String> exprsNames = params.getExprsNames();
+        List<com.starrocks.sql.ast.expression.Expr> exprs = params.exprs();
+
+        Preconditions.checkState(names != null && names.length >= exprsNames.size());
+        String[] newNames = new String[names.length];
+        com.starrocks.sql.ast.expression.Expr[] newExprs = new com.starrocks.sql.ast.expression.Expr[names.length];
+        int defaultNum = 0;
+
+        for (int j = 0; j < names.length; j++) {
+            for (int i = 0; i < exprsNames.size(); i++) {
+                if (exprsNames.get(i).equals(names[j])) {
+                    newNames[j] = exprsNames.get(i);
+                    newExprs[j] = exprs.get(i);
+                    break;
+                }
+            }
+            if (newExprs[j] == null) {
+                newExprs[j] = fn.getDefaultNamedExpr(names[j]);
+                newNames[j] = names[j];
+                Preconditions.checkState(newExprs[j] != null);
+                defaultNum++;
+            }
+        }
+        Preconditions.checkState(defaultNum + exprsNames.size() == names.length);
+        params.setExprs(Arrays.asList(newExprs));
+        params.setExprsNames(Arrays.asList(newNames));
+    }
+
+    /**
+     * Append default values for positional arguments.
+     * This method is used when calling a function that has named arguments support
+     * using positional arguments syntax.
+     *
+     * @param params FunctionParams containing positional arguments
+     * @param fn     Function definition with named arguments
+     */
+    public static void appendDefaultsForPositionalArgs(com.starrocks.sql.ast.expression.FunctionParams params, Function fn) {
+        String[] names = fn.getArgNames();
+        List<com.starrocks.sql.ast.expression.Expr> exprs = params.exprs();
+
+        Preconditions.checkState(names != null && names.length >= exprs.size());
+        int providedCount = exprs.size();
+        // Create a new mutable list
+        List<com.starrocks.sql.ast.expression.Expr> newExprs = new java.util.ArrayList<>(exprs);
+        // Append default values for remaining parameters
+        for (int i = providedCount; i < names.length; i++) {
+            com.starrocks.sql.ast.expression.Expr defaultExpr = fn.getDefaultNamedExpr(names[i]);
+            Preconditions.checkState(defaultExpr != null,
+                    "Missing default value for parameter: " + names[i]);
+            newExprs.add(defaultExpr);
+        }
+        params.setExprs(newExprs);
+    }
+
+    /**
+     * Get string representation of named arguments for error messages.
+     *
+     * @param params FunctionParams with named arguments
+     * @return String representation like "param1=>value1,param2=>value2"
+     */
+    public static String getNamedArgStr(com.starrocks.sql.ast.expression.FunctionParams params) {
+        List<com.starrocks.sql.ast.expression.Expr> exprs = params.exprs();
+        List<String> exprsNames = params.getExprsNames();
+
+        Preconditions.checkState(exprs.size() == exprsNames.size());
+        StringBuilder result = new StringBuilder();
+        for (int i = 0; i < exprs.size(); i++) {
+            if (i != 0) {
+                result.append(",");
+            }
+            result.append(exprsNames.get(i)).append("=>")
+                  .append(com.starrocks.sql.ast.expression.ExprToSql.toSql(exprs.get(i)));
+        }
+        return result.toString();
     }
 
     /**
@@ -1420,7 +1521,7 @@ public class FunctionAnalyzer {
 
         if (fn != null && fn.hasNamedArg()) {
             // Function exists and supports named args - validate to get specific error
-            validateNamedArguments(fnName, fn, paramNames);
+            validateNamedArguments(fnName, fn, paramNames, null);
         }
         // If we reach here, throw generic error (will be handled by caller)
     }
