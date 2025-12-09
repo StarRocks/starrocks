@@ -17,9 +17,13 @@
 
 package com.starrocks.common.util;
 
+<<<<<<< HEAD
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.InformationFunction;
 import com.starrocks.analysis.VariableExpr;
+=======
+import com.starrocks.catalog.FunctionSet;
+>>>>>>> 1241e67d27 ([Enhancement] Add CURRENT_WAREHOUSE() information function (#66401))
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.SetNamesVar;
@@ -79,7 +83,9 @@ public class SqlUtils {
                             return true;
                         } else if (itemExpr instanceof InformationFunction informationFunction) {
                             return informationFunction.getFuncType().equalsIgnoreCase("connection_id")
-                                    || informationFunction.getFuncType().equalsIgnoreCase("session_id");
+                                    || informationFunction.getFuncType().equalsIgnoreCase("session_id")
+                                    ||
+                                    informationFunction.getFuncType().equalsIgnoreCase(FunctionSet.CURRENT_WAREHOUSE);
                         }
                     }
                 }
