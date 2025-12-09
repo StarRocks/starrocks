@@ -28,11 +28,7 @@ import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.VariableMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
-<<<<<<< HEAD
-=======
 import com.starrocks.server.RunMode;
-import com.starrocks.sql.ast.AggregateType;
->>>>>>> b811debec6 ([BugFix] Disable ClusterSnapshot relative checks in CatalogRecycleBin when running in SharedNothing mode. (#66501))
 import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
