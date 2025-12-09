@@ -126,6 +126,19 @@ public class TabletRepairHelperTest {
     }
 
     @Test
+    public void testGetTabletMetadatasResponseNull() {
+        new MockUp<LakeServiceWithMetrics>() {
+            @Mock
+            public Future<GetTabletMetadatasResponse> getTabletMetadatas(GetTabletMetadatasRequest request) {
+                return CompletableFuture.completedFuture(null);
+            }
+        };
+
+        ExceptionChecker.expectThrowsWithMsg(StarRocksException.class, "response is null",
+                () -> Deencapsulation.invoke(TabletRepairHelper.class, "getTabletMetadatas", info, maxVersion, minVersion));
+    }
+
+    @Test
     public void testGetTabletMetadatasRpcLevelStatusFail() {
         new MockUp<LakeServiceWithMetrics>() {
             @Mock

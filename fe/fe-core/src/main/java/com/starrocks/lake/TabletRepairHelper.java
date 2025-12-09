@@ -89,28 +89,39 @@ public class TabletRepairHelper {
                 GetTabletMetadatasResponse response = responses.get(i).get(LakeService.TIMEOUT_GET_TABLET_STATS,
                         TimeUnit.MILLISECONDS);
 
-                if (response.status.statusCode != TStatusCode.OK.getValue()) {
+                if (response == null) {
+                    throw new StarRocksException("response is null");
+                }
+
+                TStatusCode statusCode = TStatusCode.findByValue(response.status.statusCode);
+                if (statusCode != TStatusCode.OK) {
                     List<String> errMsgs = response.status.errorMsgs;
                     throw new StarRocksException(errMsgs != null && !errMsgs.isEmpty() ? errMsgs.get(0) : "unknown error");
                 }
 
-                for (TabletMetadatas tm : response.tabletMetadatas) {
-                    long tabletId = tm.tabletId;
-                    int statusCode = tm.status.statusCode;
-                    if (statusCode == TStatusCode.OK.getValue()) {
-                        Map<Long, TabletMetadataPB> versionMetadatas = tm.versionMetadatas;
-                        tabletVersionMetadatas.put(tabletId, versionMetadatas);
-                    } else if (statusCode != TStatusCode.NOT_FOUND.getValue()) {
-                        List<String> errMsgs = tm.status.errorMsgs;
-                        throw new StarRocksException(errMsgs != null && !errMsgs.isEmpty() ? errMsgs.get(0) : "unknown error");
+                if (response.tabletMetadatas != null) {
+                    for (TabletMetadatas tm : response.tabletMetadatas) {
+                        long tabletId = tm.tabletId;
+                        TStatusCode tabletStatusCode = TStatusCode.findByValue(tm.status.statusCode);
+                        if (tabletStatusCode == TStatusCode.OK) {
+                            Map<Long, TabletMetadataPB> versionMetadatas = tm.versionMetadatas;
+                            tabletVersionMetadatas.put(tabletId, versionMetadatas);
+                        } else if (tabletStatusCode != TStatusCode.NOT_FOUND) {
+                            List<String> errMsgs = tm.status.errorMsgs;
+                            throw new StarRocksException(
+                                    errMsgs != null && !errMsgs.isEmpty() ? errMsgs.get(0) : "unknown error");
+                        }
                     }
                 }
 
                 if (LOG.isDebugEnabled()) {
                     Map<Long, List<Long>> tabletVersions = Maps.newHashMap();
-                    for (TabletMetadatas tm : response.tabletMetadatas) {
-                        if (tm.status.statusCode == TStatusCode.OK.getValue()) {
-                            tabletVersions.put(tm.tabletId, Lists.newArrayList(tm.versionMetadatas.keySet()));
+                    if (response.tabletMetadatas != null) {
+                        for (TabletMetadatas tm : response.tabletMetadatas) {
+                            TStatusCode tabletStatusCode = TStatusCode.findByValue(tm.status.statusCode);
+                            if (tabletStatusCode == TStatusCode.OK) {
+                                tabletVersions.put(tm.tabletId, Lists.newArrayList(tm.versionMetadatas.keySet()));
+                            }
                         }
                     }
                     LOG.debug("Get {} tablet metadatas from node {}, partition: {}, version range: [{}, {}], tablet versions: {}",
