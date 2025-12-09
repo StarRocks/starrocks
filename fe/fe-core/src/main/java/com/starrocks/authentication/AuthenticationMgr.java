@@ -269,20 +269,20 @@ public class AuthenticationMgr {
                 return;
             }
 
-            UserProperty.CheckResult checkResult = null;
+            UserProperty.UpdateInfo updateInfo = null;
             if (properties != null && !properties.isEmpty()) {
                 UserProperty userProperty = userNameToProperty.get(userIdentity.getUser());
-                checkResult = userProperty.checkUpdate(UserProperty.changeToPairList(properties));
+                updateInfo = userProperty.checkUpdate(UserProperty.changeToPairList(properties));
             }
-            final UserProperty.CheckResult finalCheckResult = checkResult;
+            final UserProperty.UpdateInfo finalUpdateInfo = updateInfo;
             GlobalStateMgr.getCurrentState().getEditLog().logAlterUser(
                     new AlterUserInfo(userIdentity, userAuthenticationInfo, properties),
                     wal -> {
                         // update user authentication info
                         userToAuthenticationInfo.put(userIdentity, userAuthenticationInfo);
-                        if (finalCheckResult != null) {
+                        if (finalUpdateInfo != null) {
                             UserProperty userProperty = userNameToProperty.get(userIdentity.getUser());
-                            userProperty.update(finalCheckResult);
+                            userProperty.update(finalUpdateInfo);
                         }
                     });
         } finally {
@@ -297,7 +297,7 @@ public class AuthenticationMgr {
             if (userProperty == null) {
                 throw new DdlException("user '" + user + "' doesn't exist");
             }
-            UserProperty.CheckResult result = userProperty.checkUpdate(properties);
+            UserProperty.UpdateInfo result = userProperty.checkUpdate(properties);
             GlobalStateMgr.getCurrentState().getEditLog().logUpdateUserPropertyV2(
                     new UserPropertyInfo(user, properties), wal -> userProperty.update(result));
             LOG.info("finished to update user '{}' with properties: {}", user, properties);
@@ -306,8 +306,9 @@ public class AuthenticationMgr {
         }
     }
 
-    public void replayUpdateUserProperty(UserPropertyInfo info) throws DdlException {
+    public void replayUpdateUserProperty(UserPropertyInfo info) {
         try {
+            writeLock();
             UserProperty userProperty = userNameToProperty.getOrDefault(info.getUser(), null);
             if (userProperty == null) {
                 return;
@@ -323,7 +324,7 @@ public class AuthenticationMgr {
                                 Map<String, String> properties) {
         writeLock();
         try {
-            updateUserNoLock(userIdentity, info);
+            userToAuthenticationInfo.put(userIdentity, info);
             // updateForReplayJournal will catch all exceptions when replaying user properties
             UserProperty userProperty = userNameToProperty.get(userIdentity.getUser());
             userProperty.updateForReplayJournal(UserProperty.changeToPairList(properties));
@@ -384,7 +385,7 @@ public class AuthenticationMgr {
             throws AuthenticationException, PrivilegeException {
         writeLock();
         try {
-            updateUserNoLock(userIdentity, info);
+            userToAuthenticationInfo.put(userIdentity, info);
             if (userProperty != null) {
                 userNameToProperty.put(userIdentity.getUser(), userProperty);
             }
@@ -395,10 +396,6 @@ public class AuthenticationMgr {
         } finally {
             writeUnlock();
         }
-    }
-
-    private void updateUserNoLock(UserIdentity userIdentity, UserAuthenticationInfo info) {
-        userToAuthenticationInfo.put(userIdentity, info);
     }
 
     private boolean hasUserNameNoLock(String userName) {

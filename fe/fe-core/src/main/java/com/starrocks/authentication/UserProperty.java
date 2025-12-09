@@ -70,8 +70,8 @@ public class UserProperty {
     @SerializedName(value = "s")
     private Map<String, String> sessionVariables = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
 
-    public CheckResult checkUpdate(List<Pair<String, String>> properties) throws DdlException {
-        CheckResult result = new CheckResult();
+    public UpdateInfo checkUpdate(List<Pair<String, String>> properties) throws DdlException {
+        UpdateInfo result = new UpdateInfo();
         if (properties == null || properties.isEmpty()) {
             return result;
         }
@@ -114,7 +114,7 @@ public class UserProperty {
         return result;
     }
 
-    public void update(CheckResult result) {
+    public void update(UpdateInfo result) {
         if (result.maxConn != null) {
             setMaxConn(result.maxConn);
         }
@@ -132,67 +132,8 @@ public class UserProperty {
     // update the user properties
     // we should check the properties and throw exceptions if the properties are invalid
     public void update(List<Pair<String, String>> properties) throws DdlException {
-        if (properties == null || properties.isEmpty()) {
-            return;
-        }
-
-        String newDatabase = getDatabase();
-        String newCatalog = getCatalog();
-        for (Pair<String, String> entry : properties) {
-            String key = entry.first;
-            String value = entry.second;
-
-            if (key.equalsIgnoreCase(PROP_MAX_USER_CONNECTIONS)) {
-                checkMaxConn(value);
-            } else if (key.equalsIgnoreCase(PROP_DATABASE)) {
-                // we do not check database existence here, because we should
-                // check catalog existence first.
-                newDatabase = value;
-            } else if (key.equalsIgnoreCase(PROP_CATALOG)) {
-                checkCatalog(value);
-                newCatalog = value;
-            } else if (key.startsWith(PROP_SESSION_PREFIX)) {
-                String sessionKey = key.substring(PROP_SESSION_PREFIX.length());
-                if (sessionKey.equalsIgnoreCase(PROP_CATALOG)) {
-                    checkCatalog(value);
-                    newCatalog = value;
-                } else {
-                    checkSessionVariable(sessionKey, value);
-                }
-            } else {
-                throw new DdlException("Unknown user property(" + key + ")");
-            }
-        }
-        if (!newDatabase.equalsIgnoreCase(getDatabase())) {
-            checkDatabase(newCatalog, newDatabase);
-        }
-
-        newDatabase = getDatabase();
-        for (Pair<String, String> entry : properties) {
-            String key = entry.first;
-            String value = entry.second;
-
-            if (key.equalsIgnoreCase(PROP_MAX_USER_CONNECTIONS)) {
-                long maxConn = checkMaxConn(value);
-                setMaxConn(maxConn);
-            } else if (key.equalsIgnoreCase(PROP_DATABASE)) {
-                // we do not check database existence here, because we should
-                // check catalog existence first.
-                newDatabase = value;
-            } else if (key.equalsIgnoreCase(PROP_CATALOG)) {
-                setCatalog(value);
-            } else if (key.startsWith(PROP_SESSION_PREFIX)) {
-                String sessionKey = key.substring(PROP_SESSION_PREFIX.length());
-                if (sessionKey.equalsIgnoreCase(PROP_CATALOG)) {
-                    setCatalog(value);
-                } else {
-                    setSessionVariable(sessionKey, value);
-                }
-            }
-        }
-        if (!newDatabase.equalsIgnoreCase(getDatabase())) {
-            setDatabase(newDatabase);
-        }
+        UpdateInfo result = checkUpdate(properties);
+        update(result);
     }
 
     // We do not check the variable default_session_database and default_session_catalog here, because we have checked them
@@ -392,7 +333,7 @@ public class UserProperty {
         maxConn = value;
     }
 
-    public static class CheckResult {
+    public static class UpdateInfo {
         Long maxConn;
 
         String database;
