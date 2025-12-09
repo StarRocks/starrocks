@@ -1100,13 +1100,11 @@ public class ExpressionAnalyzer {
                     FunctionAnalyzer.throwFriendlyNamedArgError(fnName, argumentTypes, exprsNames);
                     // Fallback to generic error if no specific error was thrown
                     String msg = String.format("No matching function with signature: %s(%s)",
-                            fnName, node.getParams().getNamedArgStr());
+                            fnName, FunctionAnalyzer.getNamedArgStr(node.getParams()));
                     throw new SemanticException(msg, node.getPos());
                 }
-                // Validate named arguments before reordering
-                FunctionAnalyzer.validateNamedArguments(fnName, fn, exprsNames);
                 // Reorder arguments according to function definition
-                node.getParams().reorderNamedArgAndAppendDefaults(fn);
+                FunctionAnalyzer.reorderNamedArgAndAppendDefaults(node.getParams(), fn);
                 // Update children to match reordered params
                 node.clearChildren();
                 node.addChildren(node.getParams().exprs());
@@ -1116,6 +1114,8 @@ public class ExpressionAnalyzer {
                         visit(child, scope);
                     }
                 }
+                // Validate named arguments after reordering (includes NULL checks for required parameters)
+                FunctionAnalyzer.validateNamedArguments(fnName, fn, exprsNames, node);
                 node.setFn(fn);
                 node.setType(fn.getReturnType());
                 FunctionAnalyzer.analyze(node);
@@ -1130,7 +1130,7 @@ public class ExpressionAnalyzer {
                         session, fnName, argumentTypes);
                 if (fn != null) {
                     // Append default values for remaining parameters
-                    node.getParams().appendDefaultsForPositionalArgs(fn);
+                    FunctionAnalyzer.appendDefaultsForPositionalArgs(node.getParams(), fn);
                     // Update children to match the expanded params
                     node.clearChildren();
                     node.addChildren(node.getParams().exprs());

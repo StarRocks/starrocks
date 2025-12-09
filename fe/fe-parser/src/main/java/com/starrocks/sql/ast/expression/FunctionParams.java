@@ -107,10 +107,6 @@ public class FunctionParams {
         return exprs;
     }
 
-    public void setExprsNames(List<String> exprsNames) {
-        this.exprsNames = exprsNames;
-    }
-
     public boolean hasNamedArguments() {
         return exprsNames != null && !exprsNames.isEmpty() && exprsNames.stream().anyMatch(name -> !name.isEmpty());
     }
@@ -121,6 +117,10 @@ public class FunctionParams {
 
     public void setExprs(List<Expr> exprs) {
         this.exprs = exprs;
+    }
+
+    public void setExprsNames(List<String> exprsNames) {
+        this.exprsNames = exprsNames;
     }
 
     @Override
