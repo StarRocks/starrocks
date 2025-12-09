@@ -81,7 +81,7 @@ under the License.
         <async-profiler.version>4.0</async-profiler.version>
         <commons-beanutils.version>1.11.0</commons-beanutils.version>
         <hbase.version>2.6.2</hbase.version>
-        <lz4-java.version>1.8.1</lz4-java.version>
+        <lz4-java.version>1.10.1</lz4-java.version>
     </properties>
 
     <profiles>
@@ -698,7 +698,6 @@ under the License.
                         <groupId>org.eclipse.jetty</groupId>
                         <artifactId>jetty-security</artifactId>
                     </exclusion>
-                    <!-- https://nvd.nist.gov/vuln/detail/CVE-2025-12183 -->
                     <exclusion>
                         <artifactId>lz4-java</artifactId>
                         <groupId>org.lz4</groupId>
@@ -1026,7 +1025,6 @@ under the License.
                         <groupId>org.apache.zookeeper</groupId>
                         <artifactId>zookeeper</artifactId>
                     </exclusion>
-                    <!-- https://nvd.nist.gov/vuln/detail/CVE-2025-12183 -->
                     <exclusion>
                         <groupId>org.lz4</groupId>
                         <artifactId>lz4-java</artifactId>
@@ -1197,7 +1195,6 @@ under the License.
                         <groupId>org.ini4j</groupId>
                         <artifactId>ini4j</artifactId>
                     </exclusion>
-                    <!-- https://nvd.nist.gov/vuln/detail/CVE-2025-12183 -->
                     <exclusion>
                         <groupId>org.lz4</groupId>
                         <artifactId>lz4-pure-java</artifactId>
@@ -1295,7 +1292,6 @@ under the License.
                 <groupId>org.apache.paimon</groupId>
                 <artifactId>paimon-bundle</artifactId>
                 <version>${paimon.version}</version>
-                <!-- https://nvd.nist.gov/vuln/detail/CVE-2025-12183 -->
                 <exclusions>
                     <exclusion>
                         <artifactId>lz4-java</artifactId>
