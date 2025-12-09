@@ -396,6 +396,7 @@ public class PlanFragmentBuilder {
             List<ExecGroup> colocateExecGroups =
                     execPlan.getExecGroups().stream().filter(ExecGroup::isColocateExecGroup).collect(
                             Collectors.toList());
+            final List<ExecGroup> execGroups = execPlan.getExecGroups();
             for (PlanFragment fragment : fragments) {
                 fragment.assignColocateExecGroups(fragment.getPlanRoot(), colocateExecGroups);
             }
@@ -2970,8 +2971,8 @@ public class PlanFragmentBuilder {
                     // do nothing
                 } else {
                     // we don't support group execution for other join
-                    currentExecGroup.disableColocateGroup(leftFragmentPlanRoot);
-                    rightExecGroup.disableColocateGroup(rightFragmentPlanRoot);
+                    currentExecGroup.setDisableColocateGroupForAllChildren(leftFragmentPlanRoot, execGroups);
+                    rightExecGroup.setDisableColocateGroupForAllChildren(rightFragmentPlanRoot, execGroups);
                     currentExecGroup.merge(rightExecGroup);
                     execGroups.remove(rightExecGroup);
                 }
