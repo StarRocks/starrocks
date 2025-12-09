@@ -39,7 +39,7 @@ public:
 TEST_F(StringFunctionTrimTest, trimTest) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
     Columns columns;
-    BinaryColumn::Ptr str = BinaryColumn::create();
+    auto str = BinaryColumn::create();
     for (int j = 0; j < 4096; ++j) {
         std::string spaces(j, ' ');
         str->append(spaces + "abcd" + std::to_string(j) + spaces);
@@ -64,7 +64,7 @@ TEST_F(StringFunctionTrimTest, trimCharTest) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
 
     // string column
-    BinaryColumn::Ptr str_col = BinaryColumn::create();
+    auto str_col = BinaryColumn::create();
     for (int j = 0; j < 4096; ++j) {
         std::string spaces(j, ' ');
         str_col->append(spaces + "abcd" + std::to_string(j) + spaces);
@@ -73,7 +73,7 @@ TEST_F(StringFunctionTrimTest, trimCharTest) {
     // remove character column
     ColumnPtr remove_col = ColumnHelper::create_const_column<TYPE_VARCHAR>(" ab", 4096);
 
-    std::vector<ColumnPtr> columns{str_col, remove_col};
+    Columns columns{str_col, remove_col};
     ctx->set_constant_columns(columns);
     ASSERT_OK(StringFunctions::trim_prepare(ctx.get(), FunctionContext::FRAGMENT_LOCAL));
     ColumnPtr result = StringFunctions::trim(ctx.get(), columns).value();

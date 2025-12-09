@@ -50,23 +50,23 @@ Status StarrocksRoleEdgesScanner::fill_chunk(ChunkPtr* chunk) {
         case 1: {
             // FROM_ROLE
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(1);
+                auto* column = (*chunk)->get_column_raw_ptr_by_slot_id(1);
                 const std::string* str = &role_edges_item.from_role;
                 Slice value(str->c_str(), str->length());
-                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+                fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&value);
             }
             break;
         }
         case 2: {
             // TO_ROLE
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(2);
+                auto* column = (*chunk)->get_column_raw_ptr_by_slot_id(2);
                 if (role_edges_item.__isset.to_role) {
                     const std::string* str = &role_edges_item.to_role;
                     Slice value(str->c_str(), str->length());
-                    fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+                    fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&value);
                 } else {
-                    fill_data_column_with_null(column.get());
+                    fill_data_column_with_null(column);
                 }
             }
             break;
@@ -74,13 +74,13 @@ Status StarrocksRoleEdgesScanner::fill_chunk(ChunkPtr* chunk) {
         case 3: {
             // TO_USER
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(3);
+                auto* column = (*chunk)->get_column_raw_ptr_by_slot_id(3);
                 if (role_edges_item.__isset.to_user) {
                     const std::string* str = &role_edges_item.to_user;
                     Slice value(str->c_str(), str->length());
-                    fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+                    fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&value);
                 } else {
-                    fill_data_column_with_null(column.get());
+                    fill_data_column_with_null(column);
                 }
             }
             break;

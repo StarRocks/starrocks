@@ -218,7 +218,7 @@ private:
                                                                      int segment_id);
 
     Status _fill_default_columns(const TabletSchemaCSPtr& tablet_schema, const std::vector<uint32_t>& column_ids,
-                                 const int64_t row_cnt, vector<ColumnPtr>* columns);
+                                 const int64_t row_cnt, MutableColumns* columns);
     Status _update_primary_index(const TabletSchemaCSPtr& tablet_schema, Tablet* tablet,
                                  const EditVersion& edit_version, uint32_t rowset_id,
                                  std::map<int, ChunkUniquePtr>& segid_to_chunk, int64_t insert_row_cnt,

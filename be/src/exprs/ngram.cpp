@@ -190,7 +190,7 @@ private:
             haystackPtr = StringCaseToggleFunction<false>::evaluate<TYPE_VARCHAR, TYPE_VARCHAR>(haystackPtr);
         }
 
-        BinaryColumn* haystack = ColumnHelper::as_raw_column<BinaryColumn>(haystackPtr);
+        const BinaryColumn* haystack = ColumnHelper::as_raw_column<BinaryColumn>(haystackPtr);
         size_t chunk_size = haystack->size();
         auto res = RunTimeColumnType<TYPE_DOUBLE>::create(chunk_size);
 

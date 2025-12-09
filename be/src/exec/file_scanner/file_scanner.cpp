@@ -203,12 +203,12 @@ StatusOr<ChunkPtr> FileScanner::materialize(const starrocks::ChunkPtr& src, star
             column_pointers.emplace(col_pointer);
         }
 
-        col = ColumnHelper::unfold_const_column(slot->type(), cast->num_rows(), col);
+        col = ColumnHelper::unfold_const_column(slot->type(), cast->num_rows(), std::move(col));
 
         // The column builder in ctx->evaluate may build column as non-nullable.
         // See be/src/column/column_builder.h#L79.
         if (!col->is_nullable()) {
-            col = ColumnHelper::cast_to_nullable_column(col);
+            col = ColumnHelper::cast_to_nullable_column(std::move(col));
         }
 
         dest_chunk->append_column(col, slot->id());

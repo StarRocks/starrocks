@@ -222,7 +222,7 @@ void LoadChannel::add_chunks(const PTabletWriterAddChunksRequest& req, PTabletWr
     MonotonicStopWatch watch;
     watch.start();
     faststring uncompressed_buffer;
-    std::unique_ptr<Chunk> chunk;
+    ChunkUniquePtr chunk;
     int eos_count = 0;
     int64_t timeout_ms = -1;
     for (int i = 0; i < req.requests_size(); i++) {

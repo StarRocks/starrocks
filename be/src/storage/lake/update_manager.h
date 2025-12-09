@@ -111,8 +111,7 @@ public:
                                               IndexEntry* index_entry, MetaFileBuilder* builder, int64_t base_version);
 
     // get rowids from primary index by each upserts
-    Status get_rowids_from_pkindex(int64_t tablet_id, int64_t base_version,
-                                   const std::vector<MutableColumnPtr>& upserts,
+    Status get_rowids_from_pkindex(int64_t tablet_id, int64_t base_version, const MutableColumns& upserts,
                                    std::vector<std::vector<uint64_t>*>* rss_rowids, bool need_lock);
     Status get_rowids_from_pkindex(int64_t tablet_id, int64_t base_version, const MutableColumnPtr& upsert,
                                    std::vector<uint64_t>* rss_rowids, bool need_lock);
@@ -120,8 +119,7 @@ public:
     // get column data by rssid and rowids
     Status get_column_values(const RowsetUpdateStateParams& params, std::vector<uint32_t>& column_ids,
                              bool with_default, std::map<uint32_t, std::vector<uint32_t>>& rowids_by_rssid,
-                             vector<MutableColumnPtr>* columns,
-                             const std::map<string, string>* column_to_expr_value = nullptr,
+                             MutableColumns* columns, const std::map<string, string>* column_to_expr_value = nullptr,
                              AutoIncrementPartialUpdateState* auto_increment_state = nullptr);
     // get delvec by version
     Status get_del_vec(const TabletSegmentId& tsid, int64_t version, const MetaFileBuilder* builder, bool fill_cache,

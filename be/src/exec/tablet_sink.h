@@ -215,7 +215,7 @@ private:
     std::unordered_map<int64_t, std::set<int64_t>> _index_id_partition_ids;
     std::vector<uint32_t> _record_hashes;
     // Store the output expr comput result column
-    std::unique_ptr<Chunk> _output_chunk;
+    ChunkUniquePtr _output_chunk;
     bool _open_done{false};
 
     std::unique_ptr<TabletSinkSender> _tablet_sink_sender;

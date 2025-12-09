@@ -21,39 +21,36 @@
 namespace starrocks {
 
 StructColumn::StructColumn(MutableColumns&& fields) {
-    for (auto& f : fields) {
-        DCHECK(f->is_nullable());
-        DCHECK_EQ(f->size(), size());
+    DCHECK_GT(fields.size(), 0);
+    size_t size = fields[0]->size();
+    for (auto&& f : fields) {
+        DCHECK_EQ(f->size(), size) << "All fields must have the same size";
         f->check_or_die();
         _fields.emplace_back(std::move(f));
     }
+    DCHECK_EQ(_fields.size(), fields.size());
 }
 
 StructColumn::StructColumn(MutableColumns&& fields, std::vector<std::string> field_names)
         : _field_names(std::move(field_names)) {
     // Struct must have at least one field.
-    DCHECK(_field_names.size() > 0);
-    for (auto& f : fields) {
+    DCHECK_GT(_field_names.size(), 0);
+    for (auto&& f : fields) {
         _fields.emplace_back(std::move(f));
     }
-    DCHECK(_fields.size() > 0);
+    DCHECK_GT(_fields.size(), 0);
     // fields and field_names must have the same size.
     DCHECK(_fields.size() == _field_names.size());
 }
 
 StructColumn::Ptr StructColumn::create(const Columns& columns, std::vector<std::string> field_names) {
-    auto column = StructColumn::create(MutableColumns());
-    column->_fields.reserve(columns.size());
-    column->_fields.assign(columns.begin(), columns.end());
-    column->_field_names = std::move(field_names);
-    return column;
+    MutableColumns mutable_columns = ColumnHelper::to_mutable_columns(columns);
+    return StructColumn::create(std::move(mutable_columns), std::move(field_names));
 }
 
 StructColumn::Ptr StructColumn::create(const Columns& columns) {
-    auto column = StructColumn::create(MutableColumns());
-    column->_fields.reserve(columns.size());
-    column->_fields.assign(columns.begin(), columns.end());
-    return column;
+    MutableColumns mutable_columns = ColumnHelper::to_mutable_columns(columns);
+    return StructColumn::create(std::move(mutable_columns));
 }
 
 bool StructColumn::is_struct() const {
@@ -122,22 +119,26 @@ void StructColumn::resize(size_t n) {
     // Don't need to resize _field_names, because the number of struct subfield is fixed.
 }
 
-StatusOr<ColumnPtr> StructColumn::upgrade_if_overflow() {
+StatusOr<MutableColumnPtr> StructColumn::upgrade_if_overflow() {
     for (auto& column : _fields) {
-        StatusOr<ColumnPtr> status = upgrade_helper_func(&column);
+        auto mutable_column = column->as_mutable_ptr();
+        auto status = upgrade_helper_func(&mutable_column);
         if (!status.ok()) {
             return status;
         }
+        column = std::move(mutable_column);
     }
     return nullptr;
 }
 
-StatusOr<ColumnPtr> StructColumn::downgrade() {
+StatusOr<MutableColumnPtr> StructColumn::downgrade() {
     for (auto& column : _fields) {
-        StatusOr<ColumnPtr> status = downgrade_helper_func(&column);
+        auto mutable_column = column->as_mutable_ptr();
+        StatusOr<MutableColumnPtr> status = downgrade_helper_func(&mutable_column);
         if (!status.ok()) {
             return status;
         }
+        column = std::move(mutable_column);
     }
     return nullptr;
 }
@@ -468,7 +469,7 @@ size_t StructColumn::reference_memory_usage(size_t from, size_t size) const {
 void StructColumn::swap_column(Column& rhs) {
     auto& struct_column = down_cast<StructColumn&>(rhs);
     for (size_t i = 0; i < _fields.size(); i++) {
-        _fields[i]->swap_column(*struct_column.fields_column()[i]);
+        _fields[i]->swap_column(*struct_column._fields[i]);
     }
     // _field_names dont need swap
 }
@@ -489,7 +490,6 @@ void StructColumn::check_or_die() const {
     DCHECK(_fields.size() == _field_names.size());
 
     for (const auto& column : _fields) {
-        DCHECK(column->is_nullable());
         column->check_or_die();
     }
 }
@@ -499,6 +499,15 @@ void StructColumn::reset_column() {
     for (auto& field : _fields) {
         field->reset_column();
     }
+}
+
+Columns StructColumn::fields() const {
+    Columns columns;
+    columns.reserve(_fields.size());
+    for (const auto& field : _fields) {
+        columns.emplace_back(field);
+    }
+    return columns;
 }
 
 size_t StructColumn::_find_field_idx_by_name(const std::string& field_name) const {
@@ -526,7 +535,7 @@ Status StructColumn::unfold_const_children(const starrocks::TypeDescriptor& type
     auto num_fields = type.children.size();
     auto num_rows = _fields[0]->size();
     for (int i = 0; i < num_fields; ++i) {
-        _fields[i] = ColumnHelper::unfold_const_column(type.children[i], num_rows, _fields[i]);
+        _fields[i] = ColumnHelper::unfold_const_column(type.children[i], num_rows, std::move(_fields[i]));
     }
     return Status::OK();
 }

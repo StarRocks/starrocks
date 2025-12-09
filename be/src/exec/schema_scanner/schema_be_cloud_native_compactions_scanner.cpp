@@ -71,36 +71,36 @@ Status SchemaBeCloudNativeCompactionsScanner::fill_chunk(ChunkPtr* chunk) {
             if (slot_id < 1 || slot_id > 11) {
                 return Status::InternalError(strings::Substitute("invalid slot id:$0", slot_id));
             }
-            ColumnPtr column = (*chunk)->get_column_by_slot_id(slot_id);
+            auto* column = (*chunk)->get_column_raw_ptr_by_slot_id(slot_id);
             switch (slot_id) {
             case 1: {
                 // BE_ID
-                fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&_be_id);
+                fill_column_with_slot<TYPE_BIGINT>(column, (void*)&_be_id);
                 break;
             }
             case 2: {
                 // TXN_ID
-                fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.txn_id);
+                fill_column_with_slot<TYPE_BIGINT>(column, (void*)&info.txn_id);
                 break;
             }
             case 3: {
                 // TABLET_ID
-                fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.tablet_id);
+                fill_column_with_slot<TYPE_BIGINT>(column, (void*)&info.tablet_id);
                 break;
             }
             case 4: {
                 // VERSION
-                fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.version);
+                fill_column_with_slot<TYPE_BIGINT>(column, (void*)&info.version);
                 break;
             }
             case 5: {
                 // SKIPPED
-                fill_column_with_slot<TYPE_BOOLEAN>(column.get(), (void*)&info.skipped);
+                fill_column_with_slot<TYPE_BOOLEAN>(column, (void*)&info.skipped);
                 break;
             }
             case 6: {
                 // RUNS
-                fill_column_with_slot<TYPE_INT>(column.get(), (void*)&info.runs);
+                fill_column_with_slot<TYPE_INT>(column, (void*)&info.runs);
                 break;
             }
             case 7: {
@@ -108,9 +108,9 @@ Status SchemaBeCloudNativeCompactionsScanner::fill_chunk(ChunkPtr* chunk) {
                 if (info.start_time > 0) {
                     DateTimeValue ts;
                     ts.from_unixtime(info.start_time, _ctz);
-                    fill_column_with_slot<TYPE_DATETIME>(column.get(), (void*)&ts);
+                    fill_column_with_slot<TYPE_DATETIME>(column, (void*)&ts);
                 } else {
-                    fill_data_column_with_null(column.get());
+                    fill_data_column_with_null(column);
                 }
                 break;
             }
@@ -119,28 +119,28 @@ Status SchemaBeCloudNativeCompactionsScanner::fill_chunk(ChunkPtr* chunk) {
                 if (info.finish_time > 0) {
                     DateTimeValue ts;
                     ts.from_unixtime(info.finish_time, _ctz);
-                    fill_column_with_slot<TYPE_DATETIME>(column.get(), (void*)&ts);
+                    fill_column_with_slot<TYPE_DATETIME>(column, (void*)&ts);
                 } else {
-                    fill_data_column_with_null(column.get());
+                    fill_data_column_with_null(column);
                 }
                 break;
             }
             case 9: {
                 // PROGRESS
-                fill_column_with_slot<TYPE_INT>(column.get(), (void*)&info.progress);
+                fill_column_with_slot<TYPE_INT>(column, (void*)&info.progress);
                 break;
             }
             case 10: {
                 // STATUS
                 auto s = info.status.message();
                 Slice v(s.data(), s.size());
-                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&v);
+                fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&v);
                 break;
             }
             case 11: {
                 // PROFILE
                 Slice v(info.profile.data(), info.profile.size());
-                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&v);
+                fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&v);
                 break;
             }
             default:

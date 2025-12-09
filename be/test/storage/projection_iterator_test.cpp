@@ -34,9 +34,9 @@ public:
     Status do_get_next(Chunk* chunk) override {
         size_t n = std::min(10LU, _c1.size() - _idx);
         for (size_t i = 0; i < n; i++) {
-            chunk->get_column_by_index(0)->append_datum(Datum(_c1[_idx]));
-            chunk->get_column_by_index(1)->append_datum(Datum(Slice(_c2[_idx])));
-            chunk->get_column_by_index(2)->append_datum(Datum(_c3[_idx]));
+            chunk->get_column_raw_ptr_by_index(0)->append_datum(Datum(_c1[_idx]));
+            chunk->get_column_raw_ptr_by_index(1)->append_datum(Datum(Slice(_c2[_idx])));
+            chunk->get_column_raw_ptr_by_index(2)->append_datum(Datum(_c3[_idx]));
             _idx++;
         }
         return n > 0 ? Status::OK() : Status::EndOfFile("eof");

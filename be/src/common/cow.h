@@ -33,9 +33,7 @@ namespace starrocks {
 template <typename Derived>
 class Cow {
 protected:
-#ifndef NDEBUG
     virtual ~Cow() = default;
-#endif
 
     Cow() : _use_count(0) {}
     Cow(Cow const&) : _use_count(0) {}
@@ -151,6 +149,8 @@ protected:
         friend class Cow;
         template <typename, typename, typename>
         friend class CowFactory;
+        template <typename>
+        friend class MutPtr; // Allow MutPtr<U> to access MutPtr<T>'s private constructor
 
         explicit MutPtr(T* ptr, bool add_ref = true) : Base(ptr, add_ref) {}
 
@@ -167,12 +167,10 @@ protected:
         MutPtr(std::nullptr_t) {}
     };
 
-    // If the owner data is immutable, it can only call non const methods of derived class ideally, but
+    // If the owner data is immutable, it can only call const methods of derived class, and
     // it can be shared with others.
     //  - mutable data can be converted to immutable data only if the mutable data's onwership is transferred;
     //  - immutable data can be converted to mutable data only if clone-on-write is triggered.
-    // NOTE: To be compatible with old codes, it can call non-const methods of derived class if the Immutable data
-    // is not `const` or `const&` or called from `const method`; otherwise, it can only call const methods of derived class.
     template <typename T>
     class ImmutPtr : public RCPtr<const T> {
     public:
@@ -201,13 +199,8 @@ protected:
         ImmutPtr(std::nullptr_t) {}
 
         const T* get() const { return this->_t; }
-        T* get() { return const_cast<T*>(this->_t); }
-
         const T* operator->() const { return this->_t; }
-        T* operator->() { return const_cast<T*>(this->_t); }
-
         const T& operator*() const { return *get(); }
-        T& operator*() { return *get(); }
 
     private:
         using Base = RCPtr<const T>;
@@ -220,20 +213,52 @@ protected:
         explicit ImmutPtr(const T* ptr, bool add_ref = true) : Base(ptr, add_ref) {}
     };
 
+    // It works as ImmutPtr if it is const and as MutPtr if it is non const.
+    template <typename T>
+    class ChameleonPtr {
+    private:
+        ImmutPtr<T> value;
+
+    public:
+        template <typename... Args>
+        ChameleonPtr(Args&&... args) : value(std::forward<Args>(args)...) {}
+
+        template <typename U>
+        ChameleonPtr(std::initializer_list<U>&& arg) : value(std::forward<std::initializer_list<U>>(arg)) {}
+
+        const T* get() const { return value.get(); }
+        T* get() { return const_cast<T*>(value.get()); }
+
+        const T* operator->() const { return get(); }
+        T* operator->() { return get(); }
+
+        const T& operator*() const { return *value; }
+        T& operator*() { return *get(); }
+
+        operator const ImmutPtr<T>&() const { return value; }
+        operator ImmutPtr<T>&() { return value; }
+
+        operator bool() const { return value.get() != nullptr; }
+        bool operator!() const { return value.get() == nullptr; }
+
+        bool operator==(const ChameleonPtr& rhs) const { return value == rhs.value; }
+        bool operator!=(const ChameleonPtr& rhs) const { return value != rhs.value; }
+    };
+
 public:
     using MutablePtr = MutPtr<Derived>;
     using Ptr = ImmutPtr<Derived>;
+    using WrappedPtr = ChameleonPtr<Derived>;
 
 protected:
     // trigger clone-on-write, deep clone if the data is shared with others, otherwise shadow clone.
     MutablePtr try_mutate() const {
+        uint32_t ref_count = this->use_count();
 #ifndef NDEBUG
-        if (VLOG_IS_ON(1)) {
-            VLOG(10) << "[COW] trigger COW: " << this << ", use_count=" << this->use_count() << ", try to "
-                     << (this->use_count() > 1 ? "deep" : "shadow") << " clone";
-        }
+        DLOG(INFO) << "[Cow] trigger COW: " << this << ", use_count=" << ref_count << ", try to "
+                   << (ref_count > 1 ? "deep" : "shadow") << " clone";
 #endif
-        if (this->use_count() > 1) {
+        if (ref_count > 1) {
             return derived()->clone();
         } else {
             return as_mutable_ptr();
@@ -258,7 +283,37 @@ public:
 
     // cast the data as mutable ptr if it's mutable no matter it's mutable or immutable.
     // NOTE:  ptr's use_count will be added by 1, and this is not safe because the data may be shared with others.
-    MutablePtr as_mutable_ptr() const { return const_cast<Cow*>(this)->get_ptr(); }
+    // DCHECK added to catch potential misuse in debug builds.
+    MutablePtr as_mutable_ptr() const {
+#ifndef NDEBUG
+        uint32_t ref_count = use_count();
+        if (ref_count > 2) {
+            DLOG(INFO) << "[Cow] as_mutable_ptr() called on heavily shared object (use_count=" << ref_count
+                       << "). This may be unsafe! Consider using try_mutate() for proper COW semantics.";
+        }
+#endif
+        return const_cast<Cow*>(this)->get_ptr();
+    }
+
+    // Get mutable reference without reference counting overhead.
+    // MOTIVATION: as_mutable_ptr() incurs reference counting overhead (increment on construction,
+    // decrement on destruction) which is unnecessary in scenarios where:
+    // - Object lifetime is guaranteed (reference won't outlive the object)
+    // - High performance is needed for frequent access
+    // - The modification is local and temporary
+    Derived* as_mutable_raw_ptr() const {
+#ifndef NDEBUG
+        uint32_t ref_count = use_count();
+        if (ref_count > 2) {
+            DLOG(INFO) << "[Cow] as_mutable_raw_ptr() called on heavily shared object (use_count=" << ref_count
+                       << "). This may break COW semantics! Consider using try_mutate() instead.";
+        }
+#endif
+        return const_cast<Derived*>(derived());
+    }
+
+    // Get mutable reference without reference counting overhead.
+    Derived& as_mutable_ref() const { return *as_mutable_raw_ptr(); }
 
 private:
     using AtomicCounter = std::atomic<uint32_t>;
@@ -271,8 +326,10 @@ class CowFactory : public Base {
 public:
     using BasePtr = typename AncestorBase::Ptr;
     using BaseMutablePtr = typename AncestorBase::MutablePtr;
+    using BaseWrappedPtr = typename AncestorBase::WrappedPtr;
     using Ptr = typename Base::template ImmutPtr<Derived>;
     using MutablePtr = typename Base::template MutPtr<Derived>;
+    using WrappedPtr = typename Base::template ChameleonPtr<Derived>;
 
     // AncestorBase is root class of inheritance hierarchy
     // if Derived class is the direct subclass of the root, then AncestorBase is just the Base class
@@ -339,7 +396,7 @@ public:
         if (auto* _p = dynamic_cast<Derived*>(ptr.detach())) {
             return MutablePtr(_p, false);
         } else {
-            return Ptr();
+            return MutablePtr();
         }
     }
 
@@ -350,6 +407,58 @@ public:
             return Ptr(_ptr);
         } else {
             return Ptr();
+        }
+    }
+
+    // cast base ptr to derived ptr statically, like std::static_pointer_cast; if failed, return nullptr.
+    // NOTE: ptr will be released if cast success.
+    static MutablePtr static_pointer_cast(BaseMutablePtr& ptr) {
+        DCHECK(ptr.get() != nullptr);
+        DCHECK(down_cast<Derived*>(ptr.get()) != nullptr);
+        return MutablePtr(down_cast<Derived*>(ptr), false);
+    }
+
+    // cast base ptr to derived ptr dynamically, like std::dynamic_pointer_cast; if failed, return nullptr.
+    static MutablePtr dynamic_pointer_cast(const BaseMutablePtr& ptr) {
+        DCHECK(ptr.get() != nullptr);
+        if (auto* _p = dynamic_cast<Derived*>(ptr.get())) {
+            return MutablePtr(_p);
+        } else {
+            return MutablePtr();
+        }
+    }
+
+    // cast base wrapped ptr to derived ptr statically
+    static Ptr static_pointer_cast(const BaseWrappedPtr& ptr) {
+        DCHECK(ptr.get() != nullptr);
+        DCHECK(down_cast<const Derived*>(ptr.get()) != nullptr);
+        return Ptr(down_cast<const Derived*>(ptr.get()));
+    }
+
+    // cast base wrapped ptr to derived mutable ptr statically
+    static MutablePtr static_pointer_cast(BaseWrappedPtr& ptr) {
+        DCHECK(ptr.get() != nullptr);
+        DCHECK(down_cast<Derived*>(ptr.get()) != nullptr);
+        return MutablePtr(down_cast<Derived*>(ptr.get()));
+    }
+
+    // cast base wrapped ptr to derived ptr dynamically
+    static Ptr dynamic_pointer_cast(const BaseWrappedPtr& ptr) {
+        DCHECK(ptr.get() != nullptr);
+        if (auto* _ptr = dynamic_cast<const Derived*>(ptr.get())) {
+            return Ptr(_ptr);
+        } else {
+            return Ptr();
+        }
+    }
+
+    // cast base wrapped ptr to derived mutable ptr dynamically
+    static MutablePtr dynamic_pointer_cast(BaseWrappedPtr& ptr) {
+        DCHECK(ptr.get() != nullptr);
+        if (auto* _ptr = dynamic_cast<Derived*>(ptr.get())) {
+            return MutablePtr(_ptr);
+        } else {
+            return MutablePtr();
         }
     }
 

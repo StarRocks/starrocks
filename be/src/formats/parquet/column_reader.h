@@ -138,7 +138,9 @@ public:
     }
 
     virtual Status fill_dst_column(ColumnPtr& dst, ColumnPtr& src) {
-        dst->swap_column(*src);
+        auto* src_col = src->as_mutable_raw_ptr();
+        auto* dst_col = dst->as_mutable_raw_ptr();
+        dst_col->swap_column(*src_col);
         return Status::OK();
     }
 

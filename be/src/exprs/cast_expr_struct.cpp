@@ -109,10 +109,10 @@ StatusOr<ColumnPtr> CastJsonToStruct::evaluate_checked(ExprContext* context, Chu
             Chunk field_chunk;
             field_chunk.append_column(elements, 0);
             ASSIGN_OR_RETURN(auto casted_field, _field_casts[i]->evaluate_checked(context, &field_chunk));
-            casted_field = NullableColumn::wrap_if_necessary(casted_field);
+            casted_field = NullableColumn::wrap_if_necessary(std::move(casted_field));
             casted_fields.emplace_back(std::move(casted_field)->as_mutable_ptr());
         } else {
-            casted_fields.emplace_back(NullableColumn::wrap_if_necessary(elements->clone())->as_mutable_ptr());
+            casted_fields.emplace_back(NullableColumn::wrap_if_necessary(elements->clone()));
         }
         DCHECK(casted_fields[i]->is_nullable());
     }
@@ -127,7 +127,7 @@ StatusOr<ColumnPtr> CastJsonToStruct::evaluate_checked(ExprContext* context, Chu
     if (column->is_constant()) {
         res = ConstColumn::create(std::move(res), column->size());
     }
-    return res;
+    return std::move(res);
 }
 
 } // namespace starrocks

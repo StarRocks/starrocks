@@ -1290,7 +1290,7 @@ void PInternalServiceImplBase<T>::update_fail_point_status(google::protobuf::Rpc
                                                            google::protobuf::Closure* done) {
     ClosureGuard closure_guard(done);
 #ifdef FIU_ENABLE
-    const auto name = request->fail_point_name();
+    const auto& name = request->fail_point_name();
     auto fp = starrocks::failpoint::FailPointRegistry::GetInstance()->get(name);
     if (fp == nullptr) {
         Status::InvalidArgument(fmt::format("FailPoint {} is not existed.", name))

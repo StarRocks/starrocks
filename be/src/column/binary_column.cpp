@@ -180,7 +180,7 @@ void BinaryColumnBase<T>::append_value_multiple_times(const Column& src, uint32_
 
 //TODO(fzh): optimize copy using SIMD
 template <typename T>
-StatusOr<ColumnPtr> BinaryColumnBase<T>::replicate(const Buffer<uint32_t>& offsets) {
+StatusOr<MutableColumnPtr> BinaryColumnBase<T>::replicate(const Buffer<uint32_t>& offsets) {
     auto dest = BinaryColumnBase<T>::create();
     auto& dest_offsets = dest->get_offset();
     auto& dest_bytes = dest->get_bytes();
@@ -865,7 +865,7 @@ size_t find_first_overflow_point(const BinaryColumnBase<uint32_t>::Offsets& offs
 }
 
 template <typename T>
-StatusOr<ColumnPtr> BinaryColumnBase<T>::upgrade_if_overflow() {
+StatusOr<MutableColumnPtr> BinaryColumnBase<T>::upgrade_if_overflow() {
     static_assert(std::is_same_v<T, uint32_t> || std::is_same_v<T, uint64_t>);
 
     if constexpr (std::is_same_v<T, uint32_t>) {
@@ -903,7 +903,7 @@ StatusOr<ColumnPtr> BinaryColumnBase<T>::upgrade_if_overflow() {
 }
 
 template <typename T>
-StatusOr<ColumnPtr> BinaryColumnBase<T>::downgrade() {
+StatusOr<MutableColumnPtr> BinaryColumnBase<T>::downgrade() {
     static_assert(std::is_same_v<T, uint32_t> || std::is_same_v<T, uint64_t>);
 
     if constexpr (std::is_same_v<T, uint32_t>) {

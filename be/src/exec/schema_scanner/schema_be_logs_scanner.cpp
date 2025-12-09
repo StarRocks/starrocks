@@ -87,33 +87,33 @@ Status SchemaBeLogsScanner::fill_chunk(ChunkPtr* chunk) {
             if (slot_id < 1 || slot_id > 5) {
                 return Status::InternalError(strings::Substitute("invalid slot id:$0", slot_id));
             }
-            ColumnPtr column = (*chunk)->get_column_by_slot_id(slot_id);
+            auto* column = (*chunk)->get_column_raw_ptr_by_slot_id(slot_id);
             switch (slot_id) {
             case 1: {
                 // be id
-                fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&_be_id);
+                fill_column_with_slot<TYPE_BIGINT>(column, (void*)&_be_id);
                 break;
             }
             case 2: {
                 // level
                 Slice v(&info.level, 1);
-                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&v);
+                fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&v);
                 break;
             }
             case 3: {
                 // timestamp
-                fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.timestamp);
+                fill_column_with_slot<TYPE_BIGINT>(column, (void*)&info.timestamp);
                 break;
             }
             case 4: {
                 // tid
-                fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.thread_id);
+                fill_column_with_slot<TYPE_BIGINT>(column, (void*)&info.thread_id);
                 break;
             }
             case 5: {
                 // log
                 Slice v(info.log);
-                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&v);
+                fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&v);
                 break;
             }
             default:

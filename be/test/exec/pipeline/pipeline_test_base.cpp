@@ -142,12 +142,11 @@ ChunkPtr PipelineTestBase::_create_and_fill_chunk(const std::vector<SlotDescript
     // add data
     for (size_t i = 0; i < slots.size(); ++i) {
         auto* slot = slots[i];
-        auto& column = chunk->columns()[i];
+        auto* data_column = chunk->get_column_raw_ptr_by_index(i);
 
-        Column* data_column = column.get();
         if (data_column->is_nullable()) {
             auto* nullable_column = down_cast<NullableColumn*>(data_column);
-            data_column = nullable_column->data_column().get();
+            data_column = nullable_column->data_column_raw_ptr();
         }
 
         for (size_t j = 0; j < row_num; ++j) {

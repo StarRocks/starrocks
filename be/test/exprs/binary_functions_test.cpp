@@ -36,7 +36,7 @@ public:
     StatusOr<ColumnPtr> test_to_binary(const std::string& input, BinaryFormatType type) {
         Columns columns;
         columns.emplace_back(BinaryColumn::create());
-        auto* arg1 = ColumnHelper::as_raw_column<BinaryColumn>(columns[0]);
+        auto* arg1 = ColumnHelper::as_raw_column<BinaryColumn>(columns[0]->as_mutable_raw_ptr());
         arg1->append(input);
         state->to_binary_type = type;
         return BinaryFunctions::to_binary(ctx.get(), columns);
@@ -45,7 +45,7 @@ public:
     StatusOr<ColumnPtr> test_from_binary(const Slice& input, BinaryFormatType type) {
         Columns columns;
         columns.emplace_back(BinaryColumn::create());
-        auto* arg1 = ColumnHelper::as_raw_column<BinaryColumn>(columns[0]);
+        auto* arg1 = ColumnHelper::as_raw_column<BinaryColumn>(columns[0]->as_mutable_raw_ptr());
         arg1->append(input);
         state->to_binary_type = type;
         return BinaryFunctions::from_binary(ctx.get(), columns);

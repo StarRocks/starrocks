@@ -172,7 +172,7 @@ TEST(FieldTest, test_with_agg_state_desc) {
         Field field1(1, "c1", get_type_info(TYPE_DOUBLE), STORAGE_AGGREGATE_AGG_STATE_UNION, &desc, 10, true, true);
         ASSERT_TRUE(field1.get_agg_state_desc() != nullptr);
 
-        auto field2 = field1;
+        auto& field2 = field1;
         ASSERT_TRUE(field2.get_agg_state_desc() != nullptr);
     }
 

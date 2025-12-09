@@ -183,7 +183,7 @@ protected:
                 {
                     st = iter->seek_to_first();
                     ASSERT_TRUE(st.ok()) << st.to_string();
-                    ColumnPtr dst = ChunkHelper::column_from_field_type(type, true);
+                    MutableColumnPtr dst = ChunkHelper::column_from_field_type(type, true);
                     // will do direct copy to column
                     size_t rows_read = src.size();
                     dst->reserve(rows_read);
@@ -205,7 +205,7 @@ protected:
                         ASSERT_TRUE(st.ok());
 
                         size_t rows_read = 1024;
-                        ColumnPtr dst = ChunkHelper::column_from_field_type(type, true);
+                        MutableColumnPtr dst = ChunkHelper::column_from_field_type(type, true);
 
                         st = iter->next_batch(&rows_read, dst.get());
                         ASSERT_TRUE(st.ok());
@@ -222,7 +222,7 @@ protected:
                     st = iter->seek_to_first();
                     ASSERT_TRUE(st.ok());
 
-                    ColumnPtr dst = ChunkHelper::column_from_field_type(type, true);
+                    MutableColumnPtr dst = ChunkHelper::column_from_field_type(type, true);
                     SparseRange<> read_range;
                     size_t write_num = src.size();
                     read_range.add(Range<>(0, write_num / 3));
@@ -322,9 +322,9 @@ protected:
         TabletColumn int_column = create_int_value(0, STORAGE_AGGREGATE_NONE, true);
         array_column.add_sub_column(int_column);
 
-        UInt32Column::Ptr src_offsets = UInt32Column::create();
-        NullableColumn::Ptr src_elements = NullableColumn::create(Int32Column::create(), NullColumn::create());
-        ArrayColumn::Ptr src_column = ArrayColumn::create(src_elements, src_offsets);
+        auto src_offsets = UInt32Column::create();
+        auto src_elements = NullableColumn::create(Int32Column::create(), NullColumn::create());
+        auto src_column = ArrayColumn::create(src_elements, src_offsets);
 
         // insert [1, 2, 3], [4, 5, 6]
         src_elements->append_datum(1);
@@ -402,9 +402,9 @@ protected:
                 auto st = iter->seek_to_first();
                 ASSERT_TRUE(st.ok()) << st.to_string();
 
-                UInt32Column::Ptr dst_offsets = UInt32Column::create();
-                NullableColumn::Ptr dst_elements = NullableColumn::create(Int32Column::create(), NullColumn::create());
-                ArrayColumn::Ptr dst_column = ArrayColumn::create(dst_elements, dst_offsets);
+                auto dst_offsets = UInt32Column::create();
+                auto dst_elements = NullableColumn::create(Int32Column::create(), NullColumn::create());
+                auto dst_column = ArrayColumn::create(std::move(dst_elements), std::move(dst_offsets));
                 size_t rows_read = src_column->size();
                 st = iter->next_batch(&rows_read, dst_column.get());
                 ASSERT_TRUE(st.ok());
@@ -420,7 +420,7 @@ protected:
     }
 
     template <LogicalType type>
-    ColumnPtr numeric_data(int null_ratio) {
+    MutableColumnPtr numeric_data(int null_ratio) {
         using CppType = typename CppTypeTraits<type>::CppType;
         auto col = ChunkHelper::column_from_field_type(type, true);
         CppType value = 0;
@@ -437,14 +437,14 @@ protected:
         return col;
     }
 
-    ColumnPtr low_cardinality_strings(int null_ratio) {
+    MutableColumnPtr low_cardinality_strings(int null_ratio) {
         static std::string s1(4, 'a');
         static std::string s2(4, 'b');
         size_t count = 128 * 1024 / 4;
         auto col = ChunkHelper::column_from_field_type(TYPE_VARCHAR, true);
         auto nc = down_cast<NullableColumn*>(col.get());
         nc->reserve(count);
-        down_cast<BinaryColumn*>(nc->data_column().get())->get_data().reserve(s1.size() * count);
+        down_cast<BinaryColumn*>(nc->data_column_raw_ptr())->get_data().reserve(s1.size() * count);
         auto v = std::vector<Slice>{s1, s2, s1, s1, s2, s2, s1, s2, s1, s1, s2, s1, s2, s1, s1, s1};
         for (size_t i = 0; i < count; i += 16) {
             CHECK(col->append_strings(v));
@@ -457,7 +457,7 @@ protected:
         return col;
     }
 
-    ColumnPtr high_cardinality_strings(int null_ratio) {
+    MutableColumnPtr high_cardinality_strings(int null_ratio) {
         std::string s1("abcdefghijklmnopqrstuvwxyz");
         std::string s2("bbcdefghijklmnopqrstuvwxyz");
         std::string s3("cbcdefghijklmnopqrstuvwxyz");
@@ -471,7 +471,7 @@ protected:
         size_t count = (128 * 1024 / s1.size()) / 8 * 8;
         auto nc = down_cast<NullableColumn*>(col.get());
         nc->reserve(count);
-        down_cast<BinaryColumn*>(nc->data_column().get())->get_data().reserve(count * s1.size());
+        down_cast<BinaryColumn*>(nc->data_column_raw_ptr())->get_data().reserve(count * s1.size());
         for (size_t i = 0; i < count; i += 8) {
             (void)col->append_strings(std::vector<Slice>{s1, s2, s3, s4, s5, s6, s7, s8});
 
@@ -492,7 +492,7 @@ protected:
         return col;
     }
 
-    ColumnPtr date_values(int null_ratio) {
+    MutableColumnPtr date_values(int null_ratio) {
         size_t count = 4 * 1024 / sizeof(DateValue);
         auto col = ChunkHelper::column_from_field_type(TYPE_DATE, true);
         DateValue value = DateValue::create(2020, 10, 1);
@@ -507,7 +507,7 @@ protected:
         return col;
     }
 
-    ColumnPtr datetime_values(int null_ratio) {
+    MutableColumnPtr datetime_values(int null_ratio) {
         size_t count = 4 * 1024 / sizeof(TimestampValue);
         auto col = ChunkHelper::column_from_field_type(TYPE_DATETIME, true);
         TimestampValue value = TimestampValue::create(2020, 10, 1, 10, 20, 1);
@@ -753,7 +753,7 @@ TEST_F(ColumnReaderWriterTest, test_large_varchar_column_writer) {
             col_strs.resize(TEST_N);
             for (int i = 0; i < TEST_N; i++) {
                 col_strs[i] = strings::Substitute("test_$0", i);
-                col_slices.push_back(Slice(col_strs[i]));
+                col_slices.emplace_back(col_strs[i]);
             }
             col->reserve(TEST_N);
             col->append_strings(col_slices);
@@ -781,7 +781,7 @@ TEST_F(ColumnReaderWriterTest, test_large_varchar_column_writer) {
             auto st = iter->init(iter_opts);
             ASSERT_TRUE(st.ok());
             ASSERT_TRUE(iter->seek_to_first().ok());
-            ColumnPtr dst = ChunkHelper::column_from_field_type(TYPE_VARCHAR, true);
+            MutableColumnPtr dst = ChunkHelper::column_from_field_type(TYPE_VARCHAR, true);
             dst->reserve(TEST_N);
             size_t rows_read = TEST_N;
             ASSERT_TRUE(iter->next_batch(&rows_read, dst.get()).ok());

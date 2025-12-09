@@ -126,7 +126,7 @@ private:
     // equals with dop of dest pipeline
     // If pipeline level shuffle is disable, the size of _chunks
     // always be 1
-    std::vector<std::unique_ptr<Chunk>> _chunks;
+    std::vector<ChunkUniquePtr> _chunks;
     PTransmitChunkParamsPtr _chunk_request;
     size_t _current_request_bytes = 0;
 

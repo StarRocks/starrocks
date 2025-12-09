@@ -30,6 +30,8 @@ public:
     // Used to construct an unnamed struct
     StructColumn(MutableColumns&& fields);
     StructColumn(MutableColumns&& fields, std::vector<std::string> field_names);
+    StructColumn(const Columns& fields);
+    StructColumn(const Columns& fields, std::vector<std::string> field_names);
     StructColumn(const StructColumn& rhs) {
         for (const auto& field : rhs._fields) {
             _fields.emplace_back(field->clone());
@@ -71,9 +73,9 @@ public:
 
     void resize(size_t n) override;
 
-    StatusOr<ColumnPtr> upgrade_if_overflow() override;
+    StatusOr<MutableColumnPtr> upgrade_if_overflow() override;
 
-    StatusOr<ColumnPtr> downgrade() override;
+    StatusOr<MutableColumnPtr> downgrade() override;
 
     bool has_large_column() const override;
 
@@ -152,15 +154,27 @@ public:
 
     void check_or_die() const override;
 
-    const Columns& fields() const { return _fields; }
-    const Columns& fields_column() const { return _fields; }
-    Columns& fields_column() { return _fields; }
+    Columns fields() const;
+    const size_t fields_size() const { return _fields.size(); }
+
+    const ColumnPtr& get_column_by_idx(size_t idx) const { return _fields[idx]; }
+    ColumnPtr& get_column_by_idx(size_t idx) { return _fields[idx]; }
 
     const ColumnPtr& field_column(const std::string& field_name) const;
     ColumnPtr& field_column(const std::string& field_name);
 
-    const std::vector<std::string>& field_names() const { return _field_names; }
+    Column* field_column_raw_ptr(size_t idx) { return _fields[idx].get(); }
+    const Column* field_column_raw_ptr(size_t idx) const { return _fields[idx].get(); }
 
+    Column* field_column_raw_ptr(const std::string& field_name) {
+        return _fields[_find_field_idx_by_name(field_name)].get();
+    }
+    const Column* field_column_raw_ptr(const std::string& field_name) const {
+        return _fields[_find_field_idx_by_name(field_name)].get();
+    }
+
+    const std::vector<std::string>& field_names() const { return _field_names; }
+    std::vector<std::string>& field_names() { return _field_names; }
     Status unfold_const_children(const TypeDescriptor& type) override;
 
     void mutate_each_subcolumn() override {
@@ -173,7 +187,7 @@ private:
     size_t _find_field_idx_by_name(const std::string& field_name) const;
 
     // A collection that contains StructType's subfield column.
-    Columns _fields;
+    std::vector<Column::WrappedPtr> _fields;
 
     // A collection that contains each struct subfield name.
     // _fields and _field_names should have the same size (_fields.size() == _field_names.size()).

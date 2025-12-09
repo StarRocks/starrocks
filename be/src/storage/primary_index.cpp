@@ -1247,7 +1247,7 @@ Status PrimaryIndex::_do_load(Tablet* tablet) {
                 } else if (!st.ok()) {
                     return st;
                 } else {
-                    Column* pkc = nullptr;
+                    const Column* pkc = nullptr;
                     if (pk_column) {
                         pk_column->reset_column();
                         TRY_CATCH_BAD_ALLOC(

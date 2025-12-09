@@ -142,14 +142,14 @@ public:
     // Return null, if the column is not overflow.
     // Return the new larger column, if upgrade success
     // Current, only support upgrade BinaryColumn to LargeBinaryColumn
-    virtual StatusOr<Ptr> upgrade_if_overflow() = 0;
+    virtual StatusOr<MutablePtr> upgrade_if_overflow() = 0;
 
     // Downgrade the column from large column to normal column.
     // Return internal error if downgrade failed.
     // Return null, if the column is already normal column, no need to downgrade.
     // Return the new normal column, if downgrade success
     // Current, only support downgrade LargeBinaryColumn to BinaryColumn
-    virtual StatusOr<Ptr> downgrade() = 0;
+    virtual StatusOr<MutablePtr> downgrade() = 0;
 
     // Check if the column contains large column.
     // Current, only used to check if it contains LargeBinaryColumn or BinaryColumn
@@ -177,7 +177,7 @@ public:
     // for example: column(1,2)->replicate({0,2,5}) = column(1,1,2,2,2)
     // FixedLengthColumn, BinaryColumn and ConstColumn override this function for better performance.
     // TODO(fzh): optimize replicate() for ArrayColumn, ObjectColumn and others.
-    virtual StatusOr<Ptr> replicate(const Buffer<uint32_t>& offsets) {
+    virtual StatusOr<MutablePtr> replicate(const Buffer<uint32_t>& offsets) {
         auto dest = this->clone_empty();
         auto dest_size = offsets.size() - 1;
         DCHECK(this->size() >= dest_size) << "The size of the source column is less when duplicating it.";
@@ -346,6 +346,8 @@ public:
 
     // REQUIRES: size of |filter| equals to the size of this column.
     // Removes elements that don't match the filter.
+    // If input filter[i] == 0, the i-th element will be removed.
+    // If input filter[i] == 1, the i-th element will be kept.
     inline size_t filter(const Filter& filter) {
         DCHECK_EQ(size(), filter.size());
         return filter_range(filter, 0, filter.size());
@@ -477,8 +479,16 @@ public:
     }
 
 protected:
-    static StatusOr<Ptr> downgrade_helper_func(Ptr* col);
-    static StatusOr<Ptr> upgrade_helper_func(Ptr* col);
+    // Helper functions for downgrade and upgrade,
+    // if downgrade failed, return the error status.
+    // if upgrade success, always return nullptr.
+    // if downgrade's result is not nullptr, it will replace the input col with the new column.
+    static StatusOr<MutablePtr> downgrade_helper_func(MutablePtr* col);
+    // Helper functions for upgrade and downgrade,
+    // if upgrade failed, return the error status.
+    // if upgrade success, always return nullptr.
+    // if upgrade's result is not nullptr, it will replace the input col with the new column.
+    static StatusOr<MutablePtr> upgrade_helper_func(MutablePtr* col);
 
     DelCondSatisfied _delete_state = DEL_NOT_SATISFIED;
 };

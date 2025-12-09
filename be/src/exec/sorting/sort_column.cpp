@@ -509,7 +509,7 @@ Status sort_and_tie_column(const std::atomic<bool>& cancel, ColumnPtr& column, c
     // Nullable column need set all the null rows to default values,
     // see the comment of the declaration of `partition_null_and_nonnull_helper` for details.
     if (column->is_nullable() && !column->is_constant()) {
-        ColumnHelper::as_column<NullableColumn>(column)->fill_null_with_default();
+        ColumnHelper::as_raw_column<NullableColumn>(column->as_mutable_raw_ptr())->fill_null_with_default();
     }
     ColumnSorter column_sorter(cancel, sort_desc, permutation, tie, range, build_tie);
     if (sort_descs != nullptr) {
@@ -524,8 +524,7 @@ static Status sort_and_tie_column(const std::atomic<bool>& cancel, const Column*
     // Nullable column need set all the null rows to default values,
     // see the comment of the declaration of `partition_null_and_nonnull_helper` for details.
     if (column->is_nullable() && !column->is_constant()) {
-        auto* mutable_col = const_cast<Column*>(column);
-        down_cast<NullableColumn*>(mutable_col)->fill_null_with_default();
+        ColumnHelper::as_raw_column<NullableColumn>(column->as_mutable_raw_ptr())->fill_null_with_default();
     }
     ColumnSorter column_sorter(cancel, sort_desc, permutation, tie, std::move(ranges), build_tie);
     if (sort_descs != nullptr) {
@@ -640,7 +639,7 @@ Status stable_sort_and_tie_columns(const std::atomic<bool>& cancel, const Column
     std::pair<int, int> range{0, num_rows};
 
     for (int col_index = 0; col_index < columns.size(); col_index++) {
-        ColumnPtr column = columns[col_index];
+        const ColumnPtr& column = columns[col_index];
         RETURN_IF_ERROR(sort_and_tie_column(cancel, column, sort_desc.get_column_desc(col_index), *small_perm, tie,
                                             range, true));
     }
@@ -667,7 +666,7 @@ Status sort_vertical_columns(const std::atomic<bool>& cancel, const Columns& col
 
     for (auto& col : columns) {
         if (col->is_nullable() && !col->is_constant()) {
-            ColumnHelper::as_column<NullableColumn>(col)->fill_null_with_default();
+            ColumnHelper::as_raw_column<NullableColumn>(col->as_mutable_raw_ptr())->fill_null_with_default();
         }
     }
 

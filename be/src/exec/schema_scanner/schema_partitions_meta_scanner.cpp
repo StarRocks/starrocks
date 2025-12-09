@@ -126,40 +126,40 @@ Status SchemaPartitionsMetaScanner::fill_chunk(ChunkPtr* chunk) {
         if (slot_id < 1 || slot_id > _column_num) {
             return Status::InternalError(fmt::format("invalid slot id:{}", slot_id));
         }
-        ColumnPtr column = (*chunk)->get_column_by_slot_id(slot_id);
+        auto* column = (*chunk)->get_column_raw_ptr_by_slot_id(slot_id);
 
         switch (slot_id) {
         case 1: {
             // DB_NAME
             Slice db_name = Slice(info.db_name);
-            fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&db_name);
+            fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&db_name);
             break;
         }
         case 2: {
             // TABLE_NAME
             Slice table_name = Slice(info.table_name);
-            fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&table_name);
+            fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&table_name);
             break;
         }
         case 3: {
             // PARTITION_NAME
             Slice partition_name = Slice(info.partition_name);
-            fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&partition_name);
+            fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&partition_name);
             break;
         }
         case 4: {
             // PARTITION_ID
-            fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.partition_id);
+            fill_column_with_slot<TYPE_BIGINT>(column, (void*)&info.partition_id);
             break;
         }
         case 5: {
             // COMPACT_VERSION
-            fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.compact_version);
+            fill_column_with_slot<TYPE_BIGINT>(column, (void*)&info.compact_version);
             break;
         }
         case 6: {
             // VISIBLE_VERSION
-            fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.visible_version);
+            fill_column_with_slot<TYPE_BIGINT>(column, (void*)&info.visible_version);
             break;
         }
         case 7: {
@@ -167,66 +167,66 @@ Status SchemaPartitionsMetaScanner::fill_chunk(ChunkPtr* chunk) {
             if (info.visible_version_time > 0) {
                 DateTimeValue ts;
                 ts.from_unixtime(info.visible_version_time, _ctz);
-                fill_column_with_slot<TYPE_DATETIME>(column.get(), (void*)&ts);
+                fill_column_with_slot<TYPE_DATETIME>(column, (void*)&ts);
             } else {
-                fill_data_column_with_null(column.get());
+                fill_data_column_with_null(column);
             }
             break;
         }
         case 8: {
             // NEXT_VERSION
-            fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.next_version);
+            fill_column_with_slot<TYPE_BIGINT>(column, (void*)&info.next_version);
             break;
         }
         case 9: {
             // DATA_VERSION
-            fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.data_version);
+            fill_column_with_slot<TYPE_BIGINT>(column, (void*)&info.data_version);
             break;
         }
         case 10: {
             // VERSION_EPOCH
-            fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.version_epoch);
+            fill_column_with_slot<TYPE_BIGINT>(column, (void*)&info.version_epoch);
             break;
         }
         case 11: {
             // VERSION_TXN_TYPE
             std::string version_txn_type_str = to_string(info.version_txn_type);
             Slice version_txn_type = Slice(version_txn_type_str);
-            fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&version_txn_type);
+            fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&version_txn_type);
             break;
         }
         case 12: {
             // PARTITION_KEY
             Slice partition_key = Slice(info.partition_key);
-            fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&partition_key);
+            fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&partition_key);
             break;
         }
         case 13: {
             // PARTITION_VALUE
             Slice partition_value = Slice(info.partition_value);
-            fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&partition_value);
+            fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&partition_value);
             break;
         }
         case 14: {
             // DISTRIBUTION_KEY
             Slice distribution_key = Slice(info.distribution_key);
-            fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&distribution_key);
+            fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&distribution_key);
             break;
         }
         case 15: {
             // BUCKETS
-            fill_column_with_slot<TYPE_INT>(column.get(), (void*)&info.buckets);
+            fill_column_with_slot<TYPE_INT>(column, (void*)&info.buckets);
             break;
         }
         case 16: {
             // REPLICATION_NUM
-            fill_column_with_slot<TYPE_INT>(column.get(), (void*)&info.replication_num);
+            fill_column_with_slot<TYPE_INT>(column, (void*)&info.replication_num);
             break;
         }
         case 17: {
             // STORAGE_MEDIUM
             Slice storage_medium = Slice(info.storage_medium);
-            fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&storage_medium);
+            fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&storage_medium);
             break;
         }
         case 18: {
@@ -234,9 +234,9 @@ Status SchemaPartitionsMetaScanner::fill_chunk(ChunkPtr* chunk) {
             if (info.cooldown_time > 0) {
                 DateTimeValue ts;
                 ts.from_unixtime(info.cooldown_time, _ctz);
-                fill_column_with_slot<TYPE_DATETIME>(column.get(), (void*)&ts);
+                fill_column_with_slot<TYPE_DATETIME>(column, (void*)&ts);
             } else {
-                fill_data_column_with_null(column.get());
+                fill_data_column_with_null(column);
             }
             break;
         }
@@ -245,73 +245,73 @@ Status SchemaPartitionsMetaScanner::fill_chunk(ChunkPtr* chunk) {
             if (info.last_consistency_check_time > 0) {
                 DateTimeValue ts;
                 ts.from_unixtime(info.last_consistency_check_time, _ctz);
-                fill_column_with_slot<TYPE_DATETIME>(column.get(), (void*)&ts);
+                fill_column_with_slot<TYPE_DATETIME>(column, (void*)&ts);
             } else {
-                fill_data_column_with_null(column.get());
+                fill_data_column_with_null(column);
             }
             break;
         }
         case 20: {
             // IS_IN_MEMORY (deprecated, always false)
             bool is_in_memory = false;
-            fill_column_with_slot<TYPE_BOOLEAN>(column.get(), (void*)&is_in_memory);
+            fill_column_with_slot<TYPE_BOOLEAN>(column, (void*)&info.is_in_memory);
             break;
         }
         case 21: {
             // IS_TEMP
-            fill_column_with_slot<TYPE_BOOLEAN>(column.get(), (void*)&info.is_temp);
+            fill_column_with_slot<TYPE_BOOLEAN>(column, (void*)&info.is_temp);
             break;
         }
         case 22: {
             // DATA_SIZE
             int64_t data_size_bytes = parse_data_size(info.data_size);
-            fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&data_size_bytes);
+            fill_column_with_slot<TYPE_BIGINT>(column, (void*)&data_size_bytes);
             break;
         }
         case 23: {
             // ROW_COUNT
-            fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.row_count);
+            fill_column_with_slot<TYPE_BIGINT>(column, (void*)&info.row_count);
             break;
         }
         case 24: {
             // ENABLE_DATACACHE
-            fill_column_with_slot<TYPE_BOOLEAN>(column.get(), (void*)&info.enable_datacache);
+            fill_column_with_slot<TYPE_BOOLEAN>(column, (void*)&info.enable_datacache);
             break;
         }
         case 25: {
             // AVG_CS
-            fill_column_with_slot<TYPE_DOUBLE>(column.get(), (void*)&info.avg_cs);
+            fill_column_with_slot<TYPE_DOUBLE>(column, (void*)&info.avg_cs);
             break;
         }
         case 26: {
             // P50_CS
-            fill_column_with_slot<TYPE_DOUBLE>(column.get(), (void*)&info.p50_cs);
+            fill_column_with_slot<TYPE_DOUBLE>(column, (void*)&info.p50_cs);
             break;
         }
         case 27: {
             // MAX_CS
-            fill_column_with_slot<TYPE_DOUBLE>(column.get(), (void*)&info.max_cs);
+            fill_column_with_slot<TYPE_DOUBLE>(column, (void*)&info.max_cs);
             break;
         }
         case 28: {
             // STORAGE_PATH
             Slice storage_path = Slice(info.storage_path);
-            fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&storage_path);
+            fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&storage_path);
             break;
         }
         case 29: {
             // STORAGE_SIZE
-            fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.storage_size);
+            fill_column_with_slot<TYPE_BIGINT>(column, (void*)&info.storage_size);
             break;
         }
         case 30: {
             // TABLET_BALANCED
-            fill_column_with_slot<TYPE_BOOLEAN>(column.get(), (void*)&info.tablet_balanced);
+            fill_column_with_slot<TYPE_BOOLEAN>(column, (void*)&info.tablet_balanced);
             break;
         }
         case 31: {
             // METADATA_SWITCH_VERSION
-            fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.metadata_switch_version);
+            fill_column_with_slot<TYPE_BIGINT>(column, (void*)&info.metadata_switch_version);
             break;
         }
 

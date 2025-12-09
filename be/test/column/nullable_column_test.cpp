@@ -28,7 +28,7 @@ namespace starrocks {
 
 // NOLINTNEXTLINE
 PARALLEL_TEST(NullableColumnTest, test_nullable_column_upgrade_if_overflow) {
-    NullableColumn::Ptr c0 = NullableColumn::create(UInt32Column::create(), NullColumn::create());
+    auto c0 = NullableColumn::create(UInt32Column::create(), NullColumn::create());
     c0->append_datum((uint32_t)1);
 
     auto ret = c0->upgrade_if_overflow();
@@ -38,7 +38,7 @@ PARALLEL_TEST(NullableColumnTest, test_nullable_column_upgrade_if_overflow) {
 
 // NOLINTNEXTLINE
 PARALLEL_TEST(NullableColumnTest, test_nullable_column_downgrade) {
-    NullableColumn::Ptr c0 = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
+    auto c0 = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
     c0->append_datum(Slice("1"));
 
     ASSERT_FALSE(c0->has_large_column());
@@ -58,7 +58,7 @@ PARALLEL_TEST(NullableColumnTest, test_nullable_column_downgrade) {
 
 // NOLINTNEXTLINE
 PARALLEL_TEST(NullableColumnTest, test_copy_constructor) {
-    NullableColumn::Ptr c0 = NullableColumn::create(Int32Column::create(), NullColumn::create());
+    auto c0 = NullableColumn::create(Int32Column::create(), NullColumn::create());
 
     c0->append_datum({}); // NULL
     c0->append_datum((int32_t)1);
@@ -81,7 +81,7 @@ PARALLEL_TEST(NullableColumnTest, test_copy_constructor) {
 
 // NOLINTNEXTLINE
 PARALLEL_TEST(NullableColumnTest, test_move_constructor) {
-    NullableColumn::Ptr c0 = NullableColumn::create(Int32Column::create(), NullColumn::create());
+    auto c0 = NullableColumn::create(Int32Column::create(), NullColumn::create());
 
     c0->append_datum({}); // NULL
     c0->append_datum((int32_t)1);
@@ -103,7 +103,7 @@ PARALLEL_TEST(NullableColumnTest, test_move_constructor) {
 
 // NOLINTNEXTLINE
 PARALLEL_TEST(NullableColumnTest, test_copy_assignment) {
-    NullableColumn::Ptr c0 = NullableColumn::create(Int32Column::create(), NullColumn::create());
+    auto c0 = NullableColumn::create(Int32Column::create(), NullColumn::create());
 
     c0->append_datum({}); // NULL
     c0->append_datum((int32_t)1);
@@ -127,7 +127,7 @@ PARALLEL_TEST(NullableColumnTest, test_copy_assignment) {
 
 // NOLINTNEXTLINE
 PARALLEL_TEST(NullableColumnTest, test_move_assignment) {
-    NullableColumn::Ptr c0 = NullableColumn::create(Int32Column::create(), NullColumn::create());
+    auto c0 = NullableColumn::create(Int32Column::create(), NullColumn::create());
 
     c0->append_datum({}); // NULL
     c0->append_datum((int32_t)1);
@@ -150,7 +150,7 @@ PARALLEL_TEST(NullableColumnTest, test_move_assignment) {
 
 // NOLINTNEXTLINE
 PARALLEL_TEST(NullableColumnTest, test_clone) {
-    NullableColumn::Ptr c0 = NullableColumn::create(Int32Column::create(), NullColumn::create());
+    auto c0 = NullableColumn::create(Int32Column::create(), NullColumn::create());
 
     auto c1 = c0->clone();
     ASSERT_TRUE(c1->is_nullable());
@@ -181,9 +181,9 @@ PARALLEL_TEST(NullableColumnTest, test_clone) {
 
 // NOLINTNEXTLINE
 PARALLEL_TEST(NullableColumnTest, test_clone_shared) {
-    NullableColumn::Ptr c0 = NullableColumn::create(Int32Column::create(), NullColumn::create());
+    auto c0 = NullableColumn::create(Int32Column::create(), NullColumn::create());
 
-    ColumnPtr c1 = c0->clone();
+    auto c1 = c0->clone();
     ASSERT_TRUE(c1->use_count() == 1);
     ASSERT_TRUE(c1->is_nullable());
     ASSERT_EQ(0, c1->size());
@@ -198,7 +198,7 @@ PARALLEL_TEST(NullableColumnTest, test_clone_shared) {
     c1->append_datum({(int32_t)2});
     c1->append_datum({(int32_t)3});
 
-    ColumnPtr c2 = c1->clone();
+    auto c2 = c1->clone();
     c1->reset_column();
 
     ASSERT_TRUE(c2->use_count() == 1);
@@ -217,7 +217,7 @@ PARALLEL_TEST(NullableColumnTest, test_clone_shared) {
 
 // NOLINTNEXTLINE
 PARALLEL_TEST(NullableColumnTest, test_clone_empty) {
-    NullableColumn::Ptr c0 = NullableColumn::create(Int32Column::create(), NullColumn::create());
+    auto c0 = NullableColumn::create(Int32Column::create(), NullColumn::create());
 
     auto c1 = c0->clone_empty();
     ASSERT_TRUE(c1->is_nullable());
@@ -245,14 +245,14 @@ PARALLEL_TEST(NullableColumnTest, test_clone_empty) {
 }
 
 PARALLEL_TEST(NullableColumnTest, test_update_rows) {
-    NullableColumn::Ptr column = NullableColumn::create(Int32Column::create(), NullColumn::create());
+    auto column = NullableColumn::create(Int32Column::create(), NullColumn::create());
     column->append_datum((int32_t)1);
     column->append_datum((int32_t)2);
     column->append_datum({});
     column->append_datum((int32_t)4);
     column->append_datum({});
 
-    NullableColumn::Ptr replace_col1 = NullableColumn::create(Int32Column::create(), NullColumn::create());
+    auto replace_col1 = NullableColumn::create(Int32Column::create(), NullColumn::create());
     replace_col1->append_datum({});
     replace_col1->append_datum((int32_t)5);
 
@@ -270,14 +270,14 @@ PARALLEL_TEST(NullableColumnTest, test_update_rows) {
     ASSERT_EQ(4, column->get(3).get_int32());
     ASSERT_EQ(5, column->get(4).get_int32());
 
-    NullableColumn::Ptr column1 = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
+    auto column1 = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
     column1->append_datum("abc");
     column1->append_datum("def");
     column1->append_datum({});
     column1->append_datum("ghi");
     column1->append_datum({});
 
-    NullableColumn::Ptr replace_col2 = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
+    auto replace_col2 = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
     replace_col2->append_datum({});
     replace_col2->append_datum("jk");
 
@@ -296,7 +296,7 @@ PARALLEL_TEST(NullableColumnTest, test_update_rows) {
 }
 
 PARALLEL_TEST(NullableColumnTest, test_murmur_hash_varbinary) {
-    NullableColumn::Ptr c0 = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
+    auto c0 = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
 
     c0->append_datum({});
     // 00 01 02 03
@@ -312,7 +312,7 @@ PARALLEL_TEST(NullableColumnTest, test_murmur_hash_varbinary) {
 }
 
 PARALLEL_TEST(NullableColumnTest, test_murmur_hash_uuid) {
-    NullableColumn::Ptr c0 = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
+    auto c0 = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
     // f79c3e09-677c-4bbd-a479-3f349cb785e7
     std::vector<uint8_t> data{0xf7, 0x9c, 0x3e, 0x09, 0x67, 0x7c, 0x4b, 0xbd,
                               0xa4, 0x79, 0x3f, 0x34, 0x9c, 0xb7, 0x85, 0xe7};
@@ -326,7 +326,7 @@ PARALLEL_TEST(NullableColumnTest, test_murmur_hash_uuid) {
 }
 
 PARALLEL_TEST(NullableColumnTest, test_xor_checksum) {
-    NullableColumn::Ptr c0 = NullableColumn::create(Int32Column::create(), NullColumn::create());
+    auto c0 = NullableColumn::create(Int32Column::create(), NullColumn::create());
 
     c0->append_datum({}); // NULL
     for (int i = 0; i <= 1000; i++) {
@@ -344,7 +344,7 @@ PARALLEL_TEST(NullableColumnTest, test_xor_checksum) {
 }
 
 PARALLEL_TEST(NullableColumnTest, test_compare_row) {
-    NullableColumn::Ptr c0 = NullableColumn::create(Int32Column::create(), NullColumn::create());
+    auto c0 = NullableColumn::create(Int32Column::create(), NullColumn::create());
     c0->append_datum({});
     c0->append_datum(1);
     c0->append_datum(2);
@@ -356,7 +356,7 @@ PARALLEL_TEST(NullableColumnTest, test_compare_row) {
     c0->append_datum({});
     auto correct = [&](const Datum& rhs_value, int sort_order, int null_first) {
         CompareVector res;
-        NullableColumn::Ptr rhs_column = NullableColumn::create(Int32Column::create(), NullColumn::create());
+        auto rhs_column = NullableColumn::create(Int32Column::create(), NullColumn::create());
         rhs_column->append_datum(rhs_value);
 
         auto desc = SortDesc(sort_order, null_first);
@@ -366,9 +366,9 @@ PARALLEL_TEST(NullableColumnTest, test_compare_row) {
                 auto cmp_res0 = c0->compare_at(i, 0, *rhs_column, desc.nan_direction());
                 auto cmp_res1 = c0->compare_at(i, 0, *rhs_column, desc.null_first) * sort_order;
                 EXPECT_EQ(cmp_res0, cmp_res1);
-                res.push_back(cmp_res0);
+                res.emplace_back(cmp_res0);
             } else {
-                res.push_back(c0->compare_at(i, 0, *rhs_column, desc.null_first) * sort_order);
+                res.emplace_back(c0->compare_at(i, 0, *rhs_column, desc.null_first) * sort_order);
             }
         }
         return res;
@@ -393,16 +393,16 @@ PARALLEL_TEST(NullableColumnTest, test_compare_row) {
 }
 
 PARALLEL_TEST(NullableColumnTest, test_replicate) {
-    NullableColumn::Ptr column = NullableColumn::create(Int32Column::create(), NullColumn::create());
+    auto column = NullableColumn::create(Int32Column::create(), NullColumn::create());
     column->append_datum((int32_t)1);
     column->append_datum({});
     column->append_datum((int32_t)4);
 
     Offsets offsets;
-    offsets.push_back(0);
-    offsets.push_back(2);
-    offsets.push_back(4);
-    offsets.push_back(7);
+    offsets.emplace_back(0);
+    offsets.emplace_back(2);
+    offsets.emplace_back(4);
+    offsets.emplace_back(7);
     auto c2 = column->replicate(offsets).value();
 
     ASSERT_EQ(1, c2->get(0).get_int32());
@@ -415,7 +415,7 @@ PARALLEL_TEST(NullableColumnTest, test_replicate) {
 }
 
 PARALLEL_TEST(NullableColumnTest, test_remove_first_n_values) {
-    NullableColumn::Ptr column = NullableColumn::create(Int32Column::create(), NullColumn::create());
+    auto column = NullableColumn::create(Int32Column::create(), NullColumn::create());
     column->append_datum((int32_t)1);
     column->append_datum({});
     column->append_datum((int32_t)4);

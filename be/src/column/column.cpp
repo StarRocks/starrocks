@@ -57,26 +57,26 @@ void Column::serialize_batch_with_null_masks(uint8_t* dst, Buffer<uint32_t>& sli
     }
 }
 
-StatusOr<ColumnPtr> Column::downgrade_helper_func(Ptr* col) {
+StatusOr<Column::MutablePtr> Column::downgrade_helper_func(Column::MutablePtr* col) {
     auto ret = (*col)->downgrade();
     if (!ret.ok()) {
         return ret;
     } else if (ret.value() == nullptr) {
         return nullptr;
     } else {
-        (*col) = ret.value();
+        (*col) = std::move(ret.value());
         return nullptr;
     }
 }
 
-StatusOr<ColumnPtr> Column::upgrade_helper_func(Ptr* col) {
+StatusOr<Column::MutablePtr> Column::upgrade_helper_func(Column::MutablePtr* col) {
     auto ret = (*col)->upgrade_if_overflow();
     if (!ret.ok()) {
         return ret;
     } else if (ret.value() == nullptr) {
         return nullptr;
     } else {
-        (*col) = ret.value();
+        (*col) = std::move(ret.value());
         return nullptr;
     }
 }

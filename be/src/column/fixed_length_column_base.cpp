@@ -32,7 +32,7 @@
 namespace starrocks {
 
 template <typename T>
-StatusOr<ColumnPtr> FixedLengthColumnBase<T>::upgrade_if_overflow() {
+StatusOr<MutableColumnPtr> FixedLengthColumnBase<T>::upgrade_if_overflow() {
     RETURN_IF_ERROR(capacity_limit_reached());
     return nullptr;
 }
@@ -110,7 +110,7 @@ void FixedLengthColumnBase<T>::append_default(size_t count) {
 
 //TODO(fzh): optimize copy using SIMD
 template <typename T>
-StatusOr<ColumnPtr> FixedLengthColumnBase<T>::replicate(const Buffer<uint32_t>& offsets) {
+StatusOr<MutableColumnPtr> FixedLengthColumnBase<T>::replicate(const Buffer<uint32_t>& offsets) {
     auto dest = this->clone_empty();
     auto& dest_data = down_cast<FixedLengthColumnBase<T>&>(*dest);
     auto& dest_datas = dest_data.get_data();

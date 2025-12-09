@@ -71,10 +71,10 @@ Status TableReader::init(const TableReaderParams& params) {
 struct TabletMultiGet {
     int64_t tablet_id{0};
     int64_t version{0};
-    std::shared_ptr<Chunk> keys;
+    ChunkPtr keys;
     std::vector<uint32_t> orig_idxs;
 
-    std::unique_ptr<Chunk> values;
+    ChunkUniquePtr values;
     std::vector<uint32_t> found_idxs;
     size_t num_rows{0};
     size_t cur_row{0};

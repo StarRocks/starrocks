@@ -155,7 +155,7 @@ public:
 
     void put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx, bool is_binary_protocol = false) const override;
 
-    StatusOr<ColumnPtr> replicate(const Buffer<uint32_t>& offsets) override;
+    StatusOr<MutableColumnPtr> replicate(const Buffer<uint32_t>& offsets) override;
 
     std::string get_name() const override { return "array-view-" + _elements->get_name(); }
 
@@ -179,11 +179,18 @@ public:
     void reset_column() override;
 
     const Column& elements() const { return *_elements; }
-    const ColumnPtr elements_column() const { return _elements; }
+    Column& elements() { return *_elements; }
+    const ColumnPtr& elements_column() const { return _elements; }
+    ColumnPtr& elements_column() { return _elements; }
 
     const UInt32Column& offsets() const { return *_offsets; }
+    UInt32Column& offsets() { return *_offsets; }
+    const UInt32Column::Ptr& offsets_column() const { return _offsets; }
     UInt32Column::Ptr& offsets_column() { return _offsets; }
+
     const UInt32Column& lengths() const { return *_lengths; }
+    UInt32Column& lengths() { return *_lengths; }
+    const UInt32Column::Ptr& lengths_column() const { return _lengths; }
     UInt32Column::Ptr& lengths_column() { return _lengths; }
 
     bool is_nullable() const override { return false; }
@@ -197,9 +204,9 @@ public:
         return _offsets->capacity_limit_reached();
     }
 
-    StatusOr<ColumnPtr> upgrade_if_overflow() override { return nullptr; }
+    StatusOr<MutableColumnPtr> upgrade_if_overflow() override { return nullptr; }
 
-    StatusOr<ColumnPtr> downgrade() override { return nullptr; }
+    StatusOr<MutableColumnPtr> downgrade() override { return nullptr; }
 
     bool has_large_column() const override { return _elements->has_large_column(); }
 
@@ -211,7 +218,7 @@ public:
 
     // build array_view column from array_column
     // if array_column is nullable, return Nullable(ArrayViewColumn), otherwise return ArrayViewColumn
-    static ColumnPtr from_array_column(const ColumnPtr& column);
+    static MutableColumnPtr from_array_column(const ColumnPtr& column);
     static ColumnPtr to_array_column(const ColumnPtr& column);
     ColumnPtr to_array_column() const;
 
@@ -225,8 +232,8 @@ public:
     }
 
 private:
-    ColumnPtr _elements;
-    UInt32Column::Ptr _offsets;
-    UInt32Column::Ptr _lengths;
+    Column::WrappedPtr _elements;
+    UInt32Column::WrappedPtr _offsets;
+    UInt32Column::WrappedPtr _lengths;
 };
 } // namespace starrocks

@@ -633,32 +633,52 @@ std::string MapColumn::debug_string() const {
     return ss.str();
 }
 
-StatusOr<ColumnPtr> MapColumn::upgrade_if_overflow() {
+StatusOr<MutableColumnPtr> MapColumn::upgrade_if_overflow() {
     if (_offsets->size() > Column::MAX_CAPACITY_LIMIT) {
         return Status::InternalError("Size of MapColumn exceed the limit");
     }
 
-    auto ret = upgrade_helper_func(&_keys);
+    auto mutable_keys = _keys->as_mutable_ptr();
+    auto ret = upgrade_helper_func(&mutable_keys);
     if (!ret.ok()) {
         return ret;
     }
+    _keys = std::move(mutable_keys);
 
-    return upgrade_helper_func(&_values);
+    auto mutable_values = _values->as_mutable_ptr();
+    ret = upgrade_helper_func(&mutable_values);
+    if (!ret.ok()) {
+        return ret;
+    }
+    _values = std::move(mutable_values);
+
+    return nullptr;
 }
 
-StatusOr<ColumnPtr> MapColumn::downgrade() {
-    auto ret = downgrade_helper_func(&_keys);
+StatusOr<MutableColumnPtr> MapColumn::downgrade() {
+    auto mutable_keys = _keys->as_mutable_ptr();
+    auto ret = downgrade_helper_func(&mutable_keys);
     if (!ret.ok()) {
         return ret;
     }
+    _keys = std::move(mutable_keys);
 
-    return downgrade_helper_func(&_values);
+    auto mutable_values = _values->as_mutable_ptr();
+    ret = downgrade_helper_func(&mutable_values);
+    if (!ret.ok()) {
+        return ret;
+    }
+    _values = std::move(mutable_values);
+
+    return nullptr;
 }
 
 Status MapColumn::unfold_const_children(const starrocks::TypeDescriptor& type) {
     DCHECK(type.children.size() == 2) << "Map schema does not match data's";
-    _keys = ColumnHelper::unfold_const_column(type.children[0], _keys->size(), _keys);
-    _values = ColumnHelper::unfold_const_column(type.children[1], _values->size(), _values);
+    size_t keys_size = _keys->size();
+    size_t values_size = _values->size();
+    _keys = ColumnHelper::unfold_const_column(type.children[0], keys_size, std::move(_keys));
+    _values = ColumnHelper::unfold_const_column(type.children[1], values_size, std::move(_values));
     return Status::OK();
 }
 

@@ -230,7 +230,7 @@ protected:
         // The first i rows has been pushed into hash_map
         if (is_passthrough && i > 0) {
             for (auto& column : chunk->columns()) {
-                column->remove_first_n_values(i);
+                column->as_mutable_raw_ptr()->remove_first_n_values(i);
             }
             chunk->check_or_die();
         }
@@ -355,7 +355,7 @@ protected:
             // The first i rows has been pushed into hash_map
             if (is_passthrough && i > 0) {
                 for (auto& column : chunk->columns()) {
-                    column->remove_first_n_values(i);
+                    column->as_mutable_raw_ptr()->remove_first_n_values(i);
                 }
                 chunk->check_or_die();
             }

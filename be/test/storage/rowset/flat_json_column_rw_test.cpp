@@ -77,8 +77,8 @@ protected:
         return std::make_shared<Segment>(fs, FileInfo{fname}, 1, _dummy_segment_schema, nullptr);
     }
 
-    void test_json(ColumnWriterOptions& writer_opts, const std::string& case_file, ColumnPtr& write_col,
-                   ColumnPtr& read_col, ColumnAccessPath* path) {
+    void test_json(ColumnWriterOptions& writer_opts, const std::string& case_file, MutableColumnPtr& write_col,
+                   MutableColumnPtr& read_col, ColumnAccessPath* path) {
         auto fs = std::make_shared<MemoryFileSystem>();
         ASSERT_TRUE(fs->create_dir(TEST_DIR).ok());
 
@@ -139,7 +139,7 @@ protected:
         }
     }
 
-    ColumnPtr create_json(const std::vector<std::string>& jsons, bool is_nullable) {
+    MutableColumnPtr create_json(const std::vector<std::string>& jsons, bool is_nullable) {
         auto json_col = JsonColumn::create();
         auto null_col = NullColumn::create();
         auto* json_column = down_cast<JsonColumn*>(json_col.get());
@@ -165,7 +165,7 @@ protected:
 };
 
 TEST_F(FlatJsonColumnRWTest, testNormalJson) {
-    ColumnPtr write_col = JsonColumn::create();
+    MutableColumnPtr write_col = JsonColumn::create();
     auto* json_col = down_cast<JsonColumn*>(write_col.get());
 
     ASSIGN_OR_ABORT(auto jv1, JsonValue::parse("{\"a\": 1, \"b\": 21}"));
@@ -180,7 +180,7 @@ TEST_F(FlatJsonColumnRWTest, testNormalJson) {
     json_col->append(&jv4);
     json_col->append(&jv5);
 
-    ColumnPtr read_col = JsonColumn::create();
+    MutableColumnPtr read_col = JsonColumn::create();
     ColumnWriterOptions writer_opts;
     writer_opts.need_flat = false;
     test_json(writer_opts, "/test_flat_json_rw1.data", write_col, read_col, nullptr);
@@ -188,13 +188,13 @@ TEST_F(FlatJsonColumnRWTest, testNormalJson) {
     auto* read_json = down_cast<JsonColumn*>(read_col.get());
     EXPECT_FALSE(read_json->is_flat_json());
     EXPECT_EQ(5, read_json->size());
-    EXPECT_EQ(0, read_json->get_flat_fields().size());
+    EXPECT_EQ(0, read_json->get_flat_fields_ptrs().size());
     EXPECT_EQ("{\"a\": 1, \"b\": 21}", read_json->debug_item(0));
     EXPECT_EQ("{\"a\": 4, \"b\": 24}", read_json->debug_item(3));
 }
 
 TEST_F(FlatJsonColumnRWTest, testNormalJsonWithPath) {
-    ColumnPtr write_col = JsonColumn::create();
+    MutableColumnPtr write_col = JsonColumn::create();
     auto* json_col = down_cast<JsonColumn*>(write_col.get());
 
     ASSIGN_OR_ABORT(auto jv1, JsonValue::parse("{\"a\": 1, \"b\": 21}"));
@@ -215,7 +215,7 @@ TEST_F(FlatJsonColumnRWTest, testNormalJsonWithPath) {
     root_path->children().emplace_back(std::move(f1_path));
     root_path->children().emplace_back(std::move(f2_path));
 
-    ColumnPtr read_col = JsonColumn::create();
+    MutableColumnPtr read_col = JsonColumn::create();
     ColumnWriterOptions writer_opts;
     writer_opts.need_flat = false;
     test_json(writer_opts, "/test_flat_json_rw1.data", write_col, read_col, root_path.get());
@@ -223,13 +223,13 @@ TEST_F(FlatJsonColumnRWTest, testNormalJsonWithPath) {
     auto* read_json = down_cast<JsonColumn*>(read_col.get());
     EXPECT_TRUE(read_json->is_flat_json());
     EXPECT_EQ(5, read_json->size());
-    EXPECT_EQ(2, read_json->get_flat_fields().size());
+    EXPECT_EQ(2, read_json->get_flat_fields_ptrs().size());
     EXPECT_EQ("{a: 1, b: 21}", read_json->debug_item(0));
     EXPECT_EQ("{a: 4, b: 24}", read_json->debug_item(3));
 }
 
 TEST_F(FlatJsonColumnRWTest, testNormalFlatJsonWithPath) {
-    ColumnPtr write_col = JsonColumn::create();
+    MutableColumnPtr write_col = JsonColumn::create();
     auto* json_col = down_cast<JsonColumn*>(write_col.get());
 
     ASSIGN_OR_ABORT(auto jv1, JsonValue::parse("{\"a\": 1, \"b\": 21}"));
@@ -250,7 +250,7 @@ TEST_F(FlatJsonColumnRWTest, testNormalFlatJsonWithPath) {
     root_path->children().emplace_back(std::move(f1_path));
     root_path->children().emplace_back(std::move(f2_path));
 
-    ColumnPtr read_col = JsonColumn::create();
+    MutableColumnPtr read_col = JsonColumn::create();
     ColumnWriterOptions writer_opts;
     writer_opts.need_flat = true;
     test_json(writer_opts, "/test_flat_json_rw1.data", write_col, read_col, root_path.get());
@@ -258,7 +258,7 @@ TEST_F(FlatJsonColumnRWTest, testNormalFlatJsonWithPath) {
     auto* read_json = down_cast<JsonColumn*>(read_col.get());
     EXPECT_TRUE(read_json->is_flat_json());
     EXPECT_EQ(5, read_json->size());
-    ASSERT_EQ(2, read_json->get_flat_fields().size());
+    ASSERT_EQ(2, read_json->get_flat_fields_ptrs().size());
     EXPECT_EQ("{a: 1, b: 21}", read_json->debug_item(0));
     EXPECT_EQ("{a: 4, b: 24}", read_json->debug_item(3));
 
@@ -266,7 +266,7 @@ TEST_F(FlatJsonColumnRWTest, testNormalFlatJsonWithPath) {
 }
 
 TEST_F(FlatJsonColumnRWTest, testNormalFlatJsonWithoutPath) {
-    ColumnPtr write_col = JsonColumn::create();
+    MutableColumnPtr write_col = JsonColumn::create();
     auto* json_col = down_cast<JsonColumn*>(write_col.get());
 
     ASSIGN_OR_ABORT(auto jv1, JsonValue::parse("{\"a\": 1, \"b\": 21}"));
@@ -281,7 +281,7 @@ TEST_F(FlatJsonColumnRWTest, testNormalFlatJsonWithoutPath) {
     json_col->append(&jv4);
     json_col->append(&jv5);
 
-    ColumnPtr read_col = JsonColumn::create();
+    MutableColumnPtr read_col = JsonColumn::create();
     ColumnWriterOptions writer_opts;
     writer_opts.need_flat = true;
     test_json(writer_opts, "/test_flat_json_rw1.data", write_col, read_col, nullptr);
@@ -289,14 +289,14 @@ TEST_F(FlatJsonColumnRWTest, testNormalFlatJsonWithoutPath) {
     auto* read_json = down_cast<JsonColumn*>(read_col.get());
     EXPECT_FALSE(read_json->is_flat_json());
     EXPECT_EQ(5, read_json->size());
-    ASSERT_EQ(0, read_json->get_flat_fields().size());
+    ASSERT_EQ(0, read_json->get_flat_fields_ptrs().size());
     EXPECT_EQ("{\"a\": 1, \"b\": 21}", read_json->debug_item(0));
     EXPECT_EQ("{\"a\": 4, \"b\": 24}", read_json->debug_item(3));
 }
 
 TEST_F(FlatJsonColumnRWTest, testNullNormalFlatJson) {
     config::json_flat_null_factor = 0.4;
-    ColumnPtr write_col = JsonColumn::create();
+    MutableColumnPtr write_col = JsonColumn::create();
     auto* json_col = down_cast<JsonColumn*>(write_col.get());
 
     ASSIGN_OR_ABORT(auto jv1, JsonValue::parse("{\"a\": 1, \"b\": 21}"));
@@ -318,7 +318,7 @@ TEST_F(FlatJsonColumnRWTest, testNullNormalFlatJson) {
     null_col->append(1);
     null_col->append(0);
 
-    ColumnPtr write_nl_col = NullableColumn::create(std::move(write_col), std::move(null_col));
+    MutableColumnPtr write_nl_col = NullableColumn::create(std::move(write_col), std::move(null_col));
 
     ASSIGN_OR_ABORT(auto root_path, ColumnAccessPath::create(TAccessPathType::FIELD, "root", 0));
     ASSIGN_OR_ABORT(auto f1_path, ColumnAccessPath::create(TAccessPathType::FIELD, "root.a", 0));
@@ -326,12 +326,12 @@ TEST_F(FlatJsonColumnRWTest, testNullNormalFlatJson) {
     root_path->children().emplace_back(std::move(f1_path));
     root_path->children().emplace_back(std::move(f2_path));
 
-    ColumnPtr read_col = NullableColumn::create(JsonColumn::create(), NullColumn::create());
+    MutableColumnPtr read_col = NullableColumn::create(JsonColumn::create(), NullColumn::create());
     ColumnWriterOptions writer_opts;
     writer_opts.need_flat = true;
     test_json(writer_opts, "/test_flat_json_rw2.data", write_nl_col, read_col, root_path.get());
 
-    auto* read_json = down_cast<JsonColumn*>(down_cast<NullableColumn*>(read_col.get())->data_column().get());
+    auto* read_json = down_cast<const JsonColumn*>(down_cast<NullableColumn*>(read_col.get())->data_column().get());
     EXPECT_TRUE(read_json->is_flat_json());
     EXPECT_EQ(5, read_col->size());
     EXPECT_EQ("NULL", read_col->debug_item(0));
@@ -339,7 +339,7 @@ TEST_F(FlatJsonColumnRWTest, testNullNormalFlatJson) {
 }
 
 TEST_F(FlatJsonColumnRWTest, tesArrayFlatJson) {
-    ColumnPtr write_col = JsonColumn::create();
+    MutableColumnPtr write_col = JsonColumn::create();
     auto* json_col = down_cast<JsonColumn*>(write_col.get());
 
     ASSIGN_OR_ABORT(auto jv1, JsonValue::parse(R"([{"a": 1}, {"b": 21}] )"));
@@ -360,7 +360,7 @@ TEST_F(FlatJsonColumnRWTest, tesArrayFlatJson) {
     root_path->children().emplace_back(std::move(f1_path));
     root_path->children().emplace_back(std::move(f2_path));
 
-    ColumnPtr read_col = JsonColumn::create();
+    MutableColumnPtr read_col = JsonColumn::create();
     ColumnWriterOptions writer_opts;
     writer_opts.need_flat = true;
     test_json(writer_opts, "/test_flat_json_rw3.data", write_col, read_col, root_path.get());
@@ -368,13 +368,13 @@ TEST_F(FlatJsonColumnRWTest, tesArrayFlatJson) {
     auto* read_json = down_cast<JsonColumn*>(read_col.get());
     EXPECT_TRUE(read_json->is_flat_json());
     EXPECT_EQ(5, read_json->size());
-    ASSERT_EQ(2, read_json->get_flat_fields().size());
+    ASSERT_EQ(2, read_json->get_flat_fields_ptrs().size());
     EXPECT_EQ("{a: NULL, b: NULL}", read_json->debug_item(0));
     EXPECT_EQ("{a: 4, b: 24}", read_json->debug_item(3));
 }
 
 TEST_F(FlatJsonColumnRWTest, testEmptyFlatObject) {
-    ColumnPtr write_col = JsonColumn::create();
+    MutableColumnPtr write_col = JsonColumn::create();
     auto* json_col = down_cast<JsonColumn*>(write_col.get());
 
     ASSIGN_OR_ABORT(auto jv1, JsonValue::parse(R"("" )"));
@@ -398,19 +398,19 @@ TEST_F(FlatJsonColumnRWTest, testEmptyFlatObject) {
     ColumnWriterOptions writer_opts;
     writer_opts.need_flat = true;
 
-    ColumnPtr read_col = JsonColumn::create();
+    MutableColumnPtr read_col = JsonColumn::create();
     test_json(writer_opts, "/test_flat_json_rw4.data", write_col, read_col, root_path.get());
 
     auto* read_json = down_cast<JsonColumn*>(read_col.get());
     EXPECT_TRUE(read_json->is_flat_json());
     EXPECT_EQ(5, read_json->size());
-    ASSERT_EQ(2, read_json->get_flat_fields().size());
+    ASSERT_EQ(2, read_json->get_flat_fields_ptrs().size());
     EXPECT_EQ("{a: NULL, b: NULL}", read_json->debug_item(0));
     EXPECT_EQ("{a: 4, b: 24}", read_json->debug_item(3));
 }
 
 TEST_F(FlatJsonColumnRWTest, testMergeRemainFlatJson) {
-    ColumnPtr write_col = JsonColumn::create();
+    MutableColumnPtr write_col = JsonColumn::create();
     auto* json_col = down_cast<JsonColumn*>(write_col.get());
 
     ASSIGN_OR_ABORT(auto jv1, JsonValue::parse(R"({"a": 1, "b": 21, "c": 31})"));
@@ -425,7 +425,7 @@ TEST_F(FlatJsonColumnRWTest, testMergeRemainFlatJson) {
     json_col->append(&jv4);
     json_col->append(&jv5);
 
-    ColumnPtr read_col = JsonColumn::create();
+    MutableColumnPtr read_col = JsonColumn::create();
     ColumnWriterOptions writer_opts;
     writer_opts.need_flat = true;
     test_json(writer_opts, "/test_flat_json_rw2.data", write_col, read_col, nullptr);
@@ -448,7 +448,7 @@ TEST_F(FlatJsonColumnRWTest, testMergeRemainFlatJson) {
 }
 
 TEST_F(FlatJsonColumnRWTest, testMergeRemainFlatJsonWithConfig) {
-    ColumnPtr write_col = JsonColumn::create();
+    MutableColumnPtr write_col = JsonColumn::create();
     auto* json_col = down_cast<JsonColumn*>(write_col.get());
 
     ASSIGN_OR_ABORT(auto jv1, JsonValue::parse(R"({"a": 1, "b": 21, "c": 31})"));
@@ -463,7 +463,7 @@ TEST_F(FlatJsonColumnRWTest, testMergeRemainFlatJsonWithConfig) {
     json_col->append(&jv4);
     json_col->append(&jv5);
 
-    ColumnPtr read_col = JsonColumn::create();
+    MutableColumnPtr read_col = JsonColumn::create();
     ColumnWriterOptions writer_opts;
     FlatJsonConfig config;
     writer_opts.need_flat = true;
@@ -488,7 +488,7 @@ TEST_F(FlatJsonColumnRWTest, testMergeRemainFlatJsonWithConfig) {
 }
 
 TEST_F(FlatJsonColumnRWTest, testMergeRemainFlatJson2) {
-    ColumnPtr write_col = JsonColumn::create();
+    MutableColumnPtr write_col = JsonColumn::create();
     auto* json_col = down_cast<JsonColumn*>(write_col.get());
     std::vector<std::string> json = {
             R"({"a": 1, "b": {"b1": 22, "b2": {"b3": "abc"}, "b4": 1}, "c": 31})",
@@ -502,7 +502,7 @@ TEST_F(FlatJsonColumnRWTest, testMergeRemainFlatJson2) {
         json_col->append(jv);
     }
 
-    ColumnPtr read_col = JsonColumn::create();
+    MutableColumnPtr read_col = JsonColumn::create();
     ColumnWriterOptions writer_opts;
     writer_opts.need_flat = true;
     test_json(writer_opts, "/test_flat_json_rw2.data", write_col, read_col, nullptr);
@@ -526,7 +526,7 @@ TEST_F(FlatJsonColumnRWTest, testMergeRemainFlatJson2) {
 }
 
 TEST_F(FlatJsonColumnRWTest, testMergeMiddleRemainFlatJson) {
-    ColumnPtr write_col = JsonColumn::create();
+    MutableColumnPtr write_col = JsonColumn::create();
     auto* json_col = down_cast<JsonColumn*>(write_col.get());
 
     ASSIGN_OR_ABORT(auto jv1, JsonValue::parse(R"({"a": 1, "b": 21, "c": 31})"));
@@ -547,7 +547,7 @@ TEST_F(FlatJsonColumnRWTest, testMergeMiddleRemainFlatJson) {
     root_path->children().emplace_back(std::move(f1_path));
     root_path->children().emplace_back(std::move(f2_path));
 
-    ColumnPtr read_col = JsonColumn::create();
+    MutableColumnPtr read_col = JsonColumn::create();
     ColumnWriterOptions writer_opts;
     writer_opts.need_flat = true;
     test_json(writer_opts, "/test_flat_json_rw2.data", write_col, read_col, root_path.get());
@@ -572,7 +572,7 @@ TEST_F(FlatJsonColumnRWTest, testMergeMiddleRemainFlatJson) {
 
 TEST_F(FlatJsonColumnRWTest, testMergeMiddleRemainFlatJson2) {
     config::json_flat_null_factor = 0.4;
-    ColumnPtr write_col = JsonColumn::create();
+    MutableColumnPtr write_col = JsonColumn::create();
     auto* json_col = down_cast<JsonColumn*>(write_col.get());
     std::vector<std::string> json = {
             R"({"a": 1, "b": {"b1": 22, "b2": {"b3": "abc"}, "b4": 1}, "c": 31})",
@@ -586,7 +586,7 @@ TEST_F(FlatJsonColumnRWTest, testMergeMiddleRemainFlatJson2) {
         json_col->append(jv);
     }
 
-    ColumnPtr read_col = JsonColumn::create();
+    MutableColumnPtr read_col = JsonColumn::create();
     ColumnWriterOptions writer_opts;
     writer_opts.need_flat = true;
     test_json(writer_opts, "/test_flat_json_rw2.data", write_col, read_col, nullptr);
@@ -611,7 +611,7 @@ TEST_F(FlatJsonColumnRWTest, testMergeMiddleRemainFlatJson2) {
 TEST_F(FlatJsonColumnRWTest, testMergeMiddleRemainFlatJson2WithConfig) {
     FlatJsonConfig config;
     config.set_flat_json_null_factor(0.4);
-    ColumnPtr write_col = JsonColumn::create();
+    MutableColumnPtr write_col = JsonColumn::create();
     auto* json_col = down_cast<JsonColumn*>(write_col.get());
     std::vector<std::string> json = {
             R"({"a": 1, "b": {"b1": 22, "b2": {"b3": "abc"}, "b4": 1}, "c": 31})",
@@ -625,7 +625,7 @@ TEST_F(FlatJsonColumnRWTest, testMergeMiddleRemainFlatJson2WithConfig) {
         json_col->append(jv);
     }
 
-    ColumnPtr read_col = JsonColumn::create();
+    MutableColumnPtr read_col = JsonColumn::create();
     ColumnWriterOptions writer_opts;
     writer_opts.need_flat = true;
     writer_opts.flat_json_config = &config;
@@ -650,7 +650,7 @@ TEST_F(FlatJsonColumnRWTest, testMergeMiddleRemainFlatJson2WithConfig) {
 
 TEST_F(FlatJsonColumnRWTest, testMergeMiddleRemainFlatJson3) {
     config::json_flat_null_factor = 0.4;
-    ColumnPtr write_col = JsonColumn::create();
+    MutableColumnPtr write_col = JsonColumn::create();
     auto* json_col = down_cast<JsonColumn*>(write_col.get());
     std::vector<std::string> json = {
             R"({"a": 1, "b": {"b1": 22, "b2": {"b3": "abc", "c1": {"c2": "a", "ce": 1},"bc": 1}, "b4": 1}})",
@@ -671,7 +671,7 @@ TEST_F(FlatJsonColumnRWTest, testMergeMiddleRemainFlatJson3) {
     b_path->children().emplace_back(std::move(b2_path));
     root_path->children().emplace_back(std::move(b_path));
 
-    ColumnPtr read_col = JsonColumn::create();
+    MutableColumnPtr read_col = JsonColumn::create();
     ColumnWriterOptions writer_opts;
     writer_opts.need_flat = true;
     test_json(writer_opts, "/test_flat_json_rw2.data", write_col, read_col, root_path.get());
@@ -699,7 +699,7 @@ TEST_F(FlatJsonColumnRWTest, testMergeMiddleRemainFlatJson3) {
 TEST_F(FlatJsonColumnRWTest, testMergeMiddleRemainFlatJson3WithConfig) {
     FlatJsonConfig config;
     config.set_flat_json_null_factor(0.4);
-    ColumnPtr write_col = JsonColumn::create();
+    MutableColumnPtr write_col = JsonColumn::create();
     auto* json_col = down_cast<JsonColumn*>(write_col.get());
     std::vector<std::string> json = {
             R"({"a": 1, "b": {"b1": 22, "b2": {"b3": "abc", "c1": {"c2": "a", "ce": 1},"bc": 1}, "b4": 1}})",
@@ -720,7 +720,7 @@ TEST_F(FlatJsonColumnRWTest, testMergeMiddleRemainFlatJson3WithConfig) {
     b_path->children().emplace_back(std::move(b2_path));
     root_path->children().emplace_back(std::move(b_path));
 
-    ColumnPtr read_col = JsonColumn::create();
+    MutableColumnPtr read_col = JsonColumn::create();
     ColumnWriterOptions writer_opts;
     writer_opts.need_flat = true;
     writer_opts.flat_json_config = &config;
@@ -747,7 +747,7 @@ TEST_F(FlatJsonColumnRWTest, testMergeMiddleRemainFlatJson3WithConfig) {
 }
 
 TEST_F(FlatJsonColumnRWTest, testDeepFlatJson) {
-    ColumnPtr write_col = JsonColumn::create();
+    MutableColumnPtr write_col = JsonColumn::create();
     auto* json_col = down_cast<JsonColumn*>(write_col.get());
     std::vector<std::string> json = {
             R"({"a": 1, "b": {"b1": 22, "b2": {"b3": "abc"}, "b4": 1}, "c": 31})",
@@ -765,7 +765,7 @@ TEST_F(FlatJsonColumnRWTest, testDeepFlatJson) {
     ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_JSON, "b.b4.b5");
     ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_JSON, "b.b2.b3");
 
-    ColumnPtr read_col = JsonColumn::create();
+    MutableColumnPtr read_col = JsonColumn::create();
     ColumnWriterOptions writer_opts;
     writer_opts.need_flat = true;
     test_json(writer_opts, "/test_flat_json_rw2.data", write_col, read_col, root.get());
@@ -793,7 +793,7 @@ TEST_F(FlatJsonColumnRWTest, testHyperFlatJson) {
     config::json_flat_null_factor = 0.4;
     config::json_flat_sparsity_factor = 0.5;
 
-    ColumnPtr write_col = JsonColumn::create();
+    MutableColumnPtr write_col = JsonColumn::create();
     auto* json_col = down_cast<JsonColumn*>(write_col.get());
     std::vector<std::string> json = {
             R"({"a": 1, "gg": "te1", "ff": {"f1": "985"}, "b": {"b1": 22, "b2": {"b3": "abc", "c1": {"c2": "a", "ce": 1},"bc": 1}, "b4": 1}})",
@@ -814,7 +814,7 @@ TEST_F(FlatJsonColumnRWTest, testHyperFlatJson) {
     ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_JSON, "ff.f1");
     ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_JSON, "gg.g1");
 
-    ColumnPtr read_col = JsonColumn::create();
+    MutableColumnPtr read_col = JsonColumn::create();
     ColumnWriterOptions writer_opts;
     writer_opts.need_flat = true;
     test_json(writer_opts, "/test_flat_json_rw2.data", write_col, read_col, root.get());
@@ -846,7 +846,7 @@ TEST_F(FlatJsonColumnRWTest, testHyperFlatJsonWithConfig) {
     FlatJsonConfig config;
     config.set_flat_json_null_factor(0.4);
     config.set_flat_json_sparsity_factor(0.5);
-    ColumnPtr write_col = JsonColumn::create();
+    MutableColumnPtr write_col = JsonColumn::create();
     auto* json_col = down_cast<JsonColumn*>(write_col.get());
     std::vector<std::string> json = {
             R"({"a": 1, "gg": "te1", "ff": {"f1": "985"}, "b": {"b1": 22, "b2": {"b3": "abc", "c1": {"c2": "a", "ce": 1},"bc": 1}, "b4": 1}})",
@@ -867,7 +867,7 @@ TEST_F(FlatJsonColumnRWTest, testHyperFlatJsonWithConfig) {
     ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_JSON, "ff.f1");
     ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_JSON, "gg.g1");
 
-    ColumnPtr read_col = JsonColumn::create();
+    MutableColumnPtr read_col = JsonColumn::create();
     ColumnWriterOptions writer_opts;
     writer_opts.need_flat = true;
     writer_opts.flat_json_config = &config;
@@ -908,7 +908,7 @@ TEST_F(FlatJsonColumnRWTest, testHyperFlatJsonWithConfig) {
 }
 
 TEST_F(FlatJsonColumnRWTest, testMergeRemainJson) {
-    ColumnPtr write_col = JsonColumn::create();
+    MutableColumnPtr write_col = JsonColumn::create();
     auto* json_col = down_cast<JsonColumn*>(write_col.get());
 
     ASSIGN_OR_ABORT(auto jv1, JsonValue::parse(R"({"a": 1, "b": 21, "c": 31})"));
@@ -923,7 +923,7 @@ TEST_F(FlatJsonColumnRWTest, testMergeRemainJson) {
     json_col->append(&jv4);
     json_col->append(&jv5);
 
-    ColumnPtr read_col = JsonColumn::create();
+    MutableColumnPtr read_col = JsonColumn::create();
     ColumnWriterOptions writer_opts;
     writer_opts.need_flat = false;
     test_json(writer_opts, "/test_flat_json_rw2.data", write_col, read_col, nullptr);
@@ -943,7 +943,7 @@ TEST_F(FlatJsonColumnRWTest, testMergeRemainJson) {
 }
 
 TEST_F(FlatJsonColumnRWTest, testMergeMiddleRemainJson) {
-    ColumnPtr write_col = JsonColumn::create();
+    MutableColumnPtr write_col = JsonColumn::create();
     auto* json_col = down_cast<JsonColumn*>(write_col.get());
 
     ASSIGN_OR_ABORT(auto jv1, JsonValue::parse(R"({"a": 1, "b": 21, "c": 31})"));
@@ -964,7 +964,7 @@ TEST_F(FlatJsonColumnRWTest, testMergeMiddleRemainJson) {
     root_path->children().emplace_back(std::move(f1_path));
     root_path->children().emplace_back(std::move(f2_path));
 
-    ColumnPtr read_col = JsonColumn::create();
+    MutableColumnPtr read_col = JsonColumn::create();
     ColumnWriterOptions writer_opts;
     writer_opts.need_flat = false;
     test_json(writer_opts, "/test_flat_json_rw2.data", write_col, read_col, root_path.get());
@@ -986,7 +986,7 @@ TEST_F(FlatJsonColumnRWTest, testMergeMiddleRemainJson) {
 
 TEST_F(FlatJsonColumnRWTest, testMergeMiddleRemainJson2) {
     config::json_flat_null_factor = 0.4;
-    ColumnPtr write_col = JsonColumn::create();
+    MutableColumnPtr write_col = JsonColumn::create();
     auto* json_col = down_cast<JsonColumn*>(write_col.get());
     std::vector<std::string> json = {
             R"({"a": 1, "b": {"b1": 22, "b2": {"b3": "abc", "c1": {"c2": "a", "ce": 1},"bc": 1}, "b4": 1}})",
@@ -1007,7 +1007,7 @@ TEST_F(FlatJsonColumnRWTest, testMergeMiddleRemainJson2) {
     b_path->children().emplace_back(std::move(b2_path));
     root_path->children().emplace_back(std::move(b_path));
 
-    ColumnPtr read_col = JsonColumn::create();
+    MutableColumnPtr read_col = JsonColumn::create();
     ColumnWriterOptions writer_opts;
     writer_opts.need_flat = false;
     test_json(writer_opts, "/test_flat_json_rw2.data", write_col, read_col, root_path.get());
@@ -1029,7 +1029,7 @@ TEST_F(FlatJsonColumnRWTest, testMergeMiddleRemainJson2) {
 TEST_F(FlatJsonColumnRWTest, testMergeMiddleRemainJson2WithConfig) {
     FlatJsonConfig config;
     config.set_flat_json_null_factor(0.4);
-    ColumnPtr write_col = JsonColumn::create();
+    MutableColumnPtr write_col = JsonColumn::create();
     auto* json_col = down_cast<JsonColumn*>(write_col.get());
     std::vector<std::string> json = {
             R"({"a": 1, "b": {"b1": 22, "b2": {"b3": "abc", "c1": {"c2": "a", "ce": 1},"bc": 1}, "b4": 1}})",
@@ -1050,7 +1050,7 @@ TEST_F(FlatJsonColumnRWTest, testMergeMiddleRemainJson2WithConfig) {
     b_path->children().emplace_back(std::move(b2_path));
     root_path->children().emplace_back(std::move(b_path));
 
-    ColumnPtr read_col = JsonColumn::create();
+    MutableColumnPtr read_col = JsonColumn::create();
     ColumnWriterOptions writer_opts;
     writer_opts.need_flat = false;
     test_json(writer_opts, "/test_flat_json_rw2.data", write_col, read_col, root_path.get());
@@ -1070,7 +1070,7 @@ TEST_F(FlatJsonColumnRWTest, testMergeMiddleRemainJson2WithConfig) {
 }
 
 TEST_F(FlatJsonColumnRWTest, testDeepJson) {
-    ColumnPtr write_col = JsonColumn::create();
+    MutableColumnPtr write_col = JsonColumn::create();
     auto* json_col = down_cast<JsonColumn*>(write_col.get());
     std::vector<std::string> json = {
             R"({"a": 1, "b": {"b1": 22, "b2": {"b3": "abc"}, "b4": 1}, "c": 31})",
@@ -1088,7 +1088,7 @@ TEST_F(FlatJsonColumnRWTest, testDeepJson) {
     ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_JSON, "b.b4.b5");
     ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_JSON, "b.b2.b3");
 
-    ColumnPtr read_col = JsonColumn::create();
+    MutableColumnPtr read_col = JsonColumn::create();
     ColumnWriterOptions writer_opts;
     writer_opts.need_flat = false;
     test_json(writer_opts, "/test_flat_json_rw2.data", write_col, read_col, root.get());
@@ -1111,7 +1111,7 @@ TEST_F(FlatJsonColumnRWTest, testHyperJson) {
     config::json_flat_null_factor = 0.4;
     config::json_flat_sparsity_factor = 0.5;
 
-    ColumnPtr write_col = JsonColumn::create();
+    MutableColumnPtr write_col = JsonColumn::create();
     auto* json_col = down_cast<JsonColumn*>(write_col.get());
     std::vector<std::string> json = {
             R"({"a": 1, "gg": "te1", "ff": {"f1": "985"}, "b": {"b1": 22, "b2": {"b3": "abc", "c1": {"c2": "a", "ce": 1},"bc": 1}, "b4": 1}})",
@@ -1132,7 +1132,7 @@ TEST_F(FlatJsonColumnRWTest, testHyperJson) {
     ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_JSON, "ff.f1");
     ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_JSON, "gg.g1");
 
-    ColumnPtr read_col = JsonColumn::create();
+    MutableColumnPtr read_col = JsonColumn::create();
     ColumnWriterOptions writer_opts;
     writer_opts.need_flat = false;
     test_json(writer_opts, "/test_flat_json_rw2.data", write_col, read_col, root.get());
@@ -1156,7 +1156,7 @@ TEST_F(FlatJsonColumnRWTest, testHyperJsonWithConfig) {
     config.set_flat_json_null_factor(0.4);
     config.set_flat_json_sparsity_factor(0.5);
 
-    ColumnPtr write_col = JsonColumn::create();
+    MutableColumnPtr write_col = JsonColumn::create();
     auto* json_col = down_cast<JsonColumn*>(write_col.get());
     std::vector<std::string> json = {
             R"({"a": 1, "gg": "te1", "ff": {"f1": "985"}, "b": {"b1": 22, "b2": {"b3": "abc", "c1": {"c2": "a", "ce": 1},"bc": 1}, "b4": 1}})",
@@ -1177,7 +1177,7 @@ TEST_F(FlatJsonColumnRWTest, testHyperJsonWithConfig) {
     ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_JSON, "ff.f1");
     ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_JSON, "gg.g1");
 
-    ColumnPtr read_col = JsonColumn::create();
+    MutableColumnPtr read_col = JsonColumn::create();
     ColumnWriterOptions writer_opts;
     writer_opts.need_flat = false;
     writer_opts.flat_json_config = &config;
@@ -1201,7 +1201,7 @@ TEST_F(FlatJsonColumnRWTest, testHyperNoCastTypeJson) {
     config::json_flat_null_factor = 0.4;
     config::json_flat_sparsity_factor = 0.5;
 
-    ColumnPtr write_col = JsonColumn::create();
+    MutableColumnPtr write_col = JsonColumn::create();
     auto* json_col = down_cast<JsonColumn*>(write_col.get());
     std::vector<std::string> json = {
             R"({"a": 1, "gg": "te1", "ff": {"f1": "985"}, "b": {"b1": 22, "b2": {"b3": "abc", "c1": {"c2": "a", "ce": 1},"bc": 1}, "b4": 1}})",
@@ -1222,7 +1222,7 @@ TEST_F(FlatJsonColumnRWTest, testHyperNoCastTypeJson) {
     ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_JSON, "ff.f1");
     ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_VARCHAR, "gg.g1");
 
-    ColumnPtr read_col = JsonColumn::create();
+    MutableColumnPtr read_col = JsonColumn::create();
     ColumnWriterOptions writer_opts;
     writer_opts.need_flat = true;
     test_json(writer_opts, "/test_flat_json_rw2.data", write_col, read_col, root.get());
@@ -1242,7 +1242,7 @@ TEST_F(FlatJsonColumnRWTest, testHyperNoCastTypeJsonWithConfig) {
     config.set_flat_json_null_factor(0.4);
     config.set_flat_json_sparsity_factor(0.5);
 
-    ColumnPtr write_col = JsonColumn::create();
+    MutableColumnPtr write_col = JsonColumn::create();
     auto* json_col = down_cast<JsonColumn*>(write_col.get());
     std::vector<std::string> json = {
             R"({"a": 1, "gg": "te1", "ff": {"f1": "985"}, "b": {"b1": 22, "b2": {"b3": "abc", "c1": {"c2": "a", "ce": 1},"bc": 1}, "b4": 1}})",
@@ -1263,7 +1263,7 @@ TEST_F(FlatJsonColumnRWTest, testHyperNoCastTypeJsonWithConfig) {
     ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_JSON, "ff.f1");
     ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_VARCHAR, "gg.g1");
 
-    ColumnPtr read_col = JsonColumn::create();
+    MutableColumnPtr read_col = JsonColumn::create();
     ColumnWriterOptions writer_opts;
     writer_opts.need_flat = true;
     writer_opts.flat_json_config = &config;
@@ -1283,7 +1283,7 @@ TEST_F(FlatJsonColumnRWTest, testHyperCastTypeJson) {
     config::json_flat_null_factor = 0.4;
     config::json_flat_sparsity_factor = 0.5;
 
-    ColumnPtr write_col = JsonColumn::create();
+    MutableColumnPtr write_col = JsonColumn::create();
     auto* json_col = down_cast<JsonColumn*>(write_col.get());
     std::vector<std::string> json = {
             R"({"a": 1, "gg": "te1", "ff": {"f1": "985"}, "b": {"b1": 22, "b2": {"b3": "abc", "c1": {"c2": "a", "ce": 1},"bc": 1}, "b4": 1}})",
@@ -1304,7 +1304,7 @@ TEST_F(FlatJsonColumnRWTest, testHyperCastTypeJson) {
     ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_BIGINT, "ff.f1");
     ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_JSON, "gg.g1");
 
-    ColumnPtr read_col = JsonColumn::create();
+    MutableColumnPtr read_col = JsonColumn::create();
     ColumnWriterOptions writer_opts;
     writer_opts.need_flat = true;
     test_json(writer_opts, "/test_flat_json_rw2.data", write_col, read_col, root.get());
@@ -1324,7 +1324,7 @@ TEST_F(FlatJsonColumnRWTest, testHyperCastTypeJsonWithConfig) {
     config.set_flat_json_null_factor(0.4);
     config.set_flat_json_sparsity_factor(0.5);
 
-    ColumnPtr write_col = JsonColumn::create();
+    MutableColumnPtr write_col = JsonColumn::create();
     auto* json_col = down_cast<JsonColumn*>(write_col.get());
     std::vector<std::string> json = {
             R"({"a": 1, "gg": "te1", "ff": {"f1": "985"}, "b": {"b1": 22, "b2": {"b3": "abc", "c1": {"c2": "a", "ce": 1},"bc": 1}, "b4": 1}})",
@@ -1345,7 +1345,7 @@ TEST_F(FlatJsonColumnRWTest, testHyperCastTypeJsonWithConfig) {
     ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_BIGINT, "ff.f1");
     ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_JSON, "gg.g1");
 
-    ColumnPtr read_col = JsonColumn::create();
+    MutableColumnPtr read_col = JsonColumn::create();
     ColumnWriterOptions writer_opts;
     writer_opts.need_flat = true;
     writer_opts.flat_json_config = &config;
@@ -1365,7 +1365,7 @@ TEST_F(FlatJsonColumnRWTest, testHyperCastTypeJson2) {
     config::json_flat_null_factor = 0.4;
     config::json_flat_sparsity_factor = 0.5;
 
-    ColumnPtr write_col = JsonColumn::create();
+    MutableColumnPtr write_col = JsonColumn::create();
     auto* json_col = down_cast<JsonColumn*>(write_col.get());
     std::vector<std::string> json = {
             R"({"a": 1, "gg": "te1", "ff": {"f1": "985"}, "b": {"b1": 22, "b2": {"b3": "abc", "c1": {"c2": "a", "ce": 1},"bc": 1}, "b4": 1}})",
@@ -1386,7 +1386,7 @@ TEST_F(FlatJsonColumnRWTest, testHyperCastTypeJson2) {
     ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_BIGINT, "ff.f1");
     ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_JSON, "gg.g1");
 
-    ColumnPtr read_col = JsonColumn::create();
+    MutableColumnPtr read_col = JsonColumn::create();
     ColumnWriterOptions writer_opts;
     writer_opts.need_flat = true;
     test_json(writer_opts, "/test_flat_json_rw2.data", write_col, read_col, root.get());
@@ -1424,7 +1424,7 @@ TEST_F(FlatJsonColumnRWTest, testMergeRemainNullFlatJson) {
     };
     // clang-format on
     auto write_col = create_json(jsons, true);
-    ColumnPtr read_col = write_col->clone_empty();
+    MutableColumnPtr read_col = write_col->clone_empty();
     ColumnWriterOptions writer_opts;
     writer_opts.need_flat = true;
     test_json(writer_opts, "/test_flat_json_rw2.data", write_col, read_col, nullptr);
@@ -1437,7 +1437,7 @@ TEST_F(FlatJsonColumnRWTest, testMergeRemainNullFlatJson) {
     EXPECT_EQ("b", writer_opts.meta->children_columns(2).name());
     EXPECT_EQ("remain", writer_opts.meta->children_columns(3).name());
 
-    auto* read_json = down_cast<JsonColumn*>(down_cast<NullableColumn*>(read_col.get())->data_column().get());
+    auto* read_json = down_cast<const JsonColumn*>(down_cast<NullableColumn*>(read_col.get())->data_column().get());
     EXPECT_FALSE(read_json->is_flat_json());
     EXPECT_EQ(5, read_col->size());
     EXPECT_EQ(R"({"a": 1, "b": 21, "c": 31})", read_col->debug_item(0));
@@ -1460,7 +1460,7 @@ TEST_F(FlatJsonColumnRWTest, testMergeRemainNullFlatJson1) {
     };
     // clang-format on
     auto write_col = create_json(jsons, true);
-    ColumnPtr read_col = write_col->clone_empty();
+    MutableColumnPtr read_col = write_col->clone_empty();
     ColumnWriterOptions writer_opts;
     writer_opts.need_flat = true;
     test_json(writer_opts, "/test_flat_json_rw2.data", write_col, read_col, nullptr);
@@ -1469,7 +1469,7 @@ TEST_F(FlatJsonColumnRWTest, testMergeRemainNullFlatJson1) {
     EXPECT_FALSE(writer_opts.meta->json_meta().is_flat());
     EXPECT_FALSE(writer_opts.meta->json_meta().has_remain());
 
-    auto* read_json = down_cast<JsonColumn*>(down_cast<NullableColumn*>(read_col.get())->data_column().get());
+    auto* read_json = down_cast<const JsonColumn*>(down_cast<NullableColumn*>(read_col.get())->data_column().get());
     EXPECT_FALSE(read_json->is_flat_json());
     EXPECT_EQ(5, read_col->size());
     EXPECT_EQ(R"({"a": 1, "b": 21, "c": 31})", read_col->debug_item(0));
@@ -1489,7 +1489,7 @@ TEST_F(FlatJsonColumnRWTest, testMergeRemainNullFlatJson2) {
             R"({"a": 3, "b": {"b1": 24, "b2": {"b3": "xyz"}, "b4": {"b5": 1}}, "e": [1, 2, 3]})", R"(NULL)",
             R"({"a": 5, "b": {}})"};
     auto write_col = create_json(jsons, true);
-    ColumnPtr read_col = write_col->clone_empty();
+    MutableColumnPtr read_col = write_col->clone_empty();
     ColumnWriterOptions writer_opts;
     writer_opts.need_flat = true;
     test_json(writer_opts, "/test_flat_json_rw2.data", write_col, read_col, nullptr);
@@ -1504,7 +1504,7 @@ TEST_F(FlatJsonColumnRWTest, testMergeRemainNullFlatJson2) {
     EXPECT_EQ("b.b4", writer_opts.meta->children_columns(4).name());
     EXPECT_EQ("remain", writer_opts.meta->children_columns(5).name());
 
-    auto* read_json = down_cast<JsonColumn*>(down_cast<NullableColumn*>(read_col.get())->data_column().get());
+    auto* read_json = down_cast<const JsonColumn*>(down_cast<NullableColumn*>(read_col.get())->data_column().get());
     EXPECT_FALSE(read_json->is_flat_json());
     EXPECT_EQ(5, read_col->size());
 
@@ -1526,7 +1526,7 @@ TEST_F(FlatJsonColumnRWTest, testMergeMiddleRemainNullFlatJson) {
         R"({})"
     };
     // clang-format on
-    ColumnPtr write_col = create_json(jsons, true);
+    MutableColumnPtr write_col = create_json(jsons, true);
 
     ASSIGN_OR_ABORT(auto root_path, ColumnAccessPath::create(TAccessPathType::FIELD, "root", 0));
     ASSIGN_OR_ABORT(auto f1_path, ColumnAccessPath::create(TAccessPathType::FIELD, "root.a", 0));
@@ -1534,12 +1534,12 @@ TEST_F(FlatJsonColumnRWTest, testMergeMiddleRemainNullFlatJson) {
     root_path->children().emplace_back(std::move(f1_path));
     root_path->children().emplace_back(std::move(f2_path));
 
-    ColumnPtr read_col = write_col->clone_empty();
+    MutableColumnPtr read_col = write_col->clone_empty();
     ColumnWriterOptions writer_opts;
     writer_opts.need_flat = true;
     test_json(writer_opts, "/test_flat_json_rw2.data", write_col, read_col, root_path.get());
 
-    auto* read_json = down_cast<JsonColumn*>(down_cast<NullableColumn*>(read_col.get())->data_column().get());
+    auto* read_json = down_cast<const JsonColumn*>(down_cast<NullableColumn*>(read_col.get())->data_column().get());
 
     EXPECT_EQ(4, writer_opts.meta->children_columns_size());
     EXPECT_TRUE(writer_opts.meta->json_meta().is_flat());
@@ -1565,9 +1565,9 @@ TEST_F(FlatJsonColumnRWTest, testMergeMiddleRemainNullFlatJson2) {
             R"({"a": 1, "b": {"b1": 22, "b2": {"b3": "abc"}, "b4": 1}, "c": 31})",
             R"({"a": 2, "b": {"b1": 23, "b2": {"b3": "efg"}, "b4": [1, 2, 3]}, "d": 32})",
             R"({"a": 3, "b": {"b1": 24, "b2": {"b3": "xyz"}, "b4": {"b5": 1}}, "e": [1, 2, 3]})", R"(NULL)", R"(NULL)"};
-    ColumnPtr write_col = create_json(json, true);
+    MutableColumnPtr write_col = create_json(json, true);
 
-    ColumnPtr read_col = write_col->clone_empty();
+    MutableColumnPtr read_col = write_col->clone_empty();
     ColumnWriterOptions writer_opts;
     writer_opts.need_flat = true;
     test_json(writer_opts, "/test_flat_json_rw2.data", write_col, read_col, nullptr);
@@ -1582,7 +1582,7 @@ TEST_F(FlatJsonColumnRWTest, testMergeMiddleRemainNullFlatJson2) {
     EXPECT_EQ("b.b4", writer_opts.meta->children_columns(4).name());
     EXPECT_EQ("remain", writer_opts.meta->children_columns(5).name());
 
-    auto* read_json = down_cast<JsonColumn*>(down_cast<NullableColumn*>(read_col.get())->data_column().get());
+    auto* read_json = down_cast<const JsonColumn*>(down_cast<NullableColumn*>(read_col.get())->data_column().get());
     EXPECT_FALSE(read_json->is_flat_json());
     EXPECT_EQ(5, read_col->size());
     for (size_t i = 0; i < json.size(); i++) {
@@ -1599,7 +1599,7 @@ TEST_F(FlatJsonColumnRWTest, testMergeMiddleRemainNullFlatJson3) {
             R"({"a": 3, "b": {"b1": 24, "b2": {"b3": "xyz", "c1": {"c2": "c", "cf": 3},"be": 3}, "b4": {"b5": 1}}})",
             R"({"a": 4, "b": {"b1": 25, "b2": {"b3": "qwe", "c1": {"c2": "d", "cg": 4},"bf": 4}, "b4": {"b7": 2}}})",
             R"({"a": 5, "b": {"b1": 26, "b2": {"b3": "sdf", "c1": {"c2": "e", "ch": 5},"bg": 5}, "b4": 23}})"};
-    ColumnPtr write_col = create_json(json, true);
+    MutableColumnPtr write_col = create_json(json, true);
 
     ASSIGN_OR_ABORT(auto root_path, ColumnAccessPath::create(TAccessPathType::FIELD, "root", 0));
     ASSIGN_OR_ABORT(auto b_path, ColumnAccessPath::create(TAccessPathType::FIELD, "root.b", 0));
@@ -1608,7 +1608,7 @@ TEST_F(FlatJsonColumnRWTest, testMergeMiddleRemainNullFlatJson3) {
     b_path->children().emplace_back(std::move(b2_path));
     root_path->children().emplace_back(std::move(b_path));
 
-    ColumnPtr read_col = write_col->clone_empty();
+    MutableColumnPtr read_col = write_col->clone_empty();
     ColumnWriterOptions writer_opts;
     writer_opts.need_flat = true;
     test_json(writer_opts, "/test_flat_json_rw2.data", write_col, read_col, root_path.get());
@@ -1624,7 +1624,7 @@ TEST_F(FlatJsonColumnRWTest, testMergeMiddleRemainNullFlatJson3) {
     EXPECT_EQ("b.b4", writer_opts.meta->children_columns(5).name());
     EXPECT_EQ("remain", writer_opts.meta->children_columns(6).name());
 
-    auto* read_json = down_cast<JsonColumn*>(down_cast<NullableColumn*>(read_col.get())->data_column().get());
+    auto* read_json = down_cast<const JsonColumn*>(down_cast<NullableColumn*>(read_col.get())->data_column().get());
     EXPECT_TRUE(read_json->is_flat_json());
     EXPECT_EQ(5, read_col->size());
     EXPECT_EQ(R"({b.b2: {"b3": "abc", "bc": 1, "c1": {"c2": "a", "ce": 1}}})", read_col->debug_item(0));
@@ -1643,12 +1643,12 @@ TEST_F(FlatJsonColumnRWTest, testDeepNullFlatJson) {
                                      R"({"a": 3, "b": {"b1": 24, "b2": {"b3": "xyz"}, "b4": {"b5": 1}}, "e": [1,2,3]})",
                                      R"(NULL)", R"({"a": 5, "b": {"b1": 26, "b2": {}, "b4": 23}})"};
 
-    ColumnPtr write_col = create_json(json, true);
+    MutableColumnPtr write_col = create_json(json, true);
     ASSIGN_OR_ABORT(auto root, ColumnAccessPath::create(TAccessPathType::FIELD, "root", 0));
     ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_JSON, "b.b4.b5");
     ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_JSON, "b.b2.b3");
 
-    ColumnPtr read_col = write_col->clone_empty();
+    MutableColumnPtr read_col = write_col->clone_empty();
     ColumnWriterOptions writer_opts;
     writer_opts.need_flat = true;
     test_json(writer_opts, "/test_flat_json_rw2.data", write_col, read_col, root.get());
@@ -1663,7 +1663,7 @@ TEST_F(FlatJsonColumnRWTest, testDeepNullFlatJson) {
     EXPECT_EQ("b.b4", writer_opts.meta->children_columns(4).name());
     EXPECT_EQ("remain", writer_opts.meta->children_columns(5).name());
 
-    auto* read_json = down_cast<JsonColumn*>(down_cast<NullableColumn*>(read_col.get())->data_column().get());
+    auto* read_json = down_cast<const JsonColumn*>(down_cast<NullableColumn*>(read_col.get())->data_column().get());
     EXPECT_TRUE(read_json->is_flat_json());
     EXPECT_EQ(5, read_col->size());
     EXPECT_EQ(R"({b.b4.b5: NULL, b.b2.b3: "abc"})", read_col->debug_item(0));
@@ -1683,7 +1683,7 @@ TEST_F(FlatJsonColumnRWTest, testHyperNullFlatJson) {
             R"({"a": 3, "gg": "te3", "ff": {"f1": "983"}, "b": {"b1": 24, "b2": {"b3": "xyz", "c1": {"c2": "c", "cf": 3},"be": 3}, "b4": {"b5": 1}}})",
             R"({"a": 4, "gg": "te4", "ff": 781, "b": {"b1": 25, "b2": {"b3": "qwe", "c1": {"c2": "d", "cg": 4},"bf": 4}, "b4": {"b7": 2}}})",
             R"(NULL)"};
-    ColumnPtr write_col = create_json(json, true);
+    MutableColumnPtr write_col = create_json(json, true);
 
     ASSIGN_OR_ABORT(auto root, ColumnAccessPath::create(TAccessPathType::FIELD, "root", 0));
     ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_DOUBLE, "b.b4.b5");
@@ -1692,7 +1692,7 @@ TEST_F(FlatJsonColumnRWTest, testHyperNullFlatJson) {
     ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_BIGINT, "ff.f1");
     ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_JSON, "gg.g1");
 
-    ColumnPtr read_col = write_col->clone_empty();
+    MutableColumnPtr read_col = write_col->clone_empty();
     ColumnWriterOptions writer_opts;
     writer_opts.need_flat = true;
     test_json(writer_opts, "/test_flat_json_rw2.data", write_col, read_col, root.get());
@@ -1711,7 +1711,7 @@ TEST_F(FlatJsonColumnRWTest, testHyperNullFlatJson) {
     EXPECT_EQ("gg", writer_opts.meta->children_columns(index++).name());
     EXPECT_EQ("remain", writer_opts.meta->children_columns(index++).name());
 
-    auto* read_json = down_cast<JsonColumn*>(down_cast<NullableColumn*>(read_col.get())->data_column().get());
+    auto* read_json = down_cast<JsonColumn*>(down_cast<NullableColumn*>(read_col.get())->data_column_raw_ptr());
     EXPECT_TRUE(read_json->is_flat_json());
     EXPECT_EQ(5, read_col->size());
     EXPECT_EQ(
@@ -1742,9 +1742,9 @@ TEST_F(FlatJsonColumnRWTest, testMergeRemainNullJson) {
             R"(NULL)"
     };
     // clang-format on
-    ColumnPtr write_col = create_json(jsons, true);
+    MutableColumnPtr write_col = create_json(jsons, true);
 
-    ColumnPtr read_col = write_col->clone_empty();
+    MutableColumnPtr read_col = write_col->clone_empty();
     ColumnWriterOptions writer_opts;
     writer_opts.need_flat = false;
     test_json(writer_opts, "/test_flat_json_rw2.data", write_col, read_col, nullptr);
@@ -1753,7 +1753,7 @@ TEST_F(FlatJsonColumnRWTest, testMergeRemainNullJson) {
     EXPECT_FALSE(writer_opts.meta->json_meta().is_flat());
     EXPECT_FALSE(writer_opts.meta->json_meta().has_remain());
 
-    auto* read_json = down_cast<JsonColumn*>(down_cast<NullableColumn*>(read_col.get())->data_column().get());
+    auto* read_json = down_cast<const JsonColumn*>(down_cast<NullableColumn*>(read_col.get())->data_column().get());
     EXPECT_FALSE(read_json->is_flat_json());
     EXPECT_EQ(5, read_col->size());
     EXPECT_EQ(R"({"a": 1, "b": 21, "c": 31})", read_col->debug_item(0));
@@ -1776,7 +1776,7 @@ TEST_F(FlatJsonColumnRWTest, testMergeMiddleRemainNullJson) {
             R"(NULL)"
     };
     // clang-format on
-    ColumnPtr write_col = create_json(jsons, true);
+    MutableColumnPtr write_col = create_json(jsons, true);
 
     ASSIGN_OR_ABORT(auto root_path, ColumnAccessPath::create(TAccessPathType::FIELD, "root", 0));
     ASSIGN_OR_ABORT(auto f1_path, ColumnAccessPath::create(TAccessPathType::FIELD, "root.a", 0));
@@ -1784,7 +1784,7 @@ TEST_F(FlatJsonColumnRWTest, testMergeMiddleRemainNullJson) {
     root_path->children().emplace_back(std::move(f1_path));
     root_path->children().emplace_back(std::move(f2_path));
 
-    ColumnPtr read_col = write_col->clone_empty();
+    MutableColumnPtr read_col = write_col->clone_empty();
     ColumnWriterOptions writer_opts;
     writer_opts.need_flat = false;
     test_json(writer_opts, "/test_flat_json_rw2.data", write_col, read_col, root_path.get());
@@ -1793,7 +1793,7 @@ TEST_F(FlatJsonColumnRWTest, testMergeMiddleRemainNullJson) {
     EXPECT_FALSE(writer_opts.meta->json_meta().is_flat());
     EXPECT_FALSE(writer_opts.meta->json_meta().has_remain());
 
-    auto* read_json = down_cast<JsonColumn*>(down_cast<NullableColumn*>(read_col.get())->data_column().get());
+    auto* read_json = down_cast<JsonColumn*>(down_cast<NullableColumn*>(read_col.get())->data_column_raw_ptr());
 
     EXPECT_TRUE(read_json->is_flat_json());
     EXPECT_EQ(5, read_col->size());
@@ -1814,7 +1814,7 @@ TEST_F(FlatJsonColumnRWTest, testMergeMiddleRemainNullJson2) {
             R"({"a": 3, "b": {"b1": 24, "b2": {"b3": "xyz", "c1": {"c2": "c", "cf": 3},"be": 3}, "b4": {"b5": 1}}})",
             R"({})", R"(NULL)"};
 
-    ColumnPtr write_col = create_json(json, true);
+    MutableColumnPtr write_col = create_json(json, true);
 
     ASSIGN_OR_ABORT(auto root_path, ColumnAccessPath::create(TAccessPathType::FIELD, "root", 0));
     ASSIGN_OR_ABORT(auto b_path, ColumnAccessPath::create(TAccessPathType::FIELD, "root.b", 0));
@@ -1823,7 +1823,7 @@ TEST_F(FlatJsonColumnRWTest, testMergeMiddleRemainNullJson2) {
     b_path->children().emplace_back(std::move(b2_path));
     root_path->children().emplace_back(std::move(b_path));
 
-    ColumnPtr read_col = write_col->clone_empty();
+    MutableColumnPtr read_col = write_col->clone_empty();
     ColumnWriterOptions writer_opts;
     writer_opts.need_flat = false;
     test_json(writer_opts, "/test_flat_json_rw2.data", write_col, read_col, root_path.get());
@@ -1832,7 +1832,7 @@ TEST_F(FlatJsonColumnRWTest, testMergeMiddleRemainNullJson2) {
     EXPECT_FALSE(writer_opts.meta->json_meta().is_flat());
     EXPECT_FALSE(writer_opts.meta->json_meta().has_remain());
 
-    auto* read_json = down_cast<JsonColumn*>(down_cast<NullableColumn*>(read_col.get())->data_column().get());
+    auto* read_json = down_cast<JsonColumn*>(down_cast<NullableColumn*>(read_col.get())->data_column_raw_ptr());
     EXPECT_TRUE(read_json->is_flat_json());
     EXPECT_EQ(5, read_col->size());
     EXPECT_EQ(R"({b.b2: {"b3": "abc", "bc": 1, "c1": {"c2": "a", "ce": 1}}})", read_col->debug_item(0));
@@ -1851,13 +1851,13 @@ TEST_F(FlatJsonColumnRWTest, testDeepNullJson) {
                                      R"({"a": 3, "b": {"b1": 24, "b2": {"b3": "xyz"}, "b4": {"b5": 1}}, "e": [1,2,3]})",
                                      R"({"a": 4, "b": {}, "g": {"x": 1}})", R"(NULL)"};
 
-    ColumnPtr write_col = create_json(json, true);
+    MutableColumnPtr write_col = create_json(json, true);
 
     ASSIGN_OR_ABORT(auto root, ColumnAccessPath::create(TAccessPathType::FIELD, "root", 0));
     ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_JSON, "b.b4.b5");
     ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_JSON, "b.b2.b3");
 
-    ColumnPtr read_col = write_col->clone_empty();
+    MutableColumnPtr read_col = write_col->clone_empty();
     ColumnWriterOptions writer_opts;
     writer_opts.need_flat = false;
     test_json(writer_opts, "/test_flat_json_rw2.data", write_col, read_col, root.get());
@@ -1866,7 +1866,7 @@ TEST_F(FlatJsonColumnRWTest, testDeepNullJson) {
     EXPECT_FALSE(writer_opts.meta->json_meta().is_flat());
     EXPECT_FALSE(writer_opts.meta->json_meta().has_remain());
 
-    auto* read_json = down_cast<JsonColumn*>(down_cast<NullableColumn*>(read_col.get())->data_column().get());
+    auto* read_json = down_cast<JsonColumn*>(down_cast<NullableColumn*>(read_col.get())->data_column_raw_ptr());
     EXPECT_TRUE(read_json->is_flat_json());
     EXPECT_EQ(5, read_col->size());
     EXPECT_EQ(R"({b.b4.b5: NULL, b.b2.b3: "abc"})", read_col->debug_item(0));
@@ -1896,7 +1896,7 @@ TEST_F(FlatJsonColumnRWTest, testHyperNullJson) {
     ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_JSON, "ff.f1");
     ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_JSON, "gg.g1");
 
-    ColumnPtr read_col = write_col->clone_empty();
+    MutableColumnPtr read_col = write_col->clone_empty();
     ColumnWriterOptions writer_opts;
     writer_opts.need_flat = false;
     test_json(writer_opts, "/test_flat_json_rw2.data", write_col, read_col, root.get());
@@ -1905,7 +1905,7 @@ TEST_F(FlatJsonColumnRWTest, testHyperNullJson) {
     EXPECT_FALSE(writer_opts.meta->json_meta().is_flat());
     EXPECT_FALSE(writer_opts.meta->json_meta().has_remain());
 
-    auto* read_json = down_cast<JsonColumn*>(down_cast<NullableColumn*>(read_col.get())->data_column().get());
+    auto* read_json = down_cast<JsonColumn*>(down_cast<NullableColumn*>(read_col.get())->data_column_raw_ptr());
     EXPECT_TRUE(read_json->is_flat_json());
     EXPECT_EQ(5, read_col->size());
     EXPECT_EQ(R"({b.b4.b5: NULL, b.b2.b3: "abc", a: 1, ff.f1: "985", gg.g1: NULL})", read_col->debug_item(0));
@@ -1935,7 +1935,7 @@ TEST_F(FlatJsonColumnRWTest, testHyperNullJson2) {
     ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_JSON, "ff.f1");
     ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_JSON, "gg.g1");
 
-    ColumnPtr read_col = write_col->clone_empty();
+    MutableColumnPtr read_col = write_col->clone_empty();
     ColumnWriterOptions writer_opts;
     writer_opts.need_flat = true;
     test_json(writer_opts, "/test_flat_json_rw2.data", write_col, read_col, root.get());
@@ -1944,7 +1944,7 @@ TEST_F(FlatJsonColumnRWTest, testHyperNullJson2) {
     EXPECT_FALSE(writer_opts.meta->json_meta().is_flat());
     EXPECT_FALSE(writer_opts.meta->json_meta().has_remain());
 
-    auto* read_json = down_cast<JsonColumn*>(down_cast<NullableColumn*>(read_col.get())->data_column().get());
+    auto* read_json = down_cast<JsonColumn*>(down_cast<NullableColumn*>(read_col.get())->data_column_raw_ptr());
     EXPECT_TRUE(read_json->is_flat_json());
     EXPECT_EQ(5, read_col->size());
     EXPECT_EQ(R"({b.b4.b5: NULL, b.b2.b3: "abc", a: 1, ff.f1: "985", gg.g1: NULL})", read_col->debug_item(0));
@@ -1964,7 +1964,7 @@ TEST_F(FlatJsonColumnRWTest, testHyperNoCastTypeNullJson) {
             R"({"a": 3, "gg": "te3", "ff": {"f1": "983"}, "b": {"b1": 24, "b2": {"b3": "xyz", "c1": {"c2": "c", "cf": 3},"be": 3}, "b4": {"b5": 1}}})",
             R"({"a": 4, "gg": "te4", "ff": 781, "b": {"b1": 25, "b2": {}, "b4": {"b7": 2}}})", R"(NULL)"};
 
-    ColumnPtr write_col = create_json(json, true);
+    MutableColumnPtr write_col = create_json(json, true);
 
     ASSIGN_OR_ABORT(auto root, ColumnAccessPath::create(TAccessPathType::FIELD, "root", 0));
     ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_BIGINT, "b.b4.b5");
@@ -1973,12 +1973,12 @@ TEST_F(FlatJsonColumnRWTest, testHyperNoCastTypeNullJson) {
     ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_JSON, "ff.f1");
     ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_VARCHAR, "gg.g1");
 
-    ColumnPtr read_col = write_col->clone_empty();
+    MutableColumnPtr read_col = write_col->clone_empty();
     ColumnWriterOptions writer_opts;
     writer_opts.need_flat = true;
     test_json(writer_opts, "/test_flat_json_rw2.data", write_col, read_col, root.get());
 
-    auto* read_json = down_cast<JsonColumn*>(down_cast<NullableColumn*>(read_col.get())->data_column().get());
+    auto* read_json = down_cast<JsonColumn*>(down_cast<NullableColumn*>(read_col.get())->data_column_raw_ptr());
     EXPECT_TRUE(read_json->is_flat_json());
     EXPECT_EQ(5, read_col->size());
     EXPECT_EQ(R"({b.b4.b5: NULL, b.b2.b3: 'abc', a: 1, ff.f1: "985", gg.g1: NULL})", read_col->debug_item(0));
@@ -1997,7 +1997,7 @@ TEST_F(FlatJsonColumnRWTest, testHyperCastTypeNullJson) {
             R"({"a": 2, "gg": "te2", "ff": {"f1": "984"}, "b": {"b1": 23, "b2": {"b3": "efg", "c1": {"c2": "b", "cd": 2},"bd": 2}, "b4": [1, 2, 3]}})",
             R"({"a": 3, "gg": "te3", "ff": {"f1": "983"}, "b": {"b1": 24, "b2": {"b3": "xyz", "c1": {"c2": "c", "cf": 3},"be": 3}, "b4": {"b5": 1}}})",
             R"({"a": 4, "gg": "te4", "ff": 781, "b": {}})", R"(NULL)"};
-    ColumnPtr write_col = create_json(json, true);
+    MutableColumnPtr write_col = create_json(json, true);
 
     ASSIGN_OR_ABORT(auto root, ColumnAccessPath::create(TAccessPathType::FIELD, "root", 0));
     ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_DOUBLE, "b.b4.b5");
@@ -2006,12 +2006,12 @@ TEST_F(FlatJsonColumnRWTest, testHyperCastTypeNullJson) {
     ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_BIGINT, "ff.f1");
     ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_JSON, "gg.g1");
 
-    ColumnPtr read_col = write_col->clone_empty();
+    MutableColumnPtr read_col = write_col->clone_empty();
     ColumnWriterOptions writer_opts;
     writer_opts.need_flat = true;
     test_json(writer_opts, "/test_flat_json_rw2.data", write_col, read_col, root.get());
 
-    auto* read_json = down_cast<JsonColumn*>(down_cast<NullableColumn*>(read_col.get())->data_column().get());
+    auto* read_json = down_cast<JsonColumn*>(down_cast<NullableColumn*>(read_col.get())->data_column_raw_ptr());
     EXPECT_TRUE(read_json->is_flat_json());
     EXPECT_EQ(5, read_col->size());
     EXPECT_EQ(R"({b.b4.b5: NULL, b.b2: NULL, a: '1', ff.f1: 985, gg.g1: NULL})", read_col->debug_item(0));
@@ -2030,7 +2030,7 @@ TEST_F(FlatJsonColumnRWTest, testHyperCastTypeNullJson2) {
             R"({"a": 2, "gg": "te2", "ff": {"f1": "984"}, "b": {"b1": 23, "b2": {"b3": "efg", "c1": {"c2": "b", "cd": 2},"bd": 2}, "b4": [1, 2, 3]}})",
             R"({"a": 3, "gg": "te3", "ff": {"f1": "983"}, "b": {"b1": 24, "b2": {"b3": "xyz", "c1": {"c2": "c", "cf": 3},"be": 3}, "b4": {"b5": 1}}})",
             R"({"a": 4, "gg": "te4", "ff": 781, "b": {}})", R"(NULL)"};
-    ColumnPtr write_col = create_json(json, true);
+    MutableColumnPtr write_col = create_json(json, true);
 
     ASSIGN_OR_ABORT(auto root, ColumnAccessPath::create(TAccessPathType::FIELD, "root", 0));
     ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_DOUBLE, "b.b4.b5");
@@ -2039,12 +2039,12 @@ TEST_F(FlatJsonColumnRWTest, testHyperCastTypeNullJson2) {
     ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_BIGINT, "ff.f1");
     ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_JSON, "gg.g1");
 
-    ColumnPtr read_col = write_col->clone_empty();
+    MutableColumnPtr read_col = write_col->clone_empty();
     ColumnWriterOptions writer_opts;
     writer_opts.need_flat = true;
     test_json(writer_opts, "/test_flat_json_rw2.data", write_col, read_col, root.get());
 
-    auto* read_json = down_cast<JsonColumn*>(down_cast<NullableColumn*>(read_col.get())->data_column().get());
+    auto* read_json = down_cast<JsonColumn*>(down_cast<NullableColumn*>(read_col.get())->data_column_raw_ptr());
     EXPECT_TRUE(read_json->is_flat_json());
     EXPECT_EQ(5, read_col->size());
     EXPECT_EQ(
@@ -2064,7 +2064,7 @@ TEST_F(FlatJsonColumnRWTest, testHyperDeepFlatternJson) {
     config::json_flat_null_factor = 0.4;
     config::json_flat_sparsity_factor = 0.5;
 
-    ColumnPtr write_col = JsonColumn::create();
+    MutableColumnPtr write_col = JsonColumn::create();
     auto* json_col = down_cast<JsonColumn*>(write_col.get());
     std::vector<std::string> json = {R"({"a": 1, "gg": "te1", "ff": {"f1": [{"e2": 1, "e3": 2}, 2, 3]}})",
                                      R"({"a": 2, "gg": "te2", "ff": 780})", R"({"a": 3, "gg": "te3", "ff": 781})",
@@ -2078,7 +2078,7 @@ TEST_F(FlatJsonColumnRWTest, testHyperDeepFlatternJson) {
     ASSIGN_OR_ABORT(auto root, ColumnAccessPath::create(TAccessPathType::FIELD, "root", 0));
     ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_JSON, "ff.f1");
 
-    ColumnPtr read_col = JsonColumn::create();
+    MutableColumnPtr read_col = JsonColumn::create();
     ColumnWriterOptions writer_opts;
     writer_opts.need_flat = true;
     test_json(writer_opts, "/test_flat_json_rw2.data", write_col, read_col, root.get());
@@ -2091,7 +2091,7 @@ TEST_F(FlatJsonColumnRWTest, testHyperDeepFlatternJson) {
 }
 
 TEST_F(FlatJsonColumnRWTest, testGetIORangeVec) {
-    ColumnPtr write_col = JsonColumn::create();
+    MutableColumnPtr write_col = JsonColumn::create();
     auto* json_col = down_cast<JsonColumn*>(write_col.get());
 
     ASSIGN_OR_ABORT(auto jv1, JsonValue::parse("{\"a\": 1, \"b\": 21}"));
@@ -2106,7 +2106,7 @@ TEST_F(FlatJsonColumnRWTest, testGetIORangeVec) {
     json_col->append(&jv4);
     json_col->append(&jv5);
 
-    ColumnPtr read_col = JsonColumn::create();
+    MutableColumnPtr read_col = JsonColumn::create();
     ColumnWriterOptions writer_opts;
 
     auto fs = std::make_shared<MemoryFileSystem>();

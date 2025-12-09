@@ -116,7 +116,7 @@ public:
 
     void update_batch_single_state(FunctionContext* ctx, size_t chunk_size, const Column** columns,
                                    AggDataPtr __restrict state) const override {
-        this->data(state).column->append(*columns[0], 0, chunk_size);
+        this->data(state).column->as_mutable_raw_ptr()->append(*columns[0], 0, chunk_size);
     }
 
     void update_batch_single_state_with_frame(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
@@ -138,7 +138,7 @@ public:
     }
 
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
-                                     ColumnPtr* dst) const override {
+                                     MutableColumnPtr& dst) const override {
         //Histogram aggregation function only support one stage Agg
         CHECK(false);
     }
