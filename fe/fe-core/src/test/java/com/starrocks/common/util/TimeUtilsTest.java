@@ -23,6 +23,11 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.ast.expression.DateLiteral;
+import com.starrocks.type.DateType;
+>>>>>>> b15e7036a3 ([Refactor] TimeUtils upgrade to java.time.* (#66360))
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.jupiter.api.Assertions;
@@ -60,15 +65,18 @@ public class TimeUtilsTest {
         Assertions.assertNotNull(TimeUtils.getCurrentFormatTime());
         Assertions.assertTrue(TimeUtils.getEstimatedTime(0L) > 0);
 
-        Assertions.assertEquals(-62167420800000L, TimeUtils.MIN_DATE.getTime());
-        Assertions.assertEquals(253402185600000L, TimeUtils.MAX_DATE.getTime());
-        Assertions.assertEquals(-62167420800000L, TimeUtils.MIN_DATETIME.getTime());
-        Assertions.assertEquals(253402271999000L, TimeUtils.MAX_DATETIME.getTime());
+        Assertions.assertEquals(-62167248343000L,
+                TimeUtils.MIN_DATE.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli());
+        Assertions.assertEquals(253402185600000L,
+                TimeUtils.MAX_DATE.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli());
+        Assertions.assertEquals(-62167248343000L,
+                TimeUtils.MIN_DATETIME.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli());
+        Assertions.assertEquals(253402271999000L,
+                TimeUtils.MAX_DATETIME.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli());
     }
 
     @Test
     public void testDateParse() {
-        // date
         List<String> validDateList = new LinkedList<>();
         validDateList.add("2013-12-02");
         validDateList.add("2013-12-02");
@@ -77,10 +85,9 @@ public class TimeUtilsTest {
         validDateList.add("9999-12-31");
         validDateList.add("1900-01-01");
         validDateList.add("2013-2-28");
-        validDateList.add("0000-01-01");
         for (String validDate : validDateList) {
             try {
-                TimeUtils.parseDate(validDate, PrimitiveType.DATE);
+                TimeUtils.parseDate(validDate);
             } catch (AnalysisException e) {
                 e.printStackTrace();
                 System.out.println(validDate);
@@ -98,14 +105,16 @@ public class TimeUtilsTest {
         invalidDateList.add("2013-2-28 2:3:4");
         for (String invalidDate : invalidDateList) {
             try {
-                TimeUtils.parseDate(invalidDate, PrimitiveType.DATE);
+                TimeUtils.parseDate(invalidDate);
                 Assertions.fail();
             } catch (AnalysisException e) {
                 Assertions.assertTrue(e.getMessage().contains("Invalid"));
             }
         }
+    }
 
-        // datetime
+    @Test
+    public void testDateTimeParse() {
         List<String> validDateTimeList = new LinkedList<>();
         validDateTimeList.add("2013-12-02 13:59:59");
         validDateTimeList.add("2013-12-2 13:59:59");
@@ -116,10 +125,9 @@ public class TimeUtilsTest {
         validDateTimeList.add("2013-2-28 23:59:59");
         validDateTimeList.add("2013-2-28 2:3:4");
         validDateTimeList.add("2014-05-07 19:8:50");
-        validDateTimeList.add("0000-01-01 00:00:00");
         for (String validDateTime : validDateTimeList) {
             try {
-                TimeUtils.parseDate(validDateTime, PrimitiveType.DATETIME);
+                TimeUtils.parseDateTime(validDateTime);
             } catch (AnalysisException e) {
                 e.printStackTrace();
                 System.out.println(validDateTime);
@@ -138,7 +146,7 @@ public class TimeUtilsTest {
         invalidDateTimeList.add("2013-13-01 12:12:12");
         for (String invalidDateTime : invalidDateTimeList) {
             try {
-                TimeUtils.parseDate(invalidDateTime, PrimitiveType.DATETIME);
+                TimeUtils.parseDateTime(invalidDateTime);
                 Assertions.fail();
             } catch (AnalysisException e) {
                 Assertions.assertTrue(e.getMessage().contains("Invalid"));
@@ -253,7 +261,7 @@ public class TimeUtilsTest {
             Assertions.fail(e.getMessage());
         }
     }
-    
+
     @Test
     public void testDateTimeWithTimeZonePattern() {
         // Case1: date time string is '2024-09-10 Asia/Shanghai'
@@ -268,7 +276,7 @@ public class TimeUtilsTest {
         Assertions.assertNull(matcher1.group("minute"));
         Assertions.assertNull(matcher1.group("second"));
         Assertions.assertNull(matcher1.group("fraction"));
-    
+
         // Case2: date time string is '2024-09-10 01:01:01.123 Asia/Shanghai'
         String value2 = "2024-09-10 01:01:01.123 Asia/Shanghai";
         Matcher matcher2 = DATETIME_WITH_TIME_ZONE_PATTERN.matcher(value2);
@@ -281,7 +289,7 @@ public class TimeUtilsTest {
         Assertions.assertEquals("01", matcher2.group("second"));
         Assertions.assertEquals("123", matcher2.group("fraction"));
         Assertions.assertEquals("Asia/Shanghai", matcher2.group("timezone"));
-    
+
         // Case3: date time string is ' 2024-09-10'. It will not match
         String value3 = " 2024-09-10";
         Matcher matcher3 = DATETIME_WITH_TIME_ZONE_PATTERN.matcher(value3);
