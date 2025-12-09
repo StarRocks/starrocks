@@ -1235,7 +1235,6 @@ public class MaterializedViewAggPushDownRewriteTest extends MaterializedViewTest
         starRocksAssert.dropMaterializedView("mv1");
     }
 
-
     @Test
     public void testAggPushDownFailWithGroupByFunc0() throws Exception {
         starRocksAssert.withTable("CREATE TABLE fact_event_requests\n" +
