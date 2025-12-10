@@ -460,7 +460,8 @@ public class AlterJobExecutor implements AstVisitorExtendInterface<Void, Connect
             if (properties.containsKey(PropertyAnalyzer.PROPERTIES_WRITE_QUORUM)) {
                 schemaChangeHandler.updateTableMeta(db, tableName.getTbl(), properties, TTabletMetaType.WRITE_QUORUM);
             } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_INMEMORY)) {
-                schemaChangeHandler.updateTableMeta(db, tableName.getTbl(), properties, TTabletMetaType.INMEMORY);
+                // deprecated, ignore the property
+                properties.remove(PropertyAnalyzer.PROPERTIES_INMEMORY);
             } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PRIMARY_INDEX_CACHE_EXPIRE_SEC)) {
                 schemaChangeHandler.updateTableMeta(db, tableName.getTbl(), properties,
                         TTabletMetaType.PRIMARY_INDEX_CACHE_EXPIRE_SEC);
@@ -819,13 +820,8 @@ public class AlterJobExecutor implements AstVisitorExtendInterface<Void, Connect
             }
             Map<String, String> properties = clause.getProperties();
             if (properties.containsKey(PropertyAnalyzer.PROPERTIES_INMEMORY)) {
-                if (table.isCloudNativeTable()) {
-                    throw new SemanticException("Lake table not support alter in_memory");
-                }
-
-                SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
-                schemaChangeHandler.updatePartitionsInMemoryMeta(
-                        db, table.getName(), partitionNames, properties);
+                // deprecated, ignore silently
+                properties.remove(PropertyAnalyzer.PROPERTIES_INMEMORY);
             }
 
             Locker locker = new Locker();
@@ -866,8 +862,6 @@ public class AlterJobExecutor implements AstVisitorExtendInterface<Void, Connect
             }
         }
 
-        boolean hasInMemory = properties.containsKey(PropertyAnalyzer.PROPERTIES_INMEMORY);
-
         PartitionInfo partitionInfo = olapTable.getPartitionInfo();
         // get value from properties here
         // 1. data property
@@ -886,8 +880,8 @@ public class AlterJobExecutor implements AstVisitorExtendInterface<Void, Connect
         // 2. replication num
         short newReplicationNum =
                 PropertyAnalyzer.analyzeReplicationNum(properties, (short) -1);
-        // 3. in memory
-        boolean newInMemory = PropertyAnalyzer.analyzeBooleanProp(properties,
+        // consume deprecated in_memory property if exists
+        PropertyAnalyzer.analyzeBooleanProp(properties,
                 PropertyAnalyzer.PROPERTIES_INMEMORY, false);
         // 4. tablet type
         TTabletType tTabletType =
@@ -937,16 +931,8 @@ public class AlterJobExecutor implements AstVisitorExtendInterface<Void, Connect
                 }
             }
             // 3. in memory
-            boolean oldInMemory = partitionInfo.getIsInMemory(partition.getId());
-            if (hasInMemory && (newInMemory != oldInMemory)) {
-                partitionInfo.setIsInMemory(partition.getId(), newInMemory);
-            }
-            // 4. tablet type
-            if (tTabletType != partitionInfo.getTabletType(partition.getId())) {
-                partitionInfo.setTabletType(partition.getId(), tTabletType);
-            }
             ModifyPartitionInfo info = new ModifyPartitionInfo(db.getId(), olapTable.getId(), partition.getId(),
-                    newDataProperty, newReplicationNum, hasInMemory ? newInMemory : oldInMemory);
+                    newDataProperty, newReplicationNum);
             modifyPartitionInfos.add(info);
         }
 

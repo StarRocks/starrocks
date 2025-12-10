@@ -327,6 +327,7 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
                 StatusOr<ChunkPtr> maybe_chunk;
                 {
                     SCOPED_TIMER(curr_op->_pull_timer);
+                    SCOPED_SET_TRACE_PLAN_NODE_ID(curr_op->get_plan_node_id());
                     QUERY_TRACE_SCOPED(curr_op->get_name(), "pull_chunk");
                     maybe_chunk = curr_op->pull_chunk(runtime_state);
                 }
@@ -374,6 +375,7 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
                         {
                             SCOPED_TIMER(next_op->_push_timer);
                             QUERY_TRACE_SCOPED(next_op->get_name(), "push_chunk");
+                            SCOPED_SET_TRACE_PLAN_NODE_ID(curr_op->get_plan_node_id());
                             _adjust_memory_usage(runtime_state, query_mem_tracker.get(), next_op, maybe_chunk.value());
                             RELEASE_RESERVED_GUARD();
                             return_status = next_op->push_chunk(runtime_state, maybe_chunk.value());
@@ -666,7 +668,7 @@ void PipelineDriver::_adjust_memory_usage(RuntimeState* state, MemTracker* track
     }
 }
 
-const double release_buffer_mem_ratio = 0.8;
+const double release_buffer_mem_ratio = 0.5;
 
 void PipelineDriver::_try_to_release_buffer(RuntimeState* state, OperatorPtr& op) {
     if (state->enable_spill() && op->releaseable()) {

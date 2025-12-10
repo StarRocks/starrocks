@@ -156,6 +156,7 @@ public:
     MemTracker* jit_cache_mem_tracker() { return _jit_cache_mem_tracker.get(); }
     MemTracker* update_mem_tracker() { return _update_mem_tracker.get(); }
     MemTracker* passthrough_mem_tracker() { return _passthrough_mem_tracker.get(); }
+    MemTracker* brpc_iobuf_mem_tracker() { return _brpc_iobuf_mem_tracker.get(); }
     MemTracker* clone_mem_tracker() { return _clone_mem_tracker.get(); }
     MemTracker* consistency_mem_tracker() { return _consistency_mem_tracker.get(); }
     MemTracker* replication_mem_tracker() { return _replication_mem_tracker.get(); }
@@ -224,6 +225,7 @@ private:
 
     // record mem usage in passthrough
     std::shared_ptr<MemTracker> _passthrough_mem_tracker;
+    std::shared_ptr<MemTracker> _brpc_iobuf_mem_tracker;
 
     std::shared_ptr<MemTracker> _clone_mem_tracker;
 

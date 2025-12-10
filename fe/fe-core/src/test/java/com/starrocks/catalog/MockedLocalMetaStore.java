@@ -24,6 +24,7 @@ import com.starrocks.server.LocalMetastore;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.DistributionDesc;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.transaction.GlobalTransactionMgr;
@@ -104,7 +105,6 @@ public class MockedLocalMetaStore extends LocalMetastore {
         long partitionId = idGenerator.getNextId();
         SinglePartitionInfo partitionInfo = new SinglePartitionInfo();
         partitionInfo.setReplicationNum(partitionId, DEFAULT_REPLICATION_NUM);
-        partitionInfo.setIsInMemory(partitionId, false);
 
         OlapTable olapTable = new OlapTable(
                 tableId,

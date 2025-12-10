@@ -44,7 +44,6 @@ import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.HashDistributionInfo;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.ListPartitionInfoTest;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedView;
@@ -65,14 +64,13 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
-import com.starrocks.common.proc.OptimizeProcDir;
 import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.persist.ColumnIdExpr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.sql.ast.ShowAlterStmt;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.ShowColumnStmt;
 import com.starrocks.sql.ast.ShowCreateDbStmt;
 import com.starrocks.sql.ast.ShowIndexStmt;
@@ -635,15 +633,6 @@ public class ShowExecutorTest {
         Assertions.assertEquals("\\N", resultSet.getString(25));
         Assertions.assertEquals("", resultSet.getString(26));
         Assertions.assertFalse(resultSet.next());
-    }
-
-    @Test
-    public void testShowAlterTable() throws AnalysisException, DdlException {
-        ShowAlterStmt stmt = new ShowAlterStmt(ShowAlterStmt.AlterType.OPTIMIZE, "testDb", null, null, null);
-        stmt.setNode(new OptimizeProcDir(globalStateMgr.getSchemaChangeHandler(),
-                globalStateMgr.getLocalMetastore().getDb("testDb")));
-
-        ShowExecutor.execute(stmt, ctx);
     }
 
     @Test

@@ -83,7 +83,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
-import static com.starrocks.catalog.KeysType.DUP_KEYS;
+import static com.starrocks.sql.ast.KeysType.DUP_KEYS;
 
 public class TabletSchedulerTest {
     @Mocked
@@ -180,7 +180,7 @@ public class TabletSchedulerTest {
         recycleBin.recycleDatabase(badDb, new HashSet<>(), true);
         recycleBin.recycleTable(goodDB.getId(), badTable, true);
         RecyclePartitionInfo recyclePartitionInfo = new RecycleRangePartitionInfo(goodDB.getId(), goodTable.getId(),
-                badPartition, null, new DataProperty(TStorageMedium.HDD), (short) 2, false, null);
+                badPartition, null, new DataProperty(TStorageMedium.HDD), (short) 2, null);
         recycleBin.recyclePartition(recyclePartitionInfo);
 
         List<TabletSchedCtx> allCtxs = new ArrayList<>();

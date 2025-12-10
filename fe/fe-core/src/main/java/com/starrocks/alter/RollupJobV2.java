@@ -44,7 +44,6 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
@@ -78,6 +77,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SelectAnalyzer;
 import com.starrocks.sql.ast.CreateMaterializedViewStmt;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.OriginStatement;
 import com.starrocks.sql.ast.expression.CastExpr;
 import com.starrocks.sql.ast.expression.Expr;
@@ -296,7 +296,6 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
                 }
                 TStorageMedium storageMedium = tbl.getPartitionInfo()
                         .getDataProperty(partition.getParentId()).getStorageMedium();
-                TTabletType tabletType = tbl.getPartitionInfo().getTabletType(partition.getParentId());
                 MaterializedIndex rollupIndex = entry.getValue();
 
                 TTabletSchema tabletSchema = SchemaInfo.newBuilder()
@@ -334,7 +333,7 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
                                 .setLatch(countDownLatch)
                                 .setEnablePersistentIndex(tbl.enablePersistentIndex())
                                 .setPrimaryIndexCacheExpireSec(tbl.primaryIndexCacheExpireSec())
-                                .setTabletType(tabletType)
+                                .setTabletType(TTabletType.TABLET_TYPE_DISK)
                                 .setCompressionType(tbl.getCompressionType())
                                 .setCompressionLevel(tbl.getCompressionLevel())
                                 .setCreateSchemaFile(true)

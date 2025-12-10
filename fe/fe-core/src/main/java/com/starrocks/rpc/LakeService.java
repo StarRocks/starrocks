@@ -32,6 +32,8 @@ import com.starrocks.proto.DeleteTxnLogRequest;
 import com.starrocks.proto.DeleteTxnLogResponse;
 import com.starrocks.proto.DropTableRequest;
 import com.starrocks.proto.DropTableResponse;
+import com.starrocks.proto.GetTabletMetadatasRequest;
+import com.starrocks.proto.GetTabletMetadatasResponse;
 import com.starrocks.proto.LockTabletMetadataRequest;
 import com.starrocks.proto.LockTabletMetadataResponse;
 import com.starrocks.proto.PublishLogVersionBatchRequest;
@@ -130,5 +132,8 @@ public interface LakeService {
 
     @ProtobufRPC(serviceName = "LakeService", methodName = "vacuum_full", onceTalkTimeout = TIMEOUT_VACUUM_FULL)
     Future<VacuumFullResponse> vacuumFull(VacuumFullRequest request);
+
+    @ProtobufRPC(serviceName = "LakeService", methodName = "get_tablet_metadatas", onceTalkTimeout = TIMEOUT_GET_TABLET_STATS)
+    Future<GetTabletMetadatasResponse> getTabletMetadatas(GetTabletMetadatasRequest request);
 }
 

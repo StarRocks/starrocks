@@ -241,80 +241,90 @@ if [[ $SKIP_CODEGEN -eq 0 ]]; then
     log_info "Using protoc: $(which protoc)"
     log_info "Using thrift: $(which thrift)"
 
-# Generate code from gensrc
-cd "$ROOT_DIR/gensrc"
-if [[ $CLEAN_BUILD -eq 1 ]]; then
-    log_info "Cleaning generated code..."
-    make clean
-fi
+    # Generate code from gensrc
+    cd "$ROOT_DIR/gensrc"
+    if [[ $CLEAN_BUILD -eq 1 ]]; then
+        log_info "Cleaning generated code..."
+        make clean
+    fi
 
-# Check if generated code needs to be rebuilt
-GENSRC_TARGET_DIR="$ROOT_DIR/gensrc/build/gen_cpp"
-GENSRC_NEEDS_BUILD=0
+    # Check if generated code needs to be rebuilt
+    GENSRC_TARGET_DIR="$ROOT_DIR/gensrc/build/gen_cpp"
+    GENSRC_NEEDS_BUILD=0
+    PROTO_FILES=0
+    THRIFT_FILES=0
 
-# Check if generated files exist
-if [[ ! -d "$GENSRC_TARGET_DIR" ]] || [[ -z "$(ls -A "$GENSRC_TARGET_DIR" 2>/dev/null)" ]]; then
-    GENSRC_NEEDS_BUILD=1
-else
-    # Check if any .proto or .thrift files are newer than generated files
-    newest_generated=$(find "$GENSRC_TARGET_DIR" -type f \( -name "*.cc" -o -name "*.cpp" -o -name "*.h" \) | xargs stat -f "%m" 2>/dev/null | sort -n | tail -1)
-    newest_source=$(find "$ROOT_DIR/gensrc" \( -name "*.proto" -o -name "*.thrift" \) | xargs stat -f "%m" 2>/dev/null | sort -n | tail -1)
-
-    if [[ -n "$newest_source" ]] && [[ -n "$newest_generated" ]] && [[ $newest_source -gt $newest_generated ]]; then
+    # Check if generated files exist
+    if [[ ! -d "$GENSRC_TARGET_DIR" ]] || [[ -z "$(ls -A "$GENSRC_TARGET_DIR" 2>/dev/null)" ]]; then
         GENSRC_NEEDS_BUILD=1
-    fi
-fi
+    else
+        PROTO_FILES=$(find "$GENSRC_TARGET_DIR" \( -name "*.pb.cc" -o -name "*.pb.h" \) | wc -l)
+        THRIFT_FILES=$(find "$GENSRC_TARGET_DIR" \( -name "*_types.cpp" -o -name "*_types.h" -o -name "*_service.cpp" -o -name "*_service.h" \) | wc -l)
 
-if [[ $GENSRC_NEEDS_BUILD -eq 1 ]]; then
-    log_info "Building generated code (incremental - source files changed)..."
+        # If either proto or thrift outputs are missing, force regeneration
+        if [[ $PROTO_FILES -eq 0 || $THRIFT_FILES -eq 0 ]]; then
+            GENSRC_NEEDS_BUILD=1
+        fi
 
-    # Ensure the gensrc make uses the correct tools from thirdparty
-    export STARROCKS_THIRDPARTY="$STARROCKS_THIRDPARTY"
-    export PATH="$STARROCKS_THIRDPARTY/installed/bin:$PATH"
+        # Check if any .proto or .thrift files are newer than generated files
+        newest_generated=$(find "$GENSRC_TARGET_DIR" -type f \( -name "*.cc" -o -name "*.cpp" -o -name "*.h" \) | xargs stat -f "%m" 2>/dev/null | sort -n | tail -1)
+        newest_source=$(find "$ROOT_DIR/gensrc" \( -name "*.proto" -o -name "*.thrift" \) | xargs stat -f "%m" 2>/dev/null | sort -n | tail -1)
 
-    # Run make with explicit environment
-    make
-
-    if [[ $? -ne 0 ]]; then
-        log_error "Generated code build failed"
-        exit 1
-    fi
-
-    # Verify that both protobuf and thrift files were generated
-    PROTO_FILES=$(find "$ROOT_DIR/gensrc/build/gen_cpp" \( -name "*.pb.cc" -o -name "*.pb.h" \) | wc -l)
-    THRIFT_FILES=$(find "$ROOT_DIR/gensrc/build/gen_cpp" \( -name "*_types.cpp" -o -name "*_types.h" -o -name "*_service.cpp" -o -name "*_service.h" \) | wc -l)
-
-    log_info "Generated $PROTO_FILES protobuf files and $THRIFT_FILES thrift files"
-
-    if [[ $PROTO_FILES -eq 0 ]]; then
-        log_warn "No protobuf files were generated"
+        if [[ -n "$newest_source" ]] && [[ -n "$newest_generated" ]] && [[ $newest_source -gt $newest_generated ]]; then
+            GENSRC_NEEDS_BUILD=1
+        fi
     fi
 
-    if [[ $THRIFT_FILES -eq 0 ]]; then
-        log_warn "No thrift files were generated - checking thrift generation..."
-        # Try to generate thrift files explicitly
-        cd "$ROOT_DIR/gensrc/thrift"
+    if [[ $GENSRC_NEEDS_BUILD -eq 1 ]]; then
+        log_info "Building generated code (incremental - source files changed)..."
+
+        # Ensure the gensrc make uses the correct tools from thirdparty
         export STARROCKS_THIRDPARTY="$STARROCKS_THIRDPARTY"
         export PATH="$STARROCKS_THIRDPARTY/installed/bin:$PATH"
+
+        # Run make with explicit environment
         make
-        # Return to gensrc directory
-        cd "$ROOT_DIR/gensrc"
+
+        if [[ $? -ne 0 ]]; then
+            log_error "Generated code build failed"
+            exit 1
+        fi
+
+        # Verify that both protobuf and thrift files were generated
+        PROTO_FILES=$(find "$ROOT_DIR/gensrc/build/gen_cpp" \( -name "*.pb.cc" -o -name "*.pb.h" \) | wc -l)
+        THRIFT_FILES=$(find "$ROOT_DIR/gensrc/build/gen_cpp" \( -name "*_types.cpp" -o -name "*_types.h" -o -name "*_service.cpp" -o -name "*_service.h" \) | wc -l)
+
+        log_info "Generated $PROTO_FILES protobuf files and $THRIFT_FILES thrift files"
+
+        if [[ $PROTO_FILES -eq 0 ]]; then
+            log_warn "No protobuf files were generated"
+        fi
+
+        if [[ $THRIFT_FILES -eq 0 ]]; then
+            log_warn "No thrift files were generated - checking thrift generation..."
+            # Try to generate thrift files explicitly
+            cd "$ROOT_DIR/gensrc/thrift"
+            export STARROCKS_THIRDPARTY="$STARROCKS_THIRDPARTY"
+            export PATH="$STARROCKS_THIRDPARTY/installed/bin:$PATH"
+            make
+            # Return to gensrc directory
+            cd "$ROOT_DIR/gensrc"
+        fi
+
+        log_success "Generated code built successfully"
+    else
+        log_info "Generated code is up to date, skipping build"
     fi
 
-    log_success "Generated code built successfully"
-else
-    log_info "Generated code is up to date, skipping build"
-fi
+    BE_GEN_CPP_DIR="$ROOT_DIR/be/src/gen_cpp"
+    BE_GEN_CPP_BUILD_DIR="$BE_GEN_CPP_DIR/build"
+    BE_GEN_CPP_BUILD_GEN_DIR="$BE_GEN_CPP_BUILD_DIR/gen_cpp"
+    BE_GEN_OPCODE_DIR="$BE_GEN_CPP_DIR/opcode"
 
-BE_GEN_CPP_DIR="$ROOT_DIR/be/src/gen_cpp"
-BE_GEN_CPP_BUILD_DIR="$BE_GEN_CPP_DIR/build"
-BE_GEN_CPP_BUILD_GEN_DIR="$BE_GEN_CPP_BUILD_DIR/gen_cpp"
-BE_GEN_OPCODE_DIR="$BE_GEN_CPP_DIR/opcode"
-
-# Always create target directories
-mkdir -p "$BE_GEN_CPP_DIR"
-mkdir -p "$BE_GEN_CPP_BUILD_GEN_DIR"
-mkdir -p "$BE_GEN_OPCODE_DIR"
+    # Always create target directories
+    mkdir -p "$BE_GEN_CPP_DIR"
+    mkdir -p "$BE_GEN_CPP_BUILD_GEN_DIR"
+    mkdir -p "$BE_GEN_OPCODE_DIR"
 
     log_info "Copying generated files to BE source directory..."
 
@@ -326,11 +336,11 @@ mkdir -p "$BE_GEN_OPCODE_DIR"
         log_warn "gensrc/build/gen_cpp directory not found; skipping thrift/protobuf copy"
     fi
 
-    if [[ -d "$ROOT_DIR/gensrc/build/opcode" ]]; then
+    if [[ -d "$ROOT_DIR/gensrc/build/gen_cpp/opcode" ]]; then
         # Copy without --delete to preserve existing files that might not be in gensrc
-        rsync -a "$ROOT_DIR/gensrc/build/opcode/" "$BE_GEN_OPCODE_DIR/"
+        rsync -a "$ROOT_DIR/gensrc/build/gen_cpp/opcode/" "$BE_GEN_OPCODE_DIR/"
     else
-        log_warn "gensrc/build/opcode directory not found; skipping opcode copy"
+        log_warn "gensrc/build/gen_cpp/opcode directory not found; skipping opcode copy"
     fi
 
     # Verify files were copied

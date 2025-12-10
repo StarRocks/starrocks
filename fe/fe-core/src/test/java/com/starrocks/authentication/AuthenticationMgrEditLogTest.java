@@ -15,12 +15,14 @@
 package com.starrocks.authentication;
 
 import com.starrocks.catalog.UserIdentity;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
 import com.starrocks.persist.AlterUserInfo;
 import com.starrocks.persist.CreateUserInfo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.GroupProviderLog;
 import com.starrocks.persist.OperationType;
+import com.starrocks.persist.SecurityIntegrationPersistInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateUserStmt;
@@ -46,6 +48,7 @@ import static org.mockito.Mockito.spy;
 
 public class AuthenticationMgrEditLogTest {
     private AuthenticationMgr authenticationMgr;
+    private AuthenticationMgr masterAuthenticationMgr;
     private ConnectContext ctx;
     private static final String TEST_PROVIDER_NAME = "test_provider_editlog";
 
@@ -56,6 +59,7 @@ public class AuthenticationMgrEditLogTest {
 
         ctx = UtFrameUtils.initCtxForNewPrivilege(UserIdentity.ROOT);
         authenticationMgr = GlobalStateMgr.getCurrentState().getAuthenticationMgr();
+        masterAuthenticationMgr = GlobalStateMgr.getCurrentState().getAuthenticationMgr();
 
         // Clean up any existing test providers
         cleanupTestProviders();
@@ -81,6 +85,8 @@ public class AuthenticationMgrEditLogTest {
         properties.put("type", "unix");
         return properties;
     }
+
+    // ========== GroupProvider Tests ==========
 
     @Test
     public void testCreateGroupProviderStatementNormalCase() throws Exception {
@@ -220,7 +226,7 @@ public class AuthenticationMgrEditLogTest {
         Assertions.assertNotNull(unchangedProvider);
         Assertions.assertEquals(TEST_PROVIDER_NAME, unchangedProvider.getName());
     }
-
+  
     // ==================== User Management Tests ====================
 
     @Test
@@ -550,6 +556,286 @@ public class AuthenticationMgrEditLogTest {
         // 5. Verify leader memory state remains unchanged after exception
         Assertions.assertTrue(authenticationMgr.doesUserExist(userIdentity));
     }
+
+    // ========== SecurityIntegration Tests ==========
+
+    private Map<String, String> createTestSecurityIntegrationProperties() {
+        Map<String, String> properties = new HashMap<>();
+        properties.put("type", "authentication_jwt");
+        properties.put("jwks_url", "https://example.com/.well-known/jwks.json");
+        properties.put("principal_field", "sub");
+        return properties;
+    }
+
+    @Test
+    public void testCreateSecurityIntegrationNormalCase() throws Exception {
+        // 1. Prepare test data
+        String name = "test_security_integration";
+        Map<String, String> propertyMap = createTestSecurityIntegrationProperties();
+
+        // 2. Verify initial state
+        Assertions.assertNull(masterAuthenticationMgr.getSecurityIntegration(name));
+
+        // 3. Execute createSecurityIntegration operation (master side)
+        masterAuthenticationMgr.createSecurityIntegration(name, propertyMap);
+
+        // 4. Verify master state
+        SecurityIntegration securityIntegration = masterAuthenticationMgr.getSecurityIntegration(name);
+        Assertions.assertNotNull(securityIntegration);
+        Assertions.assertEquals(name, securityIntegration.getName());
+        Map<String, String> actualProps = securityIntegration.getPropertyMap();
+        Assertions.assertEquals("authentication_jwt", actualProps.get("type"));
+        Assertions.assertEquals("https://example.com/.well-known/jwks.json", actualProps.get("jwks_url"));
+
+        // 5. Test follower replay functionality
+        AuthenticationMgr followerAuthenticationMgr = new AuthenticationMgr();
+
+        SecurityIntegrationPersistInfo replayInfo = (SecurityIntegrationPersistInfo) UtFrameUtils
+                .PseudoJournalReplayer.replayNextJournal(OperationType.OP_CREATE_SECURITY_INTEGRATION);
+
+        // Execute follower replay
+        followerAuthenticationMgr.replayCreateSecurityIntegration(replayInfo.name, replayInfo.propertyMap);
+
+        // 6. Verify follower state is consistent with master
+        SecurityIntegration followerSecurityIntegration = followerAuthenticationMgr.getSecurityIntegration(name);
+        Assertions.assertNotNull(followerSecurityIntegration);
+        Assertions.assertEquals(name, followerSecurityIntegration.getName());
+        Map<String, String> followerProps = followerSecurityIntegration.getPropertyMap();
+        Assertions.assertEquals("authentication_jwt", followerProps.get("type"));
+    }
+
+    @Test
+    public void testCreateSecurityIntegrationEditLogException() throws Exception {
+        // 1. Prepare test data
+        String name = "exception_security_integration";
+        Map<String, String> propertyMap = createTestSecurityIntegrationProperties();
+
+        // 2. Create a separate AuthenticationMgr for exception testing
+        AuthenticationMgr exceptionAuthenticationMgr = GlobalStateMgr.getCurrentState().getAuthenticationMgr();
+
+        EditLog spyEditLog = spy(new EditLog(null));
+
+        // 3. Mock EditLog.logCreateSecurityIntegration to throw exception
+        doThrow(new RuntimeException("EditLog write failed"))
+                .when(spyEditLog).logCreateSecurityIntegration(any(SecurityIntegrationPersistInfo.class), any());
+
+        // Temporarily set spy EditLog
+        GlobalStateMgr.getCurrentState().setEditLog(spyEditLog);
+
+        // Verify initial state
+        Assertions.assertNull(exceptionAuthenticationMgr.getSecurityIntegration(name));
+
+        // 4. Execute createSecurityIntegration operation and expect exception
+        RuntimeException exception = Assertions.assertThrows(RuntimeException.class, () -> {
+            exceptionAuthenticationMgr.createSecurityIntegration(name, propertyMap);
+        });
+        Assertions.assertEquals("EditLog write failed", exception.getMessage());
+
+        // 5. Verify leader memory state remains unchanged after exception
+        Assertions.assertNull(exceptionAuthenticationMgr.getSecurityIntegration(name));
+    }
+
+    @Test
+    public void testCreateSecurityIntegrationDuplicate() throws Exception {
+        // 1. Create a security integration first
+        String name = "duplicate_security_integration";
+        Map<String, String> propertyMap = createTestSecurityIntegrationProperties();
+        masterAuthenticationMgr.createSecurityIntegration(name, propertyMap);
+
+        // 2. Verify initial state
+        Assertions.assertNotNull(masterAuthenticationMgr.getSecurityIntegration(name));
+
+        // 3. Try to create duplicate security integration and expect DdlException
+        DdlException exception = Assertions.assertThrows(DdlException.class, () -> {
+            masterAuthenticationMgr.createSecurityIntegration(name, propertyMap);
+        });
+        Assertions.assertTrue(exception.getMessage().contains("security integration '" + name + "' already exists"));
+    }
+
+    @Test
+    public void testAlterSecurityIntegrationNormalCase() throws Exception {
+        // 1. Create a security integration first
+        String name = "test_alter_security_integration";
+        Map<String, String> propertyMap = createTestSecurityIntegrationProperties();
+        masterAuthenticationMgr.createSecurityIntegration(name, propertyMap);
+
+        // 2. Prepare alter properties
+        Map<String, String> alterProps = new HashMap<>();
+        alterProps.put("issuer", "https://new-issuer.com");
+        alterProps.put("audience", "new-audience");
+
+        // 3. Execute alterSecurityIntegration operation (master side)
+        masterAuthenticationMgr.alterSecurityIntegration(name, alterProps);
+
+        // 4. Verify master state
+        SecurityIntegration securityIntegration = masterAuthenticationMgr.getSecurityIntegration(name);
+        Assertions.assertNotNull(securityIntegration);
+        Map<String, String> actualProps = securityIntegration.getPropertyMap();
+        Assertions.assertEquals("https://new-issuer.com", actualProps.get("issuer"));
+        Assertions.assertEquals("new-audience", actualProps.get("audience"));
+        // Original properties should still exist
+        Assertions.assertEquals("authentication_jwt", actualProps.get("type"));
+
+        // 5. Test follower replay functionality
+        AuthenticationMgr followerAuthenticationMgr = new AuthenticationMgr();
+        followerAuthenticationMgr.createSecurityIntegration(name, propertyMap);
+
+        SecurityIntegrationPersistInfo replayInfo = (SecurityIntegrationPersistInfo) UtFrameUtils
+                .PseudoJournalReplayer.replayNextJournal(OperationType.OP_ALTER_SECURITY_INTEGRATION);
+
+        // Execute follower replay
+        followerAuthenticationMgr.replayAlterSecurityIntegration(replayInfo.name, replayInfo.propertyMap);
+
+        // 6. Verify follower state is consistent with master
+        SecurityIntegration followerSecurityIntegration = followerAuthenticationMgr.getSecurityIntegration(name);
+        Assertions.assertNotNull(followerSecurityIntegration);
+        Map<String, String> followerProps = followerSecurityIntegration.getPropertyMap();
+        Assertions.assertEquals("https://new-issuer.com", followerProps.get("issuer"));
+        Assertions.assertEquals("new-audience", followerProps.get("audience"));
+    }
+
+    @Test
+    public void testAlterSecurityIntegrationEditLogException() throws Exception {
+        // 1. Create a security integration first
+        String name = "exception_alter_security_integration";
+        Map<String, String> propertyMap = createTestSecurityIntegrationProperties();
+        masterAuthenticationMgr.createSecurityIntegration(name, propertyMap);
+
+        // 2. Create a separate AuthenticationMgr for exception testing
+        AuthenticationMgr exceptionAuthenticationMgr = GlobalStateMgr.getCurrentState().getAuthenticationMgr();
+        
+        // Ensure security integration exists for exception testing
+        if (exceptionAuthenticationMgr.getSecurityIntegration(name) == null) {
+            exceptionAuthenticationMgr.createSecurityIntegration(name, propertyMap);
+        }
+
+        EditLog spyEditLog = spy(new EditLog(null));
+
+        // 3. Mock EditLog.logAlterSecurityIntegration to throw exception
+        doThrow(new RuntimeException("EditLog write failed"))
+                .when(spyEditLog).logAlterSecurityIntegration(any(SecurityIntegrationPersistInfo.class), any());
+
+        // Temporarily set spy EditLog
+        GlobalStateMgr.getCurrentState().setEditLog(spyEditLog);
+
+        // Prepare alter properties
+        Map<String, String> alterProps = new HashMap<>();
+        alterProps.put("issuer", "https://new-issuer.com");
+
+        // Save initial state
+        SecurityIntegration initialIntegration = exceptionAuthenticationMgr.getSecurityIntegration(name);
+        String initialIssuer = initialIntegration.getPropertyMap().get("issuer");
+
+        // 4. Execute alterSecurityIntegration operation and expect exception
+        RuntimeException exception = Assertions.assertThrows(RuntimeException.class, () -> {
+            exceptionAuthenticationMgr.alterSecurityIntegration(name, alterProps);
+        });
+        Assertions.assertEquals("EditLog write failed", exception.getMessage());
+
+        // 5. Verify leader memory state remains unchanged after exception
+        SecurityIntegration currentIntegration = exceptionAuthenticationMgr.getSecurityIntegration(name);
+        Assertions.assertEquals(initialIssuer, currentIntegration.getPropertyMap().get("issuer"));
+    }
+
+    @Test
+    public void testAlterSecurityIntegrationNonExistent() throws Exception {
+        // 1. Test altering non-existent security integration
+        String nonExistentName = "non_existent_security_integration";
+        Map<String, String> alterProps = new HashMap<>();
+        alterProps.put("issuer", "https://new-issuer.com");
+
+        // 2. Verify initial state
+        Assertions.assertNull(masterAuthenticationMgr.getSecurityIntegration(nonExistentName));
+
+        // 3. Execute alterSecurityIntegration operation and expect DdlException
+        DdlException exception = Assertions.assertThrows(DdlException.class, () -> {
+            masterAuthenticationMgr.alterSecurityIntegration(nonExistentName, alterProps);
+        });
+        Assertions.assertTrue(exception.getMessage().contains("security integration '" + nonExistentName + "' not found"));
+    }
+
+    @Test
+    public void testDropSecurityIntegrationNormalCase() throws Exception {
+        // 1. Create a security integration first
+        String name = "test_drop_security_integration";
+        Map<String, String> propertyMap = createTestSecurityIntegrationProperties();
+        masterAuthenticationMgr.createSecurityIntegration(name, propertyMap);
+
+        // 2. Verify initial state
+        Assertions.assertNotNull(masterAuthenticationMgr.getSecurityIntegration(name));
+
+        // 3. Execute dropSecurityIntegration operation (master side)
+        masterAuthenticationMgr.dropSecurityIntegration(name);
+
+        // 4. Verify master state
+        Assertions.assertNull(masterAuthenticationMgr.getSecurityIntegration(name));
+
+        // 5. Test follower replay functionality
+        AuthenticationMgr followerAuthenticationMgr = new AuthenticationMgr();
+        followerAuthenticationMgr.replayCreateSecurityIntegration(name, propertyMap);
+        Assertions.assertNotNull(followerAuthenticationMgr.getSecurityIntegration(name));
+
+        SecurityIntegrationPersistInfo replayInfo = (SecurityIntegrationPersistInfo) UtFrameUtils
+                .PseudoJournalReplayer.replayNextJournal(OperationType.OP_DROP_SECURITY_INTEGRATION);
+
+        // Execute follower replay
+        Assertions.assertNotNull(replayInfo);
+        Assertions.assertEquals(name, replayInfo.name);
+        followerAuthenticationMgr.replayDropSecurityIntegration(replayInfo.name);
+
+        // 6. Verify follower state is consistent with master
+        Assertions.assertNull(followerAuthenticationMgr.getSecurityIntegration(name));
+    }
+
+    @Test
+    public void testDropSecurityIntegrationEditLogException() throws Exception {
+        // 1. Create a security integration first
+        String name = "exception_drop_security_integration";
+        Map<String, String> propertyMap = createTestSecurityIntegrationProperties();
+        masterAuthenticationMgr.createSecurityIntegration(name, propertyMap);
+
+        // 2. Create a separate AuthenticationMgr for exception testing
+        AuthenticationMgr exceptionAuthenticationMgr = GlobalStateMgr.getCurrentState().getAuthenticationMgr();
+        
+        // Ensure security integration exists for exception testing
+        if (exceptionAuthenticationMgr.getSecurityIntegration(name) == null) {
+            exceptionAuthenticationMgr.createSecurityIntegration(name, propertyMap);
+        }
+
+        EditLog spyEditLog = spy(new EditLog(null));
+
+        // 3. Mock EditLog.logDropSecurityIntegration to throw exception
+        doThrow(new RuntimeException("EditLog write failed"))
+                .when(spyEditLog).logDropSecurityIntegration(any(SecurityIntegrationPersistInfo.class), any());
+
+        // Temporarily set spy EditLog
+        GlobalStateMgr.getCurrentState().setEditLog(spyEditLog);
+
+        // Verify initial state
+        Assertions.assertNotNull(exceptionAuthenticationMgr.getSecurityIntegration(name));
+
+        // 4. Execute dropSecurityIntegration operation and expect exception
+        RuntimeException exception = Assertions.assertThrows(RuntimeException.class, () -> {
+            exceptionAuthenticationMgr.dropSecurityIntegration(name);
+        });
+        Assertions.assertEquals("EditLog write failed", exception.getMessage());
+
+        // 5. Verify leader memory state remains unchanged after exception
+        Assertions.assertNotNull(exceptionAuthenticationMgr.getSecurityIntegration(name));
+    }
+
+    @Test
+    public void testDropSecurityIntegrationNonExistent() throws Exception {
+        // 1. Test dropping non-existent security integration
+        String nonExistentName = "non_existent_security_integration";
+
+        // 2. Verify initial state
+        Assertions.assertNull(masterAuthenticationMgr.getSecurityIntegration(nonExistentName));
+
+        // 3. Execute dropSecurityIntegration operation and expect DdlException
+        DdlException exception = Assertions.assertThrows(DdlException.class, () -> {
+            masterAuthenticationMgr.dropSecurityIntegration(nonExistentName);
+        });
+        Assertions.assertTrue(exception.getMessage().contains("security integration '" + nonExistentName + "' not found"));
+    }
 }
-
-

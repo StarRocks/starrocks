@@ -56,8 +56,9 @@ import com.starrocks.sql.ast.ColumnSeparator;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
 import com.starrocks.sql.ast.LabelName;
 import com.starrocks.sql.ast.ParseNode;
-import com.starrocks.sql.ast.PartitionNames;
+import com.starrocks.sql.ast.PartitionRef;
 import com.starrocks.sql.parser.AstBuilder;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TResourceInfo;
@@ -91,7 +92,7 @@ public class KafkaRoutineLoadJobTest {
     private String serverAddress = "http://127.0.0.1:8080";
     private String kafkaPartitionString = "1,2,3";
 
-    private PartitionNames partitionNames;
+    private PartitionRef partitionNames;
 
     private ColumnSeparator columnSeparator = new ColumnSeparator(",");
 
@@ -104,7 +105,7 @@ public class KafkaRoutineLoadJobTest {
     public void init() {
         List<String> partitionNameList = Lists.newArrayList();
         partitionNameList.add("p1");
-        partitionNames = new PartitionNames(false, partitionNameList);
+        partitionNames = new PartitionRef(partitionNameList, false, NodePosition.ZERO);
     }
 
     @Test

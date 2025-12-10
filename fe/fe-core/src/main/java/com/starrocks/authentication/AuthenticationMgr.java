@@ -27,6 +27,7 @@ import com.starrocks.persist.CreateUserInfo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.GroupProviderLog;
 import com.starrocks.persist.ImageWriter;
+import com.starrocks.persist.SecurityIntegrationPersistInfo;
 import com.starrocks.persist.metablock.MapEntryConsumer;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
@@ -524,24 +525,24 @@ public class AuthenticationMgr {
     //=========================================== Security Integration ==================================================
 
     public void createSecurityIntegration(String name,
-                                          Map<String, String> propertyMap,
-                                          boolean isReplay) throws DdlException {
-        SecurityIntegration securityIntegration;
-        securityIntegration = SecurityIntegrationFactory.createSecurityIntegration(name, propertyMap);
-        // atomic op
-        SecurityIntegration result = nameToSecurityIntegrationMap.putIfAbsent(name, securityIntegration);
-        if (result != null) {
+                                          Map<String, String> propertyMap) throws DdlException {
+        if (nameToSecurityIntegrationMap.containsKey(name)) {
             throw new DdlException("security integration '" + name + "' already exists");
         }
-        if (!isReplay) {
-            EditLog editLog = GlobalStateMgr.getCurrentState().getEditLog();
-            editLog.logCreateSecurityIntegration(name, propertyMap);
-            LOG.info("finished to create security integration '{}'", securityIntegration.toString());
-        }
+        SecurityIntegration securityIntegration = SecurityIntegrationFactory.createSecurityIntegration(name, propertyMap);
+        EditLog editLog = GlobalStateMgr.getCurrentState().getEditLog();
+        editLog.logCreateSecurityIntegration(new SecurityIntegrationPersistInfo(name, propertyMap), wal -> {
+            nameToSecurityIntegrationMap.put(name, securityIntegration);
+        });
+        LOG.info("finished to create security integration '{}'", securityIntegration.toString());
     }
 
-    public void alterSecurityIntegration(String name, Map<String, String> alterProps,
-                                         boolean isReplay) throws DdlException {
+    public void replayCreateSecurityIntegration(String name, Map<String, String> propertyMap) {
+        SecurityIntegration securityIntegration = SecurityIntegrationFactory.createSecurityIntegration(name, propertyMap);
+        nameToSecurityIntegrationMap.put(name, securityIntegration);
+    }
+
+    public void alterSecurityIntegration(String name, Map<String, String> alterProps) throws DdlException {
         SecurityIntegration securityIntegration = nameToSecurityIntegrationMap.get(name);
         if (securityIntegration == null) {
             throw new DdlException("security integration '" + name + "' not found");
@@ -550,30 +551,28 @@ public class AuthenticationMgr {
             Map<String, String> newProps = Maps.newHashMap(securityIntegration.getPropertyMap());
             // update props
             newProps.putAll(alterProps);
-            SecurityIntegration newSecurityIntegration;
-            newSecurityIntegration = SecurityIntegrationFactory.createSecurityIntegration(name, newProps);
-            // update map
-            nameToSecurityIntegrationMap.put(name, newSecurityIntegration);
-            if (!isReplay) {
-                EditLog editLog = GlobalStateMgr.getCurrentState().getEditLog();
-                editLog.logAlterSecurityIntegration(name, alterProps);
-                LOG.info("finished to alter security integration '{}' with updated properties {}",
-                        name, alterProps);
-            }
+            SecurityIntegration newSecurityIntegration = SecurityIntegrationFactory.createSecurityIntegration(name, newProps);
+            EditLog editLog = GlobalStateMgr.getCurrentState().getEditLog();
+            editLog.logAlterSecurityIntegration(new SecurityIntegrationPersistInfo(name, alterProps), wal -> {
+                // update map
+                nameToSecurityIntegrationMap.put(name, newSecurityIntegration);
+            });
+            LOG.info("finished to alter security integration '{}' with updated properties {}", name, alterProps);
         }
     }
 
-    public void dropSecurityIntegration(String name, boolean isReplay) throws DdlException {
+
+
+    public void dropSecurityIntegration(String name) throws DdlException {
         if (!nameToSecurityIntegrationMap.containsKey(name)) {
             throw new DdlException("security integration '" + name + "' not found");
         }
 
-        SecurityIntegration result = nameToSecurityIntegrationMap.remove(name);
-        if (!isReplay && result != null) {
-            EditLog editLog = GlobalStateMgr.getCurrentState().getEditLog();
-            editLog.logDropSecurityIntegration(name);
-            LOG.info("finished to drop security integration '{}'", name);
-        }
+        EditLog editLog = GlobalStateMgr.getCurrentState().getEditLog();
+        editLog.logDropSecurityIntegration(new SecurityIntegrationPersistInfo(name, null), wal -> {
+            nameToSecurityIntegrationMap.remove(name);
+        });
+        LOG.info("finished to drop security integration '{}'", name);
     }
 
     public SecurityIntegration getSecurityIntegration(String name) {
@@ -584,19 +583,24 @@ public class AuthenticationMgr {
         return new HashSet<>(nameToSecurityIntegrationMap.values());
     }
 
-    public void replayCreateSecurityIntegration(String name, Map<String, String> propertyMap)
-            throws DdlException {
-        createSecurityIntegration(name, propertyMap, true);
+    public void replayAlterSecurityIntegration(String name, Map<String, String> alterProps) {
+        SecurityIntegration securityIntegration = nameToSecurityIntegrationMap.get(name);
+        if (securityIntegration != null) {
+            // COW
+            Map<String, String> newProps = Maps.newHashMap(securityIntegration.getPropertyMap());
+            // update props
+            newProps.putAll(alterProps);
+            SecurityIntegration newSecurityIntegration =
+                    SecurityIntegrationFactory.createSecurityIntegration(name, newProps);
+            // update map
+            nameToSecurityIntegrationMap.put(name, newSecurityIntegration);
+            LOG.info("finished to replay alter security integration '{}' with updated properties {}",
+                    name, alterProps);
+        }
     }
 
-    public void replayAlterSecurityIntegration(String name, Map<String, String> alterProps)
-            throws DdlException {
-        alterSecurityIntegration(name, alterProps, true);
-    }
-
-    public void replayDropSecurityIntegration(String name)
-            throws DdlException {
-        dropSecurityIntegration(name, true);
+    public void replayDropSecurityIntegration(String name) throws DdlException {
+        nameToSecurityIntegrationMap.remove(name);
     }
 
     // ---------------------------------------- Group Provider Statement --------------------------------------

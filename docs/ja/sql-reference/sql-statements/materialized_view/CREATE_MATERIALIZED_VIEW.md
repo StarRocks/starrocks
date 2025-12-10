@@ -258,14 +258,6 @@ AS
 
 非同期マテリアライズドビューのパーティション戦略。StarRocksの現在のバージョンでは、非同期マテリアライズドビューを作成する際に1つのパーティション式のみがサポートされています。
 
-> **注意**
->
-> v3.3.3以降、StarRocksはリストパーティション化戦略を使用した非同期マテリアライズドビューの作成をサポートしています。
->
-> - リストパーティション化または式に基づくパーティション化戦略で作成されたテーブルに基づいて、リストパーティション化されたマテリアライズドビューを作成できます。
-> - 現在、リストパーティション化戦略でマテリアライズドビューを作成する際には、1つのパーティションキーのみを指定できます。ベーステーブルに複数のパーティションキーがある場合は、1つのパーティションキーを選択する必要があります。
-> - リストパーティション化戦略を持つマテリアライズドビューのリフレッシュ動作とクエリの書き換えロジックは、レンジパーティション化戦略を持つものと一致しています。
-
 有効な値:
 
 - `column_name`: パーティション化に使用される列の名前。`PARTITION BY dt`という式は、`dt`列に従ってマテリアライズドビューをパーティション化することを意味します。
@@ -411,6 +403,13 @@ ALTER MATERIALIZED VIEW <mv_name> SET ("bloom_filter_columns" = "");
 
   共通パーティション式TTLと`force_mv`セマンティクスの詳細なガイダンスについては、[例6](#例)を参照してください。
 
+- `refresh_mode`: マテリアライズドビューの更新方法を制御します。StarRocks v4.1 で導入されました。有効な値：
+
+  - `PCT`: （デフォルト）パーティション化されたマテリアライズドビューの場合、ベーステーブルにデータの変更があると影響を受けたパーティションのみリフレッシュされ、そのパーティションの結果の一貫性が保証されます。パーティション化されていないマテリアライズドビューの場合、ベーステーブルのいずれかが変更されるとマテリアライズドビュー全体がフルリフレッシュされます。
+  - `AUTO`: 可能な限り増分リフレッシュを試みます。マテリアライズドビューのクエリ定義が増分リフレッシュをサポートしていない場合、その操作について自動的に`PCT`モードへフォールバックします。PCTリフレッシュの後、条件が整えば次回以降は再び増分リフレッシュに戻る場合もあります。
+  - `INCREMENTAL`: 増分リフレッシュのみを行うことを保証します。マテリアライズドビューの定義で増分リフレッシュがサポートされていない場合や、非増分データに遭遇した場合、作成やリフレッシュが失敗します。
+  - `FULL`: マテリアライズドビューが増分やパーティション単位のリフレッシュをサポートしているかどうかに関係なく、毎回全データのフルリフレッシュを強制します。
+
 **query_statement** (必須)
 
 非同期マテリアライズドビューを作成するためのクエリステートメント。v3.1.6以降、StarRocksはCommon Table Expression (CTE)を使用した非同期マテリアライズドビューの作成をサポートしています。
@@ -486,6 +485,88 @@ StarRocks v2.5は、SPJGタイプの非同期マテリアライズドビュー�
   - 外部カタログ内のマテリアライズドビューとベーステーブル間の厳密な一貫性は保証されません。
   - 現在、外部リソースに基づくマテリアライズドビューの構築はサポートされていません。
   - 現在、StarRocksは外部カタログ内のベーステーブルデータが変更されたかどうかを認識できないため、ベーステーブルがリフレッシュされるたびにすべてのパーティションがデフォルトでリフレッシュされます。[REFRESH MATERIALIZED VIEW](REFRESH_MATERIALIZED_VIEW.md)を使用して、一部のパーティションのみを手動でリフレッシュできます。
+
+## インクリメンタルマテリアライズドビュー
+
+StarRocks v4.1 では、マテリアライズドビューのリフレッシュ動作を制御するための `refresh_mode` パラメータが導入されました。各MVの作成時に `refresh_mode` を指定できます。作成時に `refresh_mode` を設定しない場合、システムは `Config.default_mv_refresh_mode` パラメータ（デフォルト：`pct`）で制御される既定値を使用します。以下の運用指針にご注意ください。
+
+- `refresh_mode` を調整する際には次の制限があります：
+  - レガシーなマテリアライズドビュー（たとえば`PCT`型など）を`AUTO`または`INCREMENTAL`更新モードで使用するように変更することはできません。変更するには、マテリアライズドビューを再構築する必要があります。
+  - マテリアライズドビューを `AUTO` または `INCREMENTAL` タイプから変更する場合、システムは増分更新が可能かどうかを確認します。不可能な場合、操作は失敗します。
+- インクリメンタルマテリアライズドビューはパーティションリフレッシュの指定をサポートしません：
+  - `INCREMENTAL` 方式のマテリアライズドビューでは、パーティションの更新を試みると例外が発生します。
+  - `AUTO`マテリアライズドビューの場合、StarRocksはリフレッシュ操作時に自動的に`PCT`モードに切り替わります。
+
+### 対応しているインクリメンタル演算子
+
+インクリメンタルリフレッシュは、ベーステーブルへの追記（append-only）操作のみをサポートします。`UPDATE`、`MERGE`、`OVERWRITE`などの非対応操作が行われた場合：
+- `refresh_mode` が `INCREMENTAL` だと、マテリアライズドビューのリフレッシュは失敗します。
+- `refresh_mode` が `AUTO` だと、システムは自動的にリフレッシュモードを `PCT` にフォールバックします。
+
+現在、インクリメンタルリフレッシュでサポートされている演算子は以下の通りです：
+
+| 演算子                         | インクリメンタルリフレッシュのサポート                                                                                            |
+|------------------------------|--------------------------------------------------------------------------------------------------------------------------|
+| Select                       | サポート済み                                                                                                              |
+| From `<Table>`               | Iceberg/Paimon テーブルのみサポート；その他のテーブルタイプは未対応                                                                  |
+| Filter                       | サポート済み                                                                                                              |
+| Group By付き集約              | サポート済み<ul><li>`distinct`を伴う集約関数は未対応</li><li>GROUP BYなし集約も未対応</li></ul>                                                |
+| Inner Join                   | サポート済み                                                                                                              |
+| Union All                    | サポート済み                                                                                                              |
+| Left/Right/Full Outer Join   | まだサポートされていません                                                                                                                |
+
+:::note
+- 上述の各演算子は一般的にインクリメンタルリフレッシュをサポートしますが、組み合わせによる制約があります：  
+  - join後の集約や、union後の集約に対してはインクリメンタル計算がサポートされています。
+  - 一方で、集約後にjoinや、集約後のunion allについてはインクリメンタル計算は**サポートされていません**。
+:::
+
+### 例
+
+```
+CREATE MATERIALIZED VIEW test_mv1 PARTITION BY dt 
+REFRESH DEFERRED MANUAL 
+properties
+(
+    "refresh_mode" = "INCREMENTAL"
+)
+AS SELECT 
+  t1.dt, t1.col1 as col11, t2.col1 as col21, t3.col1 as col31, t4.col1 as col41, t5.col1 as col51,
+  sum(t1.col2) as col12, sum(t2.col2) as col22, sum(t3.col2) as col32, sum(t4.col2) as col42, sum(t5.col2) as col52,
+  avg(t1.col2) as col13, avg(t2.col2) as col23, avg(t3.col2) as col33, avg(t4.col2) as col43, avg(t5.col2) as col53,
+  min(t1.col2) as col14, min(t2.col2) as col24, min(t3.col2) as col34, min(t4.col2) as col44, min(t5.col2) as col54,
+  max(t1.col2) as col15, max(t2.col2) as col25, max(t3.col2) as col35, max(t4.col2) as col45, max(t5.col2) as col55,
+  count(t1.col2) as col16, count(t2.col2) as col26, count(t3.col2) as col36, count(t4.col2) as col46, count(t5.col2) as col56,
+  approx_count_distinct(t1.col2) as col17, approx_count_distinct(t2.col2) as col27, approx_count_distinct(t3.col2) as col37, approx_count_distinct(t4.col2) as col47, approx_count_distinct(t5.col2) as col57
+FROM 
+  iceberg_catalog.iceberg_test_dbt1 
+  JOIN iceberg_catalog.iceberg_test_dbt2 ON t1.dt = t2.dt
+  JOIN iceberg_catalog.iceberg_test_dbt3 ON t1.dt = t3.dt
+  JOIN iceberg_catalog.iceberg_test_dbt4 ON t1.dt = t4.dt
+  JOIN iceberg_catalog.iceberg_test_dbt5 ON t1.dt = t5.dt
+ GROUP BY t1.dt, t1.col1, t2.col1, t3.col1, t4.col1, t5.col1;
+ 
+REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+```
+`information_schema.task_runs` の `EXTRA_MESSAGE` カラムに `refreshMode` フィールドが追加され、`TaskRun` のリフレッシュモードが示されるようになっています。より詳細については [materialized_view_task_run_details](../../../using_starrocks/async_mv/materialized_view_task_run_details.md) を参照してください。
+```
+mysql> select * from information_schema.task_runs order by CREATE_TIME desc limit 1\G;
+     QUERY_ID: 0199f00e-2152-70a8-83da-26d6a8321ac6
+    TASK_NAME: mv-78190
+  CREATE_TIME: 2025-10-17 10:44:41
+  FINISH_TIME: 2025-10-17 10:44:44
+        STATE: SUCCESS
+      CATALOG: NULL
+     DATABASE: test_mv_async_db_621c29ff_ab02_11f0_9e41_00163e09349d
+   DEFINITION: insert overwrite `test_mv_case_iceberg_transform_day_44` SELECT `t1`.`id`, `t1`.`v1`, `t1`.`v2`, `t1`.`dt` FROM `iceberg_catalog_621c2b62_ab02_11f0_a703_00163e09349d`.`iceberg_db_621c2bc9_ab02_11f0_885d_00163e09349d`.`t1` WHERE (`t1`.`id` > 1) AND (`t1`.`dt` >= '2025-06-01')
+  EXPIRE_TIME: 2025-10-24 10:44:41
+   ERROR_CODE: 0
+ERROR_MESSAGE: NULL
+     PROGRESS: 100%
+EXTRA_MESSAGE: {"forceRefresh":false,"mvPartitionsToRefresh":["p20250718000000","p20250715000000","p20250721000000","p20250615000000","p20250618000000","p20250524000000","p20250621000000","p20250518000000"],"refBasePartitionsToRefreshMap":{"t1":["p20250718000000","p20250721000000","p20250618000000","p20250524000000","p20250621000000","p20250518000000","p20250715000000","p20250615000000","pNULL","p20250521000000","p20250624000000","p20250724000000","p20250515000000"]},"basePartitionsToRefreshMap":{},"processStartTime":1760669082430,"executeOption":{"priority":80,"taskRunProperties":{"FORCE":"false","mvId":"78190","warehouse":"default_warehouse"},"isMergeRedundant":false,"isManual":true,"isSync":true,"isReplay":false},"planBuilderMessage":{},"refreshMode":"INCREMENTAL"}
+   PROPERTIES: {"FORCE":"false","mvId":"78190","warehouse":"default_warehouse"}
+       JOB_ID: 0199f00e-2152-76b0-987c-76a9a19e77f9
+```
 
 ## 例
 

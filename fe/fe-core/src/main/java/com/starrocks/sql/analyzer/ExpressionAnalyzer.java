@@ -30,7 +30,6 @@ import com.starrocks.catalog.Dictionary;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionName;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.ScalarFunction;
@@ -46,6 +45,7 @@ import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.OrderByElement;
 import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.sql.ast.expression.AnalyticExpr;
@@ -1572,6 +1572,9 @@ public class ExpressionAnalyzer {
             } else if (funcType.equalsIgnoreCase(FunctionSet.CATALOG)) {
                 node.setType(VarcharType.VARCHAR);
                 node.setStrValue(session.getCurrentCatalog());
+            } else if (funcType.equalsIgnoreCase(FunctionSet.CURRENT_WAREHOUSE)) {
+                node.setType(VarcharType.VARCHAR);
+                node.setStrValue(session.getCurrentWarehouseName());
             } else if (funcType.equalsIgnoreCase(FunctionSet.SESSION_ID)) {
                 node.setType(VarcharType.VARCHAR);
                 node.setStrValue(session.getSessionId().toString());

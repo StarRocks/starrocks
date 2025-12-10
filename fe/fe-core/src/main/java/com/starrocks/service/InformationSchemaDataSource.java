@@ -28,7 +28,6 @@ import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.InternalCatalog;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
@@ -55,6 +54,7 @@ import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.TemporaryTableMgr;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.thrift.TApplicableRolesInfo;
 import com.starrocks.thrift.TAuthInfo;
 import com.starrocks.thrift.TGetApplicableRolesRequest;
@@ -466,8 +466,6 @@ public class InformationSchemaDataSource {
         partitionMetaInfo.setCooldown_time(dataProperty.getCooldownTimeMs() / 1000);
         // LAST_CONSISTENCY_CHECK_TIME
         partitionMetaInfo.setLast_consistency_check_time(partition.getLastCheckTime() / 1000);
-        // IS_IN_MEMORY
-        partitionMetaInfo.setIs_in_memory(partitionInfo.getIsInMemory(partition.getId()));
         // ROW_COUNT
         partitionMetaInfo.setRow_count(physicalPartition.storageRowCount());
         // IS_TEMP

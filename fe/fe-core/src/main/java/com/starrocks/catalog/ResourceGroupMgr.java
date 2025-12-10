@@ -164,7 +164,7 @@ public class ResourceGroupMgr implements Writable {
                 classifier.setId(GlobalStateMgr.getCurrentState().getNextId());
             }
 
-            if (!ResourceGroup.DEFAULT_MEM_POOL.equals(wg.getMemPool()) && !resourceGroupInMemPoolHaveSameMemLimit(wg)) {
+            if (!wg.hasDefaultMemPool() && !resourceGroupInMemPoolHaveSameMemLimit(wg)) {
                 throw new DdlException(
                         "Property `mem_limit` must be equal for all resource groups using the mem_pool [" + wg.getMemPool() +
                                 "].");
@@ -203,7 +203,7 @@ public class ResourceGroupMgr implements Writable {
     }
 
     private boolean resourceGroupInMemPoolHaveSameMemLimit(ResourceGroup wg) {
-        if (wg.getMemPool() == null) {
+        if (wg.hasDefaultMemPool()) {
             return true;
         }
         return resourceGroupMap.entrySet().stream().allMatch(entry -> !wg.getMemPool().equals(entry.getValue().getMemPool()) ||
@@ -384,6 +384,11 @@ public class ResourceGroupMgr implements Writable {
                     alterResourceGroupLog.setCpuWeight(cpuWeight);
                 }
 
+                String memPool = wg.getMemPool();
+                if (wg.hasDefaultMemPool()) {
+                    memPool = ResourceGroup.DEFAULT_MEM_POOL;
+                }
+
                 if (exclusiveCpuCores != null) {
                     alterResourceGroupLog.setExclusiveCpuCores(exclusiveCpuCores);
                 }
@@ -392,10 +397,10 @@ public class ResourceGroupMgr implements Writable {
                 if (maxCpuCores != null) {
                     alterResourceGroupLog.setMaxCpuCores(maxCpuCores);
                 }
-                if (changedProperties.getMemPool() != null && !changedProperties.getMemPool().equals(wg.getMemPool())) {
+                if (changedProperties.getMemPool() != null && !changedProperties.getMemPool().equals(memPool)) {
                     throw new DdlException("Property `mem_pool` cannot be altered [" + wg.getMemPool() + "].");
                 }
-                if (!ResourceGroup.DEFAULT_MEM_POOL.equals(wg.getMemPool()) &&
+                if (!wg.hasDefaultMemPool() &&
                         changedProperties.getMemLimit() != null &&
                         !wg.getMemLimit().equals(changedProperties.getMemLimit())) {
                     throw new DdlException(

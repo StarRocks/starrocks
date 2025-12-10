@@ -117,6 +117,7 @@ import com.starrocks.thrift.THdfsProperties;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TTabletSchema;
+import com.starrocks.thrift.TTabletType;
 import com.starrocks.thrift.TTaskType;
 import com.starrocks.warehouse.WarehouseIdleChecker;
 import org.apache.commons.collections.CollectionUtils;
@@ -1304,7 +1305,7 @@ public class RestoreJob extends AbstractJob {
                                 .setStorageMedium(TStorageMedium.HDD) /* all restored replicas will be saved to HDD */
                                 .setEnablePersistentIndex(localTbl.enablePersistentIndex())
                                 .setPrimaryIndexCacheExpireSec(localTbl.primaryIndexCacheExpireSec())
-                                .setTabletType(localTbl.getPartitionInfo().getTabletType(restorePart.getId()))
+                                .setTabletType(TTabletType.TABLET_TYPE_DISK)
                                 .setCompressionType(localTbl.getCompressionType())
                                 .setCompressionLevel(localTbl.getCompressionLevel())
                                 .setInRestoreMode(true)
@@ -1528,8 +1529,7 @@ public class RestoreJob extends AbstractJob {
             Range<PartitionKey> remoteRange = remotePartitionInfo.getRange(remotePartId);
             DataProperty remoteDataProperty = remotePartitionInfo.getDataProperty(remotePartId);
             localPartitionInfo.addPartition(restorePart.getId(), false, remoteRange,
-                    remoteDataProperty, (short) restoreReplicationNum,
-                    remotePartitionInfo.getIsInMemory(remotePartId));
+                    remoteDataProperty, (short) restoreReplicationNum);
             localTbl.addPartition(restorePart);
             if (modify) {
                 // modify tablet inverted index
@@ -2371,4 +2371,3 @@ public class RestoreJob extends AbstractJob {
         return sb.toString();
     }
 }
-

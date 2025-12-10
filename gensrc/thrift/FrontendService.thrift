@@ -1509,7 +1509,7 @@ struct TPartitionMetaInfo {
     14: optional string storage_medium
     15: optional i64 cooldown_time
     16: optional i64 last_consistency_check_time
-    17: optional bool is_in_memory
+    17: optional bool is_in_memory // Deprecated
     18: optional bool is_temp
     19: optional string data_size
     20: optional i64 row_count

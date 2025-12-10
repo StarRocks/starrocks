@@ -449,11 +449,13 @@ public class CachingIcebergCatalog implements IcebergCatalog {
         tables.invalidate(new IcebergTableCacheKey(key, new ConnectContext()));
         // will invalidate all snapshots of this table
         partitionCache.invalidate(key);
-        Set<String> paths = metaFileCacheMap.get(key);
+        tableLatestAccessTime.remove(key);
+        tableLatestRefreshTime.remove(key);
+
+        Set<String> paths = metaFileCacheMap.remove(key);
         if (paths != null && !paths.isEmpty()) {
             dataFileCache.invalidateAll(paths);
             deleteFileCache.invalidateAll(paths);
-            paths.clear();
         }
     }
 

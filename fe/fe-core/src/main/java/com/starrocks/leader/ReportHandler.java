@@ -51,7 +51,6 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DiskInfo;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.LocalTablet.TabletHealthStatus;
 import com.starrocks.catalog.MaterializedIndex;
@@ -85,6 +84,7 @@ import com.starrocks.persist.BatchDeleteReplicaInfo;
 import com.starrocks.persist.ReplicaPersistInfo;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.system.Backend;
 import com.starrocks.system.Backend.BackendStatus;
 import com.starrocks.system.ComputeNode;
@@ -118,6 +118,7 @@ import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TTablet;
 import com.starrocks.thrift.TTabletInfo;
 import com.starrocks.thrift.TTabletSchema;
+import com.starrocks.thrift.TTabletType;
 import com.starrocks.thrift.TTaskType;
 import com.starrocks.thrift.TWorkGroup;
 import com.starrocks.thrift.TWorkGroupOp;
@@ -520,19 +521,16 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
         // 9. send set tablet partition info to be
         handleSetTabletPartitionId(backendId, tabletWithoutPartitionId);
 
-        // 10. send set tablet in memory to be
-        handleSetTabletInMemory(backendId, backendTablets);
-
-        // 11. send set tablet enable persistent index to be
+        // 10. send set tablet enable persistent index to be
         handleSetTabletEnablePersistentIndex(backendId, backendTablets);
 
-        // 12. send set table binlog config to be
+        // 11. send set table binlog config to be
         handleSetTabletBinlogConfig(backendId, backendTablets);
 
-        // 13. send primary index cache expire sec to be
+        // 12. send primary index cache expire sec to be
         handleSetPrimaryIndexCacheExpireSec(backendId, backendTablets);
 
-        // 14. send update tablet schema to be
+        // 13. send update tablet schema to be
         handleUpdateTableSchema(backendId, backendTablets);
 
         final SystemInfoService currentSystemInfo = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
@@ -1232,7 +1230,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                                             .setStorageMedium(TStorageMedium.HDD)
                                             .setEnablePersistentIndex(olapTable.enablePersistentIndex())
                                             .setPrimaryIndexCacheExpireSec(olapTable.primaryIndexCacheExpireSec())
-                                            .setTabletType(olapTable.getPartitionInfo().getTabletType(partitionId))
+                                            .setTabletType(TTabletType.TABLET_TYPE_DISK)
                                             .setCompressionType(olapTable.getCompressionType())
                                             .setCompressionLevel(olapTable.getCompressionLevel())
                                             .setRecoverySource(RecoverySource.REPORT)
@@ -1664,63 +1662,6 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                 .createPartitionIdUpdateTask(backendId, tabletWithoutPartitionId);
         batchTask.addTask(task);
         AgentTaskExecutor.submit(batchTask);
-    }
-
-    private static void handleSetTabletInMemory(long backendId, Map<Long, TTablet> backendTablets) {
-        // <tablet id, tablet in memory>
-        List<Pair<Long, Boolean>> tabletToInMemory = Lists.newArrayList();
-
-        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
-        for (TTablet backendTablet : backendTablets.values()) {
-            for (TTabletInfo tabletInfo : backendTablet.tablet_infos) {
-                if (!tabletInfo.isSetIs_in_memory()) {
-                    continue;
-                }
-                long tabletId = tabletInfo.getTablet_id();
-                boolean beIsInMemory = tabletInfo.is_in_memory;
-                TabletMeta tabletMeta = invertedIndex.getTabletMeta(tabletId);
-                long dbId = tabletMeta != null ? tabletMeta.getDbId() : TabletInvertedIndex.NOT_EXIST_VALUE;
-                long tableId = tabletMeta != null ? tabletMeta.getTableId() : TabletInvertedIndex.NOT_EXIST_VALUE;
-                long partitionId =
-                        tabletMeta != null ? tabletMeta.getPhysicalPartitionId() : TabletInvertedIndex.NOT_EXIST_VALUE;
-
-                Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
-                if (db == null) {
-                    continue;
-                }
-
-                OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                            .getTable(db.getId(), tableId);
-                if (olapTable == null) {
-                    continue;
-                }
-
-                Locker locker = new Locker();
-                locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.READ);
-                try {
-                    PhysicalPartition partition = olapTable.getPhysicalPartition(partitionId);
-                    if (partition == null) {
-                        continue;
-                    }
-                    boolean feIsInMemory = olapTable.getPartitionInfo().getIsInMemory(partition.getParentId());
-                    if (beIsInMemory != feIsInMemory) {
-                        tabletToInMemory.add(new Pair<>(tabletId, feIsInMemory));
-                    }
-                } finally {
-                    locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.READ);
-                }
-            }
-        }
-
-        // When reported, needn't synchronous
-        if (!tabletToInMemory.isEmpty()) {
-            LOG.info("find [{}] tablet(s) which need to be set with in-memory state", tabletToInMemory.size());
-            AgentBatchTask batchTask = new AgentBatchTask();
-            TabletMetadataUpdateAgentTask
-                    task = TabletMetadataUpdateAgentTaskFactory.createIsInMemoryUpdateTask(backendId, tabletToInMemory);
-            batchTask.addTask(task);
-            AgentTaskExecutor.submit(batchTask);
-        }
     }
 
     public static void testHandleSetTabletEnablePersistentIndex(long backendId, Map<Long, TTablet> backendTablets) {

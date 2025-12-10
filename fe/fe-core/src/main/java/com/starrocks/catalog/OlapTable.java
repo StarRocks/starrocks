@@ -100,6 +100,7 @@ import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.analyzer.SelectAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.IndexDef.IndexType;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.SlotRef;
@@ -1319,19 +1320,16 @@ public class OlapTable extends Table {
                     rangePartitionInfo.getRange(partition.getId()),
                     rangePartitionInfo.getDataProperty(partition.getId()),
                     rangePartitionInfo.getReplicationNum(partition.getId()),
-                    rangePartitionInfo.getIsInMemory(partition.getId()),
                     rangePartitionInfo.getDataCacheInfo(partition.getId()));
         } else if (partitionInfo.isListPartition()) {
             return new RecycleListPartitionInfo(dbId, id, partition,
                     partitionInfo.getDataProperty(partition.getId()),
                     partitionInfo.getReplicationNum(partition.getId()),
-                    partitionInfo.getIsInMemory(partition.getId()),
                     partitionInfo.getDataCacheInfo(partition.getId()));
         } else if (partitionInfo.isUnPartitioned()) {
             return new RecycleUnPartitionInfo(dbId, id, partition,
                     partitionInfo.getDataProperty(partition.getId()),
                     partitionInfo.getReplicationNum(partition.getId()),
-                    partitionInfo.getIsInMemory(partition.getId()),
                     partitionInfo.getDataCacheInfo(partition.getId()));
         } else {
             throw new RuntimeException("Unknown partition type: " + partitionInfo.getType());
@@ -1881,7 +1879,6 @@ public class OlapTable extends Table {
 
         DataProperty dataProperty = partitionInfo.getDataProperty(oldPartition.getId());
         short replicationNum = partitionInfo.getReplicationNum(oldPartition.getId());
-        boolean isInMemory = partitionInfo.getIsInMemory(oldPartition.getId());
         DataCacheInfo dataCacheInfo = partitionInfo.getDataCacheInfo(oldPartition.getId());
 
         if (partitionInfo.isRangePartition()) {
@@ -1889,7 +1886,7 @@ public class OlapTable extends Table {
             Range<PartitionKey> range = rangePartitionInfo.getRange(oldPartition.getId());
             rangePartitionInfo.dropPartition(oldPartition.getId());
             rangePartitionInfo.addPartition(newPartition.getId(), false, range, dataProperty,
-                    replicationNum, isInMemory, dataCacheInfo);
+                    replicationNum, dataCacheInfo);
         } else if (partitionInfo.getType() == PartitionType.LIST) {
             ListPartitionInfo listPartitionInfo = (ListPartitionInfo) partitionInfo;
             List<String> values = listPartitionInfo.getIdToValues().get(oldPartition.getId());
@@ -1897,14 +1894,14 @@ public class OlapTable extends Table {
             listPartitionInfo.dropPartition(oldPartition.getId());
             try {
                 listPartitionInfo.addPartition(idToColumn, newPartition.getId(), dataProperty, replicationNum,
-                        isInMemory, dataCacheInfo, values, multiValues);
+                        dataCacheInfo, values, multiValues);
             } catch (AnalysisException ex) {
                 LOG.warn("failed to add list partition", ex);
                 throw new SemanticException(ex.getMessage());
             }
         } else {
             partitionInfo.dropPartition(oldPartition.getId());
-            partitionInfo.addPartition(newPartition.getId(), dataProperty, replicationNum, isInMemory, dataCacheInfo);
+            partitionInfo.addPartition(newPartition.getId(), dataProperty, replicationNum, dataCacheInfo);
         }
 
         return oldPartition;
@@ -2113,22 +2110,6 @@ public class OlapTable extends Table {
             return tableProperty.getReplicationNum();
         }
         return RunMode.defaultReplicationNum();
-    }
-
-    public Boolean isInMemory() {
-        if (tableProperty != null) {
-            return tableProperty.isInMemory();
-        }
-        return false;
-    }
-
-    public void setIsInMemory(boolean isInMemory) {
-        if (tableProperty == null) {
-            tableProperty = new TableProperty(new HashMap<>());
-        }
-        tableProperty
-                .modifyTableProperties(PropertyAnalyzer.PROPERTIES_INMEMORY, Boolean.valueOf(isInMemory).toString());
-        tableProperty.buildInMemory();
     }
 
     public Boolean isFileBundling() {

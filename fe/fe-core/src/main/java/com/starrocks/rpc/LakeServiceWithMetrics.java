@@ -30,6 +30,8 @@ import com.starrocks.proto.DeleteTxnLogRequest;
 import com.starrocks.proto.DeleteTxnLogResponse;
 import com.starrocks.proto.DropTableRequest;
 import com.starrocks.proto.DropTableResponse;
+import com.starrocks.proto.GetTabletMetadatasRequest;
+import com.starrocks.proto.GetTabletMetadatasResponse;
 import com.starrocks.proto.LockTabletMetadataRequest;
 import com.starrocks.proto.LockTabletMetadataResponse;
 import com.starrocks.proto.PublishLogVersionBatchRequest;
@@ -176,5 +178,11 @@ public class LakeServiceWithMetrics implements LakeService {
     public Future<VacuumFullResponse> vacuumFull(VacuumFullRequest request) {
         increaseMetrics();
         return lakeService.vacuumFull(request);
+    }
+
+    @Override
+    public Future<GetTabletMetadatasResponse> getTabletMetadatas(GetTabletMetadatasRequest request) {
+        increaseMetrics();
+        return lakeService.getTabletMetadatas(request);
     }
 }

@@ -61,7 +61,6 @@ import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.ast.expression.TimestampArithmeticExpr;
 import com.starrocks.thrift.TStorageMedium;
-import com.starrocks.thrift.TTabletType;
 import com.starrocks.type.DateType;
 import com.starrocks.type.Type;
 import org.apache.logging.log4j.util.Strings;
@@ -747,11 +746,11 @@ public class PartitionDescAnalyzer {
         // analyze version info
         Long versionInfo = PropertyAnalyzer.analyzeVersionInfo(partitionAndTableProperties);
 
-        // analyze in memory
-        boolean isInMemory = PropertyAnalyzer
-                .analyzeBooleanProp(partitionAndTableProperties, PropertyAnalyzer.PROPERTIES_INMEMORY, false);
+        // consume deprecated in_memory property if present
+        PropertyAnalyzer.analyzeBooleanProp(partitionAndTableProperties,
+                PropertyAnalyzer.PROPERTIES_INMEMORY, false);
 
-        TTabletType tabletType = PropertyAnalyzer.analyzeTabletType(partitionAndTableProperties);
+        PropertyAnalyzer.analyzeTabletType(partitionAndTableProperties);
 
         DataCacheInfo dataCacheInfo = PropertyAnalyzer.analyzeDataCacheInfo(partitionAndTableProperties);
 
@@ -759,8 +758,6 @@ public class PartitionDescAnalyzer {
         desc.setPartitionDataProperty(partitionDataProperty);
         desc.setReplicationNum(replicationNum);
         desc.setVersionInfo(versionInfo);
-        desc.setInMemory(isInMemory);
-        desc.setTabletType(tabletType);
         desc.setDataCacheInfo(dataCacheInfo);
 
         if (desc.getProperties() != null) {

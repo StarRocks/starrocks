@@ -97,13 +97,14 @@ import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.ModifyColumnClause;
 import com.starrocks.sql.ast.MultiItemListPartitionDesc;
 import com.starrocks.sql.ast.PartitionDesc;
-import com.starrocks.sql.ast.PartitionNames;
+import com.starrocks.sql.ast.PartitionRef;
 import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
 import com.starrocks.sql.ast.ReorderColumnsClause;
 import com.starrocks.sql.ast.SingleItemListPartitionDesc;
 import com.starrocks.sql.ast.TruncatePartitionClause;
 import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.ast.expression.DateLiteral;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.type.DateType;
@@ -717,18 +718,6 @@ public class AlterTest {
                         Short.valueOf(tbl4.getPartitionInfo().getReplicationNum(partition.getId())));
         }
         Assertions.assertEquals(Short.valueOf("1"), Short.valueOf(tbl4.getPartitionInfo().getReplicationNum(p3.getId())));
-
-        // batch update in_memory property
-        stmt = "alter table test.tbl4 modify partition (p1, p2, p3) set ('in_memory' = 'true')";
-        partitionList = Lists.newArrayList(p1, p2, p3);
-        for (Partition partition : partitionList) {
-            Assertions.assertEquals(false, tbl4.getPartitionInfo().getIsInMemory(partition.getId()));
-        }
-        alterTableWithNewParser(stmt, false);
-        for (Partition partition : partitionList) {
-            Assertions.assertEquals(true, tbl4.getPartitionInfo().getIsInMemory(partition.getId()));
-        }
-        Assertions.assertEquals(false, tbl4.getPartitionInfo().getIsInMemory(p4.getId()));
 
         // batch update storage_medium and storage_cool_down properties
         stmt = "alter table test.tbl4 modify partition (p2, p3, p4) set ('storage_medium' = 'HDD')";
@@ -2240,10 +2229,9 @@ public class AlterTest {
         List<String> values = partitionInfo.getIdToValues().get(partitionId);
         DataProperty dataProperty = partitionInfo.getDataProperty(partitionId);
         short replicationNum = partitionInfo.getReplicationNum(partitionId);
-        boolean isInMemory = partitionInfo.getIsInMemory(partitionId);
         boolean isTempPartition = false;
         ListPartitionPersistInfo partitionPersistInfoOut = new ListPartitionPersistInfo(dbId, tableId, partition,
-                    dataProperty, replicationNum, isInMemory, isTempPartition, values, new ArrayList<>(),
+                    dataProperty, replicationNum, isTempPartition, values, new ArrayList<>(),
                     partitionInfo.getDataCacheInfo(partitionId));
 
         // replay log
@@ -2289,10 +2277,9 @@ public class AlterTest {
         List<List<String>> multiValues = partitionInfo.getIdToMultiValues().get(partitionId);
         DataProperty dataProperty = partitionInfo.getDataProperty(partitionId);
         short replicationNum = partitionInfo.getReplicationNum(partitionId);
-        boolean isInMemory = partitionInfo.getIsInMemory(partitionId);
         boolean isTempPartition = false;
         ListPartitionPersistInfo partitionPersistInfoIn = new ListPartitionPersistInfo(dbId, tableId, partition,
-                    dataProperty, replicationNum, isInMemory, isTempPartition, new ArrayList<>(), multiValues,
+                    dataProperty, replicationNum, isTempPartition, new ArrayList<>(), multiValues,
                     partitionInfo.getDataCacheInfo(partitionId));
 
         List<List<String>> assertMultiValues = partitionPersistInfoIn.asListPartitionPersistInfo().getMultiValues();
@@ -2711,7 +2698,7 @@ public class AlterTest {
                 }
             };
             List<AlterClause> cList = new ArrayList<>();
-            PartitionNames partitionNames = new PartitionNames(true, Arrays.asList("p1"));
+            PartitionRef partitionNames = new PartitionRef(Arrays.asList("p1"), true, NodePosition.ZERO);
             TruncatePartitionClause clause = new TruncatePartitionClause(partitionNames);
             cList.add(clause);
             AlterJobMgr alter = new AlterJobMgr(

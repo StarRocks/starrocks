@@ -29,6 +29,8 @@ import com.starrocks.proto.DeleteTxnLogRequest;
 import com.starrocks.proto.DeleteTxnLogResponse;
 import com.starrocks.proto.DropTableRequest;
 import com.starrocks.proto.DropTableResponse;
+import com.starrocks.proto.GetTabletMetadatasRequest;
+import com.starrocks.proto.GetTabletMetadatasResponse;
 import com.starrocks.proto.LockTabletMetadataRequest;
 import com.starrocks.proto.LockTabletMetadataResponse;
 import com.starrocks.proto.PublishLogVersionBatchRequest;
@@ -290,6 +292,19 @@ public class LakeServiceWithMetricsTest {
         };
 
         Future<VacuumResponse> result = lakeServiceWithMetrics.vacuum(new VacuumRequest());
+        assertNotNull(result);
+    }
+
+    @Test
+    public void testGetTabletMetadatas() throws Exception {
+        new Expectations() {
+            {
+                lakeService.getTabletMetadatas((GetTabletMetadatasRequest) any);
+                result = CompletableFuture.completedFuture(new GetTabletMetadatasResponse());
+            }
+        };
+
+        Future<GetTabletMetadatasResponse> result = lakeServiceWithMetrics.getTabletMetadatas(new GetTabletMetadatasRequest());
         assertNotNull(result);
     }
 }

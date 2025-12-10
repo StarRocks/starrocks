@@ -688,7 +688,6 @@ public class AlterJobMgr {
                     olapTable.setReplicationNum(replicationNum);
                 }
             }
-            partitionInfo.setIsInMemory(info.getPartitionId(), info.isInMemory());
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.WRITE);
         }

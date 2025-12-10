@@ -118,10 +118,6 @@ public class OperationType {
     @IgnorableOnReplayFailed
     public static final short OP_MODIFY_REPLICATION_NUM = 266;
 
-    // set table in memory
-    @IgnorableOnReplayFailed
-    public static final short OP_MODIFY_IN_MEMORY = 267;
-
     // global dict
     @IgnorableOnReplayFailed
     public static final short OP_SET_FORBIDDEN_GLOBAL_DICT = 268;
@@ -592,6 +588,9 @@ public class OperationType {
 
     @IgnorableOnReplayFailed
     public static final short OP_MODIFY_DICTIONARY_MGR = 13402;
+
+    @IgnorableOnReplayFailed
+    public static final short OP_MODIFY_DICTIONARY_MGR_V2 = 13403;
 
     // Replication job
     @IgnorableOnReplayFailed

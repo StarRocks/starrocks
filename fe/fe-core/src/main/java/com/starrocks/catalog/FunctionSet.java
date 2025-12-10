@@ -273,6 +273,9 @@ public class FunctionSet {
     public static final String JSON_LENGTH = "json_length";
     public static final String JSON_REMOVE = "json_remove";
 
+    // Variant functions:
+    public static final String VARIANT_QUERY = "variant_query";
+
     // Matching functions:
     public static final String ILIKE = "ilike";
     public static final String LIKE = "like";
@@ -559,6 +562,10 @@ public class FunctionSet {
     public static final Function JSON_QUERY_FUNC = new Function(
             new FunctionName(JSON_QUERY), new Type[] {JsonType.JSON, VarcharType.VARCHAR}, JsonType.JSON, false);
 
+    // VARIANT functions
+    public static final Function VARIANT_QUERY_FUNC = new Function(
+            new FunctionName(VARIANT_QUERY), new Type[] {VariantType.VARIANT, VarcharType.VARCHAR}, VariantType.VARIANT, false);
+
     // dict query function
     public static final String DICT_MAPPING = "dict_mapping";
 
@@ -598,6 +605,7 @@ public class FunctionSet {
     public static final String CURRENT_USER = "current_user";
     public static final String CURRENT_ROLE = "current_role";
     public static final String CURRENT_GROUP = "current_group";
+    public static final String CURRENT_WAREHOUSE = "current_warehouse";
 
     // scalar function
     public static final String STATE_SUFFIX = "_state";
@@ -868,6 +876,7 @@ public class FunctionSet {
             .add(CURRENT_USER)
             .add(CURRENT_ROLE)
             .add(CURRENT_GROUP)
+            .add(CURRENT_WAREHOUSE)
             .build();
 
     public static final java.util.function.Function<Type, ArrayType> APPROX_TOP_N_RET_TYPE_BUILDER =

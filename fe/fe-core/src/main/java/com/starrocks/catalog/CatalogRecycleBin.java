@@ -59,6 +59,7 @@ import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.thrift.TStorageMedium;
 import org.apache.commons.collections4.ListUtils;
 import org.apache.commons.lang3.StringUtils;
@@ -276,14 +277,6 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
         return null;
     }
 
-    public synchronized boolean getPartitionIsInMemory(long partitionId) {
-        RecyclePartitionInfo partitionInfo = idToPartition.get(partitionId);
-        if (partitionInfo != null) {
-            return partitionInfo.isInMemory();
-        }
-        return false;
-    }
-
     public synchronized List<Partition> getPartitions(long tableId) {
         return idToPartition.values().stream()
                 .filter(v -> (v.getTableId() == tableId))
@@ -300,6 +293,9 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
     }
 
     private synchronized boolean checkValidDeletionByClusterSnapshot(long id) {
+        if (RunMode.isSharedNothingMode()) {
+            return true;
+        }
         Long originalRecycleTime = idToRecycleTime.get(id);
         if (originalRecycleTime == null) {
             return true;
@@ -363,7 +359,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
     }
 
     private synchronized boolean canEraseDatabase(RecycleDatabaseInfo databaseInfo, long currentTimeMs) {
-        if (GlobalStateMgr.getCurrentState().getClusterSnapshotMgr()
+        if (RunMode.isSharedDataMode() && GlobalStateMgr.getCurrentState().getClusterSnapshotMgr()
                             .isDbInClusterSnapshotInfo(databaseInfo.getDb().getId())) {
             return false;
         }
@@ -379,7 +375,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
     }
 
     private synchronized boolean canEraseTable(RecycleTableInfo tableInfo, long currentTimeMs) {
-        if (GlobalStateMgr.getCurrentState().getClusterSnapshotMgr()
+        if (RunMode.isSharedDataMode() && GlobalStateMgr.getCurrentState().getClusterSnapshotMgr()
                             .isTableInClusterSnapshotInfo(tableInfo.getDbId(), tableInfo.getTable().getId())) {
             return false;
         }
@@ -400,7 +396,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
     }
 
     private synchronized boolean canErasePartition(RecyclePartitionInfo partitionInfo, long currentTimeMs) {
-        if (GlobalStateMgr.getCurrentState().getClusterSnapshotMgr()
+        if (RunMode.isSharedDataMode() && GlobalStateMgr.getCurrentState().getClusterSnapshotMgr()
                             .isPartitionInClusterSnapshotInfo(partitionInfo.getDbId(),
                                     partitionInfo.getTableId(), partitionInfo.getPartition().getId())) {
             return false;
@@ -919,7 +915,6 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
             rangePartitionInfo.setRange(partitionId, false, partitionInfo.getRange());
             rangePartitionInfo.setDataProperty(partitionId, partitionInfo.getDataProperty());
             rangePartitionInfo.setReplicationNum(partitionId, partitionInfo.getReplicationNum());
-            rangePartitionInfo.setIsInMemory(partitionId, partitionInfo.isInMemory());
 
             if (table.isCloudNativeTable()) {
                 rangePartitionInfo.setDataCacheInfo(partitionId,
@@ -1295,7 +1290,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
                         recyclePartitionInfoV1.dbId, recyclePartitionInfoV1.tableId, recyclePartitionInfoV1.partition,
                         recyclePartitionInfoV1.range, recyclePartitionInfoV1.dataProperty,
                         recyclePartitionInfoV1.replicationNum,
-                        recyclePartitionInfoV1.isInMemory, null);
+                        null);
                 writer.writeJson(recycleRangePartitionInfo);
             } else {
                 writer.writeJson(recyclePartitionInfo);

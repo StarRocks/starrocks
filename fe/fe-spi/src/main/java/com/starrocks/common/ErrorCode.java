@@ -332,9 +332,9 @@ public enum ErrorCode {
     ERR_MAPPING_EXPR_INVALID(5602, new byte[] {'4', '2', '0', '0', '0'},
             "Expr '%s' analyze error: %s, derived column is '%s'"),
     ERR_NO_PARTITIONS_HAVE_DATA_LOAD(5603, new byte[] {'0', '2', '0', '0', '0'},
-            "No partitions have data available for loading. If you are sure there may be no data to be loaded, " +
-                    "you can use `ADMIN SET FRONTEND CONFIG ('empty_load_as_error' = 'false')` " +
-                    "to ensure such load jobs can succeed"),
+            "No rows were imported from upstream. Possible causes: 1) all rows were filtered by load conditions, " +
+                    "2) all rows failed data quality/validation checks, or 3) upstream has no data. If this is acceptable, " +
+                    "set `ADMIN SET FRONTEND CONFIG ('empty_load_as_error' = 'false')` to ignore empty loads"),
     ERR_INSERT_COLUMN_COUNT_MISMATCH(5604, new byte[] {'4', '2', '6', '0', '1'},
             "Inserted target column count: %d doesn't match select/value column count: %d"),
     ERR_ILLEGAL_BYTES_LENGTH(5605, new byte[] {'4', '2', '0', '0', '0'}, "The valid bytes length for '%s' is [%d, %d]"),

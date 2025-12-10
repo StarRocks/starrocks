@@ -21,7 +21,6 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.HashDistributionInfo;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.SinglePartitionInfo;
@@ -43,17 +42,17 @@ import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.lake.snapshot.ClusterSnapshotMgr;
-import com.starrocks.persist.EditLog;
 import com.starrocks.persist.ImageWriter;
-import com.starrocks.persist.SetDefaultStorageVolumeLog;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockReaderV2;
 import com.starrocks.sql.ast.AggregateType;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.storagevolume.StorageVolume;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.type.IntegerType;
+import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -90,11 +89,10 @@ public class SharedDataStorageVolumeMgrTest {
     @Mocked
     private StarOSAgent starOSAgent;
 
-    @Mocked
-    private EditLog editLog;
-
     @BeforeEach
     public void setUp() {
+        UtFrameUtils.setUpForPersistTest();
+
         Config.cloud_native_storage_type = "S3";
         Config.aws_s3_access_key = "access_key";
         Config.aws_s3_secret_key = "secret_key";
@@ -153,17 +151,12 @@ public class SharedDataStorageVolumeMgrTest {
                 fileStores.put(fsInfo.getFsKey(), fsInfo);
             }
         };
-
-        new MockUp<GlobalStateMgr>() {
-            @Mock
-            public EditLog getEditLog() {
-                return editLog;
-            }
-        };
     }
 
     @AfterEach
     public void tearDown() {
+        UtFrameUtils.tearDownForPersisTest();
+
         Config.cloud_native_storage_type = "S3";
         Config.aws_s3_access_key = "";
         Config.aws_s3_secret_key = "";
@@ -175,12 +168,6 @@ public class SharedDataStorageVolumeMgrTest {
 
     @Test
     public void testStorageVolumeCRUD() throws AlreadyExistsException, DdlException, MetaNotFoundException {
-        new Expectations() {
-            {
-                editLog.logSetDefaultStorageVolume((SetDefaultStorageVolumeLog) any);
-            }
-        };
-
         String svName = "test";
         String svName1 = "test1";
         // create
@@ -415,12 +402,6 @@ public class SharedDataStorageVolumeMgrTest {
 
     @Test
     public void testCreateBuiltinStorageVolume() throws DdlException, AlreadyExistsException, MetaNotFoundException {
-        new Expectations() {
-            {
-                editLog.logSetDefaultStorageVolume((SetDefaultStorageVolumeLog) any);
-            }
-        };
-
         SharedDataStorageVolumeMgr sdsvm = new SharedDataStorageVolumeMgr();
         Assertions.assertFalse(sdsvm.exists(StorageVolumeMgr.BUILTIN_STORAGE_VOLUME));
 
@@ -530,12 +511,6 @@ public class SharedDataStorageVolumeMgrTest {
     @Test
     public void testGetDefaultStorageVolume() throws IllegalAccessException, AlreadyExistsException,
             DdlException, NoSuchFieldException {
-        new Expectations() {
-            {
-                editLog.logSetDefaultStorageVolume((SetDefaultStorageVolumeLog) any);
-            }
-        };
-
         SharedDataStorageVolumeMgr sdsvm = new SharedDataStorageVolumeMgr();
         sdsvm.createBuiltinStorageVolume();
         FieldUtils.writeField(sdsvm, "defaultStorageVolumeId", "", true);
@@ -554,12 +529,6 @@ public class SharedDataStorageVolumeMgrTest {
 
     @Test
     public void testGetStorageVolumeOfDb() throws DdlException, AlreadyExistsException {
-        new Expectations() {
-            {
-                editLog.logSetDefaultStorageVolume((SetDefaultStorageVolumeLog) any);
-            }
-        };
-
         SharedDataStorageVolumeMgr sdsvm = new SharedDataStorageVolumeMgr();
         ErrorReportException ex = Assertions.assertThrows(ErrorReportException.class, () -> Deencapsulation.invoke(sdsvm,
                 "getStorageVolumeOfDb", StorageVolumeMgr.DEFAULT));
@@ -584,12 +553,6 @@ public class SharedDataStorageVolumeMgrTest {
     @Test
     public void testGetStorageVolumeOfTable()
             throws DdlException, AlreadyExistsException {
-        new Expectations() {
-            {
-                editLog.logSetDefaultStorageVolume((SetDefaultStorageVolumeLog) any);
-            }
-        };
-
         SharedDataStorageVolumeMgr sdsvm = new SharedDataStorageVolumeMgr();
 
         String svName = "test";

@@ -29,7 +29,6 @@ import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.ExternalOlapTable;
 import com.starrocks.catalog.FlatJsonConfig;
 import com.starrocks.catalog.HashDistributionInfo;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -65,6 +64,7 @@ import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.ExpressionPartitionDesc;
 import com.starrocks.sql.ast.IndexDef.IndexType;
 import com.starrocks.sql.ast.KeysDesc;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.ListPartitionDesc;
 import com.starrocks.sql.ast.OrderByElement;
 import com.starrocks.sql.ast.PartitionDesc;
@@ -359,10 +359,8 @@ public class OlapTableFactory implements AbstractTableFactory {
             // analyze location property
             PropertyAnalyzer.analyzeLocation(table, properties);
 
-            // set in memory
-            boolean isInMemory =
-                    PropertyAnalyzer.analyzeBooleanProp(properties, PropertyAnalyzer.PROPERTIES_INMEMORY, false);
-            table.setIsInMemory(isInMemory);
+            // consume deprecated in_memory property if present
+            PropertyAnalyzer.analyzeBooleanProp(properties, PropertyAnalyzer.PROPERTIES_INMEMORY, false);
 
             boolean enablePersistentIndex = PropertyAnalyzer.analyzeEnablePersistentIndex(properties);
             if (table.getKeysType() == KeysType.PRIMARY_KEYS) {
@@ -624,8 +622,6 @@ public class OlapTableFactory implements AbstractTableFactory {
                 Preconditions.checkNotNull(dataProperty);
                 partitionInfo.setDataProperty(partitionId, dataProperty);
                 partitionInfo.setReplicationNum(partitionId, replicationNum);
-                partitionInfo.setIsInMemory(partitionId, isInMemory);
-                partitionInfo.setTabletType(partitionId, tabletType);
                 StorageInfo storageInfo = table.getTableProperty().getStorageInfo();
                 DataCacheInfo dataCacheInfo = storageInfo == null ? null : storageInfo.getDataCacheInfo();
                 partitionInfo.setDataCacheInfo(partitionId, dataCacheInfo);
