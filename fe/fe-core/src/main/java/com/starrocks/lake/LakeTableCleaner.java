@@ -17,7 +17,9 @@ package com.starrocks.lake;
 import com.staros.client.StarClientException;
 import com.staros.proto.ShardInfo;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.common.Config;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.logging.log4j.LogManager;
@@ -43,6 +45,11 @@ class LakeTableCleaner {
         Set<String> removedPaths = new HashSet<>();
         ComputeResource computeResource =
                 GlobalStateMgr.getCurrentState().getWarehouseMgr().getBackgroundComputeResource(table.getId());
+        if (Config.lake_enable_drop_tablet_cache && table.getTableProperty().getStorageInfo().isEnableDataCache()) {
+            for (Partition partition : table.getAllPartitions()) {
+                LakeTableHelper.dropPartitionCache(partition, computeResource);
+            }
+        }
         for (PhysicalPartition partition : table.getAllPhysicalPartitions()) {
             try {
                 ShardInfo shardInfo = LakeTableHelper.getAssociatedShardInfo(partition, computeResource).orElse(null);

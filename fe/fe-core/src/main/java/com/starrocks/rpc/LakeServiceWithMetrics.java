@@ -30,6 +30,8 @@ import com.starrocks.proto.DeleteTxnLogRequest;
 import com.starrocks.proto.DeleteTxnLogResponse;
 import com.starrocks.proto.DropTableRequest;
 import com.starrocks.proto.DropTableResponse;
+import com.starrocks.proto.DropTabletCacheRequest;
+import com.starrocks.proto.DropTabletCacheResponse;
 import com.starrocks.proto.LockTabletMetadataRequest;
 import com.starrocks.proto.LockTabletMetadataResponse;
 import com.starrocks.proto.PublishLogVersionBatchRequest;
@@ -116,6 +118,12 @@ public class LakeServiceWithMetrics implements LakeService {
     public Future<DropTableResponse> dropTable(DropTableRequest request) {
         increaseMetrics();
         return lakeService.dropTable(request);
+    }
+
+    @Override
+    public Future<DropTabletCacheResponse> dropTabletCache(DropTabletCacheRequest request) {
+        increaseMetrics();
+        return lakeService.dropTabletCache(request);
     }
 
     @Override

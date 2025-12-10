@@ -15,6 +15,7 @@
 package com.starrocks.lake;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
 import com.staros.client.StarClientException;
 import com.staros.proto.ShardInfo;
 import com.staros.proto.StatusCode;
@@ -29,7 +30,11 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.proto.DropTableRequest;
+import com.starrocks.proto.DropTabletCacheMeta;
+import com.starrocks.proto.DropTabletCacheRequest;
+import com.starrocks.proto.DropTabletCacheResponse;
 import com.starrocks.proto.StatusPB;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
@@ -40,15 +45,19 @@ import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.lang3.tuple.Pair;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.Future;
 
 public class LakeTableHelper {
     private static final Logger LOG = LogManager.getLogger(LakeTableHelper.class);
@@ -145,8 +154,91 @@ public class LakeTableHelper {
         return Optional.empty();
     }
 
-    static boolean removePartitionDirectory(Partition partition, ComputeResource computeResource) throws StarClientException {
+    public static void dropPartitionCache(Partition partition, ComputeResource computeResource) {
+        Map<Long, Long> tablets = new HashMap<>();
+        // if we reach here, only catalog recycle bin will touch partition,
+        // so we don't need db or table lock here
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        partition.getSubPartitions().forEach(physicalPartition -> {
+            long visibleVersion = physicalPartition.getVisibleVersion();
+            physicalPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)
+                    .forEach(materializedIndex ->
+                            materializedIndex.getTablets().forEach(tablet ->
+                            tablets.put(tablet.getId(), visibleVersion)));
+        });
+        Map<Long /* beId */, List<Pair<Long /* tabletId */, Long /* version */>>> tabletsByBeMap = new HashMap<>();
+        for (Map.Entry<Long, Long> entry : tablets.entrySet()) {
+            try {
+                long beId = globalStateMgr.getStarOSAgent().getPrimaryComputeNodeIdByShard(
+                        entry.getKey(), computeResource.getWorkerGroupId());
+                tabletsByBeMap.computeIfAbsent(beId,
+                        k -> Lists.newArrayList()).add(Pair.of(entry.getKey(), entry.getValue()));
+            } catch (StarRocksException e) {
+                // still continue, drop cache is a try-at-best behavior
+                LOG.debug("Fail to get replica for tablet {} when drop cache, error: {}.",
+                        entry.getKey(), e.getMessage());
+            }
+        }
+
+        Map<Long, Future<DropTabletCacheResponse>> futureMap = new HashMap<>();
+        for (Map.Entry<Long, List<Pair<Long, Long>>> entry : tabletsByBeMap.entrySet()) {
+            long beId = entry.getKey();
+            ComputeNode node = globalStateMgr.getNodeMgr().getClusterInfo()
+                    .getBackendOrComputeNode(beId);
+            if (node == null) {
+                LOG.debug("Node {} not exist when drop cache.", beId);
+                continue;
+            }
+
+            List<DropTabletCacheMeta> metas = Lists.newArrayList();
+            for (Pair<Long, Long> e : entry.getValue()) {
+                DropTabletCacheMeta meta = new DropTabletCacheMeta();
+                meta.tabletId = e.getKey();
+                meta.version = e.getValue();
+                metas.add(meta);
+            }
+            DropTabletCacheRequest request = new DropTabletCacheRequest();
+            request.tablets = metas;
+            try {
+                LakeService lakeService = BrpcProxy.getLakeService(node.getHost(), node.getBrpcPort());
+                futureMap.put(beId, lakeService.dropTabletCache(request));
+            } catch (Throwable e) {
+                LOG.debug("Fail to send rpc request to node: {} when drop cache, error: {}.",
+                        node.toString(), e.getMessage());
+            }
+        }
+
+        for (Map.Entry<Long, Future<DropTabletCacheResponse>> entry : futureMap.entrySet()) {
+            long beId = entry.getKey();
+            Future<DropTabletCacheResponse> future = entry.getValue();
+            DropTabletCacheResponse response = null;
+            try {
+                response = future.get();
+            } catch (InterruptedException exception) {
+                Thread.currentThread().interrupt();
+                LOG.debug("Interrupted while waiting for response from node: {} when drop cache, error: {}.",
+                        beId, exception.getMessage());
+                continue;
+            } catch (Exception e) {
+                LOG.debug("Failed to get response from node: {} when drop cache, error: {}.",
+                        beId, e.getMessage());
+                continue;
+            }
+            if (response.status != null && response.status.statusCode != 0) {
+                LOG.debug("Failed to drop cache from node: {}, error: {}.",
+                        beId, response.status.errorMsgs.get(0));
+            }
+        }
+    }
+
+    static boolean removePartitionDirectory(Partition partition, ComputeResource computeResource, boolean dropCache)
+            throws StarClientException {
         boolean ret = true;
+
+        if (Config.lake_enable_drop_tablet_cache && dropCache) {
+            dropPartitionCache(partition, computeResource);
+        }
+
         for (PhysicalPartition subPartition : partition.getSubPartitions()) {
             ShardInfo shardInfo = getAssociatedShardInfo(subPartition, computeResource).orElse(null);
             if (shardInfo == null) {
