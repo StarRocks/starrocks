@@ -34,6 +34,8 @@ jobs:
       PRE_COMMIT_JOB_STATUS_DICT: ${{ steps.check_blacklist.outputs.pre_commit_job_status_dict }}
       ONLY_BE_TEST: ${{ steps.check_blacklist.outputs.ONLY_BE_TEST }}
       ONLY_FE_TEST: ${{ steps.check_blacklist.outputs.ONLY_FE_TEST }}
+      BE_CHANGE: ${{ steps.check_blacklist.outputs.BE_CHANGE }}
+      FE_CHANGE: ${{ steps.check_blacklist.outputs.FE_CHANGE }}
     steps:
       - name: Sync Check
         id: check
@@ -57,7 +59,7 @@ jobs:
         with:
           name: pr_num
           path: ./pr_num.txt
-          retention-days: 3
+          retention-days: 7
           overwrite: true
 
       - name: Check Basic Workflow Status
@@ -193,7 +195,7 @@ jobs:
         with:
           name: TEST_PR_INFO
           path: ./test-pr-info.txt  
-          retention-days: 3
+          retention-days: 7
           overwrite: true
 
   be-checker:
@@ -204,6 +206,7 @@ jobs:
     env:
       PRE_COMMIT: ${{ needs.basic-checker.outputs.PRE_COMMIT }}
       PRE_COMMIT_CONCLUSION: ${{ needs.basic-checker.outputs.PRE_COMMIT_CONCLUSION }}
+      PRE_COMMIT_JOB_STATUS_DICT: ${{ needs.basic-checker.outputs.PRE_COMMIT_JOB_STATUS_DICT }}
     outputs:
       src_filter: ${{ steps.path-filter.outputs.be }}
       test_filter: ${{ steps.path-filter.outputs.ut }}
@@ -211,6 +214,12 @@ jobs:
       only_test: ${{ needs.basic-checker.outputs.ONLY_BE_TEST }}
       pre_commit: ${{ needs.basic-checker.outputs.PRE_COMMIT }}
       pre_commit_conclusion: ${{ needs.basic-checker.outputs.PRE_COMMIT_CONCLUSION }}
+      pre_commit_job_status_dict: ${{ needs.basic-checker.outputs.PRE_COMMIT_JOB_STATUS_DICT }}
+      pre_ut_conclusion: ${{ steps.check_pre_commit_conclusion.outputs.pre_ut_conclusion }}
+      pre_clang_conclusion: ${{ steps.check_pre_commit_conclusion.outputs.pre_clang_conclusion }}
+      pre_thirdparty_conclusion: ${{ steps.check_pre_commit_conclusion.outputs.pre_thirdparty_conclusion }}
+      pre_format_conclusion: ${{ steps.check_pre_commit_conclusion.outputs.pre_format_conclusion }}
+      be_change: ${{ needs.basic-checker.outputs.BE_CHANGE }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -247,8 +256,22 @@ jobs:
         with:
           name: be-path-filter
           path: ./be-path-filter/
-          retention-days: 3
+          retention-days: 7
           overwrite: true
+
+      - name: check pre-commit conclusion
+        id: check_pre_commit_conclusion
+        if: steps.path-filter.outputs.be == 'true' && needs.basic-checker.outputs.ONLY_BE_TEST == 'true' && env.PRE_COMMIT != '' && env.PRE_COMMIT_JOB_STATUS_DICT != ''
+        run: |
+          pre_commit_job_status_dict=${{ env.PRE_COMMIT_JOB_STATUS_DICT }}
+          pre_ut_conclusion=$(echo $pre_commit_job_status_dict | jq -r '."BE UT"')
+          pre_clang_conclusion=$(echo $pre_commit_job_status_dict | jq -r '."Clang-Tidy"')
+          pre_format_conclusion=$(echo $pre_commit_job_status_dict | jq -r '."Clang-Format"')
+          pre_thirdparty_conclusion=$(echo $pre_commit_job_status_dict | jq -r '."Thirdparty Info"')
+          echo "pre_ut_conclusion=${pre_ut_conclusion}" >> $GITHUB_OUTPUT
+          echo "pre_clang_conclusion=${pre_clang_conclusion}" >> $GITHUB_OUTPUT
+          echo "pre_thirdparty_conclusion=${pre_thirdparty_conclusion}" >> $GITHUB_OUTPUT
+          echo "pre_format_conclusion=${pre_format_conclusion}" >> $GITHUB_OUTPUT
 
   clang-format:
     runs-on: [self-hosted, light]
@@ -259,6 +282,11 @@ jobs:
     outputs:
       pre_commit: ${{ needs.be-checker.outputs.pre_commit }}
       pre_commit_conclusion: ${{ needs.be-checker.outputs.pre_commit_conclusion }}
+      pre_ut_conclusion: ${{ needs.be-checker.outputs.pre_ut_conclusion }}
+      pre_clang_conclusion: ${{ needs.be-checker.outputs.pre_clang_conclusion }}
+      pre_thirdparty_conclusion: ${{ needs.be-checker.outputs.pre_thirdparty_conclusion }}
+      pre_format_conclusion: ${{ needs.be-checker.outputs.pre_format_conclusion }}
+      be_change: ${{ needs.be-checker.outputs.be_change }}
       only_test: ${{ needs.be-checker.outputs.only_test }}
     if: needs.be-checker.outputs.src_filter == 'true' || needs.be-checker.outputs.test_filter == 'true'
     steps:
@@ -268,6 +296,7 @@ jobs:
           mkdir -p ${{ github.workspace }}
 
       - name: Checkout Code
+        if: needs.be-checker.outputs.be_change == 'true' || needs.be-checker.outputs.pre_format_conclusion != 'success'
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
@@ -317,6 +346,8 @@ jobs:
       PRE_COMMIT: ${{ needs.clang-format.outputs.PRE_COMMIT }}
       PRE_COMMIT_CONCLUSION: ${{ needs.clang-format.outputs.pre_commit_conclusion }}
       ONLY_TEST: ${{ needs.clang-format.outputs.only_test }}
+      BE_CHANGE: ${{ needs.clang-format.outputs.be_change }}
+
     steps:
       - name: clean
         run: |
@@ -340,7 +371,9 @@ jobs:
 
       - name: Update Image (${{ matrix.linux }})
         id: update-image
-        if: steps.parsing-path-filter.outputs.thirdparty_filter == 'true'
+        if: >
+          steps.parsing-path-filter.outputs.thirdparty_filter == 'true' && 
+          (needs.clang-format.outputs.only_test != 'true' || needs.clang-format.outputs.pre_thirdparty_conclusion != 'success')
         env:
           linux_distro: ${{ matrix.linux }}
         run: |
@@ -352,7 +385,7 @@ jobs:
         with:
           name: THIRDPARTY-RESULT-${{ matrix.linux }}
           path: image_cache.info
-          retention-days: 3
+          retention-days: 7
           overwrite: true
           if-no-files-found: ignore
 
@@ -393,7 +426,9 @@ jobs:
 
   be-ut:
     runs-on: [self-hosted, normal]
-    needs: thirdparty-info
+    needs: 
+      - thirdparty-info
+      - be-checker
     timeout-minutes: 150
     name: BE UT
     env:
@@ -404,6 +439,7 @@ jobs:
     steps:
       - name: INIT ECI & RUN UT
         id: run_ut
+        if: needs.be-checker.outputs.be_change == 'true' || needs.be-checker.outputs.pre_ut_conclusion != 'success' 
         shell: bash
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
@@ -426,7 +462,7 @@ jobs:
         with:
           name: BE UT LOG
           path: ${{ steps.run_ut.outputs.BE_LOG }}
-          retention-days: 1
+          retention-days: 3
           overwrite: true
 
       - name: Clean ENV
@@ -440,7 +476,7 @@ jobs:
   clang-tidy:
     runs-on: [self-hosted, normal]
     needs: [be-checker, thirdparty-info]
-    if: success() && needs.be-checker.outputs.src_filter == 'true'
+    if: success() && needs.be-checker.outputs.src_filter == 'true' && (needs.be-checker.outputs.only_test != 'true' || needs.be-checker.outputs.pre_clang_conclusion != 'success')
     timeout-minutes: 90
     name: Clang-Tidy
     env:
@@ -491,6 +527,10 @@ jobs:
     needs: basic-checker
     name: FE FILTER
     if: needs.basic-checker.outputs.PASS == 'true'
+    env:
+      PRE_COMMIT: ${{ needs.basic-checker.outputs.PRE_COMMIT }}
+      PRE_COMMIT_CONCLUSION: ${{ needs.basic-checker.outputs.PRE_COMMIT_CONCLUSION }}
+      PRE_COMMIT_JOB_STATUS_DICT: ${{ needs.basic-checker.outputs.PRE_COMMIT_JOB_STATUS_DICT }}
     outputs:
       src_filter: ${{ steps.path-filter.outputs.fe }}
       test_filter: ${{ steps.path-filter.outputs.ut }}
@@ -498,6 +538,11 @@ jobs:
       extension_filter: ${{ steps.path-filter.outputs.extension }}
       pom_filter: ${{ steps.path-filter.outputs.pom }}
       only_test: ${{ needs.basic-checker.outputs.ONLY_FE_TEST }}
+      pre_commit_job_status_dict: ${{ needs.basic-checker.outputs.PRE_COMMIT_JOB_STATUS_DICT }}
+      pre_ut_conclusion: ${{ steps.check_pre_commit_conclusion.outputs.pre_ut_conclusion }}
+      pre_codestyle_conclusion: ${{ steps.check_pre_commit_conclusion.outputs.pre_codestyle_conclusion }}
+      pre_sonarcloud_conclusion: ${{ steps.check_pre_commit_conclusion.outputs.pre_sonarcloud_conclusion }}
+      fe_change: ${{ needs.basic-checker.outputs.FE_CHANGE }}
     steps:
       - uses: dorny/paths-filter@v3
         id: path-filter
@@ -508,6 +553,7 @@ jobs:
               - 'gensrc/**'
               - 'java-extensions/**'
               - 'build.sh'
+              - '**/pom.xml'
             ut:
               - 'fe/**/test/**'
               - 'run-fe-ut.sh'
@@ -532,9 +578,21 @@ jobs:
         with:
           name: fe-path-filter
           path: ./fe-path-filter/
-          retention-days: 3
+          retention-days: 7
           overwrite: true
 
+      - name: check pre-commit conclusion
+        id: check_pre_commit_conclusion
+        if: steps.path-filter.outputs.fe == 'true' && needs.basic-checker.outputs.ONLY_FE_TEST == 'true' && env.PRE_COMMIT != '' && env.PRE_COMMIT_JOB_STATUS_DICT != ''
+        run: |
+          pre_commit_job_status_dict=${{ env.PRE_COMMIT_JOB_STATUS_DICT }}
+          pre_ut_conclusion=$(echo $pre_commit_job_status_dict | jq -r '."FE UT"')
+          pre_codestyle_conclusion=$(echo $pre_commit_job_status_dict | jq -r '."FE Code Style Check"')
+          pre_sonarcloud_conclusion=$(echo $pre_commit_job_status_dict | jq -r '."FE Sonarcloud Check"')
+          echo "pre_ut_conclusion=${pre_ut_conclusion}" >> $GITHUB_OUTPUT
+          echo "pre_codestyle_conclusion=${pre_codestyle_conclusion}" >> $GITHUB_OUTPUT
+          echo "pre_sonarcloud_conclusion=${pre_sonarcloud_conclusion}" >> $GITHUB_OUTPUT
+          
   fe-codestyle-check:
     runs-on: ubuntu-latest
     needs: fe-checker
@@ -546,6 +604,7 @@ jobs:
       extension_filter: ${{ needs.fe-checker.outputs.extension_filter }}
     steps:
       - name: clean
+        if: needs.fe-checker.outputs.fe_change == 'true' || needs.fe-checker.outputs.pre_codestyle_conclusion != 'success'
         run: |
           rm -rf ${{ github.workspace }}
           mkdir -p ${{ github.workspace }}
@@ -602,6 +661,7 @@ jobs:
       GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v4
+        if: needs.fe-checker.outputs.fe_change == 'true' || needs.fe-checker.outputs.pre_sonarcloud_conclusion != 'success'
         with:
           fetch-depth: 0
 
@@ -675,7 +735,9 @@ jobs:
 
   fe-ut:
     runs-on: [self-hosted, normal]
-    needs: [fe-codestyle-check]
+    needs: 
+      - fe-codestyle-check
+      - fe-checker
     name: FE UT
     env:
       PR_NUMBER: ${{ github.event.number }}
@@ -690,6 +752,7 @@ jobs:
 
       - name: BRANCH INFO
         id: branch
+        if: needs.fe-checker.outputs.fe_change == 'true' || needs.fe-checker.outputs.pre_ut_conclusion != 'success' 
         run: |
           echo "branch=${{github.base_ref}}" >> $GITHUB_OUTPUT
           repo="${{ github.repository }}"
@@ -722,7 +785,7 @@ jobs:
         with:
           name: FE UT LOG
           path: ${{ steps.run_ut.outputs.RES_LOG }}
-          retention-days: 1
+          retention-days: 3
           overwrite: true
 
       - name: Clean ENV
@@ -739,8 +802,13 @@ jobs:
     needs: basic-checker
     name: TEST FILTER
     if: needs.basic-checker.outputs.PASS == 'true'
+    env:
+      PRE_COMMIT: ${{ needs.basic-checker.outputs.PRE_COMMIT }}
+      PRE_COMMIT_CONCLUSION: ${{ needs.basic-checker.outputs.PRE_COMMIT_CONCLUSION }}
+      PRE_COMMIT_JOB_STATUS_DICT: ${{ needs.basic-checker.outputs.PRE_COMMIT_JOB_STATUS_DICT }}
     outputs:
       output1: ${{ steps.path-filter.outputs.test }}
+      pre_build_conclusion: ${{ steps.check-integration-test-results.outputs.pre_build_conclusion }}
     steps:
       - uses: dorny/paths-filter@v3
         id: path-filter
@@ -748,6 +816,14 @@ jobs:
           filters: |
             test:
               - 'test/**'
+
+      - name: Check integration test results
+        id: check-integration-test-results
+        if: env.PRE_COMMIT != '' && env.PRE_COMMIT_JOB_STATUS_DICT != ''
+        run: |
+          pre_commit_job_status_dict=${{ env.PRE_COMMIT_JOB_STATUS_DICT }}
+          pre_build_conclusion=$(echo $pre_commit_job_status_dict | jq -r '."BUILD"')
+          echo "pre_build_conclusion=${pre_build_conclusion}" >> $GITHUB_OUTPUT
 
   build:
     runs-on: [self-hosted, normal]
@@ -763,6 +839,7 @@ jobs:
       ONLY_FE_TEST: ${{ needs.basic-checker.outputs.ONLY_FE_TEST }}
       PRE_COMMIT: ${{ needs.basic-checker.outputs.PRE_COMMIT }}
       PRE_COMMIT_CONCLUSION: ${{ needs.basic-checker.outputs.PRE_COMMIT_CONCLUSION }}
+      PRE_COMMIT_JOB_STATUS_DICT: ${{ needs.basic-checker.outputs.PRE_COMMIT_JOB_STATUS_DICT }}
     outputs:
       build_output_tar: ${{ steps.run_build.outputs.OUTPUT_TAR }}
       base_version: ${{ steps.run_build.outputs.BASE_VERSION }}
@@ -774,7 +851,7 @@ jobs:
       needs.thirdparty-info.result != 'failure' && 
       needs.fe-codestyle-check.result != 'failure' && 
       (needs.thirdparty-info.result == 'success' || needs.fe-codestyle-check.result == 'success' || needs.test-checker.result == 'success') &&
-      (needs.basic-checker.outputs.ONLY_BE_TEST != 'true' || needs.basic-checker.outputs.ONLY_FE_TEST != 'true' || needs.basic-checker.outputs.PRE_COMMIT_CONCLUSION != 'success')
+      (needs.basic-checker.outputs.ONLY_BE_TEST != 'true' || needs.basic-checker.outputs.ONLY_FE_TEST != 'true')
     steps:
       - name: CLEAN
         run: |
@@ -816,9 +893,6 @@ jobs:
             echo "src_filter=`cat src_filter.txt`" >> $GITHUB_OUTPUT
             echo "test_filter.txt=`cat test_filter.txt`" >> $GITHUB_OUTPUT
             echo "thirdparty_filter=`cat thirdparty_filter.txt`" >> $GITHUB_OUTPUT
-            if [[ -e commit_only_test.txt ]]; then
-              echo "commit_only_test=`cat commit_only_test.txt`" >> $GITHUB_OUTPUT
-            fi
           fi
 
       - name: Parsing FE path-filter file
@@ -837,8 +911,7 @@ jobs:
       - name: Check necessity
         id: check-necessity
         if: >
-          steps.parsing-fe-path-filter.outputs.src_filter == 'true' || 
-          (steps.parsing-be-path-filter.outputs.src_filter == 'true' && steps.parsing-be-path-filter.outputs.commit_only_test != 'true') ||
+          steps.parsing-fe-path-filter.outputs.src_filter == 'true' || steps.parsing-be-path-filter.outputs.src_filter == 'true' ||
           (steps.parsing-be-path-filter.outputs.src_filter != 'true' && steps.parsing-fe-path-filter.outputs.src_filter != 'true' && needs.test-checker.outputs.output1 == 'true')
         run: |
           echo "BUILD_NECE=true" >> $GITHUB_OUTPUT
@@ -905,7 +978,7 @@ jobs:
         with:
           name: base_version
           path: ./base_version.txt
-          retention-days: 3
+          retention-days: 7
           overwrite: true
 
       - name: Clean ENV
@@ -1148,7 +1221,7 @@ jobs:
           path: |
             test/log/
             test/crash_logs/
-          retention-days: 1
+          retention-days: 3
           overwrite: true
           if-no-files-found: ignore
 
@@ -1374,7 +1447,7 @@ jobs:
         with:
           name: pr_num
           path: ./pr_num.txt
-          retention-days: 3
+          retention-days: 7
           overwrite: true
 
       - name: Backup SR Info
