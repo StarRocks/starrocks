@@ -14,13 +14,17 @@
 
 package com.starrocks.lake;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.proto.GetTabletMetadatasRequest;
 import com.starrocks.proto.GetTabletMetadatasResponse;
+import com.starrocks.proto.RepairTabletMetadataRequest;
+import com.starrocks.proto.RepairTabletMetadataResponse;
 import com.starrocks.proto.TabletMetadataPB;
+import com.starrocks.proto.TabletMetadataRepairStatus;
 import com.starrocks.proto.TabletMetadatas;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
@@ -136,5 +140,92 @@ public class TabletRepairHelper {
         }
 
         return tabletVersionMetadatas;
+    }
+
+    private static Map<Long, String> repairTabletMetadata(PhysicalPartitionInfo info, Map<Long, TabletMetadataPB> validMetadatas,
+                                                          boolean isFileBundling) throws Exception {
+        long physicalPartitionId = info.physicalPartitionId;
+        Map<ComputeNode, Set<Long>> nodeToTablets = info.nodeToTablets;
+
+        boolean writeBundlingFile = true;
+        List<Future<RepairTabletMetadataResponse>> responses = Lists.newArrayList();
+        List<ComputeNode> nodes = Lists.newArrayList();
+        for (Map.Entry<ComputeNode, Set<Long>> entry : nodeToTablets.entrySet()) {
+            RepairTabletMetadataRequest request = new RepairTabletMetadataRequest();
+            request.enableFileBundling = isFileBundling;
+            request.writeBundlingFile = isFileBundling && writeBundlingFile;
+
+            // if enable file bundling, we only need to send the write bundling metadata request to one node.
+            // other node requests are used for some cleanup work.
+            Set<Long> tabletIds = request.writeBundlingFile ? Sets.newHashSet(info.allTablets) : entry.getValue();
+            if (request.writeBundlingFile) {
+                writeBundlingFile = false;
+            }
+
+            List<TabletMetadataPB> newMetadatas = Lists.newArrayList();
+            for (long tabletId : tabletIds) {
+                TabletMetadataPB metadata = validMetadatas.get(tabletId);
+                Preconditions.checkState(metadata != null);
+                // set version to physical partition visible version
+                metadata.version = info.maxVersion;
+                newMetadatas.add(metadata);
+            }
+
+            request.tabletMetadatas = newMetadatas;
+
+            ComputeNode node = entry.getKey();
+            try {
+                LakeService lakeService = BrpcProxy.getLakeService(node.getHost(), node.getBrpcPort());
+                Future<RepairTabletMetadataResponse> future = lakeService.repairTabletMetadata(request);
+                responses.add(future);
+                nodes.add(node);
+            } catch (RpcException e) {
+                LOG.warn("Fail to send repair tablet metadata request to node {}, partition: {}, error: {}", node.getId(),
+                        physicalPartitionId, e.getMessage());
+                throw e;
+            }
+        }
+
+        Map<Long, String> tabletErrors = Maps.newHashMap();
+        for (int i = 0; i < responses.size(); i++) {
+            try {
+                RepairTabletMetadataResponse response = responses.get(i).get(LakeService.TIMEOUT_REPAIR_METADATA,
+                        TimeUnit.MILLISECONDS);
+
+                if (response == null) {
+                    throw new StarRocksException("response is null");
+                }
+
+                TStatusCode statusCode = TStatusCode.findByValue(response.status.statusCode);
+                if (statusCode != TStatusCode.OK) {
+                    List<String> errMsgs = response.status.errorMsgs;
+                    throw new StarRocksException(errMsgs != null && !errMsgs.isEmpty() ? errMsgs.get(0) : "unknown error");
+                }
+
+                if (response.tabletRepairStatuses != null) {
+                    for (TabletMetadataRepairStatus repairStatus : response.tabletRepairStatuses) {
+                        TStatusCode tabletStatusCode = TStatusCode.findByValue(repairStatus.status.statusCode);
+                        if (tabletStatusCode != TStatusCode.OK) {
+                            List<String> errMsgs = repairStatus.status.errorMsgs;
+                            tabletErrors.put(repairStatus.tabletId,
+                                    errMsgs != null && !errMsgs.isEmpty() ? errMsgs.get(0) : "unknown error");
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                LOG.warn("Fail to repair tablet metadata from node {}, partition: {}, error: {}", nodes.get(i).getId(),
+                        physicalPartitionId, e.getMessage());
+                throw e;
+            }
+        }
+
+        if (!tabletErrors.isEmpty()) {
+            LOG.warn("Fail to repair tablet metadata for partition {}, failed tablets: {}", physicalPartitionId,
+                    tabletErrors);
+        } else {
+            LOG.info("Repair tablet metadata for partition {} success", physicalPartitionId);
+        }
+
+        return tabletErrors;
     }
 }

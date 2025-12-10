@@ -16,6 +16,7 @@
 #include <span>
 
 #ifndef __APPLE__
+#include "common/status.h"
 #include "gen_cpp/lake_service.pb.h"
 
 namespace starrocks {
@@ -118,6 +119,8 @@ private:
     void _submit_publish_log_version_task(const int64_t* tablet_ids, size_t tablet_size,
                                           std::span<const TxnInfoPB> txn_infos, const int64_t* log_versions,
                                           ::starrocks::PublishLogVersionResponse* response);
+
+    Status _cleanup_before_repair(std::map<int64_t, TabletMetadataPB>& tablet_metadatas);
 
 private:
     static constexpr int64_t kDefaultTimeoutForGetTabletStat = 5 * 60 * 1000L;  // 5 minutes

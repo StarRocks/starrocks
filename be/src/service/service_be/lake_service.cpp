@@ -32,6 +32,7 @@
 #include "storage/lake/compaction_policy.h"
 #include "storage/lake/compaction_scheduler.h"
 #include "storage/lake/compaction_task.h"
+#include "storage/lake/metacache.h"
 #include "storage/lake/options.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/transactions.h"
@@ -1489,8 +1490,35 @@ void LakeServiceImpl::get_tablet_metadatas(::google::protobuf::RpcController* co
     }
 }
 
+// clean up before repairing tablet metadata
+// 1. drop local data cache
+// 2. drop meta cache
+// 3. drop bundle local data cache
+// TODO: clear primary key index
+Status LakeServiceImpl::_cleanup_before_repair(std::map<int64_t, TabletMetadataPB>& tablet_metadatas) {
+    int64_t tablet_id = -1;
+    int64_t version = 0;
+    for (auto& [id, metadata_pb] : tablet_metadatas) {
+        tablet_id = id;
+        version = metadata_pb.version();
+        auto tablet_metadata_location = _tablet_mgr->tablet_metadata_location(tablet_id, version);
+
+        // drop local data cache
+        auto st = _tablet_mgr->drop_local_cache(tablet_metadata_location);
+        RETURN_IF(!st.ok() && !st.is_not_found(), st);
+
+        // drop meta cache
+        _tablet_mgr->metacache()->erase(tablet_metadata_location);
+    }
+
+    // drop bundle local data cache
+    auto bundle_location = _tablet_mgr->bundle_tablet_metadata_location(tablet_id, version);
+    auto st = _tablet_mgr->drop_local_cache(bundle_location);
+    return st.is_not_found() ? Status::OK() : st;
+}
+
 // Repair bundling or non-bundling tablet metadata for all tablets in one physical partition.
-// Receieve a list of tablet metadatas sent from FE, and update the metadatas through the tablet manager
+// Receive a list of tablet metadatas sent from FE, and update the metadatas through the tablet manager
 // based on whether file bundling is enabled.
 // This function supports concurrent processing of tablet metadata repair tasks.
 void LakeServiceImpl::repair_tablet_metadata(::google::protobuf::RpcController* controller,
@@ -1498,15 +1526,16 @@ void LakeServiceImpl::repair_tablet_metadata(::google::protobuf::RpcController* 
                                              ::starrocks::RepairTabletMetadataResponse* response,
                                              ::google::protobuf::Closure* done) {
     brpc::ClosureGuard guard(done);
+    Status::OK().to_protobuf(response->mutable_status());
 
+    // 1. check tablet metadatas
     if (request->tablet_metadatas_size() == 0) {
         Status::InvalidArgument("missing tablet_metadatas").to_protobuf(response->mutable_status());
         return;
     }
 
-    // check tablet metadatas
+    std::map<int64_t, TabletMetadataPB> tablet_metadatas;
     int64_t version = 0;
-    std::unordered_set<int64_t> tablet_ids;
     for (const auto& metadata_pb : request->tablet_metadatas()) {
         // check metadata have the same version
         if (version == 0) {
@@ -1523,7 +1552,7 @@ void LakeServiceImpl::repair_tablet_metadata(::google::protobuf::RpcController* 
         }
 
         // check duplicated tablet
-        if (!tablet_ids.insert(metadata_pb.id()).second) {
+        if (!tablet_metadatas.emplace(metadata_pb.id(), metadata_pb).second) {
             Status::InvalidArgument(fmt::format("duplicated tablet id: {}", metadata_pb.id()))
                     .to_protobuf(response->mutable_status());
             return;
@@ -1536,16 +1565,23 @@ void LakeServiceImpl::repair_tablet_metadata(::google::protobuf::RpcController* 
         return;
     }
 
-    Status::OK().to_protobuf(response->mutable_status());
+    // 2. do some cleanup before repairing tablet metadata, such as drop local data cache and meta cache
+    auto st = _cleanup_before_repair(tablet_metadatas);
+    if (!st.ok()) {
+        st.to_protobuf(response->mutable_status());
+        return;
+    }
 
+    // 3. put new tablet metadatas
     bool enable_file_bundling = request->has_enable_file_bundling() && request->enable_file_bundling();
+    bool write_bundling_file = request->has_write_bundling_file() && request->write_bundling_file();
+    if (enable_file_bundling && !write_bundling_file) {
+        // if not write bundling file, only do some cleanup
+        return;
+    }
+
     if (enable_file_bundling) {
         // bundling tablet metadata
-        std::map<int64_t, TabletMetadata> tablet_metadatas;
-        for (const auto& metadata_pb : request->tablet_metadatas()) {
-            tablet_metadatas.emplace(metadata_pb.id(), metadata_pb);
-        }
-
         auto* repair_status = response->add_tablet_repair_statuses();
         // set tablet_id to 0 for bundling metadata
         repair_status->set_tablet_id(0);
@@ -1575,10 +1611,12 @@ void LakeServiceImpl::repair_tablet_metadata(::google::protobuf::RpcController* 
     } else {
         // non-bundling tablet metadata
         // traverse each tablet metadata and submit put tablet metadata task
-        auto latch = BThreadCountDownLatch(request->tablet_metadatas_size());
-        response->mutable_tablet_repair_statuses()->Reserve(request->tablet_metadatas_size());
-        for (const auto& metadata_pb : request->tablet_metadatas()) {
-            auto tablet_id = metadata_pb.id();
+        auto latch = BThreadCountDownLatch(tablet_metadatas.size());
+        response->mutable_tablet_repair_statuses()->Reserve(tablet_metadatas.size());
+        for (const auto& kv : tablet_metadatas) {
+            auto tablet_id = kv.first;
+            const auto& metadata_pb = kv.second;
+
             auto* repair_status = response->add_tablet_repair_statuses();
             repair_status->set_tablet_id(tablet_id);
 
