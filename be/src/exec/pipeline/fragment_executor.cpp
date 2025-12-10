@@ -996,8 +996,6 @@ Status FragmentExecutor::execute(ExecEnv* exec_env) {
 void FragmentExecutor::_fail_cleanup(bool fragment_has_registed) {
     if (_query_ctx) {
         if (_fragment_ctx) {
-            // ensure any parallel prepare tasks have completed before releasing pipelines/factories
-            _fragment_ctx->wait_prepare_tasks_done();
             if (fragment_has_registed) {
                 _query_ctx->fragment_mgr()->unregister(_fragment_ctx->fragment_instance_id());
             }
