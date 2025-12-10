@@ -1081,9 +1081,25 @@ public class QueryAnalyzer {
 
             View view = node.getView();
             List<Field> fields = Lists.newArrayList();
+
+            boolean useNameMapping = false;
+            java.util.Map<String, Field> queryFieldMap = new java.util.TreeMap<>(String.CASE_INSENSITIVE_ORDER);
+            if (node.getView().isHiveView()) {
+                for (Field f : queryOutputScope.getRelationFields().getAllFields()) {
+                    queryFieldMap.put(f.getName(), f);
+                }
+                useNameMapping = view.getBaseSchema().stream()
+                        .allMatch(c -> queryFieldMap.containsKey(c.getName()));
+            }
+
             for (int i = 0; i < view.getBaseSchema().size(); ++i) {
                 Column column = view.getBaseSchema().get(i);
-                Field originField = queryOutputScope.getRelationFields().getFieldByIndex(i);
+                Field originField;
+                if (useNameMapping) {
+                    originField = queryFieldMap.get(column.getName());
+                } else {
+                    originField = queryOutputScope.getRelationFields().getFieldByIndex(i);
+                }
                 // A view can specify its column names optionally, if column names are absent,
                 // the output names of the queryRelation is used as the names of the view schema,
                 // so column names in view's schema are always correct. Using originField.getName
