@@ -41,6 +41,7 @@ namespace starrocks::lake {
 class CompactionScheduler;
 class CompactionTask;
 class TabletManager;
+class TabletParallelCompactionManager;
 
 // For every `CompactRequest` a new `CompactionTaskCallback` instance will be created.
 // A single `CompactRequest` may have multiple tablets to be compacted, each time a tablet compaction
@@ -254,6 +255,13 @@ private:
     std::atomic<bool> _stopped{false};
     std::mutex _mutex;
     WrapTaskQueues _task_queues;
+
+    // Per-tablet parallel compaction manager
+    std::unique_ptr<TabletParallelCompactionManager> _parallel_mgr;
+
+    // Process compaction request with parallel mode
+    void process_parallel_compaction(const CompactRequest* request, CompactResponse* response,
+                                     std::shared_ptr<CompactionTaskCallback> callback);
 };
 
 inline bool CompactionScheduler::Limiter::acquire() {

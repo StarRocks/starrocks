@@ -494,7 +494,9 @@ SET(DW_TEST_FILES
     ./storage/lake/alter_tablet_meta_test.cpp
     ./storage/lake/async_delta_writer_test.cpp
     ./storage/lake/auto_increment_partial_update_test.cpp
+    ./storage/lake/autonomous_compaction_handler_test.cpp
     ./storage/lake/compaction_policy_test.cpp
+    ./storage/lake/compaction_result_manager_test.cpp
     ./storage/lake/compaction_scheduler_test.cpp
     ./storage/lake/compaction_task_context_test.cpp
     ./storage/lake/condition_update_test.cpp

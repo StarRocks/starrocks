@@ -1193,6 +1193,35 @@ CONF_mBool(lake_print_delete_log, "false");
 CONF_mInt64(lake_compaction_stream_buffer_size_bytes, "1048576"); // 1MB
 // The interval to check whether lake compaction is valid. Set to <= 0 to disable the check.
 CONF_mInt32(lake_compaction_check_valid_interval_minutes, "10"); // 10 minutes
+
+// Autonomous compaction configurations
+// Enable autonomous compaction for lake tablets
+CONF_mBool(enable_lake_autonomous_compaction, "false");
+// Compaction score threshold to trigger autonomous compaction
+CONF_mDouble(lake_compaction_score_threshold, "10.0");
+// Maximum number of concurrent autonomous compaction tasks globally
+CONF_mInt32(lake_compaction_max_concurrent_tasks, "32");
+// Maximum number of concurrent compaction tasks per tablet
+CONF_mInt32(lake_compaction_max_tasks_per_tablet, "3");
+// Maximum data volume (bytes) to compact in a single task (10GB default)
+CONF_mInt64(lake_compaction_max_bytes_per_task, "10737418240");
+
+// Per-tablet parallel compaction configurations (FE-scheduled mode)
+// Maximum number of parallel compaction subtasks per tablet
+CONF_mInt32(lake_compaction_max_parallel_per_tablet, "3");
+// Maximum data volume (bytes) per parallel subtask (10GB default)
+CONF_mInt64(lake_compaction_max_bytes_per_subtask, "10737418240");
+
+// ============== Autonomous Compaction Recovery Configurations (Section 6.1) ==============
+// Enable recovery of local compaction results on BE startup
+CONF_mBool(enable_lake_compaction_recovery_on_startup, "true");
+// Maximum age (in seconds) of compaction results to consider valid during recovery
+// Results older than this will be cleaned up (default: 24 hours)
+CONF_mInt64(lake_compaction_result_max_age_seconds, "86400");
+// Minimum number of tablets with results to trigger partial publish
+CONF_mInt32(lake_compaction_partial_publish_min_tablets, "1");
+// Enable partial compaction state detection and publish
+CONF_mBool(enable_lake_compaction_partial_publish, "true");
 // Used to ensure service availability in extreme situations by sacrificing a certain degree of correctness
 CONF_mBool(experimental_lake_ignore_lost_segment, "false");
 CONF_mInt64(experimental_lake_wait_per_put_ms, "0");

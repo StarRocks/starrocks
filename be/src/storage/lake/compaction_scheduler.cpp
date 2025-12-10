@@ -34,6 +34,7 @@
 #include "service/service_be/lake_service.h"
 #include "storage/lake/compaction_task.h"
 #include "storage/lake/tablet_manager.h"
+#include "storage/lake/tablet_parallel_compaction_manager.h"
 #include "storage/memtable_flush_executor.h"
 #include "storage/storage_engine.h"
 #include "testutil/sync_point.h"
@@ -227,6 +228,9 @@ CompactionScheduler::CompactionScheduler(TabletManager* tablet_mgr)
     for (int i = 0; i < _task_queues.task_queue_size(); i++) {
         CHECK(_threads->submit_func([this, id = i]() { this->thread_task(id); }).ok());
     }
+
+    // Initialize per-tablet parallel compaction manager
+    _parallel_mgr = std::make_unique<TabletParallelCompactionManager>(tablet_mgr);
 }
 
 CompactionScheduler::~CompactionScheduler() {
@@ -258,10 +262,20 @@ void CompactionScheduler::compact(::google::protobuf::RpcController* controller,
                                         st.detailed_message());
         }
     }
+
+    // Check if parallel compaction is enabled
+    bool enable_parallel = request->has_parallel_config() && request->parallel_config().enable_parallel();
+
     // By default, all the tablet compaction tasks with the same txn id will be executed in the same
     // thread to avoid blocking other transactions, but if there are idle threads, they will steal
     // tasks from busy threads to execute.
+    LOG(INFO) << "Receive compaction request. txn_id: " << request->txn_id()
+              << ", table_id: " << request->table_id() << ", partition_id: " << request->partition_id()
+              << ", tablet_ids size: " << request->tablet_ids_size()
+              << ", parallel_enabled: " << enable_parallel;
+
     auto cb = std::make_shared<CompactionTaskCallback>(this, request, response, done);
+
     std::vector<std::unique_ptr<CompactionTaskContext>> contexts_vec;
     for (auto tablet_id : request->tablet_ids()) {
         auto context = std::make_unique<CompactionTaskContext>(request->txn_id(), tablet_id, request->version(),
@@ -270,6 +284,7 @@ void CompactionScheduler::compact(::google::protobuf::RpcController* controller,
         contexts_vec.push_back(std::move(context));
         // DO NOT touch `context` from here!
     }
+
     // initialize last check time, compact request is received right after FE sends it, so consider it valid now
     cb->set_last_check_time(time(nullptr));
 
@@ -280,6 +295,16 @@ void CompactionScheduler::compact(::google::protobuf::RpcController* controller,
         reject_request(controller, request, response);
         return;
     }
+
+    // Handle parallel compaction mode
+    if (enable_parallel && _parallel_mgr != nullptr) {
+        lock.unlock();
+        guard.release();
+        process_parallel_compaction(request, response, cb);
+        return;
+    }
+
+    // Original non-parallel mode
     {
         std::lock_guard l(_contexts_lock);
         for (auto& ctx : contexts_vec) {
@@ -292,6 +317,48 @@ void CompactionScheduler::compact(::google::protobuf::RpcController* controller,
     guard.release();
 
     TEST_SYNC_POINT("CompactionScheduler::compact:return");
+}
+
+void CompactionScheduler::process_parallel_compaction(const CompactRequest* request, CompactResponse* response,
+                                                      std::shared_ptr<CompactionTaskCallback> callback) {
+    LOG(INFO) << "Processing parallel compaction request. txn_id: " << request->txn_id()
+              << ", tablet_ids size: " << request->tablet_ids_size()
+              << ", max_parallel: " << request->parallel_config().max_parallel_per_tablet()
+              << ", max_bytes: " << request->parallel_config().max_bytes_per_subtask();
+
+    int total_subtasks = 0;
+    int successful_tablets = 0;
+
+    for (auto tablet_id : request->tablet_ids()) {
+        auto result = _parallel_mgr->create_parallel_tasks(tablet_id, request->txn_id(), request->version(),
+                                                           request->parallel_config(), callback,
+                                                           request->force_base_compaction(), _threads.get(),
+                                                           request->table_id(), request->partition_id());
+
+        if (result.ok()) {
+            total_subtasks += result.value();
+            successful_tablets++;
+            LOG(INFO) << "Created " << result.value() << " parallel subtasks for tablet " << tablet_id;
+        } else {
+            LOG(WARNING) << "Failed to create parallel tasks for tablet " << tablet_id << ": " << result.status();
+            // If parallel mode fails, fall back to non-parallel mode for this tablet
+            auto context = std::make_unique<CompactionTaskContext>(
+                    request->txn_id(), tablet_id, request->version(), request->force_base_compaction(),
+                    request->skip_write_txnlog(), callback);
+            context->enqueue_time_sec = ::time(nullptr);
+
+            {
+                std::lock_guard l(_contexts_lock);
+                _contexts.Append(context.get());
+            }
+
+            std::unique_lock lock(_mutex);
+            _task_queues.put_by_txn_id(request->txn_id(), context);
+        }
+    }
+
+    LOG(INFO) << "Parallel compaction request processed. txn_id: " << request->txn_id()
+              << ", total_subtasks: " << total_subtasks << ", successful_tablets: " << successful_tablets;
 }
 
 void CompactionScheduler::list_tasks(std::vector<CompactionTaskInfo>* infos) {

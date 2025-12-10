@@ -80,6 +80,9 @@ public:
 
     StatusOr<CompactionTaskPtr> compact(CompactionTaskContext* context);
 
+    // Compact with pre-selected rowsets (for parallel compaction)
+    StatusOr<CompactionTaskPtr> compact(CompactionTaskContext* context, std::vector<RowsetPtr> input_rowsets);
+
     Status put_tablet_metadata(const TabletMetadata& metadata);
 
     Status put_tablet_metadata(const TabletMetadataPtr& metadata);

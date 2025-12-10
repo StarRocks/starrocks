@@ -402,10 +402,24 @@ public class CompactionScheduler extends Daemon {
             request.tabletIds = entry.getValue();
             request.txnId = txnId;
             request.version = currentVersion;
+            request.visibleVersion = currentVersion;
             request.timeoutMs = LakeService.TIMEOUT_COMPACT;
             request.allowPartialSuccess = allowPartialSuccess;
             request.encryptionMeta = GlobalStateMgr.getCurrentState().getKeyMgr().getCurrentKEKAsEncryptionMeta();
             request.forceBaseCompaction = (priority == PartitionStatistics.CompactionPriority.MANUAL_COMPACT);
+            request.tableId = tableId;
+            request.partitionId = partitionId;
+            // Enable autonomous compaction mode if configured
+            request.autonomousCompaction = Config.enable_lake_autonomous_compaction;
+
+            // Set parallel compaction configuration if enabled
+            if (Config.lake_compaction_enable_parallel_per_tablet) {
+                com.starrocks.proto.TabletParallelConfig parallelConfig = new com.starrocks.proto.TabletParallelConfig();
+                parallelConfig.enableParallel = true;
+                parallelConfig.maxParallelPerTablet = Config.lake_compaction_max_parallel_per_tablet;
+                parallelConfig.maxBytesPerSubtask = Config.lake_compaction_max_bytes_per_subtask;
+                request.parallelConfig = parallelConfig;
+            }
 
             CompactionTask task = new CompactionTask(node.getId(), service, request);
             tasks.add(task);
@@ -437,17 +451,22 @@ public class CompactionScheduler extends Daemon {
             request.tabletIds = entry.getValue();
             request.txnId = txnId;
             request.version = currentVersion;
+            request.visibleVersion = currentVersion;
             request.timeoutMs = LakeService.TIMEOUT_COMPACT;
             request.allowPartialSuccess = false;
             request.encryptionMeta = GlobalStateMgr.getCurrentState().getKeyMgr().getCurrentKEKAsEncryptionMeta();
             request.forceBaseCompaction = (priority == PartitionStatistics.CompactionPriority.MANUAL_COMPACT);
             request.skipWriteTxnlog = true;
+            request.tableId = tableId;
+            request.partitionId = partitionId;
+            // Enable autonomous compaction mode if configured
+            request.autonomousCompaction = Config.enable_lake_autonomous_compaction;
 
             aggRequest.requests.add(request);
             aggRequest.computeNodes.add(nodePB);
         }
 
-        // 2. pick aggregator node and build lake serivce
+        // 2. pick aggregator node and build lake service
         WarehouseManager manager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
         LakeAggregator aggregator = new LakeAggregator();
         ComputeNode aggregatorNode = aggregator.chooseAggregatorNode(computeResource);

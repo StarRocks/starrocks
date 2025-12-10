@@ -110,6 +110,8 @@ public class SystemId {
 
     public static final long FE_THREADS_ID = 46L;
 
+    public static final long BE_TABLET_WRITE_LOG_ID = 47L;
+
     public static final long SYS_DB_ID = 100L;
 
     public static final long ROLE_EDGES_ID = 101L;
