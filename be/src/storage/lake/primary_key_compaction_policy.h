@@ -44,9 +44,31 @@ public:
     //
     // Same bytes, if we use more io to fetch it, that means more overhead.
     // And in one rowset, the IO count is equal overlapped segment count plus their delvec files.
+    // Large segments (>= 0.9 * max_segment_file_size) are skipped as they are already well optimized.
     double io_count() const {
-        // rowset_meta_ptr->segments_size() could be zero here, so make sure this >= 1 using max.
-        double cnt = rowset_meta_ptr->overlapped() ? std::max(rowset_meta_ptr->segments_size(), 1) : 1;
+        double cnt = 1;
+        if (rowset_meta_ptr->overlapped()) {
+            int segments_size = rowset_meta_ptr->segments_size();
+            if (segments_size == 0) {
+                cnt = 1;
+            } else if (rowset_meta_ptr->segment_size_size() == 0) {
+                // No segment_size info, fall back to counting all segments
+                cnt = segments_size;
+            } else if (!config::enable_lake_compaction_skip_large_segment) {
+                cnt = segments_size;
+            } else {
+                // Count only segments smaller than the large segment threshold
+                int64_t large_segment_threshold = static_cast<int64_t>(
+                        config::max_segment_file_size * config::lake_compaction_skip_large_segment_ratio);
+                int effective_count = 0;
+                for (int i = 0; i < rowset_meta_ptr->segment_size_size(); i++) {
+                    if (static_cast<int64_t>(rowset_meta_ptr->segment_size(i)) < large_segment_threshold) {
+                        effective_count++;
+                    }
+                }
+                cnt = std::max(1, effective_count);
+            }
+        }
         if (stat.num_dels > 0) {
             // if delvec file exist, that means we need to read segment files and delvec files both
             // And update_compaction_delvec_file_io_ratio control the io amp ratio of delvec files, default is 2.

@@ -172,6 +172,13 @@ public:
 
     void check_global_dict(SegmentWriter* segment_writer);
 
+    // Set subtask id for parallel compaction. When set, the rows mapper file will use
+    // a subtask-specific filename to avoid conflicts between concurrent subtasks.
+    // This must be called before open().
+    virtual void set_subtask_id(int32_t subtask_id) { _subtask_id = subtask_id; }
+
+    int32_t subtask_id() const { return _subtask_id; }
+
 protected:
     TabletManager* _tablet_mgr;
     int64_t _tablet_id;
@@ -193,6 +200,7 @@ protected:
     bool _is_compaction = false;
     DictColumnsValidMap _global_dict_columns_valid_info;
     bool _enable_pk_parallel_execution = false;
+    int32_t _subtask_id = -1; // -1 means not set (not parallel compaction)
 };
 
 } // namespace lake

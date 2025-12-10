@@ -49,6 +49,10 @@ public:
                            const std::function<void(uint32_t, const DelVectorPtr&, uint32_t)>&)>& handler) override;
     Status breakpoint_check() override;
 
+    // Local tablet doesn't support parallel compaction with multi-file iterator
+    int64_t tablet_id() const override;
+    int64_t txn_id() const override { return 0; }
+
 private:
     // input
     Tablet* _tablet = nullptr;

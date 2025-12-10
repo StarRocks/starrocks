@@ -66,6 +66,10 @@ Status HorizontalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flu
     ASSIGN_OR_RETURN(auto writer,
                      _tablet.new_writer_with_schema(kHorizontal, _txn_id, 0, flush_pool, true /** compaction **/,
                                                     _tablet_schema /** output rowset schema**/))
+    // Set subtask_id for parallel compaction before open
+    if (_context->subtask_id >= 0) {
+        writer->set_subtask_id(_context->subtask_id);
+    }
     RETURN_IF_ERROR(writer->open());
     DeferOp defer([&]() { writer->close(); });
 

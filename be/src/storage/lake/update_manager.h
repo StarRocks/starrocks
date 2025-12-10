@@ -248,7 +248,11 @@ private:
     }
 
     // decide whether use light publish compaction stategy or not
-    bool _use_light_publish_primary_compaction(int64_t tablet_id, int64_t txn_id);
+    // expected_row_count: the expected row count from output_rowset, used to verify rows mapper file
+    // subtask_count: number of parallel compaction subtasks (0 for single compaction)
+    // success_subtask_ids: list of successful subtask IDs for partial success scenarios
+    bool _use_light_publish_primary_compaction(int64_t tablet_id, int64_t txn_id, int64_t expected_row_count,
+                                               int32_t subtask_count, const std::vector<int32_t>& success_subtask_ids);
 
     static const size_t kPrintMemoryStatsInterval = 300; // 5min
 private:

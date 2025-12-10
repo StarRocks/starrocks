@@ -25,24 +25,21 @@
 
 namespace starrocks {
 
-Status PrimaryKeyCompactionConflictResolver::execute() {
-    Schema pkey_schema = generate_pkey_schema();
+// Helper template to execute with different iterator types (RowsMapperIterator or MultiRowsMapperIterator)
+template <typename MapperIterator>
+static Status execute_impl(PrimaryKeyCompactionConflictResolver* resolver, MapperIterator& mapper_iter) {
+    Schema pkey_schema = resolver->generate_pkey_schema();
 
     MutableColumnPtr pk_column;
     RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column, true));
 
-    // init rows mapper iter
-    ASSIGN_OR_RETURN(auto filename, filename());
-    RowsMapperIterator mapper_iter;
-    RETURN_IF_ERROR(mapper_iter.open(filename));
-
     // iterate all segment in output rowset
-    RETURN_IF_ERROR(segment_iterator(
+    RETURN_IF_ERROR(resolver->segment_iterator(
             [&](const CompactConflictResolveParams& params, const std::vector<ChunkIteratorPtr>& segment_iters,
                 const std::function<void(uint32_t, const DelVectorPtr&, uint32_t)>& handle_delvec_result_func) {
                 std::map<uint32_t, DelVectorPtr> rssid_to_delvec;
                 for (size_t segment_id = 0; segment_id < segment_iters.size(); segment_id++) {
-                    RETURN_IF_ERROR(breakpoint_check());
+                    RETURN_IF_ERROR(resolver->breakpoint_check());
                     // only hold pkey, so can use larger chunk size
                     ChunkUniquePtr chunk_shared_ptr;
                     TRY_CATCH_BAD_ALLOC(chunk_shared_ptr =
@@ -122,19 +119,43 @@ Status PrimaryKeyCompactionConflictResolver::execute() {
     return mapper_iter.status();
 }
 
-Status PrimaryKeyCompactionConflictResolver::execute_without_update_index() {
-    // init rows mapper iter
-    ASSIGN_OR_RETURN(auto filename, filename());
-    RowsMapperIterator mapper_iter;
-    RETURN_IF_ERROR(mapper_iter.open(filename));
+Status PrimaryKeyCompactionConflictResolver::execute() {
+    if (subtask_count() > 0) {
+        // Parallel compaction: use multi-file iterator
+        MultiRowsMapperIterator mapper_iter;
+        const auto& success_ids = success_subtask_ids();
+        if (!success_ids.empty()) {
+            // Partial success: only open files for successful subtasks
+            RETURN_IF_ERROR(mapper_iter.open(tablet_id(), txn_id(), success_ids));
+        } else {
+            // All subtasks succeeded (or legacy mode): open all subtask files
+            RETURN_IF_ERROR(mapper_iter.open(tablet_id(), txn_id(), subtask_count()));
+        }
+        // Enable file deletion on close to ensure cleanup in both success and failure cases.
+        // This prevents disk space leaks if execute_impl() fails.
+        mapper_iter.set_delete_files_on_close(true);
+        return execute_impl(this, mapper_iter);
+    } else {
+        // Single compaction: use single-file iterator
+        // Note: RowsMapperIterator deletes the file in its destructor
+        ASSIGN_OR_RETURN(auto fn, filename());
+        RowsMapperIterator mapper_iter;
+        RETURN_IF_ERROR(mapper_iter.open(fn));
+        return execute_impl(this, mapper_iter);
+    }
+}
 
+// Helper template for execute_without_update_index
+template <typename MapperIterator>
+static Status execute_without_update_index_impl(PrimaryKeyCompactionConflictResolver* resolver,
+                                                MapperIterator& mapper_iter) {
     // 1. iterate all segment in output rowset
-    RETURN_IF_ERROR(segment_iterator(
+    RETURN_IF_ERROR(resolver->segment_iterator(
             [&](const CompactConflictResolveParams& params, const std::vector<std::shared_ptr<Segment>>& segments,
                 const std::function<void(uint32_t, const DelVectorPtr&, uint32_t)>& handle_delvec_result_func) {
                 std::map<uint32_t, DelVectorPtr> rssid_to_delvec;
                 for (size_t segment_id = 0; segment_id < segments.size(); segment_id++) {
-                    RETURN_IF_ERROR(breakpoint_check());
+                    RETURN_IF_ERROR(resolver->breakpoint_check());
                     // 2. get input rssid & rowids, so we can generate delvec
                     vector<uint32_t> tmp_deletes;
                     std::vector<uint64_t> rssid_rowids;
@@ -171,6 +192,32 @@ Status PrimaryKeyCompactionConflictResolver::execute_without_update_index() {
             }));
 
     return mapper_iter.status();
+}
+
+Status PrimaryKeyCompactionConflictResolver::execute_without_update_index() {
+    if (subtask_count() > 0) {
+        // Parallel compaction: use multi-file iterator
+        MultiRowsMapperIterator mapper_iter;
+        const auto& success_ids = success_subtask_ids();
+        if (!success_ids.empty()) {
+            // Partial success: only open files for successful subtasks
+            RETURN_IF_ERROR(mapper_iter.open(tablet_id(), txn_id(), success_ids));
+        } else {
+            // All subtasks succeeded (or legacy mode): open all subtask files
+            RETURN_IF_ERROR(mapper_iter.open(tablet_id(), txn_id(), subtask_count()));
+        }
+        // Enable file deletion on close to ensure cleanup in both success and failure cases.
+        // This prevents disk space leaks if execute_without_update_index_impl() fails.
+        mapper_iter.set_delete_files_on_close(true);
+        return execute_without_update_index_impl(this, mapper_iter);
+    } else {
+        // Single compaction: use single-file iterator
+        // Note: RowsMapperIterator deletes the file in its destructor
+        ASSIGN_OR_RETURN(auto fn, filename());
+        RowsMapperIterator mapper_iter;
+        RETURN_IF_ERROR(mapper_iter.open(fn));
+        return execute_without_update_index_impl(this, mapper_iter);
+    }
 }
 
 } // namespace starrocks

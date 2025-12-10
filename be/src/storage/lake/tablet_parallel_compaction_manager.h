@@ -1,0 +1,197 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+#pragma once
+
+#include <atomic>
+#include <functional>
+#include <memory>
+#include <mutex>
+#include <unordered_map>
+#include <unordered_set>
+#include <vector>
+
+#include "common/status.h"
+#include "gen_cpp/lake_service.pb.h"
+#include "storage/lake/compaction_task_context.h"
+#include "storage/lake/rowset.h"
+
+namespace starrocks {
+class ThreadPool;
+}
+
+// Token callbacks for Limiter integration
+// AcquireTokenFunc: Returns true if a token was acquired, false otherwise
+using AcquireTokenFunc = std::function<bool()>;
+// ReleaseTokenFunc: Releases a token, parameter indicates if memory limit was exceeded
+using ReleaseTokenFunc = std::function<void(bool mem_limit_exceeded)>;
+
+namespace starrocks::lake {
+
+class TabletManager;
+class CompactionTaskCallback;
+struct CompactionTaskInfo;
+
+// Subtask info for tracking parallel compaction progress
+struct SubtaskInfo {
+    int32_t subtask_id = 0;
+    std::vector<uint32_t> input_rowset_ids;
+    int64_t input_bytes = 0;
+    int64_t start_time = 0;
+    // Pointer to the running context (valid only during execution)
+    // Used to get real-time progress and status in list_tasks()
+    CompactionTaskContext* context = nullptr;
+};
+
+// Single tablet's parallel compaction state
+struct TabletParallelCompactionState {
+    int64_t tablet_id = 0;
+    int64_t txn_id = 0;
+    int64_t version = 0;
+
+    // Rowsets currently being compacted (to avoid conflicts)
+    std::unordered_set<uint32_t> compacting_rowsets;
+
+    // Running subtasks
+    std::unordered_map<int32_t, SubtaskInfo> running_subtasks;
+
+    // Completed subtask contexts
+    std::vector<std::unique_ptr<CompactionTaskContext>> completed_subtasks;
+
+    // Configuration
+    int32_t max_parallel = 0;
+    int64_t max_bytes_per_subtask = 0;
+
+    // Next subtask ID
+    int32_t next_subtask_id = 0;
+
+    // Total number of subtasks created
+    int32_t total_subtasks_created = 0;
+
+    // Callback for the original compaction request
+    std::shared_ptr<CompactionTaskCallback> callback;
+
+    // Callback to release limiter token when subtask completes
+    ReleaseTokenFunc release_token;
+
+    // Mutex for thread-safe access
+    mutable std::mutex mutex;
+
+    // Check if we can create a new subtask
+    bool can_create_subtask() const { return running_subtasks.size() < static_cast<size_t>(max_parallel); }
+
+    // Check if a rowset is being compacted
+    bool is_rowset_compacting(uint32_t rowset_id) const { return compacting_rowsets.count(rowset_id) > 0; }
+
+    // Check if all subtasks are completed
+    bool is_complete() const { return running_subtasks.empty() && total_subtasks_created > 0; }
+};
+
+// Manager for per-tablet parallel compaction
+// This enables running multiple compaction tasks concurrently within a single tablet
+// by selecting non-overlapping rowset groups for each subtask.
+class TabletParallelCompactionManager {
+public:
+    explicit TabletParallelCompactionManager(TabletManager* tablet_mgr);
+    ~TabletParallelCompactionManager();
+
+    // Create parallel compaction tasks for a tablet
+    // Returns the number of subtasks created
+    StatusOr<int> create_parallel_tasks(int64_t tablet_id, int64_t txn_id, int64_t version,
+                                        const TabletParallelConfig& config,
+                                        std::shared_ptr<CompactionTaskCallback> callback, bool force_base_compaction,
+                                        ThreadPool* thread_pool, const AcquireTokenFunc& acquire_token,
+                                        const ReleaseTokenFunc& release_token);
+
+    // Get tablet's parallel state (for testing/monitoring)
+    // Returns shared_ptr to ensure the state remains valid while being used.
+    std::shared_ptr<TabletParallelCompactionState> get_tablet_state(int64_t tablet_id, int64_t txn_id);
+
+    // Subtask completion callback
+    void on_subtask_complete(int64_t tablet_id, int64_t txn_id, int32_t subtask_id,
+                             std::unique_ptr<CompactionTaskContext> context);
+
+    // Check if all subtasks for a tablet are complete
+    bool is_tablet_complete(int64_t tablet_id, int64_t txn_id);
+
+    // Cleanup tablet state after all subtasks complete
+    void cleanup_tablet(int64_t tablet_id, int64_t txn_id);
+
+    // Get merged TxnLog from all completed subtasks
+    StatusOr<TxnLogPB> get_merged_txn_log(int64_t tablet_id, int64_t txn_id);
+
+    // Metrics
+    int64_t running_subtasks() const { return _running_subtasks.load(); }
+    int64_t completed_subtasks() const { return _completed_subtasks.load(); }
+
+    // List all running parallel compaction tasks for monitoring
+    // Forward declaration of CompactionTaskInfo is in compaction_scheduler.h
+    void list_tasks(std::vector<CompactionTaskInfo>* infos);
+
+private:
+    // Mark rowsets as being compacted
+    void mark_rowsets_compacting(TabletParallelCompactionState* state, const std::vector<uint32_t>& rowset_ids);
+
+    // Unmark rowsets after compaction completes
+    void unmark_rowsets_compacting(TabletParallelCompactionState* state, const std::vector<uint32_t>& rowset_ids);
+
+    // Execute a single subtask
+    void execute_subtask(int64_t tablet_id, int64_t txn_id, int32_t subtask_id, std::vector<RowsetPtr> input_rowsets,
+                         int64_t version, bool force_base_compaction, const ReleaseTokenFunc& release_token);
+
+    // Execute SST compaction once after all subtasks complete
+    // This is called from get_merged_txn_log to perform unified SST compaction
+    Status execute_sst_compaction(int64_t tablet_id, int64_t version, TxnLogPB* merged_log);
+
+    // Pick rowsets for compaction using CompactionPolicy
+    StatusOr<std::vector<RowsetPtr>> pick_rowsets_for_compaction(int64_t tablet_id, int64_t txn_id, int64_t version,
+                                                                 bool force_base_compaction);
+
+    // Split rowsets into groups for parallel compaction
+    // Returns empty vector if no valid groups can be formed
+    std::vector<std::vector<RowsetPtr>> split_rowsets_into_groups(int64_t tablet_id, std::vector<RowsetPtr> all_rowsets,
+                                                                  int32_t max_parallel, int64_t max_bytes);
+
+    // Create and register tablet state for parallel compaction
+    // Returns nullptr if state already exists
+    StatusOr<std::shared_ptr<TabletParallelCompactionState>> create_and_register_tablet_state(
+            int64_t tablet_id, int64_t txn_id, int64_t version, int32_t max_parallel, int64_t max_bytes,
+            std::shared_ptr<CompactionTaskCallback> callback, const ReleaseTokenFunc& release_token);
+
+    // Submit subtasks to thread pool
+    // Returns the number of subtasks successfully submitted
+    StatusOr<int> submit_subtasks(const std::shared_ptr<TabletParallelCompactionState>& state_ptr,
+                                  std::vector<std::vector<RowsetPtr>> groups, bool force_base_compaction,
+                                  ThreadPool* thread_pool, const AcquireTokenFunc& acquire_token,
+                                  const ReleaseTokenFunc& release_token);
+
+    // Generate state key from tablet_id and txn_id
+    static std::string make_state_key(int64_t tablet_id, int64_t txn_id) {
+        return std::to_string(tablet_id) + "_" + std::to_string(txn_id);
+    }
+
+    TabletManager* _tablet_mgr;
+
+    // State map: key = tablet_id_txn_id
+    // Using shared_ptr to allow safe access from on_subtask_complete even if cleanup_tablet
+    // concurrently removes the state from the map.
+    std::unordered_map<std::string, std::shared_ptr<TabletParallelCompactionState>> _tablet_states;
+    mutable std::mutex _states_mutex;
+
+    // Metrics
+    std::atomic<int64_t> _running_subtasks{0};
+    std::atomic<int64_t> _completed_subtasks{0};
+};
+
+} // namespace starrocks::lake

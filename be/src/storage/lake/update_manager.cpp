@@ -1201,17 +1201,54 @@ size_t UpdateManager::get_rowset_num_deletes(int64_t tablet_id, int64_t version,
     return num_dels;
 }
 
-bool UpdateManager::_use_light_publish_primary_compaction(int64_t tablet_id, int64_t txn_id) {
+bool UpdateManager::_use_light_publish_primary_compaction(int64_t tablet_id, int64_t txn_id, int64_t expected_row_count,
+                                                          int32_t subtask_count,
+                                                          const std::vector<int32_t>& success_subtask_ids) {
     // Is config enable ?
     if (!config::enable_light_pk_compaction_publish) {
         return false;
     }
-    // Is rows mapper file exist?
-    auto filename_st = lake_rows_mapper_filename(tablet_id, txn_id);
-    if (!filename_st.ok()) {
+
+    StatusOr<uint64_t> row_count_st;
+
+    if (subtask_count > 0) {
+        // Parallel compaction: check multiple subtask files
+        if (!success_subtask_ids.empty()) {
+            // Partial success: only check files for successful subtasks
+            row_count_st = lake_rows_mapper_row_count(tablet_id, txn_id, success_subtask_ids);
+        } else {
+            // All subtasks succeeded: check all subtask files
+            row_count_st = lake_rows_mapper_row_count(tablet_id, txn_id, subtask_count);
+        }
+    } else {
+        // Single compaction: check single file
+        auto filename_st = lake_rows_mapper_filename(tablet_id, txn_id);
+        if (!filename_st.ok()) {
+            return false;
+        }
+        if (!fs::path_exist(filename_st.value())) {
+            return false;
+        }
+        row_count_st = lake_rows_mapper_row_count(tablet_id, txn_id);
+    }
+
+    if (!row_count_st.ok()) {
+        if (!row_count_st.status().is_not_found()) {
+            LOG(WARNING) << "Failed to get rows mapper row count for tablet " << tablet_id << " txn " << txn_id
+                         << ", subtask_count=" << subtask_count
+                         << ", success_subtask_ids_size=" << success_subtask_ids.size() << ": "
+                         << row_count_st.status();
+        }
         return false;
     }
-    return fs::path_exist(filename_st.value());
+    if (static_cast<int64_t>(row_count_st.value()) != expected_row_count) {
+        LOG(INFO) << "Rows mapper row count mismatch for tablet " << tablet_id << " txn " << txn_id
+                  << ", subtask_count=" << subtask_count << ", success_subtask_ids_size=" << success_subtask_ids.size()
+                  << ", expected: " << expected_row_count << ", actual: " << row_count_st.value()
+                  << ", will use normal publish";
+        return false;
+    }
+    return true;
 }
 
 Status UpdateManager::light_publish_primary_compaction(const TxnLogPB_OpCompaction& op_compaction, int64_t txn_id,
@@ -1233,9 +1270,12 @@ Status UpdateManager::light_publish_primary_compaction(const TxnLogPB_OpCompacti
             *std::max_element(op_compaction.input_rowsets().begin(), op_compaction.input_rowsets().end());
 
     // 2. update primary index, and generate delete info.
-    auto resolver = std::make_unique<LakePrimaryKeyCompactionConflictResolver>(&metadata, &output_rowset, _tablet_mgr,
-                                                                               builder, &index, txn_id, base_version,
-                                                                               &segment_id_to_add_dels, &delvecs);
+    int32_t subtask_count = op_compaction.has_subtask_count() ? op_compaction.subtask_count() : 0;
+    std::vector<int32_t> success_subtask_ids(op_compaction.success_subtask_ids().begin(),
+                                             op_compaction.success_subtask_ids().end());
+    auto resolver = std::make_unique<LakePrimaryKeyCompactionConflictResolver>(
+            &metadata, &output_rowset, _tablet_mgr, builder, &index, txn_id, base_version, &segment_id_to_add_dels,
+            &delvecs, subtask_count, std::move(success_subtask_ids));
     if (op_compaction.ssts_size() > 0 && use_cloud_native_pk_index(metadata)) {
         RETURN_IF_ERROR(resolver->execute_without_update_index());
     } else {
@@ -1289,10 +1329,25 @@ Status UpdateManager::publish_primary_compaction(const TxnLogPB_OpCompaction& op
         // conflict happens
         return Status::OK();
     }
-    if (_use_light_publish_primary_compaction(tablet.id(), txn_id)) {
+    int64_t expected_row_count = op_compaction.has_output_rowset() ? op_compaction.output_rowset().num_rows() : 0;
+    int32_t subtask_count = op_compaction.has_subtask_count() ? op_compaction.subtask_count() : 0;
+    std::vector<int32_t> success_subtask_ids(op_compaction.success_subtask_ids().begin(),
+                                             op_compaction.success_subtask_ids().end());
+    if (_use_light_publish_primary_compaction(tablet.id(), txn_id, expected_row_count, subtask_count,
+                                              success_subtask_ids)) {
         return light_publish_primary_compaction(op_compaction, txn_id, metadata, tablet, index_entry, builder,
                                                 base_version);
     }
+
+    // When not using light_publish for parallel compaction, clean up ALL rows mapper files
+    // to prevent disk space leaks. These files were created during compaction but won't
+    // be used since we're falling back to normal publish.
+    // Note: We delete all files from 0 to subtask_count-1, regardless of success_subtask_ids,
+    // because none of them will be used when light_publish is not enabled.
+    if (subtask_count > 0) {
+        delete_lake_rows_mapper_files(tablet.id(), txn_id, subtask_count);
+    }
+
     auto& index = index_entry->value();
     // 1. iterate output rowset, update primary index and generate delvec
     std::vector<uint32_t> input_rowsets_id(op_compaction.input_rowsets().begin(), op_compaction.input_rowsets().end());

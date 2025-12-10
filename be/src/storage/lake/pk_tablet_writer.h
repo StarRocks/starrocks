@@ -64,9 +64,12 @@ protected:
     Status flush_segment_writer(SegmentPB* segment = nullptr) override;
 
 private:
+    void _init_rows_mapper_builder();
+
     std::unique_ptr<RowsetTxnMetaPB> _rowset_txn_meta;
     std::unique_ptr<RowsMapperBuilder> _rows_mapper_builder;
     std::unique_ptr<DefaultSSTWriter> _pk_sst_writer;
+    bool _rows_mapper_init_attempted = false;
 };
 
 class VerticalPkTabletWriter : public VerticalGeneralTabletWriter {
@@ -94,8 +97,11 @@ public:
     Status finish(SegmentPB* segment = nullptr) override;
 
 private:
+    void _init_rows_mapper_builder();
+
     std::unique_ptr<RowsMapperBuilder> _rows_mapper_builder;
     std::vector<std::unique_ptr<DefaultSSTWriter>> _pk_sst_writers;
+    bool _rows_mapper_init_attempted = false;
 };
 
 } // namespace starrocks::lake
