@@ -50,7 +50,7 @@ private:
 
 private:
     // Compact representation of the entire range (-inf, +inf)
-    // For example, if there are 3 tablet ranges : [-inf, 100), [100, 200), [200, +inf)
+    // For example, if there are 3 tablet ranges : (-inf, 100), [100, 200), [200, +inf)
     // the _boundaries will be: [100, 200]
     // the _lower_bound_inclusive will be: [false, true, true]
     std::vector<ColumnPtr> _boundaries;
