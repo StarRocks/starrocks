@@ -79,7 +79,7 @@ void ExecutionGroup::prepare_active_drivers_parallel(RuntimeState* state,
         // since prepare is async, we must hold the runtime state ptr
         auto runtime_state_holder = driver->fragment_ctx()->runtime_state_ptr();
         bool submitted = pipeline_prepare_pool->try_offer(
-                [sync_ctx, driver, runtime_state_holder = std::move(runtime_state_holder)]() {
+                [sync_ctx, &driver, runtime_state_holder = std::move(runtime_state_holder)]() {
                     auto runtime_state = runtime_state_holder.get();
                     // make sure mem tracker is instance level
                     auto mem_tracker = runtime_state->instance_mem_tracker();

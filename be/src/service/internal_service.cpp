@@ -389,19 +389,38 @@ void PInternalServiceImplBase<T>::_exec_batch_plan_fragments(google::protobuf::R
     // must use shared_ptr to avoid uaf
     std::shared_ptr<std::vector<pipeline::FragmentExecutor>> fragment_executors =
             std::make_shared<std::vector<pipeline::FragmentExecutor>>(unique_requests.size());
+    size_t failed_idx = unique_requests.size();
+    bool submitted = true;
     for (int i = 0; i < unique_requests.size(); ++i) {
         PromiseStatusSharedPtr ms = std::make_shared<PromiseStatus>();
-        _exec_env->pipeline_prepare_pool()->offer([ms, i, fragment_executors, t_batch_requests, this] {
+        submitted = _exec_env->pipeline_prepare_pool()->offer([ms, i, fragment_executors, t_batch_requests, this] {
             auto& unique_requests = t_batch_requests->unique_param_per_instance;
             auto& req = unique_requests[i];
             auto& fragment_executor = fragment_executors->at(i);
             ms->set_value(fragment_executor.prepare(_exec_env, req, req));
         });
+        if (!submitted) {
+            failed_idx = i;
+            break;
+        }
         prepare_futures.emplace_back(ms->get_future().share());
         promise_statuses.emplace_back(std::move(ms));
     }
 
-    size_t failed_idx = unique_requests.size();
+    // if some fragments submitted to prepare, and the following fragment submit failed
+    // wait the former fragments prepared, then clean up the query context
+    if (failed_idx != unique_requests.size()) {
+        // Drain remaining preparations and release their query context references to avoid leaks when execute() is skipped.
+        auto query_ctx = _exec_env->query_context_mgr()->get(common_request.params.query_id);
+        for (size_t j = 0; j <= failed_idx; ++j) {
+            Status prepare_status = prepare_futures[j].get();
+            if (prepare_status.ok() && query_ctx != nullptr) {
+                fragment_executors->at(j)._fail_cleanup(true);
+            }
+        }
+    }
+
+    failed_idx = unique_requests.size();
     for (size_t i = 0; i < unique_requests.size(); ++i) {
         // When a preparation fails, return error immediately. The other unfinished preparation is safe,
         // since they can use the shared pointer of promise/t_batch_requests/fragment_executors
@@ -417,6 +436,9 @@ void PInternalServiceImplBase<T>::_exec_batch_plan_fragments(google::protobuf::R
         }
     }
 
+    // fragment[failed_idx] prpare failed, but fragment[1..failed_idx-1] already executed
+    // only wait fragment[failed_idx+1..., end] prepare finished and clean them
+    // for fragment[1...fragment-1], let FE cancel them
     if (failed_idx != unique_requests.size()) {
         // Drain remaining preparations and release their query context references to avoid leaks when execute() is skipped.
         auto query_ctx = _exec_env->query_context_mgr()->get(common_request.params.query_id);

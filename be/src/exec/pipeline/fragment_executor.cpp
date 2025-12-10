@@ -833,6 +833,13 @@ Status FragmentExecutor::_prepare_global_dict(const UnifiedExecPlanFragmentParam
 
 Status FragmentExecutor::prepare_global_state(ExecEnv* exec_env, const TExecPlanFragmentParams& common_request) {
     bool prepare_success = false;
+    // make sure query context can be released
+    DeferOp defer([&prepare_success, query_ctx = _query_ctx] {
+        if (!prepare_success) {
+            query_ctx->count_down_fragments();
+        }
+    });
+
     UnifiedExecPlanFragmentParams request(common_request, common_request);
     RETURN_IF_ERROR(_prepare_query_ctx(exec_env, request));
 
@@ -847,12 +854,6 @@ Status FragmentExecutor::prepare_global_state(ExecEnv* exec_env, const TExecPlan
                                           config::vector_chunk_size));
     _query_ctx->set_desc_tbl(desc_tbl);
 
-    // make sure query context can be released
-    DeferOp defer([&prepare_success, query_ctx = _query_ctx] {
-        if (!prepare_success) {
-            query_ctx->count_down_fragments();
-        }
-    });
     prepare_success = true;
     return Status::OK();
 }
@@ -995,6 +996,8 @@ Status FragmentExecutor::execute(ExecEnv* exec_env) {
 void FragmentExecutor::_fail_cleanup(bool fragment_has_registed) {
     if (_query_ctx) {
         if (_fragment_ctx) {
+            // ensure any parallel prepare tasks have completed before releasing pipelines/factories
+            _fragment_ctx->wait_prepare_tasks_done();
             if (fragment_has_registed) {
                 _query_ctx->fragment_mgr()->unregister(_fragment_ctx->fragment_instance_id());
             }

@@ -469,6 +469,7 @@ Status FragmentContext::prepare_active_drivers() {
         for (auto& group : _execution_groups) {
             RETURN_IF_ERROR(group->prepare_active_drivers_sequentially(_runtime_state.get()));
         }
+        RETURN_IF_ERROR(submit_all_timer());
         return Status::OK();
     }
 
