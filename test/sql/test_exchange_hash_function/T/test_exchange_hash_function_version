@@ -41,9 +41,6 @@ select c0 % 10 as bucket, count(*), sum(c1) from t_hash_test group by c0 % 10 or
 set exchange_hash_function_version = 1;
 select c0 % 10 as bucket, count(*), sum(c1) from t_hash_test group by c0 % 10 order by bucket;
 
--- Reset to default
-set exchange_hash_function_version = 0;
-
 -- Clean up
 DROP TABLE t_hash_test;
 

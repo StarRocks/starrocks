@@ -83,9 +83,6 @@ select c0 % 10 as bucket, count(*), sum(c1) from t_hash_test group by c0 % 10 or
 8	100	50300
 9	100	50400
 -- !result
-set exchange_hash_function_version = 0;
--- result:
--- !result
 DROP TABLE t_hash_test;
 -- result:
 -- !result
