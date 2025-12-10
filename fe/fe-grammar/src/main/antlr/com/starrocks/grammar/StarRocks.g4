@@ -2353,6 +2353,7 @@ rowConstructor
 
 sortItem
     : expression ordering = (ASC | DESC)? (NULLS nullOrdering=(FIRST | LAST))?
+    | ALL ordering = (ASC | DESC)? (NULLS nullOrdering=(FIRST | LAST))?
     ;
 
 limitConstExpr
