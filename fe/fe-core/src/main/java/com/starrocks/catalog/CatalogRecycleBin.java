@@ -277,14 +277,6 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
         return null;
     }
 
-    public synchronized boolean getPartitionIsInMemory(long partitionId) {
-        RecyclePartitionInfo partitionInfo = idToPartition.get(partitionId);
-        if (partitionInfo != null) {
-            return partitionInfo.isInMemory();
-        }
-        return false;
-    }
-
     public synchronized List<Partition> getPartitions(long tableId) {
         return idToPartition.values().stream()
                 .filter(v -> (v.getTableId() == tableId))
@@ -923,7 +915,6 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
             rangePartitionInfo.setRange(partitionId, false, partitionInfo.getRange());
             rangePartitionInfo.setDataProperty(partitionId, partitionInfo.getDataProperty());
             rangePartitionInfo.setReplicationNum(partitionId, partitionInfo.getReplicationNum());
-            rangePartitionInfo.setIsInMemory(partitionId, partitionInfo.isInMemory());
 
             if (table.isCloudNativeTable()) {
                 rangePartitionInfo.setDataCacheInfo(partitionId,
@@ -1299,7 +1290,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
                         recyclePartitionInfoV1.dbId, recyclePartitionInfoV1.tableId, recyclePartitionInfoV1.partition,
                         recyclePartitionInfoV1.range, recyclePartitionInfoV1.dataProperty,
                         recyclePartitionInfoV1.replicationNum,
-                        recyclePartitionInfoV1.isInMemory, null);
+                        null);
                 writer.writeJson(recycleRangePartitionInfo);
             } else {
                 writer.writeJson(recyclePartitionInfo);

@@ -381,7 +381,7 @@ public class PartitionsProcDir implements ProcDirInterface {
         partitionInfo.add(TimeUtils.longToTimeString(partition.getLastCheckTime()));
         partitionInfo.add(byteSizeValue);
         partitionInfo.add(new ByteSizeValue(dataSize + extraFileSize));
-        partitionInfo.add(tblPartitionInfo.getIsInMemory(partition.getId()));
+        partitionInfo.add(false);
         partitionInfo.add(physicalPartition.storageRowCount());
 
         partitionInfo.add(physicalPartition.getDataVersion()); // DataVersion

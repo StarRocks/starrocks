@@ -252,8 +252,9 @@ Status SchemaPartitionsMetaScanner::fill_chunk(ChunkPtr* chunk) {
             break;
         }
         case 20: {
-            // IS_IN_MEMORY
-            fill_column_with_slot<TYPE_BOOLEAN>(column.get(), (void*)&info.is_in_memory);
+            // IS_IN_MEMORY (deprecated, always false)
+            bool is_in_memory = false;
+            fill_column_with_slot<TYPE_BOOLEAN>(column.get(), (void*)&is_in_memory);
             break;
         }
         case 21: {

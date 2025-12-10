@@ -385,14 +385,13 @@ public class ExternalOlapTable extends OlapTable {
                     PartitionKey endKey = PartitionKeySerializer.read(input);
                     Range<PartitionKey> range = Range.closedOpen(startKey, endKey);
                     short replicaNum = tRange.getBase_desc().getReplica_num_map().get(partitionId);
-                    boolean inMemory = tRange.getBase_desc().getIn_memory_map().get(partitionId);
                     TDataProperty thriftDataProperty = tRange.getBase_desc().getData_property().get(partitionId);
                     DataProperty dataProperty = new DataProperty(thriftDataProperty.getStorage_medium(),
                             thriftDataProperty.getCold_time());
                     // TODO: confirm false is ok
                     RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
                     rangePartitionInfo.addPartition(partitionId, tRange.isSetIs_temp() && tRange.isIs_temp(),
-                            range, dataProperty, replicaNum, inMemory);
+                            range, dataProperty, replicaNum, null);
                 }
                 break;
             case UNPARTITIONED:
@@ -402,12 +401,11 @@ public class ExternalOlapTable extends OlapTable {
                         .entrySet()) {
                     long partitionId = entry.getKey();
                     short replicaNum = singePartitionDesc.getBase_desc().getReplica_num_map().get(partitionId);
-                    boolean inMemory = singePartitionDesc.getBase_desc().getIn_memory_map().get(partitionId);
                     TDataProperty thriftDataProperty =
                             singePartitionDesc.getBase_desc().getData_property().get(partitionId);
                     DataProperty dataProperty = new DataProperty(thriftDataProperty.getStorage_medium(),
                             thriftDataProperty.getCold_time());
-                    partitionInfo.addPartition(partitionId, dataProperty, replicaNum, inMemory);
+                    partitionInfo.addPartition(partitionId, dataProperty, replicaNum, null);
                 }
                 break;
             default:

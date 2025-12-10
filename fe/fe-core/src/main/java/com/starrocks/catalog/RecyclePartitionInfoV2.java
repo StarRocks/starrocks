@@ -24,9 +24,9 @@ public class RecyclePartitionInfoV2 extends RecyclePartitionInfo {
     private DataCacheInfo dataCacheInfo;
 
     public RecyclePartitionInfoV2(long dbId, long tableId, Partition partition,
-                                  DataProperty dataProperty, short replicationNum, boolean isInMemory,
+                                  DataProperty dataProperty, short replicationNum,
                                   DataCacheInfo dataCacheInfo) {
-        super(dbId, tableId, partition, dataProperty, replicationNum, isInMemory);
+        super(dbId, tableId, partition, dataProperty, replicationNum);
         this.dataCacheInfo = dataCacheInfo;
     }
 

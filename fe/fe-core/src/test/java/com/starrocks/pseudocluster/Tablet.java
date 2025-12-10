@@ -101,7 +101,6 @@ public class Tablet {
         info.setSchema_hash(schemaHash);
         info.setStorage_medium(TStorageMedium.SSD);
         info.setPath_hash(PseudoBackend.PATH_HASH);
-        info.setIs_in_memory(false);
         info.setVersion(maxContinuousVersion());
         info.setMax_readable_version(maxContinuousVersion());
         info.setMin_readable_version(minVersion());
