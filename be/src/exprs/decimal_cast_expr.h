@@ -557,14 +557,6 @@ struct DecimalNonDecimalCast<overflow_mode, DecimalType, VariantType, DecimalLTG
             const VariantValue* variant_value = variant_column->get_object(i);
             Variant variant(variant_value->get_metadata(), variant_value->get_value());
             auto overflow = cast_variant_to_decimal<DecimalCppType>(&result_data[i], variant, precision, scale);
-
-            if (!overflow.ok()) {
-                // Set null if the cast itself fails.
-                has_null = true;
-                nulls[i] = DATUM_NULL;
-                continue;
-            }
-
             if constexpr (check_overflow<overflow_mode>) {
                 if (overflow.ok() && overflow.value()) {
                     if constexpr (error_if_overflow<overflow_mode>) {

@@ -86,10 +86,10 @@ static constexpr uint8_t kBinarySearchThreshold = 32;
 
 std::vector<uint32_t> VariantMetadata::get_index(std::string_view key) const {
     uint32_t dict_sz = dict_size();
-    bool is_sorted = is_sorted_and_unique();
+    bool is_sorted_unique = is_sorted_and_unique();
     std::vector<uint32_t> indexes;
 
-    if (is_sorted && dict_sz > kBinarySearchThreshold) {
+    if (is_sorted_unique && dict_sz > kBinarySearchThreshold) {
         // binary search
         uint32_t left = 0;
         uint32_t right = dict_sz - 1;
@@ -103,7 +103,10 @@ std::vector<uint32_t> VariantMetadata::get_index(std::string_view key) const {
             int cmp = field_key.compare(key);
             if (cmp == 0) {
                 indexes.push_back(mid);
-            } else if (cmp < 0) {
+                break;
+            }
+
+            if (cmp < 0) {
                 left = mid + 1;
             } else {
                 right = mid - 1;
