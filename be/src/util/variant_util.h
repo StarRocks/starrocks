@@ -13,6 +13,8 @@
 // limitations under the License.
 
 #pragma once
+
+#include <arrow/util/endian.h>
 #include <cctz/time_zone.h>
 
 #include "formats/parquet/variant.h"
@@ -24,7 +26,15 @@ struct VariantUtil {
 
     static Status variant_to_json(std::string_view metadata, std::string_view value, std::stringstream& json_str,
                                   cctz::time_zone timezone = cctz::local_time_zone());
-    static uint32_t readLittleEndianUnsigned(const void* from, uint8_t size);
+
+    static inline uint32_t read_little_endian_unsigned32(const void* from, uint8_t size) {
+        DCHECK_LE(size, 4);
+        DCHECK_GE(size, 1);
+
+        uint32_t result = 0;
+        memcpy(&result, from, size);
+        return arrow::bit_util::FromLittleEndian(result);
+    }
 
     static std::string decimal4_to_string(DecimalValue<int32_t> decimal);
     static std::string decimal8_to_string(DecimalValue<int64_t> decimal);
