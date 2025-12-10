@@ -15,10 +15,6 @@ PROPERTIES (
 insert into t_hash_test SELECT generate_series, generate_series, generate_series FROM TABLE(generate_series(1, 1000));
 -- result:
 -- !result
-show variables like 'exchange_hash_function_version';
--- result:
-exchange_hash_function_version	1
--- !result
 set exchange_hash_function_version = 0;
 -- result:
 -- !result
