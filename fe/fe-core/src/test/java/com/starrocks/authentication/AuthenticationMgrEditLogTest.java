@@ -15,11 +15,19 @@
 package com.starrocks.authentication;
 
 import com.starrocks.catalog.UserIdentity;
+import com.starrocks.common.DdlException;
+import com.starrocks.common.Pair;
+import com.starrocks.authentication.UserPropertyInfo;
+import com.starrocks.persist.AlterUserInfo;
+import com.starrocks.persist.CreateUserInfo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.GroupProviderLog;
 import com.starrocks.persist.OperationType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.CreateUserStmt;
+import com.starrocks.sql.ast.DropUserStmt;
+import com.starrocks.sql.ast.UserAuthOption;
 import com.starrocks.sql.ast.group.CreateGroupProviderStmt;
 import com.starrocks.sql.ast.group.DropGroupProviderStmt;
 import com.starrocks.sql.parser.NodePosition;
@@ -29,7 +37,9 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -211,6 +221,336 @@ public class AuthenticationMgrEditLogTest {
         GroupProvider unchangedProvider = authenticationMgr.getGroupProvider(TEST_PROVIDER_NAME);
         Assertions.assertNotNull(unchangedProvider);
         Assertions.assertEquals(TEST_PROVIDER_NAME, unchangedProvider.getName());
+    }
+
+    // ==================== User Management Tests ====================
+
+    @Test
+    public void testCreateUserNormalCase() throws Exception {
+        // 1. Prepare test data
+        String userName = "test_user_create";
+        String sql = "CREATE USER '" + userName + "' IDENTIFIED BY 'password123'";
+        CreateUserStmt stmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        UserIdentity userIdentity = new UserIdentity(stmt.getUser().getUser(), stmt.getUser().getHost(), 
+                stmt.getUser().isDomain());
+
+        // 2. Verify initial state
+        Assertions.assertFalse(authenticationMgr.doesUserExist(userIdentity));
+
+        // 3. Execute createUser operation (master side)
+        authenticationMgr.createUser(stmt);
+
+        // 4. Verify master state
+        Assertions.assertTrue(authenticationMgr.doesUserExist(userIdentity));
+        UserAuthenticationInfo authInfo = authenticationMgr.getUserAuthenticationInfoByUserIdentity(userIdentity);
+        Assertions.assertNotNull(authInfo);
+
+        // 5. Test follower replay functionality
+        AuthenticationMgr followerAuthMgr = new AuthenticationMgr();
+        
+        // Verify follower initial state
+        Assertions.assertFalse(followerAuthMgr.doesUserExist(userIdentity));
+
+        // Replay the operation
+        CreateUserInfo replayInfo = (CreateUserInfo) UtFrameUtils.PseudoJournalReplayer
+                .replayNextJournal(OperationType.OP_CREATE_USER_V2);
+        followerAuthMgr.replayCreateUser(
+                replayInfo.getUserIdentity(),
+                replayInfo.getAuthenticationInfo(),
+                replayInfo.getUserProperty(),
+                replayInfo.getUserPrivilegeCollection(),
+                replayInfo.getPluginId(),
+                replayInfo.getPluginVersion());
+
+        // 6. Verify follower state is consistent with master
+        Assertions.assertTrue(followerAuthMgr.doesUserExist(userIdentity));
+        UserAuthenticationInfo followerAuthInfo = followerAuthMgr.getUserAuthenticationInfoByUserIdentity(userIdentity);
+        Assertions.assertNotNull(followerAuthInfo);
+    }
+
+    @Test
+    public void testCreateUserEditLogException() throws Exception {
+        // 1. Prepare test data
+        String userName = "test_user_exception";
+        String sql = "CREATE USER '" + userName + "' IDENTIFIED BY 'password123'";
+        CreateUserStmt stmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        UserIdentity userIdentity = new UserIdentity(stmt.getUser().getUser(), stmt.getUser().getHost(), 
+                stmt.getUser().isDomain());
+
+        // 2. Mock EditLog.logCreateUser to throw exception
+        EditLog spyEditLog = spy(GlobalStateMgr.getCurrentState().getEditLog());
+        doThrow(new RuntimeException("EditLog write failed"))
+            .when(spyEditLog).logCreateUser(any(CreateUserInfo.class), any());
+        
+        // Temporarily set spy EditLog
+        GlobalStateMgr.getCurrentState().setEditLog(spyEditLog);
+
+        // Verify initial state
+        Assertions.assertFalse(authenticationMgr.doesUserExist(userIdentity));
+
+        // Save initial state snapshot
+        int initialUserCount = authenticationMgr.getUserToAuthenticationInfo().size();
+
+        // 3. Execute createUser operation and expect exception
+        RuntimeException exception = Assertions.assertThrows(RuntimeException.class, () -> {
+            authenticationMgr.createUser(stmt);
+        });
+        Assertions.assertEquals("EditLog write failed", exception.getMessage());
+
+        // 4. Verify leader memory state remains unchanged after exception
+        Assertions.assertFalse(authenticationMgr.doesUserExist(userIdentity));
+        Assertions.assertEquals(initialUserCount, authenticationMgr.getUserToAuthenticationInfo().size());
+    }
+
+    @Test
+    public void testAlterUserNormalCase() throws Exception {
+        // 1. Prepare test data - create a user first
+        String userName = "test_user_alter";
+        String createSql = "CREATE USER '" + userName + "' IDENTIFIED BY 'oldpassword'";
+        CreateUserStmt createStmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(createSql, ctx);
+        authenticationMgr.createUser(createStmt);
+        UserIdentity userIdentity = new UserIdentity(createStmt.getUser().getUser(), 
+                createStmt.getUser().getHost(), createStmt.getUser().isDomain());
+        Assertions.assertTrue(authenticationMgr.doesUserExist(userIdentity));
+
+        // 2. Prepare alter user data
+        UserAuthenticationInfo newAuthInfo = new UserAuthenticationInfo(createStmt.getUser(), 
+                new UserAuthOption(null, "newpassword", true, NodePosition.ZERO));
+        Map<String, String> properties = new HashMap<>();
+        properties.put("max_user_connections", "100");
+
+        // 3. Execute alterUser operation (master side)
+        authenticationMgr.alterUser(userIdentity, newAuthInfo, properties);
+
+        // 4. Verify master state
+        UserAuthenticationInfo updatedAuthInfo = authenticationMgr.getUserAuthenticationInfoByUserIdentity(userIdentity);
+        Assertions.assertNotNull(updatedAuthInfo);
+
+        // 5. Test follower replay functionality
+        AuthenticationMgr followerAuthMgr = new AuthenticationMgr();
+        
+        // First create the user in follower
+        followerAuthMgr.replayCreateUser(userIdentity, 
+                authenticationMgr.getUserAuthenticationInfoByUserIdentity(userIdentity),
+                authenticationMgr.getUserProperty(userIdentity.getUser()),
+                null, (short) 0, (short) 0);
+        Assertions.assertTrue(followerAuthMgr.doesUserExist(userIdentity));
+
+        // Replay the alter operation
+        AlterUserInfo replayInfo = (AlterUserInfo) UtFrameUtils.PseudoJournalReplayer
+                .replayNextJournal(OperationType.OP_ALTER_USER_V2);
+        followerAuthMgr.replayAlterUser(replayInfo.getUserIdentity(), 
+                replayInfo.getAuthenticationInfo(), replayInfo.getProperties());
+
+        // 6. Verify follower state is consistent with master
+        Assertions.assertTrue(followerAuthMgr.doesUserExist(userIdentity));
+        UserAuthenticationInfo followerAuthInfo = followerAuthMgr.getUserAuthenticationInfoByUserIdentity(userIdentity);
+        Assertions.assertNotNull(followerAuthInfo);
+    }
+
+    @Test
+    public void testAlterUserEditLogException() throws Exception {
+        // 1. Prepare test data - create a user first
+        String userName = "test_user_alter_exception";
+        String createSql = "CREATE USER '" + userName + "' IDENTIFIED BY 'oldpassword'";
+        CreateUserStmt createStmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(createSql, ctx);
+        authenticationMgr.createUser(createStmt);
+        UserIdentity userIdentity = new UserIdentity(createStmt.getUser().getUser(), 
+                createStmt.getUser().getHost(), createStmt.getUser().isDomain());
+        Assertions.assertTrue(authenticationMgr.doesUserExist(userIdentity));
+
+        // 2. Prepare alter user data
+        UserAuthenticationInfo newAuthInfo = new UserAuthenticationInfo(createStmt.getUser(), 
+                new UserAuthOption(null, "newpassword", true, NodePosition.ZERO));
+        Map<String, String> properties = new HashMap<>();
+        properties.put("max_user_connections", "100");
+
+        // 3. Mock EditLog.logAlterUser to throw exception
+        EditLog spyEditLog = spy(GlobalStateMgr.getCurrentState().getEditLog());
+        doThrow(new RuntimeException("EditLog write failed"))
+            .when(spyEditLog).logAlterUser(any(AlterUserInfo.class), any());
+        
+        // Temporarily set spy EditLog
+        GlobalStateMgr.getCurrentState().setEditLog(spyEditLog);
+
+        // Save initial state snapshot
+        UserAuthenticationInfo initialAuthInfo = authenticationMgr.getUserAuthenticationInfoByUserIdentity(userIdentity);
+
+        // 4. Execute alterUser operation and expect exception
+        RuntimeException exception = Assertions.assertThrows(RuntimeException.class, () -> {
+            authenticationMgr.alterUser(userIdentity, newAuthInfo, properties);
+        });
+        Assertions.assertEquals("EditLog write failed", exception.getMessage());
+
+        // 5. Verify leader memory state remains unchanged after exception
+        UserAuthenticationInfo unchangedAuthInfo = authenticationMgr.getUserAuthenticationInfoByUserIdentity(userIdentity);
+        Assertions.assertNotNull(unchangedAuthInfo);
+        // Note: We can't easily compare auth info, but we verify the user still exists
+        Assertions.assertTrue(authenticationMgr.doesUserExist(userIdentity));
+    }
+
+    @Test
+    public void testUpdateUserPropertyNormalCase() throws Exception {
+        // 1. Prepare test data - create a user first
+        String userName = "test_user_property";
+        String createSql = "CREATE USER '" + userName + "' IDENTIFIED BY 'password'";
+        CreateUserStmt createStmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(createSql, ctx);
+        authenticationMgr.createUser(createStmt);
+        Assertions.assertTrue(authenticationMgr.doesUserExist(
+                new UserIdentity(createStmt.getUser().getUser(), createStmt.getUser().getHost(), 
+                        createStmt.getUser().isDomain())));
+
+        // 2. Prepare property update
+        List<Pair<String, String>> properties = new ArrayList<>();
+        properties.add(new Pair<>("max_user_connections", "200"));
+
+        // 3. Execute updateUserProperty operation (master side)
+        authenticationMgr.updateUserProperty(userName, properties);
+
+        // 4. Verify master state
+        UserProperty userProperty = authenticationMgr.getUserProperty(userName);
+        Assertions.assertNotNull(userProperty);
+        Assertions.assertEquals(200, userProperty.getMaxConn());
+
+        // 5. Test follower replay functionality
+        AuthenticationMgr followerAuthMgr = new AuthenticationMgr();
+        
+        // First create the user in follower
+        UserIdentity userIdentity = new UserIdentity(createStmt.getUser().getUser(), 
+                createStmt.getUser().getHost(), createStmt.getUser().isDomain());
+        followerAuthMgr.replayCreateUser(userIdentity, 
+                authenticationMgr.getUserAuthenticationInfoByUserIdentity(userIdentity),
+                authenticationMgr.getUserProperty(userName),
+                null, (short) 0, (short) 0);
+
+        // Replay the property update operation
+        UserPropertyInfo replayInfo = (UserPropertyInfo) UtFrameUtils.PseudoJournalReplayer
+                .replayNextJournal(OperationType.OP_UPDATE_USER_PROP_V3);
+        followerAuthMgr.replayUpdateUserProperty(replayInfo);
+
+        // 6. Verify follower state is consistent with master
+        UserProperty followerUserProperty = followerAuthMgr.getUserProperty(userName);
+        Assertions.assertNotNull(followerUserProperty);
+        Assertions.assertEquals(200, followerUserProperty.getMaxConn());
+    }
+
+    @Test
+    public void testUpdateUserPropertyEditLogException() throws Exception {
+        // 1. Prepare test data - create a user first
+        String userName = "test_user_property_exception";
+        String createSql = "CREATE USER '" + userName + "' IDENTIFIED BY 'password'";
+        CreateUserStmt createStmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(createSql, ctx);
+        authenticationMgr.createUser(createStmt);
+        Assertions.assertTrue(authenticationMgr.doesUserExist(
+                new UserIdentity(createStmt.getUser().getUser(), createStmt.getUser().getHost(), 
+                        createStmt.getUser().isDomain())));
+
+        // 2. Prepare property update
+        List<Pair<String, String>> properties = new ArrayList<>();
+        properties.add(new Pair<>("max_user_connections", "200"));
+
+        // 3. Mock EditLog.logUpdateUserPropertyV2 to throw exception
+        EditLog spyEditLog = spy(GlobalStateMgr.getCurrentState().getEditLog());
+        doThrow(new RuntimeException("EditLog write failed"))
+            .when(spyEditLog).logUpdateUserPropertyV2(any(UserPropertyInfo.class), any());
+        
+        // Temporarily set spy EditLog
+        GlobalStateMgr.getCurrentState().setEditLog(spyEditLog);
+
+        // Save initial state snapshot
+        UserProperty initialProperty = authenticationMgr.getUserProperty(userName);
+        long initialMaxConn = initialProperty.getMaxConn();
+
+        // 4. Execute updateUserProperty operation and expect exception
+        RuntimeException exception = Assertions.assertThrows(RuntimeException.class, () -> {
+            authenticationMgr.updateUserProperty(userName, properties);
+        });
+        Assertions.assertEquals("EditLog write failed", exception.getMessage());
+
+        // 5. Verify leader memory state remains unchanged after exception
+        UserProperty unchangedProperty = authenticationMgr.getUserProperty(userName);
+        Assertions.assertNotNull(unchangedProperty);
+        Assertions.assertEquals(initialMaxConn, unchangedProperty.getMaxConn());
+    }
+
+    @Test
+    public void testDropUserNormalCase() throws Exception {
+        // 1. Prepare test data - create a user first
+        String userName = "test_user_drop";
+        String createSql = "CREATE USER '" + userName + "' IDENTIFIED BY 'password'";
+        CreateUserStmt createStmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(createSql, ctx);
+        authenticationMgr.createUser(createStmt);
+        UserIdentity userIdentity = new UserIdentity(createStmt.getUser().getUser(), 
+                createStmt.getUser().getHost(), createStmt.getUser().isDomain());
+        Assertions.assertTrue(authenticationMgr.doesUserExist(userIdentity));
+
+        // 2. Prepare drop statement
+        String dropSql = "DROP USER '" + userName + "'";
+        DropUserStmt dropStmt = (DropUserStmt) UtFrameUtils.parseStmtWithNewParser(dropSql, ctx);
+
+        // 3. Save user property before dropping (needed for follower replay)
+        UserProperty userProperty = authenticationMgr.getUserProperty(userName);
+        UserAuthenticationInfo userAuthInfo = authenticationMgr.getUserAuthenticationInfoByUserIdentity(userIdentity);
+        
+        // 4. Execute dropUser operation (master side)
+        authenticationMgr.dropUser(dropStmt);
+
+        // 5. Verify master state
+        Assertions.assertFalse(authenticationMgr.doesUserExist(userIdentity));
+
+        // 6. Test follower replay functionality
+        AuthenticationMgr followerAuthMgr = new AuthenticationMgr();
+        
+        // First create the user in follower
+        followerAuthMgr.replayCreateUser(userIdentity, 
+                userAuthInfo,
+                userProperty,
+                null, (short) 0, (short) 0);
+        Assertions.assertTrue(followerAuthMgr.doesUserExist(userIdentity));
+
+        // Replay the drop operation
+        UserIdentity replayUserIdentity = (UserIdentity) UtFrameUtils.PseudoJournalReplayer
+                .replayNextJournal(OperationType.OP_DROP_USER_V3);
+        followerAuthMgr.replayDropUser(replayUserIdentity);
+
+        // 7. Verify follower state is consistent with master
+        Assertions.assertFalse(followerAuthMgr.doesUserExist(userIdentity));
+    }
+
+    @Test
+    public void testDropUserEditLogException() throws Exception {
+        // 1. Prepare test data - create a user first
+        String userName = "test_user_drop_exception";
+        String createSql = "CREATE USER '" + userName + "' IDENTIFIED BY 'password'";
+        CreateUserStmt createStmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(createSql, ctx);
+        authenticationMgr.createUser(createStmt);
+        UserIdentity userIdentity = new UserIdentity(createStmt.getUser().getUser(), 
+                createStmt.getUser().getHost(), createStmt.getUser().isDomain());
+        Assertions.assertTrue(authenticationMgr.doesUserExist(userIdentity));
+
+        // 2. Prepare drop statement
+        String dropSql = "DROP USER '" + userName + "'";
+        DropUserStmt dropStmt = (DropUserStmt) UtFrameUtils.parseStmtWithNewParser(dropSql, ctx);
+
+        // 3. Mock EditLog.logDropUser to throw exception
+        EditLog spyEditLog = spy(GlobalStateMgr.getCurrentState().getEditLog());
+        doThrow(new RuntimeException("EditLog write failed"))
+            .when(spyEditLog).logDropUser(any(UserIdentity.class), any());
+        
+        // Temporarily set spy EditLog
+        GlobalStateMgr.getCurrentState().setEditLog(spyEditLog);
+
+        // Save initial state snapshot
+        Assertions.assertTrue(authenticationMgr.doesUserExist(userIdentity));
+
+        // 4. Execute dropUser operation and expect exception
+        RuntimeException exception = Assertions.assertThrows(RuntimeException.class, () -> {
+            authenticationMgr.dropUser(dropStmt);
+        });
+        Assertions.assertEquals("EditLog write failed", exception.getMessage());
+
+        // 5. Verify leader memory state remains unchanged after exception
+        Assertions.assertTrue(authenticationMgr.doesUserExist(userIdentity));
     }
 }
 
