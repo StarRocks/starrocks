@@ -16,13 +16,13 @@ package com.starrocks.replication;
 
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.common.DdlException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.ReplicateSnapshotTask;
 import com.starrocks.thrift.TTableReplicationRequest;
+import org.apache.arrow.util.Preconditions;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.TestOnly;
@@ -48,8 +48,9 @@ public class LakeReplicationJob extends ReplicationJob {
         this.virtualTabletId = virtualTabletId;
     }
 
-    public LakeReplicationJob(TTableReplicationRequest request) throws MetaNotFoundException, DdlException {
+    public LakeReplicationJob(TTableReplicationRequest request) throws MetaNotFoundException {
         super(request);
+        Preconditions.checkArgument(request.src_database_id > 0 && request.src_table_id > 0);
         this.srcDatabaseId = request.src_database_id;
         this.srcTableId = request.src_table_id;
         this.virtualTabletId = GlobalStateMgr.getCurrentState().getStorageVolumeMgr()
