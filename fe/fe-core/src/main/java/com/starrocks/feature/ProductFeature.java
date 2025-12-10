@@ -58,7 +58,7 @@ public class ProductFeature {
                 "https://docs.starrocks.io/en-us/latest/administration/privilege_overview"
         ));
         features.add(new ProductFeature(
-                "Arrow Flight SQL",
+                "ArrowFlightSQL",
                 "high-performance columnar data transfer using Apache Arrow.",
                 "https://docs.starrocks.io/docs/unloading/arrow_flight/"
         ));
