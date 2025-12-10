@@ -17,7 +17,7 @@ Currently, StarRocks supports scalar UDFs, user-defined aggregate functions (UDA
 
 - You have installed [Apache Maven](https://maven.apache.org/download.cgi), so you can create and compile Java projects.
 
-- You have installed JDK 1.8 on your servers.
+- You have installed JDK 17 on your servers.
 
 - The Java UDF feature is enabled. You can set the FE configuration item `enable_udf` to `true` in the FE configuration file **fe/conf/fe.conf** to enable this feature, and then restart the FE nodes to make the settings take effect. For more information, see [Parameter configuration](../../administration/management/FE_configuration.md).
 
@@ -56,8 +56,8 @@ Add the following dependencies to the **pom.xml** file:
     <version>1.0-SNAPSHOT</version>
 
     <properties>
-        <maven.compiler.source>8</maven.compiler.source>
-        <maven.compiler.target>8</maven.compiler.target>
+        <maven.compiler.source>17</maven.compiler.source>
+        <maven.compiler.target>17</maven.compiler.target>
     </properties>
 
     <dependencies>
