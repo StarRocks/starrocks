@@ -245,8 +245,7 @@ void run_partition_snapshot_task(const TPartitionSnapshotRequest& request, int64
                     LOG(ERROR) << "get pre tablet metadata failed, tablet_id: " << tablet_id
                                << ", status: " << meta_or_st.status().to_string();
                     partition_snapshot_rpc_ctx.handle_failure(meta_or_st.status().to_string(), tablet_ids);
-                    partition_snapshot_rpc_ctx.count_down();
-                    continue;
+                    break;
                 }
                 pre_tablet_metadata = std::move(meta_or_st.value());
             }
@@ -256,8 +255,7 @@ void run_partition_snapshot_task(const TPartitionSnapshotRequest& request, int64
                 LOG(ERROR) << "get new tablet metadata failed, tablet_id: " << tablet_id
                            << ", status: " << meta_or_st.status().to_string();
                 partition_snapshot_rpc_ctx.handle_failure(meta_or_st.status().to_string(), tablet_ids);
-                partition_snapshot_rpc_ctx.count_down();
-                continue;
+                break;
             }
             auto new_tablet_metadata = std::move(meta_or_st.value());
 
@@ -306,7 +304,7 @@ void run_partition_snapshot_task(const TPartitionSnapshotRequest& request, int64
             }
         }
 
-        if (node_req.tablet_snapshots_size() == 0) {
+        if (node_req.tablet_snapshots_size() == 0 || partition_snapshot_rpc_ctx.has_failure()) {
             partition_snapshot_rpc_ctx.count_down();
             continue;
         }
