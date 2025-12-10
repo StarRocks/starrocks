@@ -31,7 +31,7 @@ Status AggregateStreamingSinkOperator::prepare(RuntimeState* state) {
 
 Status AggregateStreamingSinkOperator::prepare_local_state(RuntimeState* state) {
     RETURN_IF_ERROR(Operator::prepare_local_state(state));
-    RETURN_IF_ERROR(_aggregator->prepare(state, _object_pool.get(), _unique_metrics.get()));
+    RETURN_IF_ERROR(_aggregator->prepare(state, _unique_metrics.get()));
     if (_aggregator->streaming_preaggregation_mode() == TStreamingPreaggregationMode::LIMITED_MEM) {
         _limited_mem_state.limited_memory_size = config::streaming_agg_limited_memory_size;
     }

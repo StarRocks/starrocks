@@ -27,8 +27,7 @@ Status AggregateDistinctBlockingSinkOperator::prepare(RuntimeState* state) {
 
 Status AggregateDistinctBlockingSinkOperator::prepare_local_state(RuntimeState* state) {
     RETURN_IF_ERROR(Operator::prepare_local_state(state));
-    // since prepare_local_state is executed in multi-thread, use a private owned pool to avoid Lock Contention
-    RETURN_IF_ERROR(_aggregator->prepare(state, _object_pool.get(), _unique_metrics.get()));
+    RETURN_IF_ERROR(_aggregator->prepare(state, _unique_metrics.get()));
     RETURN_IF_ERROR(_aggregator->open(state));
     return Status::OK();
 }

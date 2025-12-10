@@ -32,7 +32,6 @@ public:
               _shared_limit_countdown(shared_limit_countdown) {
         _aggregator->set_aggr_phase(AggrPhase2);
         _aggregator->ref();
-        _object_pool = std::make_unique<ObjectPool>();
     }
 
     ~AggregateDistinctBlockingSinkOperator() override = default;
@@ -58,7 +57,6 @@ protected:
     // - reffed at constructor() of both sink and source operator,
     // - unreffed at close() of both sink and source operator.
     AggregatorPtr _aggregator = nullptr;
-    std::unique_ptr<ObjectPool> _object_pool = nullptr;
 
 private:
     DECLARE_ONCE_DETECTOR(_set_finishing_once)
