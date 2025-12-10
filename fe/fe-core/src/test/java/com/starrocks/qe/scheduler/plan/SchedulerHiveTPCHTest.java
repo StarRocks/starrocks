@@ -30,8 +30,12 @@ public class SchedulerHiveTPCHTest extends SchedulerConnectorTestBase {
     }
 
     @BeforeEach
-    public void before() throws DdlException {
-        connectContext.changeCatalogDb("hive0.tpch");
+    public void before() {
+        try {
+            connectContext.changeCatalogDb("hive0.tpch");
+        } catch (DdlException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     @MethodSource("getTPCHTestFileNames")

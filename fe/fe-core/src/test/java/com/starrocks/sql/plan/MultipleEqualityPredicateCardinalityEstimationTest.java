@@ -34,7 +34,7 @@ import static java.lang.Double.POSITIVE_INFINITY;
 
 public class MultipleEqualityPredicateCardinalityEstimationTest extends PlanWithCostTestBase {
     @BeforeEach
-    public void before() throws Exception {
+    public void before() {
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
         OlapTable table = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("test_all_type");
 

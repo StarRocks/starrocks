@@ -41,6 +41,7 @@ import com.starrocks.sql.optimizer.LogicalPlanPrinter;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.StarRocksAssert;
+import com.starrocks.utframe.StarRocksTestBase;
 import com.starrocks.utframe.UtFrameUtils;
 import kotlin.text.Charsets;
 import org.apache.commons.collections4.CollectionUtils;
@@ -71,7 +72,7 @@ import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-public class PlanTestNoneDBBase {
+public class PlanTestNoneDBBase extends StarRocksTestBase {
     // use a unique dir so that it won't be conflict with other unit test which
     // may also start a Mocked Frontend
     public static ConnectContext connectContext;
@@ -532,7 +533,7 @@ public class PlanTestNoneDBBase {
     }
 
     public void runFileUnitTest(String filename) {
-        runFileUnitTest(filename, false);
+        runFileUnitTest(filename, true);
     }
 
     public void runFileUnitTest(String sql, String resultFile) {

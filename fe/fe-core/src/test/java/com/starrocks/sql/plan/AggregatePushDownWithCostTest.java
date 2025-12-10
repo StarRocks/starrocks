@@ -28,7 +28,7 @@ import org.junit.jupiter.api.Test;
 
 public class AggregatePushDownWithCostTest extends PlanWithCostTestBase {
     @BeforeEach
-    public void before() throws Exception {
+    public void before() {
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
         OlapTable t0 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t0");
         OlapTable t1 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t1");
