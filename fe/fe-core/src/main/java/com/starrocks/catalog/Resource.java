@@ -39,6 +39,7 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.proc.BaseProcResult;
+import com.starrocks.persist.AlterResourceInfo;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.sql.ast.CreateResourceStmt;
 
@@ -135,6 +136,13 @@ public abstract class Resource implements Writable {
      * | Name | ResourceType | Key | Value |
      */
     protected abstract void getProcNodeData(BaseProcResult result);
+
+    public AlterResourceInfo checkAlterProperties(Map<String, String> properties) throws DdlException {
+        throw new DdlException("Alter resource statement only support external hive/hudi/iceberg now");
+    }
+
+    public void alterProperties(AlterResourceInfo info) {
+    }
 
     @Override
     public String toString() {
