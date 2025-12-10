@@ -22,6 +22,7 @@
 #include "storage/rowset/rowset_meta_manager.h"
 #include "storage/task/engine_checksum_task.h"
 #include "storage/txn_manager.h"
+#include "testutil/sync_point.h"
 #include "util/failpoint/fail_point.h"
 
 namespace starrocks {
@@ -465,6 +466,65 @@ TEST_F(TabletUpdatesTest, test_pk_index_write_amp_score) {
     ASSERT_TRUE(_tablet->updates()->pk_index_major_compaction().ok());
     ASSERT_TRUE(_tablet->updates()->get_pk_index_write_amp_score() == 0);
     config::l0_max_mem_usage = old_l0_max_mem_usage;
+}
+
+TEST_F(TabletUpdatesTest, test_pk_index_major_compaction_reload_fail) {
+    srand(GetCurrentTimeMicros());
+    _tablet = create_tablet(rand(), rand());
+    _tablet->set_enable_persistent_index(true);
+    // write
+    const int N = 8000;
+    std::vector<int64_t> keys;
+    std::vector<int64_t> keys2;
+    std::vector<int64_t> keys3;
+    std::vector<int64_t> keys4;
+    for (int i = 0; i < N; i++) {
+        keys.push_back(i);
+        keys2.push_back(i + N);
+        keys3.push_back(i + N * 2);
+        keys4.push_back(i + N * 3);
+    }
+    const int64_t old_l0_max_mem_usage = config::l0_max_mem_usage;
+    // make sure generate l1
+    config::l0_max_mem_usage = 10;
+    auto rs0 = create_rowset(_tablet, keys);
+    ASSERT_TRUE(_tablet->rowset_commit(2, rs0).ok());
+    // read
+    ASSERT_EQ(N, read_tablet(_tablet, 2));
+    // check score
+    ASSERT_TRUE(_tablet->updates()->get_pk_index_write_amp_score() == 0);
+    ASSERT_EQ(2, _tablet->updates()->max_version());
+    auto rs1 = create_rowset(_tablet, keys2);
+    ASSERT_TRUE(_tablet->rowset_commit(3, rs1).ok());
+    ASSERT_EQ(3, _tablet->updates()->max_version());
+    auto rs2 = create_rowset(_tablet, keys3);
+    ASSERT_TRUE(_tablet->rowset_commit(4, rs2).ok());
+    ASSERT_EQ(4, _tablet->updates()->max_version());
+    auto rs3 = create_rowset(_tablet, keys4);
+    ASSERT_TRUE(_tablet->rowset_commit(5, rs3).ok());
+    ASSERT_EQ(5, _tablet->updates()->max_version());
+    // read
+    ASSERT_EQ(N * 4, read_tablet(_tablet, 5));
+    // check score
+    ASSERT_TRUE(_tablet->updates()->get_pk_index_write_amp_score() > 0);
+
+    // inject reload failure after major compaction writes new meta
+    TEST_ENABLE_ERROR_POINT("persistent_index_major_compaction_reload_fail",
+                            Status::InternalError("injected major compaction reload failure"));
+    SyncPoint::GetInstance()->EnableProcessing();
+    auto st = _tablet->updates()->pk_index_major_compaction();
+    ASSERT_FALSE(st.ok());
+    TEST_DISABLE_ERROR_POINT("persistent_index_major_compaction_reload_fail");
+    SyncPoint::GetInstance()->DisableProcessing();
+    config::l0_max_mem_usage = old_l0_max_mem_usage;
+
+    // verify primary index is marked need_rebuild
+    auto manager = StorageEngine::instance()->update_manager();
+    auto index_entry = manager->index_cache().get(_tablet->tablet_id());
+    ASSERT_NE(index_entry, nullptr);
+    auto& index = index_entry->value();
+    ASSERT_TRUE(index.need_rebuild());
+    manager->index_cache().release(index_entry);
 }
 
 TEST_F(TabletUpdatesTest, writeread_with_sort_key) {
