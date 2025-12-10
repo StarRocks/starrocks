@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.plan;
 
+<<<<<<< HEAD
 import com.starrocks.common.Config;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
@@ -37,6 +38,54 @@ public class ExplainTest extends PlanTestBase {
         } finally {
             Config.query_detail_explain_level = originalLevel;
         }
+=======
+import com.starrocks.sql.Explain;
+import org.junit.jupiter.api.Test;
+
+public class ExplainTest extends PlanTestBase {
+    @Test
+    public void testExplain() throws Exception {
+        String sql = "SELECT DISTINCT t0.v1 FROM t0 LEFT JOIN t1 ON t0.v1 = t1.v4";
+        ExecPlan execPlan = getExecPlan(sql);
+        String plan1 = Explain.toString(execPlan.getPhysicalPlan(), execPlan.getOutputColumns());
+        System.out.println("plan1" + plan1);
+        assertContains(plan1, "- Output => [1:v1]\n"
+                + "    - AGGREGATE(GLOBAL) [1:v1]\n"
+                + "            Estimates: {row: 1, cpu: ?, memory: ?, network: ?, cost: 27.6}\n"
+                + "        - EXCHANGE(SHUFFLE) [1]\n"
+                + "                Estimates: {row: 1, cpu: ?, memory: ?, network: ?, cost: 7.6}\n"
+                + "            - AGGREGATE(LOCAL) [1:v1]\n"
+                + "                    Estimates: {row: 1, cpu: ?, memory: ?, network: ?, cost: 6.0}\n"
+                + "                - SCAN [t0] => [1:v1]\n"
+                + "                        Estimates: {row: 1, cpu: ?, memory: ?, network: ?, cost: 4.0}\n"
+                + "                        partitionRatio: 0/1, tabletRatio: 0/0");
+
+        Explain explain = new Explain(true, true, " ", " |");
+        String plan2 = explain.print(execPlan.getPhysicalPlan(), execPlan.getOutputColumns());
+        System.out.println("plan2" + plan2);
+        assertContains(plan2, "- Output => [1:v1]\n"
+                + " - AGGREGATE(GLOBAL) [1:v1] {rows: 1}\n"
+                + "  - EXCHANGE(SHUFFLE) [1] {rows: 1}\n"
+                + "   - AGGREGATE(LOCAL) [1:v1] {rows: 1}\n"
+                + "    - SCAN [t0] => [1:v1] {rows: 1}\n"
+                + "      |partitionRatio: 0/1, tabletRatio: 0/0");
+    }
+
+    @Test
+    public void testDesensitizeExplain() throws Exception {
+        connectContext.getSessionVariable().setEnableDesensitizeExplain(true);
+        String sql = "SELECT DISTINCT t0.v1 FROM t0 LEFT JOIN t1 ON t0.v1 = t1.v4 WHERE t0.v1 > 1000";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "PREDICATES: 1: v1 > ?\n");
+
+        sql = "SELECT DISTINCT t0.v1 FROM t0 LEFT JOIN t1 ON t0.v1 = t1.v4 and t0.v2 + t1.v5 > 1000";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "other join predicates: 2: v2 + 5: v5 > ?");
+
+        sql = "SELECT MIN(pow(t0.v1, 2)) FROM t0";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "min(pow(CAST(1: v1 AS DOUBLE), ?))");
+>>>>>>> a95604dfd8 ([BugFix] Revert 63265 and add another config (#66542))
 
     }
 }

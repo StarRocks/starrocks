@@ -22,7 +22,11 @@ import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
+<<<<<<< HEAD
 import com.starrocks.common.Config;
+=======
+import com.starrocks.scheduler.mv.pct.MVPCTBasedRefreshProcessor;
+>>>>>>> a95604dfd8 ([BugFix] Revert 63265 and add another config (#66542))
 import com.starrocks.scheduler.persist.MVTaskRunExtraMessage;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
@@ -60,7 +64,6 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
 
     @BeforeAll
     public static void beforeClass() throws Exception {
-        Config.query_detail_explain_level = "NORMAL";
         MVTestBase.beforeClass();
         // table whose partitions have multiple values
         T1 = "CREATE TABLE t1 (\n" +
