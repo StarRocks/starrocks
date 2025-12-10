@@ -589,6 +589,9 @@ public class OperationType {
     @IgnorableOnReplayFailed
     public static final short OP_MODIFY_DICTIONARY_MGR = 13402;
 
+    @IgnorableOnReplayFailed
+    public static final short OP_MODIFY_DICTIONARY_MGR_V2 = 13403;
+
     // Replication job
     @IgnorableOnReplayFailed
     public static final short OP_REPLICATION_JOB = 13500;

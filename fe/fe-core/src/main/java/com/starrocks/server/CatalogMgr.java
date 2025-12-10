@@ -100,8 +100,6 @@ public class CatalogMgr {
     // please keep connector and catalog create together, they need keep in consistent asap.
     public void createCatalog(String type, String catalogName, String comment, Map<String, String> properties)
             throws DdlException {
-        CatalogConnector connector = null;
-        Catalog catalog = null;
         writeLock();
         try {
             if (Strings.isNullOrEmpty(type)) {
@@ -111,9 +109,7 @@ public class CatalogMgr {
             Preconditions.checkState(!catalogs.containsKey(catalogName), "Catalog '%s' already exists", catalogName);
 
             try {
-                Preconditions.checkState(!catalogs.containsKey(catalogName), "Catalog '%s' already exists", catalogName);
-
-                connector = connectorMgr.createConnector(
+                CatalogConnector connector = connectorMgr.createHiddenConnector(
                         new ConnectorContext(catalogName, type, properties), false);
                 if (null == connector) {
                     LOG.error("{} connector [{}] create failed", type, catalogName);
@@ -122,65 +118,28 @@ public class CatalogMgr {
                 long id = isResourceMappingCatalog(catalogName) ?
                         ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt() :
                         GlobalStateMgr.getCurrentState().getNextId();
-                catalog = new ExternalCatalog(id, catalogName, comment, properties);
-                catalogs.put(catalogName, catalog);
+                Catalog catalog = new ExternalCatalog(id, catalogName, comment, properties);
 
                 if (!isResourceMappingCatalog(catalogName)) {
-                    GlobalStateMgr.getCurrentState().getEditLog().logCreateCatalog(catalog);
+                    try {
+                        GlobalStateMgr.getCurrentState().getEditLog().logCreateCatalog(catalog, wal -> {
+                            // add connector after log create catalog
+                            catalogs.put(catalogName, catalog);
+                            connectorMgr.addConnector(catalogName, connector);
+                        });
+                    } catch (Exception e) {
+                        LOG.warn("create catalog failed, shutdown new connector", e);
+                        connector.shutdown();
+                        throw e;
+                    }
+                } else {
+                    catalogs.put(catalogName, catalog);
+                    connectorMgr.addConnector(catalogName, connector);
                 }
             } catch (StarRocksConnectorException e) {
                 LOG.error("connector create failed. catalog [{}] ", catalogName, e);
                 throw new DdlException(String.format("connector create failed {%s}", e.getMessage()));
             }
-        } catch (Exception e) {
-            if (connector != null && connectorMgr.connectorExists(catalogName)) {
-                connectorMgr.removeConnector(catalogName);
-            }
-
-            if (catalog != null) {
-                catalogs.remove(catalogName);
-            }
-
-            throw e;
-        } finally {
-            writeUnLock();
-        }
-    }
-
-    private void reCreatCatalog(Catalog catalog, Map<String, String> alterProperties, boolean isReplay) throws DdlException {
-        String catalogName = catalog.getName();
-        String type = catalog.getType();
-        CatalogConnector newConnector = null;
-
-        writeLock();
-        try {
-            Map<String, String> newProperties = new HashMap<>(catalog.getConfig().size() + alterProperties.size());
-            newProperties.putAll(catalog.getConfig());
-            newProperties.putAll(alterProperties);
-
-            LOG.info("Recreate catalog [{}] with properties [{}]", catalogName, newProperties);
-
-            newConnector = connectorMgr.createHiddenConnector(
-                    new ConnectorContext(catalogName, type, newProperties), isReplay);
-            if (null == newConnector) {
-                throw new DdlException("Create connector failed");
-            }
-
-            // drop old connector
-            connectorMgr.removeConnector(catalogName);
-
-            // replace old connector with new connector
-            connectorMgr.addConnector(catalogName, newConnector);
-
-            catalog.getConfig().putAll(alterProperties);
-        } catch (Exception e) {
-            LOG.error("Recreate catalog failed. catalog [{}] ", catalogName, e);
-
-            if (newConnector != null) {
-                newConnector.shutdown();
-            }
-
-            throw new DdlException(String.format("Alter catalog failed, msg: [%s]", e.getMessage()), e);
         } finally {
             writeUnLock();
         }
@@ -207,12 +166,17 @@ public class CatalogMgr {
 
         writeLock();
         try {
-            connectorMgr.removeConnector(catalogName);
-            Authorizer.getInstance().removeAccessControl(catalogName);
-            catalogs.remove(catalogName);
             if (!isResourceMappingCatalog(catalogName)) {
                 DropCatalogLog dropCatalogLog = new DropCatalogLog(catalogName);
-                GlobalStateMgr.getCurrentState().getEditLog().logDropCatalog(dropCatalogLog);
+                GlobalStateMgr.getCurrentState().getEditLog().logDropCatalog(dropCatalogLog, wal -> {
+                    connectorMgr.removeConnector(catalogName);
+                    Authorizer.getInstance().removeAccessControl(catalogName);
+                    catalogs.remove(catalogName);
+                });
+            } else {
+                connectorMgr.removeConnector(catalogName);
+                Authorizer.getInstance().removeAccessControl(catalogName);
+                catalogs.remove(catalogName);
             }
         } finally {
             writeUnLock();
@@ -230,22 +194,42 @@ public class CatalogMgr {
 
             if (stmt.getAlterClause() instanceof ModifyTablePropertiesClause) {
                 Map<String, String> properties = ((ModifyTablePropertiesClause) stmt.getAlterClause()).getProperties();
-                alterCatalog(catalog, properties, false);
+                CatalogConnector newConnector = createNewConnector(catalog, properties, false);
+                if (newConnector == null) {
+                    return;
+                }
 
-                AlterCatalogLog alterCatalogLog = new AlterCatalogLog(catalogName, properties);
-                GlobalStateMgr.getCurrentState().getEditLog().logAlterCatalog(alterCatalogLog);
+                try {
+                    AlterCatalogLog alterCatalogLog = new AlterCatalogLog(catalogName, properties);
+                    GlobalStateMgr.getCurrentState().getEditLog().logAlterCatalog(alterCatalogLog,
+                            wal -> alterCatalogInternal(catalog, newConnector, properties));
+                    LOG.info("Recreate catalog [{}] with properties [{}]", catalogName, catalog.getConfig());
+                } catch (Exception e) {
+                    LOG.warn("alter catalog failed, shutdown new connector", e);
+                    newConnector.shutdown();
+                    throw e;
+                }
             }
         } finally {
             writeUnLock();
         }
     }
 
-    private void alterCatalog(Catalog catalog, Map<String, String> properties, boolean isReplay) throws DdlException {
+    private void alterCatalogInternal(Catalog catalog, CatalogConnector newConnector, Map<String, String> properties) {
+        String catalogName = catalog.getName();
+        // drop old connector
+        connectorMgr.removeConnector(catalogName);
+        // replace old connector with new connector
+        connectorMgr.addConnector(catalogName, newConnector);
+        catalog.getConfig().putAll(properties);
+    }
+
+    private CatalogConnector createNewConnector(Catalog catalog, Map<String, String> properties, boolean isReplay)
+            throws DdlException {
         Map<String, String> alterProperties = new HashMap<>(properties.size());
         Map<String, String> oldProperties = catalog.getConfig();
-
         for (String confName : properties.keySet()) {
-            String oldVal = oldProperties.get(confName);
+            String oldVal = catalog.getConfig().get(confName);
             String newVal = properties.get(confName);
             if (!oldProperties.containsKey(confName) || !Objects.equals(oldVal, newVal)) {
                 alterProperties.put(confName, newVal);
@@ -253,10 +237,19 @@ public class CatalogMgr {
         }
 
         if (alterProperties.isEmpty()) {
-            return;
+            return null;
         }
 
-        reCreatCatalog(catalog, alterProperties, isReplay);
+        Map<String, String> newProperties = new HashMap<>(catalog.getConfig().size() + alterProperties.size());
+        newProperties.putAll(catalog.getConfig());
+        newProperties.putAll(alterProperties);
+        CatalogConnector newConnector = connectorMgr.createHiddenConnector(
+                new ConnectorContext(catalog.getName(), catalog.getType(), newProperties), isReplay);
+        if (null == newConnector) {
+            throw new DdlException("Create connector failed");
+        }
+
+        return newConnector;
     }
 
     // TODO @caneGuy we should put internal catalog into catalogmgr
@@ -377,7 +370,13 @@ public class CatalogMgr {
             Map<String, String> properties = log.getProperties();
             Catalog catalog = catalogs.get(catalogName);
 
-            alterCatalog(catalog, properties, true);
+            CatalogConnector newConnector = createNewConnector(catalog, properties, true);
+            if (newConnector == null) {
+                return;
+            }
+
+            alterCatalogInternal(catalog, newConnector, properties);
+            LOG.info("Recreate catalog [{}] with properties [{}] in replay", catalog.getName(), catalog.getConfig());
         } finally {
             writeUnLock();
         }
