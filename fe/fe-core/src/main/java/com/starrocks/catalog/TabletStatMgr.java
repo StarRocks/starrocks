@@ -96,16 +96,6 @@ public class TabletStatMgr extends FrontendDaemon {
         return lastWorkTimestamp;
     }
 
-<<<<<<< HEAD
-=======
-    public boolean workTimeIsMustAfter(LocalDateTime time) {
-        if (lastWorkTimestamp.isEqual(LocalDateTime.MIN)) {
-            return false;
-        }
-        return lastWorkTimestamp.minusSeconds(Config.tablet_stat_update_interval_second * 2).isAfter(time);
-    }
-
->>>>>>> 6cfb51b709 ([Enhancement] enable rewrite simple agg to meta scan by default (#64698))
     @Override
     protected void runAfterCatalogReady() {
         // update interval
