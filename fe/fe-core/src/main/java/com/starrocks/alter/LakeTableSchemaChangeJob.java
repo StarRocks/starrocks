@@ -1025,8 +1025,13 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
 
         for (Column column : table.getColumns()) {
+<<<<<<< HEAD
             if (Type.VARCHAR.equals(column.getType())) {
                 IDictManager.getInstance().removeGlobalDict(table.getId(), column.getColumnId());
+=======
+            if (VarcharType.VARCHAR.equals(column.getType())) {
+                IDictManager.getInstance().removeGlobalDict(table, column.getColumnId());
+>>>>>>> f0cf44e74a ([Enhancement] Add FE TableSchemaService for Fast Schema Evolution in shared-data (#66142))
             }
         }
 

@@ -51,6 +51,8 @@ import com.starrocks.sql.ast.ListPartitionDesc;
 import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.SingleItemListPartitionDesc;
 import com.starrocks.thrift.TAuthInfo;
+import com.starrocks.thrift.TBatchGetTableSchemaRequest;
+import com.starrocks.thrift.TBatchGetTableSchemaResponse;
 import com.starrocks.thrift.TColumnDef;
 import com.starrocks.thrift.TCreatePartitionRequest;
 import com.starrocks.thrift.TCreatePartitionResult;
@@ -62,6 +64,8 @@ import com.starrocks.thrift.TGetDictQueryParamRequest;
 import com.starrocks.thrift.TGetDictQueryParamResponse;
 import com.starrocks.thrift.TGetLoadTxnStatusRequest;
 import com.starrocks.thrift.TGetLoadTxnStatusResult;
+import com.starrocks.thrift.TGetTableSchemaRequest;
+import com.starrocks.thrift.TGetTableSchemaResponse;
 import com.starrocks.thrift.TGetTablesInfoRequest;
 import com.starrocks.thrift.TGetTablesInfoResponse;
 import com.starrocks.thrift.TGetTablesParams;
@@ -138,8 +142,10 @@ import static com.starrocks.thrift.TFileType.FILE_STREAM;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.same;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.mockStatic;
 import static org.mockito.Mockito.spy;
 
 public class FrontendServiceImplTest {
@@ -1738,4 +1744,114 @@ public class FrontendServiceImplTest {
             Assertions.assertEquals(olapTable.isTempPartition(partitionId), meta.isIs_temp());
         }
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testRefreshConnectionsSuccess() throws TException {
+        ExecuteEnv.setup();
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TRefreshConnectionsRequest request = new TRefreshConnectionsRequest();
+        request.setForce(false);
+        TRefreshConnectionsResponse response = impl.refreshConnections(request);
+        Assertions.assertEquals(TStatusCode.OK, response.getStatus().getStatus_code());
+    }
+
+    @Test
+    public void testRefreshConnectionsSuccessWithForce() throws TException {
+        ExecuteEnv.setup();
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TRefreshConnectionsRequest request = new TRefreshConnectionsRequest();
+        request.setForce(true);
+        TRefreshConnectionsResponse response = impl.refreshConnections(request);
+        Assertions.assertEquals(TStatusCode.OK, response.getStatus().getStatus_code());
+    }
+
+    @Test
+    public void testRefreshConnectionsWithException() throws TException {
+        new MockUp<com.starrocks.qe.VariableMgr>() {
+            @Mock
+            public void refreshConnectionsInternal(boolean force) {
+                throw new RuntimeException("Test exception");
+            }
+        };
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TRefreshConnectionsRequest request = new TRefreshConnectionsRequest();
+        request.setForce(false);
+        TRefreshConnectionsResponse response = impl.refreshConnections(request);
+        Assertions.assertEquals(TStatusCode.INTERNAL_ERROR, response.getStatus().getStatus_code());
+        Assertions.assertNotNull(response.getStatus().getError_msgs());
+        Assertions.assertFalse(response.getStatus().getError_msgs().isEmpty());
+    }
+
+    @Test
+    public void testGetTableSchema() {
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+
+        // Test with empty request list
+        TBatchGetTableSchemaRequest emptyRequest = new TBatchGetTableSchemaRequest();
+        TBatchGetTableSchemaResponse emptyResponse = impl.getTableSchema(emptyRequest);
+        Assertions.assertNotNull(emptyResponse);
+        Assertions.assertFalse(emptyResponse.isSetResponses());
+        Assertions.assertEquals(0, emptyResponse.getResponsesSize());
+
+        // Test with single request
+        try (org.mockito.MockedStatic<TableSchemaService> schemaService = mockStatic(TableSchemaService.class)) {
+            TGetTableSchemaRequest request1 = new TGetTableSchemaRequest();
+            TGetTableSchemaResponse response1 = new TGetTableSchemaResponse();
+            TStatus status1 = new TStatus(TStatusCode.OK);
+            response1.setStatus(status1);
+
+            schemaService.when(() -> TableSchemaService.getTableSchema(any(TGetTableSchemaRequest.class)))
+                    .thenReturn(response1);
+
+            TBatchGetTableSchemaRequest batchRequest = new TBatchGetTableSchemaRequest();
+            batchRequest.addToRequests(request1);
+            TBatchGetTableSchemaResponse batchResponse = impl.getTableSchema(batchRequest);
+
+            Assertions.assertNotNull(batchResponse);
+            Assertions.assertTrue(batchResponse.isSetStatus());
+            Assertions.assertEquals(TStatusCode.OK, batchResponse.getStatus().getStatus_code());
+            Assertions.assertNotNull(batchResponse.getResponses());
+            Assertions.assertEquals(1, batchResponse.getResponsesSize());
+            Assertions.assertEquals(TStatusCode.OK, batchResponse.getResponses().get(0).getStatus().getStatus_code());
+
+            schemaService.verify(() -> TableSchemaService.getTableSchema(any(TGetTableSchemaRequest.class)));
+        }
+
+        // Test with multiple requests
+        try (org.mockito.MockedStatic<TableSchemaService> schemaService = mockStatic(TableSchemaService.class)) {
+            TGetTableSchemaRequest request1 = new TGetTableSchemaRequest();
+            TGetTableSchemaRequest request2 = new TGetTableSchemaRequest();
+            TGetTableSchemaResponse response1 = new TGetTableSchemaResponse();
+            TGetTableSchemaResponse response2 = new TGetTableSchemaResponse();
+            TStatus status1 = new TStatus(TStatusCode.OK);
+            TStatus status2 = new TStatus(TStatusCode.TABLE_NOT_EXIST);
+            response1.setStatus(status1);
+            response2.setStatus(status2);
+
+            schemaService.when(() -> TableSchemaService.getTableSchema(same(request1)))
+                    .thenReturn(response1);
+            schemaService.when(() -> TableSchemaService.getTableSchema(same(request2)))
+                    .thenReturn(response2);
+
+            TBatchGetTableSchemaRequest batchRequest = new TBatchGetTableSchemaRequest();
+            batchRequest.addToRequests(request1);
+            batchRequest.addToRequests(request2);
+            TBatchGetTableSchemaResponse batchResponse = impl.getTableSchema(batchRequest);
+
+            Assertions.assertNotNull(batchResponse);
+            Assertions.assertTrue(batchResponse.isSetStatus());
+            Assertions.assertEquals(TStatusCode.OK, batchResponse.getStatus().getStatus_code());
+            Assertions.assertNotNull(batchResponse.getResponses());
+            Assertions.assertEquals(2, batchResponse.getResponsesSize());
+            Assertions.assertEquals(TStatusCode.OK, batchResponse.getResponses().get(0).getStatus().getStatus_code());
+            Assertions.assertEquals(TStatusCode.TABLE_NOT_EXIST,
+                    batchResponse.getResponses().get(1).getStatus().getStatus_code());
+
+            schemaService.verify(() -> TableSchemaService.getTableSchema(same(request1)));
+            schemaService.verify(() -> TableSchemaService.getTableSchema(same(request2)));
+        }
+    }
+>>>>>>> f0cf44e74a ([Enhancement] Add FE TableSchemaService for Fast Schema Evolution in shared-data (#66142))
 }

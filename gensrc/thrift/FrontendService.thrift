@@ -2195,6 +2195,66 @@ struct TTabletReshardJobsResponse {
     2: optional list<TTabletReshardJobsItem> items;
 }
 
+<<<<<<< HEAD
+=======
+struct TFeThreadInfo {
+    1: optional string fe_address;
+    2: optional i64 thread_id;
+    3: optional string thread_name;
+    4: optional string thread_state;
+    5: optional bool is_daemon;
+    6: optional i32 priority;
+    7: optional i64 cpu_time_ms;
+    8: optional i64 user_time_ms;
+}
+
+struct TGetFeThreadsRequest {
+    1: optional TAuthInfo auth_info;
+}
+
+struct TGetFeThreadsResponse {
+    1: optional Status.TStatus status;
+    2: optional list<TFeThreadInfo> threads;
+}
+
+struct TRefreshConnectionsRequest {
+    1: optional bool force;
+}
+
+struct TRefreshConnectionsResponse {
+    1: optional Status.TStatus status;
+}
+
+enum TTableSchemaRequestSource {
+    SCAN = 0,
+    LOAD = 1
+}
+
+struct TGetTableSchemaRequest {
+    1: optional PlanNodes.TTableSchemaMeta schema_meta;
+    2: optional TTableSchemaRequestSource source;
+    3: optional i64 tablet_id;
+    // Valid if request_source is SCAN
+    4: optional Types.TUniqueId query_id;
+    // Valid if request_source is LOAD
+    5: optional i64 txn_id;
+}
+
+struct TGetTableSchemaResponse {
+    1: optional Status.TStatus status;
+    2: optional AgentService.TTabletSchema schema;
+}
+
+struct TBatchGetTableSchemaRequest {
+    1: optional list<TGetTableSchemaRequest> requests;
+}
+
+struct TBatchGetTableSchemaResponse {
+    1: optional Status.TStatus status;
+    2: optional list<TGetTableSchemaResponse> responses;
+}
+
+>>>>>>> f0cf44e74a ([Enhancement] Add FE TableSchemaService for Fast Schema Evolution in shared-data (#66142))
 service FrontendService {
     TGetDbsResult getDbNames(1:TGetDbsParams params)
     TGetTablesResult getTableNames(1:TGetTablesParams params)
@@ -2339,5 +2399,12 @@ service FrontendService {
     TUpdateFailPointResponse updateFailPointStatus(1: TUpdateFailPointRequest request)
 
     TTabletReshardJobsResponse getTabletReshardJobsInfo(1: TTabletReshardJobsRequest request)
+<<<<<<< HEAD
+=======
+
+    TRefreshConnectionsResponse refreshConnections(1: TRefreshConnectionsRequest request)
+
+    TBatchGetTableSchemaResponse getTableSchema(1: TBatchGetTableSchemaRequest request)
+>>>>>>> f0cf44e74a ([Enhancement] Add FE TableSchemaService for Fast Schema Evolution in shared-data (#66142))
 }
 
