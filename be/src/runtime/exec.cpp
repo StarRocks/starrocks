@@ -21,6 +21,7 @@
 
 #include <cerrno>
 #include <chrono>
+#include <csignal>
 #include <cstring>
 #include <string>
 #include <vector>
