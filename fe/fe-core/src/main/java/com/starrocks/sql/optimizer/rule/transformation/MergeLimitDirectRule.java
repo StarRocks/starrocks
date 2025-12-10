@@ -56,6 +56,7 @@ public class MergeLimitDirectRule extends TransformationRule {
             .add(OperatorType.LOGICAL_TABLE_FUNCTION)
             .add(OperatorType.LOGICAL_TABLE_FUNCTION_TABLE_SCAN)
             .add(OperatorType.LOGICAL_CTE_CONSUME)
+            .add(OperatorType.LOGICAL_REDIS_SCAN)
             .build();
 
     public MergeLimitDirectRule() {

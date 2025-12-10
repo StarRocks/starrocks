@@ -344,7 +344,8 @@ set(EXEC_FILES
     stream/aggregate/agg_group_state.cpp
     stream/aggregate/stream_aggregator.cpp
     stream/aggregate/stream_aggregate_operator.cpp
-    stream/stream_aggregate_node.cpp)
+    stream/stream_aggregate_node.cpp
+    redis_scanner.cpp)
 
 add_library(join_hash_map_inst_objs OBJECT
     join/join_hash_map_mapping_inst.cpp

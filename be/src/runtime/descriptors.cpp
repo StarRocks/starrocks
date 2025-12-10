@@ -558,6 +558,22 @@ std::string JDBCTableDescriptor::debug_string() const {
     return out.str();
 }
 
+RedisTableDescriptor::RedisTableDescriptor(const TTableDescriptor& tdesc)
+        : TableDescriptor(tdesc),
+          _redis_url(tdesc.redisTable.redis_url),
+          _redis_user(tdesc.redisTable.redis_user),
+          _db_name(tdesc.dbName),
+          _redis_passwd(tdesc.redisTable.redis_passwd),
+          _value_data_format(tdesc.redisTable.value_data_format),
+          _table_description_dir(tdesc.redisTable.table_description_dir) {}
+
+std::string RedisTableDescriptor::debug_string() const {
+    std::stringstream out;
+    out << "RedisTable(" << TableDescriptor::debug_string() << " redis_url=" << _redis_url
+        << " redis_user=" << _redis_user << " table_description_dir=" << _table_description_dir << "}";
+    return out.str();
+}
+
 TupleDescriptor::TupleDescriptor(const TTupleDescriptor& tdesc)
         : _id(tdesc.id), _table_desc(nullptr), _byte_size(tdesc.byteSize) {}
 
@@ -784,6 +800,10 @@ Status DescriptorTbl::create(RuntimeState* state, ObjectPool* pool, const TDescr
         }
         case TTableType::KUDU_TABLE: {
             desc = pool->add(new KuduTableDescriptor(tdesc, pool));
+            break;
+        }
+        case TTableType::REDIS_TABLE: {
+            desc = pool->add(new RedisTableDescriptor(tdesc));
             break;
         }
         default:

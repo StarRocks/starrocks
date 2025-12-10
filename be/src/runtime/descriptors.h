@@ -450,6 +450,25 @@ private:
     std::string _jdbc_passwd;
 };
 
+class RedisTableDescriptor : public TableDescriptor {
+public:
+    RedisTableDescriptor(const TTableDescriptor& tdesc);
+    std::string debug_string() const override;
+    const std::string redis_url() const { return _redis_url; }
+    const std::string redis_user() const { return _redis_user; }
+    const std::string redis_passwd() const { return _redis_passwd; }
+    const std::string value_data_format() const { return _value_data_format; }
+    const std::string table_description_dir() const { return _table_description_dir; }
+
+private:
+    std::string _redis_url;
+    std::string _redis_user;
+    std::string _db_name;
+    std::string _redis_passwd;
+    std::string _value_data_format;
+    std::string _table_description_dir;
+};
+
 class TupleDescriptor {
 public:
     int byte_size() const { return _byte_size; }

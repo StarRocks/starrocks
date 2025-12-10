@@ -85,7 +85,8 @@ enum TPlanNodeType {
   STREAM_AGG_NODE,
   LAKE_META_SCAN_NODE,
   CAPTURE_VERSION_NODE,
-  RAW_VALUES_NODE
+  RAW_VALUES_NODE,
+  REDIS_SCAN_NODE
 }
 
 // phases of an execution node
@@ -653,6 +654,15 @@ struct TJDBCScanNode {
   3: optional list<string> columns
   4: optional list<string> filters
   5: optional i64 limit
+}
+
+struct TRedisScanNode {
+  1: optional Types.TTupleId tuple_id
+  2: optional string table_name
+  3: optional list<string> columns
+  4: optional list<string> filters
+  5: optional i64 limit
+  6: optional map<string,string> properties
 }
 
 // If you find yourself changing this struct, see also TOlapScanNode
@@ -1446,6 +1456,9 @@ struct TPlanNode {
   63: optional TLakeScanNode lake_scan_node;
 
   64: optional TNestLoopJoinNode nestloop_join_node;
+
+  // Scan node for redis
+  65: optional TRedisScanNode redis_scan_node;
 
   // 70 ~ 80 are reserved for stream operators
   // Stream plan
