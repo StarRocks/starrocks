@@ -5,6 +5,9 @@ create database db_${uuid0};
 use db_${uuid0};
 -- result:
 -- !result
+set enable_materialized_view_agg_pushdown_rewrite=true;
+-- result:
+-- !result
 CREATE TABLE `dim_region` (
   `region_id` bigint(20) NULL COMMENT "",
   `region_name` varchar(255) NULL COMMENT "",
