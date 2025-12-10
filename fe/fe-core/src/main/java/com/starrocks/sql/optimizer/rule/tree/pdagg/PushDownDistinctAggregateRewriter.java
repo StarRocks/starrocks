@@ -275,7 +275,7 @@ public class PushDownDistinctAggregateRewriter {
             LogicalScanOperator scanOp = optExpression.getOp().cast();
             ColumnRefSet scanOutputColRefSet = new ColumnRefSet(scanOp.getOutputColumns());
             Map<CallOperator, ColumnRefOperator> uniqueAggregations = Maps.newHashMap();
-            Map<ColumnRefOperator, ColumnRefOperator> remapping = Maps.newHashMap();
+            Map<ColumnRefOperator, ScalarOperator> remapping = Maps.newHashMap();
             Preconditions.checkArgument(scanOutputColRefSet.containsAll(new ColumnRefSet(groupBys)));
 
             for (Map.Entry<ColumnRefOperator, CallOperator> entry : ctx.aggregations.entrySet()) {
