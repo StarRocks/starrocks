@@ -26,7 +26,11 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.AggregatedMaterializedViewPushDownRewriter;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.thrift.TExplainLevel;
+<<<<<<< HEAD
 import com.starrocks.utframe.StarRocksTestBase;
+=======
+import com.starrocks.utframe.UtFrameUtils;
+>>>>>>> 81737321c4 ([Enhancement] Support push down group by expressions and mv rewrite (#66507))
 import mockit.Mock;
 import mockit.MockUp;
 import org.apache.commons.lang3.StringUtils;
@@ -1233,5 +1237,144 @@ public class MaterializedViewAggPushDownRewriteTest extends MaterializedViewTest
                         "bitmap_union(43: bitmap_agg(l.LO_REVENUE + 1))\n" +
                         "  |  group by: 57: cast, 39: LO_ORDERDATE");
         starRocksAssert.dropMaterializedView("mv1");
+    }
+
+    @Test
+    public void testAggPushDownFailWithGroupByFunc0() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE fact_event_requests\n" +
+                "(\n" +
+                "    event_date                DATE                        NOT NULL,\n" +
+                "    request_id                VARCHAR(64)                NOT NULL,\n" +
+                "    event_time                DATETIME                  NOT NULL, \n" +
+                "    event_status              VARCHAR(32)                       ,\n" +
+                "    region_id                 INT                               ,\n" +
+                "    site_id                   INT                               ,\n" +
+                "    event_type                VARCHAR(16)                       ,\n" +
+                "    location_path             ARRAY<VARCHAR(12)>               ,\n" +
+                "    channel                   VARCHAR(8)                        \n" +
+                ")\n" +
+                "ENGINE = olap\n" +
+                "PARTITION BY RANGE (event_date)\n" +
+                "(\n" +
+                "    START (\"20250101\") END (\"20260101\") EVERY (INTERVAL 1 DAY)\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(channel, request_id) BUCKETS 16\n" +
+                "PROPERTIES\n" +
+                "(\n" +
+                "    \"replication_num\" = \"1\"\n" +
+                ");\n");
+        starRocksAssert.withTable("CREATE TABLE dim_location_area\n" +
+                "(\n" +
+                "    geohash              VARCHAR(12) NOT NULL,\n" +
+                "    area_name            VARCHAR(64)        \n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(geohash) BUCKETS 8\n" +
+                "PROPERTIES\n" +
+                "(\n" +
+                "    \"replication_num\" = \"1\"\n" +
+                ");");
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv_hourly_events\n" +
+                "DISTRIBUTED BY RANDOM\n" +
+                "Partition by (event_date)\n" +
+                "AS\n" +
+                "SELECT\n" +
+                "    event_date,\n" +
+                "    DATE_TRUNC('hour', event_time) as metric_time_1h,\n" +
+                "    region_id,\n" +
+                "    site_id,\n" +
+                "    channel,\n" +
+                "    location_path[cardinality(location_path)] as last_geohash,\n" +
+                "    COUNT(request_id) as total_requests\n" +
+                "FROM fact_event_requests  \n" +
+                "WHERE event_type = 'TYPE_A'\n" +
+                "GROUP BY event_date, metric_time_1h, region_id, site_id, channel, last_geohash;\n");
+        UtFrameUtils.mockTimelinessForAsyncMVTest(connectContext);
+        {
+            String query = "SELECT " +
+                    "    DATE_TRUNC('hour', event_time) as metric_time_1h,\n" +
+                    "    location_path[cardinality(location_path)] as last_geohash,\n" +
+                    "    COUNT(request_id) as total_requests\n" +
+                    "FROM fact_event_requests  \n" +
+                    "WHERE event_type = 'TYPE_A'\n" +
+                    "GROUP BY metric_time_1h, last_geohash;";
+            String plan = getFragmentPlan(query);
+            System.out.println(plan);
+            PlanTestBase.assertContains(plan, "mv_hourly_events");
+        }
+    }
+
+    @Test
+    public void testAggPushDownFailWithGroupByFunc2() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE fact_event_requests\n" +
+                "(\n" +
+                "    event_date                DATE                        NOT NULL,\n" +
+                "    request_id                VARCHAR(64)                NOT NULL,\n" +
+                "    event_time                DATETIME                  NOT NULL, \n" +
+                "    event_status              VARCHAR(32)                       ,\n" +
+                "    region_id                 INT                               ,\n" +
+                "    site_id                   INT                               ,\n" +
+                "    event_type                VARCHAR(16)                       ,\n" +
+                "    location_path             ARRAY<VARCHAR(12)>               ,\n" +
+                "    channel                   VARCHAR(8)                        \n" +
+                ")\n" +
+                "ENGINE = olap\n" +
+                "PARTITION BY RANGE (event_date)\n" +
+                "(\n" +
+                "    START (\"20250101\") END (\"20260101\") EVERY (INTERVAL 1 DAY)\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(channel, request_id) BUCKETS 16\n" +
+                "PROPERTIES\n" +
+                "(\n" +
+                "    \"replication_num\" = \"1\"\n" +
+                ");\n");
+        starRocksAssert.withTable("CREATE TABLE dim_location_area\n" +
+                "(\n" +
+                "    geohash              VARCHAR(12) NOT NULL,\n" +
+                "    area_name            VARCHAR(64)        \n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(geohash) BUCKETS 8\n" +
+                "PROPERTIES\n" +
+                "(\n" +
+                "    \"replication_num\" = \"1\"\n" +
+                ");");
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv_hourly_events\n" +
+                "DISTRIBUTED BY RANDOM\n" +
+                "Partition by (event_date)\n" +
+                "AS\n" +
+                "SELECT\n" +
+                "    event_date,\n" +
+                "    DATE_TRUNC('hour', event_time) as metric_time_1h,\n" +
+                "    region_id,\n" +
+                "    site_id,\n" +
+                "    channel,\n" +
+                "    location_path[cardinality(location_path)] as last_geohash,\n" +
+                "    COUNT(request_id) as total_requests\n" +
+                "FROM fact_event_requests  \n" +
+                "WHERE event_type = 'TYPE_A'\n" +
+                "GROUP BY event_date, metric_time_1h, region_id, site_id, channel, last_geohash;\n");
+        UtFrameUtils.mockTimelinessForAsyncMVTest(connectContext);
+        String sql = "SELECT\n" +
+                "  DATE_TRUNC('hour', event_time) as metric_time_1h,\n" +
+                "  CAST(COUNT(request_id) AS DOUBLE)\n" +
+                "FROM\n" +
+                "  fact_event_requests AS fact_data_source\n" +
+                "LEFT JOIN (\n" +
+                "  SELECT\n" +
+                "    geohash,\n" +
+                "    max(area_name) AS area_name\n" +
+                "  FROM\n" +
+                "    dim_location_area\n" +
+                "  GROUP BY\n" +
+                "    1) AS dim_location_area \n" +
+                "    ON dim_location_area.geohash = location_path[cardinality(location_path)]\n" +
+                "WHERE event_date = 20251001\n" +
+                "  AND (region_id = 2\n" +
+                "    AND site_id IN (4)\n" +
+                "      AND area_name IN ('Zone-1')\n" +
+                "        AND event_type = 'TYPE_A'\n" +
+                "        AND channel IN ('mobile'))\n" +
+                "GROUP BY 1";
+        String plan = getFragmentPlan(sql);
+        PlanTestBase.assertContains(plan, "mv_hourly_events");
     }
 }
