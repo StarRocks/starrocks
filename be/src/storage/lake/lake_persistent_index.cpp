@@ -456,7 +456,9 @@ Status LakePersistentIndex::upsert(size_t n, const Slice* keys, const IndexValue
         RETURN_IF_ERROR(get_from_sstables(n, keys, old_values, not_founds.get(), -1));
         RETURN_IF_ERROR(flush_memtable());
     } else {
-        auto st = cb->token->submit_func([this, n, keys, old_values, not_founds, cb]() {
+        Trace* trace = Trace::CurrentTrace();
+        auto st = cb->token->submit_func([this, n, keys, old_values, not_founds, cb, trace]() {
+            ADOPT_TRACE(trace);
             auto st = get_from_inactive_memtables(n, keys, old_values, not_founds.get(), -1);
             if (st.ok()) {
                 st = get_from_sstables(n, keys, old_values, not_founds.get(), -1);
