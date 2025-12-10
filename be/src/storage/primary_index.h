@@ -53,6 +53,7 @@ public:
     //
     // [thread-safe]
     void unload();
+    void unload_without_lock();
 
     // Whether index is normally loaded
     bool is_loaded();
@@ -165,6 +166,15 @@ public:
         _status = st;
     }
 
+<<<<<<< HEAD
+=======
+    // Return the pointer of specific position of slice array.
+    static const Slice* build_persistent_keys(const Column& pks, size_t key_size, uint32_t idx_begin, uint32_t idx_end,
+                                              std::vector<Slice>* key_slices);
+
+    bool need_rebuild() const;
+
+>>>>>>> d562fdcee3 ([BugFix] Fix the concurrency issue between primary key index compaction and apply (#66282))
 protected:
     void _set_schema(const Schema& pk_schema);
     // Return the pointer of specific position of slice array.
