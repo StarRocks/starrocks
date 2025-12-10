@@ -51,7 +51,7 @@ Status SnapshotFileSyncer::upload(const TabletSnapshotInfo& snapshot_info, Uploa
         }
 
         auto dst_data_file = join_path(location_provider->root_location(dst_tablet_id),
-                                       fmt::format("{}/{}/{}/{}/{}", db_id, table_id, partition_id, "data"/ data_file));
+                                       fmt::format("{}/{}/{}/{}/{}", db_id, table_id, partition_id, "data", data_file));
         LOG(INFO) << "dst_data_file: " << dst_data_file;
         auto dst_fs = FileSystem::CreateSharedFromString(dst_data_file);
         if (!dst_fs.ok()) {
