@@ -564,6 +564,14 @@ build_gtest() {
     ${BUILD_SYSTEM} install
 }
 
+# xxhash
+build_xxhash() {
+    check_if_source_exist $XXHASH_SOURCE
+    mkdir -p $TP_INCLUDE_DIR
+    # xxhash.h is in the root directory of xxHash source
+    mkdir -p $TP_INCLUDE_DIR/xxhash && cp $TP_SOURCE_DIR/$XXHASH_SOURCE/xxhash.h $TP_INCLUDE_DIR/xxhash/
+}
+
 # rapidjson
 build_rapidjson() {
     check_if_source_exist $RAPIDJSON_SOURCE
@@ -1768,11 +1776,13 @@ declare -a all_packages=(
     libdivide
     flamegraph
     tenann
+    xxhash
+    pprof
 )
 
 # Machine specific packages
 if [[ "${MACHINE_TYPE}" != "aarch64" ]]; then
-    all_packages+=(breakpad libdeflate pprof)
+    all_packages+=(breakpad libdeflate)
 fi
 
 # Initialize packages array - if none specified, build all

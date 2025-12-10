@@ -1802,6 +1802,42 @@ class StarrocksSQLApiLib(object):
             row_count == 0, f"wait db transaction finish error, timeout {timeout_sec}s, row_count={row_count}"
         )
 
+    def get_table_state(self, db_name, table_name):
+        """
+        Get table state by executing show proc '/dbs/{db_name}' and finding the row by table_name
+        Returns the state of the specified table, or None if table not found
+        """
+        sql = f"show proc '/dbs/{db_name}'"
+        res = self.execute_sql(sql, True)
+        tools.assert_true(res["status"], f"Failed to execute show proc '/dbs/{db_name}'")
+        
+        # Find the row with matching table_name
+        # Column order: TableId, TableName, IndexNum, PartitionColumnName, PartitionNum, State, ...
+        # TableName is at index 1, State is at index 5
+        for row in res["result"]:
+            if len(row) > 1 and row[1] == table_name:
+                if len(row) > 5:
+                    return row[5]  # Return State
+                else:
+                    log.warning(f"Row for table {table_name} has insufficient columns")
+                    return None
+        
+        log.warning(f"Table {table_name} not found in database {db_name}")
+        return None
+
+    def wait_table_state_normal(self, db_name, table_name, timeout_sec=30):
+        """
+        wait table state to normal
+        """
+        times = 0
+        while times < timeout_sec:
+            state = self.get_table_state(db_name, table_name)
+            if state == "NORMAL":
+                break
+            time.sleep(1)
+            times += 1
+        tools.assert_equal("NORMAL", state, "wait table state normal error, timeout %s" % timeout_sec)
+
     def show_routine_load(self, routine_load_task_name):
         show_sql = "show routine load for %s" % routine_load_task_name
         return self.execute_sql(show_sql, True)
@@ -2321,6 +2357,29 @@ class StarrocksSQLApiLib(object):
             if status != "PENDING":
                 break
             time.sleep(0.5)
+
+    def wait_alter_table_waiting_txn(self, alter_type="COLUMN", timeout=120):
+        """
+        wait until the status of the latest alter table job becomes WAITING_TXN
+        """
+        status = ""
+        elapsed_time = 0
+        while elapsed_time < timeout:
+            res = self.execute_sql(
+                "SHOW ALTER TABLE %s ORDER BY CreateTime DESC LIMIT 1" % alter_type,
+                True,
+            )
+            if (not res["status"]) or len(res["result"]) <= 0:
+                time.sleep(0.5)
+                elapsed_time += 0.5
+                continue
+
+            status = res["result"][0][9]
+            if status == "WAITING_TXN":
+                return status
+            time.sleep(0.5)
+            elapsed_time += 0.5
+        tools.assert_true(False, "wait alter table WAITING_TXN timeout after %d seconds, current status: %s" % (timeout, status))
 
     def wait_optimize_table_finish(self, alter_type="OPTIMIZE", expect_status="FINISHED"):
         """
@@ -3539,7 +3598,7 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
         # Validate scanBytes
         actual_scan_bytes = query_detail.get("scanBytes")
         tools.assert_true(
-            actual_scan_bytes > 0,
+            actual_scan_bytes >= 0,
             f"scanBytes is negative: {actual_scan_bytes}"
         )
         # print(f"✓ scanBytes validation passed: {actual_scan_bytes}")

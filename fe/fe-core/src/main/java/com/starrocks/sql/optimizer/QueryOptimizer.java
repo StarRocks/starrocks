@@ -462,7 +462,6 @@ public class QueryOptimizer extends Optimizer {
         if (mvRewriteStrategy.enableViewBasedRewrite && viewBasedMvRuleRewrite(tree, rootTaskContext)) {
             return;
         }
-
         if (mvRewriteStrategy.enableForceRBORewrite) {
             // use rule based mv rewrite strategy to do mv rewrite for multi tables query
             if (mvRewriteStrategy.enableMultiTableRewrite) {
@@ -936,6 +935,7 @@ public class QueryOptimizer extends Optimizer {
         context.setInMemoPhase(true);
         OptExpression tree = memo.getRootGroup().extractLogicalTree();
         SessionVariable sessionVariable = connectContext.getSessionVariable();
+        CTEUtils.collectCteOperators(tree, context);
         // add CboTablePruneRule
         if (Utils.countJoinNodeSize(tree, CboTablePruneRule.JOIN_TYPES) < 10 &&
                 sessionVariable.isEnableCboTablePrune()) {

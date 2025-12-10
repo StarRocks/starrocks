@@ -110,7 +110,7 @@ public class ColumnFilterConverter {
 
         @Override
         public Boolean visitFunctionCall(FunctionCallExpr node, Void context) {
-            String functionName = node.getFnName().getFunction();
+            String functionName = node.getFunctionName();
             if (FunctionSet.SUBSTRING.equalsIgnoreCase(functionName) ||
                     FunctionSet.SUBSTR.equalsIgnoreCase(functionName)) {
                 Expr firstExpr = node.getChild(0);
@@ -412,7 +412,7 @@ public class ColumnFilterConverter {
 
     private static boolean checkPartitionExprEqualsOperator(FunctionCallExpr functionCallExpr,
                                                             CallOperator callOperator) {
-        String fnName = functionCallExpr.getFnName().getFunction();
+        String fnName = functionCallExpr.getFunctionName();
         if (!Objects.equals(fnName, callOperator.getFnName())) {
             return false;
         }

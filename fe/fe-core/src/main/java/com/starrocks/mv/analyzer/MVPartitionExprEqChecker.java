@@ -64,8 +64,8 @@ public class MVPartitionExprEqChecker {
             }
             FunctionCallExpr funcExpr1 = (FunctionCallExpr) expr1;
             FunctionCallExpr funcExpr2 = (FunctionCallExpr) expr2;
-            String fnName1 = funcExpr1.getFnName().getFunction();
-            String fnName2 = funcExpr2.getFnName().getFunction();
+            String fnName1 = funcExpr1.getFunctionName();
+            String fnName2 = funcExpr2.getFunctionName();
             if (!fnName1.equalsIgnoreCase(fnName2)) {
                 return false;
             }

@@ -30,6 +30,7 @@
 #include "testutil/assert.h"
 #include "testutil/parallel_test.h"
 #include "util/json.h"
+#include "velocypack/vpack.h"
 
 namespace starrocks {
 

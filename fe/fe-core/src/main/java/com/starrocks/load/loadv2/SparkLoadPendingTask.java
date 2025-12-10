@@ -40,14 +40,12 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
-import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.DistributionInfo.DistributionInfoType;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.HiveTable;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -82,8 +80,10 @@ import com.starrocks.load.loadv2.etl.EtlJobConfig.FilePatternVersion;
 import com.starrocks.load.loadv2.etl.EtlJobConfig.SourceType;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.BrokerDesc;
 import com.starrocks.sql.ast.ImportColumnDesc;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
@@ -618,7 +618,7 @@ public class SparkLoadPendingTask extends LoadTask {
             throw new LoadException(msg);
         }
         FunctionCallExpr fn = (FunctionCallExpr) expr;
-        String functionName = fn.getFnName().getFunction();
+        String functionName = fn.getFunctionName();
         if (!functionName.equalsIgnoreCase(FunctionSet.HLL_HASH)
                 && !functionName.equalsIgnoreCase("hll_empty")) {
             throw new LoadException(msg);
@@ -638,7 +638,7 @@ public class SparkLoadPendingTask extends LoadTask {
             throw new LoadException(msg);
         }
         FunctionCallExpr fn = (FunctionCallExpr) expr;
-        String functionName = fn.getFnName().getFunction();
+        String functionName = fn.getFunctionName();
         if (!functionName.equalsIgnoreCase(FunctionSet.TO_BITMAP)
                 && !functionName.equalsIgnoreCase(FunctionSet.BITMAP_HASH)
                 && !functionName.equalsIgnoreCase(FunctionSet.BITMAP_HASH64)

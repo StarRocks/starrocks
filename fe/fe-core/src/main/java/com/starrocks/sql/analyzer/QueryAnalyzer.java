@@ -58,7 +58,7 @@ import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.NormalizedTableFunctionRelation;
 import com.starrocks.sql.ast.OrderByElement;
 import com.starrocks.sql.ast.ParseNode;
-import com.starrocks.sql.ast.PartitionNames;
+import com.starrocks.sql.ast.PartitionRef;
 import com.starrocks.sql.ast.PivotAggregation;
 import com.starrocks.sql.ast.PivotRelation;
 import com.starrocks.sql.ast.PivotValue;
@@ -87,6 +87,7 @@ import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.FieldReference;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
+import com.starrocks.sql.ast.expression.FunctionParams;
 import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.LiteralExprFactory;
 import com.starrocks.sql.ast.expression.SlotRef;
@@ -1521,7 +1522,7 @@ public class QueryAnalyzer {
 
                     CaseExpr caseWhen = new CaseExpr(null, clauses, null);
                     FunctionCallExpr functionCallExpr = new FunctionCallExpr(
-                            pivotAggregation.getFunctionCallExpr().getFnName(), Lists.newArrayList(caseWhen));
+                            pivotAggregation.getFunctionCallExpr().getFnName().toString(), Lists.newArrayList(caseWhen));
                     analyzeExpression(functionCallExpr, analyzeState, queryScope);
                     node.addRewrittenAggFunction(functionCallExpr);
                 }
@@ -1585,17 +1586,21 @@ public class QueryAnalyzer {
                 } else {
                     throw new SemanticException("Unknown table function '%s(%s)', the function doesn't support named " +
                             "arguments or has invalid arguments",
-                            node.getFunctionName().getFunction(), node.getFunctionParams().getNamedArgStr());
+                            node.getFunctionName().getFunction(), ExprToSql.getNamedArgStr(
+                                    node.getFunctionParams().getExprsNames(), node.getFunctionParams().exprs()));
                 }
             }
 
+            List<Expr> childExpressions;
             if (namesArray != null) {
                 Preconditions.checkState(fn.hasNamedArg());
-                node.getFunctionParams().reorderNamedArgAndAppendDefaults(fn);
+                childExpressions = reorderNamedArgAndAppendDefaults(node.getFunctionParams(), fn);
             } else if (node.getFunctionParams().exprs().size() < fn.getNumArgs()) {
-                node.getFunctionParams().appendPositionalDefaultArgExprs(fn);
+                childExpressions = appendPositionalDefaultArgExprs(node.getFunctionParams(), fn);
+            } else {
+                childExpressions = node.getFunctionParams().exprs();
             }
-            Preconditions.checkState(node.getFunctionParams().exprs().size() == fn.getNumArgs());
+            Preconditions.checkState(childExpressions.size() == fn.getNumArgs());
 
             if (!(fn instanceof TableFunction)) {
                 throw new SemanticException("'%s(%s)' is not table function", node.getFunctionName().getFunction(),
@@ -1605,7 +1610,7 @@ public class QueryAnalyzer {
             TableFunction tableFunction = (TableFunction) fn;
             tableFunction.setIsLeftJoin(node.getIsLeftJoin());
             node.setTableFunction(tableFunction);
-            node.setChildExpressions(node.getFunctionParams().exprs());
+            node.setChildExpressions(childExpressions);
 
             if (node.getColumnOutputNames() == null) {
                 if (tableFunction.getFunctionName().getFunction().equals("unnest")) {
@@ -1650,6 +1655,43 @@ public class QueryAnalyzer {
             // Only the scope of the table function is visible outside.
             node.setScope(node.getRight().getScope());
             return node.getScope();
+        }
+
+        private List<Expr> appendPositionalDefaultArgExprs(FunctionParams functionParams, Function fn) {
+            List<Expr> result = Lists.newArrayList(functionParams.exprs());
+            List<Expr> lastDefaults = fn.getLastDefaultsFromN(functionParams.exprs().size());
+            if (lastDefaults != null) {
+                result.addAll(lastDefaults);
+            }
+            return result;
+        }
+
+        private List<Expr> reorderNamedArgAndAppendDefaults(FunctionParams functionParams, Function fn) {
+            String[] names = fn.getArgNames();
+            List<String> exprNames = functionParams.getExprsNames();
+            Preconditions.checkState(names != null && exprNames != null && names.length >= exprNames.size());
+
+            Map<String, Expr> nameToExpr = new HashMap<>();
+            for (int i = 0; i < exprNames.size(); i++) {
+                nameToExpr.put(exprNames.get(i), functionParams.exprs().get(i));
+            }
+
+            List<Expr> result = Lists.newArrayListWithExpectedSize(names.length);
+            int defaultNum = 0;
+            for (String name : names) {
+                Expr expr = nameToExpr.get(name);
+                if (expr != null) {
+                    result.add(expr);
+                    continue;
+                }
+
+                Expr defaultExpr = fn.getDefaultNamedExpr(name);
+                Preconditions.checkState(defaultExpr != null);
+                result.add(defaultExpr);
+                defaultNum++;
+            }
+            Preconditions.checkState(defaultNum + exprNames.size() == names.length);
+            return result;
         }
 
     }
@@ -1822,7 +1864,7 @@ public class QueryAnalyzer {
                 ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_TABLE_STATE, "RESTORING");
             }
 
-            PartitionNames partitionNamesObject = tableRelation.getPartitionNames();
+            PartitionRef partitionNamesObject = tableRelation.getPartitionNames();
             if (table.isExternalTableWithFileSystem() && partitionNamesObject != null) {
                 throw unsupportedException("Unsupported table type for partition clause, type: " + table.getType());
             }

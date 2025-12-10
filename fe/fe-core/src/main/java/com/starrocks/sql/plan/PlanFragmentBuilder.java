@@ -24,7 +24,6 @@ import com.starrocks.catalog.ColumnAccessPath;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.JDBCTable;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MaterializedView;
@@ -125,6 +124,7 @@ import com.starrocks.sql.ast.AssertNumRowsElement;
 import com.starrocks.sql.ast.BrokerDesc;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.JoinOperator;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.OrderByElement;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.expression.BinaryType;
@@ -404,6 +404,7 @@ public class PlanFragmentBuilder {
             List<ExecGroup> colocateExecGroups =
                     execPlan.getExecGroups().stream().filter(ExecGroup::isColocateExecGroup).collect(
                             Collectors.toList());
+            final List<ExecGroup> execGroups = execPlan.getExecGroups();
             for (PlanFragment fragment : fragments) {
                 fragment.assignColocateExecGroups(fragment.getPlanRoot(), colocateExecGroups);
             }
@@ -1856,6 +1857,19 @@ public class PlanFragmentBuilder {
                                     "only support `regexp` or `rlike` for log grep");
                         }
                     }
+
+                    if (like.getLikeType() == LikePredicateOperator.LikeType.LIKE) {
+                        String pattern = constantOperator.getVarchar();
+                        switch (columnRefOperator.getName()) {
+                            case "TABLE_SCHEMA":
+                            case "DATABASE_NAME":
+                                scanNode.setSchemaDb(pattern);
+                                break;
+                            case "TABLE_NAME":
+                                scanNode.setSchemaTable(pattern);
+                                break;
+                        }
+                    }
                 }
             }
 
@@ -2395,6 +2409,7 @@ public class PlanFragmentBuilder {
 
             aggregationNode.setUseSortAgg(node.isUseSortAgg());
             aggregationNode.setUsePerBucketOptimize(node.isUsePerBucketOptmize());
+            aggregationNode.setLocalLimit(node.getLocalLimit());
             aggregationNode.setStreamingPreaggregationMode(node.getNeededPreaggregationMode());
             aggregationNode.setHasNullableGenerateChild();
             aggregationNode.computeStatistics(optExpr.getStatistics());
@@ -2467,7 +2482,7 @@ public class PlanFragmentBuilder {
             }
             if (singleDistinctCount == 1) {
                 FunctionCallExpr replaceExpr = null;
-                final String functionName = functionCallExpr.getFnName().getFunction();
+                final String functionName = functionCallExpr.getFunctionName();
                 if (functionName.equalsIgnoreCase(FunctionSet.COUNT)) {
                     replaceExpr = new FunctionCallExpr(FunctionSet.MULTI_DISTINCT_COUNT, functionCallExpr.getParams());
                     replaceExpr.setFn(ExprUtils.getBuiltinFunction(FunctionSet.MULTI_DISTINCT_COUNT,
@@ -3020,8 +3035,8 @@ public class PlanFragmentBuilder {
                     // do nothing
                 } else {
                     // we don't support group execution for other join
-                    currentExecGroup.disableColocateGroup(leftFragmentPlanRoot);
-                    rightExecGroup.disableColocateGroup(rightFragmentPlanRoot);
+                    currentExecGroup.setDisableColocateGroupForAllChildren(leftFragmentPlanRoot, execGroups);
+                    rightExecGroup.setDisableColocateGroupForAllChildren(rightFragmentPlanRoot, execGroups);
                     currentExecGroup.merge(rightExecGroup);
                     execGroups.remove(rightExecGroup);
                 }
@@ -4324,8 +4339,8 @@ public class PlanFragmentBuilder {
         }
 
         private ScalarOperator extractAndValidateAsofTemporalPredicate(List<ScalarOperator> otherJoin,
-                                                            ColumnRefSet leftColumns,
-                                                            ColumnRefSet rightColumns) {
+                                                                       ColumnRefSet leftColumns,
+                                                                       ColumnRefSet rightColumns) {
             List<ScalarOperator> candidates = new ArrayList<>();
 
             for (ScalarOperator predicate : otherJoin) {

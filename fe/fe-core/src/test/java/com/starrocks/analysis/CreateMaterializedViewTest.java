@@ -24,7 +24,6 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DeltaLakeTable;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.InternalCatalog;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MaterializedViewRefreshType;
@@ -66,6 +65,7 @@ import com.starrocks.sql.ast.AsyncRefreshSchemeDesc;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateMaterializedViewStmt;
 import com.starrocks.sql.ast.DmlStmt;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.ManualRefreshSchemeDesc;
 import com.starrocks.sql.ast.RefreshSchemeClause;
 import com.starrocks.sql.ast.StatementBase;
@@ -397,7 +397,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
         Expr partitionExpr = ((ExpressionRangePartitionInfo) partitionInfo)
                 .getPartitionExprs(materializedView.getIdToColumn()).get(0);
         Assertions.assertTrue(partitionExpr instanceof FunctionCallExpr);
-        Assertions.assertEquals("date_trunc", ((FunctionCallExpr) partitionExpr).getFnName().getFunction());
+        Assertions.assertEquals("date_trunc", ((FunctionCallExpr) partitionExpr).getFunctionName());
         Assertions.assertEquals("k1", ((SlotRef) ((FunctionCallExpr) partitionExpr).getChild(1)).getColumnName());
     }
 

@@ -233,6 +233,7 @@ set(STORAGE_FILES
     sstable/iterator.cpp
     sstable/options.cpp
     sstable/merger.cpp
+    sstable/concatenating_iterator.cpp
     lake/lake_delvec_loader.cpp
     binlog_util.cpp
     binlog_file_writer.cpp

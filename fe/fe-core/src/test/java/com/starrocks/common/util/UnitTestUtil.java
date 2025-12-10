@@ -35,12 +35,10 @@
 package com.starrocks.common.util;
 
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
@@ -56,6 +54,8 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.catalog.View;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.sql.ast.AggregateType;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.system.Backend;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;

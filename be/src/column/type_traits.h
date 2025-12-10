@@ -517,8 +517,8 @@ template <>
 struct RunTimeTypeLimits<TYPE_JSON> {
     using value_type = JsonValue;
 
-    static value_type min_value() { return JsonValue{vpack::Slice::minKeySlice()}; }
-    static value_type max_value() { return JsonValue{vpack::Slice::maxKeySlice()}; }
+    static value_type min_value();
+    static value_type max_value();
 };
 
 template <>

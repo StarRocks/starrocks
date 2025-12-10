@@ -24,10 +24,10 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.expression.CaseExpr;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.SlotRef;
@@ -943,7 +943,7 @@ public class MaterializedViewRule extends Rule {
                 if (mvColumn.getDefineExpr() != null && mvColumn.getDefineExpr() instanceof FunctionCallExpr &&
                         queryFnChild0 instanceof CallOperator) {
                     CallOperator queryCall = (CallOperator) queryFnChild0;
-                    String mvName = ((FunctionCallExpr) mvColumn.getDefineExpr()).getFnName().getFunction();
+                    String mvName = ((FunctionCallExpr) mvColumn.getDefineExpr()).getFunctionName();
                     String queryName = queryCall.getFnName();
 
                     if (!mvName.equalsIgnoreCase(queryName)) {

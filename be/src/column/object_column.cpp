@@ -263,22 +263,6 @@ int ObjectColumn<T>::compare_at(size_t left, size_t right, const starrocks::Colu
 }
 
 template <typename T>
-void ObjectColumn<T>::fnv_hash(uint32_t* hash, uint32_t from, uint32_t to) const {
-    std::string s;
-    for (uint32_t i = from; i < to; ++i) {
-        s.resize(_pool[i].serialize_size());
-        //TODO: May be overflow here if the object is large then 2G.
-        size_t size = _pool[i].serialize(reinterpret_cast<uint8_t*>(s.data()));
-        hash[i] = HashUtil::fnv_hash(s.data(), static_cast<int32_t>(size), hash[i]);
-    }
-}
-
-template <typename T>
-void ObjectColumn<T>::crc32_hash(uint32_t* hash, uint32_t from, uint32_t to) const {
-    DCHECK(false) << "object column shouldn't call crc32_hash ";
-}
-
-template <typename T>
 int64_t ObjectColumn<T>::xor_checksum(uint32_t from, uint32_t to) const {
     DCHECK(false) << "object column shouldn't call xor_checksum";
     return 0;

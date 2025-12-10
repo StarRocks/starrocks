@@ -326,6 +326,7 @@ DEFINE_FAIL_POINT(tablet_meta_not_found);
 // NOTE: tablet_metas is non-const and we will clear schemas for optimization.
 // Callers should ensure thread safety.
 Status TabletManager::put_bundle_tablet_metadata(std::map<int64_t, TabletMetadataPB>& tablet_metas) {
+    TEST_ERROR_POINT("TabletManager::put_bundle_tablet_metadata");
     if (tablet_metas.empty()) {
         return Status::InternalError("tablet_metas cannot be empty");
     }
@@ -456,6 +457,7 @@ StatusOr<TabletMetadataPtr> TabletManager::get_tablet_metadata(int64_t tablet_id
 StatusOr<TabletMetadataPtr> TabletManager::get_tablet_metadata(int64_t tablet_id, int64_t version,
                                                                const CacheOptions& cache_opts, int64_t expected_gtid,
                                                                const std::shared_ptr<FileSystem>& fs) {
+    TEST_ERROR_POINT("TabletManager::get_tablet_metadata");
     StatusOr<TabletMetadataPtr> tablet_metadata_or;
     auto cache_key = _location_provider->real_location(tablet_metadata_root_location(tablet_id));
     if (cache_key.ok() && _metacache->lookup_aggregation_partition(*cache_key)) {

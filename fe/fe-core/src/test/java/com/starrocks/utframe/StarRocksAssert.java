@@ -88,6 +88,7 @@ import com.starrocks.schema.MSchema;
 import com.starrocks.schema.MTable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Analyzer;
+import com.starrocks.sql.analyzer.FunctionRefAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.analyzer.TypeDefAnalyzer;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
@@ -114,6 +115,7 @@ import com.starrocks.sql.ast.DropMaterializedViewStmt;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.DropTemporaryTableStmt;
 import com.starrocks.sql.ast.FunctionArgsDef;
+import com.starrocks.sql.ast.FunctionRef;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.ModifyTablePropertiesClause;
@@ -344,13 +346,15 @@ public class StarRocksAssert {
     }
 
     public static void utCreateFunctionMock(CreateFunctionStmt createFunctionStmt, ConnectContext ctx) throws Exception {
-        FunctionName functionName = createFunctionStmt.getFunctionName();
-        functionName.analyze(ctx.getDatabase());
+        FunctionRef functionRef = createFunctionStmt.getFunctionRef();
+        String defaultDb = functionRef.isGlobalFunction() ? FunctionRefAnalyzer.GLOBAL_UDF_DB : ctx.getDatabase();
+        FunctionRefAnalyzer.analyzeFunctionRef(functionRef, defaultDb);
         FunctionArgsDef argsDef = createFunctionStmt.getArgsDef();
         TypeDef returnType = createFunctionStmt.getReturnType();
         // check argument
-        argsDef.analyze();
+        FunctionRefAnalyzer.analyzeArgsDef(argsDef);
         TypeDefAnalyzer.analyze(returnType);
+        FunctionName functionName = FunctionRefAnalyzer.resolveFunctionName(functionRef, defaultDb);
 
         Function function = ScalarFunction.createUdf(
                 functionName, argsDef.getArgTypes(),

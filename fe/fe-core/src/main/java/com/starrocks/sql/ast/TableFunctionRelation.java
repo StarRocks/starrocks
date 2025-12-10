@@ -44,7 +44,8 @@ public class TableFunctionRelation extends Relation {
     private boolean isLeftJoin = false;
 
     public TableFunctionRelation(FunctionCallExpr functionCallExpr) {
-        this(functionCallExpr.getFnName().toString().toLowerCase(), functionCallExpr.getParams(), functionCallExpr.getPos());
+        this(functionCallExpr.getFnRef().getFnName().toString().toLowerCase(),
+                functionCallExpr.getParams(), functionCallExpr.getPos());
     }
 
     public TableFunctionRelation(String functionName, FunctionParams functionParams, NodePosition pos) {

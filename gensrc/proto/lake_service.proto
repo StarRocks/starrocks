@@ -379,6 +379,48 @@ message FindSplitPointResponse {
     repeated TabletSplitResult tablet_split_results = 2;
 }
 
+message GetTabletMetadatasRequest {
+    // all tablets in one physical partition
+    repeated int64 tablet_ids = 1;
+    // included
+    optional int64 max_version = 2;
+    // included
+    optional int64 min_version = 3;
+}
+
+message TabletMetadatas {
+    optional int64 tablet_id = 1;
+    // tablet-level status
+    optional StatusPB status = 2;
+    // version -> tablet metadata
+    map<int64, TabletMetadataPB> version_metadatas = 3;
+}
+
+message GetTabletMetadatasResponse {
+    // rpc-level status
+    optional StatusPB status = 1;
+    repeated TabletMetadatas tablet_metadatas = 2;
+}
+
+message RepairTabletMetadataRequest {
+    // all tablet metadatas with the same version in one physical partition
+    repeated TabletMetadataPB tablet_metadatas = 1;
+    // whether enable file bundling
+    optional bool enable_file_bundling = 2;
+}
+
+message TabletMetadataRepairStatus {
+    optional int64 tablet_id = 1;
+    // tablet-level status
+    optional StatusPB status = 2;
+}
+
+message RepairTabletMetadataResponse {
+    // rpc-level status
+    optional StatusPB status = 1;
+    repeated TabletMetadataRepairStatus tablet_repair_statuses = 2;
+}
+
 service LakeService {
     rpc publish_version(PublishVersionRequest) returns (PublishVersionResponse);
     rpc aggregate_publish_version(AggregatePublishVersionRequest) returns (PublishVersionResponse);
@@ -400,5 +442,7 @@ service LakeService {
     rpc vacuum_full(VacuumFullRequest) returns (VacuumFullResponse);
     rpc aggregate_compact(AggregateCompactRequest) returns (CompactResponse);
     rpc find_split_point(FindSplitPointRequest) returns (FindSplitPointResponse);
+    rpc get_tablet_metadatas(GetTabletMetadatasRequest) returns (GetTabletMetadatasResponse);
+    rpc repair_tablet_metadata(RepairTabletMetadataRequest) returns (RepairTabletMetadataResponse);
 }
 

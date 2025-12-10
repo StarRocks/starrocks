@@ -68,7 +68,9 @@ FileWriter::CommitResult ParquetFileWriter::commit() {
     FileWriter::CommitResult result{
             .io_status = Status::OK(), .format = PARQUET, .location = _location, .rollback_action = _rollback_action};
     try {
-        _writer->Close();
+        if (_writer != nullptr) {
+            _writer->Close();
+        }
     } catch (const ::parquet::ParquetStatusException& e) {
         result.io_status.update(Status::IOError(fmt::format("{}: {}", "close file error", e.what())));
     }

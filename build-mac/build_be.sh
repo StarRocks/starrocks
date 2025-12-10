@@ -175,13 +175,6 @@ if [[ "$(uname -m)" != "arm64" ]]; then
     exit 1
 fi
 
-# Set default STARROCKS_THIRDPARTY if not set
-if [[ -z "${STARROCKS_THIRDPARTY:-}" ]]; then
-    export STARROCKS_THIRDPARTY="$ROOT_DIR/thirdparty"
-fi
-
-log_info "Third-party directory: $STARROCKS_THIRDPARTY"
-
 # ============================================================================
 # THIRD-PARTY DEPENDENCIES
 # ============================================================================

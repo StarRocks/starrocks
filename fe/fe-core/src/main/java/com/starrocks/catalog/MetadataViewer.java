@@ -50,7 +50,6 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
-import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.ast.PartitionRef;
 import com.starrocks.sql.ast.expression.BinaryPredicate;
 import com.starrocks.sql.ast.expression.BinaryType;

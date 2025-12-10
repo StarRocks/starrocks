@@ -23,13 +23,13 @@ import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
@@ -778,6 +778,7 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
             newHashAggregator.setUseSortAgg(aggOperator.isUseSortAgg());
             newHashAggregator.setUsePerBucketOptmize(aggOperator.isUsePerBucketOptmize());
             newHashAggregator.setWithoutColocateRequirement(aggOperator.isWithoutColocateRequirement());
+            newHashAggregator.setLocalLimit(aggOperator.getLocalLimit());
             return newHashAggregator;
         }
 

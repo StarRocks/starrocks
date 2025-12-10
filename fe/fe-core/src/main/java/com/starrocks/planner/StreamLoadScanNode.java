@@ -37,7 +37,6 @@ package com.starrocks.planner;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Table;
@@ -52,6 +51,7 @@ import com.starrocks.load.Load;
 import com.starrocks.load.streamload.StreamLoadInfo;
 import com.starrocks.planner.expression.ExprToThrift;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.expression.ArithmeticExpr;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprUtils;
@@ -342,8 +342,8 @@ public class StreamLoadScanNode extends LoadScanNode {
                             + dstSlotDesc.getColumn().getName() + "=" + FunctionSet.HLL_HASH + "(xxx)");
                 }
                 FunctionCallExpr fn = (FunctionCallExpr) expr;
-                if (!fn.getFnName().getFunction().equalsIgnoreCase(FunctionSet.HLL_HASH)
-                        && !fn.getFnName().getFunction().equalsIgnoreCase("hll_empty")) {
+                if (!fn.getFunctionName().equalsIgnoreCase(FunctionSet.HLL_HASH)
+                        && !fn.getFunctionName().equalsIgnoreCase("hll_empty")) {
                     throw new AnalysisException("HLL column must use " + FunctionSet.HLL_HASH + " function, like "
                             + dstSlotDesc.getColumn().getName() + "=" + FunctionSet.HLL_HASH
                             + "(xxx) or " + dstSlotDesc.getColumn().getName() + "=hll_empty()");

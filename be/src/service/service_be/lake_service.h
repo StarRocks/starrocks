@@ -104,6 +104,16 @@ public:
     void vacuum_full(::google::protobuf::RpcController* controller, const ::starrocks::VacuumFullRequest* request,
                      ::starrocks::VacuumFullResponse* response, ::google::protobuf::Closure* done) override;
 
+    void get_tablet_metadatas(::google::protobuf::RpcController* controller,
+                              const ::starrocks::GetTabletMetadatasRequest* request,
+                              ::starrocks::GetTabletMetadatasResponse* response,
+                              ::google::protobuf::Closure* done) override;
+
+    void repair_tablet_metadata(::google::protobuf::RpcController* controller,
+                                const ::starrocks::RepairTabletMetadataRequest* request,
+                                ::starrocks::RepairTabletMetadataResponse* response,
+                                ::google::protobuf::Closure* done) override;
+
 private:
     void _submit_publish_log_version_task(const int64_t* tablet_ids, size_t tablet_size,
                                           std::span<const TxnInfoPB> txn_infos, const int64_t* log_versions,

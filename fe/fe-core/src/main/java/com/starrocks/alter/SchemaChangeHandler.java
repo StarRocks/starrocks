@@ -44,13 +44,12 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.binlog.BinlogConfig;
-import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ColumnBuilder;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.FlatJsonConfig;
 import com.starrocks.catalog.Index;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
@@ -101,10 +100,12 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AddColumnClause;
 import com.starrocks.sql.ast.AddColumnsClause;
 import com.starrocks.sql.ast.AddFieldClause;
+import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterTableColumnClause;
 import com.starrocks.sql.ast.CancelAlterTableStmt;
 import com.starrocks.sql.ast.CancelStmt;
+import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.ColumnPosition;
 import com.starrocks.sql.ast.CreateIndexClause;
 import com.starrocks.sql.ast.DropColumnClause;
@@ -113,6 +114,7 @@ import com.starrocks.sql.ast.DropIndexClause;
 import com.starrocks.sql.ast.DropPersistentIndexClause;
 import com.starrocks.sql.ast.IndexDef;
 import com.starrocks.sql.ast.IndexDef.IndexType;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.ModifyColumnClause;
 import com.starrocks.sql.ast.ModifyColumnCommentClause;
 import com.starrocks.sql.ast.ModifyTablePropertiesClause;
@@ -154,6 +156,8 @@ import java.util.stream.Collectors;
 import javax.annotation.Nullable;
 import javax.validation.constraints.NotNull;
 
+import static com.starrocks.sql.parser.ErrorMsgProxy.PARSER_ERROR_MSG;
+
 public class SchemaChangeHandler extends AlterHandler {
 
     private static final Logger LOG = LogManager.getLogger(SchemaChangeHandler.class);
@@ -189,6 +193,34 @@ public class SchemaChangeHandler extends AlterHandler {
         return jobBuilder.build();
     }
 
+    private Column buildColumnForAdd(ColumnDef columnDef, OlapTable table) throws DdlException {
+        Column column = buildColumnInternal(columnDef, table);
+        if (!column.isGeneratedColumn() && !column.isAllowNull()
+                && column.getDefaultValue() == null && column.getDefaultExpr() == null) {
+            throw new DdlException(PARSER_ERROR_MSG.withOutDefaultVal(column.getName()));
+        }
+        return column;
+    }
+
+    private List<Column> buildColumnsForAdd(AddColumnsClause clause, OlapTable table) throws DdlException {
+        List<Column> columns = new ArrayList<>();
+        for (ColumnDef columnDef : clause.getColumnDefs()) {
+            columns.add(buildColumnForAdd(columnDef, table));
+        }
+        return columns;
+    }
+
+    private Column buildColumnForModify(ColumnDef columnDef, OlapTable table) {
+        return buildColumnInternal(columnDef, table);
+    }
+
+    private Column buildColumnInternal(ColumnDef columnDef, Table table) {
+        if (columnDef.isGeneratedColumn()) {
+            return ColumnBuilder.buildGeneratedColumn(table, columnDef);
+        }
+        return ColumnBuilder.buildColumn(columnDef);
+    }
+
     /**
      * @param alterClause
      * @param olapTable
@@ -200,7 +232,7 @@ public class SchemaChangeHandler extends AlterHandler {
     private boolean processAddColumn(AddColumnClause alterClause, OlapTable olapTable,
                                      Map<Long, LinkedList<Column>> indexSchemaMap,
                                      IntSupplier colUniqueIdSupplier) throws DdlException {
-        Column column = alterClause.getColumn();
+        Column column = buildColumnForAdd(alterClause.getColumnDef(), olapTable);
         ColumnPosition columnPos = alterClause.getColPos();
         String targetIndexName = alterClause.getRollupName();
         checkIndexExists(olapTable, targetIndexName);
@@ -236,7 +268,7 @@ public class SchemaChangeHandler extends AlterHandler {
     private boolean processAddColumns(AddColumnsClause alterClause, OlapTable olapTable,
                                       Map<Long, LinkedList<Column>> indexSchemaMap,
                                       IntSupplier colUniqueIdSupplier) throws DdlException {
-        List<Column> columns = alterClause.getColumns();
+        List<Column> columns = buildColumnsForAdd(alterClause, olapTable);
         String targetIndexName = alterClause.getRollupName();
         checkIndexExists(olapTable, targetIndexName);
 
@@ -647,7 +679,7 @@ public class SchemaChangeHandler extends AlterHandler {
                                         Map<Long, LinkedList<Column>> indexSchemaMap) throws DdlException {
         // The fast schema evolution mechanism is only supported for modified columns in shared data mode.
         boolean fastSchemaEvolution = RunMode.isSharedDataMode() && olapTable.getUseFastSchemaEvolution();
-        Column modColumn = alterClause.getColumn();
+        Column modColumn = buildColumnForModify(alterClause.getColumnDef(), olapTable);
         if (KeysType.PRIMARY_KEYS == olapTable.getKeysType()) {
             if (olapTable.getBaseColumn(modColumn.getName()) != null && olapTable.getBaseColumn(modColumn.getName()).isKey()) {
                 throw new DdlException("Can not modify key column: " + modColumn.getName() + " for primary key table");
@@ -1958,6 +1990,8 @@ public class SchemaChangeHandler extends AlterHandler {
         List<Index> newIndexes = olapTable.getCopiedIndexes();
         Map<String, String> propertyMap = new HashMap<>();
         Set<String> modifyFieldColumns = new HashSet<>();
+        // NOTE: be very careful with the order of processing alter clauses and early return!!!
+        // It is in a for-loop!
         for (AlterClause alterClause : alterClauses) {
             if (alterClause instanceof AlterTableColumnClause) {
                 if (!propertyMap.isEmpty()) {
@@ -2003,12 +2037,16 @@ public class SchemaChangeHandler extends AlterHandler {
                 ModifyColumnClause modifyColumnClause = (ModifyColumnClause) alterClause;
 
                 // check relative mvs with the modified column
-                Set<String> modifiedColumns = Set.of(modifyColumnClause.getColumn().getName());
+                Set<String> modifiedColumns = Set.of(modifyColumnClause.getColumnDef().getName());
                 AlterMVJobExecutor.checkModifiedColumWithMaterializedViews(olapTable, modifiedColumns);
 
                 // modify column
                 fastSchemaEvolution &= processModifyColumn(modifyColumnClause, olapTable, indexSchemaMap);
             } else if (alterClause instanceof ModifyColumnCommentClause) {
+                // AlterTableStatementAnalyzer.checkAlterOpConflict() allows batch processing SCHEMA_CHANGE clauses.
+                if (alterClauses.size() > 1) {
+                    throw new DdlException("MODIFY COLUMN COMMENT can not be combined with other alter operations");
+                }
                 processModifyColumnComment((ModifyColumnCommentClause) alterClause, db, olapTable, indexSchemaMap);
                 return null;
             } else if (alterClause instanceof AddFieldClause) {
@@ -2042,12 +2080,16 @@ public class SchemaChangeHandler extends AlterHandler {
                 // reorder column
                 fastSchemaEvolution = false;
                 if (changeSortKeyColumn((ReorderColumnsClause) alterClause, olapTable)) {
+                    // AlterTableStatementAnalyzer.checkAlterOpConflict() allows batch processing SCHEMA_CHANGE clauses.
+                    if (alterClauses.size() > 1) {
+                        // This must be checked because it will do early return later.
+                        throw new DdlException("MODIFY SORT KEY COLUMNS can not be combined with other alter operations");
+                    }
                     // do modify sort key column
                     List<Integer> sortKeyIdxes = new ArrayList<>();
                     List<Integer> sortKeyUniqueIds = new ArrayList<>();
                     processModifySortKeyColumn((ReorderColumnsClause) alterClause, olapTable, indexSchemaMap, sortKeyIdxes,
                             sortKeyUniqueIds);
-
                     // If optimized olap table contains related mvs, set those mv state to inactive.
                     AlterMVJobExecutor.inactiveRelatedMaterializedViewsRecursive(olapTable,
                             MaterializedViewExceptions.inactiveReasonForBaseTableReorderColumns(olapTable.getName()), false);
@@ -2070,6 +2112,8 @@ public class SchemaChangeHandler extends AlterHandler {
                 fastSchemaEvolution = false;
                 processDropIndex((DropIndexClause) alterClause, olapTable, newIndexes);
             } else if (alterClause instanceof OptimizeClause) {
+                // AlterTableStatementAnalyzer.checkAlterOpConflict() ensures the OPTIMIZE clause is alone.
+                Preconditions.checkState(alterClauses.size() == 1);
                 return createOptimizeTableJob((OptimizeClause) alterClause, db, olapTable, propertyMap);
             } else {
                 Preconditions.checkState(false);

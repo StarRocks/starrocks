@@ -29,7 +29,6 @@ import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.ExternalOlapTable;
 import com.starrocks.catalog.FlatJsonConfig;
 import com.starrocks.catalog.HashDistributionInfo;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -65,6 +64,7 @@ import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.ExpressionPartitionDesc;
 import com.starrocks.sql.ast.IndexDef.IndexType;
 import com.starrocks.sql.ast.KeysDesc;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.ListPartitionDesc;
 import com.starrocks.sql.ast.OrderByElement;
 import com.starrocks.sql.ast.PartitionDesc;
@@ -519,12 +519,12 @@ public class OlapTableFactory implements AbstractTableFactory {
                 throw new DdlException(e.getMessage());
             }
 
+            boolean enableReplicatedStorage = PropertyAnalyzer.analyzeBooleanProp(
+                    properties, PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE,
+                    Config.enable_replicated_storage_as_default_engine);
             if (table.isOlapTableOrMaterializedView()) {
                 // replicated storage
-                table.setEnableReplicatedStorage(
-                        PropertyAnalyzer.analyzeBooleanProp(
-                                properties, PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE,
-                                Config.enable_replicated_storage_as_default_engine));
+                table.setEnableReplicatedStorage(enableReplicatedStorage);
 
                 boolean hasGin = table.getIndexes().stream()
                         .anyMatch(index -> index.getIndexType() == IndexType.GIN);

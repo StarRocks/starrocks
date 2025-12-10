@@ -97,13 +97,14 @@ import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.ModifyColumnClause;
 import com.starrocks.sql.ast.MultiItemListPartitionDesc;
 import com.starrocks.sql.ast.PartitionDesc;
-import com.starrocks.sql.ast.PartitionNames;
+import com.starrocks.sql.ast.PartitionRef;
 import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
 import com.starrocks.sql.ast.ReorderColumnsClause;
 import com.starrocks.sql.ast.SingleItemListPartitionDesc;
 import com.starrocks.sql.ast.TruncatePartitionClause;
 import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.ast.expression.DateLiteral;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.type.DateType;
@@ -2502,7 +2503,7 @@ public class AlterTest {
                     + "`col2` int(11) not null default \"0\" comment \"\") in `testTable`;";
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(stmt, starRocksAssert.getCtx());
         AddColumnsClause clause = (AddColumnsClause) alterTableStmt.getAlterClauseList().get(0);
-        Assertions.assertEquals(2, clause.getColumns().size());
+        Assertions.assertEquals(2, clause.getColumnDefs().size());
         Assertions.assertEquals(0, clause.getProperties().size());
         Assertions.assertEquals("testTable", clause.getRollupName());
 
@@ -2711,7 +2712,7 @@ public class AlterTest {
                 }
             };
             List<AlterClause> cList = new ArrayList<>();
-            PartitionNames partitionNames = new PartitionNames(true, Arrays.asList("p1"));
+            PartitionRef partitionNames = new PartitionRef(Arrays.asList("p1"), true, NodePosition.ZERO);
             TruncatePartitionClause clause = new TruncatePartitionClause(partitionNames);
             cList.add(clause);
             AlterJobMgr alter = new AlterJobMgr(

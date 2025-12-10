@@ -46,6 +46,7 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.PartitionNames;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
@@ -88,7 +89,7 @@ import com.starrocks.sql.ast.CreateRoutineLoadStmt;
 import com.starrocks.sql.ast.ImportColumnDesc;
 import com.starrocks.sql.ast.ImportColumnsStmt;
 import com.starrocks.sql.ast.LoadStmt;
-import com.starrocks.sql.ast.PartitionNames;
+import com.starrocks.sql.ast.PartitionRef;
 import com.starrocks.sql.ast.RoutineLoadDataSourceProperties;
 import com.starrocks.sql.ast.RowDelimiter;
 import com.starrocks.sql.ast.expression.Expr;
@@ -469,7 +470,8 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
             rowDelimiter = routineLoadDesc.getRowDelimiter();
         }
         if (routineLoadDesc.getPartitionNames() != null) {
-            partitions = routineLoadDesc.getPartitionNames();
+            PartitionRef partitionRef = routineLoadDesc.getPartitionNames();
+            partitions = new PartitionNames(partitionRef.isTemp(), partitionRef.getPartitionNames(), partitionRef.getPos());
         }
     }
 
@@ -1363,7 +1365,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
             return;
         }
 
-        PartitionNames partitionNames = routineLoadDesc.getPartitionNames();
+        PartitionRef partitionNames = routineLoadDesc.getPartitionNames();
         if (partitionNames == null) {
             return;
         }

@@ -14,11 +14,10 @@
 
 #include "column/json_column.h"
 
-#include <sstream>
-#include <type_traits>
+#include <velocypack/Slice.h>
 
-#include "column/bytes.h"
-#include "column/column_helper.h"
+#include <sstream>
+
 #include "column/column_view/column_view.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
@@ -26,7 +25,6 @@
 #include "glog/logging.h"
 #include "gutil/casts.h"
 #include "gutil/strings/substitute.h"
-#include "simd/simd.h"
 #include "types/logical_type.h"
 #include "util/hash_util.hpp"
 #include "util/mysql_row_buffer.h"
@@ -50,14 +48,6 @@ int JsonColumn::compare_at(size_t left_idx, size_t right_idx, const starrocks::C
     JsonValue* x = get_object(left_idx);
     const JsonValue* y = rhs.get(right_idx).get_json();
     return x->compare(*y);
-}
-
-void JsonColumn::fnv_hash(uint32_t* hash, uint32_t from, uint32_t to) const {
-    for (uint32_t i = from; i < to; i++) {
-        JsonValue* json = get_object(i);
-        int64_t h = json->hash();
-        hash[i] = HashUtil::fnv_hash(&h, sizeof(h), hash[i]);
-    }
 }
 
 void JsonColumn::put_mysql_row_buffer(starrocks::MysqlRowBuffer* buf, size_t idx, bool is_binary_protocol) const {

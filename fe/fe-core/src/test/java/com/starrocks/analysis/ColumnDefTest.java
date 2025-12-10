@@ -36,13 +36,13 @@ package com.starrocks.analysis;
 
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.AggregateFunction;
-import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnBuilder;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.analyzer.ColumnDefAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.ColumnDef.DefaultValueDef;
 import com.starrocks.sql.ast.expression.NullLiteral;
@@ -90,11 +90,12 @@ public class ColumnDefTest {
         ColumnDef column = new ColumnDef("col", intCol);
         ColumnDefAnalyzer.analyze(column, true);
 
-        Assertions.assertEquals("`col` int(11) NOT NULL COMMENT \"\"", column.toString());
         Assertions.assertEquals("col", column.getName());
         Assertions.assertEquals(PrimitiveType.INT, column.getType().getPrimitiveType());
         Assertions.assertNull(column.getAggregateType());
         Assertions.assertNull(column.getDefaultValue());
+        Assertions.assertFalse(column.isAllowNull());
+        Assertions.assertEquals("", column.getComment());
 
         // default
         column =
@@ -102,7 +103,10 @@ public class ColumnDefTest {
         ColumnDefAnalyzer.analyze(column, true);
         Assertions.assertNull(column.getAggregateType());
         Assertions.assertEquals("10", column.getDefaultValue());
-        Assertions.assertEquals("`col` int(11) NOT NULL DEFAULT \"10\" COMMENT \"\"", column.toSql());
+        Assertions.assertEquals("col", column.getName());
+        Assertions.assertEquals(PrimitiveType.INT, column.getType().getPrimitiveType());
+        Assertions.assertFalse(column.isAllowNull());
+        Assertions.assertEquals("", column.getComment());
 
         // agg
         column = new ColumnDef("col", floatCol, false, AggregateType.SUM, null, false,
@@ -110,7 +114,10 @@ public class ColumnDefTest {
         ColumnDefAnalyzer.analyze(column, true);
         Assertions.assertEquals("10", column.getDefaultValue());
         Assertions.assertEquals(AggregateType.SUM, column.getAggregateType());
-        Assertions.assertEquals("`col` float SUM NOT NULL DEFAULT \"10\" COMMENT \"\"", column.toSql());
+        Assertions.assertEquals("col", column.getName());
+        Assertions.assertEquals(PrimitiveType.FLOAT, column.getType().getPrimitiveType());
+        Assertions.assertFalse(column.isAllowNull());
+        Assertions.assertEquals("", column.getComment());
     }
 
     @Test
@@ -137,7 +144,11 @@ public class ColumnDefTest {
                     new DefaultValueDef(true, new StringLiteral("10")), "");
             ColumnDefAnalyzer.analyze(column, true);
             Assertions.assertEquals(AggregateType.REPLACE_IF_NOT_NULL, column.getAggregateType());
-            Assertions.assertEquals("`col` int(11) REPLACE_IF_NOT_NULL NULL DEFAULT \"10\" COMMENT \"\"", column.toSql());
+            Assertions.assertEquals("col", column.getName());
+            Assertions.assertEquals(PrimitiveType.INT, column.getType().getPrimitiveType());
+            Assertions.assertTrue(column.isAllowNull());
+            Assertions.assertEquals("10", column.getDefaultValue());
+            Assertions.assertEquals("", column.getComment());
         }
     }
 
@@ -148,44 +159,52 @@ public class ColumnDefTest {
                     Boolean.TRUE, null, "");
             ColumnDefAnalyzer.analyze(column, true);
 
-            Assertions.assertEquals("`col` bigint(20) NOT NULL AUTO_INCREMENT COMMENT \"\"", column.toString());
             Assertions.assertEquals("col", column.getName());
             Assertions.assertEquals(PrimitiveType.BIGINT, column.getType().getPrimitiveType());
             Assertions.assertNull(column.getAggregateType());
             Assertions.assertNull(column.getDefaultValue());
+            Assertions.assertFalse(column.isAllowNull());
+            Assertions.assertTrue(column.isAutoIncrement());
+            Assertions.assertEquals("", column.getComment());
         }
         {
             ColumnDef column = new ColumnDef("col", BigIntCol, "utf8", false, null, null, Boolean.FALSE, DefaultValueDef.NOT_SET,
                     null, null, "");
             ColumnDefAnalyzer.analyze(column, true);
 
-            Assertions.assertEquals("`col` bigint(20) NOT NULL COMMENT \"\"", column.toString());
             Assertions.assertEquals("col", column.getName());
             Assertions.assertEquals(PrimitiveType.BIGINT, column.getType().getPrimitiveType());
             Assertions.assertNull(column.getAggregateType());
             Assertions.assertNull(column.getDefaultValue());
+            Assertions.assertFalse(column.isAllowNull());
+            Assertions.assertFalse(column.isAutoIncrement());
+            Assertions.assertEquals("", column.getComment());
         }
         {
             ColumnDef column = new ColumnDef("col", BigIntCol, "utf8", true, null, null, Boolean.FALSE, DefaultValueDef.NOT_SET,
                     Boolean.TRUE, null, "");
             ColumnDefAnalyzer.analyze(column, true);
 
-            Assertions.assertEquals("`col` bigint(20) NOT NULL AUTO_INCREMENT COMMENT \"\"", column.toString());
             Assertions.assertEquals("col", column.getName());
             Assertions.assertEquals(PrimitiveType.BIGINT, column.getType().getPrimitiveType());
             Assertions.assertNull(column.getAggregateType());
             Assertions.assertNull(column.getDefaultValue());
+            Assertions.assertFalse(column.isAllowNull());
+            Assertions.assertTrue(column.isAutoIncrement());
+            Assertions.assertEquals("", column.getComment());
         }
         {
             ColumnDef column = new ColumnDef("col", BigIntCol, "utf8", true, null, null, Boolean.FALSE, DefaultValueDef.NOT_SET,
                     null, null, "");
             ColumnDefAnalyzer.analyze(column, true);
 
-            Assertions.assertEquals("`col` bigint(20) NOT NULL COMMENT \"\"", column.toString());
             Assertions.assertEquals("col", column.getName());
             Assertions.assertEquals(PrimitiveType.BIGINT, column.getType().getPrimitiveType());
             Assertions.assertNull(column.getAggregateType());
             Assertions.assertNull(column.getDefaultValue());
+            Assertions.assertFalse(column.isAllowNull());
+            Assertions.assertFalse(column.isAutoIncrement());
+            Assertions.assertEquals("", column.getComment());
         }
     }
 
@@ -354,10 +373,12 @@ public class ColumnDefTest {
         ColumnDef column = new ColumnDef("col", BigIntCol, "utf8", false, AggregateType.AGG_STATE_UNION,
                 aggStateDesc, Boolean.FALSE, DefaultValueDef.NOT_SET, Boolean.TRUE, null, "");
         ColumnDefAnalyzer.analyze(column, true);
-        Assertions.assertEquals("`col` bigint(20) AGG_STATE_UNION NOT NULL AUTO_INCREMENT COMMENT \"\"", column.toString());
         Assertions.assertEquals("col", column.getName());
         Assertions.assertEquals(PrimitiveType.BIGINT, column.getType().getPrimitiveType());
         Assertions.assertEquals(AggregateType.AGG_STATE_UNION, column.getAggregateType());
         Assertions.assertNull(column.getDefaultValue());
+        Assertions.assertFalse(column.isAllowNull());
+        Assertions.assertTrue(column.isAutoIncrement());
+        Assertions.assertEquals("", column.getComment());
     }
 }

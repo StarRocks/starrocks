@@ -18,6 +18,8 @@
 #include <glog/logging.h>
 #include <glog/vlog_is_on.h>
 #include <jemalloc/jemalloc.h>
+
+#include "common/process_exit.h"
 #ifdef __APPLE__
 #include <mach/mach_init.h>
 #include <mach/mach_port.h>
@@ -101,6 +103,7 @@ static void dump_trace_info() {
         auto query_id = CurrentThread::current().query_id();
         auto fragment_instance_id = CurrentThread::current().fragment_instance_id();
         const std::string& custom_coredump_msg = CurrentThread::current().get_custom_coredump_msg();
+        int32_t plan_node_id = CurrentThread::current().plan_node_id();
         const uint32_t MAX_BUFFER_SIZE = 512;
         char buffer[MAX_BUFFER_SIZE] = {};
 
@@ -113,6 +116,7 @@ static void dump_trace_info() {
         res = sprintf(buffer + res, ", ") + res;
         res = sprintf(buffer + res, "fragment_instance:") + res;
         res = print_unique_id(buffer + res, fragment_instance_id) + res;
+        res = sprintf(buffer + res, ", plan_node_id:%d", plan_node_id) + res;
         res = sprintf(buffer + res, "\n") + res;
 
         // print for lake filename
@@ -188,6 +192,8 @@ static void dontdump_unused_pages() {
 static void failure_handler_after_output_log() {
     static bool start_dump = false;
     if (!start_dump && config::enable_core_file_size_optimization && base::get_cur_core_file_limit() != 0) {
+        set_process_is_crashing();
+
         ExecEnv::GetInstance()->try_release_resource_before_core_dump();
 #ifndef __APPLE__
         DataCache::GetInstance()->try_release_resource_before_core_dump();

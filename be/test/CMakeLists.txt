@@ -5,6 +5,7 @@ set(EXEC_FILES
         ./agent/resource_group_usage_recorder_test.cpp
         ./column/array_column_test.cpp
         ./column/column_view_test.cpp
+        ./column/column_hash_test.cpp
         ./column/array_view_column_test.cpp
         ./column/binary_column_test.cpp
         ./column/german_string_test.cpp
@@ -77,6 +78,7 @@ set(EXEC_FILES
         ./exec/pipeline/limit_operator_test.cpp
         ./exec/pipeline/local_bucket_shuffle_test.cpp
         ./exec/pipeline/mem_limited_chunk_queue_test.cpp
+        ./exec/pipeline/exec_group_test.cpp
         ./exec/query_cache/query_cache_test.cpp
         ./exec/query_cache/transform_operator.cpp
         ./exec/schema_columns_scanner_test.cpp
@@ -316,6 +318,7 @@ set(EXEC_FILES
         ./runtime/memory_scratch_sink_test.cpp
         ./runtime/command_executor_test.cpp
         ./runtime/exec_env_test.cpp
+        ./runtime/exec_sub_process_test.cpp
         ./runtime/load_fail_point_test.cpp
         ./runtime/query_statistics_test.cpp
         ./serde/column_array_serde_test.cpp
@@ -418,6 +421,7 @@ set(EXEC_FILES
         ./service/service_be/internal_service_test.cpp
         ./service/staros_worker_test.cpp
         ./cache/datacache_utils_test.cpp
+        ./cache/datacache_metrics_test.cpp
         ./cache/data_cache_hit_rate_counter_test.cpp
         ./cache/mem_cache/page_cache_test.cpp
         ./cache/peer_cache_test.cpp
@@ -442,6 +446,7 @@ if (USE_AVX2)
 endif ()
 
 add_library(starrocks_test_objs OBJECT ${EXEC_FILES})
+target_link_libraries(starrocks_test_objs PRIVATE StarRocksPCH)
 SET_TARGET_PROPERTIES(starrocks_test_objs PROPERTIES COMPILE_FLAGS "-fno-access-control")
 add_executable(starrocks_test test_main.cpp $<TARGET_OBJECTS:starrocks_test_objs>)
 
@@ -593,6 +598,7 @@ SET(DW_TEST_FILES
     ./storage/size_tiered_compaction_policy_test.cpp
     ./storage/snapshot_meta_test.cpp
     ./storage/sstable/sstable_predicate_test.cpp
+    ./storage/sstable/concatenating_iterator_test.cpp
     ./storage/storage_engine_test.cpp
     ./storage/storage_types_test.cpp
     ./storage/table_reader_remote_test.cpp
@@ -630,6 +636,7 @@ endif ()
 
 add_library(starrocks_dw_objs OBJECT ${DW_TEST_FILES})
 SET_TARGET_PROPERTIES(starrocks_dw_objs PROPERTIES COMPILE_FLAGS "-fno-access-control")
+target_link_libraries(starrocks_dw_objs PRIVATE StarRocksPCH)
 add_executable(starrocks_dw_test test_main.cpp $<TARGET_OBJECTS:starrocks_dw_objs>)
 TARGET_LINK_LIBRARIES(starrocks_dw_test ${TEST_LINK_LIBS})
 

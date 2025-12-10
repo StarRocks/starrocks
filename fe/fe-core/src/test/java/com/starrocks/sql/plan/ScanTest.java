@@ -391,6 +391,16 @@ public class ScanTest extends PlanTestBase {
     }
 
     @Test
+    public void testSchemaScanWithLikePattern() throws Exception {
+        String sql = "select column_name from information_schema.columns " +
+                "where table_schema like 'test_%' and table_name like 'my_table%'";
+        ExecPlan plan = getExecPlan(sql);
+        SchemaScanNode scanNode = (SchemaScanNode) plan.getScanNodes().get(0);
+        Assertions.assertEquals("test_%", scanNode.getSchemaDb());
+        Assertions.assertEquals("my_table%", scanNode.getSchemaTable());
+    }
+
+    @Test
     public void testSchemaScanWithWhereConstantFunction() throws Exception {
         String sql = "SELECT TABLE_SCHEMA TABLE_CAT, NULL TABLE_SCHEM, TABLE_NAME, " +
                 "IF(TABLE_TYPE='BASE TABLE' or TABLE_TYPE='SYSTEM VERSIONED', 'TABLE', TABLE_TYPE) as TABLE_TYPE, " +
@@ -530,6 +540,29 @@ public class ScanTest extends PlanTestBase {
     }
 
     @Test
+    public void testPruneCTE() throws Exception {
+        String sql = "select \n"
+                + "*\n"
+                + "from t0 a \n"
+                + "where 1=1\n"
+                + "and v1='2025-10-21'\n"
+                + "and (\n"
+                + "        a.v2 IN (SELECT '123')\n"
+                + "        or\n"
+                + "        a.v3 IN (SELECT '123')\n"
+                + ");\n";
+
+        try {
+            connectContext.getSessionVariable().setOptimizerExecuteTimeout(-1);
+            FeConstants.enablePruneEmptyOutputScan = true;
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "0:EMPTYSET");
+        } finally {
+            FeConstants.enablePruneEmptyOutputScan = false;
+        }
+    }
+
+    @Test  
     public void testMetaScanWithCount1() throws Exception {
         String sql = "select count(1) from t0 [_META_];";
         String plan = getFragmentPlan(sql);
@@ -553,5 +586,4 @@ public class ScanTest extends PlanTestBase {
             assertContains(plan, "rows_L_ORDERKEY", "sum(rows_L_ORDERKEY)");
         }
     }
-
 }

@@ -35,7 +35,9 @@ import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.Task;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.AlterTableStmt;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.ShowCreateTableStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.expression.Expr;
@@ -1245,5 +1247,39 @@ public class MaterializedViewTest extends StarRocksTestBase {
                     .getTable(db.getFullName(), "test_mv1"));
             Assertions.assertEquals(mv.getPartitionRefreshStrategy(), MaterializedView.PartitionRefreshStrategy.ADAPTIVE);
         });
+    }
+
+    @Test
+    public void testViewAndBaseTableWithTheSameName() throws Exception {
+        starRocksAssert.useDatabase("test")
+                .withTable("CREATE TABLE test.base_t2 \n" +
+                        "(\n" +
+                        "    k1 date,\n" +
+                        "    k2 int,\n" +
+                        "    v1 int sum\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                        "PROPERTIES('replication_num' = '1');");
+
+        starRocksAssert.withDatabase("mv_db").useDatabase("mv_db")
+                .withView("CREATE VIEW mv_db.base_t1 AS " +
+                        "SELECT test.base_t1.k1 AS k1, test.base_t1.k2 AS k2 " +
+                        "FROM test.base_t1 " +
+                        "JOIN test.base_t2 ON test.base_t1.k1 = test.base_t2.k1;");
+
+        starRocksAssert.useDatabase("mv_db")
+                .withMaterializedView("CREATE MATERIALIZED VIEW mv_db.mv_cross_db_test \n" +
+                        "PARTITION BY (k1)\n" +
+                        "DISTRIBUTED BY HASH(k2) BUCKETS 1\n" +
+                        "REFRESH ASYNC\n" +
+                        "PROPERTIES('replication_num' = '1')\n" +
+                        "AS SELECT k1, k2 FROM mv_db.base_t1;");
+
+        Database mvDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("mv_db");
+        MaterializedView mv = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(mvDb.getFullName(), "mv_cross_db_test"));
+        Assertions.assertNotNull(mv);
+        Assertions.assertTrue(mv.isActive());
+        Assertions.assertEquals(1, mv.getPartitionExprMaps().size());
     }
 }

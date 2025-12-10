@@ -36,14 +36,12 @@ package com.starrocks.load.loadv2;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.HashDistributionInfo;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
@@ -64,14 +62,17 @@ import com.starrocks.load.loadv2.etl.EtlJobConfig.EtlPartitionInfo;
 import com.starrocks.load.loadv2.etl.EtlJobConfig.EtlTable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.PartitionDescAnalyzer;
+import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.BrokerDesc;
 import com.starrocks.sql.ast.DataDescription;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.PartitionKeyDesc;
-import com.starrocks.sql.ast.PartitionNames;
+import com.starrocks.sql.ast.PartitionRef;
 import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.sql.ast.SingleRangePartitionDesc;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.common.MetaUtils;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.TypeFactory;
 import mockit.Expectations;
@@ -390,7 +391,7 @@ public class SparkLoadPendingTaskTest {
         // file group
         aggKeyToFileGroups = Maps.newHashMap();
         brokerFileGroups = Lists.newArrayList();
-        PartitionNames partitionNames = new PartitionNames(true, Lists.newArrayList("tp3"));
+        PartitionRef partitionNames = new PartitionRef(Lists.newArrayList("tp3"), true, NodePosition.ZERO);
         desc = new DataDescription("testTable", partitionNames, Lists.newArrayList("abc.txt"),
                 null, null, null, null, false, null);
         brokerFileGroup = new BrokerFileGroup(desc);

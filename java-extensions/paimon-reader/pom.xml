@@ -63,10 +63,22 @@
             <version>0.20.0</version>
         </dependency>
 
+        <!-- https://mvnrepository.com/artifact/at.yawk.lz4/lz4-java -->
+        <dependency>
+            <groupId>at.yawk.lz4</groupId>
+            <artifactId>lz4-java</artifactId>
+        </dependency>
+
         <dependency>
             <groupId>org.apache.paimon</groupId>
             <artifactId>paimon-bundle</artifactId>
             <version>${paimon.version}</version>
+            <exclusions>
+                <exclusion>
+                    <artifactId>lz4-java</artifactId>
+                    <groupId>org.lz4</groupId>
+                </exclusion>
+            </exclusions>
         </dependency>
 
         <dependency>
