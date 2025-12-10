@@ -29,6 +29,7 @@ struct BeThreadInfo {
     bool idle{false};
     int64_t finished_tasks{0};
     int64_t num_bound_cpu_cores{0};
+    int64_t start_time_micros{0};
 };
 
 class SchemaBeThreadsScanner : public SchemaScanner {

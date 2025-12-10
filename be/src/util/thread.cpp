@@ -60,6 +60,7 @@
 #include "gutil/once.h"
 #include "gutil/strings/substitute.h"
 #include "util/scoped_cleanup.h"
+#include "util/time.h"
 
 namespace starrocks {
 
@@ -101,24 +102,29 @@ public:
 
 private:
     // Container class for any details we want to capture about a thread
-    // TODO: Add start-time.
     // TODO: Track fragment ID.
     class ThreadDescriptor {
     public:
         ThreadDescriptor() = default;
         ThreadDescriptor(std::string category, std::string name, int64_t thread_id, Thread* thread)
-                : _name(std::move(name)), _category(std::move(category)), _thread_id(thread_id), _thread(thread) {}
+                : _name(std::move(name)),
+                  _category(std::move(category)),
+                  _thread_id(thread_id),
+                  _thread(thread),
+                  _start_time_micros(MonotonicMicros()) {}
 
         const std::string& name() const { return _name; }
         const std::string& category() const { return _category; }
         int64_t thread_id() const { return _thread_id; }
         Thread* thread() const { return _thread; }
+        int64_t start_time_micros() const { return _start_time_micros; }
 
     private:
         std::string _name;
         std::string _category;
         int64_t _thread_id;
         Thread* _thread{nullptr};
+        int64_t _start_time_micros{0};
     };
 
     // A ThreadCategory is a set of threads that are logically related.
@@ -216,6 +222,7 @@ void ThreadMgr::get_thread_infos(std::vector<BeThreadInfo>& infos) {
             info.idle = thread.second.thread()->idle();
             info.finished_tasks = thread.second.thread()->finished_tasks();
             info.num_bound_cpu_cores = thread.second.thread()->num_bound_cpu_cores();
+            info.start_time_micros = thread.second.start_time_micros();
         }
     }
 }

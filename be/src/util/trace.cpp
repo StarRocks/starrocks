@@ -182,7 +182,7 @@ std::string Trace::DumpToString(int flags) const {
 }
 
 std::string Trace::MetricsAsJSON() const {
-    // TODO(yingchun): simplily implement here, we could import JsonWriter in the future.
+    // TODO(yingchun): simply implement here, we could import JsonWriter in the future.
     rapidjson::StringBuffer buf;
     rapidjson::Writer<rapidjson::StringBuffer> jw(buf);
     MetricsToJSON(&jw);
