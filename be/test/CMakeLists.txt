@@ -538,6 +538,7 @@ SET(DW_TEST_FILES
     ./storage/lake/tablet_manager_test.cpp
     ./storage/lake/tablet_range_helper_test.cpp
     ./storage/lake/sst_seek_range_test.cpp
+    ./storage/lake/tablet_parallel_compaction_manager_test.cpp
     ./storage/lake/tablet_reader_test.cpp
     ./storage/lake/tablet_retain_info_test.cpp
     ./storage/lake/tablet_test.cpp
