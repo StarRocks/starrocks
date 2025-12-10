@@ -750,6 +750,11 @@ public class QueryAnalyzer {
                 // Add virtual columns for internal tables (OLAP, Primary Key, Duplicate Key)
                 if (table.isOlapOrCloudNativeTable() && Config.enable_virtual_column) {
                     for (Column column : getVirtualColumns()) {
+                        // Skip adding virtual column if table already has a column with the same name
+                        // to avoid ambiguous column resolution errors
+                        if (table.getColumn(column.getName()) != null) {
+                            continue;
+                        }
                         SlotRef slot = new SlotRef(tableName, column.getName(), column.getName());
                         // Virtual columns are not visible by default (won't appear in SELECT *)
                         // but can be explicitly selected
