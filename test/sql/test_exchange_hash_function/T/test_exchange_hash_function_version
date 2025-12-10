@@ -17,9 +17,6 @@ PROPERTIES (
 -- Insert test data
 insert into t_hash_test SELECT generate_series, generate_series, generate_series FROM TABLE(generate_series(1, 1000));
 
--- Test default value (should be 0, fnv_hash)
-show variables like 'exchange_hash_function_version';
-
 -- Test with default fnv_hash (version 0)
 set exchange_hash_function_version = 0;
 select count(*) from (select c0, c1 from t_hash_test group by c0, c1) t;
