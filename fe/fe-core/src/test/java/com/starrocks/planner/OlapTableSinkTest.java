@@ -146,6 +146,8 @@ public class OlapTableSinkTest {
                 result = Lists.newArrayList(partition);
                 dstTable.getPartition(2L);
                 result = partition;
+                dstTable.getDefaultDistributionInfo();
+                result = distInfo;
             }
         };
 
@@ -186,6 +188,8 @@ public class OlapTableSinkTest {
                 result = Lists.newArrayList(p1, p2);
                 dstTable.getPartition(p1.getId());
                 result = p1;
+                dstTable.getDefaultDistributionInfo();
+                result = distInfo;
             }
         };
 
@@ -447,6 +451,8 @@ public class OlapTableSinkTest {
                 result = listPartitionInfo;
                 dstTable.getIdToColumn();
                 result = idToColumn;
+                dstTable.getDefaultDistributionInfo();
+                result = distInfo;
             }
         };
 
@@ -486,6 +492,8 @@ public class OlapTableSinkTest {
                 result = Lists.newArrayList(partition);
                 dstTable.getPartition(2L);
                 result = partition;
+                dstTable.getDefaultDistributionInfo();
+                result = distInfo;
             }
         };
 
@@ -526,6 +534,8 @@ public class OlapTableSinkTest {
                 result = Lists.newArrayList(partition);
                 dstTable.getPartition(2L);
                 result = partition;
+                dstTable.getDefaultDistributionInfo();
+                result = distInfo;
             }
         };
 
@@ -570,6 +580,8 @@ public class OlapTableSinkTest {
                 result = partition;
                 dstTable.getState();
                 result = OlapTable.OlapTableState.SCHEMA_CHANGE;
+                dstTable.getDefaultDistributionInfo();
+                result = distInfo;
             }
         };
 

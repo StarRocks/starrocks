@@ -46,6 +46,9 @@ Status TabletSinkSender::send_chunk(const OlapTableSchemaParam* schema,
                                     const std::vector<uint16_t>& validate_select_idx,
                                     std::unordered_map<int64_t, std::set<int64_t>>& index_id_partition_id,
                                     Chunk* chunk) {
+    // Range distribution is handled by the base class implementation for RangeTabletSinkSender
+    // Normal hash distribution continues here
+
     size_t num_rows = chunk->num_rows();
     size_t selection_size = validate_select_idx.size();
     if (selection_size == 0) {

@@ -272,6 +272,22 @@ public:
 
     Status test_add_partitions(OlapTablePartition* partition);
 
+    const std::vector<SlotDescriptor*>& distribution_slot_descs() const { return _distributed_slot_descs; }
+
+    bool is_range_distribution() const {
+        return _distribution_type.has_value() && _distribution_type.value() == TOlapTableDistributionType::RANGE;
+    }
+
+    bool is_hash_distribution() const {
+        return ((!_distribution_type.has_value() && !_distributed_slot_descs.empty()) ||
+                (_distribution_type.has_value() && _distribution_type.value() == TOlapTableDistributionType::HASH));
+    }
+
+    bool is_random_distribution() const {
+        return ((!_distribution_type.has_value() && _distributed_slot_descs.empty()) ||
+                (_distribution_type.has_value() && _distribution_type.value() == TOlapTableDistributionType::RANDOM));
+    }
+
 private:
     /**
      * @brief  find tablets with range partition table
@@ -336,6 +352,10 @@ private:
     std::map<ChunkRow*, std::vector<int64_t>, PartionKeyComparator> _partitions_map;
 
     Random _rand{(uint32_t)time(nullptr)};
+
+    // NOTE: Thrift generates enum as `struct TOlapTableDistributionType { enum type { ... }; };`
+    // so we should store the actual enum type `TOlapTableDistributionType::type` here.
+    std::optional<TOlapTableDistributionType::type> _distribution_type;
 };
 
 } // namespace starrocks
