@@ -23,8 +23,8 @@
 
 namespace starrocks {
 
-#define VARIANT_CAST_NOT_SUPPORT(variant_type, logical_type)                                                         \
-    Status::NotSupported(fmt::format("Cannot cast variant({}) to type: ", VariantUtil::type_to_string(variant_type), \
+#define VARIANT_CAST_NOT_SUPPORT(variant_type, logical_type)                                                           \
+    Status::NotSupported(fmt::format("Cannot cast variant({}) to type: {}", VariantUtil::type_to_string(variant_type), \
                                      logical_type_to_string(logical_type)))
 
 Status cast_variant_to_bool(const Variant& variant, ColumnBuilder<TYPE_BOOLEAN>& result);
@@ -100,8 +100,8 @@ static Status cast_variant_value_to(const Variant& variant, const cctz::time_zon
 
     if (!status.ok()) {
         if constexpr (AllowThrowException) {
-            return Status::InternalError(
-                    fmt::format("Fail to cast variant: {}", logical_type_to_string(ResultType), status.to_string()));
+            return Status::InternalError(fmt::format("Fail to cast variant: {}, error: {}",
+                                                     logical_type_to_string(ResultType), status.to_string()));
         } else {
             result.append_null();
         }

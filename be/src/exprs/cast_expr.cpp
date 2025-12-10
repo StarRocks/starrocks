@@ -1151,7 +1151,7 @@ public:
             }
         } else if constexpr (FromType == TYPE_VARIANT || ToType == TYPE_VARIANT) {
             if constexpr (lt_is_decimal<ToType>) {
-                if (context->error_if_overflow()) {
+                if (context != nullptr && context->error_if_overflow()) {
                     return VectorizedUnaryFunction<DecimalFrom<OverflowMode::REPORT_ERROR>>::evaluate<FromType, ToType>(
                             column, to_type.precision, to_type.scale);
                 } else {
