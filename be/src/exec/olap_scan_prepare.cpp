@@ -34,6 +34,7 @@
 #include "storage/runtime_filter_predicate.h"
 #include "storage/runtime_range_pruner.h"
 #include "storage/runtime_range_pruner.hpp"
+#include "storage/virtual_column.h"
 #include "types/date_value.hpp"
 #include "types/logical_type.h"
 #include "types/logical_type_infra.h"
@@ -1280,7 +1281,7 @@ Status ChunkPredicateBuilder<E, Type>::_get_column_predicates(PredicateParser* p
                 continue;
             }
             // Skip virtual columns that cannot be pushed down
-            if (slot_desc->col_name() == "_tablet_id_") {
+            if (is_virtual_column(slot_desc->col_name())) {
                 continue;
             }
             if (desc->is_stream_build_filter()) {
