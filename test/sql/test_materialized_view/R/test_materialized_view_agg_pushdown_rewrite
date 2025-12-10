@@ -593,14 +593,10 @@ GROUP BY  `id`,`pt`;
 -- result:
 -- !result
 REFRESH MATERIALIZED VIEW `test_mv1` WITH SYNC MODE;
-<<<<<<< HEAD
-function: check_hit_materialized_view("SELECT SUM((gmv+gmv2)*0.01) FROM test_pt8 WHERE pt = '20241126' AND id IN ( SELECT id FROM test_pt9 WHERE id = '1');", "test_mv1")
-=======
 -- result:
 019b020f-7067-730f-9344-2b7084761390
 -- !result
 function: print_hit_materialized_view("SELECT SUM((gmv+gmv2)*0.01) FROM test_pt8 WHERE pt = '20241126' AND id IN ( SELECT id FROM test_pt9 WHERE id = '1');", "test_mv1")
->>>>>>> 81737321c4 ([Enhancement] Support push down group by expressions and mv rewrite (#66507))
 -- result:
 None
 -- !result

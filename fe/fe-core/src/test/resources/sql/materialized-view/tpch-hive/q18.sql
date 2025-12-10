@@ -36,16 +36,6 @@ TOP-N (order by [[12: o_totalprice DESC NULLS LAST, 13: o_orderdate ASC NULLS FI
     TOP-N (order by [[12: o_totalprice DESC NULLS LAST, 13: o_orderdate ASC NULLS FIRST]])
         AGGREGATE ([GLOBAL] aggregate [{143: sum=sum(143: sum)}] group by [[2: c_name, 1: c_custkey, 9: o_orderkey, 13: o_orderdate, 12: o_totalprice]] having [null]
             EXCHANGE SHUFFLE[2, 1, 9, 13, 12]
-<<<<<<< HEAD
-                AGGREGATE ([LOCAL] aggregate [{52: sum=sum(22: l_quantity)}] group by [[2: c_name, 1: c_custkey, 9: o_orderkey, 13: o_orderdate, 12: o_totalprice]] having [null]
-                    LEFT SEMI JOIN (join-predicate [9: o_orderkey = 34: l_orderkey] post-join-predicate [null])
-                        SCAN (mv[lineitem_mv] columns[61: c_name, 67: l_orderkey, 69: l_quantity, 76: o_custkey, 77: o_orderdate, 81: o_totalprice] predicate[null])
-                        EXCHANGE BROADCAST
-                            AGGREGATE ([GLOBAL] aggregate [{143: sum=sum(143: sum)}] group by [[125: l_orderkey]] having [143: sum > 315.00]
-                                EXCHANGE SHUFFLE[125]
-                                    AGGREGATE ([LOCAL] aggregate [{143: sum=sum(129: sum_qty)}] group by [[125: l_orderkey]] having [null]
-                                        SCAN (mv[lineitem_agg_mv1] columns[125: l_orderkey, 129: sum_qty] predicate[null])
-=======
                 TOP-N (order by [[12: o_totalprice DESC NULLS LAST, 13: o_orderdate ASC NULLS FIRST]])
                     AGGREGATE ([LOCAL] aggregate [{143: sum=sum(138: sum)}] group by [[2: c_name, 1: c_custkey, 9: o_orderkey, 13: o_orderdate, 12: o_totalprice]] having [null]
                         INNER JOIN (join-predicate [1: c_custkey = 10: o_custkey] post-join-predicate [null])
@@ -57,15 +47,14 @@ TOP-N (order by [[12: o_totalprice DESC NULLS LAST, 13: o_orderdate ASC NULLS FI
                                         HIVE SCAN (columns{9,10,12,13} predicate[10: o_custkey IS NOT NULL])
                                         EXCHANGE BROADCAST
                                             AGGREGATE ([GLOBAL] aggregate [{142: sum=sum(140: sum)}] group by [[34: l_orderkey]] having [142: sum > 315.00]
-                                                AGGREGATE ([GLOBAL] aggregate [{141: sum=sum(141: sum)}] group by [[125: l_orderkey]] having [null]
-                                                    EXCHANGE SHUFFLE[125]
-                                                        AGGREGATE ([LOCAL] aggregate [{141: sum=sum(129: sum_qty)}] group by [[125: l_orderkey]] having [null]
-                                                            SCAN (mv[lineitem_agg_mv1] columns[125: l_orderkey, 129: sum_qty] predicate[125: l_orderkey IS NOT NULL])
+                                                AGGREGATE ([GLOBAL] aggregate [{141: sum=sum(141: sum)}] group by [[76: l_orderkey]] having [null]
+                                                    EXCHANGE SHUFFLE[76]
+                                                        AGGREGATE ([LOCAL] aggregate [{141: sum=sum(80: sum_qty)}] group by [[76: l_orderkey]] having [null]
+                                                            SCAN (mv[lineitem_agg_mv1] columns[76: l_orderkey, 80: sum_qty] predicate[null])
                                     EXCHANGE BROADCAST
-                                        AGGREGATE ([GLOBAL] aggregate [{139: sum=sum(139: sum)}] group by [[125: l_orderkey]] having [null]
-                                            EXCHANGE SHUFFLE[125]
-                                                AGGREGATE ([LOCAL] aggregate [{139: sum=sum(129: sum_qty)}] group by [[125: l_orderkey]] having [null]
-                                                    SCAN (mv[lineitem_agg_mv1] columns[125: l_orderkey, 129: sum_qty] predicate[null])
->>>>>>> 81737321c4 ([Enhancement] Support push down group by expressions and mv rewrite (#66507))
+                                        AGGREGATE ([GLOBAL] aggregate [{139: sum=sum(139: sum)}] group by [[76: l_orderkey]] having [null]
+                                            EXCHANGE SHUFFLE[76]
+                                                AGGREGATE ([LOCAL] aggregate [{139: sum=sum(80: sum_qty)}] group by [[76: l_orderkey]] having [null]
+                                                    SCAN (mv[lineitem_agg_mv1] columns[76: l_orderkey, 80: sum_qty] predicate[null])
 [end]
 
