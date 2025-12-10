@@ -188,7 +188,8 @@ public class TableSchemaService {
             return SchemaStatusOr.error(TStatusCode.QUERY_NOT_EXIST,
                     "query not found, maybe has finished, query id: " + DebugUtil.printId(queryId));
         }
-        Optional<SchemaInfo> schemaInfo = coordinator.getScanNodes().stream()
+        Optional<SchemaInfo> schemaInfo = Optional.ofNullable(coordinator.getScanNodes())
+                .orElse(Collections.emptyList()).stream()
                 .filter(OlapScanNode.class::isInstance)
                 .map(node -> ((OlapScanNode) node).getSchema())
                 .filter(schema -> schema.isPresent() && schema.get().getId() == schemaId)

@@ -3179,6 +3179,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     @Override
     public TBatchGetTableSchemaResponse getTableSchema(TBatchGetTableSchemaRequest batchRequest) {
         TBatchGetTableSchemaResponse batchResponse = new TBatchGetTableSchemaResponse();
+        // Always set global status OK for now. Could use it for authentication/QoS, etc., in the future.
+        batchResponse.setStatus(new TStatus(OK));
         if (batchRequest.isSetRequests()) {
             for (TGetTableSchemaRequest request : batchRequest.getRequests()) {
                 TGetTableSchemaResponse response = TableSchemaService.getTableSchema(request);

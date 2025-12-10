@@ -2248,7 +2248,8 @@ struct TBatchGetTableSchemaRequest {
 }
 
 struct TBatchGetTableSchemaResponse {
-    1: optional list<TGetTableSchemaResponse> responses;
+    1: optional Status.TStatus status;
+    2: optional list<TGetTableSchemaResponse> responses;
 }
 
 service FrontendService {

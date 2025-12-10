@@ -1810,6 +1810,8 @@ public class FrontendServiceImplTest {
             TBatchGetTableSchemaResponse batchResponse = impl.getTableSchema(batchRequest);
 
             Assertions.assertNotNull(batchResponse);
+            Assertions.assertTrue(batchResponse.isSetStatus());
+            Assertions.assertEquals(TStatusCode.OK, batchResponse.getStatus().getStatus_code());
             Assertions.assertNotNull(batchResponse.getResponses());
             Assertions.assertEquals(1, batchResponse.getResponsesSize());
             Assertions.assertEquals(TStatusCode.OK, batchResponse.getResponses().get(0).getStatus().getStatus_code());
@@ -1839,6 +1841,8 @@ public class FrontendServiceImplTest {
             TBatchGetTableSchemaResponse batchResponse = impl.getTableSchema(batchRequest);
 
             Assertions.assertNotNull(batchResponse);
+            Assertions.assertTrue(batchResponse.isSetStatus());
+            Assertions.assertEquals(TStatusCode.OK, batchResponse.getStatus().getStatus_code());
             Assertions.assertNotNull(batchResponse.getResponses());
             Assertions.assertEquals(2, batchResponse.getResponsesSize());
             Assertions.assertEquals(TStatusCode.OK, batchResponse.getResponses().get(0).getStatus().getStatus_code());
