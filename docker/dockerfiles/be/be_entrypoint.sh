@@ -17,6 +17,10 @@ STARROCKS_ROOT=${STARROCKS_ROOT:-"/opt/starrocks"}
 export STARROCKS_HOME=${STARROCKS_ROOT}/be
 BE_CONFIG=$STARROCKS_HOME/conf/be.conf
 
+MYSQL_PWD_OPT=""
+if [[ -n "$FE_PASSWORD" ]]; then
+    MYSQL_PWD_OPT="-p${FE_PASSWORD}"
+fi
 
 log_stderr()
 {
@@ -47,7 +51,7 @@ update_conf_from_configmap()
 }
 
 show_backends(){
-    timeout 15 mysql --connect-timeout 2 -h $svc -P $FE_QUERY_PORT -u root --skip-column-names --batch -e 'SHOW BACKENDS;'
+    timeout 15 mysql --connect-timeout 2 -h $svc -P $FE_QUERY_PORT -u root $MYSQL_PWD_OPT --skip-column-names --batch -e 'SHOW BACKENDS;'
 }
 
 parse_confval_from_cn_conf()
@@ -84,7 +88,7 @@ add_self()
     while true
     do
         log_stderr "Add myself ($MY_SELF:$HEARTBEAT_PORT) into FE ..."
-        timeout 15 mysql --connect-timeout 2 -h $svc -P $FE_QUERY_PORT -u root --skip-column-names --batch -e "ALTER SYSTEM ADD BACKEND \"$MY_SELF:$HEARTBEAT_PORT\";"
+        timeout 15 mysql --connect-timeout 2 -h $svc -P $FE_QUERY_PORT -u root $MYSQL_PWD_OPT --skip-column-names --batch -e "ALTER SYSTEM ADD BACKEND \"$MY_SELF:$HEARTBEAT_PORT\";"
         memlist=`show_backends $svc`
         if echo "$memlist" | grep -q -w "$MY_SELF" &>/dev/null ; then
             break;

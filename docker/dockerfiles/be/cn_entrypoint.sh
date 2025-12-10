@@ -12,6 +12,10 @@ STARROCKS_ROOT=${STARROCKS_ROOT:-"/opt/starrocks"}
 STARROCKS_HOME=${STARROCKS_ROOT}/cn
 CN_CONFIG=$STARROCKS_HOME/conf/cn.conf
 
+MYSQL_PWD_OPT=""
+if [[ -n "$FE_PASSWORD" ]]; then
+    MYSQL_PWD_OPT="-p${FE_PASSWORD}"
+fi
 
 log_stderr()
 {
@@ -42,7 +46,7 @@ update_conf_from_configmap()
 }
 
 show_compute_nodes(){
-    timeout 15 mysql --connect-timeout 2 -h $svc -P $FE_QUERY_PORT -u root --skip-column-names --batch -e 'SHOW COMPUTE NODES;'
+    timeout 15 mysql --connect-timeout 2 -h $svc -P $FE_QUERY_PORT -u root $MYSQL_PWD_OPT --skip-column-names --batch -e 'SHOW COMPUTE NODES;'
 }
 
 parse_confval_from_cn_conf()
@@ -81,12 +85,12 @@ add_self()
         log_stderr "Add myself ($MY_SELF:$HEARTBEAT_PORT) into FE ..."
         # if KUBE_STARROCKS_MULTI_WAREHOUSE environment variable is set, add compute node to the specified warehouse
         if  [[ "x$KUBE_STARROCKS_MULTI_WAREHOUSE" != "x" ]] ; then
-            timeout 15 mysql --connect-timeout 2 -h $svc -P $FE_QUERY_PORT -u root --skip-column-names --batch -e \
+            timeout 15 mysql --connect-timeout 2 -h $svc -P $FE_QUERY_PORT -u root $MYSQL_PWD_OPT --skip-column-names --batch -e \
               "CREATE WAREHOUSE IF NOT EXISTS $KUBE_STARROCKS_MULTI_WAREHOUSE;"
-            timeout 15 mysql --connect-timeout 2 -h $svc -P $FE_QUERY_PORT -u root --skip-column-names --batch -e \
+            timeout 15 mysql --connect-timeout 2 -h $svc -P $FE_QUERY_PORT -u root $MYSQL_PWD_OPT --skip-column-names --batch -e \
               "ALTER SYSTEM ADD COMPUTE NODE \"$MY_SELF:$HEARTBEAT_PORT\" INTO WAREHOUSE $KUBE_STARROCKS_MULTI_WAREHOUSE;"
         else
-            timeout 15 mysql --connect-timeout 2 -h $svc -P $FE_QUERY_PORT -u root --skip-column-names --batch -e \
+            timeout 15 mysql --connect-timeout 2 -h $svc -P $FE_QUERY_PORT -u root $MYSQL_PWD_OPT --skip-column-names --batch -e \
               "ALTER SYSTEM ADD COMPUTE NODE \"$MY_SELF:$HEARTBEAT_PORT\";"
         fi
 
@@ -127,7 +131,7 @@ drop_my_self()
                 return 0
             else
                 log_stderr "drop my self $selfinfo ..."
-                timeout 15 mysql --connect-timeout 2 -h $svc -P $FE_QUERY_PORT -u root --skip-column-names --batch -e "ALTER SYSTEM DROP COMPUTE NODE \"$selfinfo\";"
+                timeout 15 mysql --connect-timeout 2 -h $svc -P $FE_QUERY_PORT -u root $MYSQL_PWD_OPT --skip-column-names --batch -e "ALTER SYSTEM DROP COMPUTE NODE \"$selfinfo\";"
                 break;
             fi
         else
