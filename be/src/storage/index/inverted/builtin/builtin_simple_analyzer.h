@@ -80,7 +80,7 @@ private:
     inline bool _is_token_char(char c) const {
         size_t index = static_cast<unsigned char>(c);
         if (index >= LOOKUP_SIZE) {
-            return false; // Non-ASCII characters are not considered token chars
+            return false; // Non-isalnum characters are not considered token chars
         }
         return _token_char_table[index];
     }
