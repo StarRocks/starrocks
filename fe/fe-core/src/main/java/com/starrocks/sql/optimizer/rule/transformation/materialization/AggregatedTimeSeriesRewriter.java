@@ -107,7 +107,7 @@ public class AggregatedTimeSeriesRewriter extends MaterializedViewRewriter {
 
     private final Rule rule;
     private final ColumnRefFactory queryColumnRefFactory;
-    private final Map<ColumnRefOperator, ColumnRefOperator> remapping = Maps.newHashMap();
+    private final Map<ColumnRefOperator, ScalarOperator> remapping = Maps.newHashMap();
 
     public AggregatedTimeSeriesRewriter(MvRewriteContext mvRewriteContext,
                                         Rule rule) {
@@ -428,12 +428,12 @@ public class AggregatedTimeSeriesRewriter extends MaterializedViewRewriter {
         Projection project = rewrittenAggOp.getProjection();
         Map<ColumnRefOperator, ScalarOperator> rewrittenProjectMapping = project == null ? Maps.newHashMap()
                 : project.getColumnRefMap();
-        for (Map.Entry<ColumnRefOperator, ColumnRefOperator> e : remapping.entrySet()) {
+        for (Map.Entry<ColumnRefOperator, ScalarOperator> e : remapping.entrySet()) {
             ColumnRefOperator origAggColRef = e.getKey();
             CallOperator aggCall = ctx.aggregations.get(origAggColRef);
             if (ctx.aggToFinalAggMap.containsKey(aggCall)) {
                 CallOperator partialFn = ctx.aggToPartialAggMap.get(aggCall);
-                ColumnRefOperator newAggColRef = e.getValue();
+                ColumnRefOperator newAggColRef = (ColumnRefOperator) e.getValue();
                 ColumnRefOperator realPartialColRef = new ColumnRefOperator(newAggColRef.getId(), partialFn.getType(),
                         newAggColRef.getName(), partialFn.isNullable());
                 remapping.put(origAggColRef, realPartialColRef);
@@ -461,7 +461,7 @@ public class AggregatedTimeSeriesRewriter extends MaterializedViewRewriter {
 
         // refresh remapping since after duplication, the column ref id has been changed
         Map<ColumnRefOperator, ColumnRefOperator> aggColMapping = duplicator.getColumnMapping();
-        for (Map.Entry<ColumnRefOperator, ColumnRefOperator> e : remapping.entrySet()) {
+        for (Map.Entry<ColumnRefOperator, ScalarOperator> e : remapping.entrySet()) {
             remapping.put(e.getKey(), aggColMapping.get(e.getValue()));
         }
         return  Pair.create(dupRewritten, newOutputColRefs);
@@ -569,7 +569,7 @@ public class AggregatedTimeSeriesRewriter extends MaterializedViewRewriter {
                 .build();
 
         // refresh remapping since it has changed after union
-        for (Map.Entry<ColumnRefOperator, ColumnRefOperator> e : remapping.entrySet()) {
+        for (Map.Entry<ColumnRefOperator, ScalarOperator> e : remapping.entrySet()) {
             ColumnRefOperator newColRef = unionOutputColumns.get(mvRewrittenOutputCols.indexOf(e.getValue()));
             remapping.put(e.getKey(), newColRef);
         }
