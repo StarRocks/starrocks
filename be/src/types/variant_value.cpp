@@ -69,6 +69,30 @@ StatusOr<VariantValue> VariantValue::create(const Slice& slice) {
     return VariantValue(std::move(metadata), std::move(value));
 }
 
+StatusOr<VariantValue> VariantValue::create(const Slice& metadata, const Slice& value) {
+    if (metadata.empty()) {
+        return of_null();
+    }
+
+    RETURN_IF_ERROR(validate_metadata(std::string_view(metadata.get_data(), metadata.get_size())));
+    // validate value size limit (16MB)
+    if (metadata.get_size() + value.get_size() > kMaxVariantSize) {
+        return Status::InvalidArgument("Variant value size exceeds maximum limit: " + std::to_string(value.get_size()) +
+                                       " > " + std::to_string(kMaxVariantSize));
+    }
+
+    return VariantValue(std::string(metadata.get_data(), metadata.get_size()),
+                        std::string(value.get_data(), value.get_size()));
+}
+
+// Create a VariantValue from a Parquet Variant.
+VariantValue VariantValue::of_variant(const Variant& variant) {
+    const std::string_view metadata = variant.metadata().get_raw();
+    const std::string_view value = variant.value();
+
+    return VariantValue(metadata, value);
+}
+
 Status VariantValue::validate_metadata(const std::string_view metadata) {
     // metadata at least 3 bytes: version, dictionarySize and at least one offset.
     if (metadata.size() < kMinMetadataSize) {
@@ -116,7 +140,7 @@ StatusOr<std::string_view> VariantValue::load_metadata(const std::string_view va
         return Status::InvalidArgument("Variant too short to contain dict_size");
     }
 
-    uint32_t dict_size = VariantUtil::readLittleEndianUnsigned(variant.data() + 1, offset_size);
+    uint32_t dict_size = VariantUtil::read_little_endian_unsigned32(variant.data() + 1, offset_size);
     uint32_t offset_list_offset = kHeaderSize + offset_size;
 
     // Check for potential overflow in offset list size calculation
@@ -131,7 +155,7 @@ StatusOr<std::string_view> VariantValue::load_metadata(const std::string_view va
         return Status::InvalidArgument("Variant too short to contain all offsets");
     }
 
-    uint32_t last_data_size = VariantUtil::readLittleEndianUnsigned(variant.data() + last_offset_pos, offset_size);
+    uint32_t last_data_size = VariantUtil::read_little_endian_unsigned32(variant.data() + last_offset_pos, offset_size);
     uint32_t end_offset = data_offset + last_data_size;
 
     if (end_offset > variant.size()) {

@@ -688,8 +688,12 @@ Status VariantColumnReader::read_range(const Range<uint64_t>& range, const Filte
     auto append_variant_column = [&](const size_t idx) {
         const Slice metadata_slice = metadata_column->get_slice(idx);
         const Slice value_slice = value_column->get_slice(idx);
-        variant_column->append(VariantValue(std::string(metadata_slice.data, metadata_slice.size),
-                                            std::string(value_slice.data, value_slice.size)));
+        if (auto variant_value = VariantValue::create(metadata_slice, value_slice); !variant_value.ok()) {
+            // Read malformed variant value as null
+            variant_column->append(VariantValue::of_null());
+        } else {
+            variant_column->append(variant_value.value());
+        }
     };
 
     if (def_levels != nullptr && num_levels > 0) {
