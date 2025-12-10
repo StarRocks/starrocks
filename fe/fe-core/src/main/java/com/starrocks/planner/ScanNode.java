@@ -38,6 +38,7 @@ import com.google.common.base.Joiner;
 import com.google.common.base.MoreObjects;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.ColumnAccessPath;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.connector.BucketProperty;
@@ -131,6 +132,10 @@ public abstract class ScanNode extends PlanNode {
 
     public String getTableName() {
         return desc.getTable().getName();
+    }
+
+    public Table getTable() {
+        return desc.getTable();
     }
 
     public int getBucketNums() throws StarRocksException {
