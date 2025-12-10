@@ -15,9 +15,7 @@
 package com.starrocks.authentication;
 
 import com.starrocks.catalog.UserIdentity;
-import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
-import com.starrocks.authentication.UserPropertyInfo;
 import com.starrocks.persist.AlterUserInfo;
 import com.starrocks.persist.CreateUserInfo;
 import com.starrocks.persist.EditLog;

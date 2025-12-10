@@ -23,6 +23,7 @@ import com.google.common.cache.LoadingCache;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
+import com.google.rpc.context.AttributeContext;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.common.Config;
@@ -676,7 +677,7 @@ public class AuthorizationMgr {
                 for (Map.Entry<Long, RolePrivilegeCollectionV2> entry : rolePrivCollectionModified.entrySet()) {
                     long rId = entry.getKey();
                     RolePrivilegeCollectionV2 rpc = entry.getValue();
-                    replacePrivilegeEntryForImmutableBuiltInRole(rId, rpc);
+                    replacePrivilegeEntryForImmutableBuiltInRole(rId, rpc, this);
                     roleIdToPrivilegeCollection.put(rId, rpc);
                 }
             });
@@ -851,7 +852,7 @@ public class AuthorizationMgr {
                 for (Map.Entry<Long, RolePrivilegeCollectionV2> entry : rolePrivCollectionModified.entrySet()) {
                     long rId = entry.getKey();
                     RolePrivilegeCollectionV2 rpc = entry.getValue();
-                    replacePrivilegeEntryForImmutableBuiltInRole(rId, rpc);
+                    replacePrivilegeEntryForImmutableBuiltInRole(rId, rpc, this);
                     roleIdToPrivilegeCollection.put(rId, rpc);
                 }
             });
@@ -1448,7 +1449,7 @@ public class AuthorizationMgr {
                 long roleId = entry.getKey();
                 invalidateRolesInCacheRoleUnlocked(roleId);
                 RolePrivilegeCollectionV2 privilegeCollection = entry.getValue();
-                replacePrivilegeEntryForImmutableBuiltInRole(roleId, privilegeCollection);
+                replacePrivilegeEntryForImmutableBuiltInRole(roleId, privilegeCollection, this);
                 roleIdToPrivilegeCollection.put(roleId, privilegeCollection);
 
                 if (!roleNameToId.containsKey(privilegeCollection.getName())) {
@@ -1461,9 +1462,9 @@ public class AuthorizationMgr {
         }
     }
 
-    private void replacePrivilegeEntryForImmutableBuiltInRole(long roleId, RolePrivilegeCollectionV2 rpc) {
+    private void replacePrivilegeEntryForImmutableBuiltInRole(long roleId, RolePrivilegeCollectionV2 rpc, AuthorizationMgr mgr) {
         if (PrivilegeBuiltinConstants.IMMUTABLE_BUILT_IN_ROLE_IDS.contains(roleId)) {
-            RolePrivilegeCollectionV2 builtInRolePrivilegeCollection = roleIdToPrivilegeCollection.get(roleId);
+            RolePrivilegeCollectionV2 builtInRolePrivilegeCollection = mgr.roleIdToPrivilegeCollection.get(roleId);
             rpc.typeToPrivilegeEntryList = builtInRolePrivilegeCollection.typeToPrivilegeEntryList;
         }
     }
@@ -1923,7 +1924,7 @@ public class AuthorizationMgr {
                     // Use hard-code PrivilegeCollection in the memory as the built-in role permission.
                     // The reason why need to replay from the image here
                     // is because the associated information of the role-id is stored in the image.
-                    replacePrivilegeEntryForImmutableBuiltInRole(roleId, collection);
+                    replacePrivilegeEntryForImmutableBuiltInRole(roleId, collection, ret);
                     ret.roleIdToPrivilegeCollection.put(roleId, collection);
                 });
 

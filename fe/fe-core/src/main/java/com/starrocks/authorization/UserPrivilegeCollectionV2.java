@@ -65,8 +65,12 @@ public class UserPrivilegeCollectionV2 extends PrivilegeCollectionV2 {
     @Override
     public UserPrivilegeCollectionV2 clone() {
         UserPrivilegeCollectionV2 ret = new UserPrivilegeCollectionV2();
-        ret.roleIds.addAll(this.roleIds);
-        ret.defaultRoleIds.addAll(this.defaultRoleIds);
+        if (this.roleIds != null) {
+            ret.roleIds.addAll(this.roleIds);
+        }
+        if (this.defaultRoleIds != null) {
+            ret.defaultRoleIds.addAll(this.defaultRoleIds);
+        }
         ret.typeToPrivilegeEntryList = cloneTypeToPrivilegeEntryList();
         return ret;
     }

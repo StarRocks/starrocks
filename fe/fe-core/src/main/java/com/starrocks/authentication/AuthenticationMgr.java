@@ -227,9 +227,8 @@ public class AuthenticationMgr {
                 userProperty = new UserProperty();
             }
 
-            UserProperty.UpdateInfo updateInfo = null;
             if (stmt.getProperties() != null) {
-                updateInfo = userProperty.checkUpdate(UserProperty.changeToPairList(stmt.getProperties()));
+                userProperty.update(UserProperty.changeToPairList(stmt.getProperties()));
             }
 
             GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
@@ -241,14 +240,10 @@ public class AuthenticationMgr {
             short pluginId = authorizationManager.getProviderPluginId();
             short pluginVersion = authorizationManager.getProviderPluginVersion();
             final UserProperty finalUserProperty = userProperty;
-            final UserProperty.UpdateInfo finalUpdateInfo = updateInfo;
             globalStateMgr.getEditLog().logCreateUser(
                     new CreateUserInfo(userIdentity, info, userProperty, collection, pluginId, pluginVersion),
                     wal -> {
                         userToAuthenticationInfo.put(userIdentity, info);
-                        if (finalUpdateInfo != null) {
-                            finalUserProperty.update(finalUpdateInfo);
-                        }
                         userNameToProperty.put(userName, finalUserProperty);
                         authorizationManager.setUserPrivilegeCollection(userIdentity, collection);
                     });
