@@ -263,7 +263,7 @@ jobs:
         id: check_pre_commit_conclusion
         if: steps.path-filter.outputs.be == 'true' && needs.basic-checker.outputs.ONLY_BE_TEST == 'true' && env.PRE_COMMIT != '' && env.PRE_COMMIT_JOB_STATUS_DICT != ''
         run: |
-          pre_commit_job_status_dict=${{ env.PRE_COMMIT_JOB_STATUS_DICT }}
+          pre_commit_job_status_dict='${{ env.PRE_COMMIT_JOB_STATUS_DICT }}'
           pre_ut_conclusion=$(echo $pre_commit_job_status_dict | jq -r '."BE UT"')
           pre_clang_conclusion=$(echo $pre_commit_job_status_dict | jq -r '."Clang-Tidy"')
           pre_format_conclusion=$(echo $pre_commit_job_status_dict | jq -r '."Clang-Format"')
@@ -585,7 +585,7 @@ jobs:
         id: check_pre_commit_conclusion
         if: steps.path-filter.outputs.fe == 'true' && needs.basic-checker.outputs.ONLY_FE_TEST == 'true' && env.PRE_COMMIT != '' && env.PRE_COMMIT_JOB_STATUS_DICT != ''
         run: |
-          pre_commit_job_status_dict=${{ env.PRE_COMMIT_JOB_STATUS_DICT }}
+          pre_commit_job_status_dict='${{ env.PRE_COMMIT_JOB_STATUS_DICT }}'
           pre_ut_conclusion=$(echo $pre_commit_job_status_dict | jq -r '."FE UT"')
           pre_codestyle_conclusion=$(echo $pre_commit_job_status_dict | jq -r '."FE Code Style Check"')
           pre_sonarcloud_conclusion=$(echo $pre_commit_job_status_dict | jq -r '."FE Sonarcloud Check"')
@@ -821,7 +821,7 @@ jobs:
         id: check-integration-test-results
         if: env.PRE_COMMIT != '' && env.PRE_COMMIT_JOB_STATUS_DICT != ''
         run: |
-          pre_commit_job_status_dict=${{ env.PRE_COMMIT_JOB_STATUS_DICT }}
+          pre_commit_job_status_dict='${{ env.PRE_COMMIT_JOB_STATUS_DICT }}'
           pre_build_conclusion=$(echo $pre_commit_job_status_dict | jq -r '."BUILD"')
           echo "pre_build_conclusion=${pre_build_conclusion}" >> $GITHUB_OUTPUT
 
