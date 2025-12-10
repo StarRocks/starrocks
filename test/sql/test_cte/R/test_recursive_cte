@@ -13,7 +13,8 @@ PROPERTIES (
 "replicated_storage" = "true",
 "replication_num" = "1"
 );
-
+-- result:
+-- !result
 INSERT INTO employees VALUES
 (1, 'Alicia', NULL, 'CEO'),
 (2, 'Bob', 1, 'CTO'),
@@ -40,8 +41,8 @@ INSERT INTO employees VALUES
 (23, 'Wendy', 17, 'Research Associate'),
 (24, 'Xavier', 18, 'ML Engineer'),
 (25, 'Yolanda', 14, 'Junior Engineer');
-
--- Test 1: Basic recursive CTE
+-- result:
+-- !result
 WITH RECURSIVE org_hierarchy AS (
     SELECT employee_id, name, manager_id, title, cast(1 as bigint) AS `level`, name AS path
     FROM employees
@@ -54,8 +55,27 @@ WITH RECURSIVE org_hierarchy AS (
 SELECT /*+ SET_VAR(enable_recursive_cte=true)*/ employee_id, name, title, `level`, path
 FROM org_hierarchy
 ORDER BY employee_id;
-
--- Test 2: Recursive CTE with column names
+-- result:
+1	Alicia	CEO	1	Alicia
+2	Bob	CTO	2	Alicia -> Bob
+3	Carol	CFO	2	Alicia -> Carol
+4	David	VP of Engineering	3	Alicia -> Bob -> David
+5	Eve	VP of Research	3	Alicia -> Bob -> Eve
+6	Frank	VP of Finance	3	Alicia -> Carol -> Frank
+7	Grace	Engineering Manager	4	Alicia -> Bob -> David -> Grace
+8	Heidi	Tech Lead	4	Alicia -> Bob -> David -> Heidi
+9	Ivan	Research Manager	4	Alicia -> Bob -> Eve -> Ivan
+10	Judy	Senior Engineer	5	Alicia -> Bob -> David -> Grace -> Judy
+11	Kevin	Finance Manager	4	Alicia -> Carol -> Frank -> Kevin
+12	Laura	Accountant	4	Alicia -> Carol -> Frank -> Laura
+13	Mike	Senior Engineer	5	Alicia -> Bob -> David -> Heidi -> Mike
+14	Nancy	Engineer	5	Alicia -> Bob -> David -> Heidi -> Nancy
+15	Oscar	Software Engineer	5	Alicia -> Bob -> David -> Grace -> Oscar
+16	Peter	QA Engineer	5	Alicia -> Bob -> David -> Grace -> Peter
+17	Quinn	Research Scientist	5	Alicia -> Bob -> Eve -> Ivan -> Quinn
+18	Rachel	Data Scientist	5	Alicia -> Bob -> Eve -> Ivan -> Rachel
+19	Steve	Financial Analyst	5	Alicia -> Carol -> Frank -> Kevin -> Steve
+-- !result
 WITH RECURSIVE org_hierarchy(emp_id, emp_name, mgr_id, emp_title, emp_level, emp_path) AS (
     SELECT employee_id, name, manager_id, title, cast(1 as bigint), name
     FROM employees
@@ -68,8 +88,27 @@ WITH RECURSIVE org_hierarchy(emp_id, emp_name, mgr_id, emp_title, emp_level, emp
 SELECT /*+ SET_VAR(enable_recursive_cte=true)*/ emp_id, emp_name, emp_title, emp_level, emp_path
 FROM org_hierarchy
 ORDER BY emp_id;
-
--- Test 3: Recursive CTE with multiple columns
+-- result:
+1	Alicia	CEO	1	Alicia
+2	Bob	CTO	2	Alicia -> Bob
+3	Carol	CFO	2	Alicia -> Carol
+4	David	VP of Engineering	3	Alicia -> Bob -> David
+5	Eve	VP of Research	3	Alicia -> Bob -> Eve
+6	Frank	VP of Finance	3	Alicia -> Carol -> Frank
+7	Grace	Engineering Manager	4	Alicia -> Bob -> David -> Grace
+8	Heidi	Tech Lead	4	Alicia -> Bob -> David -> Heidi
+9	Ivan	Research Manager	4	Alicia -> Bob -> Eve -> Ivan
+10	Judy	Senior Engineer	5	Alicia -> Bob -> David -> Grace -> Judy
+11	Kevin	Finance Manager	4	Alicia -> Carol -> Frank -> Kevin
+12	Laura	Accountant	4	Alicia -> Carol -> Frank -> Laura
+13	Mike	Senior Engineer	5	Alicia -> Bob -> David -> Heidi -> Mike
+14	Nancy	Engineer	5	Alicia -> Bob -> David -> Heidi -> Nancy
+15	Oscar	Software Engineer	5	Alicia -> Bob -> David -> Grace -> Oscar
+16	Peter	QA Engineer	5	Alicia -> Bob -> David -> Grace -> Peter
+17	Quinn	Research Scientist	5	Alicia -> Bob -> Eve -> Ivan -> Quinn
+18	Rachel	Data Scientist	5	Alicia -> Bob -> Eve -> Ivan -> Rachel
+19	Steve	Financial Analyst	5	Alicia -> Carol -> Frank -> Kevin -> Steve
+-- !result
 WITH RECURSIVE numbers AS (
     SELECT cast(1 as bigint) AS n, cast(1 as bigint) AS square, cast(1 as bigint) AS cc
     UNION ALL
@@ -80,8 +119,13 @@ WITH RECURSIVE numbers AS (
 SELECT /*+ SET_VAR(enable_recursive_cte=true)*/ n, square, cc
 FROM numbers
 ORDER BY n;
-
--- Test 4: Multiple recursive CTEs
+-- result:
+1	1	1
+2	4	8
+3	9	27
+4	16	64
+5	25	125
+-- !result
 WITH RECURSIVE
 cte1 AS (
     SELECT cast(1 as bigint) AS n
@@ -97,8 +141,18 @@ SELECT /*+ SET_VAR(enable_recursive_cte=true)*/ 'cte1' AS source, n FROM cte1
 UNION ALL
 SELECT /*+ SET_VAR(enable_recursive_cte=true)*/ 'cte2' AS source, n FROM cte2
 ORDER BY source, n;
-
--- Test 5: Recursive CTE with join in main query
+-- result:
+cte1	1
+cte1	2
+cte1	3
+cte1	4
+cte1	5
+cte2	10
+cte2	11
+cte2	12
+cte2	13
+cte2	14
+-- !result
 WITH RECURSIVE subordinates AS (
     SELECT employee_id, name, manager_id, title
     FROM employees
@@ -112,8 +166,27 @@ SELECT /*+ SET_VAR(enable_recursive_cte=true)*/ s.employee_id, s.name, s.title, 
 FROM subordinates s
 LEFT JOIN employees e ON s.manager_id = e.employee_id
 ORDER BY s.employee_id;
-
--- Test 6: Recursive CTE with aggregation in final query
+-- result:
+2	Bob	CTO	Alicia
+4	David	VP of Engineering	Bob
+5	Eve	VP of Research	Bob
+7	Grace	Engineering Manager	David
+8	Heidi	Tech Lead	David
+9	Ivan	Research Manager	Eve
+10	Judy	Senior Engineer	Grace
+13	Mike	Senior Engineer	Heidi
+14	Nancy	Engineer	Heidi
+15	Oscar	Software Engineer	Grace
+16	Peter	QA Engineer	Grace
+17	Quinn	Research Scientist	Ivan
+18	Rachel	Data Scientist	Ivan
+20	Tina	Engineer	Mike
+21	Uma	Junior Engineer	Mike
+22	Victor	Junior Developer	Oscar
+23	Wendy	Research Associate	Quinn
+24	Xavier	ML Engineer	Rachel
+25	Yolanda	Junior Engineer	Nancy
+-- !result
 WITH RECURSIVE org_hierarchy AS (
     SELECT employee_id, name, manager_id, title, cast(1 as bigint) AS `level`
     FROM employees
@@ -127,8 +200,13 @@ SELECT /*+ SET_VAR(enable_recursive_cte=true)*/ `level`, COUNT(*) AS employee_co
 FROM org_hierarchy
 GROUP BY `level`
 ORDER BY `level`;
-
--- Test 7: Nested recursive CTE reference
+-- result:
+1	1
+2	2
+3	3
+4	5
+5	8
+-- !result
 WITH RECURSIVE parent_cte AS (
     SELECT employee_id, name, manager_id, cast(1 as bigint) AS `level`
     FROM employees
@@ -142,8 +220,14 @@ WITH RECURSIVE parent_cte AS (
 SELECT /*+ SET_VAR(enable_recursive_cte=true)*/ employee_id, name, `level`
 FROM parent_cte
 ORDER BY employee_id;
-
--- Test 8: Recursive CTE with UNION + UNION ALL    
+-- result:
+1	Alicia	1
+2	Bob	2
+3	Carol	2
+4	David	3
+5	Eve	3
+6	Frank	3
+-- !result
 WITH RECURSIVE numbers AS (    
     SELECT cast(1 as bigint) AS n, cast(1 as bigint) AS category                          
     UNION ALL                                                                             
@@ -155,7 +239,6 @@ SELECT /*+ SET_VAR(enable_recursive_cte=true)*/ DISTINCT n, category
 FROM numbers    
 ORDER BY n, category;    
     
--- Test 8.1: Recursive CTE with UNION (not UNION ALL) - removes duplicates    
 WITH RECURSIVE numbers AS (    
     SELECT cast(1 as bigint) AS n, cast(1 as bigint) AS category    
     UNION    
@@ -167,7 +250,6 @@ SELECT /*+ SET_VAR(enable_recursive_cte=true)*/ DISTINCT n, category
 FROM numbers    
 ORDER BY n, category;    
 
--- Test 9: Multiple recursive references (Fibonacci sequence)
 WITH RECURSIVE fibonacci(n, fib_n, fib_n_plus_1) AS (
     SELECT cast(1 as bigint), cast(0 as bigint), cast(1 as bigint)
     UNION ALL
@@ -178,8 +260,9 @@ WITH RECURSIVE fibonacci(n, fib_n, fib_n_plus_1) AS (
 SELECT /*+ SET_VAR(enable_recursive_cte=true)*/ n, fib_n AS fibonacci_number
 FROM fibonacci
 ORDER BY n;
-
--- Test 9.1: Multiple recursive references (Fibonacci sequence)
+-- result:
+[REGEX].*Unknown table.*
+-- !result
 WITH RECURSIVE fibonacci(n, fib_n, fib_n_plus_1) AS (
     SELECT cast(1 as bigint), cast(0 as bigint), cast(1 as bigint)
     UNION ALL
@@ -190,8 +273,18 @@ WITH RECURSIVE fibonacci(n, fib_n, fib_n_plus_1) AS (
 SELECT /*+ SET_VAR(enable_recursive_cte=true, recursive_cte_max_depth=10)*/ n, fib_n AS fibonacci_number
 FROM fibonacci
 ORDER BY n;
-
--- Test 10: Recursive CTE with WHERE clause filter
+-- result:
+1	0
+2	1
+3	1
+4	2
+5	3
+6	5
+7	8
+8	13
+9	21
+10	34
+-- !result
 WITH RECURSIVE manager_chain AS (
     SELECT employee_id, name, manager_id, title, cast(0 as bigint) AS steps
     FROM employees
@@ -204,21 +297,29 @@ WITH RECURSIVE manager_chain AS (
 SELECT /*+ SET_VAR(enable_recursive_cte=true)*/ employee_id, name, title, steps
 FROM manager_chain
 ORDER BY steps;
-
--- Test 11: Error case - recursive reference in non-recursive part
+-- result:
+10	Judy	Senior Engineer	0
+7	Grace	Engineering Manager	1
+4	David	VP of Engineering	2
+2	Bob	CTO	3
+1	Alicia	CEO	4
+-- !result
 WITH RECURSIVE invalid_cte AS (
     SELECT employee_id, name FROM employees WHERE employee_id IN (SELECT employee_id FROM invalid_cte)
     UNION ALL
     SELECT employee_id, name FROM employees WHERE manager_id = 1
 )
 SELECT /*+ SET_VAR(enable_recursive_cte=true)*/ * FROM invalid_cte;
-
--- Test 12: Error case - recursive CTE without UNION/UNION ALL
+-- result:
+[REGEX].*Unknown table.*
+-- !result
 WITH RECURSIVE invalid_cte AS (
     SELECT employee_id, name FROM employees WHERE employee_id = 1
 )
 SELECT /*+ SET_VAR(enable_recursive_cte=true)*/ * FROM invalid_cte;
-
+-- result:
+1	Alicia
+-- !result
 WITH RECURSIVE const_cte as (
     SELECT cast(10 as bigint) AS id
 ),
@@ -234,3 +335,10 @@ manager_chain AS (
 SELECT /*+ SET_VAR(enable_recursive_cte=true)*/ employee_id, name, title, steps, id
 FROM manager_chain, const_cte
 ORDER BY steps;
+-- result:
+10	Judy	Senior Engineer	0	10
+7	Grace	Engineering Manager	1	10
+4	David	VP of Engineering	2	10
+2	Bob	CTO	3	10
+1	Alicia	CEO	4	10
+-- !result
