@@ -38,6 +38,8 @@ import com.starrocks.proto.DropTableRequest;
 import com.starrocks.proto.DropTableResponse;
 import com.starrocks.proto.ExecuteCommandRequestPB;
 import com.starrocks.proto.ExecuteCommandResultPB;
+import com.starrocks.proto.GetTabletMetadatasRequest;
+import com.starrocks.proto.GetTabletMetadatasResponse;
 import com.starrocks.proto.LockTabletMetadataRequest;
 import com.starrocks.proto.LockTabletMetadataResponse;
 import com.starrocks.proto.PCancelPlanFragmentRequest;
@@ -715,6 +717,11 @@ public class MockedBackend {
 
         @Override
         public Future<VacuumFullResponse> vacuumFull(VacuumFullRequest request) {
+            return CompletableFuture.completedFuture(null);
+        }
+
+        @Override
+        public Future<GetTabletMetadatasResponse> getTabletMetadatas(GetTabletMetadatasRequest request) {
             return CompletableFuture.completedFuture(null);
         }
     }
