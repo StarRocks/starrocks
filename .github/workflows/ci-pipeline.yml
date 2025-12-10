@@ -261,7 +261,7 @@ jobs:
 
       - name: check pre-commit conclusion
         id: check_pre_commit_conclusion
-        if: steps.path-filter.outputs.be == 'true' && needs.basic-checker.outputs.ONLY_BE_TEST == 'true' && env.PRE_COMMIT != '' && env.PRE_COMMIT_JOB_STATUS_DICT != ''
+        if: (steps.path-filter.outputs.be == 'true' || steps.path-filter.outputs.ut == 'true') && needs.basic-checker.outputs.ONLY_BE_TEST == 'true' && env.PRE_COMMIT != '' && env.PRE_COMMIT_JOB_STATUS_DICT != ''
         run: |
           pre_commit_job_status_dict='${{ env.PRE_COMMIT_JOB_STATUS_DICT }}'
           pre_ut_conclusion=$(echo $pre_commit_job_status_dict | jq -r '."BE UT"')
@@ -583,7 +583,7 @@ jobs:
 
       - name: check pre-commit conclusion
         id: check_pre_commit_conclusion
-        if: steps.path-filter.outputs.fe == 'true' && needs.basic-checker.outputs.ONLY_FE_TEST == 'true' && env.PRE_COMMIT != '' && env.PRE_COMMIT_JOB_STATUS_DICT != ''
+        if: (steps.path-filter.outputs.fe == 'true' || steps.path-filter.outputs.ut == 'true') && needs.basic-checker.outputs.ONLY_FE_TEST == 'true' && env.PRE_COMMIT != '' && env.PRE_COMMIT_JOB_STATUS_DICT != ''
         run: |
           pre_commit_job_status_dict='${{ env.PRE_COMMIT_JOB_STATUS_DICT }}'
           pre_ut_conclusion=$(echo $pre_commit_job_status_dict | jq -r '."FE UT"')
