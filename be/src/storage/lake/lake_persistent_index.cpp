@@ -611,6 +611,10 @@ Status LakePersistentIndex::major_compact(TabletManager* tablet_mgr, const Table
     // merge sstable files.
     ASSIGN_OR_RETURN(auto merge_results,
                      merge_sstables(std::move(merging_iter_ptr), merge_base_level, tablet_mgr, metadata->id()));
+    if (merge_results.empty()) {
+        // no output file generated.
+        return Status::OK();
+    }
 
     // record output sstable pb, there will be only one output file.
     txn_log->mutable_op_compaction()->mutable_output_sstable()->set_filename(merge_results[0].filename);
@@ -625,7 +629,7 @@ Status LakePersistentIndex::major_compact(TabletManager* tablet_mgr, const Table
 }
 
 Status LakePersistentIndex::apply_opcompaction(const TxnLogPB_OpCompaction& op_compaction) {
-    if (op_compaction.input_sstables().empty() || !op_compaction.has_output_sstable()) {
+    if (op_compaction.input_sstables().empty()) {
         return Status::OK();
     }
     auto* block_cache = _tablet_mgr->update_mgr()->block_cache();
@@ -633,19 +637,22 @@ Status LakePersistentIndex::apply_opcompaction(const TxnLogPB_OpCompaction& op_c
         return Status::InternalError("Block cache is null.");
     }
 
-    PersistentIndexSstablePB sstable_pb;
-    sstable_pb.CopyFrom(op_compaction.output_sstable());
-    sstable_pb.set_max_rss_rowid(
-            op_compaction.input_sstables(op_compaction.input_sstables().size() - 1).max_rss_rowid());
-    auto sstable = std::make_unique<PersistentIndexSstable>();
-    RandomAccessFileOptions opts;
-    if (!sstable_pb.encryption_meta().empty()) {
-        ASSIGN_OR_RETURN(auto info, KeyCache::instance().unwrap_encryption_meta(sstable_pb.encryption_meta()));
-        opts.encryption_info = std::move(info);
+    std::unique_ptr<PersistentIndexSstable> sstable;
+    if (op_compaction.has_output_sstable()) {
+        PersistentIndexSstablePB sstable_pb;
+        sstable_pb.CopyFrom(op_compaction.output_sstable());
+        sstable_pb.set_max_rss_rowid(
+                op_compaction.input_sstables(op_compaction.input_sstables().size() - 1).max_rss_rowid());
+        RandomAccessFileOptions opts;
+        if (!sstable_pb.encryption_meta().empty()) {
+            ASSIGN_OR_RETURN(auto info, KeyCache::instance().unwrap_encryption_meta(sstable_pb.encryption_meta()));
+            opts.encryption_info = std::move(info);
+        }
+        ASSIGN_OR_RETURN(auto rf, fs::new_random_access_file(
+                                          opts, _tablet_mgr->sst_location(_tablet_id, sstable_pb.filename())));
+        sstable = std::make_unique<PersistentIndexSstable>();
+        RETURN_IF_ERROR(sstable->init(std::move(rf), sstable_pb, block_cache->cache()));
     }
-    ASSIGN_OR_RETURN(auto rf,
-                     fs::new_random_access_file(opts, _tablet_mgr->sst_location(_tablet_id, sstable_pb.filename())));
-    RETURN_IF_ERROR(sstable->init(std::move(rf), sstable_pb, block_cache->cache()));
 
     std::unordered_set<std::string> filenames;
     for (const auto& input_sstable : op_compaction.input_sstables()) {
@@ -658,12 +665,14 @@ Status LakePersistentIndex::apply_opcompaction(const TxnLogPB_OpCompaction& op_c
                                    }),
                     _sstables.end());
     // Insert sstable to sstable list by `max_rss_rowid` order.
-    auto lower_it = std::lower_bound(
-            _sstables.begin(), _sstables.end(), sstable,
-            [](const std::unique_ptr<PersistentIndexSstable>& a, const std::unique_ptr<PersistentIndexSstable>& b) {
-                return a->sstable_pb().max_rss_rowid() < b->sstable_pb().max_rss_rowid();
-            });
-    _sstables.insert(lower_it, std::move(sstable));
+    if (sstable) {
+        auto lower_it = std::lower_bound(
+                _sstables.begin(), _sstables.end(), sstable,
+                [](const std::unique_ptr<PersistentIndexSstable>& a, const std::unique_ptr<PersistentIndexSstable>& b) {
+                    return a->sstable_pb().max_rss_rowid() < b->sstable_pb().max_rss_rowid();
+                });
+        _sstables.insert(lower_it, std::move(sstable));
+    }
     return Status::OK();
 }
 
