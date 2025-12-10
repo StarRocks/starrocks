@@ -815,6 +815,9 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
 
     @Override
     public LogicalPlan visitCTE(CTERelation node, ExpressionMapping context) {
+        if (node.isRecursive()) {
+            throw new SemanticException("Recursive CTE is not supported");
+        }
         if (!cteContext.hasRegisteredCte(node.getCteMouldId())) {
             // doesn't register CTE, should inline directly
             LogicalPlan childPlan = transform(node.getCteQueryStatement().getQueryRelation());
