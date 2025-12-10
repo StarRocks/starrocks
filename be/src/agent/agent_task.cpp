@@ -899,7 +899,7 @@ void run_update_meta_info_task(const std::shared_ptr<UpdateTabletMetaInfoAgentTa
                                ExecEnv* exec_env) {
     const TUpdateTabletMetaInfoReq& update_tablet_meta_req = agent_task_req->task_req;
 
-    VLOG(1) << "get update tablet meta task, signature:" << agent_task_req->signature;
+    LOG(INFO) << "get update tablet meta task, signature:" << agent_task_req->signature;
 
     auto update_manager = StorageEngine::instance()->update_manager();
     TStatusCode::type status_code = TStatusCode::OK;
