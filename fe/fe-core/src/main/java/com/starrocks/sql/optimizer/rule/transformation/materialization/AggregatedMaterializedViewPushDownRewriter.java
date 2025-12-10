@@ -455,15 +455,11 @@ public final class AggregatedMaterializedViewPushDownRewriter extends Materializ
                     .collect(Collectors.toList());
             LogicalScanOperator scanOp = optExpression.getOp().cast();
             ColumnRefSet scanOutputColRefSet = new ColumnRefSet(scanOp.getOutputColumns());
-<<<<<<< HEAD
-            Preconditions.checkArgument(scanOutputColRefSet.containsAll(new ColumnRefSet(groupBys)));
-=======
             if (!scanOutputColRefSet.containsAll(new ColumnRefSet(groupByUsedColRefs))) {
                 logMVRewrite(mvRewriteContext, "Scan node's output columns {} not contains group bys {}",
                         scanOutputColRefSet, groupByUsedColRefs);
                 return AggRewriteInfo.NOT_REWRITE;
             }
->>>>>>> 81737321c4 ([Enhancement] Support push down group by expressions and mv rewrite (#66507))
 
             // New agg function to new generated column ref
             Map<CallOperator, ColumnRefOperator> uniqueAggregations = Maps.newHashMap();

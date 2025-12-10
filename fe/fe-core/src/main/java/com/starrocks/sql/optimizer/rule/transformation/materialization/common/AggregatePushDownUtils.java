@@ -23,11 +23,7 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Pair;
-<<<<<<< HEAD
-=======
-import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.optimizer.MaterializationContext;
->>>>>>> 81737321c4 ([Enhancement] Support push down group by expressions and mv rewrite (#66507))
 import com.starrocks.sql.optimizer.MvRewriteContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
