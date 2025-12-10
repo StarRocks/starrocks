@@ -620,12 +620,6 @@ public class IcebergMetadata implements ConnectorMetadata {
     @Override
     public List<String> listPartitionNames(String dbName, String tblName, ConnectorMetadatRequestContext requestContext) {
         IcebergCatalogType nativeType = icebergCatalog.getIcebergCatalogType();
-
-        if (nativeType != HIVE_CATALOG && nativeType != REST_CATALOG && nativeType != GLUE_CATALOG) {
-            throw new StarRocksConnectorException(
-                    "Do not support get partitions from catalog type: " + nativeType);
-        }
-
         Table table = getTable(new ConnectContext(), dbName, tblName);
         return icebergCatalog.listPartitionNames((IcebergTable) table, requestContext, jobPlanningExecutor);
     }
