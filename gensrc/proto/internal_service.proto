@@ -135,6 +135,9 @@ message PTransmitRuntimeFilterParams {
     optional bool is_skew_broadcast_join = 12;
     optional PTypeDesc columnType = 13;
     optional int32 skew_shuffle_filter_id = 14;
+
+    optional int32 transmit_timeout_ms = 15;
+    optional int64 transmit_via_http_min_size = 16;
 };
 
 message PTransmitRuntimeFilterResult {
