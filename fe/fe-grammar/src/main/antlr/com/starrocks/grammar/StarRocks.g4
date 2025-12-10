@@ -712,6 +712,7 @@ createViewStatement
         withRowAccessPolicy*
         comment?
         (SECURITY (NONE | INVOKER))?
+        properties?
         AS queryStatement
     ;
 
