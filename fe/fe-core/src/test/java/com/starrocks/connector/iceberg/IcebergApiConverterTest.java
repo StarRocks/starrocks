@@ -36,6 +36,7 @@ import org.apache.iceberg.types.Types;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -240,6 +241,19 @@ public class IcebergApiConverterTest {
         source = ImmutableMap.of("file_format", "avro", "compression_codec", "zstd");
         target = IcebergApiConverter.rebuildCreateTableProperties(source);
         Assertions.assertEquals("zstd", target.get(AVRO_COMPRESSION));
+    }
+
+    @Test
+    public void testReverseByteBuffer() {
+        byte[] bytes = new byte[] {1, 2, 3, 4, 5};
+        ByteBuffer byteBuffer = ByteBuffer.wrap(bytes);
+        IcebergApiConverter.reverseBuffer(byteBuffer);
+        Assertions.assertEquals(5, byteBuffer.remaining());
+        Assertions.assertEquals(5, byteBuffer.get(0));
+        Assertions.assertEquals(4, byteBuffer.get(1));
+        Assertions.assertEquals(3, byteBuffer.get(2));
+        Assertions.assertEquals(2, byteBuffer.get(3));
+        Assertions.assertEquals(1, byteBuffer.get(4));
     }
 
     @Test
