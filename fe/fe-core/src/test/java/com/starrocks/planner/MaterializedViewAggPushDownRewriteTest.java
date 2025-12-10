@@ -26,11 +26,7 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.AggregatedMaterializedViewPushDownRewriter;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.thrift.TExplainLevel;
-<<<<<<< HEAD
-import com.starrocks.utframe.StarRocksTestBase;
-=======
 import com.starrocks.utframe.UtFrameUtils;
->>>>>>> 81737321c4 ([Enhancement] Support push down group by expressions and mv rewrite (#66507))
 import mockit.Mock;
 import mockit.MockUp;
 import org.apache.commons.lang3.StringUtils;
