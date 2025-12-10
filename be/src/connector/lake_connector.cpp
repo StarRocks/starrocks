@@ -33,6 +33,7 @@
 #include "storage/projection_iterator.h"
 #include "storage/rowset/short_key_range_option.h"
 #include "storage/runtime_range_pruner.hpp"
+#include "storage/virtual_column.h"
 #include "util/starrocks_metrics.h"
 
 namespace starrocks::connector {
@@ -150,7 +151,7 @@ Status LakeDataSource::get_next(RuntimeState* state, ChunkPtr* chunk) {
 
         // First, set slot_id_to_index for regular columns
         for (auto slot : _query_slots) {
-            if (slot->col_name() != "_tablet_id_") {
+            if (!is_virtual_column(slot->col_name())) {
                 size_t column_index = chunk_ptr->schema()->get_field_index_by_name(slot->col_name());
                 chunk_ptr->set_slot_id_to_index(slot->id(), column_index);
             }

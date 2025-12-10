@@ -24,17 +24,9 @@
 #include "storage/predicate_tree/predicate_tree.hpp"
 #include "storage/tablet_schema.h"
 #include "storage/type_utils.h"
+#include "storage/virtual_column.h"
 
 namespace starrocks {
-
-namespace {
-// Check if a column name represents a virtual column.
-// Virtual columns are read-only metadata columns that are not persisted.
-// Currently supported: _tablet_id_
-inline bool is_virtual_column(const std::string& column_name) {
-    return column_name == "_tablet_id_";
-}
-} // namespace
 
 ColumnPredicate* PredicateParser::create_column_predicate(const TCondition& condition, TypeInfoPtr& type_info,
                                                           ColumnId index) {

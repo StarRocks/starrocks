@@ -49,6 +49,7 @@
 #include "storage/runtime_range_pruner.hpp"
 #include "storage/storage_engine.h"
 #include "storage/tablet_index.h"
+#include "storage/virtual_column.h"
 #include "types/logical_type.h"
 #include "util/runtime_profile.h"
 #include "util/table_metrics.h"
@@ -338,10 +339,9 @@ Status OlapChunkSource::_init_scanner_columns(std::vector<uint32_t>& scanner_col
     for (auto slot : *_slots) {
         DCHECK(slot->is_materialized());
 
-        // Check if this is a virtual column
-        if (slot->col_name() == "_tablet_id_") {
-            // Virtual column, skip tablet schema lookup
-            // It will be populated in _read_chunk_from_storage()
+        // Virtual column, skip tablet schema lookup
+        // It will be populated in _read_chunk_from_storage()
+        if (is_virtual_column(slot->col_name())) {
             _query_slots.push_back(slot);
             continue;
         }
