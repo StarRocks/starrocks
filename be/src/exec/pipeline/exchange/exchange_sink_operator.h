@@ -88,6 +88,10 @@ public:
 
     std::string get_name() const override;
 
+    bool releaseable() const override { return true; }
+
+    void set_execute_mode(int performance_level) override;
+
 private:
     bool _is_large_chunk(size_t sz) const {
         // ref olap_scan_node.cpp release_large_columns

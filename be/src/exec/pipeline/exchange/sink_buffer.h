@@ -108,6 +108,10 @@ public:
 
     int64_t get_sent_bytes() const { return _bytes_sent; }
 
+    void update_memory_limit(size_t mem_limit);
+
+    std::string to_string() const;
+
 private:
     using Mutex = bthread::Mutex;
 
@@ -178,8 +182,9 @@ private:
     SinkContext& sink_ctx(int64_t instance_id) { return *_sink_ctxs[instance_id]; }
 
     std::atomic<int32_t> _total_in_flight_rpc = 0;
-    std::atomic<int32_t> _num_uncancelled_sinkers = 0;
     std::atomic<int32_t> _num_remaining_eos = 0;
+
+    size_t _memory_limit = 0;
 
     // True means that SinkBuffer needn't input chunk and send chunk anymore,
     // but there may be still in-flight RPC running.

@@ -668,7 +668,7 @@ void PipelineDriver::_adjust_memory_usage(RuntimeState* state, MemTracker* track
     }
 }
 
-const double release_buffer_mem_ratio = 0.8;
+const double release_buffer_mem_ratio = 0.5;
 
 void PipelineDriver::_try_to_release_buffer(RuntimeState* state, OperatorPtr& op) {
     if (state->enable_spill() && op->releaseable()) {
