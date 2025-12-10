@@ -1507,8 +1507,7 @@ public class DatabaseTransactionMgr {
                     runningTxnNums--;
                 }
             }
-            if (transactionState.getSourceType() == TransactionState.LoadJobSourceType.LAKE_COMPACTION
-                    && transactionState.getTransactionStatus().isFinalStatus()) {
+            if (transactionState.getSourceType() == TransactionState.LoadJobSourceType.LAKE_COMPACTION) {
                 GlobalStateMgr.getCurrentState().getCompactionMgr()
                         .removeFromStartupActiveCompactionTransactionMap(transactionState.getTransactionId());
             }
@@ -1548,8 +1547,7 @@ public class DatabaseTransactionMgr {
                     runningTxnNums--;
                 }
             }
-            if (transactionState.getSourceType() == TransactionState.LoadJobSourceType.LAKE_COMPACTION
-                    && transactionState.getTransactionStatus().isFinalStatus()) {
+            if (transactionState.getSourceType() == TransactionState.LoadJobSourceType.LAKE_COMPACTION) {
                 GlobalStateMgr.getCurrentState().getCompactionMgr()
                         .removeFromStartupActiveCompactionTransactionMap(transactionState.getTransactionId());
             }
