@@ -73,8 +73,10 @@ import com.starrocks.type.VarcharType;
 import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -1348,21 +1350,48 @@ public class FunctionAnalyzer {
 
     /**
      * Validate named arguments for any function that supports them.
-     * Checks for:
-     * - Function supports named arguments
-     * - No duplicate parameter names
-     * - All parameter names are valid
-     * - All required parameters (without defaults) are provided
-     * - Required parameters (without defaults) cannot be NULL
+     * This is the main validation entry point that delegates to specialized methods.
+     *
+     * This method performs validation in two stages:
+     * 1. Structure validation (duplicates, unknown params, missing required) - safe before reordering
+     * 2. NULL constraints validation - requires correct parameter positions after reordering
      *
      * @param fnName      function name for error messages
      * @param fn          the function definition
      * @param paramNames  list of parameter names provided by user
-     * @param node        function call expression to check argument values
+     * @param node        function call expression to check argument values (null to skip NULL validation)
      * @throws SemanticException if validation fails
      */
     public static void validateNamedArguments(String fnName, Function fn, List<String> paramNames,
                                               FunctionCallExpr node) {
+        // Always validate structure first
+        validateNamedArgumentsStructure(fnName, fn, paramNames);
+
+        // Validate NULL constraints only if node is provided
+        if (node != null) {
+            validateNullConstraints(fnName, fn, node);
+        }
+    }
+
+    /**
+     * Validate named arguments structure before reordering.
+     * This method checks the logical correctness of parameter names without depending on their order.
+     *
+     * IMPORTANT: This must be called BEFORE reordering to catch duplicate parameters early,
+     * preventing confusing IllegalStateException in reorderNamedArgAndAppendDefaults().
+     *
+     * Checks:
+     * - Function supports named arguments
+     * - No duplicate parameter names
+     * - All parameter names are valid (known to the function)
+     * - All required parameters (without defaults) are provided
+     *
+     * @param fnName      function name for error messages
+     * @param fn          the function definition
+     * @param paramNames  list of parameter names provided by user
+     * @throws SemanticException if validation fails
+     */
+    public static void validateNamedArgumentsStructure(String fnName, Function fn, List<String> paramNames) {
         if (fn == null || !fn.hasNamedArg()) {
             throw new SemanticException(fnName + "() does not support named parameters");
         }
@@ -1398,17 +1427,35 @@ public class FunctionAnalyzer {
                         "%s() required parameter '%s' is missing", fnName, requiredParam));
             }
         }
+    }
+
+    /**
+     * Validate NULL constraints after reordering.
+     * This method checks that required parameters are not NULL.
+     *
+     * IMPORTANT: This must be called AFTER reordering because it relies on parameter
+     * positions matching the function definition order (node.getChild(i) corresponds to fn.getArgNames()[i]).
+     *
+     * @param fnName function name for error messages
+     * @param fn     the function definition
+     * @param node   function call expression to check argument values
+     * @throws SemanticException if any required parameter is NULL
+     */
+    public static void validateNullConstraints(String fnName, Function fn, FunctionCallExpr node) {
+        if (node == null || fn == null) {
+            return;
+        }
+
+        String[] validParamNames = fn.getArgNames();
+        int requiredCount = fn.getRequiredArgNum();
 
         // Check required parameters (without defaults) cannot be NULL
-        // Skip NULL validation if node is not provided (for testing)
-        if (node != null) {
-            // Required parameters are those without default values, indicated by index < requiredCount
-            for (int i = 0; i < requiredCount && i < node.getChildren().size(); i++) {
-                com.starrocks.sql.ast.expression.Expr argExpr = node.getChild(i);
-                if (argExpr instanceof com.starrocks.sql.ast.expression.NullLiteral) {
-                    throw new SemanticException(String.format(
-                            "%s() required parameter '%s' cannot be NULL", fnName, validParamNames[i]));
-                }
+        // Required parameters are those without default values, indicated by index < requiredCount
+        for (int i = 0; i < requiredCount && i < node.getChildren().size(); i++) {
+            com.starrocks.sql.ast.expression.Expr argExpr = node.getChild(i);
+            if (argExpr instanceof com.starrocks.sql.ast.expression.NullLiteral) {
+                throw new SemanticException(String.format(
+                        "%s() required parameter '%s' cannot be NULL", fnName, validParamNames[i]));
             }
         }
     }
@@ -1416,6 +1463,10 @@ public class FunctionAnalyzer {
     /**
      * Reorder named arguments and append defaults according to function definition.
      * This method modifies the FunctionParams to match the function's parameter order.
+     *
+     * IMPORTANT: validateNamedArgumentsStructure() should be called BEFORE this method
+     * to ensure no duplicate parameters exist. This method uses HashMap which would silently
+     * overwrite duplicates, but duplicates should already be caught by validation.
      *
      * @param params FunctionParams containing the named arguments
      * @param fn     Function definition with named arguments
@@ -1425,27 +1476,40 @@ public class FunctionAnalyzer {
         List<String> exprsNames = params.getExprsNames();
         List<com.starrocks.sql.ast.expression.Expr> exprs = params.exprs();
 
-        Preconditions.checkState(names != null && names.length >= exprsNames.size());
-        String[] newNames = new String[names.length];
+        Preconditions.checkState(names != null && names.length >= exprsNames.size(),
+                "Function parameter count mismatch");
+
+        // Use HashMap for O(1) lookup instead of O(n²) nested loops
+        // Note: If duplicates exist, this will keep the last value, but validateNamedArgumentsStructure
+        // should have already caught duplicates before this method is called
+        Map<String, com.starrocks.sql.ast.expression.Expr> nameToExpr = new HashMap<>();
+        for (int i = 0; i < exprsNames.size(); i++) {
+            nameToExpr.put(exprsNames.get(i), exprs.get(i));
+        }
+
         com.starrocks.sql.ast.expression.Expr[] newExprs = new com.starrocks.sql.ast.expression.Expr[names.length];
+        String[] newNames = new String[names.length];
         int defaultNum = 0;
 
         for (int j = 0; j < names.length; j++) {
-            for (int i = 0; i < exprsNames.size(); i++) {
-                if (exprsNames.get(i).equals(names[j])) {
-                    newNames[j] = exprsNames.get(i);
-                    newExprs[j] = exprs.get(i);
-                    break;
-                }
-            }
-            if (newExprs[j] == null) {
+            com.starrocks.sql.ast.expression.Expr expr = nameToExpr.get(names[j]);
+            if (expr != null) {
+                newExprs[j] = expr;
+                newNames[j] = names[j];
+            } else {
+                // Parameter not provided - use default value
                 newExprs[j] = fn.getDefaultNamedExpr(names[j]);
                 newNames[j] = names[j];
-                Preconditions.checkState(newExprs[j] != null);
+                Preconditions.checkState(newExprs[j] != null,
+                        "Missing default value for parameter: " + names[j]);
                 defaultNum++;
             }
         }
-        Preconditions.checkState(defaultNum + exprsNames.size() == names.length);
+
+        Preconditions.checkState(defaultNum + exprsNames.size() == names.length,
+                "Parameter count mismatch after reordering: defaultNum=%s, providedNum=%s, totalNum=%s",
+                defaultNum, exprsNames.size(), names.length);
+
         params.setExprs(Arrays.asList(newExprs));
         params.setExprsNames(Arrays.asList(newNames));
     }
