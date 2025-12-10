@@ -121,6 +121,8 @@ public:
     static StatusOr<TabletMetadataPtrs> get_metas_from_bundle_tablet_metadata(const std::string& location,
                                                                               FileSystem* input_fs = nullptr);
 
+    // NOTICE : latest_cached_tablet_metadata may contain a tablet meta that
+    // is either older or newer than the FE visible version.
     TabletMetadataPtr get_latest_cached_tablet_metadata(int64_t tablet_id);
 
     StatusOr<TabletMetadataIter> list_tablet_metadata(int64_t tablet_id);
