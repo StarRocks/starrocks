@@ -128,7 +128,7 @@ public class ResourceGroup {
                     (rg, classifier) -> classifier.toString()),
             new ColumnMeta(
                     new Column(MEM_POOL, ScalarType.createVarchar(200)),
-                    (rg, classifier) -> rg.getMemPool(), false)
+                    (rg, classifier) -> Objects.requireNonNullElse(rg.getMemPool(), DEFAULT_MEM_POOL), false)
     );
 
     public static final ShowResultSetMetaData META_DATA;
@@ -405,6 +405,10 @@ public class ResourceGroup {
 
     public String getMemPool() {
         return memPool;
+    }
+
+    public boolean hasDefaultMemPool() {
+        return memPool == null || memPool.equals(DEFAULT_MEM_POOL);
     }
 
     public void setMemPool(String memPool) {
