@@ -1103,19 +1103,29 @@ public class ExpressionAnalyzer {
                             fnName, FunctionAnalyzer.getNamedArgStr(node.getParams()));
                     throw new SemanticException(msg, node.getPos());
                 }
+
+                // This prevents confusing IllegalStateException when duplicate parameters exist.
+                // validateNamedArgumentsStructure checks: duplicates, unknown params, missing required params
+                FunctionAnalyzer.validateNamedArgumentsStructure(fnName, fn, exprsNames);
+
                 // Reorder arguments according to function definition
                 FunctionAnalyzer.reorderNamedArgAndAppendDefaults(node.getParams(), fn);
+
                 // Update children to match reordered params
                 node.clearChildren();
                 node.addChildren(node.getParams().exprs());
-                // Re-analyze children after reordering
+
+                // Re-analyze children after reordering (includes default values)
                 for (Expr child : node.getChildren()) {
                     if (!child.isAnalyzed()) {
                         visit(child, scope);
                     }
                 }
-                // Validate named arguments after reordering (includes NULL checks for required parameters)
-                FunctionAnalyzer.validateNamedArguments(fnName, fn, exprsNames, node);
+
+                // Validate NULL constraints AFTER reordering
+                // This must be after reordering because it depends on parameter positions
+                FunctionAnalyzer.validateNullConstraints(fnName, fn, node);
+
                 node.setFn(fn);
                 node.setType(fn.getReturnType());
                 FunctionAnalyzer.analyze(node);
