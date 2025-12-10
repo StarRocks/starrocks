@@ -3175,6 +3175,27 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static boolean lake_compaction_allow_partial_success = true;
 
+    // Autonomous compaction: BE triggers async compaction + collects completed results
+    // When enabled, CompactRequest.autonomousCompaction will be set to true
+    @ConfField(mutable = true, comment = "Enable autonomous compaction mode for lake tablets")
+    public static boolean enable_lake_autonomous_compaction = false;
+
+    // Per-tablet parallel compaction configurations (FE-scheduled mode)
+    @ConfField(mutable = true, comment = "Enable per-tablet parallel compaction in FE-scheduled mode")
+    public static boolean lake_compaction_enable_parallel_per_tablet = false;
+
+    @ConfField(mutable = true, comment = "Maximum number of parallel compaction subtasks per tablet")
+    public static int lake_compaction_max_parallel_per_tablet = 3;
+
+    @ConfField(mutable = true, comment = "Maximum data volume (bytes) per parallel subtask (10GB default)")
+    public static long lake_compaction_max_bytes_per_subtask = 10737418240L;
+
+    @ConfField(mutable = true, comment = "Enable partial compaction publish (when some tablets have results)")
+    public static boolean enable_lake_compaction_partial_publish = true;
+
+    @ConfField(mutable = true, comment = "Minimum number of tablets with results to trigger partial publish")
+    public static int lake_compaction_partial_publish_min_tablets = 1;
+
     @ConfField(mutable = true, comment = "the max number of previous version files to keep")
     public static int lake_autovacuum_max_previous_versions = 0;
 

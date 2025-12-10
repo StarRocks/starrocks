@@ -327,3 +327,15 @@ message ReshardingTabletsInfoPB {
     repeated MergingTabletInfoPB merging_tablet_infos = 2;
     repeated IdenticalTabletInfoPB identical_tablet_infos = 3;
 }
+
+// Autonomous compaction result, stored locally on BE
+message CompactionResultPB {
+    optional int64 tablet_id = 1;
+    optional int64 base_version = 2;           // Which version compaction was based on
+    repeated uint32 input_rowset_ids = 3;
+    optional RowsetMetadataPB output_rowset = 4;
+    optional int64 finish_time_ms = 5;
+    // SSTable info for primary key tables
+    repeated PersistentIndexSstablePB input_sstables = 6;
+    repeated PersistentIndexSstablePB output_sstables = 7;
+}
