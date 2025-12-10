@@ -899,7 +899,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
         // dictionary invalid after schema change.
         for (Column column : tbl.getColumns()) {
             if (column.getType().isVarchar()) {
-                IDictManager.getInstance().removeGlobalDict(tbl.getId(), column.getColumnId());
+                IDictManager.getInstance().removeGlobalDict(tbl, column.getColumnId());
             }
         }
         // replace the origin index with shadow index, set index state as NORMAL

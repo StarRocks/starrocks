@@ -2223,6 +2223,35 @@ struct TRefreshConnectionsResponse {
     1: optional Status.TStatus status;
 }
 
+enum TTableSchemaRequestSource {
+    SCAN = 0,
+    LOAD = 1
+}
+
+struct TGetTableSchemaRequest {
+    1: optional PlanNodes.TTableSchemaMeta schema_meta;
+    2: optional TTableSchemaRequestSource source;
+    3: optional i64 tablet_id;
+    // Valid if request_source is SCAN
+    4: optional Types.TUniqueId query_id;
+    // Valid if request_source is LOAD
+    5: optional i64 txn_id;
+}
+
+struct TGetTableSchemaResponse {
+    1: optional Status.TStatus status;
+    2: optional AgentService.TTabletSchema schema;
+}
+
+struct TBatchGetTableSchemaRequest {
+    1: optional list<TGetTableSchemaRequest> requests;
+}
+
+struct TBatchGetTableSchemaResponse {
+    1: optional Status.TStatus status;
+    2: optional list<TGetTableSchemaResponse> responses;
+}
+
 service FrontendService {
     TGetDbsResult getDbNames(1:TGetDbsParams params)
     TGetTablesResult getTableNames(1:TGetTablesParams params)
@@ -2371,5 +2400,7 @@ service FrontendService {
     TTabletReshardJobsResponse getTabletReshardJobsInfo(1: TTabletReshardJobsRequest request)
 
     TRefreshConnectionsResponse refreshConnections(1: TRefreshConnectionsRequest request)
+
+    TBatchGetTableSchemaResponse getTableSchema(1: TBatchGetTableSchemaRequest request)
 }
 
