@@ -8,19 +8,19 @@ import Beta from '../../../_assets/commonMarkdown/_beta.mdx'
 
 <Beta />
 
-このトピックでは、Iceberg catalog に対する StarRocks のタイムトラベル機能を紹介します。この機能は v3.4.0 以降でサポートされています。
+このトピックでは、Iceberg カタログにおける StarRocks のタイムトラベル機能を紹介します。この機能は v3.4.0 以降でサポートされています。
 
 ## 概要
 
-各 Iceberg テーブルはメタデータスナップショットログを保持しており、それに対する変更を表します。データベースはこれらの履歴スナップショットにアクセスすることで Iceberg テーブルに対してタイムトラベルクエリを実行できます。Iceberg はスナップショットのライフサイクル管理を高度に行うために、スナップショットのブランチングとタグ付けをサポートしており、各ブランチやタグはカスタマイズされた保持ポリシーに基づいて独自のライフサイクルを維持できます。Iceberg のブランチングとタグ付け機能の詳細については、[公式ドキュメント](https://iceberg.apache.org/docs/latest/branching/) を参照してください。
+各 Iceberg テーブルはメタデータのスナップショットログを保持しており、それに対する変更を表します。データベースは、これらの履歴スナップショットにアクセスすることで Iceberg テーブルに対してタイムトラベルクエリを実行できます。Iceberg はスナップショットの分岐とタグ付けをサポートしており、カスタマイズされた保持ポリシーに基づいて各ブランチやタグが独自のライフサイクルを維持できるようにしています。Iceberg の分岐とタグ付け機能の詳細については、[公式ドキュメント](https://iceberg.apache.org/docs/latest/branching/) を参照してください。
 
-Iceberg のスナップショットブランチングとタグ付け機能を統合することで、StarRocks は Iceberg catalog 内でのブランチとタグの作成および管理、そしてテーブルに対するタイムトラベルクエリをサポートしています。
+Iceberg のスナップショット分岐とタグ付け機能を統合することで、StarRocks は Iceberg カタログ内でのブランチとタグの作成および管理、そしてテーブルに対するタイムトラベルクエリをサポートしています。
 
 ## ブランチ、タグ、スナップショットの管理
 
-### ブランチの作成
+### ブランチを作成する
 
-**構文**
+**`CREATE BRANCH` 構文**
 
 ```SQL
 ALTER TABLE [catalog.][database.]table_name
@@ -39,12 +39,12 @@ maxSnapshotAge ::= <int> { DAYS | HOURS | MINUTES }
 
 - `branch_name`: 作成するブランチの名前。
 - `AS OF VERSION`: ブランチを作成するスナップショット（バージョン）の ID。
-- `RETAIN`: ブランチを保持する期間。形式: `<int> <unit>`。サポートされる単位: `DAYS`, `HOURS`, `MINUTES`。例: `7 DAYS`, `12 HOURS`, `30 MINUTES`。
-- `WITH SNAPSHOT RETENTION`: 保持するスナップショットの最小数および/またはスナップショットを保持する最大時間。
+- `RETAIN`: ブランチを保持する期間。フォーマット: `<int> <unit>`。サポートされている単位: `DAYS`、`HOURS`、`MINUTES`。例: `7 DAYS`、`12 HOURS`、`30 MINUTES`。
+- `WITH SNAPSHOT RETENTION`: 保持するスナップショットの最小数または最大保持期間。
 
 **例**
 
-テーブル `iceberg.sales.order` のバージョン（スナップショット ID）`12345` に基づいてブランチ `test-branch` を作成し、ブランチを `7` 日間保持し、ブランチ上で少なくとも `2` つのスナップショットを保持します。
+テーブル `iceberg.sales.order` のバージョン（スナップショット ID）`12345` に基づいてブランチ `test-branch` を作成し、ブランチを `7` 日間保持し、少なくとも `2` つのスナップショットをブランチに保持します。
 
 ```SQL
 ALTER TABLE iceberg.sales.order CREATE BRANCH `test-branch` 
@@ -53,7 +53,7 @@ RETAIN 7 DAYS
 WITH SNAPSHOT RETENTION 2 SNAPSHOTS;
 ```
 
-テーブル `iceberg.sales.order` のバージョン（スナップショット ID）`12345` に基づいてブランチ `test-branch2` を作成し、ブランチを `7` 日間保持し、ブランチ上のスナップショットを最大 `2` 日間保持する。
+テーブル `iceberg.sales.order` のバージョン（スナップショット ID）`12345` に基づいてブランチ `test-branch2` を作成し、ブランチを `7` 日間保持し、スナップショットをブランチに最大 `2` 日間保持します。
 
 ```SQL
 ALTER TABLE iceberg.sales.order CREATE BRANCH `test-branch2` 
@@ -62,7 +62,7 @@ RETAIN 7 DAYS
 WITH SNAPSHOT RETENTION 2 DAYS;
 ```
 
-テーブル `iceberg.sales.order` のバージョン（スナップショット ID）`12345` に基づいてブランチ `test-branch3` を作成し、ブランチを `7` 日間保持し、ブランチ上に少なくとも `2` 個のスナップショットを、それぞれ最大 `2` 日間保持する。
+テーブル `iceberg.sales.order` のバージョン（スナップショット ID）`12345` に基づいてブランチ `test-branch3` を作成し、ブランチを `7` 日間保持し、少なくとも `2` つのスナップショットをブランチに保持し、それぞれを最大 `2` 日間保持します。
 
 ```SQL
 ALTER TABLE iceberg.sales.order CREATE BRANCH `test-branch3` 
@@ -71,9 +71,9 @@ RETAIN 7 DAYS
 WITH SNAPSHOT RETENTION 2 SNAPSHOTS 2 DAYS;
 ```
 
-### テーブルの特定のブランチにデータをロード
+### 特定のブランチにデータをロードする
 
-**構文**
+**`VERSION AS OF` 構文**
 
 ```SQL
 INSERT INTO [catalog.][database.]table_name
@@ -84,7 +84,7 @@ INSERT INTO [catalog.][database.]table_name
 **パラメータ**
 
 - `branch_name`: データをロードするテーブルブランチの名前。
-- `query_statement`: 結果が宛先テーブルにロードされるクエリステートメント。StarRocks がサポートする任意の SQL ステートメントを使用できます。
+- `query_statement`: 結果が宛先テーブルにロードされるクエリ文。StarRocks がサポートする任意の SQL 文を使用できます。
 
 **例**
 
@@ -96,9 +96,9 @@ FOR VERSION AS OF `test-branch`
 SELECT c1, k1 FROM tbl;
 ```
 
-### タグの作成
+### タグを作成する
 
-**構文**
+**`CREATE TAG` 構文**
 
 ```SQL
 ALTER TABLE [catalog.][database.]table_name
@@ -111,7 +111,7 @@ CREATE [OR REPLACE] TAG [IF NOT EXISTS] <tag_name>
 
 - `tag_name`: 作成するタグの名前。
 - `AS OF VERSION`: タグを作成するスナップショット（バージョン）の ID。
-- `RETAIN`: タグを保持する期間。形式: `<int> <unit>`。サポートされる単位: `DAYS`, `HOURS`, `MINUTES`。例: `7 DAYS`, `12 HOURS`, `30 MINUTES`。
+- `RETAIN`: タグを保持する期間。フォーマット: `<int> <unit>`。サポートされている単位: `DAYS`、`HOURS`、`MINUTES`。例: `7 DAYS`、`12 HOURS`、`30 MINUTES`。
 
 **例**
 
@@ -123,9 +123,9 @@ AS OF VERSION 12345
 RETAIN 7 DAYS;
 ```
 
-### ブランチを別のブランチにファストフォワード
+### ブランチを別のブランチにファストフォワードする
 
-**構文**
+**`fast_forward` 構文**
 
 ```SQL
 ALTER TABLE [catalog.][database.]table_name
@@ -134,8 +134,8 @@ EXECUTE fast_forward('<from_branch>', '<to_branch>')
 
 **パラメータ**
 
-- `from_branch`: ファストフォワードしたいブランチ。ブランチ名をクォートで囲みます。
-- `to_branch`: `from_branch` をファストフォワードしたいブランチ。ブランチ名をクォートで囲みます。
+- `from_branch`: ファストフォワードしたいブランチ。ブランチ名を引用符で囲みます。
+- `to_branch`: `from_branch` をファストフォワードしたいブランチ。ブランチ名を引用符で囲みます。
 
 **例**
 
@@ -146,11 +146,11 @@ ALTER TABLE iceberg.sales.order
 EXECUTE fast_forward('main', 'test-branch');
 ```
 
-### スナップショットを選択的に適用
+### スナップショットを選択する
 
-特定のスナップショットを選択してテーブルの現在の状態に適用できます。この操作により、既存のスナップショットに基づいて新しいスナップショットが作成され、元のスナップショットは影響を受けません。
+特定のスナップショットを選択して、テーブルの現在の状態に適用できます。この操作は既存のスナップショットに基づいて新しいスナップショットを作成し、元のスナップショットには影響を与えません。
 
-**構文**
+**`cherrypick_snapshot` 構文**
 
 ```SQL
 ALTER TABLE [catalog.][database.]table_name
@@ -159,7 +159,7 @@ EXECUTE cherrypick_snapshot(<snapshot_id>)
 
 **パラメータ**
 
-`snapshot_id`: 選択的に適用したいスナップショットの ID。
+`snapshot_id`: 選択したいスナップショットの ID。
 
 **例**
 
@@ -168,11 +168,11 @@ ALTER TABLE iceberg.sales.order
 EXECUTE cherrypick_snapshot(54321);
 ```
 
-### スナップショットの期限切れ
+### スナップショットを期限切れにする
 
-特定の時点よりも前のスナップショットを期限切れにできます。この操作により、期限切れのスナップショットのデータファイルが削除されます。
+特定の時点より前のスナップショットを期限切れにすることができます。この操作は期限切れのスナップショットのデータファイルを削除します。
 
-**構文**
+**`expire_snapshot` 構文**
 
 ```SQL
 ALTER TABLE [catalog.][database.]table_name
@@ -186,9 +186,9 @@ ALTER TABLE iceberg.sales.order
 EXECUTE expire_snapshot('2023-12-17 00:14:38')
 ```
 
-### ブランチまたはタグの削除
+### ブランチまたはタグを削除する
 
-**構文**
+**`DROP BRANCH`, `DROP TAG` 構文**
 
 ```SQL
 ALTER TABLE [catalog.][database.]table_name
@@ -209,7 +209,7 @@ DROP TAG `test-tag`;
 
 ### 特定のブランチまたはタグへのタイムトラベル
 
-**構文**
+**`VERSION AS OF` 構文**
 
 ```SQL
 [FOR] VERSION AS OF '<branch_or_tag>'
@@ -217,20 +217,20 @@ DROP TAG `test-tag`;
 
 **パラメータ**
 
-`tag_or_branch`: タイムトラベルしたいブランチまたはタグの名前。ブランチ名が指定された場合、クエリはブランチのヘッドスナップショットにタイムトラベルします。タグ名が指定された場合、クエリはタグが参照するスナップショットにタイムトラベルします。
+`tag_or_branch`: タイムトラベルしたいブランチまたはタグの名前。ブランチ名が指定された場合、クエリはブランチの最新スナップショットにタイムトラベルします。タグ名が指定された場合、クエリはタグが参照するスナップショットにタイムトラベルします。
 
 **例**
 
 ```SQL
--- ブランチのヘッドスナップショットにタイムトラベル。
+-- ブランチの最新スナップショットにタイムトラベルします。
 SELECT * FROM iceberg.sales.order VERSION AS OF 'test-branch';
--- タグが参照するスナップショットにタイムトラベル。
+-- タグが参照するスナップショットにタイムトラベルします。
 SELECT * FROM iceberg.sales.order VERSION AS OF 'test-tag';
 ```
 
 ### 特定のスナップショットへのタイムトラベル
 
-**構文**
+**`VERSION AS OF` 構文**
 
 ```SQL
 [FOR] VERSION AS OF '<snapshot_id>'
@@ -248,7 +248,7 @@ SELECT * FROM iceberg.sales.order VERSION AS OF 12345;
 
 ### 特定の日時または日付へのタイムトラベル
 
-**構文**
+**`TIMESTAMP AS OF` 構文**
 
 ```SQL
 [FOR] TIMESTAMP AS OF { '<datetime>' | '<date>' | date_and_time_function }
