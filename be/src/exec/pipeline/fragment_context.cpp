@@ -188,8 +188,8 @@ void FragmentContext::set_final_status(const Status& status) {
 
         _driver_token.reset();
 
+        auto detailed_message = _s_status.detailed_message();
         if (_s_status.is_cancelled()) {
-            auto detailed_message = _s_status.detailed_message();
             std::string cancel_msg =
                     fmt::format("[Driver] Canceled, query_id={}, instance_id={}, reason={}", print_id(_query_id),
                                 print_id(_fragment_instance_id), detailed_message);
@@ -208,9 +208,11 @@ void FragmentContext::set_final_status(const Status& status) {
         }
 
         // cancel drivers in event scheduler
-        iterate_drivers([](const DriverPtr& driver) {
+        iterate_drivers([detailed_message](const DriverPtr& driver) {
             driver->set_need_check_reschedule(true);
             if (driver->is_in_blocked()) {
+                LOG_IF(WARNING, config::pipeline_timeout_diagnostic)
+                        << "[Driver] " << detailed_message << " " << driver->to_readable_string();
                 driver->observer()->cancel_trigger();
             }
         });
