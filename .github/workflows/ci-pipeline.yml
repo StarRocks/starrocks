@@ -221,12 +221,6 @@ jobs:
       pre_format_conclusion: ${{ steps.check_pre_commit_conclusion.outputs.pre_format_conclusion }}
       be_change: ${{ needs.basic-checker.outputs.BE_CHANGE }}
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          ref: ${{ github.event.pull_request.head.sha }}
-          
       - uses: dorny/paths-filter@v3
         id: path-filter
         with:
@@ -303,6 +297,7 @@ jobs:
 
       - name: BRANCH INFO
         id: branch
+        if: success()
         run: |
           echo ${{github.base_ref}}
           echo "branch=${{github.base_ref}}" >> $GITHUB_OUTPUT
@@ -454,7 +449,7 @@ jobs:
         if: always()
         run: |
           echo ${{ steps.run_ut.outputs.ECI_ID }}
-          eci rm ${{ steps.run_ut.outputs.ECI_ID }}
+          eci rm ${{ steps.run_ut.outputs.ECI_ID }} || true
 
       - name: Upload Log
         uses: actions/upload-artifact@v4
@@ -611,6 +606,7 @@ jobs:
 
       - name: BRANCH INFO
         id: branch
+        if: success()
         run: |
           echo ${{github.base_ref}}
           echo "branch=${{github.base_ref}}" >> $GITHUB_OUTPUT
@@ -667,6 +663,7 @@ jobs:
 
       - name: BRANCH INFO
         id: branch
+        if: success()
         run: |
           echo ${{github.base_ref}}
           echo "branch=${{github.base_ref}}" >> $GITHUB_OUTPUT
@@ -761,6 +758,7 @@ jobs:
 
       - name: UPDATE ECI & RUN UT
         id: run_ut
+        if: success()
         shell: bash
         timeout-minutes: 90
         env:
