@@ -61,6 +61,7 @@ import com.starrocks.catalog.PartitionNames;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Replica;
+import com.starrocks.catalog.SchemaInfo;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
@@ -108,6 +109,7 @@ import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TTableSampleOptions;
+import com.starrocks.thrift.TTableSchemaMeta;
 import com.starrocks.type.Type;
 import com.starrocks.type.TypeSerializer;
 import com.starrocks.warehouse.Warehouse;
@@ -163,10 +165,10 @@ public class OlapScanNode extends ScanNode {
      */
     private boolean isPreAggregation = false;
     private String reasonOfPreAggregation = null;
-    private OlapTable olapTable = null;
+    private final OlapTable olapTable;
+    private final SelectedIndex index;
     private long selectedTabletsNum = 0;
     private long totalTabletsNum = 0;
-    private long selectedIndexId = -1;
     private int selectedPartitionNum = 0;
     private List<Long> selectedPartitionIds = Lists.newArrayList();
     private long actualRows = 0;
@@ -212,15 +214,28 @@ public class OlapScanNode extends ScanNode {
     long backPressureThrottleTime = -1;
     long backPressureNumRows = -1;
 
-    // Constructs node to scan given data files of table 'tbl'.
-    // Constructs node to scan given data files of table 'tbl'.
-    public OlapScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName) {
+    /**
+     * Constructs a node to scan data from an OlapTable.
+     * <p>
+     * This constructor may access the schema information of the {@link OlapTable}.
+     * To ensure thread-safe access, the caller must guarantee that the table's metadata
+     * is protected, either by holding an external lock or by operating on a query-specific
+     * copy of the table (e.g., created via {@link OlapTable#copyOnlyForQuery()}).
+     *
+     * @param id The unique identifier for this plan node.
+     * @param desc The tuple descriptor for the data produced by this scan node.
+     * @param planNodeName The name of the plan node.
+     * @param selectedIndexId The ID of the materialized index to be scanned. If this value is -1,
+     *                        the base index of the OlapTable will be used.
+     */
+    public OlapScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName, long selectedIndexId) {
         super(id, desc, planNodeName);
         olapTable = (OlapTable) desc.getTable();
+        index = SelectedIndex.build(olapTable, selectedIndexId);
     }
 
-    public OlapScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName, ComputeResource computeResource) {
-        this(id, desc, planNodeName);
+    public OlapScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName, long selectedIndexId, ComputeResource computeResource) {
+        this(id, desc, planNodeName, selectedIndexId);
         this.computeResource = computeResource;
     }
 
@@ -357,6 +372,13 @@ public class OlapScanNode extends ScanNode {
         return olapTable;
     }
 
+    /**
+     * Returns the cached schema information for the selected materialized index.
+     */
+    public Optional<SchemaInfo> getSchema() {
+        return index.schema;
+    }
+
     @Override
     protected String debugString() {
         MoreObjects.ToStringHelper helper = MoreObjects.toStringHelper(this);
@@ -451,7 +473,7 @@ public class OlapScanNode extends ScanNode {
             Long physicalPartitionId = internalScanRange.partition_id;
 
             PhysicalPartition physicalPartition = olapTable.getPhysicalPartition(physicalPartitionId);
-            final MaterializedIndex selectedTable = physicalPartition.getIndex(selectedIndexId);
+            final MaterializedIndex selectedTable = physicalPartition.getIndex(index.indexId);
             final Tablet selectedTablet = selectedTable.getTablet(tabletId);
             if (selectedTablet == null) {
                 throw new StarRocksException("Tablet " + tabletId + " doesn't exist in partition " + physicalPartitionId);
@@ -732,15 +754,11 @@ public class OlapScanNode extends ScanNode {
                 (System.currentTimeMillis() - start), selectedPartitionIds);
     }
 
-    public void selectBestRollupByRollupSelector() {
-        selectedIndexId = olapTable.getBaseIndexId();
-    }
-
     private void getScanRangeLocations() throws StarRocksException {
         if (selectedPartitionIds.size() == 0) {
             return;
         }
-        Preconditions.checkState(selectedIndexId != -1);
+        Preconditions.checkState(index.indexId != -1);
         // compute tablet info by selected index id and selected partition ids
         long start = System.currentTimeMillis();
         computeTabletInfo();
@@ -764,7 +782,7 @@ public class OlapScanNode extends ScanNode {
 
             for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
                 final List<Tablet> tablets = Lists.newArrayList();
-                final MaterializedIndex selectedIndex = physicalPartition.getIndex(selectedIndexId);
+                final MaterializedIndex selectedIndex = physicalPartition.getIndex(index.indexId);
                 final Collection<Long> tabletIds = distributionPrune(selectedIndex, partition.getDistributionInfo());
                 LOG.debug("distribution prune tablets: {}", tabletIds);
 
@@ -797,7 +815,7 @@ public class OlapScanNode extends ScanNode {
             Collection<PhysicalPartition> physicalPartitions = partition.getSubPartitions();
             totalPartitionNum += physicalPartitions.size();
             for (PhysicalPartition physicalPartition : physicalPartitions) {
-                final MaterializedIndex selectedTable = physicalPartition.getIndex(selectedIndexId);
+                final MaterializedIndex selectedTable = physicalPartition.getIndex(index.indexId);
                 totalTabletsNum += selectedTable.getTablets().size();
             }
         }
@@ -830,6 +848,7 @@ public class OlapScanNode extends ScanNode {
         StringBuilder output = new StringBuilder();
 
         // TODO: unify them
+        long selectedIndexId = index.indexId;
         if (detailLevel != TExplainLevel.VERBOSE) {
             output.append(prefix).append("TABLE: ").append(olapTable.getName()).append("\n");
         } else {
@@ -1035,6 +1054,7 @@ public class OlapScanNode extends ScanNode {
             msg.setCommon(common);
         }
 
+        long selectedIndexId = index.indexId;
         if (selectedIndexId != -1) {
             MaterializedIndexMeta indexMeta = olapTable.getIndexMetaByIndexId(selectedIndexId);
             if (indexMeta != null) {
@@ -1109,6 +1129,14 @@ public class OlapScanNode extends ScanNode {
             }
 
             msg.lake_scan_node.setOutput_asc_hint(sortKeyAscHint);
+            TTableSchemaMeta schemaMeta = new TTableSchemaMeta();
+            schemaMeta.setDb_id(MetaUtils.lookupDbIdByTable(olapTable));
+            schemaMeta.setTable_id(olapTable.getId());
+            Preconditions.checkState(index.schema.isPresent(), String.format(
+                    "schema not cached, table name: %s, table id: %s, index id: %s",
+                    olapTable.getName(), olapTable.getId(), index.indexId));
+            schemaMeta.setSchema_id(index.schema.get().getId());
+            msg.lake_scan_node.setSchema_meta(schemaMeta);
         } else { // If you find yourself changing this code block, see also the above code block
             msg.node_type = TPlanNodeType.OLAP_SCAN_NODE;
             msg.olap_scan_node =
@@ -1178,8 +1206,7 @@ public class OlapScanNode extends ScanNode {
     public static OlapScanNode createOlapScanNodeByLocation(
             PlanNodeId id, TupleDescriptor desc, String planNodeName, List<TScanRangeLocations> locationsList,
             ComputeResource computeResource) {
-        OlapScanNode olapScanNode = new OlapScanNode(id, desc, planNodeName);
-        olapScanNode.selectedIndexId = olapScanNode.olapTable.getBaseIndexId();
+        OlapScanNode olapScanNode = new OlapScanNode(id, desc, planNodeName, -1);
         olapScanNode.selectedPartitionNum = 1;
         olapScanNode.selectedTabletsNum = 1;
         olapScanNode.totalTabletsNum = 1;
@@ -1201,14 +1228,12 @@ public class OlapScanNode extends ScanNode {
      */
     public void updateScanInfo(List<Long> selectedPartitionIds,
                                List<Long> scanTabletIds,
-                               List<Long> hintsReplicaIds,
-                               long selectedIndexId) {
+                               List<Long> hintsReplicaIds) {
         this.scanTabletIds = Lists.newArrayList(scanTabletIds);
         this.hintsReplicaIds = Lists.newArrayList(hintsReplicaIds);
         this.selectedTabletsNum = scanTabletIds.size();
         this.selectedPartitionIds = selectedPartitionIds;
         this.selectedPartitionNum = selectedPartitionIds.size();
-        this.selectedIndexId = selectedIndexId;
         this.partitionToScanTabletMap = mapTabletsToPartitions();
 
         // FixMe(kks): For DUPLICATE table, isPreAggregation could always true
@@ -1242,6 +1267,7 @@ public class OlapScanNode extends ScanNode {
             return false;
         }
         ConnectContext ctx = ConnectContext.get();
+        long selectedIndexId = index.indexId;
         int backendSize = ctx.getTotalBackendNumber();
         int aliveBackendSize = ctx.getAliveBackendNumber();
         int schemaHash = olapTable.getSchemaHashByIndexId(selectedIndexId);
@@ -1265,7 +1291,7 @@ public class OlapScanNode extends ScanNode {
 
     @VisibleForTesting
     public long getSelectedIndexId() {
-        return selectedIndexId;
+        return index.indexId;
     }
 
     /**
@@ -1480,8 +1506,7 @@ public class OlapScanNode extends ScanNode {
                 return false;
             case DUP_KEYS:
             case AGG_KEYS: {
-                List<Column> columns = selectedIndexId == -1 ? olapTable.getBaseSchema() :
-                        olapTable.getSchemaByIndexId(selectedIndexId);
+                List<Column> columns = olapTable.getSchemaByIndexId(index.indexId);
                 return columns.stream().noneMatch(
                         c -> c.isAggregated() && c.getAggregationType().isReplaceFamily());
             }
@@ -1502,6 +1527,7 @@ public class OlapScanNode extends ScanNode {
         // In a conclusion, only the leftmost OlapScanNode affects multi-version cache and partition
         // column predicates' decomposition mechanism. OlapScanNodes in the right-sibling Fragment only
         // affect cache key identity.
+        long selectedIndexId = index.indexId;
         if (normalizer.isProcessingLeftNode()) {
             normalizer.setKeysType(olapTable.getKeysType());
             normalizer.setCanUseMultiVersion(canUseMultiVersionCache());
@@ -1575,7 +1601,7 @@ public class OlapScanNode extends ScanNode {
         for (Long partitionId : selectedPartitionIds) {
             Partition partition = olapTable.getPartition(partitionId);
             for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
-                MaterializedIndex materializedIndex = physicalPartition.getIndex(selectedIndexId);
+                MaterializedIndex materializedIndex = physicalPartition.getIndex(index.indexId);
                 for (long tabletId : materializedIndex.getTabletIdsInOrder()) {
                     tabletToPartitionMap.put(tabletId, physicalPartition.getId());
                 }
@@ -1629,7 +1655,6 @@ public class OlapScanNode extends ScanNode {
     // clear scan node，reduce body size
     public void clearScanNodeForThriftBuild() {
         sortColumn = null;
-        this.selectedIndexId = -1;
         selectedPartitionNames.clear();
         selectedPartitionVersions.clear();
         result.clear();
@@ -1672,5 +1697,42 @@ public class OlapScanNode extends ScanNode {
             }
         }
         return accept;
+    }
+
+    private static class SelectedIndex {
+
+        final long indexId;
+
+        /**
+         * Cached schema information used for query plan.
+         * <p>
+         * This field stores the schema information that was used when generating the plan, enabling
+         * backend nodes to retrieve the exact schema from the frontend during query execution. This is
+         * particularly important for Fast Schema Evolution scenarios where schema changes are not
+         * immediately propagated schema metadata to backend nodes. Currently, this mechanism is only
+         * used in shared-data mode.
+         * </p>
+         */
+        final Optional<SchemaInfo> schema;
+
+        SelectedIndex(long indexId, SchemaInfo schema) {
+            this.indexId = indexId;
+            this.schema = Optional.ofNullable(schema);
+        }
+
+        static SelectedIndex build(OlapTable olapTable, long selectedIndexId) {
+            long indexId = selectedIndexId == -1 ? olapTable.getBaseIndexId() : selectedIndexId;
+            SchemaInfo schema = null;
+            if (olapTable.isCloudNativeTableOrMaterializedView()) {
+                MaterializedIndexMeta indexMeta = olapTable.getIndexMetaByIndexId(indexId);
+                if (indexMeta == null) {
+                    throw new RuntimeException(String.format(
+                            "can't find index, table name: %s, table id: %s, index id: %s",
+                            olapTable.getName(), olapTable.getId(), indexId));
+                }
+                schema = SchemaInfo.fromMaterializedIndex(olapTable, indexId, indexMeta);
+            }
+            return new SelectedIndex(indexId, schema);
+        }
     }
 }

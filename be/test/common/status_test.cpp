@@ -177,4 +177,11 @@ TEST_F(StatusTest, test_clone) {
     ASSERT_EQ("def: abc", st2.message());
 }
 
+TEST_F(StatusTest, test_to_string) {
+    Status table_not_exist = Status::TableNotExist("test table not exist");
+    ASSERT_EQ("Table not exist: test table not exist", table_not_exist.to_string());
+    Status query_not_exist = Status::QueryNotExist("test query not exist");
+    ASSERT_EQ("Query not exist: test query not exist", query_not_exist.to_string());
+}
+
 } // namespace starrocks
