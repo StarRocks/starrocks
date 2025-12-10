@@ -271,7 +271,7 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
         throw new NotImplementedException();
     }
 
-    public Optional<String> mayGetDatabaseName() {
+    public Optional<Long> mayGetDatabaseId() {
         return Optional.empty();
     }
 

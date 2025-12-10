@@ -73,10 +73,10 @@ public class ColumnUsage implements GsonPostProcessable {
 
     public static Optional<ColumnUsage> build(Column column, Table table, UseCase useCase) {
         LocalMetastore meta = GlobalStateMgr.getCurrentState().getLocalMetastore();
-        Optional<String> dbName = table.mayGetDatabaseName();
-        Optional<Database> db = dbName.flatMap(meta::mayGetDb);
+        Optional<Long> dbId = table.mayGetDatabaseId();
+        Optional<Database> db = dbId.flatMap(meta::mayGetDb);
         if (db.isPresent()) {
-            TableName tableName = new TableName(dbName.get(), table.getName());
+            TableName tableName = new TableName(db.get().getFullName(), table.getName());
             ColumnFullId columnFullId = ColumnFullId.create(db.get(), table, column);
             return Optional.of(new ColumnUsage(columnFullId, tableName, useCase));
         }

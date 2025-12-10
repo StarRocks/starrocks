@@ -934,7 +934,7 @@ public class PlanFragmentBuilder {
             tupleDescriptor.setTable(referenceTable);
 
             OlapScanNode scanNode = new OlapScanNode(context.getNextNodeId(), tupleDescriptor, "OlapScanNode",
-                    context.getConnectContext().getCurrentComputeResource());
+                    node.getSelectedIndexId(), context.getConnectContext().getCurrentComputeResource());
             scanNode.setLimit(node.getLimit());
             scanNode.computeStatistics(optExpr.getStatistics());
             scanNode.setScanOptimizeOption(node.getScanOptimizeOption());
@@ -949,8 +949,7 @@ public class PlanFragmentBuilder {
             try {
                 scanNode.updateScanInfo(node.getSelectedPartitionId(),
                         node.getSelectedTabletId(),
-                        node.getHintsReplicaId(),
-                        node.getSelectedIndexId());
+                        node.getHintsReplicaId());
                 long selectedIndexId = node.getSelectedIndexId();
                 long totalTabletsNum = 0;
                 // Compatible with old tablet selected, copy from "OlapScanNode::computeTabletInfo"

@@ -3178,4 +3178,39 @@ public class SchemaChangeHandler extends AlterHandler {
                 .withDisableReplicatedStorageForGIN(schemaChangeData.isDisableReplicatedStorageForGIN())
                 .build();
     }
+
+    /**
+     * Retrieves a historical schema version for the specified table and schema ID.
+     * <p>
+     * Note: This method searches through all jobs to find a matching schema, which is acceptable when the
+     * number of jobs is not excessive. A future optimization could maintain a table ID to alter job mapping 
+     * for improved performance when dealing with many alter jobs.
+     * </p>
+     *
+     * @param dbId the database ID
+     * @param tableId the table ID
+     * @param schemaId the schema ID to retrieve
+     * @return an Optional containing the SchemaInfo if found, or empty if no matching
+     *         historical schema exists
+     */
+    public Optional<SchemaInfo> getHistorySchema(long dbId, long tableId, long schemaId) {
+        for (AlterJobV2 alterJob : alterJobsV2.values()) {
+            if (alterJob.getDbId() != dbId || alterJob.getTableId() != tableId) {
+                continue;
+            }
+            OlapTableHistorySchema historySchema = null;
+            if (alterJob instanceof SchemaChangeJobV2) {
+                historySchema = ((SchemaChangeJobV2) alterJob).getHistorySchema().orElse(null);
+            } else if (alterJob instanceof LakeTableAsyncFastSchemaChangeJob) {
+                historySchema = ((LakeTableAsyncFastSchemaChangeJob) alterJob).getHistorySchema().orElse(null);
+            }
+            if (historySchema != null) {
+                Optional<SchemaInfo> schemaInfo = historySchema.getSchemaBySchemaId(schemaId);
+                if (schemaInfo.isPresent()) {
+                    return schemaInfo;
+                }
+            }
+        }
+        return Optional.empty();
+    }
 }
