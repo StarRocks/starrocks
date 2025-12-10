@@ -95,7 +95,7 @@ public class MaterializedViewTestBase extends PlanTestBase {
     }
 
     @Before
-    public void before() throws Exception {
+    public void before() {
         super.setUp();
         if (starRocksAssert != null) {
             StarRocksTestBase.collectTables(starRocksAssert, existedTables);
