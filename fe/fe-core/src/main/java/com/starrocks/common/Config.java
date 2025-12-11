@@ -3617,6 +3617,28 @@ public class Config extends ConfigBase {
     public static boolean enable_show_external_catalog_privilege = true;
 
     /**
+     * When enabled, allows MySQL-compatible tools (DBeaver, Metabase, DataGrip) to discover
+     * and connect to external catalogs via the MySQL protocol.
+     *
+     * Features enabled:
+     * 1. Connect with catalog name in database field: MySQL clients can enter an external
+     *    catalog name (e.g., "hive_catalog") in the "database" connection field to connect
+     *    directly to that catalog and browse its databases.
+     * 2. Cross-catalog SHOW DATABASES: When connected to the internal catalog without
+     *    specifying a database, SHOW DATABASES returns databases from ALL catalogs
+     *    in "catalog.database" format.
+     *
+     * IMPORTANT: If an external catalog has the same name as a database in the internal
+     * catalog (default_catalog), the database takes precedence. For example, if both
+     * exist: external catalog "sales" and internal database "sales", connecting with
+     * database="sales" will use the internal database, not switch to the catalog.
+     * To avoid confusion, ensure external catalog names don't conflict with internal
+     * database names when using this feature.
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_cross_catalog_database_list = false;
+
+    /**
      * Loading or compaction must be stopped for primary_key_disk_schedule_time
      * seconds before it can be scheduled
      */

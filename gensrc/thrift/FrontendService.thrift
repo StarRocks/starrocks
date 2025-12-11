@@ -338,6 +338,9 @@ struct TGetDbsParams {
 // getDbNames returns a list of database names
 struct TGetDbsResult {
   1: list<string> dbs
+  // Optional parallel list: catalogs[i] is the catalog name for dbs[i]
+  // Used when enable_cross_catalog_database_list is enabled
+  2: optional list<string> catalogs
 }
 
 // Arguments to getTableNames, which returns a list of tables that match an

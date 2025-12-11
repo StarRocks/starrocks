@@ -49,6 +49,7 @@ import com.starrocks.authorization.PrivilegeException;
 import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.cluster.ClusterNamespace;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -1469,7 +1470,33 @@ public class ConnectContext {
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_CATALOG_AND_DB_ERROR, identifier);
         }
 
-        if (parts.length == 1) { // use database
+        if (parts.length == 1) { // use database OR catalog (when feature enabled)
+            // When enable_cross_catalog_database_list is enabled, check if identifier is a catalog name.
+            // This allows MySQL clients (DBeaver, Metabase, etc.) to connect with a catalog name 
+            // in the database field, enabling them to browse external catalogs.
+            //
+            // Priority: Database takes precedence over catalog. If a database with this name exists
+            // in the current catalog, it will be used as a database (normal behavior). Only if no
+            // such database exists AND the name matches an external catalog, we switch to that catalog.
+            if (Config.enable_cross_catalog_database_list) {
+                String normalizedName = normalizeName(identifier);
+                // Check: is this an external catalog name AND NOT a database in current catalog?
+                if (catalogMgr.catalogExists(normalizedName) && 
+                    !CatalogMgr.isInternalCatalog(normalizedName) &&
+                    metadataMgr.getDb(this, this.getCurrentCatalog(), normalizedName) == null) {
+                    // It's an external catalog name - switch to it
+                    try {
+                        Authorizer.checkAnyActionOnCatalog(this, normalizedName);
+                    } catch (AccessDeniedException e) {
+                        AccessDeniedException.reportAccessDenied(normalizedName,
+                                this.getCurrentUserIdentity(), this.getCurrentRoleIds(),
+                                PrivilegeType.ANY.name(), ObjectType.CATALOG.name(), normalizedName);
+                    }
+                    this.setCurrentCatalog(normalizedName);
+                    // Don't set a specific database - let user see all databases in this catalog
+                    return;
+                }
+            }
             dbName = identifier;
         } else { // use catalog.database
             String newCatalogName = normalizeName(parts[0]);
