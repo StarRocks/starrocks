@@ -127,7 +127,10 @@ bool OlapPredicateParser::can_pushdown(const ConstPredicateNodePtr& pred_tree) c
 template <typename ConditionType>
 StatusOr<ColumnPredicate*> OlapPredicateParser::t_parse_thrift_cond(const ConditionType& condition) const {
     // Virtual columns cannot be pushed down as predicates
-    if (is_virtual_column(condition.column_name)) {
+    // Check using SlotDescriptor::is_virtual_column() if slot descriptors are available,
+    // otherwise fall back to name-based check for backward compatibility
+    auto it = _slot_desc_map.find(condition.column_name);
+    if (it != _slot_desc_map.end() && (it->second->is_virtual_column())) {
         return Status::NotSupported("virtual column " + condition.column_name + " cannot be pushed down");
     }
     const size_t index = _schema->field_index(condition.column_name);
@@ -188,20 +191,23 @@ bool ConnectorPredicateParser::can_pushdown(const ConstPredicateNodePtr& pred_tr
 }
 
 template <typename ConditionType>
-ColumnPredicate* ConnectorPredicateParser::t_parse_thrift_cond(const ConditionType& condition) const {
+StatusOr<ColumnPredicate*> ConnectorPredicateParser::t_parse_thrift_cond(const ConditionType& condition) const {
     uint8_t precision = 0;
     uint8_t scale = 0;
     LogicalType type = LogicalType::TYPE_UNKNOWN;
     size_t index = 0;
 
-    for (const SlotDescriptor* slot : *_slot_desc) {
-        if (slot->col_name() == condition.column_name) {
-            type = slot->type().type;
-            precision = slot->type().precision;
-            scale = slot->type().scale;
-            index = slot->id();
-            break;
+    auto it = _slot_desc_map.find(condition.column_name);
+    if (it != _slot_desc_map.end()) {
+        const SlotDescriptor* slot = it->second;
+        // Virtual columns cannot be pushed down as predicates
+        if (slot->is_virtual_column()) {
+            return Status::NotSupported("virtual column " + condition.column_name + " cannot be pushed down");
         }
+        type = slot->type().type;
+        precision = slot->type().precision;
+        scale = slot->type().scale;
+        index = slot->id();
     }
     // column not found
     RETURN_IF(type == LogicalType::TYPE_UNKNOWN, nullptr);

@@ -295,7 +295,7 @@ void LakeDataSource::decide_chunk_size(bool has_predicate) {
 Status LakeDataSource::init_reader_params(const std::vector<OlapScanRange*>& key_ranges) {
     const TLakeScanNode& thrift_lake_scan_node = _provider->_t_lake_scan_node;
     bool skip_aggregation = thrift_lake_scan_node.is_preaggregation;
-    auto parser = _obj_pool.add(new OlapPredicateParser(_tablet_schema));
+    auto parser = _obj_pool.add(new OlapPredicateParser(_tablet_schema, _slots));
     _params.is_pipeline = true;
     _params.reader_type = READER_QUERY;
     _params.skip_aggregation = skip_aggregation;
