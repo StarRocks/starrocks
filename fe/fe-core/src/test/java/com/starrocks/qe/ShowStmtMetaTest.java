@@ -1235,8 +1235,9 @@ public class ShowStmtMetaTest {
         Assertions.assertEquals("DetailCmd", metaData.getColumn(9).getName());
 
         // Test with table name but no table set (should return empty list)
-        TableName tableName = new TableName("test_db", "test_table");
-        ShowTabletStmt stmt2 = new ShowTabletStmt(tableName, 12345L, NodePosition.ZERO);
+        TableRef tableRef = new TableRef(QualifiedName.of(Lists.newArrayList("test_db", "test_table")),
+                null, NodePosition.ZERO);
+        ShowTabletStmt stmt2 = new ShowTabletStmt(tableRef, 12345L, NodePosition.ZERO);
         ShowResultSetMetaData metaData2 = new ShowResultMetaFactory().getMetadata(stmt2);
         Assertions.assertEquals(0, metaData2.getColumnCount());
 

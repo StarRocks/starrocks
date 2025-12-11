@@ -84,6 +84,8 @@ import com.starrocks.scheduler.TaskRun;
 import com.starrocks.scheduler.TaskRunBuilder;
 import com.starrocks.scheduler.TaskRunManager;
 import com.starrocks.scheduler.TaskRunScheduler;
+import com.starrocks.sql.ast.QualifiedName;
+import com.starrocks.sql.ast.TableRef;
 import com.starrocks.schema.MSchema;
 import com.starrocks.schema.MTable;
 import com.starrocks.server.GlobalStateMgr;
@@ -1301,8 +1303,9 @@ public class StarRocksAssert {
     }
 
     public ShowResultSet showTablet(String db, String table) throws DdlException, AnalysisException {
-        TableName tableName = new TableName(db, table);
-        ShowTabletStmt showTabletStmt = new ShowTabletStmt(tableName, -1, NodePosition.ZERO);
+        QualifiedName qualifiedName = QualifiedName.of(Lists.newArrayList(db, table));
+        TableRef tableRef = new TableRef(qualifiedName, null, NodePosition.ZERO);
+        ShowTabletStmt showTabletStmt = new ShowTabletStmt(tableRef, -1, NodePosition.ZERO);
         return ShowExecutor.execute(showTabletStmt, getCtx());
     }
 }

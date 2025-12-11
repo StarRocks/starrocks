@@ -1895,7 +1895,8 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             return new ShowTabletStmt(null, Long.parseLong(context.INTEGER_VALUE().getText()), pos);
         } else {
             QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
-            TableName dbTblName = qualifiedNameToTableName(qualifiedName);
+            NodePosition tablePos = createPos(context.qualifiedName().start, context.qualifiedName().stop);
+            TableRef tableRef = new TableRef(normalizeName(qualifiedName), null, tablePos);
             PartitionRef partitionNames = null;
             if (context.partitionNames() != null) {
                 partitionNames = (PartitionRef) visit(context.partitionNames());
@@ -1913,7 +1914,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             if (context.limitElement() != null) {
                 limitElement = (LimitElement) visit(context.limitElement());
             }
-            return new ShowTabletStmt(dbTblName, -1L, partitionNames, where, orderByElements, limitElement,
+            return new ShowTabletStmt(tableRef, -1L, partitionNames, where, orderByElements, limitElement,
                     createPos(context));
         }
     }
