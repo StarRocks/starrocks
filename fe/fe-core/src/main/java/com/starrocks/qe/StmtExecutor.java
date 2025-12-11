@@ -2584,11 +2584,13 @@ public class StmtExecutor {
     }
 
     public void handleInsertOverwrite(InsertStmt insertStmt) throws Exception {
-        TableName tableName = insertStmt.getTableName();
+        TableRef tableRef = insertStmt.getTableRef();
         Database db =
-                GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(context, tableName.getCatalog(), tableName.getDb());
+                GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(context, tableRef.getCatalogName(), tableRef.getDbName());
         if (db == null) {
-            throw new SemanticException("Database %s is not found", tableName.getCatalogAndDb());
+            String catalogAndDb = tableRef.getCatalogName() != null ? 
+                    tableRef.getCatalogName() + "." + tableRef.getDbName() : tableRef.getDbName();
+            throw new SemanticException("Database %s is not found", catalogAndDb);
         }
 
         Locker locker = new Locker();
@@ -2712,17 +2714,18 @@ public class StmtExecutor {
         }
 
         DmlType dmlType = DmlType.fromStmt(stmt);
-        stmt.getTableName().normalization(context);
-        String catalogName = stmt.getTableName().getCatalog();
-        String dbName = stmt.getTableName().getDb();
-        String tableName = stmt.getTableName().getTbl();
+        TableRef tableRef = stmt.getTableRef();
+        String catalogName = tableRef.getCatalogName();
+        String dbName = tableRef.getDbName();
+        String tableName = tableRef.getTableName();
         Database database = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(context, catalogName, dbName);
         GlobalTransactionMgr transactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
         final Table targetTable;
         if (stmt instanceof InsertStmt && ((InsertStmt) stmt).getTargetTable() != null) {
             targetTable = ((InsertStmt) stmt).getTargetTable();
         } else {
-            targetTable = MetaUtils.getSessionAwareTable(context, database, stmt.getTableName());
+            TableName tableNameObj = new TableName(catalogName, dbName, tableName, tableRef.getPos());
+            targetTable = MetaUtils.getSessionAwareTable(context, database, tableNameObj);
         }
         if (isExplainAnalyze) {
             Preconditions.checkState(targetTable instanceof OlapTable,

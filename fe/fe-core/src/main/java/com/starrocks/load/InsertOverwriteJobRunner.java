@@ -297,7 +297,7 @@ public class InsertOverwriteJobRunner {
         }
 
         GlobalStateMgr state = GlobalStateMgr.getCurrentState();
-        String targetDb = insertStmt.getTableName().getDb();
+        String targetDb = insertStmt.getDbName();
         Database db = state.getLocalMetastore().getDb(targetDb);
         try (AutoCloseableLock ignore = new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(olapTable.getId()),
                 LockType.READ)) {

@@ -48,6 +48,7 @@ import com.starrocks.sql.ast.SetQualifier;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.TableFunctionRelation;
+import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.UnionRelation;
 import com.starrocks.sql.ast.UnitIdentifier;
@@ -1321,7 +1322,9 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
         String tableName = parts.get(parts.size() - 1);
         List<String> columnAliases = node.getColumns().isPresent() ? node.getColumns().get().stream().
                 map(Identifier::getValue).collect(Collectors.toList()) : null;
-        return new InsertStmt(qualifiedNameToTableName(convertQualifiedName(node.getTarget())), null,
+        QualifiedName qualifiedName = convertQualifiedName(node.getTarget());
+        TableRef tableRef = new TableRef(qualifiedName, null, NodePosition.ZERO);
+        return new InsertStmt(tableRef, null,
                 tableName.concat(UUID.randomUUID().toString()), columnAliases,
                 (QueryStatement) visit(node.getQuery(), context), false, new HashMap<>(0), NodePosition.ZERO);
     }

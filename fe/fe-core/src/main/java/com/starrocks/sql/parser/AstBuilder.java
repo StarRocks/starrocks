@@ -2444,11 +2444,11 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
 
         if (context.qualifiedName() != null) {
             QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
-            TableName targetTableName = qualifiedNameToTableName(qualifiedName);
             PartitionRef partitionNames = null;
             if (context.partitionNames() != null) {
                 partitionNames = (PartitionRef) visit(context.partitionNames());
             }
+            TableRef tableRef = new TableRef(normalizeName(qualifiedName), partitionNames, createPos(context));
 
             String targetBranch = null;
             if (context.writeBranch() != null) {
@@ -2492,7 +2492,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
                 }
             }
 
-            InsertStmt stmt = new InsertStmt(targetTableName, partitionNames, label, columnAliases, queryStatement,
+            InsertStmt stmt = new InsertStmt(tableRef, partitionNames, label, columnAliases, queryStatement,
                     context.OVERWRITE() != null, getCaseSensitiveProperties(context.properties()), createPos(context));
             stmt.setHintNodes(hintMap.get(context));
             stmt.setTargetBranch(targetBranch);
@@ -2518,7 +2518,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             ctes = visit(context.withClause().commonTableExpression(), CTERelation.class);
         }
         QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
-        TableName targetTableName = qualifiedNameToTableName(qualifiedName);
+        TableRef tableRef = new TableRef(normalizeName(qualifiedName), null, createPos(context));
         List<ColumnAssignment> assignments = visit(context.assignmentList().assignment(), ColumnAssignment.class);
         List<Relation> fromRelations = null;
         if (context.fromClause() instanceof com.starrocks.sql.parser.StarRocksParser.DualContext) {
@@ -2532,7 +2532,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             }
         }
         Expr where = context.where != null ? (Expr) visit(context.where) : null;
-        UpdateStmt ret = new UpdateStmt(targetTableName, assignments, fromRelations, where, ctes, createPos(context));
+        UpdateStmt ret = new UpdateStmt(tableRef, assignments, fromRelations, where, ctes, createPos(context));
         if (context.explainDesc() != null) {
             ret.setIsExplain(true, getExplainType(context.explainDesc()));
             if (StatementBase.ExplainLevel.ANALYZE.equals(ret.getExplainLevel())) {
@@ -2550,15 +2550,15 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             ctes = visit(context.withClause().commonTableExpression(), CTERelation.class);
         }
         QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
-        TableName targetTableName = qualifiedNameToTableName(qualifiedName);
         PartitionRef partitionNames = null;
         if (context.partitionNames() != null) {
             partitionNames = (PartitionRef) visit(context.partitionNames());
         }
+        TableRef tableRef = new TableRef(normalizeName(qualifiedName), partitionNames, createPos(context));
         List<Relation> usingRelations = context.using != null ? visit(context.using.relation(), Relation.class) : null;
         Expr where = context.where != null ? (Expr) visit(context.where) : null;
         DeleteStmt ret =
-                new DeleteStmt(targetTableName, partitionNames, usingRelations, where, ctes, createPos(context));
+                new DeleteStmt(tableRef, partitionNames, usingRelations, where, ctes, createPos(context));
         if (context.explainDesc() != null) {
             ret.setIsExplain(true, getExplainType(context.explainDesc()));
             if (StatementBase.ExplainLevel.ANALYZE.equals(ret.getExplainLevel())) {

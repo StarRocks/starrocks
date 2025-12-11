@@ -310,13 +310,15 @@ public class AuthorizerStmtVisitor implements AstVisitorExtendInterface<Void, Co
     public Void visitInsertStatement(InsertStmt statement, ConnectContext context) {
         // For table just created by CTAS statement, we ignore the check of 'INSERT' privilege on it.
         if (!statement.isForCTAS()) {
+            TableRef tableRef = statement.getTableRef();
+            TableName tableName = new TableName(tableRef.getCatalogName(), tableRef.getDbName(),
+                    tableRef.getTableName(), tableRef.getPos());
             try {
-                Authorizer.checkTableAction(context,
-                        statement.getTableName(), PrivilegeType.INSERT);
+                Authorizer.checkTableAction(context, tableName, PrivilegeType.INSERT);
             } catch (AccessDeniedException e) {
-                AccessDeniedException.reportAccessDenied(statement.getTableName().getCatalog(),
+                AccessDeniedException.reportAccessDenied(tableName.getCatalog(),
                         context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                        PrivilegeType.INSERT.name(), ObjectType.TABLE.name(), statement.getTableName().getTbl());
+                        PrivilegeType.INSERT.name(), ObjectType.TABLE.name(), tableName.getTbl());
             }
         }
 
@@ -326,29 +328,34 @@ public class AuthorizerStmtVisitor implements AstVisitorExtendInterface<Void, Co
 
     @Override
     public Void visitDeleteStatement(DeleteStmt statement, ConnectContext context) {
+        TableRef tableRef = statement.getTableRef();
+        TableName tableName = new TableName(tableRef.getCatalogName(), tableRef.getDbName(),
+                tableRef.getTableName(), tableRef.getPos());
         try {
-            Authorizer.checkTableAction(context,
-                    statement.getTableName(), PrivilegeType.DELETE);
+            Authorizer.checkTableAction(context, tableName, PrivilegeType.DELETE);
         } catch (AccessDeniedException e) {
-            AccessDeniedException.reportAccessDenied(statement.getTableName().getCatalog(),
+            AccessDeniedException.reportAccessDenied(tableName.getCatalog(),
                     context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                    PrivilegeType.DELETE.name(), ObjectType.TABLE.name(), statement.getTableName().getTbl());
+                    PrivilegeType.DELETE.name(), ObjectType.TABLE.name(), tableName.getTbl());
         }
-        checkSelectTableAction(context, statement.getQueryStatement(), Lists.newArrayList(statement.getTableName()));
+        checkSelectTableAction(context, statement.getQueryStatement(), Lists.newArrayList(tableName));
         return null;
     }
 
     @Override
     public Void visitUpdateStatement(UpdateStmt statement, ConnectContext context) {
+        TableRef tableRef = statement.getTableRef();
+        TableName tableName = new TableName(tableRef.getCatalogName(), tableRef.getDbName(),
+                tableRef.getTableName(), tableRef.getPos());
         try {
-            Authorizer.checkTableAction(context,
-                    statement.getTableName(), PrivilegeType.UPDATE);
+            Authorizer.checkTableAction(context, tableName, PrivilegeType.UPDATE);
         } catch (AccessDeniedException e) {
-            AccessDeniedException.reportAccessDenied(statement.getTableName().getCatalog(),
+            AccessDeniedException.reportAccessDenied(tableName.getCatalog(),
                     context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                    PrivilegeType.UPDATE.name(), ObjectType.TABLE.name(), statement.getTableName().getTbl());
+                    PrivilegeType.UPDATE.name(), ObjectType.TABLE.name(), tableName.getTbl());
         }
-        checkSelectTableAction(context, statement.getQueryStatement(), Lists.newArrayList(statement.getTableName()));
+        TableName tableNameForSelect = TableName.fromTableRef(statement.getTableRef());
+        checkSelectTableAction(context, statement.getQueryStatement(), Lists.newArrayList(tableNameForSelect));
         return null;
     }
 

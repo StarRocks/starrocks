@@ -15,7 +15,6 @@
 package com.starrocks.sql.ast;
 
 import com.google.common.collect.Maps;
-import com.starrocks.catalog.TableName;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.Map;
@@ -32,7 +31,22 @@ public abstract class DmlStmt extends StatementBase {
         this.properties = Maps.newHashMap();
     }
 
-    public abstract TableName getTableName();
+    public abstract TableRef getTableRef();
+
+    public String getCatalogName() {
+        TableRef tableRef = getTableRef();
+        return tableRef == null ? null : tableRef.getCatalogName();
+    }
+
+    public String getDbName() {
+        TableRef tableRef = getTableRef();
+        return tableRef == null ? null : tableRef.getDbName();
+    }
+
+    public String getTblName() {
+        TableRef tableRef = getTableRef();
+        return tableRef == null ? null : tableRef.getTableName();
+    }
 
     public long getTxnId() {
         return txnId;
