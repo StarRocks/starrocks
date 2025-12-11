@@ -25,7 +25,7 @@ import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
 import com.starrocks.connector.exception.StarRocksConnectorException;
-import com.starrocks.connector.hive.HiveWriteUtils;
+import com.starrocks.connector.hive.HiveUtils;
 import com.starrocks.planner.PartitionPruner;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.ExpressionAnalyzer;
@@ -298,6 +298,10 @@ public class ListPartitionPruner implements PartitionPruner {
         this.scanOperator = scanOperator;
     }
 
+    public void setScanOperator(LogicalScanOperator scanOperator) {
+        this.scanOperator = scanOperator;
+    }
+
     // Infer equivalent partitions columns based on the partition-conjuncts.
     // Suppose the query has an expression c1 >= '2024-01-02', and the table is partitioned by
     // a GeneratedColumn c3=date_trunc('month', c1), so we can infer the expression:
@@ -527,7 +531,7 @@ public class ListPartitionPruner implements PartitionPruner {
                 new ConcurrentSkipListMap<>(partitionValueMap.comparator());
 
         partitionValueMap.forEach((key, valueSet) -> {
-            LiteralExpr newKey = HiveWriteUtils.normalizeKey(key, key.getType());
+            LiteralExpr newKey = HiveUtils.normalizeKey(key, key.getType());
             newMap.computeIfAbsent(newKey, k -> new HashSet<>()).addAll(valueSet);
         });
 
@@ -729,6 +733,10 @@ public class ListPartitionPruner implements PartitionPruner {
         Set<Long> matches = Sets.newHashSet();
         ConcurrentNavigableMap<LiteralExpr, Set<Long>> partitionValueMap = columnToPartitionValuesMap.get(child);
         Set<Long> nullPartitions = columnToNullPartitions.get(child);
+
+        if (partitionValueMap != null) {
+            partitionValueMap = normalizePartitionValueMap(partitionValueMap);
+        }
 
         if (inPredicate.getChild(0) instanceof CastOperator && partitionValueMap != null) {
             // partitionValueMap need cast to target type

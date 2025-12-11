@@ -9,13 +9,14 @@ create external catalog hive_test_${uuid0} PROPERTIES (
 -- !result
 select * from hive_test_${uuid0}.hive_oss_db.t_decimal_part;
 -- result:
-4	2
 2	2
-6	20240310
-3	2
 5	2
+7	None
+3	2
+4	2
 1	1
 2	1
+6	20240310
 -- !result
 select * from hive_test_${uuid0}.hive_oss_db.t_decimal_part where c1=1;
 -- result:
@@ -36,82 +37,104 @@ select * from hive_test_${uuid0}.hive_oss_db.t_decimal_part where c2=1.4 or c2=1
 -- !result
 select * from hive_test_${uuid0}.hive_oss_db.t_decimal_part where cast(c2 as bigint)=1;
 -- result:
-2	1
 1	1
+2	1
 -- !result
 select * from hive_test_${uuid0}.hive_oss_db.t_decimal_part where c2 >=2;
 -- result:
-6	20240310
-4	2
 5	2
+6	20240310
 3	2
 2	2
+4	2
 -- !result
 select * from hive_test_${uuid0}.hive_oss_db.t_decimal_part where c2 >= 1.5;
 -- result:
-4	2
-3	2
-2	2
 6	20240310
 5	2
+3	2
+2	2
+4	2
 -- !result
 select * from hive_test_${uuid0}.hive_oss_db.t_decimal_part where c2 > 1.5;
 -- result:
-4	2
-3	2
 5	2
 6	20240310
 2	2
+4	2
+3	2
 -- !result
 select * from hive_test_${uuid0}.hive_oss_db.t_decimal_part where c2 <= 2.5;
 -- result:
+1	1
+3	2
 4	2
 5	2
 2	2
-1	1
 2	1
-3	2
 -- !result
 select * from hive_test_${uuid0}.hive_oss_db.t_decimal_part where c2 < 2.5;
 -- result:
+3	2
+2	1
 5	2
 2	2
-2	1
-3	2
 4	2
 1	1
 -- !result
 select * from hive_test_${uuid0}.hive_oss_db.t_decimal_part where c2 <= 1.5;
 -- result:
-2	1
 1	1
+2	1
 -- !result
 select * from hive_test_${uuid0}.hive_oss_db.t_decimal_part where c2 <= 1.5 and c2 > 1;
 -- result:
 -- !result
 select * from hive_test_${uuid0}.hive_oss_db.t_decimal_part where c2 <= 1.5 and c2 >= 1;
 -- result:
-2	1
 1	1
+2	1
+-- !result
+select * from hive_test_${uuid0}.hive_oss_db.t_decimal_part where c2 in (1, 2, 3);
+-- result:
+1	1
+5	2
+3	2
+4	2
+2	2
+2	1
+-- !result
+select * from hive_test_${uuid0}.hive_oss_db.t_decimal_part where c2 in (1.1, 2, 3);
+-- result:
+3	2
+5	2
+2	2
+4	2
+-- !result
+select * from hive_test_${uuid0}.hive_oss_db.t_decimal_part where c2 is NULL;
+-- result:
+7	None
 -- !result
 select * from hive_test_${uuid0}.hive_oss_db.t_float_part;
 -- result:
-4	2.49
-6	20240310.0
-1	1.3
-3	2.33
+7	None
 2	1.5
+6	20240310.0
 1	1.4
+3	2.33
+4	2.49
 4	2.59
+1	1.3
 -- !result
 select * from hive_test_${uuid0}.hive_oss_db.t_float_part;
 -- result:
-6	20240310.0
 4	2.59
-3	2.33
 1	1.3
 2	1.5
 4	2.49
+7	None
+3	2.33
+6	20240310.0
 1	1.4
 -- !result
 select * from hive_test_${uuid0}.hive_oss_db.t_float_part where c1=1;
@@ -136,74 +159,86 @@ E: (1064, 'can not cast literal value 1.3 to target type bigint(20)')
 -- !result
 select * from hive_test_${uuid0}.hive_oss_db.t_float_part where c2 >=2;
 -- result:
-3	2.33
 4	2.59
+3	2.33
 4	2.49
 6	20240310.0
 -- !result
 select * from hive_test_${uuid0}.hive_oss_db.t_float_part where c2 >= 1.5;
 -- result:
-6	20240310.0
 4	2.59
-2	1.5
-4	2.49
 3	2.33
+4	2.49
+2	1.5
+6	20240310.0
 -- !result
 select * from hive_test_${uuid0}.hive_oss_db.t_float_part where c2 > 1.5;
 -- result:
 4	2.59
-4	2.49
-6	20240310.0
 3	2.33
+6	20240310.0
+4	2.49
 -- !result
 select * from hive_test_${uuid0}.hive_oss_db.t_float_part where c2 <= 2.5;
 -- result:
+1	1.3
 2	1.5
 4	2.49
-1	1.3
-1	1.4
 3	2.33
+1	1.4
 -- !result
 select * from hive_test_${uuid0}.hive_oss_db.t_float_part where c2 < 2.5;
 -- result:
 4	2.49
-3	2.33
 2	1.5
+3	2.33
 1	1.4
 1	1.3
 -- !result
 select * from hive_test_${uuid0}.hive_oss_db.t_float_part where c2 <= 1.5;
 -- result:
-2	1.5
 1	1.3
+2	1.5
 1	1.4
 -- !result
 select * from hive_test_${uuid0}.hive_oss_db.t_float_part where c2 <= 1.5 and c2 > 1;
 -- result:
-1	1.4
 2	1.5
+1	1.4
 1	1.3
 -- !result
 select * from hive_test_${uuid0}.hive_oss_db.t_float_part where c2 <= 1.5 and c2 >= 1;
 -- result:
+2	1.5
 1	1.3
 1	1.4
-2	1.5
+-- !result
+select * from hive_test_${uuid0}.hive_oss_db.t_float_part where c2 in (1, 2, 3);
+-- result:
+-- !result
+select * from hive_test_${uuid0}.hive_oss_db.t_float_part where c2 in (1.4, 2.4, 3.3);
+-- result:
+1	1.4
+-- !result
+select * from hive_test_${uuid0}.hive_oss_db.t_float_part where c2 is NULL;
+-- result:
+7	None
 -- !result
 select * from hive_test_${uuid0}.hive_oss_db.t_double_part;
 -- result:
-6	20240310.0
-4	2.49
-1	1.3
-1	1.4
 4	2.59
-3	2.33
 2	1.5
+7	None
+6	20240310.0
+1	1.4
+3	2.33
+1	1.3
+4	2.49
 -- !result
 select * from hive_test_${uuid0}.hive_oss_db.t_double_part where c1=1;
 -- result:
-1	1.3
 1	1.4
+1	1.3
 -- !result
 select * from hive_test_${uuid0}.hive_oss_db.t_double_part where c2=1;
 -- result:
@@ -222,79 +257,81 @@ E: (1064, 'can not cast literal value 1.3 to target type bigint(20)')
 -- !result
 select * from hive_test_${uuid0}.hive_oss_db.t_double_part where c2 >=2;
 -- result:
-6	20240310.0
-4	2.59
 3	2.33
 4	2.49
+4	2.59
+6	20240310.0
 -- !result
 select * from hive_test_${uuid0}.hive_oss_db.t_double_part where c2 >= 1.5;
 -- result:
-4	2.49
-2	1.5
 6	20240310.0
+4	2.49
 4	2.59
 3	2.33
+2	1.5
 -- !result
 select * from hive_test_${uuid0}.hive_oss_db.t_double_part where c2 > 1.5;
 -- result:
 3	2.33
+6	20240310.0
 4	2.49
 4	2.59
-6	20240310.0
 -- !result
 select * from hive_test_${uuid0}.hive_oss_db.t_double_part where c2 <= 2.5;
 -- result:
-1	1.4
 4	2.49
-3	2.33
-1	1.3
+1	1.4
 2	1.5
+1	1.3
+3	2.33
 -- !result
 select * from hive_test_${uuid0}.hive_oss_db.t_double_part where c2 < 2.5;
 -- result:
-4	2.49
 1	1.4
+2	1.5
+4	2.49
 3	2.33
 1	1.3
-2	1.5
 -- !result
 select * from hive_test_${uuid0}.hive_oss_db.t_double_part where c2 <= 1.5;
 -- result:
+1	1.4
 2	1.5
 1	1.3
-1	1.4
 -- !result
 select * from hive_test_${uuid0}.hive_oss_db.t_double_part where c2 <= 1.5 and c2 > 1;
 -- result:
-1	1.4
 1	1.3
+1	1.4
 2	1.5
 -- !result
 select * from hive_test_${uuid0}.hive_oss_db.t_double_part where c2 <= 1.5 and c2 >= 1;
 -- result:
-1	1.4
 2	1.5
+1	1.4
 1	1.3
 -- !result
-select * from hive_test_${uuid0}.hive_oss_db.t_decimal_part2;
+select * from hive_test_${uuid0}.hive_oss_db.t_double_part where c2 in (1, 2, 3);
 -- result:
-1	1.3000000000
-4	2.5900000000
-2	1.5000000000
-1	1.4000000000
-3	2.3300000000
-4	2.4900000000
-6	20240310.0000000000
+-- !result
+select * from hive_test_${uuid0}.hive_oss_db.t_double_part where c2 in (1.4, 2.4, 3.3);
+-- result:
+1	1.4
+-- !result
+select * from hive_test_${uuid0}.hive_oss_db.t_double_part where c2 is NULL;
+-- result:
+7	None
 -- !result
 select * from hive_test_${uuid0}.hive_oss_db.t_decimal_part2;
 -- result:
-4	2.4900000000
-1	1.3000000000
-6	20240310.0000000000
-4	2.5900000000
 3	2.3300000000
+6	20240310.0000000000
+4	2.4900000000
+7	None
 1	1.4000000000
+4	2.5900000000
 2	1.5000000000
+1	1.3000000000
 -- !result
 select * from hive_test_${uuid0}.hive_oss_db.t_decimal_part2 where c1=1;
 -- result:
@@ -318,59 +355,72 @@ E: (1064, 'can not cast literal value 1.3000000000 to target type bigint(20)')
 -- !result
 select * from hive_test_${uuid0}.hive_oss_db.t_decimal_part2 where c2 >=2;
 -- result:
-3	2.3300000000
-6	20240310.0000000000
 4	2.4900000000
 4	2.5900000000
+6	20240310.0000000000
+3	2.3300000000
 -- !result
 select * from hive_test_${uuid0}.hive_oss_db.t_decimal_part2 where c2 >= 1.5;
 -- result:
-4	2.5900000000
-6	20240310.0000000000
-4	2.4900000000
 2	1.5000000000
+6	20240310.0000000000
 3	2.3300000000
+4	2.4900000000
+4	2.5900000000
 -- !result
 select * from hive_test_${uuid0}.hive_oss_db.t_decimal_part2 where c2 > 1.5;
 -- result:
-3	2.3300000000
-4	2.5900000000
 6	20240310.0000000000
 4	2.4900000000
+4	2.5900000000
+3	2.3300000000
 -- !result
 select * from hive_test_${uuid0}.hive_oss_db.t_decimal_part2 where c2 <= 2.5;
 -- result:
-3	2.3300000000
-4	2.4900000000
-1	1.4000000000
-2	1.5000000000
 1	1.3000000000
+2	1.5000000000
+3	2.3300000000
+1	1.4000000000
+4	2.4900000000
 -- !result
 select * from hive_test_${uuid0}.hive_oss_db.t_decimal_part2 where c2 < 2.5;
 -- result:
+2	1.5000000000
+4	2.4900000000
 3	2.3300000000
 1	1.3000000000
-2	1.5000000000
 1	1.4000000000
-4	2.4900000000
 -- !result
 select * from hive_test_${uuid0}.hive_oss_db.t_decimal_part2 where c2 <= 1.5;
 -- result:
-2	1.5000000000
 1	1.4000000000
+2	1.5000000000
 1	1.3000000000
 -- !result
 select * from hive_test_${uuid0}.hive_oss_db.t_decimal_part2 where c2 <= 1.5 and c2 > 1;
 -- result:
-1	1.3000000000
-2	1.5000000000
 1	1.4000000000
+2	1.5000000000
+1	1.3000000000
 -- !result
 select * from hive_test_${uuid0}.hive_oss_db.t_decimal_part2 where c2 <= 1.5 and c2 >= 1;
 -- result:
-1	1.3000000000
 2	1.5000000000
 1	1.4000000000
+1	1.3000000000
+-- !result
+select * from hive_test_${uuid0}.hive_oss_db.t_decimal_part2 where c2 in (1, 2);
+-- result:
+-- !result
+select * from hive_test_${uuid0}.hive_oss_db.t_decimal_part2 where c2 in (1.1, 2);
+-- result:
+-- !result
+select * from hive_test_${uuid0}.hive_oss_db.t_decimal_part2 where c2 in (1.1, 2, NULL);
+-- result:
+-- !result
+select * from hive_test_${uuid0}.hive_oss_db.t_decimal_part2 where c2 is NULL;
+-- result:
+7	None
 -- !result
 drop catalog hive_test_${uuid0};
 -- result:

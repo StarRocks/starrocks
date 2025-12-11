@@ -282,7 +282,7 @@ public class HiveMetastoreOperationsTest {
                 "Failed to find location in database 'db'",
                 () -> hmsOps.getDefaultLocation("db", "table"));
 
-        new MockUp<HiveWriteUtils>() {
+        new MockUp<HiveUtils>() {
             @Mock
             public boolean pathExists(Path path, Configuration conf) {
                 return false;
@@ -308,7 +308,7 @@ public class HiveMetastoreOperationsTest {
                 "Database 'db' location does not exist: my_location",
                 () -> hmsOps2.getDefaultLocation("db", "table"));
 
-        new MockUp<HiveWriteUtils>() {
+        new MockUp<HiveUtils>() {
             @Mock
             public boolean pathExists(Path path, Configuration conf) {
                 return true;
@@ -324,7 +324,7 @@ public class HiveMetastoreOperationsTest {
                 "Database 'db' location is not a directory: my_location",
                 () -> hmsOps2.getDefaultLocation("db", "table"));
 
-        new MockUp<HiveWriteUtils>() {
+        new MockUp<HiveUtils>() {
             @Mock
             public boolean pathExists(Path path, Configuration conf) {
                 return true;
@@ -343,7 +343,7 @@ public class HiveMetastoreOperationsTest {
 
     @Test
     public void testCreateTable() throws DdlException {
-        new MockUp<HiveWriteUtils>() {
+        new MockUp<HiveUtils>() {
             public void createDirectory(Path path, Configuration conf) {
             }
         };
@@ -381,7 +381,7 @@ public class HiveMetastoreOperationsTest {
 
     @Test
     public void testCreateTableWithLocation() throws DdlException {
-        new MockUp<HiveWriteUtils>() {
+        new MockUp<HiveUtils>() {
             @Mock
             public void createDirectory(Path path, Configuration conf) {
             }
@@ -431,7 +431,7 @@ public class HiveMetastoreOperationsTest {
 
     @Test
     public void testCreateTableForExternal() throws DdlException {
-        new MockUp<HiveWriteUtils>() {
+        new MockUp<HiveUtils>() {
             @Mock
             public void createDirectory(Path path, Configuration conf) {
             }
@@ -471,7 +471,7 @@ public class HiveMetastoreOperationsTest {
 
     @Test
     public void testCreateTableForExternalWithoutLocation() throws DdlException {
-        new MockUp<HiveWriteUtils>() {
+        new MockUp<HiveUtils>() {
             @Mock
             public void createDirectory(Path path, Configuration conf) {
             }
@@ -510,7 +510,7 @@ public class HiveMetastoreOperationsTest {
 
     @Test
     public void testCreateTableLike() throws DdlException {
-        new MockUp<HiveWriteUtils>() {
+        new MockUp<HiveUtils>() {
             public void createDirectory(Path path, Configuration conf) {
             }
         };

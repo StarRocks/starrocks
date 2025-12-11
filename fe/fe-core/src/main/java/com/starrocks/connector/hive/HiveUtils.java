@@ -39,8 +39,8 @@ import java.util.UUID;
 
 import static com.starrocks.connector.hive.HiveMetastoreOperations.EXTERNAL_LOCATION_PROPERTY;
 
-public class HiveWriteUtils {
-    private static final Logger LOG = LogManager.getLogger(HiveWriteUtils.class);
+public class HiveUtils {
+    private static final Logger LOG = LogManager.getLogger(HiveUtils.class);
     public static boolean isS3Url(String prefix) {
         return prefix.startsWith("oss://") || prefix.startsWith("s3n://") || prefix.startsWith("s3a://") ||
                 prefix.startsWith("s3://") || prefix.startsWith("cos://") || prefix.startsWith("cosn://") ||
@@ -172,7 +172,7 @@ public class HiveWriteUtils {
     public static LiteralExpr normalizeKey(LiteralExpr key, Type targetType) {
         if (key instanceof DecimalLiteral) {
             DecimalLiteral decimalKey = (DecimalLiteral) key;
-            ScalarType type = (ScalarType) key.getType();
+            ScalarType type = (ScalarType) targetType;
             int scale = type.decimalScale();
     
             BigDecimal scaled = decimalKey.getValue()

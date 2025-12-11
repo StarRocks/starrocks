@@ -50,7 +50,7 @@ import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.HiveStorageFormat;
-import com.starrocks.connector.hive.HiveWriteUtils;
+import com.starrocks.connector.hive.HiveUtils;
 import com.starrocks.persist.ModifyTableColumnOperationLog;
 import com.starrocks.planner.DescriptorTable.ReferencedPartitionInfo;
 import com.starrocks.planner.expression.ExprToThrift;
@@ -353,8 +353,7 @@ public class HiveTable extends Table {
                     "Partition key size does not match partition columns size");
             List<TExpr> partitionKeyExprs = Lists.newArrayListWithCapacity(keys.size());
             for (int j = 0; j < keys.size(); j++) {
-                LiteralExpr literal = keys.get(j);
-                literal = HiveWriteUtils.normalizeKey(literal, partitionColumns.get(j).getType());
+                LiteralExpr literal = HiveUtils.normalizeKey(keys.get(j), partitionColumns.get(j).getType());
                 partitionKeyExprs.add(ExprToThrift.treeToThrift(literal));
             }
             tPartition.setPartition_key_exprs(partitionKeyExprs);

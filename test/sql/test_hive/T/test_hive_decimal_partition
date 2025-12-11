@@ -21,6 +21,9 @@ select * from hive_test_${uuid0}.hive_oss_db.t_decimal_part where c2 < 2.5;
 select * from hive_test_${uuid0}.hive_oss_db.t_decimal_part where c2 <= 1.5;
 select * from hive_test_${uuid0}.hive_oss_db.t_decimal_part where c2 <= 1.5 and c2 > 1;
 select * from hive_test_${uuid0}.hive_oss_db.t_decimal_part where c2 <= 1.5 and c2 >= 1;
+select * from hive_test_${uuid0}.hive_oss_db.t_decimal_part where c2 in (1, 2, 3);
+select * from hive_test_${uuid0}.hive_oss_db.t_decimal_part where c2 in (1.1, 2, 3);
+select * from hive_test_${uuid0}.hive_oss_db.t_decimal_part where c2 is NULL;
 
 select * from hive_test_${uuid0}.hive_oss_db.t_float_part;
 select * from hive_test_${uuid0}.hive_oss_db.t_float_part;
@@ -37,6 +40,9 @@ select * from hive_test_${uuid0}.hive_oss_db.t_float_part where c2 < 2.5;
 select * from hive_test_${uuid0}.hive_oss_db.t_float_part where c2 <= 1.5;
 select * from hive_test_${uuid0}.hive_oss_db.t_float_part where c2 <= 1.5 and c2 > 1;
 select * from hive_test_${uuid0}.hive_oss_db.t_float_part where c2 <= 1.5 and c2 >= 1;
+select * from hive_test_${uuid0}.hive_oss_db.t_float_part where c2 in (1, 2, 3);
+select * from hive_test_${uuid0}.hive_oss_db.t_float_part where c2 in (1.4, 2.4, 3.3);
+select * from hive_test_${uuid0}.hive_oss_db.t_float_part where c2 is NULL;
 
 select * from hive_test_${uuid0}.hive_oss_db.t_double_part;
 select * from hive_test_${uuid0}.hive_oss_db.t_double_part where c1=1;
@@ -52,8 +58,10 @@ select * from hive_test_${uuid0}.hive_oss_db.t_double_part where c2 < 2.5;
 select * from hive_test_${uuid0}.hive_oss_db.t_double_part where c2 <= 1.5;
 select * from hive_test_${uuid0}.hive_oss_db.t_double_part where c2 <= 1.5 and c2 > 1;
 select * from hive_test_${uuid0}.hive_oss_db.t_double_part where c2 <= 1.5 and c2 >= 1;
+select * from hive_test_${uuid0}.hive_oss_db.t_double_part where c2 in (1, 2, 3);
+select * from hive_test_${uuid0}.hive_oss_db.t_double_part where c2 in (1.4, 2.4, 3.3);
+select * from hive_test_${uuid0}.hive_oss_db.t_double_part where c2 is NULL;
 
-select * from hive_test_${uuid0}.hive_oss_db.t_decimal_part2;
 select * from hive_test_${uuid0}.hive_oss_db.t_decimal_part2;
 select * from hive_test_${uuid0}.hive_oss_db.t_decimal_part2 where c1=1;
 select * from hive_test_${uuid0}.hive_oss_db.t_decimal_part2 where c2=1;
@@ -68,5 +76,9 @@ select * from hive_test_${uuid0}.hive_oss_db.t_decimal_part2 where c2 < 2.5;
 select * from hive_test_${uuid0}.hive_oss_db.t_decimal_part2 where c2 <= 1.5;
 select * from hive_test_${uuid0}.hive_oss_db.t_decimal_part2 where c2 <= 1.5 and c2 > 1;
 select * from hive_test_${uuid0}.hive_oss_db.t_decimal_part2 where c2 <= 1.5 and c2 >= 1;
+select * from hive_test_${uuid0}.hive_oss_db.t_decimal_part2 where c2 in (1, 2);
+select * from hive_test_${uuid0}.hive_oss_db.t_decimal_part2 where c2 in (1.1, 2);
+select * from hive_test_${uuid0}.hive_oss_db.t_decimal_part2 where c2 in (1.1, 2, NULL);
+select * from hive_test_${uuid0}.hive_oss_db.t_decimal_part2 where c2 is NULL;
 
 drop catalog hive_test_${uuid0};

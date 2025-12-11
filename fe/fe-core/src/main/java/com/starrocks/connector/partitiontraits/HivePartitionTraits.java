@@ -66,7 +66,7 @@ public class HivePartitionTraits extends DefaultTraits {
                 "columns size is %s, but values size is %s", types.size(), values.size());
 
         PartitionKey partitionKey = super.createPartitionKeyWithType(values, types);
-
+        //createPartitionKeyWithType will generate a new precision and scale according to the value string.
         for (int i = 0; i < types.size(); i++) {
             LiteralExpr exprValue = partitionKey.getKeys().get(i);
             if (exprValue.getType().isDecimalV3()) {
