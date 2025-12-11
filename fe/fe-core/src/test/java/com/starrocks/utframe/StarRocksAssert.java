@@ -84,6 +84,8 @@ import com.starrocks.scheduler.TaskRun;
 import com.starrocks.scheduler.TaskRunBuilder;
 import com.starrocks.scheduler.TaskRunManager;
 import com.starrocks.scheduler.TaskRunScheduler;
+import com.starrocks.sql.ast.QualifiedName;
+import com.starrocks.sql.ast.TableRef;
 import com.starrocks.schema.MSchema;
 import com.starrocks.schema.MTable;
 import com.starrocks.server.GlobalStateMgr;
