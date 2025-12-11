@@ -26,4 +26,11 @@ public class ProductFeatureTest {
         List<ProductFeature> features = ProductFeature.getFeatures();
         Assertions.assertEquals(2, features.size());
     }
+
+    @Test
+    public void testFeatureNames() {
+        List<ProductFeature> features = ProductFeature.getFeatures();
+        Assertions.assertTrue(features.stream().anyMatch(feature -> feature.getName().equals("RBAC")));
+        Assertions.assertTrue(features.stream().anyMatch(feature -> feature.getName().equals("ArrowFlightSQL")));
+    }
 }
