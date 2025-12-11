@@ -248,6 +248,7 @@ public class EditLogDeserializer {
             .put(OperationType.OP_CREATE_DICTIONARY, Dictionary.class)
             .put(OperationType.OP_DROP_DICTIONARY, DropDictionaryInfo.class)
             .put(OperationType.OP_MODIFY_DICTIONARY_MGR, DictionaryMgrInfo.class)
+            .put(OperationType.OP_MODIFY_DICTIONARY_MGR_V2, UpdateDictionaryMgrLog.class)
             .put(OperationType.OP_DECOMMISSION_DISK, DecommissionDiskInfo.class)
             .put(OperationType.OP_CANCEL_DECOMMISSION_DISK, CancelDecommissionDiskInfo.class)
             .put(OperationType.OP_DISABLE_DISK, DisableDiskInfo.class)

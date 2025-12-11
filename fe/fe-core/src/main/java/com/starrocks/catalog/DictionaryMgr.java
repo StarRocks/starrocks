@@ -35,6 +35,8 @@ import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.persist.DictionaryMgrInfo;
 import com.starrocks.persist.DropDictionaryInfo;
 import com.starrocks.persist.ImageWriter;
+import com.starrocks.persist.UpdateDictionaryLog;
+import com.starrocks.persist.UpdateDictionaryMgrLog;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
@@ -506,6 +508,59 @@ public class DictionaryMgr implements Writable, GsonPostProcessable {
                     } else {
                         LOG.warn("dictionary {}, id {} has been deleted",
                                 dictionary.getDictionaryName(), dictionary.getDictionaryId());
+                    }
+                }
+            } finally {
+                lock.unlock();
+            }
+        }
+    }
+
+    public void replayModifyDictionaryMgr(UpdateDictionaryMgrLog log) {
+        long newNextTxnId = log.getNextTxnId();
+        long newNextDictionaryId = log.getNextDictionaryId();
+
+        if (newNextTxnId > this.nextTxnId) {
+            this.nextTxnId = newNextTxnId;
+        }
+
+        if (newNextDictionaryId > this.nextDictionaryId) {
+            this.nextDictionaryId = newNextDictionaryId;
+        }
+
+        List<UpdateDictionaryLog> dictionaryLogList = log.getDictionaryLogList();
+        if (dictionaryLogList != null && !dictionaryLogList.isEmpty()) {
+            lock.lock();
+            try {
+                for (UpdateDictionaryLog dictionaryLog : dictionaryLogList) {
+                    Dictionary dictionary = dictionariesMapById.get(dictionaryLog.getDictionaryId());
+                    if (dictionary != null) {
+                        if (dictionaryLog.getState() != null) {
+                            switch (dictionaryLog.getState()) {
+                                case COMMITTING:
+                                    dictionary.setCommitting();
+                                    break;
+                                case FINISHED:
+                                    dictionary.setFinished(dictionaryLog.getTs(), dictionaryLog.getLastSuccessVersion());
+                                    break;
+                                case CANCELLED:
+                                    dictionary.setCancelled();
+                                    break;
+                                case REFRESHING:
+                                    dictionary.setRefreshing(dictionaryLog.getTs());
+                                    break;
+                                default:
+                                    break;
+                            }
+                        }
+                        if (dictionaryLog.isResetStateBeforeRefresh()) {
+                            dictionary.resetStateBeforeRefresh();
+                        }
+                        if (dictionaryLog.getErrorMsg() != null) {
+                            dictionary.setErrorMsg(dictionaryLog.getErrorMsg());
+                        }
+                    } else {
+                        LOG.warn("dictionary id {} has been deleted", dictionaryLog.getDictionaryId());
                     }
                 }
             } finally {
