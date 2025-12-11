@@ -410,26 +410,12 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 默认值：true
 * 引入版本：v3.3.0
 
-<<<<<<< HEAD
-=======
-### enable_global_runtime_filter
-
-* 描述：Global runtime filter 开关。Runtime Filter（简称 RF）在运行时对数据进行过滤，过滤通常发生在 Join 阶段。当多表进行 Join 时，往往伴随着谓词下推等优化手段进行数据过滤，以减少 Join 表的数据扫描以及 shuffle 等阶段产生的 IO，从而提升查询性能。StarRocks 中有两种 RF，分别是 Local RF 和 Global RF。Local RF 应用于 Broadcast Hash Join 场景。Global RF 应用于 Shuffle Join 场景。
-* 默认值 `true`，表示打开 global runtime filter 开关。关闭该开关后, 不生成 Global RF, 但是依然会生成 Local RF。
-
-### enable_group_by_compressed_key
-
-* 描述：是否利用准确的统计信息来压缩 GROUP BY Key 列。有效值：`true` 和 `false`。
-* 默认值：true
-* 引入版本：v4.0
-
 ### enable_group_execution
 
 * 描述：Colocate Group Execution 是一种利用物理数据分区的执行模式，其中固定数量的线程依次处理各自的数据范围，以增强局部性和吞吐量。该模式可降低内存使用量。
 * 默认值：true
 * 引入版本：v3.3
 
->>>>>>> 709d411ceb ([Doc] add doc for group execution (#66469))
 ### enable_group_level_query_queue (global)
 
 * 描述：是否开启资源组粒度的[查询队列](../administration/management/resource_management/query_queues.md)。
@@ -493,17 +479,13 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 默认值：false
 * 引入版本：v3.2.3
 
-<<<<<<< HEAD
-### enable_spill
-=======
 ### enable_parallel_merge
 
 * 描述：是否启用排序的 Parallel Merge。启用后，排序的合并阶段将使用多个线程进行合并操作。
 * 默认值：true
 * 引入版本：v3.3
 
-### enable_parquet_reader_bloom_filter
->>>>>>> 709d411ceb ([Doc] add doc for group execution (#66469))
+### enable_spill
 
 * 描述：是否启用中间结果落盘。默认值：`false`。如果将其设置为 `true`，StarRocks 会将中间结果落盘，以减少在查询中处理聚合、排序或连接算子时的内存使用量。
 * 默认值：false
@@ -519,63 +501,13 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 
 * 描述：是否校验 ORDER BY 引用列是否有歧义。设置为默认值 `TRUE` 时，如果查询中的输出列存在不同的表达式使用重复别名的情况，且按照该别名进行排序，查询会报错，例如 `select distinct t1.* from tbl1 t1 order by t1.k1;`。该行为和 2.3 及之前版本的逻辑一致。如果取值为 `FALSE`，采用宽松的去重机制，把这类查询作为有效 SQL 处理。
 * 默认值：true
-<<<<<<< HEAD
 * 引入版本：v2.5.18，v3.1.7
-=======
-* 类型：Boolean
-* 单位：-
-* 描述：是否在读取 Parquet 文件时启用 Bloom Filter 优化。
-  * `true`（默认）：读取 Parquet 文件时启用 Bloom Filter 优化。
-  * `false`：读取 Parquet 文件时禁用 Bloom Filter 优化。
-* 引入版本：v3.5.0
-
-### enable_parquet_reader_page_index
-
-* 默认值：true
-* 类型：Boolean
-* 单位：-
-* 描述：是否在读取 Parquet 文件时启用 Page Index 优化。
-  * `true`（默认）：读取 Parquet 文件时启用 Page Index 优化。
-  * `false`：读取 Parquet 文件时禁用 Page Index 优化。
-* 引入版本：v3.5.0
-
-### enable_partition_hash_join
-
-* 描述: 是否启用自适应 Partition Hash Join。
-* 默认值: true
-* 引入版本: v3.4
 
 ### enable_per_bucket_optimize
 
 * 描述：是否开启分桶计算。开启后对于一阶段聚合可以按照分桶顺序计算，降低内存使用。
 * 默认值：true
 * 引入版本：v3.0
-
-### enable_phased_scheduler
-
-* 描述: 是否启用多阶段调度。当启用多阶段调度时，系统将根据 Fragment 之间的依赖关系进行调度。例如，系统将首先调度 Shuffle Join 的 Build Side Fragment ，然后调度 Probe Side Fragment （注意，与分阶段调度不同，多阶段调度仍处于 MPP 执行模式下）。启用多阶段调度可显著降低大量 UNION ALL 查询的内存使用量。
-* 默认值: false
-* 引入版本: v3.3
-
-### enable_pipeline_engine
-
-* 描述：是否启用 Pipeline 执行引擎。`true`：启用（默认），`false`：不启用。
-* 默认值：true
-
-### enable_plan_advisor
-
-* 描述：是否为慢查询或手动标记查询开启 Query Feedback 功能。
-* 默认值：true
-* 引入版本：v3.4.0
-
-### enable_predicate_reorder
-
-* **范围**: 会话
-* **描述**: 启用后，优化器在逻辑/物理计划重写阶段对 AND（合取）谓词应用 Predicate Reorder 规则。该规则通过 `Utils.extractConjuncts` 提取合取项，使用 `DefaultPredicateSelectivityEstimator` 估算每个合取项的选择性，并按估算选择性升序（较不限制的先）重排合取项以构造新的 `CompoundPredicateOperator`（AND）。只有当操作符包含超过一个合取项的 `CompoundPredicateOperator` 时，规则才会运行。当可用时，统计信息从子 `OptExpression` 的统计信息收集；对于 `PhysicalOlapScanOperator`，它会从 `GlobalStateMgr.getCurrentState().getStatisticStorage()` 获取列统计。如果缺少子统计且扫描不是 OLAP 扫描，则规则将跳过重排序。该会话变量通过 `SessionVariable.isEnablePredicateReorder()` 暴露，并提供辅助方法 `enablePredicateReorder()` 与 `disablePredicateReorder()`。
-* **默认值**: false
-* **数据类型**: boolean
-* **引入版本**: v3.2.0
->>>>>>> 709d411ceb ([Doc] add doc for group execution (#66469))
 
 ### enable_profile
 
