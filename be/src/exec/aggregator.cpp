@@ -692,6 +692,7 @@ Status Aggregator::_reset_state(RuntimeState* state, bool reset_sink_complete) {
     // _state_allocator holds the entries of the hash_map/hash_set, when iterating a hash_map/set, the _state_allocator
     // is used to access these entries, so we must reset the _state_allocator along with the hash_map/hash_set.
     _state_allocator.reset();
+    _pool->clear();
     return Status::OK();
 }
 
