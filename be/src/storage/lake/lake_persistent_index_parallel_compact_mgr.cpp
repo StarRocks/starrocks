@@ -111,9 +111,9 @@ Status LakePersistentIndexParallelCompactTask::do_run() {
 
     // Open each sstable and create iterator
     for (const auto& fileset : _input_sstables) {
-        std::vector<sstable::Iterator*> each_iters;
+        std::vector<sstable::Iterator*> sst_iters;
         DeferOp free_iters([&] {
-            for (sstable::Iterator* iter : each_iters) {
+            for (sstable::Iterator* iter : sst_iters) {
                 delete iter;
             }
         });
@@ -144,12 +144,14 @@ Status LakePersistentIndexParallelCompactTask::do_run() {
             read_options.delvec = sst->delvec();
 
             sstable::Iterator* iter = sst->new_iterator(read_options);
-            each_iters.push_back(iter);
+            sst_iters.push_back(iter);
             sstables.push_back(std::move(sst));
         }
         // Create concatenating iterator for each fileset
-        concat_iters.push_back(sstable::NewConcatenatingIterator(&each_iters[0], each_iters.size()));
-        each_iters.clear(); // Clear vector without deleting iterators (managed by concat_iters)
+        if (!sst_iters.empty()) {
+            concat_iters.push_back(sstable::NewConcatenatingIterator(&sst_iters[0], sst_iters.size()));
+            sst_iters.clear(); // Clear vector without deleting iterators (managed by concat_iters)
+        }
     }
 
     if (concat_iters.empty()) {
@@ -178,12 +180,12 @@ Status LakePersistentIndexParallelCompactTask::do_run() {
     sstable::Options options;
     std::unique_ptr<sstable::Iterator> merging_iter(
             sstable::NewMergingIterator(options.comparator, &concat_iters[0], concat_iters.size()));
+    concat_iters.clear(); // Clear vector without deleting iterators (managed by merging_iter)
     if (!_seek_range.seek_key.empty()) {
         merging_iter->Seek(_seek_range.seek_key);
     } else {
         merging_iter->SeekToFirst();
     }
-    concat_iters.clear(); // Clear vector without deleting iterators (managed by merging_iter)
 
     if (!merging_iter->Valid()) {
         return merging_iter->status();

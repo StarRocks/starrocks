@@ -53,6 +53,8 @@ Status LakePersistentIndexSizeTieredCompactionStrategy::pick_compaction_candidat
 
     for (int i = 0; i < sstable_meta.sstables_size(); ++i) {
         const auto& sstable_pb = sstable_meta.sstables(i);
+        // Every sstable without an explicit fileset_id will be treated as belonging to a different fileset.
+        // That is because these sstable lack of key range info, and we cannot group them correctly.
         UniqueId fileset_id = sstable_pb.has_fileset_id() ? sstable_pb.fileset_id() : UniqueId::gen_uid();
         if (i == 0) {
             base_level_fileset_id = fileset_id;

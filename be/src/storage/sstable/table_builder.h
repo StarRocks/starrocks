@@ -74,7 +74,8 @@ public:
     // Finish() call, returns the size of the final generated file.
     uint64_t FileSize() const;
 
-    // Return the key range of the table being built.
+    // The caller must be careful not to use these slices after
+    // the TableBuilder is destroyed
     std::pair<Slice, Slice> KeyRange() const;
 
 private:

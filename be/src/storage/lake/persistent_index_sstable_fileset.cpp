@@ -97,6 +97,11 @@ Status PersistentIndexSstableFileset::merge_from(std::unique_ptr<PersistentIndex
 Status PersistentIndexSstableFileset::multi_get(const Slice* keys, const KeyIndexSet& key_indexes, int64_t version,
                                                 IndexValue* values, KeyIndexSet* found_key_indexes) const {
     const sstable::Comparator* comparator = sstable::BytewiseComparator();
+    // 0. if single standalone sstable, directly get.
+    if (_standalone_sstable != nullptr) {
+        DCHECK(_sstable_map.empty());
+        return _standalone_sstable->multi_get(keys, key_indexes, version, values, found_key_indexes);
+    }
     // 1. divide key_indexes into different groups according to sstables
     std::map<PersistentIndexSstable*, KeyIndexSet> sstable_key_indexes_map;
     {
