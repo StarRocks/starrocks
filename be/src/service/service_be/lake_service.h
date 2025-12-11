@@ -120,7 +120,7 @@ private:
                                           std::span<const TxnInfoPB> txn_infos, const int64_t* log_versions,
                                           ::starrocks::PublishLogVersionResponse* response);
 
-    Status _cleanup_before_repair(std::map<int64_t, TabletMetadataPB>& tablet_metadatas);
+    Status _cleanup_before_repair(const ::starrocks::RepairTabletMetadataRequest* request);
 
 private:
     static constexpr int64_t kDefaultTimeoutForGetTabletStat = 5 * 60 * 1000L;  // 5 minutes
