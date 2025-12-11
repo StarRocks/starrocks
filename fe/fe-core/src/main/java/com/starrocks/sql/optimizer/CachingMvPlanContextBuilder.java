@@ -29,6 +29,7 @@ import com.starrocks.catalog.MvPlanContext;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
@@ -332,13 +333,28 @@ public class CachingMvPlanContextBuilder {
     }
 
     /**
+     * NOTE: This method will refresh the metadata of mvs to avoid using stale mv.
      * @return: null if parseNode is null or astToMvsMap doesn't contain this ast, otherwise return the mvs
      */
     public Set<MaterializedView> getMvsByAst(AstKey ast) {
         if (ast == null) {
             return null;
         }
-        return AST_TO_MV_MAP.get(ast);
+        Set<MaterializedView> candidateMVs = AST_TO_MV_MAP.get(ast);
+        // check & refresh mv's metadata to avoid using stale mv
+        if (candidateMVs == null) {
+            return Sets.newHashSet();
+        }
+        Set<MaterializedView> validMVs = Sets.newHashSet();
+        for (MaterializedView mv : candidateMVs) {
+            MaterializedView curMV = GlobalStateMgr.getCurrentState().getLocalMetastore().getMaterializedView(mv.getMvId());
+            if (curMV == null) {
+                LOG.warn("mv {} is not found in metastore, skip it.", mv.getName());
+                continue;
+            }
+            validMVs.add(curMV);
+        }
+        return validMVs;
     }
 
     /**
