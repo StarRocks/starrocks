@@ -170,6 +170,13 @@ public:
     DEFINE_VECTORIZED_FN(json_remove);
 
     /**
+     * Inserts or updates data in a JSON document at one or more specified JSON paths
+     * @param JSON, JSONPath, Value, [JSONPath, Value, ...]
+     * @return Modified JSON
+     */
+    DEFINE_VECTORIZED_FN(json_set);
+
+    /**
      * Return json built from struct/map
      */
     DEFINE_VECTORIZED_FN(to_json);
