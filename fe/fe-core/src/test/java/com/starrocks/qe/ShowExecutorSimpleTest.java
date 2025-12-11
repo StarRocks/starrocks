@@ -83,7 +83,6 @@ import com.starrocks.sql.ast.DescribeStmt;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.LabelName;
 import com.starrocks.sql.ast.QualifiedName;
-import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.ShowAuthorStmt;
 import com.starrocks.sql.ast.ShowBackendsStmt;
