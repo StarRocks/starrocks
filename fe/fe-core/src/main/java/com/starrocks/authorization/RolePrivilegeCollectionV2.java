@@ -152,8 +152,12 @@ public class RolePrivilegeCollectionV2 extends PrivilegeCollectionV2 {
         RolePrivilegeCollectionV2 ret = new RolePrivilegeCollectionV2();
         ret.name = this.name;
         ret.mask = this.mask;
-        ret.parentRoleIds = new HashSet<>(this.parentRoleIds);
-        ret.subRoleIds = new HashSet<>(this.subRoleIds);
+        if (this.parentRoleIds != null) {
+            ret.parentRoleIds = new HashSet<>(this.parentRoleIds);
+        }
+        if (this.subRoleIds != null) {
+            ret.subRoleIds = new HashSet<>(this.subRoleIds);
+        }
         ret.comment = this.comment;
         ret.typeToPrivilegeEntryList = cloneTypeToPrivilegeEntryList();
         return ret;
