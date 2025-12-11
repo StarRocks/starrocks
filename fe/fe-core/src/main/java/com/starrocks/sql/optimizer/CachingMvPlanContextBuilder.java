@@ -443,4 +443,16 @@ public class CachingMvPlanContextBuilder {
             }
         });
     }
+
+    public static String getMVPlanCacheStats() {
+        return MV_PLAN_CONTEXT_CACHE.synchronous().stats().toString();
+    }
+
+    public static String getMVGlobalContextCacheStats(MaterializedView mv) {
+        MVCacheEntity mvCacheEntity = MV_GLOBAL_CONTEXT_CACHE_MAP.get(mv);
+        if (mvCacheEntity != null) {
+            return mvCacheEntity.cache.stats().toString();
+        }
+        return "";
+    }
 }

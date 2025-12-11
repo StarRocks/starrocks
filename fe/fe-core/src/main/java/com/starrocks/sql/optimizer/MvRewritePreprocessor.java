@@ -195,6 +195,9 @@ public class MvRewritePreprocessor {
                 if (queryMaterializationContext.getValidCandidateMVs().size() > 1) {
                     queryMaterializationContext.setEnableQueryContextCache(true);
                 }
+
+                // record the current MV plan cache stats
+                Tracers.record("MVPlanCacheStats", CachingMvPlanContextBuilder.getMVPlanCacheStats());
             } catch (Exception e) {
                 List<String> tableNames = queryTables.stream().map(Table::getName).collect(Collectors.toList());
                 logMVPrepare(connectContext, "Prepare query tables {} for mv failed:{}",
@@ -858,7 +861,8 @@ public class MvRewritePreprocessor {
             
             try {
                 future.get(individualTimeoutMs, TimeUnit.MILLISECONDS);
-                // Success - no action needed
+                // record MV global cache stats after successful preparation
+                Tracers.record("MVGlobalCacheStats", CachingMvPlanContextBuilder.getMVGlobalContextCacheStats(mv));
             } catch (TimeoutException e) {
                 LOG.warn("MV {} preparation timeout after {} ms", mvName, individualTimeoutMs);
                 timeoutMvNames.add(mvName);
