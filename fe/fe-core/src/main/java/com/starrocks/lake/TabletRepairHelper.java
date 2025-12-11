@@ -158,6 +158,7 @@ public class TabletRepairHelper {
             // if enable file bundling, we only need to send the write bundling metadata request to one node.
             // other node requests are used for some cleanup work.
             Set<Long> tabletIds = request.writeBundlingFile ? Sets.newHashSet(info.allTablets) : entry.getValue();
+            Preconditions.checkState(!tabletIds.isEmpty());
             if (request.writeBundlingFile) {
                 writeBundlingFile = false;
             }
