@@ -3009,7 +3009,7 @@ public class Config extends ConfigBase {
 
     /**
      * If set to false, when the load is empty, success is returned.
-     * Otherwise, `No partitions have data available for loading` is returned.
+     * Otherwise, `No rows were imported from upstream` is returned.
      */
     @ConfField(mutable = true)
     public static boolean empty_load_as_error = true;
