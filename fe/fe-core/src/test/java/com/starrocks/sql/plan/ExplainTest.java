@@ -17,9 +17,9 @@ package com.starrocks.sql.plan;
 import com.starrocks.common.Config;
 import com.starrocks.sql.Explain;
 import com.starrocks.sql.ast.QueryStatement;
-import org.junit.jupiter.api.Assertions;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.utframe.UtFrameUtils;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 public class ExplainTest extends PlanTestBase {
