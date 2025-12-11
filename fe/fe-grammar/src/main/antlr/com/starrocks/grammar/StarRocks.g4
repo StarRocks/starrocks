@@ -2238,7 +2238,7 @@ backupStatement
     : BACKUP (ALL EXTERNAL CATALOGS | EXTERNAL (CATALOG | CATALOGS) identifierList)? (DATABASE dbName=identifier)?
     SNAPSHOT qualifiedName TO repoName=identifier
     (ON '(' backupRestoreObjectDesc (',' backupRestoreObjectDesc) * ')')?
-    (PROPERTIES propertyList)?
+    properties?
     ;
 
 cancelBackupStatement
@@ -2255,7 +2255,7 @@ restoreStatement
     (ALL EXTERNAL CATALOGS | EXTERNAL (CATALOG | CATALOGS) identifierWithAliasList)?
     (DATABASE dbName=identifier (AS dbAlias=identifier)?)?
     (ON '(' backupRestoreObjectDesc (',' backupRestoreObjectDesc) * ')')?
-    (PROPERTIES propertyList)?
+    properties?
     ;
 
 cancelRestoreStatement
@@ -2275,7 +2275,7 @@ createRepositoryStatement
     : CREATE (READ ONLY)? REPOSITORY repoName=identifier
     WITH BROKER brokerName=identifierOrString?
     ON LOCATION location=string
-    (PROPERTIES propertyList)?
+    properties?
     ;
 
 dropRepositoryStatement
@@ -3297,7 +3297,7 @@ statusDesc
     ;
 
 properties
-    : PROPERTIES '(' property (',' property)* ')'
+    : PROPERTIES propertyList
     ;
 
 extProperties

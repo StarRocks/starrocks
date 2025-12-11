@@ -289,13 +289,7 @@ public class AstBuilderEPack extends AstBuilder {
     public ParseNode visitCreateRoleMappingStatement(
             StarRocksParser.CreateRoleMappingStatementContext context) {
         String name = ((Identifier) visit(context.identifier())).getValue();
-        Map<String, String> propertyMap = new HashMap<>();
-        if (context.properties() != null) {
-            List<Property> propertyList = visit(context.properties().property(), Property.class);
-            for (Property property : propertyList) {
-                propertyMap.put(property.getKey(), property.getValue());
-            }
-        }
+        Map<String, String> propertyMap = getCaseSensitiveProperties(context.properties());
         return new CreateRoleMappingStatement(name, propertyMap, createPos(context));
     }
 
@@ -500,7 +494,7 @@ public class AstBuilderEPack extends AstBuilder {
     public ParseNode visitCreatePasswordPolicy(StarRocksParser.CreatePasswordPolicyContext ctx) {
         String policyName = getIdentifierName(ctx.identifier());
         String comment = ctx.comment() == null ? "" : ((StringLiteral) visit(ctx.comment())).getStringValue();
-        Map<String, String> properties = getProperties(ctx.properties());
+        Map<String, String> properties = getCaseSensitiveProperties(ctx.properties());
         return new CreatePasswordPolicyStmt(policyName, comment, properties, createPos(ctx));
     }
 
@@ -539,11 +533,7 @@ public class AstBuilderEPack extends AstBuilder {
         String whName = identifier.getValue();
         Map<String, String> properties = null;
         if (context.properties() != null) {
-            properties = new HashMap<>();
-            List<Property> propertyList = visit(context.properties().property(), Property.class);
-            for (Property property : propertyList) {
-                properties.put(property.getKey(), property.getValue());
-            }
+            properties = getCaseSensitiveProperties(context.properties());
         }
         String comment = null;
         if (context.comment() != null) {
@@ -633,7 +623,7 @@ public class AstBuilderEPack extends AstBuilder {
                 excludeCatalogs, excludeDatabases, excludeTables);
         List<String> members = parseMembersDescStatement(context.membersDesc());
         String schedule = ((StringLiteral) visit(context.scheduleDesc().string())).getStringValue();
-        Map<String, String> properties = getProperties(context.properties());
+        Map<String, String> properties = getCaseSensitiveProperties(context.properties());
         String comment = context.comment() == null ? null
                 : ((StringLiteral) visit(context.comment().string())).getStringValue();
 
@@ -698,7 +688,7 @@ public class AstBuilderEPack extends AstBuilder {
         List<String> members = parseMembersDescStatement(context.membersDesc());
         String schedule = context.scheduleDesc() == null ? null
                 : ((StringLiteral) visit(context.scheduleDesc().string())).getStringValue();
-        Map<String, String> properties = getProperties(context.properties());
+        Map<String, String> properties = getCaseSensitiveProperties(context.properties());
         String comment = context.comment() == null ? null
                 : ((StringLiteral) visit(context.comment().string())).getStringValue();
 
@@ -724,7 +714,7 @@ public class AstBuilderEPack extends AstBuilder {
         convertTableNames(parseExcludeTablesAddDescStatement(context.excludeTablesAddDesc()),
                 excludeCatalogs, excludeDatabases, excludeTables);
         List<String> members = parseMembersAddDescStatement(context.membersAddDesc());
-        Map<String, String> properties = getProperties(context.properties());
+        Map<String, String> properties = getCaseSensitiveProperties(context.properties());
 
         return new AlterFailoverGroupAddStmt(ifNotExist, failoverGroupName,
                 includeCatalogs, includeDatabases, includeTables,
@@ -980,7 +970,7 @@ public class AstBuilderEPack extends AstBuilder {
         QualifiedName targetQualifiedName = normalizeName(getQualifiedName(context.targetTable));
         TableRef targetTable = new TableRef(targetQualifiedName, null, createPos(context.targetTable));
         Map<String, String> properties = context.propertyList() != null
-                ? getPropertyList(context.propertyList()) : null;
+                ? getCaseInsensitivePropertyList(context.propertyList()) : null;
         return new RestoreTableFromSnapshotStmt(sourceTable, snapshotName, targetTable, properties, createPos(context));
     }
 }
