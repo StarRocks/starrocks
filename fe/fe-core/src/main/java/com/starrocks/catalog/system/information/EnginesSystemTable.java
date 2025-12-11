@@ -31,12 +31,12 @@ public class EnginesSystemTable {
                 NAME,
                 Table.TableType.SCHEMA,
                 builder()
-                        .column("ENGINE", TypeFactory.createVarchar(64))
-                        .column("SUPPORT", TypeFactory.createVarchar(8))
-                        .column("COMMENT", TypeFactory.createVarchar(80))
-                        .column("TRANSACTIONS", TypeFactory.createVarchar(3))
-                        .column("XA", TypeFactory.createVarchar(3))
-                        .column("SAVEPOINTS", TypeFactory.createVarchar(3))
+                        .column("ENGINE", TypeFactory.createVarcharType(64))
+                        .column("SUPPORT", TypeFactory.createVarcharType(8))
+                        .column("COMMENT", TypeFactory.createVarcharType(80))
+                        .column("TRANSACTIONS", TypeFactory.createVarcharType(3))
+                        .column("XA", TypeFactory.createVarcharType(3))
+                        .column("SAVEPOINTS", TypeFactory.createVarcharType(3))
                         .build(), TSchemaTableType.SCH_ENGINES);
     }
 }

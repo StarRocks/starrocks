@@ -32,17 +32,17 @@ public class ReferentialConstraintsSystemTable {
                 NAME,
                 Table.TableType.SCHEMA,
                 builder()
-                        .column("CONSTRAINT_CATALOG", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                        .column("CONSTRAINT_SCHEMA", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                        .column("CONSTRAINT_NAME", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                        .column("UNIQUE_CONSTRAINT_CATALOG", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                        .column("UNIQUE_CONSTRAINT_SCHEMA", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                        .column("UNIQUE_CONSTRAINT_NAME", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                        .column("MATCH_OPTION", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                        .column("UPDATE_RULE", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                        .column("DELETE_RULE", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                        .column("TABLE_NAME", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                        .column("REFERENCED_TABLE_NAME", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("CONSTRAINT_CATALOG", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("CONSTRAINT_SCHEMA", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("CONSTRAINT_NAME", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("UNIQUE_CONSTRAINT_CATALOG", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("UNIQUE_CONSTRAINT_SCHEMA", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("UNIQUE_CONSTRAINT_NAME", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("MATCH_OPTION", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("UPDATE_RULE", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("DELETE_RULE", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("TABLE_NAME", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("REFERENCED_TABLE_NAME", TypeFactory.createVarcharType(NAME_CHAR_LEN))
                         .build(), TSchemaTableType.SCH_REFERENTIAL_CONSTRAINTS);
     }
 }

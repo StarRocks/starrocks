@@ -68,7 +68,7 @@ public class MultiListPartitionDescTest {
 
     @Test
     public void testGetMethods() throws ParseException, AnalysisException {
-        ColumnDef province = new ColumnDef("province", new TypeDef(TypeFactory.createVarchar(64)));
+        ColumnDef province = new ColumnDef("province", new TypeDef(TypeFactory.createVarcharType(64)));
         province.setAggregateType(AggregateType.NONE);
         ColumnDef dt = new ColumnDef("dt", new TypeDef(TypeFactory.createType(PrimitiveType.DATE)));
         dt.setAggregateType(AggregateType.NONE);

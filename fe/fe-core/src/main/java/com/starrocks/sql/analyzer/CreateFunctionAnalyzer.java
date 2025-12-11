@@ -319,7 +319,7 @@ public class CreateFunctionAnalyzer {
         FunctionArgsDef argsDef = stmt.getArgsDef();
         TypeDef returnType = stmt.getReturnType();
         String objectFile = stmt.getProperties().get(CreateFunctionStmt.FILE_KEY);
-        ScalarType intermediateType = TypeFactory.createVarchar(com.starrocks.type.TypeFactory.getOlapMaxVarcharLength());
+        ScalarType intermediateType = TypeFactory.createVarcharType(com.starrocks.type.TypeFactory.getOlapMaxVarcharLength());
 
         Map<String, String> properties = stmt.getProperties();
         boolean isAnalyticFn = "true".equalsIgnoreCase(properties.get(CreateFunctionStmt.IS_ANALYTIC_NAME));

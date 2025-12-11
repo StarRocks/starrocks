@@ -380,7 +380,7 @@ public class IcebergScanNodeTest {
 
 
         List<Column> schemaColumns = new ArrayList<>();
-        schemaColumns.add(new Column("col1", TypeFactory.createVarchar(20)));
+        schemaColumns.add(new Column("col1", TypeFactory.createVarcharType(20)));
 
         IcebergTable icebergTable = new IcebergTable.Builder()
                 .setId(1234)

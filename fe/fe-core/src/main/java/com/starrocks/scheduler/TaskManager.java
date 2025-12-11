@@ -800,8 +800,8 @@ public class TaskManager implements MemoryTrackable {
         }
 
         ShowResultSetMetaData.Builder builder = ShowResultSetMetaData.builder();
-        builder.addColumn(new Column("TaskName", TypeFactory.createVarchar(40)));
-        builder.addColumn(new Column("Status", TypeFactory.createVarchar(10)));
+        builder.addColumn(new Column("TaskName", TypeFactory.createVarcharType(40)));
+        builder.addColumn(new Column("Status", TypeFactory.createVarcharType(10)));
         List<String> item = ImmutableList.of(taskName, submitResult.getStatus().toString());
         List<List<String>> result = ImmutableList.of(item);
         return new ShowResultSet(builder.build(), result);

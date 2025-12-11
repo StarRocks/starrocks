@@ -67,7 +67,7 @@ public class ListPartitionDescTest {
         userId.setAggregateType(AggregateType.NONE);
         ColumnDef rechargeMoney = new ColumnDef("recharge_money", new TypeDef(TypeFactory.createDecimalV2Type(32, 2)));
         rechargeMoney.setAggregateType(AggregateType.NONE);
-        ColumnDef province = new ColumnDef("province", new TypeDef(TypeFactory.createVarchar(64)));
+        ColumnDef province = new ColumnDef("province", new TypeDef(TypeFactory.createVarcharType(64)));
         province.setAggregateType(AggregateType.NONE);
         ColumnDef dt = new ColumnDef("dt", new TypeDef(TypeFactory.createType(PrimitiveType.DATE)));
         dt.setAggregateType(AggregateType.NONE);
@@ -216,9 +216,9 @@ public class ListPartitionDescTest {
     @Test
     public void testNotAggregatedColumn() {
         assertThrows(AnalysisException.class, () -> {
-            ColumnDef province = new ColumnDef("province", new TypeDef(TypeFactory.createVarchar(64)));
+            ColumnDef province = new ColumnDef("province", new TypeDef(TypeFactory.createVarcharType(64)));
             province.setAggregateType(AggregateType.MAX);
-            ColumnDef dt = new ColumnDef("dt", new TypeDef(TypeFactory.createVarchar(10)));
+            ColumnDef dt = new ColumnDef("dt", new TypeDef(TypeFactory.createVarcharType(10)));
             dt.setAggregateType(AggregateType.NONE);
             List<ColumnDef> columnDefList = Lists.newArrayList(province, dt);
             ListPartitionDesc listSinglePartitionDesc = this.findListSinglePartitionDesc("province", "p1", "p2", null);
