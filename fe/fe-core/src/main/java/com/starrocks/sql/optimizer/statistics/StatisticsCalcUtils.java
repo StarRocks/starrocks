@@ -20,6 +20,8 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.profile.Timer;
+import com.starrocks.common.profile.Tracers;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -52,6 +54,14 @@ public class StatisticsCalcUtils {
     private StatisticsCalcUtils() {
 
     }
+    
+    // Optimization threshold: for tables with more than this many partitions,
+    // use smart partition filtering to avoid fetching statistics for all partitions
+    private static final int DELTA_ROWS_PARTITION_THRESHOLD = 3000;
+    
+    // Time window: if partition was updated within this many days after last tablet stat report,
+    // directly use partition.getRowCount() as it's likely accurate
+    private static final int DELTA_ROWS_RECENT_UPDATE_DAYS = 1;
 
     public static Statistics.Builder estimateScanColumns(Table table,
                                                          Map<ColumnRefOperator, Column> colRefToColumnMetaMap) {
@@ -220,7 +230,7 @@ public class StatisticsCalcUtils {
         // For example, a large amount of data LOAD may cause the number of rows to change greatly.
         // This leads to very inaccurate row counts.
         LocalDateTime lastWorkTimestamp = GlobalStateMgr.getCurrentState().getTabletStatMgr().getLastWorkTimestamp();
-        long deltaRows = deltaRows(table, basicStatsMeta.getTotalRows());
+        long deltaRows = computeDeltaRows(table, basicStatsMeta.getTotalRows());
         Map<Long, Optional<Long>> tableStatisticMap = GlobalStateMgr.getCurrentState().getStatisticStorage()
                 .getTableStatistics(table.getId(), selectedPartitions);
         Map<Long, Long> result = Maps.newHashMap();
@@ -337,19 +347,73 @@ public class StatisticsCalcUtils {
         }
     }
 
-    private static long deltaRows(Table table, long totalRowCount) {
+    /**
+     * Calculate deltaRows compensation for partitions based on table-level statistics.
+     * For large partition tables (> 3000 partitions), uses optimized path to only fetch
+     * statistics for recently updated partitions.
+     * 
+     * @param table The table to calculate delta rows for
+     * @param totalRowCount Total row count from ANALYZE metadata (basicStatsMeta.getTotalRows())
+     * @return Delta row count to add to each partition that needs compensation
+     */
+    public static long computeDeltaRows(Table table, long totalRowCount) {
+        Collection<Partition> allPartitions = table.getPartitions();
+        int partitionCount = allPartitions.size();
+        
+        // Note: isEnableCboTablePrune is required for the optimized path
+        // - In CBO phase, scan operator statistics are reused
+        // - When cbo_table_prune is enabled, salt is added to scan operators, 
+        //   causing multiple scan operators in one group
+        // - Only in this case will statistics be calculated multiple times for the same scan operator
+        // - Therefore, this flag is a necessary condition to trigger the optimized path
+        boolean useOptimizedPath = partitionCount > DELTA_ROWS_PARTITION_THRESHOLD &&
+                ConnectContext.get() != null &&
+                ConnectContext.get().getSessionVariable().isEnableCboTablePrune();
+        
         long tblRowCount = 0L;
-        Map<Long, Optional<Long>> tableStatisticMap = GlobalStateMgr.getCurrentState().getStatisticStorage()
-                .getTableStatistics(table.getId(), table.getPartitions());
+        
+        if (useOptimizedPath) {
+            LocalDateTime lastWorkTimestamp = GlobalStateMgr.getCurrentState().getTabletStatMgr().getLastWorkTimestamp();
+            LocalDateTime staleUpdateThreshold = lastWorkTimestamp.minusDays(DELTA_ROWS_RECENT_UPDATE_DAYS);
+            List<Partition> needStatPartitions = Lists.newArrayList();
+            try (Timer ignored = Tracers.watchScope(Tracers.Module.OPTIMIZER, "deltaRows")) {
 
-        for (Partition partition : table.getPartitions()) {
-            long partitionRowCount;
-            Optional<Long> statistic = tableStatisticMap.getOrDefault(partition.getId(), Optional.empty());
-            partitionRowCount = statistic.orElseGet(partition::getRowCount);
-            tblRowCount += partitionRowCount;
+                for (Partition partition : allPartitions) {
+                    LocalDateTime partitionUpdateTime = StatisticUtils.getPartitionLastUpdateTime(partition);
+                    if (partitionUpdateTime.isBefore(staleUpdateThreshold)) {
+                        tblRowCount += partition.getRowCount();
+                    } else {
+                        needStatPartitions.add(partition);
+                    }
+                }
+
+                if (!needStatPartitions.isEmpty()) {
+                    Map<Long, Optional<Long>> tableStatisticMap = GlobalStateMgr.getCurrentState()
+                            .getStatisticStorage()
+                            .getTableStatistics(table.getId(), needStatPartitions);
+
+                    for (Partition partition : needStatPartitions) {
+                        Optional<Long> statistic = tableStatisticMap.getOrDefault(partition.getId(), Optional.empty());
+                        long partitionRowCount = statistic.orElseGet(partition::getRowCount);
+                        tblRowCount += partitionRowCount;
+                    }
+                }
+            }
+
+        } else {
+            Map<Long, Optional<Long>> tableStatisticMap = GlobalStateMgr.getCurrentState()
+                    .getStatisticStorage()
+                    .getTableStatistics(table.getId(), allPartitions);
+            
+            for (Partition partition : allPartitions) {
+                Optional<Long> statistic = tableStatisticMap.getOrDefault(partition.getId(), Optional.empty());
+                long partitionRowCount = statistic.orElseGet(partition::getRowCount);
+                tblRowCount += partitionRowCount;
+            }
         }
+        
         if (tblRowCount < totalRowCount) {
-            return Math.max(1, (totalRowCount - tblRowCount) / table.getPartitions().size());
+            return Math.max(1, (totalRowCount - tblRowCount) / partitionCount);
         } else {
             return 0;
         }
