@@ -4,32 +4,32 @@ displayed_sidebar: docs
 
 # arrays_zip
 
-根据元素位置合并给定的数组，将其合并为一个 Struct 数组，其中第 n 个 Struct 包含所有输入数组的第 n 个值。当数组长度不同时，缺失的元素用 NULL 填充。
+指定された配列をインデックスでマージし、入力配列の n 番目の値をすべて含む構造体の配列にします。配列の長さが異なる場合、欠けている要素は NULL で埋められます。
 
-## 语法
+## Syntax
 
 ```sql
 arrays_zip(array_1, array_2[, ...])
 ```
 
-## 参数
+## Parameters
 
-- `array_n`：要合并的数组。每个数组可以包含任何支持类型的元素。
+- `array_n`: マージされる配列。各配列はサポートされている任意の型の要素を含むことができます。
 
-## 返回值
+## Return value
 
-返回一个 Struct 的数组，其中第 n 个 Struct 包含每个输入数组的第 n 个字段。如果输入数组长度不同，较短的数组用 NULL 值填充。
+入力配列の n 番目のフィールドを含む n 番目の構造体を持つ STRUCT の ARRAY を返します。入力配列の長さが異なる場合、短い配列は NULL 値で埋められます。
 
-## 使用说明
+## Usage notes
 
-- 如果输入数组长度不同，结果数组的长度为输入数组中最长的长度。
-- 较短数组中的缺失值用 NULL 填充。
-- 如果任意输入数组为 NULL，结果为 NULL。
-- 如果所有输入数组为空，结果为一个空数组。
+- 入力配列の長さが異なる場合、結果配列の長さは入力配列の中で最も長いものになります。
+- 短い配列の欠けている値は NULL で埋められます。
+- いずれかの入力配列が NULL の場合、結果は NULL になります。
+- すべての入力配列が空の場合、結果は空の配列になります。
 
-## 示例
+## Examples
 
-示例 1：合并两个长度相等的数组。
+Example 1: 同じ長さの2つの配列をマージします。
 
 ```sql
 mysql> SELECT arrays_zip([1, 2], ['a', 'b']) AS result;
@@ -40,7 +40,7 @@ mysql> SELECT arrays_zip([1, 2], ['a', 'b']) AS result;
 +---------------------------------------------------+
 ```
 
-示例 2：合并两个长度不同的数组。
+Example 2: 異なる長さの2つの配列をマージします。
 
 ```sql
 mysql> SELECT arrays_zip([1, 2], ['a', null, 'c']) AS result;
@@ -51,7 +51,7 @@ mysql> SELECT arrays_zip([1, 2], ['a', null, 'c']) AS result;
 +-----------------------------------------------------------------------------+
 ```
 
-示例 3：合并三个数组。
+Example 3: 3つの配列をマージします。
 
 ```sql
 mysql> SELECT arrays_zip([1, 2, 3], ['a', 'b', 'c'], [10, 20, 30]) AS result;
@@ -62,7 +62,7 @@ mysql> SELECT arrays_zip([1, 2, 3], ['a', 'b', 'c'], [10, 20, 30]) AS result;
 +---------------------------------------------------------------------------------------------------------------+
 ```
 
-示例 4：合并两个空数组。
+Example 4: 空の配列を2つマージします。
 
 ```sql
 mysql> SELECT arrays_zip([], []) AS result;
@@ -73,7 +73,7 @@ mysql> SELECT arrays_zip([], []) AS result;
 +--------+
 ```
 
-示例 5：合并单个数组。
+Example 5: 単一の配列をマージします。
 
 ```sql
 mysql> SELECT arrays_zip([1, 2, 3]) AS result;
@@ -84,7 +84,7 @@ mysql> SELECT arrays_zip([1, 2, 3]) AS result;
 +------------------------------------------+
 ```
 
-示例 6：合并其中一个为 NULL 的数组。
+Example 6: 1つの配列が NULL の場合にマージします。
 
 ```sql
 mysql> SELECT arrays_zip(null, [1, 2]) AS result;
@@ -95,7 +95,7 @@ mysql> SELECT arrays_zip(null, [1, 2]) AS result;
 +--------+
 ```
 
-示例 7：合并包含 NULL 值的混合类型数组。
+Example 7: NULL 値を含む異なる型の配列をマージします。
 
 ```sql
 mysql> SELECT arrays_zip([1, null, 3], ['a', 'b', null]) AS result;
@@ -106,7 +106,7 @@ mysql> SELECT arrays_zip([1, null, 3], ['a', 'b', null]) AS result;
 +-----------------------------------------------------------------------------+
 ```
 
-示例 8：从表数据中合并数组。
+Example 8: テーブルデータから配列をマージします。
 
 ```sql
 mysql> CREATE TABLE IF NOT EXISTS test (id INT, arr1 ARRAY<INT>, arr2 ARRAY<VARCHAR>) PROPERTIES ("replication_num"="1");
