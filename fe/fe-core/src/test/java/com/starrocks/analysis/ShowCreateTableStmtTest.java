@@ -156,4 +156,74 @@ public class ShowCreateTableStmtTest {
         ShowResultSet resultSet = ShowExecutor.execute(showCreateTableStmt, ctx);
         Assert.assertTrue(resultSet.getResultRows().get(0).get(1).contains("partition_live_number"));
     }
+
+    @Test
+    public void testShowCreateTableWithUniqueAndForeignKeyConstraints() throws Exception {
+        starRocksAssert.withDatabase("test").useDatabase("test")
+                .withTable("CREATE TABLE test.parent_uk1 (\n" +
+                        "  k1 INT NOT NULL,\n" +
+                        "  k2 VARCHAR(20) NOT NULL\n" +
+                        ") ENGINE=OLAP\n" +
+                        "DUPLICATE KEY(k1)\n" +
+                        "DISTRIBUTED BY HASH(k1) BUCKETS 3\n" +
+                        "PROPERTIES (\n" +
+                        "  \"replication_num\" = \"1\",\n" +
+                        "  \"unique_constraints\" = \"k1,k2\"\n" +
+                        ");")
+                .withTable("CREATE TABLE test.parent_uk2 (\n" +
+                        "  id INT NOT NULL,\n" +
+                        "  name VARCHAR(50) NOT NULL\n" +
+                        ") ENGINE=OLAP\n" +
+                        "DUPLICATE KEY(id)\n" +
+                        "DISTRIBUTED BY HASH(id) BUCKETS 3\n" +
+                        "PROPERTIES (\n" +
+                        "  \"replication_num\" = \"1\",\n" +
+                        "  \"unique_constraints\" = \"id\"\n" +
+                        ");");
+
+        // Test showing unique constraints
+        String showParent1 = "show create table test.parent_uk1";
+        ShowCreateTableStmt stmt1 = (ShowCreateTableStmt) UtFrameUtils.parseStmtWithNewParser(showParent1, ctx);
+        ShowResultSet result1 = ShowExecutor.execute(stmt1, ctx);
+        String createTable1 = result1.getResultRows().get(0).get(1);
+        Assertions.assertTrue(createTable1.contains("unique_constraints"),
+                "SHOW CREATE TABLE should include unique_constraints. Got: " + createTable1);
+        Assertions.assertTrue(createTable1.contains("k1") && createTable1.contains("k2"),
+                "unique_constraints should include column names. Got: " + createTable1);
+
+        String showParent2 = "show create table test.parent_uk2";
+        ShowCreateTableStmt stmt2 = (ShowCreateTableStmt) UtFrameUtils.parseStmtWithNewParser(showParent2, ctx);
+        ShowResultSet result2 = ShowExecutor.execute(stmt2, ctx);
+        String createTable2 = result2.getResultRows().get(0).get(1);
+        Assertions.assertTrue(createTable2.contains("unique_constraints"),
+                "SHOW CREATE TABLE should include unique_constraints. Got: " + createTable2);
+
+        // Create child table with foreign key constraints
+        starRocksAssert.withTable("CREATE TABLE test.child_fk (\n" +
+                "  id INT,\n" +
+                "  parent1_k1 INT,\n" +
+                "  parent1_k2 VARCHAR(20),\n" +
+                "  parent2_id INT,\n" +
+                "  value VARCHAR(100)\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(id)\n" +
+                "DISTRIBUTED BY HASH(id) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "  \"replication_num\" = \"1\",\n" +
+                "  \"foreign_key_constraints\" = \"(parent1_k1, parent1_k2) REFERENCES parent_uk1(k1, k2);" +
+                "                                 (parent2_id) REFERENCES parent_uk2(id)\"\n" +
+                ");");
+
+        // Test showing foreign key constraints
+        String showChild = "show create table test.child_fk";
+        ShowCreateTableStmt stmt3 = (ShowCreateTableStmt) UtFrameUtils.parseStmtWithNewParser(showChild, ctx);
+        ShowResultSet result3 = ShowExecutor.execute(stmt3, ctx);
+        String createTable3 = result3.getResultRows().get(0).get(1);
+        Assertions.assertTrue(createTable3.contains("foreign_key_constraints"),
+                "SHOW CREATE TABLE should include foreign_key_constraints. Got: " + createTable3);
+        Assertions.assertTrue(createTable3.contains("parent_uk1") && createTable3.contains("parent_uk2"),
+                "foreign_key_constraints should include parent table names. Got: " + createTable3);
+        Assertions.assertTrue(createTable3.contains("parent1_k1") && createTable3.contains("parent1_k2"),
+                "foreign_key_constraints should include child column names. Got: " + createTable3);
+    }
 }
