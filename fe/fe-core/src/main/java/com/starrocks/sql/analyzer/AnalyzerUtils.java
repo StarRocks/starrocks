@@ -393,13 +393,15 @@ public class AnalyzerUtils {
 
         @Override
         public Void visitInsertStatement(InsertStmt node, Void context) {
-            getDB(node.getTableName());
+            TableName tableName = TableName.fromTableRef(node.getTableRef());
+            getDB(tableName);
             return visit(node.getQueryStatement());
         }
 
         @Override
         public Void visitUpdateStatement(UpdateStmt node, Void context) {
-            getDB(node.getTableName());
+            TableName tableName = TableName.fromTableRef(node.getTableRef());
+            getDB(tableName);
             //If support DML operations through query results in the future,
             //need to add the corresponding `visit(node.getQueryStatement())`
             return null;
@@ -407,7 +409,8 @@ public class AnalyzerUtils {
 
         @Override
         public Void visitDeleteStatement(DeleteStmt node, Void context) {
-            getDB(node.getTableName());
+            TableName tableName = TableName.fromTableRef(node.getTableRef());
+            getDB(tableName);
             //If support DML operations through query results in the future,
             //need to add the corresponding `visit(node.getQueryStatement())`
             return null;
@@ -508,7 +511,9 @@ public class AnalyzerUtils {
 
         public UpdateStmtSelectTableColumnCollector(UpdateStmt updateStmt) {
             this.updateTable = updateStmt.getTable();
-            this.updateTableName = updateStmt.getTableName();
+            TableRef tableRef = updateStmt.getTableRef();
+            this.updateTableName = new TableName(tableRef.getCatalogName(), tableRef.getDbName(),
+                    tableRef.getTableName(), tableRef.getPos());
         }
 
         @Override
@@ -742,21 +747,24 @@ public class AnalyzerUtils {
         @Override
         public Void visitInsertStatement(InsertStmt node, Void context) {
             Table table = node.getTargetTable();
-            tables.put(node.getTableName(), table);
+            TableName tableName = TableName.fromTableRef(node.getTableRef());
+            tables.put(tableName, table);
             return super.visitInsertStatement(node, context);
         }
 
         @Override
         public Void visitUpdateStatement(UpdateStmt node, Void context) {
             Table table = node.getTable();
-            tables.put(node.getTableName(), table);
+            TableName tableName = TableName.fromTableRef(node.getTableRef());
+            tables.put(tableName, table);
             return super.visitUpdateStatement(node, context);
         }
 
         @Override
         public Void visitDeleteStatement(DeleteStmt node, Void context) {
             Table table = node.getTable();
-            tables.put(node.getTableName(), table);
+            TableName tableName = TableName.fromTableRef(node.getTableRef());
+            tables.put(tableName, table);
             return super.visitDeleteStatement(node, context);
         }
 

@@ -19,6 +19,7 @@ import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.InsertStmt;
+import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.UpdateStmt;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -32,7 +33,14 @@ public class DMLStmtAnalyzer {
 
     static class DMLStmtAnalyzerVisitor implements AstVisitorExtendInterface<Void, ConnectContext> {
         public void analyze(DmlStmt dmlStmt, ConnectContext context) {
-            dmlStmt.getTableName().normalization(context);
+            TableRef tableRef = AnalyzerUtils.normalizedTableRef(dmlStmt.getTableRef(), context);
+            if (dmlStmt instanceof InsertStmt) {
+                ((InsertStmt) dmlStmt).setTableRef(tableRef);
+            } else if (dmlStmt instanceof DeleteStmt) {
+                ((DeleteStmt) dmlStmt).setTableRef(tableRef);
+            } else if (dmlStmt instanceof UpdateStmt) {
+                ((UpdateStmt) dmlStmt).setTableRef(tableRef);
+            }
             visit(dmlStmt, context);
         }
 

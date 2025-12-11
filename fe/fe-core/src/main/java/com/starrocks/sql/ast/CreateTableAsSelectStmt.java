@@ -15,6 +15,8 @@
 
 package com.starrocks.sql.ast;
 
+import com.google.common.collect.Lists;
+import com.starrocks.catalog.TableName;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
@@ -44,7 +46,10 @@ public class CreateTableAsSelectStmt extends StatementBase {
         this.createTableStmt = createTableStmt;
         this.columnNames = columnNames;
         this.queryStatement = queryStatement;
-        this.insertStmt = new InsertStmt(createTableStmt.getDbTbl(), queryStatement);
+        TableName tableName = createTableStmt.getDbTbl();
+        TableRef tableRef = new TableRef(QualifiedName.of(Lists.newArrayList(
+                tableName.getCatalog(), tableName.getDb(), tableName.getTbl())), null, queryStatement.getPos());
+        this.insertStmt = new InsertStmt(tableRef, queryStatement);
     }
 
     public List<String> getColumnNames() {

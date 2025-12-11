@@ -34,6 +34,7 @@ import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.SelectList;
 import com.starrocks.sql.ast.SelectListItem;
 import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.UpdateStmt;
 import com.starrocks.sql.ast.expression.DefaultValueExpr;
@@ -72,7 +73,9 @@ public class UpdateAnalyzer {
     public static void analyze(UpdateStmt updateStmt, ConnectContext session) {
         analyzeProperties(updateStmt, session);
 
-        TableName tableName = updateStmt.getTableName();
+        TableRef tableRef = AnalyzerUtils.normalizedTableRef(updateStmt.getTableRef(), session);
+        updateStmt.setTableRef(tableRef);
+        TableName tableName = TableName.fromTableRef(tableRef);
         Database db = GlobalStateMgr.getCurrentState().getMetadataMgr()
                 .getDb(session, tableName.getCatalog(), tableName.getDb());
         if (db == null) {
