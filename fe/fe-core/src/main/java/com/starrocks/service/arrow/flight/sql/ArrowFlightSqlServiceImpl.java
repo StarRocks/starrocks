@@ -451,15 +451,23 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
     private void getStreamResult(String ticket, ServerStreamListener listener) {
         String[] ticketParts = ticket.split("\\|");
 
+        if (ticketParts.length != 2 && ticketParts.length != 4) {
+            throw CallStatus.INVALID_ARGUMENT.withDescription(
+                            String.format("Invalid ticket format: expected 2 or 4 parts, got [%d]", ticketParts.length))
+                    .toRuntimeException();
+        }
+
         if (ticketParts.length == 2) {
             getStreamResultFromFE(ticketParts[0], ticketParts[1], listener); 
-        } else if (ticketParts.length == 4) {
+        }
+
+        try {
             getStreamResultFromBE(ticketParts[0], ticketParts[1], ticketParts[2],
                              Integer.parseInt(ticketParts[3]), listener);
-        } else {
+        } catch (NumberFormatException e) {
             throw CallStatus.INVALID_ARGUMENT.withDescription(
-                    String.format("Invalid ticket format: expected 2 or 4 parts, got [%d]", ticketParts.length))
-                    .toRuntimeException(); 
+                            String.format("Invalid ticket format: expected numerical port, received [%s]", ticketParts[3]))
+                    .toRuntimeException();
         }
     }
 
@@ -692,7 +700,6 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
         if (arrowFlightProxy.isEmpty()) {
             return true;
         }
-
         String[] split = arrowFlightProxy.split(":");
         return split.length == 2;
     }
