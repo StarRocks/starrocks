@@ -189,13 +189,13 @@ void FragmentContext::set_final_status(const Status& status) {
         _driver_token.reset();
 
         auto detailed_message = _s_status.detailed_message();
-        // These statuses indicate that the query completed successfully.
-        bool is_finished_cancel = detailed_message == "QueryFinished" || detailed_message == "LimitReach";
+        bool is_timeout = detailed_message == "TimeOut";
         if (_s_status.is_cancelled()) {
             std::string cancel_msg =
                     fmt::format("[Driver] Canceled, query_id={}, instance_id={}, reason={}", print_id(_query_id),
                                 print_id(_fragment_instance_id), detailed_message);
-            if (is_finished_cancel || detailed_message == "UserCancel" || detailed_message == "TimeOut") {
+            if (detailed_message == "QueryFinished" || detailed_message == "LimitReach" ||
+                detailed_message == "UserCancel" || is_timeout) {
                 LOG(INFO) << cancel_msg;
             } else {
                 LOG(WARNING) << cancel_msg;
@@ -209,11 +209,11 @@ void FragmentContext::set_final_status(const Status& status) {
         }
 
         // cancel drivers in event scheduler
-        iterate_drivers([detailed_message, is_finished_cancel](const DriverPtr& driver) {
+        iterate_drivers([is_timeout](const DriverPtr& driver) {
             driver->set_need_check_reschedule(true);
             if (driver->is_in_blocked()) {
-                LOG_IF(WARNING, config::pipeline_timeout_diagnostic && is_finished_cancel)
-                        << "[Driver] " << detailed_message << " " << driver->to_readable_string();
+                LOG_IF(WARNING, config::pipeline_timeout_diagnostic && is_timeout)
+                        << "[Driver] Timeout" << driver->to_readable_string();
                 driver->observer()->cancel_trigger();
             }
         });
