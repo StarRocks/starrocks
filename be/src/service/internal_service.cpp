@@ -524,6 +524,14 @@ inline std::string cancel_reason_to_string(::starrocks::PPlanFragmentCancelReaso
     }
 }
 
+// Check if a cancel reason should be logged.
+// Normal cancellations (LIMIT_REACH, QUERY_FINISHED) should not be logged to reduce log noise.
+// Exceptional cancellations (INTERNAL_ERROR, TIMEOUT, USER_CANCEL, UnknownReason) should be logged.
+inline bool should_log_cancel_reason(::starrocks::PPlanFragmentCancelReason reason) {
+    return reason != ::starrocks::PPlanFragmentCancelReason::LIMIT_REACH &&
+           reason != ::starrocks::PPlanFragmentCancelReason::QUERY_FINISHED;
+}
+
 template <typename T>
 void PInternalServiceImplBase<T>::cancel_plan_fragment(google::protobuf::RpcController* cntl_base,
                                                        const PCancelPlanFragmentRequest* request,
@@ -550,11 +558,17 @@ void PInternalServiceImplBase<T>::_cancel_plan_fragment(google::protobuf::RpcCon
     auto reason_string =
             request->has_cancel_reason() ? cancel_reason_to_string(request->cancel_reason()) : "UnknownReason";
     bool cancel_query_ctx = tid.hi == 0 && tid.lo == 0;
-    if (cancel_query_ctx) {
-        DCHECK(request->has_query_id());
-        LOG(INFO) << "cancel query ctx, query_id=" << print_id(request->query_id()) << ", reason: " << reason_string;
-    } else {
-        LOG(INFO) << "cancel fragment, fragment_instance_id=" << print_id(tid) << ", reason: " << reason_string;
+    // Only log cancellations for exceptional reasons (errors, timeouts, user cancels).
+    // Skip logging for normal cancellations (LIMIT_REACH, QUERY_FINISHED) to reduce log noise.
+    bool should_log = !request->has_cancel_reason() || should_log_cancel_reason(request->cancel_reason());
+    if (should_log) {
+        if (cancel_query_ctx) {
+            DCHECK(request->has_query_id());
+            LOG(INFO) << "cancel query ctx, query_id=" << print_id(request->query_id())
+                      << ", reason: " << reason_string;
+        } else {
+            LOG(INFO) << "cancel fragment, fragment_instance_id=" << print_id(tid) << ", reason: " << reason_string;
+        }
     }
 
     if (request->has_is_pipeline() && request->is_pipeline()) {
@@ -593,7 +607,6 @@ void PInternalServiceImplBase<T>::_cancel_plan_fragment(google::protobuf::RpcCon
         if (request->has_cancel_reason()) {
             st = _exec_env->fragment_mgr()->cancel(tid, request->cancel_reason());
         } else {
-            LOG(INFO) << "cancel fragment, fragment_instance_id=" << print_id(tid);
             st = _exec_env->fragment_mgr()->cancel(tid);
         }
         if (!st.ok()) {
