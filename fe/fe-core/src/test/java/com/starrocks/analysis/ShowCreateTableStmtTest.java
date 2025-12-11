@@ -160,4 +160,137 @@ public class ShowCreateTableStmtTest {
         ShowResultSet resultSet = ShowExecutor.execute(showCreateTableStmt, ctx);
         Assertions.assertTrue(resultSet.getResultRows().get(0).get(1).contains("partition_live_number"));
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void test() throws Exception {
+        starRocksAssert.withDatabase("test").useDatabase("test")
+                .withTable("CREATE TABLE dict (\n"
+                        + "                `k1`  date,\n"
+                        + "                `k2`  datetime,\n"
+                        + "                `k3`  varchar(20),\n"
+                        + "                `k4`  varchar(20),\n"
+                        + "                `k5`  boolean,\n"
+                        + "                    `k6`  tinyint,\n"
+                        + "                    `k7`  smallint,\n"
+                        + "                    `k8`  int,\n"
+                        + "                    `k9`  bigint,\n"
+                        + "                    `k10` largeint,\n"
+                        + "                    `k11` float,\n"
+                        + "                    `k12` double,\n"
+                        + "                    `k13` decimal(27,9),\n"
+                        + "                map_value1 bigint,\n"
+                        + "                map_value bigint not null auto_increment\n"
+                        + "                )\n"
+                        + "        primary KEY(`k1`, `k2`, `k3`, `k4`, `k5`)\n"
+                        + "        COMMENT \"OLAP\"\n"
+                        + "        DISTRIBUTED BY HASH(`k1`, `k2`, `k3`) BUCKETS 3\n"
+                        + "        PROPERTIES (\n"
+                        + "                \"replication_num\" = \"1\",\n"
+                        + "                \"storage_format\" = \"v2\",\n"
+                        + "                \"light_schema_change\" = \"false\"\n"
+                        + "        );")
+                .withTable("CREATE TABLE primary_table (\n"
+                        + "                `k1` date NOT NULL,\n"
+                        + "                `k2` datetime NOT NULL,\n"
+                        + "                `k3` string NOT NULL,\n"
+                        + "                `k4` string NOT NULL,\n"
+                        + "                `k5` boolean NOT NULL,\n"
+                        + "                `k6` tinyint NOT NULL,\n"
+                        + "                `k7` smallint NOT NULL,\n"
+                        + "                `k8` int NOT NULL,\n"
+                        + "                `k9` bigint NOT NULL,\n"
+                        + "                `k10` largeint NOT NULL,\n"
+                        + "                `k11` float NOT NULL,\n"
+                        + "                `k12` double NOT NULL,\n"
+                        + "                `k13` decimal(27,9) NOT NULL,\n"
+                        + "                v_mapvalue bigint as dict_mapping(\"test.dict\", k1,k2,k3,k4,k5, True)\n"
+                        + "                )\n"
+                        + "        PRIMARY KEY(`k1`, `k2`, `k3`, `k4`, `k5`)\n"
+                        + "        COMMENT \"OLAP\"\n"
+                        + "        DISTRIBUTED BY HASH(`k1`, `k2`, `k3`, `k4`, `k5`) BUCKETS 3\n"
+                        + "        PROPERTIES (\n"
+                        + "                \"replication_num\" = \"1\",\n"
+                        + "                \"storage_format\" = \"v2\",\n"
+                        + "                \"fast_schema_evolution\" = \"true\"\n"
+                        + "        );");
+        String sql = "show create table primary_table";
+        ShowCreateTableStmt showCreateTableStmt = (ShowCreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        ShowResultSet resultSet = ShowExecutor.execute(showCreateTableStmt, ctx);
+        Assertions.assertTrue(resultSet.getResultRows().get(0).get(1)
+                        .contains("AS dict_mapping('test.dict', k1, k2, k3, k4, k5, TRUE) COMMENT"),
+                resultSet.getResultRows().get(0).get(1));
+    }
+
+    @Test
+    public void testShowCreateTableWithUniqueAndForeignKeyConstraints() throws Exception {
+        starRocksAssert.withDatabase("test").useDatabase("test")
+                .withTable("CREATE TABLE test.parent_uk1 (\n" +
+                        "  k1 INT NOT NULL,\n" +
+                        "  k2 VARCHAR(20) NOT NULL\n" +
+                        ") ENGINE=OLAP\n" +
+                        "DUPLICATE KEY(k1)\n" +
+                        "DISTRIBUTED BY HASH(k1) BUCKETS 3\n" +
+                        "PROPERTIES (\n" +
+                        "  \"replication_num\" = \"1\",\n" +
+                        "  \"unique_constraints\" = \"k1,k2\"\n" +
+                        ");")
+                .withTable("CREATE TABLE test.parent_uk2 (\n" +
+                        "  id INT NOT NULL,\n" +
+                        "  name VARCHAR(50) NOT NULL\n" +
+                        ") ENGINE=OLAP\n" +
+                        "DUPLICATE KEY(id)\n" +
+                        "DISTRIBUTED BY HASH(id) BUCKETS 3\n" +
+                        "PROPERTIES (\n" +
+                        "  \"replication_num\" = \"1\",\n" +
+                        "  \"unique_constraints\" = \"id\"\n" +
+                        ");");
+
+        // Test showing unique constraints
+        String showParent1 = "show create table test.parent_uk1";
+        ShowCreateTableStmt stmt1 = (ShowCreateTableStmt) UtFrameUtils.parseStmtWithNewParser(showParent1, ctx);
+        ShowResultSet result1 = ShowExecutor.execute(stmt1, ctx);
+        String createTable1 = result1.getResultRows().get(0).get(1);
+        Assertions.assertTrue(createTable1.contains("unique_constraints"),
+                "SHOW CREATE TABLE should include unique_constraints. Got: " + createTable1);
+        Assertions.assertTrue(createTable1.contains("k1") && createTable1.contains("k2"),
+                "unique_constraints should include column names. Got: " + createTable1);
+
+        String showParent2 = "show create table test.parent_uk2";
+        ShowCreateTableStmt stmt2 = (ShowCreateTableStmt) UtFrameUtils.parseStmtWithNewParser(showParent2, ctx);
+        ShowResultSet result2 = ShowExecutor.execute(stmt2, ctx);
+        String createTable2 = result2.getResultRows().get(0).get(1);
+        Assertions.assertTrue(createTable2.contains("unique_constraints"),
+                "SHOW CREATE TABLE should include unique_constraints. Got: " + createTable2);
+
+        // Create child table with foreign key constraints
+        starRocksAssert.withTable("CREATE TABLE test.child_fk (\n" +
+                "  id INT,\n" +
+                "  parent1_k1 INT,\n" +
+                "  parent1_k2 VARCHAR(20),\n" +
+                "  parent2_id INT,\n" +
+                "  value VARCHAR(100)\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(id)\n" +
+                "DISTRIBUTED BY HASH(id) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "  \"replication_num\" = \"1\",\n" +
+                "  \"foreign_key_constraints\" = \"(parent1_k1, parent1_k2) REFERENCES parent_uk1(k1, k2);" +
+                "                                 (parent2_id) REFERENCES parent_uk2(id)\"\n" +
+                ");");
+
+        // Test showing foreign key constraints
+        String showChild = "show create table test.child_fk";
+        ShowCreateTableStmt stmt3 = (ShowCreateTableStmt) UtFrameUtils.parseStmtWithNewParser(showChild, ctx);
+        ShowResultSet result3 = ShowExecutor.execute(stmt3, ctx);
+        String createTable3 = result3.getResultRows().get(0).get(1);
+        Assertions.assertTrue(createTable3.contains("foreign_key_constraints"),
+                "SHOW CREATE TABLE should include foreign_key_constraints. Got: " + createTable3);
+        Assertions.assertTrue(createTable3.contains("parent_uk1") && createTable3.contains("parent_uk2"),
+                "foreign_key_constraints should include parent table names. Got: " + createTable3);
+        Assertions.assertTrue(createTable3.contains("parent1_k1") && createTable3.contains("parent1_k2"),
+                "foreign_key_constraints should include child column names. Got: " + createTable3);
+    }
+>>>>>>> eb4b6f1edc ([BugFix] Fix foreign key constraints lost after FE restart (#66474))
 }
