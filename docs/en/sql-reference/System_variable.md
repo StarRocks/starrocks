@@ -461,6 +461,29 @@ Default value: `true`.
 * **Default**: true
 * **Introduced in**: v3.3.0
 
+<<<<<<< HEAD
+=======
+### enable_global_runtime_filter
+
+Whether to enable global runtime filter (RF for short). RF filters data at runtime. Data filtering often occurs in the Join stage. During multi-table joins, optimizations such as predicate pushdown are used to filter data, in order to reduce the number of scanned rows for Join and the I/O in the Shuffle stage, thereby speeding up the query.
+
+StarRocks offers two types of RF: Local RF and Global RF. Local RF is suitable for Broadcast Hash Join and Global RF is suitable for Shuffle Join.
+
+Default value: `true`, which means global RF is enabled. If this feature is disabled, global RF does not take effect. Local RF can still work.
+
+### enable_group_by_compressed_key
+
+* **Description**: Whether to use accurate statistical information to compress the GROUP BY Key column. Valid values: `true` and `false`.
+* **Default**: true
+* **Introduced in**: v4.0
+
+### enable_group_execution
+
+* **Description**: Whether to enable Colocate Group Execution. Colocate Group Execution is an execution pattern that leverages physical data partitioning, where a fixed number of threads sequentially process their respective data ranges to enhance locality and throughput. Enabling this feature can reduce memory usage.
+* **Default**: true
+* **Introduced in**: v3.3
+
+>>>>>>> 709d411ceb ([Doc] add doc for group execution (#66469))
 ### enable_group_level_query_queue (global)
 
 * **Description**: Whether to enable resource group-level [query queue](../administration/management/resource_management/query_queues.md).
@@ -495,11 +518,69 @@ Default value: `true`.
 
 #### enable_iceberg_column_statistics
 
+<<<<<<< HEAD
 * **Description**: Whether to obtain column statistics, such as `min`, `max`, `null count`, `row size`, and `ndv` (if a puffin file exists). When this item is set to `false`, only the row count information will be collected.
 * **Default**: false
 * **Introduced in**: v3.4
 
 ### metadata_collect_query_timeout
+=======
+* If this feature is disabled, only Local RF works.
+* If this feature is enabled, multi-column Global RF takes effect and carries `multi-column` in the partition by clause.
+
+### enable_mv_planner
+
+* **Scope**: Session
+* **Description**: When enabled, activates the Materialized View (MV) planner mode for the current session. In this mode the optimizer:
+  - Uses MV-specific rule set via `context.getRuleSet().addRealtimeMVRules()` instead of the regular join implementation rules (QueryOptimizer).
+  - Allows stream implementation rules to apply (see `StreamImplementationRule.check` which returns true only when MV planner is on).
+  - Alters scan/operator construction during logical plan transformation (e.g., RelationTransformer chooses `LogicalBinlogScanOperator` for native tables/materialized views when MV planner is enabled).
+  - Disables or bypasses some standard transformations (for example, `SplitMultiPhaseAggRule.check` returns false when MV planner is on).
+  Materialized view planning code (MaterializedViewAnalyzer) sets this flag around MV planning work (sets to true before planning and resets to false afterward), so it is primarily intended for MV plan generation and testing. Setting this session variable affects only the current session’s optimizer behavior.
+* **Default**: `false`
+* **Data Type**: boolean
+* **Introduced in**: v3.2.0
+
+### enable_parallel_merge
+
+* **Description**: Whether to enable parallel merge for sorting. When this feature is enabled, the merge phase of sorting will utilize multiple threads for merge operations.
+* **Default**: true
+* **Introduced in**: v3.3
+
+### enable_parquet_reader_bloom_filter
+
+* **Default**: true
+* **Type**: Boolean
+* **Unit**: -
+* **Description**: Whether to enable Bloom Filter optimization when reading Parquet files.
+  * `true` (Default): Enable Bloom Filter optimization when reading Parquet files.
+  * `false`: Disable Bloom Filter optimization when reading Parquet files.
+* **Introduced in**: v3.5.0
+
+### enable_parquet_reader_page_index
+
+* **Default**: true
+* **Type**: Boolean
+* **Unit**: -
+* **Description**: Whether to enable Page Index optimization when reading Parquet files.
+  * `true` (Default): Enable Page Index optimization when reading Parquet files.
+  * `false`: Disable Page Index optimization when reading Parquet files.
+* **Introduced in**: v3.5.0
+
+### enable_partition_hash_join
+
+* **Description**: Whether to enable adaptive Partition Hash Join.
+* **Default**: true
+* **Introduced in**: v3.4
+
+### enable_per_bucket_optimize
+
+* **Description**: Whether to enable bucketed computation. When this feature is enabled, stage-one aggregation can be computed in bucketed order, reducing memory usage.
+* **Default**: true
+* **Introduced in**: v3.0
+
+### enable_phased_scheduler
+>>>>>>> 709d411ceb ([Doc] add doc for group execution (#66469))
 
 * **Description**: The timeout duration for Iceberg Catalog metadata collection queries.
 * **Unit**: Second
@@ -762,6 +843,18 @@ The commands affected by this variable are as follows:
 * **Unit**: Characters
 * **Data type**: Long
 
+### group_execution_max_groups
+
+* **Description**: Maximum number of groups allowed for Group Execution. It is used to limit the granularity of splitting, preventing excessive scheduling overhead caused by an excessive number of groups.
+* **Default**: 128
+* **Introduced in**: v3.3
+
+### group_execution_min_scan_rows
+
+* **Description**: Minimum number of rows processed per group for Group Execution.
+* **Default**: 5000000
+* **Introduced in**: v3.3
+
 ### hash_join_push_down_right_table
 
 * **Description**: Used to control whether the data of the left table can be filtered by using the filter condition against the right table in the Join query. If so, it can reduce the amount of data that needs to be processed during the query.
@@ -774,6 +867,12 @@ Used for MySQL client compatibility. No practical usage.
 ### interactive_timeout
 
 Used for MySQL client compatibility. No practical usage.
+
+### interpolate_passthrough
+
+* **Description**: Whether to add local-exchange-passthrough for certain operators. Currently supported operators include streaming aggregates, etc. Adding local-exchange can mitigate the impact of data skew on computation, but will slightly increase memory usage. 
+* **Default**: true
+* **Introduced in**: v3.2
 
 ### io_tasks_per_scan_operator
 
@@ -919,6 +1018,15 @@ Used to set the number of instances used to scan nodes on each BE. The default v
 A query plan typically produces a set of scan ranges. This data is distributed across multiple BE nodes. A BE node will have one or more scan ranges, and by default, each BE node's set of scan ranges is processed by only one execution instance. When machine resources suffice, you can increase this variable to allow more execution instances to process a scan range simultaneously for efficiency purposes.
 
 The number of scan instances determines the number of other execution nodes in the upper level, such as aggregation nodes and join nodes. Therefore, it increases the concurrency of the entire query plan execution. Modifying this variable will help  improve efficiency, but larger values will consume more machine resources, such as CPU, memory, and disk IO.
+
+### parallel_merge_late_materialization_mode
+
+* **Description**: The late materialization mode of parallel merge for sorting. Valid values:
+  * `AUTO`
+  * `ALWAYS`
+  * `NEVER`
+* **Default**: `AUTO`
+* **Introduced in**: v3.3
 
 ### partial_update_mode
 
