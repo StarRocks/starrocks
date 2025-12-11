@@ -302,7 +302,7 @@ public class OlapTable extends Table {
     public AtomicBoolean isAutomaticBucketing = new AtomicBoolean(false);
 
     // It's not persisted but resolved in QueryAnalyzer, so only exists if it's in the context of query
-    public volatile String dbName;
+    public volatile Long dbId;
 
     public OlapTable() {
         this(TableType.OLAP);
@@ -371,13 +371,13 @@ public class OlapTable extends Table {
     }
 
     @Override
-    public synchronized Optional<String> mayGetDatabaseName() {
-        return Optional.ofNullable(dbName);
+    public synchronized Optional<Long> mayGetDatabaseId() {
+        return Optional.ofNullable(dbId);
     }
 
-    public synchronized void maySetDatabaseName(String dbName) {
-        if (this.dbName == null) {
-            this.dbName = dbName;
+    public synchronized void maySetDatabaseId(Long dbId) {
+        if (this.dbId == null) {
+            this.dbId = dbId;
         }
     }
 
@@ -448,7 +448,7 @@ public class OlapTable extends Table {
         if (this.curBinlogConfig != null) {
             olapTable.curBinlogConfig = new BinlogConfig(this.curBinlogConfig);
         }
-        olapTable.dbName = this.dbName;
+        olapTable.dbId = this.dbId;
         olapTable.maxColUniqueId = new AtomicInteger(this.maxColUniqueId.get());
     }
 
@@ -2990,7 +2990,7 @@ public class OlapTable extends Table {
         }
 
         for (Column column : getColumns()) {
-            IDictManager.getInstance().removeGlobalDict(this.getId(), column.getColumnId());
+            IDictManager.getInstance().removeGlobalDict(this, column.getColumnId());
         }
     }
 
@@ -3098,7 +3098,7 @@ public class OlapTable extends Table {
         }
 
         for (Column column : getColumns()) {
-            IDictManager.getInstance().removeGlobalDict(this.getId(), column.getColumnId());
+            IDictManager.getInstance().removeGlobalDict(this, column.getColumnId());
         }
     }
 
@@ -3124,7 +3124,7 @@ public class OlapTable extends Table {
         renamePartition(tempPartitionName, sourcePartitionName);
 
         for (Column column : getColumns()) {
-            IDictManager.getInstance().removeGlobalDict(this.getId(), column.getColumnId());
+            IDictManager.getInstance().removeGlobalDict(this, column.getColumnId());
         }
     }
 
