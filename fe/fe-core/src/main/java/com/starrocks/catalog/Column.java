@@ -112,7 +112,7 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
     // column is not key and has no aggregate type: aggregate type is none
     // column is not key and has aggregate type: aggregate type is name of aggregate function.
     @SerializedName(value = "aggregationType")
-    private com.starrocks.sql.ast.AggregateType aggregationType;
+    private AggregateType aggregationType;
     // aggStateDesc is used for common aggregate function state with intermediate result type in aggregate key model.
     // if aggregationType is AGG_STATE_UNION, aggStateDesc should not be null.
     @SerializedName("aggStateDesc")
@@ -179,32 +179,32 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         Preconditions.checkArgument(dataType.isValid());
     }
 
-    public Column(String name, Type type, boolean isKey, com.starrocks.sql.ast.AggregateType aggregateType,
+    public Column(String name, Type type, boolean isKey, AggregateType aggregateType,
                   String defaultValue, String comment) {
         this(name, type, isKey, aggregateType, null, false,
                 new ColumnDef.DefaultValueDef(true, new StringLiteral(defaultValue)), comment,
                 COLUMN_UNIQUE_ID_INIT_VALUE);
     }
 
-    public Column(String name, Type type, boolean isKey, com.starrocks.sql.ast.AggregateType aggregateType,
+    public Column(String name, Type type, boolean isKey, AggregateType aggregateType,
                   ColumnDef.DefaultValueDef defaultValue, String comment) {
         this(name, type, isKey, aggregateType, null, false, defaultValue, comment, COLUMN_UNIQUE_ID_INIT_VALUE);
     }
 
-    public Column(String name, Type type, boolean isKey, com.starrocks.sql.ast.AggregateType aggregateType,
+    public Column(String name, Type type, boolean isKey, AggregateType aggregateType,
                   boolean isAllowNull, ColumnDef.DefaultValueDef defaultValueDef, String comment) {
         this(name, type, isKey, aggregateType, null, isAllowNull, defaultValueDef, comment,
                 COLUMN_UNIQUE_ID_INIT_VALUE);
     }
 
-    public Column(String name, Type type, boolean isKey, com.starrocks.sql.ast.AggregateType aggregateType,
+    public Column(String name, Type type, boolean isKey, AggregateType aggregateType,
                   AggStateDesc aggStateDesc, boolean isAllowNull, ColumnDef.DefaultValueDef defaultValueDef,
                   String comment,
                   int columnUniqId) {
         this(name, type, isKey, aggregateType, aggStateDesc, isAllowNull, defaultValueDef, comment, columnUniqId, "");
     }
 
-    public Column(String name, Type type, boolean isKey, com.starrocks.sql.ast.AggregateType aggregateType,
+    public Column(String name, Type type, boolean isKey, AggregateType aggregateType,
                   AggStateDesc aggStateDesc, boolean isAllowNull, ColumnDef.DefaultValueDef defaultValueDef,
                   String comment,
                   int columnUniqId, String physicalName) {
