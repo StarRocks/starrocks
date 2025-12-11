@@ -412,12 +412,15 @@ void PInternalServiceImplBase<T>::_exec_batch_plan_fragments(google::protobuf::R
     if (failed_idx != unique_requests.size()) {
         // Drain remaining preparations and release their query context references to avoid leaks when execute() is skipped.
         auto query_ctx = _exec_env->query_context_mgr()->get(common_request.params.query_id);
-        for (size_t j = 0; j <= failed_idx; ++j) {
+        for (size_t j = 0; j < failed_idx; ++j) {
             Status prepare_status = prepare_futures[j].get();
             if (prepare_status.ok() && query_ctx != nullptr) {
                 fragment_executors->at(j)._fail_cleanup(true);
             }
         }
+        Status::ServiceUnavailable("submit exec_batch_plan_fragment task failed")
+                .to_protobuf(response->mutable_status());
+        return;
     }
 
     failed_idx = unique_requests.size();
