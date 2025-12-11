@@ -431,6 +431,26 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 默认值：true
 * 引入版本：v3.3.0
 
+<<<<<<< HEAD
+=======
+### enable_global_runtime_filter
+
+* 描述：Global runtime filter 开关。Runtime Filter（简称 RF）在运行时对数据进行过滤，过滤通常发生在 Join 阶段。当多表进行 Join 时，往往伴随着谓词下推等优化手段进行数据过滤，以减少 Join 表的数据扫描以及 shuffle 等阶段产生的 IO，从而提升查询性能。StarRocks 中有两种 RF，分别是 Local RF 和 Global RF。Local RF 应用于 Broadcast Hash Join 场景。Global RF 应用于 Shuffle Join 场景。
+* 默认值 `true`，表示打开 global runtime filter 开关。关闭该开关后, 不生成 Global RF, 但是依然会生成 Local RF。
+
+### enable_group_by_compressed_key
+
+* 描述：是否利用准确的统计信息来压缩 GROUP BY Key 列。有效值：`true` 和 `false`。
+* 默认值：true
+* 引入版本：v4.0
+
+### enable_group_execution
+
+* 描述：Colocate Group Execution 是一种利用物理数据分区的执行模式，其中固定数量的线程依次处理各自的数据范围，以增强局部性和吞吐量。该模式可降低内存使用量。
+* 默认值：true
+* 引入版本：v3.3
+
+>>>>>>> 709d411ceb ([Doc] add doc for group execution (#66469))
 ### enable_group_level_query_queue (global)
 
 * 描述：是否开启资源组粒度的[查询队列](../administration/management/resource_management/query_queues.md)。
@@ -469,7 +489,17 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 默认值：false
 * 引入版本：v3.4
 
+<<<<<<< HEAD
 ### metadata_collect_query_timeout
+=======
+### enable_parallel_merge
+
+* 描述：是否启用排序的 Parallel Merge。启用后，排序的合并阶段将使用多个线程进行合并操作。
+* 默认值：true
+* 引入版本：v3.3
+
+### enable_parquet_reader_bloom_filter
+>>>>>>> 709d411ceb ([Doc] add doc for group execution (#66469))
 
 * 描述：Iceberg Catalog 元数据收集阶段的超时时间。
 * 单位： 秒
@@ -478,7 +508,39 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 
 ### enable_insert_strict
 
+<<<<<<< HEAD
 * 描述：是否在使用 INSERT from FILES() 导入数据时启用严格模式。有效值：`true` 和 `false`（默认值）。启用严格模式时，系统仅导入合格的数据行，过滤掉不合格的行，并返回不合格行的详细信息。更多信息请参见 [严格模式](../loading/load_concept/strict_mode.md)。在早于 v3.4.0 的版本中，当 `enable_insert_strict` 设置为 `true` 时，INSERT 作业会在出现不合格行时失败。
+=======
+* 默认值：true
+* 类型：Boolean
+* 单位：-
+* 描述：是否在读取 Parquet 文件时启用 Page Index 优化。
+  * `true`（默认）：读取 Parquet 文件时启用 Page Index 优化。
+  * `false`：读取 Parquet 文件时禁用 Page Index 优化。
+* 引入版本：v3.5.0
+
+### enable_partition_hash_join
+
+* 描述: 是否启用自适应 Partition Hash Join。
+* 默认值: true
+* 引入版本: v3.4
+
+### enable_per_bucket_optimize
+
+* 描述：是否开启分桶计算。开启后对于一阶段聚合可以按照分桶顺序计算，降低内存使用。
+* 默认值：true
+* 引入版本：v3.0
+
+### enable_phased_scheduler
+
+* 描述: 是否启用多阶段调度。当启用多阶段调度时，系统将根据 Fragment 之间的依赖关系进行调度。例如，系统将首先调度 Shuffle Join 的 Build Side Fragment ，然后调度 Probe Side Fragment （注意，与分阶段调度不同，多阶段调度仍处于 MPP 执行模式下）。启用多阶段调度可显著降低大量 UNION ALL 查询的内存使用量。
+* 默认值: false
+* 引入版本: v3.3
+
+### enable_pipeline_engine
+
+* 描述：是否启用 Pipeline 执行引擎。`true`：启用（默认），`false`：不启用。
+>>>>>>> 709d411ceb ([Doc] add doc for group execution (#66469))
 * 默认值：true
 
 ### insert_max_filter_ratio
@@ -716,6 +778,18 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 最小值：4
 * 类型：Long
 
+### group_execution_max_groups
+
+* 描述：Group Execution 允许的最大组数。用于限制拆分粒度，防止因组数过多导致过度的调度开销。
+* 默认值：128
+* 引入版本：v3.3
+
+### group_execution_min_scan_rows
+
+* 描述：Group Execution 每组处理的最小行数。
+* 默认值：5000000
+* 引入版本：v3.3
+
 ### hash_join_push_down_right_table
 
 * 描述：用于控制在 Join 查询中是否可以使用针对右表的过滤条件来过滤左表的数据，可以减少 Join 过程中需要处理的左表的数据量。取值为 `true` 时表示允许该操作，系统将根据实际情况决定是否能对左表进行过滤；取值为 `false` 表示禁用该操作。
@@ -731,6 +805,12 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 默认值：1024
 * 单位：秒
 * 类型：Int
+
+### interpolate_passthrough
+
+* 描述：是否为某些算子添加 local-exchang-passthrough。当前支持算子包括 Streaming Aggregates 等。添加 local-exchange-passthrough 会降低数据倾斜的影响，但是会稍微增加内存使用。
+* 默认值：true
+* 引入版本：v3.2
 
 ### io_tasks_per_scan_operator
 
@@ -857,6 +937,15 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 一个查询计划通常会产生一组 scan range，即需要扫描的数据范围。这些数据分布在多个 BE 节点上。一个 BE 节点会有一个或多个 scan range。默认情况下，每个 BE 节点的一组 scan range 只由一个执行实例处理。当机器资源比较充裕时，可以将增加该变量，让更多的执行实例同时处理一组 scan range，从而提升查询效率。
 
 而 scan 实例的数量决定了上层其他执行节点，如聚合节点，join 节点的数量。因此相当于增加了整个查询计划执行的并发度。修改该参数会对大查询效率提升有帮助，但较大数值会消耗更多的机器资源，如CPU、内存、磁盘I/O。
+
+### parallel_merge_late_materialization_mode
+
+* 描述：Parallel Merge 的延迟物化模式。有效值：
+  * `AUTO`
+  * `ALWAYS`
+  * `NEVER`
+* 默认值：`AUTO`
+* 引入版本：v3.3
 
 ### partial_update_mode
 
