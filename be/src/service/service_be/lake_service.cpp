@@ -1496,10 +1496,12 @@ void LakeServiceImpl::get_tablet_metadatas(::google::protobuf::RpcController* co
 // 3. drop bundle local data cache
 // TODO: clear primary key index
 Status LakeServiceImpl::_cleanup_before_repair(std::map<int64_t, TabletMetadataPB>& tablet_metadatas) {
-    int64_t tablet_id = -1;
+    // we only need any tablet id to compute the bundle metadata location
+    int64_t any_tablet_id = -1;
+    // all tablets share the same version
     int64_t version = 0;
-    for (auto& [id, metadata_pb] : tablet_metadatas) {
-        tablet_id = id;
+    for (auto& [tablet_id, metadata_pb] : tablet_metadatas) {
+        any_tablet_id = tablet_id;
         version = metadata_pb.version();
         auto tablet_metadata_location = _tablet_mgr->tablet_metadata_location(tablet_id, version);
 
@@ -1512,7 +1514,7 @@ Status LakeServiceImpl::_cleanup_before_repair(std::map<int64_t, TabletMetadataP
     }
 
     // drop bundle local data cache
-    auto bundle_location = _tablet_mgr->bundle_tablet_metadata_location(tablet_id, version);
+    auto bundle_location = _tablet_mgr->bundle_tablet_metadata_location(any_tablet_id, version);
     auto st = _tablet_mgr->drop_local_cache(bundle_location);
     return st.is_not_found() ? Status::OK() : st;
 }
