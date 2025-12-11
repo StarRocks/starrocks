@@ -115,11 +115,14 @@ public class AnalyzeStmtAnalyzer {
 
         @Override
         public Void visitAnalyzeStatement(AnalyzeStmt statement, ConnectContext session) {
-            statement.getTableName().normalization(session);
-            Table analyzeTable = MetaUtils.getSessionAwareTable(session, null, statement.getTableName());
+            TableRef tableRef = AnalyzerUtils.normalizedTableRef(statement.getTableRef(), session);
+            statement.setTableRef(tableRef);
+            TableName tableName = new TableName(tableRef.getCatalogName(), tableRef.getDbName(),
+                    tableRef.getTableName(), tableRef.getPos());
+            Table analyzeTable = MetaUtils.getSessionAwareTable(session, null, tableName);
             AnalyzeTypeDesc analyzeTypeDesc = statement.getAnalyzeTypeDesc();
-            if (StatisticUtils.statisticDatabaseBlackListCheck(statement.getTableName().getDb())) {
-                throw new SemanticException("Forbidden collect database: %s", statement.getTableName().getDb());
+            if (StatisticUtils.statisticDatabaseBlackListCheck(statement.getDbName())) {
+                throw new SemanticException("Forbidden collect database: %s", statement.getDbName());
             }
 
             // ANALYZE TABLE xxx (col1, col2, ...)
@@ -151,7 +154,7 @@ public class AnalyzeStmtAnalyzer {
                 for (Expr column : columns) {
                     ExpressionAnalyzer.analyzeExpression(column, new AnalyzeState(), new Scope(RelationId.anonymous(),
                             new RelationFields(analyzeTable.getBaseSchema().stream().map(col -> new Field(col.getName(),
-                                            col.getType(), statement.getTableName(), null))
+                                            col.getType(), tableName, null))
                                     .collect(Collectors.toList()))), session);
                     String colName = StatisticUtils.getColumnName(analyzeTable, column);
                     if (!mentionedColumns.add(colName)) {
@@ -193,8 +196,10 @@ public class AnalyzeStmtAnalyzer {
 
                 List<String> targetColumns = Lists.newArrayList();
 
+                TableName tableNameForPredicate = new TableName(tableRef.getCatalogName(), tableRef.getDbName(),
+                        tableRef.getTableName(), tableRef.getPos());
                 List<ColumnUsage> predicateColumns =
-                        PredicateColumnsMgr.getInstance().queryPredicateColumns(statement.getTableName());
+                        PredicateColumnsMgr.getInstance().queryPredicateColumns(tableNameForPredicate);
                 for (ColumnUsage col : ListUtils.emptyIfNull(predicateColumns)) {
                     Column realColumn = analyzeTable.getColumnByUniqueId(col.getColumnFullId().getColumnUniqueId());
                     if (realColumn != null) {
@@ -208,11 +213,11 @@ public class AnalyzeStmtAnalyzer {
             analyzeProperties(statement.getProperties());
             analyzeAnalyzeTypeDesc(session, statement, statement.getAnalyzeTypeDesc());
 
-            if (CatalogMgr.isExternalCatalog(statement.getTableName().getCatalog())) {
+            if (CatalogMgr.isExternalCatalog(statement.getCatalogName())) {
                 if (!analyzeTable.isAnalyzableExternalTable()) {
                     throw new SemanticException(
                             "Analyze external table only support hive, iceberg, deltalake, paimon and odps table",
-                            statement.getTableName().toString());
+                            tableName.toString());
                 } else if (analyzeTypeDesc instanceof AnalyzeMultiColumnDesc) {
                     throw new SemanticException("Don't support analyze multi-columns combined statistics on external table");
                 }
@@ -226,50 +231,54 @@ public class AnalyzeStmtAnalyzer {
 
         @Override
         public Void visitCreateAnalyzeJobStatement(CreateAnalyzeJobStmt statement, ConnectContext session) {
-            if (null != statement.getTableName()) {
-                TableName tbl = statement.getTableName();
+            if (null != statement.getTableRef()) {
+                TableRef tableRef = AnalyzerUtils.normalizedTableRef(statement.getTableRef(), session);
+                statement.setTableRef(tableRef);
 
-                if ((Strings.isNullOrEmpty(tbl.getCatalog()) &&
+                if ((Strings.isNullOrEmpty(tableRef.getCatalogName()) &&
                         CatalogMgr.isExternalCatalog(session.getCurrentCatalog())) ||
-                        CatalogMgr.isExternalCatalog(tbl.getCatalog())) {
-                    if (tbl.getTbl() == null) {
+                        CatalogMgr.isExternalCatalog(tableRef.getCatalogName())) {
+                    if (tableRef.getTableName() == null) {
                         throw new SemanticException("External catalog don't support analyze all tables, please give a" +
                                 " specific table");
                     }
-                    String catalogName = Strings.isNullOrEmpty(tbl.getCatalog()) ?
-                            session.getCurrentCatalog() : tbl.getCatalog();
-                    tbl.setCatalog(catalogName);
+                    String catalogName = Strings.isNullOrEmpty(tableRef.getCatalogName()) ?
+                            session.getCurrentCatalog() : tableRef.getCatalogName();
                     statement.setCatalogName(normalizeName(catalogName));
-                    String dbName = Strings.isNullOrEmpty(tbl.getDb()) ?
-                            session.getDatabase() : tbl.getDb();
-                    tbl.setDb(dbName);
-                    Table analyzeTable = MetaUtils.getSessionAwareTable(session, null, statement.getTableName());
+                    String dbName = tableRef.getDbName();
+                    TableName tableName = new TableName(catalogName, dbName, tableRef.getTableName(), tableRef.getPos());
+                    Table analyzeTable = MetaUtils.getSessionAwareTable(session, null, tableName);
                     if (!analyzeTable.isAnalyzableExternalTable()) {
                         throw new SemanticException("Analyze external table only support hive, iceberg, deltalake, " +
-                                "paimon and odps table", statement.getTableName().toString());
+                                "paimon and odps table", tableName.toString());
                     }
                 }
 
-                if (null != tbl.getDb() && null == tbl.getTbl()) {
-                    Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(session, tbl.getCatalog(), tbl.getDb());
+                if (null != tableRef.getDbName() && null == tableRef.getTableName()) {
+                    Database db = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                            .getDb(session, tableRef.getCatalogName(), tableRef.getDbName());
                     if (db == null) {
-                        throw new SemanticException("Database %s is not found", tbl.getCatalogAndDb());
+                        String catalogPrefix = tableRef.getCatalogName() != null ? tableRef.getCatalogName() + "." : "";
+                        throw new SemanticException("Database %s is not found", catalogPrefix + tableRef.getDbName());
                     }
 
                     if (statement.isNative() &&
-                            StatisticUtils.statisticDatabaseBlackListCheck(statement.getTableName().getDb())) {
-                        throw new SemanticException("Forbidden collect database: %s", statement.getTableName().getDb());
+                            StatisticUtils.statisticDatabaseBlackListCheck(statement.getDbName())) {
+                        throw new SemanticException("Forbidden collect database: %s", statement.getDbName());
                     }
 
                     statement.setDbId(db.getId());
-                } else if (null != statement.getTableName().getTbl()) {
-                    statement.getTableName().normalization(session);
+                } else if (null != statement.getTableName()) {
                     Database db = GlobalStateMgr.getCurrentState().getMetadataMgr()
-                            .getDb(session, statement.getTableName().getCatalog(), statement.getTableName().getDb());
+                            .getDb(session, statement.getCatalogName(), statement.getDbName());
                     if (db == null) {
-                        throw new SemanticException("Database %s is not found", statement.getTableName().getCatalogAndDb());
+                        String catalogPrefix = statement.getCatalogName() != null ?
+                                statement.getCatalogName() + "." : "";
+                        throw new SemanticException("Database %s is not found", catalogPrefix + statement.getDbName());
                     }
-                    Table analyzeTable = MetaUtils.getSessionAwareTable(session, db, statement.getTableName());
+                    TableName tableName = new TableName(statement.getCatalogName(), statement.getDbName(),
+                            statement.getTableName(), tableRef.getPos());
+                    Table analyzeTable = MetaUtils.getSessionAwareTable(session, db, tableName);
 
                     if (analyzeTable.isTemporaryTable()) {
                         throw new SemanticException("Don't support create analyze job for temporary table");
@@ -289,7 +298,7 @@ public class AnalyzeStmtAnalyzer {
                         for (Expr column : columns) {
                             ExpressionAnalyzer.analyzeExpression(column, new AnalyzeState(), new Scope(RelationId.anonymous(),
                                     new RelationFields(analyzeTable.getBaseSchema().stream().map(col -> new Field(col.getName(),
-                                                    col.getType(), statement.getTableName(), null))
+                                                    col.getType(), tableName, null))
                                             .collect(Collectors.toList()))), session);
                             String colName = StatisticUtils.getColumnName(analyzeTable, column);
                             if (!mentionedColumns.add(colName)) {
@@ -349,12 +358,21 @@ public class AnalyzeStmtAnalyzer {
                     AnalyzeStmt analyzeStmt = (AnalyzeStmt) statement;
                     columns = analyzeStmt.getColumns();
                     properties = analyzeStmt.getProperties();
-                    tableName = analyzeStmt.getTableName();
+                    TableRef tableRef = analyzeStmt.getTableRef();
+                    tableName = new TableName(tableRef.getCatalogName(), tableRef.getDbName(),
+                            tableRef.getTableName(), tableRef.getPos());
                 } else if (statement instanceof CreateAnalyzeJobStmt) {
                     CreateAnalyzeJobStmt createAnalyzeJobStmt = (CreateAnalyzeJobStmt) statement;
                     columns = createAnalyzeJobStmt.getColumns();
                     properties = createAnalyzeJobStmt.getProperties();
-                    tableName = createAnalyzeJobStmt.getTableName();
+                    TableRef tableRef = createAnalyzeJobStmt.getTableRef();
+                    if (tableRef != null) {
+                        tableName = new TableName(tableRef.getCatalogName(), tableRef.getDbName(),
+                                tableRef.getTableName(), tableRef.getPos());
+                    } else {
+                        tableName = new TableName(createAnalyzeJobStmt.getCatalogName(),
+                                createAnalyzeJobStmt.getDbName(), null, null);
+                    }
                 } else {
                     throw new NotImplementedException("unreachable");
                 }

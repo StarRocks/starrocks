@@ -23,6 +23,7 @@ import com.google.common.collect.Sets;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PartitionNames;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
 import com.starrocks.common.AnalysisException;
@@ -64,7 +65,7 @@ public class ExportStmt extends StatementBase {
     private static final Set<String> VALID_SCHEMES = Sets.newHashSet(
             "afs", "bos", "hdfs", "oss", "s3a", "cosn", "viewfs", "ks3");
 
-    private TableName tblName;
+    private TableRef tableRef;
     private List<String> partitions;
     private List<String> columnNames;
     // path should include "/"
@@ -76,22 +77,22 @@ public class ExportStmt extends StatementBase {
     private String rowDelimiter;
     private boolean includeQueryId = true;
 
-    // may catalog.db.table
-    private TableRefPersist tableRef;
+    // For persistence, converted from tableRef when needed
+    private TableRefPersist tableRefPersist;
     private long exportStartTime;
     private boolean sync;
 
-    public ExportStmt(TableRefPersist tableRef, List<String> columnNames, String path,
+    public ExportStmt(TableRef tableRef, List<String> columnNames, String path,
                       Map<String, String> properties, BrokerDesc brokerDesc) {
         this(tableRef, columnNames, path, properties, brokerDesc, NodePosition.ZERO);
     }
 
-    public ExportStmt(TableRefPersist tableRef, List<String> columnNames, String path,
+    public ExportStmt(TableRef tableRef, List<String> columnNames, String path,
                       Map<String, String> properties, BrokerDesc brokerDesc, NodePosition pos) {
         this(tableRef, columnNames, path, properties, brokerDesc, pos, false);
     }
 
-    public ExportStmt(TableRefPersist tableRef, List<String> columnNames, String path,
+    public ExportStmt(TableRef tableRef, List<String> columnNames, String path,
                       Map<String, String> properties, BrokerDesc brokerDesc, NodePosition pos, boolean sync) {
         super(pos);
         this.tableRef = tableRef;
@@ -119,8 +120,24 @@ public class ExportStmt extends StatementBase {
         return exportStartTime;
     }
 
-    public void setTblName(TableName tblName) {
-        this.tblName = tblName;
+    public TableRef getTableRef() {
+        return tableRef;
+    }
+
+    public void setTableRef(TableRef tableRef) {
+        this.tableRef = tableRef;
+    }
+
+    public String getCatalogName() {
+        return tableRef == null ? null : tableRef.getCatalogName();
+    }
+
+    public String getDbName() {
+        return tableRef == null ? null : tableRef.getDbName();
+    }
+
+    public String getTableName() {
+        return tableRef == null ? null : tableRef.getTableName();
     }
 
     public void setPartitions(List<String> partitions) {
@@ -131,12 +148,22 @@ public class ExportStmt extends StatementBase {
         this.exportStartTime = exportStartTime;
     }
 
-    public TableName getTblName() {
-        return tblName;
+    public TableRefPersist getTableRefPersist() {
+        if (tableRefPersist == null && tableRef != null) {
+            PartitionNames partitionNames = null;
+            if (tableRef.getPartitionRef() != null) {
+                partitionNames = new PartitionNames(tableRef.getPartitionRef().isTemp(),
+                        tableRef.getPartitionRef().getPartitionNames(), tableRef.getPartitionRef().getPos());
+            }
+            TableName tableName = new TableName(tableRef.getCatalogName(), tableRef.getDbName(),
+                    tableRef.getTableName(), tableRef.getPos());
+            tableRefPersist = new TableRefPersist(tableName, null, partitionNames, tableRef.getPos());
+        }
+        return tableRefPersist;
     }
 
-    public TableRefPersist getTableRef() {
-        return tableRef;
+    public void setTableRefPersist(TableRefPersist tableRefPersist) {
+        this.tableRefPersist = tableRefPersist;
     }
 
     public List<String> getPartitions() {
@@ -176,13 +203,13 @@ public class ExportStmt extends StatementBase {
     }
 
     public void checkTable(GlobalStateMgr globalStateMgr) {
-        Database db = globalStateMgr.getLocalMetastore().getDb(tblName.getDb());
+        Database db = globalStateMgr.getLocalMetastore().getDb(getDbName());
         if (db == null) {
-            throw new SemanticException("Db does not exist. name: " + tblName.getDb());
+            throw new SemanticException("Db does not exist. name: " + getDbName());
         }
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tblName.getTbl());
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), getTableName());
         if (table == null) {
-            throw new SemanticException("Table[" + tblName.getTbl() + "] does not exist");
+            throw new SemanticException("Table[" + getTableName() + "] does not exist");
         }
 
         try (AutoCloseableLock ignore =
@@ -198,7 +225,7 @@ public class ExportStmt extends StatementBase {
                 case INLINE_VIEW:
                 case VIEW:
                 default:
-                    throw new SemanticException("Table[" + tblName.getTbl() + "] is " + tblType +
+                    throw new SemanticException("Table[" + getTableName() + "] is " + tblType +
                                 " type, do not support EXPORT.");
             }
 
@@ -304,10 +331,11 @@ public class ExportStmt extends StatementBase {
     public String toSql() {
         StringBuilder sb = new StringBuilder();
         sb.append("EXPORT TABLE ");
-        if (tblName == null) {
+        if (tableRef == null) {
             sb.append("non-exist");
         } else {
-            sb.append(tblName.toSql());
+            TableName tableName = new TableName(getCatalogName(), getDbName(), getTableName(), tableRef.getPos());
+            sb.append(tableName.toSql());
         }
         if (partitions != null && !partitions.isEmpty()) {
             sb.append(" PARTITION (");

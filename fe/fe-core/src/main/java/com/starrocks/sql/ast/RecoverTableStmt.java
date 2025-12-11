@@ -15,7 +15,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.catalog.TableName;
 import com.starrocks.sql.parser.NodePosition;
 
 public class RecoverTableStmt extends DdlStmt {
@@ -48,13 +47,6 @@ public class RecoverTableStmt extends DdlStmt {
 
     public String getTableName() {
         return tableRef == null ? null : tableRef.getTableName();
-    }
-
-    public TableName toTableName() {
-        if (tableRef == null) {
-            return null;
-        }
-        return new TableName(getCatalogName(), getDbName(), getTableName(), tableRef.getPos());
     }
 
     @Override

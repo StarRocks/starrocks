@@ -91,6 +91,7 @@ import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.SetOperationRelation;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.ViewRelation;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprSubstitutionMap;
@@ -1651,10 +1652,10 @@ public class MaterializedViewAnalyzer {
 
         @Override
         public Void visitDropMaterializedViewStatement(DropMaterializedViewStmt stmt, ConnectContext context) {
-            TableName mvName = stmt.getDbMvName();
-            mvName.normalization(context);
-            Table mvTable = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(context, mvName.getCatalog(),
-                    mvName.getDb(), mvName.getTbl());
+            TableRef tableRef = AnalyzerUtils.normalizedTableRef(stmt.getTableRef(), context);
+            stmt.setTableRef(tableRef);
+            Table mvTable = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(context, stmt.getCatalogName(),
+                    stmt.getDbName(), stmt.getMvName());
             // Check mv dependency
             if (context.getSessionVariable().isEnableDropTableCheckMvDependency() && mvTable != null) {
                 Set<MvId> relatedMvIds = mvTable.getRelatedMaterializedViews();
@@ -1697,35 +1698,35 @@ public class MaterializedViewAnalyzer {
         @Override
         public Void visitRefreshMaterializedViewStatement(RefreshMaterializedViewStatement statement,
                                                           ConnectContext context) {
-            statement.getMvName().normalization(context);
-            TableName mvName = statement.getMvName();
-            Database db = context.getGlobalStateMgr().getLocalMetastore().getDb(mvName.getDb());
+            TableRef tableRef = AnalyzerUtils.normalizedTableRef(statement.getTableRef(), context);
+            statement.setTableRef(tableRef);
+            Database db = context.getGlobalStateMgr().getLocalMetastore().getDb(statement.getDbName());
             if (db == null) {
-                throw new SemanticException("Can not find database:" + mvName.getDb(), mvName.getPos());
+                throw new SemanticException("Can not find database:" + statement.getDbName(), tableRef.getPos());
             }
             OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                    .getTable(db.getFullName(), mvName.getTbl());
+                    .getTable(db.getFullName(), statement.getMvName());
             if (table == null) {
-                throw new SemanticException("Can not find materialized view:" + mvName.getTbl(), mvName.getPos());
+                throw new SemanticException("Can not find materialized view:" + statement.getMvName(), tableRef.getPos());
             }
             if (!(table instanceof MaterializedView)) {
-                throw new SemanticException("Can not refresh non materialized view:" + table.getName(), mvName.getPos());
+                throw new SemanticException("Can not refresh non materialized view:" + table.getName(), tableRef.getPos());
             }
             MaterializedView mv = (MaterializedView) table;
             if (!mv.isActive() && AlterJobMgr.MANUAL_INACTIVE_MV_REASON.equalsIgnoreCase(mv.getInactiveReason())) {
                 throw new SemanticException("Refresh materialized view failed because [" + mv.getName() +
                         "] is not active. You can try to active it with ALTER MATERIALIZED VIEW " + mv.getName()
-                        + " ACTIVE; ", mvName.getPos());
+                        + " ACTIVE; ", tableRef.getPos());
             }
             PartitionInfo partitionInfo = mv.getPartitionInfo();
             if (statement.getPartitionRangeDesc() != null) {
                 if (partitionInfo.isUnPartitioned()) {
                     throw new SemanticException("Not support refresh by partition for single partition mv",
-                            mvName.getPos());
+                            tableRef.getPos());
                 }
                 if (!partitionInfo.isExprRangePartitioned()) {
                     throw new SemanticException("Not support refresh by partition for non range partitioned mv",
-                            mvName.getPos());
+                            tableRef.getPos());
                 }
                 Column partitionColumn = partitionInfo.getPartitionColumns(table.getIdToColumn()).get(0);
                 if (partitionColumn.getType().isDateType()) {
@@ -1739,11 +1740,11 @@ public class MaterializedViewAnalyzer {
             } else if (statement.getPartitionListDesc() != null) {
                 if (partitionInfo.isUnPartitioned()) {
                     throw new SemanticException("Not support refresh by partition for single partition mv",
-                            mvName.getPos());
+                            tableRef.getPos());
                 }
                 if (!partitionInfo.isListPartition()) {
                     throw new SemanticException("Not support refresh by partition for non list partitioned mv",
-                            mvName.getPos());
+                            tableRef.getPos());
                 }
                 Set<PListCell> listCells = statement.getPartitionListDesc();
                 if (CollectionUtils.isEmpty(listCells)) {
@@ -1758,7 +1759,7 @@ public class MaterializedViewAnalyzer {
                                     "input partition value's size %s: please use `REFRESH MATERIALIZED VIEW <name> " +
                                     "(('col1', 'col2'))` if the mv contains multi partition columns; otherwise use " +
                                     "`REFRESH MATERIALIZED VIEW <name> ('v1', " +
-                                    "'v2')`", partitionCols.size(), items.size()), mvName.getPos());
+                                    "'v2')`", partitionCols.size(), items.size()), tableRef.getPos());
                         }
                     }
                 }
@@ -1811,7 +1812,8 @@ public class MaterializedViewAnalyzer {
         @Override
         public Void visitCancelRefreshMaterializedViewStatement(CancelRefreshMaterializedViewStmt statement,
                                                                 ConnectContext context) {
-            statement.getMvName().normalization(context);
+            TableRef tableRef = AnalyzerUtils.normalizedTableRef(statement.getTableRef(), context);
+            statement.setTableRef(tableRef);
             return null;
         }
     }

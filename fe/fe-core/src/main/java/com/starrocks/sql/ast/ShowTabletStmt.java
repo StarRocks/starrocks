@@ -192,7 +192,7 @@ public class ShowTabletStmt extends ShowStmt {
     }
 
     public ImmutableList<String> getTitleNames() {
-        if (isShowSingleTablet) {
+        if (isShowSingleTablet()) {
             return SINGLE_TABLET_TITLE_NAMES;
         }
 
