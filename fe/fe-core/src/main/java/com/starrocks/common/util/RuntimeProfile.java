@@ -313,9 +313,13 @@ public class RuntimeProfile {
                     String parentName = child2ParentMap.get(topName);
                     Counter counter = null;
                     if (pair == null && tcounter != null && parentName != null) {
-                        counter = addCounter(topName, tcounter.type, tcounter.strategy, parentName);
-                        counter.setValue(tcounter.value);
-                        counter.setStrategy(tcounter.strategy);
+                        // Check if parent exists in counterMap, if not, defer this counter
+                        // by not adding it now. It will be added in the second pass below.
+                        if (counterMap.containsKey(parentName)) {
+                            counter = addCounter(topName, tcounter.type, tcounter.strategy, parentName);
+                            counter.setValue(tcounter.value);
+                            counter.setStrategy(tcounter.strategy);
+                        }
                     } else if (pair != null && tcounter != null) {
                         counter = pair.first;
                         if (pair.first.getType() != tcounter.type) {
@@ -351,12 +355,21 @@ public class RuntimeProfile {
                     }
                 }
             }
-            // Second, processing the remaining counters, set ROOT_COUNTER as it's parent
+            // Second, processing the remaining counters
+            // For counters with a parent in child2ParentMap, use that parent if it exists now
+            // Otherwise, set ROOT_COUNTER as the parent
             for (TCounter tcounter : tCounterMap.values()) {
                 Pair<Counter, String> pair = counterMap.get(tcounter.name);
                 Counter counter = null;
                 if (pair == null) {
-                    counter = addCounter(tcounter.name, tcounter.type, tcounter.strategy);
+                    String parentName = child2ParentMap.get(tcounter.name);
+                    if (parentName != null && counterMap.containsKey(parentName)) {
+                        // Parent exists now, add with the correct parent
+                        counter = addCounter(tcounter.name, tcounter.type, tcounter.strategy, parentName);
+                    } else {
+                        // No parent or parent doesn't exist, use ROOT_COUNTER
+                        counter = addCounter(tcounter.name, tcounter.type, tcounter.strategy);
+                    }
                     counter.setValue(tcounter.value);
                     counter.setStrategy(tcounter.strategy);
                 } else {

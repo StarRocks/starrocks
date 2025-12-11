@@ -900,4 +900,54 @@ public class RuntimeProfileTest {
         Assertions.assertTrue(baseC3.getMaxValue().isPresent());
         Assertions.assertEquals(15, baseC3.getMaxValue().get().longValue());
     }
+
+    @Test
+    public void testDanglingCounterFix() {
+        // Reproduce the dangling counter issue: PendingTime->InputEmptyTime
+        // where InputEmptyTime is added before its parent PendingTime exists in counterMap
+        RuntimeProfile profile = new RuntimeProfile("test_profile");
+
+        TRuntimeProfileTree tree = new TRuntimeProfileTree();
+        TRuntimeProfileNode node = new TRuntimeProfileNode();
+        node.name = "test_profile";
+        node.num_children = 0;
+        node.indent = true;
+        node.counters = Lists.newArrayList();
+        node.child_counters_map = Maps.newHashMap();
+
+        // Add TotalTime counter (always present)
+        node.counters.add(new TCounter("TotalTime", TUnit.TIME_NS, 1000000000L));
+
+        // Add child counter InputEmptyTime that references parent PendingTime
+        // But PendingTime appears AFTER InputEmptyTime in the counters list
+        // This simulates the race condition where child appears before parent
+        TCounter childCounter = new TCounter("InputEmptyTime", TUnit.TIME_NS, 500000L);
+        node.counters.add(childCounter);
+
+        TCounter parentCounter = new TCounter("PendingTime", TUnit.TIME_NS, 2000000L);
+        node.counters.add(parentCounter);
+
+        // Set up the parent-child relationship
+        Set<String> childSet = Sets.newHashSet();
+        childSet.add("InputEmptyTime");
+        node.child_counters_map.put("PendingTime", childSet);
+
+        tree.addToNodes(node);
+
+        // This should not throw IllegalStateException: dangling counter PendingTime->InputEmptyTime
+        profile.update(tree);
+
+        // Verify counters were added correctly
+        Counter pendingTime = profile.getCounter("PendingTime");
+        Counter inputEmptyTime = profile.getCounter("InputEmptyTime");
+
+        Assertions.assertNotNull(pendingTime);
+        Assertions.assertNotNull(inputEmptyTime);
+        Assertions.assertEquals(2000000L, pendingTime.getValue());
+        Assertions.assertEquals(500000L, inputEmptyTime.getValue());
+
+        // Verify the parent-child relationship
+        Assertions.assertTrue(profile.getChildCounterMap().containsKey("PendingTime"));
+        Assertions.assertTrue(profile.getChildCounterMap().get("PendingTime").contains("InputEmptyTime"));
+    }
 }
