@@ -274,13 +274,8 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
-<<<<<<< HEAD
-import static com.starrocks.common.ErrorCode.ERR_NO_PARTITIONS_HAVE_DATA_LOAD;
-import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
-=======
 import static com.starrocks.common.ErrorCode.ERR_NO_ROWS_IMPORTED;
-import static com.starrocks.sql.parser.ErrorMsgProxy.PARSER_ERROR_MSG;
->>>>>>> 68ed7b2073 ([Enhancement] Improve no rows imported error message (#66624))
+import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
 import static com.starrocks.statistic.AnalyzeMgr.IS_MULTI_COLUMN_STATS;
 
 // Do one COM_QUERY process.
