@@ -581,7 +581,7 @@ public class SparkLoadJobTest {
         SparkLoadJob job = getEtlStateJob(originStmt);
         job.state = JobState.LOADING;
         Deencapsulation.setField(job, "tableToLoadPartitions", Maps.newHashMap());
-        ExceptionChecker.expectThrowsWithMsg(LoadException.class, "No partitions have data available for loading",
+        ExceptionChecker.expectThrowsWithMsg(LoadException.class, "No rows were imported from upstream",
                 () -> Deencapsulation.invoke(job, "submitPushTasks"));
     }
 }

@@ -53,7 +53,7 @@ import org.mockito.Mockito;
 import java.util.Map;
 import java.util.TimeZone;
 
-import static com.starrocks.common.ErrorCode.ERR_NO_PARTITIONS_HAVE_DATA_LOAD;
+import static com.starrocks.common.ErrorCode.ERR_NO_ROWS_IMPORTED;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.same;
 import static org.mockito.Mockito.doNothing;
@@ -150,7 +150,7 @@ public class StreamLoadTaskTest {
             }
         };
 
-        ExceptionChecker.expectThrowsWithMsg(StarRocksException.class, ERR_NO_PARTITIONS_HAVE_DATA_LOAD.formatErrorMsg(),
+        ExceptionChecker.expectThrowsWithMsg(StarRocksException.class, ERR_NO_ROWS_IMPORTED.formatErrorMsg(),
                 () -> Deencapsulation.invoke(streamLoadTask, "unprotectedWaitCoordFinish"));
     }
 

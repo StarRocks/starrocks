@@ -331,7 +331,8 @@ public enum ErrorCode {
             "Referenced column '%s' in expr '%s' can't be found in column list, derived column is '%s'"),
     ERR_MAPPING_EXPR_INVALID(5602, new byte[] {'4', '2', '0', '0', '0'},
             "Expr '%s' analyze error: %s, derived column is '%s'"),
-    ERR_NO_PARTITIONS_HAVE_DATA_LOAD(5603, new byte[] {'0', '2', '0', '0', '0'},
+    // ATTN: routineload.TxnStatusChangeReason uses this message, so it must be updated as well
+    ERR_NO_ROWS_IMPORTED(5603, new byte[] {'0', '2', '0', '0', '0'},
             "No rows were imported from upstream. Possible causes: 1) all rows were filtered by load conditions, " +
                     "2) all rows failed data quality/validation checks, or 3) upstream has no data. If this is acceptable, " +
                     "set `ADMIN SET FRONTEND CONFIG ('empty_load_as_error' = 'false')` to ignore empty loads"),
