@@ -20,7 +20,7 @@ By integrating Iceberg's snapshot branching and tagging feature, StarRocks suppo
 
 ### Create a branch
 
-**Syntax**
+**`CREATE BRANCH` Syntax**
 
 ```SQL
 ALTER TABLE [catalog.][database.]table_name
@@ -73,7 +73,7 @@ WITH SNAPSHOT RETENTION 2 SNAPSHOTS 2 DAYS;
 
 ### Load data into a specific branch of a table
 
-**Syntax**
+**`VERSION AS OF` Syntax**
 
 ```SQL
 INSERT INTO [catalog.][database.]table_name
@@ -98,7 +98,7 @@ SELECT c1, k1 FROM tbl;
 
 ### Create a tag
 
-**Syntax**
+**`CREATE TAG` Syntax**
 
 ```SQL
 ALTER TABLE [catalog.][database.]table_name
@@ -125,7 +125,7 @@ RETAIN 7 DAYS;
 
 ### Fast forward a branch to another
 
-**Syntax**
+**`fast_forward` Syntax**
 
 ```SQL
 ALTER TABLE [catalog.][database.]table_name
@@ -150,7 +150,7 @@ EXECUTE fast_forward('main', 'test-branch');
 
 You can cherry pick a specific snapshot and apply it to the current status of the table. This operation will create a new snapshot based on an existing snapshot, and the original snapshot will not be affected.
 
-**Syntax**
+**`cherrypick_snapshot` Syntax**
 
 ```SQL
 ALTER TABLE [catalog.][database.]table_name
@@ -172,7 +172,7 @@ EXECUTE cherrypick_snapshot(54321);
 
 You can expire snapshots earlier than a specific point of time. This operation will delete the data files of the expired snapshots.
 
-**Syntax**
+**`expire_snapshot` Syntax**
 
 ```SQL
 ALTER TABLE [catalog.][database.]table_name
@@ -188,14 +188,14 @@ EXECUTE expire_snapshot('2023-12-17 00:14:38')
 
 ### Drop a branch or a tag
 
-**Syntax**
+**`DROP BRANCH`, `DROP TAG` Syntax**
 
 ```SQL
 ALTER TABLE [catalog.][database.]table_name
 DROP { BRANCH <branch_name> | TAG <tag_name> }
 ```
 
-**Exmaple**
+**Example**
 
 ```SQL
 ALTER TABLE iceberg.sales.order
@@ -209,7 +209,7 @@ DROP TAG `test-tag`;
 
 ### Time Travel to a specific branch or tag
 
-**Syntax**
+**`VERSION AS OF` Syntax**
 
 ```SQL
 [FOR] VERSION AS OF '<branch_or_tag>'
@@ -230,7 +230,7 @@ SELECT * FROM iceberg.sales.order VERSION AS OF 'test-tag';
 
 ### Time Travel to a specific snapshot
 
-**Syntax**
+**`VERSION AS OF` Syntax**
 
 ```SQL
 [FOR] VERSION AS OF '<snapshot_id>'
@@ -248,7 +248,7 @@ SELECT * FROM iceberg.sales.order VERSION AS OF 12345;
 
 ### Time Travel to a specific datetime or date
 
-**Syntax**
+**`TIMESTAMP AS OF` Syntax**
 
 ```SQL
 [FOR] TIMESTAMP AS OF { '<datetime>' | '<date>' | date_and_time_function }
