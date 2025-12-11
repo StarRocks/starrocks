@@ -93,6 +93,7 @@ import com.starrocks.sql.common.LargeInPredicateException;
 import com.starrocks.sql.formatter.FormatOptions;
 import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.sql.parser.SqlParser;
+import com.starrocks.system.Frontend;
 import com.starrocks.thrift.TMasterOpRequest;
 import com.starrocks.thrift.TMasterOpResult;
 import com.starrocks.thrift.TQueryOptions;
@@ -843,7 +844,7 @@ public class ConnectProcessor {
         }
     }
 
-    public TMasterOpResult proxyExecute(TMasterOpRequest request) {
+    public TMasterOpResult proxyExecute(TMasterOpRequest request, Frontend requestFE) {
         ctx.setCurrentCatalog(request.catalog);
         if (ctx.getCurrentCatalog() == null) {
             // if we upgrade Master FE first, the request from old FE does not set "catalog".
@@ -854,6 +855,8 @@ public class ConnectProcessor {
                     "Missing current catalog. You need to upgrade this Frontend to the same version as Leader Frontend.");
             result.setMaxJournalId(GlobalStateMgr.getCurrentState().getMaxJournalId());
             result.setPacket(getResultPacket());
+            result.setState(ctx.getState().getStateType().toString());
+            result.setErrorMsg(ctx.getState().getErrorMessage());
             return result;
         }
         ctx.setDatabase(request.db);
@@ -890,6 +893,8 @@ public class ConnectProcessor {
                     "Missing current user identity. You need to upgrade this Frontend to the same version as Leader Frontend.");
             result.setMaxJournalId(GlobalStateMgr.getCurrentState().getMaxJournalId());
             result.setPacket(getResultPacket());
+            result.setState(ctx.getState().getStateType().toString());
+            result.setErrorMsg(ctx.getState().getErrorMessage());
             return result;
         }
 
@@ -985,6 +990,7 @@ public class ConnectProcessor {
 
         ctx.setThreadLocalInfo();
 
+        TMasterOpResult result = new TMasterOpResult();
         StmtExecutor executor = null;
         try {
             // set session variables first
@@ -1012,17 +1018,7 @@ public class ConnectProcessor {
             }.visit(statement);
             statement.setOrigStmt(new OriginStatement(request.getSql(), idx));
 
-            if (request.isIsInternalStmt()) {
-                executor = StmtExecutor.newInternalExecutor(ctx, statement);
-            } else {
-                executor = new StmtExecutor(ctx, statement);
-            }
-            ctx.setExecutor(executor);
-            if (ctx.getIsLastStmt()) {
-                executor.addRunningQueryDetail(statement);
-            }
-            executor.setProxy();
-            executor.execute();
+            executor = doProxyExecute(result, request, statement, requestFE);
         } catch (IOException e) {
             // Client failed.
             LOG.warn("Process one query failed because IOException: ", e);
@@ -1036,7 +1032,6 @@ public class ConnectProcessor {
             if (executor != null) {
                 executor.addFinishedQueryDetail();
             }
-            ctx.setExecutor(null);
         }
 
         // If stmt is also forwarded during execution, just return the forward result.
@@ -1046,7 +1041,6 @@ public class ConnectProcessor {
 
         // no matter the master execute success or fail, the master must transfer the result to follower
         // and tell the follower the current journalID.
-        TMasterOpResult result = new TMasterOpResult();
         result.setMaxJournalId(GlobalStateMgr.getCurrentState().getMaxJournalId());
         // following stmt will not be executed, when current stmt is failed,
         // so only set SERVER_MORE_RESULTS_EXISTS Flag when stmt executed successfully
@@ -1078,6 +1072,25 @@ public class ConnectProcessor {
             }
         }
         return result;
+    }
+
+    protected StmtExecutor doProxyExecute(TMasterOpResult result, TMasterOpRequest request, StatementBase statement,
+                                          Frontend requestFE)
+            throws Exception {
+        StmtExecutor executor;
+        if (request.isIsInternalStmt()) {
+            executor = StmtExecutor.newInternalExecutor(ctx, statement);
+        } else {
+            executor = new StmtExecutor(ctx, statement);
+        }
+        ctx.setExecutor(executor);
+        if (ctx.getIsLastStmt()) {
+            executor.addRunningQueryDetail(statement);
+        }
+        executor.setProxy();
+        executor.execute();
+
+        return executor;
     }
 
     public void processOnce(RequestPackage req) throws Exception {

@@ -93,7 +93,8 @@ public class LeaderOpExecutorTest {
         String sql = "insert into t1 select * from t1";
         StatementBase stmtBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         LeaderOpExecutor executor =
-                new LeaderOpExecutor(stmtBase, stmtBase.getOrigStmt(), connectContext, RedirectStatus.FORWARD_NO_SYNC, false);
+                new LeaderOpExecutor(stmtBase, stmtBase.getOrigStmt(), connectContext, RedirectStatus.FORWARD_NO_SYNC, false,
+                        null);
 
         mockFrontendService(new MockFrontendServiceClient());
         executor.execute();
@@ -174,7 +175,8 @@ public class LeaderOpExecutorTest {
                             -> ThriftRPCRequestExecutor.call(Mockito.any(), Mockito.any(), Mockito.anyInt(), Mockito.any()))
                     .thenReturn(tMasterOpResult);
             LeaderOpExecutor executor =
-                    new LeaderOpExecutor(stmtBase, stmtBase.getOrigStmt(), connectContext, RedirectStatus.FORWARD_NO_SYNC, false);
+                    new LeaderOpExecutor(stmtBase, stmtBase.getOrigStmt(), connectContext, RedirectStatus.FORWARD_NO_SYNC, false,
+                            null);
             executor.execute();
 
             Assertions.assertEquals(1, connectContext.getTxnId());

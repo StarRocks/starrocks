@@ -155,6 +155,10 @@ import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.TemporaryTableMgr;
 import com.starrocks.server.WarehouseManager;
+import com.starrocks.service.arrow.flight.sql.ArrowFlightSqlConnectContext;
+import com.starrocks.service.arrow.flight.sql.ArrowFlightSqlConnectProcessor;
+import com.starrocks.service.arrow.flight.sql.ArrowFlightSqlProxyQueryManager;
+import com.starrocks.service.arrow.flight.sql.ArrowFlightSqlResultDescriptor;
 import com.starrocks.sql.analyzer.AlterTableClauseAnalyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.Authorizer;
@@ -312,6 +316,8 @@ import com.starrocks.thrift.TMergeCommitRequest;
 import com.starrocks.thrift.TMergeCommitResult;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TNodesInfo;
+import com.starrocks.thrift.TNotifyForwardDeploymentFinishedRequest;
+import com.starrocks.thrift.TNotifyForwardDeploymentFinishedRespone;
 import com.starrocks.thrift.TObjectDependencyReq;
 import com.starrocks.thrift.TObjectDependencyRes;
 import com.starrocks.thrift.TOlapTableIndexTablets;
@@ -382,6 +388,7 @@ import com.starrocks.warehouse.Warehouse;
 import com.starrocks.warehouse.WarehouseInfo;
 import com.starrocks.warehouse.cngroup.CRAcquireContext;
 import com.starrocks.warehouse.cngroup.ComputeResource;
+import org.apache.arrow.vector.types.pojo.Schema;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -389,6 +396,7 @@ import org.apache.thrift.TException;
 import org.jetbrains.annotations.NotNull;
 
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -522,7 +530,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 if (!PatternMatcher.matchPattern(params.getPattern(), tableName, matcher, caseSensitive)) {
                     continue;
                 }
-                
+
                 try {
                     tbl = metadataMgr.getTable(context, catalogName, params.db, tableName);
                 } catch (Exception e) {
@@ -1019,18 +1027,24 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     @Override
     public TMasterOpResult forward(TMasterOpRequest params) throws TException {
         TNetworkAddress clientAddr = getClientAddr();
+        Frontend fe = null;
         if (clientAddr != null) {
-            Frontend fe = GlobalStateMgr.getCurrentState().getNodeMgr().getFeByHost(clientAddr.getHostname());
+            fe = GlobalStateMgr.getCurrentState().getNodeMgr().getFeByHost(clientAddr.getHostname());
             if (fe == null) {
                 LOG.warn("reject request from invalid host. client: {}", clientAddr);
                 throw new TException("request from invalid host was rejected.");
             }
         }
 
+        if (fe == null && params.isIs_arrow_flight_sql()) {
+            throw new TException("Arrow Flight SQL request must be with valid FE host info.");
+        }
+
         // add this log so that we can track this stmt
         LOG.info("receive forwarded stmt {} from FE: {}",
                 params.getStmt_id(), clientAddr != null ? clientAddr.getHostname() : "unknown");
-        ConnectContext context = new ConnectContext(null);
+        ConnectContext context = !params.isIs_arrow_flight_sql() ? new ConnectContext(null) :
+                new ArrowFlightSqlConnectContext("");
         String hostname = "";
         if (clientAddr != null) {
             hostname = clientAddr.getHostname();
@@ -1040,14 +1054,30 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         final int connectionId = params.getConnectionId();
 
         try (var guard = proxyContextManager.guard(hostname, connectionId, context, addToProxyManager)) {
-            ConnectProcessor processor = new ConnectProcessor(context);
-            return processor.proxyExecute(params);
+            ConnectProcessor processor = !params.isIs_arrow_flight_sql() ? new ConnectProcessor(context) :
+                    new ArrowFlightSqlConnectProcessor(context, params.getSql());
+            return processor.proxyExecute(params, fe);
         } catch (Exception e) {
             LOG.warn("unreachable path:", e);
             final TMasterOpResult result = new TMasterOpResult();
             result.setErrorMsg(e.getMessage());
             return result;
         }
+    }
+
+    @Override
+    public TNotifyForwardDeploymentFinishedRespone notifyForwardDeploymentFinished(
+            TNotifyForwardDeploymentFinishedRequest request) throws TException {
+        long backendId = request.getArrow_flight_sql_result_backend_id();
+        TUniqueId fragmentId = request.getArrow_flight_sql_result_fragment_id();
+        byte[] schemaBytes = request.getArrow_flight_sql_result_schema();
+        Schema schema = Schema.deserializeMessage(ByteBuffer.wrap(schemaBytes));
+        ArrowFlightSqlResultDescriptor resultDesc = new ArrowFlightSqlResultDescriptor(backendId, fragmentId, schema);
+
+        ArrowFlightSqlProxyQueryManager.getInstance().notifyBackendResult(request.getQuery_id(), resultDesc);
+
+        TStatus status = new TStatus(TStatusCode.OK);
+        return new TNotifyForwardDeploymentFinishedRespone().setStatus(status);
     }
 
     private void checkPasswordAndLoadPriv(String user, String passwd, String db, String tbl,

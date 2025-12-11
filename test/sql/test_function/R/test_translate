@@ -568,40 +568,48 @@ insert into t1 values ('placeholder', 'a', 'b');
 -- !result
 SELECT ifnull(sum(murmur_hash3_32(
     TRANSLATE(REPEAT('a', 1024*1024), from_str, to_str)
-)), 0) from t1;  
-truncate table t1;
+)), 0) from t1;
 -- result:
 1624733713
+-- !result
+truncate table t1;
+-- result:
 -- !result
 insert into t1 values ('placeholder', '膨', 'p');
 -- result:
 -- !result
 SELECT ifnull(sum(murmur_hash3_32(
     TRANSLATE(CONCAT(REPEAT('a', 1024*1024-1024*3), REPEAT('膨', 1024)), from_str, to_str)
-)), 0) from t1; 
-truncate table t1;
+)), 0) from t1;
 -- result:
 -308607422
+-- !result
+truncate table t1;
+-- result:
 -- !result
 insert into t1 values ('placeholder', 'a', '膨');
 -- result:
 -- !result
 SELECT ifnull(sum(murmur_hash3_32(
     TRANSLATE(CONCAT('a', REPEAT('b', 1024*1024 - 1 - 2)), from_str, to_str)
-)), 0) from t1; 
-truncate table t1;
+)), 0) from t1;
 -- result:
 777398045
+-- !result
+truncate table t1;
+-- result:
 -- !result
 insert into t1 values ('placeholder', 'a', '膨');
 -- result:
 -- !result
 SELECT ifnull(sum(murmur_hash3_32(
     TRANSLATE(REPEAT('a', 1024*1024), from_str, to_str)
-)), 0) from t1; 
-truncate table t1;
+)), 0) from t1;
 -- result:
 0
+-- !result
+truncate table t1;
+-- result:
 -- !result
 -- name: test_translate_multiple_chunks
 CREATE TABLE `t1` (
