@@ -755,6 +755,7 @@ public class TrinoQueryTest extends TrinoTestBase {
 
     @Test
     public void testAggFunction() throws Exception {
+        connectContext.getSessionVariable().setEnableRewriteSimpleAggToMetaScan(false);
         String sql = "select count(v1) from t0";
         assertPlanContains(sql, "output: count(1: v1)");
 

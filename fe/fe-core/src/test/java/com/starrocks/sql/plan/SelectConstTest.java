@@ -113,6 +113,7 @@ public class SelectConstTest extends PlanTestBase {
 
     @Test
     public void testSubquery() throws Exception {
+        connectContext.getSessionVariable().setEnableRewriteSimpleAggToMetaScan(false);
         assertPlanContains("select * from t0 where v3 in (select 2)", "LEFT SEMI JOIN", "<slot 7> : 2");
         assertPlanContains("select * from t0 where v3 not in (select 2)", "NULL AWARE LEFT ANTI JOIN",
                 "<slot 7> : 2");
