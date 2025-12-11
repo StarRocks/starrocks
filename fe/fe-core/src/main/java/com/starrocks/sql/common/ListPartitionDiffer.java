@@ -22,6 +22,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.mv.MVTimelinessArbiter;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
@@ -40,8 +41,8 @@ import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVPrepare;
 public final class ListPartitionDiffer extends PartitionDiffer {
     private static final Logger LOG = LogManager.getLogger(ListPartitionDiffer.class);
 
-    public ListPartitionDiffer(MaterializedView mv, boolean isQueryRewrite) {
-        super(mv, isQueryRewrite);
+    public ListPartitionDiffer(MaterializedView mv, MVTimelinessArbiter.QueryRewriteParams queryRewriteParams) {
+        super(mv, queryRewriteParams);
     }
 
     /**
@@ -247,8 +248,8 @@ public final class ListPartitionDiffer extends PartitionDiffer {
      * @param mvAtoms base table partition map
      * @return base partition name -> mv partition names mapping
      */
-    public static PCellSetMapping generateBaseRefMapImpl(Map<PListCell, Set<PCellWithName>> mvAtoms,
-                                                         Map<PListCell, Set<PCellWithName>> baseAtoms) {
+    public PCellSetMapping generateBaseRefMapImpl(Map<PListCell, Set<PCellWithName>> mvAtoms,
+                                                  Map<PListCell, Set<PCellWithName>> baseAtoms) {
         PCellSetMapping result = PCellSetMapping.of();
         if (mvAtoms.isEmpty()) {
             // all base partitions have no corresponding mv partitions
@@ -268,6 +269,9 @@ public final class ListPartitionDiffer extends PartitionDiffer {
         Map.Entry<PListCell, Set<PCellWithName>> mvEntry = mvIter.next();
         Map.Entry<PListCell, Set<PCellWithName>> baseEntry = baseIter.next();
         while (mvEntry != null && baseEntry != null) {
+            // check query rewrite exhausted
+            queryRewriteParams.checkQueryRewriteExhausted();
+
             int cmp = baseEntry.getKey().compareTo(mvEntry.getKey());
             if (cmp == 0) {
                 // Found matching atoms - record the relationship
@@ -434,6 +438,9 @@ public final class ListPartitionDiffer extends PartitionDiffer {
             Map.Entry<PListCell, Set<PCellWithName>> mvEntry = mvIter.next();
             Map.Entry<PListCell, Set<PCellWithName>> baseEntry = baseIter.next();
             while (mvEntry != null && baseEntry != null) {
+                // check query rewrite exhausted
+                queryRewriteParams.checkQueryRewriteExhausted();
+
                 int cmp = mvEntry.getKey().compareTo(baseEntry.getKey());
                 if (cmp == 0) {
                     // Found matching atoms - record the relationship

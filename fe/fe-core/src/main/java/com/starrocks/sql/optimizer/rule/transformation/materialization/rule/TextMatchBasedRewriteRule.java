@@ -25,6 +25,7 @@ import com.starrocks.catalog.MvPlanContext;
 import com.starrocks.catalog.MvUpdateInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableProperty;
+import com.starrocks.catalog.mv.MVTimelinessArbiter;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
@@ -220,6 +221,8 @@ public class TextMatchBasedRewriteRule extends Rule {
                 return null;
             }
             int mvRelatedCount = 0;
+            MVTimelinessArbiter.QueryRewriteParams queryRewriteParams =
+                    MVTimelinessArbiter.QueryRewriteParams.ofQueryRewrite(context);
             for (MaterializedView mv : candidateMvs) {
                 Pair<Boolean, String> status = isValidForTextBasedRewrite(context, mv);
                 if (!status.first) {
@@ -232,7 +235,7 @@ public class TextMatchBasedRewriteRule extends Rule {
                 if (mvRelatedCount++ > mvRewriteRelatedMVsLimit) {
                     return null;
                 }
-                MvUpdateInfo mvUpdateInfo = queryMaterializationContext.getOrInitMVTimelinessInfos(mv);
+                MvUpdateInfo mvUpdateInfo = queryMaterializationContext.getOrInitMVTimelinessInfos(mv, queryRewriteParams);
                 if (mvUpdateInfo == null || !mvUpdateInfo.isValidRewrite()) {
                     logMVRewrite(context, this, "MV {} cannot be used for rewrite, " +
                             "stale partitions {}", mv.getName(), mvUpdateInfo);

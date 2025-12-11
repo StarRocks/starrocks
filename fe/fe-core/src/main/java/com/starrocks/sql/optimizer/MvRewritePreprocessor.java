@@ -44,6 +44,7 @@ import com.starrocks.catalog.RandomDistributionInfo;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.mv.MVPlanValidationResult;
+import com.starrocks.catalog.mv.MVTimelinessArbiter;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
@@ -731,11 +732,13 @@ public class MvRewritePreprocessor {
 
         List<Pair<MaterializedViewWrapper, MvUpdateInfo>> mvInfos =
                 Lists.newArrayListWithExpectedSize(mvWithPlanContexts.size());
+        MVTimelinessArbiter.QueryRewriteParams queryRewriteParams =
+                MVTimelinessArbiter.QueryRewriteParams.ofQueryRewrite(context);
         for (MaterializedViewWrapper wrapper : mvWithPlanContexts) {
             MaterializedView mv = wrapper.getMV();
             try {
                 // mv's partitions to refresh
-                MvUpdateInfo mvUpdateInfo = queryMaterializationContext.getOrInitMVTimelinessInfos(mv);
+                MvUpdateInfo mvUpdateInfo = queryMaterializationContext.getOrInitMVTimelinessInfos(mv, queryRewriteParams);
                 if (mvUpdateInfo == null || !mvUpdateInfo.isValidRewrite()) {
                     OptimizerTraceUtil.logMVRewriteFailReason(mv.getName(), "stale partitions {}", mvUpdateInfo);
                     continue;

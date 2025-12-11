@@ -16,6 +16,7 @@ package com.starrocks.sql.optimizer;
 
 import com.github.benmanes.caffeine.cache.AsyncCacheLoader;
 import com.github.benmanes.caffeine.cache.AsyncLoadingCache;
+import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Lists;
@@ -92,6 +93,28 @@ public class CachingMvPlanContextBuilder {
     // store the ast of mv's define query to mvs
     private static final Map<AstKey, Set<MaterializedView>> AST_TO_MV_MAP = Maps.newConcurrentMap();
 
+    public static class MVCacheEntity {
+        private final Cache<Object, Object> cache = Caffeine.newBuilder()
+                .maximumSize(Config.mv_global_context_cache_max_size)
+                .recordStats()
+                .build();
+
+        public void invalidateAll() {
+            cache.invalidateAll();
+        }
+
+        public Object get(Object key, Supplier<Object> valueSupplier) {
+            return cache.get(key, k -> valueSupplier.get());
+        }
+
+        public Object getIfPresent(Object key) {
+            return cache.getIfPresent(key);
+        }
+    }
+    // Cache mv context entity for each materialized view, this cache's lifetime is same as materialized view.
+    // We can cache some mv level context info in MVCacheEntity to avoid recomputing them frequently.
+    private static final Map<MaterializedView, MVCacheEntity> MV_GLOBAL_CONTEXT_CACHE_MAP = Maps.newConcurrentMap();
+
     public static class AstKey {
         private final String sql;
 
@@ -129,7 +152,6 @@ public class CachingMvPlanContextBuilder {
         }
     }
 
-
     private CachingMvPlanContextBuilder() {
     }
 
@@ -139,6 +161,10 @@ public class CachingMvPlanContextBuilder {
 
     private CompletableFuture<List<MvPlanContext>> getPlanContextFuture(MaterializedView mv) {
         return MV_PLAN_CONTEXT_CACHE.get(mv);
+    }
+
+    public static MVCacheEntity getMVCache(MaterializedView mv) {
+        return MV_GLOBAL_CONTEXT_CACHE_MAP.computeIfAbsent(mv, k -> new MVCacheEntity());
     }
 
     /**
@@ -252,6 +278,9 @@ public class CachingMvPlanContextBuilder {
         try {
             // invalidate mv from plan cache
             MV_PLAN_CONTEXT_CACHE.synchronous().invalidate(mv);
+
+            // invalidate mv from mv level cache
+            MV_GLOBAL_CONTEXT_CACHE_MAP.remove(mv);
 
             // invalidate mv from timeline cache
             MVTimelinessMgr mvTimelinessMgr = GlobalStateMgr.getCurrentState().getMaterializedViewMgr().getMvTimelinessMgr();
