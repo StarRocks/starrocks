@@ -486,6 +486,12 @@ Default value: `true`.
 * **Default**: true
 * **Introduced in**: v3.3.0
 
+### enable_group_execution
+
+* **Description**: Whether to enable Colocate Group Execution. Colocate Group Execution is an execution pattern that leverages physical data partitioning, where a fixed number of threads sequentially process their respective data ranges to enhance locality and throughput. Enabling this feature can reduce memory usage.
+* **Default**: true
+* **Introduced in**: v3.3
+
 ### enable_group_level_query_queue (global)
 
 * **Description**: Whether to enable resource group-level [query queue](../administration/management/resource_management/query_queues.md).
@@ -523,6 +529,18 @@ Default value: `true`.
 * **Description**: Whether to obtain column statistics, such as `min`, `max`, `null count`, `row size`, and `ndv` (if a puffin file exists). When this item is set to `false`, only the row count information will be collected.
 * **Default**: false
 * **Introduced in**: v3.4
+
+### enable_parallel_merge
+
+* **Description**: Whether to enable parallel merge for sorting. When this feature is enabled, the merge phase of sorting will utilize multiple threads for merge operations.
+* **Default**: true
+* **Introduced in**: v3.3
+
+### enable_per_bucket_optimize
+
+* **Description**: Whether to enable bucketed computation. When this feature is enabled, stage-one aggregation can be computed in bucketed order, reducing memory usage.
+* **Default**: true
+* **Introduced in**: v3.0
 
 ### metadata_collect_query_timeout
 
@@ -814,6 +832,18 @@ The commands affected by this variable are as follows:
 * **Unit**: Characters
 * **Data type**: Long
 
+### group_execution_max_groups
+
+* **Description**: Maximum number of groups allowed for Group Execution. It is used to limit the granularity of splitting, preventing excessive scheduling overhead caused by an excessive number of groups.
+* **Default**: 128
+* **Introduced in**: v3.3
+
+### group_execution_min_scan_rows
+
+* **Description**: Minimum number of rows processed per group for Group Execution.
+* **Default**: 5000000
+* **Introduced in**: v3.3
+
 ### hash_join_push_down_right_table
 
 * **Description**: Used to control whether the data of the left table can be filtered by using the filter condition against the right table in the Join query. If so, it can reduce the amount of data that needs to be processed during the query.
@@ -826,6 +856,12 @@ Used for MySQL client compatibility. No practical usage.
 ### interactive_timeout
 
 Used for MySQL client compatibility. No practical usage.
+
+### interpolate_passthrough
+
+* **Description**: Whether to add local-exchange-passthrough for certain operators. Currently supported operators include streaming aggregates, etc. Adding local-exchange can mitigate the impact of data skew on computation, but will slightly increase memory usage. 
+* **Default**: true
+* **Introduced in**: v3.2
 
 ### io_tasks_per_scan_operator
 
@@ -971,6 +1007,15 @@ Used to set the number of instances used to scan nodes on each BE. The default v
 A query plan typically produces a set of scan ranges. This data is distributed across multiple BE nodes. A BE node will have one or more scan ranges, and by default, each BE node's set of scan ranges is processed by only one execution instance. When machine resources suffice, you can increase this variable to allow more execution instances to process a scan range simultaneously for efficiency purposes.
 
 The number of scan instances determines the number of other execution nodes in the upper level, such as aggregation nodes and join nodes. Therefore, it increases the concurrency of the entire query plan execution. Modifying this variable will help  improve efficiency, but larger values will consume more machine resources, such as CPU, memory, and disk IO.
+
+### parallel_merge_late_materialization_mode
+
+* **Description**: The late materialization mode of parallel merge for sorting. Valid values:
+  * `AUTO`
+  * `ALWAYS`
+  * `NEVER`
+* **Default**: `AUTO`
+* **Introduced in**: v3.3
 
 ### partial_update_mode
 
