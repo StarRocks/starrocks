@@ -19,6 +19,7 @@ import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
@@ -58,14 +59,17 @@ public class MetaScanNode extends ScanNode {
     private final List<Column> tableSchema;
     private final List<String> selectPartitionNames;
     private final List<TScanRangeLocations> result = Lists.newArrayList();
+    private long selectedIndexId = -1;
 
     public MetaScanNode(PlanNodeId id, TupleDescriptor desc, OlapTable olapTable,
-                        Map<Integer, String> columnIdToNames, List<String> selectPartitionNames, long warehouseId) {
+                        Map<Integer, String> columnIdToNames, List<String> selectPartitionNames,
+                        long selectedIndexId, long warehouseId) {
         super(id, desc, "MetaScan");
         this.olapTable = olapTable;
         this.tableSchema = olapTable.getBaseSchema();
         this.columnIdToNames = columnIdToNames;
         this.selectPartitionNames = selectPartitionNames;
+        this.selectedIndexId = selectedIndexId;
         this.warehouseId = warehouseId;
     }
 
@@ -74,8 +78,13 @@ public class MetaScanNode extends ScanNode {
         if (selectPartitionNames.isEmpty()) {
             partitions = olapTable.getPhysicalPartitions();
         } else {
-            partitions = selectPartitionNames.stream().map(olapTable::getPartition)
-                    .map(Partition::getDefaultPhysicalPartition).collect(Collectors.toList());
+            partitions = selectPartitionNames.stream().map(name -> {
+                Partition partition = olapTable.getPartition(name, false);
+                if (partition != null) {
+                    return partition;
+                }
+                return olapTable.getPartition(name, true);
+            }).map(Partition::getSubPartitions).flatMap(Collection::stream).collect(Collectors.toList());
         }
 
         for (PhysicalPartition partition : partitions) {
@@ -176,6 +185,13 @@ public class MetaScanNode extends ScanNode {
             columnsDesc.add(tColumn);
         }
         msg.meta_scan_node.setColumns(columnsDesc);
+        if (selectedIndexId != -1) {
+            MaterializedIndexMeta indexMeta = olapTable.getIndexMetaByIndexId(selectedIndexId);
+            if (indexMeta != null) {
+                long schemaId = indexMeta.getSchemaId();
+                msg.meta_scan_node.setSchema_id(schemaId);
+            }
+        }
     }
 
     @Override

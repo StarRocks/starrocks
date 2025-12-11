@@ -100,6 +100,7 @@ public class MVRewriteTest {
                 "    \"database\" = \"test\",\n" +
                 "    \"table\" = \"ods_order\"\n" +
                 "    )");
+        starRocksAssert.getCtx().getSessionVariable().setEnableRewriteSimpleAggToMetaScan(false);
     }
 
     @BeforeEach

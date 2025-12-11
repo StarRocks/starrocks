@@ -1258,7 +1258,8 @@ struct TMetaScanNode {
     // column id to column name
     1: optional map<i32, string> id_to_names
     2: optional list<Descriptors.TColumn> columns
-    3: optional i32 low_cardinality_threshold;
+    3: optional i32 low_cardinality_threshold
+    5: optional i64 schema_id
 }
 
 struct TDecodeNode {
