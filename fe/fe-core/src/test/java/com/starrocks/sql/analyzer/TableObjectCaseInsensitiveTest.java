@@ -615,8 +615,8 @@ public class TableObjectCaseInsensitiveTest {
     public void testObjectShowStatementNormalization() {
         ShowIndexStmt showIndexStmt = (ShowIndexStmt) SqlParser.parseSingleStatement(
                 "SHOW INDEX FROM TEST_db.T0", SqlModeHelper.MODE_DEFAULT);
-        Assertions.assertEquals("test_db", showIndexStmt.getTableName().getDb());
-        Assertions.assertEquals("t0", showIndexStmt.getTableName().getTbl());
+        Assertions.assertEquals("test_db", showIndexStmt.getTableRef().getDbName());
+        Assertions.assertEquals("t0", showIndexStmt.getTableRef().getTableName());
 
         ShowColumnStmt showColumnStmt = (ShowColumnStmt) SqlParser.parseSingleStatement(
                 "SHOW COLUMNS FROM TEST_db.T0", SqlModeHelper.MODE_DEFAULT);

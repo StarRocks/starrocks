@@ -766,7 +766,8 @@ public class RedirectStatusTest {
 
     @Test
     public void testShowIndexStmt() {
-        ShowIndexStmt stmt = new ShowIndexStmt(null, null);
+        ShowIndexStmt stmt = new ShowIndexStmt(new TableRef(
+                QualifiedName.of(Lists.newArrayList("test_table")), null, NodePosition.ZERO));
         Assertions.assertEquals(RedirectStatus.NO_FORWARD, RedirectStatus.getRedirectStatus(stmt));
     }
 

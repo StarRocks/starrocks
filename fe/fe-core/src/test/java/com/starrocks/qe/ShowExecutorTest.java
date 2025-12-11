@@ -644,8 +644,9 @@ public class ShowExecutorTest {
 
     @Test
     public void testShowKeysFromTable() {
-        ShowIndexStmt stmt = new ShowIndexStmt("test_db",
-                new TableName(null, "test_db", "test_table"));
+        TableRef tableRef = new TableRef(QualifiedName.of(Lists.newArrayList("test_db", "test_table")),
+                null, NodePosition.ZERO);
+        ShowIndexStmt stmt = new ShowIndexStmt(tableRef);
         ShowResultSet resultSet = ShowExecutor.execute(stmt, ctx);
         Assertions.assertEquals(0, resultSet.getResultRows().size());
     }

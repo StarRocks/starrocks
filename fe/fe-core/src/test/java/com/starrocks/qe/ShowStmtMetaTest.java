@@ -411,8 +411,9 @@ public class ShowStmtMetaTest {
 
     @Test
     public void testShowIndexStmt() {
-        TableName tableName = new TableName("test_db", "test_table");
-        ShowIndexStmt stmt = new ShowIndexStmt("test_db", tableName);
+        TableRef tableRef = new TableRef(QualifiedName.of(Lists.newArrayList("test_db", "test_table")),
+                null, NodePosition.ZERO);
+        ShowIndexStmt stmt = new ShowIndexStmt(tableRef);
         ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
         Assertions.assertEquals(12, metaData.getColumnCount());
         Assertions.assertEquals("Table", metaData.getColumn(0).getName());

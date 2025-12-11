@@ -1936,14 +1936,16 @@ public class AuthorizerStmtVisitor implements AstVisitorExtendInterface<Void, Co
 
     @Override
     public Void visitShowIndexStatement(ShowIndexStmt statement, ConnectContext context) {
+        TableRef tableRef = statement.getTableRef();
+        TableName tableName = new TableName(tableRef.getCatalogName(), tableRef.getDbName(),
+                tableRef.getTableName(), tableRef.getPos());
         try {
-            Authorizer.checkAnyActionOnTable(context,
-                    statement.getTableName());
+            Authorizer.checkAnyActionOnTable(context, tableName);
         } catch (AccessDeniedException e) {
             AccessDeniedException.reportAccessDenied(
-                    statement.getTableName().getCatalog(),
+                    tableName.getCatalog(),
                     context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                    PrivilegeType.ANY.name(), ObjectType.TABLE.name(), statement.getTableName().getTbl());
+                    PrivilegeType.ANY.name(), ObjectType.TABLE.name(), tableName.getTbl());
         }
         return null;
     }

@@ -2379,16 +2379,19 @@ public class ShowExecutor {
         @Override
         public ShowResultSet visitShowIndexStatement(ShowIndexStmt statement, ConnectContext context) {
             List<List<String>> rows = Lists.newArrayList();
-            String catalogName = statement.getTableName().getCatalog();
+            TableRef tableRef = statement.getTableRef();
+            String catalogName = tableRef.getCatalogName();
             if (catalogName == null) {
                 catalogName = context.getCurrentCatalog();
             }
-            Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(context, catalogName, statement.getDbName());
-            MetaUtils.checkDbNullAndReport(db, statement.getDbName());
-            Table table = MetaUtils.getSessionAwareTable(context, db, statement.getTableName());
+            String dbName = tableRef.getDbName();
+            Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(context, catalogName, dbName);
+            MetaUtils.checkDbNullAndReport(db, dbName);
+            TableName tableName = new TableName(catalogName, dbName, tableRef.getTableName(), tableRef.getPos());
+            Table table = MetaUtils.getSessionAwareTable(context, db, tableName);
             if (table == null) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR,
-                        db.getOriginName() + "." + statement.getTableName().toString());
+                        db.getOriginName() + "." + tableName.toString());
             }
 
             Locker locker = new Locker();
@@ -2398,7 +2401,7 @@ public class ShowExecutor {
                     List<Index> indexes = ((OlapTable) table).getIndexes();
                     for (Index index : indexes) {
                         List<String> indexColumnNames = MetaUtils.getColumnNamesByColumnIds(table, index.getColumns());
-                        rows.add(Lists.newArrayList(statement.getTableName().toString(), "",
+                        rows.add(Lists.newArrayList(tableName.toString(), "",
                                 index.getIndexName(), "", String.join(",", indexColumnNames), "", "", "", "",
                                 "", String.format("%s%s", index.getIndexType().name(), index.getPropertiesString()),
                                 index.getComment()));
