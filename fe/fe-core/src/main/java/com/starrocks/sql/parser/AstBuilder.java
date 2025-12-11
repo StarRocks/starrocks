@@ -5992,6 +5992,17 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
 
     @Override
     public ParseNode visitSortItem(com.starrocks.sql.parser.StarRocksParser.SortItemContext context) {
+        // Handle ORDER BY ALL
+        if (context.ALL() != null) {
+            return new OrderByElement(
+                    new IntLiteral(0), // Placeholder expression for ORDER BY ALL
+                    getOrderingType(context.ordering),
+                    getNullOrderingType(getOrderingType(context.ordering), context.nullOrdering),
+                    createPos(context),
+                    true); // isOrderByAll = true
+        }
+        
+        // Handle regular ORDER BY expression
         return new OrderByElement(
                 (Expr) visit(context.expression()),
                 getOrderingType(context.ordering),
