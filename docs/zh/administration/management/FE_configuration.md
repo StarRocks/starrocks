@@ -2924,6 +2924,15 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - 描述: 设置形成 lake 表发布批次所需的连续事务版本的最小数量。DatabaseTransactionMgr.getReadyToPublishTxnListBatch 将此值与 `lake_batch_publish_max_version_num` 一起传递给 transactionGraph.getTxnsWithTxnDependencyBatch 用于选择依赖事务。值为 `1` 允许单事务发布（不进行批处理）。值 >1 要求至少有该数量的连续版本、单表、非复制事务可用；如果版本不连续、出现复制事务，或架构变更消耗了某个版本，则中止批处理。增大此值可以通过将提交分组来提高发布吞吐，但在等待足够数量的连续事务时可能会延迟发布。
 - 引入版本: v3.2.0
 
+##### lake_enable_batch_publish_version
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：当启用时，PublishVersionDaemon 会在存算分离模式（RunMode 为 shared_data）下，将同一Lake表/分区的待发布事务批量收集并一次性发布版本，而不是逐事务发布。它通过调用 `getReadyPublishTransactionsBatch()` 并使用 `publishVersionForLakeTableBatch(...)` 执行分组发布，以减少 RPC 次数并提升吞吐。如果关闭，则退回到 `publishVersionForLakeTable(...)` 的逐事务发布。实现内部使用集合协调在途任务以避免开关切换时的重复发布，线程池规模受 `lake_publish_version_max_threads` 影响。
+- 引入版本：v3.2.0
+
 ##### lake_use_combined_txn_log
 
 - 默认值: `false`
