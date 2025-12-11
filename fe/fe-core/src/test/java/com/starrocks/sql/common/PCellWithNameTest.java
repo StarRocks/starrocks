@@ -63,7 +63,7 @@ public class PCellWithNameTest {
     }
 
     @Test
-    public void pCellCacheKeyEqualsAndHashCode_whenSamePCellAndNullTable() throws Exception {
+    public void testPCellCacheKeyEqualsAndHashCode() throws Exception {
         final String partitionName = "p1";
         final PartitionKey key1 = PartitionKey.ofDateTime(LocalDateTime.of(2025, 5, 27, 10, 0, 0));
         final PartitionKey key2 = PartitionKey.ofDateTime(LocalDateTime.of(2025, 5, 27, 11, 0, 0));
@@ -84,7 +84,7 @@ public class PCellWithNameTest {
     }
 
     @Test
-    public void pCellCacheKeyNotEqual_whenDifferentTableOrPCell() throws Exception {
+    public void testPCellCacheKeyNotEqual() throws Exception {
         final String partitionName = "p1";
         final PartitionKey key1 = PartitionKey.ofDateTime(LocalDateTime.of(2025, 5, 27, 10, 0, 0));
         final PartitionKey key2 = PartitionKey.ofDateTime(LocalDateTime.of(2025, 5, 27, 11, 0, 0));
@@ -100,7 +100,7 @@ public class PCellWithNameTest {
     }
 
     @Test
-    public void pCellWithNormOf_returnsProvidedBaseAndNormalized() throws Exception {
+    public void testPCellWithNormOf() throws Exception {
         final String partitionName = "p1";
         final PartitionKey key1 = PartitionKey.ofDateTime(LocalDateTime.of(2025, 5, 27, 10, 0, 0));
         final PartitionKey key2 = PartitionKey.ofDateTime(LocalDateTime.of(2025, 5, 27, 11, 0, 0));
@@ -115,7 +115,7 @@ public class PCellWithNameTest {
     }
 
     @Test
-    public void normalizePCellWithNames_returnsIdentityList_whenExprIsNull() throws Exception {
+    public void testNormalizePCellWithNames1() throws Exception {
         final String partitionName1 = "p1";
         final String partitionName2 = "p2";
         final PartitionKey k1 = PartitionKey.ofDateTime(LocalDateTime.of(2025, 5, 27, 10, 0, 0));
@@ -143,7 +143,7 @@ public class PCellWithNameTest {
     }
 
     @Test
-    public void normalizePCellWithNames_returnsIdentityList_whenExprIsSlotRef() throws Exception {
+    public void testNormalizePCellWithNames2() throws Exception {
         final String partitionName1 = "p1";
         final PartitionKey k1 = PartitionKey.ofDateTime(LocalDateTime.of(2025, 5, 27, 10, 0, 0));
         final PartitionKey k2 = PartitionKey.ofDateTime(LocalDateTime.of(2025, 5, 27, 11, 0, 0));
@@ -164,7 +164,7 @@ public class PCellWithNameTest {
     }
 
     @Test
-    public void toNormalizedCell_returnsSameInstance_whenExprIsNullOrSlotRef() throws Exception {
+    public void testtoNormalizedCell() throws Exception {
         final String partitionName = "p1";
         final PartitionKey k1 = PartitionKey.ofDateTime(LocalDateTime.of(2025, 5, 27, 10, 0, 0));
         final PartitionKey k2 = PartitionKey.ofDateTime(LocalDateTime.of(2025, 5, 27, 11, 0, 0));
