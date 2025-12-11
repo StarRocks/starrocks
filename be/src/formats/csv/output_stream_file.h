@@ -18,7 +18,10 @@
 
 #include "formats/csv/output_stream.h"
 #include "fs/fs.h"
+#include "gen_cpp/segment.pb.h"
 #include "io/async_flush_output_stream.h"
+#include "util/compression/block_compression.h"
+#include "util/raw_container.h"
 
 namespace starrocks::csv {
 
@@ -61,6 +64,28 @@ protected:
 
 private:
     io::AsyncFlushOutputStream* _stream;
+};
+
+class CompressedAsyncOutputStreamFile final : public OutputStream {
+public:
+    CompressedAsyncOutputStreamFile(io::AsyncFlushOutputStream* stream, CompressionTypePB compression_type,
+                                    size_t buff_size);
+    ~CompressedAsyncOutputStreamFile() override = default;
+
+    Status finalize() override;
+    std::size_t size() override;
+
+protected:
+    Status _sync(const char* data, size_t size) override;
+
+private:
+    io::AsyncFlushOutputStream* _stream;
+    const BlockCompressionCodec* _codec;
+    // Buffer to accumulate all uncompressed data before compression
+    raw::RawVector<uint8_t> _uncompressed_buffer;
+    raw::RawVector<uint8_t> _compress_buffer;
+    size_t _uncompressed_bytes = 0;
+    size_t _compressed_bytes = 0;
 };
 
 } // namespace starrocks::csv
