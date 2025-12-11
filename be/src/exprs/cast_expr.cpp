@@ -1826,15 +1826,15 @@ Expr* VectorizedCastExprFactory::create_variant_to_complex_type_cast(ObjectPool*
         Expr* value_cast_expr = nullptr;
         auto& value_desc = expected_type.children[1];
         if (value_desc.type != TYPE_VARIANT) {
-            TypeDescriptor json_type = TypeDescriptor::create_json_type();
-            auto result = create_cast_expr(pool, json_type, value_desc, allow_throw_exception);
+            TypeDescriptor variant_type = TypeDescriptor::create_variant_type();
+            auto result = create_cast_expr(pool, variant_type, value_desc, allow_throw_exception);
             if (!result.ok()) {
                 LOG(ERROR) << "Fail to create cast expr from variant to map, map value type: " << value_desc
                            << ", status: " << result.status();
                 return nullptr;
             }
             value_cast_expr = result.value();
-            Expr* cast_input = create_slot_ref(json_type).release();
+            Expr* cast_input = create_slot_ref(variant_type).release();
             value_cast_expr->add_child(cast_input);
             pool->add(value_cast_expr);
             pool->add(cast_input);
