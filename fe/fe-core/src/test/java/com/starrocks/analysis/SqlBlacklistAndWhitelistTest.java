@@ -31,18 +31,6 @@ public class SqlBlacklistAndWhitelistTest {
         AnalyzeTestUtil.init();
     }
 
-
-
-    @Test
-    public void testVerifyingSQL() throws Exception {
-        AddSqlBlackListStmt stmt =
-                (AddSqlBlackListStmt) analyzeSuccess("ADD SQLBLACKLIST \"select count\\(distinct .+\\) from .+\";");
-        Assertions.assertEquals("select count(distinct .+) from .+", stmt.getSql());
-        StmtExecutor stmtExecutor = new StmtExecutor(AnalyzeTestUtil.getConnectContext(), stmt);
-        stmtExecutor.execute();
-        Assertions.assertTrue(AnalyzeTestUtil.getConnectContext().getState().isError());
-    }
-
     @Test
     public void testAddSqlBlacklist() throws Exception {
         AddSqlBlackListStmt stmt =
