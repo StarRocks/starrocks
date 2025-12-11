@@ -731,7 +731,7 @@ public class DefaultCoordinator extends Coordinator {
             throws StarRocksException, RpcException {
         switch (Objects.requireNonNull(status.getErrorCode())) {
             case TIMEOUT:
-                cancelInternal(PPlanFragmentCancelReason.INTERNAL_ERROR);
+                cancelInternal(PPlanFragmentCancelReason.TIMEOUT);
                 throw new StarRocksException("query timeout. backend id: " + execution.getWorker().getId());
             case THRIFT_RPC_ERROR:
                 cancelInternal(PPlanFragmentCancelReason.INTERNAL_ERROR);
