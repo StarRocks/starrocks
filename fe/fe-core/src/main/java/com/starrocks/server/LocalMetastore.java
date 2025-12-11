@@ -2534,10 +2534,6 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         }
     }
 
-<<<<<<< HEAD
-    @Override
-    public Pair<Table, MaterializedIndexMeta> getMaterializedViewIndex(String dbName, String indexName) {
-=======
     /**
      * @param mvId mv's mvid
      * @return a checked mv by input mvid.
@@ -2559,8 +2555,8 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
      * @param tblName - the string represents the table name
      * @return a Table instance
      */
-    public Pair<Table, MaterializedIndexMeta> getMaterializedViewIndex(String dbName, String tblName) {
->>>>>>> 389a104e27 ([BugFix] Refresh mv's metadata in getting mvs by ast keys (backport #66472) (#66492))
+    @Override
+    public Pair<Table, MaterializedIndexMeta> getMaterializedViewIndex(String dbName, String indexName) {
         Database database = getDb(dbName);
         if (database == null) {
             return null;
