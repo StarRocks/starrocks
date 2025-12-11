@@ -34,7 +34,7 @@ import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorUtil;
-import com.starrocks.sql.optimizer.operator.skew.DataSkewInfo;
+import com.starrocks.sql.optimizer.skew.DataSkewInfo;
 import com.starrocks.sql.optimizer.property.DomainProperty;
 import com.starrocks.sql.optimizer.property.DomainPropertyDeriver;
 import org.apache.commons.collections4.CollectionUtils;

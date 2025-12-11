@@ -11,7 +11,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-package com.starrocks.sql.optimizer.operator.skew;
+package com.starrocks.sql.optimizer.skew;
 
 import com.google.common.collect.Lists;
 import com.starrocks.common.Pair;
@@ -43,15 +43,15 @@ public class DataSkew {
      */
     public static boolean isColumnSkewed(@NotNull Statistics statistics, @NotNull ColumnStatistic columnStatistic,
                                          Thresholds thresholds) {
-        final var rowCount = statistics.getOutputRowCount();
-        if (rowCount < 1 || columnStatistic.isUnknown() || columnStatistic.isUnknownValue()) {
-            // Without sufficient information we can not make a decision.
-            return false;
-        }
-
         if (columnStatistic.getNullsFraction() >= thresholds.relativeRowThreshold) {
             // A lot of NULL values also indicate skew.
             return true;
+        }
+
+        final var rowCount = statistics.getOutputRowCount();
+        if (statistics.isTableRowCountMayInaccurate() || rowCount < 1 || columnStatistic.isUnknown() || columnStatistic.isUnknownValue()) {
+            // Without sufficient information we can not make a decision.
+            return false;
         }
 
         final var histogram = columnStatistic.getHistogram();
@@ -63,7 +63,7 @@ public class DataSkew {
             mcv.entrySet().stream()
                     .sorted(Map.Entry.comparingByValue(Comparator.reverseOrder())) //
                     .limit(mcvLimit)
-                    .forEach(entry -> { // TODO(o.layer): Record class
+                    .forEach(entry -> {
                         mcvs.add(Pair.create(entry.getKey(), entry.getValue()));
                     });
 
