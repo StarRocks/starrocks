@@ -206,10 +206,10 @@ public class ShowStmtAnalyzer {
 
         @Override
         public Void visitShowCreateTableStatement(ShowCreateTableStmt node, ConnectContext context) {
-            if (node.getTbl() == null) {
+            if (node.getTableRef() == null) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_NO_TABLES_USED);
             }
-            node.getTbl().normalization(context);
+            node.setTableRef(AnalyzerUtils.normalizedTableRef(node.getTableRef(), context));
             return null;
         }
 
