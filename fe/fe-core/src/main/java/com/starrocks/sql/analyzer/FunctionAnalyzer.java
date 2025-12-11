@@ -786,7 +786,19 @@ public class FunctionAnalyzer {
         }
 
         // validate argument types
-        for (int i = 0; i < fn.getNumArgs(); i++) {
+        // First check argument count - if mismatched, return null to allow fallback
+        // to named arguments handling in ExpressionAnalyzer
+        if (argumentTypes.length < fn.getNumArgs() && !fn.hasVarArgs()) {
+            // If function supports named args, let ExpressionAnalyzer handle it
+            if (fn.hasNamedArg()) {
+                return null;
+            }
+            // For non-varargs, non-named-args functions, argument count must match exactly
+            // Return null to trigger "No matching function" error
+            return null;
+        }
+        int numArgsToValidate = Math.min(argumentTypes.length, fn.getNumArgs());
+        for (int i = 0; i < numArgsToValidate; i++) {
             if (!argumentTypes[i].matchesType(fn.getArgs()[i]) &&
                     !TypeManager.canCastTo(argumentTypes[i], fn.getArgs()[i])) {
                 String msg = String.format("No matching function with signature: %s(%s)", fnName,
