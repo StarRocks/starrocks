@@ -1772,7 +1772,7 @@ public class AuthorizerStmtVisitor implements AstVisitorExtendInterface<Void, Co
     public Void visitCreateTableLikeStatement(CreateTableLikeStmt statement, ConnectContext context) {
         visitCreateTableStatement(statement.getCreateTableStmt(), context);
         try {
-            com.starrocks.catalog.TableName existedTableName = 
+            com.starrocks.catalog.TableName existedTableName =
                     com.starrocks.catalog.TableName.fromTableRef(statement.getExistedTableRef());
             Authorizer.checkTableAction(context, existedTableName, PrivilegeType.SELECT);
         } catch (AccessDeniedException e) {
@@ -2676,7 +2676,7 @@ public class AuthorizerStmtVisitor implements AstVisitorExtendInterface<Void, Co
     @Override
     public Void visitAlterMaterializedViewStatement(AlterMaterializedViewStmt statement, ConnectContext context) {
         try {
-            com.starrocks.catalog.TableName tableName = 
+            com.starrocks.catalog.TableName tableName =
                     com.starrocks.catalog.TableName.fromTableRef(statement.getMvTableRef());
             Authorizer.checkMaterializedViewAction(context, tableName, PrivilegeType.ALTER);
         } catch (AccessDeniedException e) {
