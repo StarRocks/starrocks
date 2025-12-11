@@ -17,11 +17,7 @@ package com.starrocks.sql.plan;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
-<<<<<<< HEAD
-=======
 import com.starrocks.common.Config;
-import com.starrocks.common.ExceptionChecker;
->>>>>>> 7ef8f553fe ([Enhancement] Support single-tablet ResultSink optimization in share-data mode (#66517))
 import com.starrocks.common.FeConstants;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
@@ -2792,8 +2788,6 @@ public class JoinTest extends PlanTestBase {
         }
     }
 
-
-
     @Test
     public void testPushDownTopWithOuterJoin() throws Exception {
         String sql = "SELECT\n" +
@@ -3380,7 +3374,7 @@ public class JoinTest extends PlanTestBase {
                 "  |    <slot 30> : if(29: expr, 'a', 'b')\n" +
                 "  |    <slot 31> : 30: if = 'b'");
     }
-    
+
     @Test
     public void testJoinWithMultiAnalytic() throws Exception {
         FeConstants.runningUnitTest = true;

@@ -124,11 +124,6 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
-<<<<<<< HEAD
-import com.starrocks.server.RunMode;
-=======
-import com.starrocks.server.WarehouseManager;
->>>>>>> 7ef8f553fe ([Enhancement] Support single-tablet ResultSink optimization in share-data mode (#66517))
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.DecimalV3FunctionAnalyzer;
