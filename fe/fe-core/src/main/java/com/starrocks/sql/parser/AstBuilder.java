@@ -1486,10 +1486,20 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
     @Override
     public ParseNode visitShowColumnStatement(com.starrocks.sql.parser.StarRocksParser.ShowColumnStatementContext context) {
         QualifiedName tableName = getQualifiedName(context.table);
+        NodePosition tablePos = createPos(context.table.start, context.table.stop);
+        TableRef tableRef = new TableRef(normalizeName(tableName), null, tablePos);
 
-        QualifiedName dbName = null;
         if (context.db != null) {
-            dbName = getQualifiedName(context.db);
+            String normalizedDb = normalizeName(getQualifiedName(context.db).toString());
+            List<String> parts = new ArrayList<>();
+            if (tableRef.getCatalogName() != null) {
+                parts.add(tableRef.getCatalogName());
+            }
+            parts.add(normalizedDb);
+            parts.add(tableRef.getTableName());
+            String alias = tableRef.hasExplicitAlias() ? tableRef.getExplicitAlias() : null;
+            tableRef = new TableRef(QualifiedName.of(parts, tableRef.getPos()),
+                    tableRef.getPartitionRef(), alias, tableRef.getPos());
         }
 
         String pattern = null;
@@ -1503,12 +1513,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             where = (Expr) visit(context.expression());
         }
 
-        String normalizedDb = dbName == null ? null : normalizeName(dbName.toString());
-        return new ShowColumnStmt(qualifiedNameToTableName(tableName),
-                normalizedDb,
-                pattern,
-                context.FULL() != null,
-                where, createPos(context));
+        return new ShowColumnStmt(tableRef, pattern, context.FULL() != null, where, createPos(context));
     }
 
     @Override

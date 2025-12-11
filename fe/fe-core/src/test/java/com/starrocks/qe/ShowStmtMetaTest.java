@@ -171,9 +171,9 @@ public class ShowStmtMetaTest {
 
     @Test
     public void testShowColumnStmt() {
-        TableName tableName = new TableName("test_db", "test_table");
-        ShowColumnStmt stmt = new ShowColumnStmt(tableName, "test_db", null, false);
-        stmt.init();
+        TableRef tableRef = new TableRef(QualifiedName.of(Lists.newArrayList("test_db", "test_table")),
+                null, NodePosition.ZERO);
+        ShowColumnStmt stmt = new ShowColumnStmt(tableRef, null, false);
         ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
         Assertions.assertEquals(6, metaData.getColumnCount());
         Assertions.assertEquals("Field", metaData.getColumn(0).getName());
@@ -186,9 +186,9 @@ public class ShowStmtMetaTest {
 
     @Test
     public void testShowColumnStmtVerbose() {
-        TableName tableName = new TableName("test_db", "test_table");
-        ShowColumnStmt stmt = new ShowColumnStmt(tableName, "test_db", null, true);
-        stmt.init();
+        TableRef tableRef = new TableRef(QualifiedName.of(Lists.newArrayList("test_db", "test_table")),
+                null, NodePosition.ZERO);
+        ShowColumnStmt stmt = new ShowColumnStmt(tableRef, null, true);
         ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
         Assertions.assertEquals(9, metaData.getColumnCount());
         Assertions.assertEquals("Field", metaData.getColumn(0).getName());

@@ -772,7 +772,9 @@ public class RedirectStatusTest {
 
     @Test
     public void testShowColumnStmt() {
-        ShowColumnStmt stmt = new ShowColumnStmt(null, null, null, false);
+        QualifiedName qualifiedName = QualifiedName.of(Lists.newArrayList("test_table"));
+        TableRef tableRef = new TableRef(qualifiedName, null, NodePosition.ZERO);
+        ShowColumnStmt stmt = new ShowColumnStmt(tableRef, null, false);
         Assertions.assertEquals(RedirectStatus.NO_FORWARD, RedirectStatus.getRedirectStatus(stmt));
     }
 

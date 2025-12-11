@@ -155,10 +155,7 @@ public class ShowStmtAnalyzer {
 
         @Override
         public Void visitShowColumnStatement(ShowColumnStmt node, ConnectContext context) {
-            node.init();
-            String db = node.getTableName().getDb();
-            db = getDatabaseName(db, context);
-            node.getTableName().setDb(db);
+            node.setTableRef(AnalyzerUtils.normalizedTableRef(node.getTableRef(), context));
             return null;
         }
 

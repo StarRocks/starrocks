@@ -71,13 +71,16 @@ import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.KeysType;
+import com.starrocks.sql.ast.QualifiedName;
 import com.starrocks.sql.ast.ShowColumnStmt;
 import com.starrocks.sql.ast.ShowCreateDbStmt;
 import com.starrocks.sql.ast.ShowIndexStmt;
 import com.starrocks.sql.ast.ShowMaterializedViewsStmt;
 import com.starrocks.sql.ast.ShowPartitionsStmt;
+import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.common.MetaUtils;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.type.FloatType;
@@ -554,14 +557,18 @@ public class ShowExecutorTest {
     public void testShowColumnFromUnknownTable() {
         ctx.setGlobalStateMgr(globalStateMgr);
         ctx.setQualifiedUser("testUser");
-        ShowColumnStmt stmt = new ShowColumnStmt(new TableName("emptyDb", "testTable"), null, null, false);
+        TableRef emptyDbTableRef = new TableRef(QualifiedName.of(Lists.newArrayList("emptyDb", "testTable")),
+                null, NodePosition.ZERO);
+        ShowColumnStmt stmt = new ShowColumnStmt(emptyDbTableRef, null, false);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
 
         Throwable exception = assertThrows(SemanticException.class, () -> ShowExecutor.execute(stmt, ctx));
         assertThat(exception.getMessage(), containsString("Unknown database 'emptyDb'"));
 
         // empty table
-        ShowColumnStmt stmt2 = new ShowColumnStmt(new TableName("testDb", "emptyTable"), null, null, true);
+        TableRef emptyTableRef = new TableRef(QualifiedName.of(Lists.newArrayList("testDb", "emptyTable")),
+                null, NodePosition.ZERO);
+        ShowColumnStmt stmt2 = new ShowColumnStmt(emptyTableRef, null, true);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt2, ctx);
         ShowExecutor.execute(stmt2, ctx);
     }

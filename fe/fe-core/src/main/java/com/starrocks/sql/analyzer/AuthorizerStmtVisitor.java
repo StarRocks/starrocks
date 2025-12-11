@@ -1948,19 +1948,21 @@ public class AuthorizerStmtVisitor implements AstVisitorExtendInterface<Void, Co
         return null;
     }
 
-    @Override
-    public Void visitShowColumnStatement(ShowColumnStmt statement, ConnectContext context) {
-        try {
-            Authorizer.checkAnyActionOnTable(context,
-                    statement.getTableName());
-        } catch (AccessDeniedException e) {
-            AccessDeniedException.reportAccessDenied(
-                    statement.getTableName().getCatalog(),
-                    context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                    PrivilegeType.ANY.name(), ObjectType.TABLE.name(), statement.getTableName().getTbl());
+        @Override
+        public Void visitShowColumnStatement(ShowColumnStmt statement, ConnectContext context) {
+            TableRef tableRef = statement.getTableRef();
+            TableName tableName = new TableName(tableRef.getCatalogName(), tableRef.getDbName(),
+                    tableRef.getTableName(), tableRef.getPos());
+            try {
+                Authorizer.checkAnyActionOnTable(context, tableName);
+            } catch (AccessDeniedException e) {
+                AccessDeniedException.reportAccessDenied(
+                        tableName.getCatalog(),
+                        context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                        PrivilegeType.ANY.name(), ObjectType.TABLE.name(), tableName.getTbl());
+            }
+            return null;
         }
-        return null;
-    }
 
     @Override
     public Void visitRecoverPartitionStatement(RecoverPartitionStmt statement, ConnectContext context) {

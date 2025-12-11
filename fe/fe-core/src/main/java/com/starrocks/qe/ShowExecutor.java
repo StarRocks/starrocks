@@ -226,6 +226,7 @@ import com.starrocks.sql.ast.ShowTransactionStmt;
 import com.starrocks.sql.ast.ShowUserPropertyStmt;
 import com.starrocks.sql.ast.ShowUserStmt;
 import com.starrocks.sql.ast.ShowVariablesStmt;
+import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.UserRef;
 import com.starrocks.sql.ast.expression.BinaryPredicate;
 import com.starrocks.sql.ast.expression.Expr;
@@ -1108,18 +1109,19 @@ public class ShowExecutor {
         public ShowResultSet visitShowColumnStatement(ShowColumnStmt statement, ConnectContext context) {
 
             List<List<String>> rows = Lists.newArrayList();
-            String catalogName = statement.getCatalog();
+            TableRef tableRef = statement.getTableRef();
+            String catalogName = tableRef.getCatalogName();
             if (catalogName == null) {
                 catalogName = context.getCurrentCatalog();
             }
-            String dbName = statement.getDb();
+            String dbName = tableRef.getDbName();
             Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(context, catalogName, dbName);
-            MetaUtils.checkDbNullAndReport(db, statement.getDb());
+            MetaUtils.checkDbNullAndReport(db, dbName);
             Table table = GlobalStateMgr.getCurrentState().getMetadataMgr()
-                    .getTable(context, catalogName, dbName, statement.getTable());
+                    .getTable(context, catalogName, dbName, tableRef.getTableName());
             if (table == null) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR,
-                        statement.getDb() + "." + statement.getTable());
+                        dbName + "." + tableRef.getTableName());
             }
 
             Locker locker = new Locker();
