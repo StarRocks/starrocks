@@ -141,7 +141,7 @@ Status BuiltinInvertedIndexIterator::_init_like_context(const Slice& s) {
     _like_context = std::make_unique<FunctionContext>();
     auto ptr = BinaryColumn::create();
     ptr->append_datum(Datum(s));
-    ptr->get_data();
+    (void) ptr->get_data();
     Columns cols;
     cols.push_back(nullptr);
     cols.push_back(std::move(ConstColumn::create(std::move(ptr), 1)));

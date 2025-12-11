@@ -177,6 +177,8 @@ public class IndexAnalyzer {
             if (!BUILTIN.name().equalsIgnoreCase(impValue) && RunMode.isSharedDataMode()) {
                 throw new SemanticException("Clucene inverted index does not support shared data mode");
             }
+        } else if (RunMode.isSharedDataMode()) {
+            throw new SemanticException("Clucene inverted index does not support shared data mode");
         }
 
         String noMatchParamKey = properties.keySet().stream()
