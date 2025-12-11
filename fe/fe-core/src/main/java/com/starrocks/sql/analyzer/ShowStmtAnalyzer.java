@@ -288,13 +288,7 @@ public class ShowStmtAnalyzer {
 
         @Override
         public Void visitShowIndexStatement(ShowIndexStmt node, ConnectContext context) {
-            node.init();
-            String db = node.getTableName().getDb();
-            db = getDatabaseName(db, context);
-            node.getTableName().setDb(db);
-            if (Strings.isNullOrEmpty(node.getTableName().getCatalog())) {
-                node.getTableName().setCatalog(context.getCurrentCatalog());
-            }
+            node.setTableRef(AnalyzerUtils.normalizedTableRef(node.getTableRef(), context));
             return null;
         }
 
