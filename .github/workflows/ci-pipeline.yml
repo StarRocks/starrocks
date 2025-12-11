@@ -446,14 +446,14 @@ jobs:
           ./bin/elastic-ut.sh --pr ${PR_NUMBER} --module be --repository ${{ github.repository }} --linuxdistro ${LINUX_DISTRO} --with-gcov
 
       - name: clean ECI
-        if: always()
+        if: always() && steps.run_ut.outputs.ECI_ID != ''
         run: |
           echo ${{ steps.run_ut.outputs.ECI_ID }}
           eci rm ${{ steps.run_ut.outputs.ECI_ID }} || true
 
       - name: Upload Log
         uses: actions/upload-artifact@v4
-        if: always() && steps.run_ut.outcome == 'failure'
+        if: always() && steps.run_ut.outcome == 'failure' && steps.run_ut.outputs.BE_LOG != ''
         with:
           name: BE UT LOG
           path: ${{ steps.run_ut.outputs.BE_LOG }}
@@ -769,7 +769,7 @@ jobs:
           ./bin/elastic-ut.sh --pr ${PR_NUMBER} --module fe --branch ${{steps.branch.outputs.branch}} --build Release --repository ${{ github.repository }} --linuxdistro ubuntu
 
       - name: Clean ECI
-        if: always()
+        if: always() && ${{ steps.run_ut.outputs.ECI_ID != '' }}
         run: |
           echo ${{ steps.run_ut.outputs.ECI_ID }}
           echo "::group::>>> Dmesg info:"
@@ -778,7 +778,7 @@ jobs:
           eci rm ${{ steps.run_ut.outputs.ECI_ID }}
 
       - name: Upload log
-        if: always()
+        if: always() && steps.run_ut.outputs.RES_LOG != ''
         uses: actions/upload-artifact@v4
         with:
           name: FE UT LOG
@@ -1237,6 +1237,8 @@ jobs:
       PR_NUMBER: ${{ github.event.number }}
       CLUSTER_NAME: ${{ needs.deploy.outputs.cluster_name }}
       FE_NODE: ${{ needs.deploy.outputs.fe }}
+    outputs:
+      MYSQL_ECI_IP: ${{ needs.SQL-Tester.outputs.MYSQL_ECI_IP }}
     steps:
       - name: CLEAN
         run: |
@@ -1288,7 +1290,7 @@ jobs:
   admit:
     runs-on: [self-hosted, normal]
     name: ADMIT TEST
-    needs: [deploy, SQL-Tester, restart-fe, restart-be]
+    needs: [deploy, restart-fe, restart-be]
     if: always() && needs.restart-fe.result == 'success' && needs.restart-be.result == 'success' && needs.deploy.outputs.is_self_build == 'true'
     timeout-minutes: 40
     env:
@@ -1297,7 +1299,7 @@ jobs:
       FE_NODE: ${{ needs.deploy.outputs.fe }}
       BE_NODE: ${{ needs.deploy.outputs.be }}
       TEST_PR: ${{ needs.deploy.outputs.test_pr }}
-      MYSQL_ECI_IP: ${{ needs.SQL-Tester.outputs.MYSQL_ECI_IP }}
+      MYSQL_ECI_IP: ${{ needs.restart-fe.outputs.MYSQL_ECI_IP }}
     steps:
       - name: CLEAN
         run: |
