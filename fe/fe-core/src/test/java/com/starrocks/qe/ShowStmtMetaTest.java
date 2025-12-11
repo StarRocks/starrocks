@@ -739,8 +739,9 @@ public class ShowStmtMetaTest {
 
     @Test
     public void testShowPartitionsStmt() {
-        TableName tableName = new TableName("test_db", "test_table");
-        ShowPartitionsStmt stmt = new ShowPartitionsStmt(tableName, null, null, null, false);
+        TableRef tableRef = new TableRef(QualifiedName.of(Lists.newArrayList("test_db", "test_table")),
+                null, NodePosition.ZERO);
+        ShowPartitionsStmt stmt = new ShowPartitionsStmt(tableRef, null, null, null, false);
 
         // Test basic statement creation
         Assertions.assertNotNull(stmt);
