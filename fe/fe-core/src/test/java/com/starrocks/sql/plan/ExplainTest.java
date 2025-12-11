@@ -67,4 +67,28 @@ public class ExplainTest extends PlanTestBase {
         }
 
     }
+
+    @Test
+    public void testExplainUsesConfiguredDefaultLevel() throws Exception {
+        String originalLevel = Config.query_explain_level;
+        Config.query_explain_level = "LOGICAL";
+        try {
+            StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(
+                    "EXPLAIN SELECT * FROM t0", connectContext);
+            Assertions.assertTrue(statementBase instanceof QueryStatement);
+            QueryStatement queryStatement = (QueryStatement) statementBase;
+            Assertions.assertTrue(queryStatement.isExplain());
+            Assertions.assertEquals(StatementBase.ExplainLevel.LOGICAL, queryStatement.getExplainLevel());
+        } finally {
+            Config.query_explain_level = originalLevel;
+        }
+
+        StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(
+                "EXPLAIN SELECT * FROM t0", connectContext);
+        Assertions.assertTrue(statementBase instanceof QueryStatement);
+        QueryStatement queryStatement = (QueryStatement) statementBase;
+        Assertions.assertTrue(queryStatement.isExplain());
+        Assertions.assertEquals(StatementBase.ExplainLevel.NORMAL, queryStatement.getExplainLevel());
+
+    }
 }
