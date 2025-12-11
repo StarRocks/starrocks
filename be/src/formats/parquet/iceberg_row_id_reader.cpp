@@ -67,15 +67,6 @@ StatusOr<bool> IcebergRowIdReader::row_group_zone_map_filter(const std::vector<c
     ZoneMapDetail zone_map{Datum(_first_row_id + rg_first_row), Datum(_first_row_id + rg_first_row + rg_num_rows - 1),
                            false};
     bool ret = !PredicateFilterEvaluatorUtils::zonemap_satisfy(predicates, zone_map, pred_relation);
-    if (ret == false) {
-        DLOG(INFO) << "IcebergRowIdReader: row group zone map filter passed, no filtering applied."
-                   << " row_id range(" << (_first_row_id + rg_first_row) << ", "
-                   << (_first_row_id + rg_first_row + rg_num_rows - 1) << ")";
-    } else {
-        DLOG(INFO) << "IcebergRowIdReader: row group zone map filter applied, "
-                   << "filtering happened, row_id range(" << (_first_row_id + rg_first_row) << ", "
-                   << (_first_row_id + rg_first_row + rg_num_rows - 1) << ")";
-    }
     return ret;
 }
 

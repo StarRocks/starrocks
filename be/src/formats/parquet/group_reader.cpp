@@ -471,8 +471,6 @@ void GroupReader::_process_columns_and_conjunct_ctxs() {
             SlotId slot_id = slot->id();
             if (conjunct_ctxs_by_slot.find(slot_id) != conjunct_ctxs_by_slot.end()) {
                 for (ExprContext* ctx : conjunct_ctxs_by_slot.at(slot_id)) {
-                    DLOG(INFO) << "append reserved field slot conjunct ctx: " << ctx->root()->debug_string()
-                               << ", id: " << slot_id;
                     if (_left_no_dict_filter_conjuncts_by_slot.find(slot_id) ==
                         _left_no_dict_filter_conjuncts_by_slot.end()) {
                         _left_no_dict_filter_conjuncts_by_slot.insert({slot_id, std::vector<ExprContext*>{ctx}});

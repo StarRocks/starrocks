@@ -73,8 +73,8 @@ Status RemoteLookUpRequestContext::collect_input_columns(ChunkPtr chunk) {
         int64_t data_size = pcolumn.data_size();
         auto dst_col = chunk->get_column_by_slot_id(slot_id);
         auto col = dst_col->clone_empty();
-        DLOG(INFO) << "deserialize column, slot_id: " << slot_id << ", data_size: " << data_size
-                   << ", column: " << col->get_name();
+        VLOG_FILE << "deserialize column, slot_id: " << slot_id << ", data_size: " << data_size
+                  << ", column: " << col->get_name();
         const uint8_t* buff = reinterpret_cast<const uint8_t*>(pcolumn.data().data());
         auto ret = serde::ColumnArraySerde::deserialize(buff, col.get());
         if (!ret.ok()) {
@@ -86,7 +86,7 @@ Status RemoteLookUpRequestContext::collect_input_columns(ChunkPtr chunk) {
         request_chunk->append_column(std::move(col), slot_id);
     }
     chunk->check_or_die();
-    DLOG(INFO) << "RemoteLookUpRequestContext collect input columns: " << chunk->debug_columns();
+    VLOG_FILE << "RemoteLookUpRequestContext collect input columns: " << chunk->debug_columns();
     return Status::OK();
 }
 
@@ -95,7 +95,7 @@ StatusOr<size_t> RemoteLookUpRequestContext::fill_response(const ChunkPtr& resul
                                                            const std::vector<SlotDescriptor*>& slots,
                                                            size_t start_offset) {
     size_t num_rows = request_chunk->num_rows();
-    DLOG(INFO) << "RemoteLookUpRequestContext fill response, num_rows: " << num_rows << ", slots: " << slots.size();
+    VLOG_FILE << "RemoteLookUpRequestContext fill response, num_rows: " << num_rows << ", slots: " << slots.size();
     std::vector<ColumnPtr> columns;
     size_t max_serialized_size = 0;
     for (const auto& slot : slots) {
@@ -117,8 +117,8 @@ StatusOr<size_t> RemoteLookUpRequestContext::fill_response(const ChunkPtr& resul
         uint8_t* start = buff;
         ASSIGN_OR_RETURN(buff, serde::ColumnArraySerde::serialize(*column, buff));
         pcolumn->set_data_size(buff - start);
-        DLOG(INFO) << "serialize column: " << slots[i]->id() << ", " << column->get_name()
-                   << ", data_size: " << (buff - start);
+        VLOG_FILE << "serialize column: " << slots[i]->id() << ", " << column->get_name()
+                  << ", data_size: " << (buff - start);
     }
     size_t actual_serialize_size = buff - begin;
     auto* brpc_cntl = static_cast<brpc::Controller*>(cntl);
@@ -128,7 +128,7 @@ StatusOr<size_t> RemoteLookUpRequestContext::fill_response(const ChunkPtr& resul
 }
 
 void RemoteLookUpRequestContext::callback(const Status& status) {
-    DLOG(INFO) << "RemoteLookUpRequestContext callback: " << status.to_string();
+    VLOG_FILE << "RemoteLookUpRequestContext callback: " << status.to_string();
     status.to_protobuf(response->mutable_status());
     done->Run();
 }
@@ -229,7 +229,7 @@ StatusOr<ChunkPtr> IcebergV3LookUpTask::_calculate_row_id_range(
     auto [iter, _] = row_id_ranges->try_emplace(cur_scan_range_id, std::make_shared<SparseRange<int64_t>>());
     iter->second->add(cur_range);
     for (const auto& [scan_range_id, range] : *row_id_ranges) {
-        DLOG(INFO) << "scan_range_id: " << scan_range_id << ", range: " << range->to_string();
+        VLOG_FILE << "scan_range_id: " << scan_range_id << ", range: " << range->to_string();
     }
 
     if (!has_duplicated_row) {
@@ -387,10 +387,6 @@ TExpr IcebergV3LookUpTask::create_row_id_filter_expr(SlotId slot_id, const Spars
         return create_between_expr(slot_id, row_id_range[0].begin(), row_id_range[0].end());
     }
 
-    // Multiple ranges: create nested binary OR expression tree
-    // Build right-associative tree: OR(range0, OR(range1, OR(range2, ...)))
-    // This is required because VectorizedOrCompoundPredicate only supports binary OR
-
     TTypeDesc bool_type;
     TTypeNode bool_type_node;
     bool_type_node.type = TTypeNodeType::SCALAR;
@@ -398,22 +394,14 @@ TExpr IcebergV3LookUpTask::create_row_id_filter_expr(SlotId slot_id, const Spars
     bool_type_node.scalar_type.type = TPrimitiveType::BOOLEAN;
     bool_type.types.push_back(bool_type_node);
 
-    // Add OR nodes (N-1 OR nodes for N ranges)
-    for (size_t i = 0; i < row_id_range.size() - 1; i++) {
-        TExprNode or_node;
-        or_node.node_type = TExprNodeType::COMPOUND_PRED;
-        or_node.opcode = TExprOpcode::COMPOUND_OR;
-        or_node.__isset.opcode = true;
-        or_node.num_children = 2;
-        or_node.is_nullable = true;
-        or_node.type = bool_type;
-        nodes.push_back(or_node);
-    }
+    TTypeDesc bigint_type;
+    TTypeNode bigint_type_node;
+    bigint_type_node.type = TTypeNodeType::SCALAR;
+    bigint_type_node.__isset.scalar_type = true;
+    bigint_type_node.scalar_type.type = TPrimitiveType::BIGINT;
+    bigint_type.types.push_back(bigint_type_node);
 
-    // Add AND expressions for each range
-    for (size_t i = 0; i < row_id_range.size(); i++) {
-        const auto& range = row_id_range[i];
-
+    auto emit_between = [&](const Range<int64_t>& range) {
         // AND node for this range
         TExprNode and_node;
         and_node.node_type = TExprNodeType::COMPOUND_PRED;
@@ -441,13 +429,6 @@ TExpr IcebergV3LookUpTask::create_row_id_filter_expr(SlotId slot_id, const Spars
         slot_ref_ge.node_type = TExprNodeType::SLOT_REF;
         slot_ref_ge.num_children = 0;
         slot_ref_ge.is_nullable = true;
-
-        TTypeDesc bigint_type;
-        TTypeNode bigint_type_node;
-        bigint_type_node.type = TTypeNodeType::SCALAR;
-        bigint_type_node.__isset.scalar_type = true;
-        bigint_type_node.scalar_type.type = TPrimitiveType::BIGINT;
-        bigint_type.types.push_back(bigint_type_node);
         slot_ref_ge.type = bigint_type;
 
         TSlotRef slot_ref_info_ge;
@@ -508,7 +489,29 @@ TExpr IcebergV3LookUpTask::create_row_id_filter_expr(SlotId slot_id, const Spars
         literal_end.int_literal = int_literal_end;
         literal_end.__isset.int_literal = true;
         nodes.push_back(literal_end);
-    }
+    };
+
+    auto build_or = [&](auto&& self, size_t left, size_t right) -> void {
+        if (left == right) {
+            emit_between(row_id_range[left]);
+            return;
+        }
+
+        TExprNode or_node;
+        or_node.node_type = TExprNodeType::COMPOUND_PRED;
+        or_node.opcode = TExprOpcode::COMPOUND_OR;
+        or_node.__isset.opcode = true;
+        or_node.num_children = 2;
+        or_node.is_nullable = true;
+        or_node.type = bool_type;
+        nodes.push_back(or_node);
+
+        size_t mid = left + (right - left) / 2;
+        self(self, left, mid);
+        self(self, mid + 1, right);
+    };
+
+    build_or(build_or, 0, row_id_range.size() - 1);
 
     return expr;
 }
@@ -521,8 +524,6 @@ StatusOr<ChunkPtr> IcebergV3LookUpTask::_get_data_from_storage(
     SCOPED_TIMER(_ctx->parent->_get_data_from_storage_timer);
     ChunkPtr result_chunk;
     for (const auto& [scan_range_id, row_id_range] : row_id_ranges) {
-        DLOG(INFO) << "get data from storage, scan_range_id: " << scan_range_id
-                   << ", row_id_range: " << row_id_range->to_string();
         ObjectPool obj_pool;
 
         // Create filter expression for row_id column
@@ -588,7 +589,7 @@ StatusOr<ChunkPtr> IcebergV3LookUpTask::_get_data_from_storage(
 // Executes the Iceberg lookup: build row-id ranges, fetch data, reorder to the
 // original request layout, and feed responses back to each waiting context.
 Status IcebergV3LookUpTask::process(RuntimeState* state, const ChunkPtr& request_chunk) {
-    DLOG(INFO) << "IcebergV3LookUpTask process, request_ctxs size: " << _ctx->request_ctxs.size();
+    VLOG_FILE << "IcebergV3LookUpTask process, request_ctxs size: " << _ctx->request_ctxs.size();
     if (_ctx->request_ctxs.empty()) {
         return Status::OK();
     }
@@ -616,7 +617,7 @@ Status IcebergV3LookUpTask::process(RuntimeState* state, const ChunkPtr& request
         ASSIGN_OR_RETURN(auto sorted_result_chunk, _sort_chunk(state, result_chunk, {unordered_position_column}));
         result_chunk = sorted_result_chunk;
     }
-    DLOG(INFO) << "IcebergV3LookUpTask fill response, result_chunk: " << result_chunk->debug_columns();
+    VLOG_FILE << "IcebergV3LookUpTask fill response, result_chunk: " << result_chunk->debug_columns();
 
     // Collect slots to fill response, excluding lookup ref columns
     auto tuple_desc = state->desc_tbl().get_tuple_descriptor(_ctx->request_tuple_id);
