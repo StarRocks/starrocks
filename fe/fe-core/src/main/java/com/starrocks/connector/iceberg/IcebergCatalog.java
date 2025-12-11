@@ -210,7 +210,7 @@ public interface IcebergCatalog extends MemoryTrackable {
 
     /**
      * Register an existing table in the catalog using the given metadata file location.
-     * 
+     *
      * @param context The connect context
      * @param dbName The database name
      * @param tableName The table name
@@ -397,11 +397,11 @@ public interface IcebergCatalog extends MemoryTrackable {
                                             ExecutorService executorService) {
         Table nativeTable = icebergTable.getNativeTable();
 
-        // Call public method so subclasses can override and optimize this method.
-        Map<String, Partition> partitionMap = getPartitions(icebergTable, requestContext.getSnapshotId(), executorService);
         if (nativeTable.spec().isUnpartitioned()) {
             return List.of();
         } else {
+            // Call public method so subclasses can override and optimize this method.
+            Map<String, Partition> partitionMap = getPartitions(icebergTable, requestContext.getSnapshotId(), executorService);
             return new ArrayList<>(partitionMap.keySet());
         }
     }
