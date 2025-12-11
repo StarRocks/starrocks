@@ -1548,7 +1548,7 @@ public class RedirectStatusTest {
 
     @Test
     public void testCancelAlterTableStmt() {
-        CancelAlterTableStmt stmt = new CancelAlterTableStmt(null, null, null);
+        CancelAlterTableStmt stmt = new CancelAlterTableStmt(ShowAlterStmt.AlterType.COLUMN, null, null);
         Assertions.assertEquals(RedirectStatus.FORWARD_WITH_SYNC, RedirectStatus.getRedirectStatus(stmt));
     }
 

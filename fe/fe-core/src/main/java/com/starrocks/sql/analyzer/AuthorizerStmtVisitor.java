@@ -1894,8 +1894,9 @@ public class AuthorizerStmtVisitor implements AstVisitorExtendInterface<Void, Co
             }
 
             try {
-                Authorizer.checkMaterializedViewAction(context,
-                        new TableName(statement.getDbName(), statement.getTableName()), PrivilegeType.ALTER);
+                TableName tableName = new TableName(statement.getCatalogName(), statement.getDbName(),
+                        statement.getTableName(), statement.getTableRef().getPos());
+                Authorizer.checkMaterializedViewAction(context, tableName, PrivilegeType.ALTER);
             } catch (AccessDeniedException e) {
                 AccessDeniedException.reportAccessDenied(
                         InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
@@ -1904,11 +1905,12 @@ public class AuthorizerStmtVisitor implements AstVisitorExtendInterface<Void, Co
             }
         } else {
             try {
-                Authorizer.checkTableAction(context,
-                        statement.getDbTableName(), PrivilegeType.ALTER);
+                TableName tableName = new TableName(statement.getCatalogName(), statement.getDbName(),
+                        statement.getTableName(), statement.getTableRef().getPos());
+                Authorizer.checkTableAction(context, tableName, PrivilegeType.ALTER);
             } catch (AccessDeniedException e) {
                 AccessDeniedException.reportAccessDenied(
-                        statement.getDbTableName().getCatalog(),
+                        statement.getCatalogName(),
                         context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                         PrivilegeType.ALTER.name(), ObjectType.TABLE.name(), statement.getTableName());
             }
