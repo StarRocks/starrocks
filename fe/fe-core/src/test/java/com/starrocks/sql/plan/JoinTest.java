@@ -17,8 +17,10 @@ package com.starrocks.sql.plan;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.rule.RuleSet;
 import com.starrocks.sql.optimizer.rule.transformation.JoinAssociativityRule;
@@ -2732,20 +2734,59 @@ public class JoinTest extends PlanTestBase {
                 "\n" +
                 "  RESULT SINK");
 
+        sql = "select * from t0 where v1 = 10";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "PLAN FRAGMENT 0\n" +
+                " OUTPUT EXPRS:1: v1 | 2: v2 | 3: v3\n" +
+                "  PARTITION: RANDOM\n" +
+                "\n" +
+                "  RESULT SINK\n" +
+                "\n" +
+                "  0:OlapScanNode");
+
+        sql = "select /*+SET_VAR(prefer_compute_node=true)*/ t0.v1 from t0 join[shuffle] t1 on t0.v2 = t1.v5";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "PLAN FRAGMENT 0\n" +
+                " OUTPUT EXPRS:1: v1\n" +
+                "  PARTITION: HASH_PARTITIONED: 2: v2\n" +
+                "\n" +
+                "  RESULT SINK");
+
+        sql = "select /*+SET_VAR(prefer_compute_node=true)*/ * from t0 where v1 = 10";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "PLAN FRAGMENT 0\n" +
+                " OUTPUT EXPRS:1: v1 | 2: v2 | 3: v3\n" +
+                "  PARTITION: RANDOM\n" +
+                "\n" +
+                "  RESULT SINK\n" +
+                "\n" +
+                "  0:OlapScanNode");
+
+        Config.run_mode = RunMode.SHARED_DATA.getName();
+        RunMode.detectRunMode();
         try {
-            connectContext.getSessionVariable().setPreferComputeNode(true);
+            sql = "select t0.v1 from t0 join[shuffle] t1 on t0.v2 = t1.v5";
             plan = getFragmentPlan(sql);
             assertContains(plan, "PLAN FRAGMENT 0\n" +
                     " OUTPUT EXPRS:1: v1\n" +
-                    "  PARTITION: UNPARTITIONED\n" +
+                    "  PARTITION: HASH_PARTITIONED: 2: v2\n" +
                     "\n" +
                     "  RESULT SINK");
+
+            sql = "select * from t0 where v1 = 10";
+            plan = getFragmentPlan(sql);
+            assertContains(plan, "PLAN FRAGMENT 0\n" +
+                    " OUTPUT EXPRS:1: v1 | 2: v2 | 3: v3\n" +
+                    "  PARTITION: RANDOM\n" +
+                    "\n" +
+                    "  RESULT SINK\n" +
+                    "\n" +
+                    "  0:OlapScanNode");
         } finally {
-            connectContext.getSessionVariable().setPreferComputeNode(false);
+            Config.run_mode = RunMode.SHARED_NOTHING.getName();
+            RunMode.detectRunMode();
         }
     }
-
-
 
     @Test
     public void testPushDownTopWithOuterJoin() throws Exception {
@@ -3333,7 +3374,7 @@ public class JoinTest extends PlanTestBase {
                 "  |    <slot 30> : if(29: expr, 'a', 'b')\n" +
                 "  |    <slot 31> : 30: if = 'b'");
     }
-    
+
     @Test
     public void testJoinWithMultiAnalytic() throws Exception {
         FeConstants.runningUnitTest = true;
