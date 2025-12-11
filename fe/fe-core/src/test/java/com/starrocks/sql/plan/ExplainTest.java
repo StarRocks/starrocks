@@ -67,4 +67,68 @@ public class ExplainTest extends PlanTestBase {
         }
 
     }
+
+    @Test
+    public void testExplainCosts() throws Exception {
+        String sql = "SELECT DISTINCT t0.v1 FROM t0 LEFT JOIN t1 ON t0.v1 = t1.v4";
+        String plan = getCostExplain(sql);
+        Assertions.assertTrue(plan.contains("3:AGGREGATE (merge finalize)\n" +
+                "  |  group by: [1: v1, BIGINT, true]\n" +
+                "  |  cardinality: 1\n" +
+                "  |  column statistics: \n" +
+                "  |  * v1-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN\n" +
+                "  |  \n" +
+                "  2:EXCHANGE\n" +
+                "     distribution type: SHUFFLE\n" +
+                "     partition exprs: [1: v1, BIGINT, true]\n" +
+                "     cardinality: 1"), plan);
+        Assertions.assertTrue(plan.contains("1:AGGREGATE (update serialize)\n" +
+                "  |  STREAMING\n" +
+                "  |  group by: [1: v1, BIGINT, true]\n" +
+                "  |  cardinality: 1\n" +
+                "  |  column statistics: \n" +
+                "  |  * v1-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN\n" +
+                "  |  \n" +
+                "  0:OlapScanNode\n" +
+                "     table: t0, rollup: t0\n" +
+                "     preAggregation: on\n" +
+                "     partitionsRatio=0/1, tabletsRatio=0/0\n" +
+                "     tabletList=\n" +
+                "     actualRows=0, avgRowSize=1.0\n" +
+                "     cardinality: 1\n" +
+                "     column statistics: \n" +
+                "     * v1-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN"), plan);
+    }
+
+    @Test
+    public void testExplainCostsWithLabels() throws Exception {
+        String sql = "SELECT DISTINCT t0.v1 FROM t0 LEFT JOIN t1 ON t0.v1 = t1.v4";
+        String plan = getCostExplainWithLabels(sql);
+        Assertions.assertTrue(plan.contains("3:AGGREGATE (merge finalize)\n" +
+                "  |  group by: [1: v1, BIGINT, true]\n" +
+                "  |  cardinality: 1\n" +
+                "  |  column statistics: \n" +
+                "  |  * v1-->[MIN: -Infinity, MAX: Infinity, NULLS: 0.0, ROS: 1.0, NDV: 1.0] UNKNOWN\n" +
+                "  |  \n" +
+                "  2:EXCHANGE\n" +
+                "     distribution type: SHUFFLE\n" +
+                "     partition exprs: [1: v1, BIGINT, true]\n" +
+                "     cardinality: 1"), plan);
+        Assertions.assertTrue(plan.contains("1:AGGREGATE (update serialize)\n" +
+                "  |  STREAMING\n" +
+                "  |  group by: [1: v1, BIGINT, true]\n" +
+                "  |  cardinality: 1\n" +
+                "  |  column statistics: \n" +
+                "  |  * v1-->[MIN: -Infinity, MAX: Infinity, NULLS: 0.0, ROS: 1.0, NDV: 1.0] UNKNOWN\n" +
+                "  |  \n" +
+                "  0:OlapScanNode\n" +
+                "     table: t0, rollup: t0\n" +
+                "     preAggregation: on\n" +
+                "     partitionsRatio=0/1, tabletsRatio=0/0\n" +
+                "     tabletList=\n" +
+                "     actualRows=0, avgRowSize=1.0\n" +
+                "     cardinality: 1\n" +
+                "     column statistics: \n" +
+                "     * v1-->[MIN: -Infinity, MAX: Infinity, NULLS: 0.0, ROS: 1.0, NDV: 1.0] UNKNOWN"), plan);
+    }
 }
