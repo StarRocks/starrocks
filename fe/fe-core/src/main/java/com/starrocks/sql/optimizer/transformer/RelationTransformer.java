@@ -631,6 +631,7 @@ public class RelationTransformer implements AstVisitor<LogicalPlan, ExpressionMa
                         .setColRefToColumnMetaMap(colRefToColumnMetaMapBuilder.build())
                         .setSelectPartitionNames(node.getPartitionNames() == null ? Collections.emptyList() :
                                 node.getPartitionNames().getPartitionNames())
+                        .setSelectedIndexId(((OlapTable) node.getTable()).getBaseIndexId())
                         .build();
             } else if (!isMVPlanner) {
                 scanOperator = LogicalOlapScanOperator.builder()

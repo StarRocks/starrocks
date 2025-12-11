@@ -47,11 +47,20 @@ Status OlapMetaScanner::_init_meta_reader_params() {
     _reader_params.low_card_threshold = _parent->_meta_scan_node.__isset.low_cardinality_threshold
                                                 ? _parent->_meta_scan_node.low_cardinality_threshold
                                                 : DICT_DECODE_MAX_SIZE;
-    if (_parent->_meta_scan_node.__isset.columns && !_parent->_meta_scan_node.columns.empty() &&
-        _parent->_meta_scan_node.columns[0].col_unique_id > 0) {
-        _reader_params.tablet_schema = TabletSchema::copy(*_tablet->tablet_schema(), _parent->_meta_scan_node.columns);
-    } else {
+
+    if (_parent->_meta_scan_node.__isset.schema_id && _parent->_meta_scan_node.schema_id > 0 &&
+        _parent->_meta_scan_node.schema_id == _tablet->tablet_schema()->id()) {
         _reader_params.tablet_schema = _tablet->tablet_schema();
+    }
+
+    if (_reader_params.tablet_schema == nullptr) {
+        if (_parent->_meta_scan_node.__isset.columns && !_parent->_meta_scan_node.columns.empty() &&
+            (_parent->_meta_scan_node.columns[0].col_unique_id >= 0)) {
+            _reader_params.tablet_schema =
+                    TabletSchema::copy(*_tablet->tablet_schema(), _parent->_meta_scan_node.columns);
+        } else {
+            _reader_params.tablet_schema = _tablet->tablet_schema();
+        }
     }
     _reader_params.desc_tbl = &_parent->_desc_tbl;
 
