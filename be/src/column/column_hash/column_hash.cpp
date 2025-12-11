@@ -233,7 +233,7 @@ public:
     template <typename SizeT>
     Status do_visit(const BinaryColumnBase<SizeT>& column) {
         const auto& offsets = column.get_offset();
-        const auto& bytes = column.get_bytes();
+        const auto& bytes = column.get_immutable_bytes();
         _selector.for_each([&](uint32_t idx) {
             uint32_t* slot_ptr = slot(idx);
             auto len = offsets[idx + 1] - offsets[idx];

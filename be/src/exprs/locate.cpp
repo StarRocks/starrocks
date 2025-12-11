@@ -110,7 +110,7 @@ ColumnPtr haystack_vector_and_needle_const(const ColumnPtr& haystack_ptr, const 
 
     const char* begin = haystack->get_slice(0).data;
     const char* pos = begin;
-    const char* end = pos + haystack->get_bytes().size();
+    const char* end = pos + haystack->get_immutable_bytes().size();
 
     /// Current index in the array of strings.
     size_t i = 0;
