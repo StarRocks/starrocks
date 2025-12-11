@@ -359,6 +359,19 @@ public class SelectAnalyzer {
         return outputExpressions;
     }
 
+    private List<OrderByElement> expandOrderByAll(OrderByElement orderByElement,
+                                                  List<Expr> outputExpressions) {
+        List<OrderByElement> newOrderByElements = new ArrayList<>();
+        for (Expr expr : outputExpressions) {
+            OrderByElement newElement = new OrderByElement(expr.clone(),
+                    orderByElement.getIsAsc(),
+                    orderByElement.getNullsFirstParam(),
+                    orderByElement.getPos());
+            newOrderByElements.add(newElement);
+        }
+        return newOrderByElements;
+    }
+
     private List<OrderByElement> analyzeOrderBy(List<OrderByElement> orderByElements, AnalyzeState analyzeState,
                                                 Scope orderByScope,
                                                 List<Expr> outputExpressions,
@@ -366,6 +379,20 @@ public class SelectAnalyzer {
         if (orderByElements == null) {
             analyzeState.setOrderBy(Collections.emptyList());
             return Collections.emptyList();
+        }
+
+
+        // Expand ORDER BY ALL to individual columns
+        if (orderByElements.size() == 1 && orderByElements.get(0).isOrderByAll()) {
+            orderByElements = expandOrderByAll(orderByElements.get(0), outputExpressions);
+        }
+        if (orderByElements.size() > 1 && orderByElements.stream().anyMatch(OrderByElement::isOrderByAll)) {
+            throw new SemanticException("ORDER BY ALL cannot be used with other ORDER BY elements",
+                    orderByElements.stream()
+                            .filter(OrderByElement::isOrderByAll)
+                            .findFirst()
+                            .get()
+                            .getPos());
         }
 
         for (OrderByElement orderByElement : orderByElements) {

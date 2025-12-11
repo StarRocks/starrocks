@@ -34,16 +34,24 @@ public class OrderByElement implements ParseNode {
     private final Boolean nullsFirstParam;
 
     private final NodePosition pos;
+    
+    // Flag to indicate if this is an "ORDER BY ALL" element that needs to be expanded
+    private final boolean isOrderByAll;
 
     public OrderByElement(Expr expr, boolean isAsc, Boolean nullsFirstParam) {
-        this(expr, isAsc, nullsFirstParam, NodePosition.ZERO);
+        this(expr, isAsc, nullsFirstParam, NodePosition.ZERO, false);
     }
 
     public OrderByElement(Expr expr, boolean isAsc, Boolean nullsFirstParam, NodePosition pos) {
+        this(expr, isAsc, nullsFirstParam, pos, false);
+    }
+    
+    public OrderByElement(Expr expr, boolean isAsc, Boolean nullsFirstParam, NodePosition pos, boolean isOrderByAll) {
         this.pos = pos;
         this.expr = expr;
         this.isAsc = isAsc;
         this.nullsFirstParam = nullsFirstParam;
+        this.isOrderByAll = isOrderByAll;
     }
 
     public void setExpr(Expr e) {
@@ -61,9 +69,13 @@ public class OrderByElement implements ParseNode {
     public Boolean getNullsFirstParam() {
         return nullsFirstParam;
     }
+    
+    public boolean isOrderByAll() {
+        return isOrderByAll;
+    }
 
     public OrderByElement clone() {
-        return new OrderByElement(expr.clone(), isAsc, nullsFirstParam);
+        return new OrderByElement(expr.clone(), isAsc, nullsFirstParam, pos, isOrderByAll);
     }
 
     /**
