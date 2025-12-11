@@ -317,7 +317,7 @@ public class AnalyzeStmtTest {
                 2020, 1, 1, 1, 1),
                 Maps.newHashMap());
         Assertions.assertEquals("[test, t0, v1, HISTOGRAM, 2020-01-01 01:01:00, {}]",
-                ShowHistogramStatsMetaStmt.showHistogramStatsMeta(getConnectContext(), histogramStatsMeta).toString());
+                ShowExecutor.showHistogramStatsMeta(getConnectContext(), histogramStatsMeta).toString());
 
         getConnectContext().getGlobalStateMgr().getAnalyzeMgr().addHistogramStatsMeta(histogramStatsMeta);
         res = ShowExecutor.execute(showHistogramStatsMetaStmt, getConnectContext()).getResultRows().toString();

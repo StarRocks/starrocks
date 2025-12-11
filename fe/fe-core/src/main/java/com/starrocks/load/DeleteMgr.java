@@ -166,6 +166,9 @@ public class DeleteMgr implements Writable, MemoryTrackable {
 
     public void process(DeleteStmt stmt) throws DdlException, QueryStateException {
         TableRef tableRef = stmt.getTableRef();
+        if (tableRef == null) {
+            throw new DdlException("Table reference is null in delete statement");
+        }
         String dbName = tableRef.getDbName();
         String tableName = tableRef.getTableName();
 

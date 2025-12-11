@@ -55,6 +55,7 @@ import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.KeyPartitionRef;
+import com.starrocks.sql.ast.QualifiedName;
 import com.starrocks.sql.ast.SingleItemListPartitionDesc;
 import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.TruncateTablePartitionStmt;
@@ -65,6 +66,7 @@ import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.THiveFileInfo;
 import com.starrocks.thrift.TSinkCommitInfo;
 import com.starrocks.type.IntegerType;
@@ -393,9 +395,15 @@ public class HiveMetadataTest {
         ExceptionChecker.expectThrowsWithMsg(DdlException.class,
                 "Table location will be cleared. 'Force' must be set when dropping a hive table." +
                         " Please execute 'drop table hive_catalog.hive_db.hive_table force",
-                () -> hiveMetadata.dropTable(connectContext, new DropTableStmt(false, tableName, false)));
+                () -> hiveMetadata.dropTable(connectContext, new DropTableStmt(false,
+                        new TableRef(QualifiedName.of(Lists.newArrayList(
+                                tableName.getCatalog(), tableName.getDb(), tableName.getTbl())),
+                                null, NodePosition.ZERO), false)));
 
-        hiveMetadata.dropTable(connectContext, new DropTableStmt(false, tableName, true));
+        hiveMetadata.dropTable(connectContext, new DropTableStmt(false,
+                new TableRef(QualifiedName.of(Lists.newArrayList(
+                        tableName.getCatalog(), tableName.getDb(), tableName.getTbl())),
+                        null, NodePosition.ZERO), true));
 
         new MockUp<HiveMetadata>() {
             @Mock
@@ -404,7 +412,10 @@ public class HiveMetadataTest {
             }
         };
 
-        hiveMetadata.dropTable(connectContext, new DropTableStmt(true, tableName, true));
+        hiveMetadata.dropTable(connectContext, new DropTableStmt(true,
+                new TableRef(QualifiedName.of(Lists.newArrayList(
+                        tableName.getCatalog(), tableName.getDb(), tableName.getTbl())),
+                        null, NodePosition.ZERO), true));
     }
 
     @Test
@@ -1065,9 +1076,10 @@ public class HiveMetadataTest {
         AddPartitionClause addPartitionClause = new AddPartitionClause(partitionDesc, null, new HashMap<>(), false);
 
         // Create AlterTableStmt
-        TableName tableName = new TableName("hive_catalog", "db1", "table1");
+        QualifiedName qualifiedName = QualifiedName.of(Lists.newArrayList("hive_catalog", "db1", "table1"));
+        TableRef tableRef = new TableRef(qualifiedName, null, NodePosition.ZERO);
         List<AlterClause> alterClauses = Lists.newArrayList(addPartitionClause);
-        AlterTableStmt alterTableStmt = new AlterTableStmt(tableName, alterClauses);
+        AlterTableStmt alterTableStmt = new AlterTableStmt(tableRef, alterClauses);
 
         // Mock hmsOps.addPartitions to verify it's called
         final AtomicBoolean addPartitionsCalled = new AtomicBoolean(false);

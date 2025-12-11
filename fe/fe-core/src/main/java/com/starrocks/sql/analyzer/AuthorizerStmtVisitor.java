@@ -248,6 +248,7 @@ import com.starrocks.sql.ast.warehouse.cngroup.CreateCnGroupStmt;
 import com.starrocks.sql.ast.warehouse.cngroup.DropCnGroupStmt;
 import com.starrocks.sql.ast.warehouse.cngroup.EnableDisableCnGroupStmt;
 import com.starrocks.sql.common.MetaUtils;
+import com.starrocks.sql.parser.NodePosition;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -311,6 +312,9 @@ public class AuthorizerStmtVisitor implements AstVisitorExtendInterface<Void, Co
         // For table just created by CTAS statement, we ignore the check of 'INSERT' privilege on it.
         if (!statement.isForCTAS()) {
             TableRef tableRef = statement.getTableRef();
+            if (tableRef == null) {
+                throw new SemanticException("Table ref is null");
+            }
             TableName tableName = new TableName(tableRef.getCatalogName(), tableRef.getDbName(),
                     tableRef.getTableName(), tableRef.getPos());
             try {
@@ -329,6 +333,9 @@ public class AuthorizerStmtVisitor implements AstVisitorExtendInterface<Void, Co
     @Override
     public Void visitDeleteStatement(DeleteStmt statement, ConnectContext context) {
         TableRef tableRef = statement.getTableRef();
+        if (tableRef == null) {
+            throw new SemanticException("Table ref is null");
+        }
         TableName tableName = new TableName(tableRef.getCatalogName(), tableRef.getDbName(),
                 tableRef.getTableName(), tableRef.getPos());
         try {
@@ -345,6 +352,9 @@ public class AuthorizerStmtVisitor implements AstVisitorExtendInterface<Void, Co
     @Override
     public Void visitUpdateStatement(UpdateStmt statement, ConnectContext context) {
         TableRef tableRef = statement.getTableRef();
+        if (tableRef == null) {
+            throw new SemanticException("Table ref is null");
+        }
         TableName tableName = new TableName(tableRef.getCatalogName(), tableRef.getDbName(),
                 tableRef.getTableName(), tableRef.getPos());
         try {
@@ -354,7 +364,7 @@ public class AuthorizerStmtVisitor implements AstVisitorExtendInterface<Void, Co
                     context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                     PrivilegeType.UPDATE.name(), ObjectType.TABLE.name(), tableName.getTbl());
         }
-        TableName tableNameForSelect = TableName.fromTableRef(statement.getTableRef());
+        TableName tableNameForSelect = TableName.fromTableRef(tableRef);
         checkSelectTableAction(context, statement.getQueryStatement(), Lists.newArrayList(tableNameForSelect));
         return null;
     }
@@ -1080,14 +1090,14 @@ public class AuthorizerStmtVisitor implements AstVisitorExtendInterface<Void, Co
     @Override
     public Void visitShowBasicStatsMetaStatement(ShowBasicStatsMetaStmt statement, ConnectContext context) {
         // `show stats meta` only show tables that user has any privilege on, we will check it in
-        // the execution logic, not here, see `ShowBasicStatsMetaStmt#showBasicStatsMeta()` for details.
+        // the execution logic, not here, see `ShowExecutor#showBasicStatsMeta()` for details.
         return null;
     }
 
     @Override
     public Void visitShowHistogramStatsMetaStatement(ShowHistogramStatsMetaStmt statement, ConnectContext context) {
         // `show histogram meta` only show tables that user has any privilege on, we will check it in
-        // the execution logic, not here, see `ShowHistogramStatsMetaStmt#showHistogramStatsMeta()` for details.
+        // the execution logic, not here, see `ShowExecutor#showHistogramStatsMeta()` for details.
         return null;
     }
 
@@ -1654,19 +1664,18 @@ public class AuthorizerStmtVisitor implements AstVisitorExtendInterface<Void, Co
     @Override
     public Void visitCreateViewStatement(CreateViewStmt statement, ConnectContext context) {
         // 1. check if user can create view in this db
-        TableName tableName = statement.getTableName();
-        String catalog = tableName.getCatalog();
+        String catalog = statement.getCatalog();
         if (catalog == null) {
             catalog = context.getCurrentCatalog();
         }
         try {
             Authorizer.checkDbAction(context, catalog,
-                    tableName.getDb(), PrivilegeType.CREATE_VIEW);
+                    statement.getDbName(), PrivilegeType.CREATE_VIEW);
         } catch (AccessDeniedException e) {
             AccessDeniedException.reportAccessDenied(
                     catalog,
                     context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                    PrivilegeType.CREATE_VIEW.name(), ObjectType.DATABASE.name(), tableName.getDb());
+                    PrivilegeType.CREATE_VIEW.name(), ObjectType.DATABASE.name(), statement.getDbName());
         }
         // 2. check if user can query
         check(statement.getQueryStatement(), context);
@@ -1685,13 +1694,13 @@ public class AuthorizerStmtVisitor implements AstVisitorExtendInterface<Void, Co
     public Void visitAlterViewStatement(AlterViewStmt statement, ConnectContext context) {
         // 1. check if user can alter view in this db
         try {
-            Authorizer.checkViewAction(context,
-                    statement.getTableName(), PrivilegeType.ALTER);
+            com.starrocks.catalog.TableName tableName = com.starrocks.catalog.TableName.fromTableRef(statement.getTableRef());
+            Authorizer.checkViewAction(context, tableName, PrivilegeType.ALTER);
         } catch (AccessDeniedException e) {
             AccessDeniedException.reportAccessDenied(
-                    statement.getTableName().getCatalog(),
+                    statement.getCatalog(),
                     context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                    PrivilegeType.ALTER.name(), ObjectType.VIEW.name(), statement.getTableName().getTbl());
+                    PrivilegeType.ALTER.name(), ObjectType.VIEW.name(), statement.getTable());
         }
         // 2. check if user can query
         AlterClause alterClause = statement.getAlterClause();
@@ -1705,12 +1714,11 @@ public class AuthorizerStmtVisitor implements AstVisitorExtendInterface<Void, Co
 
     @Override
     public Void visitCreateTableStatement(CreateTableStmt statement, ConnectContext context) {
-        TableName tableName = statement.getDbTbl();
-        String catalog = tableName.getCatalog();
+        String catalog = statement.getCatalogName();
         if (catalog == null) {
             catalog = context.getCurrentCatalog();
         }
-        String dbName = tableName.getDb() == null ? context.getDatabase() : tableName.getDb();
+        String dbName = statement.getDbName() == null ? context.getDatabase() : statement.getDbName();
         try {
             Authorizer.checkDbAction(context, catalog, dbName,
                     PrivilegeType.CREATE_TABLE);
@@ -1764,40 +1772,40 @@ public class AuthorizerStmtVisitor implements AstVisitorExtendInterface<Void, Co
     public Void visitCreateTableLikeStatement(CreateTableLikeStmt statement, ConnectContext context) {
         visitCreateTableStatement(statement.getCreateTableStmt(), context);
         try {
-            Authorizer.checkTableAction(context,
-                    statement.getExistedDbTbl(), PrivilegeType.SELECT);
+            com.starrocks.catalog.TableName existedTableName = 
+                    com.starrocks.catalog.TableName.fromTableRef(statement.getExistedTableRef());
+            Authorizer.checkTableAction(context, existedTableName, PrivilegeType.SELECT);
         } catch (AccessDeniedException e) {
             AccessDeniedException.reportAccessDenied(
-                    statement.getExistedDbTbl().getCatalog(),
+                    statement.getExistedCatalogName(),
                     context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                    PrivilegeType.SELECT.name(), ObjectType.TABLE.name(), statement.getExistedDbTbl().getTbl());
+                    PrivilegeType.SELECT.name(), ObjectType.TABLE.name(), statement.getExistedTableName());
         }
         return null;
     }
 
     @Override
     public Void visitDropTableStatement(DropTableStmt statement, ConnectContext context) {
+        com.starrocks.catalog.TableName tableName = com.starrocks.catalog.TableName.fromTableRef(statement.getTableRef());
         if (statement.isView()) {
             try {
-                Authorizer.checkViewAction(context,
-                        statement.getTbl(), PrivilegeType.DROP);
+                Authorizer.checkViewAction(context, tableName, PrivilegeType.DROP);
             } catch (AccessDeniedException e) {
                 AccessDeniedException.reportAccessDenied(
-                        statement.getTbl().getCatalog(),
+                        tableName.getCatalog(),
                         context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                        PrivilegeType.DROP.name(), ObjectType.VIEW.name(), statement.getTbl().getTbl());
+                        PrivilegeType.DROP.name(), ObjectType.VIEW.name(), tableName.getTbl());
             }
         } else {
             Table table = null;
             try {
-                table = MetaUtils.getSessionAwareTable(context, null, statement.getTbl());
-                Authorizer.checkTableAction(context,
-                        statement.getTbl(), PrivilegeType.DROP);
+                table = MetaUtils.getSessionAwareTable(context, null, tableName);
+                Authorizer.checkTableAction(context, tableName, PrivilegeType.DROP);
             } catch (AccessDeniedException e) {
                 AccessDeniedException.reportAccessDenied(
-                        statement.getTbl().getCatalog(),
+                        tableName.getCatalog(),
                         context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                        PrivilegeType.DROP.name(), ObjectType.TABLE.name(), statement.getTbl().getTbl());
+                        PrivilegeType.DROP.name(), ObjectType.TABLE.name(), tableName.getTbl());
             } catch (Exception e) {
                 if (table == null && statement.isSetIfExists()) {
                     // an exception will be thrown if table is not found, ignore it if `if exists` is set.
@@ -1882,13 +1890,13 @@ public class AuthorizerStmtVisitor implements AstVisitorExtendInterface<Void, Co
     @Override
     public Void visitAlterTableStatement(AlterTableStmt statement, ConnectContext context) {
         try {
-            Authorizer.checkTableAction(context, statement.getTbl(),
-                    PrivilegeType.ALTER);
+            com.starrocks.catalog.TableName tableName = com.starrocks.catalog.TableName.fromTableRef(statement.getTableRef());
+            Authorizer.checkTableAction(context, tableName, PrivilegeType.ALTER);
         } catch (AccessDeniedException e) {
             AccessDeniedException.reportAccessDenied(
-                    statement.getTbl().getCatalog(),
+                    statement.getCatalogName(),
                     context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                    PrivilegeType.ALTER.name(), ObjectType.TABLE.name(), statement.getTbl().getTbl());
+                    PrivilegeType.ALTER.name(), ObjectType.TABLE.name(), statement.getTableName());
         }
         return null;
     }
@@ -2646,7 +2654,7 @@ public class AuthorizerStmtVisitor implements AstVisitorExtendInterface<Void, Co
         try {
             Authorizer.checkDbAction(context,
                     InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
-                    statement.getTableName().getDb(), PrivilegeType.CREATE_MATERIALIZED_VIEW);
+                    statement.getDbName(), PrivilegeType.CREATE_MATERIALIZED_VIEW);
             visitQueryStatement(statement.getQueryStatement(), context);
 
             // check warehouse privilege
@@ -2660,7 +2668,7 @@ public class AuthorizerStmtVisitor implements AstVisitorExtendInterface<Void, Co
             AccessDeniedException.reportAccessDenied(
                     InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
                     context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                    PrivilegeType.CREATE_MATERIALIZED_VIEW.name(), ObjectType.DATABASE.name(), statement.getTableName().getDb());
+                    PrivilegeType.CREATE_MATERIALIZED_VIEW.name(), ObjectType.DATABASE.name(), statement.getDbName());
         }
         return null;
     }
@@ -2668,13 +2676,14 @@ public class AuthorizerStmtVisitor implements AstVisitorExtendInterface<Void, Co
     @Override
     public Void visitAlterMaterializedViewStatement(AlterMaterializedViewStmt statement, ConnectContext context) {
         try {
-            Authorizer.checkMaterializedViewAction(context,
-                    statement.getMvName(), PrivilegeType.ALTER);
+            com.starrocks.catalog.TableName tableName = 
+                    com.starrocks.catalog.TableName.fromTableRef(statement.getMvTableRef());
+            Authorizer.checkMaterializedViewAction(context, tableName, PrivilegeType.ALTER);
         } catch (AccessDeniedException e) {
             AccessDeniedException.reportAccessDenied(
-                    statement.getMvName().getCatalog(),
+                    statement.getCatalogName(),
                     context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                    PrivilegeType.ALTER.name(), ObjectType.MATERIALIZED_VIEW.name(), statement.getMvName().getTbl());
+                    PrivilegeType.ALTER.name(), ObjectType.MATERIALIZED_VIEW.name(), statement.getMvName());
         }
         return null;
     }
@@ -2682,8 +2691,10 @@ public class AuthorizerStmtVisitor implements AstVisitorExtendInterface<Void, Co
     @Override
     public Void visitRefreshMaterializedViewStatement(RefreshMaterializedViewStatement statement, ConnectContext context) {
         try {
+            TableRef tableRef = statement.getTableRef();
+            NodePosition pos = (tableRef != null) ? tableRef.getPos() : NodePosition.ZERO;
             TableName tableName = new TableName(statement.getCatalogName(), statement.getDbName(),
-                    statement.getMvName(), statement.getTableRef().getPos());
+                    statement.getMvName(), pos);
             Authorizer.checkMaterializedViewAction(context, tableName, PrivilegeType.REFRESH);
         } catch (AccessDeniedException e) {
             AccessDeniedException.reportAccessDenied(
@@ -2697,8 +2708,10 @@ public class AuthorizerStmtVisitor implements AstVisitorExtendInterface<Void, Co
     @Override
     public Void visitCancelRefreshMaterializedViewStatement(CancelRefreshMaterializedViewStmt statement, ConnectContext context) {
         try {
+            TableRef tableRef = statement.getTableRef();
+            NodePosition pos = (tableRef != null) ? tableRef.getPos() : NodePosition.ZERO;
             TableName tableName = new TableName(statement.getCatalogName(), statement.getDbName(),
-                    statement.getMvName(), statement.getTableRef().getPos());
+                    statement.getMvName(), pos);
             Authorizer.checkMaterializedViewAction(context, tableName, PrivilegeType.REFRESH);
         } catch (AccessDeniedException e) {
             AccessDeniedException.reportAccessDenied(

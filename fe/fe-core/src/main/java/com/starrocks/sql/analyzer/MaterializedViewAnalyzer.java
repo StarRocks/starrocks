@@ -37,7 +37,6 @@ import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.Index;
-import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.MaterializedView;
@@ -83,6 +82,7 @@ import com.starrocks.sql.ast.IndexDef;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.OrderByElement;
 import com.starrocks.sql.ast.PartitionRangeDesc;
+import com.starrocks.sql.ast.QualifiedName;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.RandomDistributionDesc;
@@ -122,6 +122,7 @@ import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.sql.optimizer.transformer.OptExprBuilder;
 import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ExecPlan;
@@ -146,6 +147,7 @@ import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
@@ -156,6 +158,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
+import static com.starrocks.catalog.InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
 import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog;
 import static com.starrocks.server.CatalogMgr.isInternalCatalog;
 import static com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter.DEFAULT_TYPE_CAST_RULE;
@@ -309,27 +312,34 @@ public class MaterializedViewAnalyzer {
         @Override
         public Void visitCreateMaterializedViewStatement(CreateMaterializedViewStatement statement,
                                                          ConnectContext context) {
-            final TableName tableNameObject = statement.getTableName();
+            String catalog = statement.getCatalogName();
+            String dbName = statement.getDbName();
+            String tableName = statement.getTblName();
+
             /*
              * Materialized view name is a little bit different from a normal table
              * 1. Use default catalog if not specified, actually it only support default catalog until now
              */
-            if (Strings.isNullOrEmpty(tableNameObject.getCatalog())) {
-                tableNameObject.setCatalog(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
+            if (Strings.isNullOrEmpty(catalog)) {
+                catalog = DEFAULT_INTERNAL_CATALOG_NAME;
             }
-            if (Strings.isNullOrEmpty(tableNameObject.getDb())) {
+            if (Strings.isNullOrEmpty(dbName)) {
                 if (Strings.isNullOrEmpty(context.getDatabase())) {
                     throw new SemanticException("No database selected. " +
                             "You could set the database name through `<database>.<table>` or `use <database>` statement");
                 }
-                tableNameObject.setDb(context.getDatabase());
+                dbName = context.getDatabase();
             }
 
-            if (Strings.isNullOrEmpty(tableNameObject.getTbl())) {
+            if (Strings.isNullOrEmpty(tableName)) {
                 throw new SemanticException("Table name cannot be empty");
             }
 
-            final String tableName = tableNameObject.getTbl();
+            QualifiedName normalizedName = QualifiedName.of(Lists.newArrayList(catalog, dbName, tableName));
+            TableRef tableRef = statement.getTableRef();
+            tableRef = new TableRef(normalizedName, tableRef.getPartitionRef(), tableRef.getAlias(), tableRef.getPos());
+            statement.setTableRef(tableRef);
+
             FeNameFormat.checkTableName(tableName);
             QueryStatement queryStatement = statement.getQueryStatement();
             // check query relation is select relation
@@ -384,18 +394,16 @@ public class MaterializedViewAnalyzer {
             }
 
             // collect table from query statement
-
-            if (!InternalCatalog.isFromDefault(statement.getTableName())) {
+            if (!DEFAULT_INTERNAL_CATALOG_NAME.equalsIgnoreCase(catalog)) {
                 throw new SemanticException("Materialized view can only be created in default_catalog. " +
                         "You could either create it with default_catalog.<database>.<mv>, or switch to " +
                         "default_catalog through `set catalog <default_catalog>` statement",
-                        statement.getTableName().getPos());
+                        statement.getTableRef().getPos());
             }
-            Database db = context.getGlobalStateMgr().getLocalMetastore().getDb(statement.getTableName().getDb());
+            Database db = context.getGlobalStateMgr().getLocalMetastore().getDb(dbName);
             if (db == null) {
-                String catalog = statement.getTableName().getCatalog();
-                String errMsg = String.format("Can not find database:%s in %s", statement.getTableName().getDb(), catalog);
-                throw new SemanticException(errMsg, statement.getTableName().getPos());
+                String errMsg = String.format("Can not find database:%s in %s", dbName, catalog);
+                throw new SemanticException(errMsg, statement.getTableRef().getPos());
             }
             Set<BaseTableInfo> baseTableInfos = getBaseTableInfos(queryStatement, true);
             // now do not support empty base tables
@@ -909,7 +917,7 @@ public class MaterializedViewAnalyzer {
             Table table = aliasTableMap.get(tableName);
             if (table == null) {
                 String catalog = tableName.getCatalog() == null ?
-                        InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME : tableName.getCatalog();
+                        DEFAULT_INTERNAL_CATALOG_NAME : tableName.getCatalog();
                 table = connectContext.getGlobalStateMgr()
                         .getMetadataMgr().getTable(connectContext, catalog, tableName.getDb(), tableName.getTbl());
             }
@@ -1246,7 +1254,7 @@ public class MaterializedViewAnalyzer {
             // For list partition, deduce generated partition columns if its partition expression is a function call.
             int placeholder = 0;
             Map<Integer, Column> generatedPartitionColumns = statement.getGeneratedPartitionCols();
-            TableName mvTableName = statement.getTableName();
+            TableName mvTableName = com.starrocks.catalog.TableName.fromTableRef(statement.getTableRef());
             List<Column> mvColumns = statement.getMvColumnItems();
             List<Expr> partitionRefTableExprs = statement.getPartitionRefTableExpr();
             Map<Expr, Expr> partitionByExprToAdjustExprMap = statement.getPartitionByExprToAdjustExprMap();
@@ -1679,15 +1687,28 @@ public class MaterializedViewAnalyzer {
 
         @Override
         public Void visitAlterMaterializedViewStatement(AlterMaterializedViewStmt statement, ConnectContext context) {
-            TableName mvName = statement.getMvName();
-            mvName.normalization(context);
-            Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(context, statement.getMvName().getCatalog(),
-                    statement.getMvName().getDb(), statement.getMvName().getTbl());
+            TableRef mvTableRef = statement.getMvTableRef();
+            if (mvTableRef != null) {
+                TableName mvName = TableName.fromTableRef(mvTableRef);
+                mvName.normalization(context);
+                // Update the tableRef after normalization if needed
+                if (!mvName.getCatalog().equals(mvTableRef.getCatalogName()) ||
+                        !mvName.getDb().equals(mvTableRef.getDbName())) {
+                    QualifiedName normalizedName = QualifiedName.of(
+                            mvName.getCatalog() != null ? Arrays.asList(mvName.getCatalog(), mvName.getDb(), mvName.getTbl())
+                                    : Arrays.asList(mvName.getDb(), mvName.getTbl()));
+                    statement.setMvTableRef(new TableRef(normalizedName, mvTableRef.getPartitionRef(),
+                            mvTableRef.getAlias(), mvTableRef.getPos()));
+                }
+            }
+            Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(context, statement.getCatalogName(),
+                    statement.getDbName(), statement.getMvName());
             if (table == null) {
-                throw new SemanticException("Materialized view %s is not found", mvName);
+                throw new SemanticException("Materialized view %s is not found", statement.getMvName());
             }
             if (!(table instanceof MaterializedView)) {
-                throw new SemanticException(mvName.getTbl() + " is not async materialized view", mvName.getPos());
+                throw new SemanticException(statement.getMvName() + " is not async materialized view",
+                        statement.getMvTableRef() != null ? statement.getMvTableRef().getPos() : NodePosition.ZERO);
             }
 
             AlterMVClauseAnalyzerVisitor alterTableClauseAnalyzerVisitor = new AlterMVClauseAnalyzerVisitor(table);

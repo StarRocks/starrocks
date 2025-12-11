@@ -279,6 +279,9 @@ public class ExportJob implements Writable, GsonPostProcessable {
         }
         this.tableId = exportTable.getId();
         TableRef tableRef = stmt.getTableRef();
+        if (tableRef == null) {
+            throw new DdlException("Table reference is null in export statement");
+        }
         this.tableName = new TableName(tableRef.getCatalogName(), tableRef.getDbName(),
                 tableRef.getTableName(), tableRef.getPos());
 

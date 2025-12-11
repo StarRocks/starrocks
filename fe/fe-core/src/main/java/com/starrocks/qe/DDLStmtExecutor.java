@@ -356,7 +356,7 @@ public class DDLStmtExecutor {
             ErrorReport.wrapWithRuntimeException(() -> {
                 if (stmt.getTemporaryTableMark()) {
                     DropTemporaryTableStmt dropTemporaryTableStmt = new DropTemporaryTableStmt(
-                            stmt.isSetIfExists(), stmt.getTbl(), stmt.isForceDrop());
+                            stmt.isSetIfExists(), stmt.getTableRef(), stmt.isForceDrop());
                     dropTemporaryTableStmt.setSessionId(context.getSessionId());
                     context.getGlobalStateMgr().getMetadataMgr().dropTemporaryTable(dropTemporaryTableStmt);
                 } else {

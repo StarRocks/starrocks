@@ -174,6 +174,7 @@ import com.starrocks.sql.ast.ShowAlterStmt;
 import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.common.StarRocksPlannerException;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.staros.StarMgrServer;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.system.ComputeNode;
@@ -2243,7 +2244,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                     LOG.info("cancel rollup for automatic create partition txn_id={}", request.getTxn_id());
                     QualifiedName qualifiedName = QualifiedName.of(
                             Lists.newArrayList(db.getFullName(), olapTable.getName()));
-                    TableRef tableRef = new TableRef(qualifiedName, null, null);
+                    TableRef tableRef = new TableRef(qualifiedName, null, NodePosition.ZERO);
                     state.getLocalMetastore().cancelAlter(
                             new CancelAlterTableStmt(ShowAlterStmt.AlterType.ROLLUP, tableRef), errMsg);
                 }
@@ -2252,7 +2253,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                     LOG.info("cancel schema change for automatic create partition txn_id={}", request.getTxn_id());
                     QualifiedName qualifiedName = QualifiedName.of(
                             Lists.newArrayList(db.getFullName(), olapTable.getName()));
-                    TableRef tableRef = new TableRef(qualifiedName, null, null);
+                    TableRef tableRef = new TableRef(qualifiedName, null, NodePosition.ZERO);
                     state.getLocalMetastore().cancelAlter(
                             new CancelAlterTableStmt(ShowAlterStmt.AlterType.COLUMN, tableRef), errMsg);
                 }

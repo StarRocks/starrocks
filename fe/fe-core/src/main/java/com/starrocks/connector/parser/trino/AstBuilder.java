@@ -1339,9 +1339,11 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
             }
         }
 
+        QualifiedName qualifiedName = convertQualifiedName(node.getName());
+        TableRef tableRef = new TableRef(qualifiedName, null, NodePosition.ZERO);
         CreateTableStmt createTableStmt = new CreateTableStmt(node.isNotExists(),
                 false,
-                qualifiedNameToTableName(convertQualifiedName(node.getName())),
+                tableRef,
                 null,
                 "",
                 null,
@@ -1360,8 +1362,9 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
     @Override
     protected ParseNode visitDropTable(DropTable node, ParseTreeContext context) {
         boolean ifExists = node.isExists();
-        TableName tableName = qualifiedNameToTableName(convertQualifiedName(node.getTableName()));
-        return new DropTableStmt(ifExists, tableName, false, true);
+        QualifiedName qualifiedName = convertQualifiedName(node.getTableName());
+        TableRef tableRef = new TableRef(qualifiedName, null, NodePosition.ZERO);
+        return new DropTableStmt(ifExists, tableRef, false, true);
     }
 
     public Type getType(DataType dataType) {

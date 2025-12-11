@@ -1178,12 +1178,12 @@ public class StmtExecutor {
     private void dropTableCreatedByCTAS(CreateTableAsSelectStmt stmt) throws Exception {
         if (stmt instanceof CreateTemporaryTableAsSelectStmt) {
             DropTemporaryTableStmt dropTemporaryTableStmt =
-                    new DropTemporaryTableStmt(true, stmt.getCreateTableStmt().getDbTbl(), true);
+                    new DropTemporaryTableStmt(true, stmt.getCreateTableStmt().getTableRef(), true);
             dropTemporaryTableStmt.setSessionId(context.getSessionId());
             DDLStmtExecutor.execute(dropTemporaryTableStmt, context);
         } else {
             DDLStmtExecutor.execute(new DropTableStmt(
-                    true, stmt.getCreateTableStmt().getDbTbl(), true), context);
+                    true, stmt.getCreateTableStmt().getTableRef(), true), context);
         }
     }
 
@@ -2715,6 +2715,9 @@ public class StmtExecutor {
 
         DmlType dmlType = DmlType.fromStmt(stmt);
         TableRef tableRef = stmt.getTableRef();
+        if (tableRef == null) {
+            throw new SemanticException("Table ref is null");
+        }
         String catalogName = tableRef.getCatalogName();
         String dbName = tableRef.getDbName();
         String tableName = tableRef.getTableName();

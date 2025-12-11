@@ -26,7 +26,6 @@ import com.starrocks.catalog.FunctionSearchDesc;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.information.InfoSchemaDb;
 import com.starrocks.catalog.system.sys.SysDb;
@@ -45,6 +44,7 @@ import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.DropTemporaryTableStmt;
 import com.starrocks.sql.ast.FunctionArgsDef;
 import com.starrocks.sql.ast.FunctionRef;
+import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.common.MetaUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -68,7 +68,10 @@ public class DropStmtAnalyzer {
 
         @Override
         public Void visitDropTableStatement(DropTableStmt statement, ConnectContext context) {
-            statement.getTableNameObject().normalization(context);
+            TableRef tableRef = statement.getTableRef();
+            if (tableRef != null) {
+                statement.setTableRef(AnalyzerUtils.normalizedTableRef(tableRef, context));
+            }
 
             // check catalog
             String catalogName = statement.getCatalogName();
@@ -81,25 +84,26 @@ public class DropStmtAnalyzer {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
             }
             Table table = null;
-            String tableName = statement.getTableName();
+            String tableNameStr = statement.getTableName();
             try {
-                table = MetaUtils.getSessionAwareTable(context, db, new TableName(catalogName, dbName, tableName));
+                table = MetaUtils.getSessionAwareTable(context, db, 
+                        com.starrocks.catalog.TableName.fromTableRef(statement.getTableRef()));
             } catch (Exception e) {
                 // an exception will be thrown if table is not found, just ignore it
             }
             if (table == null) {
                 if (statement.isSetIfExists()) {
-                    LOG.info("drop table[{}] which does not exist", tableName);
+                    LOG.info("drop table[{}] which does not exist", tableNameStr);
                     return null;
                 } else {
-                    ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR, tableName);
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR, tableNameStr);
                 }
             } else {
                 if (table instanceof MaterializedView) {
                     throw new SemanticException(
                             "The data of '%s' cannot be dropped because '%s' is a materialized view," +
                                     "use 'drop materialized view %s' to drop it.",
-                            tableName, tableName, tableName);
+                            tableNameStr, tableNameStr, tableNameStr);
                 }
                 if (table.isTemporaryTable()) {
                     statement.setTemporaryTableMark(true);
@@ -108,11 +112,11 @@ public class DropStmtAnalyzer {
             // Check if a view
             if (statement.isView()) {
                 if (!table.isView()) {
-                    ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_OBJECT, db.getOriginName(), tableName, "VIEW");
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_OBJECT, db.getOriginName(), tableNameStr, "VIEW");
                 }
             } else {
                 if (table.isView()) {
-                    ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_OBJECT, db.getOriginName(), tableName, "TABLE");
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_OBJECT, db.getOriginName(), tableNameStr, "TABLE");
                 }
             }
             // Check mv dependency
@@ -127,7 +131,7 @@ public class DropStmtAnalyzer {
                                 .getTable(mvId.getDbId(), mvId.getId());
                         relatedMvNames.add(mvDb.getOriginName() + "." + mvTbl.getName());
                     }
-                    throw new SemanticException(tableName.toString() + " exists mv dependencies: " +
+                    throw new SemanticException(tableNameStr + " exists mv dependencies: " +
                             relatedMvNames.toString() + ", drop is not allowed. " +
                             "See more detailed information in `sys.object_dependencies`, " +
                             "or `set global enable_drop_table_check_mv_dependency=false`");
@@ -139,7 +143,10 @@ public class DropStmtAnalyzer {
         @Override
         public Void visitDropTemporaryTableStatement(DropTemporaryTableStmt statement, ConnectContext context) {
             statement.setSessionId(context.getSessionId());
-            statement.getTableNameObject().normalization(context);
+            TableRef tableRef = statement.getTableRef();
+            if (tableRef != null) {
+                statement.setTableRef(AnalyzerUtils.normalizedTableRef(tableRef, context));
+            }
 
             // check catalog
             String catalogName = statement.getCatalogName();

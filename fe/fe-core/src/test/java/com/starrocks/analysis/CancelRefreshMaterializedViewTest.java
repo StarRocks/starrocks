@@ -36,8 +36,8 @@ public class CancelRefreshMaterializedViewTest {
         String refreshMvSql = "cancel refresh materialized view test1.mv1";
         CancelRefreshMaterializedViewStmt cancelRefresh =
                 (CancelRefreshMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(refreshMvSql, connectContext);
-        String dbName = cancelRefresh.getMvName().getDb();
-        String mvName = cancelRefresh.getMvName().getTbl();
+        String dbName = cancelRefresh.getDbName();
+        String mvName = cancelRefresh.getMvName();
         Assertions.assertEquals("test1", dbName);
         Assertions.assertEquals("mv1", mvName);
         Assertions.assertFalse(cancelRefresh.isForce());
@@ -48,8 +48,8 @@ public class CancelRefreshMaterializedViewTest {
         String refreshMvSql = "cancel refresh materialized view test1.mv1 force";
         CancelRefreshMaterializedViewStmt cancelRefresh =
                 (CancelRefreshMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(refreshMvSql, connectContext);
-        String dbName = cancelRefresh.getMvName().getDb();
-        String mvName = cancelRefresh.getMvName().getTbl();
+        String dbName = cancelRefresh.getDbName();
+        String mvName = cancelRefresh.getMvName();
         Assertions.assertEquals("test1", dbName);
         Assertions.assertEquals("mv1", mvName);
         Assertions.assertTrue(cancelRefresh.isForce());

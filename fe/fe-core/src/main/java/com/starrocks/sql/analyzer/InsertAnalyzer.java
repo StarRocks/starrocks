@@ -46,6 +46,7 @@ import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.PartitionRef;
+import com.starrocks.sql.ast.QualifiedName;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.SelectListItem;
@@ -67,6 +68,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -584,6 +586,15 @@ public class InsertAnalyzer {
         }
 
         TableRef tableRef = AnalyzerUtils.normalizedTableRef(insertStmt.getTableRef(), session);
+        if (Strings.isNullOrEmpty(tableRef.getDbName()) || Strings.isNullOrEmpty(tableRef.getCatalogName())) {
+            TableName tableName = TableName.fromTableRef(tableRef);
+            tableName.normalization(session);
+            QualifiedName normalizedName = QualifiedName.of(
+                    Arrays.asList(tableName.getCatalog(), tableName.getDb(), tableName.getTbl()),
+                    tableRef.getPos());
+            String alias = tableRef.hasExplicitAlias() ? tableRef.getExplicitAlias() : null;
+            tableRef = new TableRef(normalizedName, tableRef.getPartitionRef(), alias, tableRef.getPos());
+        }
         insertStmt.setTableRef(tableRef);
         String catalogName = tableRef.getCatalogName();
         String dbName = tableRef.getDbName();

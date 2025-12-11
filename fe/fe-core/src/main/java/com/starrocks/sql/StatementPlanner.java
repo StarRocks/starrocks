@@ -532,6 +532,17 @@ public class StatementPlanner {
         }
 
         TableRef tableRef = stmt.getTableRef();
+        if (tableRef == null) {
+            throw new SemanticException("Table reference is null");
+        }
+        tableRef = AnalyzerUtils.normalizedTableRef(tableRef, session);
+        if (stmt instanceof InsertStmt) {
+            ((InsertStmt) stmt).setTableRef(tableRef);
+        } else if (stmt instanceof DeleteStmt) {
+            ((DeleteStmt) stmt).setTableRef(tableRef);
+        } else if (stmt instanceof UpdateStmt) {
+            ((UpdateStmt) stmt).setTableRef(tableRef);
+        }
         String catalogName = tableRef.getCatalogName();
         String dbName = tableRef.getDbName();
         String tableName = tableRef.getTableName();
@@ -626,6 +637,10 @@ public class StatementPlanner {
         }
 
         TableRef tableRef = stmt.getTableRef();
+        if (tableRef == null) {
+            LOG.warn("Cannot abort transaction {}: table reference is null", txnId);
+            return;
+        }
         String catalogName = tableRef.getCatalogName();
         String dbName = tableRef.getDbName();
         Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(session, catalogName, dbName);

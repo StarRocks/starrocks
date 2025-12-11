@@ -14,28 +14,31 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.catalog.TableName;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
 
 // Alter table statement.
 public class AlterTableStmt extends DdlStmt {
-    private final TableName tbl;
+    private TableRef tableRef;
     private final List<AlterClause> alterClauseList;
 
-    public AlterTableStmt(TableName tbl, List<AlterClause> ops) {
-        this(tbl, ops, NodePosition.ZERO);
+    public AlterTableStmt(TableRef tableRef, List<AlterClause> ops) {
+        this(tableRef, ops, NodePosition.ZERO);
     }
 
-    public AlterTableStmt(TableName tbl, List<AlterClause> ops, NodePosition pos) {
+    public AlterTableStmt(TableRef tableRef, List<AlterClause> ops, NodePosition pos) {
         super(pos);
-        this.tbl = tbl;
+        this.tableRef = tableRef;
         this.alterClauseList = ops;
     }
 
-    public TableName getTbl() {
-        return tbl;
+    public TableRef getTableRef() {
+        return tableRef;
+    }
+
+    public void setTableRef(TableRef tableRef) {
+        this.tableRef = tableRef;
     }
 
     public List<AlterClause> getAlterClauseList() {
@@ -43,15 +46,15 @@ public class AlterTableStmt extends DdlStmt {
     }
 
     public String getCatalogName() {
-        return tbl.getCatalog();
+        return tableRef == null ? null : tableRef.getCatalogName();
     }
 
     public String getDbName() {
-        return tbl.getDb();
+        return tableRef == null ? null : tableRef.getDbName();
     }
 
     public String getTableName() {
-        return tbl.getTbl();
+        return tableRef == null ? null : tableRef.getTableName();
     }
 
     @Override

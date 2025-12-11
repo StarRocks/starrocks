@@ -30,7 +30,6 @@ import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.ResourceGroupMgr;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.catalog.constraint.ForeignKeyConstraint;
 import com.starrocks.catalog.constraint.UniqueConstraint;
@@ -48,6 +47,8 @@ import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.CreateResourceGroupStmt;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.ModifyTablePropertiesClause;
+import com.starrocks.sql.ast.QualifiedName;
+import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
@@ -109,6 +110,15 @@ public class AlterMVJobExecutorEditLogTest {
     @AfterEach
     public void tearDown() {
         UtFrameUtils.tearDownForPersisTest();
+    }
+
+    // Helper method to create TableRef from TableName
+    private static TableRef createTableRef(String dbName, String tableName) {
+        List<String> parts = new ArrayList<>();
+        parts.add(dbName);
+        parts.add(tableName);
+        QualifiedName qualifiedName = QualifiedName.of(parts);
+        return new TableRef(qualifiedName, null, NodePosition.ZERO);
     }
 
     private static OlapTable createHashOlapTable(long tableId, String tableName, int bucketNum) {
@@ -502,7 +512,7 @@ public class AlterMVJobExecutorEditLogTest {
         properties.put(PropertyAnalyzer.PROPERTIES_PARTITION_RETENTION_CONDITION, retentionConditionValue);
         ModifyTablePropertiesClause clause = new ModifyTablePropertiesClause(properties);
         AlterMaterializedViewStmt stmt = new AlterMaterializedViewStmt(
-                new TableName(DB_NAME, retentionMvName),
+                createTableRef(DB_NAME, retentionMvName),
                 clause,
                 NodePosition.ZERO);
         
@@ -683,7 +693,7 @@ public class AlterMVJobExecutorEditLogTest {
         
         // 4. Create AlterMaterializedViewStmt
         AlterMaterializedViewStmt stmt = new AlterMaterializedViewStmt(
-                new TableName(DB_NAME, MV_NAME),
+                createTableRef(DB_NAME, MV_NAME),
                 clause,
                 NodePosition.ZERO);
         
@@ -713,7 +723,7 @@ public class AlterMVJobExecutorEditLogTest {
         
         // Create AlterMaterializedViewStmt
         AlterMaterializedViewStmt stmt = new AlterMaterializedViewStmt(
-                new TableName(DB_NAME, MV_NAME),
+                createTableRef(DB_NAME, MV_NAME),
                 clause,
                 NodePosition.ZERO);
         
@@ -775,7 +785,7 @@ public class AlterMVJobExecutorEditLogTest {
         
         // 3. Create AlterMaterializedViewStmt
         AlterMaterializedViewStmt stmt = new AlterMaterializedViewStmt(
-                new TableName(DB_NAME, mvName),
+                createTableRef(DB_NAME, mvName),
                 clause,
                 NodePosition.ZERO);
         
@@ -833,7 +843,7 @@ public class AlterMVJobExecutorEditLogTest {
         
         // 3. Create AlterMaterializedViewStmt
         AlterMaterializedViewStmt stmt = new AlterMaterializedViewStmt(
-                new TableName(DB_NAME, mvName),
+                createTableRef(DB_NAME, mvName),
                 clause,
                 NodePosition.ZERO);
         
@@ -891,7 +901,7 @@ public class AlterMVJobExecutorEditLogTest {
         
         // 3. Create AlterMaterializedViewStmt
         AlterMaterializedViewStmt stmt = new AlterMaterializedViewStmt(
-                new TableName(DB_NAME, MV_NAME),
+                createTableRef(DB_NAME, MV_NAME),
                 clause,
                 NodePosition.ZERO);
         

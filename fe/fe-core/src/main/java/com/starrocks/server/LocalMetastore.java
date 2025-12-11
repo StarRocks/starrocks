@@ -242,6 +242,7 @@ import com.starrocks.sql.common.SyncPartitionUtils;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.util.EitherOr;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
@@ -2910,8 +2911,8 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
     public void createMaterializedView(CreateMaterializedViewStatement stmt)
             throws DdlException {
         // check mv exists,name must be different from view/mv/table which exists in metadata
-        String mvName = stmt.getTableName().getTbl();
-        String dbName = stmt.getTableName().getDb();
+        String mvName = stmt.getTblName();
+        String dbName = stmt.getDbName();
         LOG.debug("Begin create materialized view: {}", mvName);
         // check if db exists
         Database db = this.getDb(dbName);
@@ -3309,8 +3310,10 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         }
         if (table instanceof MaterializedView) {
             try {
+                TableRef tableRef = stmt.getTableRef();
+                NodePosition pos = (tableRef != null) ? tableRef.getPos() : NodePosition.ZERO;
                 TableName tableName = new TableName(stmt.getCatalogName(), stmt.getDbName(),
-                        stmt.getMvName(), stmt.getTableRef().getPos());
+                        stmt.getMvName(), pos);
                 Authorizer.checkMaterializedViewAction(ConnectContext.get(), tableName, PrivilegeType.DROP);
             } catch (AccessDeniedException e) {
                 AccessDeniedException.reportAccessDenied(

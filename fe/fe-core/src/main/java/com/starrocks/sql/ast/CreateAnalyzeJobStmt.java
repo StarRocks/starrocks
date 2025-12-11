@@ -31,6 +31,8 @@ public class CreateAnalyzeJobStmt extends DdlStmt {
     private long dbId;
     private long tableId;
     private TableRef tableRef;
+    private String dbName;
+    private String tableName;
     private final StatsConstants.AnalyzeType analyzeType;
     private final AnalyzeTypeDesc analyzeTypeDesc;
     private final boolean ifNotExists;
@@ -48,8 +50,9 @@ public class CreateAnalyzeJobStmt extends DdlStmt {
     }
 
     public CreateAnalyzeJobStmt(String db, boolean isSample, Map<String, String> properties, NodePosition pos) {
-        this(new TableRef(QualifiedName.of(Lists.newArrayList(db)), null, pos), Lists.newArrayList(), false, isSample, properties,
+        this(null, Lists.newArrayList(), false, isSample, properties,
                 isSample ? StatsConstants.AnalyzeType.SAMPLE : StatsConstants.AnalyzeType.FULL, null, pos);
+        this.dbName = db;
     }
 
     public CreateAnalyzeJobStmt(TableRef tableRef, List<Expr> columns, boolean ifNotExists, boolean isSample,
@@ -59,6 +62,10 @@ public class CreateAnalyzeJobStmt extends DdlStmt {
         super(pos);
         this.catalogName = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
         this.tableRef = tableRef;
+        if (tableRef != null) {
+            this.dbName = tableRef.getDbName();
+            this.tableName = tableRef.getTableName();
+        }
         this.dbId = StatsConstants.DEFAULT_ALL_ID;
         this.tableId = StatsConstants.DEFAULT_ALL_ID;
         this.columns = columns;
@@ -91,18 +98,31 @@ public class CreateAnalyzeJobStmt extends DdlStmt {
 
     public void setTableRef(TableRef tableRef) {
         this.tableRef = tableRef;
+        if (tableRef != null) {
+            this.dbName = tableRef.getDbName();
+            this.tableName = tableRef.getTableName();
+        }
     }
 
     public String getCatalogName() {
-        return tableRef == null ? null : tableRef.getCatalogName();
+        if (tableRef != null && tableRef.getCatalogName() != null) {
+            return tableRef.getCatalogName();
+        }
+        return catalogName;
     }
 
     public String getDbName() {
-        return tableRef == null ? null : tableRef.getDbName();
+        if (tableRef != null && tableRef.getDbName() != null) {
+            return tableRef.getDbName();
+        }
+        return dbName;
     }
 
     public String getTableName() {
-        return tableRef == null ? null : tableRef.getTableName();
+        if (tableRef != null && tableRef.getTableName() != null) {
+            return tableRef.getTableName();
+        }
+        return tableName;
     }
 
     public List<String> getColumnNames() {
