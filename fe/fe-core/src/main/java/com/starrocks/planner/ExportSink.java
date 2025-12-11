@@ -48,6 +48,8 @@ import com.starrocks.thrift.THdfsProperties;
 import com.starrocks.thrift.TNetworkAddress;
 import org.apache.commons.lang.StringEscapeUtils;
 
+import java.util.List;
+
 public class ExportSink extends DataSink {
     private final String exportPath;
     private String fileNamePrefix;
@@ -55,6 +57,8 @@ public class ExportSink extends DataSink {
     private final String rowDelimiter;
     private final BrokerDesc brokerDesc;
     private final THdfsProperties hdfsProperties;
+    private List<String> columnNames;
+    private boolean withHeader = false;
 
     public ExportSink(String exportPath, String fileNamePrefix, String columnSeparator,
                       String rowDelimiter, BrokerDesc brokerDesc, THdfsProperties hdfsProperties) {
@@ -64,6 +68,14 @@ public class ExportSink extends DataSink {
         this.rowDelimiter = rowDelimiter;
         this.brokerDesc = brokerDesc;
         this.hdfsProperties = hdfsProperties;
+    }
+
+    public ExportSink(String exportPath, String fileNamePrefix, String columnSeparator,
+                      String rowDelimiter, BrokerDesc brokerDesc, THdfsProperties hdfsProperties,
+                      List<String> columnNames, boolean withHeader) {
+        this(exportPath, fileNamePrefix, columnSeparator, rowDelimiter, brokerDesc, hdfsProperties);
+        this.columnNames = columnNames;
+        this.withHeader = withHeader;
     }
 
     // for insert broker table
@@ -116,6 +128,12 @@ public class ExportSink extends DataSink {
         if (fileNamePrefix != null) {
             tExportSink.setFile_name_prefix(fileNamePrefix);
         }
+
+        // Set column names and with_header for CSV header row support
+        if (columnNames != null && !columnNames.isEmpty()) {
+            tExportSink.setColumn_names(columnNames);
+        }
+        tExportSink.setWith_header(withHeader);
 
         result.setExport_sink(tExportSink);
         return result;
