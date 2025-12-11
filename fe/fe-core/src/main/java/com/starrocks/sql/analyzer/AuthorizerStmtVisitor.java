@@ -1015,7 +1015,13 @@ public class AuthorizerStmtVisitor implements AstVisitorExtendInterface<Void, Co
 
     @Override
     public Void visitAnalyzeStatement(AnalyzeStmt statement, ConnectContext context) {
-        Authorizer.checkActionForAnalyzeStatement(context, statement.getTableName());
+        TableRef tableRef = statement.getTableRef();
+        if (tableRef == null) {
+            throw new SemanticException("Table ref is null");
+        }
+        TableName tableName = new TableName(tableRef.getCatalogName(), tableRef.getDbName(),
+                tableRef.getTableName(), tableRef.getPos());
+        Authorizer.checkActionForAnalyzeStatement(context, tableName);
         return null;
     }
 
@@ -1984,21 +1990,21 @@ public class AuthorizerStmtVisitor implements AstVisitorExtendInterface<Void, Co
         return null;
     }
 
-        @Override
-        public Void visitShowColumnStatement(ShowColumnStmt statement, ConnectContext context) {
-            TableRef tableRef = statement.getTableRef();
-            TableName tableName = new TableName(tableRef.getCatalogName(), tableRef.getDbName(),
-                    tableRef.getTableName(), tableRef.getPos());
-            try {
-                Authorizer.checkAnyActionOnTable(context, tableName);
-            } catch (AccessDeniedException e) {
-                AccessDeniedException.reportAccessDenied(
-                        tableName.getCatalog(),
-                        context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                        PrivilegeType.ANY.name(), ObjectType.TABLE.name(), tableName.getTbl());
-            }
-            return null;
+    @Override
+    public Void visitShowColumnStatement(ShowColumnStmt statement, ConnectContext context) {
+        TableRef tableRef = statement.getTableRef();
+        TableName tableName = new TableName(tableRef.getCatalogName(), tableRef.getDbName(),
+                tableRef.getTableName(), tableRef.getPos());
+        try {
+            Authorizer.checkAnyActionOnTable(context, tableName);
+        } catch (AccessDeniedException e) {
+            AccessDeniedException.reportAccessDenied(
+                    tableName.getCatalog(),
+                    context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    PrivilegeType.ANY.name(), ObjectType.TABLE.name(), tableName.getTbl());
         }
+        return null;
+    }
 
     @Override
     public Void visitRecoverPartitionStatement(RecoverPartitionStmt statement, ConnectContext context) {
@@ -2321,13 +2327,18 @@ public class AuthorizerStmtVisitor implements AstVisitorExtendInterface<Void, Co
     @Override
     public Void visitExportStatement(ExportStmt statement, ConnectContext context) {
         try {
-            Authorizer.checkTableAction(context,
-                    statement.getTblName(), PrivilegeType.EXPORT);
+            TableRef tableRef = statement.getTableRef();
+            if (tableRef == null) {
+                throw new SemanticException("Table ref is null");
+            }
+            TableName tableName = new TableName(tableRef.getCatalogName(), tableRef.getDbName(),
+                    tableRef.getTableName(), tableRef.getPos());
+            Authorizer.checkTableAction(context, tableName, PrivilegeType.EXPORT);
         } catch (AccessDeniedException e) {
             AccessDeniedException.reportAccessDenied(
-                    statement.getTblName().getCatalog(),
+                    statement.getCatalogName(),
                     context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                    PrivilegeType.EXPORT.name(), ObjectType.TABLE.name(), statement.getTblName().getTbl());
+                    PrivilegeType.EXPORT.name(), ObjectType.TABLE.name(), statement.getTableName());
         }
         return null;
     }
@@ -2664,13 +2675,14 @@ public class AuthorizerStmtVisitor implements AstVisitorExtendInterface<Void, Co
     @Override
     public Void visitRefreshMaterializedViewStatement(RefreshMaterializedViewStatement statement, ConnectContext context) {
         try {
-            Authorizer.checkMaterializedViewAction(context,
-                    statement.getMvName(), PrivilegeType.REFRESH);
+            TableName tableName = new TableName(statement.getCatalogName(), statement.getDbName(),
+                    statement.getMvName(), statement.getTableRef().getPos());
+            Authorizer.checkMaterializedViewAction(context, tableName, PrivilegeType.REFRESH);
         } catch (AccessDeniedException e) {
             AccessDeniedException.reportAccessDenied(
-                    statement.getMvName().getCatalog(),
+                    statement.getCatalogName(),
                     context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                    PrivilegeType.REFRESH.name(), ObjectType.MATERIALIZED_VIEW.name(), statement.getMvName().getTbl());
+                    PrivilegeType.REFRESH.name(), ObjectType.MATERIALIZED_VIEW.name(), statement.getMvName());
         }
         return null;
     }
@@ -2678,13 +2690,14 @@ public class AuthorizerStmtVisitor implements AstVisitorExtendInterface<Void, Co
     @Override
     public Void visitCancelRefreshMaterializedViewStatement(CancelRefreshMaterializedViewStmt statement, ConnectContext context) {
         try {
-            Authorizer.checkMaterializedViewAction(context,
-                    statement.getMvName(), PrivilegeType.REFRESH);
+            TableName tableName = new TableName(statement.getCatalogName(), statement.getDbName(),
+                    statement.getMvName(), statement.getTableRef().getPos());
+            Authorizer.checkMaterializedViewAction(context, tableName, PrivilegeType.REFRESH);
         } catch (AccessDeniedException e) {
             AccessDeniedException.reportAccessDenied(
-                    statement.getMvName().getCatalog(),
+                    statement.getCatalogName(),
                     context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                    PrivilegeType.REFRESH.name(), ObjectType.MATERIALIZED_VIEW.name(), statement.getMvName().getTbl());
+                    PrivilegeType.REFRESH.name(), ObjectType.MATERIALIZED_VIEW.name(), statement.getMvName());
         }
         return null;
     }

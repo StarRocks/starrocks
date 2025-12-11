@@ -981,8 +981,8 @@ public class DDLStmtExecutor {
                             stmt.getProperties(), StatsConstants.ScheduleStatus.PENDING,
                             LocalDateTime.MIN);
                 } else {
-                    analyzeJob = new ExternalAnalyzeJob(stmt.getTableName().getCatalog(), stmt.getTableName().getDb(),
-                            stmt.getTableName().getTbl(), stmt.getColumnNames(),
+                    analyzeJob = new ExternalAnalyzeJob(stmt.getCatalogName(), stmt.getDbName(),
+                            stmt.getTableName(), stmt.getColumnNames(),
                             stmt.getColumnTypes(),
                             stmt.getAnalyzeType(),
                             StatsConstants.ScheduleType.SCHEDULE,

@@ -1411,7 +1411,7 @@ public class RedirectStatusTest {
 
     @Test
     public void testCancelRefreshMaterializedViewStmt() {
-        CancelRefreshMaterializedViewStmt stmt = new CancelRefreshMaterializedViewStmt(null, false, NodePosition.ZERO);
+        CancelRefreshMaterializedViewStmt stmt = new CancelRefreshMaterializedViewStmt(null, false);
         Assertions.assertEquals(RedirectStatus.FORWARD_WITH_SYNC, RedirectStatus.getRedirectStatus(stmt));
     }
 

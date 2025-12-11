@@ -48,7 +48,7 @@ public class ExportRelativeStmtTest {
         ExportStmt stmt = (ExportStmt) analyzeSuccess(originStmt);
         Assertions.assertTrue(AuditEncryptionChecker.needEncrypt(stmt));
         Assertions.assertNotNull(stmt.getRowDelimiter());
-        Assertions.assertNotNull(stmt.getTblName());
+        Assertions.assertNotNull(stmt.getTableRef());
         Assertions.assertEquals("EXPORT TABLE `test`.`tall`\n" +
                 " TO 'hdfs://hdfs_host:port/a/b/c/'\n" +
                 "PROPERTIES (\"load_mem_limit\" = \"2147483648\", \"timeout\" = \"7200\")\n" +

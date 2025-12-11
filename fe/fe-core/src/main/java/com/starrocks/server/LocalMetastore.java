@@ -3309,13 +3309,15 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         }
         if (table instanceof MaterializedView) {
             try {
-                Authorizer.checkMaterializedViewAction(ConnectContext.get(), stmt.getDbMvName(), PrivilegeType.DROP);
+                TableName tableName = new TableName(stmt.getCatalogName(), stmt.getDbName(),
+                        stmt.getMvName(), stmt.getTableRef().getPos());
+                Authorizer.checkMaterializedViewAction(ConnectContext.get(), tableName, PrivilegeType.DROP);
             } catch (AccessDeniedException e) {
                 AccessDeniedException.reportAccessDenied(
-                        stmt.getDbMvName().getCatalog(),
+                        stmt.getCatalogName(),
                         ConnectContext.get().getCurrentUserIdentity(),
                         ConnectContext.get().getCurrentRoleIds(), PrivilegeType.DROP.name(), ObjectType.MATERIALIZED_VIEW.name(),
-                        stmt.getDbMvName().getTbl());
+                        stmt.getMvName());
             }
 
             db.dropTable(table.getName(), stmt.isSetIfExists(), true);
@@ -3413,8 +3415,8 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
     @Override
     public String refreshMaterializedView(RefreshMaterializedViewStatement refreshMaterializedViewStatement)
             throws DdlException, MetaNotFoundException {
-        String dbName = refreshMaterializedViewStatement.getMvName().getDb();
-        String mvName = refreshMaterializedViewStatement.getMvName().getTbl();
+        String dbName = refreshMaterializedViewStatement.getDbName();
+        String mvName = refreshMaterializedViewStatement.getMvName();
         boolean force = refreshMaterializedViewStatement.isForceRefresh();
         EitherOr<PartitionRangeDesc, Set<PListCell>> partitionDesc = refreshMaterializedViewStatement.getPartitionDesc();
         int priority = refreshMaterializedViewStatement.getPriority() != null ?
@@ -3427,8 +3429,8 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
     @Override
     public void cancelRefreshMaterializedView(
             CancelRefreshMaterializedViewStmt stmt) throws DdlException, MetaNotFoundException {
-        String dbName = stmt.getMvName().getDb();
-        String mvName = stmt.getMvName().getTbl();
+        String dbName = stmt.getDbName();
+        String mvName = stmt.getMvName();
         MaterializedView materializedView = getMaterializedViewToRefresh(dbName, mvName);
         TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
         Task refreshTask = taskManager.getTask(TaskBuilder.getMvTaskName(materializedView.getId()));

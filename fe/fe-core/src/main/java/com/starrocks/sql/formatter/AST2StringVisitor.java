@@ -20,6 +20,7 @@ import com.starrocks.authorization.ObjectType;
 import com.starrocks.authorization.PEntryObject;
 import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.TableName;
 import com.starrocks.common.util.ParseUtil;
 import com.starrocks.common.util.PrintableMap;
 import com.starrocks.common.util.SqlCredentialRedactor;
@@ -472,10 +473,12 @@ public class AST2StringVisitor implements AstVisitorExtendInterface<String, Void
         StringBuilder sb = new StringBuilder();
 
         sb.append("EXPORT TABLE ");
-        if (stmt.getTblName() == null) {
+        if (stmt.getTableRef() == null) {
             sb.append("non-exist");
         } else {
-            sb.append(stmt.getTblName().toSql());
+            TableName tableName = new TableName(stmt.getCatalogName(), stmt.getDbName(),
+                    stmt.getTableName(), stmt.getTableRef().getPos());
+            sb.append(tableName.toSql());
         }
 
         if (stmt.getPartitions() != null && !stmt.getPartitions().isEmpty()) {
