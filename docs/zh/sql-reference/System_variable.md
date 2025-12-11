@@ -410,6 +410,12 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 默认值：true
 * 引入版本：v3.3.0
 
+### enable_group_execution
+
+* 描述：Colocate Group Execution 是一种利用物理数据分区的执行模式，其中固定数量的线程依次处理各自的数据范围，以增强局部性和吞吐量。该模式可降低内存使用量。
+* 默认值：true
+* 引入版本：v3.3
+
 ### enable_group_level_query_queue (global)
 
 * 描述：是否开启资源组粒度的[查询队列](../administration/management/resource_management/query_queues.md)。
@@ -473,6 +479,12 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 默认值：false
 * 引入版本：v3.2.3
 
+### enable_parallel_merge
+
+* 描述：是否启用排序的 Parallel Merge。启用后，排序的合并阶段将使用多个线程进行合并操作。
+* 默认值：true
+* 引入版本：v3.3
+
 ### enable_spill
 
 * 描述：是否启用中间结果落盘。默认值：`false`。如果将其设置为 `true`，StarRocks 会将中间结果落盘，以减少在查询中处理聚合、排序或连接算子时的内存使用量。
@@ -490,6 +502,12 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 描述：是否校验 ORDER BY 引用列是否有歧义。设置为默认值 `TRUE` 时，如果查询中的输出列存在不同的表达式使用重复别名的情况，且按照该别名进行排序，查询会报错，例如 `select distinct t1.* from tbl1 t1 order by t1.k1;`。该行为和 2.3 及之前版本的逻辑一致。如果取值为 `FALSE`，采用宽松的去重机制，把这类查询作为有效 SQL 处理。
 * 默认值：true
 * 引入版本：v2.5.18，v3.1.7
+
+### enable_per_bucket_optimize
+
+* 描述：是否开启分桶计算。开启后对于一阶段聚合可以按照分桶顺序计算，降低内存使用。
+* 默认值：true
+* 引入版本：v3.0
 
 ### enable_profile
 
@@ -670,6 +688,18 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 最小值：4
 * 类型：Long
 
+### group_execution_max_groups
+
+* 描述：Group Execution 允许的最大组数。用于限制拆分粒度，防止因组数过多导致过度的调度开销。
+* 默认值：128
+* 引入版本：v3.3
+
+### group_execution_min_scan_rows
+
+* 描述：Group Execution 每组处理的最小行数。
+* 默认值：5000000
+* 引入版本：v3.3
+
 ### hash_join_push_down_right_table
 
 * 描述：用于控制在 Join 查询中是否可以使用针对右表的过滤条件来过滤左表的数据，可以减少 Join 过程中需要处理的左表的数据量。取值为 `true` 时表示允许该操作，系统将根据实际情况决定是否能对左表进行过滤；取值为 `false` 表示禁用该操作。
@@ -685,6 +715,12 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 默认值：1024
 * 单位：秒
 * 类型：Int
+
+### interpolate_passthrough
+
+* 描述：是否为某些算子添加 local-exchang-passthrough。当前支持算子包括 Streaming Aggregates 等。添加 local-exchange-passthrough 会降低数据倾斜的影响，但是会稍微增加内存使用。
+* 默认值：true
+* 引入版本：v3.2
 
 ### io_tasks_per_scan_operator
 
@@ -811,6 +847,15 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 一个查询计划通常会产生一组 scan range，即需要扫描的数据范围。这些数据分布在多个 BE 节点上。一个 BE 节点会有一个或多个 scan range。默认情况下，每个 BE 节点的一组 scan range 只由一个执行实例处理。当机器资源比较充裕时，可以将增加该变量，让更多的执行实例同时处理一组 scan range，从而提升查询效率。
 
 而 scan 实例的数量决定了上层其他执行节点，如聚合节点，join 节点的数量。因此相当于增加了整个查询计划执行的并发度。修改该参数会对大查询效率提升有帮助，但较大数值会消耗更多的机器资源，如CPU、内存、磁盘I/O。
+
+### parallel_merge_late_materialization_mode
+
+* 描述：Parallel Merge 的延迟物化模式。有效值：
+  * `AUTO`
+  * `ALWAYS`
+  * `NEVER`
+* 默认值：`AUTO`
+* 引入版本：v3.3
 
 ### partial_update_mode
 
