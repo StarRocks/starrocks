@@ -2613,7 +2613,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = CBO_REORDER_THRESHOLD_USE_EXHAUSTIVE)
     private int cboReorderThresholdUseExhaustive = 6;
 
-    @VarAttr(name = "enable_prune_complex_types_v2", show = ENABLE_PRUNE_COMPLEX_TYPES)
+    @VarAttr(name = "enable_prune_complex_types_v2", alias = ENABLE_PRUNE_COMPLEX_TYPES, show = ENABLE_PRUNE_COMPLEX_TYPES)
     private boolean enablePruneComplexTypes = false;
 
     @VarAttr(name = ENABLE_SUBFIELD_NO_COPY)
