@@ -34,13 +34,11 @@ public abstract class PartitionDiffer {
     protected final MaterializedView mv;
     // whether it's used for query rewrite or refresh, the difference is that query rewrite will not
     // consider partition_ttl_number and mv refresh will consider it to avoid creating too much partitions
-    protected final boolean isQueryRewrite;
     protected final MVTimelinessArbiter.QueryRewriteParams queryRewriteParams;
 
     public PartitionDiffer(MaterializedView mv, MVTimelinessArbiter.QueryRewriteParams queryRewriteParams) {
         this.mv = mv;
         this.queryRewriteParams = queryRewriteParams;
-        this.isQueryRewrite = queryRewriteParams.isQueryRewrite();
     }
 
     /**

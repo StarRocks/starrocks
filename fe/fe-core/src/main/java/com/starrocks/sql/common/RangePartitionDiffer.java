@@ -379,7 +379,7 @@ public final class RangePartitionDiffer extends PartitionDiffer {
             //
             // Diff_{deletes} = P_{MV} \setminus P_{\bigcup_{baseTables}^{}} \\
             //                = \bigcap_{baseTables} P_{MV}\setminus P_{baseTable}
-            RangePartitionDiffer differ = isQueryRewrite ? null
+            RangePartitionDiffer differ = queryRewriteParams.isQueryRewrite() ? null
                     : new RangePartitionDiffer(mv, queryRewriteParams, rangeToInclude);
             PartitionDiff rangePartitionDiff = PartitionUtil.getPartitionDiff(mvPartitionExpr, mergedRBTPartitionKeyMap,
                     mvPartitionCells, differ);
@@ -388,7 +388,7 @@ public final class RangePartitionDiffer extends PartitionDiffer {
                 return null;
             }
             Map<Table, PartitionNameSetMap> extRBTMVPartitionNameMap = Maps.newHashMap();
-            if (!isQueryRewrite) {
+            if (!queryRewriteParams.isQueryRewrite()) {
                 // To solve multi partition columns' problem of external table, record the mv partition name to all the same
                 // partition names map here.
                 collectExternalPartitionNameMapping(refBaseTablePartitionColumns, extRBTMVPartitionNameMap);

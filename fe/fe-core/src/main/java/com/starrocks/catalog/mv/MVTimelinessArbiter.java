@@ -69,8 +69,6 @@ public abstract class MVTimelinessArbiter {
     protected final MaterializedView mv;
     // differ
     protected PartitionDiffer differ;
-    // whether is query rewrite or mv refresh
-    protected final boolean isQueryRewrite;
 
     // parameters for query rewrite
     public static class QueryRewriteParams {
@@ -117,13 +115,16 @@ public abstract class MVTimelinessArbiter {
         public boolean isQueryRewrite() {
             return isQueryRewrite;
         }
+
+        public OptimizerContext getOptimizerContext() {
+            return optimizerContext;
+        }
     }
     protected final QueryRewriteParams queryRewriteParams;
 
     public MVTimelinessArbiter(MaterializedView mv,
                                QueryRewriteParams queryRewriteParams) {
         this.mv = mv;
-        this.isQueryRewrite = queryRewriteParams.isQueryRewrite;
         this.queryRewriteParams = queryRewriteParams;
     }
 

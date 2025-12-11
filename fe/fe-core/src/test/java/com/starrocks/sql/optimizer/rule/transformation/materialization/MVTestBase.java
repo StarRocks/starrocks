@@ -318,7 +318,7 @@ public abstract class MVTestBase extends StarRocksTestBase {
         OptimizerContext optimizerContext = OptimizerFactory.initContext(connectContext,
                 new ColumnRefFactory());
         MVTimelinessArbiter.QueryRewriteParams queryRewriteParams =
-                MVTimelinessArbiter.QueryRewriteParams.ofRefresh();
+                MVTimelinessArbiter.QueryRewriteParams.ofQueryRewrite(optimizerContext);
         return MvRefreshArbiter.getMVTimelinessUpdateInfo(mv, queryRewriteParams);
     }
 
