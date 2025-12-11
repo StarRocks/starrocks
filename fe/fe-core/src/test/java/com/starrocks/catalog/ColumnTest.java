@@ -225,12 +225,12 @@ public class ColumnTest {
                 new Column("user", TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL128, 15, 3), false, null, true,
                         new ColumnDef.DefaultValueDef(true, new StringLiteral("0")), "");
 
-        Column varcharColumn1 = new Column("user", TypeFactory.createVarchar(50), false, null, true,
+        Column varcharColumn1 = new Column("user", TypeFactory.createVarcharType(50), false, null, true,
                 new ColumnDef.DefaultValueDef(true, new StringLiteral("0")), "");
         varcharColumn1.checkSchemaChangeAllowed(decimalColumn);
         decimalColumn.checkSchemaChangeAllowed(varcharColumn1);
 
-        Column varcharColumn2 = new Column("user", TypeFactory.createVarchar(10), false, null, true,
+        Column varcharColumn2 = new Column("user", TypeFactory.createVarcharType(10), false, null, true,
                 new ColumnDef.DefaultValueDef(true, new StringLiteral("0")), "");
         varcharColumn2.checkSchemaChangeAllowed(decimalColumn);
         try {

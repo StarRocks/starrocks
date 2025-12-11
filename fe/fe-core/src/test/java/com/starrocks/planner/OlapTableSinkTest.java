@@ -107,11 +107,11 @@ public class OlapTableSinkTest {
 
         // k2
         SlotDescriptor k2 = descTable.addSlotDescriptor(tuple);
-        k2.setColumn(new Column("k2", TypeFactory.createVarchar(25)));
+        k2.setColumn(new Column("k2", TypeFactory.createVarcharType(25)));
         k2.setIsMaterialized(true);
         // v1
         SlotDescriptor v1 = descTable.addSlotDescriptor(tuple);
-        v1.setColumn(new Column("v1", TypeFactory.createVarchar(25)));
+        v1.setColumn(new Column("v1", TypeFactory.createVarcharType(25)));
         v1.setIsMaterialized(true);
         // v2
         SlotDescriptor v2 = descTable.addSlotDescriptor(tuple);

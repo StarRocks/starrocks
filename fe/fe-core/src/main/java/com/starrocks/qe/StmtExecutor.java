@@ -2180,7 +2180,7 @@ public class StmtExecutor {
 
         ShowResultSetMetaData metaData =
                 ShowResultSetMetaData.builder()
-                        .addColumn(new Column("Explain String", TypeFactory.createVarchar(20)))
+                        .addColumn(new Column("Explain String", TypeFactory.createVarcharType(20)))
                         .build();
         sendMetaData(metaData);
 

@@ -9264,7 +9264,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         } else if (context.SIGNED() != null) {
             return IntegerType.INT;
         } else if (context.HLL() != null) {
-            ScalarType type = TypeFactory.createHllType();
+            ScalarType type = HLLType.HLL;
             return type;
         } else if (context.BINARY() != null || context.VARBINARY() != null) {
             ScalarType type = TypeFactory.createVarbinary(length);

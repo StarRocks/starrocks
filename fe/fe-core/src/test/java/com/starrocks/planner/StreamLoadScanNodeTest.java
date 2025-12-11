@@ -120,7 +120,7 @@ public class StreamLoadScanNodeTest {
         k1.setIsAllowNull(false);
         columns.add(k1);
 
-        Column k2 = new Column("k2", TypeFactory.createVarchar(25));
+        Column k2 = new Column("k2", TypeFactory.createVarcharType(25));
         k2.setIsKey(true);
         k2.setIsAllowNull(true);
         columns.add(k2);
@@ -132,7 +132,7 @@ public class StreamLoadScanNodeTest {
 
         columns.add(v1);
 
-        Column v2 = new Column("v2", TypeFactory.createVarchar(25));
+        Column v2 = new Column("v2", TypeFactory.createVarcharType(25));
         v2.setIsKey(false);
         v2.setAggregationType(AggregateType.REPLACE, false);
         v2.setIsAllowNull(false);
@@ -803,7 +803,7 @@ public class StreamLoadScanNodeTest {
         assertThrows(DdlException.class, () -> {
             List<Column> columns = Lists.newArrayList();
             columns.add(new Column("c1", IntegerType.INT, true, null, false, null, ""));
-            columns.add(new Column("c2", TypeFactory.createVarchar(10), true, null, false, null, ""));
+            columns.add(new Column("c2", TypeFactory.createVarcharType(10), true, null, false, null, ""));
             Table table = new Table(1L, "table0", TableType.OLAP, columns);
             List<ImportColumnDesc> columnExprs = Lists.newArrayList();
             columnExprs.add(new ImportColumnDesc("c3", new FunctionCallExpr("func", Lists.newArrayList())));

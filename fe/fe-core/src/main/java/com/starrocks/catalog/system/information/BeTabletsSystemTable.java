@@ -43,13 +43,13 @@ public class BeTabletsSystemTable {
                         .column("DATA_SIZE", IntegerType.BIGINT)
                         .column("INDEX_MEM", IntegerType.BIGINT)
                         .column("CREATE_TIME", IntegerType.BIGINT)
-                        .column("STATE", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                        .column("TYPE", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                        .column("DATA_DIR", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("STATE", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("TYPE", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("DATA_DIR", TypeFactory.createVarcharType(NAME_CHAR_LEN))
                         .column("SHARD_ID", IntegerType.BIGINT)
                         .column("SCHEMA_HASH", IntegerType.BIGINT)
                         .column("INDEX_DISK", IntegerType.BIGINT)
-                        .column("MEDIUM_TYPE", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("MEDIUM_TYPE", TypeFactory.createVarcharType(NAME_CHAR_LEN))
                         .column("NUM_SEGMENT", IntegerType.BIGINT)
                         .build(), TSchemaTableType.SCH_BE_TABLETS);
     }
