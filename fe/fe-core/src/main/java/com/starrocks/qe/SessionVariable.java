@@ -1021,6 +1021,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_PRE_AGG_TOP_N_PUSH_DOWN = "enable_pre_agg_top_n_push_down";
 
+    public static final String ENABLE_LABELED_COLUMN_STATISTIC_OUTPUT = "enable_labeled_column_statistic_output";
+
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
             .add(MAX_EXECUTION_TIME)
@@ -2110,6 +2112,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_PRE_AGG_TOP_N_PUSH_DOWN, flag = VariableMgr.INVISIBLE)
     private boolean enablePreAggTopNPushDown = true;
+
+    @VarAttr(name = ENABLE_LABELED_COLUMN_STATISTIC_OUTPUT)
+    private boolean enableLabeledColumnStatisticOutput = false;
 
     public int getCboPruneJsonSubfieldDepth() {
         return cboPruneJsonSubfieldDepth;
@@ -5570,6 +5575,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isEnablePreAggTopNPushDown() {
         return enablePreAggTopNPushDown;
+    }
+
+    public void setEnableLabeledColumnStatisticOutput(boolean flag) {
+        this.enableLabeledColumnStatisticOutput = flag;
+    }
+
+    public boolean isEnableLabeledColumnStatisticOutput() {
+        return this.enableLabeledColumnStatisticOutput;
     }
 
     // Serialize to thrift object
