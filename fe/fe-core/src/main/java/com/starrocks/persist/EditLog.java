@@ -1235,6 +1235,17 @@ public class EditLog {
                     GlobalStateMgr.getCurrentState().getSqlBlackList().delete(deleteBlackListsRequest.ids);
                     break;
                 }
+                case OperationType.OP_ADD_SQL_DIGEST_BLACK_LIST: {
+                    SqlDigestBlackListPersistInfo addBlacklistRequest =
+                            (SqlDigestBlackListPersistInfo) journal.data();
+                    GlobalStateMgr.getCurrentState().getSqlDigestBlackList().put(addBlacklistRequest.digest);
+                    break;
+                }
+                case OperationType.OP_DELETE_SQL_DIGEST_BLACK_LIST: {
+                    DeleteSqlDigestBlackLists deleteBlackListsRequest = (DeleteSqlDigestBlackLists) journal.data();
+                    GlobalStateMgr.getCurrentState().getSqlDigestBlackList().deleteAll(deleteBlackListsRequest.digests);
+                    break;
+                }
                 case OperationType.OP_CREATE_SECURITY_INTEGRATION: {
                     SecurityIntegrationPersistInfo info = (SecurityIntegrationPersistInfo) journal.data();
                     AuthenticationMgr authenticationMgr = GlobalStateMgr.getCurrentState().getAuthenticationMgr();
@@ -2047,6 +2058,14 @@ public class EditLog {
 
     public void logDeleteSQLBlackList(DeleteSqlBlackLists deleteBlacklists, WALApplier walApplier) {
         logJsonObject(OperationType.OP_DELETE_SQL_QUERY_BLACK_LIST, deleteBlacklists, walApplier);
+    }
+
+    public void logAddSqlDigestBlackList(SqlDigestBlackListPersistInfo addBlackList, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_ADD_SQL_DIGEST_BLACK_LIST, addBlackList, walApplier);
+    }
+
+    public void logDeleteSqlDigestBlackList(DeleteSqlDigestBlackLists deleteBlacklists, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_DELETE_SQL_DIGEST_BLACK_LIST, deleteBlacklists, walApplier);
     }
 
     public void logStarMgrOperation(StarMgrJournal journal) {

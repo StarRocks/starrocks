@@ -619,6 +619,11 @@ public class OperationType {
     public static final short OP_DELETE_SQL_QUERY_BLACK_LIST = 13521;
 
     @IgnorableOnReplayFailed
+    public static final short OP_ADD_SQL_DIGEST_BLACK_LIST = 13522;
+    @IgnorableOnReplayFailed
+    public static final short OP_DELETE_SQL_DIGEST_BLACK_LIST = 13523;
+
+    @IgnorableOnReplayFailed
     public static final short OP_CREATE_GROUP_PROVIDER = 13530;
 
     @IgnorableOnReplayFailed

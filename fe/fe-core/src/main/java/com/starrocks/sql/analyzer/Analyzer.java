@@ -17,6 +17,7 @@ package com.starrocks.sql.analyzer;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AddSqlBlackListStmt;
+import com.starrocks.sql.ast.AddSqlDigestBlackListStmt;
 import com.starrocks.sql.ast.AdminCancelRepairTableStmt;
 import com.starrocks.sql.ast.AdminCheckTabletsStmt;
 import com.starrocks.sql.ast.AdminRepairTableStmt;
@@ -967,6 +968,11 @@ public class Analyzer {
         @Override
         public Void visitAddSqlBlackListStatement(AddSqlBlackListStmt statement, ConnectContext session) {
             return null;
+        }
+
+        @Override
+        public Void visitAddSqlDigestBlackListStatement(AddSqlDigestBlackListStmt statement, ConnectContext context) {
+            return AstVisitorExtendInterface.super.visitAddSqlDigestBlackListStatement(statement, context);
         }
 
         // ------------------------------------------- Export Statement ------------------------------------------------

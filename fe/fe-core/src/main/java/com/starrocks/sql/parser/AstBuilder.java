@@ -65,6 +65,7 @@ import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.AddPartitionColumnClause;
 import com.starrocks.sql.ast.AddRollupClause;
 import com.starrocks.sql.ast.AddSqlBlackListStmt;
+import com.starrocks.sql.ast.AddSqlDigestBlackListStmt;
 import com.starrocks.sql.ast.AdminCancelRepairTableStmt;
 import com.starrocks.sql.ast.AdminCheckTabletsStmt;
 import com.starrocks.sql.ast.AdminRepairTableStmt;
@@ -166,6 +167,7 @@ import com.starrocks.sql.ast.DecommissionBackendClause;
 import com.starrocks.sql.ast.DelBackendBlackListStmt;
 import com.starrocks.sql.ast.DelComputeNodeBlackListStmt;
 import com.starrocks.sql.ast.DelSqlBlackListStmt;
+import com.starrocks.sql.ast.DelSqlDigestBlackListStmt;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.DescStorageVolumeStmt;
 import com.starrocks.sql.ast.DescribeStmt;
@@ -374,6 +376,7 @@ import com.starrocks.sql.ast.ShowRunningQueriesStmt;
 import com.starrocks.sql.ast.ShowSmallFilesStmt;
 import com.starrocks.sql.ast.ShowSnapshotStmt;
 import com.starrocks.sql.ast.ShowSqlBlackListStmt;
+import com.starrocks.sql.ast.ShowSqlDigestBlackListStmt;
 import com.starrocks.sql.ast.ShowStatusStmt;
 import com.starrocks.sql.ast.ShowStorageVolumesStmt;
 import com.starrocks.sql.ast.ShowStreamLoadStmt;
@@ -4054,6 +4057,31 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
     @Override
     public ParseNode visitShowWhiteListStatement(com.starrocks.sql.parser.StarRocksParser.ShowWhiteListStatementContext context) {
         return new ShowWhiteListStmt();
+    }
+
+    // -------------------------------- Sql Digest BlackList Statement ------------------------------------------
+
+    @Override
+    public ParseNode visitAddSqlDigestBlackListStatement(
+            com.starrocks.sql.parser.StarRocksParser.AddSqlDigestBlackListStatementContext context) {
+        String digest = context.identifier().getText();
+        if (digest == null || digest.isEmpty()) {
+            throw new ParsingException("Digest identifier cannot be empty.", createPos(context.identifier()));
+        }
+        return new AddSqlDigestBlackListStmt(digest);
+    }
+
+    @Override
+    public ParseNode visitDelSqlDigestBlackListStatement(
+            com.starrocks.sql.parser.StarRocksParser.DelSqlDigestBlackListStatementContext context) {
+        List<String> digests = context.identifier().stream().map(ParseTree::getText).collect(toList());
+        return new DelSqlDigestBlackListStmt(digests, createPos(context));
+    }
+
+    @Override
+    public ParseNode visitShowSqlDigestBlackListStatement(
+            com.starrocks.sql.parser.StarRocksParser.ShowSqlDigestBlackListStatementContext context) {
+        return new ShowSqlDigestBlackListStmt(createPos(context));
     }
 
     // -------------------------------- backend BlackList Statement ---------------------------------------------------
