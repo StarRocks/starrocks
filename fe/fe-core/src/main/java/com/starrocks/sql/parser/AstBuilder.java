@@ -1323,15 +1323,16 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
     public ParseNode visitShowCreateTableStatement(
             com.starrocks.sql.parser.StarRocksParser.ShowCreateTableStatementContext context) {
         QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
-        TableName targetTableName = qualifiedNameToTableName(qualifiedName);
+        NodePosition tablePos = createPos(context.qualifiedName().start, context.qualifiedName().stop);
+        TableRef tableRef = new TableRef(normalizeName(qualifiedName), null, tablePos);
         NodePosition pos = createPos(context);
         if (context.MATERIALIZED() != null && context.VIEW() != null) {
-            return new ShowCreateTableStmt(targetTableName, ShowCreateTableStmt.CreateTableType.MATERIALIZED_VIEW, pos);
+            return new ShowCreateTableStmt(tableRef, ShowCreateTableStmt.CreateTableType.MATERIALIZED_VIEW, pos);
         }
         if (context.VIEW() != null) {
-            return new ShowCreateTableStmt(targetTableName, ShowCreateTableStmt.CreateTableType.VIEW, pos);
+            return new ShowCreateTableStmt(tableRef, ShowCreateTableStmt.CreateTableType.VIEW, pos);
         }
-        return new ShowCreateTableStmt(targetTableName, ShowCreateTableStmt.CreateTableType.TABLE, pos);
+        return new ShowCreateTableStmt(tableRef, ShowCreateTableStmt.CreateTableType.TABLE, pos);
     }
 
     @Override

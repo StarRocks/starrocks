@@ -742,15 +742,18 @@ public class ShowExecutor {
 
         @Override
         public ShowResultSet visitShowCreateTableStatement(ShowCreateTableStmt statement, ConnectContext context) {
-            TableName tbl = statement.getTbl();
-            String catalogName = tbl.getCatalog();
+            TableRef tableRef = statement.getTableRef();
+            if (tableRef == null) {
+                throw new SemanticException("Table ref is null");
+            }
+            String catalogName = tableRef.getCatalogName();
             if (catalogName == null) {
                 catalogName = context.getCurrentCatalog();
             }
             if (CatalogMgr.isInternalCatalog(catalogName)) {
                 return showCreateInternalCatalogTable(statement, context);
             } else {
-                return showCreateExternalCatalogTable(context, statement, tbl, catalogName);
+                return showCreateExternalCatalogTable(context, statement, catalogName);
             }
         }
 
@@ -761,7 +764,8 @@ public class ShowExecutor {
             Locker locker = new Locker();
             locker.lockDatabase(db.getId(), LockType.READ);
             try {
-                Table table = MetaUtils.getSessionAwareTable(connectContext, db, showStmt.getTbl());
+                TableName tableName = new TableName(showStmt.getCatalogName(), showStmt.getDb(), showStmt.getTable());
+                Table table = MetaUtils.getSessionAwareTable(connectContext, db, tableName);
                 if (table == null) {
                     if (showStmt.getType() != ShowCreateTableStmt.CreateTableType.MATERIALIZED_VIEW) {
                         ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR, showStmt.getTable());
@@ -857,9 +861,13 @@ public class ShowExecutor {
         }
 
         private ShowResultSet showCreateExternalCatalogTable(ConnectContext context, ShowCreateTableStmt showStmt,
-                                                             TableName tbl, String catalogName) {
-            String dbName = tbl.getDb();
-            String tableName = tbl.getTbl();
+                                                             String catalogName) {
+            TableRef tableRef = showStmt.getTableRef();
+            if (tableRef == null) {
+                throw new SemanticException("Table ref is null");
+            }
+            String dbName = tableRef.getDbName();
+            String tableName = tableRef.getTableName();
             MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
             Database db = metadataMgr.getDb(context, catalogName, dbName);
             if (db == null) {

@@ -1914,15 +1914,19 @@ public class AuthorizerStmtVisitor implements AstVisitorExtendInterface<Void, Co
     @Override
     public Void visitShowCreateTableStatement(ShowCreateTableStmt statement, ConnectContext context) {
         try {
+            TableRef tableRef = statement.getTableRef();
+            if (tableRef == null) {
+                throw new SemanticException("Table ref is null");
+            }
             BasicTable basicTable = GlobalStateMgr.getCurrentState().getMetadataMgr().getBasicTable(
-                    context, statement.getTbl().getCatalog(), statement.getTbl().getDb(), statement.getTbl().getTbl());
+                    context, tableRef.getCatalogName(), tableRef.getDbName(), tableRef.getTableName());
             Authorizer.checkAnyActionOnTableLikeObject(context,
-                    statement.getDb(), basicTable);
+                    tableRef.getDbName(), basicTable);
         } catch (AccessDeniedException e) {
             AccessDeniedException.reportAccessDenied(
-                    statement.getTbl().getCatalog(),
+                    statement.getCatalogName(),
                     context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                    PrivilegeType.ANY.name(), ObjectType.TABLE.name(), statement.getTbl().getTbl());
+                    PrivilegeType.ANY.name(), ObjectType.TABLE.name(), statement.getTable());
         }
         return null;
     }

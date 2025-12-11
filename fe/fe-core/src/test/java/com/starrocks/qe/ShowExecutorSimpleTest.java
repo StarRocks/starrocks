@@ -83,6 +83,7 @@ import com.starrocks.sql.ast.DescribeStmt;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.LabelName;
 import com.starrocks.sql.ast.QualifiedName;
+import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.ShowAuthorStmt;
 import com.starrocks.sql.ast.ShowBackendsStmt;
@@ -553,8 +554,9 @@ public class ShowExecutorSimpleTest {
     @Test
     public void testShowCreateTableEmptyDb() {
         assertThrows(SemanticException.class, () -> {
-            ShowCreateTableStmt stmt = new ShowCreateTableStmt(new TableName("emptyDb", "testTable"),
-                    ShowCreateTableStmt.CreateTableType.TABLE);
+            TableRef tableRef = new TableRef(QualifiedName.of(Lists.newArrayList("emptyDb", "testTable")),
+                    null, NodePosition.ZERO);
+            ShowCreateTableStmt stmt = new ShowCreateTableStmt(tableRef, ShowCreateTableStmt.CreateTableType.TABLE);
 
             ShowResultSet resultSet = ShowExecutor.execute(stmt, ctx);
 
@@ -838,8 +840,9 @@ public class ShowExecutorSimpleTest {
             }
         };
 
-        ShowCreateTableStmt stmt = new ShowCreateTableStmt(new TableName("hive_catalog", "hive_db", "test_table"),
-                ShowCreateTableStmt.CreateTableType.TABLE);
+        TableRef tableRef = new TableRef(QualifiedName.of(Lists.newArrayList("hive_catalog", "hive_db", "test_table")),
+                null, NodePosition.ZERO);
+        ShowCreateTableStmt stmt = new ShowCreateTableStmt(tableRef, ShowCreateTableStmt.CreateTableType.TABLE);
 
         ShowResultSet resultSet = ShowExecutor.execute(stmt, ctx);
         Assertions.assertEquals("test_table", resultSet.getResultRows().get(0).get(0));
@@ -893,8 +896,9 @@ public class ShowExecutorSimpleTest {
             }
         };
 
-        ShowCreateTableStmt stmt = new ShowCreateTableStmt(new TableName("hive_catalog", "hive_db", "test_table"),
-                ShowCreateTableStmt.CreateTableType.TABLE);
+        TableRef tableRef = new TableRef(QualifiedName.of(Lists.newArrayList("hive_catalog", "hive_db", "test_table")),
+                null, NodePosition.ZERO);
+        ShowCreateTableStmt stmt = new ShowCreateTableStmt(tableRef, ShowCreateTableStmt.CreateTableType.TABLE);
 
         ShowResultSet resultSet = ShowExecutor.execute(stmt, ctx);
         Assertions.assertEquals("test_table", resultSet.getResultRows().get(0).get(0));

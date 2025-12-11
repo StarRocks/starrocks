@@ -301,8 +301,9 @@ public class ShowStmtMetaTest {
 
     @Test
     public void testShowCreateTableStmt() {
-        TableName tableName = new TableName("test_db", "test_table");
-        ShowCreateTableStmt stmt = new ShowCreateTableStmt(tableName, ShowCreateTableStmt.CreateTableType.TABLE);
+        TableRef tableRef = new TableRef(QualifiedName.of(Lists.newArrayList("test_db", "test_table")),
+                null, NodePosition.ZERO);
+        ShowCreateTableStmt stmt = new ShowCreateTableStmt(tableRef, ShowCreateTableStmt.CreateTableType.TABLE);
         ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
         Assertions.assertEquals(2, metaData.getColumnCount());
         Assertions.assertEquals("Table", metaData.getColumn(0).getName());
@@ -311,8 +312,9 @@ public class ShowStmtMetaTest {
 
     @Test
     public void testShowCreateTableStmtView() {
-        TableName tableName = new TableName("test_db", "test_view");
-        ShowCreateTableStmt stmt = new ShowCreateTableStmt(tableName, ShowCreateTableStmt.CreateTableType.VIEW);
+        TableRef tableRef = new TableRef(QualifiedName.of(Lists.newArrayList("test_db", "test_view")),
+                null, NodePosition.ZERO);
+        ShowCreateTableStmt stmt = new ShowCreateTableStmt(tableRef, ShowCreateTableStmt.CreateTableType.VIEW);
         ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
         Assertions.assertEquals(2, metaData.getColumnCount());
         Assertions.assertEquals("Table", metaData.getColumn(0).getName());
@@ -321,8 +323,10 @@ public class ShowStmtMetaTest {
 
     @Test
     public void testShowCreateTableStmtMaterializedView() {
-        TableName tableName = new TableName("test_db", "test_mv");
-        ShowCreateTableStmt stmt = new ShowCreateTableStmt(tableName, ShowCreateTableStmt.CreateTableType.MATERIALIZED_VIEW);
+        TableRef tableRef = new TableRef(QualifiedName.of(Lists.newArrayList("test_db", "test_mv")),
+                null, NodePosition.ZERO);
+        ShowCreateTableStmt stmt = new ShowCreateTableStmt(tableRef,
+                ShowCreateTableStmt.CreateTableType.MATERIALIZED_VIEW);
         ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
         Assertions.assertEquals(2, metaData.getColumnCount());
         Assertions.assertEquals("Table", metaData.getColumn(0).getName());
