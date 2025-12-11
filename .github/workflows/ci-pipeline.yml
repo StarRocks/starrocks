@@ -290,6 +290,7 @@ jobs:
           mkdir -p ${{ github.workspace }}
 
       - name: Checkout Code
+        id: checkout_code
         if: needs.be-checker.outputs.be_change == 'true' || needs.be-checker.outputs.pre_format_conclusion != 'success'
         uses: actions/checkout@v4
         with:
@@ -297,12 +298,14 @@ jobs:
 
       - name: BRANCH INFO
         id: branch
-        if: success()
+        if: steps.checkout_code.outcome == 'success'
         run: |
           echo ${{github.base_ref}}
           echo "branch=${{github.base_ref}}" >> $GITHUB_OUTPUT
 
       - name: Checkout PR
+        id: checkout_pr
+        if: steps.checkout_code.outcome == 'success'
         run: |
           BRANCH=${{steps.branch.outputs.branch}}
           git config --global user.name "wanpengfei-git";
@@ -316,6 +319,8 @@ jobs:
           git merge --squash --no-edit ${BRANCH} || (echo "::error::Merge conflict, please check." && exit -1);
 
       - name: Run Clang-Format
+        id: run_clang_format
+        if: steps.checkout_pr.outcome == 'success'
         run: |
           export PATH=/var/lib/llvm/bin:$PATH
           bash build-support/check-format.sh
@@ -376,6 +381,8 @@ jobs:
           ./bin/run-pr-update-image.sh
 
       - name: Upload Thirdparty Result
+        id: upload_thirdparty_result
+        if: steps.update-image.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
           name: THIRDPARTY-RESULT-${{ matrix.linux }}
@@ -505,7 +512,7 @@ jobs:
           ./bin/elastic-build.sh --pr ${PR_NUMBER} --repository ${{ github.repository }} --linuxdistro ${LINUX_DISTRO} --be --clang-tidy
 
       - name: clean ECI
-        if: always()
+        if: always() && steps.run_clang_tidy.outputs.ECI_ID != ''
         run: |
           echo ${{ steps.run_clang_tidy.outputs.ECI_ID }}
           eci rm ${{ steps.run_clang_tidy.outputs.ECI_ID }}
@@ -599,6 +606,7 @@ jobs:
       extension_filter: ${{ needs.fe-checker.outputs.extension_filter }}
     steps:
       - name: clean
+        id: clean
         if: needs.fe-checker.outputs.fe_change == 'true' || needs.fe-checker.outputs.pre_codestyle_conclusion != 'success'
         run: |
           rm -rf ${{ github.workspace }}
@@ -606,16 +614,20 @@ jobs:
 
       - name: BRANCH INFO
         id: branch
-        if: success()
+        if: steps.clean.outcome == 'success'
         run: |
           echo ${{github.base_ref}}
           echo "branch=${{github.base_ref}}" >> $GITHUB_OUTPUT
 
       - uses: actions/checkout@v4
+        id: checkout_code
+        if: steps.branch.outcome == 'success'
         with:
           fetch-depth: 0
 
       - name: Checkout PR
+        id: checkout_pr
+        if: steps.checkout_code.outcome == 'success'
         run: |
           BRANCH=${{steps.branch.outputs.branch}}
           git config --global user.name "wanpengfei-git";
@@ -629,12 +641,14 @@ jobs:
           git merge --squash --no-edit ${BRANCH} || (echo "::error::Merge conflict, please check." && exit -1);
 
       - name: Copy checkstyle files
-        if: needs.fe-checker.outputs.java_filter == 'true'
+        id: copy_checkstyle_files
+        if: steps.checkout_pr.outcome == 'success' && needs.fe-checker.outputs.java_filter == 'true'
         run: |
           cp fe/checkstyle* .
 
       - name: Run java checkstyle
-        if: needs.fe-checker.outputs.java_filter == 'true'
+        id: run_java_checkstyle
+        if: steps.copy_checkstyle_files.outcome == 'success' && needs.fe-checker.outputs.java_filter == 'true'
         uses: dbelyaev/action-checkstyle@v1.15.0
         with:
           workdir: "./fe"
@@ -657,18 +671,21 @@ jobs:
       GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v4
+        id: checkout_code
         if: needs.fe-checker.outputs.fe_change == 'true' || needs.fe-checker.outputs.pre_sonarcloud_conclusion != 'success'
         with:
           fetch-depth: 0
 
       - name: BRANCH INFO
         id: branch
-        if: success()
+        if: steps.checkout_code.outcome == 'success'
         run: |
           echo ${{github.base_ref}}
           echo "branch=${{github.base_ref}}" >> $GITHUB_OUTPUT
 
       - name: Checkout PR
+        id: checkout_pr
+        if: steps.branch.outcome == 'success'
         run: |
           BRANCH=${{steps.branch.outputs.branch}}
           git config --global user.name "wanpengfei-git";
@@ -683,11 +700,15 @@ jobs:
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
+        id: setup_java
+        if: steps.checkout_pr.outcome == 'success'
         with:
           java-version: 17
           distribution: "adopt"
 
       - name: Cache SonarCloud packages
+        id: cache_sonarcloud_packages
+        if: steps.setup_java.outcome == 'success'
         uses: actions/cache@v4
         with:
           path: ~/.sonar/cache
@@ -695,6 +716,8 @@ jobs:
           restore-keys: ${{ runner.os }}-sonar
 
       - name: Cache Maven packages
+        id: cache_maven_packages
+        if: steps.cache_sonarcloud_packages.outcome == 'success'
         uses: actions/cache@v4
         with:
           path: ~/.m2
@@ -702,6 +725,8 @@ jobs:
           restore-keys: ${{ runner.os }}-maven
 
       - name: Install Apache Thrift 0.13
+        id: install_thrift_0_13
+        if: steps.cache_maven_packages.outcome == 'success'
         run: |
           mkdir -p ./.setup-thrift/oras
           mkdir -p ./.setup-thrift/thrift
@@ -713,6 +738,8 @@ jobs:
           ln -sf $(pwd)/thrift /usr/local/bin/thrift
 
       - name: Analyze FE
+        id: analyze_fe
+        if: steps.install_thrift_0_13.outcome == 'success'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # Needed to get PR information, if any
           SONAR_TOKEN: f0fb4d25c03bae90c2e994c45c29c49dc86fc169 # ${{ secrets.SONAR_TOKEN }}
@@ -758,7 +785,7 @@ jobs:
 
       - name: UPDATE ECI & RUN UT
         id: run_ut
-        if: success()
+        if: steps.branch.outcome == 'success'
         shell: bash
         timeout-minutes: 90
         env:
@@ -924,7 +951,7 @@ jobs:
 
       - name: Rebuild Checker
         id: rebuild-checker
-        if: steps.check-necessity.outcome == 'success'
+        if: steps.branch.outcome == 'success'
         env:
           be_change: ${{ steps.parsing-be-path-filter.outputs.src_filter }}
           fe_change: ${{ steps.parsing-fe-path-filter.outputs.src_filter }}
@@ -941,7 +968,7 @@ jobs:
         id: run_build
         shell: bash
         timeout-minutes: 90
-        if: steps.check-necessity.outcome == 'success'
+        if: steps.rebuild-checker.outcome == 'success'
         env:
           package: ${{ env.package }}
           pom_filter: ${{ steps.parsing-fe-path-filter.outputs.pom_filter }}
@@ -965,14 +992,15 @@ jobs:
           fi
 
       - name: build result
-        if: steps.check-necessity.outcome == 'success'
+        id: build_result
+        if: steps.run_build.outcome == 'success'
         run: |
           echo ${{ steps.run_build.outputs.OUTPUT_TAR }}
           echo ${{ steps.run_build.outputs.BASE_VERSION }} > ./base_version.txt
 
       - name: Upload the Base Version
         uses: actions/upload-artifact@v4
-        if: steps.check-necessity.outcome == 'success'
+        if: steps.build_result.outcome == 'success'
         with:
           name: base_version
           path: ./base_version.txt
