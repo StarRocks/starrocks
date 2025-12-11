@@ -2839,47 +2839,6 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         return db;
     }
 
-<<<<<<< HEAD
-=======
-    @Override
-    public boolean tableExists(ConnectContext context, String dbName, String tblName) {
-        Database database = getDb(context, dbName);
-        if (database == null) {
-            return false;
-        }
-        return database.getTable(tblName) != null;
-    }
-
-    @Override
-    public Table getTable(ConnectContext context, String dbName, String tblName) {
-        return getTable(dbName, tblName);
-    }
-
-    public Table getTable(String dbName, String tblName) {
-        Database database = getDb(dbName);
-        if (database == null) {
-            return null;
-        }
-        return database.getTable(tblName);
-    }
-
-    public Table getTable(Long dbId, Long tableId) {
-        Database database = getDb(dbId);
-        if (database == null) {
-            return null;
-        }
-        return database.getTable(tableId);
-    }
-
-    public List<Table> getTables(Long dbId) {
-        Database database = getDb(dbId);
-        if (database == null) {
-            return Collections.emptyList();
-        } else {
-            return database.getTables();
-        }
-    }
-
     /**
      * @param mvId mv's mvid
      * @return a checked mv by input mvid.
@@ -2894,22 +2853,6 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         return (MaterializedView) table;
     }
 
-    /**
-     * Get Table descriptor and materialized index for the materialized view index specific by `dbName`.`tblName`
-     *
-     * @param dbName  - the string represents the database name
-     * @param tblName - the string represents the table name
-     * @return a Table instance
-     */
-    public Pair<Table, MaterializedIndexMeta> getMaterializedViewIndex(String dbName, String tblName) {
-        Database database = getDb(dbName);
-        if (database == null) {
-            return null;
-        }
-        return database.getMaterializedViewIndex(tblName);
-    }
-
->>>>>>> 389a104e27 ([BugFix] Refresh mv's metadata in getting mvs by ast keys (backport #66472) (#66492))
     public Table getTableIncludeRecycleBin(Database db, long tableId) {
         Table table = db.getTable(tableId);
         if (table == null) {
