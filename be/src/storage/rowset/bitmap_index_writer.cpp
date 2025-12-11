@@ -146,7 +146,13 @@ public:
         rhs._value = 1; // make sure not delete when rhs is destroyed
     }
     BitmapUpdateContextRefOrSingleValue& operator=(BitmapUpdateContextRefOrSingleValue&& rhs) noexcept {
-        this->_value = rhs._value;
+        if (this == &rhs) {
+            return *this;
+        }
+        if (is_context()) {
+            delete context();
+        }
+        _value = rhs._value;
         rhs._value = 1; // make sure not delete when rhs is destroyed
         return *this;
     }
