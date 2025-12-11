@@ -273,6 +273,10 @@ public class OlapTableFactory implements AbstractTableFactory {
         try {
             table.setComment(stmt.getComment());
 
+            if (ConnectContext.get() != null) {
+                table.setCreator(ConnectContext.get().getCurrentUserIdentity().toString());
+            }
+
             // set base index id
             long baseIndexId = metastore.getNextId();
             table.setBaseIndexId(baseIndexId);
