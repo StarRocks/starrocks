@@ -169,7 +169,7 @@ To configure these variables globally for all sessions:
 SET GLOBAL arrow_flight_proxy_enabled = true;
 
 -- Set a specific proxy hostname (optional, defaults to current FE)
-SET GLOBAL arrow_flight_proxy = 'your-proxy-hostname';
+SET GLOBAL arrow_flight_proxy = 'your-proxy-hostname:Port';
 ```
 
 :::note

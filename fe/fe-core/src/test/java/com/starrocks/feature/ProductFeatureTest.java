@@ -24,6 +24,6 @@ public class ProductFeatureTest {
     @Test
     public void testProductFeature() {
         List<ProductFeature> features = ProductFeature.getFeatures();
-        Assertions.assertEquals(1, features.size());
+        Assertions.assertEquals(2, features.size());
     }
 }
