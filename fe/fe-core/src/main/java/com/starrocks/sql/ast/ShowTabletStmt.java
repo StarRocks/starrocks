@@ -15,11 +15,9 @@
 
 package com.starrocks.sql.ast;
 
-import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.TableName;
 import com.starrocks.common.proc.LakeTabletsProcDir;
 import com.starrocks.common.proc.LocalTabletsProcDir;
 import com.starrocks.sql.ast.expression.Expr;
@@ -35,11 +33,10 @@ public class ShowTabletStmt extends ShowStmt {
             .add("IsSync").add("DetailCmd")
             .build();
 
-    private String dbName;
-    private String tableName;
-    private long tabletId;
-    private PartitionRef partitionNames;
-    private Expr whereClause;
+    private TableRef tableRef;
+    private final long tabletId;
+    private final PartitionRef partitionNames;
+    private final Expr whereClause;
 
     private long version;
     private long backendId;
@@ -47,34 +44,22 @@ public class ShowTabletStmt extends ShowStmt {
     private Replica.ReplicaState replicaState;
     private Boolean isConsistent;
 
-    private boolean isShowSingleTablet;
-
     private Table table;
 
-    public ShowTabletStmt(TableName dbTableName, long tabletId, NodePosition pos) {
-        this(dbTableName, tabletId, null, null, null, null, pos);
+    public ShowTabletStmt(TableRef tableRef, long tabletId, NodePosition pos) {
+        this(tableRef, tabletId, null, null, null, null, pos);
     }
 
-    public ShowTabletStmt(TableName dbTableName, long tabletId, PartitionRef partitionNames,
+    public ShowTabletStmt(TableRef tableRef, long tabletId, PartitionRef partitionNames,
                           Expr whereClause, List<OrderByElement> orderByElements, LimitElement limitElement) {
-        this(dbTableName, tabletId, partitionNames, whereClause, orderByElements, limitElement, NodePosition.ZERO);
+        this(tableRef, tabletId, partitionNames, whereClause, orderByElements, limitElement, NodePosition.ZERO);
     }
 
-    public ShowTabletStmt(TableName dbTableName, long tabletId, PartitionRef partitionNames,
+    public ShowTabletStmt(TableRef tableRef, long tabletId, PartitionRef partitionNames,
                           Expr whereClause, List<OrderByElement> orderByElements, LimitElement limitElement,
                           NodePosition pos) {
         super(pos);
-        if (dbTableName == null) {
-            this.dbName = null;
-            this.tableName = null;
-            this.isShowSingleTablet = true;
-            this.indexName = null;
-        } else {
-            this.dbName = dbTableName.getDb();
-            this.tableName = dbTableName.getTbl();
-            this.isShowSingleTablet = false;
-            this.indexName = Strings.emptyToNull(indexName);
-        }
+        this.tableRef = tableRef;
         this.tabletId = tabletId;
         this.partitionNames = partitionNames;
         this.whereClause = whereClause;
@@ -88,16 +73,24 @@ public class ShowTabletStmt extends ShowStmt {
         this.orderByPairs = null;
     }
 
-    public String getDbName() {
-        return dbName;
+    public TableRef getTableRef() {
+        return tableRef;
     }
 
-    public void setDbName(String db) {
-        this.dbName = db;
+    public void setTableRef(TableRef tableRef) {
+        this.tableRef = tableRef;
+    }
+
+    public String getCatalogName() {
+        return tableRef == null ? null : tableRef.getCatalogName();
+    }
+
+    public String getDbName() {
+        return tableRef == null ? null : tableRef.getDbName();
     }
 
     public String getTableName() {
-        return tableName;
+        return tableRef == null ? null : tableRef.getTableName();
     }
 
     public long getTabletId() {
@@ -105,7 +98,7 @@ public class ShowTabletStmt extends ShowStmt {
     }
 
     public boolean isShowSingleTablet() {
-        return isShowSingleTablet;
+        return tableRef == null;
     }
 
     public boolean hasOffset() {
