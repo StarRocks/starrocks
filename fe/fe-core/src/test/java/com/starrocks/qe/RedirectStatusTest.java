@@ -534,7 +534,8 @@ public class RedirectStatusTest {
         CreateTableStmt createTableStmt = new CreateTableStmt(
                 false,
                 false,
-                new TableName("hive_catalog", "hive_db", "hive_table"),
+                new TableRef(QualifiedName.of(Lists.newArrayList("hive_catalog", "hive_db", "hive_table")),
+                        null, NodePosition.ZERO),
                 Lists.newArrayList(
                         new ColumnDef("c1", new TypeDef(TypeFactory.createType(PrimitiveType.INT))),
                         new ColumnDef("p1", new TypeDef(TypeFactory.createType(PrimitiveType.INT)))),
@@ -864,7 +865,10 @@ public class RedirectStatusTest {
         QueryStatement queryStatement = new QueryStatement(selectRelation);
 
         TableName tableName = new TableName("catalog", "db", "table");
-        InsertStmt stmt = new InsertStmt(tableName, queryStatement);
+        InsertStmt stmt = new InsertStmt(
+                new TableRef(QualifiedName.of(Lists.newArrayList(
+                        tableName.getCatalog(), tableName.getDb(), tableName.getTbl())),
+                        null, NodePosition.ZERO), queryStatement);
         Assertions.assertEquals(RedirectStatus.FORWARD_WITH_SYNC, RedirectStatus.getRedirectStatus(stmt));
     }
 
@@ -925,7 +929,10 @@ public class RedirectStatusTest {
         TableName tableName = new TableName("catalog", "db", "mv");
         SelectRelation selectRelation = new SelectRelation(new SelectList(), null, null, null, null);
         QueryStatement queryStatement = new QueryStatement(selectRelation);
-        CreateMaterializedViewStmt stmt = new CreateMaterializedViewStmt(tableName, queryStatement,
+        CreateMaterializedViewStmt stmt = new CreateMaterializedViewStmt(
+                new TableRef(QualifiedName.of(Lists.newArrayList(
+                        tableName.getCatalog(), tableName.getDb(), tableName.getTbl())),
+                        null, NodePosition.ZERO), queryStatement,
                 java.util.Collections.emptyMap());
         Assertions.assertEquals(RedirectStatus.FORWARD_WITH_SYNC, RedirectStatus.getRedirectStatus(stmt));
     }
@@ -954,7 +961,9 @@ public class RedirectStatusTest {
                 null, null, null, null);
         QueryStatement queryStatement = new QueryStatement(selectRelation);
 
-        InsertStmt insertStmt = new InsertStmt(new TableName(), queryStatement);
+        InsertStmt insertStmt = new InsertStmt(
+                new TableRef(QualifiedName.of(Lists.newArrayList()),
+                        null, NodePosition.ZERO), queryStatement);
         SubmitTaskStmt stmt = new SubmitTaskStmt(new TaskName("", ""), 0, insertStmt, NodePosition.ZERO);
         Assertions.assertEquals(RedirectStatus.FORWARD_WITH_SYNC, RedirectStatus.getRedirectStatus(stmt));
     }
@@ -1172,7 +1181,7 @@ public class RedirectStatusTest {
     @Test
     public void testCreateViewStmt() {
         CreateViewStmt stmt = new CreateViewStmt(false, false,
-                new TableName("catalog", "db", "table"),
+                new TableRef(QualifiedName.of(Lists.newArrayList("catalog", "db", "table")), null, NodePosition.ZERO),
                 Lists.newArrayList(new ColWithComment("k1", "",
                         NodePosition.ZERO)),
                 "",
@@ -1374,7 +1383,9 @@ public class RedirectStatusTest {
 
     @Test
     public void testDropTemporaryTableStmt() {
-        DropTemporaryTableStmt stmt = new DropTemporaryTableStmt(true, new TableName(), false);
+        DropTemporaryTableStmt stmt = new DropTemporaryTableStmt(true,
+                new TableRef(QualifiedName.of(Lists.newArrayList()),
+                        null, NodePosition.ZERO), false);
         Assertions.assertEquals(RedirectStatus.FORWARD_WITH_SYNC, RedirectStatus.getRedirectStatus(stmt));
     }
 
@@ -1508,7 +1519,10 @@ public class RedirectStatusTest {
         QueryStatement queryStatement = new QueryStatement(selectRelation);
 
         TableName tableName = new TableName("catalog", "db", "table");
-        InsertStmt insertStmt = new InsertStmt(tableName, queryStatement);
+        InsertStmt insertStmt = new InsertStmt(
+                new TableRef(QualifiedName.of(Lists.newArrayList(
+                        tableName.getCatalog(), tableName.getDb(), tableName.getTbl())),
+                        null, NodePosition.ZERO), queryStatement);
 
         DataCacheSelectStatement stmt = new DataCacheSelectStatement(insertStmt, new HashMap<>(), NodePosition.ZERO);
         Assertions.assertEquals(RedirectStatus.FORWARD_WITH_SYNC, RedirectStatus.getRedirectStatus(stmt));

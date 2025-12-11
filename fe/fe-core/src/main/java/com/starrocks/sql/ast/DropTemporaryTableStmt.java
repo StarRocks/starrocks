@@ -15,7 +15,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.catalog.TableName;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.UUID;
@@ -24,8 +23,8 @@ public class DropTemporaryTableStmt extends DropTableStmt {
     // the session's id associated with this temporary table
     private UUID sessionId = null;
 
-    public DropTemporaryTableStmt(boolean ifExists, TableName tableName, boolean forceDrop) {
-        super(ifExists, tableName, false, forceDrop, NodePosition.ZERO);
+    public DropTemporaryTableStmt(boolean ifExists, TableRef tableRef, boolean forceDrop) {
+        super(ifExists, tableRef, false, forceDrop, NodePosition.ZERO);
     }
 
     public void setSessionId(UUID sessionId) {

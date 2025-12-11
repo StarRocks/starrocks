@@ -68,7 +68,9 @@ public class ShowPipeStmt extends ShowStmt {
         row.add(String.valueOf(pipe.getPipeId().getId()));
         row.add(pipe.getName());
         row.add(String.valueOf(pipe.getState()));
-        row.add(Optional.ofNullable(pipe.getTargetTable()).map(Object::toString).orElse(""));
+        row.add(Optional.ofNullable(pipe.getTargetTable())
+                .map(tableName -> tableName.toString())
+                .orElse(""));
         row.add(pipe.getLoadStatus().toJson());
         row.add(pipe.getLastErrorInfo().toJson());
         row.add(DateUtils.formatTimestampInSeconds(pipe.getCreatedTime()));

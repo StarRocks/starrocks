@@ -23,7 +23,6 @@ import com.google.common.collect.Sets;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Partition;
-import com.starrocks.catalog.PartitionNames;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
 import com.starrocks.common.AnalysisException;
@@ -33,7 +32,6 @@ import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
-import com.starrocks.persist.TableRefPersist;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -77,8 +75,6 @@ public class ExportStmt extends StatementBase {
     private String rowDelimiter;
     private boolean includeQueryId = true;
 
-    // For persistence, converted from tableRef when needed
-    private TableRefPersist tableRefPersist;
     private long exportStartTime;
     private boolean sync;
 
@@ -148,24 +144,6 @@ public class ExportStmt extends StatementBase {
         this.exportStartTime = exportStartTime;
     }
 
-    public TableRefPersist getTableRefPersist() {
-        if (tableRefPersist == null && tableRef != null) {
-            PartitionNames partitionNames = null;
-            if (tableRef.getPartitionRef() != null) {
-                partitionNames = new PartitionNames(tableRef.getPartitionRef().isTemp(),
-                        tableRef.getPartitionRef().getPartitionNames(), tableRef.getPartitionRef().getPos());
-            }
-            TableName tableName = new TableName(tableRef.getCatalogName(), tableRef.getDbName(),
-                    tableRef.getTableName(), tableRef.getPos());
-            tableRefPersist = new TableRefPersist(tableName, null, partitionNames, tableRef.getPos());
-        }
-        return tableRefPersist;
-    }
-
-    public void setTableRefPersist(TableRefPersist tableRefPersist) {
-        this.tableRefPersist = tableRefPersist;
-    }
-
     public List<String> getPartitions() {
         return partitions;
     }
@@ -213,7 +191,7 @@ public class ExportStmt extends StatementBase {
         }
 
         try (AutoCloseableLock ignore =
-                    new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(table.getId()), LockType.READ)) {
+                     new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(table.getId()), LockType.READ)) {
             Table.TableType tblType = table.getType();
             switch (tblType) {
                 case MYSQL:
@@ -226,7 +204,7 @@ public class ExportStmt extends StatementBase {
                 case VIEW:
                 default:
                     throw new SemanticException("Table[" + getTableName() + "] is " + tblType +
-                                " type, do not support EXPORT.");
+                            " type, do not support EXPORT.");
             }
 
             if (partitions != null) {
@@ -334,7 +312,7 @@ public class ExportStmt extends StatementBase {
         if (tableRef == null) {
             sb.append("non-exist");
         } else {
-            TableName tableName = new TableName(getCatalogName(), getDbName(), getTableName(), tableRef.getPos());
+            TableName tableName = TableName.fromTableRef(tableRef);
             sb.append(tableName.toSql());
         }
         if (partitions != null && !partitions.isEmpty()) {

@@ -12,7 +12,10 @@ import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.CancelExportStmt;
 import com.starrocks.sql.ast.ExportStmt;
+import com.starrocks.sql.ast.QualifiedName;
 import com.starrocks.sql.ast.ShowExportStmt;
+import com.starrocks.sql.ast.TableRef;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.common.AuditEncryptionChecker;
 import com.starrocks.system.BrokerHbResponse;
 import org.junit.jupiter.api.Assertions;
@@ -163,7 +166,7 @@ public class ExportRelativeStmtTest {
         TableName tb = new TableName(dbName, tableName);
         List<String> columnLst = Lists.newArrayList("c1", "c2");
 
-        ExportStmt stmt1 = new ExportStmt(new TableRefPersist(tb, null), columnLst, path, new HashMap<>(), null);
+        ExportStmt stmt1 = new ExportStmt(new TableRef(QualifiedName.of(Lists.newArrayList(tb.getDb(), tb.getTbl())), null, NodePosition.ZERO), columnLst, path, new HashMap<>(), null);
 
         try {
             Analyzer.analyze(stmt1, AnalyzeTestUtil.getConnectContext());

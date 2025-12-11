@@ -34,7 +34,7 @@
 
 package com.starrocks.qe;
 
-import com.starrocks.catalog.TableName;
+import com.google.common.collect.Lists;
 import com.starrocks.common.Status;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.mysql.MysqlCapability;
@@ -44,8 +44,11 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.InsertStmt;
+import com.starrocks.sql.ast.QualifiedName;
 import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.ValuesRelation;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TUniqueId;
@@ -236,7 +239,10 @@ public class ConnectContextTest {
         ctx.setThreadLocalInfo();
 
         StmtExecutor executor = new StmtExecutor(
-                ctx, new InsertStmt(new TableName("db", "tbl"), new QueryStatement(ValuesRelation.newDualRelation())));
+                ctx, new InsertStmt(
+                        new TableRef(QualifiedName.of(Lists.newArrayList("db", "tbl")),
+                                null, NodePosition.ZERO),
+                        new QueryStatement(ValuesRelation.newDualRelation())));
         ctx.setExecutor(executor);
 
         // insert no time out

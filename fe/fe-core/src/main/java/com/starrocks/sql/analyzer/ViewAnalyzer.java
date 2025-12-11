@@ -15,6 +15,7 @@
 package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Strings;
+import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.ErrorCode;
@@ -29,8 +30,10 @@ import com.starrocks.sql.ast.AlterViewStmt;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.ColWithComment;
 import com.starrocks.sql.ast.CreateViewStmt;
+import com.starrocks.sql.ast.QualifiedName;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.TableRef;
 import org.apache.commons.collections4.MapUtils;
 
 import java.util.HashSet;
@@ -47,13 +50,41 @@ public class ViewAnalyzer {
         @Override
         public Void visitCreateViewStatement(CreateViewStmt stmt, ConnectContext context) {
             // normalize & validate view name
-            stmt.getTableName().normalization(context);
-            final String tableName = stmt.getTableName().getTbl();
+            TableRef tableRef = stmt.getTableRef();
+            if (tableRef == null) {
+                throw new SemanticException("Table reference cannot be null");
+            }
+            
+            String catalog = tableRef.getCatalogName();
+            String db = tableRef.getDbName();
+            String tbl = tableRef.getTableName();
+            
+            if (Strings.isNullOrEmpty(catalog)) {
+                catalog = context.getCurrentCatalog();
+            }
+            if (Strings.isNullOrEmpty(db)) {
+                db = context.getDatabase();
+                if (Strings.isNullOrEmpty(db)) {
+                    throw new SemanticException("No database selected");
+                }
+            }
+            if (Strings.isNullOrEmpty(tbl)) {
+                throw new SemanticException("Table name cannot be empty");
+            }
+            
+            // Create normalized TableRef if needed
+            if (!catalog.equals(tableRef.getCatalogName()) || !db.equals(tableRef.getDbName())) {
+                QualifiedName normalizedName = QualifiedName.of(Lists.newArrayList(catalog, db, tbl));
+                tableRef = new TableRef(normalizedName, null, tableRef.getPos());
+                stmt.setTableRef(tableRef);
+            }
+            
+            final String tableName = tbl;
             FeNameFormat.checkTableName(tableName);
 
             // Only allow setting properties for Iceberg views
             if (!MapUtils.isEmpty(stmt.getProperties())) {
-                String catalog = stmt.getTableName().getCatalog();
+                String catalogName = stmt.getCatalog();
                 if (Strings.isNullOrEmpty(catalog) ||
                         !GlobalStateMgr.getCurrentState().getCatalogMgr().catalogExists(catalog)) {
                     ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_CATALOG_ERROR, catalog);
@@ -80,13 +111,40 @@ public class ViewAnalyzer {
         @Override
         public Void visitAlterViewStatement(AlterViewStmt stmt, ConnectContext context) {
             // normalize & validate view name
-            stmt.getTableName().normalization(context);
-            final String tableName = stmt.getTableName().getTbl();
+            TableRef tableRef = stmt.getTableRef();
+            if (tableRef == null) {
+                throw new SemanticException("Table reference cannot be null");
+            }
+            
+            String catalog = tableRef.getCatalogName();
+            String dbName = tableRef.getDbName();
+            String tbl = tableRef.getTableName();
+            
+            if (Strings.isNullOrEmpty(catalog)) {
+                catalog = context.getCurrentCatalog();
+            }
+            if (Strings.isNullOrEmpty(dbName)) {
+                dbName = context.getDatabase();
+                if (Strings.isNullOrEmpty(dbName)) {
+                    throw new SemanticException("No database selected");
+                }
+            }
+            if (Strings.isNullOrEmpty(tbl)) {
+                throw new SemanticException("Table name cannot be empty");
+            }
+            
+            // Create normalized TableRef if needed
+            if (!catalog.equals(tableRef.getCatalogName()) || !dbName.equals(tableRef.getDbName())) {
+                QualifiedName normalizedName = QualifiedName.of(Lists.newArrayList(catalog, dbName, tbl));
+                tableRef = new TableRef(normalizedName, null, tableRef.getPos());
+                stmt.setTableRef(tableRef);
+            }
+            
+            final String tableName = tbl;
             FeNameFormat.checkTableName(tableName);
 
             Table table = GlobalStateMgr.getCurrentState().getMetadataMgr()
-                    .getTable(context, stmt.getTableName().getCatalog(), stmt.getTableName().getDb(),
-                            stmt.getTableName().getTbl());
+                    .getTable(context, catalog, dbName, tbl);
             if (table == null) {
                 throw new SemanticException("Table %s is not found", tableName);
             }

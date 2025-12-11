@@ -221,21 +221,24 @@ public class PlannerMetaLocker implements AutoCloseable {
 
         @Override
         public Void visitAlterTableStatement(AlterTableStmt statement, Void context) {
-            Pair<Database, Table> dbAndTable = resolveTable(session, statement.getTbl());
+            Pair<Database, Table> dbAndTable = resolveTable(session, 
+                    com.starrocks.catalog.TableName.fromTableRef(statement.getTableRef()));
             put(dbAndTable);
             return super.visitAlterTableStatement(statement, context);
         }
 
         @Override
         public Void visitAlterViewStatement(AlterViewStmt statement, Void context) {
-            Pair<Database, Table> dbAndTable = resolveTable(session, statement.getTableName());
+            Pair<Database, Table> dbAndTable = resolveTable(session, 
+                    com.starrocks.catalog.TableName.fromTableRef(statement.getTableRef()));
             put(dbAndTable);
             return super.visitAlterViewStatement(statement, context);
         }
 
         @Override
         public Void visitAlterMaterializedViewStatement(AlterMaterializedViewStmt statement, Void context) {
-            Pair<Database, Table> dbAndTable = resolveTable(session, statement.getMvName());
+            Pair<Database, Table> dbAndTable = resolveTable(session, 
+                    com.starrocks.catalog.TableName.fromTableRef(statement.getMvTableRef()));
             put(dbAndTable);
             return super.visitAlterMaterializedViewStatement(statement, context);
         }

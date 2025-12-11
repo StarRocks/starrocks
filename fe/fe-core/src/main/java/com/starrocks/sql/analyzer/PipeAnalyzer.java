@@ -20,7 +20,6 @@ import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.ImmutableSortedSet;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableFunctionTable;
-import com.starrocks.catalog.TableName;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.util.ParseUtil;
@@ -37,7 +36,6 @@ import com.starrocks.sql.ast.OrderByElement;
 import com.starrocks.sql.ast.OrderByPair;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
-import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.pipe.AlterPipeSetProperty;
 import com.starrocks.sql.ast.pipe.AlterPipeStmt;
@@ -171,13 +169,10 @@ public class PipeAnalyzer {
         Map<String, String> properties = stmt.getProperties();
 
         InsertStmt insertStmt = stmt.getInsertStmt();
-        TableRef tableRef = insertStmt.getTableRef();
-        TableName tableName = new TableName(tableRef.getCatalogName(), tableRef.getDbName(),
-                tableRef.getTableName(), tableRef.getPos());
-        stmt.setTargetTable(tableName);
         String insertSql = stmt.getOrigStmt().originStmt.substring(stmt.getInsertSqlStartIndex());
         stmt.setInsertSql(insertSql);
         Analyzer.analyze(insertStmt, context);
+        stmt.setTargetTableRef(insertStmt.getTableRef());
 
         analyzePipeName(stmt.getPipeName(), insertStmt.getDbName());
 

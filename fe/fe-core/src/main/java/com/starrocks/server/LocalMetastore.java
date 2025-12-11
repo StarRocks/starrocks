@@ -2909,8 +2909,8 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
     public void createMaterializedView(CreateMaterializedViewStatement stmt)
             throws DdlException {
         // check mv exists,name must be different from view/mv/table which exists in metadata
-        String mvName = stmt.getTableName().getTbl();
-        String dbName = stmt.getTableName().getDb();
+        String mvName = stmt.getTblName();
+        String dbName = stmt.getDbName();
         LOG.debug("Begin create materialized view: {}", mvName);
         // check if db exists
         Database db = this.getDb(dbName);

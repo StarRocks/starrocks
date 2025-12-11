@@ -54,6 +54,9 @@ import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.ModifyTablePropertiesClause;
+import com.starrocks.sql.ast.QualifiedName;
+import com.starrocks.sql.ast.TableRef;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.type.IntegerType;
@@ -193,8 +196,11 @@ public class LakeTableAlterDataCachePartitionDurationTest {
         };
 
         connectContext.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+        TableName tableName = new TableName(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, db.getFullName(), table.getName());
         new AlterJobExecutor().process(new AlterTableStmt(
-                new TableName(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, db.getFullName(), table.getName()),
+                new TableRef(QualifiedName.of(Lists.newArrayList(
+                        tableName.getCatalog(), tableName.getDb(), tableName.getTbl())),
+                        null, NodePosition.ZERO),
                 Lists.newArrayList(modify)
         ), connectContext);
 
@@ -228,8 +234,11 @@ public class LakeTableAlterDataCachePartitionDurationTest {
         };
 
         connectContext.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+        TableName tableName = new TableName(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, db.getFullName(), table.getName());
         new AlterJobExecutor().process(new AlterTableStmt(
-                new TableName(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, db.getFullName(), table.getName()),
+                new TableRef(QualifiedName.of(Lists.newArrayList(
+                        tableName.getCatalog(), tableName.getDb(), tableName.getTbl())),
+                        null, NodePosition.ZERO),
                 Lists.newArrayList(modify)
         ), connectContext);
 
@@ -258,8 +267,11 @@ public class LakeTableAlterDataCachePartitionDurationTest {
         };
 
         connectContext.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+        TableName tableName = new TableName(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, db.getFullName(), table.getName());
         new AlterJobExecutor().process(new AlterTableStmt(
-                new TableName(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, db.getFullName(), table.getName()),
+                new TableRef(QualifiedName.of(Lists.newArrayList(
+                        tableName.getCatalog(), tableName.getDb(), tableName.getTbl())),
+                        null, NodePosition.ZERO),
                 Lists.newArrayList(modify)
         ), connectContext);
 
