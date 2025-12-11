@@ -184,6 +184,19 @@ public class PlanFragment extends TreeNode<PlanFragment> {
 
     private List<Integer> collectExecStatsIds;
 
+    // If all scan nodes in the entire plan are OLAP scan nodes and at most one tablet is used,
+    // then all fragments will have at most one instance (running on a single BE).
+    // In this case, there is no need to put the ResultSink in a dedicated gather fragment.
+    //
+    // CN mode(prefer_compute_node is true or share-data mode) needs special handling here, because its strategy for selecting
+    // BE/CN nodes for remote fragments (whose left-deep node is not a scan node) is different from non-CN mode:
+    // - CN mode: selects all CN nodes as instances, which will be more than 1 here,
+    //   causing the fragment that contains the ResultSink to also have more than 1 instance.
+    // - None-CN mode: selects the BE node(s) where the child fragment is running.
+    //
+    // Therefore, if isSingleTabletGatherOutputFragment is true, CN mode should use the same selection strategy as none-CN mode.
+    private boolean isSingleTabletGatherOutputFragment = false;
+
     /**
      * C'tor for fragment with specific partition; the output is by default broadcast.
      */
@@ -1035,4 +1048,11 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         }
     }
 
+    public boolean isSingleTabletGatherOutputFragment() {
+        return isSingleTabletGatherOutputFragment;
+    }
+
+    public void setSingleTabletGatherOutputFragment(boolean singleTabletGatherOutputFragment) {
+        isSingleTabletGatherOutputFragment = singleTabletGatherOutputFragment;
+    }
 }

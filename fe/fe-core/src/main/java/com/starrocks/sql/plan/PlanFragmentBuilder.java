@@ -124,7 +124,11 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
+<<<<<<< HEAD
 import com.starrocks.server.RunMode;
+=======
+import com.starrocks.server.WarehouseManager;
+>>>>>>> 7ef8f553fe ([Enhancement] Support single-tablet ResultSink optimization in share-data mode (#66517))
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.DecimalV3FunctionAnalyzer;
@@ -347,12 +351,12 @@ public class PlanFragmentBuilder {
         // We shouldn't set result sink directly to top fragment, because we will hash multi result sink.
         // Note: If enable compute node and the top fragment not GATHER node, the parallelism of top fragment can't
         // be 1, it's error
-        if ((!enableComputeNode(execPlan)
-                && !inputFragment.hashLocalBucketShuffleRightOrFullJoin(inputFragment.getPlanRoot())
+        if ((!inputFragment.hashLocalBucketShuffleRightOrFullJoin(inputFragment.getPlanRoot())
                 && execPlan.getScanNodes().stream().allMatch(d -> d instanceof OlapScanNode)
                 && (execPlan.getScanNodes().stream().map(d -> ((OlapScanNode) d).getScanTabletIds().size())
                 .reduce(Integer::sum).orElse(2) <= 1)) || execPlan.isShortCircuit()) {
             inputFragment.setOutputExprs(outputExprs);
+            inputFragment.setSingleTabletGatherOutputFragment(true);
             return;
         }
 
@@ -365,14 +369,6 @@ public class PlanFragmentBuilder {
 
         exchangeFragment.setOutputExprs(outputExprs);
         execPlan.getFragments().add(exchangeFragment);
-    }
-
-    private static boolean enableComputeNode(ExecPlan execPlan) {
-        boolean preferComputeNode = execPlan.getConnectContext().getSessionVariable().isPreferComputeNode();
-        if (preferComputeNode || RunMode.isSharedDataMode()) {
-            return true;
-        }
-        return false;
     }
 
     private static boolean useQueryCache(ExecPlan execPlan) {
