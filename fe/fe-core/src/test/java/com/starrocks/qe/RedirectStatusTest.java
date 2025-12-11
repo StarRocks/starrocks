@@ -1441,7 +1441,10 @@ public class RedirectStatusTest {
 
     @Test
     public void testAdminSetPartitionVersionStmt() {
-        AdminSetPartitionVersionStmt stmt = new AdminSetPartitionVersionStmt(null, "partition", 1L, NodePosition.ZERO);
+        QualifiedName qualifiedName = QualifiedName.of(Lists.newArrayList("test_db", "test_tbl"));
+        TableRef tableRef = new TableRef(qualifiedName, null, NodePosition.ZERO);
+        AdminSetPartitionVersionStmt stmt =
+                new AdminSetPartitionVersionStmt(tableRef, "partition", 1L, NodePosition.ZERO);
         Assertions.assertEquals(RedirectStatus.FORWARD_NO_SYNC, RedirectStatus.getRedirectStatus(stmt));
     }
 

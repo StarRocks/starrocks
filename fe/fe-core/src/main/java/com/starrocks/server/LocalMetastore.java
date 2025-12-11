@@ -4983,19 +4983,20 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
     }
 
     public void setPartitionVersion(AdminSetPartitionVersionStmt stmt) {
-        Database database = getDb(stmt.getTableName().getDb());
+        TableRef tableRef = stmt.getTableRef();
+        Database database = getDb(tableRef.getDbName());
         if (database == null) {
-            throw ErrorReportException.report(ErrorCode.ERR_BAD_DB_ERROR, stmt.getTableName().getDb());
+            throw ErrorReportException.report(ErrorCode.ERR_BAD_DB_ERROR, tableRef.getDbName());
         }
         Locker locker = new Locker();
         locker.lockDatabase(database.getId(), LockType.WRITE);
         try {
-            Table table = getTable(database.getFullName(), stmt.getTableName().getTbl());
+            Table table = getTable(database.getFullName(), tableRef.getTableName());
             if (table == null) {
-                throw ErrorReportException.report(ErrorCode.ERR_BAD_TABLE_ERROR, stmt.getTableName().getTbl());
+                throw ErrorReportException.report(ErrorCode.ERR_BAD_TABLE_ERROR, tableRef.getTableName());
             }
             if (!table.isOlapTableOrMaterializedView()) {
-                throw ErrorReportException.report(ErrorCode.ERR_NOT_OLAP_TABLE, stmt.getTableName().getTbl());
+                throw ErrorReportException.report(ErrorCode.ERR_NOT_OLAP_TABLE, tableRef.getTableName());
             }
 
             PhysicalPartition physicalPartition;

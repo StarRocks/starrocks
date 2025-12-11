@@ -11,10 +11,10 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+
 package com.starrocks.sql.ast;
 
 import com.google.common.base.Preconditions;
-import com.starrocks.catalog.TableName;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
@@ -27,7 +27,6 @@ import java.util.List;
 public class AlterTableModifyDefaultBucketsClause extends AlterTableClause {
     private final List<String> distributionColumns;
     private final int bucketNum;
-    protected TableName tableName;
 
     public AlterTableModifyDefaultBucketsClause(List<String> distributionColumns, int bucketNum, NodePosition pos) {
         super(pos);
@@ -42,14 +41,6 @@ public class AlterTableModifyDefaultBucketsClause extends AlterTableClause {
 
     public int getBucketNum() {
         return bucketNum;
-    }
-
-    public void setTableName(TableName tableName) {
-        this.tableName = tableName;
-    }
-
-    public TableName getTableName() {
-        return tableName;
     }
 
     @Override

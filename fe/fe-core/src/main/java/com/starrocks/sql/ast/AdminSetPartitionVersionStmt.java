@@ -14,31 +14,34 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.catalog.TableName;
 import com.starrocks.sql.parser.NodePosition;
 
 public class AdminSetPartitionVersionStmt extends DdlStmt {
-    private final TableName tableName;
+    private TableRef tableRef;
     private String partitionName;
     private long partitionId = -1L;
     private final long version;
 
-    public AdminSetPartitionVersionStmt(TableName tableName, String partitionName, long version, NodePosition pos) {
+    public AdminSetPartitionVersionStmt(TableRef tableRef, String partitionName, long version, NodePosition pos) {
         super(pos);
-        this.tableName = tableName;
+        this.tableRef = tableRef;
         this.partitionName = partitionName;
         this.version = version;
     }
 
-    public AdminSetPartitionVersionStmt(TableName tableName, long partitionId, long version, NodePosition pos) {
+    public AdminSetPartitionVersionStmt(TableRef tableRef, long partitionId, long version, NodePosition pos) {
         super(pos);
-        this.tableName = tableName;
+        this.tableRef = tableRef;
         this.partitionId = partitionId;
         this.version = version;
     }
 
-    public TableName getTableName() {
-        return tableName;
+    public TableRef getTableRef() {
+        return tableRef;
+    }
+
+    public void setTableRef(TableRef tableRef) {
+        this.tableRef = tableRef;
     }
 
     public String getPartitionName() {
