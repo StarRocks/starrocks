@@ -202,6 +202,22 @@ public interface IcebergCatalog extends MemoryTrackable {
         throw new StarRocksConnectorException("This catalog doesn't loading iceberg view");
     }
 
+<<<<<<< HEAD
+=======
+    /**
+     * Register an existing table in the catalog using the given metadata file location.
+     *
+     * @param context The connect context
+     * @param dbName The database name
+     * @param tableName The table name
+     * @param metadataFileLocation The location of the metadata file
+     * @return true if the table was successfully registered, false otherwise
+     */
+    default boolean registerTable(ConnectContext context, String dbName, String tableName, String metadataFileLocation) {
+        throw new StarRocksConnectorException("This catalog doesn't support registering tables");
+    }
+
+>>>>>>> 4d47b7756f ([Enhancement] support explain on various iceberg catalogs (#66563))
     default void deleteUncommittedDataFiles(List<String> fileLocations) {
     }
 
@@ -380,11 +396,11 @@ public interface IcebergCatalog extends MemoryTrackable {
                                             ExecutorService executorService) {
         Table nativeTable = icebergTable.getNativeTable();
 
-        // Call public method so subclasses can override and optimize this method.
-        Map<String, Partition> partitionMap = getPartitions(icebergTable, requestContext.getSnapshotId(), executorService);
         if (nativeTable.spec().isUnpartitioned()) {
             return List.of();
         } else {
+            // Call public method so subclasses can override and optimize this method.
+            Map<String, Partition> partitionMap = getPartitions(icebergTable, requestContext.getSnapshotId(), executorService);
             return new ArrayList<>(partitionMap.keySet());
         }
     }
