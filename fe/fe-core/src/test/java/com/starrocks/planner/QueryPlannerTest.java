@@ -171,7 +171,7 @@ public class QueryPlannerTest {
                 connectContext.getSessionVariable().getSqlMode());
         StmtExecutor stmtExecutor2 = new StmtExecutor(connectContext, statement);
         stmtExecutor2.execute();
-        Assertions.assertEquals("Access denied; This sql is in blacklist, please contact your admin",
+        Assertions.assertEquals("Access denied; This sql is in blacklist[Index 0], please contact your admin",
                 connectContext.getState().getErrorMessage());
         connectContext.getState().setError("");
 
@@ -182,7 +182,7 @@ public class QueryPlannerTest {
                 SqlParser.parse(sqlWithLineSeparators, connectContext.getSessionVariable().getSqlMode()).get(0);
         StmtExecutor stmtExecutor4 = new StmtExecutor(connectContext, statement1);
         stmtExecutor4.execute();
-        Assertions.assertEquals("Access denied; This sql is in blacklist, please contact your admin",
+        Assertions.assertEquals("Access denied; This sql is in blacklist[Index 0], please contact your admin",
                 connectContext.getState().getErrorMessage());
         connectContext.getState().setError("");
 
@@ -192,7 +192,7 @@ public class QueryPlannerTest {
                 connectContext.getSessionVariable().getSqlMode());
         StmtExecutor stmtExecutor5 = new StmtExecutor(connectContext, statement);
         stmtExecutor5.execute();
-        Assertions.assertEquals("Access denied; This sql is in blacklist, please contact your admin",
+        Assertions.assertEquals("Access denied; This sql is in blacklist[Index 0], please contact your admin",
                 connectContext.getState().getErrorMessage());
         connectContext.getState().setError("");
 

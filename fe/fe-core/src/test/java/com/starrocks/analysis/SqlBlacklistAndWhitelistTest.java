@@ -13,6 +13,8 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
+import java.util.regex.Pattern;
+
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
 
@@ -27,6 +29,18 @@ public class SqlBlacklistAndWhitelistTest {
     @BeforeAll
     public static void beforeClass() throws Exception {
         AnalyzeTestUtil.init();
+    }
+
+
+
+    @Test
+    public void testVerifyingSQL() throws Exception {
+        AddSqlBlackListStmt stmt =
+                (AddSqlBlackListStmt) analyzeSuccess("ADD SQLBLACKLIST \"select count\\(distinct .+\\) from .+\";");
+        Assertions.assertEquals("select count(distinct .+) from .+", stmt.getSql());
+        StmtExecutor stmtExecutor = new StmtExecutor(AnalyzeTestUtil.getConnectContext(), stmt);
+        stmtExecutor.execute();
+        Assertions.assertTrue(AnalyzeTestUtil.getConnectContext().getState().isError());
     }
 
     @Test
