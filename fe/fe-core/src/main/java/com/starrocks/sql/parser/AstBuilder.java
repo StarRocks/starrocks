@@ -2805,7 +2805,8 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
     public ParseNode visitAdminSetPartitionVersion(
             com.starrocks.sql.parser.StarRocksParser.AdminSetPartitionVersionContext context) {
         QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
-        TableName targetTableName = qualifiedNameToTableName(qualifiedName);
+        NodePosition pos = createPos(context);
+        TableRef tableRef = new TableRef(normalizeName(qualifiedName), null, pos);
         String partitionName = null;
         if (context.partitionName != null) {
             partitionName = ((Identifier) visit(context.partitionName)).getValue();
@@ -2816,9 +2817,9 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         }
         long version = Long.parseLong(context.version.getText());
         if (partitionName != null) {
-            return new AdminSetPartitionVersionStmt(targetTableName, partitionName, version, createPos(context));
+            return new AdminSetPartitionVersionStmt(tableRef, partitionName, version, pos);
         } else {
-            return new AdminSetPartitionVersionStmt(targetTableName, partitionId, version, createPos(context));
+            return new AdminSetPartitionVersionStmt(tableRef, partitionId, version, pos);
         }
     }
 

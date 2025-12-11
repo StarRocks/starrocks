@@ -147,10 +147,6 @@ public class CreateMaterializedViewStatement extends DdlStmt {
         return tableName;
     }
 
-    public void setTableName(TableName tableName) {
-        this.tableName = tableName;
-    }
-
     public List<ColWithComment> getColWithComments() {
         return colWithComments;
     }
