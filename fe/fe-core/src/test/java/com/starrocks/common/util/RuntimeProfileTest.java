@@ -950,4 +950,64 @@ public class RuntimeProfileTest {
         Assertions.assertTrue(profile.getChildCounterMap().containsKey("PendingTime"));
         Assertions.assertTrue(profile.getChildCounterMap().get("PendingTime").contains("InputEmptyTime"));
     }
+
+    @Test
+    public void testDanglingCounterWithMultipleLevels() {
+        // Test nested hierarchy: GrandParent -> Parent -> Child
+        // where counters appear in wrong order
+        RuntimeProfile profile = new RuntimeProfile("test_profile");
+
+        TRuntimeProfileTree tree = new TRuntimeProfileTree();
+        TRuntimeProfileNode node = new TRuntimeProfileNode();
+        node.name = "test_profile";
+        node.num_children = 0;
+        node.indent = true;
+        node.counters = Lists.newArrayList();
+        node.child_counters_map = Maps.newHashMap();
+
+        // Add TotalTime counter
+        node.counters.add(new TCounter("TotalTime", TUnit.TIME_NS, 1000000000L));
+
+        // Add counters in wrong order: Child, GrandParent, Parent
+        TCounter childCounter = new TCounter("ChildTime", TUnit.TIME_NS, 100000L);
+        node.counters.add(childCounter);
+
+        TCounter grandParentCounter = new TCounter("GrandParentTime", TUnit.TIME_NS, 5000000L);
+        node.counters.add(grandParentCounter);
+
+        TCounter parentCounter = new TCounter("ParentTime", TUnit.TIME_NS, 2000000L);
+        node.counters.add(parentCounter);
+
+        // Set up the hierarchy: GrandParent -> Parent -> Child
+        Set<String> childSet = Sets.newHashSet();
+        childSet.add("ChildTime");
+        node.child_counters_map.put("ParentTime", childSet);
+
+        Set<String> parentSet = Sets.newHashSet();
+        parentSet.add("ParentTime");
+        node.child_counters_map.put("GrandParentTime", parentSet);
+
+        tree.addToNodes(node);
+
+        // This should not throw IllegalStateException
+        profile.update(tree);
+
+        // Verify all counters were added correctly
+        Counter grandParentTime = profile.getCounter("GrandParentTime");
+        Counter parentTime = profile.getCounter("ParentTime");
+        Counter childTime = profile.getCounter("ChildTime");
+
+        Assertions.assertNotNull(grandParentTime);
+        Assertions.assertNotNull(parentTime);
+        Assertions.assertNotNull(childTime);
+        Assertions.assertEquals(5000000L, grandParentTime.getValue());
+        Assertions.assertEquals(2000000L, parentTime.getValue());
+        Assertions.assertEquals(100000L, childTime.getValue());
+
+        // Verify the hierarchy
+        Assertions.assertTrue(profile.getChildCounterMap().containsKey("GrandParentTime"));
+        Assertions.assertTrue(profile.getChildCounterMap().get("GrandParentTime").contains("ParentTime"));
+        Assertions.assertTrue(profile.getChildCounterMap().containsKey("ParentTime"));
+        Assertions.assertTrue(profile.getChildCounterMap().get("ParentTime").contains("ChildTime"));
+    }
 }
