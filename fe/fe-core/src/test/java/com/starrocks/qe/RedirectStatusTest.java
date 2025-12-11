@@ -754,7 +754,9 @@ public class RedirectStatusTest {
 
     @Test
     public void testShowPartitionsStmt() {
-        ShowPartitionsStmt stmt = new ShowPartitionsStmt(new TableName(), null, null, null, false);
+        TableRef tableRef = new TableRef(QualifiedName.of(Lists.newArrayList("test_db", "test_table")),
+                null, NodePosition.ZERO);
+        ShowPartitionsStmt stmt = new ShowPartitionsStmt(tableRef, null, null, null, false);
         Assertions.assertEquals(RedirectStatus.NO_FORWARD, RedirectStatus.getRedirectStatus(stmt));
     }
 

@@ -1993,8 +1993,12 @@ public class AuthorizerStmtVisitor implements AstVisitorExtendInterface<Void, Co
     @Override
     public Void visitShowPartitionsStatement(ShowPartitionsStmt statement, ConnectContext context) {
         try {
+            TableRef tableRef = statement.getTableRef();
+            if (tableRef == null) {
+                throw new SemanticException("Table ref is null");
+            }
             Authorizer.checkAnyActionOnTable(context,
-                    new TableName(statement.getDbName(), statement.getTableName()));
+                    new TableName(tableRef.getCatalogName(), tableRef.getDbName(), tableRef.getTableName()));
         } catch (AccessDeniedException e) {
             AccessDeniedException.reportAccessDenied(
                     InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,

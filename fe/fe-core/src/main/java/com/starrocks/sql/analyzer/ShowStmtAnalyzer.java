@@ -75,6 +75,7 @@ import com.starrocks.sql.ast.ShowTableStmt;
 import com.starrocks.sql.ast.ShowTabletStmt;
 import com.starrocks.sql.ast.ShowTemporaryTableStmt;
 import com.starrocks.sql.ast.ShowTransactionStmt;
+import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.expression.BinaryPredicate;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.ast.expression.CompoundPredicate;
@@ -571,27 +572,26 @@ public class ShowStmtAnalyzer {
 
         @Override
         public Void visitShowPartitionsStatement(ShowPartitionsStmt statement, ConnectContext context) {
-            TableName tbl = statement.getTbl();
-            tbl.normalization(context);
-            String dbName = statement.getDbName();
-            dbName = getDatabaseName(dbName, context);
-            statement.setDbName(dbName);
+            TableRef tableRef = AnalyzerUtils.normalizedTableRef(statement.getTableRef(), context);
+            statement.setTableRef(tableRef);
+            String catalogName = tableRef.getCatalogName();
+            String dbName = tableRef.getDbName();
             final Map<String, Expr> filterMap = statement.getFilterMap();
             if (statement.getWhereClause() != null) {
                 analyzeSubPredicate(filterMap, statement.getWhereClause());
             }
-            Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(context, tbl.getCatalog(), dbName);
+            Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(context, catalogName, dbName);
             if (db == null) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
             }
 
-            final String tableName = statement.getTableName();
+            final String tableName = tableRef.getTableName();
             final boolean isTempPartition = statement.isTempPartition();
             Locker locker = new Locker();
             locker.lockDatabase(db.getId(), LockType.READ);
             try {
                 Table table =
-                        MetaUtils.getSessionAwareTable(context, db, new TableName(tbl.getCatalog(), dbName, tableName));
+                        MetaUtils.getSessionAwareTable(context, db, new TableName(catalogName, dbName, tableName));
                 if (!(table instanceof OlapTable) && !(table instanceof PaimonTable)) {
                     throw new SemanticException("Table[" + tableName + "] does not exists or is not OLAP/Paimon table");
                 }
@@ -608,7 +608,7 @@ public class ShowStmtAnalyzer {
                     }
                 } else if (table instanceof PaimonTable) {
                     stringBuilder.append("/catalog/");
-                    stringBuilder.append(tbl.getCatalog());
+                    stringBuilder.append(catalogName);
                     stringBuilder.append("/").append(dbName);
                     stringBuilder.append("/").append(tableName);
                     stringBuilder.append("/partitions");

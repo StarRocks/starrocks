@@ -454,8 +454,9 @@ public class ShowExecutorTest {
         };
 
         // Ok to test
-        ShowPartitionsStmt stmt = new ShowPartitionsStmt(new TableName("testDb", "testTbl"),
-                null, null, null, false);
+        TableRef tableRef = new TableRef(QualifiedName.of(Lists.newArrayList("testDb", "testTbl")),
+                null, NodePosition.ZERO);
+        ShowPartitionsStmt stmt = new ShowPartitionsStmt(tableRef, null, null, null, false);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
 
         ShowResultSet resultSet = ShowExecutor.execute(stmt, ctx);

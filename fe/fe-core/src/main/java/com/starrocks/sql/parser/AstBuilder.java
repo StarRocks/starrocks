@@ -1858,7 +1858,8 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             com.starrocks.sql.parser.StarRocksParser.ShowPartitionsStatementContext context) {
         boolean temp = context.TEMPORARY() != null;
         QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
-        TableName tableName = qualifiedNameToTableName(qualifiedName);
+        NodePosition tablePos = createPos(context.qualifiedName().start, context.qualifiedName().stop);
+        TableRef tableRef = new TableRef(normalizeName(qualifiedName), null, tablePos);
 
         Expr where = null;
         if (context.expression() != null) {
@@ -1874,7 +1875,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         if (context.limitElement() != null) {
             limitElement = (LimitElement) visit(context.limitElement());
         }
-        return new ShowPartitionsStmt(tableName, where, orderByElements, limitElement, temp, createPos(context));
+        return new ShowPartitionsStmt(tableRef, where, orderByElements, limitElement, temp, createPos(context));
     }
 
     @Override
