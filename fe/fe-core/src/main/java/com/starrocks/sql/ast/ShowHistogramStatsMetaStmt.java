@@ -18,7 +18,6 @@ import com.google.common.collect.Lists;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.TableName;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -92,7 +91,7 @@ public class ShowHistogramStatsMetaStmt extends ShowStmt {
         }
         // In new privilege framework(RBAC), user needs any action on the table to show analysis status for it.
         try {
-            Authorizer.checkAnyActionOnTable(context, new TableName(catalogName, db.getFullName(), table.getName()));
+            Authorizer.checkAnyActionOnTableLikeObject(context, db.getFullName(), table);
         } catch (AccessDeniedException e) {
             return null;
         }

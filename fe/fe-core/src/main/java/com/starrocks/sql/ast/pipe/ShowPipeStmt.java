@@ -15,7 +15,6 @@
 package com.starrocks.sql.ast.pipe;
 
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.TableName;
 import com.starrocks.common.PatternMatcher;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.load.pipe.Pipe;
@@ -69,7 +68,7 @@ public class ShowPipeStmt extends ShowStmt {
         row.add(String.valueOf(pipe.getPipeId().getId()));
         row.add(pipe.getName());
         row.add(String.valueOf(pipe.getState()));
-        row.add(Optional.ofNullable(pipe.getTargetTable()).map(TableName::toString).orElse(""));
+        row.add(Optional.ofNullable(pipe.getTargetTable()).map(Object::toString).orElse(""));
         row.add(pipe.getLoadStatus().toJson());
         row.add(pipe.getLastErrorInfo().toJson());
         row.add(DateUtils.formatTimestampInSeconds(pipe.getCreatedTime()));
