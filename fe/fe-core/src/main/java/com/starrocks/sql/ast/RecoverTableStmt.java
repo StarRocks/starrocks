@@ -19,28 +19,42 @@ import com.starrocks.catalog.TableName;
 import com.starrocks.sql.parser.NodePosition;
 
 public class RecoverTableStmt extends DdlStmt {
-    private final TableName dbTblName;
+    private TableRef tableRef;
 
-    public RecoverTableStmt(TableName dbTblName) {
-        this(dbTblName, NodePosition.ZERO);
+    public RecoverTableStmt(TableRef tableRef) {
+        this(tableRef, NodePosition.ZERO);
     }
 
-
-    public RecoverTableStmt(TableName dbTblName, NodePosition pos) {
+    public RecoverTableStmt(TableRef tableRef, NodePosition pos) {
         super(pos);
-        this.dbTblName = dbTblName;
+        this.tableRef = tableRef;
+    }
+
+    public TableRef getTableRef() {
+        return tableRef;
+    }
+
+    public void setTableRef(TableRef tableRef) {
+        this.tableRef = tableRef;
+    }
+
+    public String getCatalogName() {
+        return tableRef == null ? null : tableRef.getCatalogName();
     }
 
     public String getDbName() {
-        return dbTblName.getDb();
+        return tableRef == null ? null : tableRef.getDbName();
     }
 
     public String getTableName() {
-        return dbTblName.getTbl();
+        return tableRef == null ? null : tableRef.getTableName();
     }
 
-    public TableName getTableNameObject() {
-        return dbTblName;
+    public TableName toTableName() {
+        if (tableRef == null) {
+            return null;
+        }
+        return new TableName(getCatalogName(), getDbName(), getTableName(), tableRef.getPos());
     }
 
     @Override

@@ -558,7 +558,8 @@ public class AnalyzeStmtTest {
 
         sql = "analyze table t0 drop histogram on v1";
         DropHistogramStmt dropHistogramStmt = (DropHistogramStmt) analyzeSuccess(sql);
-        Assertions.assertEquals(dropHistogramStmt.getTableName().toSql(), "`test`.`t0`");
+        Assertions.assertEquals("test", dropHistogramStmt.getDbName());
+        Assertions.assertEquals("t0", dropHistogramStmt.getTableName());
         Assertions.assertEquals(dropHistogramStmt.getColumnNames().toString(), "[v1]");
     }
 
@@ -597,7 +598,7 @@ public class AnalyzeStmtTest {
     public void testDropStats() {
         String sql = "drop stats t0";
         DropStatsStmt dropStatsStmt = (DropStatsStmt) analyzeSuccess(sql);
-        Assertions.assertEquals("t0", dropStatsStmt.getTableName().getTbl());
+        Assertions.assertEquals("t0", dropStatsStmt.getTableName());
 
         Assertions.assertEquals("DELETE FROM table_statistic_v1 WHERE TABLE_ID = 10004",
                 StatisticSQLBuilder.buildDropStatisticsSQL(10004L, StatsConstants.AnalyzeType.SAMPLE));
@@ -609,7 +610,7 @@ public class AnalyzeStmtTest {
     public void testDropTableOnMultiColumnStats() {
         String sql = "drop multiple columns stats t0";
         DropStatsStmt dropStatsStmt = (DropStatsStmt) analyzeSuccess(sql);
-        Assertions.assertEquals("t0", dropStatsStmt.getTableName().getTbl());
+        Assertions.assertEquals("t0", dropStatsStmt.getTableName());
         Assertions.assertTrue(dropStatsStmt.isMultiColumn());
         Assertions.assertEquals("DELETE FROM multi_column_statistics WHERE TABLE_ID = 10004",
                 StatisticSQLBuilder.buildDropMultipleStatisticsSQL(10004L));

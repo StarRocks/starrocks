@@ -333,11 +333,15 @@ public class ShowStmtAnalyzer {
                 return null;
             }
 
-            node.getDbTableName().normalization(context);
-            TableName tableName = node.getDbTableName();
-            String catalogName = tableName.getCatalog();
-            String dbName = tableName.getDb();
-            String tbl = tableName.getTbl();
+            TableRef tableRef = node.getTableRef();
+            if (tableRef == null) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_NO_TABLES_USED);
+            }
+            tableRef = AnalyzerUtils.normalizedTableRef(tableRef, context);
+            node.setTableRef(tableRef);
+            String catalogName = tableRef.getCatalogName();
+            String dbName = tableRef.getDbName();
+            String tbl = tableRef.getTableName();
             if (catalogName == null) {
                 catalogName = context.getCurrentCatalog();
             }
@@ -384,7 +388,8 @@ public class ShowStmtAnalyzer {
             try {
                 Table table = null;
                 try {
-                    table = MetaUtils.getSessionAwareTable(context, db, node.getDbTableName());
+                    TableName tableName = new TableName(node.getCatalogName(), node.getDb(), node.getTableName());
+                    table = MetaUtils.getSessionAwareTable(context, db, tableName);
                 } catch (Exception e) {
                     // if table is not found, may be is statement "desc materialized-view-name",
                     // ignore this exception.

@@ -41,6 +41,7 @@ import com.starrocks.sql.ast.CreateAnalyzeJobStmt;
 import com.starrocks.sql.ast.DropHistogramStmt;
 import com.starrocks.sql.ast.DropStatsStmt;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.optimizer.OptimizerFactory;
@@ -433,8 +434,9 @@ public class AnalyzeStmtAnalyzer {
 
         @Override
         public Void visitDropStatsStatement(DropStatsStmt statement, ConnectContext session) {
-            statement.getTableName().normalization(session);
-            if (CatalogMgr.isExternalCatalog(statement.getTableName().getCatalog())) {
+            TableRef tableRef = AnalyzerUtils.normalizedTableRef(statement.getTableRef(), session);
+            statement.setTableRef(tableRef);
+            if (CatalogMgr.isExternalCatalog(tableRef.getCatalogName())) {
                 statement.setExternal(true);
             }
             return null;
@@ -442,18 +444,21 @@ public class AnalyzeStmtAnalyzer {
 
         @Override
         public Void visitDropHistogramStatement(DropHistogramStmt statement, ConnectContext session) {
-            statement.getTableName().normalization(session);
-            if (CatalogMgr.isExternalCatalog(statement.getTableName().getCatalog())) {
+            TableRef tableRef = AnalyzerUtils.normalizedTableRef(statement.getTableRef(), session);
+            statement.setTableRef(tableRef);
+            if (CatalogMgr.isExternalCatalog(tableRef.getCatalogName())) {
                 statement.setExternal(true);
             }
 
-            Table analyzeTable = MetaUtils.getSessionAwareTable(session, null, statement.getTableName());
+            TableName tableName = new TableName(tableRef.getCatalogName(), tableRef.getDbName(),
+                    tableRef.getTableName(), tableRef.getPos());
+            Table analyzeTable = MetaUtils.getSessionAwareTable(session, null, tableName);
             List<Expr> columns = statement.getColumns();
             List<String> realColumnNames = Lists.newArrayList();
             for (Expr column : columns) {
                 ExpressionAnalyzer.analyzeExpression(column, new AnalyzeState(), new Scope(RelationId.anonymous(),
                         new RelationFields(analyzeTable.getBaseSchema().stream().map(col -> new Field(col.getName(),
-                                        col.getType(), statement.getTableName(), null))
+                                        col.getType(), tableName, null))
                                 .collect(Collectors.toList()))), session);
                 String colName = StatisticUtils.getColumnName(analyzeTable, column);
                 realColumnNames.add(colName);

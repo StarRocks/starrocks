@@ -510,13 +510,17 @@ public class RedirectStatusTest {
 
     @Test
     public void testDropStatsStmt() {
-        DropStatsStmt stmt = new DropStatsStmt(null, false, NodePosition.ZERO);
+        QualifiedName qualifiedName = QualifiedName.of(Lists.newArrayList("test_db", "test_table"));
+        TableRef tableRef = new TableRef(qualifiedName, null, NodePosition.ZERO);
+        DropStatsStmt stmt = new DropStatsStmt(tableRef, false, NodePosition.ZERO);
         Assertions.assertEquals(RedirectStatus.FORWARD_WITH_SYNC, RedirectStatus.getRedirectStatus(stmt));
     }
 
     @Test
     public void testDropHistogramStmt() {
-        DropHistogramStmt stmt = new DropHistogramStmt(null, java.util.Collections.emptyList(), NodePosition.ZERO);
+        QualifiedName qualifiedName = QualifiedName.of(Lists.newArrayList("test_db", "test_table"));
+        TableRef tableRef = new TableRef(qualifiedName, null, NodePosition.ZERO);
+        DropHistogramStmt stmt = new DropHistogramStmt(tableRef, java.util.Collections.emptyList(), NodePosition.ZERO);
         Assertions.assertEquals(RedirectStatus.FORWARD_WITH_SYNC, RedirectStatus.getRedirectStatus(stmt));
     }
 
@@ -1257,7 +1261,9 @@ public class RedirectStatusTest {
     // Additional uncovered StatementBase subclasses tests
     @Test
     public void testDescribeStmt() {
-        DescribeStmt stmt = new DescribeStmt(null, false);
+        TableRef tableRef = new TableRef(QualifiedName.of(Lists.newArrayList("test_db", "test_table")),
+                null, NodePosition.ZERO);
+        DescribeStmt stmt = new DescribeStmt(tableRef, false);
         Assertions.assertEquals(RedirectStatus.NO_FORWARD, RedirectStatus.getRedirectStatus(stmt));
     }
 

@@ -1362,8 +1362,9 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
     @Override
     public ParseNode visitRecoverTableStatement(com.starrocks.sql.parser.StarRocksParser.RecoverTableStatementContext context) {
         QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
-        TableName tableName = qualifiedNameToTableName(qualifiedName);
-        return new RecoverTableStmt(tableName, createPos(context));
+        NodePosition tablePos = createPos(context.qualifiedName().start, context.qualifiedName().stop);
+        TableRef tableRef = new TableRef(normalizeName(qualifiedName), null, tablePos);
+        return new RecoverTableStmt(tableRef, createPos(context));
     }
 
     @Override
@@ -1453,8 +1454,9 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
     public ParseNode visitDescTableStatement(com.starrocks.sql.parser.StarRocksParser.DescTableStatementContext context) {
         if (context.qualifiedName() != null) {
             QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
-            TableName targetTableName = qualifiedNameToTableName(qualifiedName);
-            return new DescribeStmt(targetTableName, context.ALL() != null, createPos(context));
+            NodePosition tablePos = createPos(context.qualifiedName().start, context.qualifiedName().stop);
+            TableRef tableRef = new TableRef(normalizeName(qualifiedName), null, tablePos);
+            return new DescribeStmt(tableRef, context.ALL() != null, createPos(context));
         }
 
         Map<String, String> tableFunctionProperties = getCaseInsensitivePropertyList(context.propertyList());
@@ -1520,13 +1522,14 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
     @Override
     public ParseNode visitRefreshTableStatement(com.starrocks.sql.parser.StarRocksParser.RefreshTableStatementContext context) {
         QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
-        TableName targetTableName = qualifiedNameToTableName(qualifiedName);
+        NodePosition tablePos = createPos(context.qualifiedName().start, context.qualifiedName().stop);
+        TableRef tableRef = new TableRef(normalizeName(qualifiedName), null, tablePos);
         List<String> partitionNames = null;
         if (context.string() != null) {
             partitionNames = context.string().stream()
                     .map(c -> ((StringLiteral) visit(c)).getStringValue()).collect(toList());
         }
-        return new RefreshTableStmt(targetTableName, partitionNames, createPos(context));
+        return new RefreshTableStmt(tableRef, partitionNames, createPos(context));
     }
 
     @Override
@@ -1883,9 +1886,10 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
     public ParseNode visitRecoverPartitionStatement(
             com.starrocks.sql.parser.StarRocksParser.RecoverPartitionStatementContext context) {
         QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
-        TableName tableName = qualifiedNameToTableName(qualifiedName);
+        NodePosition tablePos = createPos(context.qualifiedName().start, context.qualifiedName().stop);
+        TableRef tableRef = new TableRef(normalizeName(qualifiedName), null, tablePos);
         String partitionName = ((Identifier) visit(context.identifier())).getValue();
-        return new RecoverPartitionStmt(tableName, partitionName, createPos(context));
+        return new RecoverPartitionStmt(tableRef, partitionName, createPos(context));
     }
 
     // ------------------------------------------- Index Statement ------------------------------------------------------
@@ -2976,8 +2980,9 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
     @Override
     public ParseNode visitDropStatsStatement(com.starrocks.sql.parser.StarRocksParser.DropStatsStatementContext context) {
         QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
-        TableName tableName = qualifiedNameToTableName(qualifiedName);
-        return new DropStatsStmt(tableName, context.MULTIPLE() != null, createPos(context));
+        NodePosition tablePos = createPos(context.qualifiedName().start, context.qualifiedName().stop);
+        TableRef tableRef = new TableRef(normalizeName(qualifiedName), null, tablePos);
+        return new DropStatsStmt(tableRef, context.MULTIPLE() != null, createPos(context));
     }
 
     @Override
@@ -3120,10 +3125,12 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
     public ParseNode visitDropHistogramStatement(com.starrocks.sql.parser.StarRocksParser.DropHistogramStatementContext context) {
         List<QualifiedName> qualifiedNames = context.qualifiedName().stream().map(this::getQualifiedName).
                 collect(toList());
-        TableName tableName = qualifiedNameToTableName(qualifiedNames.get(0));
+        QualifiedName tableQualifiedName = normalizeName(qualifiedNames.get(0));
+        NodePosition tablePos = createPos(context.qualifiedName(0).start, context.qualifiedName(0).stop);
+        TableRef tableRef = new TableRef(tableQualifiedName, null, tablePos);
         List<Expr> columns = getAnalyzeColumns(qualifiedNames.subList(1, qualifiedNames.size()));
 
-        return new DropHistogramStmt(tableName, columns, createPos(context));
+        return new DropHistogramStmt(tableRef, columns, createPos(context));
     }
 
     @Override
