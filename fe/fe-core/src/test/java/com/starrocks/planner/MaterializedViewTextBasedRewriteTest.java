@@ -402,7 +402,7 @@ public class MaterializedViewTextBasedRewriteTest extends MaterializedViewTestBa
 
     @Test
     public void testGetMvsByAstReturnsNullForNullAst() {
-        Assertions.assertNull(CachingMvPlanContextBuilder.getInstance().getMvsByAst(null));
+        Assert.assertNull(CachingMvPlanContextBuilder.getInstance().getMvsByAst(null));
     }
 
     @Test
@@ -414,8 +414,8 @@ public class MaterializedViewTextBasedRewriteTest extends MaterializedViewTestBa
         {
             Set<MaterializedView> result =
                     CachingMvPlanContextBuilder.getInstance().getMvsByAst(astKey);
-            Assertions.assertNotNull(result);
-            Assertions.assertTrue(result.isEmpty());
+            Assert.assertNotNull(result);
+            Assert.assertTrue(result.isEmpty());
         }
 
         {
@@ -423,10 +423,10 @@ public class MaterializedViewTextBasedRewriteTest extends MaterializedViewTestBa
                     "distributed by random refresh manual as " + query);
             Set<MaterializedView> result =
                     CachingMvPlanContextBuilder.getInstance().getMvsByAst(astKey);
-            Assertions.assertNotNull(result);
+            Assert.assertNotNull(result);
             MaterializedView actualMV = result.iterator().next();
             MaterializedView expectedMV = getMv(MATERIALIZED_DB_NAME, "test_mv0");
-            Assertions.assertEquals(expectedMV, actualMV);
+            Assert.assertEquals(expectedMV, actualMV);
         }
     }
 }
