@@ -132,8 +132,10 @@ void CollectStatsSourceInitializeEvent::process(RuntimeState* state) {
         sync_ctx->pending_tasks = static_cast<int>(all_drivers.size());
 
         for (auto& driver : all_drivers) {
-            auto task_fn = [driver, runtime_state = state, sync_ctx]() {
-                SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(runtime_state->instance_mem_tracker());
+            auto task_fn = [&driver, runtime_state = state, sync_ctx]() {
+                // hold mem tracker's shared ptr for thread safe
+                auto mem_tracker = runtime_state->instance_mem_tracker_ptr();
+                SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(mem_tracker.get());
                 Status st = driver->prepare_local_state(runtime_state);
                 if (!st.ok()) {
                     Status* expected = nullptr;

@@ -833,15 +833,18 @@ Status FragmentExecutor::_prepare_global_dict(const UnifiedExecPlanFragmentParam
 
 Status FragmentExecutor::prepare_global_state(ExecEnv* exec_env, const TExecPlanFragmentParams& common_request) {
     bool prepare_success = false;
+
+    UnifiedExecPlanFragmentParams request(common_request, common_request);
+    RETURN_IF_ERROR(_prepare_query_ctx(exec_env, request));
+
     // make sure query context can be released
+    // if _prepare_query_ctx return error, query context doesn't exist
+    // so it's safe to put this DeferOp below _prepare_query_ctx
     DeferOp defer([&prepare_success, query_ctx = _query_ctx] {
         if (!prepare_success) {
             query_ctx->count_down_fragments();
         }
     });
-
-    UnifiedExecPlanFragmentParams request(common_request, common_request);
-    RETURN_IF_ERROR(_prepare_query_ctx(exec_env, request));
 
     // Set up desc tbl
     DescriptorTbl* desc_tbl = nullptr;

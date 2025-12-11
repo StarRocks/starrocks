@@ -393,7 +393,7 @@ void PInternalServiceImplBase<T>::_exec_batch_plan_fragments(google::protobuf::R
     bool submitted = true;
     for (int i = 0; i < unique_requests.size(); ++i) {
         PromiseStatusSharedPtr ms = std::make_shared<PromiseStatus>();
-        submitted = _exec_env->pipeline_prepare_pool()->offer([ms, i, fragment_executors, t_batch_requests, this] {
+        submitted = _exec_env->pipeline_prepare_pool()->try_offer([ms, i, fragment_executors, t_batch_requests, this] {
             auto& unique_requests = t_batch_requests->unique_param_per_instance;
             auto& req = unique_requests[i];
             auto& fragment_executor = fragment_executors->at(i);
