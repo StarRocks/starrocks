@@ -89,13 +89,13 @@ public abstract class MVPCTRefreshPartitioner {
             Table.TableType.HUDI,
             Table.TableType.DELTALAKE
     );
+    private final Logger logger;
 
     protected final MvTaskRunContext mvContext;
     protected final TaskRunContext context;
     protected final Database db;
     protected final MaterializedView mv;
     protected final MVRefreshParams mvRefreshParams;
-    protected final Logger logger;
     protected final MVTimelinessArbiter.QueryRewriteParams queryRewriteParams;
 
     // The partitions to refresh for mv which is filtered before various filter actions.
