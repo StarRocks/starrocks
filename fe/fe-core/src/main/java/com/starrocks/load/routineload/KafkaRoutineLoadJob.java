@@ -365,13 +365,13 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
         }
 
         // For compatible reason, the default behavior of empty load is still returning
-        // "No partitions have data available for loading" and abort transaction.
+        // "No rows were imported from upstream" and abort transaction.
         // In this situation, we also need update commit info.
         if (txnStatusChangeReason != null &&
-                txnStatusChangeReason == TxnStatusChangeReason.NO_PARTITIONS) {
+                txnStatusChangeReason == TxnStatusChangeReason.NO_ROWS_IMPORTED) {
             // Because the max_filter_ratio of routine load task is always 1.
             // Therefore, under normal circumstances, routine load task will not return the error "too many filtered rows".
-            // If no data is imported, the error "No partitions have data available for loading" may only be returned.
+            // If no data is imported, the error "No rows were imported from upstream" may only be returned.
             // In this case, the status of the transaction is ABORTED,
             // but we still need to update the offset to skip these error lines.
             Preconditions.checkState(txnState.getTransactionStatus() == TransactionStatus.ABORTED,
