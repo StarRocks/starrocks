@@ -99,6 +99,7 @@ public:
     bool is_materialized() const { return _is_materialized; }
     bool is_output_column() const { return _is_output_column; }
     bool is_nullable() const { return _null_indicator_offset.bit_mask != 0; }
+    bool is_virtual_column() const { return _is_virtual_column; }
 
     int slot_size() const { return _slot_size; }
 
@@ -140,6 +141,11 @@ private:
 
     // @todo: replace _null_indicator_offset when remove _null_indicator_offset
     const bool _is_nullable;
+
+    // Indicates whether this slot represents a virtual column.
+    // Virtual columns are read-only metadata columns that are not persisted.
+    // Currently supported: _tablet_id_
+    const bool _is_virtual_column;
 
     SlotDescriptor(const PSlotDescriptor& pdesc);
 };

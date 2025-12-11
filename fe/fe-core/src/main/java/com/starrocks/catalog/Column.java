@@ -445,7 +445,7 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
      * Currently supported: _tablet_id_
      */
     public boolean isVirtualColumn() {
-        return "_tablet_id_".equalsIgnoreCase(this.name);
+        return "_tablet_id_".equalsIgnoreCase(this.name) && isHidden();
     }
 
     public int getOlapColumnIndexSize() {

@@ -81,6 +81,9 @@ public class SlotDescriptor {
     // if false, this slot cannot be NULL
     private boolean isNullable;
 
+    // if true, this slot represents a virtual column (e.g., _tablet_id_)
+    private boolean isVirtualColumn = false;
+
     // physical layout parameters
     private int byteSize;
     private int byteOffset;  // within tuple
@@ -122,6 +125,7 @@ public class SlotDescriptor {
         this.isNullable = src.isNullable;
         this.byteSize = src.byteSize;
         this.type = src.type;
+        this.isVirtualColumn = src.isVirtualColumn;
     }
 
     public void setMultiRef(boolean isMultiRef) {
@@ -176,6 +180,8 @@ public class SlotDescriptor {
         } else {
             this.type = this.originType.clone();
         }
+        // Set isVirtualColumn based on the column's virtual column status
+        this.isVirtualColumn = column.isVirtualColumn();
     }
 
     public boolean isMaterialized() {
@@ -206,6 +212,14 @@ public class SlotDescriptor {
         } else {
             nullIndicatorBit = -1;
         }
+    }
+
+    public boolean isVirtualColumn() {
+        return isVirtualColumn;
+    }
+
+    public void setIsVirtualColumn(boolean value) {
+        isVirtualColumn = value;
     }
 
     public String getLabel() {
@@ -281,6 +295,7 @@ public class SlotDescriptor {
         tSlotDescriptor.setIsMaterialized(true);
         tSlotDescriptor.setIsOutputColumn(isOutputColumn);
         tSlotDescriptor.setIsNullable(isNullable);
+        tSlotDescriptor.setIs_virtual_column(isVirtualColumn);
         return tSlotDescriptor;
     }
 
@@ -291,6 +306,7 @@ public class SlotDescriptor {
         return MoreObjects.toStringHelper(this).add("id", id.asInt()).add("parent", parentTupleId)
                 .add("col", colStr).add("type", typeStr).add("materialized", isMaterialized)
                 .add("isOutputColumns", isOutputColumn)
+                .add("isVirtualColumn", isVirtualColumn)
                 .add("byteSize", byteSize).add("byteOffset", byteOffset)
                 .add("nullIndicatorByte", nullIndicatorByte)
                 .add("nullIndicatorBit", nullIndicatorBit)

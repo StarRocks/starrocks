@@ -227,7 +227,7 @@ Status LakeDataSource::init_scanner_columns(std::vector<uint32_t>& scanner_colum
 
         // Virtual column, skip tablet schema lookup
         // It will be populated in get_next()
-        if (is_virtual_column(slot->col_name())) {
+        if (slot->is_virtual_column()) {
             _query_slots.push_back(slot);
             continue;
         }

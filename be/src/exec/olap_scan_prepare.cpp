@@ -1281,7 +1281,7 @@ Status ChunkPredicateBuilder<E, Type>::_get_column_predicates(PredicateParser* p
                 continue;
             }
             // Skip virtual columns that cannot be pushed down
-            if (is_virtual_column(slot_desc->col_name())) {
+            if (slot_desc->is_virtual_column()) {
                 continue;
             }
             if (desc->is_stream_build_filter()) {

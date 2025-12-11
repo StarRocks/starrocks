@@ -158,7 +158,7 @@ StatusOr<ColumnPredicate*> OlapPredicateParser::parse_thrift_cond(const GeneralC
 StatusOr<ColumnPredicate*> OlapPredicateParser::parse_expr_ctx(const SlotDescriptor& slot_desc, RuntimeState* state,
                                                                ExprContext* expr_ctx) const {
     // Virtual columns cannot be pushed down as predicates
-    if (is_virtual_column(slot_desc.col_name())) {
+    if (slot_desc.is_virtual_column()) {
         return Status::NotSupported("virtual column " + slot_desc.col_name() + " cannot be pushed down");
     }
     const size_t column_id = _schema->field_index(slot_desc.col_name());

@@ -341,7 +341,7 @@ Status OlapChunkSource::_init_scanner_columns(std::vector<uint32_t>& scanner_col
 
         // Virtual column, skip tablet schema lookup
         // It will be populated in _read_chunk_from_storage()
-        if (is_virtual_column(slot->col_name())) {
+        if (slot->is_virtual_column()) {
             _query_slots.push_back(slot);
             continue;
         }
@@ -617,7 +617,7 @@ Status OlapChunkSource::_init_olap_reader(RuntimeState* runtime_state) {
     // Check if virtual columns are requested
     bool has_virtual_columns = false;
     for (auto slot : *_slots) {
-        if (slot->is_materialized() && is_virtual_column(slot->col_name())) {
+        if (slot->is_materialized() && slot->is_virtual_column()) {
             has_virtual_columns = true;
             break;
         }

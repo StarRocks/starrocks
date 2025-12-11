@@ -34,7 +34,7 @@ bool is_virtual_column(const std::string& column_name) {
 void process_virtual_columns(Chunk* chunk, const std::vector<SlotDescriptor*>& query_slots, int64_t tablet_id) {
     // First, set slot_id_to_index for regular columns
     for (auto slot : query_slots) {
-        if (!is_virtual_column(slot->col_name())) {
+        if (!slot->is_virtual_column()) {
             size_t column_index = chunk->schema()->get_field_index_by_name(slot->col_name());
             chunk->set_slot_id_to_index(slot->id(), column_index);
         }
@@ -43,7 +43,7 @@ void process_virtual_columns(Chunk* chunk, const std::vector<SlotDescriptor*>& q
     // Then, handle virtual columns
     // Virtual columns are not in the chunk's schema, so we append them directly using slot_id
     for (auto slot : query_slots) {
-        if (is_virtual_column(slot->col_name())) {
+        if (slot->is_virtual_column()) {
             // Create a BIGINT column filled with tablet_id for all rows
             size_t num_rows = chunk->num_rows();
             auto tablet_id_column = Int64Column::create();
