@@ -34,9 +34,6 @@ import com.starrocks.sql.optimizer.base.DistributionSpec;
 import com.starrocks.sql.optimizer.base.HashDistributionDesc;
 import com.starrocks.sql.optimizer.base.HashDistributionSpec;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
-import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
-import com.starrocks.sql.optimizer.operator.skew.DataSkew;
-import com.starrocks.sql.optimizer.operator.skew.DataSkewInfo;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
@@ -61,7 +58,10 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalWindowOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.operator.skew.DataSkew;
+import com.starrocks.sql.optimizer.operator.skew.DataSkewInfo;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.sql.optimizer.statistics.StatisticsEstimateCoefficient;
@@ -72,10 +72,10 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
-import static com.starrocks.sql.common.ErrorType.INTERNAL_ERROR;
 import static com.starrocks.sql.optimizer.statistics.StatisticsEstimateCoefficient.EXECUTE_COST_PENALTY;
 
 public class CostModel {
@@ -182,7 +182,6 @@ public class CostModel {
                     return adjustCostForMV(context);
                 }
             }
-
             return CostEstimate.of(statistics.getComputeSize(), 0, 0);
         }
 
@@ -284,18 +283,65 @@ public class CostModel {
                     0);
         }
 
-        private boolean isGroupBySkewed(List< ColumnRefOperator > groupByList, Statistics statistics) {
-            return groupByList.stream().anyMatch(groupBy -> {
-                final var groupByStats = statistics.getColumnStatistic(groupBy);
-                return DataSkew.isColumnSkewed(statistics, groupByStats);
-            });
+        private List<ColumnRefOperator> getGroupBysWithoutDistinctColumn(List<ColumnRefOperator> groupByList,
+                                                                         ColumnRefOperator distinctColRef) {
+            return groupByList.stream()
+                    .filter(groupBy -> !groupBy.equals(distinctColRef)) //
+                    .collect(Collectors.toList());
+        }
+
+        private boolean isGroupBySkewed(List<ColumnStatistic> groupByStats, Statistics statistics) {
+            // For now, we assume that if all group by columns are skewed that they are skewed "the same way" so we get
+            // large groups. This is of course a simplification.
+            return groupByStats.stream()
+                    .allMatch(groupByStat -> {
+                        return DataSkew.isColumnSkewed(statistics, groupByStat);
+                    });
+        }
+
+        private boolean isGroupByLowCardinality(List<ColumnStatistic> groupByStatistics, Statistics statistics,
+                                                ColumnRefOperator distinctColumn) {
+            if (statistics.getOutputRowCount() < 1) {
+                return false;
+            }
+
+            if (groupByStatistics.stream().anyMatch(groupByStat -> groupByStat.isUnknown() || groupByStat.isUnknownValue())) {
+                // At least one group by column does not have statistics.
+                return false;
+            }
+
+            final var distColStat = statistics.getColumnStatistic(distinctColumn);
+            if (distColStat.isUnknown() || distColStat.isUnknownValue()) {
+                // No statistics on the distinct column.
+                return false;
+            }
+
+            double groupByColDistinctValues = groupByStatistics.stream()
+                    .mapToDouble(ColumnStatistic::getDistinctValuesCount) //
+                    .reduce(1, (lhsStat, rhsStat) -> lhsStat * rhsStat);
+
+            groupByColDistinctValues =
+                    Math.max(1.0, Math.min(groupByColDistinctValues, statistics.getOutputRowCount()));
+
+            final double groupByColDistinctHighWaterMark = 10000;
+            final double groupByColDistinctLowWaterMark = 100;
+            final double distColDistinctValuesCountWaterMark = 10000000;
+            final double distColDistinctValuesCount = distColStat.getDistinctValuesCount();
+            final double avgDistValuesPerGroup = distColDistinctValuesCount / groupByColDistinctValues;
+
+            return distColDistinctValuesCount > distColDistinctValuesCountWaterMark &&
+                    ((groupByColDistinctValues <= groupByColDistinctLowWaterMark) ||
+                            (groupByColDistinctValues < groupByColDistinctHighWaterMark &&
+                                    avgDistValuesPerGroup > 100));
         }
 
         // Compute penalty factor for GroupByCountDistinctDataSkewEliminateRule
         // Reward good cases(give a penaltyFactor=0.5) while punish bad cases(give a penaltyFactor=1.5)
         // We try to find good cases by looking at the
-        //  1) null fractions of the group by columns and
-        //  2) histogram of the group by columns.
+        //  1) null fractions of the group by columns
+        //  2) histogram of the group by columns
+        //  3) distinct cardinality of group-by column is less than 100
+        //  4) distinct cardinality of group-by column is less than 10000 and avgDistValuesPerGroup > 100
         private double computeDataSkewPenaltyOfGroupByCountDistinct(PhysicalHashAggregateOperator node,
                                                                     Statistics inputStatistics) {
             DataSkewInfo skewInfo = node.getDistinctColumnDataSkew();
@@ -308,7 +354,21 @@ public class CostModel {
                 return 1.5;
             }
 
-            if (isGroupBySkewed(node.getGroupBys(), inputStatistics)) {
+            final var countDistinctColumnRef = skewInfo.getSkewColumnRef();
+            final var groupBys = getGroupBysWithoutDistinctColumn(node.getGroupBys(), countDistinctColumnRef);
+            final var groupByStatistics = groupBys.stream()
+                    .map(inputStatistics::getColumnStatistic) //
+                    .filter(Objects::nonNull) //
+                    .collect(Collectors.toList());
+
+            // Basic skew detection on the group by columns. We are weighting this heavily if we know
+            // that group by columns are skewed since this optimization has significant speed up then.
+            if (isGroupBySkewed(groupByStatistics, inputStatistics)) {
+                return 0.2;
+            }
+
+            // Checking for the cardinality of the group by columns.
+            if (isGroupByLowCardinality(groupByStatistics, inputStatistics, skewInfo.getSkewColumnRef())) {
                 return 0.5;
             }
 
