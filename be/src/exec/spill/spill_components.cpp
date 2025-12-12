@@ -717,7 +717,7 @@ Status PartitionedSpillerWriter::_compact_skew_chunks(size_t num_rows, std::vect
     auto merger = std::make_shared<Aggregator>(aggregator_params);
     merger->set_aggr_mode(AM_STREAMING_POST_CACHE);
     RuntimeProfile* profile = _runtime_state->runtime_profile()->create_child("spillable_pw_skew_elimination", true);
-    RETURN_IF_ERROR(merger->prepare(_runtime_state, _runtime_state->obj_pool(), profile));
+    RETURN_IF_ERROR(merger->prepare(_runtime_state, profile));
     RETURN_IF_ERROR(merger->open(_runtime_state));
     DeferOp defer([&merger, this]() { merger->close(_runtime_state); });
     auto target_hash_value = mode_elem_it->first;

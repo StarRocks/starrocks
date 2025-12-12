@@ -52,7 +52,7 @@ Status AggregateBaseNode::prepare(RuntimeState* state) {
 
     // Avoid partial-prepared Aggregator, which is dangerous to close
     auto aggregator = std::make_shared<Aggregator>(std::move(params));
-    RETURN_IF_ERROR(aggregator->prepare(state, _pool, runtime_profile()));
+    RETURN_IF_ERROR(aggregator->prepare(state, runtime_profile()));
     _aggregator = std::move(aggregator);
     return Status::OK();
 }

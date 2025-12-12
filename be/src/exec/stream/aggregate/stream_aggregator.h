@@ -57,7 +57,7 @@ public:
         }
     }
 
-    Status prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* runtime_profile);
+    Status prepare(RuntimeState* state, RuntimeProfile* runtime_profile);
 
     Status open(RuntimeState* state);
 
