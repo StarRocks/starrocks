@@ -77,10 +77,10 @@ Status HttpClient::init(const std::string& url) {
         LOG(WARNING) << "fail to set CURLOPT_FAILONERROR, msg=" << _to_errmsg(code);
         return Status::InternalError("fail to set CURLOPT_FAILONERROR");
     }
-    // SECURITY: Disable automatic redirects to prevent SSRF bypass
-    // Redirects could send requests to internal/private IPs without re-validation
-    // TODO: If redirect support is needed, implement manual redirect handling with SSRF re-validation
-    code = curl_easy_setopt(_curl, CURLOPT_FOLLOWLOCATION, 0L);
+    // Enable automatic redirect following by default
+    // Note: For SSRF-sensitive use cases (like http_request() function),
+    // call set_follow_redirects(false) after init() to disable this
+    code = curl_easy_setopt(_curl, CURLOPT_FOLLOWLOCATION, 1L);
     if (code != CURLE_OK) {
         LOG(WARNING) << "fail to set CURLOPT_FOLLOWLOCATION, msg=" << _to_errmsg(code);
         return Status::InternalError("fail to set CURLOPT_FOLLOWLOCATION");
