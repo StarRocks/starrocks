@@ -1,4 +1,20 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 #pragma once
+
+#ifdef FIU_ENABLE
 
 #include <condition_variable>
 #include <memory>
@@ -121,6 +137,11 @@ private:
     bool a_triggered_{};
 };
 
+bool init_failpoint_from_conf(const std::string& conf_file);
+
+} // namespace starrocks::failpoint
+#endif
+
 #ifdef FIU_ENABLE
 // Use this macro to define failpoint
 // NOTE: it can only be used in cpp files, the name of failpoint must be globally unique
@@ -172,7 +193,3 @@ private:
 #define FAIL_POINT_TRIGGER_RETURN_ERROR(NAME)
 #define FAIL_POINT_TRIGGER_ASSIGN_STATUS_OR_DEFAULT(NAME, status, stmt, default_stmt) status = default_stmt
 #endif
-
-bool init_failpoint_from_conf(const std::string& conf_file);
-
-} // namespace starrocks::failpoint

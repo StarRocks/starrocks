@@ -774,6 +774,7 @@ void Aggregator::close(RuntimeState* state) {
         (void)agg_close();
     }
 #endif
+    _spiller.reset();
 }
 
 bool Aggregator::is_chunk_buffer_empty() {

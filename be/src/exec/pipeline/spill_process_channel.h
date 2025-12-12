@@ -122,6 +122,8 @@ public:
 
     Status execute(SpillProcessTasksBuilder& task_builder);
 
+    void close() { _spiller.reset(); }
+
 private:
     bool _is_reuseable = false;
     bool _is_finishing = false;

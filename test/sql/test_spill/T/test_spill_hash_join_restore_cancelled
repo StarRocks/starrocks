@@ -1,0 +1,36 @@
+-- name: test_spill_hash_join_restore_cancelled
+
+CREATE TABLE `t0` (
+  `c0` int(11) NULL COMMENT "",
+  `c1` varchar(20) NULL COMMENT "",
+  `c2` varchar(200) NULL COMMENT "",
+  `c3` int(11) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`c0`, `c1`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`c0`, `c1`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1"
+);
+
+insert into t0 SELECT generate_series, generate_series, generate_series, generate_series FROM TABLE(generate_series(1,  4096000));
+
+admin enable failpoint 'spill_restore_sleep';
+[UC]submit task etl_${uuid0} 
+PROPERTIES (
+    "session.pipeline_dop"= "1",
+    "session.enable_spill"="true",
+    "session.spill_mode"="force",
+    "session.spill_operator_min_bytes"="1024",
+    "session.spill_mem_table_size"="1024"
+)
+as CREATE table tmp as select sum(l.c0), sum(l.c1), sum(l.c2), sum(l.c3), sum(r.c0), sum(r.c1), sum(r.c2), sum(r.c3) from t0 l join t0 r on l.c0=r.c0 and l.c1 = r.c1;
+
+shell: sleep 1
+
+drop task etl_${uuid0};
+
+function: wait_util_no_queries()
+
+admin disable failpoint 'spill_restore_sleep';
+
