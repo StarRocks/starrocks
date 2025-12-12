@@ -29,6 +29,18 @@
   --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.3);
 }
 
+.menu__link {
+    color: var(--ifm-menu-color) !important;
+}
+
+.footer__link-item {
+    color: var(--ifm-footer-link-color) !important;
+}
+
+.navbar__brand, .navbar__link {
+    color: var(--ifm-navbar-link-color) !important;
+}
+
 img {
   width: auto;
   height: auto;
@@ -85,48 +97,38 @@ a {
     var(--ifm-transition-timing-default);
 }
 
-/* When we generate PDF files:
- 
- - avoid breaks in the middle of:
-   - code blocks
-   - admonitions (notes, tips, etc.)
-
- - we do not need to show the:
-   - feedback widget.
-   - edit this page
-   - breadcrumbs
-
- */
-@media print {
-  .theme-code-block , .theme-admonition {
-     break-inside: avoid;
-  }
+div[class^='announcementBar_'] {
+  font-size: 20px;
 }
 
-@media print {
-    .theme-edit-this-page , .feedback_Ak7m , .theme-doc-breadcrumbs   {
-        display: none;
-    }
+.sidebysidevideocontainer {
+    display: flex;
+    justify-content: space-around;
+    flex-wrap: wrap;
 }
-/*
-@media print {
-    .feedback_Ak7m {
-        display: none;
-    }
+.sidebysidevideovideo {
+    flex: 1;
+    min-width: 300px; /* Adjust this value based on your needs */
+    margin: 10px;
 }
-
-@media print {
-  .theme-doc-breadcrumbs {
-     display: none;
-  }
+sidebysidevideoiframe {
+    width: 100%;
+    height: 100%;
+    aspect-ratio: 16 / 9; /* Maintain 16:9 aspect ratio */
 }
-*/
-
 
 .navbar__logo {
   display: flex;
   height: auto;
 }
+
 .navbar__logo img {
   height: auto;
+}
+
+/* When we generate PDF files we do not need to show the feedback widget. */
+@media print {
+    .feedback_Ak7m {
+        display: none;
+    }
 }
