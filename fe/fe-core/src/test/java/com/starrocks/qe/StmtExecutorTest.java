@@ -14,13 +14,7 @@
 
 package com.starrocks.qe;
 
-<<<<<<< HEAD
-=======
 import com.starrocks.common.Config;
-import com.starrocks.common.jmockit.Deencapsulation;
-import com.starrocks.common.util.ProfileManager;
-import com.starrocks.common.util.RuntimeProfile;
->>>>>>> 70b2f5e954 ([BugFix] set ExecTimeout for ANALYZE (#66361))
 import com.starrocks.mysql.MysqlSerializer;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.StatementBase;
@@ -139,31 +133,6 @@ public class StmtExecutorTest {
         Assertions.assertTrue(executor.isExecLoadType());
         Assertions.assertEquals(ConnectContext.get().getSessionVariable().getInsertTimeoutS(), executor.getExecTimeout());
     }
-<<<<<<< HEAD
-=======
-
-    @Test
-    public void buildTopLevelProfile_createsProfileWithCorrectSummaryInfo() {
-        new MockUp<WarehouseManager>() {
-            @Mock
-            public String getWarehouseComputeResourceName(ComputeResource computeResource) {
-                return "default_warehouse";
-            }
-        };
-
-        ConnectContext ctx = UtFrameUtils.createDefaultCtx();
-        ConnectContext.threadLocalInfo.set(ctx);
-        StatementBase stmt = SqlParser.parseSingleStatement("select * from t1", SqlModeHelper.MODE_DEFAULT);
-        StmtExecutor executor = new StmtExecutor(new ConnectContext(), stmt);
-        RuntimeProfile profile = Deencapsulation.invoke(executor, "buildTopLevelProfile");
-
-        Assertions.assertNotNull(profile);
-        Assertions.assertEquals("Query", profile.getName());
-        RuntimeProfile summaryProfile = profile.getChild("Summary");
-        Assertions.assertNotNull(summaryProfile);
-        Assertions.assertEquals("Running", summaryProfile.getInfoString(ProfileManager.QUERY_STATE));
-        Assertions.assertEquals("default_warehouse", summaryProfile.getInfoString(ProfileManager.WAREHOUSE_CNGROUP));
-    }
 
     @Test
     public void testExecTimeout() {
@@ -187,5 +156,4 @@ public class StmtExecutorTest {
             Assertions.assertEquals(ctx.getSessionVariable().getInsertTimeoutS(), executor.getExecTimeout());
         }
     }
->>>>>>> 70b2f5e954 ([BugFix] set ExecTimeout for ANALYZE (#66361))
 }
