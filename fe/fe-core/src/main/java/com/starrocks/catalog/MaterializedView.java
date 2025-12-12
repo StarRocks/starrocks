@@ -1021,6 +1021,10 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                 setActive();
             }
 
+            if (tableProperty != null) {
+                tableProperty.buildConstraint();
+            }
+            
             // register constraints from global state manager
             GlobalConstraintManager globalConstraintManager = GlobalStateMgr.getCurrentState().getGlobalConstraintManager();
             globalConstraintManager.registerConstraint(this);
@@ -1043,37 +1047,9 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     /**
      * @return active or not
      */
-<<<<<<< HEAD
     private boolean onReloadImpl() {
         long startTime = System.currentTimeMillis();
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
-=======
-    private void onReloadImpl() {
-        long startMillis = System.currentTimeMillis();
-        // analyze partition info
-        analyzePartitionInfo();
-        // analyze mv partition exprs
-        analyzePartitionExprs();
-
-        if (tableProperty != null) {
-            tableProperty.buildConstraint();
-        }
-        
-        // register constraints from global state manager
-        GlobalConstraintManager globalConstraintManager = GlobalStateMgr.getCurrentState().getGlobalConstraintManager();
-        globalConstraintManager.registerConstraint(this);
-        // log reload cost
-        long duration = System.currentTimeMillis() - startMillis;
-        LOG.info("finish reloading mv {} in {}ms, total base table count: {}", getName(), duration, baseTableInfos.size());
-    }
-
-    /**
-     * Check whether this materialized view can be active on load.
-     * @return InactiveReason, which contains whether this mv is active and the reason if not active.
-     */
-    private InactiveReason checkIsActiveOnLoadBlocking() {
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
->>>>>>> eb4b6f1edc ([BugFix] Fix foreign key constraints lost after FE restart (#66474))
         if (db == null) {
             LOG.warn("db:{} do not exist. materialized view id:{} name:{} should not exist", dbId, id, name);
             setInactiveAndReason(MaterializedViewExceptions.inactiveReasonForDbNotExists(dbId));
