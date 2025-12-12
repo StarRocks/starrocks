@@ -1,0 +1,42 @@
+-- name: test_iceberg_sink_decimal
+
+create external catalog iceberg_sink_${uuid0} PROPERTIES (
+    "type"  =  "iceberg",
+    "iceberg.catalog.type"  =  "hive",
+    "iceberg.catalog.hive.metastore.uris"="${hive_metastore_uris}",
+    "aws.s3.access_key"  =  "${oss_ak}",
+    "aws.s3.secret_key"  =  "${oss_sk}",
+    "aws.s3.endpoint"  =  "${oss_endpoint}",
+    "enable_iceberg_metadata_cache" = "false"
+);
+create database iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0} properties (
+    "location" = "oss://${oss_bucket}/iceberg_sink_db_${uuid0}/test_iceberg_sink_decimal/${uuid0}"
+);
+
+create table iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t1 (
+    c1 decimal(10,3)
+);
+
+insert into iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t1 values(10.23);
+
+select * from iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t1 where c1=10.23;
+
+create table iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t2 (
+    c1 decimal(23,3)
+);
+
+insert into iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t2 values(10);
+select * from iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t2 where c1=10;
+
+insert into iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t2 values(30);
+select * from iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t2 where c1=30;
+
+select * from iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t2 where c1<=30;
+
+drop table iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t1 force;
+drop table iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t2 force;
+
+drop database iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0};
+drop catalog iceberg_sink_${uuid0};
+
+shell: ossutil64 rm -rf oss://${oss_bucket}/iceberg_sink_db_${uuid0}/test_iceberg_sink_decimal/${uuid0} > /dev/null || echo "exit 0" >/dev/null
