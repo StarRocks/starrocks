@@ -49,7 +49,8 @@ public class DataSkew {
         }
 
         final var rowCount = statistics.getOutputRowCount();
-        if (statistics.isTableRowCountMayInaccurate() || rowCount < 1 || columnStatistic.isUnknown() || columnStatistic.isUnknownValue()) {
+        if (statistics.isTableRowCountMayInaccurate() || rowCount < 1 || columnStatistic.isUnknown() ||
+                columnStatistic.isUnknownValue()) {
             // Without sufficient information we can not make a decision.
             return false;
         }
