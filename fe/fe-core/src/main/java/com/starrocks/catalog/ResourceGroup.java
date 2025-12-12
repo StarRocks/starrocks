@@ -55,7 +55,9 @@ public class ResourceGroup {
     public static final String DEFAULT_MEM_POOL = "default_mem_pool";
     public static final String DEFAULT_MV_RESOURCE_GROUP_NAME = "default_mv_wg";
     public static final String SPILL_MEM_LIMIT_THRESHOLD = "spill_mem_limit_threshold";
-
+    public static final String PLAN_SCAN_PARTITIONS_LIMIT = "plan_scan_partitions_limit";
+    public static final String PLAN_SCAN_ROWS_LIMIT = "plan_scan_rows_limit";
+    public static final String PLAN_SCAN_TABLETS_LIMIT = "plan_scan_tablets_limit";
     /**
      * In the old version, DEFAULT_WG and DEFAULT_MV_WG are not saved and persisted in the FE, but are only created in each
      * BE. Its ID is 0 and 1. To distinguish it from the old version, a new ID 2 and 3 is used here.
@@ -129,7 +131,16 @@ public class ResourceGroup {
                     (rg, classifier) -> classifier.toString()),
             new ColumnMeta(
                     new Column(MEM_POOL, TypeFactory.createVarcharType(200)),
-                    (rg, classifier) -> Objects.requireNonNullElse(rg.getMemPool(), DEFAULT_MEM_POOL), false)
+                    (rg, classifier) -> Objects.requireNonNullElse(rg.getMemPool(), DEFAULT_MEM_POOL), false),
+            new ColumnMeta(
+                    new Column(PLAN_SCAN_PARTITIONS_LIMIT, TypeFactory.createVarcharType(200)),
+                    (rg, classifier) -> "" + Objects.requireNonNullElse(rg.getBigQueryScanRowsLimit(), 0)),
+            new ColumnMeta(
+                    new Column(PLAN_SCAN_ROWS_LIMIT, TypeFactory.createVarcharType(200)),
+                    (rg, classifier) -> "" + Objects.requireNonNullElse(rg.getBigQueryScanRowsLimit(), 0)),
+            new ColumnMeta(
+                    new Column(PLAN_SCAN_TABLETS_LIMIT, TypeFactory.createVarcharType(200)),
+                    (rg, classifier) -> "" + Objects.requireNonNullElse(rg.getBigQueryScanRowsLimit(), 0))
     );
 
     public static final ShowResultSetMetaData META_DATA;
@@ -181,6 +192,12 @@ public class ResourceGroup {
     private TWorkGroupType resourceGroupType;
     @SerializedName(value = "version")
     private long version;
+    @SerializedName(value = "planScanPartitionsLimit")
+    private Long planScanPartitionsLimit;
+    @SerializedName(value = "planScanRowsLimit")
+    private Long planScanRowsLimit;
+    @SerializedName(value = "planScanTabletsLimit")
+    private Long planScanTabletsLimit;
 
     public ResourceGroup() {
     }
@@ -271,6 +288,15 @@ public class ResourceGroup {
         }
         if (memPool != null) {
             twg.setMem_pool(memPool);
+        }
+        if (planScanPartitionsLimit != null) {
+            twg.setPlan_scan_partitions_limit(planScanPartitionsLimit);
+        }
+        if (planScanTabletsLimit != null) {
+            twg.setPlan_scan_tablets_limit(planScanTabletsLimit);
+        }
+        if (planScanRowsLimit != null) {
+            twg.setPlan_scan_rows_limit(planScanRowsLimit);
         }
         twg.setExclusive_cpu_cores(getNormalizedExclusiveCpuCores());
 
@@ -413,6 +439,30 @@ public class ResourceGroup {
 
     public void setMemPool(String memPool) {
         this.memPool = memPool;
+    }
+
+    public Long getPlanScanPartitionsLimit() {
+        return planScanPartitionsLimit;
+    }
+
+    public void setPlanScanPartitionsLimit(Long planScanPartitionsLimit) {
+        this.planScanPartitionsLimit = planScanPartitionsLimit;
+    }
+
+    public Long getPlanScanRowsLimit() {
+        return planScanRowsLimit;
+    }
+
+    public void setPlanScanRowsLimit(Long planScanRowsLimit) {
+        this.planScanRowsLimit = planScanRowsLimit;
+    }
+
+    public Long getPlanScanTabletsLimit() {
+        return planScanTabletsLimit;
+    }
+
+    public void setPlanScanTabletsLimit(Long planScanTabletsLimit) {
+        this.planScanTabletsLimit = planScanTabletsLimit;
     }
 
     @Override

@@ -41,6 +41,9 @@ struct TWorkGroup {
 
   15: optional i32 exclusive_cpu_cores
   16: optional string mem_pool
+  17: optional i64 plan_scan_partitions_limit
+  18: optional i64 plan_scan_rows_limit
+  19: optional i64 plan_scan_tablets_limit
   100: optional i32 max_cpu_cores
 }
 
