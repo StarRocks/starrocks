@@ -64,7 +64,7 @@ Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicate
         return Status::Corruption("No missing version");
     }
 
-#ifndef BE_TEST
+#if !defined(BE_TEST) && defined(USE_STAROS)
     auto src_meta_dir =
             _remote_location_provider->metadata_root_location(src_tablet_id, src_db_id, src_table_id, src_partition_id);
     auto src_data_dir =
