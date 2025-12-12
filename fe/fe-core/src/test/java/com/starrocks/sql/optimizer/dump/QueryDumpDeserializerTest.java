@@ -14,6 +14,9 @@
 
 package com.starrocks.sql.optimizer.dump;
 
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import org.junit.jupiter.api.Test;
 
@@ -196,5 +199,109 @@ public class QueryDumpDeserializerTest {
         assertThat(oldStats.getAverageRowSize()).isEqualTo(newStats.getAverageRowSize());
         assertThat(oldStats.getDistinctValuesCount()).isEqualTo(newStats.getDistinctValuesCount());
         assertThat(oldStats.getType()).isEqualTo(newStats.getType());
+    }
+
+    @Test
+    public void testDeserializeQueryDumpWithOldFormatStatistics() {
+        // Simulate a query dump JSON with old format statistics
+        String queryDumpJson = "{"
+                + "\"statement\": \"select * from t1\","
+                + "\"table_meta\": {\"test.t1\": \"CREATE TABLE t1 (id INT)\"},"
+                + "\"table_row_count\": {\"test.t1\": {\"t1\": 1000}},"
+                + "\"column_statistics\": {"
+                + "  \"test.t1\": {"
+                + "    \"id\": \"[1.0, 100.0, 0.0, 4.0, 100.0] ESTIMATE\""
+                + "  }"
+                + "},"
+                + "\"be_number\": 3"
+                + "}";
+
+        Gson gson = new GsonBuilder()
+                .registerTypeAdapter(QueryDumpInfo.class, new QueryDumpDeserializer())
+                .create();
+
+        QueryDumpInfo dumpInfo = gson.fromJson(queryDumpJson, QueryDumpInfo.class);
+
+        assertThat(dumpInfo).isNotNull();
+        assertThat(dumpInfo.getOriginStmt()).isEqualTo("select * from t1");
+        assertThat(dumpInfo.getTableStatisticsMap()).containsKey("test.t1");
+
+        ColumnStatistic stats = dumpInfo.getTableStatisticsMap().get("test.t1").get("id");
+        assertThat(stats.getMinValue()).isEqualTo(1.0);
+        assertThat(stats.getMaxValue()).isEqualTo(100.0);
+        assertThat(stats.getNullsFraction()).isEqualTo(0.0);
+        assertThat(stats.getAverageRowSize()).isEqualTo(4.0);
+        assertThat(stats.getDistinctValuesCount()).isEqualTo(100.0);
+    }
+
+    @Test
+    public void testDeserializeQueryDumpWithLabeledFormatStatistics() {
+        // Simulate a query dump JSON with new labeled format statistics
+        String queryDumpJson = "{"
+                + "\"statement\": \"select * from t1\","
+                + "\"table_meta\": {\"test.t1\": \"CREATE TABLE t1 (id INT)\"},"
+                + "\"table_row_count\": {\"test.t1\": {\"t1\": 1000}},"
+                + "\"column_statistics\": {"
+                + "  \"test.t1\": {"
+                + "    \"id\": \"[MIN: 1.0, MAX: 100.0, NULLS: 0.0, ROS: 4.0, NDV: 100.0] ESTIMATE\""
+                + "  }"
+                + "},"
+                + "\"be_number\": 3"
+                + "}";
+
+        Gson gson = new GsonBuilder()
+                .registerTypeAdapter(QueryDumpInfo.class, new QueryDumpDeserializer())
+                .create();
+
+        QueryDumpInfo dumpInfo = gson.fromJson(queryDumpJson, QueryDumpInfo.class);
+
+        assertThat(dumpInfo).isNotNull();
+        assertThat(dumpInfo.getOriginStmt()).isEqualTo("select * from t1");
+        assertThat(dumpInfo.getTableStatisticsMap()).containsKey("test.t1");
+
+        ColumnStatistic stats = dumpInfo.getTableStatisticsMap().get("test.t1").get("id");
+        assertThat(stats.getMinValue()).isEqualTo(1.0);
+        assertThat(stats.getMaxValue()).isEqualTo(100.0);
+        assertThat(stats.getNullsFraction()).isEqualTo(0.0);
+        assertThat(stats.getAverageRowSize()).isEqualTo(4.0);
+        assertThat(stats.getDistinctValuesCount()).isEqualTo(100.0);
+    }
+
+    @Test
+    public void testDeserializeMixedFormatStatistics() {
+        // Simulate a query dump JSON with both old and new format statistics in different columns
+        String queryDumpJson = "{"
+                + "\"statement\": \"select * from t1\","
+                + "\"table_meta\": {\"test.t1\": \"CREATE TABLE t1 (id INT, name VARCHAR)\"},"
+                + "\"table_row_count\": {\"test.t1\": {\"t1\": 1000}},"
+                + "\"column_statistics\": {"
+                + "  \"test.t1\": {"
+                + "    \"id\": \"[1.0, 100.0, 0.0, 4.0, 100.0] ESTIMATE\","
+                + "    \"name\": \"[MIN: 0.0, MAX: 1000.0, NULLS: 0.1, ROS: 20.0, NDV: 500.0] ESTIMATE\""
+                + "  }"
+                + "},"
+                + "\"be_number\": 3"
+                + "}";
+
+        Gson gson = new GsonBuilder()
+                .registerTypeAdapter(QueryDumpInfo.class, new QueryDumpDeserializer())
+                .create();
+
+        QueryDumpInfo dumpInfo = gson.fromJson(queryDumpJson, QueryDumpInfo.class);
+
+        assertThat(dumpInfo).isNotNull();
+
+        // Verify old format column (id)
+        ColumnStatistic idStats = dumpInfo.getTableStatisticsMap().get("test.t1").get("id");
+        assertThat(idStats.getMinValue()).isEqualTo(1.0);
+        assertThat(idStats.getMaxValue()).isEqualTo(100.0);
+        assertThat(idStats.getDistinctValuesCount()).isEqualTo(100.0);
+
+        // Verify new labeled format column (name)
+        ColumnStatistic nameStats = dumpInfo.getTableStatisticsMap().get("test.t1").get("name");
+        assertThat(nameStats.getMinValue()).isEqualTo(0.0);
+        assertThat(nameStats.getMaxValue()).isEqualTo(1000.0);
+        assertThat(nameStats.getNullsFraction()).isEqualTo(0.1);
+        assertThat(nameStats.getDistinctValuesCount()).isEqualTo(500.0);
     }
 }
