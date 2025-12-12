@@ -642,7 +642,7 @@ public class HiveMetadataTest {
             }
         };
 
-        new MockUp<HiveWriteUtils>() {
+        new MockUp<HiveUtils>() {
             @Mock
             public boolean fileCreatedByQuery(String fileName, String queryId) {
                 return true;
@@ -668,7 +668,7 @@ public class HiveMetadataTest {
         Assertions.assertFalse(result.dirNotExists());
         Assertions.assertEquals(fileStatus.getPath().toString(), result.getNotDeletedEligibleItems().get(0));
 
-        new MockUp<HiveWriteUtils>() {
+        new MockUp<HiveUtils>() {
             @Mock
             public boolean fileCreatedByQuery(String fileName, String queryId) {
                 return false;
@@ -759,7 +759,7 @@ public class HiveMetadataTest {
             }
         };
 
-        new MockUp<HiveWriteUtils>() {
+        new MockUp<HiveUtils>() {
             @Mock
             public void createDirectory(Path path, Configuration conf) {
 

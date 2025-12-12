@@ -56,8 +56,8 @@ import static com.starrocks.connector.PartitionUtil.toPartitionValues;
 import static com.starrocks.connector.hive.HiveMetadata.STARROCKS_QUERY_ID;
 import static com.starrocks.connector.hive.HivePartitionStats.ReduceOperator.SUBTRACT;
 import static com.starrocks.connector.hive.HivePartitionStats.fromCommonStats;
-import static com.starrocks.connector.hive.HiveWriteUtils.fileCreatedByQuery;
-import static com.starrocks.connector.hive.HiveWriteUtils.isS3Url;
+import static com.starrocks.connector.hive.HiveUtils.fileCreatedByQuery;
+import static com.starrocks.connector.hive.HiveUtils.isS3Url;
 import static io.airlift.concurrent.MoreFutures.getFutureValue;
 import static java.util.Objects.requireNonNull;
 

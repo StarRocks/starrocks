@@ -165,10 +165,28 @@ public class PruneHDFSScanColumnRule extends TransformationRule {
                 scanColumnRefOperators.stream().map(col -> context.getColumnRefFactory().getColumn(col)).
                         collect(Collectors.toList());
         partitionColumns.retainAll(scanColumns);
+<<<<<<< HEAD
         if (partitionColumns.stream().map(Column::getType).anyMatch(this::notSupportedPartitionColumnType)) {
+=======
+        if (table.isIcebergTable()) {
+            if (partitionColumns.stream().map(Column::getType).anyMatch(this::icebergNotSupportedPartitionColumnType)) {
+                throw new StarRocksPlannerException("Iceberg table partition by float/double/decimalV2 datatype is not supported",
+                        ErrorType.UNSUPPORTED);
+            }
+        } else if (table.isHiveTable()) {
+            if (partitionColumns.stream().map(Column::getType).anyMatch(this::hiveNotSupportedPartitionColumnType)) {
+                throw new StarRocksPlannerException("Hive table partition by decimalV2 datatype is not supported",
+                        ErrorType.UNSUPPORTED);
+            }
+        } else if (partitionColumns.stream().map(Column::getType).anyMatch(this::notSupportedPartitionColumnType)) {
+>>>>>>> 486d74af56 ([Enhancement] support read float/double/decimal partitioned hive table (#65590))
             throw new StarRocksPlannerException("Table partition by float/double/decimal datatype is not supported",
                     ErrorType.UNSUPPORTED);
         }
+    }
+
+    private boolean hiveNotSupportedPartitionColumnType(Type type) {
+        return type.isDecimalV2();
     }
 
     private boolean notSupportedPartitionColumnType(Type type) {

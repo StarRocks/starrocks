@@ -53,10 +53,12 @@ import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.HiveStorageFormat;
+import com.starrocks.connector.hive.HiveUtils;
 import com.starrocks.persist.ModifyTableColumnOperationLog;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TColumn;
+import com.starrocks.thrift.TExpr;
 import com.starrocks.thrift.THdfsPartition;
 import com.starrocks.thrift.THdfsPartitionLocation;
 import com.starrocks.thrift.THdfsTable;
@@ -306,9 +308,10 @@ public class HiveTable extends Table {
         // columns and partition columns
         Set<String> partitionColumnNames = Sets.newHashSet();
         List<TColumn> tPartitionColumns = Lists.newArrayList();
+        List<Column> partitionColumns = getPartitionColumns();
         List<TColumn> tColumns = Lists.newArrayList();
 
-        for (Column column : getPartitionColumns()) {
+        for (Column column : partitionColumns) {
             tPartitionColumns.add(column.toThrift());
             partitionColumnNames.add(column.getName());
         }
@@ -346,7 +349,18 @@ public class HiveTable extends Table {
             tPartition.setFile_format(hivePartitions.get(i).getFileFormat().toThrift());
 
             List<LiteralExpr> keys = key.getKeys();
+<<<<<<< HEAD
             tPartition.setPartition_key_exprs(keys.stream().map(Expr::treeToThrift).collect(Collectors.toList()));
+=======
+            Preconditions.checkState(keys.size() == partitionColumns.size(),
+                    "Partition key size does not match partition columns size");
+            List<TExpr> partitionKeyExprs = Lists.newArrayListWithCapacity(keys.size());
+            for (int j = 0; j < keys.size(); j++) {
+                LiteralExpr literal = HiveUtils.normalizeKey(keys.get(j), partitionColumns.get(j).getType());
+                partitionKeyExprs.add(ExprToThrift.treeToThrift(literal));
+            }
+            tPartition.setPartition_key_exprs(partitionKeyExprs);
+>>>>>>> 486d74af56 ([Enhancement] support read float/double/decimal partitioned hive table (#65590))
 
             THdfsPartitionLocation tPartitionLocation = new THdfsPartitionLocation();
             tPartitionLocation.setPrefix_index(-1);

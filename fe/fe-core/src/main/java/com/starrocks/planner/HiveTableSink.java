@@ -21,7 +21,7 @@ import com.starrocks.common.util.CompressionUtils;
 import com.starrocks.connector.Connector;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.HiveStorageFormat;
-import com.starrocks.connector.hive.HiveWriteUtils;
+import com.starrocks.connector.hive.HiveUtils;
 import com.starrocks.connector.hive.TextFileFormatDesc;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.qe.SessionVariable;
@@ -54,7 +54,7 @@ public class HiveTableSink extends DataSink {
 
     public HiveTableSink(HiveTable hiveTable, TupleDescriptor desc, boolean isStaticPartitionSink, SessionVariable sessionVariable) {
         this.desc = desc;
-        this.stagingDir = HiveWriteUtils.getStagingDir(hiveTable, sessionVariable.getHiveTempStagingDir());
+        this.stagingDir = HiveUtils.getStagingDir(hiveTable, sessionVariable.getHiveTempStagingDir());
         this.partitionColNames = hiveTable.getPartitionColumnNames();
         this.dataColNames = hiveTable.getDataColumnNames();
         this.tableIdentifier = hiveTable.getUUID();

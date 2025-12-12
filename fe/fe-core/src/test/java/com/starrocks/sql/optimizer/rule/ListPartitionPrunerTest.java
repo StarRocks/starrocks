@@ -27,6 +27,15 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.ast.expression.BinaryType;
+import com.starrocks.sql.ast.expression.DateLiteral;
+import com.starrocks.sql.ast.expression.DecimalLiteral;
+import com.starrocks.sql.ast.expression.IntLiteral;
+import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.sql.ast.expression.StringLiteral;
+>>>>>>> 486d74af56 ([Enhancement] support read float/double/decimal partitioned hive table (#65590))
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalHiveScanOperator;
@@ -41,6 +50,16 @@ import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.OptExternalPartitionPruner;
 import com.starrocks.sql.optimizer.rule.transformation.ListPartitionPruner;
+<<<<<<< HEAD
+=======
+import com.starrocks.type.DateType;
+import com.starrocks.type.FloatType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.StringType;
+import com.starrocks.type.TypeFactory;
+import com.starrocks.type.VarcharType;
+>>>>>>> 486d74af56 ([Enhancement] support read float/double/decimal partitioned hive table (#65590))
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -794,5 +813,42 @@ public class ListPartitionPrunerTest {
                 Lists.newArrayList(intColumn, ConstantOperator.createInt(1000), ConstantOperator.createInt(2000))));
         pruner = new ListPartitionPruner(columnToPartitionValuesMap, columnToNullPartitions, conjuncts, null);
         Assertions.assertNull(pruner.prune());
+    }
+
+    @Test
+    public void testNormalizePartitionValueMapForHiveDecimalKeys() {
+        // Partition column has DECIMAL(10, 2) type while Hive metastore still reports raw literal strings.
+        ColumnRefOperator decimalColumnRef =
+                new ColumnRefOperator(6, TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 10, 2),
+                        "decimal_col", true);
+        DecimalLiteral literalOne = new DecimalLiteral("1.234");
+        literalOne.setType(decimalColumnRef.getType());
+        DecimalLiteral literalTwo = new DecimalLiteral("1.555");
+        literalTwo.setType(decimalColumnRef.getType());
+        ConcurrentNavigableMap<LiteralExpr, Set<Long>> decimalPartitionValues = new ConcurrentSkipListMap<>();
+        decimalPartitionValues.put(literalOne, Sets.newHashSet(1L));
+        decimalPartitionValues.put(literalTwo, Sets.newHashSet(2L));
+        Map<ColumnRefOperator, ConcurrentNavigableMap<LiteralExpr, Set<Long>>> columnToPartitions = Maps.newHashMap();
+        columnToPartitions.put(decimalColumnRef, decimalPartitionValues);
+        Map<ColumnRefOperator, Set<Long>> columnToNulls = Maps.newHashMap();
+        columnToNulls.put(decimalColumnRef, Sets.newHashSet());
+        ListPartitionPruner decimalPruner =
+                new ListPartitionPruner(columnToPartitions, columnToNulls, Lists.newArrayList(), null);
+        Column decimalColumnMeta = new Column("decimal_col", decimalColumnRef.getType());
+        Map<ColumnRefOperator, Column> colRefToColumn = Maps.newHashMap();
+        colRefToColumn.put(decimalColumnRef, decimalColumnMeta);
+        Map<Column, ColumnRefOperator> columnMetaToColRef = Maps.newHashMap();
+        columnMetaToColRef.put(decimalColumnMeta, decimalColumnRef);
+        LogicalHiveScanOperator scanOperator = new LogicalHiveScanOperator(new HiveTable(),
+                colRefToColumn, columnMetaToColRef, Operator.DEFAULT_LIMIT, null);
+        decimalPruner.setScanOperator(scanOperator);
+        ConcurrentNavigableMap<LiteralExpr, Set<Long>> normalized =
+                decimalPruner.normalizePartitionValueMap(decimalPartitionValues);
+        Assertions.assertEquals(2, normalized.size());
+        LiteralExpr normalizedKey = normalized.firstKey();
+        Assertions.assertEquals("1.23", normalizedKey.getStringValue());
+        Assertions.assertEquals("1.56", normalized.lastKey().getStringValue());
+        Assertions.assertEquals(Sets.newHashSet(1L), normalized.get(normalizedKey));
+        Assertions.assertEquals(Sets.newHashSet(2L), normalized.get(normalized.lastKey()));
     }
 }
