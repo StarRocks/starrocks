@@ -293,6 +293,10 @@ public class CostModel {
         private boolean isGroupBySkewed(List<ColumnStatistic> groupByStats, Statistics statistics) {
             // For now, we assume that if all group by columns are skewed that they are skewed "the same way" so we get
             // large groups. This is of course a simplification.
+            if (groupByStats.isEmpty()) {
+                return false;
+            }
+
             return groupByStats.stream()
                     .allMatch(groupByStat -> {
                         return DataSkew.isColumnSkewed(statistics, groupByStat);

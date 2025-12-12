@@ -58,17 +58,19 @@ public class DataSkew {
         if (histogram != null) {
             final var mcv = histogram.getMCV();
 
-            List<Pair<String, Long>> mcvs = Lists.newArrayList();
-            int mcvLimit = Math.min(thresholds.mcvLimit, mcv.size());
-            mcv.entrySet().stream()
-                    .sorted(Map.Entry.comparingByValue(Comparator.reverseOrder())) //
-                    .limit(mcvLimit)
-                    .forEach(entry -> {
-                        mcvs.add(Pair.create(entry.getKey(), entry.getValue()));
-                    });
+            if (mcv != null) {
+                List<Pair<String, Long>> mcvs = Lists.newArrayList();
+                int mcvLimit = Math.min(thresholds.mcvLimit, mcv.size());
+                mcv.entrySet().stream()
+                        .sorted(Map.Entry.comparingByValue(Comparator.reverseOrder())) //
+                        .limit(mcvLimit)
+                        .forEach(entry -> {
+                            mcvs.add(Pair.create(entry.getKey(), entry.getValue()));
+                        });
 
-            long rowCountOfMcvs = mcvs.stream().mapToLong(pair -> pair.second).sum();
-            return ((double) rowCountOfMcvs / rowCount) > thresholds.relativeRowThreshold;
+                long rowCountOfMcvs = mcvs.stream().mapToLong(pair -> pair.second).sum();
+                return ((double) rowCountOfMcvs / rowCount) > thresholds.relativeRowThreshold;
+            }
         }
 
         // No histogram information, can not deduce skew.
