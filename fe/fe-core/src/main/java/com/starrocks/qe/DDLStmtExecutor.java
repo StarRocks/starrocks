@@ -1144,9 +1144,17 @@ public class DDLStmtExecutor {
 
         @Override
         public ShowResultSet visitAlterStorageVolumeStatement(AlterStorageVolumeStmt stmt, ConnectContext context) {
-            ErrorReport.wrapWithRuntimeException(() ->
-                    context.getGlobalStateMgr().getStorageVolumeMgr().updateStorageVolume(stmt)
-            );
+            ErrorReport.wrapWithRuntimeException(() -> {
+                try {
+                    context.getGlobalStateMgr().getStorageVolumeMgr().updateStorageVolume(stmt);
+                } catch (MetaNotFoundException e) {
+                    if (stmt.isSetIfExists()) {
+                        LOG.info("alter storage volume[{}] which does not exist", stmt.getName());
+                    } else {
+                        throw e;
+                    }
+                }
+            });
             return null;
         }
 

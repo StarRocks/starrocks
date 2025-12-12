@@ -893,8 +893,8 @@ public class SharedDataStorageVolumeMgrTest {
 
         storageParams.put("dfs.client.failover.proxy.provider",
                 "org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider");
-        svm.updateStorageVolume("test", null, null, storageParams, Optional.of(false), "");
-        Assertions.assertEquals(false, svm.getStorageVolumeByName(svName).getEnabled());
+        Assertions.assertThrows(MetaNotFoundException.class,
+                () -> svm.updateStorageVolume("test", null, null, storageParams, Optional.of(false), ""));
     }
 
     @Test
