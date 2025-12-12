@@ -42,9 +42,9 @@ import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVPrepare;
 public final class MVTimelinessListPartitionArbiter extends MVTimelinessArbiter {
     private static final Logger LOG = LogManager.getLogger(MVTimelinessListPartitionArbiter.class);
 
-    public MVTimelinessListPartitionArbiter(MaterializedView mv, boolean isQueryRewrite) {
-        super(mv, isQueryRewrite);
-        differ = new ListPartitionDiffer(mv, isQueryRewrite);
+    public MVTimelinessListPartitionArbiter(MaterializedView mv, QueryRewriteParams queryRewriteParams) {
+        super(mv, queryRewriteParams);
+        differ = new ListPartitionDiffer(mv, queryRewriteParams);
     }
 
     @Override

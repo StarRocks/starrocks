@@ -31,6 +31,7 @@ import com.starrocks.catalog.MvRefreshArbiter;
 import com.starrocks.catalog.MvUpdateInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.View;
+import com.starrocks.catalog.mv.MVTimelinessArbiter;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
@@ -304,11 +305,15 @@ public abstract class MVTestBase extends StarRocksTestBase {
     }
 
     public static MvUpdateInfo getMvUpdateInfo(MaterializedView mv) {
-        return MvRefreshArbiter.getMVTimelinessUpdateInfo(mv, true);
+        OptimizerContext optimizerContext = OptimizerFactory.initContext(connectContext,
+                new ColumnRefFactory());
+        MVTimelinessArbiter.QueryRewriteParams queryRewriteParams =
+                MVTimelinessArbiter.QueryRewriteParams.ofQueryRewrite(optimizerContext);
+        return MvRefreshArbiter.getMVTimelinessUpdateInfo(mv, queryRewriteParams);
     }
 
     public static Set<String> getPartitionNamesToRefreshForMv(MaterializedView mv) {
-        MvUpdateInfo mvUpdateInfo = MvRefreshArbiter.getMVTimelinessUpdateInfo(mv, true);
+        MvUpdateInfo mvUpdateInfo = getMvUpdateInfo(mv);
         Preconditions.checkState(mvUpdateInfo != null);
         return mvUpdateInfo.getMvToRefreshPartitionNames();
     }

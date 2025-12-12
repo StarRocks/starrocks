@@ -15,6 +15,7 @@
 package com.starrocks.catalog.mv;
 
 import com.google.common.base.Preconditions;
+import com.google.common.base.Stopwatch;
 import com.google.common.base.Strings;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
@@ -30,10 +31,19 @@ import com.starrocks.catalog.TableProperty;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
+<<<<<<< HEAD
 import com.starrocks.sql.common.PCell;
+=======
+import com.starrocks.qe.SessionVariable;
+import com.starrocks.sql.common.PCellSetMapping;
+import com.starrocks.sql.common.PCellSortedSet;
+import com.starrocks.sql.common.PCellUtils;
+import com.starrocks.sql.common.PCellWithName;
+>>>>>>> 0317eb423e ([Enhancement] Optimize mv rewrite performance (#66623))
 import com.starrocks.sql.common.PartitionDiff;
 import com.starrocks.sql.common.PartitionDiffResult;
 import com.starrocks.sql.common.PartitionDiffer;
+import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
@@ -43,6 +53,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import static com.starrocks.catalog.MvRefreshArbiter.getMvBaseTableUpdateInfo;
@@ -62,12 +73,63 @@ public abstract class MVTimelinessArbiter {
     protected final MaterializedView mv;
     // differ
     protected PartitionDiffer differ;
-    // whether is query rewrite or mv refresh
-    protected final boolean isQueryRewrite;
 
-    public MVTimelinessArbiter(MaterializedView mv, boolean isQueryRewrite) {
+    // parameters for query rewrite
+    public static class QueryRewriteParams {
+        private final boolean isQueryRewrite;
+        private final OptimizerContext optimizerContext;
+        private final long timeLimit;
+        private long loopCounter = 0;
+
+        public QueryRewriteParams(boolean isQueryRewrite, OptimizerContext optimizerContext) {
+            this.isQueryRewrite = isQueryRewrite;
+            this.optimizerContext = optimizerContext;
+            if (optimizerContext != null) {
+                SessionVariable sessionVariable = optimizerContext.getSessionVariable();
+                this.timeLimit = Math.max(sessionVariable.getOptimizerExecuteTimeout() / 2, 1000);
+            } else {
+                this.timeLimit = -1;
+            }
+        }
+
+        public static QueryRewriteParams ofRefresh() {
+            return new QueryRewriteParams(false, null);
+        }
+
+        public static QueryRewriteParams ofQueryRewrite(OptimizerContext optimizerContext) {
+            return new QueryRewriteParams(true, optimizerContext);
+        }
+
+        public void checkQueryRewriteExhausted() {
+            if (!isQueryRewrite || timeLimit <= 0) {
+                return;
+            }
+            // to avoid too frequent check, check every 100 loops
+            if (++loopCounter % 100 != 0) {
+                return;
+            }
+            Stopwatch stopwatch = optimizerContext.getOptimizerTimer();
+            long elapsed = stopwatch.elapsed(TimeUnit.MILLISECONDS);
+            if (elapsed > timeLimit) {
+                throw new RuntimeException(String.format("Materialized view query rewrite time limit exceeded, " +
+                        ",time limit: %d ms, elapsed: %d ms", timeLimit, elapsed));
+            }
+        }
+
+        public boolean isQueryRewrite() {
+            return isQueryRewrite;
+        }
+
+        public OptimizerContext getOptimizerContext() {
+            return optimizerContext;
+        }
+    }
+    protected final QueryRewriteParams queryRewriteParams;
+
+    public MVTimelinessArbiter(MaterializedView mv,
+                               QueryRewriteParams queryRewriteParams) {
         this.mv = mv;
-        this.isQueryRewrite = isQueryRewrite;
+        this.queryRewriteParams = queryRewriteParams;
     }
 
     /**
@@ -129,7 +191,7 @@ public abstract class MVTimelinessArbiter {
                 return true;
             }
             // If the non-ref table has already changed, need refresh all materialized views' partitions.
-            if (needsToRefreshTable(mv, tableInfo, baseTable, isQueryRewrite)) {
+            if (needsToRefreshTable(mv, tableInfo, baseTable, queryRewriteParams)) {
                 return true;
             }
         }
@@ -176,7 +238,7 @@ public abstract class MVTimelinessArbiter {
         Map<Table, Set<String>> baseChangedPartitionNames = Maps.newHashMap();
         for (Table baseTable : refBaseTableAndColumns.keySet()) {
             MvBaseTableUpdateInfo mvBaseTableUpdateInfo = getMvBaseTableUpdateInfo(mv, baseTable,
-                    true, isQueryRewrite);
+                    true, queryRewriteParams);
             mvUpdateInfo.getBaseTableUpdateInfos().put(baseTable, mvBaseTableUpdateInfo);
             // If base table is a mv, its to-update partitions may not be created yet, skip it
             baseChangedPartitionNames.put(baseTable, mvBaseTableUpdateInfo.getToRefreshPartitionNames());

@@ -23,6 +23,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.mv.MVTimelinessArbiter;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
@@ -41,8 +42,8 @@ import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVPrepare;
 public final class ListPartitionDiffer extends PartitionDiffer {
     private static final Logger LOG = LogManager.getLogger(ListPartitionDiffer.class);
 
-    public ListPartitionDiffer(MaterializedView mv, boolean isQueryRewrite) {
-        super(mv, isQueryRewrite);
+    public ListPartitionDiffer(MaterializedView mv, MVTimelinessArbiter.QueryRewriteParams queryRewriteParams) {
+        super(mv, queryRewriteParams);
     }
 
     /**
@@ -173,6 +174,7 @@ public final class ListPartitionDiffer extends PartitionDiffer {
         return result;
     }
 
+<<<<<<< HEAD
     public static Map<String, Set<String>> generateBaseRefMapImpl(Map<PListAtom, Set<PListCellPlus>> mvPartitionMap,
                                                                   Map<String, PCell> baseTablePartitionMap) {
         if (mvPartitionMap.isEmpty()) {
@@ -191,6 +193,45 @@ public final class ListPartitionDiffer extends PartitionDiffer {
                             result.computeIfAbsent(baseCellPlus.getPartitionName(), k -> Sets.newHashSet())
                                     .add(x.getPartitionName())
                     );
+=======
+    /**
+     * Generate the reference map between the base table and the mv using merge-join algorithm.
+     * @param mvAtoms mv partition atoms (sorted)
+     * @param mvAtoms base table partition map
+     * @return base partition name -> mv partition names mapping
+     */
+    public PCellSetMapping generateBaseRefMapImpl(Map<PListCell, Set<PCellWithName>> mvAtoms,
+                                                  Map<PListCell, Set<PCellWithName>> baseAtoms) {
+        PCellSetMapping result = PCellSetMapping.of();
+        if (mvAtoms.isEmpty()) {
+            // all base partitions have no corresponding mv partitions
+            for (Set<PCellWithName> baseCellPluses : baseAtoms.values()) {
+                baseCellPluses.forEach(x -> result.put(x.name()));
+            }
+            return result;
+        }
+
+        // Merge-join algorithm: iterate both sorted maps simultaneously
+        Iterator<Map.Entry<PListCell, Set<PCellWithName>>> mvIter = mvAtoms.entrySet().iterator();
+        Iterator<Map.Entry<PListCell, Set<PCellWithName>>> baseIter = baseAtoms.entrySet().iterator();
+        if (!mvIter.hasNext() || !baseIter.hasNext()) {
+            return result;
+        }
+
+        Map.Entry<PListCell, Set<PCellWithName>> mvEntry = mvIter.next();
+        Map.Entry<PListCell, Set<PCellWithName>> baseEntry = baseIter.next();
+        while (mvEntry != null && baseEntry != null) {
+            // check query rewrite exhausted
+            queryRewriteParams.checkQueryRewriteExhausted();
+
+            int cmp = baseEntry.getKey().compareTo(mvEntry.getKey());
+            if (cmp == 0) {
+                // Found matching atoms - record the relationship
+                Set<PCellWithName> mvCellPluses = mvEntry.getValue();
+                Set<PCellWithName> baseCellPluses = baseEntry.getValue();
+                for (PCellWithName baseCellPlus : baseCellPluses) {
+                    mvCellPluses.forEach(x -> result.put(baseCellPlus.name(), x));
+>>>>>>> 0317eb423e ([Enhancement] Optimize mv rewrite performance (#66623))
                 }
             } else {
                 // add an empty set
@@ -271,8 +312,13 @@ public final class ListPartitionDiffer extends PartitionDiffer {
                 mvPartitionNameToListMap, uniqueResultNames);
 
         // collect external partition column mapping
+<<<<<<< HEAD
         Map<Table, Map<String, Set<String>>> externalPartitionMaps = Maps.newHashMap();
         if (!isQueryRewrite) {
+=======
+        Map<Table, PartitionNameSetMap> externalPartitionMaps = Maps.newHashMap();
+        if (!queryRewriteParams.isQueryRewrite()) {
+>>>>>>> 0317eb423e ([Enhancement] Optimize mv rewrite performance (#66623))
             try {
                 collectExternalPartitionNameMapping(mv.getRefBaseTablePartitionColumns(), externalPartitionMaps);
             } catch (Exception e) {
@@ -317,6 +363,7 @@ public final class ListPartitionDiffer extends PartitionDiffer {
         Map<PListAtom, Set<PListCellPlus>> mvAtoms = toAtoms(mvPartitionMap);
         for (Map.Entry<Table, Map<String, PCell>> entry : basePartitionMaps.entrySet()) {
             Table baseTable = entry.getKey();
+<<<<<<< HEAD
             Map<String, PCell> basePartitionMap = entry.getValue();
             Map<PListAtom, Set<PListCellPlus>> baseAtoms = toAtoms(basePartitionMap);
             for (Map.Entry<PListAtom, Set<PListCellPlus>> e : baseAtoms.entrySet()) {
@@ -329,6 +376,31 @@ public final class ListPartitionDiffer extends PartitionDiffer {
                                 result.computeIfAbsent(mvCell.getPartitionName(), k -> Maps.newHashMap())
                                         .computeIfAbsent(baseTable, k -> Sets.newHashSet())
                                         .add(x.getPartitionName())
+=======
+            Map<PListCell, Set<PCellWithName>> baseAtoms = toSortedAtoms(entry.getValue());
+            // Merge-join algorithm: iterate both sorted maps simultaneously
+            Iterator<Map.Entry<PListCell, Set<PCellWithName>>> mvIter = mvAtoms.entrySet().iterator();
+            Iterator<Map.Entry<PListCell, Set<PCellWithName>>> baseIter = baseAtoms.entrySet().iterator();
+            if (!mvIter.hasNext() || !baseIter.hasNext()) {
+                continue;
+            }
+            Map.Entry<PListCell, Set<PCellWithName>> mvEntry = mvIter.next();
+            Map.Entry<PListCell, Set<PCellWithName>> baseEntry = baseIter.next();
+            while (mvEntry != null && baseEntry != null) {
+                // check query rewrite exhausted
+                queryRewriteParams.checkQueryRewriteExhausted();
+
+                int cmp = mvEntry.getKey().compareTo(baseEntry.getKey());
+                if (cmp == 0) {
+                    // Found matching atoms - record the relationship
+                    Set<PCellWithName> mvCellPluses = mvEntry.getValue();
+                    Set<PCellWithName> baseCellPluses = baseEntry.getValue();
+                    for (PCellWithName mvCell : mvCellPluses) {
+                        baseCellPluses.forEach(x ->
+                                result.computeIfAbsent(mvCell.name(), k -> Maps.newHashMap())
+                                        .computeIfAbsent(baseTable, k -> PCellSortedSet.of())
+                                        .add(x)
+>>>>>>> 0317eb423e ([Enhancement] Optimize mv rewrite performance (#66623))
                         );
                     }
                 }
