@@ -1136,4 +1136,37 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
         String plan = getPlanFragment("query_dump/nest_cte_reuse", TExplainLevel.NORMAL);
         PlanTestBase.assertContains(plan, "MultiCastDataSinks");
     }
+
+    @Test
+    public void testReplayBeCoreStat() throws Exception {
+        {
+            String dumpString = getDumpInfoFromFile("query_dump/test_replay_be_core_stat_v1");
+            QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(dumpString);
+            Pair<QueryDumpInfo, String> replayPair =
+                    getPlanFragment(dumpString, queryDumpInfo.getSessionVariable(), TExplainLevel.NORMAL);
+            queryDumpInfo = replayPair.first;
+            int dop = queryDumpInfo.getSessionVariable().getDegreeOfParallelism(connectContext.getCurrentWarehouseId());
+            Assertions.assertEquals(6, dop);
+        }
+
+        {
+            String dumpString = getDumpInfoFromFile("query_dump/test_replay_be_core_stat_v2_0");
+            QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(dumpString);
+            Pair<QueryDumpInfo, String> replayPair =
+                    getPlanFragment(dumpString, queryDumpInfo.getSessionVariable(), TExplainLevel.NORMAL);
+            queryDumpInfo = replayPair.first;
+            int dop = queryDumpInfo.getSessionVariable().getDegreeOfParallelism(connectContext.getCurrentWarehouseId());
+            Assertions.assertEquals(4, dop);
+        }
+
+        {
+            String dumpString = getDumpInfoFromFile("query_dump/test_replay_be_core_stat_v2_1");
+            QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(dumpString);
+            Pair<QueryDumpInfo, String> replayPair =
+                    getPlanFragment(dumpString, queryDumpInfo.getSessionVariable(), TExplainLevel.NORMAL);
+            queryDumpInfo = replayPair.first;
+            int dop = queryDumpInfo.getSessionVariable().getDegreeOfParallelism(connectContext.getCurrentWarehouseId());
+            Assertions.assertEquals(8, dop);
+        }
+    }
 }

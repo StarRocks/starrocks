@@ -2547,16 +2547,26 @@ public class PlanFragmentBuilder {
             return fragment;
         }
 
+        private int calcParallelMergeInputRowsThreshold() {
+            ConnectContext connectContext = ConnectContext.get();
+            if (connectContext == null) {
+                return -1;
+            }
+
+            SessionVariable sv = connectContext.getSessionVariable();
+            if (!sv.isEnableParallelMerge()) {
+                return -1;
+            }
+
+            return sv.getDegreeOfParallelism(connectContext.getCurrentWarehouseId()) * sv.getChunkSize();
+        }
+
         private boolean isUseParallelMerge(OptExpression optExpr, long limit, long offset) {
             long inputRowCount = Optional.ofNullable(optExpr.inputAt(0).getStatistics())
                     .map(stat -> (long) stat.getOutputRowCount()).orElse(-1L);
 
             long topN = limit == Operator.DEFAULT_LIMIT ? Operator.DEFAULT_LIMIT : limit + offset;
-            int parallelMergeInputRowsThreshold = Optional.ofNullable(ConnectContext.get())
-                    .map(ConnectContext::getSessionVariable)
-                    .map(sv ->
-                            sv.isEnableParallelMerge() ? sv.getDegreeOfParallelism() * sv.getChunkSize() : -1
-                    ).orElse(-1);
+            int parallelMergeInputRowsThreshold = calcParallelMergeInputRowsThreshold();
             // this threshold == -1 indidcates that enable_parallel_merge is off
             if (parallelMergeInputRowsThreshold == -1) {
                 return false;
@@ -4136,7 +4146,8 @@ public class PlanFragmentBuilder {
                         INTERNAL_ERROR);
             }
 
-            int dop = ConnectContext.get().getSessionVariable().getSinkDegreeOfParallelism();
+            ConnectContext connectContext = ConnectContext.get();
+            int dop = connectContext.getSessionVariable().getSinkDegreeOfParallelism(connectContext.getCurrentWarehouseId());
             scanNode.setLoadInfo(-1, -1, table, new BrokerDesc(table.getProperties()), fileGroups, table.isStrictMode(), dop);
             scanNode.setUseVectorizedLoad(true);
             scanNode.setFlexibleColumnMapping(table.isFlexibleColumnMapping());

@@ -25,9 +25,11 @@ import com.google.gson.JsonParseException;
 import com.google.gson.reflect.TypeToken;
 import com.starrocks.catalog.Resource;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.json.JSONObject;
 
 import java.io.IOException;
 import java.lang.reflect.Type;
@@ -98,10 +100,16 @@ public class QueryDumpDeserializer implements JsonDeserializer<QueryDumpInfo> {
         }
         // session variables
         if (dumpJsonObject.has("session_variables")) {
+            String svString = dumpJsonObject.get("session_variables").getAsString();
             try {
-                dumpInfo.getSessionVariable().replayFromJson(dumpJsonObject.get("session_variables").getAsString());
+                dumpInfo.getSessionVariable().replayFromJson(svString);
             } catch (IOException e) {
                 LOG.warn("deserialize from json failed. ", e);
+            }
+
+            JSONObject root = new JSONObject(svString);
+            if (dumpJsonObject.has("be_core_stat_v2") && root.has(SessionVariable.WAREHOUSE_NAME)) {
+                dumpInfo.getSessionVariable().setWarehouseName(root.getString(SessionVariable.WAREHOUSE_NAME));
             }
         }
         // column statistics
@@ -119,12 +127,29 @@ public class QueryDumpDeserializer implements JsonDeserializer<QueryDumpInfo> {
         // Be core stat
         if (dumpJsonObject.has("be_core_stat")) {
             JsonObject beCoreStat = dumpJsonObject.getAsJsonObject("be_core_stat");
-            dumpInfo.setCachedAvgNumOfHardwareCores(beCoreStat.get("cachedAvgNumOfHardwareCores").getAsInt());
+            dumpInfo.setCachedAvgNumCores(beCoreStat.get("cachedAvgNumOfHardwareCores").getAsInt());
             Map<Long, Integer> numOfHardwareCoresPerBe = GsonUtils.GSON.fromJson(
                     beCoreStat.get("numOfHardwareCoresPerBe").getAsString(),
                     new TypeToken<Map<Long, Integer>>() {
                     }.getType());
-            dumpInfo.addNumOfHardwareCoresPerBe(numOfHardwareCoresPerBe);
+            dumpInfo.addNumCoresPerBe(numOfHardwareCoresPerBe);
+        }
+        // Be core stat v2
+        if (dumpJsonObject.has("be_core_stat_v2")) {
+            JsonObject beCoreStatV2 = dumpJsonObject.getAsJsonObject("be_core_stat_v2");
+            dumpInfo.setCurrentWarehouseId(beCoreStatV2.get("currentWarehouseId").getAsLong());
+            dumpInfo.setCachedAvgNumCores(beCoreStatV2.get("cachedAvgNumOfHardwareCores").getAsInt());
+            JsonArray warehouseStats = beCoreStatV2.getAsJsonArray("warehouses");
+            for (JsonElement warehouseStat : warehouseStats) {
+                JsonObject warehouseStatObj = warehouseStat.getAsJsonObject();
+                long warehouseId = warehouseStatObj.get("warehouseId").getAsLong();
+                int cachedAvgNumCores = warehouseStatObj.get("cachedAvgNumOfHardwareCores").getAsInt();
+                Map<Long, Integer> numCoresPerBe = GsonUtils.GSON.fromJson(
+                        warehouseStatObj.get("numOfHardwareCoresPerBe").getAsString(),
+                        new TypeToken<Map<Long, Integer>>() {
+                        }.getType());
+                dumpInfo.addWarehouseBeCoreStat(warehouseId, cachedAvgNumCores, numCoresPerBe);
+            }
         }
 
         return dumpInfo;

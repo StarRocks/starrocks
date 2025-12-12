@@ -211,7 +211,7 @@ public class AggregateTest extends PlanTestBase {
             int cpuCores = 8;
             int expectedTotalDop = cpuCores / 2;
             {
-                BackendResourceStat.getInstance().setCachedAvgNumHardwareCores(cpuCores);
+                BackendResourceStat.getInstance().setCachedAvgNumCores(cpuCores);
                 Pair<String, ExecPlan> plan = UtFrameUtils.getPlanAndFragment(connectContext, queryStr);
                 String explainString = plan.second.getExplainString(TExplainLevel.NORMAL);
                 assertContains(explainString, "2:Project\n" +
@@ -262,7 +262,7 @@ public class AggregateTest extends PlanTestBase {
         } finally {
             connectContext.getSessionVariable().setPipelineDop(originPipelineDop);
             connectContext.getSessionVariable().setPipelineDop(originInstanceNum);
-            BackendResourceStat.getInstance().setCachedAvgNumHardwareCores(1);
+            BackendResourceStat.getInstance().setCachedAvgNumCores(1);
         }
     }
 

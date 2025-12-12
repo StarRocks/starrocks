@@ -131,10 +131,11 @@ public class DeletePlanner {
 
             if (canUsePipeline) {
                 PlanFragment sinkFragment = execPlan.getFragments().get(0);
-                if (ConnectContext.get().getSessionVariable().getEnableAdaptiveSinkDop()) {
-                    sinkFragment.setPipelineDop(ConnectContext.get().getSessionVariable().getSinkDegreeOfParallelism());
+                if (session.getSessionVariable().getEnableAdaptiveSinkDop()) {
+                    long warehouseId = session.getCurrentComputeResource().getWarehouseId();
+                    sinkFragment.setPipelineDop(session.getSessionVariable().getSinkDegreeOfParallelism(warehouseId));
                 } else {
-                    sinkFragment.setPipelineDop(ConnectContext.get().getSessionVariable().getParallelExecInstanceNum());
+                    sinkFragment.setPipelineDop(session.getSessionVariable().getParallelExecInstanceNum());
                 }
                 sinkFragment.setHasOlapTableSink();
                 sinkFragment.setForceSetTableSinkDop();
