@@ -297,9 +297,13 @@ public class CostModel {
                 return false;
             }
 
+            final var dataSkewRowPercentageThreshold =
+                    ConnectContext.get().getSessionVariable().getDataSkewRowPercentageThreshold();
+            final var skewThresholds = DataSkew.Thresholds.withRelativeRowThreshold(dataSkewRowPercentageThreshold);
+
             return groupByStats.stream()
                     .allMatch(groupByStat -> {
-                        return DataSkew.isColumnSkewed(statistics, groupByStat);
+                        return DataSkew.isColumnSkewed(statistics, groupByStat, skewThresholds);
                     });
         }
 

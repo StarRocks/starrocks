@@ -28,13 +28,13 @@ public class DataSkew {
     private static final double DEFAULT_RELATIVE_ROW_THRESHOLD = 0.2;
     private static final Thresholds DEFAULT_THRESHOLDS = new Thresholds(DEFAULT_MCV_LIMIT, DEFAULT_RELATIVE_ROW_THRESHOLD);
 
-    public static class Thresholds {
-        public int mcvLimit;
-        public double relativeRowThreshold;
+    public record Thresholds(int mcvLimit, double relativeRowThreshold) {
+        public static Thresholds withRelativeRowThreshold(double relativeRowThreshold) {
+            return new Thresholds(DEFAULT_MCV_LIMIT, relativeRowThreshold);
+        }
 
-        public Thresholds(int mcvLimit, double relativeRowThreshold) {
-            this.mcvLimit = mcvLimit;
-            this.relativeRowThreshold = relativeRowThreshold;
+        public static Thresholds withMcvLimit(int mcvLimit) {
+            return new Thresholds(mcvLimit, DEFAULT_RELATIVE_ROW_THRESHOLD);
         }
     }
 
