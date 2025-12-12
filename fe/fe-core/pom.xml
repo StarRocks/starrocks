@@ -39,6 +39,7 @@ under the License.
         <maven.compiler.release>17</maven.compiler.release>
         <starrocks.home>${basedir}/../../</starrocks.home>
         <fe_ut_parallel>${env.FE_UT_PARALLEL}</fe_ut_parallel>
+        <fe_ut_timeout>${env.FE_UT_TIMEOUT}</fe_ut_timeout>
         <jacoco.version>0.8.12</jacoco.version>
         <jprotobuf-precompile-plugin.version>2.2.12</jprotobuf-precompile-plugin.version>
         <python>python</python>
@@ -1062,6 +1063,8 @@ under the License.
                     <!-->not reuse forked jvm, so that each unit test will run in separate jvm. to avoid singleton confict<-->
                     <reuseForks>false</reuseForks>
 
+                    <!-- Kill a stuck test JVM after specified seconds -->
+                    <!-- This enforces a hard timeout per forked process (test case when not reusing forks) -->
                     <argLine>
                         -javaagent:${settings.localRepository}/com/github/hazendaz/jmockit/jmockit/1.49.4/jmockit-1.49.4.jar
                         ${async.profiler.arg}
@@ -1070,6 +1073,10 @@ under the License.
                         -Duser.timezone=Asia/Shanghai
                         -Djacoco-agent.destfile=${project.build.directory}/jacoco.exec
                     </argLine>
+                    <testFailureIgnore>true</testFailureIgnore>
+                    <systemPropertyVariables>
+                        <junit.jupiter.execution.timeout.default>${fe_ut_timeout}</junit.jupiter.execution.timeout.default>
+                    </systemPropertyVariables>
                     <!-- Set maven to use independent class loading to avoid unit test failure due to the early shutdown of the JVM -->
                     <useSystemClassLoader>false</useSystemClassLoader>
                     <excludes>

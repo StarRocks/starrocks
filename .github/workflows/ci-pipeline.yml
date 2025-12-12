@@ -765,6 +765,10 @@ jobs:
             echo "src_filter=`cat src_filter.txt`" >> $GITHUB_OUTPUT
             echo "test_filter.txt=`cat test_filter.txt`" >> $GITHUB_OUTPUT
             echo "thirdparty_filter=`cat thirdparty_filter.txt`" >> $GITHUB_OUTPUT
+
+            if [[ `cat src_filter.txt` == "true" || `cat thirdparty_filter.txt` == "true" ]]; then
+              echo "be_build_necc=true" >> $GITHUB_OUTPUT
+            fi
           fi
 
       - name: Parsing FE path-filter file
@@ -778,12 +782,16 @@ jobs:
             echo "java_filter=`cat java_filter.txt`" >> $GITHUB_OUTPUT
             echo "extension_filter=`cat extension_filter.txt`" >> $GITHUB_OUTPUT
             echo "pom_filter=`cat pom_filter.txt`" >> $GITHUB_OUTPUT
+
+            if [[ `cat src_filter.txt` == "true" || `cat pom_filter.txt` == "true" || `cat extension_filter.txt` == "true" ]]; then
+              echo "fe_build_necc=true" >> $GITHUB_OUTPUT
+            fi
           fi
 
       - name: Check necessity
         id: check-necessity
         if: >
-          (needs.be-ut.result == 'success' && needs.fe-ut.result == 'success') || 
+          (needs.be-ut.result == 'success' && needs.fe-ut.result == 'success' && (steps.parsing-be-path-filter.outputs.be_build_necc == 'true' || steps.parsing-fe-path-filter.outputs.fe_build_necc == 'true')) || 
           (steps.parsing-be-path-filter.outputs.src_filter != 'true' && steps.parsing-fe-path-filter.outputs.src_filter == 'true' && needs.fe-ut.result == 'success') || 
           (steps.parsing-fe-path-filter.outputs.src_filter != 'true' && steps.parsing-be-path-filter.outputs.src_filter == 'true' && needs.be-ut.result == 'success') ||
           (steps.parsing-be-path-filter.outputs.src_filter != 'true' && steps.parsing-fe-path-filter.outputs.src_filter != 'true' && needs.test-checker.outputs.output1 == 'true')

@@ -37,7 +37,8 @@ Usage: $0 <options>
      --coverage                 run coverage statistic tasks
      --dumpcase [PATH]          run dump case and save to path
      --enable-profiler [0|1]    enable/disable async-profiler for performance profiling
-     -j [N]                     build parallel, default is ${FE_UT_PARALLEL:-4}
+     --timeout [N]              set timeout for each test case, default is ${FE_UT_TIMEOUT:-60} seconds
+	 -j [N]                     build parallel, default is ${FE_UT_PARALLEL:-4}
 
   Eg.
     $0                                            run all unit tests
@@ -48,6 +49,7 @@ Usage: $0 <options>
     $0 --dumpcase /home/disk1/                    run dump case and save to path
     $0 --enable-profiler 1                        run tests with async-profiler enabled
     $0 --enable-profiler 0                        run tests with async-profiler disabled
+	$0 --timeout 30                               run demo test with 30 seconds timeout
     $0 -j16 --test com.starrocks.utframe.Demo     run demo test with 16 parallel threads
   "
   exit 1
@@ -65,6 +67,7 @@ OPTS=$(getopt \
   -l 'enable-profiler:' \
   -l 'help' \
   -l 'run' \
+  -l 'timeout:' \
   -- "$@")
 
 if [ $? != 0 ] ; then
@@ -82,6 +85,8 @@ COVERAGE=0
 DUMPCASE=0
 ENABLE_PROFILER=0
 PARALLEL=${FE_UT_PARALLEL:-4}
+TIMEOUT=${FE_UT_TIMEOUT:-60}
+
 while true; do
     case "$1" in
         --coverage) COVERAGE=1 ; shift ;;
@@ -92,6 +97,7 @@ while true; do
         --dry-run) DRY_RUN=1 ; shift ;;
         --enable-profiler) ENABLE_PROFILER=$2; shift 2;;
         --help) HELP=1 ; shift ;;
+		--timeout) TIMEOUT=$2; shift 2 ;;
         -j) PARALLEL=$2; shift 2 ;;
         --) shift ;  break ;;
         *) echo "Internal error" ; exit 1 ;;
@@ -112,7 +118,8 @@ mkdir -p build/compile
 
 # Set FE_UT_PARALLEL if -j parameter is provided
 export FE_UT_PARALLEL=$PARALLEL
-echo "Unit test parallel is: $FE_UT_PARALLEL"
+export FE_UT_TIMEOUT=$TIMEOUT
+echo "Unit test parallel is: $FE_UT_PARALLEL, timeout is: $FE_UT_TIMEOUT seconds"
 
 # Set ASYNC_PROFILER_ENABLED based on --enable-profiler parameter and platform detection
 if [ "${ENABLE_PROFILER}" = "1" ]; then
