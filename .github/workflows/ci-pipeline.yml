@@ -984,8 +984,6 @@ jobs:
         run: |
           rm -f ${{ steps.run_build.outputs.RES_FILE }}
           rm -f ${{ steps.run_build.outputs.RES_LOG }}
-          rm -rf ${{ github.workspace }}
-
   deploy:
     runs-on: [self-hosted, normal]
     needs: build
@@ -1036,11 +1034,10 @@ jobs:
           repo: ${{ github.repository }}
         run: |
           cd ci-tool && source lib/init.sh
-
-          
-          echo "##### Package: ${tar_path}" >> $GITHUB_STEP_SUMMARY
+          echo "##### Package(BE): ${BE_OUTPUT_TAR}" >> $GITHUB_STEP_SUMMARY
+          echo "##### Package(FE): ${FE_OUTPUT_TAR}" >> $GITHUB_STEP_SUMMARY
           echo "cluster_name=${CLUSTER_NAME}" >> $GITHUB_OUTPUT
-          ./bin/deploy-cluster.sh -c ${CLUSTER_NAME} --output ${tar_path} --with-coverage
+          ./bin/deploy-cluster.sh -c ${CLUSTER_NAME} --with-coverage
 
       - name: Clean ENV
         if: always()
