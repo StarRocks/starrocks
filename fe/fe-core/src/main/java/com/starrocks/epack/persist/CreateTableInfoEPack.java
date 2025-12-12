@@ -9,11 +9,11 @@ import com.starrocks.catalog.Table;
 import com.starrocks.epack.authorization.MaskingPolicyContext;
 import com.starrocks.epack.authorization.RowAccessPolicyContext;
 import com.starrocks.epack.authorization.TableUID;
-import com.starrocks.epack.sql.ast.WithColumnMaskingPolicy;
 import com.starrocks.epack.sql.ast.WithRowAccessPolicy;
 import com.starrocks.persist.CreateTableInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.WithColumnMaskingPolicy;
 import com.starrocks.sql.common.MetaUtils;
 
 import java.util.ArrayList;

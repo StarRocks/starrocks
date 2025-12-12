@@ -19,7 +19,6 @@ import com.starrocks.catalog.DataProperty;
 import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TTabletType;
-import org.apache.commons.lang.NotImplementedException;
 
 import java.util.Map;
 
@@ -37,7 +36,7 @@ public class PartitionDesc implements ParseNode {
     }
 
     public String toSql() {
-        throw new NotImplementedException();
+        throw new UnsupportedOperationException();
     }
 
     @Override
@@ -45,40 +44,40 @@ public class PartitionDesc implements ParseNode {
         return pos;
     }
 
-    public String getPartitionName() throws NotImplementedException {
-        throw new NotImplementedException();
+    public String getPartitionName() throws UnsupportedOperationException {
+        throw new UnsupportedOperationException();
     }
 
-    public boolean isSetIfNotExists() throws NotImplementedException {
-        throw new NotImplementedException();
+    public boolean isSetIfNotExists() throws UnsupportedOperationException {
+        throw new UnsupportedOperationException();
     }
 
-    public Map<String, String> getProperties() throws NotImplementedException {
-        throw new NotImplementedException();
+    public Map<String, String> getProperties() throws UnsupportedOperationException {
+        throw new UnsupportedOperationException();
     }
 
-    public short getReplicationNum() throws NotImplementedException {
-        throw new NotImplementedException();
+    public short getReplicationNum() throws UnsupportedOperationException {
+        throw new UnsupportedOperationException();
     }
 
-    public DataProperty getPartitionDataProperty() throws NotImplementedException {
-        throw new NotImplementedException();
+    public DataProperty getPartitionDataProperty() throws UnsupportedOperationException {
+        throw new UnsupportedOperationException();
     }
 
-    public Long getVersionInfo() throws NotImplementedException {
-        throw new NotImplementedException();
+    public Long getVersionInfo() throws UnsupportedOperationException {
+        throw new UnsupportedOperationException();
     }
 
-    public TTabletType getTabletType() throws NotImplementedException {
-        throw new NotImplementedException();
+    public TTabletType getTabletType() throws UnsupportedOperationException {
+        throw new UnsupportedOperationException();
     }
 
-    public boolean isInMemory() throws NotImplementedException {
-        throw new NotImplementedException();
+    public boolean isInMemory() throws UnsupportedOperationException {
+        throw new UnsupportedOperationException();
     }
 
-    public DataCacheInfo getDataCacheInfo() throws NotImplementedException {
-        throw new NotImplementedException();
+    public DataCacheInfo getDataCacheInfo() throws UnsupportedOperationException {
+        throw new UnsupportedOperationException();
     }
 
     public boolean isSystem() {

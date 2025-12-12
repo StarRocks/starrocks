@@ -9,16 +9,16 @@ import com.starrocks.epack.authorization.SecurityPolicyMgr;
 import com.starrocks.epack.sql.ast.ApplyMaskingPolicyClause;
 import com.starrocks.epack.sql.ast.ApplyRowAccessPolicyClause;
 import com.starrocks.epack.sql.ast.AstVisitorEPack;
-import com.starrocks.epack.sql.ast.PolicyName;
 import com.starrocks.epack.sql.ast.PolicyType;
 import com.starrocks.epack.sql.ast.RevokeMaskingPolicyClause;
 import com.starrocks.epack.sql.ast.RevokeRowAccessPolicyClause;
-import com.starrocks.epack.sql.ast.WithColumnMaskingPolicy;
 import com.starrocks.epack.sql.ast.WithRowAccessPolicy;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AlterTableClauseAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.PolicyName;
+import com.starrocks.sql.ast.WithColumnMaskingPolicy;
 import com.starrocks.sql.common.TypeManager;
 import com.starrocks.type.Type;
 
@@ -31,8 +31,8 @@ public class AlterTableClauseAnalyzerEPack extends AlterTableClauseAnalyzer impl
 
     @Override
     public Void visitApplyMaskingPolicyClause(ApplyMaskingPolicyClause clause, ConnectContext context) {
-        clause.getWithColumnMaskingPolicy().analyze(context, clause.getMaskingColumn());
         WithColumnMaskingPolicy withColumnMaskingPolicy = clause.getWithColumnMaskingPolicy();
+        WithColumnMaskingPolicyAnalyzer.analyze(withColumnMaskingPolicy, context, clause.getMaskingColumn());
         analyzeApplyPolicy(withColumnMaskingPolicy.getPolicyName(), withColumnMaskingPolicy.getUsingColumns(),
                 clause.getMaskingColumn(), PolicyType.MASKING);
 

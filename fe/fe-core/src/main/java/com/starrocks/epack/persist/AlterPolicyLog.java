@@ -5,9 +5,9 @@ package com.starrocks.epack.persist;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
-import com.starrocks.epack.sql.ast.PolicyName;
 import com.starrocks.epack.sql.ast.PolicyType;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.sql.ast.PolicyName;
 
 import java.io.DataInput;
 import java.io.DataOutput;

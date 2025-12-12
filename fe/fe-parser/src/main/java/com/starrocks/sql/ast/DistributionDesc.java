@@ -15,7 +15,6 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.sql.parser.NodePosition;
-import org.apache.commons.lang.NotImplementedException;
 
 public class DistributionDesc implements ParseNode {
     protected final NodePosition pos;
@@ -29,7 +28,7 @@ public class DistributionDesc implements ParseNode {
     }
 
     public int getBuckets() {
-        throw new NotImplementedException();
+        throw new UnsupportedOperationException();
     }
 
     @Override

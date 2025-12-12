@@ -3,9 +3,9 @@
 package com.starrocks.epack.sql.analyzer;
 
 import com.google.common.base.Strings;
-import com.starrocks.epack.sql.ast.PolicyName;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.PolicyName;
 
 public class AnalyzerUtilsEPack {
     public static void normalizationPolicyName(ConnectContext connectContext, PolicyName policyName) {

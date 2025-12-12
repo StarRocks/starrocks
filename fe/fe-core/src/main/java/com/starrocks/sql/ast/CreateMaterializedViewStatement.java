@@ -24,7 +24,6 @@ import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.TableName;
-import com.starrocks.epack.sql.ast.WithColumnMaskingPolicy;
 import com.starrocks.epack.sql.ast.WithRowAccessPolicy;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;

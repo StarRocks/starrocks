@@ -44,8 +44,8 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.binlog.BinlogConfig;
-import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ColumnBuilder;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.FlatJsonConfig;
@@ -101,10 +101,12 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AddColumnClause;
 import com.starrocks.sql.ast.AddColumnsClause;
 import com.starrocks.sql.ast.AddFieldClause;
+import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterTableColumnClause;
 import com.starrocks.sql.ast.CancelAlterTableStmt;
 import com.starrocks.sql.ast.CancelStmt;
+import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.ColumnPosition;
 import com.starrocks.sql.ast.CreateIndexClause;
 import com.starrocks.sql.ast.DropColumnClause;
@@ -154,6 +156,8 @@ import java.util.stream.Collectors;
 import javax.annotation.Nullable;
 import javax.validation.constraints.NotNull;
 
+import static com.starrocks.sql.parser.ErrorMsgProxy.PARSER_ERROR_MSG;
+
 public class SchemaChangeHandler extends AlterHandler {
 
     private static final Logger LOG = LogManager.getLogger(SchemaChangeHandler.class);
@@ -189,6 +193,34 @@ public class SchemaChangeHandler extends AlterHandler {
         return jobBuilder.build();
     }
 
+    private Column buildColumnForAdd(ColumnDef columnDef, OlapTable table) throws DdlException {
+        Column column = buildColumnInternal(columnDef, table);
+        if (!column.isGeneratedColumn() && !column.isAllowNull()
+                && column.getDefaultValue() == null && column.getDefaultExpr() == null) {
+            throw new DdlException(PARSER_ERROR_MSG.withOutDefaultVal(column.getName()));
+        }
+        return column;
+    }
+
+    private List<Column> buildColumnsForAdd(AddColumnsClause clause, OlapTable table) throws DdlException {
+        List<Column> columns = new ArrayList<>();
+        for (ColumnDef columnDef : clause.getColumnDefs()) {
+            columns.add(buildColumnForAdd(columnDef, table));
+        }
+        return columns;
+    }
+
+    private Column buildColumnForModify(ColumnDef columnDef, OlapTable table) {
+        return buildColumnInternal(columnDef, table);
+    }
+
+    private Column buildColumnInternal(ColumnDef columnDef, Table table) {
+        if (columnDef.isGeneratedColumn()) {
+            return ColumnBuilder.buildGeneratedColumn(table, columnDef);
+        }
+        return ColumnBuilder.buildColumn(columnDef);
+    }
+
     /**
      * @param alterClause
      * @param olapTable
@@ -200,7 +232,7 @@ public class SchemaChangeHandler extends AlterHandler {
     private boolean processAddColumn(AddColumnClause alterClause, OlapTable olapTable,
                                      Map<Long, LinkedList<Column>> indexSchemaMap,
                                      IntSupplier colUniqueIdSupplier) throws DdlException {
-        Column column = alterClause.getColumn();
+        Column column = buildColumnForAdd(alterClause.getColumnDef(), olapTable);
         ColumnPosition columnPos = alterClause.getColPos();
         String targetIndexName = alterClause.getRollupName();
         checkIndexExists(olapTable, targetIndexName);
@@ -236,7 +268,7 @@ public class SchemaChangeHandler extends AlterHandler {
     private boolean processAddColumns(AddColumnsClause alterClause, OlapTable olapTable,
                                       Map<Long, LinkedList<Column>> indexSchemaMap,
                                       IntSupplier colUniqueIdSupplier) throws DdlException {
-        List<Column> columns = alterClause.getColumns();
+        List<Column> columns = buildColumnsForAdd(alterClause, olapTable);
         String targetIndexName = alterClause.getRollupName();
         checkIndexExists(olapTable, targetIndexName);
 
@@ -647,7 +679,7 @@ public class SchemaChangeHandler extends AlterHandler {
                                         Map<Long, LinkedList<Column>> indexSchemaMap) throws DdlException {
         // The fast schema evolution mechanism is only supported for modified columns in shared data mode.
         boolean fastSchemaEvolution = RunMode.isSharedDataMode() && olapTable.getUseFastSchemaEvolution();
-        Column modColumn = alterClause.getColumn();
+        Column modColumn = buildColumnForModify(alterClause.getColumnDef(), olapTable);
         if (KeysType.PRIMARY_KEYS == olapTable.getKeysType()) {
             if (olapTable.getBaseColumn(modColumn.getName()) != null && olapTable.getBaseColumn(modColumn.getName()).isKey()) {
                 throw new DdlException("Can not modify key column: " + modColumn.getName() + " for primary key table");
@@ -2003,7 +2035,7 @@ public class SchemaChangeHandler extends AlterHandler {
                 ModifyColumnClause modifyColumnClause = (ModifyColumnClause) alterClause;
 
                 // check relative mvs with the modified column
-                Set<String> modifiedColumns = Set.of(modifyColumnClause.getColumn().getName());
+                Set<String> modifiedColumns = Set.of(modifyColumnClause.getColumnDef().getName());
                 AlterMVJobExecutor.checkModifiedColumWithMaterializedViews(olapTable, modifiedColumns);
 
                 // modify column

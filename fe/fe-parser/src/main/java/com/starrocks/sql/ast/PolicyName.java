@@ -1,9 +1,8 @@
 // Copyright 2021-present StarRocks, Inc. All rights reserved.
 
-package com.starrocks.epack.sql.ast;
+package com.starrocks.sql.ast;
 
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.parser.NodePosition;
 
 public class PolicyName implements ParseNode {

@@ -2,11 +2,11 @@
 
 package com.starrocks.epack.sql.analyzer;
 
-import com.starrocks.epack.sql.ast.WithColumnMaskingPolicy;
 import com.starrocks.epack.sql.ast.WithRowAccessPolicy;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.CreateTableAnalyzer;
 import com.starrocks.sql.ast.CreateTableStmt;
+import com.starrocks.sql.ast.WithColumnMaskingPolicy;
 
 import java.util.Map;
 
@@ -17,7 +17,7 @@ public class CreateTableAnalyzerEPack {
         if (statement.getMaskingPolicyContextMap() != null) {
             Map<String, WithColumnMaskingPolicy> maskingPolicyMap = statement.getMaskingPolicyContextMap();
             for (Map.Entry<String, WithColumnMaskingPolicy> entry : maskingPolicyMap.entrySet()) {
-                entry.getValue().analyze(context, entry.getKey());
+                WithColumnMaskingPolicyAnalyzer.analyze(entry.getValue(), context, entry.getKey());
             }
         }
 

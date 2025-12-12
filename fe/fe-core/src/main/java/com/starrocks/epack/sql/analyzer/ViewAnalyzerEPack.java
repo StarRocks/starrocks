@@ -2,13 +2,13 @@
 
 package com.starrocks.epack.sql.analyzer;
 
-import com.starrocks.epack.sql.ast.WithColumnMaskingPolicy;
 import com.starrocks.epack.sql.ast.WithRowAccessPolicy;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.ViewAnalyzer;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.WithColumnMaskingPolicy;
 
 import java.util.Map;
 
@@ -23,7 +23,7 @@ public class ViewAnalyzerEPack {
             ViewAnalyzer.analyze(statement, context);
             Map<String, WithColumnMaskingPolicy> maskingPolicyMap = statement.getMaskingPolicyContextMap();
             for (Map.Entry<String, WithColumnMaskingPolicy> entry : maskingPolicyMap.entrySet()) {
-                entry.getValue().analyze(context, entry.getKey());
+                WithColumnMaskingPolicyAnalyzer.analyze(entry.getValue(), context, entry.getKey());
             }
 
             for (WithRowAccessPolicy withRowAccessPolicy : statement.getWithRowAccessPolicies()) {

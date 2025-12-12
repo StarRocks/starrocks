@@ -4,6 +4,7 @@ package com.starrocks.epack.sql.ast;
 
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.DdlStmt;
+import com.starrocks.sql.ast.PolicyName;
 import com.starrocks.sql.parser.NodePosition;
 
 public class DropPolicyStmt extends DdlStmt {

@@ -25,6 +25,7 @@ public class AddColumnsClause extends AlterTableColumnClause {
     private final List<ColumnDef> columnDefs;
 
     private ColumnPosition generatedColumnPos = null;
+    private String rollupName;
 
     public ColumnPosition getGeneratedColumnPos() {
         return generatedColumnPos;
@@ -44,12 +45,21 @@ public class AddColumnsClause extends AlterTableColumnClause {
 
     public AddColumnsClause(List<ColumnDef> columnDefs, String rollupName, Map<String, String> properties,
                             NodePosition pos) {
-        super(rollupName, properties, pos);
+        super(properties, pos);
         this.columnDefs = columnDefs;
+        this.rollupName = rollupName;
     }
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return ((AstVisitorExtendInterface<R, C>) visitor).visitAddColumnsClause(this, context);
+        return visitor.visitAddColumnsClause(this, context);
+    }
+
+    public String getRollupName() {
+        return rollupName;
+    }
+
+    public void setRollupName(String rollupName) {
+        this.rollupName = rollupName;
     }
 }
