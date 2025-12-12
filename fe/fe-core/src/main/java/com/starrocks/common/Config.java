@@ -3175,6 +3175,9 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, comment = "metadata expired time from full vacuum begin running")
     public static long lake_fullvacuum_meta_expired_seconds = 3600L * 24L * 2L;
 
+    @ConfField(mutable = true, comment = "Whether to enable full vacuum daemon")
+    public static boolean lake_enable_fullvacuum = false;
+
     @ConfField(mutable = true, comment =
             "Whether enable throttling ingestion speed when compaction score exceeds the threshold.\n" +
                     "Only takes effect for tables in clusters with run_mode=shared_data.")
