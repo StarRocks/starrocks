@@ -507,4 +507,10 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
         sql = "select merge(approx_set(\"tc\")) from tall";
         assertPlanContains(sql, "hll_raw_agg(hll_hash(CAST(3: tc AS VARCHAR)))");
     }
+
+    @Test
+    public void testMapFunction() throws Exception {
+        String sql = "select map_agg('key', 'value')";
+        assertPlanContains(sql, "array_agg('key'), array_agg('value')", "map_from_arrays(2: array_agg, 3: array_agg)");
+    }
 }
