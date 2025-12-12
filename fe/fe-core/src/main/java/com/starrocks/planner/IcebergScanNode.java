@@ -187,6 +187,8 @@ public class IcebergScanNode extends ScanNode {
         scanRangeSource = new IcebergConnectorScanRangeSource(icebergTable,
                 remoteFileInfoSource, morParams, desc, bucketProperties, partitionIdGenerator, false,
                 scanOptimizeOption.getCanUseMinMaxOpt());
+
+        selectedPartitionCount = scanRangeSource.selectedPartitionCount();
     }
 
     private void setupCloudCredential() {

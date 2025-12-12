@@ -2791,6 +2791,9 @@ public class StmtExecutor {
         long loadedBytes = 0;
         long jobId = -1;
         long estimateScanRows = -1;
+        long planMaxScanRows = -1;
+        long planMaxScanPartitions = -1;
+        long planMaxScanTablets = -1;
         int estimateFileNum = 0;
         long estimateScanFileSize = 0;
         TransactionStatus txnStatus = TransactionStatus.ABORTED;
@@ -2806,13 +2809,24 @@ public class StmtExecutor {
                 if (scanNode instanceof OlapScanNode) {
                     estimateScanRows += ((OlapScanNode) scanNode).getActualRows();
                     needQuery = true;
+                    planMaxScanPartitions = Math.max(planMaxScanPartitions, scanNode.getSelectedTabletsNum());
+                    planMaxScanTablets = Math.max(planMaxScanTablets, scanNode.getSelectedTabletsNum());
+                    planMaxScanRows = Math.max(planMaxScanRows, scanNode.getCardinality());
                 }
                 if (scanNode instanceof FileScanNode) {
                     estimateFileNum += ((FileScanNode) scanNode).getFileNum();
                     estimateScanFileSize += ((FileScanNode) scanNode).getFileTotalSize();
                     needQuery = true;
                 }
+                if  (scanNode instanceof IcebergScanNode) {
+                    planMaxScanPartitions = Math.max(planMaxScanPartitions, scanNode.getSelectedTabletsNum());
+                    planMaxScanRows = Math.max(planMaxScanRows, scanNode.getCardinality());
+                }
             }
+
+            context.getAuditEventBuilder().setPlanMaxScanRows(planMaxScanRows);
+            context.getAuditEventBuilder().setPlanMaxScanPartitions(planMaxScanPartitions);
+            context.getAuditEventBuilder().setPlanMaxScanTablets(planMaxScanTablets);
 
             if (needQuery) {
                 coord.setLoadJobType(TLoadJobType.INSERT_QUERY);
