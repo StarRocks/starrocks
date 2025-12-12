@@ -50,11 +50,11 @@ Status AppendWithMaskVisitor<PositiveSelect>::do_visit(NullableColumn* column) {
         const auto* src_column = down_cast<const NullableColumn*>(&_src);
         if (!src_column->has_null()) {
             size_t selected = count_selected();
-            nullable_column->null_column()->resize(orig_size + selected);
-            RETURN_IF_ERROR(apply(nullable_column->mutable_data_column(), src_column->data_column().get()));
+            nullable_column->null_column_raw_ptr()->resize(orig_size + selected);
+            RETURN_IF_ERROR(apply(nullable_column->data_column_raw_ptr(), src_column->data_column().get()));
         } else {
-            RETURN_IF_ERROR(apply(nullable_column->mutable_data_column(), src_column->data_column().get()));
-            RETURN_IF_ERROR(apply(nullable_column->null_column().get(), src_column->null_column().get()));
+            RETURN_IF_ERROR(apply(nullable_column->data_column_raw_ptr(), src_column->data_column().get()));
+            RETURN_IF_ERROR(apply(nullable_column->null_column_raw_ptr(), src_column->null_column().get()));
             size_t appended = nullable_column->null_column()->size() - orig_size;
             if (appended != 0) {
                 const auto null_data = nullable_column->null_column()->immutable_data();
@@ -64,8 +64,8 @@ Status AppendWithMaskVisitor<PositiveSelect>::do_visit(NullableColumn* column) {
         }
     } else {
         size_t selected = count_selected();
-        nullable_column->null_column()->resize(orig_size + selected);
-        RETURN_IF_ERROR(apply(nullable_column->mutable_data_column(), &_src));
+        nullable_column->null_column_raw_ptr()->resize(orig_size + selected);
+        RETURN_IF_ERROR(apply(nullable_column->data_column_raw_ptr(), &_src));
     }
 
     DCHECK_EQ(nullable_column->null_column()->size(), nullable_column->data_column()->size());

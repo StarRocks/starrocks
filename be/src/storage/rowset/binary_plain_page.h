@@ -352,7 +352,7 @@ private:
         if (column->is_nullable()) {
             // This is NullableColumn, get its data_column
             auto* nullable_col = down_cast<NullableColumn*>(column);
-            data_col = nullable_col->data_column().get();
+            data_col = nullable_col->data_column_raw_ptr();
         } else {
             data_col = column;
         }
