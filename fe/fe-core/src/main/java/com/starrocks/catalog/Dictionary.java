@@ -346,6 +346,8 @@ public class Dictionary implements Writable {
     public synchronized void setCancelled() {
         this.state = DictionaryState.CANCELLED;
         this.stateBeforeRefresh = null;
+        System.out.println("debug: set dictionary cancelled");
+        new Exception().printStackTrace();
     }
 
     public DictionaryState getState() {
