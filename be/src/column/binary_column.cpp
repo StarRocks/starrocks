@@ -562,7 +562,7 @@ void BinaryColumnBase<T>::remove_first_n_values(size_t count) {
     DCHECK_LE(count, _offsets.size() - 1);
     size_t remain_size = _offsets.size() - 1 - count;
 
-    ColumnPtr column = cut(count, remain_size);
+    MutableColumnPtr column = cut(count, remain_size);
     auto* binary_column = down_cast<BinaryColumnBase<T>*>(column.get());
     _offsets = std::move(binary_column->_offsets);
     _bytes = std::move(binary_column->get_bytes());
@@ -571,7 +571,7 @@ void BinaryColumnBase<T>::remove_first_n_values(size_t count) {
 }
 
 template <typename T>
-ColumnPtr BinaryColumnBase<T>::cut(size_t start, size_t length) const {
+MutableColumnPtr BinaryColumnBase<T>::cut(size_t start, size_t length) const {
     auto result = this->create();
 
     if (start >= size() || length == 0) {

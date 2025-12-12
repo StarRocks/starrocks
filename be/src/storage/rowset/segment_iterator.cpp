@@ -41,6 +41,7 @@
 #include "storage/index/vector/tenann/del_id_filter.h"
 #include "storage/index/vector/tenann/tenann_index_utils.h"
 #include "storage/index/vector/vector_index_reader.h"
+#include "storage/index/vector/vector_index_reader_factory.h"
 #include "storage/index/vector/vector_search_option.h"
 #include "storage/lake/update_manager.h"
 #include "storage/projection_iterator.h"
@@ -497,7 +498,6 @@ Status SegmentIterator::ScanContext::read_columns(Chunk* chunk, const SparseRang
     bool may_has_del_row = chunk->delete_state() != DEL_NOT_SATISFIED;
     std::vector<ColumnId> pruned_cols;
     size_t pruned_col_size = 0;
-    size_t num_rows = chunk->num_rows();
     for (size_t i = 0; i < column_iterators.size(); i++) {
         ColumnId column_id = predicate_col_late_materialize_read ? _column_id_for_predicate_late_materialize[i]
                                                                  : _read_schema.field(i)->id();
@@ -2044,7 +2044,6 @@ StatusOr<size_t> SegmentIterator::_predicate_evaluate_late_materialize(vector<ro
         }
 
         chunk_start = next_start;
-        // DCHECK_EQ(chunk_start, chunk->num_rows());
 
         if (chunk_start && !scan_range_normalized) {
             break;
@@ -2067,9 +2066,9 @@ StatusOr<size_t> SegmentIterator::_predicate_evaluate_late_materialize(vector<ro
     bool may_has_del_row = chunk->delete_state() != DEL_NOT_SATISFIED;
     for (int i = 1; i < _context->_predicate_order.size(); i++) {
         const ColumnId current_column_id = _context->_predicate_order[i];
-        ColumnPtr rowid_column = chunk->get_column_by_id(_context->_row_id_column_id);
+        auto rowid_column = chunk->get_column_raw_ptr_by_id(_context->_row_id_column_id);
         // read column by row id if not read yet
-        const auto* ordinals = down_cast<FixedLengthColumn<rowid_t>*>(rowid_column.get());
+        const auto* ordinals = down_cast<const FixedLengthColumn<rowid_t>*>(rowid_column);
         auto* col = chunk->get_column_raw_ptr_by_id(current_column_id);
         current_columns.emplace_back(col);
 
