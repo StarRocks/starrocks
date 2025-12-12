@@ -197,8 +197,16 @@ static StatusOr<std::map<std::string, std::string>> parse_headers_json(const std
 // Helper function: Check if string is valid JSON using simdjson
 static bool is_valid_json(const std::string& s) {
     if (s.empty()) return false;
-    // Quick check: must start with { or [
-    char first = s[0];
+
+    // Skip leading whitespace (RFC 8259 allows insignificant whitespace)
+    size_t i = 0;
+    while (i < s.size() && std::isspace(static_cast<unsigned char>(s[i]))) {
+        ++i;
+    }
+    if (i >= s.size()) return false;
+
+    // Quick check: must start with { or [ (after whitespace)
+    char first = s[i];
     if (first != '{' && first != '[') return false;
 
     // Use simdjson for proper validation
@@ -533,6 +541,10 @@ static StatusOr<std::string> execute_http_request_with_config(HttpClient& client
 
     // Disable CURLOPT_FAILONERROR to get HTTP error responses
     client.set_fail_on_error(false);
+
+    // SECURITY: Disable automatic redirects to prevent SSRF bypass
+    // Redirects could send requests to internal/private IPs without re-validation
+    client.set_follow_redirects(false);
 
     // Set HTTP method
     auto method_result = parse_http_method(Slice(config.method));

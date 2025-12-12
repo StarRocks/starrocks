@@ -103,6 +103,11 @@ public:
     // Control whether HTTP error status codes (4xx, 5xx) should cause curl to fail
     // When set to false, the response body will be returned even for HTTP errors
     void set_fail_on_error(bool fail) { curl_easy_setopt(_curl, CURLOPT_FAILONERROR, fail ? 1L : 0L); }
+
+    // Control whether to follow HTTP redirects (3xx responses)
+    // Default is true (follow redirects). Set to false to disable redirect following,
+    // which is important for SSRF protection in http_request() function.
+    void set_follow_redirects(bool follow) { curl_easy_setopt(_curl, CURLOPT_FOLLOWLOCATION, follow ? 1L : 0L); }
     // used to get content length
     int64_t get_content_length() const {
         // CURLINFO_CONTENT_LENGTH_DOWNLOAD is deprecated since v7.55.0
