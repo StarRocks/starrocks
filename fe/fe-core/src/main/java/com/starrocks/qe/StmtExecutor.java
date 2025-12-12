@@ -254,7 +254,9 @@ import com.starrocks.transaction.TransactionStatus;
 import com.starrocks.transaction.TransactionStmtExecutor;
 import com.starrocks.transaction.VisibleStateWaiter;
 import com.starrocks.type.TypeFactory;
+import com.starrocks.warehouse.Warehouse;
 import com.starrocks.warehouse.WarehouseIdleChecker;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang.exception.ExceptionUtils;
 import org.apache.commons.lang3.StringUtils;
@@ -695,6 +697,11 @@ public class StmtExecutor {
                 processQueryScopeHint();
             }
 
+            // processQueryScopeHint may change current warehouse.
+            if (context.getQueryDetail() != null) {
+                context.getQueryDetail().setWarehouse(context.getCurrentWarehouseName());
+            }
+
             // set warehouse for auditLog
             context.getAuditEventBuilder()
                     .setWarehouse(context.getCurrentWarehouseName())
@@ -1042,7 +1049,7 @@ public class StmtExecutor {
                     }
                     for (Map.Entry<String, String> entry : hint.getValue().entrySet()) {
                         GlobalStateMgr.getCurrentState().getVariableMgr().setSystemVariable(clonedSessionVariable,
-                                new SystemVariable(entry.getKey(), new StringLiteral(entry.getValue())), true);
+                                new SystemVariable(entry.getKey(), new StringLiteral(entry.getValue())), true, context);
                     }
                 }
 
