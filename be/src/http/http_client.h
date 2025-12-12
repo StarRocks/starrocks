@@ -94,6 +94,15 @@ public:
         curl_easy_setopt(_curl, CURLOPT_SSL_VERIFYPEER, 0L);
         curl_easy_setopt(_curl, CURLOPT_SSL_VERIFYHOST, 0L);
     }
+
+    // Pin DNS resolution to a specific IP address to prevent DNS rebinding attacks
+    // Format: "hostname:port:ip_address" (e.g., "example.com:443:93.184.216.34")
+    // This forces curl to use the specified IP for the given hostname, bypassing DNS resolution
+    void set_resolve_host(const std::string& resolve_entry);
+
+    // Control whether HTTP error status codes (4xx, 5xx) should cause curl to fail
+    // When set to false, the response body will be returned even for HTTP errors
+    void set_fail_on_error(bool fail) { curl_easy_setopt(_curl, CURLOPT_FAILONERROR, fail ? 1L : 0L); }
     // used to get content length
     int64_t get_content_length() const {
         // CURLINFO_CONTENT_LENGTH_DOWNLOAD is deprecated since v7.55.0
@@ -146,6 +155,7 @@ private:
     const HttpCallback* _callback = nullptr;
     char _error_buf[CURL_ERROR_SIZE];
     curl_slist* _header_list = nullptr;
+    curl_slist* _resolve_list = nullptr;  // For CURLOPT_RESOLVE (DNS pinning to prevent rebinding)
 
     // Store headers for easy management
     std::unordered_map<std::string, std::string> _headers;

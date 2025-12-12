@@ -195,6 +195,268 @@ bool is_valid_ip(const std::string& ip) {
     return (inet_pton(AF_INET6, ip.data(), buf) > 0) || (inet_pton(AF_INET, ip.data(), buf) > 0);
 }
 
+// Check if IPv4 address (as 32-bit integer in host byte order) is in a private range
+static bool is_private_ipv4(uint32_t ip) {
+    // 127.0.0.0/8 - Loopback
+    if ((ip & 0xFF000000) == 0x7F000000) return true;
+
+    // 10.0.0.0/8 - Class A Private
+    if ((ip & 0xFF000000) == 0x0A000000) return true;
+
+    // 172.16.0.0/12 - Class B Private
+    if ((ip & 0xFFF00000) == 0xAC100000) return true;
+
+    // 192.168.0.0/16 - Class C Private
+    if ((ip & 0xFFFF0000) == 0xC0A80000) return true;
+
+    // 169.254.0.0/16 - Link-local(Include IMDS)
+    if ((ip & 0xFFFF0000) == 0xA9FE0000) return true;
+
+    // 0.0.0.0/8 - Current network
+    if ((ip & 0xFF000000) == 0x00000000) return true;
+
+    return false;
+}
+
+// Check if IPv6 address is in a private range
+static bool is_private_ipv6(const unsigned char* ip) {
+    // ::1 - Loopback
+    static const unsigned char loopback[16] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1};
+    if (memcmp(ip, loopback, 16) == 0) return true;
+
+    // fc00::/7 - Unique local (fc00:: to fdff::)
+    if ((ip[0] & 0xFE) == 0xFC) return true;
+
+    // fe80::/10 - Link-local
+    if (ip[0] == 0xFE && (ip[1] & 0xC0) == 0x80) return true;
+
+    // ::ffff:0:0/96 - IPv4-mapped IPv6, check the embedded IPv4
+    static const unsigned char v4mapped_prefix[12] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xFF, 0xFF};
+    if (memcmp(ip, v4mapped_prefix, 12) == 0) {
+        uint32_t v4_addr = (static_cast<uint32_t>(ip[12]) << 24) | (static_cast<uint32_t>(ip[13]) << 16) |
+                           (static_cast<uint32_t>(ip[14]) << 8) | static_cast<uint32_t>(ip[15]);
+        return is_private_ipv4(v4_addr);
+    }
+
+    return false;
+}
+
+bool is_private_ip(const std::string& ip) {
+    // Try IPv4 first
+    struct in_addr addr4;
+    if (inet_pton(AF_INET, ip.c_str(), &addr4) == 1) {
+        return is_private_ipv4(ntohl(addr4.s_addr));
+    }
+
+    // Try IPv6
+    struct in6_addr addr6;
+    if (inet_pton(AF_INET6, ip.c_str(), &addr6) == 1) {
+        return is_private_ipv6(addr6.s6_addr);
+    }
+
+    // Invalid IP format - treat as private for safety
+    return true;
+}
+
+bool is_link_local_ip(const std::string& ip) {
+    // Try IPv4 first
+    struct in_addr addr4;
+    if (inet_pton(AF_INET, ip.c_str(), &addr4) == 1) {
+        uint32_t ip_num = ntohl(addr4.s_addr);
+        // 169.254.0.0/16 - Link-local (AWS/GCP/Azure metadata, etc.)
+        return (ip_num & 0xFFFF0000) == 0xA9FE0000;
+    }
+
+    // Try IPv6
+    struct in6_addr addr6;
+    if (inet_pton(AF_INET6, ip.c_str(), &addr6) == 1) {
+        // fe80::/10 - Link-local
+        if (addr6.s6_addr[0] == 0xFE && (addr6.s6_addr[1] & 0xC0) == 0x80) {
+            return true;
+        }
+        // ::ffff:169.254.x.x - IPv4-mapped link-local
+        static const unsigned char v4mapped_prefix[12] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xFF, 0xFF};
+        if (memcmp(addr6.s6_addr, v4mapped_prefix, 12) == 0) {
+            uint32_t v4_addr = (static_cast<uint32_t>(addr6.s6_addr[12]) << 24) |
+                               (static_cast<uint32_t>(addr6.s6_addr[13]) << 16) |
+                               (static_cast<uint32_t>(addr6.s6_addr[14]) << 8) |
+                               static_cast<uint32_t>(addr6.s6_addr[15]);
+            return (v4_addr & 0xFFFF0000) == 0xA9FE0000;
+        }
+    }
+
+    return false;
+}
+
+StatusOr<std::vector<std::string>> resolve_hostname_all_ips(const std::string& hostname) {
+    std::vector<std::string> results;
+
+    // Check if hostname is already a valid IP address
+    if (is_valid_ip(hostname)) {
+        results.push_back(hostname);
+        return results;
+    }
+
+    struct addrinfo hints {};
+    hints.ai_family = AF_UNSPEC;     // Allow IPv4 or IPv6
+    hints.ai_socktype = SOCK_STREAM; // TCP
+    hints.ai_flags = AI_ADDRCONFIG;  // Only return addresses the system can reach
+
+    struct addrinfo* res = nullptr;
+    int err = getaddrinfo(hostname.c_str(), nullptr, &hints, &res);
+    if (err != 0) {
+        return Status::InvalidArgument(
+                strings::Substitute("DNS resolution failed for $0: $1", hostname, gai_strerror(err)));
+    }
+
+    for (struct addrinfo* p = res; p != nullptr; p = p->ai_next) {
+        char ip_str[INET6_ADDRSTRLEN];
+
+        if (p->ai_family == AF_INET) {
+            struct sockaddr_in* addr = reinterpret_cast<struct sockaddr_in*>(p->ai_addr);
+            inet_ntop(AF_INET, &addr->sin_addr, ip_str, sizeof(ip_str));
+            results.emplace_back(ip_str);
+        } else if (p->ai_family == AF_INET6) {
+            struct sockaddr_in6* addr = reinterpret_cast<struct sockaddr_in6*>(p->ai_addr);
+            inet_ntop(AF_INET6, &addr->sin6_addr, ip_str, sizeof(ip_str));
+            results.emplace_back(ip_str);
+        }
+    }
+
+    freeaddrinfo(res);
+
+    if (results.empty()) {
+        return Status::InvalidArgument(strings::Substitute("No IP addresses found for $0", hostname));
+    }
+
+    return results;
+}
+
+std::string extract_host_from_url(const std::string& url) {
+    if (url.empty()) return "";
+
+    // Find the scheme separator
+    size_t scheme_end = url.find("://");
+    if (scheme_end == std::string::npos) {
+        return "";
+    }
+
+    size_t host_start = scheme_end + 3;
+
+    // Skip user:password@ if present
+    size_t at_pos = url.find('@', host_start);
+    size_t slash_pos = url.find('/', host_start);
+    if (at_pos != std::string::npos && (slash_pos == std::string::npos || at_pos < slash_pos)) {
+        host_start = at_pos + 1;
+    }
+
+    // Handle IPv6 address [::1]
+    if (host_start < url.size() && url[host_start] == '[') {
+        size_t bracket_end = url.find(']', host_start);
+        if (bracket_end != std::string::npos) {
+            return url.substr(host_start + 1, bracket_end - host_start - 1);
+        }
+        return "";
+    }
+
+    // Find end of host (port, path, or end of string)
+    size_t host_end = url.size();
+    for (size_t i = host_start; i < url.size(); ++i) {
+        if (url[i] == ':' || url[i] == '/' || url[i] == '?' || url[i] == '#') {
+            host_end = i;
+            break;
+        }
+    }
+
+    return url.substr(host_start, host_end - host_start);
+}
+
+int extract_port_from_url(const std::string& url) {
+    if (url.empty()) return 0;
+
+    // Determine default port based on scheme (case-insensitive comparison)
+    int default_port = 80;  // HTTP
+    if (url.size() >= 8) {
+        std::string scheme = boost::algorithm::to_lower_copy(url.substr(0, 8));
+        if (scheme == "https://") {
+            default_port = 443;  // HTTPS
+        }
+    }
+
+    // Find the scheme separator
+    size_t scheme_end = url.find("://");
+    if (scheme_end == std::string::npos) {
+        return 0;  // Invalid URL
+    }
+
+    size_t host_start = scheme_end + 3;
+
+    // Skip user:password@ if present
+    size_t at_pos = url.find('@', host_start);
+    size_t slash_pos = url.find('/', host_start);
+    if (at_pos != std::string::npos && (slash_pos == std::string::npos || at_pos < slash_pos)) {
+        host_start = at_pos + 1;
+    }
+
+    // Handle IPv6 address [::1]:port
+    if (host_start < url.size() && url[host_start] == '[') {
+        size_t bracket_end = url.find(']', host_start);
+        if (bracket_end != std::string::npos) {
+            // Check if there's a port after the bracket
+            if (bracket_end + 1 < url.size() && url[bracket_end + 1] == ':') {
+                size_t port_start = bracket_end + 2;
+                size_t port_end = url.find_first_of("/?#", port_start);
+                if (port_end == std::string::npos) port_end = url.size();
+                std::string port_str = url.substr(port_start, port_end - port_start);
+                try {
+                    return std::stoi(port_str);
+                } catch (...) {
+                    return 0;
+                }
+            }
+            return default_port;
+        }
+        return 0;  // Invalid IPv6 format
+    }
+
+    // Find the port separator after host_start
+    size_t port_pos = std::string::npos;
+    for (size_t i = host_start; i < url.size(); ++i) {
+        if (url[i] == ':') {
+            port_pos = i;
+            break;
+        }
+        if (url[i] == '/' || url[i] == '?' || url[i] == '#') {
+            break;  // No port found
+        }
+    }
+
+    // No explicit port
+    if (port_pos == std::string::npos) {
+        return default_port;
+    }
+
+    // Extract port number
+    size_t port_start = port_pos + 1;
+    size_t port_end = url.find_first_of("/?#", port_start);
+    if (port_end == std::string::npos) port_end = url.size();
+
+    std::string port_str = url.substr(port_start, port_end - port_start);
+    if (port_str.empty()) {
+        return default_port;
+    }
+
+    try {
+        int port = std::stoi(port_str);
+        if (port <= 0 || port > 65535) {
+            return 0;  // Invalid port range
+        }
+        return port;
+    } catch (...) {
+        return 0;  // Invalid port format
+    }
+}
+
 // Prefer ipv4 when both ipv4 and ipv6 bound to the same host
 Status hostname_to_ip(const std::string& host, std::string& ip) {
     auto start = std::chrono::high_resolution_clock::now();
