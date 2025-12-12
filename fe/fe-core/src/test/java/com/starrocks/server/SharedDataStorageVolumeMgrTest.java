@@ -16,6 +16,9 @@ package com.starrocks.server;
 
 import com.google.common.collect.Lists;
 import com.google.gson.stream.JsonReader;
+import com.staros.client.StarClientException;
+import com.staros.proto.FileCacheInfo;
+import com.staros.proto.FilePathInfo;
 import com.staros.proto.FileStoreInfo;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
@@ -32,6 +35,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReportException;
+import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.InvalidConfException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.jmockit.Deencapsulation;
@@ -62,6 +66,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.wildfly.common.Assert;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -1010,6 +1015,204 @@ public class SharedDataStorageVolumeMgrTest {
         // remove
         DdlException ex = Assertions.assertThrows(DdlException.class, () -> svm.removeStorageVolume(svName));
         Assertions.assertEquals("Snapshot enabled on storage volume 'test_snap', drop volume failed.", ex.getMessage());
+    }
 
+    @Test
+    public void testRestoreStorageVolumeToVTabletGroupMappings() {
+        new MockUp<GlobalStateMgr>() {
+
+            @Mock
+            public StarOSAgent getStarOSAgent() {
+                return starOSAgent;
+            }
+        };
+
+
+        // Test normal
+        new MockUp<StarOSAgent>() {
+            private long id = 1;
+            final long existedShardId = 10001L;
+            final long existedGroupId = 20001L;
+
+            @Mock
+            public List<FileStoreInfo> listFileStore() throws DdlException {
+                Map<String, String> properties = new HashMap<>();
+                properties.put(StorageVolume.V_SHARD_ID, String.valueOf(existedShardId));
+                properties.put(StorageVolume.V_SHARD_GROUP_ID, String.valueOf(existedGroupId));
+                FileStoreInfo fsInfo1 = FileStoreInfo.newBuilder().setFsKey(String.valueOf(id++))
+                        .putAllProperties(properties).build();
+
+                FileStoreInfo fsInfo2 = FileStoreInfo.newBuilder().setFsKey(String.valueOf(id++)).build();
+
+                properties = new HashMap<>();
+                properties.put(StorageVolume.V_SHARD_ID, String.valueOf(existedShardId));
+                properties.put(StorageVolume.V_SHARD_GROUP_ID, "not valid format number");
+                FileStoreInfo fsInfo3 = FileStoreInfo.newBuilder().setFsKey(String.valueOf(id++))
+                        .putAllProperties(properties).build();
+                return List.of(fsInfo1, fsInfo2, fsInfo3);
+            }
+        };
+
+        SharedDataStorageVolumeMgr svm = new SharedDataStorageVolumeMgr();
+        svm.restoreStorageVolumeToVTabletGroupMappings();
+
+        Assert.assertTrue(svm.hasStorageVolumeBindAsVirtualGroup(20001L));
+
+        // corner case: listFileStore failed with DDL exception
+        // storage mapping should keep unmodified
+        new MockUp<StarOSAgent>() {
+
+            @Mock
+            public List<FileStoreInfo> listFileStore() throws DdlException {
+                throw new DdlException("Mocked exception");
+            }
+        };
+
+        svm.restoreStorageVolumeToVTabletGroupMappings();
+        Assert.assertTrue(svm.hasStorageVolumeBindAsVirtualGroup(20001L));
+    }
+
+    @Test
+    public void testGetOrCreateVirtualTabletIdStorageVolumeNotExist() {
+        String storageVolumeName = "test_sv";
+        String srcServiceId = "test_service_id";
+        StorageVolumeMgr svm = new SharedDataStorageVolumeMgr();
+
+        ExceptionChecker.expectThrowsWithMsg(MetaNotFoundException.class,
+                "Unknown src storage volume while creating virtual tablet: " + storageVolumeName,
+                () -> svm.getOrCreateVirtualTabletId(storageVolumeName, srcServiceId));
+    }
+
+    @Test
+    public void testGetOrCreateVirtualTabletIdNormal()
+            throws DdlException, AlreadyExistsException, StarClientException, MetaNotFoundException {
+
+        long expectedVirtualTabletId = 20001;
+        new MockUp<GlobalStateMgr>() {
+
+            @Mock
+            public StarOSAgent getStarOSAgent() {
+                return starOSAgent;
+            }
+
+            @Mock
+            public long getNextId() {
+                return expectedVirtualTabletId;
+            }
+        };
+
+        String storageVolumeName = "test_sv";
+        String srcServiceId = "test_service_id";
+        StorageVolumeMgr svm = new SharedDataStorageVolumeMgr();
+
+        // create
+        List<String> locations = Arrays.asList("s3://abc");
+        Map<String, String> storageParams = new HashMap<>();
+        storageParams.put(AWS_S3_REGION, "region");
+        storageParams.put(AWS_S3_ENDPOINT, "endpoint");
+        storageParams.put(AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR, "true");
+        String svKey = svm.createStorageVolume(storageVolumeName, "S3", locations, storageParams, Optional.empty(), "");
+        Assertions.assertTrue(svm.exists(storageVolumeName));
+        Assertions.assertEquals(storageVolumeName, svm.getStorageVolumeName(svKey));
+
+        long groupId = 1001L;
+        FilePathInfo pathInfo = FilePathInfo.newBuilder().build();
+        new Expectations() {
+            {
+                starOSAgent.allocateFilePath(anyString, srcServiceId);
+                result = pathInfo;
+
+                starOSAgent.createShardGroupForVirtualTablet();
+                result = groupId;
+
+                starOSAgent.createShardWithVirtualTabletId(pathInfo, (FileCacheInfo) any, groupId, (HashMap) any,
+                        expectedVirtualTabletId, WarehouseManager.DEFAULT_RESOURCE);
+                result = null;
+            }
+        };
+
+        ExceptionChecker.expectThrowsNoException(() -> {
+            Assertions.assertEquals(expectedVirtualTabletId, svm.getOrCreateVirtualTabletId(storageVolumeName, srcServiceId));
+        });
+
+        svm.removeStorageVolume(storageVolumeName);
+    }
+
+    @Test
+    public void testGetOrCreateVirtualTabletIdWhileStorageVolumeAlreadyHasVirtualTabletId()
+            throws DdlException, AlreadyExistsException, MetaNotFoundException {
+
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public StarOSAgent getStarOSAgent() {
+                return starOSAgent;
+            }
+        };
+
+        new MockUp<StarOSAgent>() {
+            Map<String, FileStoreInfo> fileStores = new HashMap<>();
+            private long id = 1;
+            final long existedShardId = 10001L;
+            final long existedGroupId = 20001L;
+
+            @Mock
+            public String addFileStore(FileStoreInfo fsInfo) {
+                if (fsInfo.getFsKey().isEmpty()) {
+                    Map<String, String> properties = new HashMap<>();
+                    properties.put(StorageVolume.V_SHARD_ID, String.valueOf(existedShardId));
+                    properties.put(StorageVolume.V_SHARD_GROUP_ID, String.valueOf(existedGroupId));
+                    fsInfo = fsInfo.toBuilder().setFsKey(String.valueOf(id++)).putAllProperties(properties).build();
+                }
+                fileStores.put(fsInfo.getFsKey(), fsInfo);
+                return fsInfo.getFsKey();
+            }
+
+            @Mock
+            public FileStoreInfo getFileStoreByName(String fsName) {
+                for (FileStoreInfo fsInfo : fileStores.values()) {
+                    if (fsInfo.getFsName().equals(fsName)) {
+                        return fsInfo;
+                    }
+                }
+                return null;
+            }
+
+            @Mock
+            public FileStoreInfo getFileStore(String fsKey) {
+                return fileStores.get(fsKey);
+            }
+        };
+
+        String storageVolumeName = "test_sv";
+        String srcServiceId = "test_service_id";
+
+        // create
+        List<String> locations = Arrays.asList("s3://abc");
+        Map<String, String> storageParams = new HashMap<>();
+        storageParams.put(AWS_S3_REGION, "region");
+        storageParams.put(AWS_S3_ENDPOINT, "endpoint");
+        storageParams.put(AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR, "true");
+
+        StorageVolumeMgr svm = new SharedDataStorageVolumeMgr();
+        String svKey = svm.createStorageVolume(storageVolumeName, "S3", locations, storageParams, Optional.empty(), "");
+        Assertions.assertTrue(svm.exists(storageVolumeName));
+        Assertions.assertEquals(storageVolumeName, svm.getStorageVolumeName(svKey));
+
+        long existedShardId = 10001L;
+        long existedGroupId = 20001L;
+        StorageVolume storageVolume = svm.getStorageVolumeByName(storageVolumeName);
+        storageVolume.setVTabletId(existedShardId);
+        storageVolume.setVTabletGroupId(existedGroupId);
+
+        ExceptionChecker.expectThrowsNoException(() -> {
+            Assertions.assertEquals(existedShardId, svm.getOrCreateVirtualTabletId(storageVolumeName, srcServiceId));
+        });
+
+        long notExistedGroupId = 30001L;
+        svm.updateStorageVolumeVTabletMapping(storageVolumeName, existedShardId, existedGroupId);
+        Assertions.assertTrue(svm.hasStorageVolumeBindAsVirtualGroup(existedGroupId));
+        Assertions.assertFalse(svm.hasStorageVolumeBindAsVirtualGroup(notExistedGroupId));
+
+        svm.removeStorageVolume(storageVolumeName);
     }
 }

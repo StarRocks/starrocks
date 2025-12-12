@@ -14,7 +14,9 @@
 
 package com.starrocks.server;
 
+import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
+import com.staros.proto.FileCacheInfo;
 import com.staros.proto.FilePathInfo;
 import com.staros.proto.FileStoreInfo;
 import com.staros.util.LockCloseable;
@@ -28,15 +30,18 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.InvalidConfException;
+import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.connector.share.credential.CloudConfigurationConstants;
+import com.starrocks.lake.StarOSAgent;
 import com.starrocks.lake.StorageInfo;
 import com.starrocks.persist.TableStorageInfo;
 import com.starrocks.persist.TableStorageInfos;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.storagevolume.StorageVolume;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -50,12 +55,16 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 import static com.starrocks.server.GlobalStateMgr.NEXT_ID_INIT_VALUE;
+import static com.starrocks.storagevolume.StorageVolume.V_SHARD_GROUP_ID;
 
 public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
     private static final Logger LOG = LogManager.getLogger(SharedDataStorageVolumeMgr.class);
+
+    private final Map<String, Long> storageVolumeIdToVTabletGroupId = new ConcurrentHashMap<>();
 
     @Override
     public StorageVolume getStorageVolumeByName(String svName) {
@@ -95,6 +104,36 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
         }
     }
 
+    /**
+     * refresh `storageVolumeIdToVTabletGroupId` at startup time of FE leader or after this FE transferred to leader.
+     */
+    public void restoreStorageVolumeToVTabletGroupMappings() {
+        try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
+            try {
+                List<FileStoreInfo> fileStoreInfos = GlobalStateMgr.getCurrentState().getStarOSAgent().listFileStore();
+
+                Map<String, Long> newMappings = new HashMap<>();
+                for (FileStoreInfo fsInfo : fileStoreInfos) {
+                    String vTabletIdGroupId = fsInfo.getPropertiesMap().get(V_SHARD_GROUP_ID);
+                    if (StringUtils.isEmpty(vTabletIdGroupId)) {
+                        continue;
+                    }
+                    try {
+                        newMappings.put(fsInfo.getFsName(), Long.parseLong(vTabletIdGroupId));
+                    } catch (NumberFormatException e) {
+                        LOG.warn("found invalid v_shard_group_id" +
+                                " while restoring storage volume to virtual tablet group mapping: {}", vTabletIdGroupId);
+                    }
+                }
+
+                storageVolumeIdToVTabletGroupId.clear();
+                storageVolumeIdToVTabletGroupId.putAll(newMappings);
+            } catch (DdlException e) {
+                LOG.warn("failed to restore storage volume to tablet, keeping existing mappings", e);
+            }
+        }
+    }
+
     @Override
     protected String createInternalNoLock(String name, String svType, List<String> locations,
             Map<String, String> params, Optional<Boolean> enabled, String comment)
@@ -117,6 +156,17 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
     @Override
     protected void removeInternalNoLock(StorageVolume sv) throws DdlException {
         GlobalStateMgr.getCurrentState().getStarOSAgent().removeFileStoreByName(sv.getName());
+
+        // remove virtual tablets
+        if (sv.getVTabletId() != -1) {
+            GlobalStateMgr.getCurrentState().getStarOSAgent().deleteShards(Collections.singleton(sv.getVTabletId()));
+        }
+
+        if (sv.getVTabletGroupId() != -1) {
+            GlobalStateMgr.getCurrentState().getStarOSAgent().deleteShardGroup(
+                    Collections.singletonList(sv.getVTabletGroupId()));
+            storageVolumeIdToVTabletGroupId.remove(sv.getName());
+        }
     }
 
     @Override
@@ -622,6 +672,70 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
                 return "";
             default:
                 return "";
+        }
+    }
+
+    @Override
+    public void updateStorageVolumeVTabletMapping(String name, long vTabletId, long vTabletGroupId)
+            throws DdlException {
+        try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
+            StorageVolume sv = getStorageVolumeByName(name);
+            Preconditions.checkState(sv != null, "Storage volume '%s' does not exist", name);
+            StorageVolume copied = new StorageVolume(sv);
+            // reset global unique id
+            copied.setVTabletId(vTabletId);
+            copied.setVTabletGroupId(vTabletGroupId);
+            updateInternalNoLock(copied);
+            storageVolumeIdToVTabletGroupId.put(name, vTabletGroupId);
+        }
+    }
+
+    @Override
+    public boolean hasStorageVolumeBindAsVirtualGroup(long shardGroupId) {
+        try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
+            return storageVolumeIdToVTabletGroupId.values().stream()
+                    .anyMatch(vTabletGroupId -> shardGroupId == vTabletGroupId);
+        }
+    }
+
+    public long getOrCreateVirtualTabletId(String storageVolumeName, String srcServiceId)
+            throws MetaNotFoundException {
+        try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
+            StorageVolume storageVolume = this.getStorageVolumeByName(storageVolumeName);
+            if (storageVolume == null) {
+                throw new MetaNotFoundException("Unknown src storage volume while creating virtual tablet: " + storageVolumeName);
+            }
+
+            long vTabletId = storageVolume.getVTabletId();
+            if (vTabletId != -1) {
+                return vTabletId;
+            }
+
+            long shardGroupId = -1;
+            try {
+                StarOSAgent starOSAgent = GlobalStateMgr.getCurrentState().getStarOSAgent();
+                FilePathInfo pathInfo = starOSAgent.allocateFilePath(storageVolume.getId(), srcServiceId);
+                FileCacheInfo cacheInfo =
+                        FileCacheInfo.newBuilder().setEnableCache(false).setTtlSeconds(-1).setAsyncWriteBack(false).build();
+                // assume each shard group has only one shard
+                shardGroupId = starOSAgent.createShardGroupForVirtualTablet();
+                Map<String, String> properties = new HashMap<>();
+                // create a new id as tablet id
+                vTabletId = GlobalStateMgr.getCurrentState().getNextId();
+
+                starOSAgent.createShardWithVirtualTabletId(pathInfo, cacheInfo, shardGroupId, properties, vTabletId,
+                        WarehouseManager.DEFAULT_RESOURCE);
+                LOG.info("Created shard for storage volume: {}, vTablet id: {}, group id: {}, src service id: {}",
+                        storageVolumeName, vTabletId, shardGroupId, srcServiceId);
+
+                // update storage volume
+                updateStorageVolumeVTabletMapping(storageVolumeName, vTabletId, shardGroupId);
+                return vTabletId;
+            } catch (Exception e) {
+                // StarMgrMetaSyncer would clean the orphaned shards & shard groups
+                LOG.error("Failed to create shard for storage volume {} ", storageVolumeName, e);
+                throw new RuntimeException("Failed to create shard for storage volume: " + storageVolumeName, e);
+            }
         }
     }
 }

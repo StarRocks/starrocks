@@ -41,6 +41,7 @@ typedef i32 TPlanNodeId
 typedef i32 TTupleId
 typedef i32 TSlotId
 typedef i64 TTableId
+typedef i64 TDatabaseId
 typedef i64 TTabletId
 typedef i64 TVersion
 typedef i64 TVersionHash
