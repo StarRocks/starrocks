@@ -86,6 +86,12 @@ public class AuthorizationMgrEditLogTest {
         // 4. Verify master state
         UserPrivilegeCollectionV2 userCollection = authorizationMgr.getUserPrivilegeCollection(userIdentity);
         Assertions.assertNotNull(userCollection);
+        
+        // Verify the privilege content is correct
+        TablePEntryObject allTablesInAllDb = new TablePEntryObject(
+                PrivilegeBuiltinConstants.ALL_DATABASES_UUID, PrivilegeBuiltinConstants.ALL_TABLES_UUID);
+        Assertions.assertTrue(userCollection.check(ObjectType.TABLE, PrivilegeType.SELECT, allTablesInAllDb),
+                "User should have SELECT privilege on ALL TABLES IN ALL DATABASES");
 
         // 5. Test follower replay functionality
         AuthorizationMgr followerAuthMgr = new AuthorizationMgr(new DefaultAuthorizationProvider());
@@ -109,6 +115,10 @@ public class AuthorizationMgrEditLogTest {
         // 6. Verify follower state is consistent with master
         UserPrivilegeCollectionV2 followerCollection = followerAuthMgr.getUserPrivilegeCollection(userIdentity);
         Assertions.assertNotNull(followerCollection);
+        
+        // Verify the privilege content is correct in follower
+        Assertions.assertTrue(followerCollection.check(ObjectType.TABLE, PrivilegeType.SELECT, allTablesInAllDb),
+                "Follower user should have SELECT privilege on ALL TABLES IN ALL DATABASES");
     }
 
     @Test
@@ -135,6 +145,13 @@ public class AuthorizationMgrEditLogTest {
 
         // Save initial state snapshot
         UserPrivilegeCollectionV2 initialCollection = authorizationMgr.getUserPrivilegeCollection(userIdentity);
+        Set<Long> initialRoles = new HashSet<>(initialCollection.getAllRoles());
+        Set<Long> initialDefaultRoles = new HashSet<>(initialCollection.getDefaultRoleIds());
+        
+        // Verify initial state has no SELECT privilege
+        TablePEntryObject allTablesInAllDb = new TablePEntryObject(
+                PrivilegeBuiltinConstants.ALL_DATABASES_UUID, PrivilegeBuiltinConstants.ALL_TABLES_UUID);
+        boolean initialHasSelectPrivilege = initialCollection.check(ObjectType.TABLE, PrivilegeType.SELECT, allTablesInAllDb);
 
         // 4. Execute grant operation and expect exception
         RuntimeException exception = Assertions.assertThrows(RuntimeException.class, () -> {
@@ -145,6 +162,19 @@ public class AuthorizationMgrEditLogTest {
         // 5. Verify leader memory state remains unchanged after exception
         UserPrivilegeCollectionV2 unchangedCollection = authorizationMgr.getUserPrivilegeCollection(userIdentity);
         Assertions.assertNotNull(unchangedCollection);
+        
+        // Verify roles have not changed
+        Assertions.assertEquals(initialRoles, unchangedCollection.getAllRoles(),
+                "User roles should remain unchanged after EditLog exception");
+        
+        // Verify default roles have not changed
+        Assertions.assertEquals(initialDefaultRoles, unchangedCollection.getDefaultRoleIds(),
+                "User default roles should remain unchanged after EditLog exception");
+        
+        // Verify privileges have not changed (should still not have SELECT privilege)
+        boolean unchangedHasSelectPrivilege = unchangedCollection.check(ObjectType.TABLE, PrivilegeType.SELECT, allTablesInAllDb);
+        Assertions.assertEquals(initialHasSelectPrivilege, unchangedHasSelectPrivilege,
+                "User privileges should remain unchanged after EditLog exception");
     }
 
     @Test
@@ -165,6 +195,12 @@ public class AuthorizationMgrEditLogTest {
         // 4. Verify master state
         RolePrivilegeCollectionV2 roleCollection = authorizationMgr.getRolePrivilegeCollection(roleName);
         Assertions.assertNotNull(roleCollection);
+        
+        // Verify the privilege content is correct
+        TablePEntryObject allTablesInAllDb = new TablePEntryObject(
+                PrivilegeBuiltinConstants.ALL_DATABASES_UUID, PrivilegeBuiltinConstants.ALL_TABLES_UUID);
+        Assertions.assertTrue(roleCollection.check(ObjectType.TABLE, PrivilegeType.SELECT, allTablesInAllDb),
+                "Role should have SELECT privilege on ALL TABLES IN ALL DATABASES");
 
         // 5. Test follower replay functionality
         AuthorizationMgr followerAuthMgr = new AuthorizationMgr(new DefaultAuthorizationProvider());
@@ -182,6 +218,10 @@ public class AuthorizationMgrEditLogTest {
         // 6. Verify follower state is consistent with master
         RolePrivilegeCollectionV2 followerCollection = followerAuthMgr.getRolePrivilegeCollection(roleName);
         Assertions.assertNotNull(followerCollection);
+        
+        // Verify the privilege content is correct in follower
+        Assertions.assertTrue(followerCollection.check(ObjectType.TABLE, PrivilegeType.SELECT, allTablesInAllDb),
+                "Follower role should have SELECT privilege on ALL TABLES IN ALL DATABASES");
     }
 
     @Test
@@ -206,6 +246,11 @@ public class AuthorizationMgrEditLogTest {
 
         // Save initial state snapshot
         RolePrivilegeCollectionV2 initialCollection = authorizationMgr.getRolePrivilegeCollection(roleName);
+        
+        // Verify initial state has no SELECT privilege
+        TablePEntryObject allTablesInAllDb = new TablePEntryObject(
+                PrivilegeBuiltinConstants.ALL_DATABASES_UUID, PrivilegeBuiltinConstants.ALL_TABLES_UUID);
+        boolean initialHasSelectPrivilege = initialCollection.check(ObjectType.TABLE, PrivilegeType.SELECT, allTablesInAllDb);
 
         // 4. Execute grant operation and expect exception
         RuntimeException exception = Assertions.assertThrows(RuntimeException.class, () -> {
@@ -216,6 +261,11 @@ public class AuthorizationMgrEditLogTest {
         // 5. Verify leader memory state remains unchanged after exception
         RolePrivilegeCollectionV2 unchangedCollection = authorizationMgr.getRolePrivilegeCollection(roleName);
         Assertions.assertNotNull(unchangedCollection);
+        
+        // Verify privileges have not changed
+        boolean unchangedHasSelectPrivilege = unchangedCollection.check(ObjectType.TABLE, PrivilegeType.SELECT, allTablesInAllDb);
+        Assertions.assertEquals(initialHasSelectPrivilege, unchangedHasSelectPrivilege,
+                "Role privileges should remain unchanged after EditLog exception");
     }
 
     // ==================== Revoke Privilege Tests ====================
@@ -244,6 +294,12 @@ public class AuthorizationMgrEditLogTest {
         // 4. Verify master state
         UserPrivilegeCollectionV2 userCollection = authorizationMgr.getUserPrivilegeCollection(userIdentity);
         Assertions.assertNotNull(userCollection);
+        
+        // Verify the privilege has been revoked (should not have SELECT privilege)
+        TablePEntryObject allTablesInAllDb = new TablePEntryObject(
+                PrivilegeBuiltinConstants.ALL_DATABASES_UUID, PrivilegeBuiltinConstants.ALL_TABLES_UUID);
+        Assertions.assertFalse(userCollection.check(ObjectType.TABLE, PrivilegeType.SELECT, allTablesInAllDb),
+                "User should not have SELECT privilege on ALL TABLES IN ALL DATABASES after revoke");
 
         // 5. Test follower replay functionality
         AuthorizationMgr followerAuthMgr = new AuthorizationMgr(new DefaultAuthorizationProvider());
@@ -276,6 +332,10 @@ public class AuthorizationMgrEditLogTest {
         // 6. Verify follower state is consistent with master
         UserPrivilegeCollectionV2 followerCollection = followerAuthMgr.getUserPrivilegeCollection(userIdentity);
         Assertions.assertNotNull(followerCollection);
+        
+        // Verify the privilege has been revoked in follower
+        Assertions.assertFalse(followerCollection.check(ObjectType.TABLE, PrivilegeType.SELECT, allTablesInAllDb),
+                "Follower user should not have SELECT privilege on ALL TABLES IN ALL DATABASES after revoke");
     }
 
     @Test
@@ -306,6 +366,14 @@ public class AuthorizationMgrEditLogTest {
 
         // Save initial state snapshot
         UserPrivilegeCollectionV2 initialCollection = authorizationMgr.getUserPrivilegeCollection(userIdentity);
+        Set<Long> initialRoles = new HashSet<>(initialCollection.getAllRoles());
+        Set<Long> initialDefaultRoles = new HashSet<>(initialCollection.getDefaultRoleIds());
+        
+        // Verify initial state has SELECT privilege (before revoke)
+        TablePEntryObject allTablesInAllDb = new TablePEntryObject(
+                PrivilegeBuiltinConstants.ALL_DATABASES_UUID, PrivilegeBuiltinConstants.ALL_TABLES_UUID);
+        boolean initialHasSelectPrivilege = initialCollection.check(ObjectType.TABLE, PrivilegeType.SELECT, allTablesInAllDb);
+        Assertions.assertTrue(initialHasSelectPrivilege, "Initial state should have SELECT privilege");
 
         // 4. Execute revoke operation and expect exception
         RuntimeException exception = Assertions.assertThrows(RuntimeException.class, () -> {
@@ -316,6 +384,19 @@ public class AuthorizationMgrEditLogTest {
         // 5. Verify leader memory state remains unchanged after exception
         UserPrivilegeCollectionV2 unchangedCollection = authorizationMgr.getUserPrivilegeCollection(userIdentity);
         Assertions.assertNotNull(unchangedCollection);
+        
+        // Verify roles have not changed
+        Assertions.assertEquals(initialRoles, unchangedCollection.getAllRoles(),
+                "User roles should remain unchanged after EditLog exception");
+        
+        // Verify default roles have not changed
+        Assertions.assertEquals(initialDefaultRoles, unchangedCollection.getDefaultRoleIds(),
+                "User default roles should remain unchanged after EditLog exception");
+        
+        // Verify privileges have not changed (should still have SELECT privilege)
+        boolean unchangedHasSelectPrivilege = unchangedCollection.check(ObjectType.TABLE, PrivilegeType.SELECT, allTablesInAllDb);
+        Assertions.assertEquals(initialHasSelectPrivilege, unchangedHasSelectPrivilege,
+                "User privileges should remain unchanged after EditLog exception");
     }
 
     @Test
@@ -340,6 +421,12 @@ public class AuthorizationMgrEditLogTest {
         // 4. Verify master state
         RolePrivilegeCollectionV2 roleCollection = authorizationMgr.getRolePrivilegeCollection(roleName);
         Assertions.assertNotNull(roleCollection);
+        
+        // Verify the privilege has been revoked (should not have SELECT privilege)
+        TablePEntryObject allTablesInAllDb = new TablePEntryObject(
+                PrivilegeBuiltinConstants.ALL_DATABASES_UUID, PrivilegeBuiltinConstants.ALL_TABLES_UUID);
+        Assertions.assertFalse(roleCollection.check(ObjectType.TABLE, PrivilegeType.SELECT, allTablesInAllDb),
+                "Role should not have SELECT privilege on ALL TABLES IN ALL DATABASES after revoke");
 
         // 5. Test follower replay functionality
         AuthorizationMgr followerAuthMgr = new AuthorizationMgr(new DefaultAuthorizationProvider());
@@ -362,6 +449,10 @@ public class AuthorizationMgrEditLogTest {
         // 6. Verify follower state is consistent with master
         RolePrivilegeCollectionV2 followerCollection = followerAuthMgr.getRolePrivilegeCollection(roleName);
         Assertions.assertNotNull(followerCollection);
+        
+        // Verify the privilege has been revoked in follower
+        Assertions.assertFalse(followerCollection.check(ObjectType.TABLE, PrivilegeType.SELECT, allTablesInAllDb),
+                "Follower role should not have SELECT privilege on ALL TABLES IN ALL DATABASES after revoke");
     }
 
     @Test
@@ -390,6 +481,12 @@ public class AuthorizationMgrEditLogTest {
 
         // Save initial state snapshot
         RolePrivilegeCollectionV2 initialCollection = authorizationMgr.getRolePrivilegeCollection(roleName);
+        
+        // Verify initial state has SELECT privilege (before revoke)
+        TablePEntryObject allTablesInAllDb = new TablePEntryObject(
+                PrivilegeBuiltinConstants.ALL_DATABASES_UUID, PrivilegeBuiltinConstants.ALL_TABLES_UUID);
+        boolean initialHasSelectPrivilege = initialCollection.check(ObjectType.TABLE, PrivilegeType.SELECT, allTablesInAllDb);
+        Assertions.assertTrue(initialHasSelectPrivilege, "Initial state should have SELECT privilege");
 
         // 4. Execute revoke operation and expect exception
         RuntimeException exception = Assertions.assertThrows(RuntimeException.class, () -> {
@@ -400,6 +497,11 @@ public class AuthorizationMgrEditLogTest {
         // 5. Verify leader memory state remains unchanged after exception
         RolePrivilegeCollectionV2 unchangedCollection = authorizationMgr.getRolePrivilegeCollection(roleName);
         Assertions.assertNotNull(unchangedCollection);
+        
+        // Verify privileges have not changed (should still have SELECT privilege)
+        boolean unchangedHasSelectPrivilege = unchangedCollection.check(ObjectType.TABLE, PrivilegeType.SELECT, allTablesInAllDb);
+        Assertions.assertEquals(initialHasSelectPrivilege, unchangedHasSelectPrivilege,
+                "Role privileges should remain unchanged after EditLog exception");
     }
 
     // ==================== Grant Role Tests ====================
