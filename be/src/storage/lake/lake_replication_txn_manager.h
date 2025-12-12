@@ -35,8 +35,13 @@ class TabletManager;
 class LakeReplicationTxnManager {
 public:
     explicit LakeReplicationTxnManager(lake::TabletManager* tablet_manager)
-            : _tablet_manager(tablet_manager),
-              _remote_location_provider(std::make_unique<lake::RemoteStarletLocationProvider>()) {}
+            : _tablet_manager(tablet_manager)
+#ifdef USE_STAROS
+              ,
+              _remote_location_provider(std::make_unique<RemoteStarletLocationProvider>())
+#endif
+    {
+    }
 
     Status replicate_lake_remote_storage(const TReplicateSnapshotRequest& request);
 
@@ -76,7 +81,9 @@ public:
 
 private:
     TabletManager* _tablet_manager;
-    std::unique_ptr<lake::RemoteStarletLocationProvider> _remote_location_provider;
+#ifdef USE_STAROS
+    std::unique_ptr<RemoteStarletLocationProvider> _remote_location_provider;
+#endif
 };
 
 } // namespace starrocks::lake
