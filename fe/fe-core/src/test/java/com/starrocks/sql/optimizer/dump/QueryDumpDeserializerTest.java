@@ -43,9 +43,9 @@ public class QueryDumpDeserializerTest {
     @ParameterizedTest(name = "{0}")
     @MethodSource("basicStatisticsFormats")
     public void testParseBasicStatistics(String formatName, String format,
-                                          double expectedMin, double expectedMax,
-                                          double expectedNulls, double expectedAvgSize,
-                                          double expectedNdv, ColumnStatistic.StatisticType expectedType) {
+                                         double expectedMin, double expectedMax,
+                                         double expectedNulls, double expectedAvgSize,
+                                         double expectedNdv, ColumnStatistic.StatisticType expectedType) {
         ColumnStatistic stats = ColumnStatistic.buildFrom(format).build();
 
         assertThat(stats.getMinValue()).isEqualTo(expectedMin);
@@ -59,9 +59,11 @@ public class QueryDumpDeserializerTest {
     private static Stream<Arguments> unknownTypeFormats() {
         return Stream.of(
                 Arguments.of("old format with UNKNOWN type", "[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN"),
-                Arguments.of("new labeled format with UNKNOWN type", "[MIN: -Infinity, MAX: Infinity, NULLS: 0.0, ROS: 1.0, NDV: 1.0] UNKNOWN"),
+                Arguments.of("new labeled format with UNKNOWN type",
+                        "[MIN: -Infinity, MAX: Infinity, NULLS: 0.0, ROS: 1.0, NDV: 1.0] UNKNOWN"),
                 Arguments.of("old format without type", "[-Infinity, Infinity, 0.0, 1.0, 1.0]"),
-                Arguments.of("new labeled format without type", "[MIN: -Infinity, MAX: Infinity, NULLS: 0.0, ROS: 1.0, NDV: 1.0]")
+                Arguments.of("new labeled format without type",
+                        "[MIN: -Infinity, MAX: Infinity, NULLS: 0.0, ROS: 1.0, NDV: 1.0]")
         );
     }
 
@@ -81,7 +83,8 @@ public class QueryDumpDeserializerTest {
     private static Stream<Arguments> nullFractionFormats() {
         return Stream.of(
                 Arguments.of("old format", "[0.0, 1000.0, 0.1, 16.0, 200.0] ESTIMATE"),
-                Arguments.of("new labeled format", "[MIN: 0.0, MAX: 1000.0, NULLS: 0.1, ROS: 16.0, NDV: 200.0] ESTIMATE")
+                Arguments.of("new labeled format",
+                        "[MIN: 0.0, MAX: 1000.0, NULLS: 0.1, ROS: 16.0, NDV: 200.0] ESTIMATE")
         );
     }
 
@@ -133,7 +136,8 @@ public class QueryDumpDeserializerTest {
     private static Stream<Arguments> scientificNotationFormats() {
         return Stream.of(
                 Arguments.of("old format", "[1.0E-10, 1.0E10, 0.0, 8.0, 1.0E5] ESTIMATE"),
-                Arguments.of("new labeled format", "[MIN: 1.0E-10, MAX: 1.0E10, NULLS: 0.0, ROS: 8.0, NDV: 1.0E5] ESTIMATE")
+                Arguments.of("new labeled format",
+                        "[MIN: 1.0E-10, MAX: 1.0E10, NULLS: 0.0, ROS: 8.0, NDV: 1.0E5] ESTIMATE")
         );
     }
 
