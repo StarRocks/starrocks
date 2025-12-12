@@ -39,6 +39,10 @@ StatusOr<std::pair<std::string, int64_t>> parse_starlet_uri(std::string_view uri
 
 std::unique_ptr<FileSystem> new_fs_starlet();
 
+// starlet fs used for virtual shard id, a new fs starlet will be created on each call
+// to prevent shard fs re-create everty time, we will reuse the lru cache framework to cache the shard fs
+std::shared_ptr<FileSystem> new_fs_starlet(int64_t virtual_shard_id);
+
 } // namespace starrocks
 
 #endif // USE_STAROS

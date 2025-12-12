@@ -113,7 +113,7 @@ public:
         return join_path(root_location(tablet_id), schema_filename(schema_id));
     }
 
-private:
+protected:
     static std::string join_path(std::string_view parent, std::string_view child) {
         return fmt::format("{}/{}", parent, child);
     }
