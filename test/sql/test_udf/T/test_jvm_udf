@@ -194,3 +194,23 @@ insert into map_table values (1, map{"a": 10, "b": 20}), (1, map{"a": 20, "c": 2
 select id, data from map_table order by id;
 select id, sum_map(data) from map_table group by id order by id;
 
+CREATE FUNCTION echoint(int)
+RETURNS int
+symbol = "Echoint"
+type = "StarrocksJar"
+file = "${udf_url}/starrocks-jdbc/udf.jar";
+
+CREATE TABLE `t1` (
+  `c0` int DEFAULT NULL,
+  `c1` int DEFAULT NULL,
+  `c2` array<int> DEFAULT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`c0`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`c0`) BUCKETS 4
+PROPERTIES (
+"replication_num" = "1"
+);
+
+insert into t1 SELECT generate_series, 4096 - generate_series, [generate_series] FROM TABLE(generate_series(1,  40960));
+select count(*) from (select * from t1 where any_match((x)->cast(echoint(1) as boolean), c2)) t;
