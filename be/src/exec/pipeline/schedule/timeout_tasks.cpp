@@ -29,7 +29,7 @@ void CheckFragmentTimeout::Run() {
     _fragment_ctx->iterate_drivers([](const DriverPtr& driver) {
         driver->set_need_check_reschedule(true);
         if (driver->is_in_blocked()) {
-            LOG(WARNING) << "[Driver] Timeout " << driver->to_readable_string();
+            LOG_IF(WARNING, config::pipeline_timeout_diagnostic) << "[Driver] Timeout " << driver->to_readable_string();
             driver->observer()->cancel_trigger();
         }
     });
