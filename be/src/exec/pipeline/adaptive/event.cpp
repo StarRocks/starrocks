@@ -14,13 +14,20 @@
 
 #include "exec/pipeline/adaptive/event.h"
 
+#include <atomic>
+#include <condition_variable>
+#include <mutex>
 #include <utility>
 
+#include "exec/pipeline/group_execution/execution_group.h"
 #include "exec/pipeline/pipeline.h"
 #include "exec/pipeline/pipeline_driver.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/pipeline/source_operator.h"
+#include "exec/workgroup/work_group.h"
+#include "runtime/current_thread.h"
 #include "util/failpoint/fail_point.h"
+#include "util/priority_thread_pool.hpp"
 
 namespace starrocks::pipeline {
 
@@ -95,16 +102,77 @@ void CollectStatsSourceInitializeEvent::process(RuntimeState* state) {
     }
 
     auto prepare_drivers = [state, &pipelines = _pipelines]() {
+        size_t total_driver_size = 0;
         for (const auto& pipeline : pipelines) {
             for (const auto& driver : pipeline->drivers()) {
                 FAIL_POINT_TRIGGER_RETURN(
                         collect_stats_source_initialize_prepare_failed,
                         Status::InternalError("injected collect_stats_source_initialize_prepare_failed"));
                 RETURN_IF_ERROR(driver->prepare(state));
+                total_driver_size++;
             }
         }
+
+        auto* prepare_thread_pool = state->exec_env()->pipeline_prepare_pool();
+        DCHECK(prepare_thread_pool != nullptr);
+
+        std::vector<DriverPtr> all_drivers;
+        all_drivers.reserve(total_driver_size);
+        for (const auto& pipeline : pipelines) {
+            for (const auto& driver : pipeline->drivers()) {
+                all_drivers.emplace_back(driver);
+            }
+        }
+
+        if (all_drivers.empty()) {
+            return Status::OK();
+        }
+
+        auto sync_ctx = std::make_shared<DriverPrepareSyncContext>();
+        sync_ctx->pending_tasks = static_cast<int>(all_drivers.size());
+
+        for (auto& driver : all_drivers) {
+            auto task_fn = [&driver, runtime_state = state, sync_ctx]() {
+                // hold mem tracker's shared ptr for thread safe
+                auto mem_tracker = runtime_state->instance_mem_tracker_ptr();
+                SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(mem_tracker.get());
+                Status st = driver->prepare_local_state(runtime_state);
+                if (!st.ok()) {
+                    Status* expected = nullptr;
+                    Status* new_error = new Status(std::move(st));
+                    if (!sync_ctx->first_error.compare_exchange_strong(expected, new_error)) {
+                        // Another thread already set the error, clean up our allocation
+                        delete new_error;
+                    }
+                }
+
+                if (sync_ctx->pending_tasks.fetch_sub(1) == 1) {
+                    std::lock_guard<std::mutex> l(sync_ctx->mutex);
+                    sync_ctx->cv.notify_all();
+                }
+            };
+
+            bool submit_res = prepare_thread_pool->try_offer(task_fn);
+            if (!submit_res) {
+                task_fn();
+            }
+        }
+
+        // Wait for all tasks to finish
+        {
+            std::unique_lock<std::mutex> lock(sync_ctx->mutex);
+            sync_ctx->cv.wait(lock, [&sync_ctx] { return sync_ctx->pending_tasks.load() == 0; });
+        }
+
+        Status* error = sync_ctx->first_error.load();
+        if (error != nullptr) {
+            Status result = *error;
+            return result;
+        }
+
         return Status::OK();
     };
+
     if (const auto status = prepare_drivers(); !status.ok()) {
         LOG(WARNING) << "[ADAPTIVE DOP] failed to prepare pipeline drivers [status=" << status.message() << "]";
         state->fragment_ctx()->cancel(status);

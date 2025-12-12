@@ -27,6 +27,7 @@ public:
     ~SpillablePartitionSortSinkOperator() override = default;
 
     Status prepare(RuntimeState* state) override;
+    Status prepare_local_state(RuntimeState* state) override { return Status::OK(); }
 
     void close(RuntimeState* state) override;
 

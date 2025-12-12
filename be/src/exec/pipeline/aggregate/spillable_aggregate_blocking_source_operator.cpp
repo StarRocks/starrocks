@@ -22,7 +22,7 @@
 namespace starrocks::pipeline {
 Status SpillableAggregateBlockingSourceOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(AggregateBlockingSourceOperator::prepare(state));
-    RETURN_IF_ERROR(_stream_aggregator->prepare(state, state->obj_pool(), _unique_metrics.get()));
+    RETURN_IF_ERROR(_stream_aggregator->prepare(state, _unique_metrics.get()));
     RETURN_IF_ERROR(_stream_aggregator->open(state));
     _accumulator.set_max_size(state->chunk_size());
     return Status::OK();

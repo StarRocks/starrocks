@@ -41,6 +41,14 @@ Status MultilaneOperator::prepare(RuntimeState* state) {
     return Status::OK();
 }
 
+Status MultilaneOperator::prepare_local_state(RuntimeState* state) {
+    RETURN_IF_ERROR(pipeline::Operator::prepare_local_state(state));
+    for (auto& lane : _lanes) {
+        RETURN_IF_ERROR(lane.processor->prepare_local_state(state));
+    }
+    return Status::OK();
+}
+
 void MultilaneOperator::close(RuntimeState* state) {
     for (auto& lane : _lanes) {
         lane.processor->close(state);
