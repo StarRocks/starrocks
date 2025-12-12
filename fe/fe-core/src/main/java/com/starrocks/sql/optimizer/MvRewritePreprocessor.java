@@ -42,6 +42,7 @@ import com.starrocks.catalog.RandomDistributionInfo;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.mv.MVPlanValidationResult;
+import com.starrocks.catalog.mv.MVTimelinessArbiter;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
@@ -189,11 +190,20 @@ public class MvRewritePreprocessor {
                 if (queryMaterializationContext.getValidCandidateMVs().size() > 1) {
                     queryMaterializationContext.setEnableQueryContextCache(true);
                 }
+
+                // record the current MV plan cache stats
+                Tracers.record("MVPlanCacheStats", CachingMvPlanContextBuilder.getMVPlanCacheStats());
             } catch (Exception e) {
-                List<String> tableNames = queryTables.stream().map(Table::getName).collect(Collectors.toList());
-                logMVPrepare(connectContext, "Prepare query tables {} for mv failed:{}",
-                        tableNames, DebugUtil.getStackTrace(e));
-                LOG.warn("Prepare query tables {} for mv failed", tableNames, e);
+                try {
+                    List<String> tableNames = queryTables.stream().map(Table::getName).collect(Collectors.toList());
+                    logMVPrepare(connectContext, "Prepare query tables {} for mv failed:{}",
+                            tableNames, DebugUtil.getStackTrace(e));
+                    LOG.warn("Prepare query tables {} for mv failed", tableNames, e);
+                } catch (Throwable traceLogException) {
+                    // ignore all exception in mv rewrite prepare
+                    LOG.warn("Failed to log mv rewrite prepare exception: {}",
+                            DebugUtil.getStackTrace(traceLogException));
+                }
             }
         }
     }
@@ -721,11 +731,13 @@ public class MvRewritePreprocessor {
 
         List<Pair<MaterializedViewWrapper, MvUpdateInfo>> mvInfos =
                 Lists.newArrayListWithExpectedSize(mvWithPlanContexts.size());
+        MVTimelinessArbiter.QueryRewriteParams queryRewriteParams =
+                MVTimelinessArbiter.QueryRewriteParams.ofQueryRewrite(context);
         for (MaterializedViewWrapper wrapper : mvWithPlanContexts) {
             MaterializedView mv = wrapper.getMV();
             try {
                 // mv's partitions to refresh
-                MvUpdateInfo mvUpdateInfo = queryMaterializationContext.getOrInitMVTimelinessInfos(mv);
+                MvUpdateInfo mvUpdateInfo = queryMaterializationContext.getOrInitMVTimelinessInfos(mv, queryRewriteParams);
                 if (mvUpdateInfo == null || !mvUpdateInfo.isValidRewrite()) {
                     OptimizerTraceUtil.logMVRewriteFailReason(mv.getName(), "stale partitions {}", mvUpdateInfo);
                     continue;
@@ -845,7 +857,8 @@ public class MvRewritePreprocessor {
             
             try {
                 future.get(individualTimeoutMs, TimeUnit.MILLISECONDS);
-                // Success - no action needed
+                // record MV global cache stats after successful preparation
+                Tracers.record("MVGlobalCacheStats", CachingMvPlanContextBuilder.getMVGlobalContextCacheStats(mv));
             } catch (TimeoutException e) {
                 LOG.warn("MV {} preparation timeout after {} ms", mvName, individualTimeoutMs);
                 timeoutMvNames.add(mvName);
