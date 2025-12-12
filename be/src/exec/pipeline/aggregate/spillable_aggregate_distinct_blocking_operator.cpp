@@ -191,6 +191,9 @@ bool SpillableAggregateDistinctBlockingSourceOperator::has_output() const {
     if (AggregateDistinctBlockingSourceOperator::has_output()) {
         return true;
     }
+    if (_is_finished) {
+        return false;
+    }
     if (!_aggregator->spiller()->spilled()) {
         return false;
     }

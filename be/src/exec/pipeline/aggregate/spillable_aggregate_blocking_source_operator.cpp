@@ -34,6 +34,9 @@ void SpillableAggregateBlockingSourceOperator::close(RuntimeState* state) {
 }
 
 bool SpillableAggregateBlockingSourceOperator::has_output() const {
+    if (_is_finished) {
+        return false;
+    }
     bool has_spilled = _aggregator->spiller()->spilled();
 
     if (!has_spilled && AggregateBlockingSourceOperator::has_output()) {
