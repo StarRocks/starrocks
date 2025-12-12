@@ -459,6 +459,7 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
 
         if (ticketParts.length == 2) {
             getStreamResultFromFE(ticketParts[0], ticketParts[1], listener); 
+            return;
         }
 
         try {
