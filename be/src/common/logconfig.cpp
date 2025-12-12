@@ -18,8 +18,12 @@
 #include <glog/logging.h>
 #include <glog/vlog_is_on.h>
 #include <jemalloc/jemalloc.h>
+#include <unistd.h>
+
+#include <limits>
 
 #include "common/process_exit.h"
+#include "util/uid_util.h"
 #ifdef __APPLE__
 #include <mach/mach_init.h>
 #include <mach/mach_port.h>
@@ -137,6 +141,26 @@ static void dump_trace_info() {
     std::ignore = write(STDERR_FILENO, mbuffer.data(), mbuffer.size());                                        \
     mbuffer.clear();
 
+#ifdef __APPLE__
+#define JEMALLOC_CTL mallctl
+#else
+#define JEMALLOC_CTL je_mallctl
+#endif
+
+static int jemalloc_purge() {
+    char buffer[100];
+    int res = snprintf(buffer, sizeof(buffer), "arena.%d.purge", MALLCTL_ARENAS_ALL);
+    buffer[res] = '\0';
+    return JEMALLOC_CTL(buffer, nullptr, nullptr, nullptr, 0);
+}
+
+static int jemalloc_dontdump() {
+    char buffer[100];
+    int res = snprintf(buffer, sizeof(buffer), "arena.%d.dontdump", MALLCTL_ARENAS_ALL);
+    buffer[res] = '\0';
+    return JEMALLOC_CTL(buffer, nullptr, nullptr, nullptr, 0);
+}
+
 static void dontdump_unused_pages() {
     size_t prev_allocate_size = CurrentThread::current().get_consumed_bytes();
     static bool start_dump = false;
@@ -148,20 +172,10 @@ static void dontdump_unused_pages() {
 #else
     pthread_t tid = pthread_self();
 #endif
-    const uint32_t MAX_BUFFER_SIZE = 1024;
-    char buffer[MAX_BUFFER_SIZE] = {};
     // memory_buffer allocate 500 bytes from stack
     fmt::memory_buffer mbuffer;
     if (!start_dump) {
-        int res = snprintf(buffer, MAX_BUFFER_SIZE, "arena.%d.purge", MALLCTL_ARENAS_ALL);
-        buffer[res] = '\0';
-        int ret =
-#ifdef __APPLE__
-                mallctl
-#else
-                je_mallctl
-#endif
-                (buffer, nullptr, nullptr, nullptr, 0);
+        int ret = jemalloc_purge();
 
         if (ret != 0) {
             FMT_LOG("je_mallctl execute purge failed, errno:{}", ret);
@@ -169,15 +183,7 @@ static void dontdump_unused_pages() {
             FMT_LOG("je_mallctl execute purge success");
         }
 
-        res = snprintf(buffer, MAX_BUFFER_SIZE, "arena.%d.dontdump", MALLCTL_ARENAS_ALL);
-        buffer[res] = '\0';
-        ret =
-#ifdef __APPLE__
-                mallctl
-#else
-                je_mallctl
-#endif
-                (buffer, nullptr, nullptr, nullptr, 0);
+        ret = jemalloc_dontdump();
 
         if (ret != 0) {
             FMT_LOG("je_mallctl execute dontdump failed, errno:{}", ret);
@@ -215,6 +221,32 @@ static void failure_function() {
     dump_trace_info();
     failure_handler_after_output_log();
     std::abort();
+}
+
+std::string lite_exec(const std::vector<std::string>& argv_vec, int timeout_ms);
+static std::mutex gcore_mutex;
+static bool gcore_done = false;
+void hook_on_query_timeout(TUniqueId& query_id, size_t timeout_seconds) {
+    if (config::pipeline_gcore_timeout_threshold_sec > 0 &&
+        timeout_seconds > static_cast<size_t>(config::pipeline_gcore_timeout_threshold_sec)) {
+        std::unique_lock<std::mutex> lock(gcore_mutex);
+        if (gcore_done) {
+            return;
+        }
+
+        if (config::enable_core_file_size_optimization) {
+            jemalloc_purge();
+            jemalloc_dontdump();
+        }
+
+        std::string core_file = config::pipeline_gcore_output_dir + "core-" + print_id(query_id);
+        LOG(WARNING) << "dump gcore via query timeout:" << timeout_seconds;
+        pid_t pid = getpid();
+        // gcore have too many verbose output. skip them
+        (void)lite_exec({"gcore", "-o", core_file, std::to_string(pid)}, std::numeric_limits<int>::max());
+        LOG(WARNING) << "gcore finished ";
+        gcore_done = true;
+    }
 }
 
 // Calculate timezone offset string dynamically with caching (thread-safe)

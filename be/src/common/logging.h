@@ -90,7 +90,8 @@
 
 namespace starrocks {
 class TUniqueId;
-}
+void hook_on_query_timeout(TUniqueId& query_id, size_t timeout_seconds);
+} // namespace starrocks
 
 // Print log with query id.
 #define QUERY_LOG(level) LOG(level) << "[" << tls_thread_status.query_id() << "] "
