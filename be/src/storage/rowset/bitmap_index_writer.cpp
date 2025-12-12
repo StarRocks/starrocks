@@ -393,7 +393,7 @@ private:
             auto it = ordered_mem_index.find(dict);
             if (it == ordered_mem_index.end()) {
                 // should never happen
-                return Status::InternalError(fmt::format("No bitmap found for dict {}", dict));
+                return Status::InternalError("No bitmap found for dict");
             }
             bitmaps.push_back(&(it->second));
         }
