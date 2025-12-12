@@ -60,6 +60,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.UserIdentity;
+import com.starrocks.catalog.mv.MVTimelinessArbiter;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -1355,11 +1356,12 @@ public class UtFrameUtils {
     public static void mockTimelinessForAsyncMVTest(ConnectContext connectContext) {
         new MockUp<MvRefreshArbiter>() {
             /**
-             * {@link MvRefreshArbiter#getMVTimelinessUpdateInfo(MaterializedView, boolean)}
+             * {@link MvRefreshArbiter#getMVTimelinessUpdateInfo(MaterializedView,
+             * com.starrocks.catalog.mv.MVTimelinessArbiter.QueryRewriteParams)}
              */
             @Mock
             public MvUpdateInfo getMVTimelinessUpdateInfo(MaterializedView mv,
-                                                          boolean isQueryRewrite) {
+                                                          MVTimelinessArbiter.QueryRewriteParams queryRewriteParams) {
                 return MvUpdateInfo.noRefresh(mv);
             }
         };
