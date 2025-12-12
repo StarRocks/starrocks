@@ -1214,6 +1214,11 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
                 String functionName = defaultDescContext.qualifiedName().getText().toLowerCase();
                 defaultValueDef = new ColumnDef.DefaultValueDef(true,
                         new FunctionCallExpr(functionName, new ArrayList<>()));
+            } else if (defaultDescContext.primaryExpression() != null) {
+                // Handle complex types (ARRAY, MAP, STRUCT) and other expressions
+                // DEFAULT [1, 2, 3], DEFAULT map{1: 'a'}, DEFAULT row(1, 'Bob')
+                Expr expr = (Expr) visit(defaultDescContext.primaryExpression());
+                defaultValueDef = new ColumnDef.DefaultValueDef(true, expr);
             }
         }
         final com.starrocks.sql.parser.StarRocksParser.GeneratedColumnDescContext generatedColumnDescContext =

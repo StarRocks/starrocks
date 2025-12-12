@@ -39,8 +39,13 @@
 #include <algorithm>
 #include <vector>
 
+#include "column/column.h"
+#include "column/const_column.h"
+#include "exprs/expr.h"
+#include "exprs/expr_context.h"
 #include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
+#include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
 #include "storage/metadata_util.h"
 #include "storage/tablet_schema_map.h"
@@ -140,7 +145,12 @@ TabletColumn::TabletColumn(const TabletColumn& rhs)
           _extended_info(rhs._extended_info ? std::make_unique<ExtendedColumnInfo>(*rhs._extended_info) : nullptr),
           _flags(rhs._flags) {
     if (rhs._extra_fields != nullptr) {
-        _extra_fields = new ExtraFields(*rhs._extra_fields);
+        _extra_fields = new ExtraFields();
+        _extra_fields->default_value = rhs._extra_fields->default_value;
+        _extra_fields->sub_columns = rhs._extra_fields->sub_columns;
+        _extra_fields->has_default_value = rhs._extra_fields->has_default_value;
+        // Copy the pre-evaluated default column (shared_ptr, shallow copy is fine)
+        _extra_fields->evaluated_default_column = rhs._extra_fields->evaluated_default_column;
     }
     if (rhs._agg_state_desc != nullptr) {
         _agg_state_desc = new AggStateDesc(*rhs._agg_state_desc);
@@ -307,6 +317,41 @@ void TabletColumn::to_schema_pb(ColumnPB* column) const {
     }
 }
 
+// Helper function to evaluate default expression
+static StatusOr<ColumnPtr> evaluate_default_expr(const TExpr& texpr, RuntimeState* runtime_state) {
+    auto obj_pool = std::make_unique<ObjectPool>();
+    
+    // Create ExprContext from TExpr
+    ExprContext* expr_ctx = nullptr;
+    RETURN_IF_ERROR(Expr::create_expr_tree(obj_pool.get(), texpr, &expr_ctx, runtime_state));
+    
+    // Prepare and open the expression
+    RETURN_IF_ERROR(expr_ctx->prepare(runtime_state));
+    RETURN_IF_ERROR(expr_ctx->open(runtime_state));
+    
+    // Evaluate the constant expression
+    ASSIGN_OR_RETURN(ColumnPtr result, expr_ctx->root()->evaluate_const(expr_ctx));
+    
+    if (result == nullptr || result->size() == 0) {
+        return Status::InternalError("Failed to evaluate default value expression");
+    }
+    
+    // Unwrap ConstColumn if needed
+    if (result->is_constant()) {
+        auto const_col = down_cast<ConstColumn*>(result.get());
+        result = const_col->data_column();
+    }
+    
+    // Keep only the first value
+    ColumnPtr default_column = result->clone_empty();
+    default_column->append(*result, 0, 1);
+    
+    // Clean up
+    expr_ctx->close(runtime_state);
+    
+    return default_column;
+}
+
 void TabletSchema::append_column(TabletColumn column) {
     if (column.is_key()) {
         _num_key_columns++;
@@ -431,12 +476,29 @@ TabletSchemaSPtr TabletSchema::copy(const TabletSchema& tablet_schema) {
     return std::make_shared<TabletSchema>(tablet_schema);
 }
 
-TabletSchemaCSPtr TabletSchema::copy(const TabletSchema& src_schema, const std::vector<TColumn>& cols) {
+TabletSchemaCSPtr TabletSchema::copy(const TabletSchema& src_schema, const std::vector<TColumn>& cols,
+                                     RuntimeState* runtime_state) {
     auto dst_schema = std::make_unique<TabletSchema>(src_schema);
     dst_schema->_clear_columns();
+    
     for (const auto& col : cols) {
-        dst_schema->append_column(TabletColumn(col));
+        TabletColumn tablet_col(col);
+        
+        // If column has default_expr and runtime_state is available, evaluate it now
+        if (runtime_state != nullptr && col.__isset.default_expr) {
+            auto result = evaluate_default_expr(col.default_expr, runtime_state);
+            if (result.ok()) {
+                tablet_col.set_evaluated_default_column(result.value());
+                LOG(INFO) << "Evaluated default expression for column: " << tablet_col.name();
+            } else {
+                LOG(WARNING) << "Failed to evaluate default expression for column: " << tablet_col.name()
+                            << ", error: " << result.status().message();
+            }
+        }
+        
+        dst_schema->append_column(std::move(tablet_col));
     }
+    
     dst_schema->_generate_sort_key_idxes();
     return dst_schema;
 }

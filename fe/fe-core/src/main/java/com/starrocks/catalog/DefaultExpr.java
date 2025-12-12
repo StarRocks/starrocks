@@ -16,11 +16,14 @@ package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.sql.ast.expression.ArrayExpr;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.FunctionParams;
 import com.starrocks.sql.ast.expression.IntLiteral;
+import com.starrocks.sql.ast.expression.MapExpr;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.Type;
 import org.apache.logging.log4j.LogManager;
@@ -35,9 +38,20 @@ public class DefaultExpr {
     @SerializedName("expr")
     private String expr;
     private boolean hasArguments;
+    
+    // For complex types (ARRAY, MAP, STRUCT), store the actual expression
+    private Expr complexExpr;
 
     public DefaultExpr(String expr, boolean hasArguments) {
         this.expr = expr;
+        this.hasArguments = hasArguments;
+        this.complexExpr = null;
+    }
+    
+    // Constructor for complex type expressions
+    public DefaultExpr(Expr expr, boolean hasArguments) {
+        this.complexExpr = expr;
+        this.expr = ExprToSql.toSql(expr);
         this.hasArguments = hasArguments;
     }
 
@@ -86,6 +100,11 @@ public class DefaultExpr {
     }
 
     public Expr obtainExpr() {
+        // If this is a complex type expression, return it directly
+        if (complexExpr != null) {
+            return complexExpr;
+        }
+        
         if (isValidDefaultFunction(expr)) {
             String functionName = expr.replaceAll("\\(.*\\)", "");
 
@@ -110,5 +129,14 @@ public class DefaultExpr {
             return functionCallExpr;
         }
         return null;
+    }
+    
+    public boolean isComplexTypeExpr() {
+        return complexExpr != null && 
+               (complexExpr instanceof ArrayExpr || 
+                complexExpr instanceof MapExpr || 
+                (complexExpr instanceof FunctionCallExpr && 
+                 (((FunctionCallExpr) complexExpr).getFnName().getFunction().equalsIgnoreCase("row") ||
+                  ((FunctionCallExpr) complexExpr).getFnName().getFunction().equalsIgnoreCase("named_struct"))));
     }
 }

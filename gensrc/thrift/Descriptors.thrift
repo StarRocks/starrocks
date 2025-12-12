@@ -244,7 +244,11 @@ struct TColumn {
     // For fixed-length column, this value may be ignored by BE when creating a tablet.
     20: optional i32 index_len                 
     // column type. If this field is set, the |column_type| will be ignored.
-    21: optional Types.TTypeDesc type_desc         
+    21: optional Types.TTypeDesc type_desc
+    // default value expression. Used for complex types (ARRAY, MAP, STRUCT).
+    // If set, will be used instead of |default_value| string.
+    // Priority: default_expr > default_value
+    22: optional Exprs.TExpr default_expr
 }
 
 struct TOlapTableTablet {

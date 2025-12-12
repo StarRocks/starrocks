@@ -75,6 +75,9 @@ class TabletColumn {
         std::string default_value;
         std::vector<TabletColumn> sub_columns;
         bool has_default_value = false;
+        // Pre-evaluated default value column (for expression-based defaults)
+        // This is populated at TabletSchema::copy() time when RuntimeState is available
+        ColumnPtr evaluated_default_column;
     };
 
 public:
@@ -169,6 +172,21 @@ public:
         ext->has_default_value = true;
         ext->default_value = std::move(value);
     }
+    
+    // Get pre-evaluated default column (for expression-based defaults)
+    // Returns nullptr if there is no evaluated default column
+    const ColumnPtr& evaluated_default_column() const {
+        return _extra_fields ? _extra_fields->evaluated_default_column : kNullColumnPtr;
+    }
+    
+    bool has_evaluated_default_column() const {
+        return _extra_fields && _extra_fields->evaluated_default_column != nullptr;
+    }
+    
+    void set_evaluated_default_column(ColumnPtr column) {
+        ExtraFields* ext = _get_or_alloc_extra_fields();
+        ext->evaluated_default_column = std::move(column);
+    }
 
     bool has_agg_state_desc() const { return _agg_state_desc != nullptr; }
     AggStateDesc* get_agg_state_desc() const { return _agg_state_desc; }
@@ -214,6 +232,7 @@ public:
 
 private:
     inline static const std::string kEmptyDefaultValue;
+    inline static const ColumnPtr kNullColumnPtr;
     constexpr static uint8_t kIsKeyShift = 0;
     constexpr static uint8_t kIsNullableShift = 1;
     constexpr static uint8_t kIsBfColumnShift = 2;
@@ -284,7 +303,10 @@ public:
     static StatusOr<TabletSchemaSPtr> create(const TabletSchema& ori_schema, int64_t schema_id, int32_t version,
                                              const POlapTableColumnParam& column_param);
     static TabletSchemaSPtr copy(const TabletSchema& tablet_schema);
-    static TabletSchemaCSPtr copy(const TabletSchema& src_schema, const std::vector<TColumn>& cols);
+    // Copy TabletSchema with TColumn list from FE
+    // If runtime_state is provided, default expressions will be evaluated immediately
+    static TabletSchemaCSPtr copy(const TabletSchema& src_schema, const std::vector<TColumn>& cols, 
+                                  RuntimeState* runtime_state = nullptr);
 
     // Must be consistent with MaterializedIndexMeta.INVALID_SCHEMA_ID defined in
     // file ./fe/fe-core/src/main/java/com/starrocks/catalog/MaterializedIndexMeta.java

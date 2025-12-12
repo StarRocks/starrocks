@@ -37,15 +37,21 @@
 #include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
 #include "storage/rowset/column_iterator.h"
+#include "gen_cpp/Descriptors_types.h"
 
 namespace starrocks {
 
 class TypeInfo;
 using TypeInfoPtr = std::shared_ptr<TypeInfo>;
+class Expr;
+class ExprContext;
+class RuntimeState;
+class ObjectPool;
 
 // This iterator is used to read default value column
 class DefaultValueColumnIterator final : public ColumnIterator {
 public:
+    // Constructor with string default value
     DefaultValueColumnIterator(bool has_default_value, std::string default_value, bool is_nullable,
                                TypeInfoPtr type_info, size_t schema_length, ordinal_t num_rows)
             : _has_default_value(has_default_value),
@@ -55,6 +61,17 @@ public:
               _schema_length(schema_length),
               _pool(),
               _num_rows(num_rows) {}
+    
+    // Constructor with pre-evaluated default column (for complex types with expressions)
+    DefaultValueColumnIterator(ColumnPtr default_column, bool is_nullable,
+                               TypeInfoPtr type_info, ordinal_t num_rows)
+            : _has_default_value(false),
+              _is_nullable(is_nullable),
+              _type_info(std::move(type_info)),
+              _schema_length(0),
+              _pool(),
+              _num_rows(num_rows),
+              _cached_default_column(std::move(default_column)) {}
 
     Status init(const ColumnIteratorOptions& opts) override;
 
@@ -100,6 +117,8 @@ public:
     }
 
 private:
+    Status _init_from_string();
+    
     bool _has_default_value;
     std::string _default_value;
     bool _is_nullable;
@@ -114,6 +133,10 @@ private:
     ordinal_t _current_rowid = 0;
     ordinal_t _num_rows = 0;
     bool _may_contain_deleted_row = false;
+    
+    // For pre-evaluated default column (complex types with expressions)
+    // This is passed in through the constructor, not evaluated here
+    ColumnPtr _cached_default_column = nullptr;
 };
 
 } // namespace starrocks

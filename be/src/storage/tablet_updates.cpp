@@ -5310,9 +5310,22 @@ Status TabletUpdates::get_column_values(const std::vector<uint32_t>& column_ids,
             }
             if (has_default_value) {
                 const TypeInfoPtr& type_info = get_type_info(tablet_column);
-                std::unique_ptr<DefaultValueColumnIterator> default_value_iter =
-                        std::make_unique<DefaultValueColumnIterator>(true, default_value, tablet_column.is_nullable(),
-                                                                     type_info, tablet_column.length(), 1);
+                
+                // Try pre-evaluated default value first
+                std::unique_ptr<DefaultValueColumnIterator> default_value_iter;
+                if (tablet_column.has_evaluated_default_column()) {
+                    const auto& default_col = tablet_column.evaluated_default_column();
+                    default_value_iter = std::make_unique<DefaultValueColumnIterator>(
+                            default_col, tablet_column.is_nullable(), type_info, 1);
+                }
+                
+                // Fall back to string default value
+                if (!default_value_iter) {
+                    default_value_iter = std::make_unique<DefaultValueColumnIterator>(
+                            true, default_value, tablet_column.is_nullable(),
+                            type_info, tablet_column.length(), 1);
+                }
+                
                 ColumnIteratorOptions iter_opts;
                 RETURN_IF_ERROR(default_value_iter->init(iter_opts));
                 RETURN_IF_ERROR(default_value_iter->fetch_values_by_rowid(nullptr, 1, (*columns)[i].get()));

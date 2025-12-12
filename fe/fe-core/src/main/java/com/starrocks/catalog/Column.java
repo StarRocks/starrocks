@@ -46,17 +46,20 @@ import com.starrocks.persist.ColumnIdExpr;
 import com.starrocks.persist.ExpressionSerializedObject;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonPreProcessable;
+import com.starrocks.planner.expression.ExprToThrift;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.IndexDef;
+import com.starrocks.sql.ast.expression.CastExpr;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.NullLiteral;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.ast.expression.TypeDef;
+import com.starrocks.sql.common.TypeManager;
 import com.starrocks.thrift.TAggStateDesc;
 import com.starrocks.thrift.TAggregationType;
 import com.starrocks.thrift.TColumn;
@@ -237,7 +240,16 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
                 // for default value is null or default value is not set the defaultExpr = null
                 this.defaultExpr = null;
             } else {
-                this.defaultExpr = new DefaultExpr(ExprToSql.toSql(defaultValueDef.expr), defaultValueDef.hasArguments);
+                // For complex types (ARRAY, MAP, STRUCT), store the Expr directly
+                // Add cast if type doesn't match exactly
+                Expr expr = defaultValueDef.expr;
+                if (expr.getType() != null && !type.matchesType(expr.getType())) {
+                    // Add implicit cast to match column type
+                    if (TypeManager.canCastTo(expr.getType(), type)) {
+                        expr = TypeManager.addCastExpr(expr, type);
+                    }
+                }
+                this.defaultExpr = new DefaultExpr(expr, defaultValueDef.hasArguments);
             }
         }
         this.isAutoIncrement = false;
@@ -461,7 +473,17 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         tColumn.setIs_key(this.isKey);
         tColumn.setIs_allow_null(this.isAllowNull);
         tColumn.setIs_auto_increment(this.isAutoIncrement);
-        tColumn.setDefault_value(this.defaultValue);
+        
+        // Handle default value
+        // For complex types (ARRAY, MAP, STRUCT), use default_expr instead of default_value string
+        if (this.defaultExpr != null && shouldUseExprForDefaultValue()) {
+            // Use expression for complex types
+            tColumn.setDefault_expr(ExprToThrift.treeToThrift(this.defaultExpr.obtainExpr()));
+        } else {
+            // Use string for basic types (backward compatible)
+            tColumn.setDefault_value(this.defaultValue);
+        }
+        
         // The define expr does not need to be serialized here for now.
         // At present, only serialized(analyzed) define expr is directly used when creating a materialized view.
         // It will not be used here, but through another structure `TAlterMaterializedViewParam`.
@@ -472,6 +494,12 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         tColumn.setCol_unique_id(uniqueId);
 
         return tColumn;
+    }
+    
+    private boolean shouldUseExprForDefaultValue() {
+        // Only use expression for complex types
+        // Basic types continue to use string for backward compatibility
+        return type.isArrayType() || type.isMapType() || type.isStructType();
     }
 
     public TAggregationType toThrift(AggregateType aggregateType) {
@@ -696,6 +724,9 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
     public DefaultValueType getDefaultValueType() {
         if (defaultExpr != null) {
             if (isEmptyDefaultTimeFunction(defaultExpr)) {
+                return DefaultValueType.CONST;
+            } else if (defaultExpr.isComplexTypeExpr()) {
+                // ✅ 复杂类型表达式（ARRAY/MAP/STRUCT构造器）是常量
                 return DefaultValueType.CONST;
             } else {
                 return DefaultValueType.VARY;

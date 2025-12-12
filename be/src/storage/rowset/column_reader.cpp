@@ -757,9 +757,26 @@ StatusOr<std::unique_ptr<ColumnIterator>> ColumnReader::_create_merge_struct_ite
                         fmt::format("invalid nonexistent column({}) without default value.", sub_column->name()));
             } else {
                 const TypeInfoPtr& type_info = get_type_info(*sub_column);
-                auto default_value_iter = std::make_unique<DefaultValueColumnIterator>(
-                        sub_column->has_default_value(), sub_column->default_value(), sub_column->is_nullable(),
-                        type_info, sub_column->length(), num_rows());
+                LOG(ERROR) << "StructColumnReader - Creating default iter for subcolumn: " << sub_column->name()
+                           << ", has_default_value: " << sub_column->has_default_value()
+                           << ", default_value: " << sub_column->default_value()
+                           << ", has_evaluated_default_column: " << sub_column->has_evaluated_default_column();
+                
+                // Try pre-evaluated default value first
+                std::unique_ptr<DefaultValueColumnIterator> default_value_iter;
+                if (sub_column->has_evaluated_default_column()) {
+                    const auto& default_col = sub_column->evaluated_default_column();
+                    default_value_iter = std::make_unique<DefaultValueColumnIterator>(
+                            default_col, sub_column->is_nullable(), type_info, num_rows());
+                }
+                
+                // Fall back to string default value
+                if (!default_value_iter) {
+                    default_value_iter = std::make_unique<DefaultValueColumnIterator>(
+                            sub_column->has_default_value(), sub_column->default_value(), 
+                            sub_column->is_nullable(), type_info, sub_column->length(), num_rows());
+                }
+                
                 ColumnIteratorOptions iter_opts;
                 RETURN_IF_ERROR(default_value_iter->init(iter_opts));
                 field_iters.emplace_back(std::move(default_value_iter));

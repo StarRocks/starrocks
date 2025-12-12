@@ -494,12 +494,43 @@ StatusOr<std::unique_ptr<ColumnIterator>> Segment::new_column_iterator_or_defaul
                 fmt::format("invalid nonexistent column({}) without default value.", column.name()));
     } else {
         const TypeInfoPtr& type_info = get_type_info(column);
-        auto default_value_iter = std::make_unique<DefaultValueColumnIterator>(
-                column.has_default_value(), column.default_value(), column.is_nullable(), type_info, column.length(),
-                num_rows());
-        ColumnIteratorOptions iter_opts;
-        RETURN_IF_ERROR(default_value_iter->init(iter_opts));
-        return default_value_iter;
+        LOG(ERROR) << "Segment::new_column_iterator_or_default - Creating default iter for column: " << column.name()
+                   << ", type: " << column.type()
+                   << ", has_default_value: " << column.has_default_value()
+                   << ", default_value: " << column.default_value()
+                   << ", has_evaluated_default_column: " << column.has_evaluated_default_column();
+        
+        // Try to get pre-evaluated default column first
+        if (column.has_evaluated_default_column()) {
+            const auto& default_col = column.evaluated_default_column();
+            LOG(ERROR) << "Using pre-evaluated default column";
+            auto default_value_iter = std::make_unique<DefaultValueColumnIterator>(
+                    default_col, column.is_nullable(), type_info, num_rows());
+            ColumnIteratorOptions iter_opts;
+            RETURN_IF_ERROR(default_value_iter->init(iter_opts));
+            return default_value_iter;
+        }
+        
+        // Use string default value if available
+        if (column.has_default_value()) {
+            auto default_value_iter = std::make_unique<DefaultValueColumnIterator>(
+                    true, column.default_value(), column.is_nullable(), type_info, 
+                    column.length(), num_rows());
+            ColumnIteratorOptions iter_opts;
+            RETURN_IF_ERROR(default_value_iter->init(iter_opts));
+            return default_value_iter;
+        }
+        
+        // No default value at all, create null iterator if nullable
+        if (column.is_nullable()) {
+            auto default_value_iter = std::make_unique<DefaultValueColumnIterator>(
+                    false, "", true, type_info, column.length(), num_rows());
+            ColumnIteratorOptions iter_opts;
+            RETURN_IF_ERROR(default_value_iter->init(iter_opts));
+            return default_value_iter;
+        }
+        
+        return Status::InternalError("Column has no default value and is not nullable");
     }
 }
 
@@ -520,9 +551,22 @@ StatusOr<ColumnIteratorUPtr> Segment::_new_extended_column_iterator(const Tablet
         // The root column does not exist in this segment (e.g., added by schema change later).
         // Fall back to column default/nullability.
         const TypeInfoPtr& type_info = get_type_info(column);
-        auto default_iter = std::make_unique<DefaultValueColumnIterator>(column.has_default_value(),
-                                                                         column.default_value(), column.is_nullable(),
-                                                                         type_info, column.length(), num_rows());
+        
+        // Try pre-evaluated default value first
+        if (column.has_evaluated_default_column()) {
+            const auto& default_col = column.evaluated_default_column();
+            auto default_iter = std::make_unique<DefaultValueColumnIterator>(
+                    default_col, column.is_nullable(), type_info, num_rows());
+            ColumnIteratorOptions iter_opts;
+            RETURN_IF_ERROR(default_iter->init(iter_opts));
+            VLOG(2) << "root column '" << col_name << "' not found, return default from pre-evaluated column for path: " << full_path;
+            return default_iter;
+        }
+        
+        // Fall back to string default value
+        auto default_iter = std::make_unique<DefaultValueColumnIterator>(
+                column.has_default_value(), column.default_value(), column.is_nullable(),
+                type_info, column.length(), num_rows());
         ColumnIteratorOptions iter_opts;
         RETURN_IF_ERROR(default_iter->init(iter_opts));
         VLOG(2) << "root column '" << col_name << "' not found in segment, return default for path: " << full_path;

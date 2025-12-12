@@ -43,63 +43,106 @@ namespace starrocks {
 
 Status DefaultValueColumnIterator::init(const ColumnIteratorOptions& opts) {
     _opts = opts;
+    
+    LOG(ERROR) << "DefaultValueColumnIterator::init() - type: " << _type_info->type() 
+               << ", has_default_value: " << _has_default_value 
+               << ", default_value: " << _default_value 
+               << ", has_cached_column: " << (_cached_default_column != nullptr);
+    
+    // If we have a pre-evaluated cached column, we're done
+    if (_cached_default_column != nullptr) {
+        LOG(ERROR) << "DefaultValueColumnIterator::init() - using pre-evaluated cached column";
+        return Status::OK();
+    }
+    
     // be consistent with segment v1
-    // if _has_default_value, we should create default column iterator for this column, and
+    // if _has_default_value, we should create default column iterator for this column
     // "NULL" is a special default value which means the default value is null.
     if (_has_default_value) {
         if (_default_value == "NULL") {
             DCHECK(_is_nullable);
             _is_default_value_null = true;
-        } else {
-            _type_size = _type_info->size();
-            _mem_value = reinterpret_cast<void*>(_pool.allocate(static_cast<int64_t>(_type_size)));
-            if (UNLIKELY(_mem_value == nullptr)) {
-                return Status::InternalError("Mem usage has exceed the limit of BE");
-            }
-            Status status = Status::OK();
-            if (_type_info->type() == TYPE_CHAR) {
-                auto length = static_cast<int32_t>(_schema_length);
-                char* string_buffer = reinterpret_cast<char*>(_pool.allocate(length));
-                if (UNLIKELY(string_buffer == nullptr)) {
-                    return Status::InternalError("Mem usage has exceed the limit of BE");
-                }
-                memset(string_buffer, 0, length);
-                memory_copy(string_buffer, _default_value.c_str(), _default_value.length());
-                (static_cast<Slice*>(_mem_value))->size = length;
-                (static_cast<Slice*>(_mem_value))->data = string_buffer;
-            } else if (_type_info->type() == TYPE_VARCHAR || _type_info->type() == TYPE_HLL ||
-                       _type_info->type() == TYPE_OBJECT || _type_info->type() == TYPE_PERCENTILE) {
-                auto length = static_cast<int32_t>(_default_value.length());
-                char* string_buffer = reinterpret_cast<char*>(_pool.allocate(length));
-                if (UNLIKELY(string_buffer == nullptr)) {
-                    return Status::InternalError("Mem usage has exceed the limit of BE");
-                }
-                memory_copy(string_buffer, _default_value.c_str(), length);
-                (static_cast<Slice*>(_mem_value))->size = length;
-                (static_cast<Slice*>(_mem_value))->data = string_buffer;
-            } else if (_type_info->type() == TYPE_ARRAY || _type_info->type() == TYPE_MAP ||
-                       _type_info->type() == TYPE_STRUCT) {
-                // @todo: need support complex type literal
-                return Status::NotSupported("Array/Map/Struct default type is unsupported");
-            } else {
-                RETURN_IF_ERROR(_type_info->from_string(_mem_value, _default_value));
-            }
+            LOG(ERROR) << "DefaultValueColumnIterator::init() - setting default to NULL";
+            return Status::OK();
         }
+        
+        LOG(ERROR) << "DefaultValueColumnIterator::init() - using string path";
+        return _init_from_string();
     } else if (_is_nullable) {
-        // if _has_default_value is false but _is_nullable is true, we should return null as default value.
+        // if _has_default_value is false, but _is_nullable is true, 
+        // we should return null as default value.
         _is_default_value_null = true;
+        LOG(ERROR) << "DefaultValueColumnIterator::init() - no default value, setting to NULL (nullable)";
     } else {
+        LOG(ERROR) << "DefaultValueColumnIterator::init() - ERROR: no default value and not nullable";
         return Status::InternalError("invalid default value column for no default value and not nullable");
     }
     return Status::OK();
 }
 
+Status DefaultValueColumnIterator::_init_from_string() {
+    LOG(ERROR) << "_init_from_string() - type: " << _type_info->type() << ", default_value: " << _default_value;
+    
+    _type_size = _type_info->size();
+    _mem_value = reinterpret_cast<void*>(_pool.allocate(static_cast<int64_t>(_type_size)));
+    if (UNLIKELY(_mem_value == nullptr)) {
+        return Status::InternalError("Mem usage has exceed the limit of BE");
+    }
+    Status status = Status::OK();
+    if (_type_info->type() == TYPE_CHAR) {
+        auto length = static_cast<int32_t>(_schema_length);
+        char* string_buffer = reinterpret_cast<char*>(_pool.allocate(length));
+        if (UNLIKELY(string_buffer == nullptr)) {
+            return Status::InternalError("Mem usage has exceed the limit of BE");
+        }
+        memset(string_buffer, 0, length);
+        memory_copy(string_buffer, _default_value.c_str(), _default_value.length());
+        (static_cast<Slice*>(_mem_value))->size = length;
+        (static_cast<Slice*>(_mem_value))->data = string_buffer;
+    } else if (_type_info->type() == TYPE_VARCHAR || _type_info->type() == TYPE_HLL ||
+               _type_info->type() == TYPE_OBJECT || _type_info->type() == TYPE_PERCENTILE) {
+        auto length = static_cast<int32_t>(_default_value.length());
+        char* string_buffer = reinterpret_cast<char*>(_pool.allocate(length));
+        if (UNLIKELY(string_buffer == nullptr)) {
+            return Status::InternalError("Mem usage has exceed the limit of BE");
+        }
+        memory_copy(string_buffer, _default_value.c_str(), length);
+        (static_cast<Slice*>(_mem_value))->size = length;
+        (static_cast<Slice*>(_mem_value))->data = string_buffer;
+    } else if (_type_info->type() == TYPE_ARRAY || _type_info->type() == TYPE_MAP ||
+               _type_info->type() == TYPE_STRUCT) {
+        // @todo: need support complex type literal
+        LOG(ERROR) << "_init_from_string() - ERROR: Complex type not supported yet, type: " << _type_info->type();
+        return Status::NotSupported("Array/Map/Struct default type is unsupported");
+    } else {
+        RETURN_IF_ERROR(_type_info->from_string(_mem_value, _default_value));
+    }
+    
+    LOG(ERROR) << "_init_from_string() - SUCCESS";
+    return Status::OK();
+}
+
 Status DefaultValueColumnIterator::next_batch(size_t* n, Column* dst) {
+    LOG(ERROR) << "next_batch() - n: " << *n 
+               << ", _is_default_value_null: " << _is_default_value_null
+               << ", _cached_default_column: " << (_cached_default_column != nullptr)
+               << ", type: " << _type_info->type();
+    
     if (_is_default_value_null) {
         [[maybe_unused]] bool ok = dst->append_nulls(*n);
         _current_rowid += *n;
+        LOG(ERROR) << "next_batch() - appended " << *n << " NULLs";
         DCHECK(ok) << "cannot append null to non-nullable column";
+    } else if (_cached_default_column != nullptr) {
+        // Use cached expression result for complex types
+        // Use append_value_multiple_times which is efficient for all column types
+        LOG(ERROR) << "next_batch() - using cached column with append_value_multiple_times, size: " 
+                   << _cached_default_column->size();
+        dst->append_value_multiple_times(*_cached_default_column, 0, *n);
+        _current_rowid += *n;
+        LOG(ERROR) << "next_batch() - appended " << *n << " values from cached column";
     } else {
+        // Use _mem_value for basic types
         if (_type_info->type() == TYPE_OBJECT || _type_info->type() == TYPE_HLL ||
             _type_info->type() == TYPE_PERCENTILE) {
             std::vector<Slice> slices;
@@ -112,6 +155,7 @@ Status DefaultValueColumnIterator::next_batch(size_t* n, Column* dst) {
             dst->append_value_multiple_times(_mem_value, *n);
         }
         _current_rowid += *n;
+        LOG(ERROR) << "next_batch() - appended " << *n << " values from _mem_value";
     }
     if (_may_contain_deleted_row) {
         dst->set_delete_state(DEL_PARTIAL_SATISFIED);
@@ -134,7 +178,12 @@ Status DefaultValueColumnIterator::next_batch(const SparseRange<>& range, Column
         [[maybe_unused]] bool ok = dst->append_nulls(to_read);
         _current_rowid = range.end();
         DCHECK(ok) << "cannot append null to non-nullable column";
+    } else if (_cached_default_column != nullptr) {
+        // Use append_value_multiple_times for complex types with cached column
+        dst->append_value_multiple_times(*_cached_default_column, 0, to_read);
+        _current_rowid = range.end();
     } else {
+        // Use _mem_value for basic types
         if (_type_info->type() == TYPE_OBJECT || _type_info->type() == TYPE_HLL ||
             _type_info->type() == TYPE_PERCENTILE) {
             std::vector<Slice> slices;

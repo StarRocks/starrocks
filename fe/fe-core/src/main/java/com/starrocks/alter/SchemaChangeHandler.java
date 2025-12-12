@@ -1113,11 +1113,19 @@ public class SchemaChangeHandler extends AlterHandler {
      */
     private boolean addColumnInternal(OlapTable olapTable, Column newColumn, ColumnPosition columnPos,
                                       long targetIndexId, long baseIndexId,
-                                      Map<Long, LinkedList<Column>> indexSchemaMap,
-                                      Set<String> newColNameSet) throws DdlException {
+                                     Map<Long, LinkedList<Column>> indexSchemaMap,
+                                     Set<String> newColNameSet) throws DdlException {
 
         Column.DefaultValueType defaultValueType = newColumn.getDefaultValueType();
+        LOG.info("addColumnInternal: column={}, defaultValueType={}, defaultExpr={}, type={}", 
+                 newColumn.getName(), defaultValueType, 
+                 newColumn.getDefaultExpr() != null ? newColumn.getDefaultExpr().getExpr() : "null",
+                 newColumn.getType());
+        
         if (defaultValueType != Column.DefaultValueType.CONST && defaultValueType != Column.DefaultValueType.NULL) {
+            LOG.error("Unsupported default value type: column={}, defaultValueType={}, defaultExpr={}", 
+                     newColumn.getName(), defaultValueType, 
+                     newColumn.getDefaultExpr() != null ? newColumn.getDefaultExpr().getExpr() : "null");
             throw new DdlException("unsupported default expr:" + newColumn.getDefaultExpr().getExpr());
         }
 
@@ -1131,8 +1139,16 @@ public class SchemaChangeHandler extends AlterHandler {
             fastSchemaEvolution = false;
         }
         if (newColumn.getDefaultExpr() != null && newColumn.getDefaultValueType() == Column.DefaultValueType.CONST) {
-            long startTime = ConnectContext.get().getStartTime();
-            newColumn.setDefaultValue(newColumn.calculatedDefaultValueWithTime(startTime));
+            // For complex types (ARRAY/MAP/STRUCT), keep defaultExpr and don't convert to string
+            // For basic types, calculate string value for backward compatibility
+            if (!newColumn.getType().isComplexType()) {
+                long startTime = ConnectContext.get().getStartTime();
+                String calculatedValue = newColumn.calculatedDefaultValueWithTime(startTime);
+                if (calculatedValue != null) {
+                    newColumn.setDefaultValue(calculatedValue);
+                }
+            }
+            // Note: for complex types, defaultExpr is preserved, no defaultValue is set
         }
 
         String newColName = newColumn.getName();
@@ -3062,6 +3078,16 @@ public class SchemaChangeHandler extends AlterHandler {
                 }
 
                 currentIndexMeta.setSchema(indexSchema);
+                
+                // Log schema for debugging
+                for (Column col : indexSchema) {
+                    if (col.getType().isComplexType()) {
+                        LOG.info("Setting schema - column: {}, type: {}, defaultValue: {}, defaultExpr: {}, isComplexType: {}",
+                                col.getName(), col.getType(), col.getDefaultValue(),
+                                col.getDefaultExpr() != null ? col.getDefaultExpr().getExpr() : "null",
+                                col.getType().isComplexType());
+                    }
+                }
                 if (!newSortKeyIdxes.isEmpty()) {
                     currentIndexMeta.setSortKeyIdxes(newSortKeyIdxes);
                 }

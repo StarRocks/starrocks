@@ -453,7 +453,7 @@ charsetName
     ;
 
 defaultDesc
-    : DEFAULT (string | NULL | CURRENT_TIMESTAMP ('(' (INTEGER_VALUE)? ')')? | '(' qualifiedName '(' ')' ')')
+    : DEFAULT (string | NULL | CURRENT_TIMESTAMP ('(' (INTEGER_VALUE)? ')')? | '(' qualifiedName '(' ')' ')' | primaryExpression)
     ;
 
 generatedColumnDesc
