@@ -387,7 +387,7 @@ public class VacuumTest {
             }
         };
 
-        Config.enable_lake_fullvacuum = true;
+        Config.lake_enable_fullvacuum = true;
         FeConstants.runningUnitTest = false;
         int oldValue1 = Config.lake_fullvacuum_parallel_partitions;
         long oldValue2 = Config.lake_fullvacuum_partition_naptime_seconds;
@@ -397,7 +397,7 @@ public class VacuumTest {
         Config.lake_fullvacuum_partition_naptime_seconds = oldValue2;
         Config.lake_fullvacuum_parallel_partitions = oldValue1;
         FeConstants.runningUnitTest = true;
-        Config.enable_lake_fullvacuum = false;
+        Config.lake_enable_fullvacuum = false;
     }
 
     @Test

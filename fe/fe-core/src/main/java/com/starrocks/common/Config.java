@@ -3214,7 +3214,7 @@ public class Config extends ConfigBase {
     public static long lake_fullvacuum_meta_expired_seconds = 3600L * 24L * 2L;
 
     @ConfField(mutable = true, comment = "Whether to enable full vacuum daemon")
-    public static boolean enable_lake_fullvacuum = false;
+    public static boolean lake_enable_fullvacuum = false;
 
     @ConfField(mutable = true, comment =
             "Whether enable throttling ingestion speed when compaction score exceeds the threshold.\n" +
