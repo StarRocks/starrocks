@@ -399,13 +399,13 @@ Status Aggregator::open(RuntimeState* state) {
     return Status::OK();
 }
 
-Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* runtime_profile) {
+Status Aggregator::prepare(RuntimeState* state, RuntimeProfile* runtime_profile) {
     if (_is_prepared) {
         return Status::OK();
     }
     _is_prepared = true;
     _state = state;
-    _pool = pool;
+    _pool = std::make_unique<ObjectPool>();
     _runtime_profile = runtime_profile;
 
     _limit = _params->limit;
@@ -414,9 +414,9 @@ Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile
     _intermediate_tuple_id = _params->intermediate_tuple_id;
     _output_tuple_id = _params->output_tuple_id;
 
-    RETURN_IF_ERROR(Expr::create_expr_trees(_pool, _params->conjuncts, &_conjunct_ctxs, state, true));
-    RETURN_IF_ERROR(Expr::create_expr_trees(_pool, _params->grouping_exprs, &_group_by_expr_ctxs, state, true));
-    RETURN_IF_ERROR(Expr::create_expr_trees(_pool, _params->grouping_min_max, &_group_by_min_max, state, true));
+    RETURN_IF_ERROR(Expr::create_expr_trees(_pool.get(), _params->conjuncts, &_conjunct_ctxs, state, true));
+    RETURN_IF_ERROR(Expr::create_expr_trees(_pool.get(), _params->grouping_exprs, &_group_by_expr_ctxs, state, true));
+    RETURN_IF_ERROR(Expr::create_expr_trees(_pool.get(), _params->grouping_min_max, &_group_by_min_max, state, true));
     _ranges.resize(_group_by_expr_ctxs.size());
     if (_group_by_min_max.size() == _group_by_expr_ctxs.size() * 2) {
         for (size_t i = 0; i < _group_by_expr_ctxs.size(); ++i) {
@@ -472,8 +472,8 @@ Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile
             ++node_idx;
             Expr* expr = nullptr;
             ExprContext* ctx = nullptr;
-            RETURN_IF_ERROR(
-                    Expr::create_tree_from_thrift_with_jit(_pool, desc.nodes, nullptr, &node_idx, &expr, &ctx, state));
+            RETURN_IF_ERROR(Expr::create_tree_from_thrift_with_jit(_pool.get(), desc.nodes, nullptr, &node_idx, &expr,
+                                                                   &ctx, state));
             _agg_expr_ctxs[i].emplace_back(ctx);
         }
 
@@ -493,7 +493,7 @@ Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile
             int node_idx = 0;
             Expr* expr = nullptr;
             ExprContext* ctx = nullptr;
-            RETURN_IF_ERROR(Expr::create_tree_from_thrift_with_jit(_pool, aggr_exprs[i].nodes, nullptr, &node_idx,
+            RETURN_IF_ERROR(Expr::create_tree_from_thrift_with_jit(_pool.get(), aggr_exprs[i].nodes, nullptr, &node_idx,
                                                                    &expr, &ctx, state));
             _intermediate_agg_expr_ctxs[i].emplace_back(ctx);
         }

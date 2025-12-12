@@ -1352,6 +1352,11 @@ public class UtFrameUtils {
             // Disable text based rewrite by default.
             connectContext.getSessionVariable().setEnableMaterializedViewTextMatchRewrite(false);
             connectContext.getSessionVariable().setTraceLogLevel(10);
+            connectContext.getSessionVariable().setEnableSingleNodeSchedule(false);
+            // Also disable SingleNodeSchedule in the global default session variable
+            // This ensures that any new ConnectContext created (e.g., by TaskRun) will inherit this setting
+            GlobalStateMgr.getCurrentState().getVariableMgr().getDefaultSessionVariable()
+                    .setEnableSingleNodeSchedule(false);
         }
 
         new MockUp<PlanTestBase>() {

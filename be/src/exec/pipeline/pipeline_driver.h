@@ -259,6 +259,8 @@ public:
     DriverAcct& driver_acct() { return _driver_acct; }
     DriverState driver_state() const { return _state; }
 
+    Status prepare_local_state(RuntimeState* runtime_state);
+
     void increment_schedule_times();
 
     void set_driver_state(DriverState state) {
@@ -553,6 +555,8 @@ public:
     void assign_observer();
     bool is_operator_cancelled() const { return _is_operator_cancelled; }
 
+    bool local_prepare_is_done() const { return _local_prepare_is_done; }
+
 protected:
     PipelineDriver()
             : _observer(this),
@@ -642,6 +646,9 @@ protected:
 
     std::unique_ptr<PipelineTimerTask> _global_rf_timer;
 
+    std::atomic<bool> _local_prepare_is_done{false};
+
+protected:
     // metrics
     RuntimeProfile::Counter* _total_timer = nullptr;
     RuntimeProfile::Counter* _active_timer = nullptr;
@@ -674,6 +681,9 @@ protected:
     MonotonicStopWatch* _pending_finish_timer_sw = nullptr;
 
     RuntimeProfile::HighWaterMarkCounter* _peak_driver_queue_size_counter = nullptr;
+
+private:
+    void prepare_profile();
 };
 
 } // namespace pipeline
