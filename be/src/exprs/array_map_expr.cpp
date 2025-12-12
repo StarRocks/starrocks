@@ -207,6 +207,13 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_lambda_expr(ExprContext* context, Chu
         ColumnPtr tmp_col;
         if (!cur_chunk->has_columns()) {
             ASSIGN_OR_RETURN(tmp_col, context->evaluate(_children[0], nullptr));
+            DCHECK_EQ(tmp_col->size(), 1);
+            // Now we cannot guarantee that a const column input will return a const column.
+            if (tmp_col->has_null()) {
+                tmp_col = ColumnHelper::create_const_null_column(1);
+            } else {
+                tmp_col = ConstColumn::create(ColumnHelper::get_data_column(tmp_col.get()), 1);
+            }
         } else {
             ASSIGN_OR_RETURN(tmp_col, context->evaluate(_children[0], cur_chunk.get()));
         }

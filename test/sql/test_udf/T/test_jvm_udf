@@ -1,0 +1,216 @@
+-- name: test_jvm_udf
+
+set enable_group_execution = true;
+
+CREATE AGGREGATE FUNCTION sumbigint(bigint)
+RETURNS bigint
+symbol = "Sumbigint"
+type = "StarrocksJar"
+file = "${udf_url}/starrocks-jdbc%2FSumbigint.jar";
+
+CREATE TABLE FUNCTION udtfstring(string)
+RETURNS string
+symbol = "UDTFstring"
+type = "StarrocksJar"
+file = "${udf_url}/starrocks-jdbc%2FUDTFstring.jar";
+
+CREATE TABLE FUNCTION udtfstring_wrong_match(string)
+RETURNS int
+symbol = "UDTFstring"
+type = "StarrocksJar"
+file = "${udf_url}/starrocks-jdbc%2FUDTFstring.jar";
+
+CREATE TABLE FUNCTION udtfint(int)
+RETURNS int
+symbol = "UDTFint"
+type = "StarrocksJar"
+file = "${udf_url}/starrocks-jdbc%2FUDTFint.jar";
+
+CREATE TABLE FUNCTION udtfbigint(bigint)
+RETURNS bigint
+symbol = "UDTFbigint"
+type = "StarrocksJar"
+file = "${udf_url}/starrocks-jdbc%2FUDTFbigint.jar";
+
+CREATE TABLE FUNCTION udtffloat(float)
+RETURNS float
+symbol = "UDTFfloat"
+type = "StarrocksJar"
+file = "${udf_url}/starrocks-jdbc%2FUDTFfloat.jar";
+
+CREATE TABLE FUNCTION udtfdouble(double)
+RETURNS double
+symbol = "UDTFdouble"
+type = "StarrocksJar"
+file = "${udf_url}/starrocks-jdbc%2FUDTFdouble.jar";
+
+CREATE FUNCTION exception_test(string)
+RETURNS string
+PROPERTIES
+(
+"symbol" = "ExceptionUDF2", 
+"type" = "StarrocksJar", 
+"file" = "${udf_url}/starrocks-jdbc/ExceptionUDF2.jar"
+);
+
+CREATE FUNCTION shared_exception_test(string)
+RETURNS string
+PROPERTIES
+(
+"symbol" = "ExceptionUDF2", 
+"isolation"="shared",
+"type" = "StarrocksJar", 
+"file" = "${udf_url}/starrocks-jdbc/ExceptionUDF2.jar"
+);
+
+CREATE TABLE `t0` (
+  `c0` int(11) NULL COMMENT "",
+  `c1` varchar(20) NULL COMMENT "",
+  `c2` varchar(200) NULL COMMENT "",
+  `c3` int(11) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`c0`, `c1`)
+COMMENT "OLAP"
+PROPERTIES (
+"replication_num" = "1"
+);
+
+insert into t0 SELECT generate_series, generate_series, generate_series, generate_series FROM TABLE(generate_series(1,  40960));
+
+-- test udtf cases
+select count(udtfstring) from t0, udtfstring(c1);
+select count(udtfstring_wrong_match) from t0, udtfstring_wrong_match(c1);
+select count(udtfint) from t0, udtfint(c1);
+select count(udtfbigint) from t0, udtfbigint(c1);
+select count(udtffloat) from t0, udtffloat(c1);
+select count(udtfdouble) from t0, udtfdouble(c1);
+-- test udtf with utf8 case
+select * from TABLE(udtfstring(""));
+select * from TABLE(udtfstring("▁▂▃▄▅▆▇█"));
+select * from TABLE(udtfstring("中文测试"));
+select * from TABLE(udtfstring("∀∂∈ℝ∧∪≡∞ ↑↗↨↻⇣ ┐┼╔╘░►☺♀ ﬁ�⑀₂ἠḂӥẄɐː⍎אԱა"));
+select * from TABLE(udtfstring("2H₂ + O₂ ⇌ 2H₂O"));
+select * from TABLE(udtfstring("ᚻᛖ ᚳᚹᚫᚦ ᚦᚫᛏ ᚻᛖ ᛒᚢᛞᛖ ᚩᚾ ᚦᚫᛗ ᛚᚪᚾᛞᛖ ᚾᚩᚱᚦᚹᛖᚪᚱᛞᚢᛗ ᚹᛁᚦ ᚦᚪ ᚹᛖᛥᚫ"));
+
+
+-- test group by limit case:
+set streaming_preaggregation_mode="force_streaming";
+select sum(delta), count(*), count(delta) from (select (sum(c3) - sumbigint(c3)) as delta from t0 group by c0,c1 limit 10) tb;
+
+-- test group by spill case:
+set streaming_preaggregation_mode="auto";
+set enable_spill=true;
+set spill_mode="force";
+
+select sum(delta), count(*), count(delta) from (select (sum(c3) - sumbigint(c3)) as delta from t0 group by c0,c1) tb;
+-- test udf exception case
+select count(*) from t0 where exception_test(c1) is null;
+-- run two times
+select count(*) from t0 where shared_exception_test(c1) is null;
+select count(*) from t0 where shared_exception_test(c1) is null;
+
+-- test array and map
+CREATE FUNCTION echo_array_string(array<string>)
+RETURNS array<string>
+PROPERTIES
+(
+  "symbol" = "EchoArray", 
+  "isolation"="shared",
+  "type" = "StarrocksJar", 
+  "file" = "${udf_url}/starrocks-jdbc/ArrayMap.jar"
+);
+
+CREATE FUNCTION echo_array_int(array<int>)
+RETURNS array<int>
+PROPERTIES
+(
+  "symbol" = "EchoArray", 
+  "isolation"="shared",
+  "type" = "StarrocksJar", 
+  "file" = "${udf_url}/starrocks-jdbc/ArrayMap.jar"
+);
+
+CREATE FUNCTION echo_map(map<int,string>)
+RETURNS map<int,string>
+PROPERTIES
+(
+  "symbol" = "EchoMap", 
+  "isolation"="shared",
+  "type" = "StarrocksJar", 
+  "file" = "${udf_url}/starrocks-jdbc/ArrayMap.jar"
+);
+
+CREATE TABLE `tlistarray` (
+  `c0` int(11) NULL COMMENT "",
+  `c1` array<int> NULL,
+  `c2` array<string> NULL COMMENT "",
+  `c3` map<string, int> NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`c0`)
+COMMENT "OLAP"
+PROPERTIES (
+"replication_num" = "1"
+);
+
+select echo_array_int([1,2,3]);
+select echo_array_string([1,2,3]);
+select echo_map(map(1,2,3,4));
+
+insert into tlistarray values(1, [1,2,3], [1,2,3], map(1,2,3,4)), (2, [4,5], ["6", "7"], map(4,5,1,2)), (null,null,null,null);
+select c0,echo_array_int(c1) from tlistarray order by 1;
+select c0,echo_array_string(c2) from tlistarray order by 1;
+select c0,echo_map(c3) from tlistarray order by 1;
+select echo_map(map()),echo_array_int([]), echo_array_string([]);
+
+CREATE FUNCTION invalid_func(bigint)
+RETURNS bigint
+symbol = "SumbigintInvalid"
+type = "StarrocksJar"
+file = "${udf_url}/starrocks-jdbc%2FSumbigint.jar";
+
+select echo_map(map("","")), echo_map(map(null, null)),echo_array_int([1]), echo_array_string([1]);
+
+CREATE FUNCTION echo_map2(map<int,string>)
+RETURNS map<int,string>
+PROPERTIES
+(
+  "symbol" = "EchoMap", 
+  "isolation"="shared",
+  "type" = "StarrocksJar", 
+  "file" = "${udf_url}/starrocks-jdbc/ArrayMap.jar?v=2"
+);
+select echo_map2(map("","")), echo_map2(map(null, null));
+
+CREATE aggregate FUNCTION sum_map(map<string,bigint>)
+RETURNS map<string,bigint>
+properties (
+"symbol" = "com.starrocks.udf.SumMapInt64",
+"type" = "StarrocksJar",
+"file" = "${udf_url}/starrocks-jdbc/java-udf.jar?v=2"
+);
+
+create table map_table (id int, data map<string, bigint>);
+insert into map_table values (1, map{"a": 10, "b": 20}), (1, map{"a": 20, "c": 20}),  (2, map{"d": 20, "e": 30}), (2, map{null: 40, "d": 30});
+select id, data from map_table order by id;
+select id, sum_map(data) from map_table group by id order by id;
+
+CREATE FUNCTION echoint(int)
+RETURNS int
+symbol = "Echoint"
+type = "StarrocksJar"
+file = "${udf_url}/starrocks-jdbc/udf.jar";
+
+CREATE TABLE `t1` (
+  `c0` int DEFAULT NULL,
+  `c1` int DEFAULT NULL,
+  `c2` array<int> DEFAULT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`c0`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`c0`) BUCKETS 4
+PROPERTIES (
+"replication_num" = "1"
+);
+
+insert into t1 SELECT generate_series, 4096 - generate_series, [generate_series] FROM TABLE(generate_series(1,  40960));
+select count(*) from (select * from t1 where any_match((x)->cast(echoint(1) as boolean), c2)) t;
