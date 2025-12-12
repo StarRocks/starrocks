@@ -25,6 +25,7 @@ import com.starrocks.catalog.MvBaseTableUpdateInfo;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.mv.MVTimelinessArbiter;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
@@ -69,7 +70,9 @@ public abstract class MVPCTRefreshPartitioner {
     protected final TaskRunContext context;
     protected final Database db;
     protected final MaterializedView mv;
-    private final Logger logger;
+    protected final Logger logger;
+    protected final MVTimelinessArbiter.QueryRewriteParams queryRewriteParams =
+            MVTimelinessArbiter.QueryRewriteParams.ofRefresh();
 
     public MVPCTRefreshPartitioner(MvTaskRunContext mvContext,
                                    TaskRunContext context,
@@ -269,7 +272,7 @@ public abstract class MVPCTRefreshPartitioner {
 
             // check the updated partition names in the ref base table
             MvBaseTableUpdateInfo mvBaseTableUpdateInfo = getMvBaseTableUpdateInfo(mv, baseTable,
-                    false, false);
+                    false, queryRewriteParams);
             if (mvBaseTableUpdateInfo == null) {
                 throw new DmlException(String.format("Find the updated partition info of ref base table %s of mv " +
                         "%s failed, current mv partitions:%s", baseTable.getName(), mv.getName(), mvPartitionNames));
@@ -310,7 +313,7 @@ public abstract class MVPCTRefreshPartitioner {
             if (tableColumnMap.containsKey(snapshotTable)) {
                 continue;
             }
-            if (needsToRefreshTable(mv, snapshotInfo.getBaseTableInfo(), snapshotTable, false)) {
+            if (needsToRefreshTable(mv, snapshotInfo.getBaseTableInfo(), snapshotTable, queryRewriteParams)) {
                 return true;
             }
         }
@@ -329,7 +332,8 @@ public abstract class MVPCTRefreshPartitioner {
             if (!isPartitionRefreshSupported(snapshotTable)) {
                 return true;
             }
-            if (needsToRefreshTable(mv, snapshotInfo.getBaseTableInfo(), snapshotTable, false)) {
+            if (needsToRefreshTable(mv, snapshotInfo.getBaseTableInfo(), snapshotTable,
+                    MVTimelinessArbiter.QueryRewriteParams.ofRefresh())) {
                 return true;
             }
         }
