@@ -317,6 +317,12 @@ public class AuthenticationMgrEditLogTest {
                 createStmt.getUser().getHost(), createStmt.getUser().isDomain());
         Assertions.assertTrue(authenticationMgr.doesUserExist(userIdentity));
 
+        // Save original state for comparison
+        UserAuthenticationInfo originalAuthInfo = authenticationMgr.getUserAuthenticationInfoByUserIdentity(userIdentity);
+        UserProperty originalUserProperty = authenticationMgr.getUserProperty(userIdentity.getUser());
+        byte[] originalPassword = originalAuthInfo.getPassword();
+        long originalMaxConn = originalUserProperty.getMaxConn();
+
         // 2. Prepare alter user data
         UserAuthenticationInfo newAuthInfo = new UserAuthenticationInfo(createStmt.getUser(), 
                 new UserAuthOption(null, "newpassword", true, NodePosition.ZERO));
@@ -329,6 +335,21 @@ public class AuthenticationMgrEditLogTest {
         // 4. Verify master state
         UserAuthenticationInfo updatedAuthInfo = authenticationMgr.getUserAuthenticationInfoByUserIdentity(userIdentity);
         Assertions.assertNotNull(updatedAuthInfo);
+        // Verify UserAuthenticationInfo was updated - password should be different
+        byte[] updatedPassword = updatedAuthInfo.getPassword();
+        Assertions.assertNotNull(updatedPassword);
+        Assertions.assertTrue(updatedPassword.length > 0, "Password should not be empty after alter");
+        Assertions.assertFalse(java.util.Arrays.equals(originalPassword, updatedPassword), 
+                "Password should be different from original after alter");
+        Assertions.assertEquals("MYSQL_NATIVE_PASSWORD", updatedAuthInfo.getAuthPlugin());
+
+        // Verify UserProperty was updated
+        UserProperty updatedUserProperty = authenticationMgr.getUserProperty(userIdentity.getUser());
+        Assertions.assertNotNull(updatedUserProperty);
+        Assertions.assertEquals(100, updatedUserProperty.getMaxConn(), 
+                "max_user_connections should be updated to 100");
+        Assertions.assertNotEquals(originalMaxConn, updatedUserProperty.getMaxConn(), 
+                "max_user_connections should be different from original");
 
         // 5. Test follower replay functionality
         AuthenticationMgr followerAuthMgr = new AuthenticationMgr();
@@ -350,6 +371,22 @@ public class AuthenticationMgrEditLogTest {
         Assertions.assertTrue(followerAuthMgr.doesUserExist(userIdentity));
         UserAuthenticationInfo followerAuthInfo = followerAuthMgr.getUserAuthenticationInfoByUserIdentity(userIdentity);
         Assertions.assertNotNull(followerAuthInfo);
+        // Verify UserAuthenticationInfo in follower matches master
+        byte[] followerPassword = followerAuthInfo.getPassword();
+        Assertions.assertNotNull(followerPassword);
+        Assertions.assertTrue(followerPassword.length > 0, "Follower password should not be empty");
+        Assertions.assertTrue(java.util.Arrays.equals(updatedPassword, followerPassword), 
+                "Follower password should match master password");
+        Assertions.assertEquals(updatedAuthInfo.getAuthPlugin(), followerAuthInfo.getAuthPlugin(),
+                "Follower auth plugin should match master");
+
+        // Verify UserProperty in follower matches master
+        UserProperty followerUserProperty = followerAuthMgr.getUserProperty(userIdentity.getUser());
+        Assertions.assertNotNull(followerUserProperty);
+        Assertions.assertEquals(100, followerUserProperty.getMaxConn(), 
+                "Follower max_user_connections should be 100");
+        Assertions.assertEquals(updatedUserProperty.getMaxConn(), followerUserProperty.getMaxConn(), 
+                "Follower max_user_connections should match master");
     }
 
     @Test
@@ -379,6 +416,9 @@ public class AuthenticationMgrEditLogTest {
 
         // Save initial state snapshot
         UserAuthenticationInfo initialAuthInfo = authenticationMgr.getUserAuthenticationInfoByUserIdentity(userIdentity);
+        byte[] initialPassword = initialAuthInfo.getPassword();
+        UserProperty initialUserProperty = authenticationMgr.getUserProperty(userIdentity.getUser());
+        long initialMaxConn = initialUserProperty.getMaxConn();
 
         // 4. Execute alterUser operation and expect exception
         RuntimeException exception = Assertions.assertThrows(RuntimeException.class, () -> {
@@ -389,7 +429,19 @@ public class AuthenticationMgrEditLogTest {
         // 5. Verify leader memory state remains unchanged after exception
         UserAuthenticationInfo unchangedAuthInfo = authenticationMgr.getUserAuthenticationInfoByUserIdentity(userIdentity);
         Assertions.assertNotNull(unchangedAuthInfo);
-        // Note: We can't easily compare auth info, but we verify the user still exists
+        // Verify UserAuthenticationInfo password was not changed
+        byte[] unchangedPassword = unchangedAuthInfo.getPassword();
+        Assertions.assertNotNull(unchangedPassword);
+        Assertions.assertTrue(java.util.Arrays.equals(initialPassword, unchangedPassword), 
+                "Password should remain unchanged after EditLog exception");
+        Assertions.assertEquals(initialAuthInfo.getAuthPlugin(), unchangedAuthInfo.getAuthPlugin(),
+                "Auth plugin should remain unchanged after EditLog exception");
+
+        // Verify UserProperty max_user_connections was not changed
+        UserProperty unchangedUserProperty = authenticationMgr.getUserProperty(userIdentity.getUser());
+        Assertions.assertNotNull(unchangedUserProperty);
+        Assertions.assertEquals(initialMaxConn, unchangedUserProperty.getMaxConn(), 
+                "max_user_connections should remain unchanged after EditLog exception");
         Assertions.assertTrue(authenticationMgr.doesUserExist(userIdentity));
     }
 
