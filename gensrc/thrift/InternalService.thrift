@@ -360,12 +360,24 @@ struct TQueryOptions {
   // 0: fnv_hash (default, for backward compatibility)
   // 1: xxh3_hash (faster)
   201: optional i32 exchange_hash_function_version = 0;
+<<<<<<< HEAD
    // whether enable predicate column late materialization
   202: optional bool enable_predicate_col_late_materialize;
   
+=======
+
+>>>>>>> fcdb4e8944 ([Feature] Add http_request() function for SQL-based HTTP requests)
   210: optional bool enable_global_late_materialization;
   211: optional bool enable_schedule_log;
 
+  // http_request function SSL settings
+  212: optional bool http_request_ssl_verification_required = true;
+
+  // http_request function SSRF protection settings
+  213: optional i32 http_request_security_level = 3;
+  214: optional string http_request_ip_allowlist = "";
+  215: optional string http_request_host_allowlist_regexp = "";
+  216: optional bool http_request_allow_private_in_allowlist = false;
 }
 
 // A scan range plus the parameters needed to execute that scan.

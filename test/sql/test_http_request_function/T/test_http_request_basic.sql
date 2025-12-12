@@ -1,0 +1,249 @@
+-- name: test_http_request_basic
+-- description: Basic tests for http_request() function with Named Parameters
+-- Note: Uses jsonplaceholder.typicode.com as a reliable public API
+-- Response format: {"status": <code>, "body": <content>} or {"status": -1, "body": null, "error": "<message>"}
+--
+-- Function signature:
+--   http_request(
+--     url VARCHAR,           -- Required: The URL to request
+--     method VARCHAR,        -- Default: 'GET'
+--     body VARCHAR,          -- Default: ''
+--     headers VARCHAR,       -- Default: '{}' (JSON object)
+--     timeout_ms INT,        -- Default: 30000
+--     ssl_verify BOOLEAN,    -- Default: true
+--     username VARCHAR,      -- Default: ''
+--     password VARCHAR       -- Default: ''
+--   ) -> VARCHAR
+
+-- Setup: Allow external API hosts for basic functional tests
+ADMIN SET FRONTEND CONFIG ("http_request_host_allowlist_regexp" = "jsonplaceholder\\.typicode\\.com|httpbin\\.org");
+
+-- Test 1: NULL input returns error (required parameter cannot be NULL)
+SELECT http_request(url => NULL);
+
+-- Test 2: Empty string returns JSON with error
+SELECT json_query(http_request(url => ''), '$.status') as status;
+
+-- Test 3: Invalid URL returns JSON with error
+SELECT json_query(http_request(url => 'not a valid url'), '$.status') as status;
+
+-- Test 4: Simple GET request (url only) - check status code
+SELECT json_query(http_request(url => 'https://jsonplaceholder.typicode.com/posts/1'), '$.status') as status;
+
+-- Test 5: GET and parse JSON response body
+SELECT json_query(
+    json_query(http_request(url => 'https://jsonplaceholder.typicode.com/posts/1'), '$.body'),
+    '$.id'
+) as post_id;
+
+-- Test 6: POST with Named Parameters
+SELECT json_query(
+    json_query(http_request(
+        url => 'https://jsonplaceholder.typicode.com/posts',
+        method => 'POST',
+        headers => '{"Content-Type": "application/json"}',
+        body => '{"title": "test post", "body": "hello world", "userId": 1}',
+        timeout_ms => 30000
+    ), '$.body'),
+    '$.title'
+) as created_title;
+
+-- Test 7: DELETE request with Named Parameters
+SELECT json_query(http_request(
+    url => 'https://jsonplaceholder.typicode.com/posts/1',
+    method => 'DELETE'
+), '$.status') as status;
+
+-- Test 8: Request with SSL options (disable verification)
+SELECT json_query(http_request(
+    url => 'https://jsonplaceholder.typicode.com/posts/1',
+    ssl_verify => false
+), '$.status') as status;
+
+-- Test 9: Invalid domain returns JSON with status -1 (network error)
+SELECT json_query(http_request(
+    url => 'https://invalid-domain-that-does-not-exist-12345.com/api',
+    timeout_ms => 5000
+), '$.status') as status;
+
+-- Test 10: HTTP 404 error returns JSON with status 404
+SELECT json_query(http_request(
+    url => 'https://jsonplaceholder.typicode.com/posts/99999'
+), '$.status') as status;
+
+-- Test 11: GET with custom headers using Named Parameters
+SELECT json_query(http_request(
+    url => 'https://jsonplaceholder.typicode.com/posts/1',
+    headers => '{"Accept": "application/json"}'
+), '$.status') as status;
+
+-- Test 12: Very short timeout returns JSON with status -1 (timeout error)
+SELECT json_query(http_request(
+    url => 'https://jsonplaceholder.typicode.com/posts/1',
+    timeout_ms => 1
+), '$.status') as status;
+
+-- Test 13: Large response (100 posts ~27KB) - should work within 1MB limit
+SELECT json_query(http_request(
+    url => 'https://jsonplaceholder.typicode.com/posts'
+), '$.status') as status;
+
+-- Test 14: Very large response (photos ~25MB) - exceeds 1MB limit, returns error
+SELECT json_query(http_request(
+    url => 'https://jsonplaceholder.typicode.com/photos',
+    timeout_ms => 60000
+), '$.status') as status;
+
+-- Test 15: POST with body as string (not auto-stringify)
+SELECT json_query(http_request(
+    url => 'https://jsonplaceholder.typicode.com/posts',
+    method => 'POST',
+    headers => '{"Content-Type": "text/plain"}',
+    body => 'plain text body'
+), '$.status') as status;
+
+-- ============================================================
+-- Slack Webhook Integration Tests
+-- ============================================================
+
+-- Test 16: Slack Webhook - Simple Message
+SELECT json_query(http_request(
+    url => 'https://hooks.slack.com/services/INVALID/WEBHOOK/URL',
+    method => 'POST',
+    headers => '{"Content-Type": "application/json"}',
+    body => '{"text": "Test 16: Simple message from StarRocks http_request function"}'
+), '$.status') as status;
+
+-- Test 17: Slack Webhook - Rich Message with Block Kit (Sales Report)
+SELECT json_query(http_request(
+    url => 'https://hooks.slack.com/services/INVALID/WEBHOOK/URL',
+    method => 'POST',
+    headers => '{"Content-Type": "application/json"}',
+    body => '{"blocks": [{"type": "header", "text": {"type": "plain_text", "text": "Sales Summary from StarRocks", "emoji": true}}, {"type": "section", "fields": [{"type": "mrkdwn", "text": "*North:* $125,000.50"}, {"type": "mrkdwn", "text": "*South:* $98,000.25"}, {"type": "mrkdwn", "text": "*East:* $156,000.75"}, {"type": "mrkdwn", "text": "*West:* $142,000.00"}]}]}'
+), '$.status') as status;
+
+-- Test 18: Slack Webhook - Alert with Attachments (CPU Alert)
+SELECT json_query(http_request(
+    url => 'https://hooks.slack.com/services/INVALID/WEBHOOK/URL',
+    method => 'POST',
+    headers => '{"Content-Type": "application/json"}',
+    body => '{"attachments": [{"color": "#ff0000", "title": "High CPU Alert", "text": "Server node-01 CPU usage exceeded 90%", "fields": [{"title": "Server", "value": "node-01", "short": true}, {"title": "CPU", "value": "92.5%", "short": true}, {"title": "Memory", "value": "78.3%", "short": true}, {"title": "Status", "value": "Critical", "short": true}], "footer": "StarRocks Monitoring"}]}'
+), '$.status') as status;
+
+-- ============================================================
+-- SSL Verification Tests (using badssl.com test sites)
+-- ============================================================
+
+-- Test 19: Self-signed certificate with ssl_verify=true (default) - should fail
+SELECT json_query(http_request(url => 'https://self-signed.badssl.com/'), '$.status') as status;
+
+-- Test 20: Self-signed certificate with ssl_verify=false - should succeed
+SELECT json_query(http_request(
+    url => 'https://self-signed.badssl.com/',
+    ssl_verify => false
+), '$.status') as status;
+
+-- Test 21: Expired certificate with ssl_verify=true (default) - should fail
+SELECT json_query(http_request(url => 'https://expired.badssl.com/'), '$.status') as status;
+
+-- Test 22: Expired certificate with ssl_verify=false - should succeed
+SELECT json_query(http_request(
+    url => 'https://expired.badssl.com/',
+    ssl_verify => false
+), '$.status') as status;
+
+-- ============================================================
+-- Named Parameter Order Tests
+-- ============================================================
+
+-- Test 23: Named parameters in different order (should work the same)
+SELECT json_query(http_request(
+    method => 'GET',
+    timeout_ms => 30000,
+    url => 'https://jsonplaceholder.typicode.com/posts/1',
+    ssl_verify => true
+), '$.status') as status;
+
+-- Test 24: Only required parameter (url)
+SELECT json_query(http_request(
+    url => 'https://jsonplaceholder.typicode.com/posts/1'
+), '$.status') as status;
+
+-- Test 25: Basic Auth with Named Parameters (using httpbin)
+SELECT json_query(http_request(
+    url => 'https://httpbin.org/basic-auth/user/passwd',
+    username => 'user',
+    password => 'passwd'
+), '$.status') as status;
+
+-- Test 26: Basic Auth with wrong credentials
+SELECT json_query(http_request(
+    url => 'https://httpbin.org/basic-auth/user/passwd',
+    username => 'wrong',
+    password => 'wrong'
+), '$.status') as status;
+
+-- ============================================================
+-- HEAD and OPTIONS Method Tests
+-- ============================================================
+
+-- Test 27: HEAD request - returns headers only (no body)
+SELECT json_query(http_request(
+    url => 'https://httpbin.org/get',
+    method => 'HEAD'
+), '$.status') as status;
+
+-- Test 28: OPTIONS request - returns allowed methods
+SELECT json_query(http_request(
+    url => 'https://httpbin.org/get',
+    method => 'OPTIONS'
+), '$.status') as status;
+
+-- Test 29: HEAD request - body should be empty or null
+SELECT json_query(http_request(
+    url => 'https://httpbin.org/get',
+    method => 'HEAD'
+), '$.body') as body;
+
+-- ============================================================
+-- Invalid HTTP Method Tests
+-- ============================================================
+
+-- Test 30: Invalid method 'INVALID' - should return error
+SELECT json_query(http_request(
+    url => 'https://httpbin.org/get',
+    method => 'INVALID'
+), '$.status') as status;
+
+-- Test 31: Invalid method error message should contain 'Invalid HTTP method'
+SELECT CAST(json_query(http_request(
+    url => 'https://httpbin.org/get',
+    method => 'INVALID'
+), '$.error') AS STRING) LIKE '%Invalid HTTP method%' as has_error_message;
+
+-- Test 32: Invalid method 'PATCH' - not in allowed list
+SELECT json_query(http_request(
+    url => 'https://httpbin.org/get',
+    method => 'PATCH'
+), '$.status') as status;
+
+-- Test 33: Empty method string - should return error
+SELECT json_query(http_request(
+    url => 'https://httpbin.org/get',
+    method => ''
+), '$.status') as status;
+
+-- Test 34: Case insensitive method (lowercase 'get')
+SELECT json_query(http_request(
+    url => 'https://httpbin.org/get',
+    method => 'get'
+), '$.status') as status;
+
+-- Test 35: Case insensitive method (mixed case 'GeT')
+SELECT json_query(http_request(
+    url => 'https://httpbin.org/get',
+    method => 'GeT'
+), '$.status') as status;
+
+-- Cleanup: Reset allowlist to default (empty)
+ADMIN SET FRONTEND CONFIG ("http_request_host_allowlist_regexp" = "");

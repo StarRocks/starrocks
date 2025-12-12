@@ -40,6 +40,7 @@
 #include <vector>
 
 #include "common/status.h"
+#include "common/statusor.h"
 #include "gen_cpp/Types_types.h"
 
 namespace starrocks {
@@ -66,6 +67,41 @@ Status hostname_to_ipv4(const std::string& host, std::string& ip);
 Status hostname_to_ipv6(const std::string& host, std::string& ip);
 
 bool is_valid_ip(const std::string& ip);
+
+// Check if an IP address is in a private/reserved range
+// Returns true for: loopback (127.0.0.0/8, ::1), private networks (10.0.0.0/8,
+// 172.16.0.0/12, 192.168.0.0/16), link-local (169.254.0.0/16, fe80::/10),
+// unique local (fc00::/7), and other reserved ranges.
+// Also returns true for invalid IP addresses (fail-safe behavior).
+bool is_private_ip(const std::string& ip);
+
+// Check if an IP address is in link-local range (169.254.0.0/16 for IPv4, fe80::/10 for IPv6)
+// These ranges are commonly used for cloud metadata services (AWS, GCP, Azure IMDS)
+// and require special security warnings.
+bool is_link_local_ip(const std::string& ip);
+
+// Resolve hostname to all IP addresses (both IPv4 and IPv6)
+// Returns a vector of resolved IP addresses as strings.
+// If the host is already a valid IP address, returns it directly.
+StatusOr<std::vector<std::string>> resolve_hostname_all_ips(const std::string& hostname);
+
+// Extract host from URL
+// Examples:
+//   "http://example.com/path" -> "example.com"
+//   "https://api.example.com:8080/v1" -> "api.example.com"
+//   "http://user:pass@example.com/" -> "example.com"
+//   "http://[::1]:8080/test" -> "::1"
+// Returns empty string for invalid URLs.
+std::string extract_host_from_url(const std::string& url);
+
+// Extract port from URL, returns default port (80 for HTTP, 443 for HTTPS) if not specified
+// Examples:
+//   "http://example.com/path" -> 80
+//   "https://example.com/path" -> 443
+//   "http://example.com:8080/path" -> 8080
+//   "https://api.example.com:9443/v1" -> 9443
+// Returns 0 for invalid URLs.
+int extract_port_from_url(const std::string& url);
 
 // Sets the output argument to the system defined hostname.
 // Returns OK if a hostname can be found, false otherwise.
