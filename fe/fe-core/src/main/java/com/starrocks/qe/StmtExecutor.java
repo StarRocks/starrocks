@@ -696,8 +696,10 @@ public class StmtExecutor {
             }
 
             // processQueryScopeHint may change current warehouse.
-            if (context.getQueryDetail() != null) {
+            if (context.getQueryDetail() != null
+                    && !Objects.equals(context.getCurrentWarehouseName(), context.getQueryDetail().getWarehouse())) {
                 context.getQueryDetail().setWarehouse(context.getCurrentWarehouseName());
+                addRunningQueryDetail(parsedStmt);
             }
 
             // set warehouse for auditLog
