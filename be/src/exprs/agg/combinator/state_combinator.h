@@ -107,7 +107,7 @@ protected:
                     "AggStateBaseFunction input column is nullable but agg function is not nullable");
         }
         if (arg_nullable && !unpack_column->is_nullable()) {
-            return ColumnHelper::cast_to_nullable_column(unpack_column);
+            return ColumnHelper::cast_to_nullable_column(std::move(unpack_column));
         }
         return unpack_column;
     }

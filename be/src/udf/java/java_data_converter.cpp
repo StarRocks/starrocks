@@ -51,7 +51,7 @@ public:
     JavaArrayConverter(JVMFunctionHelper& helper) : ColumnVisitorAdapter(this), _helper(helper) {}
 
     Status do_visit(const NullableColumn& column) {
-        _nulls_buffer = get_buffer_data(*column.immutable_null_column());
+        _nulls_buffer = get_buffer_data(*column.null_column_raw_ptr());
         return column.data_column()->accept(this);
     }
 
@@ -308,7 +308,7 @@ void assign_jvalue(MethodTypeDescriptor method_type_desc, Column* col, int row_n
             nullable_column->set_null(row_num);
             return;
         }
-        data_col = nullable_column->mutable_data_column();
+        data_col = nullable_column->data_column_raw_ptr();
     }
     switch (method_type_desc.type) {
 #define ASSIGN_BOX_TYPE(NAME, TYPE)                                                \
@@ -391,11 +391,12 @@ Status append_jvalue(const TypeDescriptor& type_desc, bool is_box, Column* col, 
             auto* array_column = down_cast<ArrayColumn*>(data_column);
             for (size_t i = 0; i < len; ++i) {
                 ASSIGN_OR_RETURN(auto element, list_stub.get(i));
-                RETURN_IF_ERROR(append_jvalue(type_desc.children[0], true, array_column->elements_column().get(),
+                RETURN_IF_ERROR(append_jvalue(type_desc.children[0], true, array_column->elements_column_raw_ptr(),
                                               {.l = element}));
             }
-            size_t last_offset = array_column->offsets_column()->get_data().back();
-            array_column->offsets_column()->get_data().push_back(last_offset + len);
+            auto* offsets_col = array_column->offsets_column_raw_ptr();
+            size_t last_offset = offsets_col->get_data().back();
+            offsets_col->get_data().push_back(last_offset + len);
             break;
         }
         case TYPE_MAP: {
@@ -416,16 +417,17 @@ Status append_jvalue(const TypeDescriptor& type_desc, bool is_box, Column* col, 
 
             for (size_t i = 0; i < len; ++i) {
                 ASSIGN_OR_RETURN(auto key_element, key_list_stub.get(i));
-                RETURN_IF_ERROR(append_jvalue(type_desc.children[0], true, map_column->keys_column().get(),
+                RETURN_IF_ERROR(append_jvalue(type_desc.children[0], true, map_column->keys_column_raw_ptr(),
                                               {.l = key_element}));
 
                 ASSIGN_OR_RETURN(auto val_element, val_list_stub.get(i));
-                RETURN_IF_ERROR(append_jvalue(type_desc.children[1], true, map_column->values_column().get(),
+                RETURN_IF_ERROR(append_jvalue(type_desc.children[1], true, map_column->values_column_raw_ptr(),
                                               {.l = val_element}));
             }
 
-            size_t last_offset = map_column->offsets_column()->get_data().back();
-            map_column->offsets_column()->get_data().push_back(last_offset + len);
+            auto* offsets_col = map_column->offsets_column_raw_ptr();
+            size_t last_offset = offsets_col->get_data().back();
+            offsets_col->get_data().push_back(last_offset + len);
             break;
         }
         default:
@@ -541,9 +543,9 @@ Status JavaDataTypeConverter::convert_to_boxed_array(FunctionContext* ctx, const
         if (columns[i]->only_null()) {
             arg = helper.create_array(num_rows);
         } else if (columns[i]->is_constant()) {
-            auto& data_column = down_cast<const ConstColumn*>(columns[i])->data_column();
-            data_column->as_mutable_ptr()->resize(1);
-            ASSIGN_OR_RETURN(jvalue jval, cast_to_jvalue(*ctx->get_arg_type(i), true, data_column.get(), 0));
+            auto* data_column = down_cast<const ConstColumn*>(columns[i])->data_column_raw_ptr();
+            data_column->as_mutable_raw_ptr()->resize(1);
+            ASSIGN_OR_RETURN(jvalue jval, cast_to_jvalue(*ctx->get_arg_type(i), true, data_column, 0));
             arg = helper.create_object_array(jval.l, num_rows);
             env->DeleteLocalRef(jval.l);
         } else {

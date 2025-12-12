@@ -232,9 +232,9 @@ public:
         return Status::OK();
     }
 
-    StatusOr<ColumnPtr> upgrade_if_overflow() override;
+    StatusOr<MutableColumnPtr> upgrade_if_overflow() override;
 
-    StatusOr<ColumnPtr> downgrade() override { return nullptr; }
+    StatusOr<MutableColumnPtr> downgrade() override { return nullptr; }
 
     bool has_large_column() const override { return false; }
 

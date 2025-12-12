@@ -36,7 +36,7 @@ public:
             TScalarType scalar_type;
             scalar_type.__set_type(t_type);
             node.__set_scalar_type(scalar_type);
-            type.types.push_back(node);
+            type.types.emplace_back(node);
         }
 
         return type;
@@ -59,15 +59,15 @@ public:
         return slot_desc;
     }
 
-    static TDescriptorTable create_table_desc(std::vector<TTupleDescriptor> tuple_descs,
-                                              std::vector<TSlotDescriptor> slot_descs) {
+    static TDescriptorTable create_table_desc(const std::vector<TTupleDescriptor>& tuple_descs,
+                                              const std::vector<TSlotDescriptor>& slot_descs) {
         TDescriptorTable t_desc_table;
         for (auto& slot_desc : slot_descs) {
-            t_desc_table.slotDescriptors.push_back(slot_desc);
+            t_desc_table.slotDescriptors.emplace_back(slot_desc);
         }
         t_desc_table.__isset.slotDescriptors = true;
         for (auto& tuple_desc : tuple_descs) {
-            t_desc_table.tupleDescriptors.push_back(tuple_desc);
+            t_desc_table.tupleDescriptors.emplace_back(tuple_desc);
         }
         return t_desc_table;
     }
@@ -97,7 +97,8 @@ public:
         return create_array_expr(type.to_thrift());
     }
 
-    static TExprNode create_slot_expr_node(TupleId tuple_id, SlotId slot_id, TTypeDesc t_type, bool is_nullable) {
+    static TExprNode create_slot_expr_node(TupleId tuple_id, SlotId slot_id, const TTypeDesc& t_type,
+                                           bool is_nullable) {
         TExprNode slot_ref;
         slot_ref.node_type = TExprNodeType::SLOT_REF;
         slot_ref.type = t_type;
@@ -111,11 +112,11 @@ public:
 
     static TExpr create_slot_expr(TExprNode slot_ref) {
         TExpr expr;
-        expr.nodes.push_back(slot_ref);
+        expr.nodes.emplace_back(slot_ref);
         return expr;
     }
 
-    static TFunction create_builtin_function(const std::string func_name, const std::vector<TTypeDesc>& arg_types,
+    static TFunction create_builtin_function(const std::string& func_name, const std::vector<TTypeDesc>& arg_types,
                                              const TTypeDesc& intermediate_type, const TTypeDesc& ret_type) {
         TFunction fn;
         {
@@ -145,9 +146,9 @@ public:
         node.fn = fn;
         node.num_children = children.size();
 
-        expr.nodes.push_back(node);
+        expr.nodes.emplace_back(node);
         for (auto& child : children) {
-            expr.nodes.push_back(child);
+            expr.nodes.emplace_back(child);
         }
         return expr;
     }

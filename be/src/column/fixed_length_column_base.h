@@ -181,7 +181,7 @@ public:
 
     void append_default(size_t count) override;
 
-    StatusOr<ColumnPtr> replicate(const Buffer<uint32_t>& offsets) override;
+    StatusOr<MutableColumnPtr> replicate(const Buffer<uint32_t>& offsets) override;
 
     void fill_default(const Filter& filter) override;
 
@@ -191,9 +191,9 @@ public:
 
     // The `_data` support one size(> 2^32), but some interface such as update_rows() will use uint32_t to
     // access the item, so we should use 2^32 as the limit
-    StatusOr<ColumnPtr> upgrade_if_overflow() override;
+    StatusOr<MutableColumnPtr> upgrade_if_overflow() override;
 
-    StatusOr<ColumnPtr> downgrade() override { return nullptr; }
+    StatusOr<MutableColumnPtr> downgrade() override { return nullptr; }
 
     bool has_large_column() const override { return false; }
 
@@ -239,6 +239,9 @@ public:
         return _data;
     }
 
+    const ImmContainer get_data() const { return immutable_data(); }
+
+    // TODO: remove this function
     const ImmContainer immutable_data() const {
         if (!_resource.empty()) {
             return _resource.span<T>();

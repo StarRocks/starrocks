@@ -127,9 +127,9 @@ SegmentedChunkPtr ChunkHelperTest::build_segmented_chunk() {
         size_t chunk_rows = 4096;
         auto chunk = ChunkHelper::new_chunk(*tuple_desc, chunk_rows);
         for (int j = 0; j < chunk_rows; j++) {
-            chunk->get_column_by_index(0)->append_datum(row_id++);
+            chunk->get_column_raw_ptr_by_index(0)->append_datum(row_id++);
             std::string str = fmt::format("str{}", row_id);
-            chunk->get_column_by_index(1)->append_datum(Slice(str));
+            chunk->get_column_raw_ptr_by_index(1)->append_datum(Slice(str));
         }
 
         segmented_chunk->append_chunk(std::move(chunk));
@@ -197,7 +197,7 @@ TEST_F(ChunkHelperTest, Accumulator) {
     // push small chunks
     for (int i = 0; i < 10; i++) {
         auto chunk = ChunkHelper::new_chunk(*tuple_desc, 1025);
-        chunk->get_column_by_index(0)->append_default(1025);
+        chunk->get_column_raw_ptr_by_index(0)->append_default(1025);
         input_rows += 1025;
 
         static_cast<void>(accumulator.push(std::move(chunk)));
@@ -209,7 +209,7 @@ TEST_F(ChunkHelperTest, Accumulator) {
     // push large chunks
     for (int i = 0; i < 10; i++) {
         auto chunk = ChunkHelper::new_chunk(*tuple_desc, 8888);
-        chunk->get_column_by_index(0)->append_default(8888);
+        chunk->get_column_raw_ptr_by_index(0)->append_default(8888);
         input_rows += 8888;
         static_cast<void>(accumulator.push(std::move(chunk)));
     }

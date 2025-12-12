@@ -51,7 +51,7 @@ Status Spiller::spill(RuntimeState* state, const ChunkPtr& chunk, MemGuard&& gua
         if (!_opts.splittable && _opts.init_partition_nums > 0) {
             // For splittable spiller, we need to set the schema before spilling.
             // This is because the partitioned spiller needs to know the schema of the chunk.
-            std::shared_ptr<Chunk> new_chunk = chunk->clone_empty(0);
+            ChunkPtr new_chunk = chunk->clone_empty(0);
             new_chunk->remove_column_by_slot_id(Chunk::HASH_AGG_SPILL_HASH_SLOT_ID);
             _chunk_builder.chunk_schema()->set_schema(new_chunk);
         } else {
@@ -297,7 +297,7 @@ Status PartitionedSpillerWriter::spill(RuntimeState* state, const ChunkPtr& chun
     {
         SCOPED_TIMER(_spiller->metrics().shuffle_timer);
         std::vector<uint32_t> shuffle_result;
-        shuffle(shuffle_result, down_cast<SpillHashColumn*>(hash_column.get()));
+        shuffle(shuffle_result, down_cast<SpillHashColumn*>(hash_column->as_mutable_raw_ptr()));
         process_partition_data(chunk, shuffle_result,
                                [&chunk](SpilledPartition* partition, const std::vector<uint32_t>& selection,
                                         int32_t from, int32_t size) {

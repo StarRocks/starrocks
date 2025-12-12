@@ -512,6 +512,11 @@ struct AggHashMapVariant {
         return std::visit(std::forward<Vistor>(vistor), hash_map_with_key);
     }
 
+    template <class Vistor>
+    auto visit(Vistor&& vistor) {
+        return std::visit(std::forward<Vistor>(vistor), hash_map_with_key);
+    }
+
     void init(RuntimeState* state, Type type, AggStatistics* agg_statis);
 
     void convert_to_two_level(RuntimeState* state);
@@ -630,6 +635,11 @@ struct AggHashSetVariant {
 
     template <class Vistor>
     auto visit(Vistor&& vistor) const {
+        return std::visit(std::forward<Vistor>(vistor), hash_set_with_key);
+    }
+
+    template <class Vistor>
+    auto visit(Vistor&& vistor) {
         return std::visit(std::forward<Vistor>(vistor), hash_set_with_key);
     }
 

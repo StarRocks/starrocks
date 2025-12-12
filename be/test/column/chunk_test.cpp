@@ -81,7 +81,7 @@ public:
         auto chunk = std::make_unique<Chunk>(make_columns(num_cols, size), make_schema(num_cols));
         std::vector<ChunkExtraColumnsMeta> extra_data_metas;
         for (size_t i = 0; i < num_cols; i++) {
-            extra_data_metas.push_back(
+            extra_data_metas.emplace_back(
                     ChunkExtraColumnsMeta{.type = TypeDescriptor(TYPE_INT), .is_null = false, .is_const = false});
         }
         auto extra_data_cols = make_columns(num_cols, size);
@@ -92,9 +92,9 @@ public:
 // NOLINTNEXTLINE
 GROUP_SLOW_TEST_F(ChunkTest, test_chunk_upgrade_if_overflow) {
     size_t row_count = 1 << 30;
-    BinaryColumn::Ptr c1 = BinaryColumn::create();
+    auto c1 = BinaryColumn::create();
     c1->resize(row_count);
-    BinaryColumn::Ptr c2 = BinaryColumn::create();
+    auto c2 = BinaryColumn::create();
     for (size_t i = 0; i < row_count; i++) {
         c2->append(std::to_string(i));
     }
@@ -130,9 +130,9 @@ TEST_F(ChunkTest, test_remove_column_by_slot_id) {
 
 // NOLINTNEXTLINE
 TEST_F(ChunkTest, test_chunk_downgrade) {
-    BinaryColumn::Ptr c1 = BinaryColumn::create();
+    auto c1 = BinaryColumn::create();
     c1->append_string("1");
-    BinaryColumn::Ptr c2 = BinaryColumn::create();
+    auto c2 = BinaryColumn::create();
     c2->append_string("11");
     auto chunk = std::make_shared<Chunk>();
     chunk->append_column(c1, 1);
@@ -143,9 +143,9 @@ TEST_F(ChunkTest, test_chunk_downgrade) {
     ASSERT_TRUE(ret.ok());
     ASSERT_FALSE(chunk->has_large_column());
 
-    LargeBinaryColumn::Ptr c3 = LargeBinaryColumn::create();
+    auto c3 = LargeBinaryColumn::create();
     c3->append_string("1");
-    LargeBinaryColumn::Ptr c4 = LargeBinaryColumn::create();
+    auto c4 = LargeBinaryColumn::create();
     c4->append_string("2");
     chunk = std::make_shared<Chunk>();
     chunk->append_column(c3, 1);
@@ -176,8 +176,8 @@ TEST_F(ChunkTest, test_construct) {
 
     Columns columns = chunk->columns();
     ASSERT_EQ(2, columns.size());
-    check_column(reinterpret_cast<FixedLengthColumn<int32_t>*>(columns[0].get()), 0);
-    check_column(reinterpret_cast<FixedLengthColumn<int32_t>*>(columns[1].get()), 1);
+    check_column(ColumnHelper::as_raw_column<FixedLengthColumn<int32_t>>(columns[0].get()), 0);
+    check_column(ColumnHelper::as_raw_column<FixedLengthColumn<int32_t>>(columns[1].get()), 1);
 }
 
 // NOLINTNEXTLINE
@@ -197,9 +197,9 @@ TEST_F(ChunkTest, test_append_column) {
 
     Columns columns = chunk->columns();
     ASSERT_EQ(3, columns.size());
-    check_column(reinterpret_cast<FixedLengthColumn<int32_t>*>(columns[0].get()), 0);
-    check_column(reinterpret_cast<FixedLengthColumn<int32_t>*>(columns[1].get()), 1);
-    check_column(reinterpret_cast<FixedLengthColumn<int32_t>*>(columns[2].get()), 2);
+    check_column(ColumnHelper::as_raw_column<FixedLengthColumn<int32_t>>(columns[0].get()), 0);
+    check_column(ColumnHelper::as_raw_column<FixedLengthColumn<int32_t>>(columns[1].get()), 1);
+    check_column(ColumnHelper::as_raw_column<FixedLengthColumn<int32_t>>(columns[2].get()), 2);
 }
 
 // NOLINTNEXTLINE
@@ -209,9 +209,9 @@ TEST_F(ChunkTest, test_insert_column) {
 
     Columns columns = chunk->columns();
     ASSERT_EQ(3, columns.size());
-    check_column(reinterpret_cast<FixedLengthColumn<int32_t>*>(columns[0].get()), 0);
-    check_column(reinterpret_cast<FixedLengthColumn<int32_t>*>(columns[2].get()), 1);
-    check_column(reinterpret_cast<FixedLengthColumn<int32_t>*>(columns[1].get()), 2);
+    check_column(ColumnHelper::as_raw_column<FixedLengthColumn<int32_t>>(columns[0].get()), 0);
+    check_column(ColumnHelper::as_raw_column<FixedLengthColumn<int32_t>>(columns[2].get()), 1);
+    check_column(ColumnHelper::as_raw_column<FixedLengthColumn<int32_t>>(columns[1].get()), 2);
 }
 
 // NOLINTNEXTLINE
@@ -221,37 +221,38 @@ TEST_F(ChunkTest, test_remove_column_by_index) {
     chunk->remove_column_by_index(1);
     Columns columns = chunk->columns();
     ASSERT_EQ(1, columns.size());
-    check_column(reinterpret_cast<FixedLengthColumn<int32_t>*>(columns[0].get()), 0);
+    check_column(ColumnHelper::as_raw_column<FixedLengthColumn<int32_t>>(columns[0].get()), 0);
 }
 
 // NOLINTNEXTLINE
 TEST_F(ChunkTest, get_column_by_name) {
     auto chunk = std::make_unique<Chunk>(make_columns(2), make_schema(2));
     ColumnPtr column = chunk->get_column_by_name("c1");
-    check_column(reinterpret_cast<FixedLengthColumn<int32_t>*>(column.get()), 1);
+    check_column(ColumnHelper::as_raw_column<FixedLengthColumn<int32_t>>(column.get()), 1);
 }
 
 // NOLINTNEXTLINE
-TEST_F(ChunkTest, get_column_by_index) {
+TEST_F(ChunkTest, get_mutable_column_by_index) {
     auto chunk = std::make_unique<Chunk>(make_columns(2), make_schema(2));
-    ColumnPtr column = chunk->get_column_by_index(1);
-    check_column(reinterpret_cast<FixedLengthColumn<int32_t>*>(column.get()), 1);
+    auto* column = chunk->get_column_raw_ptr_by_index(1);
+    check_column(ColumnHelper::as_raw_column<FixedLengthColumn<int32_t>>(column), 1);
 }
 
 // NOLINTNEXTLINE
 TEST_F(ChunkTest, test_copy_one_row) {
     auto chunk = std::make_unique<Chunk>(make_columns(2), make_schema(2));
 
-    std::unique_ptr<Chunk> new_chunk = chunk->clone_empty();
+    ChunkUniquePtr new_chunk = chunk->clone_empty();
     for (size_t i = 0; i < chunk->num_rows(); ++i) {
         new_chunk->append(*chunk, i, 1);
     }
 
     ASSERT_EQ(new_chunk->num_rows(), chunk->num_rows());
     for (size_t i = 0; i < chunk->columns().size(); ++i) {
-        ASSERT_EQ(chunk->columns()[i]->size(), new_chunk->columns()[i]->size());
-        for (size_t j = 0; j < chunk->columns()[i]->size(); ++j) {
-            ASSERT_EQ(chunk->columns()[i]->get(j).get_int32(), new_chunk->columns()[i]->get(j).get_int32());
+        ASSERT_EQ(chunk->mutable_columns()[i]->size(), new_chunk->mutable_columns()[i]->size());
+        for (size_t j = 0; j < chunk->mutable_columns()[i]->size(); ++j) {
+            ASSERT_EQ(chunk->mutable_columns()[i]->get(j).get_int32(),
+                      new_chunk->mutable_columns()[i]->get(j).get_int32());
         }
     }
 }
@@ -281,7 +282,7 @@ TEST_F(ChunkTest, test_reset) {
     auto chk = std::make_unique<Chunk>(make_columns(1), make_schema(1));
     chk->set_delete_state(DEL_PARTIAL_SATISFIED);
     chk->set_slot_id_to_index(1, 0);
-    chk->get_column_by_index(0)->resize(10);
+    chk->get_column_raw_ptr_by_index(0)->resize(10);
     ASSERT_EQ(10, chk->num_rows());
 
     chk->reset();
@@ -307,7 +308,7 @@ TEST_F(ChunkTest, test_append_chunk_safe) {
     chunk_1->append_safe(*chunk_2);
 
     for (size_t i = 0; i < chunk_1->num_columns(); i++) {
-        auto column = chunk_1->columns()[i];
+        auto column = ColumnHelper::as_raw_column<FixedLengthColumn<int32_t>>(chunk_1->mutable_columns()[i].get());
         ASSERT_EQ(column->size(), 200);
         for (size_t j = 0; j < 100; j++) {
             ASSERT_EQ(column->get(j).get_int32(), j);
@@ -351,8 +352,8 @@ TEST_F(ChunkTest, test_append_chunk_with_extra_data) {
     ASSERT_EQ(2, columns.size());
     ASSERT_EQ(4, chunk1->num_rows());
 
-    check_column(reinterpret_cast<FixedLengthColumn<int32_t>*>(columns[0].get()), {0, 1, 0, 1});
-    check_column(reinterpret_cast<FixedLengthColumn<int32_t>*>(columns[1].get()), {1, 2, 1, 2});
+    check_column(ColumnHelper::as_raw_column<FixedLengthColumn<int32_t>>(columns[0].get()), {0, 1, 0, 1});
+    check_column(ColumnHelper::as_raw_column<FixedLengthColumn<int32_t>>(columns[1].get()), {1, 2, 1, 2});
 
     ASSERT_TRUE(chunk1->has_extra_data());
     ASSERT_TRUE(chunk2->has_extra_data());
@@ -363,8 +364,8 @@ TEST_F(ChunkTest, test_append_chunk_with_extra_data) {
     chunk_extra_data1->append(*chunk_extra_data2, 0, chunk_extra_data2->num_rows());
     auto extra_data_columns = chunk_extra_data1->columns();
     ASSERT_EQ(2, extra_data_columns.size());
-    check_column(reinterpret_cast<FixedLengthColumn<int32_t>*>(extra_data_columns[0].get()), {0, 1, 0, 1});
-    check_column(reinterpret_cast<FixedLengthColumn<int32_t>*>(extra_data_columns[1].get()), {1, 2, 1, 2});
+    check_column(ColumnHelper::as_raw_column<FixedLengthColumn<int32_t>>(extra_data_columns[0].get()), {0, 1, 0, 1});
+    check_column(ColumnHelper::as_raw_column<FixedLengthColumn<int32_t>>(extra_data_columns[1].get()), {1, 2, 1, 2});
 }
 
 // NOLINTNEXTLINE
@@ -383,16 +384,18 @@ TEST_F(ChunkTest, test_filter_with_extra_data) {
     // 2, 4
 
     ASSERT_EQ(chunk1->num_rows(), 2);
-    check_column(reinterpret_cast<FixedLengthColumn<int32_t>*>(chunk1->columns()[0].get()), {1, 3});
-    check_column(reinterpret_cast<FixedLengthColumn<int32_t>*>(chunk1->columns()[1].get()), {2, 4});
+    check_column(ColumnHelper::as_raw_column<FixedLengthColumn<int32_t>>(chunk1->columns()[0].get()), {1, 3});
+    check_column(ColumnHelper::as_raw_column<FixedLengthColumn<int32_t>>(chunk1->columns()[1].get()), {2, 4});
 
     ASSERT_TRUE(chunk1->has_extra_data());
     auto* chunk_extra_data1 = dynamic_cast<ChunkExtraColumnsData*>(chunk1->get_extra_data().get());
     ASSERT_TRUE(chunk_extra_data1);
     chunk_extra_data1->filter(selection);
     ASSERT_EQ(chunk_extra_data1->columns().size(), 2);
-    check_column(reinterpret_cast<FixedLengthColumn<int32_t>*>(chunk_extra_data1->columns()[0].get()), {1, 3});
-    check_column(reinterpret_cast<FixedLengthColumn<int32_t>*>(chunk_extra_data1->columns()[1].get()), {2, 4});
+    check_column(ColumnHelper::as_raw_column<FixedLengthColumn<int32_t>>(chunk_extra_data1->columns()[0].get()),
+                 {1, 3});
+    check_column(ColumnHelper::as_raw_column<FixedLengthColumn<int32_t>>(chunk_extra_data1->columns()[1].get()),
+                 {2, 4});
 }
 
 // NOLINTNEXTLINE
@@ -409,7 +412,7 @@ TEST_F(ChunkTest, test_clone_empty_with_extra_data) {
     auto* copy_extra_data = dynamic_cast<ChunkExtraColumnsData*>(copy->get_extra_data().get());
     ASSERT_TRUE(copy_extra_data);
     ASSERT_EQ(copy_extra_data->columns().size(), extra_data->columns().size());
-    ASSERT_EQ(copy_extra_data->columns()[0]->size(), 0);
+    ASSERT_EQ(ColumnHelper::as_raw_column<FixedLengthColumn<int32_t>>(copy_extra_data->columns()[0].get())->size(), 0);
     ASSERT_EQ(copy_extra_data->chunk_data_metas().size(), extra_data->chunk_data_metas().size());
 }
 
@@ -427,7 +430,8 @@ TEST_F(ChunkTest, test_clone_unique_with_extra_data) {
     auto expect_extra_data = make_extra_data(2);
     auto* copy_extra_data = dynamic_cast<ChunkExtraColumnsData*>(copy->get_extra_data().get());
     ASSERT_EQ(copy_extra_data->columns().size(), expect_extra_data->columns().size());
-    ASSERT_EQ(copy_extra_data->columns()[0]->size(), expect_extra_data->columns()[0]->size());
+    ASSERT_EQ(ColumnHelper::as_raw_column<FixedLengthColumn<int32_t>>(copy_extra_data->columns()[0].get())->size(),
+              expect_extra_data->columns()[0]->size());
 }
 
 // NOLINTNEXTLINE

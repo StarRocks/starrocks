@@ -161,6 +161,11 @@ public:
     void reset_column() override;
 
     const UInt32Column& offsets() const { return *_offsets; }
+    UInt32Column& offsets() { return *_offsets; }
+
+    UInt32Column* offsets_column_raw_ptr() { return _offsets.get(); }
+    const UInt32Column* offsets_column_raw_ptr() const { return _offsets.get(); }
+
     const UInt32Column::Ptr& offsets_column() const { return _offsets; }
     UInt32Column::Ptr& offsets_column() { return _offsets; }
 
@@ -176,19 +181,29 @@ public:
         return _offsets->capacity_limit_reached();
     }
 
-    StatusOr<ColumnPtr> upgrade_if_overflow() override;
+    StatusOr<MutableColumnPtr> upgrade_if_overflow() override;
 
-    StatusOr<ColumnPtr> downgrade() override;
+    StatusOr<MutableColumnPtr> downgrade() override;
 
     bool has_large_column() const override { return _keys->has_large_column() || _values->has_large_column(); }
 
     void check_or_die() const override;
 
     const Column& keys() const { return *_keys; }
+    Column& keys() { return *_keys; }
+
+    Column* keys_column_raw_ptr() { return _keys.get(); }
+    const Column* keys_column_raw_ptr() const { return _keys.get(); }
+
     const ColumnPtr& keys_column() const { return _keys; }
     ColumnPtr& keys_column() { return _keys; }
 
     const Column& values() const { return *_values; }
+    Column& values() { return *_values; }
+
+    Column* values_column_raw_ptr() { return _values.get(); }
+    const Column* values_column_raw_ptr() const { return _values.get(); }
+
     const ColumnPtr& values_column() const { return _values; }
     ColumnPtr& values_column() { return _values; }
 
@@ -210,15 +225,15 @@ public:
 
 private:
     // Keys must be NullableColumn to facilitate handling nested types.
-    ColumnPtr _keys;
+    Column::WrappedPtr _keys;
     // Values must be NullableColumn to facilitate handling nested types.
-    ColumnPtr _values;
+    Column::WrappedPtr _values;
     // Offsets column will store the start position of every map element.
     // Offsets store more one data to indicate the end position.
     // For example, map Column: m1keys [k1, k2, k3], m2keys [k4, k5, k6]
     //                          m1vals [v1, v2, v3], m2vals [v4, v5, v6]
     // The two element array has three offsets(0, 3, 6)
-    UInt32Column::Ptr _offsets;
+    UInt32Column::WrappedPtr _offsets;
 };
 
 } // namespace starrocks

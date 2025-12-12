@@ -47,11 +47,11 @@ class SchemaChangeTest : public testing::Test {
     void TearDown() override {}
 
 protected:
-    void add_key_column(TCreateTabletReq* request, std::string column_name, TPrimitiveType::type type);
-    void add_value_column(TCreateTabletReq* request, std::string column_name, TPrimitiveType::type type,
+    void add_key_column(TCreateTabletReq* request, const std::string& column_name, TPrimitiveType::type type);
+    void add_value_column(TCreateTabletReq* request, const std::string& column_name, TPrimitiveType::type type,
                           TKeysType::type keys_type = TKeysType::DUP_KEYS);
-    void add_value_column_with_index(TCreateTabletReq* request, std::string column_name, TPrimitiveType::type type,
-                                     TKeysType::type keys_type = TKeysType::DUP_KEYS);
+    void add_value_column_with_index(TCreateTabletReq* request, const std::string& column_name,
+                                     TPrimitiveType::type type, TKeysType::type keys_type = TKeysType::DUP_KEYS);
 
     void create_base_tablet(TTabletId tablet_id, TKeysType::type type, TStorageType::type);
     void create_dest_tablet_with_index(TTabletId base_tablet_id, TTabletId new_tablet_id, TKeysType::type type);
@@ -63,7 +63,7 @@ protected:
     template <typename T>
     void test_convert_to_varchar(LogicalType type, int type_size, T val, const std::string& expect_val);
     template <typename T>
-    void test_convert_from_varchar(LogicalType type, int type_size, std::string val, T expect_val);
+    void test_convert_from_varchar(LogicalType type, int type_size, const std::string& val, T expect_val);
     std::vector<SlotDescriptor*> gen_base_slots();
     TAlterTabletReqV2 gen_alter_tablet_req(TTabletId base_tablet_id, TTabletId new_tablet_id, Version version);
     RowsetId next_rowset_id() const { return _storage_engine->next_rowset_id(); }
@@ -112,23 +112,24 @@ std::vector<SlotDescriptor*> SchemaChangeTest::gen_base_slots() {
     return slots;
 }
 
-void SchemaChangeTest::add_key_column(TCreateTabletReq* request, std::string column_name, TPrimitiveType::type type) {
+void SchemaChangeTest::add_key_column(TCreateTabletReq* request, const std::string& column_name,
+                                      TPrimitiveType::type type) {
     TColumn col = SchemaTestHelper::gen_key_column(column_name, type);
-    request->tablet_schema.columns.push_back(col);
+    request->tablet_schema.columns.emplace_back(col);
 }
 
-void SchemaChangeTest::add_value_column(TCreateTabletReq* request, std::string column_name, TPrimitiveType::type type,
-                                        TKeysType::type keys_type) {
+void SchemaChangeTest::add_value_column(TCreateTabletReq* request, const std::string& column_name,
+                                        TPrimitiveType::type type, TKeysType::type keys_type) {
     TColumn col;
     if (keys_type == TKeysType::DUP_KEYS) {
         col = SchemaTestHelper::gen_value_column_for_dup_table(column_name, type);
     } else {
         col = SchemaTestHelper::gen_value_column_for_agg_table(column_name, type);
     }
-    request->tablet_schema.columns.push_back(col);
+    request->tablet_schema.columns.emplace_back(col);
 }
 
-void SchemaChangeTest::add_value_column_with_index(TCreateTabletReq* request, std::string column_name,
+void SchemaChangeTest::add_value_column_with_index(TCreateTabletReq* request, const std::string& column_name,
                                                    TPrimitiveType::type type, TKeysType::type keys_type) {
     TColumn col;
     if (keys_type == TKeysType::DUP_KEYS) {
@@ -137,7 +138,7 @@ void SchemaChangeTest::add_value_column_with_index(TCreateTabletReq* request, st
         col = SchemaTestHelper::gen_value_column_for_agg_table(column_name, type);
     }
     col.__set_has_bitmap_index(true);
-    request->tablet_schema.columns.push_back(col);
+    request->tablet_schema.columns.emplace_back(col);
 }
 
 void SchemaChangeTest::create_base_tablet(TTabletId tablet_id, TKeysType::type type, TStorageType::type storage_type) {
@@ -206,7 +207,8 @@ void SchemaChangeTest::test_convert_to_varchar(LogicalType type, int type_size, 
 }
 
 template <typename T>
-void SchemaChangeTest::test_convert_from_varchar(LogicalType type, int type_size, std::string val, T expect_val) {
+void SchemaChangeTest::test_convert_from_varchar(LogicalType type, int type_size, const std::string& val,
+                                                 T expect_val) {
     auto src_tablet_schema = gen_tablet_schema("c1", "VARCHAR", "REPLACE", 255);
     auto dst_tablet_schema = gen_tablet_schema("c2", logical_type_to_string(type), "REPLACE", type_size);
 
@@ -422,8 +424,8 @@ TEST_F(SchemaChangeTest, convert_int_to_bitmap) {
 
     ChunkPtr src_chunk = ChunkHelper::new_chunk(ChunkHelper::convert_schema(src_tablet_schema), 4096);
     ChunkPtr dst_chunk = ChunkHelper::new_chunk(ChunkHelper::convert_schema(dst_tablet_schema), 4096);
-    ColumnPtr& src_col = src_chunk->get_column_by_index(0);
-    ColumnPtr& dst_col = dst_chunk->get_column_by_index(0);
+    Column* src_col = src_chunk->get_column_raw_ptr_by_index(0);
+    Column* dst_col = dst_chunk->get_column_raw_ptr_by_index(0);
     Field f1 = ChunkHelper::convert_field(0, src_tablet_schema->column(0));
     Field f2 = ChunkHelper::convert_field(0, dst_tablet_schema->column(0));
 
@@ -432,7 +434,7 @@ TEST_F(SchemaChangeTest, convert_int_to_bitmap) {
     src_col->append_datum(src_datum);
 
     auto converter = get_materialized_converter(TYPE_INT, OLAP_MATERIALIZE_TYPE_BITMAP);
-    Status st = converter->convert_materialized(src_col, dst_col, f1.type().get());
+    Status st = converter->convert_materialized(std::move(src_col), dst_col, f1.type().get());
     ASSERT_TRUE(st.ok());
 
     Datum dst_datum = dst_col->get(0);
@@ -446,8 +448,8 @@ TEST_F(SchemaChangeTest, convert_varchar_to_hll) {
 
     ChunkPtr src_chunk = ChunkHelper::new_chunk(ChunkHelper::convert_schema(src_tablet_schema), 4096);
     ChunkPtr dst_chunk = ChunkHelper::new_chunk(ChunkHelper::convert_schema(dst_tablet_schema), 4096);
-    ColumnPtr& src_col = src_chunk->get_column_by_index(0);
-    ColumnPtr& dst_col = dst_chunk->get_column_by_index(0);
+    Column* src_col = src_chunk->get_column_raw_ptr_by_index(0);
+    Column* dst_col = dst_chunk->get_column_raw_ptr_by_index(0);
     Field f1 = ChunkHelper::convert_field(0, src_tablet_schema->column(0));
     Field f2 = ChunkHelper::convert_field(0, dst_tablet_schema->column(0));
 
@@ -458,7 +460,7 @@ TEST_F(SchemaChangeTest, convert_varchar_to_hll) {
     src_col->append_datum(src_datum);
 
     auto converter = get_materialized_converter(TYPE_VARCHAR, OLAP_MATERIALIZE_TYPE_HLL);
-    Status st = converter->convert_materialized(src_col, dst_col, f1.type().get());
+    Status st = converter->convert_materialized(std::move(src_col), dst_col, f1.type().get());
     ASSERT_TRUE(st.ok());
 
     Datum dst_datum = dst_col->get(0);
@@ -472,8 +474,8 @@ TEST_F(SchemaChangeTest, convert_int_to_count) {
 
     ChunkPtr src_chunk = ChunkHelper::new_chunk(ChunkHelper::convert_schema(src_tablet_schema), 4096);
     ChunkPtr dst_chunk = ChunkHelper::new_chunk(ChunkHelper::convert_schema(dst_tablet_schema), 4096);
-    ColumnPtr& src_col = src_chunk->get_column_by_index(0);
-    ColumnPtr& dst_col = dst_chunk->get_column_by_index(0);
+    Column* src_col = src_chunk->get_column_raw_ptr_by_index(0);
+    Column* dst_col = dst_chunk->get_column_raw_ptr_by_index(0);
     Field f1 = ChunkHelper::convert_field(0, src_tablet_schema->column(0));
     Field f2 = ChunkHelper::convert_field(0, dst_tablet_schema->column(0));
 
@@ -482,7 +484,7 @@ TEST_F(SchemaChangeTest, convert_int_to_count) {
     src_col->append_datum(src_datum);
 
     auto converter = get_materialized_converter(TYPE_INT, OLAP_MATERIALIZE_TYPE_COUNT);
-    Status st = converter->convert_materialized(src_col, dst_col, f1.type().get());
+    Status st = converter->convert_materialized(std::move(src_col), dst_col, f1.type().get());
     ASSERT_TRUE(st.ok());
 
     Datum dst_datum = dst_col->get(0);
@@ -633,8 +635,8 @@ TEST_F(SchemaChangeTest, convert_varchar_to_json) {
     for (const auto& json_str : test_cases) {
         JsonValue expected = JsonValue::parse(json_str).value();
 
-        BinaryColumn::Ptr src_column = BinaryColumn::create();
-        JsonColumn::Ptr dst_column = JsonColumn::create();
+        auto src_column = BinaryColumn::create();
+        auto dst_column = JsonColumn::create();
         src_column->append(json_str);
 
         auto converter = get_type_converter(TYPE_VARCHAR, TYPE_JSON);
@@ -648,8 +650,8 @@ TEST_F(SchemaChangeTest, convert_varchar_to_json) {
 TEST_F(SchemaChangeTest, convert_json_to_varchar) {
     std::string json_str = "{\"a\": 1}";
     JsonValue json = JsonValue::parse(json_str).value();
-    JsonColumn::Ptr src_column = JsonColumn::create();
-    BinaryColumn::Ptr dst_column = BinaryColumn::create();
+    auto src_column = JsonColumn::create();
+    auto dst_column = BinaryColumn::create();
     src_column->append(&json);
 
     auto converter = get_type_converter(TYPE_JSON, TYPE_VARCHAR);

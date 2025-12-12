@@ -107,8 +107,8 @@ public:
     }
 
     Status do_visit(NullableColumn* column) {
-        RETURN_IF_ERROR(fill(column->null_column().get()));
-        RETURN_IF_ERROR(column->data_column()->accept_mutable(this));
+        RETURN_IF_ERROR(fill(column->null_column_raw_ptr()));
+        RETURN_IF_ERROR(column->data_column_raw_ptr()->accept_mutable(this));
         return Status::OK();
     }
 

@@ -186,110 +186,110 @@ Status SchemaBeTabletsScanner::fill_chunk(ChunkPtr* chunk) {
             if (slot_id < 1 || slot_id > 20) {
                 return Status::InternalError(strings::Substitute("invalid slot id:$0", slot_id));
             }
-            ColumnPtr column = (*chunk)->get_column_by_slot_id(slot_id);
+            auto* column = (*chunk)->get_column_raw_ptr_by_slot_id(slot_id);
             switch (slot_id) {
             case 1: {
                 // be id
-                fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&_be_id);
+                fill_column_with_slot<TYPE_BIGINT>(column, (void*)&_be_id);
                 break;
             }
             case 2: {
                 // table id
-                fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.table_id);
+                fill_column_with_slot<TYPE_BIGINT>(column, (void*)&info.table_id);
                 break;
             }
             case 3: {
                 // partition id
-                fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.partition_id);
+                fill_column_with_slot<TYPE_BIGINT>(column, (void*)&info.partition_id);
                 break;
             }
             case 4: {
                 // tablet id
-                fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.tablet_id);
+                fill_column_with_slot<TYPE_BIGINT>(column, (void*)&info.tablet_id);
                 break;
             }
             case 5: {
                 // num version
-                fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.num_version);
+                fill_column_with_slot<TYPE_BIGINT>(column, (void*)&info.num_version);
                 break;
             }
             case 6: {
                 // max version
-                fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.max_version);
+                fill_column_with_slot<TYPE_BIGINT>(column, (void*)&info.max_version);
                 break;
             }
             case 7: {
                 // min version
-                fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.min_version);
+                fill_column_with_slot<TYPE_BIGINT>(column, (void*)&info.min_version);
                 break;
             }
             case 8: {
                 // num rowset
-                fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.num_rowset);
+                fill_column_with_slot<TYPE_BIGINT>(column, (void*)&info.num_rowset);
                 break;
             }
             case 9: {
                 // num rows
-                fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.num_row);
+                fill_column_with_slot<TYPE_BIGINT>(column, (void*)&info.num_row);
                 break;
             }
             case 10: {
                 // data size
-                fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.data_size);
+                fill_column_with_slot<TYPE_BIGINT>(column, (void*)&info.data_size);
                 break;
             }
             case 11: {
                 // index mem
-                fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.index_mem);
+                fill_column_with_slot<TYPE_BIGINT>(column, (void*)&info.index_mem);
                 break;
             }
             case 12: {
                 // create time
-                fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.create_time);
+                fill_column_with_slot<TYPE_BIGINT>(column, (void*)&info.create_time);
                 break;
             }
             case 13: {
                 // state
                 Slice state = Slice(tablet_state_to_string((TabletState)info.state));
-                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&state);
+                fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&state);
                 break;
             }
             case 14: {
                 // type
                 Slice type = Slice(keys_type_to_string((KeysType)info.type));
-                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&type);
+                fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&type);
                 break;
             }
             case 15: {
                 // DATA_DIR
                 Slice data_dir = Slice(info.data_dir);
-                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&data_dir);
+                fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&data_dir);
                 break;
             }
             case 16: {
                 // SHARD_ID
-                fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.shard_id);
+                fill_column_with_slot<TYPE_BIGINT>(column, (void*)&info.shard_id);
                 break;
             }
             case 17: {
                 // SCHEMA_HASH
-                fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.schema_hash);
+                fill_column_with_slot<TYPE_BIGINT>(column, (void*)&info.schema_hash);
                 break;
             }
             case 18: {
                 // INDEX_DISK
-                fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.index_disk_usage);
+                fill_column_with_slot<TYPE_BIGINT>(column, (void*)&info.index_disk_usage);
                 break;
             }
             case 19: {
                 // medium type
                 Slice medium_type = Slice(medium_type_to_string(info.medium_type));
-                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&medium_type);
+                fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&medium_type);
                 break;
             }
             case 20: {
                 // NUM_SEGMENT
-                fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.num_segment);
+                fill_column_with_slot<TYPE_BIGINT>(column, (void*)&info.num_segment);
             }
             default:
                 break;

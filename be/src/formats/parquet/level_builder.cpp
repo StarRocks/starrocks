@@ -39,7 +39,7 @@ inline const uint8_t* get_raw_null_column(const ColumnPtr& col) {
     if (!col->has_null()) {
         return nullptr;
     }
-    auto& null_column = down_cast<const NullableColumn*>(col.get())->null_column();
+    auto null_column = down_cast<const NullableColumn*>(col.get())->null_column();
     auto* raw_column = null_column->immutable_data().data();
     return raw_column;
 }

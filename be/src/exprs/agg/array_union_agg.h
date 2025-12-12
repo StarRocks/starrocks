@@ -159,9 +159,9 @@ public:
     }
 
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
-                                     ColumnPtr* dst) const override {
+                                     MutableColumnPtr& dst) const override {
         const Column* src_data = ColumnHelper::get_data_column(src[0].get());
-        (*dst)->append(*src_data);
+        dst->append(*src_data);
     }
 
     std::string get_name() const override { return is_distinct ? "array_unique_agg" : "array_union_agg"; }

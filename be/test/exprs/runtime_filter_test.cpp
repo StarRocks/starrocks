@@ -361,7 +361,7 @@ TEST_F(RuntimeMembershipFilterTest, TestJoinRuntimeFilter) {
     EXPECT_EQ(minmax.max_value(&_pool), 187);
 
     // test evaluate.
-    ColumnPtr column = ColumnHelper::create_column(TYPE_INT_DESC, false);
+    auto column = ColumnHelper::create_column(TYPE_INT_DESC, false);
     auto* col = ColumnHelper::as_raw_column<RunTimeTypeTraits<TYPE_INT>::ColumnType>(column);
     for (int i = 0; i <= 200; i += 1) {
         col->append(i);
@@ -783,12 +783,12 @@ void test_pipeline_level_grf_helper_template(TRuntimeFilterBuildJoinMode::type j
                                         join_mode == TRuntimeFilterBuildJoinMode::SHUFFLE_HASH_BUCKET);
     auto part_func = part_func_gen(is_reduce);
     part_func(column.get(), hash_values, num_rows_per_partitions);
-    Columns columns(num_partitions);
+    MutableColumns columns(num_partitions);
     for (auto p = 0; p < num_partitions; ++p) {
         auto size = num_rows_per_partitions[p];
         bfs[p].membership_filter().init(size);
         columns[p] = BinaryColumn::create();
-        columns[p]->reserve(size);
+        columns[p]->as_mutable_ptr()->reserve(size);
     }
 
     int num_bucket_absent = 0;
@@ -806,7 +806,7 @@ void test_pipeline_level_grf_helper_template(TRuntimeFilterBuildJoinMode::type j
     int rf_version = RF_VERSION_V2;
     std::vector<std::vector<RuntimeFilter*>> rfs_per_instance;
     std::vector<Columns> columns_per_instance;
-    split_merged_rf(layout, rfs, columns, rfs_per_instance, columns_per_instance);
+    split_merged_rf(layout, rfs, ColumnHelper::to_columns(std::move(columns)), rfs_per_instance, columns_per_instance);
     std::vector<ComposedRuntimeBloomFilter<TYPE_VARCHAR>> pipeline_level_bfs_per_instance(rfs_per_instance.size());
     std::vector<RuntimeFilter*> merged_rf_per_instance(rfs_per_instance.size());
     std::vector<std::string> serialized_rfs(merged_rf_per_instance.size());
@@ -1126,9 +1126,8 @@ void test_pipeline_level_broadcast(size_t num_rows, TRuntimeFilterBuildJoinMode:
     test_pipeline_level_helper(join_mode, layout, num_rows, 1);
 }
 
-void TestMultiColumnsOnRuntimeFilter(TRuntimeFilterBuildJoinMode::type join_mode, std::vector<ColumnPtr> columns,
-                                     int64_t num_rows, int64_t num_partitions,
-                                     std::vector<int32_t> bucketseq_to_partition) {
+void TestMultiColumnsOnRuntimeFilter(TRuntimeFilterBuildJoinMode::type join_mode, Columns columns, int64_t num_rows,
+                                     int64_t num_partitions, std::vector<int32_t> bucketseq_to_partition) {
     std::vector<uint32_t> expected_hash_values;
     std::vector<size_t> num_rows_per_partitions(num_partitions, 0);
 
@@ -1239,7 +1238,7 @@ ColumnPtr CreateSeriesColumnInt32(int32_t num_rows, bool nullable) {
 }
 
 TEST_F(RuntimeFilterTest, TestMultiColumnsOnRuntimeFilter_BucketJoin) {
-    std::vector<ColumnPtr> columns;
+    Columns columns;
     int32_t num_rows = 100;
     int32_t num_partition = 10;
     for (int i = 0; i < 10; i++) {
@@ -1251,7 +1250,7 @@ TEST_F(RuntimeFilterTest, TestMultiColumnsOnRuntimeFilter_BucketJoin) {
 }
 
 TEST_F(RuntimeFilterTest, TestMultiColumnsOnRuntimeFilter_ShuffleJoin) {
-    std::vector<ColumnPtr> columns;
+    Columns columns;
     int32_t num_rows = 100;
     int32_t num_partition = 10;
     for (int i = 0; i < 10; i++) {
@@ -1344,7 +1343,7 @@ TEST_F(RuntimeMembershipFilterTest, TestEvaluateEmptyFilter) {
     }
 
     const auto col = ColumnTestHelper::build_column<int32_t>({-1, 5, 10, 15, 20, 25, 200});
-    auto nullable_col = ColumnHelper::cast_to_nullable_column(col->clone()->get_ptr());
+    auto nullable_col = ColumnHelper::cast_to_nullable_column(col->clone());
     nullable_col->append_nulls(2);
 
     // Non-null RF evaluates non-nullable column.
@@ -1415,7 +1414,7 @@ TEST_F(RuntimeMembershipFilterTest, TestEvaluateBitsetFilter) {
     }
 
     const auto col = ColumnTestHelper::build_column<int32_t>({-1, 5, 10, 15, 20, 25, 200});
-    auto nullable_col = ColumnHelper::cast_to_nullable_column(col->clone()->get_ptr());
+    auto nullable_col = ColumnHelper::cast_to_nullable_column(col->clone());
     nullable_col->append_nulls(2);
 
     // Non-null RF evaluates non-nullable column.

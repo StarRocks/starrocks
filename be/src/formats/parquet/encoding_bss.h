@@ -140,7 +140,7 @@ public:
             // decoded result is in decode_buffer_ if we pass nullptr.
             RETURN_IF_ERROR(Decode(nullptr, count));
             if (dst->is_nullable()) {
-                down_cast<NullableColumn*>(dst)->mutable_null_column()->append_default(count);
+                down_cast<NullableColumn*>(dst)->null_column_raw_ptr()->append_default(count);
             }
             auto* binary_column = ColumnHelper::get_binary_column(dst);
             const char* string_buffer = (const char*)decode_buffer_.data();

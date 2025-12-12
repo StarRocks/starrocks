@@ -23,11 +23,11 @@
 namespace starrocks {
 
 PARALLEL_TEST(StructFunctionsTest, test_new_struct) {
-    Columns input_columns;
+    MutableColumns input_columns;
     for (int i = 0; i < 5; ++i) {
         TypeDescriptor type;
         type.type = LogicalType::TYPE_INT;
-        input_columns.emplace_back(ColumnHelper::create_column(type, true));
+        input_columns.emplace_back(ColumnHelper::create_column(type, true)->as_mutable_ptr());
     }
 
     // append 0,1,2,3,4
@@ -60,7 +60,7 @@ PARALLEL_TEST(StructFunctionsTest, test_new_struct) {
 
     FunctionContext* context = FunctionContext::create_context(nullptr, nullptr, ret_type, arg_types);
 
-    auto ret = StructFunctions::new_struct(context, input_columns);
+    auto ret = StructFunctions::new_struct(context, ColumnHelper::to_columns(std::move(input_columns)));
     delete context;
     ASSERT_TRUE(ret.ok());
     auto struct_col = std::move(ret).value();
@@ -72,7 +72,7 @@ PARALLEL_TEST(StructFunctionsTest, test_new_struct) {
 }
 
 PARALLEL_TEST(StructFunctionsTest, test_named_struct) {
-    Columns input_columns;
+    MutableColumns input_columns;
     for (int i = 0; i < 6; ++i) {
         TypeDescriptor type;
         type.type = LogicalType::TYPE_INT;
@@ -108,7 +108,7 @@ PARALLEL_TEST(StructFunctionsTest, test_named_struct) {
 
     FunctionContext* context = FunctionContext::create_context(nullptr, nullptr, ret_type, arg_types);
 
-    auto ret = StructFunctions::named_struct(context, input_columns);
+    auto ret = StructFunctions::named_struct(context, ColumnHelper::to_columns(std::move(input_columns)));
     delete context;
     ASSERT_TRUE(ret.ok());
     auto struct_col = std::move(ret).value();

@@ -154,7 +154,7 @@ public:
         auto chunk = ChunkHelper::new_chunk(schema, 1024);
         for (size_t i = 0; i < 1024; ++i) {
             test_data.push_back("well" + std::to_string(i));
-            auto& cols = chunk->columns();
+            auto cols = chunk->mutable_columns();
             cols[0]->append_datum(Datum(static_cast<int32_t>(i)));
             Slice field_1(test_data[i]);
             cols[1]->append_datum(Datum(field_1));
@@ -231,7 +231,7 @@ TEST_F(PublishVersionTaskTest, test_publish_version) {
         for (size_t i = 0; i < 1024; ++i) {
             indexes.push_back(i);
             test_data.push_back("well" + std::to_string(i));
-            auto& cols = chunk->columns();
+            auto cols = chunk->mutable_columns();
             cols[0]->append_datum(Datum(static_cast<int32_t>(i)));
             Slice field_1(test_data[i]);
             cols[1]->append_datum(Datum(field_1));
@@ -334,7 +334,7 @@ TEST_F(PublishVersionTaskTest, test_publish_version2) {
         for (size_t i = 0; i < 1024; ++i) {
             indexes.push_back(i);
             test_data.push_back("well" + std::to_string(i));
-            auto& cols = chunk->columns();
+            auto cols = chunk->mutable_columns();
             cols[0]->append_datum(Datum(static_cast<int32_t>(i)));
             Slice field_1(test_data[i]);
             cols[1]->append_datum(Datum(field_1));
@@ -422,7 +422,7 @@ TEST_F(PublishVersionTaskTest, test_publish_version_cancellation) {
         for (size_t i = 0; i < 128; ++i) {
             indexes.push_back(i);
             test_data.push_back("well" + std::to_string(i));
-            auto& cols = chunk->columns();
+            auto cols = chunk->mutable_columns();
             cols[0]->append_datum(Datum(static_cast<int32_t>(i)));
             Slice field_1(test_data[i]);
             cols[1]->append_datum(Datum(field_1));
@@ -574,7 +574,7 @@ TEST_F(PublishVersionTaskTest, test_publish_version_overwrite_failed) {
         indexes.reserve(8);
         for (size_t i = 0; i < 8; ++i) {
             indexes.push_back(i);
-            auto& cols = chunk->columns();
+            auto cols = chunk->mutable_columns();
             cols[0]->append_datum(Datum(static_cast<int32_t>(i)));
             std::string s_str = std::string("owf") + std::to_string(i);
             Slice s(s_str);
@@ -689,7 +689,7 @@ TEST_F(PublishVersionTaskTest, test_publish_version_tablet_dropped) {
         indexes.reserve(8);
         for (size_t i = 0; i < 8; ++i) {
             indexes.push_back(i);
-            auto& cols = chunk->columns();
+            auto cols = chunk->mutable_columns();
             cols[0]->append_datum(Datum(static_cast<int32_t>(i)));
             std::string s_str = std::string("dropped") + std::to_string(i);
             Slice s(s_str);

@@ -384,8 +384,8 @@ TEST_F(VectorizedInPredicateTest, inArray) {
             ASSERT_TRUE(expr->open(nullptr, nullptr, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
             ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
             ASSERT_TRUE(ptr->is_nullable());
-            auto data = down_cast<NullableColumn*>(ptr.get())->data_column();
-            auto* v = down_cast<BooleanColumn*>(data.get());
+            auto data = down_cast<const NullableColumn*>(ptr.get())->data_column();
+            auto* v = down_cast<const BooleanColumn*>(data.get());
             // true,NULL,false
             ASSERT_FALSE(ptr->is_null(0));
             ASSERT_TRUE(ptr->is_null(1));
@@ -431,7 +431,7 @@ TEST_F(VectorizedInPredicateTest, inArrayConstAll) {
             ASSERT_TRUE(expr->open(nullptr, nullptr, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
             ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
             ASSERT_TRUE(ptr->is_constant());
-            auto v = down_cast<BooleanColumn*>(down_cast<ConstColumn*>(ptr.get())->data_column().get());
+            auto v = down_cast<const BooleanColumn*>(down_cast<const ConstColumn*>(ptr.get())->data_column().get());
             ASSERT_EQ(!not_in, v->get_data()[0]);
             ASSERT_EQ(ptr->size(), 3);
         }

@@ -465,8 +465,8 @@ Status UpdateManager::_read_chunk_for_upsert(const TxnLogPB_OpWrite& op_write, c
             const TabletColumn& col = tschema->column(cid);
             ASSIGN_OR_RETURN(auto col_iter, segment->new_column_iterator_or_default(col, nullptr));
             RETURN_IF_ERROR(col_iter->init(iter_opts));
-            RETURN_IF_ERROR(col_iter->fetch_values_by_rowid(insert_rowids.data(), insert_rowids.size(),
-                                                            full_chunk->get_column_by_id(cid).get()));
+            auto mut_col = full_chunk->get_column_raw_ptr_by_id(cid);
+            RETURN_IF_ERROR(col_iter->fetch_values_by_rowid(insert_rowids.data(), insert_rowids.size(), mut_col));
         }
     }
 
@@ -491,10 +491,11 @@ Status UpdateManager::_read_chunk_for_upsert(const TxnLogPB_OpWrite& op_write, c
                                                                  (int)insert_rowids.size());
             ColumnIteratorOptions iter_opts;
             RETURN_IF_ERROR(default_value_iter->init(iter_opts));
-            RETURN_IF_ERROR(default_value_iter->fetch_values_by_rowid(nullptr, insert_rowids.size(),
-                                                                      full_chunk->get_column_by_id(cid).get()));
+            auto mut_col = full_chunk->get_column_raw_ptr_by_id(cid);
+            RETURN_IF_ERROR(default_value_iter->fetch_values_by_rowid(nullptr, insert_rowids.size(), mut_col));
         } else {
-            full_chunk->get_column_by_id(cid)->append_default(insert_rowids.size());
+            auto mut_col = full_chunk->get_column_raw_ptr_by_id(cid);
+            mut_col->append_default(insert_rowids.size());
         }
     }
 
@@ -845,8 +846,7 @@ Status UpdateManager::_handle_index_op(int64_t tablet_id, int64_t base_version, 
     return Status::OK();
 }
 
-Status UpdateManager::get_rowids_from_pkindex(int64_t tablet_id, int64_t base_version,
-                                              const std::vector<MutableColumnPtr>& upserts,
+Status UpdateManager::get_rowids_from_pkindex(int64_t tablet_id, int64_t base_version, const MutableColumns& upserts,
                                               std::vector<std::vector<uint64_t>*>* rss_rowids, bool need_lock) {
     Status st;
     st.update(_handle_index_op(tablet_id, base_version, need_lock, [&](LakePrimaryIndex& index) {
@@ -932,8 +932,7 @@ static StatusOr<std::unique_ptr<ColumnIterator>> new_lake_dcg_column_iterator(
 
 Status UpdateManager::get_column_values(const RowsetUpdateStateParams& params, std::vector<uint32_t>& column_ids,
                                         bool with_default, std::map<uint32_t, std::vector<uint32_t>>& rowids_by_rssid,
-                                        vector<MutableColumnPtr>* columns,
-                                        const std::map<string, string>* column_to_expr_value,
+                                        MutableColumns* columns, const std::map<string, string>* column_to_expr_value,
                                         AutoIncrementPartialUpdateState* auto_increment_state) {
     TRACE_COUNTER_SCOPE_LATENCY_US("get_column_values_latency_us");
     std::stringstream cost_str;

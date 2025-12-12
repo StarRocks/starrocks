@@ -302,7 +302,7 @@ public:
     }
 
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
-                                     ColumnPtr* dst) const override {
+                                     MutableColumnPtr& dst) const override {
         TestingAlternative alternative{TestingAlternative::TwoSided};
         int64_t continuity_correction = 1;
 
@@ -345,7 +345,7 @@ public:
                 state.update(x, treatment);
             }
 
-            serialize_to_column(ctx, reinterpret_cast<AggDataPtr>(&state), dst->get());
+            serialize_to_column(ctx, reinterpret_cast<AggDataPtr>(&state), dst->as_mutable_raw_ptr());
         }
     }
 

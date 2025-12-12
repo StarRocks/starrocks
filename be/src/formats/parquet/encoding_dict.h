@@ -97,8 +97,8 @@ public:
             FixedLengthColumn<int32_t>* data_column;
             if (dst->is_nullable()) {
                 auto nullable_column = down_cast<NullableColumn*>(dst);
-                nullable_column->null_column()->append_default(count);
-                data_column = down_cast<FixedLengthColumn<int32_t>*>(nullable_column->data_column().get());
+                nullable_column->null_column_raw_ptr()->append_default(count);
+                data_column = down_cast<FixedLengthColumn<int32_t>*>(nullable_column->data_column_raw_ptr());
             } else {
                 data_column = down_cast<FixedLengthColumn<int32_t>*>(dst);
             }
@@ -172,7 +172,7 @@ public:
         auto nullable_column = down_cast<NullableColumn*>(dst);
 
         size_t read_count = count - null_cnt;
-        Int32Column* data_column = down_cast<Int32Column*>(nullable_column->data_column().get());
+        Int32Column* data_column = down_cast<Int32Column*>(nullable_column->data_column_raw_ptr());
         // resize data
         data_column->resize_uninitialized(cur_size + count);
         int32_t* __restrict__ data = data_column->get_data().data() + cur_size;
@@ -270,7 +270,7 @@ public:
         // assign null infos
         size_t null_cnt = null_infos.num_nulls;
         auto nullable_column = down_cast<NullableColumn*>(dst);
-        FixedLengthColumn<T>* data_column = down_cast<FixedLengthColumn<T>*>(nullable_column->data_column().get());
+        FixedLengthColumn<T>* data_column = down_cast<FixedLengthColumn<T>*>(nullable_column->data_column_raw_ptr());
         // resize data
         data_column->resize_uninitialized(cur_size + count);
         T* __restrict__ data = data_column->get_data().data() + cur_size;
@@ -324,8 +324,8 @@ private:
         FixedLengthColumn<T>* data_column /* = nullptr */;
         if (dst->is_nullable()) {
             auto nullable_column = down_cast<NullableColumn*>(dst);
-            nullable_column->null_column()->append_default(count);
-            data_column = down_cast<FixedLengthColumn<T>*>(nullable_column->data_column().get());
+            nullable_column->null_column_raw_ptr()->append_default(count);
+            data_column = down_cast<FixedLengthColumn<T>*>(nullable_column->data_column_raw_ptr());
         } else {
             data_column = down_cast<FixedLengthColumn<T>*>(dst);
         }
@@ -616,7 +616,7 @@ private:
                 return Status::InternalError("Index not in dictionary bounds");
             }
             if (dst->is_nullable()) {
-                down_cast<NullableColumn*>(dst)->mutable_null_column()->append_default(count);
+                down_cast<NullableColumn*>(dst)->null_column_raw_ptr()->append_default(count);
             }
             auto* binary_column = ColumnHelper::get_binary_column(dst);
             for (int i = 0; i < count; ++i) {

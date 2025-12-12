@@ -449,10 +449,10 @@ public:
     }
 
     static StatusOr<const uint8_t*> deserialize(const uint8_t* buff, NullableColumn* column, const int encode_level) {
-        ASSIGN_OR_RETURN(buff,
-                         serde::ColumnArraySerde::deserialize(buff, column->null_column().get(), false, encode_level));
-        ASSIGN_OR_RETURN(buff,
-                         serde::ColumnArraySerde::deserialize(buff, column->data_column().get(), false, encode_level));
+        ASSIGN_OR_RETURN(
+                buff, serde::ColumnArraySerde::deserialize(buff, column->null_column_raw_ptr(), false, encode_level));
+        ASSIGN_OR_RETURN(
+                buff, serde::ColumnArraySerde::deserialize(buff, column->data_column_raw_ptr(), false, encode_level));
         column->update_has_null();
         return buff;
     }
@@ -473,9 +473,9 @@ public:
 
     static StatusOr<const uint8_t*> deserialize(const uint8_t* buff, ArrayColumn* column, const int encode_level) {
         ASSIGN_OR_RETURN(
-                buff, serde::ColumnArraySerde::deserialize(buff, column->offsets_column().get(), true, encode_level));
-        ASSIGN_OR_RETURN(
-                buff, serde::ColumnArraySerde::deserialize(buff, column->elements_column().get(), false, encode_level));
+                buff, serde::ColumnArraySerde::deserialize(buff, column->offsets_column_raw_ptr(), true, encode_level));
+        ASSIGN_OR_RETURN(buff, serde::ColumnArraySerde::deserialize(buff, column->elements_column_raw_ptr(), false,
+                                                                    encode_level));
         return buff;
     }
 };
@@ -497,11 +497,11 @@ public:
 
     static StatusOr<const uint8_t*> deserialize(const uint8_t* buff, MapColumn* column, const int encode_level) {
         ASSIGN_OR_RETURN(
-                buff, serde::ColumnArraySerde::deserialize(buff, column->offsets_column().get(), true, encode_level));
-        ASSIGN_OR_RETURN(buff,
-                         serde::ColumnArraySerde::deserialize(buff, column->keys_column().get(), false, encode_level));
+                buff, serde::ColumnArraySerde::deserialize(buff, column->offsets_column_raw_ptr(), true, encode_level));
         ASSIGN_OR_RETURN(
-                buff, serde::ColumnArraySerde::deserialize(buff, column->values_column().get(), false, encode_level));
+                buff, serde::ColumnArraySerde::deserialize(buff, column->keys_column_raw_ptr(), false, encode_level));
+        ASSIGN_OR_RETURN(
+                buff, serde::ColumnArraySerde::deserialize(buff, column->values_column_raw_ptr(), false, encode_level));
         return buff;
     }
 };
@@ -524,8 +524,9 @@ public:
     }
 
     static StatusOr<const uint8_t*> deserialize(const uint8_t* buff, StructColumn* column, const int encode_level) {
-        for (auto& field : column->fields_column()) {
-            ASSIGN_OR_RETURN(buff, serde::ColumnArraySerde::deserialize(buff, field.get(), false, encode_level));
+        for (auto& field : column->fields()) {
+            ASSIGN_OR_RETURN(
+                    buff, serde::ColumnArraySerde::deserialize(buff, field->as_mutable_raw_ptr(), false, encode_level));
         }
         return buff;
     }
@@ -547,8 +548,8 @@ public:
     static StatusOr<const uint8_t*> deserialize(const uint8_t* buff, ConstColumn* column, const int encode_level) {
         uint64_t size = 0;
         buff = read_little_endian_64(buff, &size);
-        ASSIGN_OR_RETURN(buff,
-                         serde::ColumnArraySerde::deserialize(buff, column->data_column().get(), false, encode_level));
+        ASSIGN_OR_RETURN(
+                buff, serde::ColumnArraySerde::deserialize(buff, column->data_column_raw_ptr(), false, encode_level));
         column->resize(size);
         return buff;
     }

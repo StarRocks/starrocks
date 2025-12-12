@@ -49,7 +49,7 @@ public:
         tuple.append(Datum(pk1));
         tuple.append(Datum(v1));
         tuple.append(Datum(v2));
-        data.push_back(tuple);
+        data.emplace_back(tuple);
     }
 
     static void create_rowset(const TabletSharedPtr& tablet, int version, const vector<DatumTuple>& data, int start_pos,
@@ -70,7 +70,7 @@ public:
         EXPECT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &writer).ok());
         auto schema = ChunkHelper::convert_schema(tablet->tablet_schema());
         auto chunk = ChunkHelper::new_chunk(schema, data.size());
-        auto& cols = chunk->columns();
+        auto cols = chunk->mutable_columns();
         for (int pos = start_pos; pos < end_pos; pos++) {
             const DatumTuple& row = data[pos];
             DatumTuple tmp_row;
@@ -97,19 +97,19 @@ public:
         pk1.column_name = "pk1";
         pk1.__set_is_key(true);
         pk1.column_type.type = TPrimitiveType::BIGINT;
-        request.tablet_schema.columns.push_back(pk1);
+        request.tablet_schema.columns.emplace_back(pk1);
 
         TColumn v1;
         v1.column_name = "v1";
         v1.__set_is_key(false);
         v1.column_type.type = TPrimitiveType::BIGINT;
-        request.tablet_schema.columns.push_back(v1);
+        request.tablet_schema.columns.emplace_back(v1);
 
         TColumn v2;
         v2.column_name = "v2";
         v2.__set_is_key(false);
         v2.column_type.type = TPrimitiveType::INT;
-        request.tablet_schema.columns.push_back(v2);
+        request.tablet_schema.columns.emplace_back(v2);
         auto st = StorageEngine::instance()->create_tablet(request);
         CHECK(st.ok()) << st.to_string();
         return StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id, false);
@@ -181,8 +181,8 @@ TEST_F(TableReaderRemoteTest, test_multi_get_1_tablet) {
     int64_t tablet_id = rand();
     for (int i = 0; i < num_buckets; i++) {
         TabletSharedPtr tablet = create_tablet(tablet_id + i, rand());
-        _tablets.push_back(tablet);
-        _tablet_ids.push_back(tablet_id + i);
+        _tablets.emplace_back(tablet);
+        _tablet_ids.emplace_back(tablet_id + i);
     }
     _key_schema = ChunkHelper::convert_schema(_tablets[0]->tablet_schema(), {0});
     _value_schema = ChunkHelper::convert_schema(_tablets[0]->tablet_schema(), {1, 2});
@@ -239,16 +239,16 @@ TEST_F(TableReaderRemoteTest, test_multi_get_1_tablet) {
     ChunkPtr key_chunk = std::make_shared<Chunk>();
     TypeDescriptor key_type = TypeDescriptor::from_thrift(read_params.schema.slot_descs[0].slotType);
     key_chunk->append_column(ColumnHelper::create_column(key_type, false), read_params.schema.slot_descs[0].id);
-    key_chunk->get_column_by_index(0)->reserve(multi_get_size);
+    key_chunk->get_column_raw_ptr_by_index(0)->reserve(multi_get_size);
     ChunkPtr values_chunk = ChunkHelper::new_chunk(_value_schema, multi_get_size);
     vector<int64_t> expected_values;
     vector<bool> expected_found(multi_get_size, false);
     for (int64_t i = 0; i < multi_get_size; i++) {
         int64_t pk = i * 2;
-        key_chunk->get_column_by_index(0)->append_datum(Datum(pk));
+        key_chunk->get_column_raw_ptr_by_index(0)->append_datum(Datum(pk));
         if (all_ints.find(pk) != all_ints.end()) {
             expected_found[i] = true;
-            expected_values.push_back(pk * 2);
+            expected_values.emplace_back(pk * 2);
         }
     }
     vector<bool> found;
@@ -275,8 +275,8 @@ TEST_F(TableReaderRemoteTest, test_multi_get_4_tablet) {
     int64_t tablet_id = rand();
     for (int i = 0; i < num_buckets; i++) {
         TabletSharedPtr tablet = create_tablet(tablet_id + i, rand());
-        _tablets.push_back(tablet);
-        _tablet_ids.push_back(tablet_id + i);
+        _tablets.emplace_back(tablet);
+        _tablet_ids.emplace_back(tablet_id + i);
     }
     _key_schema = ChunkHelper::convert_schema(_tablets[0]->tablet_schema(), {0});
     _value_schema = ChunkHelper::convert_schema(_tablets[0]->tablet_schema(), {1, 2});
@@ -335,16 +335,16 @@ TEST_F(TableReaderRemoteTest, test_multi_get_4_tablet) {
         ChunkPtr key_chunk = std::make_shared<Chunk>();
         TypeDescriptor key_type = TypeDescriptor::from_thrift(read_params.schema.slot_descs[0].slotType);
         key_chunk->append_column(ColumnHelper::create_column(key_type, false), read_params.schema.slot_descs[0].id);
-        key_chunk->get_column_by_index(0)->reserve(multi_get_size);
+        key_chunk->get_column_raw_ptr_by_index(0)->reserve(multi_get_size);
         ChunkPtr values_chunk = ChunkHelper::new_chunk(_value_schema, multi_get_size);
         vector<int64_t> expected_values;
         vector<bool> expected_found(multi_get_size, false);
         for (int64_t i = 0; i < multi_get_size; i++) {
             int64_t pk = rand() % pk_range;
-            key_chunk->get_column_by_index(0)->append_datum(Datum(pk));
+            key_chunk->get_column_raw_ptr_by_index(0)->append_datum(Datum(pk));
             if (all_ints.find(pk) != all_ints.end()) {
                 expected_found[i] = true;
-                expected_values.push_back(pk * 2);
+                expected_values.emplace_back(pk * 2);
             }
         }
         vector<bool> found;
