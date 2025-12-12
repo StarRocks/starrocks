@@ -123,6 +123,10 @@ public class PRangeCellPlus implements Comparable<PRangeCellPlus> {
         private final String partitionName;
         private final PRangeCell rangeCell;
 
+        public PCellCacheKey(Table refBaseTable, PRangeCellPlus plus) {
+            this(refBaseTable, plus.getPartitionName(), plus.getCell());
+        }
+
         public PCellCacheKey(Table refBaseTable,
                              String partitionName, PRangeCell rangeCell) {
             this.refBaseTable = refBaseTable;

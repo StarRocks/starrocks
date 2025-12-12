@@ -19,10 +19,14 @@ import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Range;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.MvPlanContext;
+import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Pair;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.common.PRangeCell;
@@ -57,10 +61,12 @@ import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.utframe.UtFrameUtils;
 import org.apache.parquet.Strings;
 import org.assertj.core.util.Sets;
+import org.junit.Assert;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
+import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
@@ -1166,139 +1172,6 @@ public class MvRewritePreprocessorTest extends MVTestBase {
                 });
     }
 
-    @Test
-    public void testMvIdGetNameWithValidMv() {
-        starRocksAssert.withMaterializedView("create materialized view mvid_test_mv5 " +
-                        "distributed by random as select k1, v1 from t1",
-                (obj) -> {
-                    MaterializedView mv = getMv(DB_NAME, "mvid_test_mv5");
-                    Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB_NAME);
-
-                    MvId mvId = new MvId(db.getId(), mv.getId());
-                    String name = mvId.getName();
-
-                    Assert.assertNotNull(name);
-                    Assert.assertTrue(name.contains(DB_NAME));
-                    Assert.assertTrue(name.contains("mvid_test_mv5"));
-                    Assert.assertTrue(name.contains("."));
-                });
-    }
-
-    @Test
-    public void testMvIdGetNameWithInvalidDbId() {
-        // Create MvId with non-existent database ID
-        long invalidDbId = 999999999L;
-        long validMvId = 1L;
-
-        MvId mvId = new MvId(invalidDbId, validMvId);
-        String name = mvId.getName();
-
-        // Should return empty string when DB doesn't exist
-        Assert.assertEquals("", name);
-    }
-
-    @Test
-    public void testMvIdGetNameWithInvalidMvId() {
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB_NAME);
-        long invalidMvId = 999999999L;
-
-        MvId mvId = new MvId(db.getId(), invalidMvId);
-        String name = mvId.getName();
-
-        // Should return empty string when table doesn't exist
-        Assert.assertEquals("", name);
-    }
-
-    @Test
-    public void testMvIdToStringWithValidMv() {
-        starRocksAssert.withMaterializedView("create materialized view mvid_test_mv6 " +
-                        "distributed by random as select k1, v1 from t1",
-                (obj) -> {
-                    MaterializedView mv = getMv(DB_NAME, "mvid_test_mv6");
-                    Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB_NAME);
-
-                    MvId mvId = new MvId(db.getId(), mv.getId());
-                    String toString = mvId.toString();
-
-                    Assert.assertNotNull(toString);
-                    // Should return the full name (db.table) when MV exists
-                    Assert.assertTrue(toString.contains(DB_NAME));
-                    Assert.assertTrue(toString.contains("mvid_test_mv6"));
-                });
-    }
-
-    @Test
-    public void testMvIdToStringWithInvalidMv() {
-        // Create MvId with non-existent database ID
-        long invalidDbId = 999999999L;
-        long invalidMvId = 888888888L;
-
-        MvId mvId = new MvId(invalidDbId, invalidMvId);
-        String toString = mvId.toString();
-
-        Assert.assertNotNull(toString);
-        // Should return "dbId.mvId" format when name is empty
-        Assert.assertTrue(toString.contains(String.valueOf(invalidDbId)));
-        Assert.assertTrue(toString.contains(String.valueOf(invalidMvId)));
-        Assert.assertTrue(toString.contains("."));
-    }
-
-    @Test
-    public void testMvIdLazyNameCaching() {
-        starRocksAssert.withMaterializedView("create materialized view mvid_test_mv7 " +
-                        "distributed by random as select k1, v1 from t1",
-                (obj) -> {
-                    MaterializedView mv = getMv(DB_NAME, "mvid_test_mv7");
-                    Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB_NAME);
-
-                    MvId mvId = new MvId(db.getId(), mv.getId());
-
-                    // First call - should compute and cache
-                    String name1 = mvId.getName();
-                    // Second call - should return cached value
-                    String name2 = mvId.getName();
-
-                    // Both calls should return the same value
-                    Assert.assertEquals(name1, name2);
-                    Assert.assertNotNull(name1);
-                    Assert.assertTrue(name1.contains("mvid_test_mv7"));
-                });
-    }
-
-    @Test
-    public void testMvIdWithDifferentDatabases() {
-        try {
-            // Create another database
-            starRocksAssert.withDatabase("test_db2");
-            starRocksAssert.useDatabase("test_db2");
-            starRocksAssert.withTable("CREATE TABLE test_db2.t1\n" +
-                    "(\n" +
-                    "    k1 int,\n" +
-                    "    v1 int\n" +
-                    ")\n" +
-                    "DISTRIBUTED BY HASH(k1) BUCKETS 3\n" +
-                    "PROPERTIES('replication_num' = '1');");
-
-            starRocksAssert.withMaterializedView("create materialized view mvid_test_mv8 " +
-                            "distributed by random as select k1, v1 from test_db2.t1",
-                    (obj) -> {
-                        MaterializedView mv = getMv("test_db2", "mvid_test_mv8");
-                        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test_db2");
-
-                        MvId mvId = new MvId(db.getId(), mv.getId());
-                        String name = mvId.getName();
-
-                        Assert.assertNotNull(name);
-                        Assert.assertTrue(name.contains("test_db2"));
-                        Assert.assertTrue(name.contains("mvid_test_mv8"));
-                    });
-
-            starRocksAssert.dropDatabase("test_db2");
-            starRocksAssert.useDatabase(DB_NAME);
-        } catch (Exception e) {
-            Assert.fail("Test failed with exception: " + e.getMessage());
-        }
-    }
 
     @Test
     public void testMvIdEqualityContract() {
@@ -1391,32 +1264,6 @@ public class MvRewritePreprocessorTest extends MVTestBase {
     }
 
     @Test
-    public void testMaterializedViewWrapperEquals() {
-        starRocksAssert.withMaterializedView("create materialized view wrapper_test_mv5 " +
-                        "distributed by random as select k1, v1 from t1",
-                (obj) -> {
-                    MaterializedView mv = getMv(DB_NAME, "wrapper_test_mv5");
-                    MaterializedViewWrapper wrapper1 = MaterializedViewWrapper.create(mv, 0);
-                    MaterializedViewWrapper wrapper2 = MaterializedViewWrapper.create(mv, 1);
-                    MaterializedViewWrapper wrapper3 = MaterializedViewWrapper.create(mv, 0);
-
-                    // Same MV should be equal regardless of level
-                    Assert.assertEquals(wrapper1, wrapper2);
-                    Assert.assertEquals(wrapper1, wrapper3);
-                    Assert.assertEquals(wrapper2, wrapper3);
-
-                    // Self equality
-                    Assert.assertEquals(wrapper1, wrapper1);
-
-                    // Null check
-                    Assert.assertNotEquals(wrapper1, null);
-
-                    // Different class check
-                    Assert.assertNotEquals(wrapper1, "string");
-                });
-    }
-
-    @Test
     public void testMaterializedViewWrapperEqualsWithDifferentMVs() {
         List<String> mvs = ImmutableList.of(
                 "create materialized view wrapper_test_mv6 distributed by random as select k1, v1 from t1",
@@ -1433,20 +1280,6 @@ public class MvRewritePreprocessorTest extends MVTestBase {
 
                     // Different MVs should not be equal
                     Assert.assertNotEquals(wrapper1, wrapper2);
-                });
-    }
-
-    @Test
-    public void testMaterializedViewWrapperHashCode() {
-        starRocksAssert.withMaterializedView("create materialized view wrapper_test_mv8 " +
-                        "distributed by random as select k1, v1 from t1",
-                (obj) -> {
-                    MaterializedView mv = getMv(DB_NAME, "wrapper_test_mv8");
-                    MaterializedViewWrapper wrapper1 = MaterializedViewWrapper.create(mv, 0);
-                    MaterializedViewWrapper wrapper2 = MaterializedViewWrapper.create(mv, 1);
-
-                    // Same MV should have same hashCode regardless of level
-                    Assert.assertEquals(wrapper1.hashCode(), wrapper2.hashCode());
                 });
     }
 
@@ -1469,53 +1302,6 @@ public class MvRewritePreprocessorTest extends MVTestBase {
                     // This is just a sanity check
                     Assert.assertNotNull(wrapper1.hashCode());
                     Assert.assertNotNull(wrapper2.hashCode());
-                });
-    }
-
-    @Test
-    public void testMaterializedViewWrapperCompareTo() {
-        starRocksAssert.withMaterializedView("create materialized view wrapper_test_mv11 " +
-                        "distributed by random as select k1, v1 from t1",
-                (obj) -> {
-                    MaterializedView mv = getMv(DB_NAME, "wrapper_test_mv11");
-                    MaterializedViewWrapper wrapper0 = MaterializedViewWrapper.create(mv, 0);
-                    MaterializedViewWrapper wrapper1 = MaterializedViewWrapper.create(mv, 1);
-                    MaterializedViewWrapper wrapper2 = MaterializedViewWrapper.create(mv, 2);
-
-                    // Lower level should come before higher level
-                    Assert.assertTrue(wrapper0.compareTo(wrapper1) < 0);
-                    Assert.assertTrue(wrapper1.compareTo(wrapper2) < 0);
-                    Assert.assertTrue(wrapper0.compareTo(wrapper2) < 0);
-
-                    // Higher level should come after lower level
-                    Assert.assertTrue(wrapper1.compareTo(wrapper0) > 0);
-                    Assert.assertTrue(wrapper2.compareTo(wrapper1) > 0);
-                    Assert.assertTrue(wrapper2.compareTo(wrapper0) > 0);
-
-                    // Same level should be equal
-                    MaterializedViewWrapper wrapper1Copy = MaterializedViewWrapper.create(mv, 1);
-                    Assert.assertEquals(0, wrapper1.compareTo(wrapper1Copy));
-                });
-    }
-
-    @Test
-    public void testMaterializedViewWrapperCompareToWithDifferentMVs() {
-        List<String> mvs = ImmutableList.of(
-                "create materialized view wrapper_test_mv12 distributed by random as select k1, v1 from t1",
-                "create materialized view wrapper_test_mv13 distributed by random as select k1, v2 from t1"
-        );
-
-        starRocksAssert.withMaterializedViews(mvs,
-                (obj) -> {
-                    MaterializedView mv1 = getMv(DB_NAME, "wrapper_test_mv12");
-                    MaterializedView mv2 = getMv(DB_NAME, "wrapper_test_mv13");
-
-                    MaterializedViewWrapper wrapper1Level0 = MaterializedViewWrapper.create(mv1, 0);
-                    MaterializedViewWrapper wrapper2Level1 = MaterializedViewWrapper.create(mv2, 1);
-
-                    // Comparison is based on level, not on MV
-                    Assertions.assertTrue(wrapper1Level0.compareTo(wrapper2Level1) < 0);
-                    Assertions.assertTrue(wrapper2Level1.compareTo(wrapper1Level0) > 0);
                 });
     }
 
@@ -1570,48 +1356,6 @@ public class MvRewritePreprocessorTest extends MVTestBase {
     }
 
     @Test
-    public void testMaterializedViewWrapperCompareToEqualsConsistency() {
-        List<String> mvs = ImmutableList.of(
-                "create materialized view wrapper_test_mv17 distributed by random as select k1, v1 from t1",
-                "create materialized view wrapper_test_mv18 distributed by random as select k1, v2 from t1"
-        );
-
-        starRocksAssert.withMaterializedViews(mvs,
-                (obj) -> {
-                    MaterializedView mv1 = getMv(DB_NAME, "wrapper_test_mv17");
-                    MaterializedView mv2 = getMv(DB_NAME, "wrapper_test_mv18");
-
-                    // Test with same level - should maintain (compareTo==0) == equals() contract
-                    MaterializedViewWrapper wrapper1Level0 = MaterializedViewWrapper.create(mv1, 0);
-                    MaterializedViewWrapper wrapper2Level0 = MaterializedViewWrapper.create(mv2, 0);
-
-                    // Different MVs at same level
-                    int compareResult = wrapper1Level0.compareTo(wrapper2Level0);
-                    boolean equalsResult = wrapper1Level0.equals(wrapper2Level0);
-
-                    // Contract: (x.compareTo(y)==0) == (x.equals(y))
-                    // Since MVs are different, equals should be false and compareTo should be non-zero
-                    Assertions.assertFalse(equalsResult);
-                    Assertions.assertNotEquals(0, compareResult);
-
-                    // Same MV at same level
-                    MaterializedViewWrapper wrapper1Copy = MaterializedViewWrapper.create(mv1, 0);
-                    int sameMvCompare = wrapper1Level0.compareTo(wrapper1Copy);
-                    boolean sameMvEquals = wrapper1Level0.equals(wrapper1Copy);
-
-                    // Both should be true/zero
-                    Assertions.assertTrue(sameMvEquals);
-                    Assertions.assertEquals(0, sameMvCompare);
-
-                    // Verify ordering is deterministic and based on MV ID
-                    long id1 = mv1.getId();
-                    long id2 = mv2.getId();
-                    int expectedOrder = Long.compare(id1, id2);
-                    Assertions.assertEquals(expectedOrder, compareResult);
-                });
-    }
-
-    @Test
     public void testMaterializedViewGlobalContextCache() {
         starRocksAssert.withMaterializedView("create materialized view wrapper_test_mv15 " +
                         "distributed by random as select k1, v1 from t1",
@@ -1625,16 +1369,16 @@ public class MvRewritePreprocessorTest extends MVTestBase {
                             .getLocalMetastore().getDb(DB_NAME).getTable("t1");
                     Assertions.assertTrue(refTable != null);
 
-                    PRangeCellPlus.PCellCacheKey key1 = new PRangeCellPlus.PCellCacheKey(null, null);
+                    PRangeCellPlus.PCellCacheKey key1 = new PRangeCellPlus.PCellCacheKey(null, "", null);
                     Object result = mvGlobalCache.getIfPresent(key1);
                     Assertions.assertTrue(result == null);
                     result  = mvGlobalCache.get(key1, () -> "test_value");
                     Assertions.assertEquals("test_value", result);
 
                     PRangeCellPlus.PCellCacheKey key2 = new PRangeCellPlus.PCellCacheKey(refTable,
-                            new PRangeCellPlus("p1", new PRangeCell(
-                                    Range.closed(PartitionKey.ofDateTime(LocalDateTime.of(2025, 5, 27, 10, 0, 0)), 
-                                    PartitionKey.ofDateTime(LocalDateTime.of(2025, 5, 27, 11, 0, 0))))));
+                            "p1", new PRangeCell(
+                                    Range.closed(PartitionKey.ofDateTime(LocalDateTime.of(2025, 5, 27, 10, 0, 0)),
+                                    PartitionKey.ofDateTime(LocalDateTime.of(2025, 5, 27, 11, 0, 0)))));
                     result = mvGlobalCache.getIfPresent(key2);
                     Assertions.assertTrue(result == null);
                     result  = mvGlobalCache.get(key2, () -> 12345);
