@@ -301,7 +301,7 @@ public:
 
     MutableColumnPtr clone_empty() const override { return BinaryColumnBase<T>::create(); }
 
-    ColumnPtr cut(size_t start, size_t length) const;
+    MutableColumnPtr cut(size_t start, size_t length) const;
     size_t filter_range(const Filter& filter, size_t start, size_t to) override;
 
     int compare_at(size_t left, size_t right, const Column& rhs, int nan_direction_hint) const override;

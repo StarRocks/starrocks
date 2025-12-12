@@ -288,7 +288,7 @@ Status BinaryPlainPageDecoder<Type>::next_range_with_filter(
         // Append null flags for selected rows if null_data is provided
         if (null != nullptr) {
             auto* nullable_column = down_cast<NullableColumn*>(dst);
-            auto* temp_nullable = down_cast<NullableColumn*>(temp_eval_column.get());
+            auto* temp_nullable = down_cast<NullableColumn*>(temp_eval_column->as_mutable_raw_ptr());
             RETURN_IF_ERROR(append_with_mask</*PositiveSelect=*/true>(
                     nullable_column->null_column_raw_ptr(), *temp_nullable->null_column(), selection, num_rows));
             nullable_column->update_has_null();
