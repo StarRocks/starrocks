@@ -203,6 +203,7 @@ FileInfo PersistentIndexSstableStreamBuilder::file_info() const {
 }
 
 std::pair<Slice, Slice> PersistentIndexSstableStreamBuilder::key_range() const {
+    DCHECK(_table_builder != nullptr);
     return _table_builder->KeyRange();
 }
 
