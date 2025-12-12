@@ -648,29 +648,45 @@ public class ResourceGroupStmtTest {
                 "WITH (\n" +
                 "   'max_cpu_cores'='3'\n" +
                 ")";
+
+        String alterRg1Sql3 = "" +
+                "ALTER resource group rg1 \n" +
+                "WITH (\n" +
+                "   'plan_scan_partitions_limit'='1',\n" +
+                "   'plan_scan_rows_limit'='1',\n" +
+                "   'plan_scan_tablets_limit'='1'\n" +
+                ")";
+
+        String alterRg3Sql3 = "" +
+                "ALTER resource group rg3 \n" +
+                "WITH (\n" +
+                "   'plan_scan_partitions_limit'='1',\n" +
+                "   'plan_scan_rows_limit'='1',\n" +
+                "   'plan_scan_tablets_limit'='1'\n" +
+                ")";
         String[] sqls =
-                new String[] {alterRg1Sql, alterRg2Sql, alterRg2Sql, alterRg3Sql, alterRg4Sql, alterRg1Sql2, alterRg3Sql2};
+                new String[] {alterRg1Sql, alterRg2Sql, alterRg2Sql, alterRg3Sql, alterRg4Sql, alterRg1Sql2, alterRg3Sql2, alterRg1Sql3, alterRg3Sql3};
         for (String sql : sqls) {
             starRocksAssert.executeResourceGroupDdlSql(sql);
         }
         List<List<String>> rows = starRocksAssert.executeResourceGroupShowSql("show verbose resource groups all");
         String result = rowsToString(rows);
-        String expect = "default_mv_wg|0|1|0|null|80.0%|null|0|0|0|null|80%|NORMAL|(weight=0.0)|default_mem_pool|\n" +
-                "default_wg|0|100|0|null|100.0%|null|0|0|0|null|100%|NORMAL|(weight=0.0)|default_mem_pool|\n" +
-                "rg1|21|null|0|null|20.0%|4|0|0|0|11|100%|NORMAL|(weight=4.475, user=rg1_user1, role=rg1_role1, query_type in (SELECT), source_ip=192.168.2.1/24)|default_mem_pool|\n" +
-                "rg1|21|null|0|null|20.0%|4|0|0|0|11|100%|NORMAL|(weight=3.475, user=rg1_user2, query_type in (SELECT), source_ip=192.168.3.1/24)|default_mem_pool|\n" +
-                "rg1|21|null|0|null|20.0%|4|0|0|0|11|100%|NORMAL|(weight=2.375, user=rg1_user3, source_ip=192.168.4.1/24)|default_mem_pool|\n" +
-                "rg1|21|null|0|null|20.0%|4|0|0|0|11|100%|NORMAL|(weight=1.0, user=rg1_user4)|default_mem_pool|\n" +
-                "rg2|30|null|0|null|37.0%|null|0|0|0|20|100%|NORMAL|(weight=3.475, role=rg2_role1, query_type in (SELECT), source_ip=192.168.5.1/24)|default_mem_pool|\n" +
-                "rg2|30|null|0|null|37.0%|null|0|0|0|20|100%|NORMAL|(weight=2.375, role=rg2_role2, source_ip=192.168.6.1/24)|default_mem_pool|\n" +
-                "rg2|30|null|0|null|37.0%|null|0|0|0|20|100%|NORMAL|(weight=1.0, role=rg2_role3)|default_mem_pool|\n" +
-                "rg3|32|null|0|null|80.0%|3|0|0|0|23|100%|NORMAL|(weight=2.475, query_type in (SELECT), source_ip=192.168.6.1/24)|default_mem_pool|\n" +
-                "rg3|32|null|0|null|80.0%|3|0|0|0|23|100%|NORMAL|(weight=1.1, query_type in (SELECT))|default_mem_pool|\n" +
-                "rg4|13|null|0|null|41.0%|null|1024|1024|1024|23|100%|NORMAL|(weight=1.375, source_ip=192.168.7.1/24)|default_mem_pool|\n" +
-                "rg5|25|null|0|null|80.0%|null|0|0|0|10|100%|NORMAL|(weight=10.0, db='db1')|default_mem_pool|\n" +
-                "rg6|32|null|0|null|80.0%|null|0|0|0|10|100%|NORMAL|(weight=2.475, query_type in (INSERT), source_ip=192.168.6.1/24)|default_mem_pool|\n" +
-                "rg7|32|null|0|null|80.0%|null|0|0|0|10|30%|NORMAL|(weight=2.475, query_type in (SELECT), source_ip=192.168.6.1/24)|default_mem_pool|\n" +
-                "rt_rg1|25|null|25|null|80.0%|null|0|0|0|10|100%|SHORT_QUERY|(weight=1.0, user=rt_rg_user)|default_mem_pool|";
+        String expect = "default_mv_wg|0|1|0|null|80.0%|null|0|0|0|null|80%|NORMAL|(weight=0.0)|default_mem_pool||0|0|0\n" +
+                "default_wg|0|100|0|null|100.0%|null|0|0|0|null|100%|NORMAL|(weight=0.0)|default_mem_pool||0|0|0\n" +
+                "rg1|10|null|0|null|20.0%|8|0|0|0|11|100%|NORMAL|(weight=4.475, user=rg1_user1, role=rg1_role1, query_type in (SELECT), source_ip=192.168.2.1/24)|default_mem_pool||1|1|1\n" +
+                "rg1|10|null|0|null|20.0%|8|0|0|0|11|100%|NORMAL|(weight=3.475, user=rg1_user2, query_type in (SELECT), source_ip=192.168.3.1/24)|default_mem_pool||1|1|1\n" +
+                "rg1|10|null|0|null|20.0%|8|0|0|0|11|100%|NORMAL|(weight=2.375, user=rg1_user3, source_ip=192.168.4.1/24)|default_mem_pool||1|1|1\n" +
+                "rg1|10|null|0|null|20.0%|8|0|0|0|11|100%|NORMAL|(weight=1.0, user=rg1_user4)|default_mem_pool||1|1|1\n" +
+                "rg2|30|null|0|null|50.0%|null|0|0|0|20|100%|NORMAL|(weight=3.475, role=rg2_role1, query_type in (SELECT), source_ip=192.168.5.1/24)|default_mem_pool||0|0|0\n" +
+                "rg2|30|null|0|null|50.0%|null|0|0|0|20|100%|NORMAL|(weight=2.375, role=rg2_role2, source_ip=192.168.6.1/24)|default_mem_pool||0|0|0\n" +
+                "rg2|30|null|0|null|50.0%|null|0|0|0|20|100%|NORMAL|(weight=1.0, role=rg2_role3)|default_mem_pool||0|0|0\n" +
+                "rg3|32|null|0|null|80.0%|null|0|0|0|10|100%|NORMAL|(weight=2.475, query_type in (SELECT), source_ip=192.168.6.1/24)|default_mem_pool||1|1|1\n" +
+                "rg3|32|null|0|null|80.0%|null|0|0|0|10|100%|NORMAL|(weight=1.1, query_type in (SELECT))|default_mem_pool||1|1|1\n" +
+                "rg4|25|null|0|null|80.0%|null|1024|1024|1024|10|100%|NORMAL|(weight=1.375, source_ip=192.168.7.1/24)|default_mem_pool||0|0|0\n" +
+                "rg5|25|null|0|null|80.0%|null|0|0|0|10|100%|NORMAL|(weight=10.0, db='db1')|default_mem_pool||0|0|0\n" +
+                "rg6|32|null|0|null|80.0%|null|0|0|0|10|100%|NORMAL|(weight=2.475, query_type in (INSERT), source_ip=192.168.6.1/24)|default_mem_pool||0|0|0\n" +
+                "rg7|32|null|0|null|80.0%|null|0|0|0|10|30%|NORMAL|(weight=2.475, query_type in (SELECT), source_ip=192.168.6.1/24)|default_mem_pool||0|0|0\n" +
+                "rt_rg1|25|null|25|null|80.0%|null|0|0|0|10|100%|SHORT_QUERY|(weight=1.0, user=rt_rg_user)|default_mem_pool||0|0|0";
         Assertions.assertEquals(expect, result);
         dropResourceGroups();
     }

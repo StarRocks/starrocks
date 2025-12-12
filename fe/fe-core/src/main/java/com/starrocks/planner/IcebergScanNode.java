@@ -16,6 +16,7 @@ package com.starrocks.planner;
 
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.connector.BucketProperty;
@@ -68,11 +69,10 @@ public class IcebergScanNode extends ScanNode {
     private IcebergConnectorScanRangeSource scanRangeSource = null;
     private final IcebergTableMORParams tableFullMORParams;
     private final IcebergMORParams morParams;
-    private volatile boolean reachLimit = false;
-    private int selectedPartitionCount = -1;
     private Optional<List<BucketProperty>> bucketProperties = Optional.empty();
     private PartitionIdGenerator partitionIdGenerator = null;
     private IcebergMetricsReporter icebergScanMetricsReporter;
+    private List<TScanRangeLocations> scanRangeLocationsList = Lists.newArrayList();
 
     public IcebergScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName,
                            IcebergTableMORParams tableFullMORParams, IcebergMORParams morParams,
@@ -88,30 +88,8 @@ public class IcebergScanNode extends ScanNode {
     }
 
     @Override
-    public boolean hasMoreScanRanges() {
-        if (scanRangeSource == null) {
-            return false;
-        }
-
-        return !reachLimit && scanRangeSource.hasMoreOutput();
-    }
-
-    @Override
-    public void setReachLimit() {
-        reachLimit = true;
-    }
-
-    @Override
     public List<TScanRangeLocations> getScanRangeLocations(long maxScanRangeLength) {
-        if (tvrVersionRange.isEmpty() || scanRangeSource == null) {
-            return List.of();
-        }
-
-        if (maxScanRangeLength == 0) {
-            return scanRangeSource.getAllOutputs();
-        }
-
-        return scanRangeSource.getOutputs((int) maxScanRangeLength);
+        return scanRangeLocationsList;
     }
 
     public IcebergConnectorScanRangeSource getSourceRange() {
@@ -184,11 +162,17 @@ public class IcebergScanNode extends ScanNode {
             }
         }
 
+
         scanRangeSource = new IcebergConnectorScanRangeSource(icebergTable,
                 remoteFileInfoSource, morParams, desc, bucketProperties, partitionIdGenerator, false,
                 scanOptimizeOption.getCanUseMinMaxOpt());
 
-        selectedPartitionCount = scanRangeSource.selectedPartitionCount();
+        if (selectedPartitionNum == -1) {
+            while (scanRangeSource.hasMoreOutput()) {
+                scanRangeLocationsList.addAll(scanRangeSource.getSourceOutputs(1000));
+            }
+            selectedPartitionNum = scanRangeSource.selectedPartitionCount();
+        }
     }
 
     private void setupCloudCredential() {
@@ -321,20 +305,8 @@ public class IcebergScanNode extends ScanNode {
                     icebergTable.getCatalogName(), icebergTable.getCatalogDBName(),
                     icebergTable.getCatalogTableName(), requestContext);
 
-            if (selectedPartitionCount == -1) {
-                if (scanRangeSource != null) {
-                    // we have to consume all scan ranges to know how many partition been selected.
-                    while (scanRangeSource.hasMoreOutput()) {
-                        scanRangeSource.getOutputs(1000);
-                    }
-                    selectedPartitionCount = scanRangeSource.selectedPartitionCount();
-                } else {
-                    selectedPartitionCount = 0;
-                }
-            }
-
             output.append(prefix).append(
-                    String.format("partitions=%s/%s", selectedPartitionCount,
+                    String.format("partitions=%s/%s", selectedPartitionNum,
                             partitionNames.isEmpty() ? 1 : partitionNames.size()));
             output.append("\n");
 
