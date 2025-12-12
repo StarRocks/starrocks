@@ -45,8 +45,8 @@ StreamAggregator::StreamAggregator(AggregatorParamsPtr params) : Aggregator(std:
     _count_agg_idx = _params->count_agg_idx;
 }
 
-Status StreamAggregator::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* runtime_profile) {
-    RETURN_IF_ERROR(Aggregator::prepare(state, pool, runtime_profile));
+Status StreamAggregator::prepare(RuntimeState* state, RuntimeProfile* runtime_profile) {
+    RETURN_IF_ERROR(Aggregator::prepare(state, runtime_profile));
     return Status::OK();
 }
 

@@ -87,6 +87,7 @@ The build system is extremely resource-intensive and time-consuming. Building th
    - Backend (be/) is C++ - focus on performance and memory management
    - Frontend (fe/) is Java - focus on SQL parsing and query planning
    - Tests are Python - focus on SQL correctness and integration testing
+5. **Code Comments**: All code comments must be written in English for consistency and international collaboration
 
 ## Pull Request Guidelines
 

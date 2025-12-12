@@ -433,6 +433,11 @@ public class PseudoCluster {
         dataSource.setMaxTotal(40);
         dataSource.setMaxIdle(40);
         cluster.dataSource = dataSource;
+        // Disable SingleNodeSchedule globally for test environment
+        // SingleNodeSchedule's batch deployment may cause timing issues and compatibility problems
+        // with certain sink types (like OlapTableSink, prepared statements) in test scenarios
+        GlobalStateMgr.getCurrentState().getVariableMgr().getDefaultSessionVariable()
+                .setEnableSingleNodeSchedule(false);
 
         if (logToConsole) {
             System.out.println("start add console appender");

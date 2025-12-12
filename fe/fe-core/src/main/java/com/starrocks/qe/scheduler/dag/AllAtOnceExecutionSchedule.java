@@ -35,8 +35,8 @@ import java.util.concurrent.ExecutorService;
 public class AllAtOnceExecutionSchedule implements ExecutionSchedule {
     private static final Logger LOG = LogManager.getLogger(AllAtOnceExecutionSchedule.class);
     private Coordinator coordinator;
-    private Deployer deployer;
-    private ExecutionDAG dag;
+    protected Deployer deployer;
+    protected ExecutionDAG dag;
     private volatile boolean cancelled = false;
     private DeployScanRangesTask deployScanRangesTask = null;
 
