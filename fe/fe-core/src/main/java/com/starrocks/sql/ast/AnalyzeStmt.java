@@ -19,6 +19,7 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.Config;
 import com.starrocks.sql.parser.NodePosition;
 import org.apache.commons.collections4.CollectionUtils;
 
@@ -132,6 +133,11 @@ public class AnalyzeStmt extends StatementBase {
     @Override
     public RedirectStatus getRedirectStatus() {
         return RedirectStatus.FORWARD_WITH_SYNC;
+    }
+
+    @Override
+    public int getTimeout() {
+        return (int) Config.statistic_collect_query_timeout;
     }
 
     @Override
