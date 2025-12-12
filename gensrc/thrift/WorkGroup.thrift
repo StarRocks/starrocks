@@ -43,6 +43,9 @@ struct TWorkGroup {
   16: optional string mem_pool
   17: optional i32 cpu_weight_percent
   18: optional i32 exclusive_cpu_percent
+  19: optional i64 plan_scan_partitions_limit
+  20: optional i64 plan_scan_rows_limit
+  21: optional i64 plan_scan_tablets_limit
 
   50: optional list<string> warehouses
   51: optional bool inactive

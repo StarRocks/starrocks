@@ -351,6 +351,8 @@ public enum ErrorCode {
     ERR_LOAD_HAS_FILTERED_DATA(5610, new byte[] {'2', '2', '0', '0', '0'}, "Insert has filtered data : %s"),
     ERR_LOAD_DATA_PARSE_ERROR(5611, new byte[] {'2', '2', '0', '0', '0'},
             "%s. Check the 'TrackingSQL' field for detailed information."),
+    ERR_PERFORM_QUERY_ERROR(5612, new byte[] {'2', '2', '0', '0', '0'},
+            "%s. The query will scan data over system limitation."),
 
     /**
      * 5700 - 5799: Partition

@@ -2823,10 +2823,21 @@ public class StmtExecutor {
                     planMaxScanRows = Math.max(planMaxScanRows, scanNode.getCardinality());
                 }
             }
-
             context.getAuditEventBuilder().setPlanMaxScanRows(planMaxScanRows);
             context.getAuditEventBuilder().setPlanMaxScanPartitions(planMaxScanPartitions);
             context.getAuditEventBuilder().setPlanMaxScanTablets(planMaxScanTablets);
+
+            checkScanLimit(planMaxScanRows,
+                    context.getResourceGroup().getPlan_scan_rows_limit(),
+                    "rows");
+
+            checkScanLimit(planMaxScanPartitions,
+                    context.getResourceGroup().getPlan_scan_partitions_limit(),
+                    "partitions");
+
+            checkScanLimit(planMaxScanTablets,
+                    context.getResourceGroup().getPlan_scan_tablets_limit(),
+                    "tablets");
 
             if (needQuery) {
                 coord.setLoadJobType(TLoadJobType.INSERT_QUERY);
@@ -3469,5 +3480,13 @@ public class StmtExecutor {
             }
         }
         return ConnectContext.get().getSessionVariable().getInsertMaxFilterRatio();
+    }
+
+    private void checkScanLimit(long value, long limit, String scanMetric) throws AnalysisException {
+        if (value > 0 && limit >= value) {
+            ErrorReport.reportAnalysisException("%s",
+                    ErrorCode.ERR_PERFORM_QUERY_ERROR,
+                    String.format("scanning table %s %d over %d", scanMetric, value, limit));
+        }
     }
 }
