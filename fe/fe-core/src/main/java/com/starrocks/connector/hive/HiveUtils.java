@@ -16,8 +16,14 @@ package com.starrocks.connector.hive;
 
 import com.google.common.base.Preconditions;
 import com.starrocks.catalog.HiveTable;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.sql.ast.expression.DecimalLiteral;
+import com.starrocks.sql.ast.expression.ExprCastFunction;
+import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.type.ScalarType;
+import com.starrocks.type.Type;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -26,13 +32,15 @@ import org.apache.logging.log4j.Logger;
 
 import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.Map;
 import java.util.UUID;
 
 import static com.starrocks.connector.hive.HiveMetastoreOperations.EXTERNAL_LOCATION_PROPERTY;
 
-public class HiveWriteUtils {
-    private static final Logger LOG = LogManager.getLogger(HiveWriteUtils.class);
+public class HiveUtils {
+    private static final Logger LOG = LogManager.getLogger(HiveUtils.class);
     public static boolean isS3Url(String prefix) {
         return prefix.startsWith("oss://") || prefix.startsWith("s3n://") || prefix.startsWith("s3a://") ||
                 prefix.startsWith("s3://") || prefix.startsWith("cos://") || prefix.startsWith("cosn://") ||
@@ -159,6 +167,30 @@ public class HiveWriteUtils {
             LOG.error("Failed to create remote path {}", path, e);
             throw new StarRocksConnectorException("Failed to create remote path: " + path);
         }
+    }
+
+    public static LiteralExpr normalizeKey(LiteralExpr key, Type targetType) {
+        if (key instanceof DecimalLiteral) {
+            DecimalLiteral decimalKey = (DecimalLiteral) key;
+            ScalarType type = (ScalarType) targetType;
+            int scale = type.decimalScale();
+    
+            BigDecimal scaled = decimalKey.getValue()
+                    .setScale(scale, RoundingMode.HALF_UP);
+    
+            key = new DecimalLiteral(scaled);
+        }
+
+        if (!key.getType().equals(targetType)) {
+            try {
+                key = (LiteralExpr) ExprCastFunction.castTo(key, targetType);
+            } catch (AnalysisException e) {
+                throw new StarRocksConnectorException(
+                        String.format("Failed to cast partition column literal %s to %s",
+                                key.getStringValue(), targetType), e);
+            }
+        }
+        return key;
     }
 
 }
