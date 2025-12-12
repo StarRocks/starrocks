@@ -16,6 +16,7 @@ package com.starrocks.service.arrow.flight.sql;
 
 import com.google.protobuf.ByteString;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.Pair;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.ArrowUtil;
 import com.starrocks.metric.LongCounterMetric;
@@ -592,6 +593,86 @@ public class ArrowFlightSqlServiceImplTest {
 
     private void setFinalField(Object target, String fieldName, Object value) {
         Deencapsulation.setField(target, fieldName, value);
+    }
+
+    @Test
+    public void testParseProxyAllPaths() {
+        // Setup common mocks
+        SessionVariable mockSv = mock(SessionVariable.class);
+        DefaultCoordinator mockCoordinator = mock(DefaultCoordinator.class);
+        ComputeNode mockWorker = mock(ComputeNode.class);
+        TUniqueId mockFragmentInstanceId = new TUniqueId(1L, 2L);
+        TUniqueId mockQueryId = new TUniqueId(3L, 4L);
+
+        when(mockCoordinator.getQueryId()).thenReturn(mockQueryId);
+        when(mockWorker.getHost()).thenReturn("be-host");
+        when(mockWorker.getArrowFlightPort()).thenReturn(8815);
+
+        when(mockSv.isArrowFlightProxyEnabled()).thenReturn(false);
+        Pair<Location, ByteString> result = service.parseProxy(mockSv, mockCoordinator, mockWorker, mockFragmentInstanceId);
+        assertEquals(Location.forGrpcInsecure("be-host", 8815), result.first);
+        String beTicket = result.second.toStringUtf8();
+        assertEquals("3-4:1-2", beTicket);
+
+        when(mockSv.isArrowFlightProxyEnabled()).thenReturn(true);
+        when(mockSv.getArrowFlightProxy()).thenReturn("");
+        result = service.parseProxy(mockSv, mockCoordinator, mockWorker, mockFragmentInstanceId);
+        assertEquals(Location.forGrpcInsecure("localhost", 1234), result.first);
+        String feProxyTicket = result.second.toStringUtf8();
+        assertEquals("3-4|1-2|be-host|8815", feProxyTicket);
+
+        when(mockSv.getArrowFlightProxy()).thenReturn("proxy-host:9400");
+        result = service.parseProxy(mockSv, mockCoordinator, mockWorker, mockFragmentInstanceId);
+        assertEquals(Location.forGrpcInsecure("proxy-host", 9400), result.first);
+        // Ticket should still be FE proxy ticket format
+        assertEquals("3-4|1-2|be-host|8815", result.second.toStringUtf8());
+
+        when(mockSv.getArrowFlightProxy()).thenReturn("invalidproxy");
+        RuntimeException ex = assertThrows(RuntimeException.class, () ->
+                service.parseProxy(mockSv, mockCoordinator, mockWorker, mockFragmentInstanceId));
+        assertEquals(
+                "Invalid proxy format [arrow_flight_proxy=invalidproxy]: Expected format 'hostname:port', got 'invalidproxy'",
+                ex.getMessage());
+
+        when(mockSv.getArrowFlightProxy()).thenReturn(":9400");
+        ex = assertThrows(RuntimeException.class, () ->
+                service.parseProxy(mockSv, mockCoordinator, mockWorker, mockFragmentInstanceId));
+        assertEquals("Invalid proxy format [arrow_flight_proxy=:9400]: Hostname cannot be empty, got ':9400'",
+                ex.getMessage());
+
+        when(mockSv.getArrowFlightProxy()).thenReturn("hostname:abc");
+        ex = assertThrows(RuntimeException.class, () ->
+                service.parseProxy(mockSv, mockCoordinator, mockWorker, mockFragmentInstanceId));
+        assertEquals("Invalid proxy format [arrow_flight_proxy=hostname:abc]: Port must be a valid integer, got 'abc'",
+                ex.getMessage());
+
+        when(mockSv.getArrowFlightProxy()).thenReturn("hostname:99999");
+        ex = assertThrows(RuntimeException.class, () ->
+                service.parseProxy(mockSv, mockCoordinator, mockWorker, mockFragmentInstanceId));
+        assertEquals("Invalid proxy format [arrow_flight_proxy=hostname:99999]: Port must be between 1 and 65535, got '99999'",
+                ex.getMessage());
+
+        when(mockSv.getArrowFlightProxy()).thenReturn("hostname:0");
+        ex = assertThrows(RuntimeException.class, () ->
+                service.parseProxy(mockSv, mockCoordinator, mockWorker, mockFragmentInstanceId));
+        assertEquals("Invalid proxy format [arrow_flight_proxy=hostname:0]: Port must be between 1 and 65535, got '0'",
+                ex.getMessage());
+
+        when(mockSv.getArrowFlightProxy()).thenReturn("host:port:extra");
+        ex = assertThrows(RuntimeException.class, () ->
+                service.parseProxy(mockSv, mockCoordinator, mockWorker, mockFragmentInstanceId));
+        assertEquals(
+                "Invalid proxy format " +
+                "[arrow_flight_proxy=host:port:extra]: Expected format 'hostname:port', got 'host:port:extra'",
+                ex.getMessage());
+
+        when(mockSv.getArrowFlightProxy()).thenReturn("hostname:65535");
+        result = service.parseProxy(mockSv, mockCoordinator, mockWorker, mockFragmentInstanceId);
+        assertEquals(Location.forGrpcInsecure("hostname", 65535), result.first);
+
+        when(mockSv.getArrowFlightProxy()).thenReturn("hostname:1");
+        result = service.parseProxy(mockSv, mockCoordinator, mockWorker, mockFragmentInstanceId);
+        assertEquals(Location.forGrpcInsecure("hostname", 1), result.first);
     }
 
     @Test

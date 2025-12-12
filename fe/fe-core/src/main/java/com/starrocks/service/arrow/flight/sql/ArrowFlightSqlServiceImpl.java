@@ -133,8 +133,8 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
      */
     @Override
     public void close() throws Exception {
-        AutoCloseables.close(rootAllocator);
         beClientCache.invalidateAll();
+        AutoCloseables.close(rootAllocator);
     }
 
     @Override
@@ -697,22 +697,41 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
         return builder.toString();
     }
 
-    private boolean validProxyFormat(String arrowFlightProxy) {
+    private static String validateProxyFormat(String arrowFlightProxy) {
         if (arrowFlightProxy.isEmpty()) {
-            return true;
+            return null; 
         }
+
         String[] split = arrowFlightProxy.split(":");
-        return split.length == 2;
+        if (split.length != 2) {
+            return String.format("Expected format 'hostname:port', got '%s'", arrowFlightProxy);
+        }
+
+        if (split[0].isEmpty()) {
+            return String.format("Hostname cannot be empty, got '%s'", arrowFlightProxy);
+        }
+
+        try {
+            int port = Integer.parseInt(split[1]);
+            if (port < 1 || port > 65535) {
+                return String.format("Port must be between 1 and 65535, got '%d'", port);
+            }
+        } catch (NumberFormatException e) {
+            return String.format("Port must be a valid integer, got '%s'", split[1]);
+        }
+
+        return null;
     }
 
-    private Pair<Location, ByteString> parseProxy(SessionVariable sv, Coordinator defaultCoordinator,
+    protected Pair<Location, ByteString> parseProxy(SessionVariable sv, Coordinator defaultCoordinator,
                                                   ComputeNode worker, TUniqueId rootFragmentInstanceId) {
         ByteString handle;
         Location endpoint;
         if (sv.isArrowFlightProxyEnabled()) {
-            if (!validProxyFormat(sv.getArrowFlightProxy())) {
-                throw new RuntimeException(String.format("Invalid proxy format [arrow_flight_proxy=%s]",
-                        sv.getArrowFlightProxy()));
+            String validationError = validateProxyFormat(sv.getArrowFlightProxy());
+            if (validationError != null) {
+                throw new RuntimeException(String.format("Invalid proxy format [arrow_flight_proxy=%s]: %s",
+                        sv.getArrowFlightProxy(), validationError));
             }
 
             handle = buildFEProxyTicket(defaultCoordinator.getQueryId(), rootFragmentInstanceId, worker);
