@@ -144,18 +144,8 @@ Status TabletManager::drop_local_cache(const std::string& path) {
 }
 
 // current lru cache does not support updating value size, so use refill to update.
-void TabletManager::update_segment_cache_size(std::string_view key, intptr_t segment_addr_hint) {
-    // use write lock to protect parallel segment size update
-    std::unique_lock wrlock(_meta_lock);
-    auto segment = _metacache->lookup_segment(key);
-    if (segment == nullptr) {
-        return;
-    }
-    if (segment_addr_hint != 0 && segment_addr_hint != reinterpret_cast<intptr_t>(segment.get())) {
-        // the segment in cache is not the one as expected, skip the cache update
-        return;
-    }
-    _metacache->cache_segment(key, std::move(segment));
+void TabletManager::update_segment_cache_size(std::string_view key, size_t mem_cost, intptr_t segment_addr_hint) {
+    _metacache->cache_segment_if_present(key, mem_cost, segment_addr_hint);
 }
 
 void TabletManager::prune_metacache() {
@@ -855,7 +845,7 @@ StatusOr<SegmentPtr> TabletManager::load_segment(const FileInfo& segment_info, i
         if (fill_metadata_cache) {
             // NOTE: the returned segment may be not the same as the parameter passed in
             // Use the one in cache if the same key already exists
-            if (auto cached_segment = metacache()->cache_segment_if_absent(segment_info.path, segment);
+            if (auto cached_segment = _metacache->cache_segment_if_absent(segment_info.path, segment);
                 cached_segment != nullptr) {
                 segment = cached_segment;
             }
