@@ -303,7 +303,7 @@ public abstract class MVTestBase extends StarRocksTestBase {
     }
 
     public static Set<String> getPartitionNamesToRefreshForMv(MaterializedView mv) {
-        MvUpdateInfo mvUpdateInfo = MvRefreshArbiter.getMVTimelinessUpdateInfo(mv, true);
+        MvUpdateInfo mvUpdateInfo = getMvUpdateInfo(mv);
         Preconditions.checkState(mvUpdateInfo != null);
         return mvUpdateInfo.getMvToRefreshPartitionNames();
     }
