@@ -18,9 +18,10 @@
 
 namespace starrocks::parquet {
 Status RowSourceReader::read_range(const Range<uint64_t>& range, const Filter* filter, ColumnPtr& dst) {
+    auto dst_col = dst->as_mutable_raw_ptr();
     size_t num_rows = range.end() - range.begin();
     for (size_t i = 0; i < num_rows; i++) {
-        dst->append_datum(Datum(_node_id));
+        dst_col->append_datum(Datum(_node_id));
     }
     return Status::OK();
 }

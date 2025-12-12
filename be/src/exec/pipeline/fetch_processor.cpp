@@ -228,8 +228,8 @@ Status FetchProcessor::_gen_fetch_tasks(RuntimeState* state, const ChunkPtr& req
 
         ColumnPtr col = request_chunk->get_column_by_slot_id(source_slot_id);
 
-        Int32Column::Ptr source_id_column;
-        ColumnPtr position_column;
+        Int32Column::MutablePtr source_id_column;
+        MutableColumnPtr position_column;
 
         // 1. find all null position, remove null rows
         if (col->is_nullable() && col->has_null()) {
@@ -246,9 +246,9 @@ Status FetchProcessor::_gen_fetch_tasks(RuntimeState* state, const ChunkPtr& req
             }
             std::vector<uint32_t> not_null_indices;
             not_null_indices.reserve(not_null_rows);
-            ColumnPtr null_row_positions = UInt32Column::create();
+            MutableColumnPtr null_row_positions = UInt32Column::create();
             null_row_positions->reserve(null_rows);
-            auto& null_row_positions_data = UInt32Column::static_pointer_cast(null_row_positions)->get_data();
+            auto& null_row_positions_data = down_cast<UInt32Column*>(null_row_positions.get())->get_data();
 
             const auto& null_data = nullable_column->null_column_data();
             for (size_t i = 0; i < nullable_column->size(); i++) {
@@ -279,8 +279,8 @@ Status FetchProcessor::_gen_fetch_tasks(RuntimeState* state, const ChunkPtr& req
 
             // append selective all
         } else {
-            source_id_column = Int32Column::static_pointer_cast(ColumnHelper::get_data_column(col));
-            position_column = request_chunk->get_column_by_slot_id(kPositionColumnSlotId);
+            source_id_column = Int32Column::static_pointer_cast(ColumnHelper::get_data_column(col)->as_mutable_ptr());
+            position_column = request_chunk->get_column_by_slot_id(kPositionColumnSlotId)->as_mutable_ptr();
             for (const auto& slot_id : row_pos_desc->get_fetch_ref_slot_ids()) {
                 auto src_col = request_chunk->get_column_by_slot_id(slot_id);
                 tmp_chunk->append_column(std::move(src_col), slot_id);
@@ -294,10 +294,11 @@ Status FetchProcessor::_gen_fetch_tasks(RuntimeState* state, const ChunkPtr& req
         // 2. partition by source_id
         ASSIGN_OR_RETURN(auto sorted_chunk, _sort_chunk(state, tmp_chunk, {source_id_column}));
 
-        source_id_column = Int32Column::static_pointer_cast(sorted_chunk->get_column_by_slot_id(source_slot_id));
-        position_column = sorted_chunk->get_column_by_slot_id(kPositionColumnSlotId);
+        source_id_column =
+                Int32Column::static_pointer_cast(sorted_chunk->get_column_by_slot_id(source_slot_id)->as_mutable_ptr());
+        position_column = sorted_chunk->get_column_by_slot_id(kPositionColumnSlotId)->as_mutable_ptr();
 
-        const auto& source_ids = Int32Column::static_pointer_cast(source_id_column)->get_data();
+        const auto& source_ids = source_id_column->get_data();
 
         auto iter = source_ids.begin();
         while (iter != source_ids.end()) {
@@ -412,7 +413,7 @@ Status FetchProcessor::_build_output_chunk(RuntimeState* state, const BatchUnitP
         auto chunk = std::make_shared<Chunk>();
         const auto& tuple_desc = state->desc_tbl().get_tuple_descriptor(tuple_id);
         auto source_slot_id = row_pos_desc->get_row_source_slot_id();
-        ColumnPtr position_column = UInt32Column::create();
+        MutableColumnPtr position_column = UInt32Column::create();
         std::vector<SlotDescriptor*> slots;
         {
             for (const auto& slot : tuple_desc->slots()) {
@@ -443,7 +444,9 @@ Status FetchProcessor::_build_output_chunk(RuntimeState* state, const BatchUnitP
                     DCHECK(ctx->response_columns.contains(slot->id()))
                             << "response columns should contains slot: " << slot->debug_string();
                     auto partial_column = ctx->response_columns.at(slot->id());
-                    chunk->get_column_by_slot_id(slot->id())->append(*partial_column);
+                    chunk->get_column_by_slot_id(slot->id())
+                            ->as_mutable_raw_ptr()
+                            ->append(*partial_column->as_mutable_raw_ptr());
                 }
             }
             chunk->check_or_die();
@@ -453,7 +456,7 @@ Status FetchProcessor::_build_output_chunk(RuntimeState* state, const BatchUnitP
             position_column->append(*null_positions, 0, null_positions->size());
             // for (const auto& slot : tuple_desc->slots()) {
             for (const auto& slot : slots) {
-                auto dst_column = chunk->get_column_by_slot_id(slot->id());
+                auto dst_column = chunk->get_column_by_slot_id(slot->id())->as_mutable_raw_ptr();
                 DCHECK(dst_column->is_nullable()) << "slot: " << slot->debug_string() << " should be nullable";
                 dst_column->append_nulls(null_positions->size());
             }

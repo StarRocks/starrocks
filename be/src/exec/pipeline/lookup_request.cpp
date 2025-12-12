@@ -39,7 +39,7 @@ Status LocalLookUpRequestContext::collect_input_columns(ChunkPtr chunk) {
     size_t num_rows = fetch_ctx->request_chunk->num_rows();
     for (const auto& [slot_id, idx] : fetch_ctx->request_chunk->get_slot_id_to_index_map()) {
         auto src_col = fetch_ctx->request_chunk->get_column_by_index(idx);
-        auto dst_col = chunk->get_column_by_slot_id(slot_id);
+        auto dst_col = chunk->get_column_by_slot_id(slot_id)->as_mutable_raw_ptr();
         dst_col->append(*src_col, 0, num_rows);
     }
     chunk->check_or_die();
@@ -71,7 +71,7 @@ Status RemoteLookUpRequestContext::collect_input_columns(ChunkPtr chunk) {
         const auto& pcolumn = request->request_columns(i);
         SlotId slot_id = pcolumn.slot_id();
         int64_t data_size = pcolumn.data_size();
-        auto dst_col = chunk->get_column_by_slot_id(slot_id);
+        auto dst_col = chunk->get_column_by_slot_id(slot_id)->as_mutable_raw_ptr();
         auto col = dst_col->clone_empty();
         VLOG_FILE << "deserialize column, slot_id: " << slot_id << ", data_size: " << data_size
                   << ", column: " << col->get_name();
@@ -157,7 +157,7 @@ StatusOr<ChunkPtr> IcebergV3LookUpTask::_calculate_row_id_range(
         Buffer<uint32_t>* replicated_offsets) {
     SCOPED_TIMER(_ctx->parent->_calculate_row_id_range_timer);
     // Step 1: Add position column to track original row order
-    UInt32Column::Ptr position_column = UInt32Column::create();
+    UInt32Column::MutablePtr position_column = UInt32Column::create();
     position_column->resize_uninitialized(request_chunk->num_rows());
     auto& position_data = position_column->get_data();
     for (size_t i = 0; i < request_chunk->num_rows(); i++) {
@@ -173,14 +173,14 @@ StatusOr<ChunkPtr> IcebergV3LookUpTask::_calculate_row_id_range(
     ASSIGN_OR_RETURN(auto sorted_chunk, _sort_chunk(state, request_chunk, {scan_range_id_column, row_id_column}));
 
     // Step 3: Calculate row_id ranges and replicated_offsets for duplicate handling
-    const auto& nullable_scan_range_id_column =
-            down_cast<NullableColumn*>(sorted_chunk->get_column_by_slot_id(_ctx->fetch_ref_slot_ids[0]).get());
+    const auto& nullable_scan_range_id_column = down_cast<NullableColumn*>(
+            sorted_chunk->get_column_by_slot_id(_ctx->fetch_ref_slot_ids[0])->as_mutable_raw_ptr());
     DCHECK(!nullable_scan_range_id_column->has_null()) << "scan_range_id column should not have null";
     auto ordered_scan_range_id_column = Int32Column::static_pointer_cast(nullable_scan_range_id_column->data_column());
     const auto& ordered_scan_range_ids = ordered_scan_range_id_column->get_data();
 
-    const auto& nullable_row_id_column =
-            down_cast<NullableColumn*>(sorted_chunk->get_column_by_slot_id(_ctx->fetch_ref_slot_ids[1]).get());
+    const auto& nullable_row_id_column = down_cast<NullableColumn*>(
+            sorted_chunk->get_column_by_slot_id(_ctx->fetch_ref_slot_ids[1])->as_mutable_raw_ptr());
     DCHECK(!nullable_row_id_column->has_null()) << "row_id column should not have null";
     auto ordered_row_id_column = Int64Column::static_pointer_cast(nullable_row_id_column->data_column());
     const auto& ordered_row_ids = ordered_row_id_column->get_data();
@@ -576,7 +576,7 @@ StatusOr<ChunkPtr> IcebergV3LookUpTask::_get_data_from_storage(
                         continue;
                     }
                     auto src_col = chunk->get_column_by_index(idx);
-                    auto dst_col = result_chunk->get_column_by_slot_id(slot_id);
+                    auto dst_col = result_chunk->get_column_by_slot_id(slot_id)->as_mutable_raw_ptr();
                     dst_col->append(*src_col, 0, chunk->num_rows());
                 }
             }
@@ -606,7 +606,7 @@ Status IcebergV3LookUpTask::process(RuntimeState* state, const ChunkPtr& request
         if (!replicated_offsets.empty()) {
             // Replicate data for duplicate row_ids
             for (const auto& [slot_id, _] : result_chunk->get_slot_id_to_index_map()) {
-                auto old_column = result_chunk->get_column_by_slot_id(slot_id);
+                auto old_column = result_chunk->get_column_by_slot_id(slot_id)->as_mutable_raw_ptr();
                 ASSIGN_OR_RETURN(auto new_column, old_column->replicate(replicated_offsets));
                 result_chunk->append_or_update_column(std::move(new_column), slot_id);
             }
