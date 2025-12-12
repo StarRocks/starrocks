@@ -832,7 +832,7 @@ jobs:
       PRE_COMMIT_CONCLUSION: ${{ needs.basic-checker.outputs.PRE_COMMIT_CONCLUSION }}
       PRE_COMMIT_JOB_STATUS_DICT: ${{ needs.basic-checker.outputs.PRE_COMMIT_JOB_STATUS_DICT }}
     outputs:
-      output1: ${{ steps.path-filter.outputs.test }}
+      test_change: ${{ steps.path-filter.outputs.test }}
       pre_build_conclusion: ${{ steps.check-integration-test-results.outputs.pre_build_conclusion }}
     steps:
       - uses: dorny/paths-filter@v3
@@ -866,17 +866,17 @@ jobs:
       PRE_COMMIT_CONCLUSION: ${{ needs.basic-checker.outputs.PRE_COMMIT_CONCLUSION }}
       PRE_COMMIT_JOB_STATUS_DICT: ${{ needs.basic-checker.outputs.PRE_COMMIT_JOB_STATUS_DICT }}
     outputs:
-      build_output_tar: ${{ steps.run_build.outputs.OUTPUT_TAR }}
+      build_be_output_tar: ${{ steps.run_build.outputs.BE_OUTPUT_TAR }}
+      build_fe_output_tar: ${{ steps.run_build.outputs.FE_OUTPUT_TAR }}
       base_version: ${{ steps.run_build.outputs.BASE_VERSION }}
       is_self_build: ${{ steps.run_build.outputs.is_self_build }}
-      build_nece: ${{ steps.check-necessity.outputs.BUILD_NECE }}
       test_pr: ${{ needs.basic-checker.outputs.TEST_PR }}
+      sys_test_need: ${{ steps.run_build.outputs.sys_test_need }}
     if: >
       always() && 
       needs.thirdparty-info.result != 'failure' && 
       needs.fe-codestyle-check.result != 'failure' && 
-      (needs.thirdparty-info.result == 'success' || needs.fe-codestyle-check.result == 'success' || needs.test-checker.result == 'success') &&
-      (needs.basic-checker.outputs.ONLY_BE_TEST != 'true' || needs.basic-checker.outputs.ONLY_FE_TEST != 'true')
+      (needs.thirdparty-info.result == 'success' || needs.fe-codestyle-check.result == 'success' || needs.test-checker.outputs.test_change == 'true')
     steps:
       - name: CLEAN
         run: |
@@ -933,45 +933,21 @@ jobs:
             echo "pom_filter=`cat pom_filter.txt`" >> $GITHUB_OUTPUT
           fi
 
-      - name: Check necessity
-        id: check-necessity
-        if: >
-          steps.parsing-fe-path-filter.outputs.src_filter == 'true' || steps.parsing-be-path-filter.outputs.src_filter == 'true' ||
-          (steps.parsing-be-path-filter.outputs.src_filter != 'true' && steps.parsing-fe-path-filter.outputs.src_filter != 'true' && needs.test-checker.outputs.output1 == 'true')
-        run: |
-          echo "BUILD_NECE=true" >> $GITHUB_OUTPUT
-
-      - name: BRANCH INFO
-        id: branch
-        if: steps.check-necessity.outcome == 'success'
-        run: |
-          repo="${{ github.repository }}"
-          bucket_prefix=`echo ${repo%/*} | tr '[:upper:]' '[:lower:]'` 
-          echo "bucket_prefix=${bucket_prefix}" >> "$GITHUB_ENV"
-
-      - name: Rebuild Checker
-        id: rebuild-checker
-        if: steps.branch.outcome == 'success'
-        env:
-          be_change: ${{ steps.parsing-be-path-filter.outputs.src_filter }}
-          fe_change: ${{ steps.parsing-fe-path-filter.outputs.src_filter }}
-          build_type: Release
-        run: |
-          echo "package=${package}" >> "$GITHUB_ENV"
-          if [[ "${be_change}" != "true" && "${fe_change}" != "true" ]]; then
-            oss_path=oss://${bucket_prefix}-ci-release/${BRANCH}/${build_type}/inspection/pr/ubuntu/StarRocks-
-            package=$(ossutil64 --config-file ~/.ossutilconfig ls ${oss_path} | grep "tar.gz" | sort -n -r | head -n 1 | awk '{print $NF}')
-            echo "package=${package}" >> $GITHUB_ENV
-          fi
-
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.base_ref }}
+          
       - name: UPDATE ECI & RUN BUILD
         id: run_build
         shell: bash
         timeout-minutes: 90
-        if: steps.rebuild-checker.outcome == 'success'
+        if: steps.check-sync.outputs.IS_SYNC != 'true'
         env:
           package: ${{ env.package }}
-          pom_filter: ${{ steps.parsing-fe-path-filter.outputs.pom_filter }}
+          pr_pom_change: ${{ steps.parsing-fe-path-filter.outputs.pom_filter }}
+          pr_be_change: ${{ steps.parsing-be-path-filter.outputs.src_filter }}
+          pr_fe_change: ${{ steps.parsing-fe-path-filter.outputs.src_filter }}
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
           git checkout commit-pipeline && git pull
@@ -980,22 +956,18 @@ jobs:
             export image_tag=$BRANCH-$PR_NUMBER
           fi
 
-          if [[ ${package} == "" ]]; then
-            ./bin/elastic-build.sh --pr ${PR_NUMBER} --repository ${{ github.repository }} --linuxdistro ${LINUX_DISTRO} --with-gcov --with-trivy
-            echo "is_self_build=true" >> $GITHUB_OUTPUT
-          else
-            echo "Use latest tar: ${package}" 
-            echo "OUTPUT_TAR=${package}" >> "$GITHUB_OUTPUT"
-            echo "BASE_VERSION=" >> "$GITHUB_OUTPUT"
-            echo "ECI_ID=" >> "$GITHUB_OUTPUT"
-            echo "is_self_build=false" >> $GITHUB_OUTPUT
+          ./bin/elastic-build.sh --pr ${PR_NUMBER} --repository ${{ github.repository }} --linuxdistro ${LINUX_DISTRO} --with-gcov --with-trivy
+
+          if [[ "${{ env.pr_pom_change}}" == 'true' || "${{ env.pr_be_change}}" == 'true' || "${{ env.pr_fe_change}}" == 'true' ]]; then
+            echo "sys_test_need=true" >> $GITHUB_OUTPUT
           fi
 
       - name: build result
         id: build_result
         if: steps.run_build.outcome == 'success'
         run: |
-          echo ${{ steps.run_build.outputs.OUTPUT_TAR }}
+          echo ${{ steps.run_build.outputs.BE_OUTPUT_TAR }}
+          echo ${{ steps.run_build.outputs.FE_OUTPUT_TAR }}
           echo ${{ steps.run_build.outputs.BASE_VERSION }} > ./base_version.txt
 
       - name: Upload the Base Version
@@ -1016,12 +988,14 @@ jobs:
 
   deploy:
     runs-on: [self-hosted, normal]
-    if: always() && needs.build.result == 'success' && needs.build.outputs.build_nece == 'true'
     needs: build
+    if: always() && needs.build.result == 'success' && needs.build.outputs.sys_test_need == 'true'
     name: DEPLOY SR
     env:
       PR_NUMBER: ${{ github.event.number }}
       LINUX_DISTRO: ubuntu
+      BE_OUTPUT_TAR: ${{ needs.build.outputs.build_be_output_tar }}
+      FE_OUTPUT_TAR: ${{ needs.build.outputs.build_fe_output_tar }}
     outputs:
       fe: ${{steps.deploy_sr.outputs.fe}}
       be: ${{steps.deploy_sr.outputs.be}}
@@ -1063,13 +1037,7 @@ jobs:
         run: |
           cd ci-tool && source lib/init.sh
 
-          if [[ "${{ needs.build.outputs.is_self_build }}" == 'true' ]]; then 
-            bucket_prefix=`echo ${repo%/*} | tr '[:upper:]' '[:lower:]'`
-            tar_path="oss://${bucket_prefix}-ci-release/${{github.base_ref}}/Release/pr/${LINUX_DISTRO}/${{needs.build.outputs.build_output_tar}}"
-          else
-            tar_path="${{ needs.build.outputs.build_output_tar }}"
-          fi
-
+          
           echo "##### Package: ${tar_path}" >> $GITHUB_STEP_SUMMARY
           echo "cluster_name=${CLUSTER_NAME}" >> $GITHUB_OUTPUT
           ./bin/deploy-cluster.sh -c ${CLUSTER_NAME} --output ${tar_path} --with-coverage
