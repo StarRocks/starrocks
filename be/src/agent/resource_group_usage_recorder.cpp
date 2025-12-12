@@ -19,6 +19,13 @@
 
 namespace starrocks {
 
+namespace {
+struct VersionedResourceGroupUsage {
+    int64_t version;
+    TResourceGroupUsage usage;
+};
+}
+
 ResourceGroupUsageRecorder::ResourceGroupUsageRecorder() {
     // Record cpu usage of all the groups the first time.
     [[maybe_unused]] auto _ = get_resource_group_usages();
@@ -29,25 +36,45 @@ std::vector<TResourceGroupUsage> ResourceGroupUsageRecorder::get_resource_group_
     int64_t delta_ns = std::max<int64_t>(1, timestamp_ns - _timestamp_ns);
     _timestamp_ns = timestamp_ns;
 
-    std::unordered_map<int64_t, TResourceGroupUsage> group_to_usage;
+    std::unordered_map<int64_t, VersionedResourceGroupUsage> group_to_usage;
     std::unordered_map<int64_t, int64_t> curr_group_to_cpu_runtime_ns;
 
     ExecEnv::GetInstance()->workgroup_manager()->for_each_workgroup(
             [&group_to_usage, &curr_group_to_cpu_runtime_ns](const workgroup::WorkGroup& wg) {
                 auto it = group_to_usage.find(wg.id());
                 if (it == group_to_usage.end()) {
-                    TResourceGroupUsage group_usage;
-                    group_usage.__set_group_id(wg.id());
-                    group_usage.__set_mem_used_bytes(wg.mem_consumption_bytes());
-                    group_usage.__set_num_running_queries(wg.num_running_queries());
-                    group_to_usage.emplace(wg.id(), std::move(group_usage));
-
+                    VersionedResourceGroupUsage group{
+                        .version = wg.version(),
+                        .usage = TResourceGroupUsage{}};
+                    group.usage.__set_group_id(wg.id());
+                    group.usage.__set_mem_used_bytes(wg.mem_consumption_bytes());
+                    group.usage.__set_num_running_queries(wg.num_running_queries());
+                    group.usage.__set_mem_limit_bytes(wg.mem_limit_bytes());
+                    group.usage.__set_mem_pool(wg.mem_pool());
+                    if (wg.parent_memory_limit_bytes().has_value()) {
+                        group.usage.__set_mem_pool_mem_limit_bytes(wg.parent_memory_limit_bytes().value());
+                    }
+                    if (wg.parent_memory_usage_bytes().has_value()) {
+                        group.usage.__set_mem_pool_mem_used_bytes(wg.parent_memory_usage_bytes().value());
+                    }
+                    group_to_usage.emplace(wg.id(), std::move(group));
                     curr_group_to_cpu_runtime_ns.emplace(wg.id(), wg.cpu_runtime_ns());
                 } else {
-                    TResourceGroupUsage& group_usage = it->second;
-                    group_usage.__set_mem_used_bytes(group_usage.mem_used_bytes + wg.mem_consumption_bytes());
-                    group_usage.__set_num_running_queries(group_usage.num_running_queries + wg.num_running_queries());
-
+                    VersionedResourceGroupUsage& existing_group = it->second;
+                    existing_group.usage.__set_mem_used_bytes(
+                        existing_group.usage.mem_used_bytes + wg.mem_consumption_bytes());
+                    existing_group.usage.__set_num_running_queries(
+                        existing_group.usage.num_running_queries + wg.num_running_queries());
+                    if (wg.version() >= existing_group.version) {
+                        existing_group.version = wg.version();
+                        existing_group.usage.__set_mem_pool(wg.mem_pool());
+                        if (wg.parent_memory_limit_bytes().has_value()) {
+                            existing_group.usage.__set_mem_pool_mem_limit_bytes(wg.parent_memory_limit_bytes().value());
+                        }
+                        if (wg.parent_memory_usage_bytes().has_value()) {
+                            existing_group.usage.__set_mem_pool_mem_used_bytes(wg.parent_memory_usage_bytes().value());
+                        }
+                    }
                     curr_group_to_cpu_runtime_ns[wg.id()] += wg.cpu_runtime_ns();
                 }
             });
@@ -63,7 +90,7 @@ std::vector<TResourceGroupUsage> ResourceGroupUsageRecorder::get_resource_group_
 
         int64_t cpu_core_used_permille = (cpu_runtime_ns - prev_runtime_ns) * 1000 / delta_ns;
         cpu_core_used_permille = std::clamp<int64_t>(cpu_core_used_permille, 0, CpuInfo::num_cores() * 1000);
-        group_to_usage[group_id].__set_cpu_core_used_permille(cpu_core_used_permille);
+        group_to_usage[group_id].usage.__set_cpu_core_used_permille(cpu_core_used_permille);
     }
     _group_to_cpu_runtime_ns = std::move(curr_group_to_cpu_runtime_ns);
 
@@ -71,9 +98,9 @@ std::vector<TResourceGroupUsage> ResourceGroupUsageRecorder::get_resource_group_
     group_usages.reserve(group_to_usage.size());
     for (auto& [_, group_usage] : group_to_usage) {
         // Only report the resource group with effective resource usages.
-        if (group_usage.cpu_core_used_permille > 0 || group_usage.mem_used_bytes > 0 ||
-            group_usage.num_running_queries > 0) {
-            group_usages.emplace_back(std::move(group_usage));
+        if (group_usage.usage.cpu_core_used_permille > 0 || group_usage.usage.mem_used_bytes > 0 ||
+            group_usage.usage.num_running_queries > 0) {
+            group_usages.emplace_back(std::move(group_usage.usage));
         }
     }
 

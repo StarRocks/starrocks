@@ -1559,7 +1559,8 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
 
         {
             String res = starRocksAssert.executeShowResourceUsageSql("SHOW USAGE RESOURCE GROUPS;");
-            assertThat(res).isEqualTo("Name|Id|Backend|BEInUseCpuCores|BEInUseMemBytes|BERunningQueries\n");
+            assertThat(res).isEqualTo("Name|Id|Backend|BEInUseCpuCores|BEInUseMemBytes|BERunningQueries" +
+                    "|BEMemLimitBytes|BEMemPool|BEMemPoolInUseMemBytes|BEMemPoolMemLimitBytes\n");
         }
 
         List<TResourceGroupUsage> groupUsages = ImmutableList.of(
