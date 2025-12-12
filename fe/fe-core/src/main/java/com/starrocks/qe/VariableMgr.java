@@ -232,7 +232,7 @@ public class VariableMgr {
         return attr.show().isEmpty() ? attr.name() : attr.show();
     }
 
-    private void handleSetWarehouse(ConnectContext connectContext, SessionVariable sessionVariable, Field field, String value)
+    private void handleSetWarehouse(ConnectContext connectContext, SessionVariable sessionVariable, Field field, Object value)
             throws DdlException {
         final String originalWarehouseName = sessionVariable.getWarehouseName();
         setParsedValue(sessionVariable, field, value);
@@ -360,7 +360,7 @@ public class VariableMgr {
 
         // set session variable
         if (SessionVariable.WAREHOUSE_NAME.equalsIgnoreCase(attr.name()) && connectContext != null) {
-            handleSetWarehouse(connectContext, sessionVariable, ctx.getField(), value);
+            handleSetWarehouse(connectContext, sessionVariable, ctx.getField(), parsedVal);
         } else {
             setParsedValue(sessionVariable, ctx.getField(), parsedVal);
         }
