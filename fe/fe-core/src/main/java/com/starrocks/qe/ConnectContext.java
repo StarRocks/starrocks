@@ -1103,8 +1103,7 @@ public class ConnectContext {
      *
      * @return the current compute resource(null if not set), or the default resource if not in shared data mode.
      */
-    @VisibleForTesting
-    ComputeResource getCurrentComputeResourceNoAcquire() {
+    public ComputeResource getCurrentComputeResourceNoAcquire() {
         if (!RunMode.isSharedDataMode()) {
             return WarehouseManager.DEFAULT_RESOURCE;
         }
