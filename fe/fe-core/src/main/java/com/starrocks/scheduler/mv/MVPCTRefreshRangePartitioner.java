@@ -86,9 +86,16 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
     public MVPCTRefreshRangePartitioner(MvTaskRunContext mvContext,
                                         TaskRunContext context,
                                         Database db,
+<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/scheduler/mv/MVPCTRefreshRangePartitioner.java
                                         MaterializedView mv) {
         super(mvContext, context, db, mv);
         this.differ = new RangePartitionDiffer(mv, false, null);
+=======
+                                        MaterializedView mv,
+                                        MVRefreshParams mvRefreshParams) {
+        super(mvContext, context, db, mv, mvRefreshParams);
+        this.differ = new RangePartitionDiffer(mv, queryRewriteParams, null);
+>>>>>>> 0317eb423e ([Enhancement] Optimize mv rewrite performance (#66623)):fe/fe-core/src/main/java/com/starrocks/scheduler/mv/pct/MVPCTRefreshRangePartitioner.java
         this.logger = MVTraceUtils.getLogger(mv, MVPCTRefreshRangePartitioner.class);
     }
 

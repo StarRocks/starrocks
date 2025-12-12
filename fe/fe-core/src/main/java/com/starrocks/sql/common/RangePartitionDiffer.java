@@ -27,20 +27,34 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
+<<<<<<< HEAD
 import com.starrocks.catalog.Type;
+=======
+import com.starrocks.catalog.mv.MVTimelinessArbiter;
+>>>>>>> 0317eb423e ([Enhancement] Optimize mv rewrite performance (#66623))
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.RangeUtils;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.sql.analyzer.SemanticException;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.type.Type;
+>>>>>>> 0317eb423e ([Enhancement] Optimize mv rewrite performance (#66623))
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.threeten.extra.PeriodDuration;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+<<<<<<< HEAD
 import java.util.Comparator;
+=======
+import java.util.ArrayList;
+import java.util.Collections;
+>>>>>>> 0317eb423e ([Enhancement] Optimize mv rewrite performance (#66623))
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -72,9 +86,9 @@ public final class RangePartitionDiffer extends PartitionDiffer {
     private final Map<Table, List<Expr>> refBaseTablePartitionExprs;
 
     public RangePartitionDiffer(MaterializedView mv,
-                                boolean isQueryRewrite,
+                                MVTimelinessArbiter.QueryRewriteParams queryRewriteParams,
                                 Range<PartitionKey> rangeToInclude) {
-        super(mv, isQueryRewrite);
+        super(mv, queryRewriteParams);
         this.partitionInfo = mv.getPartitionInfo();
         this.partitionTTLNumber = mv.getTableProperty().getPartitionTTLNumber();
         this.partitionTTL = mv.getTableProperty().getPartitionTTL();
@@ -260,8 +274,19 @@ public final class RangePartitionDiffer extends PartitionDiffer {
             return PRangeCell.toRangeMap(first);
         }
         RangeMap<PartitionKey, String> addRanges = TreeRangeMap.create();
+<<<<<<< HEAD
         for (Map<String, PCell> tRangMap : basePartitionMap.values()) {
             for (Map.Entry<String, PCell> add : tRangMap.entrySet()) {
+=======
+        for (Map.Entry<Table, PCellSortedSet> entry : basePartitionMap.entrySet()) {
+            PCellSortedSet tRangeCells = entry.getValue();
+            for (PCellWithName add : tRangeCells.getPartitions()) {
+                // If the base table's partition granularity is different with mv's, we need to normalize it first.
+                PCellWithName normalizedPCell = PCellWithName.toNormalizedCell(add, mvPartitionExpr);
+                String newPCellName = normalizedPCell.name();
+                PRangeCell newPCell = (PRangeCell) normalizedPCell.cell();
+
+>>>>>>> 0317eb423e ([Enhancement] Optimize mv rewrite performance (#66623))
                 // TODO: we may implement a new `merge` method in `TreeRangeMap` to merge intersected partitions later.
                 Range<PartitionKey> range = ((PRangeCell) add.getValue()).getRange();
                 Map<Range<PartitionKey>, String> intersectedRange = addRanges.subRangeMap(range).asMapOfRanges();
@@ -350,12 +375,20 @@ public final class RangePartitionDiffer extends PartitionDiffer {
             // Check unaligned partitions, unaligned partitions may cause uncorrected result which is not supported for now.
             List<PartitionDiff> rangePartitionDiffList = Lists.newArrayList();
             for (Table refBaseTable : refBaseTablePartitionColumns.keySet()) {
+<<<<<<< HEAD
                 Preconditions.checkArgument(rBTPartitionMap.containsKey(refBaseTable));
                 RangePartitionDiffer differ = new RangePartitionDiffer(mv, isQueryRewrite, rangeToInclude);
                 Map<String, PCell> basePartitionToCells = rBTPartitionMap.get(refBaseTable);
                 Map<String, Range<PartitionKey>> basePartitionMap = PRangeCell.toRangeMap(basePartitionToCells);
                 PartitionDiff diff = PartitionUtil.getPartitionDiff(mvPartitionExpr, basePartitionMap, mvRangePartitionMap,
                         differ);
+=======
+                Preconditions.checkArgument(refBaseTablePartitionMap.containsKey(refBaseTable));
+                RangePartitionDiffer differ = new RangePartitionDiffer(mv, queryRewriteParams, rangeToInclude);
+                PCellSortedSet basePartitionMap = refBaseTablePartitionMap.get(refBaseTable);
+                PartitionDiff diff = PartitionUtil.getPartitionDiff(mvPartitionExpr, basePartitionMap,
+                        mvPartitionCells, differ);
+>>>>>>> 0317eb423e ([Enhancement] Optimize mv rewrite performance (#66623))
                 rangePartitionDiffList.add(diff);
             }
             PartitionDiff.checkRangePartitionAligned(rangePartitionDiffList);
@@ -369,15 +402,21 @@ public final class RangePartitionDiffer extends PartitionDiffer {
             //
             // Diff_{deletes} = P_{MV} \setminus P_{\bigcup_{baseTables}^{}} \\
             //                = \bigcap_{baseTables} P_{MV}\setminus P_{baseTable}
-            RangePartitionDiffer differ = isQueryRewrite ? null : new RangePartitionDiffer(mv, false, rangeToInclude);
+            RangePartitionDiffer differ = queryRewriteParams.isQueryRewrite() ? null
+                    : new RangePartitionDiffer(mv, queryRewriteParams, rangeToInclude);
             PartitionDiff rangePartitionDiff = PartitionUtil.getPartitionDiff(mvPartitionExpr, mergedRBTPartitionKeyMap,
                     mvRangePartitionMap, differ);
             if (rangePartitionDiff == null) {
                 LOG.warn("Materialized view compute partition difference with base table failed: rangePartitionDiff is null.");
                 return null;
             }
+<<<<<<< HEAD
             Map<Table, Map<String, Set<String>>> extRBTMVPartitionNameMap = Maps.newHashMap();
             if (!isQueryRewrite) {
+=======
+            Map<Table, PartitionNameSetMap> extRBTMVPartitionNameMap = Maps.newHashMap();
+            if (!queryRewriteParams.isQueryRewrite()) {
+>>>>>>> 0317eb423e ([Enhancement] Optimize mv rewrite performance (#66623))
                 // To solve multi partition columns' problem of external table, record the mv partition name to all the same
                 // partition names map here.
                 collectExternalPartitionNameMapping(refBaseTablePartitionColumns, extRBTMVPartitionNameMap);
@@ -448,11 +487,56 @@ public final class RangePartitionDiffer extends PartitionDiffer {
             Preconditions.checkState(refBaseTablePartitionExprs.containsKey(baseTable));
             List<Expr> partitionExprs = refBaseTablePartitionExprs.get(baseTable);
             Preconditions.checkArgument(partitionExprs.size() == 1);
+<<<<<<< HEAD
             List<PRangeCellPlus> baseRanges = toPRangeCellPlus(refreshedPartitionsMap, partitionExprs.get(0));
             for (PRangeCellPlus baseRange : baseRanges) {
                 List<PRangeCellPlus> intersectedRanges = getIntersectedCells(baseRange, mvRanges);
                 if (intersectedRanges.isEmpty()) {
                     initialBaseRefMap(result, baseTable, baseRange);
+=======
+            List<PCellWithName.PCellWithNorm> baseRanges =
+                    PCellWithName.normalizePCellWithNames(mv, baseTable, refreshedPartitions, partitionExprs.get(0));
+            buildBaseToMvIntersectionsMapping(result, baseRanges, mvRanges, baseTable);
+        }
+        return result;
+    }
+
+    /**
+     * Optimized intersection finding for base-to-MV mapping using merge-join approach.
+     * Time complexity: O(B * M) in worst case with many overlaps, O(B + M) in best case
+     *
+     * This method finds all MV ranges that intersect with each base range.
+     * For each base range, we find all MV ranges that intersect with it.
+     */
+    private void buildBaseToMvIntersectionsMapping(Map<Table, PCellSetMapping> result,
+                                                   List<PCellWithName.PCellWithNorm> baseRanges,
+                                                   List<PCellWithName> mvRanges,
+                                                   Table baseTable) {
+        int mvStartIndex = 0;  // Track where to start searching for each base range
+
+        for (int baseIndex = 0; baseIndex < baseRanges.size(); baseIndex++) {
+            PCellWithName.PCellWithNorm basePCellWithNorm = baseRanges.get(baseIndex);
+
+            PCellWithName baseRange = basePCellWithNorm.normalized();
+            Range<PartitionKey> basePartitionRange = ((PRangeCell) baseRange.cell()).getRange();
+            PCellWithName origBasePCell = basePCellWithNorm.basePCell();
+
+            boolean foundIntersection = false;
+            // For each base range, scan MV ranges starting from mvStartIndex
+            int mvIndex = mvStartIndex;
+            while (mvIndex < mvRanges.size()) {
+                // check query rewrite exhausted
+                queryRewriteParams.checkQueryRewriteExhausted();
+
+                PCellWithName mvRange = mvRanges.get(mvIndex);
+                Range<PartitionKey> mvPartitionRange = ((PRangeCell) mvRange.cell()).getRange();
+                // If MV range ends before base range starts, skip it and update mvStartIndex
+                if (mvPartitionRange.upperEndpoint().compareTo(basePartitionRange.lowerEndpoint()) <= 0) {
+                    if (mvIndex == mvStartIndex) {
+                        mvStartIndex++;  // This MV range won't intersect with any future base ranges
+                    }
+                    mvIndex++;
+>>>>>>> 0317eb423e ([Enhancement] Optimize mv rewrite performance (#66623))
                     continue;
                 }
 
@@ -488,16 +572,60 @@ public final class RangePartitionDiffer extends PartitionDiffer {
             Preconditions.checkState(refBaseTablePartitionExprs.containsKey(baseTable));
             List<Expr> partitionExprs = refBaseTablePartitionExprs.get(baseTable);
             Preconditions.checkArgument(partitionExprs.size() == 1);
+<<<<<<< HEAD
             List<PRangeCellPlus> baseRanges = toPRangeCellPlus(refreshedPartitionsMap, partitionExprs.get(0));
             baseRangesMap.put(entry.getKey(), baseRanges);
+=======
+            // Convert base ranges to list for efficient access
+            List<PCellWithName.PCellWithNorm> baseRanges =
+                    PCellWithName.normalizePCellWithNames(mv, baseTable, refreshedPartitions, partitionExprs.get(0));
+            // Use merge-join optimization for sorted ranges
+            buildMVToBaseIntersectionMapping(result, mvRanges, baseRanges, baseTable);
+>>>>>>> 0317eb423e ([Enhancement] Optimize mv rewrite performance (#66623))
         }
 
+<<<<<<< HEAD
         for (Map.Entry<Table, List<PRangeCellPlus>> entry : baseRangesMap.entrySet()) {
             initialMvRefMap(result, mvRanges, entry.getKey());
             List<PRangeCellPlus> baseRanges = entry.getValue();
             for (PRangeCellPlus baseRange : baseRanges) {
                 List<PRangeCellPlus> intersectedRanges = getIntersectedCells(baseRange, mvRanges);
                 if (intersectedRanges.isEmpty()) {
+=======
+    /**
+     * Optimized intersection finding using merge-join approach for sorted ranges.
+     * Time complexity: O(M * N) in worst case with many overlaps, O(M + N) in best case
+     *
+     * This method finds all intersections between MV ranges and base ranges.
+     * For each MV range, we find all base ranges that intersect with it.
+     */
+    private void buildMVToBaseIntersectionMapping(Map<String, Map<Table, PCellSortedSet>> result,
+                                                  List<PCellWithName> mvRanges,
+                                                  List<PCellWithName.PCellWithNorm> baseRanges,
+                                                  Table baseTable) {
+        int baseStartIndex = 0;  // Track where to start searching for each MV range
+
+        for (int mvIndex = 0; mvIndex < mvRanges.size(); mvIndex++) {
+            PCellWithName mvRange = mvRanges.get(mvIndex);
+            Range<PartitionKey> mvPartitionRange = ((PRangeCell) mvRange.cell()).getRange();
+
+            // For each MV range, scan base ranges starting from baseStartIndex
+            int baseIndex = baseStartIndex;
+            while (baseIndex < baseRanges.size()) {
+                // check query rewrite exhausted
+                queryRewriteParams.checkQueryRewriteExhausted();
+
+                PCellWithName.PCellWithNorm basePCellWithNorm = baseRanges.get(baseIndex);
+                PCellWithName baseRange = basePCellWithNorm.normalized();
+                Range<PartitionKey> basePartitionRange = ((PRangeCell) baseRange.cell()).getRange();
+
+                // If base range ends before MV range starts, skip it and update baseStartIndex
+                if (basePartitionRange.upperEndpoint().compareTo(mvPartitionRange.lowerEndpoint()) <= 0) {
+                    if (baseIndex == baseStartIndex) {
+                        baseStartIndex++;  // This base range won't intersect with any future MV ranges
+                    }
+                    baseIndex++;
+>>>>>>> 0317eb423e ([Enhancement] Optimize mv rewrite performance (#66623))
                     continue;
                 }
 
@@ -505,8 +633,29 @@ public final class RangePartitionDiffer extends PartitionDiffer {
                     updatePartitionRefMap(
                             result, intersectedRange.getPartitionName(), entry.getKey(), baseRange.getPartitionName());
                 }
+<<<<<<< HEAD
             }
         }
         return result;
+=======
+
+                // MV:
+                //  mv1: [0, 10)
+                //  mv2: [10, 20)
+                //  mv3: [20, 30)
+                //
+                //Base:
+                //  b1: [5, 15)   ← Overlaps with mv1 AND mv2
+                //  b2: [15, 25)  ← Overlaps with mv2 AND mv3
+                //
+                //Result: All intersections correctly found:
+                //  b1 → {mv1, mv2}
+                //  b2 → {mv2, mv3}
+                PCellWithName origBasePCell = basePCellWithNorm.basePCell();
+                updatePartitionRefMap(result, mvRange.name(), baseTable, origBasePCell);
+                baseIndex++;
+            }
+        }
+>>>>>>> 0317eb423e ([Enhancement] Optimize mv rewrite performance (#66623))
     }
 }

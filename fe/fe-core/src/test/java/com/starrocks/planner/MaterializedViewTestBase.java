@@ -33,7 +33,11 @@ import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.statistic.StatisticsMetaManager;
 import com.starrocks.thrift.TExplainLevel;
+<<<<<<< HEAD
 import com.starrocks.utframe.StarRocksTestBase;
+=======
+import com.starrocks.utframe.StarRocksTestExtension;
+>>>>>>> 0317eb423e ([Enhancement] Optimize mv rewrite performance (#66623))
 import com.starrocks.utframe.UtFrameUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -42,6 +46,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.openjdk.jmh.annotations.Scope;
 import org.openjdk.jmh.annotations.State;
 
@@ -53,6 +58,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 @State(Scope.Thread) // Add State annotation with appropriate scope
+@ExtendWith(StarRocksTestExtension.class)
 public class MaterializedViewTestBase extends PlanTestBase {
     protected static final Logger LOG = LogManager.getLogger(MaterializedViewTestBase.class);
 
