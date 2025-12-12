@@ -30,6 +30,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.hive.HiveUtils;
 import com.starrocks.planner.PartitionPruner;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.ExpressionAnalyzer;
@@ -295,6 +296,10 @@ public class ListPartitionPruner implements PartitionPruner {
         this.scanOperator = scanOperator;
     }
 
+    public void setScanOperator(LogicalScanOperator scanOperator) {
+        this.scanOperator = scanOperator;
+    }
+
     // Infer equivalent partitions columns based on the partition-conjuncts.
     // Suppose the query has an expression c1 >= '2024-01-02', and the table is partitioned by
     // a GeneratedColumn c3=date_trunc('month', c1), so we can infer the expression:
@@ -513,6 +518,24 @@ public class ListPartitionPruner implements PartitionPruner {
         return result;
     }
 
+    public ConcurrentNavigableMap<LiteralExpr, Set<Long>> normalizePartitionValueMap(
+            ConcurrentNavigableMap<LiteralExpr, Set<Long>> partitionValueMap) {
+
+        if (scanOperator == null || !scanOperator.getTable().isHiveTable()) {
+            return partitionValueMap;
+        }
+
+        ConcurrentNavigableMap<LiteralExpr, Set<Long>> newMap =
+                new ConcurrentSkipListMap<>(partitionValueMap.comparator());
+
+        partitionValueMap.forEach((key, valueSet) -> {
+            LiteralExpr newKey = HiveUtils.normalizeKey(key, key.getType());
+            newMap.computeIfAbsent(newKey, k -> new HashSet<>()).addAll(valueSet);
+        });
+
+        return newMap;
+    }    
+
     // generate new partition value map using cast operator' type.
     // eg. string partition value cast to int
     // string_col = '01'  1
@@ -571,6 +594,9 @@ public class ListPartitionPruner implements PartitionPruner {
         Set<Long> matches = Sets.newHashSet();
         ConcurrentNavigableMap<LiteralExpr, Set<Long>> partitionValueMap = columnToPartitionValuesMap.get(leftChild);
         Set<Long> nullPartitions = columnToNullPartitions.get(leftChild);
+        if (partitionValueMap != null) {
+            partitionValueMap = normalizePartitionValueMap(partitionValueMap);
+        }
 
         if (binaryPredicate.getChild(0) instanceof CastOperator && partitionValueMap != null) {
             // partitionValueMap need cast to target type
@@ -705,6 +731,10 @@ public class ListPartitionPruner implements PartitionPruner {
         Set<Long> matches = Sets.newHashSet();
         ConcurrentNavigableMap<LiteralExpr, Set<Long>> partitionValueMap = columnToPartitionValuesMap.get(child);
         Set<Long> nullPartitions = columnToNullPartitions.get(child);
+
+        if (partitionValueMap != null) {
+            partitionValueMap = normalizePartitionValueMap(partitionValueMap);
+        }
 
         if (inPredicate.getChild(0) instanceof CastOperator && partitionValueMap != null) {
             // partitionValueMap need cast to target type
