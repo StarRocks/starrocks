@@ -28,6 +28,8 @@
 #include "storage/runtime_range_pruner.hpp"
 #include "util/compression/compression_utils.h"
 #include "util/compression/stream_compression.h"
+#include "util/hash_util.hpp"
+
 namespace starrocks {
 
 static const std::string kCountOptColumnName = "___count___";
@@ -912,6 +914,29 @@ CompressionTypePB HdfsScanner::get_compression_type_from_path(const std::string&
     if (end == -1 || filename[end] == '/') return NO_COMPRESSION;
     const std::string& ext = filename.substr(end + 1);
     return CompressionUtils::to_compression_pb(ext);
+}
+
+std::string get_file_cache_key(CacheType type, const std::string& filename, int64_t modification_time,
+                               uint64_t file_size) {
+    std::string key;
+    key.resize(14);
+    char* data = key.data();
+    uint64_t hash_value = HashUtil::hash64(filename.data(), filename.size(), 0);
+    memcpy(data, &hash_value, sizeof(hash_value));
+    const std::string& prefix = cache_key_prefix[type];
+    memcpy(data + 8, prefix.data(), prefix.size());
+    // The modification time is more appropriate to indicate the different file versions.
+    // While some data source, such as Hudi, have no modification time because their files
+    // cannot be overwritten. So, if the modification time is unsupported, we use file size instead.
+    // Also, to reduce memory usage, we only use the high four bytes to represent the second timestamp.
+    if (modification_time > 0) {
+        uint32_t mtime_s = (modification_time >> 9) & 0x00000000FFFFFFFF;
+        memcpy(data + 10, &mtime_s, sizeof(mtime_s));
+    } else {
+        uint32_t size = file_size;
+        memcpy(data + 10, &size, sizeof(size));
+    }
+    return key;
 }
 
 } // namespace starrocks
