@@ -696,9 +696,10 @@ TEST_F(SpillTest, partition_yield_with_failed) {
             ASSERT_OK(spiller->_spilled_task_status);
             holder.push_back(chunk);
         }
-
-        PredoSyncExecutor::predo = [&]() { spiller.reset(); };
-        ASSERT_OK(spiller->flush<PredoSyncExecutor>(&dummy_rt_st, EmptyMemGuard{}));
+        auto dummy = std::make_shared<int>();
+        PredoSyncExecutor::predo = [&]() { dummy.reset(); };
+        ASSERT_OK(spiller->flush<PredoSyncExecutor>(&dummy_rt_st,
+                                                    spill::ResourceMemTrackerGuard(nullptr, std::weak_ptr(dummy))));
     }
 }
 
