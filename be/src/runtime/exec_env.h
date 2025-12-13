@@ -162,6 +162,7 @@ public:
     MemTracker* replication_mem_tracker() { return _replication_mem_tracker.get(); }
     MemTracker* datacache_mem_tracker() { return _datacache_mem_tracker.get(); }
     MemTracker* jemalloc_metadata_traker() { return _jemalloc_metadata_tracker.get(); }
+    MemTracker* rss_non_jemalloc_tracker() { return _rss_non_jemalloc_tracker.get(); }
     std::shared_ptr<MemTracker> get_mem_tracker_by_type(MemTrackerType type);
     std::vector<std::shared_ptr<MemTracker>> mem_trackers() const;
 
@@ -182,6 +183,9 @@ private:
 
     // Track usage of jemalloc
     std::shared_ptr<MemTracker> _jemalloc_metadata_tracker;
+
+    // Track RSS non jemalloc (process RSS - jemalloc.resident)
+    std::shared_ptr<MemTracker> _rss_non_jemalloc_tracker;
 
     // Limit the memory used by the query. At present, it can use 90% of the be memory limit
     std::shared_ptr<MemTracker> _query_pool_mem_tracker;
