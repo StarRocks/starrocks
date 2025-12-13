@@ -209,6 +209,7 @@ set(EXEC_FILES
         ./exprs/in_const_predicate_test.cpp
         ./exprs/table_function/test_list_rowsets.cpp
         ./exprs/dict_expr_test.cpp
+        ./exprs/http_request_functions_test.cpp
         ./formats/csv/array_converter_test.cpp
         ./formats/csv/boolean_converter_test.cpp
         ./formats/csv/csv_file_writer_test.cpp
@@ -448,6 +449,7 @@ set(EXEC_FILES
         ./util/jvm_metrics_test.cpp
         ./util/llm_cache_test.cpp
         ./util/llm_query_service_test.cpp
+        ./util/network_util_test.cpp
         )
 
 if (${USE_AVX512})
