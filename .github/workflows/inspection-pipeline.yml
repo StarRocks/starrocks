@@ -324,7 +324,7 @@ jobs:
         run: |
           echo ${{ steps.run_build.outputs.BE_OUTPUT_TAR }} >> $GITHUB_STEP_SUMMARY
           echo ${{ steps.run_build.outputs.FE_OUTPUT_TAR }} >> $GITHUB_STEP_SUMMARY
-          echo "BE=${{ steps.run_build.outputs.BE_OUTPUT_TAR }}\nFE=${{ steps.run_build.outputs.FE_OUTPUT_TAR }}"> tar.txt
+          echo -e "BE=${{ steps.run_build.outputs.BE_OUTPUT_TAR }}\nFE=${{ steps.run_build.outputs.FE_OUTPUT_TAR }}"> tar.txt
 
       - uses: actions/upload-artifact@v4
         with:

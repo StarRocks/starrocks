@@ -872,6 +872,7 @@ jobs:
       is_self_build: ${{ steps.run_build.outputs.is_self_build }}
       test_pr: ${{ needs.basic-checker.outputs.TEST_PR }}
       sys_test_need: ${{ steps.run_build.outputs.sys_test_need }}
+      pre_commit_job_status_dict: ${{ needs.basic-checker.outputs.PRE_COMMIT_JOB_STATUS_DICT }}
     if: >
       always() && 
       needs.thirdparty-info.result != 'failure' && 
@@ -1007,6 +1008,7 @@ jobs:
       shared_data: ${{steps.choose-mode.outputs.cloud}}
       is_self_build: ${{ needs.build.outputs.is_self_build }}
       test_pr: ${{ needs.build.outputs.test_pr }}
+      pre_commit_job_status_dict: ${{ needs.build.outputs.pre_commit_job_status_dict}}
     steps:
       - name: Clean Workspace
         uses: AutoModality/action-clean@v1.1.0
