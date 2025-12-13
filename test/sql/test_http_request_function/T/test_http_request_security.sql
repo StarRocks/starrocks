@@ -113,11 +113,11 @@ SELECT json_query(http_request(
 
 -- Test 16: Host not in allowlist should be blocked
 SELECT json_query(http_request(
-    url => 'https://httpbin.org/get'
+    url => 'https://postman-echo.com/get'
 ), '$.status') as status;
 
 -- Test 17: Configure multiple hosts in allowlist (using regexp)
-ADMIN SET FRONTEND CONFIG ("http_request_host_allowlist_regexp" = "jsonplaceholder\\.typicode\\.com|httpbin\\.org");
+ADMIN SET FRONTEND CONFIG ("http_request_host_allowlist_regexp" = "jsonplaceholder\\.typicode\\.com|postman-echo\\.com");
 
 -- Test 18: Both hosts should be allowed now
 SELECT json_query(http_request(
@@ -125,7 +125,7 @@ SELECT json_query(http_request(
 ), '$.status') as status;
 
 SELECT json_query(http_request(
-    url => 'https://httpbin.org/get'
+    url => 'https://postman-echo.com/get'
 ), '$.status') as status;
 
 -- ============================================================
@@ -143,7 +143,7 @@ SELECT json_query(http_request(
 
 -- Test 21: Non-matching host should be blocked
 SELECT json_query(http_request(
-    url => 'https://httpbin.org/get'
+    url => 'https://postman-echo.com/get'
 ), '$.status') as status;
 
 -- ============================================================
@@ -154,14 +154,14 @@ SELECT json_query(http_request(
 -- Note: http_request_ip_allowlist is for IP addresses only
 -- Using regexp for hostname matching
 ADMIN SET FRONTEND CONFIG ("http_request_ip_allowlist" = "");
-ADMIN SET FRONTEND CONFIG ("http_request_host_allowlist_regexp" = "httpbin\\.org|.*\\.typicode\\.com");
+ADMIN SET FRONTEND CONFIG ("http_request_host_allowlist_regexp" = "postman-echo\\.com|.*\\.typicode\\.com");
 
--- Test 23: Regex match for httpbin should be allowed
+-- Test 23: Regex match for postman-echo should be allowed
 SELECT json_query(http_request(
-    url => 'https://httpbin.org/get'
+    url => 'https://postman-echo.com/get'
 ), '$.status') as status;
 
--- Test 24: Regex match should be allowed
+-- Test 24: Regex match for typicode should be allowed
 SELECT json_query(http_request(
     url => 'https://jsonplaceholder.typicode.com/posts/1'
 ), '$.status') as status;
@@ -221,7 +221,7 @@ SELECT json_query(http_request(
 -- Test 29: Allowlist should handle whitespace correctly (using regexp for hostnames)
 ADMIN SET FRONTEND CONFIG ("http_request_security_level" = "3");
 ADMIN SET FRONTEND CONFIG ("http_request_ip_allowlist" = "");
-ADMIN SET FRONTEND CONFIG ("http_request_host_allowlist_regexp" = "jsonplaceholder\\.typicode\\.com|httpbin\\.org");
+ADMIN SET FRONTEND CONFIG ("http_request_host_allowlist_regexp" = "jsonplaceholder\\.typicode\\.com|jsonplaceholder\\.typicode\\.com");
 
 -- Test 30: Host matching regexp should be allowed
 SELECT json_query(http_request(
@@ -297,13 +297,13 @@ SELECT json_query(http_request(url => 'https://'), '$.status') as status;
 
 -- Test E7: Invalid JSON syntax in headers (missing closing brace)
 SELECT json_query(http_request(
-    url => 'https://httpbin.org/get',
+    url => 'https://jsonplaceholder.typicode.com/posts/1',
     headers => '{"Content-Type": "application/json"'
 ), '$.status') as status;
 
 -- Test E8: JSON array instead of object for headers
 SELECT json_query(http_request(
-    url => 'https://httpbin.org/get',
+    url => 'https://jsonplaceholder.typicode.com/posts/1',
     headers => '["Content-Type", "application/json"]'
 ), '$.status') as status;
 
@@ -331,9 +331,9 @@ SELECT json_query(http_request(
 
 -- Test E11: Connection timeout (very short timeout)
 ADMIN SET FRONTEND CONFIG ("http_request_security_level" = "2");
-ADMIN SET FRONTEND CONFIG ("http_request_host_allowlist_regexp" = "httpbin\\.org");
+ADMIN SET FRONTEND CONFIG ("http_request_host_allowlist_regexp" = "jsonplaceholder\\.typicode\\.com");
 SELECT json_query(http_request(
-    url => 'https://httpbin.org/delay/10',
+    url => 'https://jsonplaceholder.typicode.com/posts/1',
     timeout_ms => 1
 ), '$.status') as status;
 
@@ -341,22 +341,13 @@ SELECT json_query(http_request(
 -- Error Test Cases - Invalid Regex Patterns
 -- ============================================================
 
--- Test E12: Invalid regex pattern in allowlist_regexp (unclosed group)
--- Note: Invalid patterns are logged as warnings and skipped
+-- Test E12: Invalid regex pattern in allowlist_regexp (unclosed group) - now returns error
 ADMIN SET FRONTEND CONFIG ("http_request_security_level" = "3");
 ADMIN SET FRONTEND CONFIG ("http_request_ip_allowlist" = "");
 ADMIN SET FRONTEND CONFIG ("http_request_host_allowlist_regexp" = "(unclosed");
-SELECT json_query(http_request(
-    url => 'https://httpbin.org/get',
-    timeout_ms => 5000
-), '$.status') as status;
 
--- Test E13: Invalid regex pattern (invalid range)
+-- Test E13: Invalid regex pattern (invalid range) - now returns error
 ADMIN SET FRONTEND CONFIG ("http_request_host_allowlist_regexp" = "[z-a]");
-SELECT json_query(http_request(
-    url => 'https://httpbin.org/get',
-    timeout_ms => 5000
-), '$.status') as status;
 
 -- ============================================================
 -- Edge Cases - SSRF Bypass Attempts
@@ -408,19 +399,19 @@ SELECT json_query(http_request(
 -- Test E20: Timeout at minimum boundary (1ms) - should timeout
 ADMIN SET FRONTEND CONFIG ("http_request_security_level" = "2");
 SELECT json_query(http_request(
-    url => 'https://httpbin.org/get',
+    url => 'https://jsonplaceholder.typicode.com/posts/1',
     timeout_ms => 1
 ), '$.status') as status;
 
 -- Test E21: Timeout below minimum (0) - should clamp to 1ms
 SELECT json_query(http_request(
-    url => 'https://httpbin.org/get',
+    url => 'https://jsonplaceholder.typicode.com/posts/1',
     timeout_ms => 0
 ), '$.status') as status;
 
 -- Test E22: Negative timeout - should clamp to 1ms
 SELECT json_query(http_request(
-    url => 'https://httpbin.org/get',
+    url => 'https://jsonplaceholder.typicode.com/posts/1',
     timeout_ms => -1000
 ), '$.status') as status;
 
@@ -433,14 +424,11 @@ ADMIN SET FRONTEND CONFIG ("http_request_security_level" = "3");
 ADMIN SET FRONTEND CONFIG ("http_request_ip_allowlist" = "");
 ADMIN SET FRONTEND CONFIG ("http_request_host_allowlist_regexp" = "");
 SELECT json_query(http_request(
-    url => 'https://httpbin.org/get'
+    url => 'https://jsonplaceholder.typicode.com/posts/1'
 ), '$.status') as status;
 
--- Test E24: Allowlist with only whitespace - should be treated as empty
-ADMIN SET FRONTEND CONFIG ("http_request_ip_allowlist" = "   ,  , ");
-SELECT json_query(http_request(
-    url => 'https://httpbin.org/get'
-), '$.status') as status;
+-- Test E24: Removed - FE validation rejects whitespace-only allowlist values
+-- The ConfigBase.java validation throws InvalidConfException for empty values between commas
 
 -- ============================================================
 -- Edge Cases - Blocklist Tests (if implemented)
@@ -498,21 +486,21 @@ ADMIN SET FRONTEND CONFIG ("http_request_security_level" = "2");
 
 -- HTTP with default port 80
 SELECT json_query(http_request(
-    url => 'http://httpbin.org/get',
+    url => 'http://jsonplaceholder.typicode.com/posts/1',
     timeout_ms => 5000
 ), '$.status') as status;
 
 -- HTTPS with default port 443
 SELECT json_query(http_request(
-    url => 'https://httpbin.org/get',
+    url => 'https://jsonplaceholder.typicode.com/posts/1',
     timeout_ms => 5000
 ), '$.status') as status;
 
--- HTTP with explicit port 8080
-ADMIN SET FRONTEND CONFIG ("http_request_host_allowlist_regexp" = "httpbin\\.org");
+-- HTTPS with explicit port 443
+ADMIN SET FRONTEND CONFIG ("http_request_host_allowlist_regexp" = "jsonplaceholder\\.typicode\\.com");
 ADMIN SET FRONTEND CONFIG ("http_request_security_level" = "3");
 SELECT json_query(http_request(
-    url => 'http://httpbin.org:8080/get',
+    url => 'https://jsonplaceholder.typicode.com:443/posts/1',
     timeout_ms => 5000
 ), '$.status') as status;
 

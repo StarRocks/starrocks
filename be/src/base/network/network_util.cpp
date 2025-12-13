@@ -337,7 +337,8 @@ std::string extract_host_from_url(const std::string& url) {
 
     // Find the scheme separator
     size_t scheme_end = url.find("://");
-    if (scheme_end == std::string::npos) {
+    if (scheme_end == std::string::npos || scheme_end == 0) {
+        // No scheme separator found, or no scheme name before ://
         return "";
     }
 

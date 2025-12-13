@@ -32,7 +32,7 @@ class HttpRequestFunctionsTest : public ::testing::Test {
 protected:
     void SetUp() override {
         _runtime_state = std::make_unique<RuntimeState>(TQueryGlobals());
-        _ctx = FunctionContext::create_test_context();
+        _ctx.reset(FunctionContext::create_test_context());
     }
 
     void TearDown() override {
@@ -112,7 +112,7 @@ protected:
 };
 
 // Basic prepare and close test
-PARALLEL_TEST_F(HttpRequestFunctionsTest, prepareCloseTest) {
+TEST_F(HttpRequestFunctionsTest, prepareCloseTest) {
     // Test http_request_prepare
     FunctionContext::FunctionStateScope scope = FunctionContext::FRAGMENT_LOCAL;
     ASSERT_OK(HttpRequestFunctions::http_request_prepare(_ctx.get(), scope));
@@ -130,7 +130,7 @@ PARALLEL_TEST_F(HttpRequestFunctionsTest, prepareCloseTest) {
 }
 
 // Test NULL input handling - when URL is NULL, result should be NULL
-PARALLEL_TEST_F(HttpRequestFunctionsTest, nullInputTest) {
+TEST_F(HttpRequestFunctionsTest, nullInputTest) {
     FunctionContext::FunctionStateScope scope = FunctionContext::FRAGMENT_LOCAL;
     ASSERT_OK(HttpRequestFunctions::http_request_prepare(_ctx.get(), scope));
 
@@ -146,7 +146,7 @@ PARALLEL_TEST_F(HttpRequestFunctionsTest, nullInputTest) {
 }
 
 // Test empty URL - returns JSON error response with status -1
-PARALLEL_TEST_F(HttpRequestFunctionsTest, emptyUrlTest) {
+TEST_F(HttpRequestFunctionsTest, emptyUrlTest) {
     FunctionContext::FunctionStateScope scope = FunctionContext::FRAGMENT_LOCAL;
     ASSERT_OK(HttpRequestFunctions::http_request_prepare(_ctx.get(), scope));
 
@@ -170,7 +170,7 @@ PARALLEL_TEST_F(HttpRequestFunctionsTest, emptyUrlTest) {
 }
 
 // Test invalid URL format - returns JSON error response with status -1
-PARALLEL_TEST_F(HttpRequestFunctionsTest, invalidUrlTest) {
+TEST_F(HttpRequestFunctionsTest, invalidUrlTest) {
     FunctionContext::FunctionStateScope scope = FunctionContext::FRAGMENT_LOCAL;
     ASSERT_OK(HttpRequestFunctions::http_request_prepare(_ctx.get(), scope));
 
@@ -204,7 +204,7 @@ PARALLEL_TEST_F(HttpRequestFunctionsTest, invalidUrlTest) {
 //=============================================================================
 
 // Test default security level is set correctly
-PARALLEL_TEST_F(HttpRequestFunctionsTest, securityLevelDefaultTest) {
+TEST_F(HttpRequestFunctionsTest, securityLevelDefaultTest) {
     FunctionContext::FunctionStateScope scope = FunctionContext::FRAGMENT_LOCAL;
     ASSERT_OK(HttpRequestFunctions::http_request_prepare(_ctx.get(), scope));
 
@@ -217,7 +217,7 @@ PARALLEL_TEST_F(HttpRequestFunctionsTest, securityLevelDefaultTest) {
 }
 
 // Test security state initialization with empty allowlists
-PARALLEL_TEST_F(HttpRequestFunctionsTest, securityStateEmptyAllowlistTest) {
+TEST_F(HttpRequestFunctionsTest, securityStateEmptyAllowlistTest) {
     FunctionContext::FunctionStateScope scope = FunctionContext::FRAGMENT_LOCAL;
     ASSERT_OK(HttpRequestFunctions::http_request_prepare(_ctx.get(), scope));
 
@@ -231,7 +231,7 @@ PARALLEL_TEST_F(HttpRequestFunctionsTest, securityStateEmptyAllowlistTest) {
 }
 
 // Test IP allowlist parsing with whitespace trimming
-PARALLEL_TEST_F(HttpRequestFunctionsTest, ipAllowlistParseTest) {
+TEST_F(HttpRequestFunctionsTest, ipAllowlistParseTest) {
     // Test that parse_comma_separated_list correctly handles whitespace for IP addresses
     auto result = parse_comma_separated_list(" 192.168.1.1 , 10.0.0.1 ");
     ASSERT_EQ(2, result.size());
@@ -240,7 +240,7 @@ PARALLEL_TEST_F(HttpRequestFunctionsTest, ipAllowlistParseTest) {
 }
 
 // Test allowlist regex pattern compilation
-PARALLEL_TEST_F(HttpRequestFunctionsTest, allowlistRegexPatternTest) {
+TEST_F(HttpRequestFunctionsTest, allowlistRegexPatternTest) {
     // Test valid regex pattern
     auto patterns = compile_regex_patterns(".*\\.example\\.com,api\\.github\\.com");
     ASSERT_EQ(2, patterns.size());
@@ -253,7 +253,7 @@ PARALLEL_TEST_F(HttpRequestFunctionsTest, allowlistRegexPatternTest) {
 }
 
 // Test check_ip_allowlist with exact IP match
-PARALLEL_TEST_F(HttpRequestFunctionsTest, checkIpAllowlistTest) {
+TEST_F(HttpRequestFunctionsTest, checkIpAllowlistTest) {
     HttpRequestFunctionState state;
     state.ip_allowlist = {"192.168.1.1", "10.0.0.1"};
 
@@ -267,7 +267,7 @@ PARALLEL_TEST_F(HttpRequestFunctionsTest, checkIpAllowlistTest) {
 }
 
 // Test check_host_regex with regex patterns for hostname matching
-PARALLEL_TEST_F(HttpRequestFunctionsTest, checkHostRegexTest) {
+TEST_F(HttpRequestFunctionsTest, checkHostRegexTest) {
     HttpRequestFunctionState state;
     state.host_allowlist_patterns = compile_regex_patterns(".*\\.example\\.com");
 
@@ -282,7 +282,7 @@ PARALLEL_TEST_F(HttpRequestFunctionsTest, checkHostRegexTest) {
 }
 
 // Test IP allowlist and host regex (OR condition for security check)
-PARALLEL_TEST_F(HttpRequestFunctionsTest, ipAndHostRegexOrConditionTest) {
+TEST_F(HttpRequestFunctionsTest, ipAndHostRegexOrConditionTest) {
     HttpRequestFunctionState state;
     state.ip_allowlist = {"192.168.1.1"};
     state.host_allowlist_patterns = compile_regex_patterns(".*\\.api\\.com");
@@ -300,7 +300,7 @@ PARALLEL_TEST_F(HttpRequestFunctionsTest, ipAndHostRegexOrConditionTest) {
 }
 
 // Test validate_host_security at Level 1 (TRUSTED) - allows everything
-PARALLEL_TEST_F(HttpRequestFunctionsTest, securityLevel1AllowsEverythingTest) {
+TEST_F(HttpRequestFunctionsTest, securityLevel1AllowsEverythingTest) {
     HttpRequestFunctionState state;
     state.security_level = 1;  // TRUSTED
 
@@ -314,7 +314,7 @@ PARALLEL_TEST_F(HttpRequestFunctionsTest, securityLevel1AllowsEverythingTest) {
 }
 
 // Test validate_host_security returns resolved IPs for DNS pinning at Level 1 (TRUSTED)
-PARALLEL_TEST_F(HttpRequestFunctionsTest, securityLevel1ReturnsDnsPinningIpsTest) {
+TEST_F(HttpRequestFunctionsTest, securityLevel1ReturnsDnsPinningIpsTest) {
     HttpRequestFunctionState state;
     state.security_level = 1;  // TRUSTED
 
@@ -328,7 +328,7 @@ PARALLEL_TEST_F(HttpRequestFunctionsTest, securityLevel1ReturnsDnsPinningIpsTest
 }
 
 // Test validate_host_security returns resolved IPs for DNS pinning at Level 2 (PUBLIC)
-PARALLEL_TEST_F(HttpRequestFunctionsTest, securityLevel2ReturnsDnsPinningIpsTest) {
+TEST_F(HttpRequestFunctionsTest, securityLevel2ReturnsDnsPinningIpsTest) {
     HttpRequestFunctionState state;
     state.security_level = 2;  // PUBLIC
     state.ip_allowlist = {"127.0.0.1"};
@@ -343,7 +343,7 @@ PARALLEL_TEST_F(HttpRequestFunctionsTest, securityLevel2ReturnsDnsPinningIpsTest
 }
 
 // Test validate_host_security returns resolved IPs for DNS pinning at Level 3 (RESTRICTED)
-PARALLEL_TEST_F(HttpRequestFunctionsTest, securityLevel3ReturnsDnsPinningIpsTest) {
+TEST_F(HttpRequestFunctionsTest, securityLevel3ReturnsDnsPinningIpsTest) {
     HttpRequestFunctionState state;
     state.security_level = 3;  // RESTRICTED
     state.ip_allowlist = {"127.0.0.1"};
@@ -358,7 +358,7 @@ PARALLEL_TEST_F(HttpRequestFunctionsTest, securityLevel3ReturnsDnsPinningIpsTest
 }
 
 // Test validate_host_security does NOT return IPs at Level 4 (PARANOID) - request blocked
-PARALLEL_TEST_F(HttpRequestFunctionsTest, securityLevel4NoDnsPinningTest) {
+TEST_F(HttpRequestFunctionsTest, securityLevel4NoDnsPinningTest) {
     HttpRequestFunctionState state;
     state.security_level = 4;  // PARANOID
 
@@ -371,7 +371,7 @@ PARALLEL_TEST_F(HttpRequestFunctionsTest, securityLevel4NoDnsPinningTest) {
 }
 
 // Test validate_host_security at Level 2 (PUBLIC) - public hosts allowed, private IPs need allowlist
-PARALLEL_TEST_F(HttpRequestFunctionsTest, securityLevel2PublicOpenPrivateNeedsAllowlistTest) {
+TEST_F(HttpRequestFunctionsTest, securityLevel2PublicOpenPrivateNeedsAllowlistTest) {
     HttpRequestFunctionState state;
     state.security_level = 2;  // PUBLIC
 
@@ -395,7 +395,7 @@ PARALLEL_TEST_F(HttpRequestFunctionsTest, securityLevel2PublicOpenPrivateNeedsAl
 }
 
 // Test validate_host_security at Level 2 (PUBLIC) - private IPs allowed with allowlist + allow_private_in_allowlist
-PARALLEL_TEST_F(HttpRequestFunctionsTest, securityLevel2PrivateIPAllowedWithAllowlistTest) {
+TEST_F(HttpRequestFunctionsTest, securityLevel2PrivateIPAllowedWithAllowlistTest) {
     HttpRequestFunctionState state;
     state.security_level = 2;  // PUBLIC
     state.ip_allowlist = {"127.0.0.1", "192.168.1.1"};
@@ -411,7 +411,7 @@ PARALLEL_TEST_F(HttpRequestFunctionsTest, securityLevel2PrivateIPAllowedWithAllo
 }
 
 // Test validate_host_security at Level 2 - private IPs blocked even in allowlist without allow_private_in_allowlist
-PARALLEL_TEST_F(HttpRequestFunctionsTest, securityLevel2PrivateIPBlockedWithoutFlagTest) {
+TEST_F(HttpRequestFunctionsTest, securityLevel2PrivateIPBlockedWithoutFlagTest) {
     HttpRequestFunctionState state;
     state.security_level = 2;  // PUBLIC
     state.ip_allowlist = {"127.0.0.1", "192.168.1.1"};
@@ -426,7 +426,7 @@ PARALLEL_TEST_F(HttpRequestFunctionsTest, securityLevel2PrivateIPBlockedWithoutF
 }
 
 // Test validate_host_security at Level 3 (RESTRICTED) - requires allowlist
-PARALLEL_TEST_F(HttpRequestFunctionsTest, securityLevel3RequiresAllowlistTest) {
+TEST_F(HttpRequestFunctionsTest, securityLevel3RequiresAllowlistTest) {
     HttpRequestFunctionState state;
     state.security_level = 3;  // RESTRICTED
     // Empty allowlists
@@ -438,24 +438,25 @@ PARALLEL_TEST_F(HttpRequestFunctionsTest, securityLevel3RequiresAllowlistTest) {
                 status.message().find("Allowlist") != std::string::npos);
 }
 
-// Test validate_host_security at Level 3 with host regex allowlist configured
-PARALLEL_TEST_F(HttpRequestFunctionsTest, securityLevel3AllowlistWorksTest) {
+// Test validate_host_security at Level 3 with IP allowlist configured
+// Note: This test uses IP addresses to avoid DNS resolution dependencies
+TEST_F(HttpRequestFunctionsTest, securityLevel3AllowlistWorksTest) {
     HttpRequestFunctionState state;
     state.security_level = 3;  // RESTRICTED
-    // Use regex patterns for hostname matching
-    state.host_allowlist_patterns = compile_regex_patterns("api\\.example\\.com|data\\.example\\.com");
+    // Use IP allowlist for direct IP access
+    state.ip_allowlist = {"93.184.216.34", "1.2.3.4"};  // example.com's IP and test IP
 
-    // Hosts matching regex should be allowed
-    ASSERT_TRUE(validate_host_security("http://api.example.com/v1", state).ok());
-    ASSERT_TRUE(validate_host_security("https://data.example.com/query", state).ok());
+    // IPs in allowlist should be allowed (using public IPs)
+    ASSERT_TRUE(validate_host_security("http://93.184.216.34/v1", state).ok());
+    ASSERT_TRUE(validate_host_security("https://1.2.3.4/query", state).ok());
 
-    // Hosts not matching regex should be blocked
-    auto status = validate_host_security("http://evil.com/api", state);
+    // IPs not in allowlist should be blocked
+    auto status = validate_host_security("http://5.6.7.8/api", state);
     ASSERT_FALSE(status.ok());
 }
 
 // Test validate_host_security at Level 3 - private IP allowed with allowlist + allow_private_in_allowlist
-PARALLEL_TEST_F(HttpRequestFunctionsTest, securityLevel3PrivateIPAllowedWithAllowlistTest) {
+TEST_F(HttpRequestFunctionsTest, securityLevel3PrivateIPAllowedWithAllowlistTest) {
     HttpRequestFunctionState state;
     state.security_level = 3;  // RESTRICTED
     state.ip_allowlist = {"127.0.0.1", "192.168.1.1"};
@@ -471,7 +472,7 @@ PARALLEL_TEST_F(HttpRequestFunctionsTest, securityLevel3PrivateIPAllowedWithAllo
 }
 
 // Test validate_host_security at Level 3 - private IP blocked even in allowlist without flag
-PARALLEL_TEST_F(HttpRequestFunctionsTest, securityLevel3PrivateIPBlockedWithoutFlagTest) {
+TEST_F(HttpRequestFunctionsTest, securityLevel3PrivateIPBlockedWithoutFlagTest) {
     HttpRequestFunctionState state;
     state.security_level = 3;  // RESTRICTED
     state.ip_allowlist = {"127.0.0.1", "192.168.1.1"};
@@ -486,7 +487,7 @@ PARALLEL_TEST_F(HttpRequestFunctionsTest, securityLevel3PrivateIPBlockedWithoutF
 }
 
 // Test validate_host_security at Level 4 (PARANOID) - blocks ALL requests
-PARALLEL_TEST_F(HttpRequestFunctionsTest, securityLevel4BlocksAllRequestsTest) {
+TEST_F(HttpRequestFunctionsTest, securityLevel4BlocksAllRequestsTest) {
     HttpRequestFunctionState state;
     state.security_level = 4;  // PARANOID
     state.ip_allowlist = {"127.0.0.1"};
@@ -507,7 +508,7 @@ PARALLEL_TEST_F(HttpRequestFunctionsTest, securityLevel4BlocksAllRequestsTest) {
 }
 
 // Test validate_host_security with invalid URL format
-PARALLEL_TEST_F(HttpRequestFunctionsTest, securityInvalidUrlTest) {
+TEST_F(HttpRequestFunctionsTest, securityInvalidUrlTest) {
     HttpRequestFunctionState state;
     state.security_level = 3;  // RESTRICTED
     state.host_allowlist_patterns = compile_regex_patterns("example\\.com");
@@ -524,7 +525,7 @@ PARALLEL_TEST_F(HttpRequestFunctionsTest, securityInvalidUrlTest) {
 }
 
 // Test protocol validation - only http:// and https:// allowed
-PARALLEL_TEST_F(HttpRequestFunctionsTest, protocolValidationTest) {
+TEST_F(HttpRequestFunctionsTest, protocolValidationTest) {
     HttpRequestFunctionState state;
     state.security_level = 1;  // TRUSTED (allow everything except protocol check)
 
@@ -561,7 +562,7 @@ PARALLEL_TEST_F(HttpRequestFunctionsTest, protocolValidationTest) {
 }
 
 // Test invalid regex pattern handling (should be skipped without crashing)
-PARALLEL_TEST_F(HttpRequestFunctionsTest, invalidRegexPatternTest) {
+TEST_F(HttpRequestFunctionsTest, invalidRegexPatternTest) {
     // Invalid regex patterns should be handled gracefully
     auto patterns = compile_regex_patterns("[invalid(regex,valid\\.pattern\\.com");
     // Should have at least the valid pattern, invalid ones are skipped
@@ -573,7 +574,7 @@ PARALLEL_TEST_F(HttpRequestFunctionsTest, invalidRegexPatternTest) {
 }
 
 // Test validate_http_method with valid methods
-PARALLEL_TEST_F(HttpRequestFunctionsTest, validateHttpMethodValidTest) {
+TEST_F(HttpRequestFunctionsTest, validateHttpMethodValidTest) {
     // All valid methods should return OK
     ASSERT_TRUE(validate_http_method("GET").ok());
     ASSERT_TRUE(validate_http_method("POST").ok());
@@ -591,7 +592,7 @@ PARALLEL_TEST_F(HttpRequestFunctionsTest, validateHttpMethodValidTest) {
 }
 
 // Test validate_http_method with invalid methods
-PARALLEL_TEST_F(HttpRequestFunctionsTest, validateHttpMethodInvalidTest) {
+TEST_F(HttpRequestFunctionsTest, validateHttpMethodInvalidTest) {
     // Invalid method should return error
     auto status1 = validate_http_method("INVALID");
     ASSERT_FALSE(status1.ok());

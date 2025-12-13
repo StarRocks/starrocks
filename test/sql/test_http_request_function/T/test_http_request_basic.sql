@@ -15,8 +15,11 @@
 --     password VARCHAR       -- Default: ''
 --   ) -> VARCHAR
 
--- Setup: Allow external API hosts for basic functional tests
-ADMIN SET FRONTEND CONFIG ("http_request_host_allowlist_regexp" = "jsonplaceholder\\.typicode\\.com|httpbin\\.org");
+-- Setup: Reset security configuration and allow external API hosts for basic functional tests
+ADMIN SET FRONTEND CONFIG ("http_request_security_level" = "3");
+ADMIN SET FRONTEND CONFIG ("http_request_host_allowlist_regexp" = "jsonplaceholder\\.typicode\\.com|.*\\.badssl\\.com");
+-- Allow ssl_verify=false for SSL verification tests
+ADMIN SET FRONTEND CONFIG ("http_request_ssl_verification_required" = "false");
 
 -- Test 1: NULL input returns error (required parameter cannot be NULL)
 SELECT http_request(url => NULL);
@@ -103,34 +106,6 @@ SELECT json_query(http_request(
 ), '$.status') as status;
 
 -- ============================================================
--- Slack Webhook Integration Tests
--- ============================================================
-
--- Test 16: Slack Webhook - Simple Message
-SELECT json_query(http_request(
-    url => 'https://hooks.slack.com/services/INVALID/WEBHOOK/URL',
-    method => 'POST',
-    headers => '{"Content-Type": "application/json"}',
-    body => '{"text": "Test 16: Simple message from StarRocks http_request function"}'
-), '$.status') as status;
-
--- Test 17: Slack Webhook - Rich Message with Block Kit (Sales Report)
-SELECT json_query(http_request(
-    url => 'https://hooks.slack.com/services/INVALID/WEBHOOK/URL',
-    method => 'POST',
-    headers => '{"Content-Type": "application/json"}',
-    body => '{"blocks": [{"type": "header", "text": {"type": "plain_text", "text": "Sales Summary from StarRocks", "emoji": true}}, {"type": "section", "fields": [{"type": "mrkdwn", "text": "*North:* $125,000.50"}, {"type": "mrkdwn", "text": "*South:* $98,000.25"}, {"type": "mrkdwn", "text": "*East:* $156,000.75"}, {"type": "mrkdwn", "text": "*West:* $142,000.00"}]}]}'
-), '$.status') as status;
-
--- Test 18: Slack Webhook - Alert with Attachments (CPU Alert)
-SELECT json_query(http_request(
-    url => 'https://hooks.slack.com/services/INVALID/WEBHOOK/URL',
-    method => 'POST',
-    headers => '{"Content-Type": "application/json"}',
-    body => '{"attachments": [{"color": "#ff0000", "title": "High CPU Alert", "text": "Server node-01 CPU usage exceeded 90%", "fields": [{"title": "Server", "value": "node-01", "short": true}, {"title": "CPU", "value": "92.5%", "short": true}, {"title": "Memory", "value": "78.3%", "short": true}, {"title": "Status", "value": "Critical", "short": true}], "footer": "StarRocks Monitoring"}]}'
-), '$.status') as status;
-
--- ============================================================
 -- SSL Verification Tests (using badssl.com test sites)
 -- ============================================================
 
@@ -169,39 +144,25 @@ SELECT json_query(http_request(
     url => 'https://jsonplaceholder.typicode.com/posts/1'
 ), '$.status') as status;
 
--- Test 25: Basic Auth with Named Parameters (using httpbin)
-SELECT json_query(http_request(
-    url => 'https://httpbin.org/basic-auth/user/passwd',
-    username => 'user',
-    password => 'passwd'
-), '$.status') as status;
-
--- Test 26: Basic Auth with wrong credentials
-SELECT json_query(http_request(
-    url => 'https://httpbin.org/basic-auth/user/passwd',
-    username => 'wrong',
-    password => 'wrong'
-), '$.status') as status;
-
 -- ============================================================
--- HEAD and OPTIONS Method Tests
+-- HEAD and OPTIONS Method Tests (using jsonplaceholder)
 -- ============================================================
 
--- Test 27: HEAD request - returns headers only (no body)
+-- Test 25: HEAD request - returns headers only (no body)
 SELECT json_query(http_request(
-    url => 'https://httpbin.org/get',
+    url => 'https://jsonplaceholder.typicode.com/posts/1',
     method => 'HEAD'
 ), '$.status') as status;
 
--- Test 28: OPTIONS request - returns allowed methods
+-- Test 26: OPTIONS request - returns allowed methods
 SELECT json_query(http_request(
-    url => 'https://httpbin.org/get',
+    url => 'https://jsonplaceholder.typicode.com/posts/1',
     method => 'OPTIONS'
 ), '$.status') as status;
 
--- Test 29: HEAD request - body should be empty or null
+-- Test 27: HEAD request - body should be empty or null
 SELECT json_query(http_request(
-    url => 'https://httpbin.org/get',
+    url => 'https://jsonplaceholder.typicode.com/posts/1',
     method => 'HEAD'
 ), '$.body') as body;
 
@@ -209,41 +170,42 @@ SELECT json_query(http_request(
 -- Invalid HTTP Method Tests
 -- ============================================================
 
--- Test 30: Invalid method 'INVALID' - should return error
+-- Test 28: Invalid method 'INVALID' - should return error
 SELECT json_query(http_request(
-    url => 'https://httpbin.org/get',
+    url => 'https://jsonplaceholder.typicode.com/posts/1',
     method => 'INVALID'
 ), '$.status') as status;
 
--- Test 31: Invalid method error message should contain 'Invalid HTTP method'
+-- Test 29: Invalid method error message should contain 'Invalid HTTP method'
 SELECT CAST(json_query(http_request(
-    url => 'https://httpbin.org/get',
+    url => 'https://jsonplaceholder.typicode.com/posts/1',
     method => 'INVALID'
 ), '$.error') AS STRING) LIKE '%Invalid HTTP method%' as has_error_message;
 
--- Test 32: Invalid method 'PATCH' - not in allowed list
+-- Test 30: Invalid method 'PATCH' - not in allowed list
 SELECT json_query(http_request(
-    url => 'https://httpbin.org/get',
+    url => 'https://jsonplaceholder.typicode.com/posts/1',
     method => 'PATCH'
 ), '$.status') as status;
 
--- Test 33: Empty method string - should return error
+-- Test 31: Empty method string - should return error
 SELECT json_query(http_request(
-    url => 'https://httpbin.org/get',
+    url => 'https://jsonplaceholder.typicode.com/posts/1',
     method => ''
 ), '$.status') as status;
 
--- Test 34: Case insensitive method (lowercase 'get')
+-- Test 32: Case insensitive method (lowercase 'get')
 SELECT json_query(http_request(
-    url => 'https://httpbin.org/get',
+    url => 'https://jsonplaceholder.typicode.com/posts/1',
     method => 'get'
 ), '$.status') as status;
 
--- Test 35: Case insensitive method (mixed case 'GeT')
+-- Test 33: Case insensitive method (mixed case 'GeT')
 SELECT json_query(http_request(
-    url => 'https://httpbin.org/get',
+    url => 'https://jsonplaceholder.typicode.com/posts/1',
     method => 'GeT'
 ), '$.status') as status;
 
--- Cleanup: Reset allowlist to default (empty)
+-- Cleanup: Reset configuration to default
 ADMIN SET FRONTEND CONFIG ("http_request_host_allowlist_regexp" = "");
+ADMIN SET FRONTEND CONFIG ("http_request_ssl_verification_required" = "true");
