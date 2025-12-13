@@ -49,6 +49,8 @@ public:
 
     int64_t node_id() { return _node_id; }
 
+    const std::string& host() const { return _host; }
+
     std::string debug_string();
 
     Status get_status() {
