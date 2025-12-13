@@ -85,6 +85,12 @@ Status HttpClient::init(const std::string& url) {
         LOG(WARNING) << "fail to set CURLOPT_FOLLOWLOCATION, msg=" << _to_errmsg(code);
         return Status::InternalError("fail to set CURLOPT_FOLLOWLOCATION");
     }
+    // Limit maximum number of redirects to prevent infinite loops
+    code = curl_easy_setopt(_curl, CURLOPT_MAXREDIRS, 20);
+    if (code != CURLE_OK) {
+        LOG(WARNING) << "fail to set CURLOPT_MAXREDIRS, msg=" << _to_errmsg(code);
+        return Status::InternalError("fail to set CURLOPT_MAXREDIRS");
+    }
 
     curl_write_callback callback = [](char* buffer, size_t size, size_t nmemb, void* param) {
         auto* client = (HttpClient*)param;
