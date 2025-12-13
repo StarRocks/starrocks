@@ -56,7 +56,7 @@ Status PersistentIndexSstableFileset::init(std::vector<std::unique_ptr<Persisten
 }
 
 Status PersistentIndexSstableFileset::init(std::unique_ptr<PersistentIndexSstable>& sstable) {
-    if (is_inited()()) {
+    if (is_inited()) {
         return Status::InternalError("sstable fileset is already initialized");
     }
     if (sstable->sstable_pb().has_range()) {

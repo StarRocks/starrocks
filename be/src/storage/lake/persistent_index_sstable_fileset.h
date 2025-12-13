@@ -39,6 +39,7 @@ public:
     Status merge_from(std::unique_ptr<PersistentIndexSstable>& sstable);
     UniqueId fileset_id() const { return _fileset_id; }
     bool is_standalone_sstable() const { return _standalone_sstable != nullptr; }
+    // Check whether it's standalone sstable before call function.
     const std::string& standalone_sstable_filename() const;
 
     // multi get from sstable fileset
@@ -48,8 +49,6 @@ public:
     void get_all_sstable_pbs(PersistentIndexSstableMetaPB* sstable_pbs) const;
 
     size_t memory_usage() const;
-
-    bool is_inited() const { return !_sstable_map.empty() || _standalone_sstable != nullptr; }
 
     void print_debug_info(std::stringstream& ss);
 
@@ -70,6 +69,8 @@ private:
             return sstable::BytewiseComparator()->Compare(a, b) < 0;
         }
     };
+
+    bool is_inited() const { return !_sstable_map.empty() || _standalone_sstable != nullptr; }
 
     // From start_key to <end_key, sstable_ptr>
     std::map<std::string, std::pair<std::string, std::unique_ptr<PersistentIndexSstable>>, KeyComparator> _sstable_map;

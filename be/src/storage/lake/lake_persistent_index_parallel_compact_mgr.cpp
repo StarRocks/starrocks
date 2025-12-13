@@ -279,7 +279,7 @@ LakePersistentIndexParallelCompactMgr::~LakePersistentIndexParallelCompactMgr() 
 }
 
 Status LakePersistentIndexParallelCompactMgr::init() {
-    ThreadPoolBuilder builder("pk_index_compact");
+    ThreadPoolBuilder builder("cloud_native_pk_index_compact");
     builder.set_min_threads(1);
     builder.set_max_threads(std::max(1, config::pk_index_parallel_compaction_threadpool_max_threads));
     return builder.build(&_thread_pool);
@@ -400,7 +400,8 @@ void LakePersistentIndexParallelCompactMgr::generate_compaction_tasks(
     // Calculate segment number based on total size, threshold and parallelism config
     size_t segment_num =
             std::max<size_t>(1, total_size / config::pk_index_parallel_compaction_task_split_threshold_bytes);
-    segment_num = std::min<size_t>(segment_num, config::pk_index_parallel_compaction_threadpool_max_threads * 4);
+    segment_num =
+            std::min<size_t>(segment_num, std::max(1, config::pk_index_parallel_compaction_threadpool_max_threads) * 4);
 
     struct Segment {
         // [seek_key, stop_key)

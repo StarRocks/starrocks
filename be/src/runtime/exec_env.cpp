@@ -578,12 +578,12 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
     if (max_thread_count <= 0) {
         max_thread_count = CpuInfo::num_cores();
     }
-    RETURN_IF_ERROR(ThreadPoolBuilder("pk_index_get")
+    RETURN_IF_ERROR(ThreadPoolBuilder("cloud_native_pk_index_get")
                             .set_min_threads(1)
                             .set_max_threads(std::max(1, max_thread_count))
                             .set_max_queue_size(std::numeric_limits<int>::max())
                             .build(&_pk_index_get_thread_pool));
-    RETURN_IF_ERROR(ThreadPoolBuilder("pk_index_flush")
+    RETURN_IF_ERROR(ThreadPoolBuilder("cloud_native_pk_index_flush")
                             .set_min_threads(1)
                             .set_max_threads(std::max(1, config::pk_index_memtable_flush_threadpool_max_threads))
                             .set_max_queue_size(std::numeric_limits<int>::max())
