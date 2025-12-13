@@ -113,6 +113,8 @@ jobs:
             if [[ "${#centos_tar_array[@]}" -eq 2 ]]; then
               echo "CENTOS_FE_TAR_PATH=${centos_tar_array[0]}" >> $GITHUB_OUTPUT
               echo "CENTOS_BE_TAR_PATH=${centos_tar_array[1]}" >> $GITHUB_OUTPUT
+            elif [[ "${#centos_tar_array[@]}" -eq 0 ]]; then
+              echo "No Centos tar path provided."
             else
               echo "::error::CENTOS_TAR_PATH format error, please check."
               exit -1
@@ -122,6 +124,8 @@ jobs:
             if [[ "${#ubuntu_tar_array[@]}" -eq 2 ]]; then
               echo "UBUNTU_FE_TAR_PATH=${ubuntu_tar_array[0]}" >> $GITHUB_OUTPUT
               echo "UBUNTU_BE_TAR_PATH=${ubuntu_tar_array[1]}" >> $GITHUB_OUTPUT
+            elif [[ "${#ubuntu_tar_array[@]}" -eq 0 ]]; then
+              echo "No Ubuntu tar path provided."
             else
               echo "::error::UBUNTU_TAR_PATH format error, please check."
               exit -1

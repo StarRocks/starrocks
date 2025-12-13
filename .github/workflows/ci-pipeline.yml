@@ -1159,6 +1159,7 @@ jobs:
       - name: CLEAN
         run: |
           rm -rf ${{ github.workspace }} && mkdir -p ${{ github.workspace }}
+          exit 1
 
       - name: Checkout Code
         uses: actions/checkout@v4
