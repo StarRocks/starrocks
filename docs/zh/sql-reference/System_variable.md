@@ -898,7 +898,7 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * `force`：启用异步物化视图的自动查询改写，并且优化器优先使用物化视图改写查询。如果查询无法改写，则直接查询基表中的数据。
 * `force_or_error`：启用异步物化视图的自动查询改写，并且优化器优先使用物化视图改写查询。如果查询无法改写，将返回错误。
 
-### materialized_view_subuqery_text_match_max_count
+### materialized_view_subquery_text_match_max_count
 
 * 描述：指定系统比对查询的子查询是否与物化视图定义匹配的最大次数。
 * 默认值：4

@@ -1172,7 +1172,7 @@ Specifies the query rewrite mode of asynchronous materialized views. Valid value
 * `force`: Enable automatic query rewrite of asynchronous materialized views, and the optimizer prioritizes query rewrite using the materialized view. If the query cannot be rewritten, it directly scans the data in the base table.
 * `force_or_error`: Enable automatic query rewrite of asynchronous materialized views, and the optimizer prioritizes query rewrite using the materialized view. If the query cannot be rewritten, an error is returned.
 
-### materialized_view_subuqery_text_match_max_count
+### materialized_view_subquery_text_match_max_count
 
 * **Description**: Specifies the maximum number of times that the system checks whether a query's sub-query matches the materialized views' definition.
 * **Default**: 4
