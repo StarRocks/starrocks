@@ -4,7 +4,6 @@ on:
   schedule:
     - cron: "0 0 * * 1-5"
     - cron: "30 4 * * 1-5"
-    - cron: "30 9 * * 1-5"
     - cron: "0 11 * * 1,3,5"
     - cron: "0 11 * * 2,4"
   workflow_dispatch:
@@ -78,8 +77,10 @@ jobs:
     outputs:
       BRANCH: ${{ steps.param.outputs.BRANCH }}
       PR_NUMBER: ${{ steps.param.outputs.PR_NUMBER }}
-      CENTOS_TAR_PATH: ${{ steps.param.outputs.CENTOS_TAR_PATH }}
-      UBUNTU_TAR_PATH: ${{ steps.param.outputs.UBUNTU_TAR_PATH }}
+      CENTOS_FE_TAR_PATH: ${{ steps.param.outputs.CENTOS_FE_TAR_PATH }}
+      CENTOS_BE_TAR_PATH: ${{ steps.param.outputs.CENTOS_BE_TAR_PATH }}
+      UBUNTU_FE_TAR_PATH: ${{ steps.param.outputs.UBUNTU_FE_TAR_PATH }}
+      UBUNTU_BE_TAR_PATH: ${{ steps.param.outputs.UBUNTU_BE_TAR_PATH }}
       BE_UT_LINUX: ${{ steps.param.outputs.BE_UT_LINUX }}
       ALL_LINUX: ${{ steps.param.outputs.ALL_LINUX }}
       WITH_FEATURE_COV: ${{ steps.param.outputs.WITH_FEATURE_COV }}
@@ -106,8 +107,29 @@ jobs:
           else
             echo "BRANCH=${{ inputs.BRANCH }}" >> $GITHUB_OUTPUT
             echo "PR_NUMBER=${{ inputs.COMMIT_ID }}" >> $GITHUB_OUTPUT
-            echo "CENTOS_TAR_PATH=${{ inputs.CENTOS_TAR_PATH }}" >> $GITHUB_OUTPUT
-            echo "UBUNTU_TAR_PATH=${{ inputs.UBUNTU_TAR_PATH }}" >> $GITHUB_OUTPUT
+
+            IFS=',' read -r -a centos_tar_array <<< "${{ inputs.CENTOS_TAR_PATH }}"
+            if [[ "${#centos_tar_array[@]}" -eq 2 ]]; then
+              echo "CENTOS_FE_TAR_PATH=${centos_tar_array[0]}" >> $GITHUB_OUTPUT
+              echo "CENTOS_BE_TAR_PATH=${centos_tar_array[1]}" >> $GITHUB_OUTPUT
+            elif [[ "${#centos_tar_array[@]}" -eq 0 ]]; then
+              echo "No Centos tar path provided."
+            else
+              echo "::error::CENTOS_TAR_PATH format error, please check."
+              exit -1
+            fi
+
+            IFS=',' read -r -a ubuntu_tar_array <<< "${{ inputs.UBUNTU_TAR_PATH }}"
+            if [[ "${#ubuntu_tar_array[@]}" -eq 2 ]]; then
+              echo "UBUNTU_FE_TAR_PATH=${ubuntu_tar_array[0]}" >> $GITHUB_OUTPUT
+              echo "UBUNTU_BE_TAR_PATH=${ubuntu_tar_array[1]}" >> $GITHUB_OUTPUT
+            elif [[ "${#ubuntu_tar_array[@]}" -eq 0 ]]; then
+              echo "No Ubuntu tar path provided."
+            else
+              echo "::error::UBUNTU_TAR_PATH format error, please check."
+              exit -1
+            fi
+
             echo "ALL_LINUX=${{ inputs.ALL_LINUX }}" >> $GITHUB_OUTPUT
             echo "WITH_FEATURE_COV=${{ inputs.WITH_FEATURE_COV }}" >> $GITHUB_OUTPUT
             echo "IS_ARM=${{ inputs.IS_ARM }}" >> $GITHUB_OUTPUT
@@ -298,9 +320,9 @@ jobs:
 
       - name: BUILD RESULT
         run: |
-          echo ${{ steps.run_build.outputs.ABSOLUTE_OUTPUT_TAR }}
-          echo "Package: ${{ steps.run_build.outputs.ABSOLUTE_OUTPUT_TAR }}" >> $GITHUB_STEP_SUMMARY
-          echo ${{ steps.run_build.outputs.ABSOLUTE_OUTPUT_TAR }} > tar.txt
+          echo ${{ steps.run_build.outputs.BE_OUTPUT_TAR }} >> $GITHUB_STEP_SUMMARY
+          echo ${{ steps.run_build.outputs.FE_OUTPUT_TAR }} >> $GITHUB_STEP_SUMMARY
+          echo -e "BE=${{ steps.run_build.outputs.BE_OUTPUT_TAR }}\nFE=${{ steps.run_build.outputs.FE_OUTPUT_TAR }}"> tar.txt
 
       - uses: actions/upload-artifact@v4
         with:
@@ -332,10 +354,14 @@ jobs:
     env:
       ALL_LINUX: needs.info.outputs.ALL_LINUX
     outputs:
-      CENTOS_RELEASE_TAR_PATH: ${{ steps.set_output.outputs.CENTOS_RELEASE_TAR_PATH }}
-      CENTOS_ASAN_TAR_PATH: ${{ steps.set_output.outputs.CENTOS_ASAN_TAR_PATH }}
-      UBUNTU_RELEASE_TAR_PATH: ${{ steps.set_output.outputs.UBUNTU_RELEASE_TAR_PATH }}
-      UBUNTU_ASAN_TAR_PATH: ${{ steps.set_output.outputs.UBUNTU_ASAN_TAR_PATH }}
+      CENTOS_RELEASE_BE_TAR_PATH: ${{ steps.set_output.outputs.CENTOS_RELEASE_BE_TAR_PATH }}
+      CENTOS_RELEASE_FE_TAR_PATH: ${{ steps.set_output.outputs.CENTOS_RELEASE_FE_TAR_PATH }}
+      CENTOS_ASAN_BE_TAR_PATH: ${{ steps.set_output.outputs.CENTOS_ASAN_BE_TAR_PATH }}
+      CENTOS_ASAN_FE_TAR_PATH: ${{ steps.set_output.outputs.CENTOS_ASAN_FE_TAR_PATH }}
+      UBUNTU_RELEASE_BE_TAR_PATH: ${{ steps.set_output.outputs.UBUNTU_RELEASE_BE_TAR_PATH }}
+      UBUNTU_RELEASE_FE_TAR_PATH: ${{ steps.set_output.outputs.UBUNTU_RELEASE_FE_TAR_PATH }}
+      UBUNTU_ASAN_BE_TAR_PATH: ${{ steps.set_output.outputs.UBUNTU_ASAN_BE_TAR_PATH }}
+      UBUNTU_ASAN_FE_TAR_PATH: ${{ steps.set_output.outputs.UBUNTU_ASAN_FE_TAR_PATH }}
       IS_SELF_BUILD: ${{ steps.set_output.outputs.IS_SELF_BUILD }}
     steps:
       - name: Clean Workspace
@@ -353,29 +379,37 @@ jobs:
         if: github.event_name == 'schedule' || inputs.IS_REBUILD
         run: |
           if [[ -e "./outputs/BUILD-RESULT-Release-centos7/tar.txt" ]]; then
-            build_result=$(cat "./outputs/BUILD-RESULT-Release-centos7/tar.txt")
-            echo "CENTOS_RELEASE_TAR_PATH=${build_result}" >> $GITHUB_OUTPUT
+            build_fe_result=`grep "FE=" "./outputs/BUILD-RESULT-Release-centos7/tar.txt" | cut -d "=" -f 2`
+            build_be_result=`grep "BE=" "./outputs/BUILD-RESULT-Release-centos7/tar.txt" | cut -d "=" -f 2`
+            echo "CENTOS_RELEASE_BE_TAR_PATH=${build_be_result}" >> $GITHUB_OUTPUT
+            echo "CENTOS_RELEASE_FE_TAR_PATH=${build_fe_result}" >> $GITHUB_OUTPUT
           else
             has_failure=true
           fi
           
           if [[ -e "./outputs/BUILD-RESULT-ASAN-centos7/tar.txt" ]]; then
-            build_result=$(cat "./outputs/BUILD-RESULT-ASAN-centos7/tar.txt")
-            echo "CENTOS_ASAN_TAR_PATH=${build_result}" >> $GITHUB_OUTPUT
+            build_fe_result=`grep "FE=" "./outputs/BUILD-RESULT-ASAN-centos7/tar.txt" | cut -d "=" -f 2`
+            build_be_result=`grep "BE=" "./outputs/BUILD-RESULT-ASAN-centos7/tar.txt" | cut -d "=" -f 2`
+            echo "CENTOS_ASAN_BE_TAR_PATH=${build_be_result}" >> $GITHUB_OUTPUT
+            echo "CENTOS_ASAN_FE_TAR_PATH=${build_fe_result}" >> $GITHUB_OUTPUT
           else
             has_failure=true
           fi
           
           if [[ -e "./outputs/BUILD-RESULT-Release-ubuntu/tar.txt" ]]; then
-            build_result=$(cat "./outputs/BUILD-RESULT-Release-ubuntu/tar.txt")
-            echo "UBUNTU_RELEASE_TAR_PATH=${build_result}" >> $GITHUB_OUTPUT
+            build_fe_result=`grep "FE=" "./outputs/BUILD-RESULT-Release-ubuntu/tar.txt" | cut -d "=" -f 2`
+            build_be_result=`grep "BE=" "./outputs/BUILD-RESULT-Release-ubuntu/tar.txt" | cut -d "=" -f 2`
+            echo "UBUNTU_RELEASE_BE_TAR_PATH=${build_be_result}" >> $GITHUB_OUTPUT
+            echo "UBUNTU_RELEASE_FE_TAR_PATH=${build_fe_result}" >> $GITHUB_OUTPUT
           else
             has_failure=true
           fi
           
           if [[ -e "./outputs/BUILD-RESULT-ASAN-ubuntu/tar.txt" ]]; then
-            build_result=$(cat "./outputs/BUILD-RESULT-ASAN-ubuntu/tar.txt")
-            echo "UBUNTU_ASAN_TAR_PATH=${build_result}" >> $GITHUB_OUTPUT
+            build_fe_result=`grep "FE=" "./outputs/BUILD-RESULT-ASAN-ubuntu/tar.txt" | cut -d "=" -f 2`
+            build_be_result=`grep "BE=" "./outputs/BUILD-RESULT-ASAN-ubuntu/tar.txt" | cut -d "=" -f 2`
+            echo "UBUNTU_ASAN_BE_TAR_PATH=${build_be_result}" >> $GITHUB_OUTPUT
+            echo "UBUNTU_ASAN_FE_TAR_PATH=${build_fe_result}" >> $GITHUB_OUTPUT
           else
             has_failure=true
           fi
@@ -389,16 +423,20 @@ jobs:
         if: always()
         run: |
           if [[ "${{steps.analyse_artifact.outcome}}" == "skipped" ]]; then
-            echo "CENTOS_RELEASE_TAR_PATH=${{ needs.info.outputs.CENTOS_TAR_PATH }}" >> $GITHUB_OUTPUT
-            echo "CENTOS_ASAN_TAR_PATH=${{ needs.info.outputs.CENTOS_ASAN_TAR_PATH }}" >> $GITHUB_OUTPUT
-            echo "UBUNTU_RELEASE_TAR_PATH=${{ needs.info.outputs.UBUNTU_TAR_PATH }}" >> $GITHUB_OUTPUT
-            echo "UBUNTU_ASAN_TAR_PATH=${{ needs.info.outputs.UBUNTU_ASAN_TAR_PATH }}" >> $GITHUB_OUTPUT
+            echo "CENTOS_RELEASE_BE_TAR_PATH=${{ needs.info.outputs.CENTOS_BE_TAR_PATH }}" >> $GITHUB_OUTPUT
+            echo "CENTOS_RELEASE_FE_TAR_PATH=${{ needs.info.outputs.CENTOS_FE_TAR_PATH }}" >> $GITHUB_OUTPUT
+            echo "UBUNTU_RELEASE_BE_TAR_PATH=${{ needs.info.outputs.UBUNTU_BE_TAR_PATH }}" >> $GITHUB_OUTPUT
+            echo "UBUNTU_RELEASE_FE_TAR_PATH=${{ needs.info.outputs.UBUNTU_FE_TAR_PATH }}" >> $GITHUB_OUTPUT
             echo "IS_SELF_BUILD=false" >> $GITHUB_OUTPUT
           else
-            echo "CENTOS_RELEASE_TAR_PATH=${{ steps.analyse_artifact.outputs.CENTOS_RELEASE_TAR_PATH }}" >> $GITHUB_OUTPUT
-            echo "CENTOS_ASAN_TAR_PATH=${{ steps.analyse_artifact.outputs.CENTOS_ASAN_TAR_PATH }}" >> $GITHUB_OUTPUT
-            echo "UBUNTU_RELEASE_TAR_PATH=${{ steps.analyse_artifact.outputs.UBUNTU_RELEASE_TAR_PATH }}" >> $GITHUB_OUTPUT
-            echo "UBUNTU_ASAN_TAR_PATH=${{ steps.analyse_artifact.outputs.UBUNTU_ASAN_TAR_PATH }}" >> $GITHUB_OUTPUT
+            echo "CENTOS_RELEASE_BE_TAR_PATH=${{ steps.analyse_artifact.outputs.CENTOS_RELEASE_BE_TAR_PATH }}" >> $GITHUB_OUTPUT
+            echo "CENTOS_RELEASE_FE_TAR_PATH=${{ steps.analyse_artifact.outputs.CENTOS_RELEASE_FE_TAR_PATH }}" >> $GITHUB_OUTPUT
+            echo "CENTOS_ASAN_BE_TAR_PATH=${{ steps.analyse_artifact.outputs.CENTOS_ASAN_BE_TAR_PATH }}" >> $GITHUB_OUTPUT
+            echo "CENTOS_ASAN_FE_TAR_PATH=${{ steps.analyse_artifact.outputs.CENTOS_ASAN_FE_TAR_PATH }}" >> $GITHUB_OUTPUT
+            echo "UBUNTU_RELEASE_BE_TAR_PATH=${{ steps.analyse_artifact.outputs.UBUNTU_RELEASE_BE_TAR_PATH }}" >> $GITHUB_OUTPUT
+            echo "UBUNTU_RELEASE_FE_TAR_PATH=${{ steps.analyse_artifact.outputs.UBUNTU_RELEASE_FE_TAR_PATH }}" >> $GITHUB_OUTPUT
+            echo "UBUNTU_ASAN_BE_TAR_PATH=${{ steps.analyse_artifact.outputs.UBUNTU_ASAN_BE_TAR_PATH }}" >> $GITHUB_OUTPUT
+            echo "UBUNTU_ASAN_FE_TAR_PATH=${{ steps.analyse_artifact.outputs.UBUNTU_ASAN_FE_TAR_PATH }}" >> $GITHUB_OUTPUT
             echo "IS_SELF_BUILD=true" >> $GITHUB_OUTPUT
           fi
 
@@ -409,11 +447,12 @@ jobs:
       - info
       - test_filter
     secrets: inherit
-    if: always() && needs.test_filter.outputs.CENTOS_RELEASE_TAR_PATH != '' && (needs.info.outputs.ALL_LINUX == 'true' || needs.test_filter.outputs.IS_SELF_BUILD == 'false')
+    if: always() && needs.test_filter.outputs.CENTOS_RELEASE_BE_TAR_PATH != '' && needs.test_filter.outputs.CENTOS_RELEASE_FE_TAR_PATH != '' && (needs.info.outputs.ALL_LINUX == 'true' || needs.test_filter.outputs.IS_SELF_BUILD == 'false')
     with:
       BRANCH: ${{ needs.info.outputs.BRANCH }}
       COMMIT_ID: ${{ needs.info.outputs.PR_NUMBER }}
-      TAR_PATH: ${{ needs.test_filter.outputs.CENTOS_RELEASE_TAR_PATH }}
+      BE_OUTPUT_TAR: ${{ needs.test_filter.outputs.CENTOS_RELEASE_BE_TAR_PATH }}
+      FE_OUTPUT_TAR: ${{ needs.test_filter.outputs.CENTOS_RELEASE_FE_TAR_PATH }}
       BUILD_TYPE: Release
       LINUX_DISTRO: centos7
       IS_SELF_BUILD: ${{ needs.test_filter.outputs.IS_SELF_BUILD }}
@@ -426,11 +465,12 @@ jobs:
       - info
       - test_filter
     secrets: inherit
-    if: always() && needs.test_filter.outputs.CENTOS_ASAN_TAR_PATH != '' && (needs.info.outputs.ALL_LINUX == 'true' || needs.test_filter.outputs.IS_SELF_BUILD == 'false')
+    if: always() && needs.test_filter.outputs.CENTOS_ASAN_BE_TAR_PATH != '' && needs.test_filter.outputs.CENTOS_ASAN_FE_TAR_PATH != '' && (needs.info.outputs.ALL_LINUX == 'true' || needs.test_filter.outputs.IS_SELF_BUILD == 'false')
     with:
       BRANCH: ${{ needs.info.outputs.BRANCH }}
       COMMIT_ID: ${{ needs.info.outputs.PR_NUMBER }}
-      TAR_PATH: ${{ needs.test_filter.outputs.CENTOS_ASAN_TAR_PATH }}
+      BE_OUTPUT_TAR: ${{ needs.test_filter.outputs.CENTOS_ASAN_BE_TAR_PATH }}
+      FE_OUTPUT_TAR: ${{ needs.test_filter.outputs.CENTOS_ASAN_FE_TAR_PATH }}
       BUILD_TYPE: ASAN
       LINUX_DISTRO: centos7
       IS_SELF_BUILD: ${{ needs.test_filter.outputs.IS_SELF_BUILD }}
@@ -443,11 +483,12 @@ jobs:
       - info
       - test_filter
     secrets: inherit
-    if: always() && needs.test_filter.outputs.UBUNTU_RELEASE_TAR_PATH != ''
+    if: always() && needs.test_filter.outputs.UBUNTU_RELEASE_BE_TAR_PATH != '' && needs.test_filter.outputs.UBUNTU_RELEASE_FE_TAR_PATH != ''
     with:
       BRANCH: ${{ needs.info.outputs.BRANCH }}
       COMMIT_ID: ${{ needs.info.outputs.PR_NUMBER }}
-      TAR_PATH: ${{ needs.test_filter.outputs.UBUNTU_RELEASE_TAR_PATH }}
+      BE_OUTPUT_TAR: ${{ needs.test_filter.outputs.UBUNTU_RELEASE_BE_TAR_PATH }}
+      FE_OUTPUT_TAR: ${{ needs.test_filter.outputs.UBUNTU_RELEASE_FE_TAR_PATH }}
       BUILD_TYPE: Release
       LINUX_DISTRO: ubuntu
       IS_SELF_BUILD: ${{ needs.test_filter.outputs.IS_SELF_BUILD }}
@@ -462,11 +503,12 @@ jobs:
       - info
       - test_filter
     secrets: inherit
-    if: always() && needs.test_filter.outputs.UBUNTU_ASAN_TAR_PATH != '' && (needs.info.outputs.ALL_LINUX == 'true' || needs.test_filter.outputs.IS_SELF_BUILD == 'false')
+    if: always() && needs.test_filter.outputs.UBUNTU_ASAN_BE_TAR_PATH != '' && needs.test_filter.outputs.UBUNTU_ASAN_FE_TAR_PATH != '' && (needs.info.outputs.ALL_LINUX == 'true' || needs.test_filter.outputs.IS_SELF_BUILD == 'false')
     with:
       BRANCH: ${{ needs.info.outputs.BRANCH }}
       COMMIT_ID: ${{ needs.info.outputs.PR_NUMBER }}
-      TAR_PATH: ${{ needs.test_filter.outputs.UBUNTU_ASAN_TAR_PATH }}
+      BE_OUTPUT_TAR: ${{ needs.test_filter.outputs.UBUNTU_ASAN_BE_TAR_PATH }}
+      FE_OUTPUT_TAR: ${{ needs.test_filter.outputs.UBUNTU_ASAN_FE_TAR_PATH }}
       BUILD_TYPE: ASAN
       LINUX_DISTRO: ubuntu
       IS_SELF_BUILD: ${{ needs.test_filter.outputs.IS_SELF_BUILD }}
