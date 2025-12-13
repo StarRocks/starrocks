@@ -463,11 +463,12 @@ jobs:
       - info
       - test_filter
     secrets: inherit
-    if: always() && needs.test_filter.outputs.CENTOS_ASAN_TAR_PATH != '' && (needs.info.outputs.ALL_LINUX == 'true' || needs.test_filter.outputs.IS_SELF_BUILD == 'false')
+    if: always() && needs.test_filter.outputs.CENTOS_ASAN_BE_TAR_PATH != '' && needs.test_filter.outputs.CENTOS_ASAN_FE_TAR_PATH != '' && (needs.info.outputs.ALL_LINUX == 'true' || needs.test_filter.outputs.IS_SELF_BUILD == 'false')
     with:
       BRANCH: ${{ needs.info.outputs.BRANCH }}
       COMMIT_ID: ${{ needs.info.outputs.PR_NUMBER }}
-      TAR_PATH: ${{ needs.test_filter.outputs.CENTOS_ASAN_TAR_PATH }}
+      BE_OUTPUT_TAR: ${{ needs.test_filter.outputs.CENTOS_ASAN_BE_TAR_PATH }}
+      FE_OUTPUT_TAR: ${{ needs.test_filter.outputs.CENTOS_ASAN_FE_TAR_PATH }}
       BUILD_TYPE: ASAN
       LINUX_DISTRO: centos7
       IS_SELF_BUILD: ${{ needs.test_filter.outputs.IS_SELF_BUILD }}
@@ -480,11 +481,12 @@ jobs:
       - info
       - test_filter
     secrets: inherit
-    if: always() && needs.test_filter.outputs.UBUNTU_RELEASE_TAR_PATH != ''
+    if: always() && needs.test_filter.outputs.UBUNTU_RELEASE_BE_TAR_PATH != '' && needs.test_filter.outputs.UBUNTU_RELEASE_FE_TAR_PATH != ''
     with:
       BRANCH: ${{ needs.info.outputs.BRANCH }}
       COMMIT_ID: ${{ needs.info.outputs.PR_NUMBER }}
-      TAR_PATH: ${{ needs.test_filter.outputs.UBUNTU_RELEASE_TAR_PATH }}
+      BE_OUTPUT_TAR: ${{ needs.test_filter.outputs.UBUNTU_RELEASE_BE_TAR_PATH }}
+      FE_OUTPUT_TAR: ${{ needs.test_filter.outputs.UBUNTU_RELEASE_FE_TAR_PATH }}
       BUILD_TYPE: Release
       LINUX_DISTRO: ubuntu
       IS_SELF_BUILD: ${{ needs.test_filter.outputs.IS_SELF_BUILD }}
@@ -499,11 +501,12 @@ jobs:
       - info
       - test_filter
     secrets: inherit
-    if: always() && needs.test_filter.outputs.UBUNTU_ASAN_TAR_PATH != '' && (needs.info.outputs.ALL_LINUX == 'true' || needs.test_filter.outputs.IS_SELF_BUILD == 'false')
+    if: always() && needs.test_filter.outputs.UBUNTU_ASAN_BE_TAR_PATH != '' && needs.test_filter.outputs.UBUNTU_ASAN_FE_TAR_PATH != '' && (needs.info.outputs.ALL_LINUX == 'true' || needs.test_filter.outputs.IS_SELF_BUILD == 'false')
     with:
       BRANCH: ${{ needs.info.outputs.BRANCH }}
       COMMIT_ID: ${{ needs.info.outputs.PR_NUMBER }}
-      TAR_PATH: ${{ needs.test_filter.outputs.UBUNTU_ASAN_TAR_PATH }}
+      BE_OUTPUT_TAR: ${{ needs.test_filter.outputs.UBUNTU_ASAN_BE_TAR_PATH }}
+      FE_OUTPUT_TAR: ${{ needs.test_filter.outputs.UBUNTU_ASAN_FE_TAR_PATH }}
       BUILD_TYPE: ASAN
       LINUX_DISTRO: ubuntu
       IS_SELF_BUILD: ${{ needs.test_filter.outputs.IS_SELF_BUILD }}
