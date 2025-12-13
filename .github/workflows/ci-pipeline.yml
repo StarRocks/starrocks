@@ -343,7 +343,7 @@ jobs:
       PR_NUMBER: ${{ github.event.number }}
       BRANCH: ${{ github.base_ref }}
       REPO: ${{ github.repository }}
-      PRE_COMMIT: ${{ needs.clang-format.outputs.PRE_COMMIT }}
+      PRE_COMMIT: ${{ needs.clang-format.outputs.pre_commit }}
       PRE_COMMIT_CONCLUSION: ${{ needs.clang-format.outputs.pre_commit_conclusion }}
       ONLY_TEST: ${{ needs.clang-format.outputs.only_test }}
       BE_CHANGE: ${{ needs.clang-format.outputs.be_change }}
