@@ -67,8 +67,9 @@ std::vector<TResourceGroupUsage> ResourceGroupUsageRecorder::get_resource_group_
                         existing_group.usage.num_running_queries + wg.num_running_queries());
                     if (wg.version() >= existing_group.version) {
                         existing_group.version = wg.version();
-                        existing_group.usage.__set_mem_pool(wg.mem_pool());
-                        if (wg.parent_memory_limit_bytes().has_value()) {
+			existing_group.usage.__set_mem_pool(wg.mem_pool());
+                        existing_group.usage.__set_mem_limit_bytes(wg.mem_limit_bytes());
+			if (wg.parent_memory_limit_bytes().has_value()) {
                             existing_group.usage.__set_mem_pool_mem_limit_bytes(wg.parent_memory_limit_bytes().value());
                         }
                         if (wg.parent_memory_usage_bytes().has_value()) {
