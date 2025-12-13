@@ -42,6 +42,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.time.LocalDateTime;
+import java.util.Optional;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -371,9 +372,8 @@ public class StatisticsCollectionTrigger {
             return null;
         }
 
-        long totalRows = partitionIds.stream()
-                .mapToLong(p -> table.mayGetPartition(p).stream().mapToLong(Partition::getRowCount).sum())
-                .sum();
+        // Use BasicStatsMeta.getTotalRows() for more accurate totalRows
+        long totalRows = getTotalRowsFromStatsMeta(table);
         double deltaRatio = 1.0 * loadRows / (totalRows + 1);
         if (deltaRatio < Config.statistic_sample_collect_ratio_threshold_of_first_load) {
             return null;
@@ -382,6 +382,23 @@ public class StatisticsCollectionTrigger {
         } else {
             return StatsConstants.AnalyzeType.FULL;
         }
+    }
+
+    /**
+     * Get total rows using BasicStatsMeta.getTotalRows() if available, otherwise fallback to partition.getRowCount().
+     */
+    private long getTotalRowsFromStatsMeta(OlapTable table) {
+        BasicStatsMeta basicStatsMeta = GlobalStateMgr.getCurrentState()
+                .getAnalyzeMgr().getTableBasicStatsMeta(table.getId());
+        
+        if (basicStatsMeta != null && basicStatsMeta.getTotalRows() > 0) {
+            return basicStatsMeta.getTotalRows();
+        }
+        
+        // Fallback to partition.getRowCount() if no stats meta exists
+        return partitionIds.stream()
+                .mapToLong(p -> table.mayGetPartition(p).stream().mapToLong(Partition::getRowCount).sum())
+                .sum();
     }
 
     StatsConstants.AnalyzeType getAnalyzeType() {

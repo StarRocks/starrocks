@@ -19,7 +19,9 @@ from _statistics_.column_statistics
 where table_name = "test_update_trigger_statistics.test_update_stats" ;
 
 CREATE VIEW analyze_status_verify AS
-select `Table`, Columns, Type from information_schema.analyze_status
+select `Table`, Columns, Type, 
+    IF(StartTime >= @last_analyze, 'new analyze', 'no analyze') as is_new 
+from information_schema.analyze_status
 where 
     `Database` = 'test_update_trigger_statistics' 
     and `Table` = "test_update_stats" 
@@ -29,21 +31,28 @@ order by StartTime desc limit 1;
 -- Clear any existing statistics
 delete from _statistics_.column_statistics where table_name='test_update_trigger_statistics.test_update_stats';
 
--- First load
+-- First load, 1M rows
 insert into test_update_stats select generate_series, 'data' from table(generate_series(1, 1000000));
 select * from statistic_verify order by column_name;
 
--- UPDATE a few rows
-update test_update_stats set k3 = '1updated' where k2 < 500;
+-- UPDATE a few rows should not trigger statistics collection
+set @last_analyze=(select now());
+update test_update_stats set k3 = '1updated' where k2 = 1;
 select * from statistic_verify order by column_name;
-
--- UPDATE lots of rows
-update test_update_stats set k3 = '2updated2' where k2 < 10000;
+select * from analyze_status_verify;
+update test_update_stats set k3 = '2updated2' where k2 < 1000;
 select * from statistic_verify order by column_name;
 select * from analyze_status_verify;
 
--- UPDATE all rows
-update test_update_stats set k3 = '3updated3' where k2 < 1000000000;
+-- UPDATE lots of rows 
+set @last_analyze=(select now());
+update test_update_stats set k3 = '3updated3' where k2 < 200*1000;
+select * from statistic_verify order by column_name;
+select * from analyze_status_verify;
+
+-- UPDATE all rows 
+set @last_analyze=(select now());
+update test_update_stats set k3 = '4updated4' where k2 < 1000000000;
 -- sample result is not stable
 -- select * from statistic_verify order by column_name;
 select * from analyze_status_verify;

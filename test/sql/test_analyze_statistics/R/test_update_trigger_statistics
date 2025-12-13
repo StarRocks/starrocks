@@ -24,7 +24,8 @@ where table_name = "test_update_trigger_statistics.test_update_stats" ;
 -- result:
 -- !result
 CREATE VIEW analyze_status_verify AS
-select `Table`, Columns, Type from information_schema.analyze_status
+select `Table`, Columns, Type, 
+    IF(StartTime >= @last_analyze, 'new analyze', 'no analyze') as is_new from information_schema.analyze_status
 where 
     `Database` = 'test_update_trigger_statistics' 
     and `Table` = "test_update_stats" 
@@ -42,32 +43,57 @@ select * from statistic_verify order by column_name;
 k2	test_update_stats	1000000	1000000	1
 k3	test_update_stats	1000000	data	data
 -- !result
-update test_update_stats set k3 = '1updated' where k2 < 500;
+set @last_analyze=(select now());
+-- result:
+-- !result
+update test_update_stats set k3 = '1updated' where k2 = 1;
 -- result:
 -- !result
 select * from statistic_verify order by column_name;
 -- result:
 k2	test_update_stats	1000000	1000000	1
-k3	test_update_stats	1000000	data	1updated
+k3	test_update_stats	1000000	data	data
 -- !result
-update test_update_stats set k3 = '2updated2' where k2 < 10000;
+select * from analyze_status_verify;
+-- result:
+test_update_stats	ALL	SAMPLE	no analyze
+-- !result
+update test_update_stats set k3 = '2updated2' where k2 < 1000;
 -- result:
 -- !result
 select * from statistic_verify order by column_name;
 -- result:
 k2	test_update_stats	1000000	1000000	1
-k3	test_update_stats	1000000	data	2updated2
+k3	test_update_stats	1000000	data	data
 -- !result
 select * from analyze_status_verify;
 -- result:
-test_update_stats	ALL	FULL
+test_update_stats	ALL	SAMPLE	no analyze
 -- !result
-update test_update_stats set k3 = '3updated3' where k2 < 1000000000;
+set @last_analyze=(select now());
+-- result:
+-- !result
+update test_update_stats set k3 = '3updated3' where k2 < 200*1000;
+-- result:
+-- !result
+select * from statistic_verify order by column_name;
+-- result:
+k2	test_update_stats	1000000	1000000	1
+k3	test_update_stats	1000000	data	3updated3
+-- !result
+select * from analyze_status_verify;
+-- result:
+test_update_stats	ALL	FULL	new analyze
+-- !result
+set @last_analyze=(select now());
+-- result:
+-- !result
+update test_update_stats set k3 = '4updated4' where k2 < 1000000000;
 -- result:
 -- !result
 select * from analyze_status_verify;
 -- result:
-test_update_stats	ALL	SAMPLE
+test_update_stats	ALL	SAMPLE	new analyze
 -- !result
 drop table test_update_stats;
 -- result:
