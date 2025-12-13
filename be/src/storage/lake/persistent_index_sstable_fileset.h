@@ -49,6 +49,8 @@ public:
 
     size_t memory_usage() const;
 
+    bool is_inited() const { return !_sstable_map.empty() || _standalone_sstable != nullptr; }
+
     void print_debug_info(std::stringstream& ss);
 
 private:

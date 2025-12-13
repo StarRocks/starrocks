@@ -48,7 +48,7 @@ Status LakePersistentIndexSizeTieredCompactionStrategy::pick_compaction_candidat
     };
 
     std::vector<FilesetInfo> filesets;
-    std::map<UniqueId, size_t> fileset_id_to_index;
+    std::unordered_map<UniqueId, size_t> fileset_id_to_index;
     UniqueId base_level_fileset_id; // fileset id of base level (the first fileset)
 
     for (int i = 0; i < sstable_meta.sstables_size(); ++i) {

@@ -21,6 +21,9 @@
 namespace starrocks::lake {
 
 Status PersistentIndexSstableFileset::init(std::vector<std::unique_ptr<PersistentIndexSstable>>& sstables) {
+    if (is_inited()) {
+        return Status::InternalError("sstable fileset is already initialized");
+    }
     const sstable::Comparator* comparator = sstable::BytewiseComparator();
     for (auto&& sstable : sstables) {
         if (sstable->sstable_pb().has_range()) {
@@ -53,6 +56,9 @@ Status PersistentIndexSstableFileset::init(std::vector<std::unique_ptr<Persisten
 }
 
 Status PersistentIndexSstableFileset::init(std::unique_ptr<PersistentIndexSstable>& sstable) {
+    if (is_inited()()) {
+        return Status::InternalError("sstable fileset is already initialized");
+    }
     if (sstable->sstable_pb().has_range()) {
         if (!sstable->sstable_pb().has_fileset_id()) {
             // New fileset
@@ -103,7 +109,7 @@ Status PersistentIndexSstableFileset::multi_get(const Slice* keys, const KeyInde
         return _standalone_sstable->multi_get(keys, key_indexes, version, values, found_key_indexes);
     }
     // 1. divide key_indexes into different groups according to sstables
-    std::map<PersistentIndexSstable*, KeyIndexSet> sstable_key_indexes_map;
+    std::unordered_map<PersistentIndexSstable*, KeyIndexSet> sstable_key_indexes_map;
     {
         TRACE_COUNTER_SCOPE_LATENCY_US("fileset_get_divide_us");
         for (auto& key_index : key_indexes) {
@@ -157,10 +163,10 @@ void PersistentIndexSstableFileset::print_debug_info(std::stringstream& ss) {
     ss << " Number of sstables: " << _sstable_map.size();
     for (const auto& [start_key, end_sstable_pair] : _sstable_map) {
         const auto& [end_key, sstable] = end_sstable_pair;
-        ss << "  Sstable filesize: " << sstable->sstable_pb().filesize();
+        ss << " Sstable filesize: " << sstable->sstable_pb().filesize();
     }
     if (_standalone_sstable != nullptr) {
-        ss << "Standalone sstable filesize: " << _standalone_sstable->sstable_pb().filesize();
+        ss << " Standalone sstable filesize: " << _standalone_sstable->sstable_pb().filesize();
     }
 }
 
