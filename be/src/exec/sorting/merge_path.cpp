@@ -24,6 +24,7 @@
 #include "exec/pipeline/sort/sort_context.h"
 #include "runtime/runtime_state.h"
 #include "util/defer_op.h"
+#include "util/type_utils.h"
 
 namespace starrocks::merge_path {
 
@@ -1163,12 +1164,7 @@ void MergePathCascadeMerger::_init_late_materialization() {
 
         // nullable column always contribute 1 byte to materialized cost.
         non_orderby_materialized_cost_per_level += slot->is_nullable();
-        if (slot->type().is_string_type()) {
-            // Slice is 16 bytes
-            non_orderby_materialized_cost_per_level += 16;
-        } else {
-            non_orderby_materialized_cost_per_level += std::max<int>(1, slot->type().get_slot_size());
-        }
+        non_orderby_materialized_cost_per_level += TypeUtils::compute_materialization_cost(slot->type());
     }
     const size_t total_original_cost = non_orderby_materialized_cost_per_level * level_size;
 
