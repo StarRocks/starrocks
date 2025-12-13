@@ -86,6 +86,12 @@ struct BitmapTypeCode {
         SET = 10,
         BITMAP32_SERIV2 = 12,
         BITMAP64_SERIV2 = 13,
+        //In external table query scenarios, the standard bitmap format needs to be used
+        //https://github.com/RoaringBitmap/RoaringBitmap/blob/master/roaringbitmap/src/main/java/org/roaringbitmap/RoaringArray.java
+        // In the serialization, BITMAP32 out.writeInt(Integer.reverseBytes("12346"),first char is 58
+        //if hasRunContainer, out.writeInt(Integer.reverseBytes("12346" | ((size - 1) << 16)));first char is 59
+        STANDARD_BITMAP32 = 58,
+        STANDARD_BITMAP32_HAS_RUN = 59,
     };
 };
 
@@ -687,8 +693,19 @@ public:
                 *is_valid_ptr = false;
                 return result;
             }
-
             Roaring read = Roaring::read(buf + 1, usev1);
+            result.emplace(0, std::move(read));
+            return result;
+        }
+        bool is_standard_bitmap32 =
+                BitmapTypeCode::STANDARD_BITMAP32 == *buf || BitmapTypeCode::STANDARD_BITMAP32_HAS_RUN == *buf;
+        if (is_standard_bitmap32) {
+            // check whether there is no valid bitmap.
+            if (!read_roaring_check(buf, max_bytes, true)) {
+                *is_valid_ptr = false;
+                return result;
+            }
+            Roaring read = Roaring::read(buf, true);
             result.emplace(0, std::move(read));
             return result;
         }

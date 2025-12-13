@@ -751,8 +751,8 @@ bool BitmapValue::valid_and_deserialize(const char* src, size_t max_bytes) {
         _type = EMPTY;
         return true;
     }
-
-    if (*src < BitmapTypeCode::EMPTY || *src > BitmapTypeCode::BITMAP64_SERIV2) {
+    if ((*src < BitmapTypeCode::EMPTY || *src > BitmapTypeCode::BITMAP64_SERIV2) &&
+        *src != BitmapTypeCode::STANDARD_BITMAP32 && *src != BitmapTypeCode::STANDARD_BITMAP32_HAS_RUN) {
         return false;
     } else {
         bool valid = true;
@@ -778,6 +778,8 @@ bool BitmapValue::valid_and_deserialize(const char* src, size_t max_bytes) {
         case BitmapTypeCode::BITMAP64:
         case BitmapTypeCode::BITMAP32_SERIV2:
         case BitmapTypeCode::BITMAP64_SERIV2:
+        case BitmapTypeCode::STANDARD_BITMAP32:
+        case BitmapTypeCode::STANDARD_BITMAP32_HAS_RUN:
             _bitmap = std::make_shared<detail::Roaring64Map>(detail::Roaring64Map::read_safe(src, max_bytes, &valid));
             if (!valid) {
                 return false;
