@@ -13,6 +13,7 @@
 // limitations under the License.
 
 import com.baidu.jprotobuf.plugin.PrecompileTask
+import org.gradle.api.DefaultTask
 import org.gradle.api.tasks.testing.logging.TestExceptionFormat
 import org.gradle.api.tasks.testing.logging.TestLogEvent
 
@@ -297,7 +298,7 @@ dependencies {
 }
 
 // Custom task for Protocol Buffer generation
-tasks.register<Task>("generateProtoSources") {
+tasks.register<DefaultTask>("generateProtoSources") {
     description = "Generates Java source files from Protocol Buffer definitions"
     group = "build"
 
@@ -332,7 +333,7 @@ tasks.register<Task>("generateProtoSources") {
         // Process each proto file individually
         protoFiles.forEach { protoFile ->
             logger.info("Processing proto file: $protoFile")
-            project.javaexec {
+            javaexec {
                 classpath = protoGenClasspath
                 mainClass.set("com.baidu.bjf.remoting.protobuf.command.Main")
                 args = listOf(
@@ -345,7 +346,7 @@ tasks.register<Task>("generateProtoSources") {
 }
 
 // Custom task for Thrift generation
-tasks.register<Task>("generateThriftSources") {
+tasks.register<DefaultTask>("generateThriftSources") {
     description = "Generates Java source files from Thrift definitions"
     group = "build"
 
@@ -373,7 +374,7 @@ tasks.register<Task>("generateThriftSources") {
     doFirst {
         mkdir(outputDir)
         // Process each proto file individually
-        project.javaexec {
+        javaexec {
             classpath = thriftGenClasspath
             mainClass.set("io.github.decster.ThriftCompiler")
             // Build arguments list with the output directory and all thrift files
@@ -387,7 +388,7 @@ tasks.register<Task>("generateThriftSources") {
 }
 
 
-tasks.register<Task>("generateByScripts") {
+tasks.register<DefaultTask>("generateByScripts") {
     description = "Generates java code by scripts"
     group = "build"
 
@@ -399,7 +400,7 @@ tasks.register<Task>("generateByScripts") {
         mkdir(outputDir)
 
         // First Python script - build version generation
-        project.exec {
+        exec {
             commandLine(
                 "python3",
                 "${project.rootProject.projectDir}/../build-support/gen_build_version.py",
@@ -408,7 +409,7 @@ tasks.register<Task>("generateByScripts") {
         }
 
         // Second Python script - function generation
-        project.exec {
+        exec {
             commandLine(
                 "python3",
                 "${project.rootProject.projectDir}/../gensrc/script/gen_functions.py",
