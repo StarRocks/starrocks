@@ -134,6 +134,7 @@ export LDFLAGS="-L${HOMEBREW_PREFIX}/lib ${LDFLAGS:-}"
 export CCACHE_DIR="$HOME/.ccache"
 export CCACHE_MAXSIZE="50G"
 export USE_CCACHE=1
+export CCACHE_SLOPPINESS="pch_defines,time_macros"
 
 # Parallel builds
 export PARALLEL="$(sysctl -n hw.ncpu)"
