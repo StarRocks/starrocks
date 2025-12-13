@@ -560,6 +560,10 @@ endif()
 # enable global pch compiling
 add_library(StarRocksPCH INTERFACE)
 target_precompile_headers(StarRocksPCH INTERFACE ${SRC_DIR}/pch/starrocks_pch.h)
+if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+    target_compile_options(StarRocksPCH INTERFACE "$<$<COMPILE_LANGUAGE:CXX>:SHELL:-Xclang -fno-pch-timestamp>")
+endif()
+
 
 # Add all external dependencies. They should come after the starrocks libs.
 
