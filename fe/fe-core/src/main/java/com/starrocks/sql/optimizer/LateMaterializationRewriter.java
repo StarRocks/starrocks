@@ -397,48 +397,6 @@ public class LateMaterializationRewriter {
         }
 
         @Override
-        public OptExpression visitPhysicalOlapScan(OptExpression optExpression, CollectorContext context) {
-
-            PhysicalOlapScanOperator scanOperator = (PhysicalOlapScanOperator) optExpression.getOp();
-            IdentifyOperator identifyOperator = new IdentifyOperator(scanOperator);
-
-            OlapTable scanTable = (OlapTable) scanOperator.getTable();
-            if (scanTable.getKeysType() == KeysType.DUP_KEYS || scanTable.getKeysType() == KeysType.PRIMARY_KEYS) {
-                if (scanOperator.getOutputColumns().isEmpty()) {
-                    return optExpression;
-                }
-                Map<ColumnRefOperator, Column> columnRefOperatorColumnMap = scanOperator.getColRefToColumnMetaMap();
-                for (ColumnRefOperator columnRefOperator : columnRefOperatorColumnMap.keySet()) {
-                    context.columnSources.put(columnRefOperator, identifyOperator);
-                    if (!context.unMaterializedColumns.containsKey(identifyOperator)) {
-                        context.unMaterializedColumns.put(identifyOperator, new HashSet<>());
-                    }
-                    context.unMaterializedColumns.get(identifyOperator).add(columnRefOperator);
-                }
-
-                if (scanOperator.getPredicate() != null) {
-                    List<ColumnRefOperator> columnRefOperators = scanOperator.getPredicate().getUsedColumns()
-                            .getColumnRefOperators(optimizerContext.getColumnRefFactory());
-                    columnRefOperators.forEach(columnRefOperator -> {
-                        if (context.columnSources.containsKey(columnRefOperator)) {
-                            materializedBefore(columnRefOperator, scanOperator, context);
-                        }
-                    });
-                }
-                if (scanOperator.getProjection() != null) {
-                    List<ColumnRefOperator> columnRefOperators = scanOperator.getProjection().getUsedColumns()
-                            .getColumnRefOperators(optimizerContext.getColumnRefFactory());
-                    columnRefOperators.forEach(columnRefOperator -> {
-                        if (context.columnSources.containsKey(columnRefOperator)) {
-                            materializedBefore(columnRefOperator, scanOperator, context);
-                        }
-                    });
-                }
-            }
-            return optExpression;
-        }
-
-        @Override
         public OptExpression visitPhysicalIcebergScan(OptExpression optExpression, CollectorContext context) {
 
             PhysicalIcebergScanOperator scanOperator = (PhysicalIcebergScanOperator) optExpression.getOp();
