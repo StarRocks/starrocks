@@ -17,13 +17,20 @@ package com.starrocks.sql.optimizer.rule.transformation.materialization;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Range;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.MvPlanContext;
+import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Pair;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.common.PRangeCell;
+import com.starrocks.sql.common.PRangeCellPlus;
 import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
 import com.starrocks.sql.optimizer.MaterializationContext;
 import com.starrocks.sql.optimizer.MvRewritePreprocessor;
@@ -52,11 +59,13 @@ import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.utframe.UtFrameUtils;
+import org.apache.parquet.Strings;
 import org.assertj.core.util.Sets;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
+import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
@@ -146,7 +155,7 @@ public class MvRewritePreprocessorTest extends MVTestBase {
         try {
             optimizer1.getContext().getTaskScheduler().executeTasks(rootTaskContext);
         } catch (Exception e) {
-            e.getMessage().contains("StarRocks planner use long time 1 ms in logical phase");
+            Assertions.assertTrue(e.getMessage().contains("StarRocks planner use long time 1 ms in logical phase"));
         } finally {
             connectContext.getSessionVariable().setOptimizerExecuteTimeout(timeout);
         }
@@ -1077,5 +1086,310 @@ public class MvRewritePreprocessorTest extends MVTestBase {
                 Thread.interrupted();
             }
         });
+    }
+
+    @Test
+    public void testMvIdConstructorAndGetters() {
+        starRocksAssert.withMaterializedView("create materialized view mvid_test_mv1 " +
+                        "distributed by random as select k1, v1 from t1",
+                (obj) -> {
+                    MaterializedView mv = getMv(DB_NAME, "mvid_test_mv1");
+                    Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB_NAME);
+
+                    MvId mvId = new MvId(db.getId(), mv.getId());
+
+                    Assertions.assertEquals(db.getId(), mvId.getDbId());
+                    Assertions.assertEquals(mv.getId(), mvId.getId());
+                });
+    }
+
+    @Test
+    public void testMvIdEquals() {
+        starRocksAssert.withMaterializedView("create materialized view mvid_test_mv2 " +
+                        "distributed by random as select k1, v1 from t1",
+                (obj) -> {
+                    MaterializedView mv = getMv(DB_NAME, "mvid_test_mv2");
+                    Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB_NAME);
+
+                    MvId mvId1 = new MvId(db.getId(), mv.getId());
+                    MvId mvId2 = new MvId(db.getId(), mv.getId());
+                    MvId mvId3 = new MvId(db.getId() + 1, mv.getId());
+                    MvId mvId4 = new MvId(db.getId(), mv.getId() + 1);
+
+                    // Same dbId and id should be equal
+                    Assertions.assertEquals(mvId1, mvId2);
+
+                    // Self equality
+                    Assertions.assertEquals(mvId1, mvId1);
+
+                    // Different dbId should not be equal
+                    Assertions.assertNotEquals(mvId1, mvId3);
+
+                    // Different id should not be equal
+                    Assertions.assertNotEquals(mvId1, mvId4);
+
+                    // Null check
+                    Assertions.assertNotEquals(mvId1, null);
+
+                    // Different class check
+                    Assertions.assertNotEquals(mvId1, "string");
+                });
+    }
+
+    @Test
+    public void testMvIdHashCode() {
+        starRocksAssert.withMaterializedView("create materialized view mvid_test_mv3 " +
+                "distributed by random as select k1, v1 from t1",
+                (obj) -> {
+                    MaterializedView mv = getMv(DB_NAME, "mvid_test_mv3");
+                    Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB_NAME);
+
+                    MvId mvId1 = new MvId(db.getId(), mv.getId());
+                    MvId mvId2 = new MvId(db.getId(), mv.getId());
+
+                    // Same dbId and id should have same hashCode
+                    Assertions.assertEquals(mvId1.hashCode(), mvId2.hashCode());
+                });
+    }
+
+    @Test
+    public void testMvIdHashCodeWithDifferentIds() {
+        starRocksAssert.withMaterializedView("create materialized view mvid_test_mv4 " +
+                        "distributed by random as select k1, v1 from t1",
+                (obj) -> {
+                    MaterializedView mv = getMv(DB_NAME, "mvid_test_mv4");
+                    Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB_NAME);
+
+                    MvId mvId1 = new MvId(db.getId(), mv.getId());
+                    MvId mvId2 = new MvId(db.getId() + 1, mv.getId());
+                    MvId mvId3 = new MvId(db.getId(), mv.getId() + 1);
+
+                    // Different ids typically have different hashCodes (not guaranteed but expected)
+                    Assertions.assertNotNull(mvId1.hashCode());
+                    Assertions.assertNotNull(mvId2.hashCode());
+                    Assertions.assertNotNull(mvId3.hashCode());
+                });
+    }
+
+
+    @Test
+    public void testMvIdEqualityContract() {
+        starRocksAssert.withMaterializedView("create materialized view mvid_test_mv9 " +
+                        "distributed by random as select k1, v1 from t1",
+                (obj) -> {
+                    MaterializedView mv = getMv(DB_NAME, "mvid_test_mv9");
+                    Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB_NAME);
+
+                    MvId mvId1 = new MvId(db.getId(), mv.getId());
+                    MvId mvId2 = new MvId(db.getId(), mv.getId());
+                    MvId mvId3 = new MvId(db.getId(), mv.getId());
+
+                    // Reflexive: x.equals(x) should be true
+                    Assertions.assertEquals(mvId1, mvId1);
+
+                    // Symmetric: x.equals(y) == y.equals(x)
+                    Assertions.assertEquals(mvId1, mvId2);
+                    Assertions.assertEquals(mvId2, mvId1);
+
+                    // Transitive: if x.equals(y) and y.equals(z), then x.equals(z)
+                    Assertions.assertEquals(mvId1, mvId2);
+                    Assertions.assertEquals(mvId2, mvId3);
+                    Assertions.assertEquals(mvId1, mvId3);
+
+                    // Consistent hashCode
+                    Assertions.assertEquals(mvId1.hashCode(), mvId2.hashCode());
+                    Assertions.assertEquals(mvId2.hashCode(), mvId3.hashCode());
+                });
+    }
+
+    @Test
+    public void testMaterializedViewWrapperConstructorWithTwoParams() {
+        starRocksAssert.withMaterializedView("create materialized view wrapper_test_mv1 " +
+                        "distributed by random as select k1, v1 from t1",
+                (obj) -> {
+                    MaterializedView mv = getMv(DB_NAME, "wrapper_test_mv1");
+                    MaterializedViewWrapper wrapper = new MaterializedViewWrapper(mv, 0);
+
+                    Assertions.assertEquals(mv, wrapper.getMV());
+                    Assertions.assertEquals(0, wrapper.getLevel());
+                    Assertions.assertNull(wrapper.getMvPlanContext());
+                });
+    }
+
+    @Test
+    public void testMaterializedViewWrapperConstructorWithThreeParams() {
+        starRocksAssert.withMaterializedView("create materialized view wrapper_test_mv2 " +
+                        "distributed by random as select k1, v1 from t1",
+                (obj) -> {
+                    MaterializedView mv = getMv(DB_NAME, "wrapper_test_mv2");
+                    MvPlanContext mvPlanContext = getOptimizedPlan(mv, false);
+                    MaterializedViewWrapper wrapper = new MaterializedViewWrapper(mv, 1, mvPlanContext);
+
+                    Assertions.assertEquals(mv, wrapper.getMV());
+                    Assertions.assertEquals(1, wrapper.getLevel());
+                    Assertions.assertNotNull(wrapper.getMvPlanContext());
+                    Assertions.assertEquals(mvPlanContext, wrapper.getMvPlanContext());
+                });
+    }
+
+    @Test
+    public void testMaterializedViewWrapperCreateWithTwoParams() {
+        starRocksAssert.withMaterializedView("create materialized view wrapper_test_mv3 " +
+                        "distributed by random as select k1, v1 from t1",
+                (obj) -> {
+                    MaterializedView mv = getMv(DB_NAME, "wrapper_test_mv3");
+                    MaterializedViewWrapper wrapper = MaterializedViewWrapper.create(mv, 2);
+
+                    Assertions.assertEquals(mv, wrapper.getMV());
+                    Assertions.assertEquals(2, wrapper.getLevel());
+                    Assertions.assertNull(wrapper.getMvPlanContext());
+                });
+    }
+
+    @Test
+    public void testMaterializedViewWrapperCreateWithThreeParams() {
+        starRocksAssert.withMaterializedView("create materialized view wrapper_test_mv4 " +
+                        "distributed by random as select k1, v1 from t1",
+                (obj) -> {
+                    MaterializedView mv = getMv(DB_NAME, "wrapper_test_mv4");
+                    MvPlanContext mvPlanContext = getOptimizedPlan(mv, false);
+                    MaterializedViewWrapper wrapper = MaterializedViewWrapper.create(mv, 3, mvPlanContext);
+
+                    Assertions.assertEquals(mv, wrapper.getMV());
+                    Assertions.assertEquals(3, wrapper.getLevel());
+                    Assertions.assertNotNull(wrapper.getMvPlanContext());
+                    Assertions.assertEquals(mvPlanContext, wrapper.getMvPlanContext());
+                });
+    }
+
+    @Test
+    public void testMaterializedViewWrapperEqualsWithDifferentMVs() {
+        List<String> mvs = ImmutableList.of(
+                "create materialized view wrapper_test_mv6 distributed by random as select k1, v1 from t1",
+                "create materialized view wrapper_test_mv7 distributed by random as select k1, v2 from t1"
+        );
+
+        starRocksAssert.withMaterializedViews(mvs,
+                (obj) -> {
+                    MaterializedView mv1 = getMv(DB_NAME, "wrapper_test_mv6");
+                    MaterializedView mv2 = getMv(DB_NAME, "wrapper_test_mv7");
+
+                    MaterializedViewWrapper wrapper1 = MaterializedViewWrapper.create(mv1, 0);
+                    MaterializedViewWrapper wrapper2 = MaterializedViewWrapper.create(mv2, 0);
+
+                    // Different MVs should not be equal
+                    Assertions.assertNotEquals(wrapper1, wrapper2);
+                });
+    }
+
+    @Test
+    public void testMaterializedViewWrapperHashCodeWithDifferentMVs() {
+        List<String> mvs = ImmutableList.of(
+                "create materialized view wrapper_test_mv9 distributed by random as select k1, v1 from t1",
+                "create materialized view wrapper_test_mv10 distributed by random as select k1, v2 from t1"
+        );
+
+        starRocksAssert.withMaterializedViews(mvs,
+                (obj) -> {
+                    MaterializedView mv1 = getMv(DB_NAME, "wrapper_test_mv9");
+                    MaterializedView mv2 = getMv(DB_NAME, "wrapper_test_mv10");
+
+                    MaterializedViewWrapper wrapper1 = MaterializedViewWrapper.create(mv1, 0);
+                    MaterializedViewWrapper wrapper2 = MaterializedViewWrapper.create(mv2, 0);
+
+                    // Different MVs typically have different hashCodes (not guaranteed but expected)
+                    // This is just a sanity check
+                    Assertions.assertNotNull(wrapper1.hashCode());
+                    Assertions.assertNotNull(wrapper2.hashCode());
+                });
+    }
+
+    @Test
+    public void testMaterializedViewWrapperToString() {
+        starRocksAssert.withMaterializedView("create materialized view wrapper_test_mv14 " +
+                        "distributed by random as select k1, v1 from t1",
+                (obj) -> {
+                    MaterializedView mv = getMv(DB_NAME, "wrapper_test_mv14");
+                    MaterializedViewWrapper wrapper = MaterializedViewWrapper.create(mv, 2);
+
+                    String toString = wrapper.toString();
+                    Assertions.assertNotNull(toString);
+                    Assertions.assertTrue(toString.contains("MVWrapper{"));
+                    Assertions.assertTrue(toString.contains("mv="));
+                    Assertions.assertTrue(toString.contains("level=2"));
+                });
+    }
+
+    @Test
+    public void testMaterializedViewWrapperLevelValues() {
+        starRocksAssert.withMaterializedView("create materialized view wrapper_test_mv15 " +
+                        "distributed by random as select k1, v1 from t1",
+                (obj) -> {
+                    MaterializedView mv = getMv(DB_NAME, "wrapper_test_mv15");
+
+                    // Test various level values
+                    MaterializedViewWrapper wrapper0 = MaterializedViewWrapper.create(mv, 0);
+                    MaterializedViewWrapper wrapper1 = MaterializedViewWrapper.create(mv, 1);
+                    MaterializedViewWrapper wrapper5 = MaterializedViewWrapper.create(mv, 5);
+                    MaterializedViewWrapper wrapper10 = MaterializedViewWrapper.create(mv, 10);
+
+                    Assertions.assertEquals(0, wrapper0.getLevel());
+                    Assertions.assertEquals(1, wrapper1.getLevel());
+                    Assertions.assertEquals(5, wrapper5.getLevel());
+                    Assertions.assertEquals(10, wrapper10.getLevel());
+                });
+    }
+
+    @Test
+    public void testMaterializedViewWrapperWithNullMvPlanContext() {
+        starRocksAssert.withMaterializedView("create materialized view wrapper_test_mv16 " +
+                        "distributed by random as select k1, v1 from t1",
+                (obj) -> {
+                    MaterializedView mv = getMv(DB_NAME, "wrapper_test_mv16");
+                    MaterializedViewWrapper wrapper = MaterializedViewWrapper.create(mv, 0, null);
+
+                    Assertions.assertEquals(mv, wrapper.getMV());
+                    Assertions.assertEquals(0, wrapper.getLevel());
+                    Assertions.assertNull(wrapper.getMvPlanContext());
+                });
+    }
+
+    @Test
+    public void testMaterializedViewGlobalContextCache() {
+        starRocksAssert.withMaterializedView("create materialized view wrapper_test_mv15 " +
+                        "distributed by random as select k1, v1 from t1",
+                (obj) -> {
+                    MaterializedView mv = getMv(DB_NAME, "wrapper_test_mv15");
+                    CachingMvPlanContextBuilder.MVCacheEntity mvGlobalCache =
+                            CachingMvPlanContextBuilder.getMVCache(mv);
+                    Assertions.assertTrue(mvGlobalCache != null);
+
+                    Table refTable = GlobalStateMgr.getCurrentState()
+                            .getLocalMetastore().getDb(DB_NAME).getTable("t1");
+                    Assertions.assertTrue(refTable != null);
+
+                    PRangeCellPlus.PCellCacheKey key1 = new PRangeCellPlus.PCellCacheKey(null, "", null);
+                    Object result = mvGlobalCache.getIfPresent(key1);
+                    Assertions.assertTrue(result == null);
+                    result  = mvGlobalCache.get(key1, () -> "test_value");
+                    Assertions.assertEquals("test_value", result);
+
+                    PRangeCellPlus.PCellCacheKey key2 = new PRangeCellPlus.PCellCacheKey(refTable,
+                            "p1", new PRangeCell(
+                                    Range.closed(PartitionKey.ofDateTime(LocalDateTime.of(2025, 5, 27, 10, 0, 0)),
+                                    PartitionKey.ofDateTime(LocalDateTime.of(2025, 5, 27, 11, 0, 0)))));
+                    result = mvGlobalCache.getIfPresent(key2);
+                    Assertions.assertTrue(result == null);
+                    result  = mvGlobalCache.get(key2, () -> 12345);
+                    Assertions.assertEquals(12345, result);
+
+                    String cacheStats1 = CachingMvPlanContextBuilder.getMVGlobalContextCacheStats(mv);
+                    System.out.println(cacheStats1);
+                    Assertions.assertFalse(Strings.isNullOrEmpty(cacheStats1));
+
+                    String cacheStats2 = CachingMvPlanContextBuilder.getMVPlanCacheStats();
+                    System.out.println(cacheStats2);
+                    Assertions.assertFalse(Strings.isNullOrEmpty(cacheStats2));
+                });
     }
 }
