@@ -94,7 +94,6 @@ jobs:
           AUTHOR: ${{ github.event.pull_request.user.login }}
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull >/dev/null
-          git checkout commit-pipeline && git pull
           ./scripts/check-blacklist.sh
 
       - name: Check Test Case
@@ -445,7 +444,6 @@ jobs:
         shell: bash
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
-          git checkout commit-pipeline && git pull
           if [[ "${IMAGE_CACHE_ID}" != '' ]]; then
               export image_cache_id=${IMAGE_CACHE_ID}
               export image_tag=$BRANCH-$PR_NUMBER
@@ -504,7 +502,6 @@ jobs:
         timeout-minutes: 90
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
-          git checkout commit-pipeline && git pull
           if [[ "${{ needs.be-checker.outputs.thirdparty_filter }}" == 'true' ]]; then
               export image_cache_id=${IMAGE_CACHE_ID}
               export image_tag=$BRANCH-$PR_NUMBER
@@ -792,7 +789,6 @@ jobs:
           EXTENSION: ${{ needs.fe-codestyle-check.outputs.extension_filter }}
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
-          git checkout commit-pipeline && git pull
           ./bin/elastic-ut.sh --pr ${PR_NUMBER} --module fe --branch ${{steps.branch.outputs.branch}} --build Release --repository ${{ github.repository }} --linuxdistro ubuntu
 
       - name: Clean ECI
@@ -951,7 +947,6 @@ jobs:
           pr_fe_change: ${{ steps.parsing-fe-path-filter.outputs.src_filter }}
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
-          git checkout commit-pipeline && git pull
           if [[ "${{ steps.parsing-be-path-filter.outputs.thirdparty_filter }}" == 'true' ]]; then
             export image_cache_id=${IMAGE_CACHE_ID}
             export image_tag=$BRANCH-$PR_NUMBER
@@ -1017,7 +1012,6 @@ jobs:
         id: choose-mode
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
-          git checkout commit-pipeline && git pull
           cluster_type=$(./bin/choose-mode.sh)
           if [[ "${cluster_type}" == "cloud" ]]; then
             echo "cloud=true" >> "$GITHUB_OUTPUT"
