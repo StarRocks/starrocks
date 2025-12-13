@@ -31,11 +31,8 @@ import com.starrocks.catalog.MvRefreshArbiter;
 import com.starrocks.catalog.MvUpdateInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.View;
-<<<<<<< HEAD
-import com.starrocks.common.Config;
-=======
 import com.starrocks.catalog.mv.MVTimelinessArbiter;
->>>>>>> c22f695834 ([BugFix] [Enhancement] Optimize mv rewrite performance(backport  #66623) (#66616))
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;

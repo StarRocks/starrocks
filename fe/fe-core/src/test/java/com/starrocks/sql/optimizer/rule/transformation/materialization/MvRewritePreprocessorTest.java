@@ -61,7 +61,6 @@ import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.utframe.UtFrameUtils;
 import org.apache.parquet.Strings;
 import org.assertj.core.util.Sets;
-import org.junit.Assert;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -493,7 +492,7 @@ public class MvRewritePreprocessorTest extends MVTestBase {
                 for (int i = 0; i < 5; i++) {
                     MVCorrelation mvCorrelation = bestRelatedMVs.poll();
                     String mvName = String.format("mv_%s", i + 1);
-                    Assert.assertEquals(mvCorrelation.getMv().getName(), mvName);
+                    Assertions.assertEquals(mvCorrelation.getMv().getName(), mvName);
                 }
             }
 
@@ -511,7 +510,7 @@ public class MvRewritePreprocessorTest extends MVTestBase {
                 for (int i = 0; i < 5; i++) {
                     MVCorrelation mvCorrelation = bestRelatedMVs.poll();
                     String mvName = String.format("mv_%s", 5 - i);
-                    Assert.assertEquals(mvCorrelation.getMv().getName(), mvName);
+                    Assertions.assertEquals(mvCorrelation.getMv().getName(), mvName);
                 }
             }
 
@@ -529,7 +528,7 @@ public class MvRewritePreprocessorTest extends MVTestBase {
                 for (int i = 0; i < 5; i++) {
                     MVCorrelation mvCorrelation = bestRelatedMVs.poll();
                     String mvName = String.format("mv_%s", i + 1);
-                    Assert.assertEquals(mvCorrelation.getMv().getName(), mvName);
+                    Assertions.assertEquals(mvCorrelation.getMv().getName(), mvName);
                 }
             }
         });
@@ -632,14 +631,14 @@ public class MvRewritePreprocessorTest extends MVTestBase {
                 connectContext.getSessionVariable().setCboMaterializedViewRewriteRelatedMVsLimit(2);
                 validMVs = preprocessor.chooseBestRelatedMVs(queryTables, relatedMVs, logicalTree);
                 Assertions.assertEquals(2, validMVs.size());
-                Assert.assertTrue(containsMV(validMVs, "mv_98", "mv_99"));
+                Assertions.assertTrue(containsMV(validMVs, "mv_98", "mv_99"));
                 mvWithPlanContexts = preprocessor.getMvWithPlanContext(validMVs);
                 Assertions.assertEquals(4, mvWithPlanContexts.size());
 
                 connectContext.getSessionVariable().setCboMaterializedViewRewriteRelatedMVsLimit(1);
                 validMVs = preprocessor.chooseBestRelatedMVs(queryTables, relatedMVs, logicalTree);
                 Assertions.assertEquals(1, validMVs.size());
-                Assert.assertTrue(containsMV(validMVs, "mv_99"));
+                Assertions.assertTrue(containsMV(validMVs, "mv_99"));
 
                 mvWithPlanContexts = preprocessor.getMvWithPlanContext(validMVs);
                 Assertions.assertEquals(2, mvWithPlanContexts.size());
@@ -1149,7 +1148,7 @@ public class MvRewritePreprocessorTest extends MVTestBase {
                     MvId mvId2 = new MvId(db.getId(), mv.getId());
 
                     // Same dbId and id should have same hashCode
-                    Assert.assertEquals(mvId1.hashCode(), mvId2.hashCode());
+                    Assertions.assertEquals(mvId1.hashCode(), mvId2.hashCode());
                 });
     }
 
@@ -1166,9 +1165,9 @@ public class MvRewritePreprocessorTest extends MVTestBase {
                     MvId mvId3 = new MvId(db.getId(), mv.getId() + 1);
 
                     // Different ids typically have different hashCodes (not guaranteed but expected)
-                    Assert.assertNotNull(mvId1.hashCode());
-                    Assert.assertNotNull(mvId2.hashCode());
-                    Assert.assertNotNull(mvId3.hashCode());
+                    Assertions.assertNotNull(mvId1.hashCode());
+                    Assertions.assertNotNull(mvId2.hashCode());
+                    Assertions.assertNotNull(mvId3.hashCode());
                 });
     }
 
@@ -1186,20 +1185,20 @@ public class MvRewritePreprocessorTest extends MVTestBase {
                     MvId mvId3 = new MvId(db.getId(), mv.getId());
 
                     // Reflexive: x.equals(x) should be true
-                    Assert.assertEquals(mvId1, mvId1);
+                    Assertions.assertEquals(mvId1, mvId1);
 
                     // Symmetric: x.equals(y) == y.equals(x)
-                    Assert.assertEquals(mvId1, mvId2);
-                    Assert.assertEquals(mvId2, mvId1);
+                    Assertions.assertEquals(mvId1, mvId2);
+                    Assertions.assertEquals(mvId2, mvId1);
 
                     // Transitive: if x.equals(y) and y.equals(z), then x.equals(z)
-                    Assert.assertEquals(mvId1, mvId2);
-                    Assert.assertEquals(mvId2, mvId3);
-                    Assert.assertEquals(mvId1, mvId3);
+                    Assertions.assertEquals(mvId1, mvId2);
+                    Assertions.assertEquals(mvId2, mvId3);
+                    Assertions.assertEquals(mvId1, mvId3);
 
                     // Consistent hashCode
-                    Assert.assertEquals(mvId1.hashCode(), mvId2.hashCode());
-                    Assert.assertEquals(mvId2.hashCode(), mvId3.hashCode());
+                    Assertions.assertEquals(mvId1.hashCode(), mvId2.hashCode());
+                    Assertions.assertEquals(mvId2.hashCode(), mvId3.hashCode());
                 });
     }
 
@@ -1211,9 +1210,9 @@ public class MvRewritePreprocessorTest extends MVTestBase {
                     MaterializedView mv = getMv(DB_NAME, "wrapper_test_mv1");
                     MaterializedViewWrapper wrapper = new MaterializedViewWrapper(mv, 0);
 
-                    Assert.assertEquals(mv, wrapper.getMV());
-                    Assert.assertEquals(0, wrapper.getLevel());
-                    Assert.assertNull(wrapper.getMvPlanContext());
+                    Assertions.assertEquals(mv, wrapper.getMV());
+                    Assertions.assertEquals(0, wrapper.getLevel());
+                    Assertions.assertNull(wrapper.getMvPlanContext());
                 });
     }
 
@@ -1226,10 +1225,10 @@ public class MvRewritePreprocessorTest extends MVTestBase {
                     MvPlanContext mvPlanContext = getOptimizedPlan(mv, false);
                     MaterializedViewWrapper wrapper = new MaterializedViewWrapper(mv, 1, mvPlanContext);
 
-                    Assert.assertEquals(mv, wrapper.getMV());
-                    Assert.assertEquals(1, wrapper.getLevel());
-                    Assert.assertNotNull(wrapper.getMvPlanContext());
-                    Assert.assertEquals(mvPlanContext, wrapper.getMvPlanContext());
+                    Assertions.assertEquals(mv, wrapper.getMV());
+                    Assertions.assertEquals(1, wrapper.getLevel());
+                    Assertions.assertNotNull(wrapper.getMvPlanContext());
+                    Assertions.assertEquals(mvPlanContext, wrapper.getMvPlanContext());
                 });
     }
 
@@ -1241,9 +1240,9 @@ public class MvRewritePreprocessorTest extends MVTestBase {
                     MaterializedView mv = getMv(DB_NAME, "wrapper_test_mv3");
                     MaterializedViewWrapper wrapper = MaterializedViewWrapper.create(mv, 2);
 
-                    Assert.assertEquals(mv, wrapper.getMV());
-                    Assert.assertEquals(2, wrapper.getLevel());
-                    Assert.assertNull(wrapper.getMvPlanContext());
+                    Assertions.assertEquals(mv, wrapper.getMV());
+                    Assertions.assertEquals(2, wrapper.getLevel());
+                    Assertions.assertNull(wrapper.getMvPlanContext());
                 });
     }
 
@@ -1256,10 +1255,10 @@ public class MvRewritePreprocessorTest extends MVTestBase {
                     MvPlanContext mvPlanContext = getOptimizedPlan(mv, false);
                     MaterializedViewWrapper wrapper = MaterializedViewWrapper.create(mv, 3, mvPlanContext);
 
-                    Assert.assertEquals(mv, wrapper.getMV());
-                    Assert.assertEquals(3, wrapper.getLevel());
-                    Assert.assertNotNull(wrapper.getMvPlanContext());
-                    Assert.assertEquals(mvPlanContext, wrapper.getMvPlanContext());
+                    Assertions.assertEquals(mv, wrapper.getMV());
+                    Assertions.assertEquals(3, wrapper.getLevel());
+                    Assertions.assertNotNull(wrapper.getMvPlanContext());
+                    Assertions.assertEquals(mvPlanContext, wrapper.getMvPlanContext());
                 });
     }
 
@@ -1279,7 +1278,7 @@ public class MvRewritePreprocessorTest extends MVTestBase {
                     MaterializedViewWrapper wrapper2 = MaterializedViewWrapper.create(mv2, 0);
 
                     // Different MVs should not be equal
-                    Assert.assertNotEquals(wrapper1, wrapper2);
+                    Assertions.assertNotEquals(wrapper1, wrapper2);
                 });
     }
 
@@ -1300,8 +1299,8 @@ public class MvRewritePreprocessorTest extends MVTestBase {
 
                     // Different MVs typically have different hashCodes (not guaranteed but expected)
                     // This is just a sanity check
-                    Assert.assertNotNull(wrapper1.hashCode());
-                    Assert.assertNotNull(wrapper2.hashCode());
+                    Assertions.assertNotNull(wrapper1.hashCode());
+                    Assertions.assertNotNull(wrapper2.hashCode());
                 });
     }
 
