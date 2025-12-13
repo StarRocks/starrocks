@@ -1599,6 +1599,26 @@ public class LowCardinalityTest extends PlanTestBase {
     }
 
     @Test
+    public void testMetaScanWithTabletHint() throws Exception {
+        // Test that tablet hint is properly passed to MetaScan operator
+        String sql = "select max(t1c), min(t1d) from test_all_type tablet(12345) [_META_]";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "0:MetaScan");
+        assertContains(plan, "Table: test_all_type");
+        assertContains(plan, "TabletIds: [12345]");
+    }
+
+    @Test
+    public void testMetaScanWithMultipleTabletHints() throws Exception {
+        // Test multiple tablet hints
+        String sql = "select max(t1c), min(t1d) from test_all_type tablet(12345, 67890) [_META_]";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "0:MetaScan");
+        assertContains(plan, "Table: test_all_type");
+        assertContains(plan, "TabletIds: [12345, 67890]");
+    }
+
+    @Test
     public void testHasGlobalDictButNotFound() throws Exception {
         IDictManager dictManager = IDictManager.getInstance();
 
