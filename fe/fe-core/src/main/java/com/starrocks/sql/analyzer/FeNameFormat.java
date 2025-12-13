@@ -53,6 +53,7 @@ public class FeNameFormat {
 
     // The username by kerberos authentication may include the host name, so additional adaptation is required.
     private static final String MYSQL_USER_NAME_REGEX = "^\\w{1,64}/?[.\\w-]{0,63}$";
+    public static final Pattern MYSQL_USER_NAME_PATTERN = Pattern.compile(MYSQL_USER_NAME_REGEX);
 
     public static final String FORBIDDEN_PARTITION_NAME = "placeholder_";
 
