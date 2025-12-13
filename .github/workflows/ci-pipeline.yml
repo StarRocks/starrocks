@@ -413,7 +413,7 @@ jobs:
           ./scripts/check-thirdparty-result.sh
 
       - name: Download Thirdparty Artifact
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v4
         with:
           pattern: THIRDPARTY-RESULT-*
           path: outputs
