@@ -960,7 +960,7 @@ jobs:
           ./bin/elastic-build.sh --pr ${PR_NUMBER} --repository ${{ github.repository }} --linuxdistro ${LINUX_DISTRO} --with-gcov --with-trivy
 
           if [[ "${sys_test_need}" == "" ]]; then
-            if [[ "${{ env.pr_pom_change}}" == 'true' || "${{ env.pr_be_change}}" == 'true' || "${{ env.pr_fe_change}}" == 'true' ]]; then
+            if [[ "${{ env.pr_pom_change}}" == 'true' || "${{ env.pr_be_change}}" == 'true' || "${{ env.pr_fe_change}}" == 'true' || "${{ needs.test-checker.outputs.test_change }}" == 'true' ]]; then
               echo "sys_test_need=true" >> $GITHUB_OUTPUT
             fi
           else
