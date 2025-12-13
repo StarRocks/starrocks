@@ -1,6 +1,10 @@
 -- name: test_normal_flat_json_predicate @sequential
 
 update information_schema.be_configs set value = 'true' where name = 'enable_json_flat';
+
+CREATE DATABASE flat_json_test;
+USE flat_json_test;
+
 CREATE TABLE js2 (
     v1 BIGINT NULL,
     j1 JSON NULL
@@ -56,6 +60,8 @@ select
     generate_series, 
     json_object('f1', generate_series)
 from (table(generate_series(1, 1000)));
+function: manual_compact('flat_json_test', 'js2')
+function: wait_compaction_finish('js2', 1)
 
 select * from js2 where get_json_int(j1, '$.f1') = -1;
 select * from profile_filter_rows;
@@ -75,6 +81,8 @@ select
     generate_series, 
     json_object('f2', generate_series)
 from (table(generate_series(1, 1000)));
+function: manual_compact('flat_json_test', 'js2')
+function: wait_compaction_finish('js2', 1)
 
 -- use various iterators
 select get_json_int(j1, '$.f1') from js2 where get_json_int(j1, '$.f1') = 1;
@@ -126,6 +134,8 @@ select
     generate_series, 
     json_object('f1', concat('a', generate_series%10))
 from (table(generate_series(1, 1000)));
+function: manual_compact('flat_json_test', 'js3')
+function: wait_compaction_finish('js3', 1)
 
 -- No need to decode dict
 select count(v1) from js3 where get_json_string(j1, 'f1') = 'a0';
@@ -145,6 +155,8 @@ select
     generate_series, 
     json_object('f1', generate_series, 'f2', generate_series)
 from (table(generate_series(1, 1000)));
+function: manual_compact('flat_json_test', 'js2')
+function: wait_compaction_finish('js2', 1)
 
 select count(get_json_int(j1, '$.f2')) from js2 where get_json_int(j1, '$.f1') < 100;
 select * from profile_late_materialize;
@@ -162,6 +174,8 @@ select generate_series, json_object(
         'f_double', cast(generate_series as double) * 1.0
         )
 from (table(generate_series(1, 1000)));
+function: manual_compact('flat_json_test', 'js3')
+function: wait_compaction_finish('js3', 1)
 
 -- unmatched type
 select count(*) from js3 where get_json_bool(j1, 'f_bool') = true;
