@@ -571,3 +571,37 @@ SELECT count(*), max(k13), min(k13), count(k13) FROM update_table_with_null_part
 -- result:
 12	51.000000000	40.000000000	11
 -- !result
+
+-- name: test_meta_scan_with_tablet_hint
+CREATE TABLE t_tablet_hint (
+    k1 date,
+    k2 int
+)
+DUPLICATE KEY(k1)
+PARTITION BY RANGE(k1) (
+    PARTITION p1 VALUES LESS THAN ("2020-01-01"),
+    PARTITION p2 VALUES LESS THAN ("2020-02-01"),
+    PARTITION p3 VALUES LESS THAN ("2020-03-01")
+)
+DISTRIBUTED BY HASH(k1) BUCKETS 3
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO t_tablet_hint VALUES ("2019-12-01", 10), ("2020-01-15", 20), ("2020-02-15", 30);
+-- result:
+-- !result
+-- Test: Single tablet hint - EXPLAIN should show TabletIds
+EXPLAIN SELECT min(k2), max(k2) FROM t_tablet_hint TABLET(99999) [_META_];
+-- result:
+[REGEX].*TabletIds: \[99999\].*
+-- !result
+-- Test: Multiple tablet hints
+EXPLAIN SELECT min(k2), max(k2) FROM t_tablet_hint TABLET(11111, 22222) [_META_];
+-- result:
+[REGEX].*TabletIds: \[11111, 22222\].*
+-- !result
+-- Test: Partition + Tablet hint combination
+EXPLAIN SELECT min(k2), max(k2) FROM t_tablet_hint PARTITION(p1) TABLET(99999) [_META_];
+-- result:
+[REGEX].*Partitions: \[p1\][\s\S]*TabletIds: \[99999\].*
+-- !result
