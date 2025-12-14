@@ -186,7 +186,6 @@ protected:
         CHECK_OK(fs::create_directories(lake::join_path(kTestGroupPath, lake::kMetadataDirectoryName)));
         CHECK_OK(fs::create_directories(lake::join_path(kTestGroupPath, lake::kTxnLogDirectoryName)));
 
-        _tablet_manager->cache_global_schema(_tablet_schema);
         CHECK_OK(_tablet_manager->put_tablet_metadata(*new_tablet_metadata(10086)));
         CHECK_OK(_tablet_manager->put_tablet_metadata(*new_tablet_metadata(10087)));
         CHECK_OK(_tablet_manager->put_tablet_metadata(*new_tablet_metadata(10088)));
