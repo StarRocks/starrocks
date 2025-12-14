@@ -599,6 +599,13 @@ Status RuntimeFilterProbeDescriptor::prepare(RuntimeState* state, RuntimeProfile
     for (auto* partition_by_expr : _partition_by_exprs_contexts) {
         RETURN_IF_ERROR(partition_by_expr->prepare(state));
     }
+    // Set exchange_hash_function_version from RuntimeState query_options
+    // 0: FNV (default for backward compatibility), 1: XXH3
+    if (state != nullptr && state->query_options().__isset.exchange_hash_function_version) {
+        _exchange_hash_function_version = state->query_options().exchange_hash_function_version;
+    } else {
+        _exchange_hash_function_version = 0; // Default to FNV
+    }
     _open_timestamp = UnixMillis();
     _latency_timer = ADD_COUNTER(p, strings::Substitute("JoinRuntimeFilter/$0/latency", _filter_id), TUnit::TIME_NS);
     // not set yet.
@@ -876,6 +883,15 @@ void RuntimeFilterProbeCollector::compute_hash_values(Chunk* chunk, const Column
     DCHECK(filter);
     if (filter->num_hash_partitions() == 0) {
         return;
+    }
+
+    // Set exchange_hash_function_version from RuntimeState query_options
+    // 0: FNV (default for backward compatibility), 1: XXH3
+    if (_runtime_state != nullptr && _runtime_state->query_options().__isset.exchange_hash_function_version) {
+        eval_context.running_context.exchange_hash_function_version =
+                _runtime_state->query_options().exchange_hash_function_version;
+    } else {
+        eval_context.running_context.exchange_hash_function_version = 0; // Default to FNV
     }
 
     if (rf_desc->partition_by_expr_contexts()->empty()) {

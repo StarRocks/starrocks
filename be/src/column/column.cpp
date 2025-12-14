@@ -149,4 +149,16 @@ void Column::murmur_hash3_x86_32(uint32_t* hash, uint32_t from, uint32_t to) con
     murmur_hash3_x86_32_column(*this, hash, from, to);
 }
 
+void Column::xxh3_hash(uint32_t* hash, uint32_t from, uint32_t to) const {
+    xxh3_64_column(*this, hash, from, to);
+}
+
+void Column::xxh3_hash_with_selection(uint32_t* hash, uint8_t* selection, uint16_t from, uint16_t to) const {
+    xxh3_64_column_with_selection(*this, hash, selection, from, to);
+}
+
+void Column::xxh3_hash_selective(uint32_t* hash, uint16_t* sel, uint16_t sel_size) const {
+    xxh3_64_column_selective(*this, hash, sel, sel_size);
+}
+
 } // namespace starrocks
