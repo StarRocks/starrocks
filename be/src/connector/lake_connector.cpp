@@ -23,8 +23,8 @@
 #include "runtime/global_dict/parser.h"
 #include "storage/chunk_helper.h"
 #include "storage/column_predicate_rewriter.h"
-#include "storage/lake/tablet.h"
 #include "storage/lake/table_schema_service.h"
+#include "storage/lake/tablet.h"
 #include "storage/predicate_parser.h"
 #include "storage/predicate_tree/predicate_tree.hpp"
 #include "storage/projection_iterator.h"
@@ -181,14 +181,13 @@ Status LakeDataSource::get_tablet(const TInternalScanRange& scan_range) {
     auto& lake_scan_node = _provider->_t_lake_scan_node;
     if (lake_scan_node.__isset.schema_meta) {
         auto& schema_meta = lake_scan_node.schema_meta;
-        auto schema_info = lake::TableSchemaService::TableSchemaInfo{
-                .schema_id = schema_meta.schema_id,
-                .db_id = schema_meta.db_id,
-                .table_id = schema_meta.table_id,
-                .tablet_id = tablet_id};
+        auto schema_info = lake::TableSchemaService::TableSchemaInfo{.schema_id = schema_meta.schema_id,
+                                                                     .db_id = schema_meta.db_id,
+                                                                     .table_id = schema_meta.table_id,
+                                                                     .tablet_id = tablet_id};
         ASSIGN_OR_RETURN(_tablet_schema, tablet_manager->table_schema_service()->get_scan_schema(
-                schema_info, _runtime_state->query_id(),
-                _runtime_state->fragment_ctx()->fe_addr(), _tablet.metadata()));
+                                                 schema_info, _runtime_state->query_id(),
+                                                 _runtime_state->fragment_ctx()->fe_addr(), _tablet.metadata()));
     } else {
         // no table schema meta indicates FE has not been upgraded to use fast schema evolution v2,
         // so fallback to the old way to get schema from tablet metadata

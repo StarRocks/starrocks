@@ -35,11 +35,11 @@
 #include "storage/lake/metacache.h"
 #include "storage/lake/pk_tablet_writer.h"
 #include "storage/lake/spill_mem_table_sink.h"
+#include "storage/lake/table_schema_service.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_write_log_manager.h"
 #include "storage/lake/tablet_writer.h"
-#include "storage/lake/table_schema_service.h"
 #include "storage/lake/update_manager.h"
 #include "storage/load_spill_block_manager.h"
 #include "storage/memtable.h"
@@ -412,13 +412,9 @@ inline Status DeltaWriterImpl::init_tablet_schema() {
     ASSIGN_OR_RETURN(auto tablet, _tablet_manager->get_tablet(_tablet_id));
     TabletMetadataPtr latest_metadata = _tablet_manager->get_latest_cached_tablet_metadata(_tablet_id);
     auto schema_info = TableSchemaService::TableSchemaInfo{
-        .schema_id = _schema_id,
-        .db_id = _db_id,
-        .table_id = _table_id,
-        .tablet_id = _tablet_id
-    };
-    ASSIGN_OR_RETURN(_tablet_schema, _tablet_manager->table_schema_service()->get_load_schema(
-            schema_info, _txn_id, latest_metadata));
+            .schema_id = _schema_id, .db_id = _db_id, .table_id = _table_id, .tablet_id = _tablet_id};
+    ASSIGN_OR_RETURN(_tablet_schema,
+                     _tablet_manager->table_schema_service()->get_load_schema(schema_info, _txn_id, latest_metadata));
     return Status::OK();
 }
 
@@ -1021,10 +1017,11 @@ StatusOr<DeltaWriterBuilder::DeltaWriterPtr> DeltaWriterBuilder::build() {
     if (UNLIKELY(_schema_id == 0)) {
         return Status::InvalidArgument("schema_id not set");
     }
-    auto impl = new DeltaWriterImpl(_tablet_mgr, _tablet_id, _txn_id, _partition_id, _slots, _merge_condition,
-                                    _miss_auto_increment_column, _db_id, _table_id, _immutable_tablet_size, _mem_tracker,
-                                    _max_buffer_size, _schema_id, _partial_update_mode, _column_to_expr_value, _load_id,
-                                    _profile, _bundle_writable_file_context, _global_dicts, _is_multi_statements_txn);
+    auto impl =
+            new DeltaWriterImpl(_tablet_mgr, _tablet_id, _txn_id, _partition_id, _slots, _merge_condition,
+                                _miss_auto_increment_column, _db_id, _table_id, _immutable_tablet_size, _mem_tracker,
+                                _max_buffer_size, _schema_id, _partial_update_mode, _column_to_expr_value, _load_id,
+                                _profile, _bundle_writable_file_context, _global_dicts, _is_multi_statements_txn);
     return std::make_unique<DeltaWriter>(impl);
 }
 
