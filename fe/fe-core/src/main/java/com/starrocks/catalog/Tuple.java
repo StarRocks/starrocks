@@ -15,8 +15,11 @@
 package com.starrocks.catalog;
 
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.proto.TuplePB;
+import com.starrocks.thrift.TTuple;
 
 import java.util.List;
+import java.util.stream.Collectors;
 
 public class Tuple implements Comparable<Tuple> {
 
@@ -51,5 +54,13 @@ public class Tuple implements Comparable<Tuple> {
     @Override
     public int hashCode() {
         return values.hashCode();
+    }
+
+    public static Tuple fromThrift(TTuple tTuple) {
+        return new Tuple(tTuple.values.stream().map(v -> Variant.fromThrift(v)).collect(Collectors.toList()));
+    }
+
+    public static Tuple fromProto(TuplePB tuplePB) {
+        return new Tuple(tuplePB.values.stream().map(v -> Variant.fromProto(v)).collect(Collectors.toList()));
     }
 }

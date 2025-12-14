@@ -28,11 +28,11 @@ public class SplitTabletClause extends AlterTableClause {
 
     private final Map<String, String> properties;
 
-    private long tabletReshardSplitSize;
+    private long tabletReshardTargetSize;
 
     public SplitTabletClause() {
         this(null, null, null);
-        this.tabletReshardSplitSize = Config.tablet_reshard_split_size;
+        this.tabletReshardTargetSize = Config.tablet_reshard_target_size;
     }
 
     public SplitTabletClause(
@@ -65,12 +65,12 @@ public class SplitTabletClause extends AlterTableClause {
         return properties;
     }
 
-    public long getTabletReshardSplitSize() {
-        return tabletReshardSplitSize;
+    public long getTabletReshardTargetSize() {
+        return tabletReshardTargetSize;
     }
 
-    public void setTabletReshardSplitSize(long tabletReshardSplitSize) {
-        this.tabletReshardSplitSize = tabletReshardSplitSize;
+    public void setTabletReshardTargetSize(long tabletReshardTargetSize) {
+        this.tabletReshardTargetSize = tabletReshardTargetSize;
     }
 
     @Override
