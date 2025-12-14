@@ -31,6 +31,7 @@ bool SpillProcessOperator::is_finished() const {
 }
 
 void SpillProcessOperator::close(RuntimeState* state) {
+    _channel->close();
     SourceOperator::close(state);
 }
 

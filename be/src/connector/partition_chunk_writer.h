@@ -17,6 +17,7 @@
 #include "column/chunk.h"
 #include "common/status.h"
 #include "connector/utils.h"
+#include "exec/sorting/sorting.h"
 #include "formats/file_writer.h"
 #include "fs/fs.h"
 #include "runtime/exec_env.h"
