@@ -1308,6 +1308,65 @@ TEST_P(CSVScannerTest, test_get_schema) {
             EXPECT_EQ(expected_schema[i].second, schema[i].type().type) << schema[i].col_name();
         }
     }
+
+    {
+        // sample 1 row, enclose ", escape "\"
+        std::vector<std::pair<std::string, LogicalType>> expected_schema = {
+                {"$1", TYPE_BIGINT}, {"$2", TYPE_VARCHAR}, {"$3", TYPE_DOUBLE}, {"$4", TYPE_BOOLEAN}};
+
+        std::vector<TBrokerRangeDesc> ranges;
+        TBrokerRangeDesc range;
+        range.__set_path("./be/test/exec/test_data/csv_scanner/type_sniff.csv");
+        range.__set_num_of_columns_from_file(0);
+        ranges.push_back(range);
+
+        TBrokerScanRangeParams* params = _obj_pool.add(new TBrokerScanRangeParams());
+        params->__set_row_delimiter('\n');
+        params->__set_column_separator(',');
+        params->__set_enclose('"');
+        params->__set_escape('\\');
+        params->__set_schema_sample_file_row_count(1);
+        auto scanner = create_csv_scanner({}, ranges, params);
+        EXPECT_OK(scanner->open());
+        std::vector<SlotDescriptor> schema;
+        EXPECT_OK(scanner->get_schema(&schema));
+        EXPECT_EQ(expected_schema.size(), schema.size());
+
+        for (size_t i = 0; i < schema.size(); i++) {
+            EXPECT_EQ(expected_schema[i].first, schema[i].col_name());
+            EXPECT_EQ(expected_schema[i].second, schema[i].type().type) << schema[i].col_name();
+        }
+    }
+
+    {
+        // sample 1 row, enclose ", escape "\", no type detection
+        std::vector<std::pair<std::string, LogicalType>> expected_schema = {
+                {"$1", TYPE_VARCHAR}, {"$2", TYPE_VARCHAR}, {"$3", TYPE_VARCHAR}, {"$4", TYPE_VARCHAR}};
+
+        std::vector<TBrokerRangeDesc> ranges;
+        TBrokerRangeDesc range;
+        range.__set_path("./be/test/exec/test_data/csv_scanner/type_sniff.csv");
+        range.__set_num_of_columns_from_file(0);
+        ranges.push_back(range);
+
+        TBrokerScanRangeParams* params = _obj_pool.add(new TBrokerScanRangeParams());
+        params->__set_row_delimiter('\n');
+        params->__set_column_separator(',');
+        params->__set_enclose('"');
+        params->__set_escape('\\');
+        params->__set_schema_sample_file_row_count(1);
+        params->__set_schema_sample_types(false);
+        auto scanner = create_csv_scanner({}, ranges, params);
+        EXPECT_OK(scanner->open());
+        std::vector<SlotDescriptor> schema;
+        EXPECT_OK(scanner->get_schema(&schema));
+        EXPECT_EQ(expected_schema.size(), schema.size());
+
+        for (size_t i = 0; i < schema.size(); i++) {
+            EXPECT_EQ(expected_schema[i].first, schema[i].col_name());
+            EXPECT_EQ(expected_schema[i].second, schema[i].type().type) << schema[i].col_name();
+        }
+    }
 }
 
 TEST_P(CSVScannerTest, test_flexible_column_mapping) {
