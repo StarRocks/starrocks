@@ -407,6 +407,9 @@ message RepairTabletMetadataRequest {
     repeated TabletMetadataPB tablet_metadatas = 1;
     // whether enable file bundling
     optional bool enable_file_bundling = 2;
+    // whether write bundling file
+    // only one node needs to write bundling tablet metadata file for all tablets in one physical partition
+    optional bool write_bundling_file = 3;
 }
 
 message TabletMetadataRepairStatus {

@@ -85,6 +85,8 @@ import com.starrocks.proto.PublishLogVersionRequest;
 import com.starrocks.proto.PublishLogVersionResponse;
 import com.starrocks.proto.PublishVersionRequest;
 import com.starrocks.proto.PublishVersionResponse;
+import com.starrocks.proto.RepairTabletMetadataRequest;
+import com.starrocks.proto.RepairTabletMetadataResponse;
 import com.starrocks.proto.RestoreSnapshotsRequest;
 import com.starrocks.proto.RestoreSnapshotsResponse;
 import com.starrocks.proto.StatusPB;
@@ -1218,6 +1220,11 @@ public class PseudoBackend {
 
         @Override
         public Future<GetTabletMetadatasResponse> getTabletMetadatas(GetTabletMetadatasRequest request) {
+            return CompletableFuture.completedFuture(null);
+        }
+
+        @Override
+        public Future<RepairTabletMetadataResponse> repairTabletMetadata(RepairTabletMetadataRequest request) {
             return CompletableFuture.completedFuture(null);
         }
     }

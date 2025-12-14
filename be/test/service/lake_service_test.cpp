@@ -3215,6 +3215,7 @@ TEST_F(LakeServiceTest, test_repair_tablet_metadata) {
         request.add_tablet_metadatas()->CopyFrom(metadata_to_repair_1);
         request.add_tablet_metadatas()->CopyFrom(metadata_to_repair_2);
         request.set_enable_file_bundling(true);
+        request.set_write_bundling_file(true);
 
         _lake_service.repair_tablet_metadata(&cntl, &request, &response, nullptr);
         ASSERT_FALSE(cntl.Failed()) << cntl.ErrorText();
@@ -3292,6 +3293,7 @@ TEST_F(LakeServiceTest, test_repair_tablet_metadata) {
         metadata_to_repair.set_version(100);
         request.add_tablet_metadatas()->CopyFrom(metadata_to_repair);
         request.set_enable_file_bundling(true);
+        request.set_write_bundling_file(true);
 
         _lake_service.repair_tablet_metadata(&cntl, &request, &response, nullptr);
         ASSERT_FALSE(cntl.Failed());
@@ -3335,6 +3337,7 @@ TEST_F(LakeServiceTest, test_repair_tablet_metadata) {
             metadata_to_repair.set_version(100);
             request.add_tablet_metadatas()->CopyFrom(metadata_to_repair);
             request.set_enable_file_bundling(true);
+            request.set_write_bundling_file(true);
 
             _lake_service.repair_tablet_metadata(&cntl, &request, &response, nullptr);
             ASSERT_FALSE(cntl.Failed());
