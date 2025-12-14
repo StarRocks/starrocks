@@ -1146,7 +1146,7 @@ public class DDLStmtExecutor {
         public ShowResultSet visitAlterStorageVolumeStatement(AlterStorageVolumeStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
                 context.getGlobalStateMgr().getStorageVolumeMgr().updateStorageVolume(stmt)
-        });
+            });
             return null;
         }
 
