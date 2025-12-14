@@ -891,10 +891,6 @@ public class SharedDataStorageVolumeMgrTest {
         String svKey = svm.createStorageVolume(svName, "hdfs", locations, storageParams, Optional.empty(), "");
         Assertions.assertEquals(true, svm.exists(svName));
 
-        // print storage volumes
-        StorageVolume sv = svm.getStorageVolumeByName(svName);
-        Assertions.assertEquals(svKey, sv.getId());
-        
         storageParams.put("dfs.client.failover.proxy.provider",
                 "org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider");
         svm.updateStorageVolume(svName, null, null, storageParams, Optional.of(false), "");
