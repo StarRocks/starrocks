@@ -268,7 +268,7 @@ drop database test_add_drop_field_array;
 
 
 
--- name: test_add_drop_field_not_allowed
+-- name: test_add_drop_field_not_allowed @cloud
 create database test_add_drop_field_not_allowed;
 -- result:
 -- !result
