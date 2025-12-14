@@ -14,7 +14,10 @@
 
 #include "storage/lake/compaction_policy.h"
 
+#include <unordered_map>
+
 #include "common/config.h"
+#include "common/logging.h"
 #include "gutil/strings/join.h"
 #include "runtime/exec_env.h"
 #include "storage/lake/meta_file.h"
@@ -469,6 +472,53 @@ double size_tiered_compaction_score(const std::shared_ptr<const TabletMetadataPB
 
 CompactionPolicy::~CompactionPolicy() = default;
 
+StatusOr<std::vector<RowsetPtr>> CompactionPolicy::pick_rowsets_with_limit(
+        int64_t max_bytes, const std::unordered_set<uint32_t>& exclude_rowsets) {
+    // First pick rowsets using normal policy
+    ASSIGN_OR_RETURN(auto candidate_rowsets, pick_rowsets());
+    
+    if (candidate_rowsets.empty()) {
+        return candidate_rowsets;
+    }
+    
+    // Filter out excluded rowsets and apply data volume limit
+    std::vector<RowsetPtr> result;
+    int64_t total_bytes = 0;
+    
+    for (auto& rowset : candidate_rowsets) {
+        // Skip if this rowset is being compacted
+        if (exclude_rowsets.count(rowset->id()) > 0) {
+            continue;
+        }
+        
+        int64_t rowset_size = rowset->data_size();
+        
+        // Check if adding this rowset would exceed the limit
+        if (!result.empty() && total_bytes + rowset_size > max_bytes) {
+            break;
+        }
+        
+        result.push_back(rowset);
+        total_bytes += rowset_size;
+        
+        // Stop if we've reached the limit
+        if (total_bytes >= max_bytes) {
+            break;
+        }
+    }
+    
+    // Need at least 2 rowsets to compact
+    if (result.size() < 2) {
+        return std::vector<RowsetPtr>();
+    }
+    
+    VLOG(2) << "Pick rowsets with limit. tablet: " << _tablet_metadata->id() 
+            << ", max_bytes: " << max_bytes << ", total_bytes: " << total_bytes
+            << ", selected rowsets: " << result.size() << ", excluded rowsets: " << exclude_rowsets.size();
+    
+    return result;
+}
+
 StatusOr<CompactionAlgorithm> CompactionPolicy::choose_compaction_algorithm(const std::vector<RowsetPtr>& rowsets) {
     // If there are no rowsets, it could be cloud native index compaction, default to CLOUD_NATIVE_INDEX_COMPACTION
     if (rowsets.empty()) {
@@ -519,6 +569,101 @@ double compaction_score(TabletManager* tablet_mgr, const std::shared_ptr<const T
         return size_tiered_compaction_score(metadata);
     }
     return std::max(base_compaction_score(metadata), cumulative_compaction_score(metadata));
+}
+
+// ============== Partial Compaction Support Implementation (Section 6.3.3) ==============
+
+PartialCompactionState PartialCompactionSelector::check_partition_state(
+        const std::vector<int64_t>& tablet_ids,
+        const std::unordered_map<int64_t, std::unordered_set<uint32_t>>& compacting_rowsets_map,
+        const std::unordered_set<int64_t>& pending_results_tablets) {
+    
+    PartialCompactionState state;
+    
+    for (int64_t tablet_id : tablet_ids) {
+        state.tablet_id = tablet_id;  // Will be overwritten, but we track the last one for debugging
+        
+        // Check if tablet has pending results
+        if (pending_results_tablets.count(tablet_id) > 0) {
+            state.has_pending_results = true;
+            state.pending_result_count++;
+        }
+        
+        // Check if tablet has running compaction tasks
+        auto it = compacting_rowsets_map.find(tablet_id);
+        if (it != compacting_rowsets_map.end() && !it->second.empty()) {
+            state.has_running_tasks = true;
+            state.running_task_count++;
+        }
+    }
+    
+    VLOG(2) << "Checked partition state for " << tablet_ids.size() << " tablets: "
+            << "pending_results=" << state.pending_result_count
+            << ", running_tasks=" << state.running_task_count
+            << ", is_partial=" << state.is_partial();
+    
+    return state;
+}
+
+bool PartialCompactionSelector::should_publish_partial(const PartialCompactionState& state,
+                                                        int min_tablets_with_results,
+                                                        bool force_publish) {
+    // Design Doc Section 6.3.3:
+    // Selector must:
+    // - Detect partial completion states
+    // - Trigger publish when some results exist
+    // - Use force_publish to maintain version consistency
+    
+    if (force_publish) {
+        // Force publish requested - always return true if there are any pending results
+        return state.has_pending_results;
+    }
+    
+    // Check if we have enough tablets with results
+    if (state.pending_result_count >= min_tablets_with_results) {
+        LOG(INFO) << "Partial compaction selector: triggering publish with "
+                  << state.pending_result_count << " tablets having results"
+                  << " (min threshold: " << min_tablets_with_results << ")";
+        return true;
+    }
+    
+    return false;
+}
+
+void PartialCompactionSelector::prepare_partial_publish(
+        const std::vector<int64_t>& tablet_ids,
+        const std::unordered_set<int64_t>& tablets_with_results,
+        bool* force_publish_out,
+        std::vector<int64_t>* tablets_to_publish_out) {
+    
+    // Design Doc Section 6.3.3:
+    // - Trigger publish when some results exist
+    // - Use force_publish to maintain version consistency
+    //
+    // In partial compaction mode:
+    // - All tablets are included in the publish request
+    // - Tablets with results will have actual compaction applied
+    // - Tablets without results will just have their version updated (via force_publish)
+    
+    if (tablets_to_publish_out != nullptr) {
+        tablets_to_publish_out->clear();
+        tablets_to_publish_out->reserve(tablet_ids.size());
+        
+        // Include all tablets
+        for (int64_t tablet_id : tablet_ids) {
+            tablets_to_publish_out->push_back(tablet_id);
+        }
+    }
+    
+    if (force_publish_out != nullptr) {
+        // Always set force_publish when doing partial compaction
+        // This ensures version consistency across all tablets in the partition
+        // even when some tablets don't have compaction results
+        *force_publish_out = true;
+    }
+    
+    LOG(INFO) << "Prepared partial publish for " << tablet_ids.size() << " tablets, "
+              << tablets_with_results.size() << " with results, force_publish=true";
 }
 
 } // namespace starrocks::lake
