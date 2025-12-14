@@ -3111,6 +3111,8 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
     public ParseNode visitKillAnalyzeStatement(com.starrocks.sql.parser.StarRocksParser.KillAnalyzeStatementContext context) {
         if (context.ALL() != null) {
             return new KillAnalyzeStmt(-1, createPos(context));
+        } else if (context.userVariable() != null) {
+            return new KillAnalyzeStmt((UserVariableExpr) visit(context.userVariable()), createPos(context));
         } else {
             return new KillAnalyzeStmt(Long.parseLong(context.INTEGER_VALUE().getText()), createPos(context));
         }
