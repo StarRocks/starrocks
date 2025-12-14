@@ -84,6 +84,7 @@ public:
         auto index = _open_request.mutable_schema()->add_indexes();
         index->set_id(kIndexId);
         index->set_schema_hash(0);
+        index->set_schema_id(_schema_id);
         for (int i = 0, sz = metadata->schema().column_size(); i < sz; i++) {
             auto slot = _open_request.mutable_schema()->add_slot_descs();
             slot->set_id(i);
@@ -188,6 +189,7 @@ protected:
         CHECK_OK(fs::create_directories(lake::join_path(_test_directory, lake::kMetadataDirectoryName)));
         CHECK_OK(fs::create_directories(lake::join_path(_test_directory, lake::kTxnLogDirectoryName)));
 
+        _tablet_manager->cache_global_schema(_tablet_schema);
         CHECK_OK(_tablet_manager->put_tablet_metadata(*new_tablet_metadata(10086)));
         CHECK_OK(_tablet_manager->put_tablet_metadata(*new_tablet_metadata(10087)));
         CHECK_OK(_tablet_manager->put_tablet_metadata(*new_tablet_metadata(10088)));
