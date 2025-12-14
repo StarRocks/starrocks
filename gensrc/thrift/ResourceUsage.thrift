@@ -26,6 +26,7 @@ struct TResourceGroupUsage {
     6: optional string mem_pool
     7: optional i64 mem_pool_mem_limit_bytes
     8: optional i64 mem_pool_mem_used_bytes
+    9: optional i64 group_version
 }
 
 struct TResourceUsage {
