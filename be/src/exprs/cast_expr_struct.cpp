@@ -130,4 +130,82 @@ StatusOr<ColumnPtr> CastJsonToStruct::evaluate_checked(ExprContext* context, Chu
     return std::move(res);
 }
 
+StatusOr<ColumnPtr> CastVariantToStruct::evaluate_checked(ExprContext* context, Chunk* input_chunk) {
+    ASSIGN_OR_RETURN(ColumnPtr column, _children[0]->evaluate_checked(context, input_chunk));
+    if (column->only_null()) {
+        return ColumnHelper::create_const_null_column(column->size());
+    }
+
+    ColumnViewer<TYPE_VARIANT> viewer(column);
+    NullColumn::MutablePtr null_column = NullColumn::create();
+
+    // 1. Cast struct fields to variant columns.
+    const size_t field_size = _type.children.size();
+    DCHECK_EQ(field_size, _type.field_names.size());
+    vector<ColumnBuilder<TYPE_VARIANT>> variant_columns;
+    for (size_t i = 0; i < field_size; i++) {
+        ColumnBuilder<TYPE_VARIANT> variant_column_builder(viewer.size());
+        variant_columns.emplace_back(variant_column_builder);
+    }
+
+    for (size_t row = 0; row < viewer.size(); row++) {
+        if (viewer.is_null(row)) {
+            APPEND_NULL(variant_columns, null_column);
+            continue;
+        }
+
+        const VariantValue* variant_value = viewer.value(row);
+        Variant variant(variant_value->get_metadata(), variant_value->get_value());
+        if (variant.type() != VariantType::OBJECT) {
+            APPEND_NULL(variant_columns, null_column);
+            continue;
+        }
+
+        // 2. Find matched fields from variant object and append to variant columns.
+        // The name of the struct fields must match the variant object keys, otherwise, the value of the field will be NULL.
+        // iterate struct fields via iterator:
+        for (int field_index = 0; field_index < _type.field_names.size(); field_index++) {
+            const VariantPath& variant_path = _variant_paths[field_index];
+            const auto field_variant = VariantPath::seek(variant_value, &variant_path);
+            // If the field not found, append null.
+            if (!field_variant.ok()) {
+                variant_columns[field_index].append_null();
+            } else {
+                VariantValue field_value = field_variant.value();
+                variant_columns[field_index].append(std::move(field_value));
+            }
+        }
+        null_column->append(0);
+    }
+
+    // 3. Cast variant column to expected field type
+    MutableColumns casted_fields;
+    for (size_t field_idx = 0; field_idx < field_size; field_idx++) {
+        ColumnPtr elements = variant_columns[field_idx].build_nullable_column();
+        // do casting for the required fields
+        if (_field_casts[field_idx] != nullptr) {
+            Chunk field_chunk;
+            field_chunk.append_column(elements, 0);
+            ASSIGN_OR_RETURN(auto casted_field, _field_casts[field_idx]->evaluate_checked(context, &field_chunk));
+            casted_field = NullableColumn::wrap_if_necessary(casted_field);
+            casted_fields.emplace_back(std::move(casted_field)->as_mutable_ptr());
+        } else {
+            casted_fields.emplace_back(NullableColumn::wrap_if_necessary(elements->clone())->as_mutable_ptr());
+        }
+        DCHECK(casted_fields[field_idx]->is_nullable());
+    }
+
+    // 4. Build struct column.
+    MutableColumnPtr res = StructColumn::create(std::move(casted_fields), _type.field_names);
+    RETURN_IF_ERROR(res->unfold_const_children(_type));
+    if (column->is_nullable()) {
+        res = NullableColumn::create(std::move(res), std::move(null_column));
+    }
+    if (column->is_constant()) {
+        res = ConstColumn::create(std::move(res), column->size());
+    }
+
+    return res;
+}
+
 } // namespace starrocks

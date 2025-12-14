@@ -27,6 +27,24 @@
 
 namespace starrocks {
 
+StatusOr<int64_t> VariantUtil::get_long(const Variant* variant) {
+    int64_t result = 0;
+    VariantType type = variant->type();
+    if (type == VariantType::INT8) {
+        ASSIGN_OR_RETURN(result, variant->get_int8());
+    } else if (type == VariantType::INT16) {
+        ASSIGN_OR_RETURN(result, variant->get_int16());
+    } else if (type == VariantType::INT32) {
+        ASSIGN_OR_RETURN(result, variant->get_int32());
+    } else if (type == VariantType::INT64) {
+        ASSIGN_OR_RETURN(result, variant->get_int64());
+    } else {
+        return Status::NotSupported("Variant type is not integer type: " + type_to_string(type));
+    }
+
+    return result;
+}
+
 std::string VariantUtil::type_to_string(VariantType type) {
     switch (type) {
     case VariantType::OBJECT:

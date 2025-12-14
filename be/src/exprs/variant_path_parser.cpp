@@ -251,6 +251,10 @@ StatusOr<VariantValue> VariantPath::seek(const VariantValue* value, const Varian
     }
 
     const std::string& metadata = value->get_metadata();
+    if (metadata.empty()) {
+        return Status::InvalidArgument("Can not find variant value with empty metadata");
+    }
+
     const std::string& val = value->get_value();
     if (val.empty()) {
         return Status::InvalidArgument("Variant value is empty");

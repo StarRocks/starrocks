@@ -22,6 +22,9 @@
 
 namespace starrocks {
 struct VariantUtil {
+    // Get int64_t value from INT8/INT16/INT32/INT64 variant
+    static StatusOr<int64_t> get_long(const Variant* variant);
+
     static std::string type_to_string(VariantType type);
 
     static Status variant_to_json(std::string_view metadata, std::string_view value, std::stringstream& json_str,
