@@ -1,0 +1,127 @@
+-- name: test_json_pretty
+CREATE DATABASE IF NOT EXISTS test_json_pretty_db;
+-- result:
+-- !result
+
+USE test_json_pretty_db;
+-- result:
+-- !result
+
+SELECT json_pretty('{"a": 1, "b": 2}');
+-- result:
+{
+  "a" : 1,
+  "b" : 2
+}
+-- !result
+
+SELECT json_pretty('[1, 2, 3]');
+-- result:
+[
+  1,
+  2,
+  3
+]
+-- !result
+
+SELECT json_pretty('{"a": true, "b": null, "c": "string"}');
+-- result:
+{
+  "a" : true,
+  "b" : null,
+  "c" : "string"
+}
+-- !result
+
+SELECT json_pretty('{"level1": {"level2": {"level3": "value"}}}');
+-- result:
+{
+  "level1" : {
+    "level2" : {
+      "level3" : "value"
+    }
+  }
+}
+-- !result
+
+SELECT json_pretty('[{"id": 1, "val": [10, 20]}, {"id": 2}]');
+-- result:
+[
+  {
+    "id" : 1,
+    "val" : [
+      10,
+      20
+    ]
+  },
+  {
+    "id" : 2
+  }
+]
+-- !result
+
+SELECT json_pretty('{"message": "Hello { world }", "tags": "[tag1, tag2]"}');
+-- result:
+{
+  "message" : "Hello { world }",
+  "tags" : "[tag1, tag2]"
+}
+-- !result
+
+SELECT json_pretty('{}');
+-- result:
+{
+}
+-- !result
+
+SELECT json_pretty('[]');
+-- result:
+[
+]
+-- !result
+
+SELECT json_pretty('{"int": 123, "float": 12.34}');
+-- result:
+{
+  "float" : 12.34,
+  "int" : 123
+}
+-- !result
+
+CREATE TABLE json_pretty_test_table (
+    id INT,
+    data JSON
+) DUPLICATE KEY(id)
+PROPERTIES("replication_num" = "1");
+-- result:
+-- !result
+
+INSERT INTO json_pretty_test_table VALUES
+(1, parse_json('{"name": "Alice", "details": {"age": 25}}')),
+(2, parse_json('[10, 20]')),
+(3, NULL);
+-- result:
+-- !result
+
+SELECT id, json_pretty(data) FROM json_pretty_test_table ORDER BY id;
+-- result:
+1	{
+  "details" : {
+    "age" : 25
+  },
+  "name" : "Alice"
+}
+2	[
+  10,
+  20
+]
+3	NULL
+-- !result
+
+DROP TABLE json_pretty_test_table;
+-- result:
+-- !result
+
+DROP DATABASE test_json_pretty_db;
+-- result:
+-- !result

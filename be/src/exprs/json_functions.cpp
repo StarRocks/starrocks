@@ -359,6 +359,32 @@ StatusOr<ColumnPtr> JsonFunctions::json_string(FunctionContext* context, const C
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
+StatusOr<ColumnPtr> JsonFunctions::json_pretty(FunctionContext* context, const Columns& columns) {
+    ColumnViewer<TYPE_JSON> viewer(columns[0]);
+    ColumnBuilder<TYPE_VARCHAR> result(columns[0]->size());
+
+    arangodb::velocypack::Options options = arangodb::velocypack::Options::Defaults;
+    options.prettyPrint = true;
+
+    for (int row = 0; row < columns[0]->size(); row++) {
+        if (viewer.is_null(row)) {
+            result.append_null();
+        } else {
+            JsonValue* json = viewer.value(row);
+
+            // LCOV_EXCL_START
+            try {
+                std::string pretty_json = json->to_vslice().toJson(&options);
+                result.append(pretty_json);
+            } catch (const std::exception& e) {
+                result.append_null();
+            }
+            // LCOV_EXCL_STOP
+        }
+    }
+    return result.build(ColumnHelper::is_all_const(columns));
+}
+
 StatusOr<ColumnPtr> _string_json(FunctionContext* context, const Columns& columns) {
     ColumnViewer<TYPE_VARCHAR> viewer(columns[0]);
     ColumnBuilder<TYPE_JSON> result(columns[0]->size());
