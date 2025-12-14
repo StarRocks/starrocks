@@ -1115,9 +1115,9 @@ public class DDLStmtExecutor {
 
         @Override
         public ShowResultSet visitAlterStorageVolumeStatement(AlterStorageVolumeStmt stmt, ConnectContext context) {
-            ErrorReport.wrapWithRuntimeException(() ->
-                    context.getGlobalStateMgr().getStorageVolumeMgr().updateStorageVolume(stmt)
-            );
+            ErrorReport.wrapWithRuntimeException(() -> {
+                context.getGlobalStateMgr().getStorageVolumeMgr().updateStorageVolume(stmt)
+            });
             return null;
         }
 
