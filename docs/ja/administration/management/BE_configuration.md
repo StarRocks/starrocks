@@ -2273,6 +2273,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 説明: 共有データクラスターにおいて、オブジェクトストレージに書き込まれたファイルにオブジェクトストレージタグを付与し、便利なカスタムファイル管理を行うかどうか。
 - 導入バージョン: v3.5.3
 
+##### table_schema_service_max_retries
+
+- デフォルト: 3
+- タイプ: Int
+- 単位: -
+- 変更可能: はい
+- 説明: Table Schema Service リクエストの最大リトライ回数。
+- 導入バージョン: v4.1
+
 ### データレイク
 
 ##### datacache_block_buffer_enable
