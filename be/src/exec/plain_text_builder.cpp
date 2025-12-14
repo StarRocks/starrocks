@@ -24,6 +24,8 @@ PlainTextBuilder::PlainTextBuilder(PlainTextBuilderOptions options, std::unique_
                   std::make_unique<csv::OutputStreamFile>(std::move(writable_file), OUTSTREAM_BUFFER_SIZE_BYTES)),
           _init(false) {}
 
+PlainTextBuilder::~PlainTextBuilder() = default;
+
 Status PlainTextBuilder::init() {
     if (_init) {
         return Status::OK();
@@ -43,6 +45,17 @@ Status PlainTextBuilder::init() {
         }
         _converters.emplace_back(std::move(conv));
     }
+
+    // Write header row if enabled
+    if (_options.with_header && !_options.column_names.empty()) {
+        auto* os = _output_stream.get();
+        const size_t num_cols = _options.column_names.size();
+        for (size_t i = 0; i < num_cols; i++) {
+            RETURN_IF_ERROR(os->write(_options.column_names[i]));
+            RETURN_IF_ERROR(os->write((i == num_cols - 1) ? _options.line_terminated_by : _options.column_terminated_by));
+        }
+    }
+
     _init = true;
 
     return Status::OK();
@@ -95,6 +108,8 @@ std::size_t PlainTextBuilder::file_size() {
 
 Status PlainTextBuilder::finish() {
     DCHECK(_output_stream != nullptr);
+    // Ensure header is written even if no data was added
+    RETURN_IF_ERROR(init());
     return _output_stream->finalize();
 }
 

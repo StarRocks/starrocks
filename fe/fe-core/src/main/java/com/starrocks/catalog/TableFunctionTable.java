@@ -136,6 +136,7 @@ public class TableFunctionTable extends Table {
     private static final String PROPERTY_CSV_ENCLOSE = "csv.enclose";
     private static final String PROPERTY_CSV_ESCAPE = "csv.escape";
     private static final String PROPERTY_CSV_TRIM_SPACE = "csv.trim_space";
+    private static final String PROPERTY_CSV_INCLUDE_HEADER = "csv.include_header";
 
     private static final String PROPERTY_PARQUET_USE_LEGACY_ENCODING = "parquet.use_legacy_encoding";
     private static final Set<String> SUPPORTED_PARQUET_VERSIONS = Sets.newHashSet("1.0", "2.4", "2.6");
@@ -199,6 +200,7 @@ public class TableFunctionTable extends Table {
     private byte csvEscape;
     private long csvSkipHeader;
     private boolean csvTrimSpace;
+    private boolean csvIncludeHeader = false;
 
     // PARQUET format options
     private boolean parquetUseLegacyEncoding = false;
@@ -393,6 +395,7 @@ public class TableFunctionTable extends Table {
         if (CSV.equalsIgnoreCase(format)) {
             tTableFunctionTable.setCsv_column_seperator(csvColumnSeparator);
             tTableFunctionTable.setCsv_row_delimiter(csvRowDelimiter);
+            tTableFunctionTable.setCsv_include_header(csvIncludeHeader);
         }
         tTableFunctionTable.setParquet_use_legacy_encoding(parquetUseLegacyEncoding);
         TParquetOptions parquetOptions = new TParquetOptions();
@@ -895,6 +898,15 @@ public class TableFunctionTable extends Table {
                 throw new SemanticException("The valid bytes length for '%s' is [%d, %d]", PROPERTY_CSV_ROW_DELIMITER,
                         1, CsvFormat.MAX_ROW_DELIMITER_LENGTH);
             }
+        }
+
+        if (properties.containsKey(PROPERTY_CSV_INCLUDE_HEADER)) {
+            String includeHeader = properties.get(PROPERTY_CSV_INCLUDE_HEADER);
+            if (!includeHeader.equalsIgnoreCase("true") && !includeHeader.equalsIgnoreCase("false")) {
+                throw new SemanticException("got invalid parameter \"csv.include_header\" = \"%s\", " +
+                        "expect a boolean value (true or false).", includeHeader);
+            }
+            this.csvIncludeHeader = includeHeader.equalsIgnoreCase("true");
         }
 
         // parquet options
