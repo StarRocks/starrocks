@@ -292,6 +292,10 @@ public class OptimizerContext {
         return uniquePartitionIdGenerator++;
     }
 
+    public Stopwatch getOptimizerTimer() {
+        return optimizerTimer;
+    }
+
     /**
      * Throw exception if reach optimizer timeout
      */
