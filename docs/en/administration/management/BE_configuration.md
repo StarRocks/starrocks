@@ -2232,11 +2232,137 @@ When this value is set to less than `0`, the system uses the product of its abso
 
 ##### pk_parallel_execution_threshold_bytes
 
-- Default: 314572800
-- Type: int
+- Default: 104857600
+- Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: When enable_pk_parallel_execution is set to true, the Primary Key table parallel execution strategy will be enabled if the data generated during import or compaction exceeds this threshold.
+- Description: When enable_pk_parallel_execution is set to true, the Primary Key table parallel execution strategy will be enabled if the data generated during import or compaction exceeds this threshold. Default is 100MB.
+- Introduced in: -
+
+##### pk_index_parallel_compaction_threadpool_max_threads
+
+- Default: 4
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum number of threads in the thread pool for cloud native primary key index parallel compaction in shared-data mode.
+- Introduced in: -
+
+##### pk_index_parallel_compaction_task_split_threshold_bytes
+
+- Default: 104857600
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The splitting threshold for primary key index compaction tasks. When the total size of the files involved in a task is smaller than this threshold, the task will not be split. Default is 100MB.
+- Introduced in: -
+
+##### pk_index_target_file_size
+
+- Default: 67108864
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: Target file size for primary key index in shared-data mode. Default is 64MB.
+- Introduced in: -
+
+##### pk_index_compaction_score_ratio
+
+- Default: 1.5
+- Type: Double
+- Unit: -
+- Is mutable: Yes
+- Description: Compaction score ratio for primary key index in shared-data mode. For example, if there are N filesets, the compaction score will be N * pk_index_compaction_score_ratio.
+- Introduced in: -
+
+##### pk_index_ingest_sst_compaction_threshold
+
+- Default: 5
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: Ingest SST compaction threshold for primary key index in shared-data mode.
+- Introduced in: -
+
+##### enable_pk_index_parallel_compaction
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to enable parallel compaction for primary key index in shared-data mode.
+- Introduced in: -
+
+##### enable_pk_index_parallel_get
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to enable parallel get for primary key index in shared-data mode.
+- Introduced in: -
+
+##### pk_index_parallel_get_min_rows
+
+- Default: 16384
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The minimum rows threshold to enable parallel get for primary key index in shared-data mode.
+- Introduced in: -
+
+##### pk_index_parallel_get_threadpool_max_threads
+
+- Default: 0
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum number of threads in the thread pool for primary key index parallel get in shared-data mode. 0 means auto configuration.
+- Introduced in: -
+
+##### pk_index_memtable_flush_threadpool_max_threads
+
+- Default: 4
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum number of threads in the thread pool for primary key index memtable flush in shared-data mode.
+- Introduced in: -
+
+##### pk_index_memtable_max_count
+
+- Default: 3
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum number of memtables for primary key index in shared-data mode.
+- Introduced in: -
+
+##### pk_index_size_tiered_min_level_size
+
+- Default: 131072
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The minimum level size parameter for primary key index size-tiered compaction strategy.
+- Introduced in: -
+
+##### pk_index_size_tiered_level_multiple
+
+- Default: 10
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The level multiple parameter for primary key index size-tiered compaction strategy.
+- Introduced in: -
+
+##### pk_index_size_tiered_level_num
+
+- Default: 5
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The level number parameter for primary key index size-tiered compaction strategy.
 - Introduced in: -
 
 ##### primary_key_limit_size

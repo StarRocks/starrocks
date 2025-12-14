@@ -1701,11 +1701,137 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 
 ##### pk_parallel_execution_threshold_bytes
 
-- 默认值：314572800
+- 默认值：104857600
 - 类型：Int
 - 单位：-
 - 是否动态：是
-- 描述：当enable_pk_parallel_execution设置为true后，导入或者compaction生成的数据大于该阈值时，Primary Key 表并行执行策略将被启用。
+- 描述：当enable_pk_parallel_execution设置为true后，导入或者compaction生成的数据大于该阈值时，Primary Key 表并行执行策略将被启用。默认为 100MB。
+- 引入版本：-
+
+##### pk_index_parallel_compaction_threadpool_max_threads
+
+- 默认值：4
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：存算分离模式下，主键索引并行 Compaction 的线程池最大线程数。
+- 引入版本：-
+
+##### pk_index_parallel_compaction_task_split_threshold_bytes
+
+- 默认值：104857600
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：主键索引 Compaction 任务拆分的阈值。当任务涉及的文件总大小小于此阈值时，任务将不会被拆分。默认为 100MB。
+- 引入版本：-
+
+##### pk_index_target_file_size
+
+- 默认值：67108864
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：存算分离模式下，主键索引的目标文件大小。默认为 64MB。
+- 引入版本：-
+
+##### pk_index_compaction_score_ratio
+
+- 默认值：1.5
+- 类型：Double
+- 单位：-
+- 是否动态：是
+- 描述：存算分离模式下，主键索引的 Compaction 分数比率。例如，如果有 N 个文件集，Compaction 分数将为 N * pk_index_compaction_score_ratio。
+- 引入版本：-
+
+##### pk_index_ingest_sst_compaction_threshold
+
+- 默认值：5
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：存算分离模式下，主键索引 Ingest SST Compaction 的阈值。
+- 引入版本：-
+
+##### enable_pk_index_parallel_compaction
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：是否启用存算分离模式下主键索引的并行 Compaction。
+- 引入版本：-
+
+##### enable_pk_index_parallel_get
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：是否启用存算分离模式下主键索引的并行读取。
+- 引入版本：-
+
+##### pk_index_parallel_get_min_rows
+
+- 默认值：16384
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：存算分离模式下，启用主键索引并行读取的最小行数阈值。
+- 引入版本：-
+
+##### pk_index_parallel_get_threadpool_max_threads
+
+- 默认值：0
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：存算分离模式下，主键索引并行读取的线程池最大线程数。0 表示自动配置。
+- 引入版本：-
+
+##### pk_index_memtable_flush_threadpool_max_threads
+
+- 默认值：4
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：存算分离模式下，主键索引 Memtable 刷盘的线程池最大线程数。
+- 引入版本：-
+
+##### pk_index_memtable_max_count
+
+- 默认值：3
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：存算分离模式下，主键索引的最大 Memtable 数量。
+- 引入版本：-
+
+##### pk_index_size_tiered_min_level_size
+
+- 默认值：131072
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：主键索引 Size-Tiered Compaction 策略的最小层级大小参数。
+- 引入版本：-
+
+##### pk_index_size_tiered_level_multiple
+
+- 默认值：10
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：主键索引 Size-Tiered Compaction 策略的层级倍数参数。
+- 引入版本：-
+
+##### pk_index_size_tiered_level_num
+
+- 默认值：5
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：主键索引 Size-Tiered Compaction 策略的层级数量参数。
 - 引入版本：-
 
 ##### primary_key_limit_size
