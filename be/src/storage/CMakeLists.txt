@@ -184,10 +184,13 @@ set(STORAGE_FILES
     primary_key_recover.cpp
     local_primary_key_recover.cpp
     lake/async_delta_writer.cpp
+    lake/autonomous_compaction_handler.cpp
     lake/compaction_policy.cpp
+    lake/compaction_result_manager.cpp
     lake/compaction_scheduler.cpp
     lake/compaction_task.cpp
     lake/compaction_task_context.cpp
+    lake/tablet_parallel_compaction_manager.cpp
     lake/horizontal_compaction_task.cpp
     lake/delta_writer.cpp
     lake/vacuum.cpp
