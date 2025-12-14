@@ -14,6 +14,7 @@
 
 #include "storage/lake/table_schema_service.h"
 
+#include <bvar/bvar.h>
 #include <fmt/format.h>
 
 #include <algorithm>
@@ -29,12 +30,28 @@
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/metadata_util.h"
-#include "storage/tablet_schema_map.h"
 #include "testutil/sync_point.h"
+#include "util/defer_op.h"
 #include "util/thrift_rpc_helper.h"
 #include "util/uid_util.h"
 
 namespace starrocks::lake {
+
+// Number of schema lookups that hit the global schema cache (fastest path).
+bvar::Adder<int64_t> g_schema_cache_hit("table_schema_service", "schema_cache_hit");
+// Number of schema lookups that hit the tablet metadata (fallback when global cache misses).
+bvar::Adder<int64_t> g_tablet_metadata_hit("table_schema_service", "tablet_metadata_hit");
+// Number of schema lookups that miss both schema cache and tablet metadata, requiring remote fetch.
+// Note: g_schema_cache_hit + g_tablet_metadata_hit + g_local_miss represents total local lookup attempts.
+bvar::Adder<int64_t> g_local_miss("table_schema_service", "local_miss");
+// Total latency (in microseconds) for remote schema fetches, including all retry attempts.
+// This measures the end-to-end time from initiating remote fetch to completion.
+bvar::LatencyRecorder g_remote_fetch_latency_us("table_schema_service", "remote_fetch");
+// Number of retry attempts for remote schema fetches (excludes the initial attempt).
+bvar::Adder<int64_t> g_remote_fetch_retries("table_schema_service", "remote_fetch_retries");
+// Latency (in microseconds) for individual RPC calls to FE for schema fetching.
+// This measures single RPC latency, while g_remote_fetch_latency_us measures total time including retries.
+bvar::LatencyRecorder g_schema_rpc_latency_us("table_schema_service", "schema_rpc");
 
 std::string TableSchemaService::SingleFlightExecutionContext::to_string() const {
     std::stringstream ss;
@@ -111,7 +128,12 @@ StatusOr<TabletSchemaPtr> TableSchemaService::get_scan_schema(const TableSchemaI
 
 TabletSchemaPtr TableSchemaService::_get_local_schema(int64_t schema_id, const TabletMetadataPtr& tablet_meta) {
     auto schema = _tablet_mgr->get_cached_global_schema(schema_id);
-    if (schema == nullptr && tablet_meta != nullptr) {
+    if (schema != nullptr) {
+        g_schema_cache_hit << 1;
+        return schema;
+    }
+
+    if (tablet_meta != nullptr) {
         const TabletSchemaPB* schema_pb = nullptr;
         if (schema_id == tablet_meta->schema().id()) {
             schema_pb = &tablet_meta->schema();
@@ -124,11 +146,15 @@ TabletSchemaPtr TableSchemaService::_get_local_schema(int64_t schema_id, const T
         if (schema_pb != nullptr) {
             schema = TabletSchema::create(*schema_pb);
             _tablet_mgr->cache_global_schema(schema);
+            g_tablet_metadata_hit << 1;
             VLOG(2) << "get schema from tablet metadata. schema_id: " << schema_id
                     << ", tablet_id: " << tablet_meta->id() << ", metadata version: " << tablet_meta->version();
+            return schema;
         }
     }
-    return schema;
+
+    g_local_miss << 1;
+    return nullptr;
 }
 
 StatusOr<TabletSchemaPtr> TableSchemaService::_get_remote_schema(const TGetTableSchemaRequest& request,
@@ -146,11 +172,15 @@ StatusOr<TabletSchemaPtr> TableSchemaService::_get_remote_schema(const TGetTable
     // 4. Isolation Strategy (Last Retry):
     //    - On the final retry attempt, we switch the grouping strategy to include QueryID or TxnID.
     //    - This ensures we execute a dedicated RPC for our own context, avoiding any interference from others.
+    auto start = butil::gettimeofday_us();
+    DeferOp defer([&]() { g_remote_fetch_latency_us << (butil::gettimeofday_us() - start); });
     const int max_retries = std::max(1, config::table_schema_service_max_retries);
     SingleFlightResultPtr sf_result;
     GroupStrategy group_strategy = GroupStrategy::SCHEMA_AND_FE;
     for (int attempt = 0; attempt < max_retries; ++attempt) {
+        g_remote_fetch_retries << (attempt == 0 ? 0 : 1);
         const std::string group_key = _group_key(group_strategy, request, fe);
+        auto t = butil::gettimeofday_us();
         sf_result = _select_single_flight_group(group_key).Do(group_key,
                                                               [&]() { return _fetch_schema_via_rpc(request, fe); });
 
@@ -158,7 +188,8 @@ StatusOr<TabletSchemaPtr> TableSchemaService::_get_remote_schema(const TGetTable
         auto& exec_ctx = sf_result->execution_ctx;
 
         VLOG(2) << "get schema from remote. " << _print_request_info(request) << ", attempt: " << attempt + 1 << "/"
-                << max_retries << ", execution_ctx: " << exec_ctx.to_string() << ", status: " << rpc_result.status();
+                << max_retries << ", latency: " << (butil::gettimeofday_us() - t)
+                << "us, execution_ctx: " << exec_ctx.to_string() << ", status: " << rpc_result.status();
 
         if (rpc_result.ok()) {
             return rpc_result;
@@ -228,14 +259,18 @@ TableSchemaService::SingleFlightResultPtr TableSchemaService::_fetch_schema_via_
     TEST_SYNC_POINT_CALLBACK("TableSchemaService::_fetch_schema_via_rpc::test_hook", &test_ctx);
 #endif
 
+    int64_t rpc_latency_us = 0;
     if (!mock_thrift_rpc) {
+        auto start = butil::gettimeofday_us();
         status = ThriftRpcHelper::rpc<FrontendServiceClient>(
                 fe.hostname, fe.port,
                 [&request_batch, &response_batch](FrontendServiceConnection& client) {
                     client->getTableSchema(response_batch, request_batch);
                 },
                 config::thrift_rpc_timeout_ms);
+        rpc_latency_us = butil::gettimeofday_us() - start;
     }
+    g_schema_rpc_latency_us << rpc_latency_us;
 
     TableSchemaService::SingleFlightResultPtr result = std::make_shared<TableSchemaService::SingleFlightResult>();
     result->execution_ctx.target_fe = fe;
@@ -248,7 +283,8 @@ TableSchemaService::SingleFlightResultPtr TableSchemaService::_fetch_schema_via_
 
     auto log_helper = [&](const char* msg, const Status& st = Status::OK()) {
         std::stringstream ss;
-        ss << msg << ". " << _print_request_info(request) << ", fe: " << fe.hostname;
+        ss << msg << ". " << _print_request_info(request) << ", fe: " << fe.hostname
+           << ", rpc latency: " << rpc_latency_us << "us";
         if (!st.ok()) {
             ss << ", error: " << st;
         }
