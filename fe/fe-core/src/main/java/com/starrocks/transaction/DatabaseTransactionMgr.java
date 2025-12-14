@@ -1507,6 +1507,10 @@ public class DatabaseTransactionMgr {
                     runningTxnNums--;
                 }
             }
+            if (transactionState.getSourceType() == TransactionState.LoadJobSourceType.LAKE_COMPACTION) {
+                GlobalStateMgr.getCurrentState().getCompactionMgr()
+                        .removeFromStartupActiveCompactionTransactionMap(transactionState.getTransactionId());
+            }
             transactionGraph.remove(transactionState.getTransactionId());
             idToFinalStatusTransactionState.put(transactionState.getTransactionId(), transactionState);
             finalStatusTransactionStateDeque.add(transactionState);
@@ -1542,6 +1546,10 @@ public class DatabaseTransactionMgr {
                 } else {
                     runningTxnNums--;
                 }
+            }
+            if (transactionState.getSourceType() == TransactionState.LoadJobSourceType.LAKE_COMPACTION) {
+                GlobalStateMgr.getCurrentState().getCompactionMgr()
+                        .removeFromStartupActiveCompactionTransactionMap(transactionState.getTransactionId());
             }
             transactionGraph.remove(transactionState.getTransactionId());
             idToFinalStatusTransactionState.put(transactionState.getTransactionId(), transactionState);
