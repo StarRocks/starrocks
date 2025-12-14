@@ -209,13 +209,38 @@ public class ColumnStatistic {
         String valueString = columnStatistic.substring(1, endIndex);
         String typeString = endIndex == columnStatistic.length() - 1 ? "" : columnStatistic.substring(endIndex + 2);
 
-        String[] valueArray = valueString.split(",");
-        Preconditions.checkState(valueArray.length == 5,
-                "statistic value: %s is illegal", valueString);
+        // Check if this is the new labeled format (contains "MIN:")
+        boolean isLabeledFormat = valueString.contains("MIN:");
+        
+        double minValue;
+        double maxValue;
+        double nullsFraction;
+        double averageRowSize;
+        double distinctValues;
+        
+        if (isLabeledFormat) {
+            // Parse labeled format: MIN: 1.0, MAX: 100.0, NULLS: 0.0, ROS: 8.0, NDV: 50.0
+            String[] parts = valueString.split(",");
+            Preconditions.checkState(parts.length == 5,
+                    "statistic value: %s is illegal", valueString);
+            
+            minValue = parseLabeledValue(parts[0].trim(), "MIN:");
+            maxValue = parseLabeledValue(parts[1].trim(), "MAX:");
+            nullsFraction = parseLabeledValue(parts[2].trim(), "NULLS:");
+            averageRowSize = parseLabeledValue(parts[3].trim(), "ROS:");
+            distinctValues = parseLabeledValue(parts[4].trim(), "NDV:");
+        } else {
+            // Parse old format: 1.0, 100.0, 0.0, 8.0, 50.0
+            String[] valueArray = valueString.split(",");
+            Preconditions.checkState(valueArray.length == 5,
+                    "statistic value: %s is illegal", valueString);
 
-        double minValue = Double.parseDouble(valueArray[0]);
-        double maxValue = Double.parseDouble(valueArray[1]);
-        double distinctValues = Double.parseDouble(valueArray[4]);
+            minValue = Double.parseDouble(valueArray[0]);
+            maxValue = Double.parseDouble(valueArray[1]);
+            nullsFraction = Double.parseDouble(valueArray[2]);
+            averageRowSize = Double.parseDouble(valueArray[3]);
+            distinctValues = Double.parseDouble(valueArray[4]);
+        }
 
         if (minValue > maxValue) {
             minValue = Double.NEGATIVE_INFINITY;
@@ -226,15 +251,19 @@ public class ColumnStatistic {
             distinctValues = 1;
         }
 
-        Builder builder = new Builder(minValue, maxValue,
-                Double.parseDouble(valueArray[2]), Double.parseDouble(valueArray[3]),
-                distinctValues);
+        Builder builder = new Builder(minValue, maxValue, nullsFraction, averageRowSize, distinctValues);
         if (!typeString.isEmpty()) {
             builder.setType(StatisticType.valueOf(typeString));
         } else if (builder.build().isUnknownValue()) {
             builder.setType(StatisticType.UNKNOWN);
         }
         return builder;
+    }
+
+    private static double parseLabeledValue(String part, String label) {
+        Preconditions.checkState(part.startsWith(label),
+                "Expected label %s but got: %s", label, part);
+        return Double.parseDouble(part.substring(label.length()).trim());
     }
 
     public static Builder builder() {
