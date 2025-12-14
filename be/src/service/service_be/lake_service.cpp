@@ -18,6 +18,7 @@
 #include <bthread/condition_variable.h>
 #include <bthread/mutex.h>
 #include <butil/time.h> // NOLINT
+#include <chrono>
 
 #include "agent/agent_server.h"
 #include "common/config.h"
@@ -910,6 +911,7 @@ void LakeServiceImpl::get_tablet_stats(::google::protobuf::RpcController* contro
         cntl->SetFailed("missing tablet_infos");
         return;
     }
+    const auto tablet_count = request->tablet_infos_size();
     auto thread_pool = get_tablet_stats_thread_pool(_env);
     if (UNLIKELY(thread_pool == nullptr)) {
         cntl->SetFailed("thread pool is null");
@@ -919,6 +921,9 @@ void LakeServiceImpl::get_tablet_stats(::google::protobuf::RpcController* contro
     auto max_pending = std::max(10, thread_pool->max_threads() * 2);
     auto timeout_ms = request->has_timeout_ms() ? request->timeout_ms() : kDefaultTimeoutForGetTabletStat;
     auto timeout_deadline = std::chrono::system_clock::now() + std::chrono::milliseconds(timeout_ms);
+    LOG(INFO) << "get tablet stats request start, tablet_count=" << tablet_count << ", timeout_ms=" << timeout_ms
+              << ", max_pending=" << max_pending;
+    auto start_time = std::chrono::steady_clock::now();
     auto thread_pool_token = ConcurrencyLimitedThreadPoolToken(thread_pool, max_pending);
     auto latch = BThreadCountDownLatch(request->tablet_infos_size());
     bthread::Mutex response_mtx;
@@ -973,6 +978,11 @@ void LakeServiceImpl::get_tablet_stats(::google::protobuf::RpcController* contro
     }
 
     latch.wait();
+    auto elapsed_ms =
+            std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start_time)
+                    .count();
+    LOG(INFO) << "get tablet stats finished, tablet_count=" << tablet_count
+              << ", returned_stats=" << response->tablet_stats_size() << ", elapsed_ms=" << elapsed_ms;
 }
 
 void LakeServiceImpl::lock_tablet_metadata(::google::protobuf::RpcController* controller,
