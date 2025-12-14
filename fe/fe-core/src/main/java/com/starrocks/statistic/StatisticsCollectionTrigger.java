@@ -42,6 +42,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.time.LocalDateTime;
+import java.util.Optional;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -110,9 +111,10 @@ public class StatisticsCollectionTrigger {
                                           Database db,
                                           Table table,
                                           boolean sync,
-                                          boolean useLock) {
+                                                                 boolean useLock,
+                                                                 DmlType dmlType) {
         StatisticsCollectionTrigger trigger = new StatisticsCollectionTrigger();
-        trigger.dmlType = DmlType.INSERT_INTO;
+        trigger.dmlType = dmlType == null ? DmlType.INSERT_INTO : dmlType;
         trigger.db = db;
         trigger.table = table;
         trigger.sync = sync;
@@ -288,17 +290,30 @@ public class StatisticsCollectionTrigger {
                 PartitionCommitInfo partitionCommitInfo = entry.getValue();
                 Map<Long, Long> tabletRows = partitionCommitInfo.getTabletIdToRowCountForPartitionFirstLoad();
 
-                if (partitionCommitInfo.getVersion() == Partition.PARTITION_INIT_VERSION + 1) {
-                    PhysicalPartition physicalPartition = table.getPhysicalPartition(physicalPartitionId);
-                    Long partitionId = table.getPartition(physicalPartition.getParentId()).getId();
-                    if (table.isNativeTableOrMaterializedView()) {
-                        OlapTable olapTable = (OlapTable) table;
-                        if (olapTable.isTempPartition(partitionId)) {
-                            continue;
-                        }
+                PhysicalPartition physicalPartition = table.getPhysicalPartition(physicalPartitionId);
+                Long partitionId = table.getPartition(physicalPartition.getParentId()).getId();
+                if (table.isNativeTableOrMaterializedView()) {
+                    OlapTable olapTable = (OlapTable) table;
+                    if (olapTable.isTempPartition(partitionId)) {
+                        continue;
                     }
+                }
+
+                if (dmlType == DmlType.UPDATE) {
+                    // For UPDATE, collect on touched partitions regardless of version.
                     partitionIds.add(partitionId);
-                    tabletRows.forEach((tabletId, rowCount) -> partitionTabletRowCounts.put(partitionId, tabletId, rowCount));
+                    tabletRows.forEach(
+                            (tabletId, rowCount) -> partitionTabletRowCounts.put(partitionId, tabletId, rowCount));
+                } else if (dmlType == DmlType.INSERT_INTO) {
+                    // For INSERT, only consider the first load of a partition
+                    if (partitionCommitInfo.getVersion() == Partition.PARTITION_INIT_VERSION + 1) {
+                        partitionIds.add(partitionId);
+                        tabletRows.forEach(
+                                (tabletId, rowCount) -> partitionTabletRowCounts.put(partitionId, tabletId, rowCount));
+                    }
+                } else {
+                    // TODO: support DELETE
+                    LOG.debug("Statistics collection not triggered for DML type: {}", dmlType);
                 }
             }
         } finally {
@@ -357,9 +372,8 @@ public class StatisticsCollectionTrigger {
             return null;
         }
 
-        long totalRows = partitionIds.stream()
-                .mapToLong(p -> table.mayGetPartition(p).stream().mapToLong(Partition::getRowCount).sum())
-                .sum();
+        // Use BasicStatsMeta.getTotalRows() for more accurate totalRows
+        long totalRows = getTotalRowsFromStatsMeta(table);
         double deltaRatio = 1.0 * loadRows / (totalRows + 1);
         if (deltaRatio < Config.statistic_sample_collect_ratio_threshold_of_first_load) {
             return null;
@@ -368,6 +382,23 @@ public class StatisticsCollectionTrigger {
         } else {
             return StatsConstants.AnalyzeType.FULL;
         }
+    }
+
+    /**
+     * Get total rows using BasicStatsMeta.getTotalRows() if available, otherwise fallback to partition.getRowCount().
+     */
+    private long getTotalRowsFromStatsMeta(OlapTable table) {
+        BasicStatsMeta basicStatsMeta = GlobalStateMgr.getCurrentState()
+                .getAnalyzeMgr().getTableBasicStatsMeta(table.getId());
+        
+        if (basicStatsMeta != null && basicStatsMeta.getTotalRows() > 0) {
+            return basicStatsMeta.getTotalRows();
+        }
+        
+        // Fallback to partition.getRowCount() if no stats meta exists
+        return partitionIds.stream()
+                .mapToLong(p -> table.mayGetPartition(p).stream().mapToLong(Partition::getRowCount).sum())
+                .sum();
     }
 
     StatsConstants.AnalyzeType getAnalyzeType() {
