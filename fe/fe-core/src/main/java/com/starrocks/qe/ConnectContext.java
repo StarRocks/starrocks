@@ -1713,6 +1713,10 @@ public class ConnectContext {
         this.listeners.add(listener);
     }
 
+    public List<Listener> getListeners() {
+        return listeners;
+    }
+
     public void onQueryFinished() {
         for (Listener listener : listeners) {
             try {
@@ -1728,5 +1732,8 @@ public class ConnectContext {
         } catch (Exception e) {
             LOG.warn("set cn group name failed", e);
         }
+
+        // after current query finished, remove all current listeners
+        listeners.clear();
     }
 }
