@@ -24,6 +24,8 @@ StatusOr<InvertedImplementType> get_inverted_imp_type(const TabletIndex& tablet_
         const auto& imp_type = inverted_imp_prop->second;
         if (boost::algorithm::to_lower_copy(imp_type) == TYPE_CLUCENE) {
             return InvertedImplementType::CLUCENE;
+        } else if (boost::algorithm::to_lower_copy(imp_type) == TYPE_BUILTIN) {
+            return InvertedImplementType::BUILTIN;
         } else {
             return Status::InvalidArgument("Do not support imp_type : " + imp_type);
         }
