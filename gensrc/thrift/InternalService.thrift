@@ -350,6 +350,14 @@ struct TQueryOptions {
   191: optional i64 column_view_concat_bytes_limit;
 
   200: optional bool enable_full_sort_use_german_string;
+
+  201: optional bool http_request_ssl_verification_required = true;
+
+  // http_request function SSRF protection settings
+  202: optional i32 http_request_security_level = 3;
+  203: optional string http_request_ip_allowlist = "";
+  204: optional string http_request_host_allowlist_regexp = "";
+  205: optional bool http_request_allow_private_in_allowlist = false;
 }
 
 // A scan range plus the parameters needed to execute that scan.
