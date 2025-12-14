@@ -264,7 +264,7 @@ public:
     void stop();
 
     // Cache the schema into the metadata cache.
-    void cache_global_schema(TabletSchemaPtr schema);
+    void cache_global_schema(const TabletSchemaPtr& schema);
 
     // Get the global schema from the metadata cache.
     // Return nullptr if not found.
