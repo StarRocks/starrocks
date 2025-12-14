@@ -24,6 +24,7 @@ import com.starrocks.catalog.TabletMeta;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.Config;
+import com.starrocks.common.util.concurrent.ConcurrentLong2ObjectHashMap;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
@@ -48,9 +49,8 @@ import java.nio.file.Paths;
 import java.util.Comparator;
 import java.util.ConcurrentModificationException;
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
-
+import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
  * This is the base class for unit class that wants to start a FE service.
@@ -202,14 +202,12 @@ public abstract class TestWithFeService {
     }
 
     private void updateReplicaPathHash() {
-        Map<Long, Map<Long, Replica>> replicaMetaTable =
-                GlobalStateMgr.getCurrentState().getTabletInvertedIndex()
-                        .getReplicaMetaTable();
-        for (Map.Entry<Long, Map<Long, Replica>> tabletEntry : replicaMetaTable.entrySet()) {
-            long tabletId = tabletEntry.getKey();
-            for (Map.Entry<Long, Replica> replicaEntry : tabletEntry.getValue().entrySet()) {
-                long beId = replicaEntry.getKey();
-                Replica replica = replicaEntry.getValue();
+        ConcurrentLong2ObjectHashMap<CopyOnWriteArrayList<Replica>> tabletToReplicaMap =
+                GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getReplicaMetaTable();
+        for (Long tabletId : tabletToReplicaMap.keySet()) {
+            List<Replica> replicas = GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getReplicasByTabletId(tabletId);
+            for (Replica replica : replicas) {
+                long beId = replica.getBackendId();
                 Backend be = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackend(beId);
                 if (be == null) {
                     continue;
