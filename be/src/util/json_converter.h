@@ -18,7 +18,7 @@
 #include "column/type_traits.h"
 #include "common/compiler_util.h"
 #include "common/statusor.h"
-#include "simdjson/ondemand.h"
+#include "simdjson.h"
 #include "util/json.h"
 
 namespace starrocks {
