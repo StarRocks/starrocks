@@ -1558,6 +1558,23 @@ public class PrivilegeCheckerTest extends StarRocksTestBase {
     }
 
     @Test
+    public void testDigestBlackListStmts() throws Exception {
+        String grantSql = "grant blacklist on system to test";
+        String revokeSql = "revoke blacklist on system from test";
+        String err =
+                "Access denied; you need (at least one of) the BLACKLIST privilege(s) on SYSTEM for this operation";
+
+        String sql = "ADD SQL DIGEST BLACKLIST abcd";
+        verifyGrantRevoke(sql, grantSql, revokeSql, err);
+
+        sql = "DELETE SQL DIGEST BLACKLIST abcd";
+        verifyGrantRevoke(sql, grantSql, revokeSql, err);
+
+        sql = "SHOW SQL DIGEST BLACKLIST";
+        verifyGrantRevoke(sql, grantSql, revokeSql, err);
+    }
+
+    @Test
     public void testRoleUserStmts() throws Exception {
         String grantSql = "grant user_admin to test";
         String revokeSql = "revoke user_admin from test";

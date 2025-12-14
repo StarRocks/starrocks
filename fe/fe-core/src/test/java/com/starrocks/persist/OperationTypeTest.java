@@ -155,6 +155,8 @@ public class OperationTypeTest {
         Assertions.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_CLUSTER_SNAPSHOT_LOG));
         Assertions.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_ADD_SQL_QUERY_BLACK_LIST));
         Assertions.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_DELETE_SQL_QUERY_BLACK_LIST));
+        Assertions.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_ADD_SQL_DIGEST_BLACK_LIST));
+        Assertions.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_DELETE_SQL_DIGEST_BLACK_LIST));
         Assertions.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_UPDATE_TABLET_RESHARD_JOB_LOG));
         Assertions.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_REMOVE_TABLET_RESHARD_JOB_LOG));
     }

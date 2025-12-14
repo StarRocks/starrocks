@@ -146,6 +146,10 @@ public interface AstVisitor<R, C> {
         return visitStatement(statement, context);
     }
 
+    default R visitDelSqlDigestBlackListStatement(DelSqlDigestBlackListStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
     default R visitClearDataCacheRulesStatement(ClearDataCacheRulesStmt statement, C context) {
         return visitDDLStatement(statement, context);
     }
@@ -227,6 +231,10 @@ public interface AstVisitor<R, C> {
     }
 
     default R visitShowWhiteListStatement(ShowWhiteListStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitShowSqlDigestBlackListStatement(ShowSqlDigestBlackListStmt statement, C context) {
         return visitShowStatement(statement, context);
     }
 
@@ -509,6 +517,10 @@ public interface AstVisitor<R, C> {
     }
 
     default R visitAddSqlBlackListStatement(AddSqlBlackListStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    default R visitAddSqlDigestBlackListStatement(AddSqlDigestBlackListStmt statement, C context) {
         return visitStatement(statement, context);
     }
 

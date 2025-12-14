@@ -55,6 +55,7 @@ import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.AddBackendBlackListStmt;
 import com.starrocks.sql.ast.AddComputeNodeBlackListStmt;
 import com.starrocks.sql.ast.AddSqlBlackListStmt;
+import com.starrocks.sql.ast.AddSqlDigestBlackListStmt;
 import com.starrocks.sql.ast.AdminCancelRepairTableStmt;
 import com.starrocks.sql.ast.AdminCheckTabletsStmt;
 import com.starrocks.sql.ast.AdminRepairTableStmt;
@@ -112,6 +113,7 @@ import com.starrocks.sql.ast.DataCacheSelectStatement;
 import com.starrocks.sql.ast.DelBackendBlackListStmt;
 import com.starrocks.sql.ast.DelComputeNodeBlackListStmt;
 import com.starrocks.sql.ast.DelSqlBlackListStmt;
+import com.starrocks.sql.ast.DelSqlDigestBlackListStmt;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.DescStorageVolumeStmt;
 import com.starrocks.sql.ast.DescribeStmt;
@@ -199,6 +201,7 @@ import com.starrocks.sql.ast.ShowRoutineLoadTaskStmt;
 import com.starrocks.sql.ast.ShowSmallFilesStmt;
 import com.starrocks.sql.ast.ShowSnapshotStmt;
 import com.starrocks.sql.ast.ShowSqlBlackListStmt;
+import com.starrocks.sql.ast.ShowSqlDigestBlackListStmt;
 import com.starrocks.sql.ast.ShowTableStatusStmt;
 import com.starrocks.sql.ast.ShowTabletStmt;
 import com.starrocks.sql.ast.ShowTransactionStmt;
@@ -1073,8 +1076,7 @@ public class AuthorizerStmtVisitor implements AstVisitorExtendInterface<Void, Co
 
     // --------------------------------------- Sql BlackList And WhiteList Statement ------------------
 
-    @Override
-    public Void visitAddSqlBlackListStatement(AddSqlBlackListStmt statement, ConnectContext context) {
+    private void checkBlackListPrivilege(ConnectContext context) {
         try {
             Authorizer.checkSystemAction(context, PrivilegeType.BLACKLIST);
         } catch (AccessDeniedException e) {
@@ -1083,32 +1085,43 @@ public class AuthorizerStmtVisitor implements AstVisitorExtendInterface<Void, Co
                     context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                     PrivilegeType.BLACKLIST.name(), ObjectType.SYSTEM.name(), null);
         }
+    }
+
+    @Override
+    public Void visitAddSqlBlackListStatement(AddSqlBlackListStmt statement, ConnectContext context) {
+        checkBlackListPrivilege(context);
         return null;
     }
 
     @Override
     public Void visitDelSqlBlackListStatement(DelSqlBlackListStmt statement, ConnectContext context) {
-        try {
-            Authorizer.checkSystemAction(context, PrivilegeType.BLACKLIST);
-        } catch (AccessDeniedException e) {
-            AccessDeniedException.reportAccessDenied(
-                    InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
-                    context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                    PrivilegeType.BLACKLIST.name(), ObjectType.SYSTEM.name(), null);
-        }
+        checkBlackListPrivilege(context);
         return null;
     }
 
     @Override
     public Void visitShowSqlBlackListStatement(ShowSqlBlackListStmt statement, ConnectContext context) {
-        try {
-            Authorizer.checkSystemAction(context, PrivilegeType.BLACKLIST);
-        } catch (AccessDeniedException e) {
-            AccessDeniedException.reportAccessDenied(
-                    InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
-                    context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                    PrivilegeType.BLACKLIST.name(), ObjectType.SYSTEM.name(), null);
-        }
+        checkBlackListPrivilege(context);
+        return null;
+    }
+
+    // --------------------------------------- Sql Digest BlackList Statement ------------------
+
+    @Override
+    public Void visitAddSqlDigestBlackListStatement(AddSqlDigestBlackListStmt statement, ConnectContext context) {
+        checkBlackListPrivilege(context);
+        return null;
+    }
+
+    @Override
+    public Void visitDelSqlDigestBlackListStatement(DelSqlDigestBlackListStmt statement, ConnectContext context) {
+        checkBlackListPrivilege(context);
+        return null;
+    }
+
+    @Override
+    public Void visitShowSqlDigestBlackListStatement(ShowSqlDigestBlackListStmt statement, ConnectContext context) {
+        checkBlackListPrivilege(context);
         return null;
     }
 
