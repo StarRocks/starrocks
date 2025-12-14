@@ -114,11 +114,21 @@ private:
     std::shared_ptr<LoadChannel> _find_load_channel(const UniqueId& load_id);
     std::shared_ptr<LoadChannel> _find_load_channel(int64_t txn_id);
     void _start_load_channels_clean();
+    void _record_cancel_reason(const UniqueId& load_id, const std::string& reason);
+    std::string _get_cancel_reason(const UniqueId& load_id);
+    void _clean_expired_cancel_reasons();
 
     // lock protect the load channel map
     bthread::Mutex _lock;
     // load id -> load channel
     std::unordered_map<UniqueId, std::shared_ptr<LoadChannel>> _load_channels;
+
+    // cancel reason cache: load_id -> (reason, timestamp)
+    struct CancelReasonInfo {
+        std::string reason;
+        time_t timestamp;
+    };
+    std::unordered_map<UniqueId, CancelReasonInfo> _cancel_reasons;
 
     // check the total load mem consumption of this Backend
     MemTracker* _mem_tracker;
