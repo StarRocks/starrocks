@@ -107,12 +107,17 @@ public class FunctionParams {
         return exprs;
     }
 
+
     public void setIsDistinct(boolean v) {
         isDistinct = v;
     }
 
     public void setExprs(List<Expr> exprs) {
         this.exprs = exprs;
+    }
+
+    public void setExprsNames(List<String> exprsNames) {
+        this.exprsNames = exprsNames;
     }
 
     @Override
