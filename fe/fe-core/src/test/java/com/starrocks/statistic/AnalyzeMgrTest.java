@@ -26,6 +26,7 @@ import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.journal.JournalEntity;
 import com.starrocks.persist.OperationType;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.DmlType;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.optimizer.statistics.CachedStatisticStorage;
@@ -322,7 +323,7 @@ public class AnalyzeMgrTest {
         TransactionState transactionState = new TransactionState(dbId, Lists.newArrayList(tableId), 33333L, "xxx",
                 requestId, TransactionState.LoadJobSourceType.INSERT_STREAMING, null, 44444L, 10000);
         transactionState.setTxnCommitAttachment(new InsertTxnCommitAttachment(0));
-        GlobalStateMgr.getCurrentState().getAnalyzeMgr().updateLoadRows(transactionState);
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().updateLoadRows(transactionState, DmlType.INSERT_INTO);
     }
 
     @Test

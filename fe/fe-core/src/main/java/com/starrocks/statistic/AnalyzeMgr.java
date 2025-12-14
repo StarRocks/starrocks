@@ -40,6 +40,7 @@ import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.DmlType;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.transaction.InsertTxnCommitAttachment;
@@ -879,7 +880,7 @@ public class AnalyzeMgr implements Writable {
         return ANALYZE_TASK_THREAD_POOL;
     }
 
-    public void updateLoadRows(TransactionState transactionState) {
+    public void updateLoadRows(TransactionState transactionState, DmlType dmlType) {
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(transactionState.getDbId());
         if (null == db || StatisticUtils.statisticDatabaseBlackListCheck(db.getFullName())) {
             return;
@@ -906,12 +907,21 @@ public class AnalyzeMgr implements Writable {
             if (!transactionState.getTableIdList().isEmpty()) {
                 long tableId = transactionState.getTableIdList().get(0);
                 long loadRows = ((InsertTxnCommitAttachment) attachment).getLoadedRows();
-                if (loadRows == 0) {
-                    OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                // For UPDATE operations, loadRows represents modified rows, not inserted rows
+                if (dmlType == DmlType.UPDATE) {
+                    BasicStatsMeta basicStatsMeta =
+                            GlobalStateMgr.getCurrentState().getAnalyzeMgr().getTableBasicStatsMeta(tableId);
+                    if (basicStatsMeta != null) {
+                        basicStatsMeta.increaseUpdateModifiedRows(loadRows);
+                    }
+                } else {
+                    if (loadRows == 0) {
+                        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
                                 .getTable(db.getId(), tableId);
-                    loadRows = table != null ? table.getRowCount() : 0;
+                        loadRows = table != null ? table.getRowCount() : 0;
+                    }
+                    updateBasicStatsMeta(db.getId(), tableId, loadRows);
                 }
-                updateBasicStatsMeta(db.getId(), tableId, loadRows);
             }
         }
     }
