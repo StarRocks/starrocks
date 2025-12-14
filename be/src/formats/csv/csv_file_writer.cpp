@@ -25,24 +25,19 @@ namespace starrocks::formats {
 CSVFileWriter::CSVFileWriter(std::string location, std::shared_ptr<csv::OutputStream> output_stream,
                              std::vector<std::string> column_names, std::vector<TypeDescriptor> types,
                              std::vector<std::unique_ptr<ColumnEvaluator>>&& column_evaluators,
-                             TCompressionType::type compression_type, std::shared_ptr<CSVWriterOptions> writer_options,
+                             std::shared_ptr<CSVWriterOptions> writer_options,
                              std::function<void()> rollback_action)
         : _location(std::move(location)),
           _output_stream(std::move(output_stream)),
           _column_names(std::move(column_names)),
           _types(std::move(types)),
           _column_evaluators(std::move(column_evaluators)),
-          _compression_type(compression_type),
           _writer_options(std::move(writer_options)),
           _rollback_action(std::move(rollback_action)) {}
 
 CSVFileWriter::~CSVFileWriter() = default;
 
 Status CSVFileWriter::init() {
-    if (_compression_type != TCompressionType::NO_COMPRESSION) {
-        return Status::NotSupported(fmt::format("not supported compression type {}", to_string(_compression_type)));
-    }
-
     RETURN_IF_ERROR(ColumnEvaluator::init(_column_evaluators));
     _column_converters.reserve(_types.size());
     for (auto& type : _types) {
@@ -151,10 +146,20 @@ StatusOr<WriterAndStream> CSVFileWriterFactory::create(const std::string& path) 
     auto types = ColumnEvaluator::types(_column_evaluators);
     auto async_output_stream =
             std::make_unique<io::AsyncFlushOutputStream>(std::move(file), _executors, _runtime_state);
-    auto csv_output_stream = std::make_shared<csv::AsyncOutputStreamFile>(async_output_stream.get(), 1024 * 1024);
+
+    // Use compressed stream if compression is enabled
+    std::shared_ptr<csv::OutputStream> csv_output_stream;
+    if (_compression_type != TCompressionType::NO_COMPRESSION) {
+        CompressionTypePB compression_pb = static_cast<CompressionTypePB>(_compression_type);
+        csv_output_stream = std::make_shared<csv::CompressedAsyncOutputStreamFile>(
+                async_output_stream.get(), compression_pb, 1024 * 1024);
+    } else {
+        csv_output_stream = std::make_shared<csv::AsyncOutputStreamFile>(async_output_stream.get(), 1024 * 1024);
+    }
+
     auto writer =
             std::make_unique<CSVFileWriter>(path, csv_output_stream, _column_names, types, std::move(column_evaluators),
-                                            _compression_type, _parsed_options, rollback_action);
+                                            _parsed_options, rollback_action);
     return WriterAndStream{
             .writer = std::move(writer),
             .stream = std::move(async_output_stream),
