@@ -23,8 +23,11 @@ import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.lake.TabletRepairHelper.PhysicalPartitionInfo;
 import com.starrocks.proto.GetTabletMetadatasRequest;
 import com.starrocks.proto.GetTabletMetadatasResponse;
+import com.starrocks.proto.RepairTabletMetadataRequest;
+import com.starrocks.proto.RepairTabletMetadataResponse;
 import com.starrocks.proto.StatusPB;
 import com.starrocks.proto.TabletMetadataPB;
+import com.starrocks.proto.TabletMetadataRepairStatus;
 import com.starrocks.proto.TabletMetadatas;
 import com.starrocks.rpc.LakeServiceWithMetrics;
 import com.starrocks.rpc.RpcException;
@@ -191,5 +194,178 @@ public class TabletRepairHelperTest {
 
         ExceptionChecker.expectThrowsWithMsg(StarRocksException.class, "get tablet metadata failed",
                 () -> Deencapsulation.invoke(TabletRepairHelper.class, "getTabletMetadatas", info, maxVersion, minVersion));
+    }
+
+    private TabletMetadataPB createTabletMetadataPB(long tabletId, long version) {
+        TabletMetadataPB metadata = new TabletMetadataPB();
+        metadata.id = tabletId;
+        metadata.version = version;
+        return metadata;
+    }
+
+    @Test
+    public void testRepairTabletMetadata() {
+        Map<Long, TabletMetadataPB> validMetadatas = Maps.newHashMap();
+        validMetadatas.put(tabletId1, createTabletMetadataPB(tabletId1, maxVersion));
+        validMetadatas.put(tabletId2, createTabletMetadataPB(tabletId2, maxVersion));
+
+        new MockUp<LakeServiceWithMetrics>() {
+            @Mock
+            public Future<RepairTabletMetadataResponse> repairTabletMetadata(RepairTabletMetadataRequest request) {
+                Assertions.assertFalse(request.enableFileBundling);
+                Assertions.assertEquals(2, request.tabletMetadatas.size());
+
+                RepairTabletMetadataResponse response = new RepairTabletMetadataResponse();
+                response.status = new StatusPB();
+                response.status.statusCode = 0;
+                response.tabletRepairStatuses = Lists.newArrayList();
+
+                for (TabletMetadataPB metadata : request.tabletMetadatas) {
+                    TabletMetadataRepairStatus status = new TabletMetadataRepairStatus();
+                    status.tabletId = metadata.id;
+                    status.status = new StatusPB();
+                    status.status.statusCode = 0;
+                    response.tabletRepairStatuses.add(status);
+                }
+
+                return CompletableFuture.completedFuture(response);
+            }
+        };
+
+        Map<Long, String> tabletErrors = Deencapsulation.invoke(TabletRepairHelper.class, "repairTabletMetadata",
+                info, validMetadatas, false);
+        Assertions.assertTrue(tabletErrors.isEmpty());
+    }
+
+    @Test
+    public void testRepairTabletMetadataWithFileBundling() {
+        Map<Long, TabletMetadataPB> validMetadatas = Maps.newHashMap();
+        validMetadatas.put(tabletId1, createTabletMetadataPB(tabletId1, maxVersion));
+        validMetadatas.put(tabletId2, createTabletMetadataPB(tabletId2, maxVersion));
+
+        new MockUp<LakeServiceWithMetrics>() {
+            @Mock
+            public Future<RepairTabletMetadataResponse> repairTabletMetadata(RepairTabletMetadataRequest request) {
+                Assertions.assertTrue(request.enableFileBundling);
+                Assertions.assertEquals(2, request.tabletMetadatas.size());
+
+                RepairTabletMetadataResponse response = new RepairTabletMetadataResponse();
+                response.status = new StatusPB();
+                response.status.statusCode = 0;
+                response.tabletRepairStatuses = Lists.newArrayList();
+
+                for (TabletMetadataPB metadata : request.tabletMetadatas) {
+                    TabletMetadataRepairStatus status = new TabletMetadataRepairStatus();
+                    status.tabletId = metadata.id;
+                    status.status = new StatusPB();
+                    status.status.statusCode = 0;
+                    response.tabletRepairStatuses.add(status);
+                }
+
+                return CompletableFuture.completedFuture(response);
+            }
+        };
+
+        Map<Long, String> tabletErrors = Deencapsulation.invoke(TabletRepairHelper.class, "repairTabletMetadata",
+                info, validMetadatas, true);
+        Assertions.assertTrue(tabletErrors.isEmpty());
+    }
+
+    @Test
+    public void testRepairTabletMetadataRpcException() {
+        Map<Long, TabletMetadataPB> validMetadatas = Maps.newHashMap();
+        validMetadatas.put(tabletId1, createTabletMetadataPB(tabletId1, maxVersion));
+        validMetadatas.put(tabletId2, createTabletMetadataPB(tabletId2, maxVersion));
+
+        new MockUp<LakeServiceWithMetrics>() {
+            @Mock
+            public Future<RepairTabletMetadataResponse> repairTabletMetadata(RepairTabletMetadataRequest request)
+                    throws RpcException {
+                throw new RpcException("rpc exception");
+            }
+        };
+
+        ExceptionChecker.expectThrowsWithMsg(RpcException.class, "rpc exception",
+                () -> Deencapsulation.invoke(TabletRepairHelper.class, "repairTabletMetadata",
+                        info, validMetadatas, false));
+    }
+
+    @Test
+    public void testRepairTabletMetadataResponseNull() {
+        Map<Long, TabletMetadataPB> validMetadatas = Maps.newHashMap();
+        validMetadatas.put(tabletId1, createTabletMetadataPB(tabletId1, maxVersion));
+        validMetadatas.put(tabletId2, createTabletMetadataPB(tabletId2, maxVersion));
+
+        new MockUp<LakeServiceWithMetrics>() {
+            @Mock
+            public Future<RepairTabletMetadataResponse> repairTabletMetadata(RepairTabletMetadataRequest request) {
+                return CompletableFuture.completedFuture(null);
+            }
+        };
+
+        ExceptionChecker.expectThrowsWithMsg(StarRocksException.class, "response is null",
+                () -> Deencapsulation.invoke(TabletRepairHelper.class, "repairTabletMetadata",
+                        info, validMetadatas, false));
+    }
+
+    @Test
+    public void testRepairTabletMetadataRpcLevelStatusFail() {
+        Map<Long, TabletMetadataPB> validMetadatas = Maps.newHashMap();
+        validMetadatas.put(tabletId1, createTabletMetadataPB(tabletId1, maxVersion));
+        validMetadatas.put(tabletId2, createTabletMetadataPB(tabletId2, maxVersion));
+
+        new MockUp<LakeServiceWithMetrics>() {
+            @Mock
+            public Future<RepairTabletMetadataResponse> repairTabletMetadata(RepairTabletMetadataRequest request) {
+                RepairTabletMetadataResponse response = new RepairTabletMetadataResponse();
+                response.status = new StatusPB();
+                response.status.statusCode = 1;
+                response.status.errorMsgs = Lists.newArrayList("missing tablet_metadatas");
+                return CompletableFuture.completedFuture(response);
+            }
+        };
+
+        ExceptionChecker.expectThrowsWithMsg(StarRocksException.class, "missing tablet_metadatas",
+                () -> Deencapsulation.invoke(TabletRepairHelper.class, "repairTabletMetadata",
+                        info, validMetadatas, false));
+    }
+
+    @Test
+    public void testRepairTabletMetadataPartialFailure() {
+        Map<Long, TabletMetadataPB> validMetadatas = Maps.newHashMap();
+        validMetadatas.put(tabletId1, createTabletMetadataPB(tabletId1, maxVersion));
+        validMetadatas.put(tabletId2, createTabletMetadataPB(tabletId2, maxVersion));
+
+        new MockUp<LakeServiceWithMetrics>() {
+            @Mock
+            public Future<RepairTabletMetadataResponse> repairTabletMetadata(RepairTabletMetadataRequest request) {
+                RepairTabletMetadataResponse response = new RepairTabletMetadataResponse();
+                response.status = new StatusPB();
+                response.status.statusCode = 0;
+                response.tabletRepairStatuses = Lists.newArrayList();
+
+                for (TabletMetadataPB metadata : request.tabletMetadatas) {
+                    TabletMetadataRepairStatus status = new TabletMetadataRepairStatus();
+                    status.tabletId = metadata.id;
+                    status.status = new StatusPB();
+                    if (metadata.id == tabletId2) {
+                        status.status.statusCode = 1;
+                        status.status.errorMsgs = Lists.newArrayList("repair failed");
+                    } else {
+                        status.status.statusCode = 0;
+                    }
+                    response.tabletRepairStatuses.add(status);
+                }
+
+                return CompletableFuture.completedFuture(response);
+            }
+        };
+
+        Map<Long, String> tabletErrors = Deencapsulation.invoke(TabletRepairHelper.class, "repairTabletMetadata",
+                info, validMetadatas, false);
+
+        Assertions.assertEquals(1, tabletErrors.size());
+        Assertions.assertTrue(tabletErrors.containsKey(tabletId2));
+        Assertions.assertEquals("repair failed", tabletErrors.get(tabletId2));
     }
 }
