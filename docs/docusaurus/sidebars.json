@@ -577,6 +577,7 @@
                 "faq/Sql_faq",
                 "faq/Dump_query",
                 "faq/fe_mem_faq",
+                "faq/operation_maintenance_faq",
                 "faq/Others"
             ]
         },
