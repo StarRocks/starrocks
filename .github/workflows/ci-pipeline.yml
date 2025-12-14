@@ -848,7 +848,7 @@ jobs:
 
   build:
     runs-on: [self-hosted, normal]
-    needs: [basic-checker, test-checker, thirdparty-info, fe-codestyle-check]
+    needs: [basic-checker, test-checker, thirdparty-info, fe-codestyle-check, clang-format]
     name: BUILD
     env:
       PR_NUMBER: ${{ github.event.number }}
@@ -873,6 +873,7 @@ jobs:
       always() && 
       needs.thirdparty-info.result != 'failure' && 
       needs.fe-codestyle-check.result != 'failure' && 
+      needs.clang-format.result != 'failure' &&
       (needs.thirdparty-info.result == 'success' || needs.fe-codestyle-check.result == 'success' || needs.test-checker.outputs.test_change == 'true')
     steps:
       - name: CLEAN
