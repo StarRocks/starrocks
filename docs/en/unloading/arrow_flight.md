@@ -53,6 +53,8 @@ This design provides true zero-copy transmission, which is both faster and more 
 
 Additionally, StarRocks offers a universal JDBC driver for Arrow Flight SQL, so applications can adopt this high-performance transfer path without sacrificing JDBC compatibility or interoperability with other Arrow Flight–enabled systems.
 
+For deployments where BE nodes are not directly accessible to clients (such as in private networks or Kubernetes clusters), StarRocks provides an Arrow Flight proxy feature. When enabled, the FE can act as a proxy to route Arrow data from BE nodes to clients, maintaining the columnar transfer benefits while accommodating network topology constraints. This proxy mode incurs a small performance overhead but enables Arrow Flight SQL access in environments where direct BE connectivity is not available.
+
 ### Performance Comparison
 
 Comprehensive tests demonstrate significant improvements in data retrieval speed. Across various data types (integer, float, string, boolean, and mixed columns), Arrow Flight SQL consistently outperformed traditional PyMySQL and Pandas `read_sql` interfaces. Key results include:
@@ -150,6 +152,32 @@ arrow_flight_port = 9408
 // be.conf
 arrow_flight_port = 9419
 ```
+
+#### Configure Arrow Flight Proxy (Optional)
+
+If your BE nodes are not directly accessible from client applications, (for example, when deployed in private networks or Kubernetes environments), you can enable the Arrow Flight proxy feature on the FE to route data from BE nodes through the FE.
+
+The proxy feature is controlled by two global variables: 
+
+- `arrow_flight_proxy_enabled`: Controls whether proxy mode is enabled. Default is `true`. When enabled, there is a slight performance overhead.
+- `arrow_flight_proxy`: Specifies the proxy hostname. If empty (default), the current FE node acts as the proxy. You can set this to a specific hostname if using a different proxy endpoint.
+
+To configure these variables globally for all sessions:
+
+```sql
+-- Enable or disable proxy mode (enabled by default)
+SET GLOBAL arrow_flight_proxy_enabled = true;
+
+-- Set a specific proxy hostname (optional, defaults to current FE)
+SET GLOBAL arrow_flight_proxy = 'your-proxy-hostname:Port';
+```
+
+:::note
+
+- The proxy feature is enabled by default, which may result in 8-10% lower throughput compared to direct BE connections. If your clients have direct network access to BE nodes, you can disable the proxy to achieve optimal performance: `SET GLOBAL arrow_flight_proxy_enabled = false;`
+- When `arrow_flight_proxy` is empty, tickets will automatically route through the FE node that the client initially connected to.
+
+:::
 
 #### Establish connection
 
@@ -401,6 +429,10 @@ The examples of output listed below are implemented based on the optional module
    execute("SHOW VARIABLES LIKE '%query_mem_limit%';")
    execute("SET query_mem_limit = 2147483648;")
    execute("SHOW VARIABLES LIKE '%query_mem_limit%';")
+   execute("SHOW VARIABLES LIKE '%arrow_flight_proxy%';")
+   execute("SET arrow_flight_proxy_enabled = true;")
+   execute("SET arrow_flight_proxy = 'fe-proxy.example.com';")
+   execute("SHOW VARIABLES LIKE '%arrow_flight_proxy%';")
    
    # Step 6: Aggregation query
    print_header("Step 6: Aggregation Query")
@@ -484,6 +516,48 @@ The examples of output listed below are implemented based on the optional module
      query_mem_limit 2147483648
    
    ⏱️  Execution time: 0.005 seconds
+
+   🟡 SQL:
+   SHOW VARIABLES LIKE '%arrow_flight_proxy%';
+   
+   🟢 Result:
+
+     Variable_name Value
+     arrow_flight_proxy      
+     arrow_flight_proxy_enabled  true
+
+   ⏱️  Execution time: 0.006 seconds
+
+   🟡 SQL:
+   SET arrow_flight_proxy_enabled = true;
+
+   🟢 Result:
+
+   StatusResult
+              0
+
+   ⏱️  Execution time: 0.008 seconds
+
+   🟡 SQL:
+   SET arrow_flight_proxy = 'fe-proxy.example.com';
+
+   🟢 Result:
+
+   StatusResult
+              0
+
+   ⏱️  Execution time: 0.007 seconds
+
+   🟡 SQL:
+   SHOW VARIABLES LIKE '%arrow_flight_proxy%';
+
+   🟢 Result:
+
+         Variable_name    Value
+         arrow_flight_proxy   fe-proxy.example.com
+         arrow_flight_proxy_enabled   true
+
+    ⏱️  Execution time: 0.006 seconds
    
    ================================================================================
    🟢 Step 6: Aggregation Query
@@ -1135,6 +1209,10 @@ print_header("Step 5: Session Variables")
 execute("SHOW VARIABLES LIKE '%query_mem_limit%';")
 execute("SET query_mem_limit = 2147483648;")
 execute("SHOW VARIABLES LIKE '%query_mem_limit%';")
+execute("SHOW VARIABLES LIKE '%arrow_flight_proxy%';")
+execute("SET arrow_flight_proxy_enabled = true;")
+execute("SET arrow_flight_proxy = 'fe-proxy.example.com';")
+execute("SHOW VARIABLES LIKE '%arrow_flight_proxy%';")
 
 # =============================================================================
 # Step 6: Aggregation Query

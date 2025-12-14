@@ -16,6 +16,7 @@ package com.starrocks.service.arrow.flight.sql;
 
 import com.google.protobuf.ByteString;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.Pair;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.ArrowUtil;
 import com.starrocks.metric.LongCounterMetric;
@@ -43,6 +44,7 @@ import org.apache.arrow.flight.CallHeaders;
 import org.apache.arrow.flight.CloseSessionRequest;
 import org.apache.arrow.flight.CloseSessionResult;
 import org.apache.arrow.flight.Criteria;
+import org.apache.arrow.flight.FlightClient;
 import org.apache.arrow.flight.FlightConstants;
 import org.apache.arrow.flight.FlightDescriptor;
 import org.apache.arrow.flight.FlightInfo;
@@ -57,6 +59,7 @@ import org.apache.arrow.flight.ServerHeaderMiddleware;
 import org.apache.arrow.flight.SessionOptionValue;
 import org.apache.arrow.flight.SetSessionOptionsRequest;
 import org.apache.arrow.flight.SetSessionOptionsResult;
+import org.apache.arrow.flight.Ticket;
 import org.apache.arrow.flight.sql.FlightSqlProducer;
 import org.apache.arrow.flight.sql.impl.FlightSql;
 import org.apache.arrow.vector.VectorSchemaRoot;
@@ -90,6 +93,7 @@ import static org.mockito.Mockito.RETURNS_DEEP_STUBS;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.mockStatic;
 import static org.mockito.Mockito.timeout;
@@ -125,6 +129,7 @@ public class ArrowFlightSqlServiceImplTest {
         when(mockSessionVariable.getQueryTimeoutS()).thenReturn(10);
         when(mockSessionVariable.getQueryDeliveryTimeoutS()).thenReturn(10);
         when(mockSessionVariable.getSqlDialect()).thenReturn("mysql");
+        when(mockSessionVariable.isArrowFlightProxyEnabled()).thenReturn(false);
 
         CallHeaders mockHeaders = mock(CallHeaders.class);
         when(mockHeaders.get("database")).thenReturn("test_db");
@@ -186,6 +191,7 @@ public class ArrowFlightSqlServiceImplTest {
         when(mockSessionVariable.getQueryTimeoutS()).thenReturn(10);
         when(mockSessionVariable.getQueryDeliveryTimeoutS()).thenReturn(10);
         when(mockSessionVariable.getSqlDialect()).thenReturn("mysql");
+        when(mockSessionVariable.getArrowFlightProxy()).thenReturn("");
 
 
         ExecutionDAG mockDAG = mock(ExecutionDAG.class);
@@ -214,6 +220,125 @@ public class ArrowFlightSqlServiceImplTest {
                 .getFlightInfoStatement(command, mockCallContext, FlightDescriptor.command("SELECT 1".getBytes()));
         assertNotNull(beInfo);
         assertEquals(mockFlightInfo, beInfo);
+    }
+
+    @Test
+    public void testGetFlightInfoStatementProxy() throws ExecutionException, InterruptedException, TimeoutException {
+        DefaultCoordinator mockCoordinator = mock(DefaultCoordinator.class);
+        JobSpec mockJobSpec = mock(JobSpec.class);
+        ExecPlan mockPlan = mock(ExecPlan.class);
+        when(mockContext.waitForDeploymentFinished(anyLong())).thenReturn(mockCoordinator);
+        when(mockCoordinator.getJobSpec()).thenReturn(mockJobSpec);
+        when(mockJobSpec.getExecPlan()).thenReturn(mockPlan);
+
+        FlightSql.CommandStatementQuery command = FlightSql.CommandStatementQuery.newBuilder()
+                .setQuery("SELECT 1").build();
+        FlightInfo info = service
+                .getFlightInfoStatement(command, mockCallContext, FlightDescriptor.command("SELECT 1".getBytes()));
+        assertNotNull(info);
+
+        when(mockContext.returnFromFE()).thenReturn(false);
+        when(mockContext.isFromFECoordinator()).thenReturn(false);
+
+        QueryState mockState = mock(QueryState.class);
+        when(mockContext.getState()).thenReturn(mockState);
+        when(mockState.isError()).thenReturn(false);
+
+        SessionVariable mockSessionVariable = mock(SessionVariable.class);
+        when(mockContext.getSessionVariable()).thenReturn(mockSessionVariable);
+        when(mockSessionVariable.getQueryTimeoutS()).thenReturn(10);
+        when(mockSessionVariable.getQueryDeliveryTimeoutS()).thenReturn(10);
+        when(mockSessionVariable.getSqlDialect()).thenReturn("mysql");
+        when(mockSessionVariable.getArrowFlightProxy()).thenReturn("10.0.0.24:9400");
+        when(mockSessionVariable.isArrowFlightProxyEnabled()).thenReturn(true);
+
+
+        ExecutionDAG mockDAG = mock(ExecutionDAG.class);
+        when(mockCoordinator.getExecutionDAG()).thenReturn(mockDAG);
+
+        ExecutionFragment mockFragment = mock(ExecutionFragment.class);
+        when(mockDAG.getRootFragment()).thenReturn(mockFragment);
+
+        FragmentInstance mockInstance = mock(FragmentInstance.class);
+        when(mockFragment.getInstances()).thenReturn(Collections.singletonList(mockInstance));
+
+        ComputeNode mockNode = mock(ComputeNode.class);
+        when(mockInstance.getWorker()).thenReturn(mockNode);
+        when(mockNode.getHost()).thenReturn("127.0.0.1");
+        when(mockNode.getArrowFlightPort()).thenReturn(8815);
+        when(mockNode.getBrpcAddress()).thenReturn(new TNetworkAddress("127.0.0.1", 9020));
+
+        TUniqueId mockInstanceId = new TUniqueId(3, 4);
+        when(mockInstance.getInstanceId()).thenReturn(mockInstanceId);
+
+        ArrowFlightSqlServiceImpl spyService = Mockito.spy(service);
+        FlightInfo mockFlightInfo = mock(FlightInfo.class);
+        doReturn(mockFlightInfo).when(spyService).buildFlightInfo(any(), any(), any(), any());
+
+        FlightInfo beInfo = spyService
+                .getFlightInfoStatement(command, mockCallContext, FlightDescriptor.command("SELECT 1".getBytes()));
+        assertNotNull(beInfo);
+        assertEquals(mockFlightInfo, beInfo);
+        verify(spyService).buildFlightInfo(any(), any(), any(), eq(Location.forGrpcInsecure("10.0.0.24", 9400)));
+    }
+
+    @Test
+    public void testGetFlightInfoStatementInvalidProxy() throws ExecutionException, InterruptedException, TimeoutException {
+        DefaultCoordinator mockCoordinator = mock(DefaultCoordinator.class);
+        JobSpec mockJobSpec = mock(JobSpec.class);
+        ExecPlan mockPlan = mock(ExecPlan.class);
+        when(mockContext.waitForDeploymentFinished(anyLong())).thenReturn(mockCoordinator);
+        when(mockCoordinator.getJobSpec()).thenReturn(mockJobSpec);
+        when(mockJobSpec.getExecPlan()).thenReturn(mockPlan);
+
+        FlightSql.CommandStatementQuery command = FlightSql.CommandStatementQuery.newBuilder()
+                .setQuery("SELECT 1").build();
+        FlightInfo info = service
+                .getFlightInfoStatement(command, mockCallContext, FlightDescriptor.command("SELECT 1".getBytes()));
+        assertNotNull(info);
+
+        when(mockContext.returnFromFE()).thenReturn(false);
+        when(mockContext.isFromFECoordinator()).thenReturn(false);
+
+        QueryState mockState = mock(QueryState.class);
+        when(mockContext.getState()).thenReturn(mockState);
+        when(mockState.isError()).thenReturn(false);
+
+        SessionVariable mockSessionVariable = mock(SessionVariable.class);
+        when(mockContext.getSessionVariable()).thenReturn(mockSessionVariable);
+        when(mockSessionVariable.getQueryTimeoutS()).thenReturn(10);
+        when(mockSessionVariable.getQueryDeliveryTimeoutS()).thenReturn(10);
+        when(mockSessionVariable.getSqlDialect()).thenReturn("mysql");
+        when(mockSessionVariable.getArrowFlightProxy()).thenReturn("invalid proxy");
+        when(mockSessionVariable.isArrowFlightProxyEnabled()).thenReturn(true);
+
+
+        ExecutionDAG mockDAG = mock(ExecutionDAG.class);
+        when(mockCoordinator.getExecutionDAG()).thenReturn(mockDAG);
+
+        ExecutionFragment mockFragment = mock(ExecutionFragment.class);
+        when(mockDAG.getRootFragment()).thenReturn(mockFragment);
+
+        FragmentInstance mockInstance = mock(FragmentInstance.class);
+        when(mockFragment.getInstances()).thenReturn(Collections.singletonList(mockInstance));
+
+        ComputeNode mockNode = mock(ComputeNode.class);
+        when(mockInstance.getWorker()).thenReturn(mockNode);
+        when(mockNode.getHost()).thenReturn("127.0.0.1");
+        when(mockNode.getArrowFlightPort()).thenReturn(8815);
+        when(mockNode.getBrpcAddress()).thenReturn(new TNetworkAddress("127.0.0.1", 9020));
+
+        TUniqueId mockInstanceId = new TUniqueId(3, 4);
+        when(mockInstance.getInstanceId()).thenReturn(mockInstanceId);
+
+        ArrowFlightSqlServiceImpl spyService = Mockito.spy(service);
+        FlightInfo mockFlightInfo = mock(FlightInfo.class);
+        doReturn(mockFlightInfo).when(spyService).buildFlightInfo(any(), any(), any(), any());
+
+        assertThrows(RuntimeException.class, () ->
+                spyService
+                        .getFlightInfoStatement(command, mockCallContext, FlightDescriptor.command("SELECT 1".getBytes())
+                ));
     }
 
     @Test
@@ -307,7 +432,7 @@ public class ArrowFlightSqlServiceImplTest {
     @Test
     public void testGetStreamStatement() {
         FlightSql.TicketStatementQuery ticket = FlightSql.TicketStatementQuery.newBuilder()
-                .setStatementHandle(ByteString.copyFromUtf8("token123:queryId")).build();
+                .setStatementHandle(ByteString.copyFromUtf8("token123|queryId")).build();
         FlightProducer.ServerStreamListener listener = mock(FlightProducer.ServerStreamListener.class);
         when(mockContext.getResult("queryId")).thenReturn(mock(VectorSchemaRoot.class));
         service.getStreamStatement(ticket, mockCallContext, listener);
@@ -317,9 +442,47 @@ public class ArrowFlightSqlServiceImplTest {
     }
 
     @Test
+    public void testGetStreamResultWithBEProxyTicket() throws Exception {
+        // Setup mocks
+        FlightClient mockBeClient = mock(FlightClient.class);
+        FlightStream mockBeStream = mock(FlightStream.class);
+        VectorSchemaRoot mockRoot = mock(VectorSchemaRoot.class);
+
+        service.addToCacheForTesting("127.0.0.1:9400", mockBeClient);
+
+        when(mockBeClient.getStream(any(Ticket.class))).thenReturn(mockBeStream);
+        when(mockBeStream.getRoot()).thenReturn(mockRoot);
+        when(mockBeStream.next()).thenReturn(true).thenReturn(false); // One batch then done
+
+        String proxyTicket = "19abc7b87307530-9965dc19f22a94a8|19abc7b87307530-9965dc19f22a94a9|127.0.0.1|9400";
+        FlightSql.TicketStatementQuery ticket = FlightSql.TicketStatementQuery.newBuilder()
+                .setStatementHandle(ByteString.copyFromUtf8(proxyTicket))
+                .build();
+        FlightProducer.ServerStreamListener listener = mock(FlightProducer.ServerStreamListener.class);
+
+        service.getStreamStatement(ticket, mockCallContext, listener);
+
+        verify(listener).start(mockRoot);
+        verify(listener).putNext();
+        verify(listener).completed();
+        verify(mockBeStream).close();
+    }
+
+    @Test
+    public void testGetStreamStatementInvalid() {
+        FlightSql.TicketStatementQuery ticket = FlightSql.TicketStatementQuery.newBuilder()
+                .setStatementHandle(ByteString.copyFromUtf8("token123|queryId|invalid_section")).build();
+        FlightProducer.ServerStreamListener listener = mock(FlightProducer.ServerStreamListener.class);
+
+        assertThrows(FlightRuntimeException.class, () ->
+                    service.getStreamStatement(ticket, mockCallContext, listener
+        ));
+    }
+
+    @Test
     public void testGetStreamPreparedStatement() {
         FlightSql.CommandPreparedStatementQuery command = FlightSql.CommandPreparedStatementQuery.newBuilder()
-                .setPreparedStatementHandle(ByteString.copyFromUtf8("token123:queryId")).build();
+                .setPreparedStatementHandle(ByteString.copyFromUtf8("token123|queryId")).build();
         FlightProducer.ServerStreamListener listener = mock(FlightProducer.ServerStreamListener.class);
         when(mockContext.getResult("queryId")).thenReturn(mock(VectorSchemaRoot.class));
         service.getStreamPreparedStatement(command, mockCallContext, listener);
@@ -430,6 +593,86 @@ public class ArrowFlightSqlServiceImplTest {
 
     private void setFinalField(Object target, String fieldName, Object value) {
         Deencapsulation.setField(target, fieldName, value);
+    }
+
+    @Test
+    public void testParseProxyAllPaths() {
+        // Setup common mocks
+        SessionVariable mockSv = mock(SessionVariable.class);
+        DefaultCoordinator mockCoordinator = mock(DefaultCoordinator.class);
+        ComputeNode mockWorker = mock(ComputeNode.class);
+        TUniqueId mockFragmentInstanceId = new TUniqueId(1L, 2L);
+        TUniqueId mockQueryId = new TUniqueId(3L, 4L);
+
+        when(mockCoordinator.getQueryId()).thenReturn(mockQueryId);
+        when(mockWorker.getHost()).thenReturn("be-host");
+        when(mockWorker.getArrowFlightPort()).thenReturn(8815);
+
+        when(mockSv.isArrowFlightProxyEnabled()).thenReturn(false);
+        Pair<Location, ByteString> result = service.parseProxy(mockSv, mockCoordinator, mockWorker, mockFragmentInstanceId);
+        assertEquals(Location.forGrpcInsecure("be-host", 8815), result.first);
+        String beTicket = result.second.toStringUtf8();
+        assertEquals("3-4:1-2", beTicket);
+
+        when(mockSv.isArrowFlightProxyEnabled()).thenReturn(true);
+        when(mockSv.getArrowFlightProxy()).thenReturn("");
+        result = service.parseProxy(mockSv, mockCoordinator, mockWorker, mockFragmentInstanceId);
+        assertEquals(Location.forGrpcInsecure("localhost", 1234), result.first);
+        String feProxyTicket = result.second.toStringUtf8();
+        assertEquals("3-4|1-2|be-host|8815", feProxyTicket);
+
+        when(mockSv.getArrowFlightProxy()).thenReturn("proxy-host:9400");
+        result = service.parseProxy(mockSv, mockCoordinator, mockWorker, mockFragmentInstanceId);
+        assertEquals(Location.forGrpcInsecure("proxy-host", 9400), result.first);
+        // Ticket should still be FE proxy ticket format
+        assertEquals("3-4|1-2|be-host|8815", result.second.toStringUtf8());
+
+        when(mockSv.getArrowFlightProxy()).thenReturn("invalidproxy");
+        RuntimeException ex = assertThrows(RuntimeException.class, () ->
+                service.parseProxy(mockSv, mockCoordinator, mockWorker, mockFragmentInstanceId));
+        assertEquals(
+                "Invalid proxy format [arrow_flight_proxy=invalidproxy]: Expected format 'hostname:port', got 'invalidproxy'",
+                ex.getMessage());
+
+        when(mockSv.getArrowFlightProxy()).thenReturn(":9400");
+        ex = assertThrows(RuntimeException.class, () ->
+                service.parseProxy(mockSv, mockCoordinator, mockWorker, mockFragmentInstanceId));
+        assertEquals("Invalid proxy format [arrow_flight_proxy=:9400]: Hostname cannot be empty, got ':9400'",
+                ex.getMessage());
+
+        when(mockSv.getArrowFlightProxy()).thenReturn("hostname:abc");
+        ex = assertThrows(RuntimeException.class, () ->
+                service.parseProxy(mockSv, mockCoordinator, mockWorker, mockFragmentInstanceId));
+        assertEquals("Invalid proxy format [arrow_flight_proxy=hostname:abc]: Port must be a valid integer, got 'abc'",
+                ex.getMessage());
+
+        when(mockSv.getArrowFlightProxy()).thenReturn("hostname:99999");
+        ex = assertThrows(RuntimeException.class, () ->
+                service.parseProxy(mockSv, mockCoordinator, mockWorker, mockFragmentInstanceId));
+        assertEquals("Invalid proxy format [arrow_flight_proxy=hostname:99999]: Port must be between 1 and 65535, got '99999'",
+                ex.getMessage());
+
+        when(mockSv.getArrowFlightProxy()).thenReturn("hostname:0");
+        ex = assertThrows(RuntimeException.class, () ->
+                service.parseProxy(mockSv, mockCoordinator, mockWorker, mockFragmentInstanceId));
+        assertEquals("Invalid proxy format [arrow_flight_proxy=hostname:0]: Port must be between 1 and 65535, got '0'",
+                ex.getMessage());
+
+        when(mockSv.getArrowFlightProxy()).thenReturn("host:port:extra");
+        ex = assertThrows(RuntimeException.class, () ->
+                service.parseProxy(mockSv, mockCoordinator, mockWorker, mockFragmentInstanceId));
+        assertEquals(
+                "Invalid proxy format " +
+                "[arrow_flight_proxy=host:port:extra]: Expected format 'hostname:port', got 'host:port:extra'",
+                ex.getMessage());
+
+        when(mockSv.getArrowFlightProxy()).thenReturn("hostname:65535");
+        result = service.parseProxy(mockSv, mockCoordinator, mockWorker, mockFragmentInstanceId);
+        assertEquals(Location.forGrpcInsecure("hostname", 65535), result.first);
+
+        when(mockSv.getArrowFlightProxy()).thenReturn("hostname:1");
+        result = service.parseProxy(mockSv, mockCoordinator, mockWorker, mockFragmentInstanceId);
+        assertEquals(Location.forGrpcInsecure("hostname", 1), result.first);
     }
 
     @Test
