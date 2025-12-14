@@ -703,6 +703,13 @@ public class StmtExecutor {
                 processQueryScopeHint();
             }
 
+            // processQueryScopeHint may change current warehouse.
+            if (context.getQueryDetail() != null
+                    && !Objects.equals(context.getCurrentWarehouseName(), context.getQueryDetail().getWarehouse())) {
+                context.getQueryDetail().setWarehouse(context.getCurrentWarehouseName());
+                addRunningQueryDetail(parsedStmt);
+            }
+
             // set warehouse for auditLog
             context.getAuditEventBuilder()
                     .setWarehouse(context.getCurrentWarehouseName())
@@ -1050,7 +1057,7 @@ public class StmtExecutor {
                     }
                     for (Map.Entry<String, String> entry : hint.getValue().entrySet()) {
                         GlobalStateMgr.getCurrentState().getVariableMgr().setSystemVariable(clonedSessionVariable,
-                                new SystemVariable(entry.getKey(), new StringLiteral(entry.getValue())), true);
+                                new SystemVariable(entry.getKey(), new StringLiteral(entry.getValue())), true, context);
                     }
                 }
 
