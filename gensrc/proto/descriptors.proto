@@ -53,6 +53,10 @@ message PSlotDescriptor {
     required bool is_materialized = 10;
     repeated string global_dict_words = 11; 
     optional int64 global_dict_version = 12;
+    // is_virtual_column indicates whether this slot represents a virtual column.
+    // Virtual columns are read-only metadata columns that are not persisted.
+    // Currently supported: _tablet_id_
+    optional bool is_virtual_column = 13;
 };
 
 message PTupleDescriptor {

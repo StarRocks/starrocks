@@ -77,7 +77,8 @@ SlotDescriptor::SlotDescriptor(SlotId id, std::string name, TypeDescriptor type)
           _slot_size(_type.get_slot_size()),
           _is_materialized(false),
           _is_output_column(false),
-          _is_nullable(true) {}
+          _is_nullable(true),
+          _is_virtual_column(false) {}
 
 SlotDescriptor::SlotDescriptor(const TSlotDescriptor& tdesc)
         : _id(tdesc.id),
@@ -91,7 +92,8 @@ SlotDescriptor::SlotDescriptor(const TSlotDescriptor& tdesc)
           _slot_size(_type.get_slot_size()),
           _is_materialized(tdesc.isMaterialized),
           _is_output_column(tdesc.__isset.isOutputColumn ? tdesc.isOutputColumn : true),
-          _is_nullable(tdesc.__isset.isNullable ? tdesc.isNullable : true) {}
+          _is_nullable(tdesc.__isset.isNullable ? tdesc.isNullable : true),
+          _is_virtual_column(tdesc.__isset.is_virtual_column ? tdesc.is_virtual_column : false) {}
 
 SlotDescriptor::SlotDescriptor(const PSlotDescriptor& pdesc)
         : _id(pdesc.id()),
@@ -105,7 +107,8 @@ SlotDescriptor::SlotDescriptor(const PSlotDescriptor& pdesc)
           _is_materialized(pdesc.is_materialized()),
           _is_output_column(true),
           // keep same as is_nullable()
-          _is_nullable(_null_indicator_offset.bit_mask != 0) {}
+          _is_nullable(_null_indicator_offset.bit_mask != 0),
+          _is_virtual_column(pdesc.has_is_virtual_column() ? pdesc.is_virtual_column() : false) {}
 
 void SlotDescriptor::to_protobuf(PSlotDescriptor* pslot) const {
     pslot->set_id(_id);
@@ -120,12 +123,14 @@ void SlotDescriptor::to_protobuf(PSlotDescriptor* pslot) const {
     pslot->set_col_name(_col_name);
     pslot->set_slot_idx(_slot_idx);
     pslot->set_is_materialized(_is_materialized);
+    pslot->set_is_virtual_column(_is_virtual_column);
 }
 
 std::string SlotDescriptor::debug_string() const {
     std::stringstream out;
     out << "Slot(id=" << _id << " type=" << _type << " name=" << _col_name << " col_unique_id=" << _col_unique_id
-        << " col_physical_name=" << _col_physical_name << " null=" << _null_indicator_offset.debug_string() << ")";
+        << " col_physical_name=" << _col_physical_name << " null=" << _null_indicator_offset.debug_string()
+        << " is_virtual_column=" << _is_virtual_column << ")";
     return out.str();
 }
 
