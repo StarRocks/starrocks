@@ -339,11 +339,15 @@ StatusOr<TabletSchemaPtr> TableSchemaService::_fallback_load_to_schema_file(int6
     if (!tablet_res.ok()) {
         return tablet_res.status();
     }
-    auto tablet_schema = tablet_res->get_schema();
+    auto tablet_schema_res = tablet_res->get_schema();
+    if (!tablet_schema_res.ok()) {
+        return tablet_schema_res.status();
+    }
+    auto tablet_schema = std::move(tablet_schema_res).value();
     if (tablet_schema->id() != schema_id) {
-        return Status::InternalError(fmt::format(
-                "schema not match, tablet id: {}, tablet schema id/version: {}/{}, expected schema id: {}",
-                tablet_id, tablet_schema->id(), tablet_schema->version(), schema_id));
+        return Status::InternalError(
+                fmt::format("schema not match, tablet id: {}, tablet schema id/version: {}/{}, expected schema id: {}",
+                            tablet_id, tablet_schema->id(), tablet_schema->schema_version(), schema_id));
     }
     return tablet_schema;
 }
