@@ -170,6 +170,7 @@ public:
 #endif
 #endif // USE_STAROS
 
+    Status drop_local_cache(const std::string& path);
     void prune_metacache();
 
     // TODO: remove this method
@@ -262,7 +263,6 @@ private:
     static std::string global_schema_cache_key(int64_t index_id);
     static std::string tablet_schema_cache_key(int64_t tablet_id);
     static std::string tablet_latest_metadata_cache_key(int64_t tablet_id);
-    static Status drop_local_cache(const std::string& path);
 
     StatusOr<TabletSchemaPtr> load_and_parse_schema_file(const std::string& path);
     StatusOr<TabletSchemaPtr> get_tablet_schema_by_id(int64_t tablet_id, int64_t schema_id);
