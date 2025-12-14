@@ -336,11 +336,16 @@ StatusOr<TabletSchemaPtr> TableSchemaService::_fallback_load_to_schema_file(int6
     auto tablet_res = _tablet_mgr->get_tablet(tablet_id);
     VLOG(2) << "get schema from tablet, schema_id: " << schema_id << ", tablet_id: " << tablet_id
             << ", status: " << tablet_res.status();
-    if (tablet_res.ok()) {
-        return tablet_res->get_schema();
-    } else {
+    if (!tablet_res.ok()) {
         return tablet_res.status();
     }
+    auto tablet_schema = tablet_res->get_schema();
+    if (tablet_schema->id() != schema_id) {
+        return Status::InternalError(fmt::format(
+                "schema not match, tablet id: {}, tablet schema id/version: {}/{}, expected schema id: {}",
+                tablet_id, tablet_schema->id(), tablet_schema->version(), schema_id));
+    }
+    return tablet_schema;
 }
 
 } // namespace starrocks::lake
