@@ -57,10 +57,12 @@
 #include "exec/empty_set_node.h"
 #include "exec/except_node.h"
 #include "exec/exchange_node.h"
+#include "exec/fetch_node.h"
 #include "exec/file_scan_node.h"
 #include "exec/hash_join_node.h"
 #include "exec/intersect_node.h"
 #include "exec/lake_meta_scan_node.h"
+#include "exec/lookup_node.h"
 #include "exec/olap_meta_scan_node.h"
 #include "exec/olap_scan_node.h"
 #include "exec/pipeline/chunk_accumulate_operator.h"
@@ -574,6 +576,14 @@ Status ExecNode::create_vectorized_node(starrocks::RuntimeState* state, starrock
     }
     case TPlanNodeType::CAPTURE_VERSION_NODE: {
         *node = pool->add(new CaptureVersionNode(pool, tnode, descs));
+        return Status::OK();
+    }
+    case TPlanNodeType::FETCH_NODE: {
+        *node = pool->add(new FetchNode(pool, tnode, descs));
+        return Status::OK();
+    }
+    case TPlanNodeType::LOOKUP_NODE: {
+        *node = pool->add(new LookUpNode(pool, tnode, descs));
         return Status::OK();
     }
     default:
