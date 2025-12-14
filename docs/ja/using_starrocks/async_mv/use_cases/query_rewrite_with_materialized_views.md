@@ -1149,7 +1149,7 @@ v3.3.0 以降、StarRocks はテキストベースのマテリアライズドビ
 
 FE の設定項目 `enable_materialized_view_text_based_rewrite` は、非同期マテリアライズドビューを作成する際に抽象構文ツリーを構築するかどうかを制御します。この機能もデフォルトで有効になっています。この項目を `false` に設定すると、システムレベルでテキストベースのマテリアライズドビューの書き換えが無効になります。
 
-変数 `materialized_view_subuqery_text_match_max_count` は、マテリアライズドビューとサブクエリの抽象構文ツリーを比較する最大回数を制御します。デフォルト値は `4` です。この値を増やすと、オプティマイザの時間消費も増加します。
+変数 `materialized_view_subquery_text_match_max_count` は、マテリアライズドビューとサブクエリの抽象構文ツリーを比較する最大回数を制御します。デフォルト値は `4` です。この値を増やすと、オプティマイザの時間消費も増加します。
 
 注意すべき点は、マテリアライズドビューがタイムリー性（データ整合性）の要件を満たしている場合にのみ、テキストベースのクエリの書き換えに使用できることです。マテリアライズドビューを作成する際にプロパティ `query_rewrite_consistency` を使用して整合性チェックルールを手動で設定できます。詳細については、[CREATE MATERIALIZED VIEW](../../../sql-reference/sql-statements/materialized_view/CREATE_MATERIALIZED_VIEW.md) を参照してください。
 

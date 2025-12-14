@@ -1147,7 +1147,7 @@ StarRocks 默认启用基于文本的物化视图改写。您可以通过将变�
 
 FE 配置项 `enable_materialized_view_text_based_rewrite` 用于控制是否在创建异步物化视图时构建抽象语法树。此功能默认启用。将此项设置为 `false` 将在系统级别禁用基于文本的物化视图改写。
 
-变量 `materialized_view_subuqery_text_match_max_count` 用于控制系统比对子查询是否与物化视图定义匹配的最大次数。默认值为 `4`。增加此值同时也会增加优化器的耗时。
+变量 `materialized_view_subquery_text_match_max_count` 用于控制系统比对子查询是否与物化视图定义匹配的最大次数。默认值为 `4`。增加此值同时也会增加优化器的耗时。
 
 请注意，只有当物化视图满足时效性（数据一致性）要求时，才能用于基于文本的查询改写。您可以在创建物化视图时通过属性 `query_rewrite_consistency`手动设置一致性检查规则。更多信息，请参考 [CREATE MATERIALIZED VIEW](../../../sql-reference/sql-statements/materialized_view/CREATE_MATERIALIZED_VIEW.md)。
 
