@@ -820,22 +820,21 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         Database db = metadataMgr.getDb(context, catalogName, params.db);
 
         if (db != null) {
-            Locker locker = new Locker();
-            try {
-                locker.lockDatabase(db.getId(), LockType.READ);
-                Table table = metadataMgr.getTable(context, catalogName, params.db, params.table_name);
-                if (table == null) {
-                    return result;
-                }
-                try {
-                    Authorizer.checkAnyActionOnTableLikeObject(context, params.db, table);
-                } catch (AccessDeniedException e) {
-                    return result;
-                }
-                setColumnDesc(columns, table, limit, false, params.db, params.table_name);
-            } finally {
-                locker.unLockDatabase(db.getId(), LockType.READ);
+            // No database lock needed here because:
+            // 1. Database.getTable() accesses ConcurrentHashMap which is thread-safe for reads
+            // 2. Table.getBaseSchema() accesses fullSchema which is a CopyOnWriteArrayList that provides consistent snapshots
+            // 3. If table is dropped concurrently, getTable() returns null and we return empty result (correct behavior)
+            // 4. This reduces lock contention for frequent information_schema queries
+            Table table = metadataMgr.getTable(context, catalogName, params.db, params.table_name);
+            if (table == null) {
+                return result;
             }
+            try {
+                Authorizer.checkAnyActionOnTableLikeObject(context, params.db, table);
+            } catch (AccessDeniedException e) {
+                return result;
+            }
+            setColumnDesc(columns, table, limit, false, params.db, params.table_name);
         }
         return result;
     }
@@ -859,25 +858,24 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             }
             Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(fullName);
             if (db != null) {
-                Locker locker = new Locker();
+                // getTableNamesViewWithLock() acquires database read lock internally to get table names
+                // No additional database lock needed for subsequent table metadata reads because:
+                // 1. Database.getTable() accesses ConcurrentHashMap which is thread-safe for reads
+                // 2. Table.getBaseSchema() accesses fullSchema which is a CopyOnWriteArrayList that provides consistent snapshots
+                // 3. If table is dropped concurrently, getTable() returns null and we skip it (correct behavior)
                 for (String tableName : db.getTableNamesViewWithLock()) {
-                    try {
-                        locker.lockDatabase(db.getId(), LockType.READ);
-                        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
-                        if (table == null) {
-                            continue;
-                        }
-
-                        try {
-                            Authorizer.checkAnyActionOnTableLikeObject(context, fullName, table);
-                        } catch (AccessDeniedException e) {
-                            continue;
-                        }
-
-                        reachLimit = setColumnDesc(columns, table, limit, true, fullName, tableName);
-                    } finally {
-                        locker.unLockDatabase(db.getId(), LockType.READ);
+                    Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
+                    if (table == null) {
+                        continue;
                     }
+
+                    try {
+                        Authorizer.checkAnyActionOnTableLikeObject(context, fullName, table);
+                    } catch (AccessDeniedException e) {
+                        continue;
+                    }
+
+                    reachLimit = setColumnDesc(columns, table, limit, true, fullName, tableName);
                     if (reachLimit) {
                         return;
                     }
