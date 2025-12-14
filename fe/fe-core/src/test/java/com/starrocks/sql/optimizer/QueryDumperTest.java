@@ -16,15 +16,19 @@ package com.starrocks.sql.optimizer;
 
 import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.dump.DumpInfo;
 import com.starrocks.sql.optimizer.dump.QueryDumper;
 import com.starrocks.sql.plan.PlanTestBase;
+import com.starrocks.system.BackendResourceStat;
+import com.starrocks.warehouse.DefaultWarehouse;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import static com.starrocks.server.WarehouseManager.DEFAULT_WAREHOUSE_ID;
 import static org.assertj.core.api.Assertions.assertThat;
 
 public class QueryDumperTest extends PlanTestBase {
@@ -122,6 +126,68 @@ public class QueryDumperTest extends PlanTestBase {
             assertThat(statusAndRes.second)
                     .containsPattern("\"column_statistics\":\\{.+\\}")
                             .contains("SELECT count(tbl_mock_001.mock_002)");
+        }
+    }
+
+    @Test
+    public void testDumpBeCoreStat() {
+        BackendResourceStat.getInstance().setNumCoresOfBe(DEFAULT_WAREHOUSE_ID, 0, 8);
+        BackendResourceStat.getInstance().setNumCoresOfBe(DEFAULT_WAREHOUSE_ID, 1, 8);
+        BackendResourceStat.getInstance().setNumCoresOfBe(1, 10, 16);
+        BackendResourceStat.getInstance().setNumCoresOfBe(1, 11, 16);
+
+        GlobalStateMgr.getCurrentState().getWarehouseMgr().addWarehouse(new DefaultWarehouse(1, "wh1"));
+
+        {
+            Pair<HttpResponseStatus, String> statusAndRes =
+                    QueryDumper.dumpQuery("default_catalog", "test", "select count(v1) from t0", false);
+            assertThat(statusAndRes.first).isEqualTo(HttpResponseStatus.OK);
+
+            assertThat(statusAndRes.second).contains(
+                    "\"be_core_stat\":{" +
+                            "\"cachedAvgNumOfHardwareCores\":-1," +
+                            "\"numOfHardwareCoresPerBe\":\"{\\\"0\\\":8,\\\"1\\\":8,\\\"10\\\":16,\\\"11\\\":16}\"" +
+                            "}");
+            assertThat(statusAndRes.second).contains(
+                    "\"be_core_stat_v2\":{" +
+                            "\"cachedAvgNumOfHardwareCores\":-1," +
+                            "\"warehouses\":[{" +
+                            "\"warehouseId\":0," +
+                            "\"cachedAvgNumOfHardwareCores\":8," +
+                            "\"numOfHardwareCoresPerBe\":\"{\\\"0\\\":8,\\\"1\\\":8}\"" +
+                            "},{" +
+                            "\"warehouseId\":1," +
+                            "\"cachedAvgNumOfHardwareCores\":-1," +
+                            "\"numOfHardwareCoresPerBe\":\"{\\\"10\\\":16,\\\"11\\\":16}\"" +
+                            "}]," +
+                            "\"currentWarehouseId\":0}");
+        }
+
+        {
+            connectContext.getSessionVariable().setWarehouseName("wh1");
+            Pair<HttpResponseStatus, String> statusAndRes =
+                    QueryDumper.dumpQuery("default_catalog", "test", "select count(v1) from t0", false);
+            assertThat(statusAndRes.first).isEqualTo(HttpResponseStatus.OK);
+            System.out.println(statusAndRes.second);
+
+            assertThat(statusAndRes.second).contains(
+                    "\"be_core_stat\":{" +
+                            "\"cachedAvgNumOfHardwareCores\":-1," +
+                            "\"numOfHardwareCoresPerBe\":\"{\\\"0\\\":8,\\\"1\\\":8,\\\"10\\\":16,\\\"11\\\":16}\"" +
+                            "}");
+            assertThat(statusAndRes.second).contains(
+                    "\"be_core_stat_v2\":{" +
+                            "\"cachedAvgNumOfHardwareCores\":-1," +
+                            "\"warehouses\":[{" +
+                            "\"warehouseId\":0," +
+                            "\"cachedAvgNumOfHardwareCores\":8," +
+                            "\"numOfHardwareCoresPerBe\":\"{\\\"0\\\":8,\\\"1\\\":8}\"" +
+                            "},{" +
+                            "\"warehouseId\":1," +
+                            "\"cachedAvgNumOfHardwareCores\":16," +
+                            "\"numOfHardwareCoresPerBe\":\"{\\\"10\\\":16,\\\"11\\\":16}\"" +
+                            "}]," +
+                            "\"currentWarehouseId\":1}");
         }
     }
 }

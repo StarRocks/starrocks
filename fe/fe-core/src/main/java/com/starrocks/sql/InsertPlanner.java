@@ -492,12 +492,12 @@ public class InsertPlanner {
                     // If you want to set tablet sink dop > 1, please enable single tablet loading and disable shuffle service
                     sinkFragment.setPipelineDop(1);
                 } else {
-                    if (ConnectContext.get().getSessionVariable().getEnableAdaptiveSinkDop()) {
-                        sinkFragment.setPipelineDop(
-                                ConnectContext.get().getSessionVariable().getSinkDegreeOfParallelism());
+                    SessionVariable sv = session.getSessionVariable();
+                    if (sv.getEnableAdaptiveSinkDop()) {
+                        long warehouseId = session.getCurrentComputeResource().getWarehouseId();
+                        sinkFragment.setPipelineDop(sv.getSinkDegreeOfParallelism(warehouseId));
                     } else {
-                        sinkFragment
-                                .setPipelineDop(ConnectContext.get().getSessionVariable().getParallelExecInstanceNum());
+                        sinkFragment.setPipelineDop(sv.getParallelExecInstanceNum());
                     }
                 }
 
