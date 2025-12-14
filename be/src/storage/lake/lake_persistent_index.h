@@ -53,11 +53,12 @@ public:
     ~KeyValueMerger() = default;
 
     struct TableBuilderWrapper {
-        std::unique_ptr<sstable::TableBuilder> table_builder;
         std::string filename;
         std::string encryption_meta;
         std::unique_ptr<WritableFile> wf;
         std::unique_ptr<sstable::FilterPolicy> filter_policy;
+        // destroy first.
+        std::unique_ptr<sstable::TableBuilder> table_builder;
     };
 
     struct KeyValueMergerOutput {

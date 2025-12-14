@@ -334,7 +334,7 @@ TEST_F(LakePersistentIndexParallelCompactMgrTest, test_compact_multiple_non_over
     config::pk_index_parallel_compaction_task_split_threshold_bytes = 1; // Very small threshold
 
     std::vector<std::shared_ptr<LakePersistentIndexParallelCompactTask>> tasks;
-    mgr->generate_compaction_tasks(candidates, _tablet_metadata, false, &tasks);
+    mgr->TEST_generate_compaction_tasks(candidates, _tablet_metadata, false, &tasks);
 
     ASSERT_EQ(tasks.size(), 3);
 

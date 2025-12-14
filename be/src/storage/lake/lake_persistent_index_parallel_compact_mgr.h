@@ -137,15 +137,21 @@ public:
                    const TabletMetadataPtr& metadata, bool merge_base_level,
                    std::vector<PersistentIndexSstablePB>* output_sstables);
 
+    ThreadPool* thread_pool() { return _thread_pool.get(); }
+
+    // For UT to test generate_compaction_tasks.
+    void TEST_generate_compaction_tasks(const std::vector<std::vector<PersistentIndexSstablePB>>& candidates,
+                                        const TabletMetadataPtr& metadata, bool merge_base_level,
+                                        std::vector<std::shared_ptr<LakePersistentIndexParallelCompactTask>>* tasks) {
+        generate_compaction_tasks(candidates, metadata, merge_base_level, tasks);
+    }
+
+private:
     // generate compaction tasks using candidate filesets.
     // The final task number will be decided by config pk_index_parallel_compaction_task_split_threshold_bytes
     void generate_compaction_tasks(const std::vector<std::vector<PersistentIndexSstablePB>>& candidates,
                                    const TabletMetadataPtr& metadata, bool merge_base_level,
                                    std::vector<std::shared_ptr<LakePersistentIndexParallelCompactTask>>* tasks);
-
-    ThreadPool* thread_pool() { return _thread_pool.get(); }
-
-private:
     // Check if two key ranges overlap
     // Returns true if [start1, end1) overlaps with [start2, end2)
     static bool key_ranges_overlap(const std::string& start1, const std::string& end1, const std::string& start2,
