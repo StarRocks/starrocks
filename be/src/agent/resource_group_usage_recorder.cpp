@@ -38,6 +38,7 @@ std::vector<TResourceGroupUsage> ResourceGroupUsageRecorder::get_resource_group_
                 if (it == group_to_usage.end()) {
                     TResourceGroupUsage group_usage;
                     group_usage.__set_group_id(wg.id());
+                    group_usage.__set_group_version(wg.version());
                     group_usage.__set_mem_used_bytes(wg.mem_consumption_bytes());
                     group_usage.__set_num_running_queries(wg.num_running_queries());
                     group_usage.__set_mem_limit_bytes(wg.mem_limit_bytes());
