@@ -162,11 +162,7 @@ public class StatisticsCalcUtils {
         // For example, a large amount of data LOAD may cause the number of rows to change greatly.
         // This leads to very inaccurate row counts.
         LocalDateTime lastWorkTimestamp = GlobalStateMgr.getCurrentState().getTabletStatMgr().getLastWorkTimestamp();
-<<<<<<< HEAD
-        long deltaRows = deltaRows(table, basicStatsMeta.getUpdateRows());
-=======
         LocalDateTime statsUpdateTime = basicStatsMeta.getUpdateTime();
->>>>>>> 60e0d5739f ([Enhancement] Optimize deltaRows with lazy evaluation for large partition tables (#66381))
         Map<Long, Optional<Long>> tableStatisticMap = GlobalStateMgr.getCurrentState().getStatisticStorage()
                 .getTableStatistics(table.getId(), selectedPartitions);
 
