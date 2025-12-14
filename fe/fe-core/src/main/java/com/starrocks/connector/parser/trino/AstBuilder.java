@@ -48,6 +48,7 @@ import com.starrocks.sql.ast.SetQualifier;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.TableFunctionRelation;
+import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.UnionRelation;
 import com.starrocks.sql.ast.UnitIdentifier;
@@ -1321,7 +1322,9 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
         String tableName = parts.get(parts.size() - 1);
         List<String> columnAliases = node.getColumns().isPresent() ? node.getColumns().get().stream().
                 map(Identifier::getValue).collect(Collectors.toList()) : null;
-        return new InsertStmt(qualifiedNameToTableName(convertQualifiedName(node.getTarget())), null,
+        QualifiedName qualifiedName = convertQualifiedName(node.getTarget());
+        TableRef tableRef = new TableRef(qualifiedName, null, NodePosition.ZERO);
+        return new InsertStmt(tableRef, null,
                 tableName.concat(UUID.randomUUID().toString()), columnAliases,
                 (QueryStatement) visit(node.getQuery(), context), false, new HashMap<>(0), NodePosition.ZERO);
     }
@@ -1336,9 +1339,11 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
             }
         }
 
+        QualifiedName qualifiedName = convertQualifiedName(node.getName());
+        TableRef tableRef = new TableRef(qualifiedName, null, NodePosition.ZERO);
         CreateTableStmt createTableStmt = new CreateTableStmt(node.isNotExists(),
                 false,
-                qualifiedNameToTableName(convertQualifiedName(node.getName())),
+                tableRef,
                 null,
                 "",
                 null,
@@ -1357,8 +1362,9 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
     @Override
     protected ParseNode visitDropTable(DropTable node, ParseTreeContext context) {
         boolean ifExists = node.isExists();
-        TableName tableName = qualifiedNameToTableName(convertQualifiedName(node.getTableName()));
-        return new DropTableStmt(ifExists, tableName, false, true);
+        QualifiedName qualifiedName = convertQualifiedName(node.getTableName());
+        TableRef tableRef = new TableRef(qualifiedName, null, NodePosition.ZERO);
+        return new DropTableStmt(ifExists, tableRef, false, true);
     }
 
     public Type getType(DataType dataType) {

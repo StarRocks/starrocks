@@ -15,26 +15,41 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.catalog.TableName;
 import com.starrocks.sql.parser.NodePosition;
 
 public class DropStatsStmt extends StatementBase {
-    private final TableName tbl;
+    private TableRef tableRef;
     private boolean isExternal = false;
     private boolean isMultiColumn = false;
 
-    public DropStatsStmt(TableName tbl) {
-        this(tbl, false, NodePosition.ZERO);
+    public DropStatsStmt(TableRef tableRef) {
+        this(tableRef, false, NodePosition.ZERO);
     }
 
-    public DropStatsStmt(TableName tbl, boolean isMultiColumn, NodePosition pos) {
+    public DropStatsStmt(TableRef tableRef, boolean isMultiColumn, NodePosition pos) {
         super(pos);
-        this.tbl = tbl;
+        this.tableRef = tableRef;
         this.isMultiColumn = isMultiColumn;
     }
 
-    public TableName getTableName() {
-        return tbl;
+    public TableRef getTableRef() {
+        return tableRef;
+    }
+
+    public void setTableRef(TableRef tableRef) {
+        this.tableRef = tableRef;
+    }
+
+    public String getCatalogName() {
+        return tableRef == null ? null : tableRef.getCatalogName();
+    }
+
+    public String getDbName() {
+        return tableRef == null ? null : tableRef.getDbName();
+    }
+
+    public String getTableName() {
+        return tableRef == null ? null : tableRef.getTableName();
     }
 
     public boolean isExternal() {

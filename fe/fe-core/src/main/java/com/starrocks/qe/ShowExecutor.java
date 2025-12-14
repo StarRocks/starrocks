@@ -225,6 +225,7 @@ import com.starrocks.sql.ast.ShowTransactionStmt;
 import com.starrocks.sql.ast.ShowUserPropertyStmt;
 import com.starrocks.sql.ast.ShowUserStmt;
 import com.starrocks.sql.ast.ShowVariablesStmt;
+import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.UserRef;
 import com.starrocks.sql.ast.expression.BinaryPredicate;
 import com.starrocks.sql.ast.expression.Expr;
@@ -740,15 +741,18 @@ public class ShowExecutor {
 
         @Override
         public ShowResultSet visitShowCreateTableStatement(ShowCreateTableStmt statement, ConnectContext context) {
-            TableName tbl = statement.getTbl();
-            String catalogName = tbl.getCatalog();
+            TableRef tableRef = statement.getTableRef();
+            if (tableRef == null) {
+                throw new SemanticException("Table ref is null");
+            }
+            String catalogName = tableRef.getCatalogName();
             if (catalogName == null) {
                 catalogName = context.getCurrentCatalog();
             }
             if (CatalogMgr.isInternalCatalog(catalogName)) {
                 return showCreateInternalCatalogTable(statement, context);
             } else {
-                return showCreateExternalCatalogTable(context, statement, tbl, catalogName);
+                return showCreateExternalCatalogTable(context, statement, catalogName);
             }
         }
 
@@ -759,7 +763,8 @@ public class ShowExecutor {
             Locker locker = new Locker();
             locker.lockDatabase(db.getId(), LockType.READ);
             try {
-                Table table = MetaUtils.getSessionAwareTable(connectContext, db, showStmt.getTbl());
+                TableName tableName = new TableName(showStmt.getCatalogName(), showStmt.getDb(), showStmt.getTable());
+                Table table = MetaUtils.getSessionAwareTable(connectContext, db, tableName);
                 if (table == null) {
                     if (showStmt.getType() != ShowCreateTableStmt.CreateTableType.MATERIALIZED_VIEW) {
                         ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR, showStmt.getTable());
@@ -855,9 +860,13 @@ public class ShowExecutor {
         }
 
         private ShowResultSet showCreateExternalCatalogTable(ConnectContext context, ShowCreateTableStmt showStmt,
-                                                             TableName tbl, String catalogName) {
-            String dbName = tbl.getDb();
-            String tableName = tbl.getTbl();
+                                                             String catalogName) {
+            TableRef tableRef = showStmt.getTableRef();
+            if (tableRef == null) {
+                throw new SemanticException("Table ref is null");
+            }
+            String dbName = tableRef.getDbName();
+            String tableName = tableRef.getTableName();
             MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
             Database db = metadataMgr.getDb(context, catalogName, dbName);
             if (db == null) {
@@ -1107,18 +1116,19 @@ public class ShowExecutor {
         public ShowResultSet visitShowColumnStatement(ShowColumnStmt statement, ConnectContext context) {
 
             List<List<String>> rows = Lists.newArrayList();
-            String catalogName = statement.getCatalog();
+            TableRef tableRef = statement.getTableRef();
+            String catalogName = tableRef.getCatalogName();
             if (catalogName == null) {
                 catalogName = context.getCurrentCatalog();
             }
-            String dbName = statement.getDb();
+            String dbName = tableRef.getDbName();
             Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(context, catalogName, dbName);
-            MetaUtils.checkDbNullAndReport(db, statement.getDb());
+            MetaUtils.checkDbNullAndReport(db, dbName);
             Table table = GlobalStateMgr.getCurrentState().getMetadataMgr()
-                    .getTable(context, catalogName, dbName, statement.getTable());
+                    .getTable(context, catalogName, dbName, tableRef.getTableName());
             if (table == null) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR,
-                        statement.getDb() + "." + statement.getTable());
+                        dbName + "." + tableRef.getTableName());
             }
 
             Locker locker = new Locker();
@@ -1853,14 +1863,20 @@ public class ShowExecutor {
                         partitionId.toString(), indexId.toString(),
                         isSync.toString(), detailCmd));
             } else {
-                Database db = globalStateMgr.getLocalMetastore().getDb(statement.getDbName());
-                MetaUtils.checkDbNullAndReport(db, statement.getDbName());
+                TableRef tableRef = statement.getTableRef();
+                if (tableRef == null) {
+                    throw new SemanticException("Table ref is null");
+                }
+                String dbName = tableRef.getDbName();
+                Database db = globalStateMgr.getLocalMetastore().getDb(dbName);
+                MetaUtils.checkDbNullAndReport(db, dbName);
 
                 Locker locker = new Locker();
                 locker.lockDatabase(db.getId(), LockType.READ);
                 try {
                     Table table = MetaUtils.getSessionAwareTable(
-                            context, db, new TableName(statement.getDbName(), statement.getTableName()));
+                            context, db, new TableName(tableRef.getCatalogName(), tableRef.getDbName(),
+                                    tableRef.getTableName()));
                     if (table == null) {
                         ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR, statement.getTableName());
                     }
@@ -2376,16 +2392,19 @@ public class ShowExecutor {
         @Override
         public ShowResultSet visitShowIndexStatement(ShowIndexStmt statement, ConnectContext context) {
             List<List<String>> rows = Lists.newArrayList();
-            String catalogName = statement.getTableName().getCatalog();
+            TableRef tableRef = statement.getTableRef();
+            String catalogName = tableRef.getCatalogName();
             if (catalogName == null) {
                 catalogName = context.getCurrentCatalog();
             }
-            Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(context, catalogName, statement.getDbName());
-            MetaUtils.checkDbNullAndReport(db, statement.getDbName());
-            Table table = MetaUtils.getSessionAwareTable(context, db, statement.getTableName());
+            String dbName = tableRef.getDbName();
+            Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(context, catalogName, dbName);
+            MetaUtils.checkDbNullAndReport(db, dbName);
+            TableName tableName = new TableName(catalogName, dbName, tableRef.getTableName(), tableRef.getPos());
+            Table table = MetaUtils.getSessionAwareTable(context, db, tableName);
             if (table == null) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR,
-                        db.getOriginName() + "." + statement.getTableName().toString());
+                        db.getOriginName() + "." + tableName.toString());
             }
 
             Locker locker = new Locker();
@@ -2395,7 +2414,7 @@ public class ShowExecutor {
                     List<Index> indexes = ((OlapTable) table).getIndexes();
                     for (Index index : indexes) {
                         List<String> indexColumnNames = MetaUtils.getColumnNamesByColumnIds(table, index.getColumns());
-                        rows.add(Lists.newArrayList(statement.getTableName().toString(), "",
+                        rows.add(Lists.newArrayList(tableName.toString(), "",
                                 index.getIndexName(), "", String.join(",", indexColumnNames), "", "", "", "",
                                 "", String.format("%s%s", index.getIndexType().name(), index.getPropertiesString()),
                                 index.getComment()));
@@ -2845,7 +2864,18 @@ public class ShowExecutor {
                     .orElseThrow(() -> ErrorReport.buildSemanticException(ErrorCode.ERR_UNKNOWN_PIPE, statement.getName()));
 
             List<String> row = Lists.newArrayList();
-            DescPipeStmt.handleDesc(row, pipe);
+
+            row.add(String.valueOf(pipe.getPipeId().getDbId()));
+            row.add(String.valueOf(pipe.getPipeId().getId()));
+            row.add(pipe.getName());
+            row.add(String.valueOf(pipe.getType()));
+            row.add(Optional.ofNullable(pipe.getTargetTable())
+                    .map(tableName -> tableName.toString())
+                    .orElse(""));
+            row.add(pipe.getPipeSource().toString());
+            row.add(pipe.getOriginSql());
+            row.add(pipe.getPropertiesJson());
+
             rows.add(row);
             return new ShowResultSet(showResultMetaFactory.getMetadata(statement), rows);
         }

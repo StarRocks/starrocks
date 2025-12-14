@@ -93,6 +93,7 @@ import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.BrokerDesc;
 import com.starrocks.sql.ast.ExportStmt;
 import com.starrocks.sql.ast.LoadStmt;
+import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.system.Backend;
@@ -242,7 +243,7 @@ public class ExportJob implements Writable, GsonPostProcessable {
         CRAcquireContext acquireContext = CRAcquireContext.of(this.warehouseId, this.computeResource);
         this.computeResource = warehouseManager.acquireComputeResource(acquireContext);
 
-        String dbName = stmt.getTblName().getDb();
+        String dbName = stmt.getDbName();
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
         if (db == null) {
             throw new DdlException("Database " + dbName + " does not exist");
@@ -272,12 +273,14 @@ public class ExportJob implements Writable, GsonPostProcessable {
 
         this.dbId = db.getId();
         this.exportTable = GlobalStateMgr.getCurrentState().getLocalMetastore()
-                .getTable(db.getFullName(), stmt.getTblName().getTbl());
+                .getTable(db.getFullName(), stmt.getTableName());
         if (exportTable == null) {
-            throw new DdlException("Table " + stmt.getTblName().getTbl() + " does not exist");
+            throw new DdlException("Table " + stmt.getTableName() + " does not exist");
         }
         this.tableId = exportTable.getId();
-        this.tableName = stmt.getTblName();
+        TableRef tableRef = stmt.getTableRef();
+        this.tableName = new TableName(tableRef.getCatalogName(), tableRef.getDbName(),
+                tableRef.getTableName(), tableRef.getPos());
 
         try (AutoCloseableLock ignore = new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(this.tableId),
                 LockType.READ)) {

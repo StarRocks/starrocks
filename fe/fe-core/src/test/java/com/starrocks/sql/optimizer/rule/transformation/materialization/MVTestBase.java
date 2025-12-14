@@ -223,7 +223,7 @@ public abstract class MVTestBase extends StarRocksTestBase {
             StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
             Assertions.assertTrue(stmt instanceof CreateMaterializedViewStatement);
             CreateMaterializedViewStatement createMaterializedViewStatement = (CreateMaterializedViewStatement) stmt;
-            mvTableName = createMaterializedViewStatement.getTableName();
+            mvTableName = com.starrocks.catalog.TableName.fromTableRef(createMaterializedViewStatement.getTableRef());
             Assertions.assertTrue(mvTableName != null);
 
             createAndRefreshMv(sql);
@@ -244,7 +244,7 @@ public abstract class MVTestBase extends StarRocksTestBase {
         StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         Assertions.assertTrue(stmt instanceof CreateMaterializedViewStatement);
         CreateMaterializedViewStatement createMaterializedViewStatement = (CreateMaterializedViewStatement) stmt;
-        TableName mvTableName = createMaterializedViewStatement.getTableName();
+        TableName mvTableName = com.starrocks.catalog.TableName.fromTableRef(createMaterializedViewStatement.getTableRef());
         Assertions.assertTrue(mvTableName != null);
         String dbName = Strings.isNullOrEmpty(mvTableName.getDb()) ? DB_NAME : mvTableName.getDb();
         String mvName = mvTableName.getTbl();

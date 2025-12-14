@@ -32,6 +32,7 @@ import com.starrocks.sql.ast.MultiRangePartitionDesc;
 import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.RangePartitionDesc;
+import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.TypeDef;
@@ -86,9 +87,23 @@ public class CTASAnalyzer {
             }
         }
 
-        TableName tableNameObject = createTableStmt.getDbTbl();
-        tableNameObject.normalization(session);
-        CreateTableAnalyzer.analyzeEngineName(createTableStmt, tableNameObject.getCatalog());
+        TableRef tableRef = createTableStmt.getTableRef();
+        if (tableRef != null) {
+            TableName tableNameObject = TableName.fromTableRef(tableRef);
+            tableNameObject.normalization(session);
+            CreateTableAnalyzer.analyzeEngineName(createTableStmt, tableNameObject.getCatalog());
+            // Update tableRef if normalization changed catalog/db
+            if (!tableNameObject.getCatalog().equals(tableRef.getCatalogName()) ||
+                    !tableNameObject.getDb().equals(tableRef.getDbName())) {
+                com.starrocks.sql.ast.QualifiedName normalizedName = 
+                        com.starrocks.sql.ast.QualifiedName.of(tableNameObject.getCatalog() != null
+                                ? java.util.Arrays.asList(
+                                        tableNameObject.getCatalog(), tableNameObject.getDb(), tableNameObject.getTbl())
+                                : java.util.Arrays.asList(tableNameObject.getDb(), tableNameObject.getTbl()));
+                createTableStmt.setTableRef(new com.starrocks.sql.ast.TableRef(normalizedName, tableRef.getPartitionRef(),
+                        tableRef.getAlias(), tableRef.getPos()));
+            }
+        }
 
         for (int i = 0; i < allFields.size(); i++) {
             Type type = AnalyzerUtils.transformTableColumnType(allFields.get(i).getType(),

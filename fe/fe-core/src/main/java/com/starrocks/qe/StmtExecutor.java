@@ -189,6 +189,7 @@ import com.starrocks.sql.ast.ShowExportStmt;
 import com.starrocks.sql.ast.ShowStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SystemVariable;
+import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.UnsupportedStmt;
 import com.starrocks.sql.ast.UpdateFailPointStatusStatement;
 import com.starrocks.sql.ast.UpdateStmt;
@@ -1114,12 +1115,12 @@ public class StmtExecutor {
     private void dropTableCreatedByCTAS(CreateTableAsSelectStmt stmt) throws Exception {
         if (stmt instanceof CreateTemporaryTableAsSelectStmt) {
             DropTemporaryTableStmt dropTemporaryTableStmt =
-                    new DropTemporaryTableStmt(true, stmt.getCreateTableStmt().getDbTbl(), true);
+                    new DropTemporaryTableStmt(true, stmt.getCreateTableStmt().getTableRef(), true);
             dropTemporaryTableStmt.setSessionId(context.getSessionId());
             DDLStmtExecutor.execute(dropTemporaryTableStmt, context);
         } else {
             DDLStmtExecutor.execute(new DropTableStmt(
-                    true, stmt.getCreateTableStmt().getDbTbl(), true), context);
+                    true, stmt.getCreateTableStmt().getTableRef(), true), context);
         }
     }
 
@@ -1632,13 +1633,15 @@ public class StmtExecutor {
     // TODO: move to DdlExecutor
     private void handleAnalyzeStmt() throws IOException {
         AnalyzeStmt analyzeStmt = (AnalyzeStmt) parsedStmt;
-        TableName tableName = analyzeStmt.getTableName();
+        TableRef tableRef = analyzeStmt.getTableRef();
+        TableName tableName = new TableName(tableRef.getCatalogName(), tableRef.getDbName(),
+                tableRef.getTableName(), tableRef.getPos());
         Database db =
                 GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(context, tableName.getCatalog(), tableName.getDb());
         if (db == null) {
             throw new SemanticException("Database %s is not found", tableName.getCatalogAndDb());
         }
-        Table table = MetaUtils.getSessionAwareTable(context, db, analyzeStmt.getTableName());
+        Table table = MetaUtils.getSessionAwareTable(context, db, tableName);
         if (StatisticUtils.isEmptyTable(table)) {
             return;
         }
@@ -1653,7 +1656,7 @@ public class StmtExecutor {
 
         AnalyzeStatus analyzeStatus;
         if (analyzeStmt.isExternal()) {
-            String catalogName = analyzeStmt.getTableName().getCatalog();
+            String catalogName = analyzeStmt.getCatalogName();
             analyzeStatus = new ExternalAnalyzeStatus(GlobalStateMgr.getCurrentState().getNextId(),
                     catalogName, db.getOriginName(), table.getName(),
                     table.getUUID(),
@@ -1762,7 +1765,7 @@ public class StmtExecutor {
         if (analyzeStmt.isExternal()) {
             if (analyzeTypeDesc.isHistogram()) {
                 statisticExecutor.collectStatistics(statsConnectCtx,
-                        new ExternalHistogramStatisticsCollectJob(analyzeStmt.getTableName().getCatalog(),
+                        new ExternalHistogramStatisticsCollectJob(analyzeStmt.getCatalogName(),
                                 db, table, analyzeStmt.getColumnNames(), analyzeStmt.getColumnTypes(),
                                 StatsConstants.AnalyzeType.HISTOGRAM, StatsConstants.ScheduleType.ONCE,
                                 analyzeStmt.getProperties()),
@@ -1773,7 +1776,7 @@ public class StmtExecutor {
                         StatsConstants.AnalyzeType.FULL;
                 statisticExecutor.collectStatistics(statsConnectCtx,
                         StatisticsCollectJobFactory.buildExternalStatisticsCollectJob(
-                                analyzeStmt.getTableName().getCatalog(),
+                                analyzeStmt.getCatalogName(),
                                 db, table, null,
                                 analyzeStmt.getColumnNames(),
                                 analyzeStmt.getColumnTypes(),
@@ -1812,7 +1815,12 @@ public class StmtExecutor {
 
     private void handleDropStatsStmt() {
         DropStatsStmt dropStatsStmt = (DropStatsStmt) parsedStmt;
-        TableName tableName = dropStatsStmt.getTableName();
+        TableRef tableRef = dropStatsStmt.getTableRef();
+        if (tableRef == null) {
+            throw new SemanticException("Table ref is null");
+        }
+        TableName tableName = new TableName(tableRef.getCatalogName(), tableRef.getDbName(),
+                tableRef.getTableName(), tableRef.getPos());
         Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(context, tableName.getCatalog(),
                 tableName.getDb(), tableName.getTbl());
         if (table == null) {
@@ -1845,7 +1853,12 @@ public class StmtExecutor {
 
     private void handleDropHistogramStmt() {
         DropHistogramStmt dropHistogramStmt = (DropHistogramStmt) parsedStmt;
-        TableName tableName = dropHistogramStmt.getTableName();
+        TableRef tableRef = dropHistogramStmt.getTableRef();
+        if (tableRef == null) {
+            throw new SemanticException("Table ref is null");
+        }
+        TableName tableName = new TableName(tableRef.getCatalogName(), tableRef.getDbName(),
+                tableRef.getTableName(), tableRef.getPos());
         Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(context, tableName.getCatalog(),
                 tableName.getDb(), tableName.getTbl());
         if (table == null) {
@@ -1857,7 +1870,7 @@ public class StmtExecutor {
 
             GlobalStateMgr.getCurrentState().getAnalyzeMgr().dropExternalAnalyzeStatus(table.getUUID());
             GlobalStateMgr.getCurrentState().getAnalyzeMgr().dropExternalHistogramStatsMetaAndData(
-                    StatisticUtils.buildConnectContext(), dropHistogramStmt.getTableName(), table, columns);
+                    StatisticUtils.buildConnectContext(), tableName, table, columns);
             GlobalStateMgr.getCurrentState().getStatisticStorage().expireConnectorHistogramStatistics(table, columns);
         } else {
             List<String> columns = table.getBaseSchema().stream().filter(d -> !d.isAggregated()).map(Column::getName)
@@ -2323,7 +2336,7 @@ public class StmtExecutor {
         }
 
         // proxy send show export result
-        String db = exportStmt.getTblName().getDb();
+        String db = exportStmt.getDbName();
         String showStmt = String.format("SHOW EXPORT FROM %s WHERE QueryId = \"%s\";", db, queryId);
         StatementBase statementBase =
                 com.starrocks.sql.parser.SqlParser.parse(showStmt, context.getSessionVariable()).get(0);
@@ -2458,11 +2471,13 @@ public class StmtExecutor {
     }
 
     public void handleInsertOverwrite(InsertStmt insertStmt) throws Exception {
-        TableName tableName = insertStmt.getTableName();
+        TableRef tableRef = insertStmt.getTableRef();
         Database db =
-                GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(context, tableName.getCatalog(), tableName.getDb());
+                GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(context, tableRef.getCatalogName(), tableRef.getDbName());
         if (db == null) {
-            throw new SemanticException("Database %s is not found", tableName.getCatalogAndDb());
+            String catalogAndDb = tableRef.getCatalogName() != null ? 
+                    tableRef.getCatalogName() + "." + tableRef.getDbName() : tableRef.getDbName();
+            throw new SemanticException("Database %s is not found", catalogAndDb);
         }
 
         Locker locker = new Locker();
@@ -2586,17 +2601,18 @@ public class StmtExecutor {
         }
 
         DmlType dmlType = DmlType.fromStmt(stmt);
-        stmt.getTableName().normalization(context);
-        String catalogName = stmt.getTableName().getCatalog();
-        String dbName = stmt.getTableName().getDb();
-        String tableName = stmt.getTableName().getTbl();
+        TableRef tableRef = stmt.getTableRef();
+        String catalogName = tableRef.getCatalogName();
+        String dbName = tableRef.getDbName();
+        String tableName = tableRef.getTableName();
         Database database = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(context, catalogName, dbName);
         GlobalTransactionMgr transactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
         final Table targetTable;
         if (stmt instanceof InsertStmt && ((InsertStmt) stmt).getTargetTable() != null) {
             targetTable = ((InsertStmt) stmt).getTargetTable();
         } else {
-            targetTable = MetaUtils.getSessionAwareTable(context, database, stmt.getTableName());
+            TableName tableNameObj = new TableName(catalogName, dbName, tableName, tableRef.getPos());
+            targetTable = MetaUtils.getSessionAwareTable(context, database, tableNameObj);
         }
         if (isExplainAnalyze) {
             Preconditions.checkState(targetTable instanceof OlapTable,

@@ -22,7 +22,6 @@ import com.starrocks.catalog.FunctionName;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.PaimonTable;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.TableName;
 import com.starrocks.common.Config;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.tvr.TvrTableSnapshot;
@@ -45,6 +44,8 @@ import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.ast.ColWithComment;
 import com.starrocks.sql.ast.CreateViewStmt;
+import com.starrocks.sql.ast.QualifiedName;
+import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -646,7 +647,8 @@ public class PaimonMetadataTest {
         org.junit.jupiter.api.Assertions.assertThrows(StarRocksConnectorException.class,
                 () -> metadata.createView(connectContext,
                         new CreateViewStmt(false, false,
-                                new TableName("catalog", "db", "table"),
+                                new TableRef(QualifiedName.of(Lists.newArrayList("catalog", "db", "table")),
+                                        null, NodePosition.ZERO),
                     Lists.newArrayList(new ColWithComment("k1", "",
                             NodePosition.ZERO)),
                                 "",

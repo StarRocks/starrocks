@@ -16,6 +16,7 @@ package com.starrocks.connector.iceberg;
 
 import com.google.common.collect.Lists;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
+import com.starrocks.catalog.TableName;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.connector.RemoteFileInfo;
@@ -31,6 +32,7 @@ import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.IcebergRewriteStmt;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.thrift.TSinkCommitInfo;
 import com.starrocks.thrift.TUniqueId;
@@ -138,7 +140,9 @@ public class IcebergRewriteDataJob {
 
         IcebergScanNode targetNode = scanNodes.stream().findFirst().orElse(null);
         if (targetNode == null) {
-            LOG.info("No IcebergScanNode of table " + ((InsertStmt) parsedStmt).getTableName() + 
+            TableRef tableRef = ((InsertStmt) parsedStmt).getTableRef();
+            TableName tableName = TableName.fromTableRef(tableRef);
+            LOG.info("No IcebergScanNode of table " + tableName + 
                         " found for rewrite, prepare becomes no-op.");
             return;
         }

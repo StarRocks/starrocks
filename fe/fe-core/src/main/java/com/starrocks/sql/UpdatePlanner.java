@@ -36,6 +36,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.QueryRelation;
+import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.UpdateStmt;
 import com.starrocks.sql.common.TypeManager;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -156,7 +157,8 @@ public class UpdatePlanner {
                 session.getSessionVariable().setPreferComputeNode(false);
                 session.getSessionVariable().setUseComputeNodes(0);
                 OlapTableSink olapTableSink = (OlapTableSink) dataSink;
-                TableName catalogDbTable = updateStmt.getTableName();
+                TableRef tableRef = updateStmt.getTableRef();
+                TableName catalogDbTable = TableName.fromTableRef(tableRef);
                 Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(session, catalogDbTable.getCatalog(),
                         catalogDbTable.getDb());
                 try {

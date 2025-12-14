@@ -37,6 +37,7 @@ import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.SelectList;
 import com.starrocks.sql.ast.SelectListItem;
 import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.expression.BinaryPredicate;
 import com.starrocks.sql.ast.expression.CompoundPredicate;
@@ -197,7 +198,8 @@ public class DeleteAnalyzer {
     public static void analyze(DeleteStmt deleteStatement, ConnectContext session) {
         analyzeProperties(deleteStatement, session);
 
-        TableName tableName = deleteStatement.getTableName();
+        TableRef tableRef = deleteStatement.getTableRef();
+        TableName tableName = TableName.fromTableRef(tableRef);
         MetaUtils.checkNotSupportCatalog(tableName.getCatalog(), "DELETE");
         Database db = GlobalStateMgr.getCurrentState().getMetadataMgr()
                 .getDb(session, tableName.getCatalog(), tableName.getDb());

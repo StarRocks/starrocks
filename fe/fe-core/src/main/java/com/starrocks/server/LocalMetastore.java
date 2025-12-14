@@ -2909,8 +2909,8 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
     public void createMaterializedView(CreateMaterializedViewStatement stmt)
             throws DdlException {
         // check mv exists,name must be different from view/mv/table which exists in metadata
-        String mvName = stmt.getTableName().getTbl();
-        String dbName = stmt.getTableName().getDb();
+        String mvName = stmt.getTblName();
+        String dbName = stmt.getDbName();
         LOG.debug("Begin create materialized view: {}", mvName);
         // check if db exists
         Database db = this.getDb(dbName);
@@ -3308,13 +3308,15 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         }
         if (table instanceof MaterializedView) {
             try {
-                Authorizer.checkMaterializedViewAction(ConnectContext.get(), stmt.getDbMvName(), PrivilegeType.DROP);
+                TableName tableName = new TableName(stmt.getCatalogName(), stmt.getDbName(),
+                        stmt.getMvName(), stmt.getTableRef().getPos());
+                Authorizer.checkMaterializedViewAction(ConnectContext.get(), tableName, PrivilegeType.DROP);
             } catch (AccessDeniedException e) {
                 AccessDeniedException.reportAccessDenied(
-                        stmt.getDbMvName().getCatalog(),
+                        stmt.getCatalogName(),
                         ConnectContext.get().getCurrentUserIdentity(),
                         ConnectContext.get().getCurrentRoleIds(), PrivilegeType.DROP.name(), ObjectType.MATERIALIZED_VIEW.name(),
-                        stmt.getDbMvName().getTbl());
+                        stmt.getMvName());
             }
 
             db.dropTable(table.getName(), stmt.isSetIfExists(), true);
@@ -3412,8 +3414,8 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
     @Override
     public String refreshMaterializedView(RefreshMaterializedViewStatement refreshMaterializedViewStatement)
             throws DdlException, MetaNotFoundException {
-        String dbName = refreshMaterializedViewStatement.getMvName().getDb();
-        String mvName = refreshMaterializedViewStatement.getMvName().getTbl();
+        String dbName = refreshMaterializedViewStatement.getDbName();
+        String mvName = refreshMaterializedViewStatement.getMvName();
         boolean force = refreshMaterializedViewStatement.isForceRefresh();
         EitherOr<PartitionRangeDesc, Set<PListCell>> partitionDesc = refreshMaterializedViewStatement.getPartitionDesc();
         int priority = refreshMaterializedViewStatement.getPriority() != null ?
@@ -3426,8 +3428,8 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
     @Override
     public void cancelRefreshMaterializedView(
             CancelRefreshMaterializedViewStmt stmt) throws DdlException, MetaNotFoundException {
-        String dbName = stmt.getMvName().getDb();
-        String mvName = stmt.getMvName().getTbl();
+        String dbName = stmt.getDbName();
+        String mvName = stmt.getMvName();
         MaterializedView materializedView = getMaterializedViewToRefresh(dbName, mvName);
         TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
         Task refreshTask = taskManager.getTask(TaskBuilder.getMvTaskName(materializedView.getId()));
@@ -4988,19 +4990,20 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
     }
 
     public void setPartitionVersion(AdminSetPartitionVersionStmt stmt) {
-        Database database = getDb(stmt.getTableName().getDb());
+        TableRef tableRef = stmt.getTableRef();
+        Database database = getDb(tableRef.getDbName());
         if (database == null) {
-            throw ErrorReportException.report(ErrorCode.ERR_BAD_DB_ERROR, stmt.getTableName().getDb());
+            throw ErrorReportException.report(ErrorCode.ERR_BAD_DB_ERROR, tableRef.getDbName());
         }
         Locker locker = new Locker();
         locker.lockDatabase(database.getId(), LockType.WRITE);
         try {
-            Table table = getTable(database.getFullName(), stmt.getTableName().getTbl());
+            Table table = getTable(database.getFullName(), tableRef.getTableName());
             if (table == null) {
-                throw ErrorReportException.report(ErrorCode.ERR_BAD_TABLE_ERROR, stmt.getTableName().getTbl());
+                throw ErrorReportException.report(ErrorCode.ERR_BAD_TABLE_ERROR, tableRef.getTableName());
             }
             if (!table.isOlapTableOrMaterializedView()) {
-                throw ErrorReportException.report(ErrorCode.ERR_NOT_OLAP_TABLE, stmt.getTableName().getTbl());
+                throw ErrorReportException.report(ErrorCode.ERR_NOT_OLAP_TABLE, tableRef.getTableName());
             }
 
             PhysicalPartition physicalPartition;
