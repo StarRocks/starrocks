@@ -223,7 +223,7 @@ TEST_F(LakeServiceTest, test_publish_version_missing_tablet_ids) {
     request.add_txn_ids(1000);
     _lake_service.publish_version(&cntl, &request, &response, nullptr);
     ASSERT_TRUE(cntl.Failed());
-    ASSERT_EQ("missing tablet_ids", cntl.ErrorText());
+    ASSERT_EQ("neither tablet_ids nor resharding_tablet_infos is set, one of them must be set", cntl.ErrorText());
 }
 
 TEST_F(LakeServiceTest, test_publish_version_missing_txn_ids) {
@@ -754,6 +754,425 @@ TEST_F(LakeServiceTest, test_publish_version_transform_batch_to_single) {
         ASSERT_EQ(_tablet_id, metadata->id());
         ASSERT_EQ(101, metadata->rowsets(0).num_rows());
         ASSERT_EQ(4096, metadata->rowsets(0).data_size());
+    }
+}
+
+TEST_F(LakeServiceTest, test_publish_splitting_tablet) {
+    {
+        auto txn_log = generate_write_txn_log(1, 100, 100);
+        ASSERT_OK(_tablet_mgr->put_txn_log(txn_log));
+
+        PublishVersionRequest publish_request;
+        publish_request.set_base_version(1);
+        publish_request.set_new_version(2);
+        publish_request.add_tablet_ids(_tablet_id);
+        publish_request.add_txn_ids(txn_log.txn_id());
+
+        {
+            SyncPoint::GetInstance()->SetCallBack("ThreadPool::do_submit:1", [](void* arg) { *(int64_t*)arg = 0; });
+            SyncPoint::GetInstance()->EnableProcessing();
+            DeferOp defer([]() {
+                SyncPoint::GetInstance()->ClearCallBack("ThreadPool::do_submit:1");
+                SyncPoint::GetInstance()->DisableProcessing();
+            });
+
+            PublishVersionResponse response;
+            _lake_service.publish_version(nullptr, &publish_request, &response, nullptr);
+            ASSERT_EQ(1, response.failed_tablets_size());
+            EXPECT_NE(0, response.status().status_code()) << response.status().error_msgs(0);
+        }
+
+        {
+            class MockRunnable : public Runnable {
+            public:
+                MockRunnable() {}
+                virtual ~MockRunnable() override {}
+                virtual void run() override {}
+                virtual void cancel() override {}
+            };
+
+            SyncPoint::GetInstance()->SetCallBack("ThreadPool::do_submit:replace_task", [](void* arg) {
+                auto ptr = (*(std::shared_ptr<Runnable>*)arg);
+                ptr->cancel();
+                (*(std::shared_ptr<Runnable>*)arg) = std::make_shared<MockRunnable>();
+            });
+            SyncPoint::GetInstance()->EnableProcessing();
+            DeferOp defer([]() {
+                SyncPoint::GetInstance()->ClearCallBack("ThreadPool::do_submit:replace_task");
+                SyncPoint::GetInstance()->DisableProcessing();
+            });
+
+            PublishVersionResponse response;
+            _lake_service.publish_version(nullptr, &publish_request, &response, nullptr);
+            ASSERT_EQ(1, response.failed_tablets_size());
+            EXPECT_NE(0, response.status().status_code()) << response.status().error_msgs(0);
+        }
+
+        {
+            PublishVersionResponse response;
+            _lake_service.publish_version(nullptr, &publish_request, &response, nullptr);
+            ASSERT_EQ(0, response.failed_tablets_size());
+            EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+            ASSERT_EQ(0, response.tablet_metas_size());
+            ASSERT_EQ(0, response.tablet_ranges_size());
+        }
+
+        {
+            publish_request.set_enable_aggregate_publish(true);
+            PublishVersionResponse response;
+            _lake_service.publish_version(nullptr, &publish_request, &response, nullptr);
+            ASSERT_EQ(0, response.failed_tablets_size());
+            EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+            ASSERT_EQ(1, response.tablet_metas_size());
+            ASSERT_EQ(0, response.tablet_ranges_size());
+        }
+    }
+
+    ReshardingTabletInfoPB resharding_tablet_info;
+    auto* splitting_tablet_info = resharding_tablet_info.mutable_splitting_tablet_info();
+    splitting_tablet_info->set_old_tablet_id(_tablet_id);
+    splitting_tablet_info->add_new_tablet_ids(next_id());
+    splitting_tablet_info->add_new_tablet_ids(next_id());
+
+    // Test tablet reshard transaction
+    {
+        PublishVersionRequest publish_request;
+        publish_request.set_base_version(2);
+        publish_request.set_new_version(3);
+
+        auto* txn_info = publish_request.add_txn_infos();
+        txn_info->set_txn_id(next_id());
+        txn_info->set_txn_type(TXN_TABLET_RESHARD);
+        txn_info->set_combined_txn_log(false);
+        txn_info->set_commit_time(12345);
+        txn_info->set_force_publish(false);
+
+        publish_request.add_resharding_tablet_infos()->CopyFrom(resharding_tablet_info);
+
+        {
+            PublishVersionResponse response;
+            _lake_service.publish_version(nullptr, &publish_request, &response, nullptr);
+            ASSERT_EQ(0, response.failed_tablets_size());
+            EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+            ASSERT_EQ(0, response.tablet_metas_size());
+            ASSERT_EQ(2, response.tablet_ranges_size());
+        }
+
+        {
+            publish_request.set_enable_aggregate_publish(true);
+            PublishVersionResponse response;
+            _lake_service.publish_version(nullptr, &publish_request, &response, nullptr);
+            ASSERT_EQ(0, response.failed_tablets_size());
+            EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+            ASSERT_EQ(3, response.tablet_metas_size());
+            ASSERT_EQ(2, response.tablet_ranges_size());
+        }
+    }
+
+    // Test cross publish
+    {
+        auto txn_log = generate_write_txn_log(1, 100, 100);
+        ASSERT_OK(_tablet_mgr->put_txn_log(txn_log));
+
+        PublishVersionRequest publish_request;
+        publish_request.set_base_version(3);
+        publish_request.set_new_version(4);
+        publish_request.add_txn_ids(txn_log.txn_id());
+        publish_request.add_resharding_tablet_infos()->CopyFrom(resharding_tablet_info);
+
+        {
+            PublishVersionResponse response;
+            _lake_service.publish_version(nullptr, &publish_request, &response, nullptr);
+            ASSERT_EQ(0, response.failed_tablets_size());
+            EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+            ASSERT_EQ(0, response.tablet_metas_size());
+            ASSERT_EQ(0, response.tablet_ranges_size());
+        }
+
+        {
+            publish_request.set_enable_aggregate_publish(true);
+            PublishVersionResponse response;
+            _lake_service.publish_version(nullptr, &publish_request, &response, nullptr);
+            ASSERT_EQ(0, response.failed_tablets_size());
+            EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+            ASSERT_EQ(2, response.tablet_metas_size());
+            ASSERT_EQ(0, response.tablet_ranges_size());
+        }
+    }
+}
+
+TEST_F(LakeServiceTest, test_publish_merging_tablet) {
+    {
+        auto txn_log = generate_write_txn_log(1, 100, 100);
+        ASSERT_OK(_tablet_mgr->put_txn_log(txn_log));
+
+        PublishVersionRequest publish_request;
+        publish_request.set_base_version(1);
+        publish_request.set_new_version(2);
+        publish_request.add_tablet_ids(_tablet_id);
+        auto* txn_info = publish_request.add_txn_infos();
+        txn_info->set_txn_id(txn_log.txn_id());
+
+        {
+            PublishVersionResponse response;
+            _lake_service.publish_version(nullptr, &publish_request, &response, nullptr);
+            ASSERT_EQ(0, response.failed_tablets_size());
+            EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+        }
+
+        {
+            publish_request.set_enable_aggregate_publish(true);
+            PublishVersionResponse response;
+            _lake_service.publish_version(nullptr, &publish_request, &response, nullptr);
+            ASSERT_EQ(0, response.failed_tablets_size());
+            EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+        }
+    }
+
+    ReshardingTabletInfoPB resharding_tablet_info;
+    auto* merging_tablet_info = resharding_tablet_info.mutable_merging_tablet_info();
+    merging_tablet_info->add_old_tablet_ids(_tablet_id);
+    merging_tablet_info->add_old_tablet_ids(_tablet_id);
+    merging_tablet_info->set_new_tablet_id(next_id());
+
+    {
+        PublishVersionRequest publish_request;
+        publish_request.set_base_version(2);
+        publish_request.set_new_version(3);
+
+        auto* txn_info = publish_request.add_txn_infos();
+        txn_info->set_txn_id(next_id());
+        txn_info->set_txn_type(TXN_TABLET_RESHARD);
+        txn_info->set_combined_txn_log(false);
+        txn_info->set_commit_time(12345);
+        txn_info->set_force_publish(false);
+
+        publish_request.add_resharding_tablet_infos()->CopyFrom(resharding_tablet_info);
+
+        {
+            SyncPoint::GetInstance()->SetCallBack("ThreadPool::do_submit:1", [](void* arg) { *(int64_t*)arg = 0; });
+            SyncPoint::GetInstance()->EnableProcessing();
+            DeferOp defer([]() {
+                SyncPoint::GetInstance()->ClearCallBack("ThreadPool::do_submit:1");
+                SyncPoint::GetInstance()->DisableProcessing();
+            });
+
+            PublishVersionResponse response;
+            _lake_service.publish_version(nullptr, &publish_request, &response, nullptr);
+            ASSERT_EQ(2, response.failed_tablets_size());
+            EXPECT_NE(0, response.status().status_code()) << response.status().error_msgs(0);
+        }
+
+        {
+            class MockRunnable : public Runnable {
+            public:
+                MockRunnable() {}
+                virtual ~MockRunnable() override {}
+                virtual void run() override {}
+                virtual void cancel() override {}
+            };
+
+            SyncPoint::GetInstance()->SetCallBack("ThreadPool::do_submit:replace_task", [](void* arg) {
+                auto ptr = (*(std::shared_ptr<Runnable>*)arg);
+                ptr->cancel();
+                (*(std::shared_ptr<Runnable>*)arg) = std::make_shared<MockRunnable>();
+            });
+            SyncPoint::GetInstance()->EnableProcessing();
+            DeferOp defer([]() {
+                SyncPoint::GetInstance()->ClearCallBack("ThreadPool::do_submit:replace_task");
+                SyncPoint::GetInstance()->DisableProcessing();
+            });
+
+            PublishVersionResponse response;
+            _lake_service.publish_version(nullptr, &publish_request, &response, nullptr);
+            ASSERT_EQ(2, response.failed_tablets_size());
+            EXPECT_NE(0, response.status().status_code()) << response.status().error_msgs(0);
+        }
+
+        // Failed due to not implemented
+        {
+            PublishVersionResponse response;
+            _lake_service.publish_version(nullptr, &publish_request, &response, nullptr);
+            ASSERT_EQ(2, response.failed_tablets_size());
+            EXPECT_NE(0, response.status().status_code());
+        }
+
+        {
+            publish_request.set_enable_aggregate_publish(true);
+            PublishVersionResponse response;
+            _lake_service.publish_version(nullptr, &publish_request, &response, nullptr);
+            ASSERT_EQ(2, response.failed_tablets_size());
+            EXPECT_NE(0, response.status().status_code());
+        }
+    }
+
+    // Test cross publish
+    {
+        auto txn_log = generate_write_txn_log(1, 100, 100);
+        ASSERT_OK(_tablet_mgr->put_txn_log(txn_log));
+
+        PublishVersionRequest publish_request;
+        publish_request.set_base_version(3);
+        publish_request.set_new_version(4);
+        publish_request.add_txn_ids(txn_log.txn_id());
+        publish_request.add_resharding_tablet_infos()->CopyFrom(resharding_tablet_info);
+
+        {
+            PublishVersionResponse response;
+            _lake_service.publish_version(nullptr, &publish_request, &response, nullptr);
+            ASSERT_EQ(2, response.failed_tablets_size());
+            EXPECT_NE(0, response.status().status_code()) << response.status().error_msgs(0);
+        }
+
+        {
+            publish_request.set_enable_aggregate_publish(true);
+            PublishVersionResponse response;
+            _lake_service.publish_version(nullptr, &publish_request, &response, nullptr);
+            ASSERT_EQ(2, response.failed_tablets_size());
+            EXPECT_NE(0, response.status().status_code()) << response.status().error_msgs(0);
+        }
+    }
+}
+
+TEST_F(LakeServiceTest, test_publish_identical_tablet) {
+    {
+        auto txn_log = generate_write_txn_log(1, 100, 100);
+        ASSERT_OK(_tablet_mgr->put_txn_log(txn_log));
+
+        PublishVersionRequest publish_request;
+        publish_request.set_base_version(1);
+        publish_request.set_new_version(2);
+        publish_request.add_tablet_ids(_tablet_id);
+        publish_request.add_txn_ids(txn_log.txn_id());
+
+        {
+            PublishVersionResponse response;
+            _lake_service.publish_version(nullptr, &publish_request, &response, nullptr);
+            ASSERT_EQ(0, response.failed_tablets_size());
+            EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+            ASSERT_EQ(0, response.tablet_metas_size());
+            ASSERT_EQ(0, response.tablet_ranges_size());
+        }
+
+        {
+            publish_request.set_enable_aggregate_publish(true);
+            PublishVersionResponse response;
+            _lake_service.publish_version(nullptr, &publish_request, &response, nullptr);
+            ASSERT_EQ(0, response.failed_tablets_size());
+            EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+            ASSERT_EQ(1, response.tablet_metas_size());
+            ASSERT_EQ(0, response.tablet_ranges_size());
+        }
+    }
+
+    ReshardingTabletInfoPB resharding_tablet_info;
+    auto* identical_tablet_info = resharding_tablet_info.mutable_identical_tablet_info();
+    identical_tablet_info->set_old_tablet_id(_tablet_id);
+    identical_tablet_info->set_new_tablet_id(next_id());
+
+    {
+        PublishVersionRequest publish_request;
+        publish_request.set_base_version(2);
+        publish_request.set_new_version(3);
+
+        auto* txn_info = publish_request.add_txn_infos();
+        txn_info->set_txn_id(next_id());
+        txn_info->set_txn_type(TXN_TABLET_RESHARD);
+        txn_info->set_combined_txn_log(false);
+        txn_info->set_commit_time(12345);
+        txn_info->set_force_publish(false);
+
+        publish_request.add_resharding_tablet_infos()->CopyFrom(resharding_tablet_info);
+
+        {
+            SyncPoint::GetInstance()->SetCallBack("ThreadPool::do_submit:1", [](void* arg) { *(int64_t*)arg = 0; });
+            SyncPoint::GetInstance()->EnableProcessing();
+            DeferOp defer([]() {
+                SyncPoint::GetInstance()->ClearCallBack("ThreadPool::do_submit:1");
+                SyncPoint::GetInstance()->DisableProcessing();
+            });
+
+            PublishVersionResponse response;
+            _lake_service.publish_version(nullptr, &publish_request, &response, nullptr);
+            ASSERT_EQ(1, response.failed_tablets_size());
+            EXPECT_NE(0, response.status().status_code()) << response.status().error_msgs(0);
+        }
+
+        {
+            class MockRunnable : public Runnable {
+            public:
+                MockRunnable() {}
+                virtual ~MockRunnable() override {}
+                virtual void run() override {}
+                virtual void cancel() override {}
+            };
+
+            SyncPoint::GetInstance()->SetCallBack("ThreadPool::do_submit:replace_task", [](void* arg) {
+                auto ptr = (*(std::shared_ptr<Runnable>*)arg);
+                ptr->cancel();
+                (*(std::shared_ptr<Runnable>*)arg) = std::make_shared<MockRunnable>();
+            });
+            SyncPoint::GetInstance()->EnableProcessing();
+            DeferOp defer([]() {
+                SyncPoint::GetInstance()->ClearCallBack("ThreadPool::do_submit:replace_task");
+                SyncPoint::GetInstance()->DisableProcessing();
+            });
+
+            PublishVersionResponse response;
+            _lake_service.publish_version(nullptr, &publish_request, &response, nullptr);
+            ASSERT_EQ(1, response.failed_tablets_size());
+            EXPECT_NE(0, response.status().status_code()) << response.status().error_msgs(0);
+        }
+
+        {
+            PublishVersionResponse response;
+            _lake_service.publish_version(nullptr, &publish_request, &response, nullptr);
+            ASSERT_EQ(0, response.failed_tablets_size());
+            EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+            ASSERT_EQ(0, response.tablet_metas_size());
+            ASSERT_EQ(0, response.tablet_ranges_size());
+        }
+
+        {
+            publish_request.set_enable_aggregate_publish(true);
+            PublishVersionResponse response;
+            _lake_service.publish_version(nullptr, &publish_request, &response, nullptr);
+            ASSERT_EQ(0, response.failed_tablets_size());
+            EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+            ASSERT_EQ(2, response.tablet_metas_size());
+            ASSERT_EQ(0, response.tablet_ranges_size());
+        }
+    }
+
+    // Test cross publish
+    {
+        auto txn_log = generate_write_txn_log(1, 100, 100);
+        ASSERT_OK(_tablet_mgr->put_txn_log(txn_log));
+
+        PublishVersionRequest publish_request;
+        publish_request.set_base_version(3);
+        publish_request.set_new_version(4);
+        publish_request.add_txn_ids(txn_log.txn_id());
+        publish_request.add_resharding_tablet_infos()->CopyFrom(resharding_tablet_info);
+
+        {
+            PublishVersionResponse response;
+            _lake_service.publish_version(nullptr, &publish_request, &response, nullptr);
+            ASSERT_EQ(0, response.failed_tablets_size());
+            EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+            ASSERT_EQ(0, response.tablet_metas_size());
+            ASSERT_EQ(0, response.tablet_ranges_size());
+        }
+
+        {
+            publish_request.set_enable_aggregate_publish(true);
+            PublishVersionResponse response;
+            _lake_service.publish_version(nullptr, &publish_request, &response, nullptr);
+            ASSERT_EQ(0, response.failed_tablets_size());
+            EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+            ASSERT_EQ(1, response.tablet_metas_size());
+            ASSERT_EQ(0, response.tablet_ranges_size());
+        }
     }
 }
 

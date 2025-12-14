@@ -272,7 +272,7 @@ public class PropertyAnalyzer {
 
     public static final String PROPERTIES_COMPACTION_STRATEGY = "compaction_strategy";
 
-    public static final String PROPERTIES_TABLET_RESHARD_SPLIT_SIZE = "tablet_reshard_split_size";
+    public static final String PROPERTIES_TABLET_RESHARD_TARGET_SIZE = "tablet_reshard_target_size";
 
     public static final String PROPERTIES_ENABLE_STATISTIC_COLLECT_ON_FIRST_LOAD = "enable_statistic_collect_on_first_load";
 
@@ -1610,22 +1610,22 @@ public class PropertyAnalyzer {
         return TCompactionStrategy.DEFAULT;
     }
 
-    public static long analyzeTabletReshardSplitSize(Map<String, String> properties, boolean removeProperties)
+    public static long analyzeTabletReshardTargetSize(Map<String, String> properties, boolean removeProperties)
             throws AnalysisException {
-        long tabletReshardSplitSize = Config.tablet_reshard_split_size;
+        long tabletReshardTargetSize = Config.tablet_reshard_target_size;
         if (properties != null) {
-            String value = removeProperties ? properties.remove(PROPERTIES_TABLET_RESHARD_SPLIT_SIZE)
-                    : properties.get(PROPERTIES_TABLET_RESHARD_SPLIT_SIZE);
+            String value = removeProperties ? properties.remove(PROPERTIES_TABLET_RESHARD_TARGET_SIZE)
+                    : properties.get(PROPERTIES_TABLET_RESHARD_TARGET_SIZE);
             if (value != null) {
                 try {
-                    tabletReshardSplitSize = Long.parseLong(value);
+                    tabletReshardTargetSize = Long.parseLong(value);
                 } catch (Exception e) {
                     ErrorReport.reportAnalysisException(ErrorCode.ERR_INVALID_VALUE,
-                            PROPERTIES_TABLET_RESHARD_SPLIT_SIZE, value, "a positive integer");
+                            PROPERTIES_TABLET_RESHARD_TARGET_SIZE, value, "a positive integer");
                 }
             }
         }
-        return tabletReshardSplitSize;
+        return tabletReshardTargetSize;
     }
 
     public static PeriodDuration analyzeStorageCoolDownTTL(Map<String, String> properties,
