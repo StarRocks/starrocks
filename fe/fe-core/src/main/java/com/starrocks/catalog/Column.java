@@ -538,7 +538,7 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
             }
         }
         if (getPrimitiveType().isJsonType() && other.getPrimitiveType().isCharFamily()) {
-            if (other.getStrLen() <= getPrimitiveType().getTypeSize()) {
+            if (other.getStrLen() < getPrimitiveType().getTypeSize()) {
                 throw new DdlException("JSON needs minimum length of " + getPrimitiveType().getTypeSize());
             }
         }
