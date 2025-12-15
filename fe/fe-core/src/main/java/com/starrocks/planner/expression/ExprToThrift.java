@@ -518,6 +518,8 @@ public final class ExprToThrift {
         public Void visitLambdaFunctionExpr(LambdaFunctionExpr node, TExprNode msg) {
             msg.setNode_type(TExprNodeType.LAMBDA_FUNCTION_EXPR);
             msg.setOutput_column(node.getCommonSubOperatorNum());
+            boolean exists = AnalyzerUtils.containsNonDeterministicFunction(node.getChild(0)).first;
+            msg.setIs_nondeterministic(exists);
             return null;
         }
 
