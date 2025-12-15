@@ -167,6 +167,57 @@ public class TabletSchedulerTest {
     }
 
     @Test
+    public void testRemoveAllTabletIdsIfExpired() throws InterruptedException {
+        Database db = new Database(1, "db");
+        Table table = new Table(3, "table", Table.TableType.OLAP, new ArrayList<>());
+        Partition partition = new Partition(5, 6, "partition", null, null);
+
+        CatalogRecycleBin recycleBin = new CatalogRecycleBin();
+        recycleBin.recycleDatabase(db, new HashSet<>(), true);
+        recycleBin.recycleTable(db.getId(), table, true);
+        RecyclePartitionInfo recyclePartitionInfo = new RecycleRangePartitionInfo(db.getId(), table.getId(),
+                partition, null, new DataProperty(null), (short) 2, null);
+        recycleBin.recyclePartition(recyclePartitionInfo);
+
+        List<TabletSchedCtx> allCtxs = new ArrayList<>();
+        List<Triple<Database, Table, Partition>> arguments = Arrays.asList(
+                Triple.of(db, table, partition),
+                Triple.of(db, table, partition),
+                Triple.of(db, table, partition),
+                Triple.of(db, table, partition)
+        );
+        int tabletId = 1;
+        for (Triple<Database, Table, Partition> triple : arguments) {
+            TabletSchedCtx tabletSchedCtx = new TabletSchedCtx(
+                    TabletSchedCtx.Type.REPAIR,
+                    triple.getLeft().getId(),
+                    triple.getMiddle().getId(),
+                    triple.getRight().getId(),
+                    1,
+                    tabletId++,
+                    System.currentTimeMillis(),
+                    systemInfoService);
+            tabletSchedCtx.setOrigPriority(TabletSchedCtx.Priority.LOW);
+            allCtxs.add(tabletSchedCtx);
+        }
+
+        TabletScheduler tabletScheduler = new TabletScheduler(tabletSchedulerStat);
+
+        Config.catalog_trash_expire_second = 1;
+        allCtxs.forEach(e -> tabletScheduler.addTablet(e, false));
+        Assertions.assertEquals(tabletScheduler.getTotalNum(), 4);
+        GlobalStateMgr.getCurrentState().setRecycleBin(recycleBin);
+        Thread.sleep(1000);
+        List<TabletSchedCtx> nextBatch = Deencapsulation.invoke(tabletScheduler, "getNextTabletCtxBatch");
+        Assertions.assertEquals(nextBatch.size(), 0);
+        Assertions.assertEquals(tabletScheduler.getTotalNum(), 0);
+        Assertions.assertEquals(tabletScheduler.getHistoryNum(), 4);
+        for (TabletSchedCtx ctx : allCtxs) {
+            Assertions.assertEquals(ctx.getState(), TabletSchedCtx.State.EXPIRED);
+        }
+    }
+
+    @Test
     public void testSubmitBatchTaskIfNotExpired() {
         Database badDb = new Database(1, "mal");
         Database goodDB = new Database(2, "bueno");
