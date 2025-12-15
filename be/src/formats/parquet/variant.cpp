@@ -359,6 +359,56 @@ std::string primitive_type_to_string(VariantPrimitiveType type) {
     return "Unknown";
 }
 
+std::string variant_type_to_string(VariantType type) {
+    switch (type) {
+    case VariantType::NULL_TYPE:
+        return "Null";
+    case VariantType::BOOLEAN:
+        return "Boolean";
+    case VariantType::INT8:
+        return "Int8";
+    case VariantType::INT16:
+        return "Int16";
+    case VariantType::INT32:
+        return "Int32";
+    case VariantType::INT64:
+        return "Int64";
+    case VariantType::FLOAT:
+        return "Float";
+    case VariantType::DOUBLE:
+        return "Double";
+    case VariantType::DECIMAL4:
+        return "Decimal4";
+    case VariantType::DECIMAL8:
+        return "Decimal8";
+    case VariantType::DECIMAL16:
+        return "Decimal16";
+    case VariantType::DATE:
+        return "Date";
+    case VariantType::TIMESTAMP_TZ:
+        return "TimestampTz";
+    case VariantType::TIMESTAMP_NTZ:
+        return "TimestampNtz";
+    case VariantType::TIME_NTZ:
+        return "TimeNtz";
+    case VariantType::TIMESTAMP_TZ_NANOS:
+        return "TimestampTzNanos";
+    case VariantType::TIMESTAMP_NTZ_NANOS:
+        return "TimestampNtzNanos";
+    case VariantType::BINARY:
+        return "Binary";
+    case VariantType::STRING:
+        return "String";
+    case VariantType::OBJECT:
+        return "Object";
+    case VariantType::ARRAY:
+        return "Array";
+    case VariantType::UUID:
+        return "Uuid";
+    }
+    return "Unknown";
+}
+
 uint8_t Variant::value_header() const {
     return static_cast<uint8_t>(_value[0]) >> kValueHeaderBitShift;
 }

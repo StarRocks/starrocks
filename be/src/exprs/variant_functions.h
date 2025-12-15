@@ -43,6 +43,13 @@ public:
     DEFINE_VECTORIZED_FN(get_variant_double);
     DEFINE_VECTORIZED_FN(get_variant_string);
 
+    /**
+     * @param: [variant, path]
+     * @paramType: [VariantColumn, BinaryColumn]
+     * @return: BinaryColumn
+     */
+    DEFINE_VECTORIZED_FN(variant_typeof);
+
     // Preload the variant segments if necessary.
     // This function is called once per query execution
     // The scope indicates whether the state is shared across the plan fragment

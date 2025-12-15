@@ -157,6 +157,31 @@ StatusOr<ColumnPtr> VariantFunctions::_do_variant_query(FunctionContext* context
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
+StatusOr<ColumnPtr> VariantFunctions::variant_typeof(FunctionContext* context, const Columns& columns) {
+    auto st = _do_variant_query<TYPE_VARIANT>(context, columns);
+    if (!st.ok()) {
+        return st.status();
+    }
+    auto variant_column = st.value();
+    auto variant_viewer = ColumnViewer<TYPE_VARIANT>(variant_column);
+    size_t num_rows = variant_column->size();
+
+    ColumnBuilder<TYPE_VARCHAR> result(num_rows);
+    for (size_t row = 0; row < num_rows; ++row) {
+        if (variant_viewer.is_null(row)) {
+            result.append_null();
+            continue;
+        }
+        const VariantValue* variant_value = variant_viewer.value(row);
+        if (variant_value == nullptr) {
+            result.append_null();
+            continue;
+        }
+        result.append(variant_type_to_string(variant_value->to_variant().type()));
+    }
+    return result.build(ColumnHelper::is_all_const(columns));
+}
+
 } // namespace starrocks
 
 #include "gen_cpp/opcode/VariantFunctions.inc"

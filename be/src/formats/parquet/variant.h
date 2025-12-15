@@ -75,6 +75,8 @@ enum class VariantType {
     UUID
 };
 
+std::string variant_type_to_string(VariantType type);
+
 template <typename D>
 struct DecimalValue {
     uint8_t scale;
