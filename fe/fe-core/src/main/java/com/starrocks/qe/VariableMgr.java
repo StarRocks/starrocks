@@ -216,7 +216,7 @@ public class VariableMgr {
         return true;
     }
 
-    private void handleSetWarehouse(ConnectContext connectContext, SessionVariable sessionVariable, Field field, Object value)
+    private void handleSetWarehouse(ConnectContext connectContext, SessionVariable sessionVariable, Field field, String value)
             throws DdlException {
         final String originalWarehouseName = sessionVariable.getWarehouseName();
         setValue(sessionVariable, field, value);
