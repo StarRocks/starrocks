@@ -177,7 +177,8 @@ public class SqlBlacklistTest {
     public void testVerifyingSQLExistsInBlackList() {
         Pattern p = Pattern.compile("qwert");
         sqlBlackList.put(p);
-        assertThrows(AnalysisException.class,
-                () -> sqlBlackList.verifying("qwert"));
+        AnalysisException exception = assertThrows(AnalysisException.class, () -> sqlBlackList.verifying("qwert"));
+        Assertions.assertEquals("Access denied; This sql is in blacklist (id: 0), please contact your admin",
+                exception.getMessage());
     }
 }
