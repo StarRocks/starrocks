@@ -43,9 +43,12 @@ public:
 
     bool is_finished() const override;
 
+    Status set_finished(RuntimeState* state) override;
+
     StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
 
 private:
+    bool _is_finished = false;
     SpillProcessChannelPtr _channel;
 };
 

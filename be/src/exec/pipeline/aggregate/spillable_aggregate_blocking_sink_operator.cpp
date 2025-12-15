@@ -51,7 +51,7 @@ Status SpillableAggregateBlockingSinkOperator::set_finishing(RuntimeState* state
     }
     ONCE_DETECT(_set_finishing_once);
     auto defer_set_finishing = DeferOp([this]() {
-        _aggregator->spill_channel()->set_finishing_if_not_reuseable();
+        _aggregator->spill_channel()->set_finishing();
         _is_finished = true;
     });
 
