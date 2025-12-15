@@ -107,6 +107,9 @@ public class OptimizerTraceUtil {
      * Safe log for MV module, ignore any exception during logging.
      */
     private static void traceLogMVSafe(Function<Object[], String> func, Object... args) {
+        if (!Tracers.isSetTraceModule(Tracers.Module.MV)) {
+            return;
+        }
         try {
             Tracers.log(Tracers.Module.MV, func, args);
         } catch (Exception e) {
@@ -118,6 +121,9 @@ public class OptimizerTraceUtil {
      * Safe log for MV module, ignore any exception during logging.
      */
     private static void traceLogMVSafe(Tracers tracers, Function<Object[], String> func, Object... args) {
+        if (!Tracers.isSetTraceModule(Tracers.Module.MV)) {
+            return;
+        }
         try {
             Tracers.log(tracers, Tracers.Module.MV, func, args);
         } catch (Exception e) {
