@@ -15,19 +15,24 @@
 package com.starrocks.sql.plan;
 
 import com.google.common.collect.Maps;
+import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.qe.VariableMgr;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.HintNode;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.parser.SqlParser;
+import com.starrocks.warehouse.DefaultWarehouse;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -214,6 +219,36 @@ public class SetVarTest extends PlanTestBase {
         StmtExecutor executor = new StmtExecutor(starRocksAssert.getCtx(), stmt);
         executor.execute();
         assertEquals("default_warehouse", starRocksAssert.getCtx().getSessionVariable().getWarehouseName());
+    }
+
+    @Test
+    public void testChangeWarehouse() throws Exception {
+        Config.run_mode = RunMode.SHARED_DATA.getName();
+        RunMode.detectRunMode();
+
+        try {
+            GlobalStateMgr.getCurrentState().getWarehouseMgr().addWarehouse(new DefaultWarehouse(2, "wh2"));
+            GlobalStateMgr.getCurrentState().getWarehouseMgr().addWarehouse(new DefaultWarehouse(3, "wh3"));
+
+            {
+                String sql = "set warehouse = wh2";
+                StatementBase stmt = SqlParser.parse(sql, starRocksAssert.getCtx().getSessionVariable()).get(0);
+                StmtExecutor executor = new StmtExecutor(starRocksAssert.getCtx(), stmt);
+                executor.execute();
+                Assertions.assertEquals(2, starRocksAssert.getCtx().getCurrentComputeResource().getWarehouseId());
+            }
+
+            {
+                String sql = "set warehouse = wh3";
+                StatementBase stmt = SqlParser.parse(sql, starRocksAssert.getCtx().getSessionVariable()).get(0);
+                StmtExecutor executor = new StmtExecutor(starRocksAssert.getCtx(), stmt);
+                executor.execute();
+                Assertions.assertEquals(3, starRocksAssert.getCtx().getCurrentComputeResource().getWarehouseId());
+            }
+        } finally {
+            Config.run_mode = RunMode.SHARED_NOTHING.getName();
+            RunMode.detectRunMode();
+        }
     }
 
 }

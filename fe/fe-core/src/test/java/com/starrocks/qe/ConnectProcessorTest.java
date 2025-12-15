@@ -42,6 +42,7 @@ import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.authentication.PlainPasswordAuthenticationProvider;
 import com.starrocks.authorization.PrivilegeBuiltinConstants;
 import com.starrocks.catalog.UserIdentity;
+import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.profile.Tracers;
@@ -54,9 +55,11 @@ import com.starrocks.mysql.MysqlErrPacket;
 import com.starrocks.mysql.MysqlOkPacket;
 import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.mysql.MysqlSerializer;
+import com.starrocks.plugin.AuditEvent;
 import com.starrocks.plugin.AuditEvent.AuditEventBuilder;
 import com.starrocks.proto.PQueryStatistics;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.DDLTestBase;
 import com.starrocks.sql.ast.PrepareStmt;
 import com.starrocks.sql.ast.StatementBase;
@@ -65,6 +68,9 @@ import com.starrocks.thrift.TMasterOpResult;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TUserIdentity;
 import com.starrocks.utframe.UtFrameUtils;
+import com.starrocks.warehouse.DefaultWarehouse;
+import com.starrocks.warehouse.cngroup.ComputeResource;
+import com.starrocks.warehouse.cngroup.WarehouseComputeResourceProvider;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -99,7 +105,6 @@ public class ConnectProcessorTest extends DDLTestBase {
     private static StreamConnection connection;
 
     private static PQueryStatistics statistics = new PQueryStatistics();
-
 
     @BeforeAll
     public static void setUpClass() {
@@ -447,6 +452,115 @@ public class ConnectProcessorTest extends DDLTestBase {
 
         processor.processOnce();
         Assertions.assertEquals(MysqlCommand.COM_QUERY, myContext.getCommand());
+    }
+
+    @Test
+    public void testQueryWithInlineWarehouse() throws Exception {
+        Config.run_mode = RunMode.SHARED_DATA.getName();
+        RunMode.detectRunMode();
+        Config.enable_collect_query_detail_info = true;
+
+        new MockUp<WarehouseComputeResourceProvider>() {
+            @Mock
+            public boolean isResourceAvailable(ComputeResource computeResource) {
+                return true;
+            }
+        };
+        // Mock statement executor
+        // Create mock for StmtExecutor using MockUp instead of @Mocked parameter
+        new MockUp<StmtExecutor>() {
+            @Mock
+            public PQueryStatistics getQueryStatisticsForAuditLog() {
+                return statistics;
+            }
+        };
+
+        try {
+            GlobalStateMgr.getCurrentState().getWarehouseMgr().addWarehouse(new DefaultWarehouse(2, "wh2"));
+            GlobalStateMgr.getCurrentState().getWarehouseMgr().addWarehouse(new DefaultWarehouse(3, "wh3"));
+
+            MysqlSerializer serializer = MysqlSerializer.newInstance();
+            serializer.writeInt1(3);
+            serializer.writeEofString("select /*+SET_VAR(enable_constant_execute_in_fe=false,warehouse='wh2')*/ 1");
+            ByteBuffer packet = serializer.toByteBuffer();
+
+            ConnectContext ctx = initMockContext(mockChannel(packet), GlobalStateMgr.getCurrentState());
+            ctx.setCurrentUserIdentity(UserIdentity.ROOT);
+            ctx.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
+            ctx.setQualifiedUser(UserIdentity.ROOT.getUser());
+            ctx.setQueryId(UUIDUtil.genUUID());
+
+            ConnectProcessor processor = new ConnectProcessor(ctx);
+
+            processor.processOnce();
+            Assertions.assertEquals(MysqlCommand.COM_QUERY, myContext.getCommand());
+
+            QueryDetail queryDetail = ctx.getQueryDetail();
+            Assertions.assertEquals("wh2", queryDetail.getWarehouse());
+
+            DefaultCoordinator coordinator = (DefaultCoordinator) ctx.getExecutor().getCoordinator();
+            Assertions.assertEquals(2, coordinator.getJobSpec().getComputeResource().getWarehouseId());
+
+            AuditEvent auditEvent = ctx.getAuditEventBuilder().build();
+            Assertions.assertEquals("wh2", auditEvent.warehouse);
+        } finally {
+            Config.enable_collect_query_detail_info = false;
+            Config.run_mode = RunMode.SHARED_NOTHING.getName();
+            RunMode.detectRunMode();
+        }
+    }
+
+    @Test
+    public void testQueryWithSetWarehouse() throws Exception {
+        Config.run_mode = RunMode.SHARED_DATA.getName();
+        RunMode.detectRunMode();
+        Config.enable_collect_query_detail_info = true;
+
+        new MockUp<WarehouseComputeResourceProvider>() {
+            @Mock
+            public boolean isResourceAvailable(ComputeResource computeResource) {
+                return true;
+            }
+        };
+        // Mock statement executor
+        // Create mock for StmtExecutor using MockUp instead of @Mocked parameter
+        new MockUp<StmtExecutor>() {
+            @Mock
+            public PQueryStatistics getQueryStatisticsForAuditLog() {
+                return statistics;
+            }
+        };
+
+        try {
+            GlobalStateMgr.getCurrentState().getWarehouseMgr().addWarehouse(new DefaultWarehouse(2, "wh2"));
+            GlobalStateMgr.getCurrentState().getWarehouseMgr().addWarehouse(new DefaultWarehouse(3, "wh3"));
+
+            MysqlSerializer serializer = MysqlSerializer.newInstance();
+            serializer.writeInt1(3);
+            serializer.writeEofString("select /*+SET_VAR(enable_constant_execute_in_fe=false)*/ 1");
+            ByteBuffer packet = serializer.toByteBuffer();
+
+            ConnectContext ctx = initMockContext(mockChannel(packet), GlobalStateMgr.getCurrentState());
+            ctx.getSessionVariable().setWarehouseName("wh3");
+
+            ConnectProcessor processor = new ConnectProcessor(ctx);
+
+            processor.processOnce();
+            Assertions.assertEquals(MysqlCommand.COM_QUERY, myContext.getCommand());
+
+            QueryDetail queryDetail = ctx.getQueryDetail();
+            Assertions.assertEquals("wh3", queryDetail.getWarehouse());
+
+            DefaultCoordinator coordinator = (DefaultCoordinator) ctx.getExecutor().getCoordinator();
+            Assertions.assertEquals(3, coordinator.getJobSpec().getComputeResource().getWarehouseId());
+
+            AuditEvent auditEvent = ctx.getAuditEventBuilder().build();
+            Assertions.assertEquals("wh3", auditEvent.warehouse);
+        } finally {
+            Config.enable_collect_query_detail_info = false;
+            Config.run_mode = RunMode.SHARED_NOTHING.getName();
+            RunMode.detectRunMode();
+        }
     }
 
     @Test
