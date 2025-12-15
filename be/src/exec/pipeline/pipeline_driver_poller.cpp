@@ -96,9 +96,11 @@ void PipelineDriverPoller::run_internal() {
                         LOG(WARNING) << "[Driver] Timeout " << driver->to_readable_string();
                         driver->fragment_ctx()->set_expired_log_count(++expired_log_count);
                     }
+                    auto query_id = driver->query_ctx()->query_id();
+                    size_t timeout = driver->query_ctx()->get_query_expire_seconds();
+                    hook_on_query_timeout(query_id, timeout);
                     driver->fragment_ctx()->cancel(
-                            Status::TimedOut(fmt::format("Query reached its timeout of {} seconds",
-                                                         driver->query_ctx()->get_query_expire_seconds())));
+                            Status::TimedOut(fmt::format("Query reached its timeout of {} seconds", timeout)));
                     on_cancel(driver, ready_drivers, _local_blocked_drivers, driver_it);
                 } else if (driver->fragment_ctx()->is_canceled()) {
                     // If the fragment is cancelled when the source operator is already pending i/o task,
