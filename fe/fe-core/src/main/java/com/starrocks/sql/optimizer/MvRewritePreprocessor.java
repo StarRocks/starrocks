@@ -770,6 +770,9 @@ public class MvRewritePreprocessor {
                 candidateMvNames);
     }
 
+    /**
+     * Since this method is executed in parallel for multiple MVs, it must be thread-safe.
+     */
     private void prepareMV(Tracers tracers, Set<Table> queryTables, MaterializedViewWrapper mvWithPlanContext,
                            MvUpdateInfo mvUpdateInfo, long timeoutMs) {
         MaterializedView mv = mvWithPlanContext.getMV();
@@ -778,6 +781,7 @@ public class MvRewritePreprocessor {
         if (!checkMvPartitionNamesToRefresh(connectContext, mv, partitionNamesToRefresh, mvPlanContext)) {
             return;
         }
+
         if (partitionNamesToRefresh.isEmpty()) {
             logMVPrepare(tracers, connectContext, mv, "MV {} has no partitions to refresh", mv.getName());
         } else {
@@ -795,8 +799,8 @@ public class MvRewritePreprocessor {
         // to avoid race condition when multiple threads are adding valid candidate mvs to query materialization context
         synchronized (queryMaterializationContext) {
             queryMaterializationContext.addValidCandidateMV(materializationContext);
+            logMVPrepare(tracers, connectContext, mv, "Prepare MV {} success", mv.getName());
         }
-        logMVPrepare(tracers, connectContext, mv, "Prepare MV {} success", mv.getName());
     }
 
     /**
