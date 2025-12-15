@@ -1169,4 +1169,16 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
             Assertions.assertEquals(8, dop);
         }
     }
+
+    @Test
+    public void testJoinAggDisableLowCardinality() throws Exception {
+        FeConstants.USE_MOCK_DICT_MANAGER = true;
+        String dumpString = getDumpInfoFromFile("query_dump/join_agg_low_cardinality");
+        QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(dumpString);
+        Pair<QueryDumpInfo, String> replayPair = getPlanFragment(dumpString, queryDumpInfo.getSessionVariable(),
+                TExplainLevel.NORMAL);
+        FeConstants.USE_MOCK_DICT_MANAGER = false;
+        PlanTestBase.assertContains(replayPair.second, "  1:OlapScanNode\n"
+                + "     TABLE: rpt_crm_reach_goal_cust_all_d");
+    }
 }
