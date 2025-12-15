@@ -58,7 +58,8 @@ Status AppendWithMaskVisitor<PositiveSelect>::do_visit(NullableColumn* column) {
             size_t appended = nullable_column->null_column()->size() - orig_size;
             if (appended != 0) {
                 const auto null_data = nullable_column->null_column()->immutable_data();
-                bool has_new_null = SIMD::contain_nonzero(null_data, orig_size, appended);
+                bool has_new_null =
+                        SIMD::contain_nonzero(null_data, orig_size, appended) || nullable_column->has_null();
                 nullable_column->set_has_null(has_new_null);
             }
         }
