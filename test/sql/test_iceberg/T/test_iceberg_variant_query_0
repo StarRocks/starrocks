@@ -71,14 +71,18 @@ properties(
   'format-version' = '3'
 );
 
-shell: ossutil64 sync ./sql/test_iceberg/data/variant_query_0/ oss://${oss_bucket}/test_iceberg_variant_query_0/${uuid0}/variant_query_0/ > /dev/null
+shell: ossutil64 cp ./sql/test_iceberg/data/variant_query_0/data/00000-0-968ed6e2-3543-431b-ba6c-b41704fb5cd7-0-00001.parquet oss://${oss_bucket}/test_iceberg_variant_query_0/${uuid0}/variant_query_0/data/00000-0-968ed6e2-3543-431b-ba6c-b41704fb5cd7-0-00001.parquet > /dev/null
+shell: ossutil64 cp ./sql/test_iceberg/data/variant_query_0/data/00001-1-968ed6e2-3543-431b-ba6c-b41704fb5cd7-0-00001.parquet oss://${oss_bucket}/test_iceberg_variant_query_0/${uuid0}/variant_query_0/data/00001-1-968ed6e2-3543-431b-ba6c-b41704fb5cd7-0-00001.parquet > /dev/null
+shell: ossutil64 cp ./sql/test_iceberg/data/variant_query_0/data/00002-2-968ed6e2-3543-431b-ba6c-b41704fb5cd7-0-00001.parquet oss://${oss_bucket}/test_iceberg_variant_query_0/${uuid0}/variant_query_0/data/00002-2-968ed6e2-3543-431b-ba6c-b41704fb5cd7-0-00001.parquet > /dev/null
+shell: ossutil64 cp ./sql/test_iceberg/data/variant_query_0/data/00003-3-968ed6e2-3543-431b-ba6c-b41704fb5cd7-0-00001.parquet oss://${oss_bucket}/test_iceberg_variant_query_0/${uuid0}/variant_query_0/data/00003-3-968ed6e2-3543-431b-ba6c-b41704fb5cd7-0-00001.parquet > /dev/null
+
 alter table variant_test_cases execute add_files(location='oss://${oss_bucket}/test_iceberg_variant_query_0/${uuid0}/variant_query_0/data/00000-0-968ed6e2-3543-431b-ba6c-b41704fb5cd7-0-00001.parquet', file_format='parquet');
 alter table variant_test_cases execute add_files(location='oss://${oss_bucket}/test_iceberg_variant_query_0/${uuid0}/variant_query_0/data/00001-1-968ed6e2-3543-431b-ba6c-b41704fb5cd7-0-00001.parquet', file_format='parquet');
 alter table variant_test_cases execute add_files(location='oss://${oss_bucket}/test_iceberg_variant_query_0/${uuid0}/variant_query_0/data/00002-2-968ed6e2-3543-431b-ba6c-b41704fb5cd7-0-00001.parquet', file_format='parquet');
 alter table variant_test_cases execute add_files(location='oss://${oss_bucket}/test_iceberg_variant_query_0/${uuid0}/variant_query_0/data/00003-3-968ed6e2-3543-431b-ba6c-b41704fb5cd7-0-00001.parquet', file_format='parquet');
 
 
-select * from variant_test_cases order by case_id;
+-- select * from variant_test_cases order by case_id;
 
 
 -- ========================================

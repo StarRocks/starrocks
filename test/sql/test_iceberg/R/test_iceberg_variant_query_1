@@ -93,7 +93,52 @@ CREATE TABLE if not exists variant_test_cases (
 );
 -- result:
 -- !result
-shell: ossutil64 sync ./sql/test_iceberg/data/variant_query_1/ oss://${oss_bucket}/test_iceberg_variant_query_1/${uuid0}/variant_query_1/ > /dev/null
+shell: ossutil64 cp ./sql/test_iceberg/data/variant_query_1/data/00000-0-3f040690-719d-4a7c-aa99-f1ce04647eb9-0-00001.parquet oss://${oss_bucket}/test_iceberg_variant_query_1/${uuid0}/variant_query_1/data/00000-0-3f040690-719d-4a7c-aa99-f1ce04647eb9-0-00001.parquet > /dev/null
+-- result:
+0
+
+-- !result
+shell: ossutil64 cp ./sql/test_iceberg/data/variant_query_1/data/00001-1-3f040690-719d-4a7c-aa99-f1ce04647eb9-0-00001.parquet oss://${oss_bucket}/test_iceberg_variant_query_1/${uuid0}/variant_query_1/data/00001-1-3f040690-719d-4a7c-aa99-f1ce04647eb9-0-00001.parquet > /dev/null
+-- result:
+0
+
+-- !result
+shell: ossutil64 cp ./sql/test_iceberg/data/variant_query_1/data/00002-2-3f040690-719d-4a7c-aa99-f1ce04647eb9-0-00001.parquet oss://${oss_bucket}/test_iceberg_variant_query_1/${uuid0}/variant_query_1/data/00002-2-3f040690-719d-4a7c-aa99-f1ce04647eb9-0-00001.parquet > /dev/null
+-- result:
+0
+
+-- !result
+shell: ossutil64 cp ./sql/test_iceberg/data/variant_query_1/data/00003-3-3f040690-719d-4a7c-aa99-f1ce04647eb9-0-00001.parquet oss://${oss_bucket}/test_iceberg_variant_query_1/${uuid0}/variant_query_1/data/00003-3-3f040690-719d-4a7c-aa99-f1ce04647eb9-0-00001.parquet > /dev/null
+-- result:
+0
+
+-- !result
+shell: ossutil64 cp ./sql/test_iceberg/data/variant_query_1/data/00004-4-3f040690-719d-4a7c-aa99-f1ce04647eb9-0-00001.parquet oss://${oss_bucket}/test_iceberg_variant_query_1/${uuid0}/variant_query_1/data/00004-4-3f040690-719d-4a7c-aa99-f1ce04647eb9-0-00001.parquet > /dev/null
+-- result:
+0
+
+-- !result
+shell: ossutil64 cp ./sql/test_iceberg/data/variant_query_1/data/00005-5-3f040690-719d-4a7c-aa99-f1ce04647eb9-0-00001.parquet oss://${oss_bucket}/test_iceberg_variant_query_1/${uuid0}/variant_query_1/data/00005-5-3f040690-719d-4a7c-aa99-f1ce04647eb9-0-00001.parquet > /dev/null
+-- result:
+0
+
+-- !result
+shell: ossutil64 cp ./sql/test_iceberg/data/variant_query_1/data/00006-6-3f040690-719d-4a7c-aa99-f1ce04647eb9-0-00001.parquet oss://${oss_bucket}/test_iceberg_variant_query_1/${uuid0}/variant_query_1/data/00006-6-3f040690-719d-4a7c-aa99-f1ce04647eb9-0-00001.parquet > /dev/null
+-- result:
+0
+
+-- !result
+shell: ossutil64 cp ./sql/test_iceberg/data/variant_query_1/data/00007-7-3f040690-719d-4a7c-aa99-f1ce04647eb9-0-00001.parquet oss://${oss_bucket}/test_iceberg_variant_query_1/${uuid0}/variant_query_1/data/00007-7-3f040690-719d-4a7c-aa99-f1ce04647eb9-0-00001.parquet > /dev/null
+-- result:
+0
+
+-- !result
+shell: ossutil64 cp ./sql/test_iceberg/data/variant_query_1/data/00008-8-3f040690-719d-4a7c-aa99-f1ce04647eb9-0-00001.parquet oss://${oss_bucket}/test_iceberg_variant_query_1/${uuid0}/variant_query_1/data/00008-8-3f040690-719d-4a7c-aa99-f1ce04647eb9-0-00001.parquet > /dev/null
+-- result:
+0
+
+-- !result
+shell: ossutil64 cp ./sql/test_iceberg/data/variant_query_1/data/00009-9-3f040690-719d-4a7c-aa99-f1ce04647eb9-0-00001.parquet oss://${oss_bucket}/test_iceberg_variant_query_1/${uuid0}/variant_query_1/data/00009-9-3f040690-719d-4a7c-aa99-f1ce04647eb9-0-00001.parquet > /dev/null
 -- result:
 0
 
@@ -395,16 +440,16 @@ Unified variant comprehensive tests	All test scenarios in a single table	Basic t
 -- !result
 SELECT
     test_scenario,
-    COUNT(*) as row_count,
-    GROUP_CONCAT(DISTINCT test_case) as test_cases
+    COUNT(*) AS row_count,
+    GROUP_CONCAT(DISTINCT test_case ORDER BY test_case SEPARATOR ',') AS test_cases
 FROM variant_test_cases
 GROUP BY test_scenario
 ORDER BY test_scenario;
 -- result:
-basic_types	4	zero_and_empty,all_null,positive_values,negative_values
+basic_types	4	all_null,negative_values,positive_values,zero_and_empty
 complex_to_variant	2	array_of_complex_objects,deep_struct_to_variant
 deep_nested	2	ecommerce_order,user_profile
-variant_to_complex	2	variant_to_simple_types,variant_to_complex_types
+variant_to_complex	2	variant_to_complex_types,variant_to_simple_types
 -- !result
 shell: ossutil64 rm -rf oss://${oss_bucket}/test_iceberg_variant_query_1/${uuid0}/ > /dev/null
 -- result:
