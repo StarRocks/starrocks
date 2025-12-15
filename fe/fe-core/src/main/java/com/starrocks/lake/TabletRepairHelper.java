@@ -14,6 +14,7 @@
 
 package com.starrocks.lake;
 
+import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -215,7 +216,7 @@ public class TabletRepairHelper {
     private static TabletMetadataPB createEmptyTabletMetadata(long tabletId, TabletMetadataPB otherValidMetadata) {
         TabletMetadataPB metadata = new TabletMetadataPB();
         metadata.id = tabletId;
-        // version will be overwritten to visible version later
+        // version will be overwritten to the visible version in repairTabletMetadata()
         metadata.version = 0L;
         metadata.schema = otherValidMetadata.schema;
         metadata.rowsets = Lists.newArrayList();
@@ -245,7 +246,7 @@ public class TabletRepairHelper {
             }
             if (allHaveVisibleVersionMetadata) {
                 throw new StarRocksException(
-                        String.format("all tablets have valid metadata with version %d, no need for repair", maxVersion));
+                        String.format("all tablets have valid tablet metadata with version %d, no need for repair", maxVersion));
             } else {
                 return;
             }
@@ -257,7 +258,7 @@ public class TabletRepairHelper {
         } else {
             if (validMetadatas.isEmpty()) {
                 throw new StarRocksException(
-                        "no latest valid tablet metadatas were found for all allTablets, you should recreate the partition");
+                        "no valid tablet metadata was found for any tablet, you should recreate the partition");
             }
 
             Set<Long> missingTablets = Sets.newHashSet(allTablets);
@@ -265,9 +266,9 @@ public class TabletRepairHelper {
             Preconditions.checkState(!missingTablets.isEmpty());
             if (!allowEmptyTabletRecovery) {
                 throw new StarRocksException(String.format(
-                        "tablet %d has no valid tablet metadatas, " +
+                        "no tablet metadatas were found for tablets [%s], " +
                                 "you can set enforce_consistent_version=false and allow_empty_tablet_recovery=true",
-                        missingTablets.iterator().next()));
+                        Joiner.on(", ").join(missingTablets)));
             }
 
             TabletMetadataPB validMetadata = validMetadatas.values().iterator().next();

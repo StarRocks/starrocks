@@ -302,7 +302,7 @@ public class TabletRepairHelperTest {
             Assertions.assertFalse(validMetadatas.containsKey(tabletId2));
 
             ExceptionChecker.expectThrowsWithMsg(StarRocksException.class,
-                    "tablet 10002 has no valid tablet metadatas",
+                    "no tablet metadatas were found for tablets [10002]",
                     () -> Deencapsulation.invoke(TabletRepairHelper.class, "checkOrCreateEmptyTabletMetadata",
                             info, validMetadatas, false, false));
 
@@ -571,12 +571,12 @@ public class TabletRepairHelperTest {
             }
         };
 
-        // consistent version
+        // case 1: enforceConsistentVersion = true
         Map<Long, String> tabletErrors =
                 Deencapsulation.invoke(TabletRepairHelper.class, "repairPhysicalPartition", info, true, false, false);
         Assertions.assertTrue(tabletErrors.isEmpty());
 
-        // inconsistent version
+        // case 2: enforceConsistentVersion = false
         info = new PhysicalPartitionInfo(physicalPartitionId, Lists.newArrayList(tabletId1, tabletId2),
                 Sets.newHashSet(tabletId1, tabletId2), nodeToTablets, maxVersion, minVersion);
         tabletErrors = Deencapsulation.invoke(TabletRepairHelper.class, "repairPhysicalPartition", info, false, false, false);
