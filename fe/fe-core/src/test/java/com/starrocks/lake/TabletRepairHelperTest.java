@@ -577,6 +577,8 @@ public class TabletRepairHelperTest {
         Assertions.assertTrue(tabletErrors.isEmpty());
 
         // inconsistent version
+        info = new PhysicalPartitionInfo(physicalPartitionId, Lists.newArrayList(tabletId1, tabletId2),
+                Sets.newHashSet(tabletId1, tabletId2), nodeToTablets, maxVersion, minVersion);
         tabletErrors = Deencapsulation.invoke(TabletRepairHelper.class, "repairPhysicalPartition", info, false, false, false);
         Assertions.assertTrue(tabletErrors.isEmpty());
     }
