@@ -186,7 +186,7 @@ Status LakeDataSource::get_tablet(const TInternalScanRange& scan_range) {
         schema_meta_pb.set_schema_id(schema_meta.schema_id);
         schema_meta_pb.set_db_id(schema_meta.db_id);
         schema_meta_pb.set_table_id(schema_meta.table_id);
-        ASSIGN_OR_RETURN(_tablet_schema, tablet_manager->table_schema_service()->get_scan_schema(
+        ASSIGN_OR_RETURN(_tablet_schema, tablet_manager->table_schema_service()->get_schema_for_scan(
                                                  schema_meta_pb, tablet_id, _runtime_state->query_id(),
                                                  _runtime_state->fragment_ctx()->fe_addr(), _tablet.metadata()));
     } else {

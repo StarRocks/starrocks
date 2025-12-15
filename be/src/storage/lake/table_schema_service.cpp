@@ -66,8 +66,9 @@ std::string TableSchemaService::SingleFlightExecutionContext::to_string() const 
     return ss.str();
 }
 
-StatusOr<TabletSchemaPtr> TableSchemaService::get_load_schema(const TableSchemaMetaPB& schema_meta, int64_t tablet_id,
-                                                              int64_t txn_id, const TabletMetadataPtr& tablet_meta) {
+StatusOr<TabletSchemaPtr> TableSchemaService::get_schema_for_load(const TableSchemaMetaPB& schema_meta,
+                                                                  int64_t tablet_id, int64_t txn_id,
+                                                                  const TabletMetadataPtr& tablet_meta) {
     int64_t schema_id = schema_meta.schema_id();
     TabletSchemaPtr schema = _get_local_schema(schema_id, tablet_meta);
     if (schema != nullptr) {
@@ -98,10 +99,10 @@ StatusOr<TabletSchemaPtr> TableSchemaService::get_load_schema(const TableSchemaM
     return status_or_schema;
 }
 
-StatusOr<TabletSchemaPtr> TableSchemaService::get_scan_schema(const TableSchemaMetaPB& schema_meta, int64_t tablet_id,
-                                                              const TUniqueId& query_id,
-                                                              const TNetworkAddress& coordinator_fe,
-                                                              const TabletMetadataPtr& tablet_meta) {
+StatusOr<TabletSchemaPtr> TableSchemaService::get_schema_for_scan(const TableSchemaMetaPB& schema_meta,
+                                                                  int64_t tablet_id, const TUniqueId& query_id,
+                                                                  const TNetworkAddress& coordinator_fe,
+                                                                  const TabletMetadataPtr& tablet_meta) {
     int64_t schema_id = schema_meta.schema_id();
     TabletSchemaPtr schema = _get_local_schema(schema_id, tablet_meta);
     if (schema != nullptr) {

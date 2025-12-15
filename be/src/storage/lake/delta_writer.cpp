@@ -415,7 +415,7 @@ inline Status DeltaWriterImpl::init_tablet_schema() {
     schema_meta.set_schema_id(_schema_id);
     schema_meta.set_db_id(_db_id);
     schema_meta.set_table_id(_table_id);
-    ASSIGN_OR_RETURN(_tablet_schema, _tablet_manager->table_schema_service()->get_load_schema(
+    ASSIGN_OR_RETURN(_tablet_schema, _tablet_manager->table_schema_service()->get_schema_for_load(
                                              schema_meta, _tablet_id, _txn_id, latest_metadata));
     return Status::OK();
 }

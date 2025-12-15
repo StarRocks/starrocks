@@ -79,8 +79,8 @@ public:
      * @param tablet_meta Optional pointer to tablet metadata for local lookup.
      * @return A shared pointer to the TabletSchema on success, or an error status.
      */
-    StatusOr<TabletSchemaPtr> get_load_schema(const TableSchemaMetaPB& schema_meta, int64_t tablet_id, int64_t txn_id,
-                                              const TabletMetadataPtr& tablet_meta = nullptr);
+    StatusOr<TabletSchemaPtr> get_schema_for_load(const TableSchemaMetaPB& schema_meta, int64_t tablet_id,
+                                                  int64_t txn_id, const TabletMetadataPtr& tablet_meta = nullptr);
 
     /**
      * @brief Retrieves the table schema for a SCAN operation.
@@ -92,9 +92,9 @@ public:
      * @param tablet_meta Optional pointer to tablet metadata for local lookup.
      * @return A shared pointer to the TabletSchema on success, or an error status.
      */
-    StatusOr<TabletSchemaPtr> get_scan_schema(const TableSchemaMetaPB& schema_meta, int64_t tablet_id,
-                                              const TUniqueId& query_id, const TNetworkAddress& coordinator_fe,
-                                              const TabletMetadataPtr& tablet_meta = nullptr);
+    StatusOr<TabletSchemaPtr> get_schema_for_scan(const TableSchemaMetaPB& schema_meta, int64_t tablet_id,
+                                                  const TUniqueId& query_id, const TNetworkAddress& coordinator_fe,
+                                                  const TabletMetadataPtr& tablet_meta = nullptr);
 
 private:
     /**

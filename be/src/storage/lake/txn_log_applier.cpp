@@ -124,7 +124,7 @@ Status update_metadata_schema(const TxnLogPB_OpWrite& op_write, int64_t txn_id, 
         return Status::OK();
     }
     ASSIGN_OR_RETURN(auto new_schema,
-                     ExecEnv::GetInstance()->lake_tablet_manager()->table_schema_service()->get_load_schema(
+                     ExecEnv::GetInstance()->lake_tablet_manager()->table_schema_service()->get_schema_for_load(
                              schema_meta, tablet_meta->id(), txn_id));
     auto& old_schema = tablet_meta->schema();
     if (new_schema->schema_version() <= old_schema.schema_version()) {
