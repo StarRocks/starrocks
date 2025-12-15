@@ -108,6 +108,27 @@ Status LambdaFunction::extract_outer_common_exprs(RuntimeState* state, ExprConte
     return Status::OK();
 }
 
+bool LambdaFunction::can_evaluate_constant() const {
+    DCHECK(_is_prepared);
+    return _captured_slot_ids.empty() && _is_lambda_expr_independent && !_is_nondeterministic;
+}
+
+StatusOr<ColumnPtr> LambdaFunction::evaluate_constant(ExprContext* context) {
+    DCHECK(_is_prepared);
+    DCHECK(can_evaluate_constant());
+    if (_common_sub_expr.empty()) {
+        return this->get_child(0)->evaluate_checked(context, nullptr);
+    }
+
+    ChunkPtr chunk = std::make_shared<Chunk>();
+    for (auto i = 0; i < _common_sub_expr.size(); ++i) {
+        ASSIGN_OR_RETURN(auto sub_col, context->evaluate(_common_sub_expr[i], nullptr));
+        chunk->append_column(sub_col, _common_sub_expr_ids[i]);
+    }
+    // try to evaluate lambda expr to constant column
+    return this->get_child(0)->evaluate_checked(context, nullptr);
+}
+
 Status LambdaFunction::collect_lambda_argument_ids() {
     if (!_arguments_ids.empty()) {
         return Status::OK();

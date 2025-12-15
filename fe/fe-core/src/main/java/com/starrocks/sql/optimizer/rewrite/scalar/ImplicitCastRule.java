@@ -25,27 +25,33 @@ import com.starrocks.catalog.MapType;
 import com.starrocks.catalog.Type;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariableConstants;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.common.TypeManager;
 import com.starrocks.sql.optimizer.Utils;
+import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.scalar.BetweenPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CaseWhenOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.LambdaFunctionOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LargeInPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.MapOperator;
 import com.starrocks.sql.optimizer.operator.scalar.MultiInPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriteContext;
+import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
@@ -81,6 +87,40 @@ public class ImplicitCastRule extends TopDownScalarOperatorRewriteRule {
                     fn.functionName().equals(FunctionSet.EXCHANGE_BYTES) ||
                     fn.functionName().equals(FunctionSet.EXCHANGE_SPEED) ||
                     fn.functionName().equals(FunctionSet.ARRAY_SORTBY)) {
+                return call;
+            }
+
+            if (fn.functionName().equals(FunctionSet.ARRAY_SORT_LAMBDA)) {
+                LambdaFunctionOperator lambdaOp = (LambdaFunctionOperator) call.getChild(1);
+                ScalarOperator lambdaBodyOp = lambdaOp.getChild(0);
+
+                Map<Boolean, List<ColumnRefOperator>> argumentGroups = lambdaBodyOp.asStream()
+                        .filter(ScalarOperator::isColumnRef)
+                        .map(op -> (ColumnRefOperator) op)
+                        .collect(Collectors.partitioningBy(colRef -> colRef.getOpType().equals(
+                                OperatorType.LAMBDA_ARGUMENT)));
+
+                boolean isLegal = argumentGroups.get(true).stream().distinct().count() == 2 &&
+                        argumentGroups.get(false).isEmpty() && !Utils.hasNonDeterministicFunc(lambdaBodyOp);
+
+                if (!isLegal) {
+                    throw new SemanticException("Lambda function in sort_array should only depend on both two" +
+                            " arguments and contain no non-deterministic functions");
+                }
+
+                if (lambdaBodyOp.getType().isBoolean()) {
+                    return visit(call, context);
+                } else if (lambdaBodyOp.getType().isNumericType()) {
+                    ScalarOperator zeroValue =
+                            new CastOperator(lambdaBodyOp.getType(), ConstantOperator.createTinyInt((byte) 0));
+                    ScalarOperatorRewriter rewriter = new ScalarOperatorRewriter();
+                    zeroValue = rewriter.rewrite(zeroValue, List.of(new FoldConstantsRule()));
+                    lambdaBodyOp = new BinaryPredicateOperator(BinaryType.LT, lambdaBodyOp, zeroValue);
+                } else {
+                    throw new SemanticException(
+                            "Return type of lambda function in array_sort must be boolean|numeric types");
+                }
+                lambdaOp.setChild(0, lambdaBodyOp);
                 return call;
             }
             if (!call.isAggregate() || FunctionSet.AVG.equalsIgnoreCase(fn.functionName())) {

@@ -27,6 +27,7 @@ import com.starrocks.sql.optimizer.operator.OperatorType;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
+import java.util.stream.Stream;
 
 import static java.util.Objects.requireNonNull;
 
@@ -429,5 +430,9 @@ public abstract class ScalarOperator implements Cloneable {
         if (constantOperator.isPresent()) {
             predicate.setChild(1, constantOperator.get());
         }
+    }
+
+    public Stream<ScalarOperator> asStream() {
+        return Stream.concat(Stream.of(this), this.getChildren().stream().flatMap(ScalarOperator::asStream));
     }
 }
