@@ -1106,6 +1106,11 @@ StatusOr<ColumnPtr> ArrayFunctions::array_contains_seq([[maybe_unused]] Function
 StatusOr<ColumnPtr> ArrayFunctions::array_map([[maybe_unused]] FunctionContext* context, const Columns& columns) {
     return nullptr;
 }
+// cannot be called anymore
+StatusOr<ColumnPtr> ArrayFunctions::array_sort_lambda([[maybe_unused]] FunctionContext* context,
+                                                      const Columns& columns) {
+    return nullptr;
+}
 
 StatusOr<ColumnPtr> ArrayFunctions::array_filter(FunctionContext* context, const Columns& columns) {
     return ArrayFilter::process(context, columns);

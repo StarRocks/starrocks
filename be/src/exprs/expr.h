@@ -277,6 +277,7 @@ protected:
     friend class ColumnPredicateRewriter;
     friend class LambdaFunction;
     friend class ArrayMapExpr;
+    friend class ArraySortLambdaExpr;
 
     explicit Expr(TypeDescriptor type);
     explicit Expr(const TExprNode& node);
@@ -342,6 +343,8 @@ protected:
 
     // In storage engine, Is this expr only used for index filter(so expr filter phase will skip this expr). This info is passed from FE
     bool _is_index_only_filter = false;
+
+    bool _is_nondeterministic = false;
 
     // analysis is done, types are fixed at this point
     TypeDescriptor _type;
