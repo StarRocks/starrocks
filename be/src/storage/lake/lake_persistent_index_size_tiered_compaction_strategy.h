@@ -25,16 +25,16 @@ namespace starrocks::lake {
 
 class PersistentIndexSstable;
 
+struct CompactionCandidateResult {
+    std::vector<std::vector<PersistentIndexSstablePB>> candidate_filesets;
+    // Whether to merge base level during compaction
+    bool merge_base_level = false;
+};
+
 class LakePersistentIndexSizeTieredCompactionStrategy {
 public:
     LakePersistentIndexSizeTieredCompactionStrategy() = default;
     ~LakePersistentIndexSizeTieredCompactionStrategy() = default;
-
-    struct CompactionCandidateResult {
-        std::vector<std::vector<PersistentIndexSstablePB>> candidate_filesets;
-        // Whether to merge base level during compaction
-        bool merge_base_level = false;
-    };
 
     // Pick compaction candidates from tablet metadata.
     // Use size tiered compaction strategy.
@@ -48,8 +48,8 @@ public:
     //   1. Fileset is the smallest unit for selection — partial selection within a fileset is not allowed.
     //   2. Only consecutive filesets can be compacted together.
     //
-    static Status pick_compaction_candidates(const PersistentIndexSstableMetaPB& sstable_meta,
-                                             CompactionCandidateResult* result);
+    static StatusOr<CompactionCandidateResult> pick_compaction_candidates(
+            const PersistentIndexSstableMetaPB& sstable_meta);
 };
 
 } // namespace starrocks::lake

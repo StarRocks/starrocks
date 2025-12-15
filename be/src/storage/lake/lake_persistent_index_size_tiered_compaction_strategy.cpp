@@ -31,12 +31,13 @@
 
 namespace starrocks::lake {
 
-Status LakePersistentIndexSizeTieredCompactionStrategy::pick_compaction_candidates(
-        const PersistentIndexSstableMetaPB& sstable_meta, CompactionCandidateResult* result) {
-    result->candidate_filesets.clear();
+StatusOr<CompactionCandidateResult> LakePersistentIndexSizeTieredCompactionStrategy::pick_compaction_candidates(
+        const PersistentIndexSstableMetaPB& sstable_meta) {
+    CompactionCandidateResult result;
+    result.candidate_filesets.clear();
 
     if (sstable_meta.sstables_size() == 0) {
-        return Status::OK();
+        return result;
     }
 
     // Group sstables by fileset_id
@@ -77,14 +78,14 @@ Status LakePersistentIndexSizeTieredCompactionStrategy::pick_compaction_candidat
 
     // If only one fileset or no filesets, no compaction needed
     if (filesets.size() <= 1) {
-        return Status::OK();
+        return result;
     }
 
     // Apply size-tiered compaction strategy
     // Similar to SizeTieredCompactionPolicy but for filesets
-    const int64_t level_multiple = config::pk_index_size_tiered_level_multiple;
+    const int64_t level_multiplier = config::pk_index_size_tiered_level_multiplier;
     const int64_t max_level_size = config::pk_index_size_tiered_min_level_size *
-                                   std::pow(level_multiple, config::pk_index_size_tiered_level_num);
+                                   std::pow(level_multiplier, config::pk_index_size_tiered_max_level);
     const int64_t min_compaction_filesets = 2;
 
     struct SizeTieredLevel {
@@ -118,9 +119,9 @@ Status LakePersistentIndexSizeTieredCompactionStrategy::pick_compaction_candidat
         // Level bonus: smaller levels have higher priority to reduce compaction latency
         // Small levels are cheaper to compact and finish faster
         int64_t level_bonus = 0;
-        for (int64_t v = level_size; v < max_level_size && level_bonus <= config::pk_index_size_tiered_level_num;
+        for (int64_t v = level_size; v < max_level_size && level_bonus <= config::pk_index_size_tiered_max_level;
              ++level_bonus) {
-            v = v * level_multiple;
+            v = v * level_multiplier;
         }
         score += level_bonus;
 
@@ -143,7 +144,7 @@ Status LakePersistentIndexSizeTieredCompactionStrategy::pick_compaction_candidat
 
         // Check if we need to start a new level
         if (level_size > config::pk_index_size_tiered_min_level_size && fileset_size < level_size &&
-            level_size / fileset_size > (level_multiple - 1)) {
+            level_size / fileset_size > (level_multiplier - 1)) {
             // Close current level
             if (!transient_filesets.empty()) {
                 auto level =
@@ -173,12 +174,12 @@ Status LakePersistentIndexSizeTieredCompactionStrategy::pick_compaction_candidat
 
     // Pick the best level for compaction
     if (priority_levels.empty()) {
-        return Status::OK();
+        return result;
     }
 
     SizeTieredLevel* selected_level = *priority_levels.begin();
     if (selected_level->fileset_indexes.size() < min_compaction_filesets) {
-        return Status::OK();
+        return result;
     }
 
     // Build result: for each selected fileset, add all its sstables
@@ -200,7 +201,7 @@ Status LakePersistentIndexSizeTieredCompactionStrategy::pick_compaction_candidat
     }
     result->merge_base_level = merge_base_level;
 
-    return Status::OK();
+    return result;
 }
 
 } // namespace starrocks::lake

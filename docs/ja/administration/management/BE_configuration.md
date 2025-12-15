@@ -1827,7 +1827,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 説明: プライマリキーインデックス Size-Tiered コンパクション戦略の最小レベルサイズパラメータ。
 - 導入バージョン: -
 
-##### pk_index_size_tiered_level_multiple
+##### pk_index_size_tiered_level_multiplier 
 
 - デフォルト: 10
 - タイプ: Int
@@ -1836,7 +1836,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 説明: プライマリキーインデックス Size-Tiered コンパクション戦略のレベル倍数パラメータ。
 - 導入バージョン: -
 
-##### pk_index_size_tiered_level_num
+##### pk_index_size_tiered_max_level 
 
 - デフォルト: 5
 - タイプ: Int

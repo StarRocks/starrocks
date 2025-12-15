@@ -30,7 +30,7 @@ Status PersistentIndexSstableFileset::init(std::vector<std::unique_ptr<Persisten
             DCHECK(sstable->sstable_pb().has_fileset_id());
             // Make sure sstable is inorder via comparator
             if (!_sstable_map.empty()) {
-                const auto& last_end_key = _sstable_map.rbegin()->second.first;
+                const auto& last_end_key = _sstable_map.rbegin()->first.second;
                 if (comparator->Compare(Slice(last_end_key), Slice(sstable->sstable_pb().range().start_key())) >= 0) {
                     return Status::InternalError("sstables are not in order or have overlap key range");
                 }
@@ -42,7 +42,7 @@ Status PersistentIndexSstableFileset::init(std::vector<std::unique_ptr<Persisten
             // Extract keys before moving sstable to avoid undefined behavior
             std::string start_key = sstable->sstable_pb().range().start_key();
             std::string end_key = sstable->sstable_pb().range().end_key();
-            _sstable_map.emplace(std::move(start_key), std::make_pair(std::move(end_key), std::move(sstable)));
+            _sstable_map.emplace(std::make_pair(std::move(start_key), std::move(end_key)), std::move(sstable));
         } else {
             if (_standalone_sstable != nullptr) {
                 return Status::InternalError("more than one standalone sstable in fileset");
@@ -70,7 +70,7 @@ Status PersistentIndexSstableFileset::init(std::unique_ptr<PersistentIndexSstabl
         // Extract keys before moving sstable to avoid undefined behavior
         std::string start_key = sstable->sstable_pb().range().start_key();
         std::string end_key = sstable->sstable_pb().range().end_key();
-        _sstable_map.emplace(std::move(start_key), std::make_pair(std::move(end_key), std::move(sstable)));
+        _sstable_map.emplace(std::make_pair(std::move(start_key), std::move(end_key)), std::move(sstable));
     } else {
         _fileset_id = UniqueId::gen_uid();
         sstable->set_fileset_id(_fileset_id);
@@ -84,7 +84,7 @@ Status PersistentIndexSstableFileset::merge_from(std::unique_ptr<PersistentIndex
     DCHECK(sstable->sstable_pb().has_range());
     // Make sure sstable is inorder via comparator
     if (!_sstable_map.empty()) {
-        const auto& last_end_key = _sstable_map.rbegin()->second.first;
+        const auto& last_end_key = _sstable_map.rbegin()->first.second;
         if (comparator->Compare(Slice(last_end_key), Slice(sstable->sstable_pb().range().start_key())) >= 0) {
             return Status::InternalError("sstables are not in order or have overlap key range");
         }
@@ -96,7 +96,7 @@ Status PersistentIndexSstableFileset::merge_from(std::unique_ptr<PersistentIndex
     std::string end_key = sstable->sstable_pb().range().end_key();
     // This sstable belong to same fileset.
     sstable->set_fileset_id(_fileset_id);
-    _sstable_map.emplace(std::move(start_key), std::make_pair(std::move(end_key), std::move(sstable)));
+    _sstable_map.emplace(std::make_pair(std::move(start_key), std::move(end_key)), std::move(sstable));
     return Status::OK();
 }
 
@@ -116,8 +116,8 @@ Status PersistentIndexSstableFileset::multi_get(const Slice* keys, const KeyInde
             auto it = _sstable_map.upper_bound(keys[key_index]);
             if (it != _sstable_map.begin()) {
                 --it;
-                const auto& [start_key, end_sstable_pair] = *it;
-                const auto& [end_key, sstable] = end_sstable_pair;
+                const auto& [key_pair, sstable] = *it;
+                const auto& [start_key, end_key] = key_pair;
                 if (comparator->Compare(keys[key_index], Slice(end_key)) <= 0) {
                     // key in range [start_key, end_key]
                     sstable_key_indexes_map[sstable.get()].insert(key_index);
@@ -137,8 +137,7 @@ const std::string& PersistentIndexSstableFileset::standalone_sstable_filename() 
 }
 
 void PersistentIndexSstableFileset::get_all_sstable_pbs(PersistentIndexSstableMetaPB* sstable_pbs) const {
-    for (const auto& [start_key, end_sstable_pair] : _sstable_map) {
-        const auto& [end_key, sstable] = end_sstable_pair;
+    for (const auto& [key_pair, sstable] : _sstable_map) {
         sstable_pbs->add_sstables()->CopyFrom(sstable->sstable_pb());
     }
     if (_standalone_sstable != nullptr) {
@@ -148,8 +147,7 @@ void PersistentIndexSstableFileset::get_all_sstable_pbs(PersistentIndexSstableMe
 
 size_t PersistentIndexSstableFileset::memory_usage() const {
     size_t total_memory = 0;
-    for (const auto& [start_key, end_sstable_pair] : _sstable_map) {
-        const auto& [end_key, sstable] = end_sstable_pair;
+    for (const auto& [key_pair, sstable] : _sstable_map) {
         total_memory += sstable->memory_usage();
     }
     if (_standalone_sstable != nullptr) {
@@ -161,8 +159,7 @@ size_t PersistentIndexSstableFileset::memory_usage() const {
 void PersistentIndexSstableFileset::print_debug_info(std::stringstream& ss) {
     ss << " Fileset ID: " << _fileset_id.to_string();
     ss << " Number of sstables: " << _sstable_map.size();
-    for (const auto& [start_key, end_sstable_pair] : _sstable_map) {
-        const auto& [end_key, sstable] = end_sstable_pair;
+    for (const auto& [key_pair, sstable] : _sstable_map) {
         ss << " Sstable filesize: " << sstable->sstable_pb().filesize();
     }
     if (_standalone_sstable != nullptr) {

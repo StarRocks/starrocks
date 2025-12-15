@@ -2347,7 +2347,7 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Description: The minimum level size parameter for primary key index size-tiered compaction strategy.
 - Introduced in: -
 
-##### pk_index_size_tiered_level_multiple
+##### pk_index_size_tiered_level_multiplier 
 
 - Default: 10
 - Type: Int
@@ -2356,7 +2356,7 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Description: The level multiple parameter for primary key index size-tiered compaction strategy.
 - Introduced in: -
 
-##### pk_index_size_tiered_level_num
+##### pk_index_size_tiered_max_level 
 
 - Default: 5
 - Type: Int

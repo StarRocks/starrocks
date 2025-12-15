@@ -30,20 +30,20 @@ protected:
     void SetUp() override {
         // Save original config values
         _original_min_level_size = config::pk_index_size_tiered_min_level_size;
-        _original_level_multiple = config::pk_index_size_tiered_level_multiple;
-        _original_level_num = config::pk_index_size_tiered_level_num;
+        _original_level_multiple = config::pk_index_size_tiered_level_multiplier;
+        _original_level_num = config::pk_index_size_tiered_max_level;
 
         // Set default config values for tests
         config::pk_index_size_tiered_min_level_size = 131072; // 128KB
-        config::pk_index_size_tiered_level_multiple = 5;
-        config::pk_index_size_tiered_level_num = 7;
+        config::pk_index_size_tiered_level_multiplier = 5;
+        config::pk_index_size_tiered_max_level = 7;
     }
 
     void TearDown() override {
         // Restore original config values
         config::pk_index_size_tiered_min_level_size = _original_min_level_size;
-        config::pk_index_size_tiered_level_multiple = _original_level_multiple;
-        config::pk_index_size_tiered_level_num = _original_level_num;
+        config::pk_index_size_tiered_level_multiplier = _original_level_multiple;
+        config::pk_index_size_tiered_max_level = _original_level_num;
     }
 
     // Helper function to create a TabletMetadata with sstables
@@ -76,9 +76,9 @@ private:
 TEST_F(LakePersistentIndexSizeTieredCompactionStrategyTest, test_empty_sstables) {
     auto metadata = std::make_shared<TabletMetadata>();
 
-    LakePersistentIndexSizeTieredCompactionStrategy::CompactionCandidateResult result;
-    ASSERT_OK(LakePersistentIndexSizeTieredCompactionStrategy::pick_compaction_candidates(metadata->sstable_meta(),
-                                                                                          &result));
+    ASSIGN_OR_ABORT(CompactionCandidateResult result,
+                    LakePersistentIndexSizeTieredCompactionStrategy::pick_compaction_candidates(
+                            metadata->sstable_meta(), &result));
 
     EXPECT_EQ(0, result.candidate_filesets.size());
     EXPECT_FALSE(result.merge_base_level);
@@ -93,9 +93,9 @@ TEST_F(LakePersistentIndexSizeTieredCompactionStrategyTest, test_single_fileset)
 
     auto metadata = create_tablet_metadata_with_sstables(sstables_info);
 
-    LakePersistentIndexSizeTieredCompactionStrategy::CompactionCandidateResult result;
-    ASSERT_OK(LakePersistentIndexSizeTieredCompactionStrategy::pick_compaction_candidates(metadata->sstable_meta(),
-                                                                                          &result));
+    ASSIGN_OR_ABORT(CompactionCandidateResult result,
+                    LakePersistentIndexSizeTieredCompactionStrategy::pick_compaction_candidates(
+                            metadata->sstable_meta(), &result));
 
     EXPECT_EQ(0, result.candidate_filesets.size());
 }
@@ -109,9 +109,9 @@ TEST_F(LakePersistentIndexSizeTieredCompactionStrategyTest, test_two_filesets_sa
 
     auto metadata = create_tablet_metadata_with_sstables(sstables_info);
 
-    LakePersistentIndexSizeTieredCompactionStrategy::CompactionCandidateResult result;
-    ASSERT_OK(LakePersistentIndexSizeTieredCompactionStrategy::pick_compaction_candidates(metadata->sstable_meta(),
-                                                                                          &result));
+    ASSIGN_OR_ABORT(CompactionCandidateResult result,
+                    LakePersistentIndexSizeTieredCompactionStrategy::pick_compaction_candidates(
+                            metadata->sstable_meta(), &result));
 
     EXPECT_EQ(2, result.candidate_filesets.size());
     EXPECT_TRUE(result.merge_base_level);
@@ -140,9 +140,9 @@ TEST_F(LakePersistentIndexSizeTieredCompactionStrategyTest, test_multiple_sstabl
 
     auto metadata = create_tablet_metadata_with_sstables(sstables_info);
 
-    LakePersistentIndexSizeTieredCompactionStrategy::CompactionCandidateResult result;
-    ASSERT_OK(LakePersistentIndexSizeTieredCompactionStrategy::pick_compaction_candidates(metadata->sstable_meta(),
-                                                                                          &result));
+    ASSIGN_OR_ABORT(CompactionCandidateResult result,
+                    LakePersistentIndexSizeTieredCompactionStrategy::pick_compaction_candidates(
+                            metadata->sstable_meta(), &result));
 
     EXPECT_EQ(2, result.candidate_filesets.size());
     EXPECT_TRUE(result.merge_base_level);
@@ -168,9 +168,9 @@ TEST_F(LakePersistentIndexSizeTieredCompactionStrategyTest, test_three_filesets_
 
     auto metadata = create_tablet_metadata_with_sstables(sstables_info);
 
-    LakePersistentIndexSizeTieredCompactionStrategy::CompactionCandidateResult result;
-    ASSERT_OK(LakePersistentIndexSizeTieredCompactionStrategy::pick_compaction_candidates(metadata->sstable_meta(),
-                                                                                          &result));
+    ASSIGN_OR_ABORT(CompactionCandidateResult result,
+                    LakePersistentIndexSizeTieredCompactionStrategy::pick_compaction_candidates(
+                            metadata->sstable_meta(), &result));
 
     EXPECT_EQ(3, result.candidate_filesets.size());
     EXPECT_TRUE(result.merge_base_level);
@@ -187,9 +187,9 @@ TEST_F(LakePersistentIndexSizeTieredCompactionStrategyTest, test_different_size_
 
     auto metadata = create_tablet_metadata_with_sstables(sstables_info);
 
-    LakePersistentIndexSizeTieredCompactionStrategy::CompactionCandidateResult result;
-    ASSERT_OK(LakePersistentIndexSizeTieredCompactionStrategy::pick_compaction_candidates(metadata->sstable_meta(),
-                                                                                          &result));
+    ASSIGN_OR_ABORT(CompactionCandidateResult result,
+                    LakePersistentIndexSizeTieredCompactionStrategy::pick_compaction_candidates(
+                            metadata->sstable_meta(), &result));
 
     // Should select the smaller filesets (higher score due to more filesets and smaller level)
     EXPECT_EQ(2, result.candidate_filesets.size());
@@ -199,7 +199,7 @@ TEST_F(LakePersistentIndexSizeTieredCompactionStrategyTest, test_different_size_
 // Test 7: Size-tiered with multiple levels - select highest score
 TEST_F(LakePersistentIndexSizeTieredCompactionStrategyTest, test_multiple_levels_highest_score) {
     config::pk_index_size_tiered_min_level_size = 100000; // 100KB
-    config::pk_index_size_tiered_level_multiple = 5;
+    config::pk_index_size_tiered_level_multiplier = 5;
 
     // Level 1: 3 filesets of ~100KB each (high score due to many filesets)
     // Level 2: 2 filesets of ~500KB each
@@ -208,9 +208,9 @@ TEST_F(LakePersistentIndexSizeTieredCompactionStrategyTest, test_multiple_levels
 
     auto metadata = create_tablet_metadata_with_sstables(sstables_info);
 
-    LakePersistentIndexSizeTieredCompactionStrategy::CompactionCandidateResult result;
-    ASSERT_OK(LakePersistentIndexSizeTieredCompactionStrategy::pick_compaction_candidates(metadata->sstable_meta(),
-                                                                                          &result));
+    ASSIGN_OR_ABORT(CompactionCandidateResult result,
+                    LakePersistentIndexSizeTieredCompactionStrategy::pick_compaction_candidates(
+                            metadata->sstable_meta(), &result));
 
     // Should select level with highest score (3 filesets)
     EXPECT_EQ(3, result.candidate_filesets.size());
@@ -229,9 +229,9 @@ TEST_F(LakePersistentIndexSizeTieredCompactionStrategyTest, test_base_level_not_
 
     auto metadata = create_tablet_metadata_with_sstables(sstables_info);
 
-    LakePersistentIndexSizeTieredCompactionStrategy::CompactionCandidateResult result;
-    ASSERT_OK(LakePersistentIndexSizeTieredCompactionStrategy::pick_compaction_candidates(metadata->sstable_meta(),
-                                                                                          &result));
+    ASSIGN_OR_ABORT(CompactionCandidateResult result,
+                    LakePersistentIndexSizeTieredCompactionStrategy::pick_compaction_candidates(
+                            metadata->sstable_meta(), &result));
 
     // Should select the 3 smaller filesets, not including base level
     EXPECT_EQ(3, result.candidate_filesets.size());
@@ -256,9 +256,9 @@ TEST_F(LakePersistentIndexSizeTieredCompactionStrategyTest, test_sstables_withou
         // Don't set fileset_id - should generate unique IDs for each sstable
     }
 
-    LakePersistentIndexSizeTieredCompactionStrategy::CompactionCandidateResult result;
-    ASSERT_OK(LakePersistentIndexSizeTieredCompactionStrategy::pick_compaction_candidates(metadata->sstable_meta(),
-                                                                                          &result));
+    ASSIGN_OR_ABORT(CompactionCandidateResult result,
+                    LakePersistentIndexSizeTieredCompactionStrategy::pick_compaction_candidates(
+                            metadata->sstable_meta(), &result));
 
     // All 3 sstables are in different filesets (each gets a unique generated ID), should be selected
     EXPECT_EQ(3, result.candidate_filesets.size());
@@ -274,9 +274,9 @@ TEST_F(LakePersistentIndexSizeTieredCompactionStrategyTest, test_minimum_compact
 
     auto metadata = create_tablet_metadata_with_sstables(sstables_info);
 
-    LakePersistentIndexSizeTieredCompactionStrategy::CompactionCandidateResult result;
-    ASSERT_OK(LakePersistentIndexSizeTieredCompactionStrategy::pick_compaction_candidates(metadata->sstable_meta(),
-                                                                                          &result));
+    ASSIGN_OR_ABORT(CompactionCandidateResult result,
+                    LakePersistentIndexSizeTieredCompactionStrategy::pick_compaction_candidates(
+                            metadata->sstable_meta(), &result));
 
     EXPECT_EQ(0, result.candidate_filesets.size());
 }
@@ -292,9 +292,9 @@ TEST_F(LakePersistentIndexSizeTieredCompactionStrategyTest, test_large_number_of
 
     auto metadata = create_tablet_metadata_with_sstables(sstables_info);
 
-    LakePersistentIndexSizeTieredCompactionStrategy::CompactionCandidateResult result;
-    ASSERT_OK(LakePersistentIndexSizeTieredCompactionStrategy::pick_compaction_candidates(metadata->sstable_meta(),
-                                                                                          &result));
+    ASSIGN_OR_ABORT(CompactionCandidateResult result,
+                    LakePersistentIndexSizeTieredCompactionStrategy::pick_compaction_candidates(
+                            metadata->sstable_meta(), &result));
 
     // Should select multiple filesets for compaction
     EXPECT_GT(result.candidate_filesets.size(), 0);
@@ -312,9 +312,9 @@ TEST_F(LakePersistentIndexSizeTieredCompactionStrategyTest, test_mixed_sizes) {
 
     auto metadata = create_tablet_metadata_with_sstables(sstables_info);
 
-    LakePersistentIndexSizeTieredCompactionStrategy::CompactionCandidateResult result;
-    ASSERT_OK(LakePersistentIndexSizeTieredCompactionStrategy::pick_compaction_candidates(metadata->sstable_meta(),
-                                                                                          &result));
+    ASSIGN_OR_ABORT(CompactionCandidateResult result,
+                    LakePersistentIndexSizeTieredCompactionStrategy::pick_compaction_candidates(
+                            metadata->sstable_meta(), &result));
 
     // Should select the 3 small filesets
     EXPECT_EQ(3, result.candidate_filesets.size());
@@ -331,9 +331,9 @@ TEST_F(LakePersistentIndexSizeTieredCompactionStrategyTest, test_non_sequential_
 
     auto metadata = create_tablet_metadata_with_sstables(sstables_info);
 
-    LakePersistentIndexSizeTieredCompactionStrategy::CompactionCandidateResult result;
-    ASSERT_OK(LakePersistentIndexSizeTieredCompactionStrategy::pick_compaction_candidates(metadata->sstable_meta(),
-                                                                                          &result));
+    ASSIGN_OR_ABORT(CompactionCandidateResult result,
+                    LakePersistentIndexSizeTieredCompactionStrategy::pick_compaction_candidates(
+                            metadata->sstable_meta(), &result));
 
     EXPECT_EQ(3, result.candidate_filesets.size());
     EXPECT_TRUE(result.merge_base_level);
@@ -354,9 +354,9 @@ TEST_F(LakePersistentIndexSizeTieredCompactionStrategyTest, test_zero_size_sstab
 
     auto metadata = create_tablet_metadata_with_sstables(sstables_info);
 
-    LakePersistentIndexSizeTieredCompactionStrategy::CompactionCandidateResult result;
-    ASSERT_OK(LakePersistentIndexSizeTieredCompactionStrategy::pick_compaction_candidates(metadata->sstable_meta(),
-                                                                                          &result));
+    ASSIGN_OR_ABORT(CompactionCandidateResult result,
+                    LakePersistentIndexSizeTieredCompactionStrategy::pick_compaction_candidates(
+                            metadata->sstable_meta(), &result));
 
     // Should handle zero-size sstables gracefully
     EXPECT_GT(result.candidate_filesets.size(), 0);
@@ -372,9 +372,9 @@ TEST_F(LakePersistentIndexSizeTieredCompactionStrategyTest, test_max_rss_rowid_c
 
     auto metadata = create_tablet_metadata_with_sstables(sstables_info);
 
-    LakePersistentIndexSizeTieredCompactionStrategy::CompactionCandidateResult result;
-    ASSERT_OK(LakePersistentIndexSizeTieredCompactionStrategy::pick_compaction_candidates(metadata->sstable_meta(),
-                                                                                          &result));
+    ASSIGN_OR_ABORT(CompactionCandidateResult result,
+                    LakePersistentIndexSizeTieredCompactionStrategy::pick_compaction_candidates(
+                            metadata->sstable_meta(), &result));
 
     EXPECT_EQ(2, result.candidate_filesets.size());
 }
@@ -382,7 +382,7 @@ TEST_F(LakePersistentIndexSizeTieredCompactionStrategyTest, test_max_rss_rowid_c
 // Test 16: Consecutive levels with increasing sizes
 TEST_F(LakePersistentIndexSizeTieredCompactionStrategyTest, test_consecutive_levels) {
     config::pk_index_size_tiered_min_level_size = 100000;
-    config::pk_index_size_tiered_level_multiple = 5;
+    config::pk_index_size_tiered_level_multiplier = 5;
 
     std::vector<std::tuple<int64_t, int64_t, uint64_t>> sstables_info = {
             // Level 1: ~100KB
@@ -397,9 +397,9 @@ TEST_F(LakePersistentIndexSizeTieredCompactionStrategyTest, test_consecutive_lev
 
     auto metadata = create_tablet_metadata_with_sstables(sstables_info);
 
-    LakePersistentIndexSizeTieredCompactionStrategy::CompactionCandidateResult result;
-    ASSERT_OK(LakePersistentIndexSizeTieredCompactionStrategy::pick_compaction_candidates(metadata->sstable_meta(),
-                                                                                          &result));
+    ASSIGN_OR_ABORT(CompactionCandidateResult result,
+                    LakePersistentIndexSizeTieredCompactionStrategy::pick_compaction_candidates(
+                            metadata->sstable_meta(), &result));
 
     // Should select one of the levels with 5 filesets
     EXPECT_EQ(5, result.candidate_filesets.size());
@@ -416,9 +416,9 @@ TEST_F(LakePersistentIndexSizeTieredCompactionStrategyTest, test_all_same_size) 
 
     auto metadata = create_tablet_metadata_with_sstables(sstables_info);
 
-    LakePersistentIndexSizeTieredCompactionStrategy::CompactionCandidateResult result;
-    ASSERT_OK(LakePersistentIndexSizeTieredCompactionStrategy::pick_compaction_candidates(metadata->sstable_meta(),
-                                                                                          &result));
+    ASSIGN_OR_ABORT(CompactionCandidateResult result,
+                    LakePersistentIndexSizeTieredCompactionStrategy::pick_compaction_candidates(
+                            metadata->sstable_meta(), &result));
 
     // All should be in the same level and selected
     EXPECT_EQ(5, result.candidate_filesets.size());
@@ -434,17 +434,16 @@ TEST_F(LakePersistentIndexSizeTieredCompactionStrategyTest, test_result_cleared)
 
     auto metadata = create_tablet_metadata_with_sstables(sstables_info);
 
-    LakePersistentIndexSizeTieredCompactionStrategy::CompactionCandidateResult result;
-
     // First call
-    ASSERT_OK(LakePersistentIndexSizeTieredCompactionStrategy::pick_compaction_candidates(metadata->sstable_meta(),
-                                                                                          &result));
+    ASSIGN_OR_ABORT(CompactionCandidateResult result,
+                    LakePersistentIndexSizeTieredCompactionStrategy::pick_compaction_candidates(
+                            metadata->sstable_meta(), &result));
     EXPECT_EQ(2, result.candidate_filesets.size());
 
     // Second call with empty metadata
     auto empty_metadata = std::make_shared<TabletMetadata>();
-    ASSERT_OK(LakePersistentIndexSizeTieredCompactionStrategy::pick_compaction_candidates(
-            empty_metadata->sstable_meta(), &result));
+    ASSIGN_OR_ABORT(result, LakePersistentIndexSizeTieredCompactionStrategy::pick_compaction_candidates(
+                                    empty_metadata->sstable_meta(), &result));
 
     // Result should be cleared
     EXPECT_EQ(0, result.candidate_filesets.size());
@@ -467,9 +466,9 @@ TEST_F(LakePersistentIndexSizeTieredCompactionStrategyTest, test_many_sstables_p
         }
     }
 
-    LakePersistentIndexSizeTieredCompactionStrategy::CompactionCandidateResult result;
-    ASSERT_OK(LakePersistentIndexSizeTieredCompactionStrategy::pick_compaction_candidates(metadata->sstable_meta(),
-                                                                                          &result));
+    ASSIGN_OR_ABORT(CompactionCandidateResult result,
+                    LakePersistentIndexSizeTieredCompactionStrategy::pick_compaction_candidates(
+                            metadata->sstable_meta(), &result));
 
     EXPECT_EQ(2, result.candidate_filesets.size());
     EXPECT_EQ(100, result.candidate_filesets[0].size()); // 100 sstables in fileset 1
@@ -479,7 +478,7 @@ TEST_F(LakePersistentIndexSizeTieredCompactionStrategyTest, test_many_sstables_p
 // Test 20: Boundary test with exact level_multiple threshold
 TEST_F(LakePersistentIndexSizeTieredCompactionStrategyTest, test_level_multiple_threshold) {
     config::pk_index_size_tiered_min_level_size = 100000;
-    config::pk_index_size_tiered_level_multiple = 5;
+    config::pk_index_size_tiered_level_multiplier = 5;
 
     std::vector<std::tuple<int64_t, int64_t, uint64_t>> sstables_info = {
             {2, 500000, 200}, // 500KB = 100KB * 5 (exact threshold)
@@ -489,9 +488,9 @@ TEST_F(LakePersistentIndexSizeTieredCompactionStrategyTest, test_level_multiple_
 
     auto metadata = create_tablet_metadata_with_sstables(sstables_info);
 
-    LakePersistentIndexSizeTieredCompactionStrategy::CompactionCandidateResult result;
-    ASSERT_OK(LakePersistentIndexSizeTieredCompactionStrategy::pick_compaction_candidates(metadata->sstable_meta(),
-                                                                                          &result));
+    ASSIGN_OR_ABORT(CompactionCandidateResult result,
+                    LakePersistentIndexSizeTieredCompactionStrategy::pick_compaction_candidates(
+                            metadata->sstable_meta(), &result));
 
     // Should separate into different levels based on size
     EXPECT_EQ(result.candidate_filesets.size(), 2);

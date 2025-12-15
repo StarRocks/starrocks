@@ -1816,7 +1816,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 描述：主键索引 Size-Tiered Compaction 策略的最小层级大小参数。
 - 引入版本：-
 
-##### pk_index_size_tiered_level_multiple
+##### pk_index_size_tiered_level_multiplier 
 
 - 默认值：10
 - 类型：Int
@@ -1825,7 +1825,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 描述：主键索引 Size-Tiered Compaction 策略的层级倍数参数。
 - 引入版本：-
 
-##### pk_index_size_tiered_level_num
+##### pk_index_size_tiered_max_level 
 
 - 默认值：5
 - 类型：Int

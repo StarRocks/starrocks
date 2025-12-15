@@ -282,6 +282,7 @@ Status LakePersistentIndexParallelCompactMgr::init() {
     ThreadPoolBuilder builder("cloud_native_pk_index_compact");
     builder.set_min_threads(1);
     builder.set_max_threads(std::max(1, config::pk_index_parallel_compaction_threadpool_max_threads));
+    builder.set_max_queue_size(config::pk_index_parallel_compaction_threadpool_size);
     return builder.build(&_thread_pool);
 }
 
@@ -310,13 +311,14 @@ StatusOr<AsyncCompactCBPtr> LakePersistentIndexParallelCompactMgr::async_compact
     } else {
         // run via thread pool
         cb = std::make_unique<AsyncCompactCB>(_thread_pool->new_token(ThreadPool::ExecutionMode::CONCURRENT), callback);
-        for (int i = 0; i < tasks.size(); ++i) {
-            tasks[i]->set_cb(cb.get());
-            auto submit_st = cb->thread_pool_token()->submit(tasks[i]);
+        for (auto& task; tasks) {
+            task->set_cb(cb.get());
+            auto submit_st = cb->thread_pool_token()->submit(task);
             if (!submit_st.ok()) {
                 LOG(ERROR) << "Failed to submit persistent index parallel compaction task to thread pool: "
                            << submit_st;
                 cb->update_status(submit_st);
+                break;
             }
         }
     }
@@ -471,6 +473,12 @@ void LakePersistentIndexParallelCompactMgr::generate_compaction_tasks(
                     std::move(seg.filesets), _tablet_mgr, metadata, merge_base_level, fileset_id, seg.seek_range));
         }
     }
+}
+
+void LakePersistentIndexParallelCompactMgr::TEST_generate_compaction_tasks(
+        const std::vector<std::vector<PersistentIndexSstablePB>>& candidates, const TabletMetadataPtr& metadata,
+        bool merge_base_level, std::vector<std::shared_ptr<LakePersistentIndexParallelCompactTask>>* tasks) {
+    generate_compaction_tasks(candidates, metadata, merge_base_level, tasks);
 }
 
 } // namespace starrocks::lake

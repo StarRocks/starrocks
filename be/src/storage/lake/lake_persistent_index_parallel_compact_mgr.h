@@ -142,9 +142,7 @@ public:
     // For UT to test generate_compaction_tasks.
     void TEST_generate_compaction_tasks(const std::vector<std::vector<PersistentIndexSstablePB>>& candidates,
                                         const TabletMetadataPtr& metadata, bool merge_base_level,
-                                        std::vector<std::shared_ptr<LakePersistentIndexParallelCompactTask>>* tasks) {
-        generate_compaction_tasks(candidates, metadata, merge_base_level, tasks);
-    }
+                                        std::vector<std::shared_ptr<LakePersistentIndexParallelCompactTask>>* tasks);
 
 private:
     // generate compaction tasks using candidate filesets.

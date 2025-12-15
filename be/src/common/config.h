@@ -431,6 +431,8 @@ CONF_mInt64(pk_parallel_execution_threshold_bytes, "104857600");
 // Compaction threadpool max thread num for cloud native pk index compact in shared-data mode.
 // Default is 4.
 CONF_mInt32(pk_index_parallel_compaction_threadpool_max_threads, "4");
+// The queue size for pk index parallel compaction threadpool in shared-data mode.
+CONF_mInt32(pk_index_parallel_compaction_threadpool_size, "1048576");
 // The splitting threshold for PK index compaction tasks — when the total size of the files involved in a task is
 // smaller than this threshold, the task will not be split.
 // Default is 100MB.
@@ -450,16 +452,20 @@ CONF_mBool(enable_pk_index_parallel_compaction, "false");
 CONF_mBool(enable_pk_index_parallel_get, "false");
 // The minimum rows threshold to enable parallel get for primary key index in shared-data mode.
 CONF_mInt64(pk_index_parallel_get_min_rows, "16384");
-// Compaction threadpool max thread num for pk index get in shared-data mode.
+// The threadpool max thread num for pk index get in shared-data mode.
 CONF_mInt32(pk_index_parallel_get_threadpool_max_threads, "0");
+// The queue size for pk index parallel get threadpool in shared-data mode.
+CONF_mInt32(pk_index_parallel_get_threadpool_size, "1048576");
 // Memtable flush threadpool max thread num for pk index in shared-data mode.
 CONF_mInt32(pk_index_memtable_flush_threadpool_max_threads, "4");
+// The queue size for pk index memtable flush threadpool in shared-data mode.
+CONF_mInt32(pk_index_memtable_flush_threadpool_size, "1048576");
 // The maximum number of memtables for pk index in shared-data mode.
 CONF_mInt32(pk_index_memtable_max_count, "3");
 // The parameters for pk index size-tiered compaction strategy.
 CONF_mInt64(pk_index_size_tiered_min_level_size, "131072");
-CONF_mInt64(pk_index_size_tiered_level_multiple, "10");
-CONF_mInt64(pk_index_size_tiered_level_num, "5");
+CONF_mInt64(pk_index_size_tiered_level_multiplier, "10");
+CONF_mInt64(pk_index_size_tiered_max_level, "5");
 // We support real-time compaction strategy for primary key tables in shared-data mode.
 // This real-time compaction strategy enables compacting rowsets across multiple levels simultaneously.
 // The parameter `size_tiered_max_compaction_level` defines the maximum compaction level allowed in a single compaction task.
