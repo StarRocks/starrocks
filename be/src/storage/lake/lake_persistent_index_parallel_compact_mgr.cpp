@@ -311,7 +311,7 @@ StatusOr<AsyncCompactCBPtr> LakePersistentIndexParallelCompactMgr::async_compact
     } else {
         // run via thread pool
         cb = std::make_unique<AsyncCompactCB>(_thread_pool->new_token(ThreadPool::ExecutionMode::CONCURRENT), callback);
-        for (auto& task; tasks) {
+        for (auto& task : tasks) {
             task->set_cb(cb.get());
             auto submit_st = cb->thread_pool_token()->submit(task);
             if (!submit_st.ok()) {

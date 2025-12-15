@@ -33,8 +33,6 @@ class TableBuilder;
 
 namespace lake {
 
-using KeyIndex = size_t;
-using KeyIndexSet = std::set<KeyIndex>;
 class MetaFileBuilder;
 class PersistentIndexMemtable;
 class PersistentIndexSstable;

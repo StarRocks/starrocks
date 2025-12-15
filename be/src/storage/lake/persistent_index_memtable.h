@@ -14,13 +14,11 @@
 
 #pragma once
 
+#include "storage/lake/types_fwd.h"
 #include "storage/persistent_index.h"
 #include "util/phmap/btree.h"
 
 namespace starrocks::lake {
-
-using KeyIndex = size_t;
-using KeyIndexSet = std::set<KeyIndex>;
 
 class PersistentIndexMemtable {
 public:

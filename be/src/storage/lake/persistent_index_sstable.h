@@ -20,6 +20,7 @@
 
 #include "gen_cpp/lake_types.pb.h"
 #include "storage/lake/tablet_metadata.h"
+#include "storage/lake/types_fwd.h"
 #include "storage/persistent_index.h"
 #include "storage/sstable/filter_policy.h"
 #include "storage/sstable/table.h"
@@ -37,8 +38,6 @@ class FilterPolicy;
 } // namespace sstable
 
 namespace lake {
-using KeyIndex = size_t;
-using KeyIndexSet = std::set<KeyIndex>;
 // <version, IndexValue>
 using IndexValueWithVer = std::pair<int64_t, IndexValue>;
 

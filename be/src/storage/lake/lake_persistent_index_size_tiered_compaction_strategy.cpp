@@ -180,9 +180,9 @@ StatusOr<CompactionCandidateResult> LakePersistentIndexSizeTieredCompactionStrat
             merge_base_level = true;
         }
 
-        result->candidate_filesets.push_back(std::move(fileset_sstables));
+        result.candidate_filesets.push_back(std::move(fileset_sstables));
     }
-    result->merge_base_level = merge_base_level;
+    result.merge_base_level = merge_base_level;
 
     return result;
 }
