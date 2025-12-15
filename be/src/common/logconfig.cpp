@@ -239,7 +239,7 @@ void hook_on_query_timeout(TUniqueId& query_id, size_t timeout_seconds) {
             jemalloc_dontdump();
         }
 
-        std::string core_file = config::pipeline_gcore_output_dir + "core-" + print_id(query_id);
+        std::string core_file = config::pipeline_gcore_output_dir + "/core-" + print_id(query_id);
         LOG(WARNING) << "dump gcore via query timeout:" << timeout_seconds;
         pid_t pid = getpid();
         // gcore have too many verbose output. skip them
