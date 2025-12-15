@@ -248,7 +248,7 @@ public enum ErrorCode {
     ERR_PASSWD_LENGTH(5201, new byte[] {'H', 'Y', '0', '0', '0'},
             "Password hash should be a %d-digit hexadecimal number"),
     ERR_SQL_IN_BLACKLIST_ERROR(5202, new byte[] {'4', '2', '0', '0', '0'},
-            "Access denied; This sql is in blacklist, please contact your admin"),
+            "Access denied; This sql is in blacklist (id: %d), please contact your admin"),
     ERR_ACCESS_DENIED(5203, new byte[] {'4', '2', '0', '0', '0'},
             "Access denied; you need (at least one of) the %s privilege(s) on %s%s for this operation. " +
                     ErrorCode.ERR_ACCESS_DENIED_HINT_MSG_FORMAT),
