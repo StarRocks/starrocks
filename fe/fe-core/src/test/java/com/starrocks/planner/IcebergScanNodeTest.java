@@ -28,6 +28,9 @@ import com.starrocks.connector.iceberg.IcebergTableMORParams;
 import com.starrocks.connector.iceberg.IcebergTableOperation;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
+import com.starrocks.credential.CloudType;
+import com.starrocks.credential.aws.AwsCloudConfiguration;
+import com.starrocks.credential.aws.AwsCloudCredential;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.StmtExecutor;
@@ -1093,6 +1096,12 @@ public class IcebergScanNodeTest {
 
         CloudConfiguration cloudConfig = Deencapsulation.getField(scanNode, "cloudConfiguration");
         Assertions.assertNotNull(cloudConfig);
+        // Verify that credentials came from catalog config (lines 215-220)
+        Assertions.assertEquals(CloudType.AWS, cloudConfig.getCloudType());
+        AwsCloudConfiguration awsConfig = (AwsCloudConfiguration) cloudConfig;
+        AwsCloudCredential credential = awsConfig.getAwsCloudCredential();
+        Assertions.assertEquals("AKIA_FROM_CONFIG", credential.getAccessKey());
+        Assertions.assertEquals("secret_from_config", credential.getSecretKey());
     }
 
     @Test
