@@ -213,14 +213,12 @@ struct BitmapIndexSliceHash {
 template <typename CppType>
 struct BitmapIndexTraits {
     using UnorderedMemoryIndexType = phmap::flat_hash_map<CppType, BitmapUpdateContextRefOrSingleValue>;
-    using OrderedMemoryIndexType = std::map<CppType, BitmapUpdateContextRefOrSingleValue>;
 };
 
 template <>
 struct BitmapIndexTraits<Slice> {
     using UnorderedMemoryIndexType = phmap::flat_hash_map<Slice, BitmapUpdateContextRefOrSingleValue,
                                                           BitmapIndexSliceHash, std::equal_to<Slice>>;
-    using OrderedMemoryIndexType = std::map<Slice, BitmapUpdateContextRefOrSingleValue, Slice::Comparator>;
 };
 
 // Builder for bitmap index. Bitmap index is comprised of two parts
@@ -241,7 +239,6 @@ class BitmapIndexWriterImpl : public BitmapIndexWriter {
 public:
     using CppType = typename CppTypeTraits<field_type>::CppType;
     using UnorderedMemoryIndexType = typename BitmapIndexTraits<CppType>::UnorderedMemoryIndexType;
-    using OrderedMemoryIndexType = typename BitmapIndexTraits<CppType>::OrderedMemoryIndexType;
 
     explicit BitmapIndexWriterImpl(TypeInfoPtr type_info, int32_t gram_num)
             : _gram_num(gram_num), _typeinfo(std::move(type_info)) {}
@@ -289,29 +286,41 @@ public:
         meta->set_bitmap_type(BitmapIndexPB::ROARING_BITMAP);
         meta->set_has_null(!_null_bitmap.isEmpty());
 
-        OrderedMemoryIndexType ordered_mem_index;
+        std::vector<CppType> sorted_dicts;
+        sorted_dicts.reserve(_mem_index.size());
         for (auto& p : _mem_index) {
             p.second.flush_pending_adds();
-            ordered_mem_index.insert(std::move(p));
+            sorted_dicts.emplace_back(p.first);
         }
+        std::sort(sorted_dicts.begin(), sorted_dicts.end());
 
         // write dictionary
-        RETURN_IF_ERROR(_write_dictionary(ordered_mem_index, wfile, meta->mutable_dict_column()));
+        RETURN_IF_ERROR(_write_dictionary(sorted_dicts, wfile, meta->mutable_dict_column()));
         // write bitmap
-        RETURN_IF_ERROR(_write_bitmap(ordered_mem_index, wfile, meta->mutable_bitmap_column()));
+        RETURN_IF_ERROR(_write_bitmap(_mem_index, sorted_dicts, wfile, meta->mutable_bitmap_column()));
 
         if (_gram_num > 0) {
             if constexpr (field_type == TYPE_VARCHAR || field_type == TYPE_CHAR) {
                 size_t offset = 0;
-                OrderedMemoryIndexType ngram_index;
-                for (const auto& it : ordered_mem_index) {
-                    RETURN_IF_ERROR(_build_ngram(ngram_index, &it.first, offset++));
+                UnorderedMemoryIndexType ngram_index;
+                for (const auto& dict : sorted_dicts) {
+                    RETURN_IF_ERROR(_build_ngram(ngram_index, &dict, offset++));
                 }
-                for (auto& it: ngram_index) {
+
+                for (auto& it : ngram_index) {
                     it.second.flush_pending_adds();
                 }
-                RETURN_IF_ERROR(_write_dictionary(ngram_index, wfile, meta->mutable_ngram_dict_column()));
-                RETURN_IF_ERROR(_write_bitmap(ngram_index, wfile, meta->mutable_ngram_bitmap_column()));
+
+                std::vector<Slice> sorted_ngram_dicts;
+                sorted_ngram_dicts.reserve(ngram_index.size());
+                for (const auto& it : ngram_index) {
+                    sorted_ngram_dicts.emplace_back(it.first);
+                }
+                std::ranges::sort(sorted_ngram_dicts);
+
+                RETURN_IF_ERROR(_write_dictionary(sorted_ngram_dicts, wfile, meta->mutable_ngram_dict_column()));
+                RETURN_IF_ERROR(
+                        _write_bitmap(ngram_index, sorted_ngram_dicts, wfile, meta->mutable_ngram_bitmap_column()));
             }
         }
         return Status::OK();
@@ -334,7 +343,7 @@ public:
     inline void incre_rowid() override { _rid++; }
 
 private:
-    Status _build_ngram(OrderedMemoryIndexType& ngram_index, const Slice* cur_slice, const size_t offset) {
+    Status _build_ngram(UnorderedMemoryIndexType& ngram_index, const Slice* cur_slice, const size_t offset) {
         if (_gram_num <= 0) {
             return Status::InvalidArgument(
                     "Invalid gram num while building ngram index for inverted index dictionary.");
@@ -362,8 +371,7 @@ private:
         return Status::OK();
     }
 
-    Status _write_dictionary(OrderedMemoryIndexType& ordered_mem_index, WritableFile* wfile,
-                             IndexedColumnMetaPB* meta) {
+    Status _write_dictionary(const std::vector<CppType>& sorted_dicts, WritableFile* wfile, IndexedColumnMetaPB* meta) {
         IndexedColumnWriterOptions options;
         options.write_ordinal_index = true;
         options.write_value_index = true;
@@ -372,16 +380,22 @@ private:
 
         IndexedColumnWriter dict_column_writer(options, _typeinfo, wfile);
         RETURN_IF_ERROR(dict_column_writer.init());
-        for (auto const& it : ordered_mem_index) {
-            RETURN_IF_ERROR(dict_column_writer.add(&(it.first)));
+        for (auto const& dict : sorted_dicts) {
+            RETURN_IF_ERROR(dict_column_writer.add(&dict));
         }
         return dict_column_writer.finish(meta);
     }
 
-    Status _write_bitmap(OrderedMemoryIndexType& ordered_mem_index, WritableFile* wfile, IndexedColumnMetaPB* meta) {
+    Status _write_bitmap(UnorderedMemoryIndexType& ordered_mem_index, const std::vector<CppType>& sorted_dicts,
+                         WritableFile* wfile, IndexedColumnMetaPB* meta) {
         std::vector<BitmapUpdateContextRefOrSingleValue*> bitmaps;
-        for (auto& it : ordered_mem_index) {
-            bitmaps.push_back(&(it.second));
+        for (const auto& dict : sorted_dicts) {
+            auto it = ordered_mem_index.find(dict);
+            if (it == ordered_mem_index.end()) {
+                // should never happen
+                return Status::InternalError("No bitmap found for dict");
+            }
+            bitmaps.push_back(&(it->second));
         }
 
         uint32_t max_bitmap_size = 0;
