@@ -119,8 +119,8 @@ public:
         if constexpr (lambda_depends_on_args) {
             DCHECK(_argument_ids.size() == 2);
             // Get the argument columns from eval_chunk
-            auto& arg1_col = _one_row_chunk->get_column_by_slot_id(_argument_ids[0]);
-            auto& arg2_col = _one_row_chunk->get_column_by_slot_id(_argument_ids[1]);
+            auto* arg1_col = _one_row_chunk->get_column_raw_ptr_by_slot_id(_argument_ids[0]);
+            auto* arg2_col = _one_row_chunk->get_column_raw_ptr_by_slot_id(_argument_ids[1]);
 
             // Clear and rebuild the argument columns with just the two elements being compared
             arg1_col->reset_column();
@@ -265,8 +265,8 @@ StatusOr<ColumnPtr> ArraySortLambdaExpr::evaluate_lambda_expr(ExprContext* conte
         }
 
         for (const auto id : capture_slot_ids) {
-            auto& column = captured_chunk->get_column_by_slot_id(id);
-            auto& col = one_row_chunk->get_column_by_slot_id(id);
+            auto* column = captured_chunk->get_column_raw_ptr_by_slot_id(id);
+            auto* col = one_row_chunk->get_column_raw_ptr_by_slot_id(id);
             col->reset_column();
             col->append(*column, row, 1);
         }
