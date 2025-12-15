@@ -123,13 +123,9 @@ Status update_metadata_schema(const TxnLogPB_OpWrite& op_write, int64_t txn_id, 
         tablet_meta->historical_schemas().contains(schema_meta.schema_id())) {
         return Status::OK();
     }
-    auto schema_info = TableSchemaService::TableSchemaInfo{.schema_id = schema_meta.schema_id(),
-                                                           .db_id = schema_meta.db_id(),
-                                                           .table_id = schema_meta.table_id(),
-                                                           .tablet_id = tablet_meta->id()};
     ASSIGN_OR_RETURN(auto new_schema,
-                     ExecEnv::GetInstance()->lake_tablet_manager()->table_schema_service()->get_load_schema(schema_info,
-                                                                                                            txn_id));
+                     ExecEnv::GetInstance()->lake_tablet_manager()->table_schema_service()->get_load_schema(
+                             schema_meta, tablet_meta->id(), txn_id));
     auto& old_schema = tablet_meta->schema();
     if (new_schema->schema_version() <= old_schema.schema_version()) {
         return Status::OK();

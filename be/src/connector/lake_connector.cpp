@@ -20,6 +20,7 @@
 #include "exec/connector_scan_node.h"
 #include "exec/olap_scan_prepare.h"
 #include "exec/pipeline/fragment_context.h"
+#include "gen_cpp/lake_types.pb.h"
 #include "runtime/global_dict/parser.h"
 #include "storage/chunk_helper.h"
 #include "storage/column_predicate_rewriter.h"
@@ -180,13 +181,13 @@ Status LakeDataSource::get_tablet(const TInternalScanRange& scan_range) {
     ASSIGN_OR_RETURN(_tablet, tablet_manager->get_tablet(tablet_id, version));
     auto& lake_scan_node = _provider->_t_lake_scan_node;
     if (lake_scan_node.__isset.schema_meta) {
-        auto& schema_meta = lake_scan_node.schema_meta;
-        auto schema_info = lake::TableSchemaService::TableSchemaInfo{.schema_id = schema_meta.schema_id,
-                                                                     .db_id = schema_meta.db_id,
-                                                                     .table_id = schema_meta.table_id,
-                                                                     .tablet_id = tablet_id};
+        const auto& schema_meta = lake_scan_node.schema_meta;
+        TableSchemaMetaPB schema_meta_pb;
+        schema_meta_pb.set_schema_id(schema_meta.schema_id);
+        schema_meta_pb.set_db_id(schema_meta.db_id);
+        schema_meta_pb.set_table_id(schema_meta.table_id);
         ASSIGN_OR_RETURN(_tablet_schema, tablet_manager->table_schema_service()->get_scan_schema(
-                                                 schema_info, _runtime_state->query_id(),
+                                                 schema_meta_pb, tablet_id, _runtime_state->query_id(),
                                                  _runtime_state->fragment_ctx()->fe_addr(), _tablet.metadata()));
     } else {
         // no table schema meta indicates FE has not been upgraded to use fast schema evolution v2,

@@ -243,10 +243,12 @@ protected:
         return metadata;
     }
 
-    TableSchemaService::TableSchemaInfo create_schema_info(int64_t schema_id, int64_t db_id, int64_t table_id,
-                                                           int64_t tablet_id) {
-        return TableSchemaService::TableSchemaInfo{
-                .schema_id = schema_id, .db_id = db_id, .table_id = table_id, .tablet_id = tablet_id};
+    TableSchemaMetaPB create_schema_info(int64_t schema_id, int64_t db_id, int64_t table_id) {
+        TableSchemaMetaPB schema_meta;
+        schema_meta.set_schema_id(schema_id);
+        schema_meta.set_db_id(db_id);
+        schema_meta.set_table_id(table_id);
+        return schema_meta;
     }
 
     TUniqueId create_query_id() {
@@ -379,12 +381,12 @@ TEST_F(TableSchemaServiceTest, global_schema_cache_hit) {
     _tablet_manager->cache_schema(schema);
 
     // LOAD path should hit global cache.
-    auto load_result = _schema_service->get_load_schema(create_schema_info(schema_id, 100, 101, 1000), 1);
+    auto load_result = _schema_service->get_load_schema(create_schema_info(schema_id, 100, 101), 1000, 1);
     ASSERT_OK(load_result);
     ASSERT_EQ(load_result.value()->id(), schema_id);
 
     // SCAN path should hit global cache.
-    auto scan_result = _schema_service->get_scan_schema(create_schema_info(schema_id, 100, 101, 1000),
+    auto scan_result = _schema_service->get_scan_schema(create_schema_info(schema_id, 100, 101), 1000,
                                                         create_query_id(), create_fe_address());
     ASSERT_OK(scan_result);
     ASSERT_EQ(scan_result.value()->id(), schema_id);
@@ -401,7 +403,7 @@ TEST_F(TableSchemaServiceTest, tablet_metadata_hit) {
 
     {
         SCOPED_TRACE("current_schema");
-        auto result = _schema_service->get_load_schema(create_schema_info(current_schema_id, 100, 101, tablet_id), 1,
+        auto result = _schema_service->get_load_schema(create_schema_info(current_schema_id, 100, 101), tablet_id, 1,
                                                        metadata);
         ASSERT_OK(result);
         ASSERT_EQ(result.value()->id(), current_schema_id);
@@ -412,7 +414,7 @@ TEST_F(TableSchemaServiceTest, tablet_metadata_hit) {
 
     {
         SCOPED_TRACE("historical_schema");
-        auto result = _schema_service->get_load_schema(create_schema_info(historical_schema_id, 100, 101, tablet_id), 1,
+        auto result = _schema_service->get_load_schema(create_schema_info(historical_schema_id, 100, 101), tablet_id, 1,
                                                        metadata);
         ASSERT_OK(result);
         ASSERT_EQ(result.value()->id(), historical_schema_id);
@@ -429,7 +431,7 @@ TEST_F(TableSchemaServiceTest, remote_hit) {
     int64_t schema_id = next_id();
     setup_rpc_success_schema(schema_id);
 
-    auto result = _schema_service->get_load_schema(create_schema_info(schema_id, 100, 101, 1000), 1);
+    auto result = _schema_service->get_load_schema(create_schema_info(schema_id, 100, 101), 1000, 1);
     ASSERT_OK(result);
     ASSERT_EQ(result.value()->id(), schema_id);
 
@@ -460,7 +462,7 @@ TEST_F(TableSchemaServiceTest, rpc_request_fields_verify) {
                 },
                 schema_id);
 
-        auto result = _schema_service->get_load_schema(create_schema_info(schema_id, 100, 101, tablet_id), txn_id);
+        auto result = _schema_service->get_load_schema(create_schema_info(schema_id, 100, 101), tablet_id, txn_id);
         ASSERT_TRUE(invoked.load());
         ASSERT_OK(result);
     }
@@ -485,7 +487,7 @@ TEST_F(TableSchemaServiceTest, rpc_request_fields_verify) {
                 },
                 schema_id);
 
-        auto result = _schema_service->get_scan_schema(create_schema_info(schema_id, 100, 101, tablet_id), query_id,
+        auto result = _schema_service->get_scan_schema(create_schema_info(schema_id, 100, 101), tablet_id, query_id,
                                                        create_fe_address(), nullptr);
         ASSERT_TRUE(invoked.load());
         ASSERT_OK(result);
@@ -529,7 +531,7 @@ TEST_F(TableSchemaServiceTest, remote_error_handling) {
         int64_t schema_id = next_id();
         c.setup(this);
         // Trigger LOAD path to exercise _get_remote_schema() error handling.
-        auto result = _schema_service->get_load_schema(create_schema_info(schema_id, 100, 101, 1000), 1);
+        auto result = _schema_service->get_load_schema(create_schema_info(schema_id, 100, 101), 1000, 1);
         c.check(result.status());
     }
 }
@@ -553,7 +555,7 @@ TEST_F(TableSchemaServiceTest, load_fallback_to_schema_file) {
         // Force schema-file path to "hit" via TabletManager sync point.
         mock_tablet_schema_by_id(schema);
 
-        auto result = _schema_service->get_load_schema(create_schema_info(schema_id, 100, 101, tablet_id), 1);
+        auto result = _schema_service->get_load_schema(create_schema_info(schema_id, 100, 101), tablet_id, 1);
         ASSERT_OK(result);
         ASSERT_EQ(result.value()->id(), schema_id);
     }
@@ -570,7 +572,7 @@ TEST_F(TableSchemaServiceTest, load_fallback_to_schema_file) {
         setup_rpc_method_not_found();
         mock_tablet_schema_by_id(Status::InternalError("mocked"));
 
-        auto result = _schema_service->get_load_schema(create_schema_info(schema_id, 100, 101, tablet_id), 1);
+        auto result = _schema_service->get_load_schema(create_schema_info(schema_id, 100, 101), tablet_id, 1);
         ASSERT_TRUE(result.status().is_internal_error());
     }
 }
@@ -590,7 +592,7 @@ TEST_F(TableSchemaServiceTest, load_fallback_to_tablet_schema) {
         setup_rpc_method_not_found();
         mock_tablet_schema_by_id(Status::NotFound("mocked not found"));
 
-        auto result = _schema_service->get_load_schema(create_schema_info(schema_id, 100, 101, tablet_id), 1, metadata);
+        auto result = _schema_service->get_load_schema(create_schema_info(schema_id, 100, 101), tablet_id, 1, metadata);
         ASSERT_OK(result);
         ASSERT_EQ(result.value()->id(), schema_id);
     }
@@ -605,7 +607,7 @@ TEST_F(TableSchemaServiceTest, load_fallback_to_tablet_schema) {
         setup_rpc_method_not_found();
         mock_tablet_schema_by_id(Status::NotFound("mocked not found"));
 
-        auto result = _schema_service->get_load_schema(create_schema_info(schema_id, 100, 101, tablet_id), 1);
+        auto result = _schema_service->get_load_schema(create_schema_info(schema_id, 100, 101), tablet_id, 1);
         ASSERT_TRUE(result.status().is_not_found());
     }
 }

@@ -67,38 +67,33 @@ class TabletManager;
  */
 class TableSchemaService {
 public:
-    struct TableSchemaInfo {
-        int64_t schema_id;
-        int64_t db_id;
-        int64_t table_id;
-        int64_t tablet_id;
-    };
-
     TableSchemaService(TabletManager* tablet_mgr) : _tablet_mgr(tablet_mgr) {}
     ~TableSchemaService() = default;
 
     /**
      * @brief Retrieves the table schema for a LOAD operation.
      * 
-     * @param schema_info Basic information to identify the schema.
+     * @param schema_meta Basic information to identify the schema (db_id/table_id/schema_id).
+     * @param tablet_id The tablet that sends the request.
      * @param txn_id The transaction ID associated with the load.
      * @param tablet_meta Optional pointer to tablet metadata for local lookup.
      * @return A shared pointer to the TabletSchema on success, or an error status.
      */
-    StatusOr<TabletSchemaPtr> get_load_schema(const TableSchemaInfo& schema_info, int64_t txn_id,
+    StatusOr<TabletSchemaPtr> get_load_schema(const TableSchemaMetaPB& schema_meta, int64_t tablet_id, int64_t txn_id,
                                               const TabletMetadataPtr& tablet_meta = nullptr);
 
     /**
      * @brief Retrieves the table schema for a SCAN operation.
      *
-     * @param schema_info Identifiers for the target schema.
+     * @param schema_meta Identifiers for the target schema (db_id/table_id/schema_id).
+     * @param tablet_id The tablet that sends the request.
      * @param query_id Query ID for the scan.
      * @param coordinator_fe Address of the coordinator FE.
      * @param tablet_meta Optional pointer to tablet metadata for local lookup.
      * @return A shared pointer to the TabletSchema on success, or an error status.
      */
-    StatusOr<TabletSchemaPtr> get_scan_schema(const TableSchemaInfo& schema_info, const TUniqueId& query_id,
-                                              const TNetworkAddress& coordinator_fe,
+    StatusOr<TabletSchemaPtr> get_scan_schema(const TableSchemaMetaPB& schema_meta, int64_t tablet_id,
+                                              const TUniqueId& query_id, const TNetworkAddress& coordinator_fe,
                                               const TabletMetadataPtr& tablet_meta = nullptr);
 
 private:

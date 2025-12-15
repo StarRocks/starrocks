@@ -66,59 +66,60 @@ std::string TableSchemaService::SingleFlightExecutionContext::to_string() const 
     return ss.str();
 }
 
-StatusOr<TabletSchemaPtr> TableSchemaService::get_load_schema(const TableSchemaInfo& schema_info, int64_t txn_id,
-                                                              const TabletMetadataPtr& tablet_meta) {
-    int64_t schema_id = schema_info.schema_id;
+StatusOr<TabletSchemaPtr> TableSchemaService::get_load_schema(const TableSchemaMetaPB& schema_meta, int64_t tablet_id,
+                                                              int64_t txn_id, const TabletMetadataPtr& tablet_meta) {
+    int64_t schema_id = schema_meta.schema_id();
     TabletSchemaPtr schema = _get_local_schema(schema_id, tablet_meta);
     if (schema != nullptr) {
-        VLOG(2) << "get load schema from local. db_id: " << schema_info.db_id << ", table_id: " << schema_info.table_id
-                << ", schema_id: " << schema_id << ", tablet_id: " << schema_info.tablet_id << ", txn_id: " << txn_id;
+        VLOG(2) << "get load schema from local. db_id: " << schema_meta.db_id()
+                << ", table_id: " << schema_meta.table_id() << ", schema_id: " << schema_id
+                << ", tablet_id: " << tablet_id << ", txn_id: " << txn_id;
         return schema;
     }
 
-    TTableSchemaMeta schema_meta;
-    schema_meta.__set_schema_id(schema_id);
-    schema_meta.__set_db_id(schema_info.db_id);
-    schema_meta.__set_table_id(schema_info.table_id);
+    TTableSchemaMeta thrift_schema_meta;
+    thrift_schema_meta.__set_schema_id(schema_id);
+    thrift_schema_meta.__set_db_id(schema_meta.db_id());
+    thrift_schema_meta.__set_table_id(schema_meta.table_id());
 
     TGetTableSchemaRequest request;
-    request.__set_schema_meta(schema_meta);
+    request.__set_schema_meta(thrift_schema_meta);
     request.__set_source(TTableSchemaRequestSource::LOAD);
     request.__set_txn_id(txn_id);
-    request.__set_tablet_id(schema_info.tablet_id);
+    request.__set_tablet_id(tablet_id);
 
     TNetworkAddress coordinator_fe = get_master_address();
     auto status_or_schema = _get_remote_schema(request, coordinator_fe);
     if (status_or_schema.status().is_not_supported()) {
         // If FE doesn't support table schema service which indicates
         // fast schema change v2 does not work, fallback to schema file.
-        return _fallback_load_to_schema_file(schema_id, schema_info.tablet_id);
+        return _fallback_load_to_schema_file(schema_id, tablet_id);
     }
     return status_or_schema;
 }
 
-StatusOr<TabletSchemaPtr> TableSchemaService::get_scan_schema(const TableSchemaInfo& schema_info,
+StatusOr<TabletSchemaPtr> TableSchemaService::get_scan_schema(const TableSchemaMetaPB& schema_meta, int64_t tablet_id,
                                                               const TUniqueId& query_id,
                                                               const TNetworkAddress& coordinator_fe,
                                                               const TabletMetadataPtr& tablet_meta) {
-    int64_t schema_id = schema_info.schema_id;
+    int64_t schema_id = schema_meta.schema_id();
     TabletSchemaPtr schema = _get_local_schema(schema_id, tablet_meta);
     if (schema != nullptr) {
-        VLOG(2) << "get scan schema from local. db_id: " << schema_info.db_id << ", table_id: " << schema_info.table_id
-                << ", schema_id: " << schema_id << ", tablet_id: " << schema_info.tablet_id
-                << ", query_id: " << print_id(query_id);
+        VLOG(2) << "get scan schema from local. db_id: " << schema_meta.db_id()
+                << ", table_id: " << schema_meta.table_id() << ", schema_id: " << schema_id
+                << ", tablet_id: " << tablet_id << ", query_id: " << print_id(query_id);
         return schema;
     }
 
-    TTableSchemaMeta schema_meta;
-    schema_meta.__set_schema_id(schema_id);
-    schema_meta.__set_db_id(schema_info.db_id);
-    schema_meta.__set_table_id(schema_info.table_id);
+    TTableSchemaMeta thrift_schema_meta;
+    thrift_schema_meta.__set_schema_id(schema_id);
+    thrift_schema_meta.__set_db_id(schema_meta.db_id());
+    thrift_schema_meta.__set_table_id(schema_meta.table_id());
 
     TGetTableSchemaRequest request;
-    request.__set_schema_meta(schema_meta);
+    request.__set_schema_meta(thrift_schema_meta);
     request.__set_source(TTableSchemaRequestSource::SCAN);
-    request.__set_tablet_id(schema_info.tablet_id);
+    request.__set_tablet_id(tablet_id);
     request.__set_query_id(query_id);
 
     // SCAN path has check whether FE supports table schema service in LakeDataSource::get_tablet,

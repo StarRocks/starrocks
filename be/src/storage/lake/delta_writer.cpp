@@ -411,10 +411,12 @@ inline Status DeltaWriterImpl::init_tablet_schema() {
     }
     ASSIGN_OR_RETURN(auto tablet, _tablet_manager->get_tablet(_tablet_id));
     TabletMetadataPtr latest_metadata = _tablet_manager->get_latest_cached_tablet_metadata(_tablet_id);
-    auto schema_info = TableSchemaService::TableSchemaInfo{
-            .schema_id = _schema_id, .db_id = _db_id, .table_id = _table_id, .tablet_id = _tablet_id};
-    ASSIGN_OR_RETURN(_tablet_schema,
-                     _tablet_manager->table_schema_service()->get_load_schema(schema_info, _txn_id, latest_metadata));
+    TableSchemaMetaPB schema_meta;
+    schema_meta.set_schema_id(_schema_id);
+    schema_meta.set_db_id(_db_id);
+    schema_meta.set_table_id(_table_id);
+    ASSIGN_OR_RETURN(_tablet_schema, _tablet_manager->table_schema_service()->get_load_schema(
+                                             schema_meta, _tablet_id, _txn_id, latest_metadata));
     return Status::OK();
 }
 
