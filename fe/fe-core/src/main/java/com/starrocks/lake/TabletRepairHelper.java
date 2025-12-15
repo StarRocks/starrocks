@@ -141,7 +141,7 @@ public class TabletRepairHelper {
             long maxVersion = physicalPartition.getVisibleVersion();
             long minVersion = enforceConsistentVersion ? 1L : Long.MAX_VALUE;
 
-            List<MaterializedIndex> indexes = physicalPartition.getMaterializedIndices(IndexExtState.VISIBLE);
+            List<MaterializedIndex> indexes = physicalPartition.getLatestMaterializedIndices(IndexExtState.VISIBLE);
             if (indexes.size() > 1 && !enforceConsistentVersion) {
                 throw new StarRocksException(
                         "table with multiple materialized indexes should be repaired with consistent version");

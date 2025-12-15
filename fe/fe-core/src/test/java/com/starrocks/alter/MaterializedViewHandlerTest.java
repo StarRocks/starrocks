@@ -137,7 +137,7 @@ public class MaterializedViewHandlerTest {
                                   @Injectable PhysicalPartition partition,
                                   @Injectable MaterializedIndex materializedIndex) {
         final String baseIndexName = "t1";
-        final Long baseIndexId = Long.valueOf(1);
+        final Long baseIndexMetaId = Long.valueOf(1);
         new Expectations() {
             {
                 createMaterializedViewStmt.getBaseIndexName();
@@ -147,11 +147,11 @@ public class MaterializedViewHandlerTest {
                 olapTable.getState();
                 result = OlapTable.OlapTableState.NORMAL;
                 olapTable.getIndexMetaIdByName(baseIndexName);
-                result = baseIndexId;
+                result = baseIndexMetaId;
                 olapTable.getPhysicalPartitions();
                 result = Lists.newArrayList(partition);
 
-                partition.getIndex(baseIndexId);
+                partition.getLatestIndex(baseIndexMetaId);
                 result = materializedIndex;
 
                 materializedIndex.getState();
@@ -343,7 +343,7 @@ public class MaterializedViewHandlerTest {
                 olapTable.getPhysicalPartitions();
                 result = Lists.newArrayList(partition);
 
-                partition.getIndex(1L);
+                partition.getLatestIndex(1L);
                 result = materializedIndex;
             }
         };

@@ -131,7 +131,7 @@ public class OlapDeleteJob extends DeleteJob {
             for (Partition partition : partitions) {
                 for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
                     for (MaterializedIndex index : physicalPartition
-                                .getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)) {
+                                .getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)) {
                         for (Tablet tablet : index.getTablets()) {
                             totalReplicaNum += ((LocalTablet) tablet).getImmutableReplicas().size();
                         }
@@ -144,7 +144,7 @@ public class OlapDeleteJob extends DeleteJob {
             for (Partition partition : partitions) {
                 for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
                     for (MaterializedIndex index : physicalPartition
-                                .getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)) {
+                                .getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)) {
                         long indexMetaId = index.getMetaId();
                         int schemaHash = olapTable.getSchemaHashByIndexMetaId(indexMetaId);
 

@@ -768,8 +768,8 @@ public class InformationSchemaDataSource {
             if (partition.getVisibleVersionTime() > lastUpdateTime) {
                 lastUpdateTime = partition.getVisibleVersionTime();
             }
-            totalRowsOfTable = partition.getBaseIndex().getRowCount() + totalRowsOfTable;
-            totalBytesOfTable = partition.getBaseIndex().getDataSize() + totalBytesOfTable;
+            totalRowsOfTable = partition.getLatestBaseIndex().getRowCount() + totalRowsOfTable;
+            totalBytesOfTable = partition.getLatestBaseIndex().getDataSize() + totalBytesOfTable;
         }
         // TABLE_ROWS
         info.setTable_rows(totalRowsOfTable);

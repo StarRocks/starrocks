@@ -154,7 +154,7 @@ public class StatisticProcDir implements ProcDirInterface {
                         ++dbPartitionNum;
                         for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
                             for (MaterializedIndex materializedIndex : physicalPartition
-                                    .getMaterializedIndices(IndexExtState.VISIBLE)) {
+                                    .getLatestMaterializedIndices(IndexExtState.VISIBLE)) {
                                 ++dbIndexNum;
                                 for (Tablet tablet : materializedIndex.getTablets()) {
                                     ++dbTabletNum;

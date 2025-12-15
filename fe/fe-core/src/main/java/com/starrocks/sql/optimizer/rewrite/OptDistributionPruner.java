@@ -50,7 +50,7 @@ public class OptDistributionPruner {
         for (Long partitionId : selectedPartitionIds) {
             Partition partition = olapTable.getPartition(partitionId);
             for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
-                MaterializedIndex table = physicalPartition.getIndex(olapScanOperator.getSelectedIndexMetaId());
+                MaterializedIndex table = physicalPartition.getLatestIndex(olapScanOperator.getSelectedIndexMetaId());
                 Collection<Long> tabletIds = distributionPrune(table, partition.getDistributionInfo(),
                         olapScanOperator, olapTable.getIdToColumn());
                 result.addAll(tabletIds);

@@ -145,7 +145,7 @@ public class TabletStatMgr extends FrontendDaemon {
                     for (Partition partition : olapTable.getAllPartitions()) {
                         for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
                             long version = physicalPartition.getVisibleVersion();
-                            for (MaterializedIndex index : physicalPartition.getMaterializedIndices(
+                            for (MaterializedIndex index : physicalPartition.getLatestMaterializedIndices(
                                     IndexExtState.VISIBLE)) {
                                 long indexRowCount = 0L;
                                 // NOTE: can take a rather long time to iterate lots of tablets
@@ -173,7 +173,7 @@ public class TabletStatMgr extends FrontendDaemon {
                     for (Partition partition : olapTable.getAllPartitions()) {
                         for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
                             for (MaterializedIndex index :
-                                    physicalPartition.getMaterializedIndices(IndexExtState.VISIBLE)) {
+                                    physicalPartition.getLatestMaterializedIndices(IndexExtState.VISIBLE)) {
                                 Long indexRowCount =
                                         indexRowCountMap.get(Pair.create(physicalPartition.getId(), index.getId()));
                                 if (indexRowCount != null) {
@@ -315,7 +315,7 @@ public class TabletStatMgr extends FrontendDaemon {
         try {
             long visibleVersion = partition.getVisibleVersion();
             long visibleVersionTime = partition.getVisibleVersionTime();
-            List<Tablet> tablets = new ArrayList<>(partition.getBaseIndex().getTablets());
+            List<Tablet> tablets = new ArrayList<>(partition.getLatestBaseIndex().getTablets());
             return new PartitionSnapshot(dbName, tableName, partitionId, visibleVersion, visibleVersionTime, tablets);
         } finally {
             locker.unLockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
