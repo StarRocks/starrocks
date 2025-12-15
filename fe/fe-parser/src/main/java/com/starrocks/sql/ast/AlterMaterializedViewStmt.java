@@ -58,6 +58,6 @@ public class AlterMaterializedViewStmt extends DdlStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return ((AstVisitorExtendInterface<R, C>) visitor).visitAlterMaterializedViewStatement(this, context);
+        return visitor.visitAlterMaterializedViewStatement(this, context);
     }
 }

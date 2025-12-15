@@ -12,23 +12,25 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.ast;
 
 import com.starrocks.sql.parser.NodePosition;
 
-public class RecoverPartitionStmt extends DdlStmt {
-    private TableRef tableRef;
-    private final String partitionName;
+import java.util.List;
 
-    public RecoverPartitionStmt(TableRef tableRef, String partitionName) {
-        this(tableRef, partitionName, NodePosition.ZERO);
+// Alter table statement.
+public class AlterTableStmt extends DdlStmt {
+    private TableRef tableRef;
+    private final List<AlterClause> alterClauseList;
+
+    public AlterTableStmt(TableRef tableRef, List<AlterClause> ops) {
+        this(tableRef, ops, NodePosition.ZERO);
     }
 
-    public RecoverPartitionStmt(TableRef tableRef, String partitionName, NodePosition pos) {
+    public AlterTableStmt(TableRef tableRef, List<AlterClause> ops, NodePosition pos) {
         super(pos);
         this.tableRef = tableRef;
-        this.partitionName = partitionName;
+        this.alterClauseList = ops;
     }
 
     public TableRef getTableRef() {
@@ -37,6 +39,10 @@ public class RecoverPartitionStmt extends DdlStmt {
 
     public void setTableRef(TableRef tableRef) {
         this.tableRef = tableRef;
+    }
+
+    public List<AlterClause> getAlterClauseList() {
+        return alterClauseList;
     }
 
     public String getCatalogName() {
@@ -51,12 +57,8 @@ public class RecoverPartitionStmt extends DdlStmt {
         return tableRef == null ? null : tableRef.getTableName();
     }
 
-    public String getPartitionName() {
-        return partitionName;
-    }
-
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return ((AstVisitorExtendInterface<R, C>) visitor).visitRecoverPartitionStatement(this, context);
+        return visitor.visitAlterTableStatement(this, context);
     }
 }

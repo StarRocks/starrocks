@@ -15,22 +15,26 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.sql.ast.ShowAlterStmt.AlterType;
+import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
 
-/*
- * CANCEL ALTER COLUMN|ROLLUP FROM db_name.table_name
- */
-public class CancelAlterTableStmt extends CancelStmt {
-
-    private final AlterType alterType;
-
+public class DropHistogramStmt extends StatementBase {
     private TableRef tableRef;
+    private List<String> columnNames;
+    private final List<Expr> columns;
 
-    public AlterType getAlterType() {
-        return alterType;
+    private boolean isExternal = false;
+
+    public DropHistogramStmt(TableRef tableRef, List<Expr> columns) {
+        this(tableRef, columns, NodePosition.ZERO);
+    }
+
+    public DropHistogramStmt(TableRef tableRef, List<Expr> columns, NodePosition pos) {
+        super(pos);
+        this.tableRef = tableRef;
+        this.columns = columns;
     }
 
     public TableRef getTableRef() {
@@ -53,35 +57,28 @@ public class CancelAlterTableStmt extends CancelStmt {
         return tableRef == null ? null : tableRef.getTableName();
     }
 
-    private final List<Long> alterJobIdList;
-
-    public CancelAlterTableStmt(AlterType alterType, TableRef tableRef) {
-        this(alterType, tableRef, null);
+    public List<String> getColumnNames() {
+        return columnNames;
     }
 
-    public CancelAlterTableStmt(AlterType alterType, TableRef tableRef, List<Long> alterJobIdList) {
-        this(alterType, tableRef, alterJobIdList, NodePosition.ZERO);
+    public void setColumnNames(List<String> columnNames) {
+        this.columnNames = columnNames;
     }
 
-    public CancelAlterTableStmt(AlterType alterType, TableRef tableRef, List<Long> alterJobIdList, NodePosition pos) {
-        super(pos);
-        this.alterType = alterType;
-        this.tableRef = tableRef;
-        this.alterJobIdList = alterJobIdList;
-    }
-
-    public List<Long> getAlterJobIdList() {
-        return alterJobIdList;
+    public List<Expr> getColumns() {
+        return columns;
     }
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return ((AstVisitorExtendInterface<R, C>) visitor).visitCancelAlterTableStatement(this, context);
+        return visitor.visitDropHistogramStatement(this, context);
     }
 
-    @Override
-    public String toString() {
-        return toSql();
+    public boolean isExternal() {
+        return isExternal;
     }
 
+    public void setExternal(boolean isExternal) {
+        this.isExternal = isExternal;
+    }
 }

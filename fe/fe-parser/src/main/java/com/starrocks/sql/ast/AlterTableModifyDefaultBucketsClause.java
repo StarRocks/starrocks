@@ -45,6 +45,6 @@ public class AlterTableModifyDefaultBucketsClause extends AlterTableClause {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return ((AstVisitorExtendInterface<R, C>) visitor).visitAlterTableModifyDefaultBucketsClause(this, context);
+        return visitor.visitAlterTableModifyDefaultBucketsClause(this, context);
     }
 }

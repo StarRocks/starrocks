@@ -17,26 +17,34 @@ package com.starrocks.sql.ast;
 
 import com.starrocks.sql.parser.NodePosition;
 
-public class TruncatePartitionClause extends AlterTableClause {
+import java.util.Map;
 
-    private PartitionRef partitionNames;
+public class InstallPluginStmt extends DdlStmt {
 
-    public TruncatePartitionClause(PartitionRef partitionNames) {
-        this(partitionNames, NodePosition.ZERO);
+    private final String pluginPath;
+    private final Map<String, String> properties;
+
+    public InstallPluginStmt(String pluginPath, Map<String, String> properties) {
+        this(pluginPath, properties, NodePosition.ZERO);
     }
 
-
-    public TruncatePartitionClause(PartitionRef partitionNames, NodePosition pos) {
+    public InstallPluginStmt(String pluginPath, Map<String, String> properties, NodePosition pos) {
         super(pos);
-        this.partitionNames = partitionNames;
+        this.pluginPath = pluginPath;
+        this.properties = properties;
     }
 
-    public PartitionRef getPartitionNames() {
-        return partitionNames;
+    public String getPluginPath() {
+        return pluginPath;
+    }
+
+    public Map<String, String> getProperties() {
+        return properties;
     }
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return ((AstVisitorExtendInterface<R, C>) visitor).visitTruncatePartitionClause(this, context);
+        return visitor.visitInstallPluginStatement(this, context);
     }
 }
+

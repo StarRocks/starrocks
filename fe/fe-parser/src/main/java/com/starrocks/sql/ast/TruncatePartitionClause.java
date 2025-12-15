@@ -17,26 +17,26 @@ package com.starrocks.sql.ast;
 
 import com.starrocks.sql.parser.NodePosition;
 
-import java.util.UUID;
+public class TruncatePartitionClause extends AlterTableClause {
 
-public class DropTemporaryTableStmt extends DropTableStmt {
-    // the session's id associated with this temporary table
-    private UUID sessionId = null;
+    private PartitionRef partitionNames;
 
-    public DropTemporaryTableStmt(boolean ifExists, TableRef tableRef, boolean forceDrop) {
-        super(ifExists, tableRef, false, forceDrop, NodePosition.ZERO);
+    public TruncatePartitionClause(PartitionRef partitionNames) {
+        this(partitionNames, NodePosition.ZERO);
     }
 
-    public void setSessionId(UUID sessionId) {
-        this.sessionId = sessionId;
+
+    public TruncatePartitionClause(PartitionRef partitionNames, NodePosition pos) {
+        super(pos);
+        this.partitionNames = partitionNames;
     }
 
-    public UUID getSessionId() {
-        return sessionId;
+    public PartitionRef getPartitionNames() {
+        return partitionNames;
     }
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return ((AstVisitorExtendInterface<R, C>) visitor).visitDropTemporaryTableStatement(this, context);
+        return visitor.visitTruncatePartitionClause(this, context);
     }
 }

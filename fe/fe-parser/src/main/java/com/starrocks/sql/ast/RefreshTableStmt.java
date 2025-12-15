@@ -12,21 +12,30 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.ast;
 
 import com.starrocks.sql.parser.NodePosition;
 
-public class ShowIndexStmt extends ShowStmt {
-    private TableRef tableRef;
+import java.util.List;
 
-    public ShowIndexStmt(TableRef tableRef) {
-        this(tableRef, NodePosition.ZERO);
+/**
+ * This command used to refresh connector table of external catalog.
+ * For example:
+ * 'REFRESH EXTERNAL TABLE catalog1.db1.table1'
+ * This sql will refresh table1 of db1 in catalog1.
+ */
+public class RefreshTableStmt extends DdlStmt {
+    private TableRef tableRef;
+    private final List<String> partitionNames;
+
+    public RefreshTableStmt(TableRef tableRef, List<String> partitionNames) {
+        this(tableRef, partitionNames, NodePosition.ZERO);
     }
 
-    public ShowIndexStmt(TableRef tableRef, NodePosition pos) {
+    public RefreshTableStmt(TableRef tableRef, List<String> partitionNames, NodePosition pos) {
         super(pos);
         this.tableRef = tableRef;
+        this.partitionNames = partitionNames;
     }
 
     public TableRef getTableRef() {
@@ -37,12 +46,24 @@ public class ShowIndexStmt extends ShowStmt {
         this.tableRef = tableRef;
     }
 
+    public String getCatalogName() {
+        return tableRef == null ? null : tableRef.getCatalogName();
+    }
+
     public String getDbName() {
         return tableRef == null ? null : tableRef.getDbName();
     }
 
+    public String getTableName() {
+        return tableRef == null ? null : tableRef.getTableName();
+    }
+
+    public List<String> getPartitions() {
+        return partitionNames;
+    }
+
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return ((AstVisitorExtendInterface<R, C>) visitor).visitShowIndexStatement(this, context);
+        return visitor.visitRefreshTableStatement(this, context);
     }
 }
