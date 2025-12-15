@@ -198,8 +198,9 @@ void SystemMetrics::install(MetricRegistry* registry, const std::set<std::string
 }
 
 void SystemMetrics::update() {
+    update_memory_metrics();
+
     _update_cpu_metrics();
-    _update_memory_metrics();
     _update_disk_metrics();
     _update_net_metrics();
     _update_fd_metrics();
@@ -323,7 +324,7 @@ void SystemMetrics::_update_pagecache_mem_tracker() {
     }
 }
 
-void SystemMetrics::_update_memory_metrics() {
+void SystemMetrics::update_memory_metrics() {
 #if defined(ADDRESS_SANITIZER) || defined(LEAK_SANITIZER) || defined(THREAD_SANITIZER)
     LOG(INFO) << "Memory tracking is not available with address sanitizer builds.";
 #else
