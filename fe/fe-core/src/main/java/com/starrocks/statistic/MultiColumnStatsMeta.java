@@ -16,6 +16,7 @@ package com.starrocks.statistic;
 
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Writable;
+import com.starrocks.sql.ast.StatisticsType;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -36,7 +37,7 @@ public class MultiColumnStatsMeta implements Writable {
     private StatsConstants.AnalyzeType analyzeType;
 
     @SerializedName("statisticsTypes")
-    private List<StatsConstants.StatisticsType> statisticsTypes;
+    private List<StatisticsType> statisticsTypes;
 
     @SerializedName("updateTime")
     private LocalDateTime updateTime;
@@ -45,7 +46,7 @@ public class MultiColumnStatsMeta implements Writable {
     private Map<String, String> properties;
 
     public MultiColumnStatsMeta(long dbId, long tableId, Set<Integer> columnIds,
-                                StatsConstants.AnalyzeType analyzeType, List<StatsConstants.StatisticsType> statisticsTypes,
+                                StatsConstants.AnalyzeType analyzeType, List<StatisticsType> statisticsTypes,
                                 LocalDateTime updateTime, Map<String, String> properties) {
         this.dbId = dbId;
         this.tableId = tableId;
@@ -72,7 +73,7 @@ public class MultiColumnStatsMeta implements Writable {
         return analyzeType;
     }
 
-    public List<StatsConstants.StatisticsType> getStatsTypes() {
+    public List<StatisticsType> getStatsTypes() {
         return statisticsTypes;
     }
 

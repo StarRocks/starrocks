@@ -219,6 +219,7 @@ import com.starrocks.sql.ast.RecoverTableStmt;
 import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
 import com.starrocks.sql.ast.RefreshSchemeClause;
 import com.starrocks.sql.ast.ReplacePartitionClause;
+import com.starrocks.sql.ast.ReplicaStatus;
 import com.starrocks.sql.ast.RollupRenameClause;
 import com.starrocks.sql.ast.ShowAlterStmt;
 import com.starrocks.sql.ast.SingleRangePartitionDesc;
@@ -4939,7 +4940,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
     public void setReplicaStatus(AdminSetReplicaStatusStmt stmt) {
         long tabletId = stmt.getTabletId();
         long backendId = stmt.getBackendId();
-        Replica.ReplicaStatus status = stmt.getStatus();
+        ReplicaStatus status = stmt.getStatus();
         setReplicaStatusInternal(tabletId, backendId, status, false);
     }
 
@@ -4947,7 +4948,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         setReplicaStatusInternal(log.getTabletId(), log.getBackendId(), log.getReplicaStatus(), true);
     }
 
-    private void setReplicaStatusInternal(long tabletId, long backendId, Replica.ReplicaStatus status,
+    private void setReplicaStatusInternal(long tabletId, long backendId, ReplicaStatus status,
                                           boolean isReplay) {
         TabletMeta meta = stateMgr.getTabletInvertedIndex().getTabletMeta(tabletId);
         if (meta == null) {
@@ -4968,8 +4969,8 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                 LOG.info("replica of tablet {} does not exist", tabletId);
                 return;
             }
-            if (status == Replica.ReplicaStatus.BAD || status == Replica.ReplicaStatus.OK) {
-                if (replica.setBadForce(status == Replica.ReplicaStatus.BAD)) {
+            if (status == ReplicaStatus.BAD || status == ReplicaStatus.OK) {
+                if (replica.setBadForce(status == ReplicaStatus.BAD)) {
                     if (!isReplay) {
                         // Put this tablet into urgent table so that it can be repaired ASAP.
                         stateMgr.getTabletChecker().setTabletForUrgentRepair(dbId, meta.getTableId(),

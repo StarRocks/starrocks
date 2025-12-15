@@ -29,6 +29,7 @@ import com.starrocks.persist.EditLog;
 import com.starrocks.persist.OperationType;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.KeysType;
+import com.starrocks.sql.ast.StatisticsType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.AfterEach;
@@ -709,7 +710,7 @@ public class AnalyzeMgrEditLogTest {
         Set<Integer> columnIds = new HashSet<>();
         columnIds.add(1);
         columnIds.add(2);
-        List<StatsConstants.StatisticsType> statsTypes = Lists.newArrayList(StatsConstants.StatisticsType.MCDISTINCT);
+        List<StatisticsType> statsTypes = Lists.newArrayList(StatisticsType.MCDISTINCT);
         MultiColumnStatsMeta meta = new MultiColumnStatsMeta(testDbId, testTableId, columnIds,
                 StatsConstants.AnalyzeType.FULL, statsTypes, LocalDateTime.now(),
                 StatsConstants.buildInitStatsProp());
@@ -730,7 +731,7 @@ public class AnalyzeMgrEditLogTest {
         Set<Integer> columnIds = new HashSet<>();
         columnIds.add(1);
         columnIds.add(2);
-        List<StatsConstants.StatisticsType> statsTypes = Lists.newArrayList(StatsConstants.StatisticsType.MCDISTINCT);
+        List<StatisticsType> statsTypes = Lists.newArrayList(StatisticsType.MCDISTINCT);
         MultiColumnStatsMeta meta = new MultiColumnStatsMeta(testDbId, testTableId, columnIds,
                 StatsConstants.AnalyzeType.FULL, statsTypes, LocalDateTime.now(),
                 StatsConstants.buildInitStatsProp());
@@ -1022,7 +1023,7 @@ public class AnalyzeMgrEditLogTest {
         Set<Integer> columnIds = new HashSet<>();
         columnIds.add(1);
         columnIds.add(2);
-        List<StatsConstants.StatisticsType> statsTypes = Lists.newArrayList(StatsConstants.StatisticsType.MCDISTINCT);
+        List<StatisticsType> statsTypes = Lists.newArrayList(StatisticsType.MCDISTINCT);
         MultiColumnStatsMeta meta = new MultiColumnStatsMeta(testDbId, testTableId, columnIds,
                 StatsConstants.AnalyzeType.FULL, statsTypes, LocalDateTime.now(),
                 StatsConstants.buildInitStatsProp());
@@ -1057,7 +1058,7 @@ public class AnalyzeMgrEditLogTest {
         Set<Integer> columnIds = new HashSet<>();
         columnIds.add(1);
         columnIds.add(2);
-        List<StatsConstants.StatisticsType> statsTypes = Lists.newArrayList(StatsConstants.StatisticsType.MCDISTINCT);
+        List<StatisticsType> statsTypes = Lists.newArrayList(StatisticsType.MCDISTINCT);
         MultiColumnStatsMeta meta = new MultiColumnStatsMeta(testDbId, testTableId, columnIds,
                 StatsConstants.AnalyzeType.FULL, statsTypes, LocalDateTime.now(),
                 StatsConstants.buildInitStatsProp());

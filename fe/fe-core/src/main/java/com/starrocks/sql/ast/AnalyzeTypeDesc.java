@@ -15,7 +15,6 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.sql.parser.NodePosition;
-import com.starrocks.statistic.StatsConstants;
 
 import java.util.List;
 
@@ -39,7 +38,7 @@ public abstract class AnalyzeTypeDesc implements ParseNode {
         return false;
     }
 
-    public List<StatsConstants.StatisticsType> getStatsTypes() {
+    public List<StatisticsType> getStatsTypes() {
         return List.of();
     }
 }
