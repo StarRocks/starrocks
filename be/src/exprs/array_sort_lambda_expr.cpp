@@ -145,7 +145,7 @@ public:
         }
 
         auto* data_col = ColumnHelper::get_data_column(result_col.get());
-        auto* boolean_col = down_cast<BooleanColumn*>(data_col);
+        auto* boolean_col = down_cast<const BooleanColumn*>(data_col);
         DCHECK(boolean_col->size() == 1);
         return boolean_col->immutable_data()[0];
     }
@@ -318,9 +318,10 @@ StatusOr<ColumnPtr> ArraySortLambdaExpr::evaluate_checked(ExprContext* context, 
     auto* data_column = ColumnHelper::get_data_column(array_col.get());
     DCHECK(data_column->is_array() && !data_column->is_nullable() && !data_column->is_constant());
     if (array_col->is_nullable()) {
-        null_column = down_cast<NullableColumn*>(array_col.get())->null_column();
-        const auto& offsets = down_cast<ArrayColumn*>(data_column)->offsets();
-        data_column->empty_null_in_complex_column(null_column->immutable_data(), offsets.immutable_data());
+        null_column = down_cast<const NullableColumn*>(array_col.get())->null_column();
+        const auto& offsets = down_cast<const ArrayColumn*>(data_column)->offsets();
+        data_column->as_mutable_raw_ptr()->empty_null_in_complex_column(null_column->immutable_data(),
+                                                                        offsets.immutable_data());
     }
     const auto* lambda_fun = down_cast<LambdaFunction*>(_children[1]);
     if (lambda_fun->is_lambda_expr_independent()) {
