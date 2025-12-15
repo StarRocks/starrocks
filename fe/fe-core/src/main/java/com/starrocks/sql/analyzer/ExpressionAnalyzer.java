@@ -115,6 +115,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
@@ -159,11 +160,21 @@ public class ExpressionAnalyzer {
 
     private boolean isArrayHighOrderFunction(Expr expr) {
         if (expr instanceof FunctionCallExpr) {
+<<<<<<< HEAD
             if (((FunctionCallExpr) expr).getFnName().getFunction().equals(FunctionSet.ARRAY_MAP) ||
                     ((FunctionCallExpr) expr).getFnName().getFunction().equals(FunctionSet.ARRAY_FILTER) ||
                     ((FunctionCallExpr) expr).getFnName().getFunction().equals(FunctionSet.ANY_MATCH) ||
                     ((FunctionCallExpr) expr).getFnName().getFunction().equals(FunctionSet.ALL_MATCH) ||
                     ((FunctionCallExpr) expr).getFnName().getFunction().equals(FunctionSet.ARRAY_SORTBY)) {
+=======
+            if (((FunctionCallExpr) expr).getFunctionName().equals(FunctionSet.ARRAY_MAP) ||
+                    ((FunctionCallExpr) expr).getFunctionName().equals(FunctionSet.ARRAY_FILTER) ||
+                    ((FunctionCallExpr) expr).getFunctionName().equals(FunctionSet.ANY_MATCH) ||
+                    ((FunctionCallExpr) expr).getFunctionName().equals(FunctionSet.ALL_MATCH) ||
+                    ((FunctionCallExpr) expr).getFunctionName().equals(FunctionSet.ARRAY_SORTBY) ||
+                    ((FunctionCallExpr) expr).getFunctionName().equals(FunctionSet.ARRAY_SORT) ||
+                    ((FunctionCallExpr) expr).getFunctionName().equals(FunctionSet.ARRAY_SORT_LAMBDA)) {
+>>>>>>> c05e566b51 ([Enhancement] Support array_sort with lambda comparator (#66607))
                 return true;
             } else if (((FunctionCallExpr) expr).getFnName().getFunction().equals(FunctionSet.TRANSFORM)) {
                 // transform just a alias of array_map
@@ -232,6 +243,22 @@ public class ExpressionAnalyzer {
                 visitor.visit(arrayMap, scope);
                 break;
             }
+            case FunctionSet.ARRAY_SORT:
+            case FunctionSet.ARRAY_SORT_LAMBDA: {
+                // Check if this is array_sort with lambda comparator
+                // array_sort(arr, (x, y) -> ...) or array_sort(arr, lambda_expr)
+                if (functionCallExpr.getChildren().size() == 2 &&
+                        functionCallExpr.getChild(0) instanceof LambdaFunctionExpr) {
+                    // Convert to array_sort_lambda for lambda version
+                    functionCallExpr.resetFnName(functionCallExpr.getDbName(), FunctionSet.ARRAY_SORT_LAMBDA);
+                    Expr lambdaExpr = functionCallExpr.getChild(0);
+                    Expr arrayExpr = functionCallExpr.getChild(1);
+                    functionCallExpr.setChild(0, arrayExpr);
+                    functionCallExpr.setChild(1, lambdaExpr);
+                }
+                // If not lambda version, leave it as regular array_sort (no rewriting)
+                break;
+            }
             case FunctionSet.MAP_FILTER:
                 // map_filter((k,v)->(k,expr),map) -> map_filter(map, map_values(map_apply((k,v)->(k,expr),map)))
                 FunctionCallExpr mapApply = new FunctionCallExpr(FunctionSet.MAP_APPLY,
@@ -260,6 +287,7 @@ public class ExpressionAnalyzer {
             throw new SemanticException(funcName + " can't use lambda functions, " +
                     "as it is not a supported high-order function");
         }
+
         int childSize = expression.getChildren().size();
         // move the lambda function to the first if it is at the last.
         if (expression.getChild(childSize - 1) instanceof LambdaFunctionExpr) {
@@ -270,6 +298,7 @@ public class ExpressionAnalyzer {
             expression.setChild(0, last);
         }
         if (isArrayHighOrderFunction(expression)) {
+<<<<<<< HEAD
             // the first child is lambdaFunction, following input arrays
             for (int i = 1; i < childSize; ++i) {
                 Expr expr = expression.getChild(i);
@@ -280,13 +309,54 @@ public class ExpressionAnalyzer {
                 Expr expr = expression.getChild(i);
                 if (expr instanceof NullLiteral) {
                     expr.setType(Type.ARRAY_INT); // Let it have item type.
+=======
+
+            boolean isArraySortLambda = Optional.ofNullable(((FunctionCallExpr) expression).getFunctionName())
+                    .map(fn -> fn.equals(FunctionSet.ARRAY_SORT) || fn.equals(FunctionSet.ARRAY_SORT_LAMBDA))
+                    .orElse(false);
+            if (isArraySortLambda) {
+                if (expression.getChildren().size() != 2) {
+                    throw new SemanticException(
+                            "array_sort is not well-formed, it should be array_sort(array, (x,y)->expr(x,y)");
+>>>>>>> c05e566b51 ([Enhancement] Support array_sort with lambda comparator (#66607))
                 }
-                if (!expr.getType().isArrayType()) {
-                    throw new SemanticException(i + "-th lambda input ( " + expr + " ) should be arrays, " +
-                            "but real type is " + expr.getType().toSql());
+                Expr lambdaExpr = expression.getChild(0);
+                if (!(lambdaExpr instanceof LambdaFunctionExpr) || lambdaExpr.getChildren().size() != 3) {
+                    throw new SemanticException("lambda in array_sort should be a binary function");
                 }
-                Type itemType = ((ArrayType) expr.getType()).getItemType();
-                scope.putLambdaInput(new PlaceHolderExpr(-1, expr.isNullable(), itemType));
+                Expr arrayExpr = expression.getChild(1);
+                bottomUpAnalyze(visitor, arrayExpr, scope);
+                if (arrayExpr instanceof NullLiteral) {
+                    arrayExpr.setType(ArrayType.ARRAY_INT);
+                }
+                if (!arrayExpr.getType().isArrayType()) {
+                    throw new SemanticException("The 1st parameter (" + arrayExpr +
+                            ") of array_sort_lambda should be arrays, but real type is " + arrayExpr.getType().toSql());
+                }
+
+                Type itemType = ((ArrayType) arrayExpr.getType()).getItemType();
+                scope.putLambdaInput(new PlaceHolderExpr(-1, arrayExpr.isNullable(), itemType));
+                scope.putLambdaInput(new PlaceHolderExpr(-1, arrayExpr.isNullable(), itemType));
+            } else {
+                // the first child is lambdaFunction, following input arrays
+                for (int i = 1; i < childSize; ++i) {
+                    Expr expr = expression.getChild(i);
+                    bottomUpAnalyze(visitor, expr, scope);
+                }
+
+                // putting lambda inputs should after analyze
+                for (int i = 1; i < childSize; ++i) {
+                    Expr expr = expression.getChild(i);
+                    if (expr instanceof NullLiteral) {
+                        expr.setType(ArrayType.ARRAY_INT); // Let it have item type.
+                    }
+                    if (!expr.getType().isArrayType()) {
+                        throw new SemanticException(i + "-th lambda input ( " + expr + " ) should be arrays, " +
+                                "but real type is " + expr.getType().toSql());
+                    }
+                    Type itemType = ((ArrayType) expr.getType()).getItemType();
+                    scope.putLambdaInput(new PlaceHolderExpr(-1, expr.isNullable(), itemType));
+                }
             }
         } else {
             Preconditions.checkState(expression instanceof FunctionCallExpr);
