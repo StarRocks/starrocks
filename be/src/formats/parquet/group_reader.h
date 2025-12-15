@@ -111,6 +111,8 @@ struct GroupReaderParam {
     const std::vector<SlotDescriptor*>* reserved_field_slots = nullptr;
     // used for global low cardinality optimization
     ColumnIdToGlobalDictMap* global_dictmaps = &EMPTY_GLOBAL_DICTMAPS;
+
+    int32_t scan_range_id = -1;
 };
 
 class GroupReader {

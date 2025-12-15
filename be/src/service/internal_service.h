@@ -36,6 +36,7 @@
 
 #include <bthread/condition_variable.h>
 #include <bthread/mutex.h>
+#include <google/protobuf/service.h>
 
 #include "common/compiler_util.h"
 #include "common/status.h"
@@ -197,6 +198,8 @@ public:
     void update_transaction_state(google::protobuf::RpcController* controller,
                                   const PUpdateTransactionStateRequest* request,
                                   PUpdateTransactionStateResponse* response, google::protobuf::Closure* done) override;
+    void lookup(google::protobuf::RpcController* controller, const PLookUpRequest* request, PLookUpResponse* response,
+                google::protobuf::Closure* done) override;
 
 private:
     void _transmit_chunk(::google::protobuf::RpcController* controller,
