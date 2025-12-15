@@ -502,7 +502,7 @@ public class SystemInfoService implements GsonPostProcessable {
         idToComputeNodeRef.remove(dropComputeNode.getId());
 
         // remove from BackendCoreStat
-        BackendResourceStat.getInstance().removeBe(dropComputeNode.getId());
+        BackendResourceStat.getInstance().removeBe(dropComputeNode.getWarehouseId(), dropComputeNode.getId());
 
         // remove worker
         if (RunMode.isSharedDataMode()) {
@@ -640,7 +640,7 @@ public class SystemInfoService implements GsonPostProcessable {
         idToReportVersionRef = ImmutableMap.copyOf(copiedReportVersions);
 
         // remove from BackendCoreStat
-        BackendResourceStat.getInstance().removeBe(droppedBackend.getId());
+        BackendResourceStat.getInstance().removeBe(droppedBackend.getWarehouseId(), droppedBackend.getId());
 
         // remove worker
         if (RunMode.isSharedDataMode()) {
