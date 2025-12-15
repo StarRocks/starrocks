@@ -15,11 +15,8 @@
 package com.starrocks.sql.plan;
 
 import com.google.common.collect.Maps;
-<<<<<<< HEAD
 import com.starrocks.analysis.HintNode;
-=======
 import com.starrocks.common.Config;
->>>>>>> 04bebb8e81 ([BugFix] Fix usage and record for changing warehouse in inline comment (#66677))
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.SessionVariable;

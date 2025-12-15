@@ -219,7 +219,7 @@ public class VariableMgr {
     private void handleSetWarehouse(ConnectContext connectContext, SessionVariable sessionVariable, Field field, Object value)
             throws DdlException {
         final String originalWarehouseName = sessionVariable.getWarehouseName();
-        setParsedValue(sessionVariable, field, value);
+        setValue(sessionVariable, field, value);
         final String newWarehouseName = sessionVariable.getWarehouseName();
 
         // after set warehouse, need to reset compute resource
@@ -341,20 +341,16 @@ public class VariableMgr {
         }
 
         // set session variable
-<<<<<<< HEAD
-        setValue(sessionVariable, ctx.getField(), value);
-=======
         if (SessionVariable.WAREHOUSE_NAME.equalsIgnoreCase(attr.name()) && connectContext != null) {
-            handleSetWarehouse(connectContext, sessionVariable, ctx.getField(), parsedVal);
+            handleSetWarehouse(connectContext, sessionVariable, ctx.getField(), value);
         } else {
-            setParsedValue(sessionVariable, ctx.getField(), parsedVal);
+            setValue(sessionVariable, ctx.getField(), value);
         }
     }
 
     public void setSystemVariable(SessionVariable sessionVariable, SystemVariable setVar, boolean onlySetSessionVar)
             throws DdlException {
         setSystemVariable(sessionVariable, setVar, onlySetSessionVar, null);
->>>>>>> 04bebb8e81 ([BugFix] Fix usage and record for changing warehouse in inline comment (#66677))
     }
 
     private void setGlobalVariableAndWriteEditLog(VarContext ctx, String name, String value) throws DdlException {

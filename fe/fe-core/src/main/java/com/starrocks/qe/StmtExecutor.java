@@ -3143,36 +3143,6 @@ public class StmtExecutor {
         if (!Config.enable_collect_query_detail_info) {
             return;
         }
-<<<<<<< HEAD
-        String sql;
-        if (AuditEncryptionChecker.needEncrypt(parsedStmt)) {
-            sql = AstToSQLBuilder.toSQLOrDefault(parsedStmt, parsedStmt.getOrigStmt().originStmt);
-        } else {
-            sql = parsedStmt.getOrigStmt().originStmt;
-        }
-
-        boolean isQuery = context.isQueryStmt(parsedStmt);
-        QueryDetail queryDetail = new QueryDetail(
-                DebugUtil.printId(context.getQueryId()),
-                isQuery,
-                context.connectionId,
-                context.getMysqlChannel() != null ? context.getMysqlChannel().getRemoteIp() : "System",
-                context.getStartTime(), -1, -1,
-                QueryDetail.QueryMemState.RUNNING,
-                context.getDatabase(),
-                sql,
-                context.getQualifiedUser(),
-                Optional.ofNullable(context.getResourceGroup()).map(TWorkGroup::getName).orElse(""),
-                context.getCurrentWarehouseName(),
-                context.getCurrentCatalog(),
-                context.getCommandStr(),
-                getPreparedStmtId());
-        // Set query source from context
-        queryDetail.setQuerySource(context.getQuerySource());
-        context.setQueryDetail(queryDetail);
-        // copy queryDetail, cause some properties can be changed in future
-        QueryDetailQueue.addQueryDetail(queryDetail.copy());
-=======
 
         SessionVariable sessionVariableBackup = context.getSessionVariable();
         try {
@@ -3182,18 +3152,14 @@ public class StmtExecutor {
         }
 
         try {
-            String sql = parsedStmt.getOrigStmt().originStmt;
-            boolean needEncrypt = AuditEncryptionChecker.needEncrypt(parsedStmt);
-            if (needEncrypt || Config.enable_sql_desensitize_in_log) {
-                sql = AstToSQLBuilder.toSQL(parsedStmt, FormatOptions.allEnable()
-                                .setColumnSimplifyTableName(false)
-                                .setHideCredential(needEncrypt)
-                                .setEnableDigest(Config.enable_sql_desensitize_in_log))
-                        .orElse("this is a desensitized sql");
+            String sql;
+            if (AuditEncryptionChecker.needEncrypt(parsedStmt)) {
+                sql = AstToSQLBuilder.toSQLOrDefault(parsedStmt, parsedStmt.getOrigStmt().originStmt);
+            } else {
+                sql = parsedStmt.getOrigStmt().originStmt;
             }
 
             boolean isQuery = context.isQueryStmt(parsedStmt);
-
             QueryDetail queryDetail = new QueryDetail(
                     DebugUtil.printId(context.getQueryId()),
                     isQuery,
@@ -3217,7 +3183,6 @@ public class StmtExecutor {
         } finally {
             context.setSessionVariable(sessionVariableBackup);
         }
->>>>>>> 04bebb8e81 ([BugFix] Fix usage and record for changing warehouse in inline comment (#66677))
     }
 
     /*
