@@ -29,6 +29,7 @@ import com.starrocks.proto.TabletMetadatas;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.rpc.RpcException;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TStatusCode;
 import org.apache.logging.log4j.LogManager;
@@ -39,9 +40,12 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 public class TabletRepairHelper {
     private static final Logger LOG = LogManager.getLogger(TabletRepairHelper.class);
+
+    private static final long BATCH_VERSION_NUM = 5L;
 
     record PhysicalPartitionInfo(
             long physicalPartitionId,
@@ -142,6 +146,137 @@ public class TabletRepairHelper {
         return tabletVersionMetadatas;
     }
 
+    /**
+     * Finds valid tablet metadata for a physical partition based on version consistency requirements.
+     * If `enforceConsistentVersion` is true, it attempts to find a single version for which all tablets in the
+     * physical partition have metadata. This ensures all tablets are repaired to a consistent state.
+     * If `enforceConsistentVersion` is false, it finds the latest available valid metadata for each individual tablet
+     * within the specified version range.
+     * The identified valid metadata entries are stored in the `validMetadatas` map.
+     */
+    private static void findValidTabletMetadata(PhysicalPartitionInfo info,
+                                                Map<Long, Map<Long, TabletMetadataPB>> tabletVersionMetadatas, long maxVersion,
+                                                long minVersion, boolean enforceConsistentVersion,
+                                                Map<Long, TabletMetadataPB> validMetadatas) {
+        List<Long> allTablets = info.allTablets;
+
+        // try to find the valid tablet metadata
+        if (enforceConsistentVersion) {
+            // find consistent valid metadata version
+            Preconditions.checkState(validMetadatas.isEmpty());
+
+            long validVersion = 0;
+            for (long version = maxVersion; version >= minVersion; --version) {
+                boolean allTabletsMetadataExist = true;
+                for (long tabletId : allTablets) {
+                    Map<Long, TabletMetadataPB> versionMetadatas = tabletVersionMetadatas.get(tabletId);
+                    if (versionMetadatas == null || !versionMetadatas.containsKey(version)) {
+                        allTabletsMetadataExist = false;
+                        break;
+                    }
+                }
+
+                if (allTabletsMetadataExist) {
+                    validVersion = version;
+                    break;
+                }
+            }
+
+            if (validVersion != 0) {
+                for (long tabletId : allTablets) {
+                    validMetadatas.put(tabletId, tabletVersionMetadatas.get(tabletId).get(validVersion));
+                }
+            }
+        } else {
+            // find the latest valid metadata for each tablet
+            Preconditions.checkState(!validMetadatas.keySet().containsAll(allTablets));
+
+            for (long tabletId : allTablets) {
+                if (validMetadatas.containsKey(tabletId)) {
+                    continue;
+                }
+
+                Map<Long, TabletMetadataPB> versionMetadatas = tabletVersionMetadatas.get(tabletId);
+                if (versionMetadatas == null) {
+                    continue;
+                }
+
+                for (long version = maxVersion; version >= minVersion; --version) {
+                    TabletMetadataPB metadata = versionMetadatas.get(version);
+                    if (metadata != null) {
+                        validMetadatas.put(tabletId, metadata);
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    private static TabletMetadataPB createEmptyTabletMetadata(long tabletId, TabletMetadataPB otherValidMetadata) {
+        TabletMetadataPB metadata = new TabletMetadataPB();
+        metadata.id = tabletId;
+        // version will be overwritten to visible version later
+        metadata.version = 0L;
+        metadata.schema = otherValidMetadata.schema;
+        metadata.rowsets = Lists.newArrayList();
+        metadata.nextRowsetId = 1;
+        metadata.cumulativePoint = 0;
+        metadata.enablePersistentIndex = otherValidMetadata.enablePersistentIndex;
+        metadata.persistentIndexType = otherValidMetadata.persistentIndexType;
+        metadata.gtid = GlobalStateMgr.getCurrentState().getGtidGenerator().nextGtid();
+        metadata.compactionStrategy = otherValidMetadata.compactionStrategy;
+        metadata.flatJsonConfig = otherValidMetadata.flatJsonConfig;
+        return metadata;
+    }
+
+    private static void checkOrCreateEmptyTabletMetadata(PhysicalPartitionInfo info, Map<Long, TabletMetadataPB> validMetadatas,
+                                                         boolean enforceConsistentVersion, boolean allowEmptyTabletRecovery)
+            throws StarRocksException {
+        long maxVersion = info.maxVersion;
+        List<Long> allTablets = info.allTablets;
+        if (validMetadatas.keySet().containsAll(allTablets)) {
+            // check all tablets have consistent valid metadata, and the version is visible version
+            boolean allHaveVisibleVersionMetadata = true;
+            for (TabletMetadataPB metadata : validMetadatas.values()) {
+                if (metadata.version != maxVersion) {
+                    allHaveVisibleVersionMetadata = false;
+                    break;
+                }
+            }
+            if (allHaveVisibleVersionMetadata) {
+                throw new StarRocksException(
+                        String.format("all tablets have valid metadata with version %d, no need for repair", maxVersion));
+            } else {
+                return;
+            }
+        }
+
+        if (enforceConsistentVersion) {
+            throw new StarRocksException("no consistent valid tablet metadata version was found, " +
+                    "you can set enforce_consistent_version=false");
+        } else {
+            if (validMetadatas.isEmpty()) {
+                throw new StarRocksException(
+                        "no latest valid tablet metadatas were found for all allTablets, you should recreate the partition");
+            }
+
+            Set<Long> missingTablets = Sets.newHashSet(allTablets);
+            missingTablets.removeAll(validMetadatas.keySet());
+            Preconditions.checkState(!missingTablets.isEmpty());
+            if (!allowEmptyTabletRecovery) {
+                throw new StarRocksException(String.format(
+                        "tablet %d has no valid tablet metadatas, " +
+                                "you can set enforce_consistent_version=false and allow_empty_tablet_recovery=true",
+                        missingTablets.iterator().next()));
+            }
+
+            TabletMetadataPB validMetadata = validMetadatas.values().iterator().next();
+            for (long tabletId : missingTablets) {
+                validMetadatas.put(tabletId, createEmptyTabletMetadata(tabletId, validMetadata));
+            }
+        }
+    }
+
     private static Map<Long, String> repairTabletMetadata(PhysicalPartitionInfo info, Map<Long, TabletMetadataPB> validMetadatas,
                                                           boolean isFileBundling) throws Exception {
         long physicalPartitionId = info.physicalPartitionId;
@@ -228,5 +363,55 @@ public class TabletRepairHelper {
         }
 
         return tabletErrors;
+    }
+
+    /**
+     * Repairs the tablet metadata for a single physical partition.
+     * This function attempts to find valid tablet metadata for all tablets within the given physical partition.
+     * It iterates through versions to retrieve tablet metadatas from compute nodes by batches.
+     * If valid metadata is found for all tablets, or
+     * if `allowEmptyTabletRecovery` is true and empty metadata can be created for missing tablets,
+     * it then sends these valid metadatas to the compute nodes to perform the repair operation.
+     *
+     * @param info                     Information about the physical partition.
+     * @param enforceConsistentVersion Whether to enforce consistent metadata version across all tablets.
+     * @param allowEmptyTabletRecovery Whether to allow creating empty metadata for tablets without valid metadata.
+     * @param isFileBundling           Whether file bundling is enabled for the table.
+     * @return A map of tablet IDs to error messages for any tablets that failed to repair.
+     * @throws Exception If an error occurs during the repair process.
+     */
+    private static Map<Long, String> repairPhysicalPartition(PhysicalPartitionInfo info, boolean enforceConsistentVersion,
+                                                             boolean allowEmptyTabletRecovery, boolean isFileBundling)
+            throws Exception {
+        List<Long> allTablets = info.allTablets;
+        Set<Long> leftTablets = info.leftTablets;
+        long partitionMaxVersion = info.maxVersion;
+        long partitionMinVersion = info.minVersion;
+        Map<Long, TabletMetadataPB> validMetadatas = Maps.newHashMap();
+
+        for (long maxVersion = partitionMaxVersion; maxVersion >= partitionMinVersion; maxVersion -= BATCH_VERSION_NUM) {
+            long minVersion = Math.max(maxVersion - BATCH_VERSION_NUM + 1, partitionMinVersion);
+
+            // get tablet metadatas from backends
+            Map<Long, Map<Long, TabletMetadataPB>> tabletVersionMetadatas = getTabletMetadatas(info, maxVersion, minVersion);
+
+            // find the valid tablet metadata
+            findValidTabletMetadata(info, tabletVersionMetadatas, maxVersion, minVersion, enforceConsistentVersion,
+                    validMetadatas);
+
+            if (validMetadatas.keySet().containsAll(allTablets)) {
+                break;
+            } else {
+                leftTablets.removeAll(validMetadatas.keySet());
+            }
+        }
+
+        // check the valid tablet metadata, and create empty tablet metadata if no valid metadata is found
+        checkOrCreateEmptyTabletMetadata(info, validMetadatas, enforceConsistentVersion, allowEmptyTabletRecovery);
+        LOG.info("Found valid tablet metadatas for partition {}, tablet versions: {}", info.physicalPartitionId,
+                validMetadatas.entrySet().stream().collect(Collectors.toMap(Map.Entry::getKey, e -> e.getValue().version)));
+
+        // repair the valid tablet metadata through backends
+        return repairTabletMetadata(info, validMetadatas, isFileBundling);
     }
 }
