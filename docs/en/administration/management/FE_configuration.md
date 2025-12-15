@@ -650,6 +650,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: The IP address of the FE node.
 - Introduced in: -
 
+##### dns_cache_ttl_seconds
+
+- Default: 60
+- Type: Int
+- Unit: Seconds
+- Is mutable: No
+- Description: DNS cache TTL (Time-To-Live) in seconds for successful DNS lookups. This sets the Java security property `networkaddress.cache.ttl` which controls how long the JVM caches successful DNS lookups. The default value is 60 seconds. Set to -1 to cache forever, or 0 to disable caching. This is particularly useful in environments where IP addresses change frequently, such as Kubernetes deployments or when using dynamic DNS. Note: This is a static configuration and requires FE restart to take effect.
+- Introduced in: -
+
 ##### http_async_threads_num
 
 - Default: 4096

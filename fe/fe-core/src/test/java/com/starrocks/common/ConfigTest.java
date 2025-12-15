@@ -173,4 +173,15 @@ public class ConfigTest {
         configs = ConfigForArray.getConfigInfo(null);
         Assertions.assertEquals("[]", configs.get(2).get(2));
     }
+
+    @Test
+    public void testDnsCacheTtlConfig() throws DdlException {
+        // Test that dns_cache_ttl_seconds config exists and has the default value
+        PatternMatcher matcher = PatternMatcher.createMysqlPattern("dns_cache_ttl_seconds", false);
+        List<List<String>> configs = Config.getConfigInfo(matcher);
+        Assertions.assertEquals(1, configs.size());
+        Assertions.assertEquals("dns_cache_ttl_seconds", configs.get(0).get(0));
+        Assertions.assertEquals("60", configs.get(0).get(2));
+        Assertions.assertEquals(60, Config.dns_cache_ttl_seconds);
+    }
 }
