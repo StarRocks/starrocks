@@ -1,0 +1,251 @@
+-- name: test_array_sort_lambda
+SELECT array_sort([3, 2, 5, 1, 2], (x, y) -> IF(x < y, 1, IF(x = y, 0, -1)));
+-- result:
+[5,3,2,2,1]
+-- !result
+create table t0 (
+    k0 int,
+    c0 array<tinyint>,
+    c1 array<smallint>,
+    c2 array<int>,
+    c3 array<bigint>,
+    c4 array<largeint>,
+    c5 array<double>,
+    c6 array<float>
+)
+properties(
+   "replication_num" = "1"
+);
+-- result:
+-- !result
+insert into t0 select i
+       ,[3,2,5,1,2] as c0
+       ,[3,2,5,1,2] as c1
+       ,[3,2,5,1,2] as c2
+       ,[3,2,5,1,2] as c3
+       ,[3,2,5,1,2] as c4
+       ,[3,2,5,1,2] as c5
+       ,[3,2,5,1,2] as c6
+from table(generate_series(0,10000)) t(i);
+-- result:
+-- !result
+SELECT distinct array_sort(c0, (x, y) -> IF(x < y, 1, IF(x = y, 0, -1))) from t0;
+-- result:
+[5,3,2,2,1]
+-- !result
+SELECT distinct array_sort(c1, (x, y) -> IF(x < y, 1, IF(x = y, 0, -1))) from t0;
+-- result:
+[5,3,2,2,1]
+-- !result
+SELECT distinct array_sort(c2, (x, y) -> IF(x < y, 1, IF(x = y, 0, -1))) from t0;
+-- result:
+[5,3,2,2,1]
+-- !result
+SELECT distinct array_sort(c3, (x, y) -> IF(x < y, 1, IF(x = y, 0, -1))) from t0;
+-- result:
+[5,3,2,2,1]
+-- !result
+SELECT distinct array_sort(c4, (x, y) -> IF(x < y, 1, IF(x = y, 0, -1))) from t0;
+-- result:
+[5,3,2,2,1]
+-- !result
+SELECT distinct array_sort(c5, (x, y) -> IF(x < y, 1, IF(x = y, 0, -1))) from t0;
+-- result:
+[5,3,2,2,1]
+-- !result
+SELECT distinct array_sort(c6, (x, y) -> IF(x < y, 1, IF(x = y, 0, -1))) from t0;
+-- result:
+[5,3,2,2,1]
+-- !result
+SELECT distinct array_sort(array_map(x->cast(x as decimal(7,2)),c6), (x, y) -> IF(x < y, 1, IF(x = y, 0, -1))) from t0;
+-- result:
+[5.00,3.00,2.00,2.00,1.00]
+-- !result
+SELECT distinct array_sort(array_map(x->cast(x as decimal(19,5)),c6), (x, y) -> IF(x < y, 1, IF(x = y, 0, -1))) from t0;
+-- result:
+[5.00000,3.00000,2.00000,2.00000,1.00000]
+-- !result
+SELECT distinct array_sort([3, 2, 5, 1, 2], (x, y) -> IF(x < y, 1, IF(x = y, 0, -1))) from t0;
+-- result:
+[5,3,2,2,1]
+-- !result
+SELECT distinct array_sort([3, 2, 5, 1, 2], (x, y) -> IF(x < y, -1, IF(x = y, 0, 1)));
+-- result:
+[1,2,2,3,5]
+-- !result
+SELECT distinct array_sort([], (x, y) -> IF(x < y, -1, IF(x = y, 0, 1)));
+-- result:
+[]
+-- !result
+SELECT distinct array_sort([5], (x, y) -> IF(x < y, -1, IF(x = y, 0, 1)));
+-- result:
+[5]
+-- !result
+SELECT distinct array_sort([1, 1, 1, 1], (x, y) -> IF(x < y, -1, IF(x = y, 0, 1)));
+-- result:
+[1,1,1,1]
+-- !result
+SELECT distinct array_sort([3, 2, 5, 1, 2], (x, y) -> k0%3-2) <=3 from t0;
+-- result:
+E: (1064, 'Getting analyzing error from line 1, column 16 to line 1, column 64. Detail message: Column type array<tinyint(4)> does not support binary predicate operation with type tinyint(4).')
+-- !result
+SELECT distinct array_sort(c0, (x, y) -> k0%3-2)<=array_max(c0) from t0;
+-- result:
+E: (1064, 'Getting analyzing error from line 1, column 16 to line 1, column 62. Detail message: Column type array<tinyint(4)> does not support binary predicate operation with type tinyint(4).')
+-- !result
+with cte as (
+select array_agg(k0) as arr
+from t0
+)
+select array_sort(arr, (x,y)->rand()-0.5)[1] <= array_max(arr) from cte;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Lambda function in sort_array should only depend on both two arguments and contain no non-deterministic functions.')
+-- !result
+with cte as (
+select array_agg(k0) as arr
+from t0
+)
+select array_sort(arr, (x,y)->-1)[1] <= array_max(arr) from cte;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Lambda function in sort_array should only depend on both two arguments and contain no non-deterministic functions.')
+-- !result
+with cte as (
+select array_agg(k0) as arr
+from t0
+)
+select array_sort(arr, (x,y)->1)[1] <= array_max(arr) from cte;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Lambda function in sort_array should only depend on both two arguments and contain no non-deterministic functions.')
+-- !result
+drop table t0;
+-- result:
+-- !result
+SELECT array_sort(['bc', 'ab', 'dc'], (x, y) -> IF(x < y, 1, IF(x = y, 0, -1)));
+-- result:
+["dc","bc","ab"]
+-- !result
+SELECT array_sort(['a', 'abcd', 'abc'], (x, y) -> IF(length(x) < length(y), -1, IF(length(x) = length(y), 0, 1)));
+-- result:
+["a","abc","abcd"]
+-- !result
+create table t0 (
+    k0 int,
+    c0 array<string>,
+    c1 array<string>
+)
+properties(
+   "replication_num" = "1"
+);
+-- result:
+-- !result
+insert into t0 select i
+       ,['bc','ab','dc'] as c0
+       ,['a','abcd','abc'] as c1
+from table(generate_series(0,10000)) t(i);
+-- result:
+-- !result
+SELECT distinct array_sort(['bc', 'ab', 'dc'], (x, y) -> IF(x < y, 1, IF(x = y, 0, -1))) from t0;
+-- result:
+["dc","bc","ab"]
+-- !result
+SELECT distinct array_sort(['a', 'abcd', 'abc'], (x, y) -> IF(length(x) < length(y), -1, IF(length(x) = length(y), 0, 1))) from t0;
+-- result:
+["a","abc","abcd"]
+-- !result
+SELECT distinct array_sort(c0, (x, y) -> IF(x < y, 1, IF(x = y, 0, -1))) from t0;
+-- result:
+["dc","bc","ab"]
+-- !result
+SELECT distinct array_sort(c1, (x, y) -> IF(length(x) < length(y), -1, IF(length(x) = length(y), 0, 1))) from t0;
+-- result:
+["a","abc","abcd"]
+-- !result
+drop table t0;
+-- result:
+-- !result
+SELECT array_sort([3, 2, null, 5, null, 1, 2], (x, y) -> CASE WHEN x IS NULL THEN -1 WHEN y IS NULL THEN 1 WHEN x < y THEN 1 WHEN x = y THEN 0 ELSE -1 END);
+-- result:
+[null,null,5,3,2,2,1]
+-- !result
+SELECT array_sort([3, 2, null, 5, null, 1, 2], (x, y) -> CASE WHEN x IS NULL THEN 1 WHEN y IS NULL THEN -1 WHEN x < y THEN 1 WHEN x = y THEN 0 ELSE -1 END);
+-- result:
+[5,3,2,2,1,null,null]
+-- !result
+create table t0 (
+    k0 int,
+    c0 array<int>
+)
+properties(
+   "replication_num" = "1"
+);
+-- result:
+-- !result
+insert into t0 select i
+       ,[3,2,null,5,null,1,2] as c0
+from table(generate_series(0,10000)) t(i);
+-- result:
+-- !result
+SELECT distinct  array_sort([3, 2, null, 5, null, 1, 2], (x, y) -> CASE WHEN x IS NULL THEN -1 WHEN y IS NULL THEN 1 WHEN x < y THEN 1 WHEN x = y THEN 0 ELSE -1 END) from t0;
+-- result:
+[null,null,5,3,2,2,1]
+-- !result
+SELECT distinct array_sort([3, 2, null, 5, null, 1, 2], (x, y) -> CASE WHEN x IS NULL THEN 1 WHEN y IS NULL THEN -1 WHEN x < y THEN 1 WHEN x = y THEN 0 ELSE -1 END) from t0;
+-- result:
+[5,3,2,2,1,null,null]
+-- !result
+SELECT distinct array_sort(c0, (x, y) -> CASE WHEN x IS NULL THEN -1 WHEN y IS NULL THEN 1 WHEN x < y THEN 1 WHEN x = y THEN 0 ELSE -1 END) from t0;
+-- result:
+[null,null,5,3,2,2,1]
+-- !result
+SELECT distinct array_sort(c0, (x, y) -> CASE WHEN x IS NULL THEN 1 WHEN y IS NULL THEN -1 WHEN x < y THEN 1 WHEN x = y THEN 0 ELSE -1 END) from t0;
+-- result:
+[5,3,2,2,1,null,null]
+-- !result
+drop table t0;
+-- result:
+-- !result
+SELECT array_sort([[2, 3, 1], [4, 2, 1, 4], [1, 2]], (x, y) -> IF(cardinality(x) < cardinality(y), -1, IF(cardinality(x) = cardinality(y), 0, 1)));
+-- result:
+[[1,2],[2,3,1],[4,2,1,4]]
+-- !result
+create table t0 (
+    k0 int,
+    c0 array<array<int>>
+)
+properties(
+   "replication_num" = "1"
+);
+-- result:
+-- !result
+insert into t0 select i
+      ,[[2, 3, 1], [4, 2, 1, 4], [1, 2]] c0
+from table(generate_series(0,10000)) t(i);
+-- result:
+-- !result
+SELECT distinct array_sort([[2, 3, 1], [4, 2, 1, 4], [1, 2]], (x, y) -> IF(cardinality(x) < cardinality(y), -1, IF(cardinality(x) = cardinality(y), 0, 1))) from t0;
+-- result:
+[[1,2],[2,3,1],[4,2,1,4]]
+-- !result
+SELECT distinct array_sort(c0, (x, y) -> IF(cardinality(x) < cardinality(y), -1, IF(cardinality(x) = cardinality(y), 0, 1))) from t0;
+-- result:
+[[1,2],[2,3,1],[4,2,1,4]]
+-- !result
+drop table t0;
+-- result:
+-- !result
+select array_sort([1,3,2,1,3,6,100,200],(x,y)->rand()-0.5)[1] <= array_max([1,3,2,1,3,6,100,200]);
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Lambda function in sort_array should only depend on both two arguments and contain no non-deterministic functions.')
+-- !result
+select array_sort([1,3,2,1,3,6,100,200],(x,y)->0)[1] <= array_max([1,3,2,1,3,6,100,200]);
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Lambda function in sort_array should only depend on both two arguments and contain no non-deterministic functions.')
+-- !result
+select array_sort([1,3,2,1,3,6,100,200],(x,y)->1)[1] <= array_max([1,3,2,1,3,6,100,200]);
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Lambda function in sort_array should only depend on both two arguments and contain no non-deterministic functions.')
+-- !result
+select array_sort([1,3,2,1,3,6,100,200],(x,y)->-1)[1] <= array_max([1,3,2,1,3,6,100,200]);
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Lambda function in sort_array should only depend on both two arguments and contain no non-deterministic functions.')
+-- !result

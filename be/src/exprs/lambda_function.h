@@ -91,6 +91,8 @@ public:
     // 1. slot 1 -> array_map(x->x<10, arr1)
     // 2. slot 2 -> any_match(slot 1, arr1)
     Status extract_outer_common_exprs(RuntimeState* state, ExprContext* expr_ctx, ExtractContext* ctx);
+    bool can_evaluate_constant() const;
+    StatusOr<ColumnPtr> evaluate_constant(ExprContext* context);
 
 private:
     Status collect_lambda_argument_ids();
