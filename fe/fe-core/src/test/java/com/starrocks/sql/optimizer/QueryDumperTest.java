@@ -135,6 +135,7 @@ public class QueryDumperTest extends PlanTestBase {
         BackendResourceStat.getInstance().setNumCoresOfBe(DEFAULT_WAREHOUSE_ID, 1, 8);
         BackendResourceStat.getInstance().setNumCoresOfBe(1, 10, 16);
         BackendResourceStat.getInstance().setNumCoresOfBe(1, 11, 16);
+        BackendResourceStat.getInstance().getAvgNumCoresOfBe();
 
         GlobalStateMgr.getCurrentState().getWarehouseMgr().addWarehouse(new DefaultWarehouse(1, "wh1"));
 
@@ -145,12 +146,12 @@ public class QueryDumperTest extends PlanTestBase {
 
             assertThat(statusAndRes.second).contains(
                     "\"be_core_stat\":{" +
-                            "\"cachedAvgNumOfHardwareCores\":-1," +
+                            "\"cachedAvgNumOfHardwareCores\":12," +
                             "\"numOfHardwareCoresPerBe\":\"{\\\"0\\\":8,\\\"1\\\":8,\\\"10\\\":16,\\\"11\\\":16}\"" +
                             "}");
             assertThat(statusAndRes.second).contains(
                     "\"be_core_stat_v2\":{" +
-                            "\"cachedAvgNumOfHardwareCores\":-1," +
+                            "\"cachedAvgNumOfHardwareCores\":12," +
                             "\"warehouses\":[{" +
                             "\"warehouseId\":0," +
                             "\"cachedAvgNumOfHardwareCores\":8," +
@@ -168,16 +169,15 @@ public class QueryDumperTest extends PlanTestBase {
             Pair<HttpResponseStatus, String> statusAndRes =
                     QueryDumper.dumpQuery("default_catalog", "test", "select count(v1) from t0", false);
             assertThat(statusAndRes.first).isEqualTo(HttpResponseStatus.OK);
-            System.out.println(statusAndRes.second);
 
             assertThat(statusAndRes.second).contains(
                     "\"be_core_stat\":{" +
-                            "\"cachedAvgNumOfHardwareCores\":-1," +
+                            "\"cachedAvgNumOfHardwareCores\":12," +
                             "\"numOfHardwareCoresPerBe\":\"{\\\"0\\\":8,\\\"1\\\":8,\\\"10\\\":16,\\\"11\\\":16}\"" +
                             "}");
             assertThat(statusAndRes.second).contains(
                     "\"be_core_stat_v2\":{" +
-                            "\"cachedAvgNumOfHardwareCores\":-1," +
+                            "\"cachedAvgNumOfHardwareCores\":12," +
                             "\"warehouses\":[{" +
                             "\"warehouseId\":0," +
                             "\"cachedAvgNumOfHardwareCores\":8," +
