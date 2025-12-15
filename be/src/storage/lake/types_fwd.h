@@ -14,6 +14,7 @@
 
 #pragma once
 #include <memory>
+#include <set>
 #include <vector>
 
 namespace starrocks {
