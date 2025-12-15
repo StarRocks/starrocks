@@ -986,15 +986,16 @@ public class TableProperty implements Writable, GsonPostProcessable {
     }
 
     public boolean isSetPartitionRefreshNumber() {
-        return partitionRefreshNumber != INVALID;
+        return properties != null && properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER);
     }
 
     public int getPartitionRefreshNumber() {
-        return partitionRefreshNumber == INVALID ? Config.default_mv_partition_refresh_number : partitionRefreshNumber;
+        return partitionRefreshNumber;
     }
 
     public boolean isSetPartitionRefreshStrategy() {
-        return !Strings.isNullOrEmpty(partitionRefreshStrategy);
+        return properties != null && properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_STRATEGY)
+                && !Strings.isNullOrEmpty(partitionRefreshStrategy);
     }
 
     public String getPartitionRefreshStrategy() {
