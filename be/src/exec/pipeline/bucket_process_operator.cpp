@@ -172,16 +172,6 @@ StatusOr<ChunkPtr> BucketProcessSourceOperator::pull_chunk(RuntimeState* state) 
     return chunk;
 }
 
-// TODO: put the spill channel in operator.
-SpillProcessChannelPtr get_spill_channel(const OperatorPtr& op) {
-    if (auto raw = dynamic_cast<SpillableAggregateBlockingSinkOperator*>(op.get()); raw != nullptr) {
-        return raw->spill_channel();
-    } else if (auto raw = dynamic_cast<SpillableAggregateDistinctBlockingSinkOperator*>(op.get()); raw != nullptr) {
-        return raw->spill_channel();
-    }
-    return nullptr;
-}
-
 BucketProcessSinkOperatorFactory::BucketProcessSinkOperatorFactory(int32_t id, int32_t plan_node_id,
                                                                    BucketProcessContextFactoryPtr context_factory,
                                                                    OperatorFactoryPtr factory)
@@ -192,11 +182,6 @@ BucketProcessSinkOperatorFactory::BucketProcessSinkOperatorFactory(int32_t id, i
 OperatorPtr BucketProcessSinkOperatorFactory::create(int32_t degree_of_parallelism, int32_t driver_sequence) {
     auto ctx = _ctx_factory->get_or_create(driver_sequence);
     ctx->sink = _factory->create(degree_of_parallelism, driver_sequence);
-    auto spill_channel = get_spill_channel(ctx->sink);
-    if (spill_channel != nullptr) {
-        spill_channel->set_reuseable(true);
-    }
-    ctx->spill_channel = std::move(spill_channel);
     auto bucket_source_operator =
             std::make_shared<BucketProcessSinkOperator>(this, _id, _plan_node_id, driver_sequence, ctx);
     return bucket_source_operator;
