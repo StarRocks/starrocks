@@ -63,6 +63,7 @@ subprojects {
         set("jackson.version", "2.15.2")
         set("jetty.version", "9.4.57.v20241219")
         set("jprotobuf-starrocks.version", "1.0.0")
+        set("junit.version", "5.8.2")
         set("kafka-clients.version", "3.4.0")
         set("kudu.version", "1.17.1")
         set("log4j.version", "2.19.0")
@@ -83,6 +84,8 @@ subprojects {
         implementation(platform("com.azure:azure-sdk-bom:${project.ext["azure.version"]}"))
         implementation(platform("io.opentelemetry:opentelemetry-bom:1.14.0"))
         implementation(platform("software.amazon.awssdk:bom:${project.ext["aws-v2-sdk.version"]}"))
+        // Enforce the same JUnit 5 versions as Maven (via `junit.version`) across all FE subprojects.
+        testImplementation(enforcedPlatform("org.junit:junit-bom:${project.ext["junit.version"]}"))
 
         constraints {
             // dependency sync start
@@ -223,7 +226,7 @@ subprojects {
             implementation("org.jboss.xnio:xnio-nio:3.8.16.Final")
             implementation("org.jdom:jdom2:2.0.6.1")
             implementation("org.json:json:20231013")
-            implementation("org.junit.jupiter:junit-jupiter:5.8.2")
+            implementation("org.junit.jupiter:junit-jupiter:${project.ext["junit.version"]}")
             implementation("org.mariadb.jdbc:mariadb-java-client:3.3.2")
             implementation("org.owasp.encoder:encoder:1.3.1")
             implementation("org.postgresql:postgresql:42.4.4")
