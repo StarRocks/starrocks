@@ -1462,6 +1462,8 @@ public class PropertyAnalyzer {
             short replicationNum = RunMode.defaultReplicationNum();
             if (properties.containsKey(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM)) {
                 if (FeConstants.isReplayFromQueryDump) {
+                    // still call analyzeReplicationNum to check the validity of replication_num
+                    PropertyAnalyzer.analyzeReplicationNum(properties, replicationNum);
                     replicationNum = 1;
                 } else {
                     replicationNum = PropertyAnalyzer.analyzeReplicationNum(properties, replicationNum);
@@ -1731,7 +1733,7 @@ public class PropertyAnalyzer {
             }
         } catch (AnalysisException e) {
             if (FeConstants.isReplayFromQueryDump) {
-                LOG.warn("Ignore MV properties analysis error during replay from query dump: ", e);
+                LOG.warn("Ignore MV properties analysis error during replay from query dump: " + e.getMessage());
             } else {
                 if (materializedView.isCloudNativeMaterializedView()) {
                     GlobalStateMgr.getCurrentState().getStorageVolumeMgr()
