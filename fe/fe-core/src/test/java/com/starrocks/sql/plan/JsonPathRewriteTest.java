@@ -221,6 +221,12 @@ public class JsonPathRewriteTest extends PlanTestBase {
                         "select get_json_string(c2, 'f1') from extend_predicate3",
                         "get_json_string(2: c2, 'f1')",
                         ""
+                ),
+                // [22] With lambda function
+                Arguments.of(
+                        "SELECT * FROM extend_predicate " +
+                                "WHERE any_match(x -> get_json_double(x, '$.longitude') > 0, CAST(c2 AS ARRAY<JSON>)) ",
+                        "get_json_double", "any_match"
                 )
         );
     }
