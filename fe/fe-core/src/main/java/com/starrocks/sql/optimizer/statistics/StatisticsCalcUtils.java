@@ -194,7 +194,7 @@ public class StatisticsCalcUtils {
 
             if (needDelta) {
                 if (deltaRows == null) {
-                    deltaRows = deltaRows(table, basicStatsMeta.getTotalRows());
+                    deltaRows = deltaRows(table, basicStatsMeta.getUpdateRows());
                 }
                 partitionRowCount += deltaRows;
             }
