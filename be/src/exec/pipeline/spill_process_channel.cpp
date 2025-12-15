@@ -33,7 +33,7 @@ SpillProcessChannelPtr SpillProcessChannelFactory::get_or_create(int32_t sequenc
 Status SpillProcessChannel::execute(SpillProcessTasksBuilder& task_builder) {
     std::lock_guard guard(_mutex);
     Status res;
-    if (is_working() || _is_closed) {
+    if (is_working() && !_is_closed) {
         for (auto&& task : task_builder.tasks()) {
             add_spill_task(std::move(task));
         }
@@ -67,7 +67,9 @@ void SpillProcessChannel::close() {
     DCHECK(task);
 
     // run the last task
-    (void)task();
+    if (task) {
+        (void)task();
+    }
 
     _spiller.reset();
     _is_closed = true;

@@ -2498,7 +2498,7 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
             if not res["status"]:
                 tools.assert_true(False, "acquire task state error")
             state = res["result"][0][0]
-            if state != "RUNNING" and state != "PENDING":
+            if state != "RUNNING" and state != "PENDING" and state != "SUBMITTED":
                 return ""
             time.sleep(1)
 

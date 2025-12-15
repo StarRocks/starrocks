@@ -72,11 +72,6 @@ bool BucketProcessSinkOperator::is_finished() const {
 Status BucketProcessSinkOperator::set_finishing(RuntimeState* state) {
     auto notify = _ctx->defer_notify_source();
     ONCE_DETECT(_set_finishing_once);
-    auto defer = DeferOp([&]() {
-        if (_ctx->spill_channel != nullptr) {
-            _ctx->spill_channel->set_finishing();
-        }
-    });
     _ctx->all_input_finishing = true;
     DCHECK(_ctx->reset_version <= _ctx->sink_complete_version);
     // acquire finish token and never release
