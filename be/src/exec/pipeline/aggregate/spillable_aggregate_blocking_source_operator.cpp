@@ -31,6 +31,8 @@ Status SpillableAggregateBlockingSourceOperator::prepare(RuntimeState* state) {
 void SpillableAggregateBlockingSourceOperator::close(RuntimeState* state) {
     AggregateBlockingSourceOperator::close(state);
     _stream_aggregator->close(state);
+    DCHECK(is_finished());
+    DCHECK(!has_output());
 }
 
 bool SpillableAggregateBlockingSourceOperator::has_output() const {

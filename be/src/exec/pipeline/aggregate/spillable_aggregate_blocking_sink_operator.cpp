@@ -97,6 +97,8 @@ Status SpillableAggregateBlockingSinkOperator::set_finishing(RuntimeState* state
 
 void SpillableAggregateBlockingSinkOperator::close(RuntimeState* state) {
     AggregateBlockingSinkOperator::close(state);
+    DCHECK(is_finished());
+    DCHECK(!need_input());
 }
 
 Status SpillableAggregateBlockingSinkOperator::prepare(RuntimeState* state) {

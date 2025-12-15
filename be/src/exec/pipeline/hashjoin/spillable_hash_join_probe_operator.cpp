@@ -58,6 +58,8 @@ void SpillableHashJoinProbeOperator::close(RuntimeState* state) {
     _probe_spiller.reset();
     _reset_load_partitions();
     HashJoinProbeOperator::close(state);
+    DCHECK(!has_output());
+    DCHECK(is_finished());
 }
 
 bool SpillableHashJoinProbeOperator::has_output() const {
