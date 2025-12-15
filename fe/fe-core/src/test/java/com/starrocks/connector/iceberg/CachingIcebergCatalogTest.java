@@ -312,6 +312,28 @@ public class CachingIcebergCatalogTest {
     }
 
     @Test
+    public void testGetCatalogPropertiesDelegatesToWrappedCatalog() {
+        Map<String, String> expectedProperties = new HashMap<>();
+        expectedProperties.put("s3.access-key-id", "test-key");
+        expectedProperties.put("s3.secret-access-key", "test-secret");
+
+        // Use Mockito for this test since JMockit doesn't properly handle default interface methods
+        IcebergCatalog delegate = Mockito.mock(IcebergCatalog.class);
+        Mockito.when(delegate.getCatalogProperties()).thenReturn(expectedProperties);
+
+        CachingIcebergCatalog cachingIcebergCatalog = new CachingIcebergCatalog(CATALOG_NAME, delegate,
+                DEFAULT_CATALOG_PROPERTIES, Executors.newSingleThreadExecutor());
+
+        Map<String, String> actualProperties = cachingIcebergCatalog.getCatalogProperties();
+        Assertions.assertEquals(expectedProperties, actualProperties);
+        Assertions.assertEquals("test-key", actualProperties.get("s3.access-key-id"));
+        Assertions.assertEquals("test-secret", actualProperties.get("s3.secret-access-key"));
+
+        // Verify that getCatalogProperties was called on the delegate
+        Mockito.verify(delegate).getCatalogProperties();
+    }
+
+    @Test
     public void testCacheFreshnessBug(@Mocked IcebergCatalog delegate, @Mocked PartitionSpec spec) {
         //this test will fail on 3.5.9
         System.out.println("===========Starting testCacheFreshnessBug==========");

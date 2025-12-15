@@ -176,6 +176,11 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     }
 
     @Override
+    public Map<String, String> getCatalogProperties() {
+        return delegate.getCatalogProperties();
+    }
+
+    @Override
     public List<String> listAllDatabases(ConnectContext connectContext) {
         return delegate.listAllDatabases(connectContext);
     }
