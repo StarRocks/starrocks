@@ -23,7 +23,7 @@
 namespace starrocks::pipeline {
 
 bool SpillProcessOperator::has_output() const {
-    return _is_finished && _channel->has_output();
+    return !_is_finished && _channel->has_output();
 }
 
 bool SpillProcessOperator::is_finished() const {
