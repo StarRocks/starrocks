@@ -260,6 +260,7 @@ public class FoldConstantsRule extends BottomUpScalarOperatorRewriteRule {
                 .add("array_max")
                 .add("array_distinct")
                 .add("array_sort")
+                .add("array_sort_lambda")
                 .add("reverse")
                 .add("array_join")
                 .add("array_difference")
