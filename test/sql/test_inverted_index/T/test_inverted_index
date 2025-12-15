@@ -1,4 +1,4 @@
--- name: test_basic_create_index @slow
+-- name: test_basic_create_index @slow @native
 ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
 set low_cardinality_optimize_v2 = false;
 set cbo_enable_low_cardinality_optimize = false;
@@ -85,7 +85,7 @@ show create table t_test_basic_create_index_replicated;
 DROP TABLE t_test_basic_create_index_pk;
 DROP TABLE t_test_basic_create_index_dup;
 
--- name: test_query_gin_index
+-- name: test_query_gin_index @native
 ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
 set low_cardinality_optimize_v2 = false;
 set cbo_enable_low_cardinality_optimize = false;
@@ -135,7 +135,7 @@ select count(*) from t_test_gin_index_query where query_chinese match_all "ç‰©åŒ
 
 drop table t_test_gin_index_query;
 
--- name: test_gin_index_single_predicate_none
+-- name: test_gin_index_single_predicate_none @native
 ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
 set low_cardinality_optimize_v2 = false;
 set cbo_enable_low_cardinality_optimize = false;
@@ -180,7 +180,7 @@ SELECT * FROM t_gin_index_single_predicate_none WHERE text_column match_any "ABC
 
 DROP TABLE t_gin_index_single_predicate_none;
 
--- name: test_gin_index_single_predicate_english
+-- name: test_gin_index_single_predicate_english @native
 ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
 set low_cardinality_optimize_v2 = false;
 set cbo_enable_low_cardinality_optimize = false;
@@ -223,7 +223,7 @@ SELECT * FROM t_gin_index_single_predicate_english WHERE text_column LIKE "thi%"
 
 DROP TABLE t_gin_index_single_predicate_english;
 
--- name: test_gin_index_multiple_predicate_none
+-- name: test_gin_index_multiple_predicate_none @native
 ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
 set low_cardinality_optimize_v2 = false;
 set cbo_enable_low_cardinality_optimize = false;
@@ -270,7 +270,7 @@ SELECT * FROM t_gin_index_multiple_predicate_none WHERE text_column NOT match_an
 
 DROP TABLE t_gin_index_multiple_predicate_none;
 
--- name: test_gin_index_multiple_predicate_english
+-- name: test_gin_index_multiple_predicate_english @native
 ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
 set low_cardinality_optimize_v2 = false;
 set cbo_enable_low_cardinality_optimize = false;
@@ -307,7 +307,7 @@ SELECT * FROM t_gin_index_multiple_predicate_english WHERE text_column match_all
 
 DROP TABLE t_gin_index_multiple_predicate_english;
 
--- name: test_gin_index_compaction
+-- name: test_gin_index_compaction @native
 ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
 set low_cardinality_optimize_v2 = false;
 set cbo_enable_low_cardinality_optimize = false;
@@ -410,7 +410,7 @@ DROP TABLE t_gin_index_compaction_english_base;
 DROP TABLE t_gin_index_compaction_english_cumu;
 
 
--- name: test_gin_index_type
+-- name: test_gin_index_type @native
 ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
 set low_cardinality_optimize_v2 = false;
 set cbo_enable_low_cardinality_optimize = false;
@@ -512,7 +512,7 @@ PROPERTIES (
 "compression" = "LZ4"
 );
 
--- name: test_clone_for_gin
+-- name: test_clone_for_gin @native
 ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
 set low_cardinality_optimize_v2 = false;
 set cbo_enable_low_cardinality_optimize = false;
@@ -543,7 +543,7 @@ function: set_first_tablet_bad_and_recover("t_clone_for_gin")
 
 SELECT * FROM t_clone_for_gin ORDER BY id1;
 
--- name: test_complex_predicate_for_gin
+-- name: test_complex_predicate_for_gin @native
 ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
 set low_cardinality_optimize_v2 = false;
 set cbo_enable_low_cardinality_optimize = false;
@@ -653,7 +653,7 @@ SELECT * FROM t_complex_predicate_for_gin_english WHERE text_column match_all NU
 DROP TABLE t_complex_predicate_for_gin_none;
 DROP TABLE t_complex_predicate_for_gin_english;
 
--- name: test_delete_and_column_prune
+-- name: test_delete_and_column_prune @native
 ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
 CREATE TABLE `t_delete_and_column_prune` (
   `id1` bigint(20) NOT NULL COMMENT "",
@@ -676,7 +676,7 @@ SELECT id1 FROM t_delete_and_column_prune WHERE text_column MATCH "b";
 
 DROP TABLE t_delete_and_column_prune;
 
--- name: test_upper_case_column_name
+-- name: test_upper_case_column_name @native
 ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
 set low_cardinality_optimize_v2 = false;
 set cbo_enable_low_cardinality_optimize = false;
@@ -713,7 +713,7 @@ SELECT id1 FROM t_upper_case_column_name WHERE `text` MATCH_ALL "b";
 
 DROP TABLE t_upper_case_column_name;
 
--- name: test_alter_replicated_storage
+-- name: test_alter_replicated_storage @native
 ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
 CREATE TABLE `t_alter_replicated_storage` (
   `id` bigint(20) NOT NULL COMMENT "",
@@ -733,7 +733,7 @@ ALTER TABLE t_alter_replicated_storage SET ("replicated_storage" = "true");
 SHOW CREATE TABLE t_alter_replicated_storage;
 DROP TABLE t_alter_replicated_storage;
 
--- name: test_disable_global_dict_rewrite
+-- name: test_disable_global_dict_rewrite @native
 ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
 CREATE TABLE `t_disable_global_dict_rewrite` (
   `id` bigint(20) NOT NULL COMMENT "",
@@ -788,7 +788,7 @@ SELECT id FROM t_disable_global_dict_rewrite WHERE v2 MATCH_ALL "abc" ORDER BY v
 
 DROP TABLE t_disable_global_dict_rewrite;
 
--- name: test_create_mv_with_match
+-- name: test_create_mv_with_match @native
 ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
 CREATE TABLE `t_create_mv_with_match` (
   `id` bigint(20) NOT NULL COMMENT "",
@@ -812,7 +812,7 @@ CREATE MATERIALIZED VIEW mv1 AS SELECT id, v1, v2 FROM t_create_mv_with_match WH
 function: wait_materialized_view_cancel()
 DROP TABLE t_create_mv_with_match;
 
--- name: test_alter_gin_col_into_other_type
+-- name: test_alter_gin_col_into_other_type @native
 ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
 CREATE TABLE `t_alter_gin_col_into_other_type` (
   `id` bigint(20) NOT NULL COMMENT "",
@@ -837,7 +837,7 @@ SHOW CREATE TABLE t_alter_gin_col_into_other_type;
 SELECT * FROM t_alter_gin_col_into_other_type;
 DROP TABLE t_alter_gin_col_into_other_type;
 
--- name: test_gin_var @sequential
+-- name: test_gin_var @sequential @native
 ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
 CREATE TABLE `t_gin_var` (
   `id` bigint(20) NOT NULL COMMENT "",
@@ -906,7 +906,7 @@ PROPERTIES (
 );
 DROP TABLE t_gin_var;
 
--- name: test_gin_match_empty
+-- name: test_gin_match_empty @native
 CREATE TABLE `t_gin_match_empty` (
   `k` BIGINT NOT NULL COMMENT "",
   `v1` string COMMENT "",
@@ -941,7 +941,7 @@ SELECT count(*) FROM t_gin_match_empty WHERE v3 MATCH_ALL "";
 
 DROP TABLE t_gin_match_empty;
 
--- name: test_gin_view
+-- name: test_gin_view @native
 ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
 CREATE TABLE `t_gin_view` (
   `id` bigint(20) NOT NULL COMMENT "",
@@ -992,7 +992,7 @@ select * from test_view where DDD match 'msrjabmbwkxmjggulkiy';
 DROP VIEW test_view;
 DROP TABLE duplicate_table_demo_datatype_not_replicated_all_varchar;
 
--- name: test_vertical_compaction
+-- name: test_vertical_compaction @native
 ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
 CREATE TABLE `t_vertical_compaction` (
   `id1` bigint(20) NOT NULL COMMENT "",
