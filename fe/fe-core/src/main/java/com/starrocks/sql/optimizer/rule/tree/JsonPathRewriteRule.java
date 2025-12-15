@@ -427,8 +427,16 @@ public class JsonPathRewriteRule extends TransformationRule {
             ScalarOperator jsonColumn = call.getArguments().get(0);
             ScalarOperator pathArg = call.getArguments().get(1);
 
-            if (!(pathArg instanceof ConstantOperator) || !(jsonColumn instanceof ColumnRefOperator)) {
+            if (!(pathArg instanceof ConstantOperator) || !(jsonColumn instanceof ColumnRefOperator jsonColumnRef)) {
                 return call;
+            }
+
+            // Check if the JSON column is attached to a table
+            // Lambda arguments are ColumnRefOperators but not attached to tables,
+            // so we should not attempt to rewrite them
+            Pair<Table, Column> tableAndColumn = context.getColumnRefFactory().getTableAndColumn(jsonColumnRef);
+            if (tableAndColumn == null) {
+                return call; // Cannot rewrite if not attached to a table (e.g., lambda arguments)
             }
 
             String path = ((ConstantOperator) pathArg).getVarchar();
@@ -448,10 +456,12 @@ public class JsonPathRewriteRule extends TransformationRule {
         private ScalarOperator createColumnAccessExpression(ColumnRefOperator jsonColumn,
                                                             List<String> fields,
                                                             Type resultType) {
+            // Note: tableAndColumn should not be null here because we check it in rewriteJsonFunction
+            // before calling this method. This check is kept for safety.
             Pair<Table, Column> tableAndColumn = context.getColumnRefFactory().getTableAndColumn(jsonColumn);
-            if (tableAndColumn == null) {
-                return jsonColumn; // Cannot rewrite if not attached to a table
-            }
+            Preconditions.checkState(tableAndColumn != null,
+                    "ColumnRefOperator %s must be attached to a table when creating column access expression",
+                    jsonColumn);
 
             // Build full path: columnName.field1.field2
             List<String> fullPath = Lists.newArrayList();
