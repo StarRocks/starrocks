@@ -18,6 +18,7 @@ import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
@@ -29,10 +30,10 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -61,14 +62,38 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
     @SerializedName(value = "isImmutable")
     private AtomicBoolean isImmutable = new AtomicBoolean(false);
 
+    /**
+     * Deprecated, use baseIndexMetaId and indexMetaIdToIndexIds instead.
+     *
+     * indexMetaIdToIndexIds.get(baseIndexMetaId).getLast() is the latest version of base index.
+     */
+    @Deprecated
     @SerializedName(value = "baseIndex")
     private MaterializedIndex baseIndex;
+
+    @SerializedName(value = "baseIndexMetaId")
+    private long baseIndexMetaId = -1L;
+
     /**
-     * Visible rollup indexes are indexes which are visible to user.
+     * Support multi-version materialized indexes for tablet split.
+     * A single index meta may correspond to multiple materialized indexes in tablet split process.
+     *
+     * index meta id -> List<index id>
+     */
+    @SerializedName(value = "indexMetaIdToIndexIds")
+    private Map<Long, List<Long>> indexMetaIdToIndexIds = Maps.newHashMap();
+
+    /**
+     * Visible indexes are indexes which are visible to user.
      * User can do query on them, show them in related 'show' stmt.
+     *
+     * Visible indexes = base index + rollup indexes
+     *
+     * Move baseIndex to idToVisibleIndex for better management.
+     * Not change the SerializedName for compatibility.
      */
     @SerializedName(value = "idToVisibleRollupIndex")
-    private Map<Long, MaterializedIndex> idToVisibleRollupIndex = Maps.newHashMap();
+    private Map<Long, MaterializedIndex> idToVisibleIndex = Maps.newHashMap();
     /**
      * Shadow indexes are indexes which are not visible to user.
      * Query will not run on these shadow indexes, and user can not see them neither.
@@ -142,7 +167,22 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
     public PhysicalPartition(long id, long parentId, MaterializedIndex baseIndex) {
         this.id = id;
         this.parentId = parentId;
-        this.baseIndex = baseIndex;
+        this.baseIndexMetaId = baseIndex.getMetaId();
+        this.indexMetaIdToIndexIds.put(baseIndex.getMetaId(), Lists.newArrayList(baseIndex.getId()));
+        this.idToVisibleIndex.put(baseIndex.getId(), baseIndex);
+        this.visibleVersion = PARTITION_INIT_VERSION;
+        this.visibleVersionTime = System.currentTimeMillis();
+        this.nextVersion = this.visibleVersion + 1;
+        this.dataVersion = this.visibleVersion;
+        this.nextDataVersion = this.nextVersion;
+        this.versionEpoch = this.nextVersionEpoch();
+        this.versionTxnType = TransactionType.TXN_NORMAL;
+    }
+
+    // for external olap table
+    public PhysicalPartition(long id, long parentId) {
+        this.id = id;
+        this.parentId = parentId;
         this.visibleVersion = PARTITION_INIT_VERSION;
         this.visibleVersionTime = System.currentTimeMillis();
         this.nextVersion = this.visibleVersion + 1;
@@ -178,11 +218,22 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
     }
 
     public List<Long> getShardGroupIds() {
-        List<Long> result = new ArrayList<>();
-        idToVisibleRollupIndex.values().stream().map(MaterializedIndex::getShardGroupId).forEach(result::add);
-        idToShadowIndex.values().stream().map(MaterializedIndex::getShardGroupId).forEach(result::add);
-        result.add(baseIndex.getShardGroupId());
-        return result;
+        Set<Long> result = Sets.newHashSet();
+        for (List<Long> indexIds : indexMetaIdToIndexIds.values()) {
+            for (long indexId : indexIds) {
+                MaterializedIndex index = idToVisibleIndex.get(indexId);
+                if (index != null) {
+                    result.add(index.getShardGroupId());
+                    continue;
+                }
+
+                index = idToShadowIndex.get(indexId);
+                if (index != null) {
+                    result.add(index.getShardGroupId());
+                }
+            }
+        }
+        return Lists.newArrayList(result);
     }
 
     public void setShardGroupId(Long shardGroupId) {
@@ -291,28 +342,83 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
         this.visibleVersionTime = visibleVersionTime;
     }
 
-    public void createRollupIndex(MaterializedIndex mIndex) {
-        if (mIndex.getState().isVisible()) {
-            this.idToVisibleRollupIndex.put(mIndex.getId(), mIndex);
-        } else {
-            this.idToShadowIndex.put(mIndex.getId(), mIndex);
-        }
-    }
-
-    public MaterializedIndex deleteRollupIndex(long indexId) {
-        if (this.idToVisibleRollupIndex.containsKey(indexId)) {
-            return idToVisibleRollupIndex.remove(indexId);
-        } else {
-            return idToShadowIndex.remove(indexId);
-        }
-    }
-
     public void setBaseIndex(MaterializedIndex baseIndex) {
-        this.baseIndex = baseIndex;
+        Preconditions.checkState(!indexMetaIdToIndexIds.containsKey(baseIndex.getMetaId()),
+                String.format("base index meta id %d already exists", baseIndex.getMetaId()));
+        Preconditions.checkState(!idToVisibleIndex.containsKey(baseIndex.getId()),
+                String.format("base index id %d already exists", baseIndex.getId()));
+
+        baseIndexMetaId = baseIndex.getMetaId();
+        indexMetaIdToIndexIds.put(baseIndex.getMetaId(), Lists.newArrayList(baseIndex.getId()));
+        idToVisibleIndex.put(baseIndex.getId(), baseIndex);
     }
 
-    public MaterializedIndex getBaseIndex() {
-        return baseIndex;
+    public MaterializedIndex getLatestBaseIndex() {
+        List<Long> indexIds = indexMetaIdToIndexIds.get(baseIndexMetaId);
+        Preconditions.checkState(indexIds != null && !indexIds.isEmpty(),
+                String.format("base index meta id %d not exist or index list is empty", baseIndexMetaId));
+        return idToVisibleIndex.get(indexIds.get(indexIds.size() - 1));
+    }
+
+    public List<MaterializedIndex> getBaseIndices() {
+        List<Long> indexIds = indexMetaIdToIndexIds.get(baseIndexMetaId);
+        Preconditions.checkState(indexIds != null && !indexIds.isEmpty(),
+                String.format("base index meta id %d not exist or index list is empty", baseIndexMetaId));
+        List<MaterializedIndex> indices = Lists.newArrayList();
+        for (Long indexId : indexIds) {
+            MaterializedIndex index = idToVisibleIndex.get(indexId);
+            Preconditions.checkState(index != null, String.format("base index id %d not exist", indexId));
+            indices.add(index);
+        }
+        return indices;
+    }
+
+    public void createRollupIndex(MaterializedIndex mIndex) {
+        Preconditions.checkState(!indexMetaIdToIndexIds.containsKey(mIndex.getMetaId()),
+                String.format("index meta id %d already exists", mIndex.getMetaId()));
+        Preconditions.checkState(!idToVisibleIndex.containsKey(mIndex.getId()) && !idToShadowIndex.containsKey(mIndex.getId()),
+                String.format("index id %d already exists", mIndex.getId()));
+
+        indexMetaIdToIndexIds.put(mIndex.getMetaId(), Lists.newArrayList(mIndex.getId()));
+        if (mIndex.getState().isVisible()) {
+            idToVisibleIndex.put(mIndex.getId(), mIndex);
+        } else {
+            idToShadowIndex.put(mIndex.getId(), mIndex);
+        }
+    }
+
+    public void addMaterializedIndex(MaterializedIndex mIndex, boolean isBaseIndex) {
+        Preconditions.checkState(indexMetaIdToIndexIds.containsKey(mIndex.getMetaId()),
+                String.format("index meta id %d not exist", mIndex.getMetaId()));
+        Preconditions.checkState(!idToVisibleIndex.containsKey(mIndex.getId()) && !idToShadowIndex.containsKey(mIndex.getId()),
+                String.format("index id %d already exists", mIndex.getId()));
+        Preconditions.checkState(!isBaseIndex || mIndex.getMetaId() == baseIndexMetaId,
+                String.format("index meta id %d not match baseIndexMetaId %d", mIndex.getMetaId(), baseIndexMetaId));
+        Preconditions.checkState(mIndex.getState() == IndexState.NORMAL,
+                String.format("index state %s is not NORMAL", mIndex.getState()));
+
+        indexMetaIdToIndexIds.get(mIndex.getMetaId()).add(mIndex.getId());
+        idToVisibleIndex.put(mIndex.getId(), mIndex);
+    }
+
+    public List<MaterializedIndex> deleteMaterializedIndexByMetaId(long indexMetaId) {
+        List<MaterializedIndex> indices = Lists.newArrayList();
+        List<Long> indexIds = indexMetaIdToIndexIds.remove(indexMetaId);
+        if (indexIds != null) {
+            for (long indexId : indexIds) {
+                MaterializedIndex index = idToVisibleIndex.remove(indexId);
+                if (index != null) {
+                    indices.add(index);
+                    continue;
+                }
+
+                index = idToShadowIndex.remove(indexId);
+                if (index != null) {
+                    indices.add(index);
+                }
+            }
+        }
+        return indices;
     }
 
     public long getNextVersion() {
@@ -376,7 +482,7 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
     }
 
     public boolean isTabletBalanced() {
-        for (MaterializedIndex index : getMaterializedIndices(IndexExtState.VISIBLE)) {
+        for (MaterializedIndex index : getLatestMaterializedIndices(IndexExtState.VISIBLE)) {
             if (!index.isTabletBalanced()) {
                 return false;
             }
@@ -384,32 +490,83 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
         return true;
     }
 
-    public MaterializedIndex getIndex(long indexId) {
-        if (baseIndex.getId() == indexId) {
-            return baseIndex;
+    public MaterializedIndex getLatestIndex(long indexMetaId) {
+        List<Long> indexIds = indexMetaIdToIndexIds.get(indexMetaId);
+        if (indexIds == null || indexIds.isEmpty()) {
+            return null;
         }
-        if (idToVisibleRollupIndex.containsKey(indexId)) {
-            return idToVisibleRollupIndex.get(indexId);
+        return getIndex(indexIds.get(indexIds.size() - 1));
+    }
+
+    public MaterializedIndex getIndex(long indexId) {
+        MaterializedIndex index = idToVisibleIndex.get(indexId);
+        if (index != null) {
+            return index;
         } else {
             return idToShadowIndex.get(indexId);
         }
     }
 
-    public List<MaterializedIndex> getMaterializedIndices(IndexExtState extState) {
-        int expectedSize = 1 + idToVisibleRollupIndex.size() + idToShadowIndex.size();
-        List<MaterializedIndex> indices = Lists.newArrayListWithExpectedSize(expectedSize);
+    private List<MaterializedIndex> getLatestVisibleIndices() {
+        List<MaterializedIndex> indices = Lists.newArrayList();
+        for (Map.Entry<Long, List<Long>> entry : indexMetaIdToIndexIds.entrySet()) {
+            List<Long> indexIds = entry.getValue();
+            Preconditions.checkState(!indexIds.isEmpty(), String.format("index list is empty. meta id: %d", entry.getKey()));
+            long indexId = indexIds.get(indexIds.size() - 1);
+            MaterializedIndex index = idToVisibleIndex.get(indexId);
+            if (index != null) {
+                indices.add(index);
+            }
+        }
+        return indices;
+    }
+
+    private List<MaterializedIndex> getLatestShadowIndices() {
+        List<MaterializedIndex> indices = Lists.newArrayList();
+        for (Map.Entry<Long, List<Long>> entry : indexMetaIdToIndexIds.entrySet()) {
+            List<Long> indexIds = entry.getValue();
+            Preconditions.checkState(!indexIds.isEmpty(), String.format("index list is empty. meta id: %d", entry.getKey()));
+            long indexId = indexIds.get(indexIds.size() - 1);
+            MaterializedIndex index = idToShadowIndex.get(indexId);
+            if (index != null) {
+                indices.add(index);
+            }
+        }
+        return indices;
+    }
+
+    public List<MaterializedIndex> getLatestMaterializedIndices(IndexExtState extState) {
+        List<MaterializedIndex> indices = Lists.newArrayList();
         switch (extState) {
             case ALL:
-                indices.add(baseIndex);
-                indices.addAll(idToVisibleRollupIndex.values());
+                indices.addAll(getLatestVisibleIndices());
+                indices.addAll(getLatestShadowIndices());
+                break;
+            case VISIBLE:
+                indices.addAll(getLatestVisibleIndices());
+                break;
+            case SHADOW:
+                indices.addAll(getLatestShadowIndices());
+                break;
+            default:
+                break;
+        }
+        return indices;
+    }
+
+    public List<MaterializedIndex> getAllMaterializedIndices(IndexExtState extState) {
+        List<MaterializedIndex> indices = Lists.newArrayList();
+        switch (extState) {
+            case ALL:
+                indices.addAll(idToVisibleIndex.values());
                 indices.addAll(idToShadowIndex.values());
                 break;
             case VISIBLE:
-                indices.add(baseIndex);
-                indices.addAll(idToVisibleRollupIndex.values());
+                indices.addAll(idToVisibleIndex.values());
                 break;
             case SHADOW:
                 indices.addAll(idToShadowIndex.values());
+                break;
             default:
                 break;
         }
@@ -418,7 +575,7 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
 
     public long getTabletMaxDataSize() {
         long maxDataSize = 0;
-        for (MaterializedIndex mIndex : getMaterializedIndices(IndexExtState.VISIBLE)) {
+        for (MaterializedIndex mIndex : getLatestVisibleIndices()) {
             maxDataSize = Math.max(maxDataSize, mIndex.getTabletMaxDataSize());
         }
         return maxDataSize;
@@ -426,7 +583,7 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
 
     public long storageDataSize() {
         long dataSize = 0;
-        for (MaterializedIndex mIndex : getMaterializedIndices(IndexExtState.VISIBLE)) {
+        for (MaterializedIndex mIndex : getLatestVisibleIndices()) {
             dataSize += mIndex.getDataSize();
         }
         return dataSize;
@@ -434,7 +591,7 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
 
     public long storageRowCount() {
         long rowCount = 0;
-        for (MaterializedIndex mIndex : getMaterializedIndices(IndexExtState.VISIBLE)) {
+        for (MaterializedIndex mIndex : getLatestVisibleIndices()) {
             rowCount += mIndex.getRowCount();
         }
         return rowCount;
@@ -442,14 +599,19 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
 
     public long storageReplicaCount() {
         long replicaCount = 0;
-        for (MaterializedIndex mIndex : getMaterializedIndices(IndexExtState.VISIBLE)) {
+        for (MaterializedIndex mIndex : getLatestVisibleIndices()) {
             replicaCount += mIndex.getReplicaCount();
         }
         return replicaCount;
     }
 
     public boolean hasMaterializedView() {
-        return !idToVisibleRollupIndex.isEmpty();
+        List<Long> baseIndexIds = indexMetaIdToIndexIds.get(baseIndexMetaId);
+        Preconditions.checkState(baseIndexIds != null && !baseIndexIds.isEmpty(),
+                String.format("base index meta id %d not exist or index list is empty", baseIndexMetaId));
+        Set<Long> visibleIndexIds = Sets.newHashSet(idToVisibleIndex.keySet());
+        visibleIndexIds.removeAll(baseIndexIds);
+        return !visibleIndexIds.isEmpty();
     }
 
     public boolean hasStorageData() {
@@ -474,7 +636,8 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
         if (shadowIdx == null) {
             return false;
         }
-        Preconditions.checkState(!idToVisibleRollupIndex.containsKey(shadowIndexId), shadowIndexId);
+        Preconditions.checkState(!idToVisibleIndex.containsKey(shadowIndexId),
+                String.format("index id %d already exists", shadowIndexId));
         shadowIdx.setState(IndexState.NORMAL);
         if (isBaseIndex) {
             // in shared-data cluster, if upgraded from 3.3 or older version, `shardGroupId` will not
@@ -482,16 +645,16 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
             if (shadowIdx.getShardGroupId() == PhysicalPartition.INVALID_SHARD_GROUP_ID) {
                 shadowIdx.setShardGroupId(shardGroupId);
             }
-            baseIndex = shadowIdx;
-        } else {
-            idToVisibleRollupIndex.put(shadowIndexId, shadowIdx);
+            baseIndexMetaId = shadowIdx.getMetaId();
         }
+        indexMetaIdToIndexIds.put(shadowIdx.getMetaId(), Lists.newArrayList(shadowIndexId));
+        idToVisibleIndex.put(shadowIndexId, shadowIdx);
         LOG.info("visualise the shadow index: {}", shadowIndexId);
         return true;
     }
 
     public int hashCode() {
-        return Objects.hashCode(visibleVersion, baseIndex);
+        return Objects.hashCode(id, parentId);
     }
 
     public int getBucketNum() {
@@ -511,40 +674,50 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
         }
 
         PhysicalPartition partition = (PhysicalPartition) obj;
-        if (idToVisibleRollupIndex != partition.idToVisibleRollupIndex) {
-            if (idToVisibleRollupIndex.size() != partition.idToVisibleRollupIndex.size()) {
+        if (idToVisibleIndex != partition.idToVisibleIndex) {
+            if (idToVisibleIndex.size() != partition.idToVisibleIndex.size()) {
                 return false;
             }
-            for (Entry<Long, MaterializedIndex> entry : idToVisibleRollupIndex.entrySet()) {
+            for (Entry<Long, MaterializedIndex> entry : idToVisibleIndex.entrySet()) {
                 long key = entry.getKey();
-                if (!partition.idToVisibleRollupIndex.containsKey(key)) {
-                    return false;
-                }
-                if (!entry.getValue().equals(partition.idToVisibleRollupIndex.get(key))) {
+                MaterializedIndex index = partition.idToVisibleIndex.get(key);
+                if (index == null || !entry.getValue().equals(index)) {
                     return false;
                 }
             }
         }
 
-        return (visibleVersion == partition.visibleVersion)
-                && (baseIndex.equals(partition.baseIndex));
+        return visibleVersion == partition.visibleVersion;
     }
 
     public String toString() {
+        List<MaterializedIndex> baseIndices = Lists.newArrayList();
+        List<MaterializedIndex> rollupIndices = Lists.newArrayList();
+        for (Map.Entry<Long, List<Long>> entry : indexMetaIdToIndexIds.entrySet()) {
+            long indexMetaId = entry.getKey();
+            List<Long> indexIds = entry.getValue();
+            List<MaterializedIndex> indices = indexMetaId == baseIndexMetaId ? baseIndices : rollupIndices;
+            for (Long indexId : indexIds) {
+                MaterializedIndex index = idToVisibleIndex.get(indexId);
+                if (index != null) {
+                    indices.add(index);
+                }
+            }
+        }
+
         StringBuilder buffer = new StringBuilder();
         buffer.append("partitionId: ").append(id).append("; ");
         buffer.append("parentPartitionId: ").append(parentId).append("; ");
         buffer.append("shardGroupId: ").append(shardGroupId).append("; ");
         buffer.append("isImmutable: ").append(isImmutable()).append("; ");
 
-        buffer.append("baseIndex: ").append(baseIndex.toString()).append("; ");
+        buffer.append("baseIndex: ").append(baseIndices).append("; ");
 
-        int rollupCount = (idToVisibleRollupIndex != null) ? idToVisibleRollupIndex.size() : 0;
-        buffer.append("rollupCount: ").append(rollupCount).append("; ");
+        buffer.append("rollupCount: ").append(rollupIndices.size()).append("; ");
 
-        if (idToVisibleRollupIndex != null) {
-            for (Map.Entry<Long, MaterializedIndex> entry : idToVisibleRollupIndex.entrySet()) {
-                buffer.append("rollupIndex: ").append(entry.getValue().toString()).append("; ");
+        if (!rollupIndices.isEmpty()) {
+            for (MaterializedIndex index : rollupIndices) {
+                buffer.append("rollupIndex: ").append(index.toString()).append("; ");
             }
         }
 
@@ -578,6 +751,25 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
         }
         if (versionTxnType == null) {
             versionTxnType = TransactionType.TXN_NORMAL;
+        }
+
+        if (baseIndexMetaId == -1L) {
+            Preconditions.checkState(indexMetaIdToIndexIds.isEmpty());
+            Preconditions.checkNotNull(baseIndex);
+
+            // add base index into idToVisibleIndex
+            idToVisibleIndex.put(baseIndex.getId(), baseIndex);
+
+            // fill indexMetaIdToIndexIds
+            for (MaterializedIndex index : idToVisibleIndex.values()) {
+                indexMetaIdToIndexIds.put(index.getMetaId(), Lists.newArrayList(index.getId()));
+            }
+            for (MaterializedIndex index : idToShadowIndex.values()) {
+                indexMetaIdToIndexIds.put(index.getMetaId(), Lists.newArrayList(index.getId()));
+            }
+
+            // set baseIndexMetaId
+            baseIndexMetaId = baseIndex.getMetaId();
         }
     }
 }

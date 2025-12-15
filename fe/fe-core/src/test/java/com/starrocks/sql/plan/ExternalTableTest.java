@@ -267,7 +267,7 @@ public class ExternalTableTest extends PlanTestBase {
         for (Partition partition : tbl.getPartitions()) {
             partition.getDefaultPhysicalPartition().updateVisibleVersion(2);
             for (MaterializedIndex mIndex : partition.getDefaultPhysicalPartition()
-                    .getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)) {
+                    .getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)) {
                 mIndex.setRowCount(10000);
                 for (Tablet tablet : mIndex.getTablets()) {
                     for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {

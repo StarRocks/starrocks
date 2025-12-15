@@ -253,8 +253,8 @@ public class CompactionSchedulerTest {
                 Table table = new LakeTable();
                 PartitionIdentifier partitionIdentifier1 = new PartitionIdentifier(1, 2, 3);
                 PartitionIdentifier partitionIdentifier2 = new PartitionIdentifier(1, 2, 4);
-                PhysicalPartition partition1 = new PhysicalPartition(123, 123, null);
-                PhysicalPartition partition2 = new PhysicalPartition(124, 124, null);
+                PhysicalPartition partition1 = new PhysicalPartition(123, 123, new MaterializedIndex());
+                PhysicalPartition partition2 = new PhysicalPartition(124, 124, new MaterializedIndex());
                 CompactionJob job1 = new CompactionJob(db, table, partition1, 100, false, null, "");
                 try {
                     Thread.sleep(10);
@@ -342,7 +342,7 @@ public class CompactionSchedulerTest {
                 Database db = new Database();
                 Table table = new LakeTable();
                 long partitionId = partitionStatisticsSnapshot.getPartition().getPartitionId();
-                PhysicalPartition partition = new PhysicalPartition(partitionId, partitionId, null);
+                PhysicalPartition partition = new PhysicalPartition(partitionId, partitionId, new MaterializedIndex());
                 return new CompactionJob(db, table, partition, 100, false, info.computeResource, info.warehouseName);
             }
         };
@@ -527,7 +527,7 @@ public class CompactionSchedulerTest {
                 Database db = new Database();
                 Table table = new LakeTable();
                 long partitionId = partitionStatisticsSnapshot.getPartition().getPartitionId();
-                PhysicalPartition partition = new PhysicalPartition(partitionId, partitionId, null);
+                PhysicalPartition partition = new PhysicalPartition(partitionId, partitionId, new MaterializedIndex());
                 CompactionJob job = new CompactionJob(db, table, partition, 100, false, info.computeResource, info.warehouseName);
                 return job;
             }

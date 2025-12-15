@@ -132,7 +132,7 @@ public class SplitTabletJobTest {
         };
 
         PhysicalPartition physicalPartition = table.getAllPhysicalPartitions().iterator().next();
-        MaterializedIndex materializedIndex = physicalPartition.getBaseIndex();
+        MaterializedIndex materializedIndex = physicalPartition.getLatestBaseIndex();
         long oldVersion = physicalPartition.getVisibleVersion();
 
         TabletReshardJob tabletReshardJob = createTabletReshardJob();
@@ -152,7 +152,7 @@ public class SplitTabletJobTest {
         long newVersion = physicalPartition.getVisibleVersion();
         Assertions.assertTrue(newVersion == oldVersion + 1);
 
-        MaterializedIndex newMaterializedIndex = physicalPartition.getBaseIndex();
+        MaterializedIndex newMaterializedIndex = physicalPartition.getLatestBaseIndex();
         Assertions.assertTrue(newMaterializedIndex != materializedIndex);
 
         Assertions.assertTrue(newMaterializedIndex.getTablets().size() > materializedIndex.getTablets().size());
@@ -208,7 +208,7 @@ public class SplitTabletJobTest {
         };
 
         PhysicalPartition physicalPartition = table.getAllPhysicalPartitions().iterator().next();
-        MaterializedIndex materializedIndex = physicalPartition.getBaseIndex();
+        MaterializedIndex materializedIndex = physicalPartition.getLatestBaseIndex();
         long oldVersion = physicalPartition.getVisibleVersion();
 
         TabletReshardJob tabletReshardJob = createTabletReshardJob();
@@ -228,7 +228,7 @@ public class SplitTabletJobTest {
         long newVersion = physicalPartition.getVisibleVersion();
         Assertions.assertTrue(newVersion == oldVersion + 1);
 
-        MaterializedIndex newMaterializedIndex = physicalPartition.getBaseIndex();
+        MaterializedIndex newMaterializedIndex = physicalPartition.getLatestBaseIndex();
         Assertions.assertTrue(newMaterializedIndex != materializedIndex);
 
         Assertions.assertTrue(newMaterializedIndex.getTablets().size() == materializedIndex.getTablets().size());
@@ -237,7 +237,7 @@ public class SplitTabletJobTest {
     @Test
     public void testReplayTabletReshardJob() throws Exception {
         PhysicalPartition physicalPartition = table.getAllPhysicalPartitions().iterator().next();
-        MaterializedIndex materializedIndex = physicalPartition.getBaseIndex();
+        MaterializedIndex materializedIndex = physicalPartition.getLatestBaseIndex();
         long oldVersion = physicalPartition.getVisibleVersion();
 
         TabletReshardJob tabletReshardJob = createTabletReshardJob();
@@ -263,7 +263,7 @@ public class SplitTabletJobTest {
         long newVersion = physicalPartition.getVisibleVersion();
         Assertions.assertTrue(newVersion == oldVersion + 1);
 
-        MaterializedIndex newMaterializedIndex = physicalPartition.getBaseIndex();
+        MaterializedIndex newMaterializedIndex = physicalPartition.getLatestBaseIndex();
         Assertions.assertTrue(newMaterializedIndex != materializedIndex);
 
         Assertions.assertTrue(newMaterializedIndex.getTablets().size() > materializedIndex.getTablets().size());
@@ -300,7 +300,7 @@ public class SplitTabletJobTest {
 
     private TabletReshardJob createTabletReshardJob() throws Exception {
         PhysicalPartition physicalPartition = table.getAllPhysicalPartitions().iterator().next();
-        MaterializedIndex materializedIndex = physicalPartition.getBaseIndex();
+        MaterializedIndex materializedIndex = physicalPartition.getLatestBaseIndex();
 
         long tabletId = materializedIndex.getTablets().get(0).getId();
         TabletList tabletList = new TabletList(List.of(tabletId));

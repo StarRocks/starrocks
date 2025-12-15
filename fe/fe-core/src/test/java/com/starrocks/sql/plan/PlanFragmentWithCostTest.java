@@ -852,7 +852,7 @@ public class PlanFragmentWithCostTest extends PlanWithCostTestBase {
         List<String> tabletIdsStrList = new ArrayList<>();
         tables.forEach(olapTable -> tabletIdsStrList.add(Joiner.on(",")
                 .join(olapTable.getPartition(olapTable.getAllPartitionIds().get(0)).getDefaultPhysicalPartition()
-                        .getBaseIndex().getTablets().stream().map(t -> t.getId()).collect(Collectors.toList()))));
+                        .getLatestBaseIndex().getTablets().stream().map(t -> t.getId()).collect(Collectors.toList()))));
 
         ArrayList<String> plans = new ArrayList<>();
         /// ===== union =====
@@ -1022,7 +1022,7 @@ public class PlanFragmentWithCostTest extends PlanWithCostTestBase {
         List<String> tabletIdsStrList = new ArrayList<>();
         tables.forEach(olapTable -> tabletIdsStrList.add(Joiner.on(",")
                 .join(olapTable.getPartition(olapTable.getAllPartitionIds().get(0)).getDefaultPhysicalPartition()
-                        .getBaseIndex().getTablets().stream().map(t -> t.getId()).collect(Collectors.toList()))));
+                        .getLatestBaseIndex().getTablets().stream().map(t -> t.getId()).collect(Collectors.toList()))));
 
         setTableStatistics(t1, 400000);
         setTableStatistics(t2, 100);

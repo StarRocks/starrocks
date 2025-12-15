@@ -749,14 +749,14 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
     private void onFinished(OlapTable tbl) {
         for (Partition partition : tbl.getPartitions()) {
             for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
-                MaterializedIndex rollupIndex = physicalPartition.getIndex(rollupIndexMetaId);
+                MaterializedIndex rollupIndex = physicalPartition.getLatestIndex(rollupIndexMetaId);
                 Preconditions.checkNotNull(rollupIndex, rollupIndexMetaId);
                 for (Tablet tablet : rollupIndex.getTablets()) {
                     for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
                         replica.setState(ReplicaState.NORMAL);
                     }
                 }
-                physicalPartition.visualiseShadowIndex(rollupIndexMetaId, false);
+                physicalPartition.visualiseShadowIndex(rollupIndex.getId(), false);
             }
         }
         tbl.rebuildFullSchema();
@@ -819,7 +819,7 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
                             invertedIndex.deleteTablet(rollupTablet.getId());
                         }
                         PhysicalPartition partition = tbl.getPhysicalPartition(partitionId);
-                        partition.deleteRollupIndex(rollupIndexMetaId);
+                        partition.deleteMaterializedIndexByMetaId(rollupIndexMetaId);
                     }
                     tbl.deleteIndexInfo(rollupIndexName);
                 }

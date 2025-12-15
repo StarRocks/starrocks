@@ -170,7 +170,7 @@ public class TabletSchedulerTest {
     public void testRemoveAllTabletIdsIfExpired() throws InterruptedException {
         Database db = new Database(1, "db");
         Table table = new Table(3, "table", Table.TableType.OLAP, new ArrayList<>());
-        Partition partition = new Partition(5, 6, "partition", null, null);
+        Partition partition = new Partition(5, 6, "partition", new MaterializedIndex(), null);
 
         CatalogRecycleBin recycleBin = new CatalogRecycleBin();
         recycleBin.recycleDatabase(db, new HashSet<>(), true);
@@ -229,8 +229,8 @@ public class TabletSchedulerTest {
         Database goodDB = new Database(2, "bueno");
         Table badTable = new Table(3, "mal", Table.TableType.OLAP, new ArrayList<>());
         Table goodTable = new Table(4, "bueno", Table.TableType.OLAP, new ArrayList<>());
-        Partition badPartition = new Partition(5, 55, "mal", null, null);
-        Partition goodPartition = new Partition(6, 66, "bueno", null, null);
+        Partition badPartition = new Partition(5, 55, "mal", new MaterializedIndex(), null);
+        Partition goodPartition = new Partition(6, 66, "bueno", new MaterializedIndex(), null);
 
         long now = System.currentTimeMillis();
         CatalogRecycleBin recycleBin = new CatalogRecycleBin();
@@ -281,7 +281,7 @@ public class TabletSchedulerTest {
         TabletScheduler tabletScheduler = new TabletScheduler(tabletSchedulerStat);
         Database goodDB = new Database(2, "bueno");
         Table goodTable = new Table(4, "bueno", Table.TableType.OLAP, new ArrayList<>());
-        Partition goodPartition = new Partition(6, 66, "bueno", null, null);
+        Partition goodPartition = new Partition(6, 66, "bueno", new MaterializedIndex(), null);
 
 
         List<TabletSchedCtx> tabletSchedCtxList = new ArrayList<>();

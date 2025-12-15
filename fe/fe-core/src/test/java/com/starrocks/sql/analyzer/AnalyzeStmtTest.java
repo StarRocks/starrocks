@@ -568,7 +568,7 @@ public class AnalyzeStmtTest {
         OlapTable t0 = (OlapTable) starRocksAssert.getCtx().getGlobalStateMgr()
                 .getLocalMetastore().getDb("db").getTable("tbl");
         for (Partition partition : t0.getAllPartitions()) {
-            partition.getDefaultPhysicalPartition().getBaseIndex().setRowCount(10000);
+            partition.getDefaultPhysicalPartition().getLatestBaseIndex().setRowCount(10000);
         }
 
         String sql = "analyze table db.tbl update histogram on kk1 with 256 buckets " +
@@ -577,7 +577,7 @@ public class AnalyzeStmtTest {
         Assertions.assertEquals("1", analyzeStmt.getProperties().get(StatsConstants.HISTOGRAM_SAMPLE_RATIO));
 
         for (Partition partition : t0.getAllPartitions()) {
-            partition.getDefaultPhysicalPartition().getBaseIndex().setRowCount(400000);
+            partition.getDefaultPhysicalPartition().getLatestBaseIndex().setRowCount(400000);
         }
 
         sql = "analyze table db.tbl update histogram on kk1 with 256 buckets " +
@@ -586,7 +586,7 @@ public class AnalyzeStmtTest {
         Assertions.assertEquals("0.5", analyzeStmt.getProperties().get(StatsConstants.HISTOGRAM_SAMPLE_RATIO));
 
         for (Partition partition : t0.getAllPartitions()) {
-            partition.getDefaultPhysicalPartition().getBaseIndex().setRowCount(20000000);
+            partition.getDefaultPhysicalPartition().getLatestBaseIndex().setRowCount(20000000);
         }
         sql = "analyze table db.tbl update histogram on kk1 with 256 buckets " +
                 "properties(\"histogram_sample_ratio\"=\"0.9\")";

@@ -790,7 +790,7 @@ public class OlapTable extends Table {
             Optional<PhysicalPartition> firstPhysicalPartition = partition.getSubPartitions().stream().findFirst();
             if (firstPhysicalPartition.isPresent()) {
                 PhysicalPartition physicalPartition = firstPhysicalPartition.get();
-                return physicalPartition.getMaterializedIndices(IndexExtState.VISIBLE);
+                return physicalPartition.getLatestMaterializedIndices(IndexExtState.VISIBLE);
             }
         }
         return Lists.newArrayList();
@@ -834,7 +834,7 @@ public class OlapTable extends Table {
                         + " has no data property: " + name);
             }
             for (MaterializedIndex index : partition
-                    .getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+                    .getLatestMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
                 for (Tablet tablet : index.getTablets()) {
                     if (tablet == null) {
                         throw new DdlException("tablet is null in table: " + name);
@@ -1640,7 +1640,7 @@ public class OlapTable extends Table {
         long rowCount = 0;
         for (Map.Entry<Long, Partition> entry : idToPartition.entrySet()) {
             for (PhysicalPartition partition : entry.getValue().getSubPartitions()) {
-                rowCount += partition.getBaseIndex().getRowCount();
+                rowCount += partition.getLatestBaseIndex().getRowCount();
             }
         }
         return rowCount;
@@ -1692,7 +1692,9 @@ public class OlapTable extends Table {
                 // and now every Materialized index has a shardGroup.
                 // So the original partition's shardGroup is moved to the base materialized index for compatibility
                 if (physicalPartition.getShardGroupId() != PhysicalPartition.INVALID_SHARD_GROUP_ID) {
-                    physicalPartition.getBaseIndex().setShardGroupId(physicalPartition.getShardGroupId());
+                    for (MaterializedIndex index : physicalPartition.getBaseIndices()) {
+                        index.setShardGroupId(physicalPartition.getShardGroupId());
+                    }
                 }
             }
         }
@@ -1721,9 +1723,9 @@ public class OlapTable extends Table {
         if (resetState) {
             // remove shadow index from copied table
             List<MaterializedIndex> shadowIndex = copied.getPhysicalPartitions().stream().findFirst()
-                    .map(p -> p.getMaterializedIndices(IndexExtState.SHADOW)).orElse(Lists.newArrayList());
+                    .map(p -> p.getLatestMaterializedIndices(IndexExtState.SHADOW)).orElse(Lists.newArrayList());
             for (MaterializedIndex deleteIndex : shadowIndex) {
-                LOG.debug("copied table delete shadow index : {}", deleteIndex.getId());
+                LOG.debug("copied table delete shadow index : {}", deleteIndex.getMetaId());
                 copied.deleteIndexInfo(copied.getIndexNameByMetaId(deleteIndex.getMetaId()));
             }
             copied.setState(OlapTableState.NORMAL);
@@ -1731,9 +1733,9 @@ public class OlapTable extends Table {
                 for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
                     // remove shadow index from partition
                     for (MaterializedIndex deleteIndex : shadowIndex) {
-                        physicalPartition.deleteRollupIndex(deleteIndex.getId());
+                        physicalPartition.deleteMaterializedIndexByMetaId(deleteIndex.getMetaId());
                     }
-                    for (MaterializedIndex idx : physicalPartition.getMaterializedIndices(extState)) {
+                    for (MaterializedIndex idx : physicalPartition.getLatestMaterializedIndices(extState)) {
                         idx.setState(IndexState.NORMAL);
                         if (copied.isCloudNativeTableOrMaterializedView()) {
                             continue;
@@ -1862,7 +1864,7 @@ public class OlapTable extends Table {
             short replicationNum = partitionInfo.getReplicationNum(partition.getId());
             for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
                 long visibleVersion = physicalPartition.getVisibleVersion();
-                for (MaterializedIndex mIndex : physicalPartition.getMaterializedIndices(IndexExtState.ALL)) {
+                for (MaterializedIndex mIndex : physicalPartition.getLatestMaterializedIndices(IndexExtState.ALL)) {
                     for (Tablet tablet : mIndex.getTablets()) {
                         LocalTablet localTablet = (LocalTablet) tablet;
                         if (tabletScheduler.containsTablet(tablet.getId())) {
@@ -1898,7 +1900,7 @@ public class OlapTable extends Table {
             PhysicalPartition physicalPartition = partition.getDefaultPhysicalPartition();
 
             short replicationNum = partitionInfo.getReplicationNum(partition.getId());
-            MaterializedIndex baseIdx = physicalPartition.getBaseIndex();
+            MaterializedIndex baseIdx = physicalPartition.getLatestBaseIndex();
             for (Long tabletId : baseIdx.getTabletIdsInOrder()) {
                 LocalTablet tablet = (LocalTablet) baseIdx.getTablet(tabletId);
                 List<Long> replicaBackendIds = tablet.getNormalReplicaBackendIds();
@@ -1925,7 +1927,7 @@ public class OlapTable extends Table {
         for (Partition partition : getPartitions()) {
             for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
                 long version = physicalPartition.getVisibleVersion();
-                for (MaterializedIndex index : physicalPartition.getMaterializedIndices(IndexExtState.VISIBLE)) {
+                for (MaterializedIndex index : physicalPartition.getLatestMaterializedIndices(IndexExtState.VISIBLE)) {
                     for (Tablet tablet : index.getTablets()) {
                         totalCount += tablet.getRowCount(version);
                     }
@@ -2759,7 +2761,7 @@ public class OlapTable extends Table {
         Collection<Partition> allPartitions = getAllPartitions();
         for (Partition partition : allPartitions) {
             for (PhysicalPartition subPartition : partition.getSubPartitions()) {
-                for (MaterializedIndex index : subPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+                for (MaterializedIndex index : subPartition.getAllMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
                     for (Tablet tablet : index.getTablets()) {
                         invertedIndex.deleteTablet(tablet.getId());
                     }
@@ -3271,14 +3273,11 @@ public class OlapTable extends Table {
         if (RunMode.isSharedNothingMode()) {
             return Lists.newArrayList();
         }
-        List<Long> shardGroupIds = new ArrayList<>();
+        Set<Long> shardGroupIds = Sets.newHashSet();
         for (Partition p : getAllPartitions()) {
-            for (MaterializedIndex index : p.getDefaultPhysicalPartition()
-                    .getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
-                shardGroupIds.add(index.getShardGroupId());
-            }
+            shardGroupIds.addAll(p.getDefaultPhysicalPartition().getShardGroupIds());
         }
-        return shardGroupIds;
+        return Lists.newArrayList(shardGroupIds);
     }
 
     @Override
