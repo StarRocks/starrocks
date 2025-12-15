@@ -123,7 +123,7 @@ private:
         SingleFlightExecutionContext execution_ctx;
         StatusOr<TabletSchemaPtr> rpc_result;
     };
-    using SingleFlightResultPtr = std::shared_ptr<SingleFlightResult>;
+    using SingleFlightResultPtr = std::shared_ptr<const SingleFlightResult>;
 
     /**
      * @brief Grouping strategies for SingleFlight.

@@ -274,7 +274,7 @@ TableSchemaService::SingleFlightResultPtr TableSchemaService::_fetch_schema_via_
     }
     g_schema_rpc_latency_us << rpc_latency_us;
 
-    TableSchemaService::SingleFlightResultPtr result = std::make_shared<TableSchemaService::SingleFlightResult>();
+    auto result = std::make_shared<TableSchemaService::SingleFlightResult>();
     result->execution_ctx.target_fe = fe;
     result->execution_ctx.request_source = request.source;
     if (request.source == TTableSchemaRequestSource::SCAN) {
