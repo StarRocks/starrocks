@@ -518,6 +518,7 @@
                 "administration/data_migration_tool",
                 "administration/http_interface",
                 "administration/sql_digest",
+                "administration/graceful_exit",
         {
             "type": "category",
             "label": "User Privileges and Authentication",
