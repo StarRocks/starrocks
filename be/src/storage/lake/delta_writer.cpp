@@ -623,7 +623,6 @@ StatusOr<TxnLogPtr> DeltaWriterImpl::finish_with_txnlog(DeltaWriterFinishMode mo
     table_schema_meta->set_db_id(_db_id);
     table_schema_meta->set_table_id(_table_id);
     table_schema_meta->set_schema_id(_tablet_schema->id());
-    table_schema_meta->set_schema_version(_tablet_schema->schema_version());
 
     for (auto& f : _tablet_writer->files()) {
         if (is_segment(f.path)) {

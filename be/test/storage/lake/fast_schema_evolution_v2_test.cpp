@@ -175,8 +175,7 @@ protected:
         return m;
     }
 
-    static TxnLogPB make_write_log(int64_t txn_id, int64_t schema_id, int64_t db_id, int64_t table_id,
-                                   int32_t schema_version) {
+    static TxnLogPB make_write_log(int64_t txn_id, int64_t schema_id, int64_t db_id, int64_t table_id) {
         TxnLogPB log;
         log.set_txn_id(txn_id);
         auto* op_write = log.mutable_op_write();
@@ -184,12 +183,11 @@ protected:
         schema_meta->set_schema_id(schema_id);
         schema_meta->set_db_id(db_id);
         schema_meta->set_table_id(table_id);
-        schema_meta->set_schema_version(schema_version);
         return log;
     }
 
     static std::shared_ptr<TxnLogPB> make_write_log_ptr(int64_t txn_id, int64_t schema_id, int64_t db_id,
-                                                        int64_t table_id, int32_t schema_version) {
+                                                        int64_t table_id) {
         auto log = std::make_shared<TxnLogPB>();
         log->set_txn_id(txn_id);
         auto* op_write = log->mutable_op_write();
@@ -197,7 +195,6 @@ protected:
         schema_meta->set_schema_id(schema_id);
         schema_meta->set_db_id(db_id);
         schema_meta->set_table_id(table_id);
-        schema_meta->set_schema_version(schema_version);
         return log;
     }
 
@@ -243,8 +240,29 @@ TEST_F(FastSchemaEvolutionV2Test, no_schema_update) {
         install_rpc_hook([&](const RpcTestHookArgs&) { invoked = true; });
 
         // 3) Apply an op_write with schema_meta.schema_version == current.
-        auto log = make_write_log(next_id(), /*schema_id=*/200, /*db_id=*/1, /*table_id=*/2,
-                                  /*schema_version=*/kOldSchemaVersion);
+        auto log = make_write_log(next_id(), /*schema_id=*/kOldSchemaId, /*db_id=*/1, /*table_id=*/2);
+
+        // 4) Assert: schema unchanged, and no remote schema fetch attempted.
+        auto st = applier->apply(log);
+        ASSERT_TRUE(st.ok()) << st;
+        ASSERT_FALSE(invoked);
+        ASSERT_EQ(meta->schema().id(), kOldSchemaId);
+        ASSERT_EQ(meta->schema().schema_version(), kOldSchemaVersion);
+    }
+
+    {
+        // 1) Prepare metadata with an existing schema.
+        auto tablet_id = next_id();
+        auto meta = make_meta(tablet_id, DUP_KEYS, kOldSchemaId, kOldSchemaVersion);
+        auto applier = new_applier(tablet_id, meta);
+
+
+        // 2) Mock FE schema RPC to return an older schema (id/version controlled by the test).
+        const int64_t new_schema_id = next_id();
+        mock_schema_rpc(TKeysType::DUP_KEYS, new_schema_id, /*schema_version=*/5, /*num_columns=*/3);
+
+        // 3) Apply an op_write with schema_meta.schema_version == current.
+        auto log = make_write_log(next_id(), /*schema_id=*/new_schema_id, /*db_id=*/1, /*table_id=*/2);
 
         // 4) Assert: schema unchanged, and no remote schema fetch attempted.
         auto st = applier->apply(log);
@@ -268,8 +286,8 @@ TEST_F(FastSchemaEvolutionV2Test, schema_update) {
         mock_schema_rpc(keys_type == DUP_KEYS ? TKeysType::DUP_KEYS : TKeysType::PRIMARY_KEYS, new_schema_id,
                         /*schema_version=*/20, /*num_columns=*/3);
 
-        // 2) Apply an op_write with schema_meta.schema_version newer than metadata.
-        auto log = make_write_log(next_id(), new_schema_id, /*db_id=*/1, /*table_id=*/2, /*schema_version=*/11);
+        // 2) Apply an op_write with schema version newer than metadata.
+        auto log = make_write_log(next_id(), new_schema_id, /*db_id=*/1, /*table_id=*/2);
 
         // 3) Assert: metadata schema replaced by fetched schema.
         auto st = applier->apply(log);
@@ -298,7 +316,7 @@ TEST_F(FastSchemaEvolutionV2Test, archive_to_history) {
     mock_schema_rpc(TKeysType::DUP_KEYS, new_schema_id, /*schema_version=*/20, /*num_columns=*/3);
 
     // 2) Apply an op_write with a newer schema.
-    auto log = make_write_log(next_id(), new_schema_id, /*db_id=*/1, /*table_id=*/2, /*schema_version=*/11);
+    auto log = make_write_log(next_id(), new_schema_id, /*db_id=*/1, /*table_id=*/2);
     auto st = applier->apply(log);
     ASSERT_TRUE(st.ok()) << st;
 
@@ -337,7 +355,7 @@ TEST_F(FastSchemaEvolutionV2Test, no_archive_to_history) {
     mock_schema_rpc(TKeysType::DUP_KEYS, new_schema_id, /*schema_version=*/20, /*num_columns=*/3);
 
     // 2) Apply an op_write with a newer schema.
-    auto log = make_write_log(next_id(), new_schema_id, /*db_id=*/1, /*table_id=*/2, /*schema_version=*/11);
+    auto log = make_write_log(next_id(), new_schema_id, /*db_id=*/1, /*table_id=*/2);
     auto st = applier->apply(log);
     ASSERT_TRUE(st.ok()) << st;
     // 3) Assert: existing historical schema entry remains unchanged.
@@ -379,12 +397,9 @@ TEST_F(FastSchemaEvolutionV2Test, apply_log_vector_updates_schema) {
 
         // 2) Apply a log vector with increasing schema_meta.schema_version.
         TxnLogVector logs;
-        logs.push_back(make_write_log_ptr(/*txn_id=*/100, schema_ids[0], /*db_id=*/1, /*table_id=*/2,
-                                          /*schema_version=*/100));
-        logs.push_back(make_write_log_ptr(/*txn_id=*/101, schema_ids[1], /*db_id=*/1, /*table_id=*/2,
-                                          /*schema_version=*/101));
-        logs.push_back(make_write_log_ptr(/*txn_id=*/102, schema_ids[2], /*db_id=*/1, /*table_id=*/2,
-                                          /*schema_version=*/102));
+        logs.push_back(make_write_log_ptr(/*txn_id=*/100, schema_ids[0], /*db_id=*/1, /*table_id=*/2));
+        logs.push_back(make_write_log_ptr(/*txn_id=*/101, schema_ids[1], /*db_id=*/1, /*table_id=*/2));
+        logs.push_back(make_write_log_ptr(/*txn_id=*/102, schema_ids[2], /*db_id=*/1, /*table_id=*/2));
 
         // 3) Assert: schema updated to latest.
         auto st = applier->apply(logs);

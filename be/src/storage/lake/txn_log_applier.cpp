@@ -119,7 +119,8 @@ Status update_metadata_schema(const TxnLogPB_OpWrite& op_write, int64_t txn_id, 
         return Status::OK();
     }
     auto& schema_meta = op_write.schema_meta();
-    if (schema_meta.schema_version() <= tablet_meta->schema().schema_version()) {
+    if (schema_meta.schema_id() == tablet_meta->schema().id() ||
+        tablet_meta->historical_schemas().contains(schema_meta.schema_id())) {
         return Status::OK();
     }
     auto schema_info = TableSchemaService::TableSchemaInfo{.schema_id = schema_meta.schema_id(),
@@ -131,12 +132,7 @@ Status update_metadata_schema(const TxnLogPB_OpWrite& op_write, int64_t txn_id, 
                                                                                                             txn_id));
     auto& old_schema = tablet_meta->schema();
     if (new_schema->schema_version() <= old_schema.schema_version()) {
-        // should not happen normally
-        return Status::InternalError(
-                fmt::format("The new schema version is not greater than current schema version, "
-                            "new schema id/version: {}/{}, current schema id/version: {}/{}",
-                            new_schema->id(), new_schema->schema_version(), tablet_meta->schema().id(),
-                            tablet_meta->schema().schema_version()));
+        return Status::OK();
     }
 
     LOG(INFO) << "update metadata schema. db_id: " << schema_meta.db_id() << ", table_id: " << schema_meta.table_id()

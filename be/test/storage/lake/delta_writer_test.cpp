@@ -302,7 +302,6 @@ TEST_F(LakeDeltaWriterTest, test_write) {
     ASSERT_EQ(txnlog->op_write().schema_meta().db_id(), db_id);
     ASSERT_EQ(txnlog->op_write().schema_meta().table_id(), table_id);
     ASSERT_EQ(txnlog->op_write().schema_meta().schema_id(), _tablet_schema->id());
-    ASSERT_EQ(txnlog->op_write().schema_meta().schema_version(), _tablet_schema->schema_version());
 
     // Check segment file
     ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(kTestDirectory));
@@ -411,7 +410,6 @@ TEST_F(LakeDeltaWriterTest, test_finish_without_write_txn_log) {
     ASSERT_EQ(txn_log->op_write().schema_meta().db_id(), db_id);
     ASSERT_EQ(txn_log->op_write().schema_meta().table_id(), table_id);
     ASSERT_EQ(txn_log->op_write().schema_meta().schema_id(), _tablet_schema->id());
-    ASSERT_EQ(txn_log->op_write().schema_meta().schema_version(), _tablet_schema->schema_version());
 
     delta_writer->close();
 

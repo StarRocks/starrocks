@@ -230,14 +230,13 @@ message BundleTabletMetadataPB {
     map<int64, PagePointerPB> tablet_meta_pages = 3;
 }
 
-message TxnLogPB {
+message TableSchemaMetaPB {
+    optional int64 db_id = 1;
+    optional int64 table_id = 2;
+    optional int64 schema_id = 3;
+}
 
-    message TableSchemaMetaPB {
-        optional int64 db_id = 1;
-        optional int64 table_id = 2;
-        optional int64 schema_id = 3;
-        optional int64 schema_version = 4; 
-    }
+message TxnLogPB {
 
     message OpWrite {
         optional RowsetMetadataPB rowset = 1;
@@ -249,6 +248,7 @@ message TxnLogPB {
         repeated bytes del_encryption_metas = 5;
         repeated FileMetaPB ssts = 6;
         repeated PersistentIndexSstableRangePB sst_ranges = 7;
+        // The meta of the table schema used to generate this rowset
         optional TableSchemaMetaPB schema_meta = 8;
     }
 
