@@ -16,13 +16,13 @@ package com.starrocks.alter;
 
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.MockedLocalMetaStore;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.View;
 import com.starrocks.persist.AlterViewInfo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.OperationType;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.transaction.MockedLocalMetaStore;
 import com.starrocks.transaction.MockedMetadataMgr;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.AfterEach;

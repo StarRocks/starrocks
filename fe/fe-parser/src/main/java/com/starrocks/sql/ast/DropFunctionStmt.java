@@ -12,48 +12,33 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.ast;
 
-import com.starrocks.catalog.FunctionName;
-import com.starrocks.catalog.FunctionSearchDesc;
 import com.starrocks.sql.parser.NodePosition;
 
 public class DropFunctionStmt extends DdlStmt {
-    private final FunctionName functionName;
-
-    public FunctionArgsDef getArgsDef() {
-        return argsDef;
-    }
-
+    private final FunctionRef functionRef;
     private final FunctionArgsDef argsDef;
-
-    // set after analyzed
-    private FunctionSearchDesc functionSearchDesc;
 
     private final boolean dropIfExists;
 
-    public DropFunctionStmt(FunctionName functionName, FunctionArgsDef argsDef, boolean dropIfExists) {
-        this(functionName, argsDef, NodePosition.ZERO, dropIfExists);
+    public DropFunctionStmt(FunctionRef functionRef, FunctionArgsDef argsDef, boolean dropIfExists) {
+        this(functionRef, argsDef, NodePosition.ZERO, dropIfExists);
     }
 
-    public DropFunctionStmt(FunctionName functionName, FunctionArgsDef argsDef, NodePosition pos, boolean dropIfExists) {
+    public DropFunctionStmt(FunctionRef functionRef, FunctionArgsDef argsDef, NodePosition pos, boolean dropIfExists) {
         super(pos);
-        this.functionName = functionName;
+        this.functionRef = functionRef;
         this.argsDef = argsDef;
         this.dropIfExists = dropIfExists;
     }
 
-    public FunctionName getFunctionName() {
-        return functionName;
+    public FunctionRef getFunctionRef() {
+        return functionRef;
     }
 
-    public FunctionSearchDesc getFunctionSearchDesc() {
-        return functionSearchDesc;
-    }
-
-    public void setFunctionSearchDesc(FunctionSearchDesc functionSearchDesc) {
-        this.functionSearchDesc = functionSearchDesc;
+    public FunctionArgsDef getArgsDef() {
+        return argsDef;
     }
 
     public boolean dropIfExists() {
@@ -62,6 +47,7 @@ public class DropFunctionStmt extends DdlStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return ((AstVisitorExtendInterface<R, C>) visitor).visitDropFunctionStatement(this, context);
+        return visitor.visitDropFunctionStatement(this, context);
     }
 }
+

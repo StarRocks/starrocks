@@ -266,6 +266,10 @@ public interface AstVisitor<R, C> {
         return visitShowStatement(statement, context);
     }
 
+    default R visitShowFunctionsStatement(ShowFunctionsStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
     default R visitShowTriggersStatement(ShowTriggersStmt statement, C context) {
         return visitShowStatement(statement, context);
     }
@@ -527,6 +531,10 @@ public interface AstVisitor<R, C> {
     }
 
     default R visitCreateRepositoryStatement(CreateRepositoryStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitDropFunctionStatement(DropFunctionStmt statement, C context) {
         return visitDDLStatement(statement, context);
     }
 
