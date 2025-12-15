@@ -34,7 +34,6 @@
 
 package com.starrocks.qe;
 
-import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
@@ -1028,19 +1027,46 @@ public class StmtExecutor {
         }
     }
 
+    public void processQueryScopeSetVarHint() throws DdlException {
+        if (!parsedStmt.isExistQueryScopeHint()) {
+            return;
+        }
+
+        SessionVariable clonedSessionVariable = null;
+        for (HintNode hint : parsedStmt.getAllQueryScopeHints()) {
+            if (!(hint instanceof SetVarHint)) {
+                continue;
+            }
+
+            if (clonedSessionVariable == null) {
+                clonedSessionVariable = (SessionVariable) context.sessionVariable.clone();
+            }
+            for (Map.Entry<String, String> entry : hint.getValue().entrySet()) {
+                GlobalStateMgr.getCurrentState().getVariableMgr().setSystemVariable(clonedSessionVariable,
+                        new SystemVariable(entry.getKey(), new StringLiteral(entry.getValue())), true, context);
+            }
+        }
+
+        if (clonedSessionVariable == null) {
+            return;
+        }
+
+        context.setSessionVariable(clonedSessionVariable);
+    }
+
     // support select hint e.g. select /*+ SET_VAR(query_timeout=1) */ sleep(3);
-    @VisibleForTesting
     public void processQueryScopeHint() throws DdlException {
         SessionVariable clonedSessionVariable = null;
         UUID queryId = context.getQueryId();
         final TUniqueId executionId = context.getExecutionId();
-        Map<String, UserVariable> clonedUserVars = new ConcurrentHashMap<>();
-        clonedUserVars.putAll(context.getUserVariables());
+
+        Map<String, UserVariable> clonedUserVars = new ConcurrentHashMap<>(context.getUserVariables());
         boolean hasUserVariableHint = parsedStmt.getAllQueryScopeHints()
                 .stream().anyMatch(hint -> hint instanceof UserVariableHint);
         if (hasUserVariableHint) {
             context.modifyUserVariablesCopyInWrite(clonedUserVars);
         }
+
         boolean executeSuccess = true;
         try {
             for (HintNode hint : parsedStmt.getAllQueryScopeHints()) {
@@ -1050,7 +1076,7 @@ public class StmtExecutor {
                     }
                     for (Map.Entry<String, String> entry : hint.getValue().entrySet()) {
                         GlobalStateMgr.getCurrentState().getVariableMgr().setSystemVariable(clonedSessionVariable,
-                                new SystemVariable(entry.getKey(), new StringLiteral(entry.getValue())), true);
+                                new SystemVariable(entry.getKey(), new StringLiteral(entry.getValue())), true, context);
                     }
                 }
 
@@ -3181,38 +3207,50 @@ public class StmtExecutor {
         if (!Config.enable_collect_query_detail_info) {
             return;
         }
-        String sql = parsedStmt.getOrigStmt().originStmt;
-        boolean needEncrypt = AuditEncryptionChecker.needEncrypt(parsedStmt);
-        if (needEncrypt || Config.enable_sql_desensitize_in_log) {
-            sql = AstToSQLBuilder.toSQL(parsedStmt, FormatOptions.allEnable()
-                            .setColumnSimplifyTableName(false)
-                            .setHideCredential(needEncrypt)
-                            .setEnableDigest(Config.enable_sql_desensitize_in_log))
-                    .orElse("this is a desensitized sql");
+
+        SessionVariable sessionVariableBackup = context.getSessionVariable();
+        try {
+            processQueryScopeSetVarHint();
+        } catch (DdlException e) {
+            LOG.warn("Failed to process query scope set variable.", e);
         }
 
-        boolean isQuery = context.isQueryStmt(parsedStmt);
+        try {
+            String sql = parsedStmt.getOrigStmt().originStmt;
+            boolean needEncrypt = AuditEncryptionChecker.needEncrypt(parsedStmt);
+            if (needEncrypt || Config.enable_sql_desensitize_in_log) {
+                sql = AstToSQLBuilder.toSQL(parsedStmt, FormatOptions.allEnable()
+                                .setColumnSimplifyTableName(false)
+                                .setHideCredential(needEncrypt)
+                                .setEnableDigest(Config.enable_sql_desensitize_in_log))
+                        .orElse("this is a desensitized sql");
+            }
 
-        QueryDetail queryDetail = new QueryDetail(
-                DebugUtil.printId(context.getQueryId()),
-                isQuery,
-                context.connectionId,
-                context.getMysqlChannel() != null ? context.getMysqlChannel().getRemoteIp() : "System",
-                context.getStartTime(), -1, -1,
-                QueryDetail.QueryMemState.RUNNING,
-                context.getDatabase(),
-                sql,
-                context.getQualifiedUser(),
-                Optional.ofNullable(context.getResourceGroup()).map(TWorkGroup::getName).orElse(""),
-                context.getCurrentWarehouseName(),
-                context.getCurrentCatalog(),
-                context.getCommandStr(),
-                getPreparedStmtId());
-        // Set query source from context
-        queryDetail.setQuerySource(context.getQuerySource());
-        context.setQueryDetail(queryDetail);
-        // copy queryDetail, cause some properties can be changed in future
-        QueryDetailQueue.addQueryDetail(queryDetail.copy());
+            boolean isQuery = context.isQueryStmt(parsedStmt);
+
+            QueryDetail queryDetail = new QueryDetail(
+                    DebugUtil.printId(context.getQueryId()),
+                    isQuery,
+                    context.connectionId,
+                    context.getMysqlChannel() != null ? context.getMysqlChannel().getRemoteIp() : "System",
+                    context.getStartTime(), -1, -1,
+                    QueryDetail.QueryMemState.RUNNING,
+                    context.getDatabase(),
+                    sql,
+                    context.getQualifiedUser(),
+                    Optional.ofNullable(context.getResourceGroup()).map(TWorkGroup::getName).orElse(""),
+                    context.getCurrentWarehouseName(),
+                    context.getCurrentCatalog(),
+                    context.getCommandStr(),
+                    getPreparedStmtId());
+            // Set query source from context
+            queryDetail.setQuerySource(context.getQuerySource());
+            context.setQueryDetail(queryDetail);
+            // copy queryDetail, cause some properties can be changed in future
+            QueryDetailQueue.addQueryDetail(queryDetail.copy());
+        } finally {
+            context.setSessionVariable(sessionVariableBackup);
+        }
     }
 
     /*
