@@ -37,9 +37,9 @@
 
 namespace starrocks::lake {
 
-// Number of schema lookups that hit the global schema cache (fastest path).
+// Number of schema lookups that hit the schema cache (fastest path).
 bvar::Adder<int64_t> g_schema_cache_hit("table_schema_service", "schema_cache_hit");
-// Number of schema lookups that hit the tablet metadata (fallback when global cache misses).
+// Number of schema lookups that hit the tablet metadata (fallback when schema cache misses).
 bvar::Adder<int64_t> g_tablet_metadata_hit("table_schema_service", "tablet_metadata_hit");
 // Number of schema lookups that miss both schema cache and tablet metadata, requiring remote fetch.
 // Note: g_schema_cache_hit + g_tablet_metadata_hit + g_local_miss represents total local lookup attempts.
@@ -127,7 +127,7 @@ StatusOr<TabletSchemaPtr> TableSchemaService::get_scan_schema(const TableSchemaI
 }
 
 TabletSchemaPtr TableSchemaService::_get_local_schema(int64_t schema_id, const TabletMetadataPtr& tablet_meta) {
-    auto schema = _tablet_mgr->get_cached_global_schema(schema_id);
+    auto schema = _tablet_mgr->get_cached_schema(schema_id);
     if (schema != nullptr) {
         g_schema_cache_hit << 1;
         return schema;
@@ -145,7 +145,7 @@ TabletSchemaPtr TableSchemaService::_get_local_schema(int64_t schema_id, const T
         }
         if (schema_pb != nullptr) {
             schema = TabletSchema::create(*schema_pb);
-            _tablet_mgr->cache_global_schema(schema);
+            _tablet_mgr->cache_schema(schema);
             g_tablet_metadata_hit << 1;
             VLOG(2) << "get schema from tablet metadata. schema_id: " << schema_id
                     << ", tablet_id: " << tablet_meta->id() << ", metadata version: " << tablet_meta->version();
@@ -328,7 +328,7 @@ TableSchemaService::SingleFlightResultPtr TableSchemaService::_fetch_schema_via_
         return result;
     }
     TabletSchemaSPtr schema = TabletSchema::create(schema_pb);
-    _tablet_mgr->cache_global_schema(schema);
+    _tablet_mgr->cache_schema(schema);
     VLOG(2) << log_helper("get schema success");
     result->rpc_result = schema;
     return result;

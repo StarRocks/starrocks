@@ -1433,7 +1433,7 @@ StatusOr<TabletAndRowsets> TabletManager::capture_tablet_and_rowsets(int64_t tab
     return std::make_tuple(std::move(tablet_ptr), std::move(rowsets));
 }
 
-void TabletManager::cache_global_schema(const TabletSchemaPtr& schema) {
+void TabletManager::cache_schema(const TabletSchemaPtr& schema) {
     // GlobalTabletSchemaMap and metadata cache overlap in functionality, but because many places
     // previously relied on GlobalTabletSchemaMap, caching is still performed in GlobalTabletSchemaMap
     // here. In the future, it may be possible to refactor and remove GlobalTabletSchemaMap.
@@ -1443,7 +1443,7 @@ void TabletManager::cache_global_schema(const TabletSchemaPtr& schema) {
     _metacache->cache_tablet_schema(cache_key, cached_schema, cache_size);
 }
 
-TabletSchemaPtr TabletManager::get_cached_global_schema(int64_t schema_id) {
+TabletSchemaPtr TabletManager::get_cached_schema(int64_t schema_id) {
     auto cache_key = global_schema_cache_key(schema_id);
     return _metacache->lookup_tablet_schema(cache_key);
 }

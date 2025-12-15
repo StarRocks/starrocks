@@ -376,7 +376,7 @@ TEST_F(TableSchemaServiceTest, global_schema_cache_hit) {
     // 2) Verify both LOAD and SCAN return from cache without RPC.
     int64_t schema_id = next_id();
     auto schema = create_test_schema(schema_id);
-    _tablet_manager->cache_global_schema(schema);
+    _tablet_manager->cache_schema(schema);
 
     // LOAD path should hit global cache.
     auto load_result = _schema_service->get_load_schema(create_schema_info(schema_id, 100, 101, 1000), 1);
@@ -405,7 +405,7 @@ TEST_F(TableSchemaServiceTest, tablet_metadata_hit) {
                                                        metadata);
         ASSERT_OK(result);
         ASSERT_EQ(result.value()->id(), current_schema_id);
-        auto cached_schema = _tablet_manager->get_cached_global_schema(current_schema_id);
+        auto cached_schema = _tablet_manager->get_cached_schema(current_schema_id);
         ASSERT_NE(cached_schema, nullptr);
         ASSERT_EQ(cached_schema->id(), current_schema_id);
     }
@@ -416,7 +416,7 @@ TEST_F(TableSchemaServiceTest, tablet_metadata_hit) {
                                                        metadata);
         ASSERT_OK(result);
         ASSERT_EQ(result.value()->id(), historical_schema_id);
-        auto cached_schema = _tablet_manager->get_cached_global_schema(historical_schema_id);
+        auto cached_schema = _tablet_manager->get_cached_schema(historical_schema_id);
         ASSERT_NE(cached_schema, nullptr);
         ASSERT_EQ(cached_schema->id(), historical_schema_id);
     }
@@ -433,7 +433,7 @@ TEST_F(TableSchemaServiceTest, remote_hit) {
     ASSERT_OK(result);
     ASSERT_EQ(result.value()->id(), schema_id);
 
-    auto cached_schema = _tablet_manager->get_cached_global_schema(schema_id);
+    auto cached_schema = _tablet_manager->get_cached_schema(schema_id);
     ASSERT_NE(cached_schema, nullptr);
     ASSERT_EQ(cached_schema->id(), schema_id);
 }

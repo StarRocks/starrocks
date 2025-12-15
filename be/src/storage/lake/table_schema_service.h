@@ -37,7 +37,7 @@ class TabletManager;
  *
  * Core capabilities:
  * 1. Two-level Local Cache:
- *    - Global schema cached in tablet manager.
+ *    - Schema cached in tablet manager.
  *    - Tablet Metadata Lookup: Checks the in-memory metadata of the specific tablet.
  *
  * 2. Remote Fetch via Frontend (FE):
@@ -45,6 +45,25 @@ class TabletManager;
  *
  * 3. Request Deduplication (SingleFlight):
  *    - Uses a SingleFlight mechanism to merge concurrent requests for the same schema, reducing pressure on the FE.
+ *
+ * Terminology & Relationships:
+ *
+ * 1. Table Schema (Logical Concept):
+ *    Represents the schema of a table in the catalog. As schema evolves (Schema Evolution),
+ *    a table generates multiple schema versions, each identified by a unique `schema_id`.
+ *
+ * 2. @ref starrocks::TabletSchema (In-Memory Representation):
+ *    Despite the name "Tablet"Schema, this C++ class represents a specific VERSION of a
+ *    Table Schema.
+ *    - In Shared-Data mode, we maintain a "Schema Cache" (schema_id -> TabletSchemaPtr)
+ *      via @ref starrocks::lake::TabletManager::cache_schema() to allow thousands of tablets
+ *      belonging to the same table to share the same underlying TabletSchema object, saving memory.
+ *
+ * 3. TabletMetadataPB::schema (Persistence/Metadata):
+ *    A field in the tablet's metadata recording the "latest" schema version known to this tablet.
+ *    - During Fast Schema Evolution, the tablet's metadata is updated to point to the new
+ *      schema version (stored here), while historical versions might be referenced in
+ *      `TabletMetadataPB::historical_schemas`.
  */
 class TableSchemaService {
 public:
@@ -123,7 +142,7 @@ private:
     /**
      * @brief Attempts to retrieve the schema from local sources.
      * 
-     * Checks the global metadata cache and the provided tablet metadata (if any).
+     * Checks the schema cache and the provided tablet metadata (if any).
      * 
      * @param schema_id The ID of the schema to retrieve.
      * @param tablet_meta Optional pointer to tablet metadata.

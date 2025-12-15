@@ -264,11 +264,11 @@ public:
     void stop();
 
     // Cache the schema into the metadata cache.
-    void cache_global_schema(const TabletSchemaPtr& schema);
+    void cache_schema(const TabletSchemaPtr& schema);
 
-    // Get the global schema from the metadata cache.
+    // Get the schema from the metadata cache.
     // Return nullptr if not found.
-    TabletSchemaPtr get_cached_global_schema(int64_t schema_id);
+    TabletSchemaPtr get_cached_schema(int64_t schema_id);
 
 private:
     static std::string global_schema_cache_key(int64_t index_id);
