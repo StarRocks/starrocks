@@ -302,7 +302,7 @@ public final class GlobalVariable {
 
     public static int getQueryQueueDriverHighWater() {
         if (queryQueueDriverHighWater == 0) {
-            return BackendResourceStat.getInstance().getAvgNumHardwareCoresOfBe() * 16;
+            return BackendResourceStat.getInstance().getAvgNumCoresOfBe() * 16;
         }
         return queryQueueDriverHighWater;
     }
@@ -317,7 +317,7 @@ public final class GlobalVariable {
 
     public static int getQueryQueueDriverLowWater() {
         if (queryQueueDriverLowWater == 0) {
-            return BackendResourceStat.getInstance().getAvgNumHardwareCoresOfBe() * 8;
+            return BackendResourceStat.getInstance().getAvgNumCoresOfBe() * 8;
         }
         return queryQueueDriverLowWater;
     }

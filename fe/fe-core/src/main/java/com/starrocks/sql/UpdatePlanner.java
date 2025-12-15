@@ -34,6 +34,7 @@ import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.SchemaTableSink;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.QueryRelation;
@@ -174,11 +175,12 @@ public class UpdatePlanner {
             }
             if (canUsePipeline) {
                 PlanFragment sinkFragment = execPlan.getFragments().get(0);
-                if (ConnectContext.get().getSessionVariable().getEnableAdaptiveSinkDop()) {
-                    sinkFragment.setPipelineDop(ConnectContext.get().getSessionVariable().getSinkDegreeOfParallelism());
+                SessionVariable sv = session.getSessionVariable();
+                if (sv.getEnableAdaptiveSinkDop()) {
+                    long warehouseId = session.getCurrentComputeResource().getWarehouseId();
+                    sinkFragment.setPipelineDop(sv.getSinkDegreeOfParallelism(warehouseId));
                 } else {
-                    sinkFragment
-                            .setPipelineDop(ConnectContext.get().getSessionVariable().getParallelExecInstanceNum());
+                    sinkFragment.setPipelineDop(sv.getParallelExecInstanceNum());
                 }
                 if (targetTable instanceof OlapTable) {
                     sinkFragment.setHasOlapTableSink();

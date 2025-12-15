@@ -3554,29 +3554,29 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // in case of pipeline_dop > 0: return pipeline_dop * parallelExecInstanceNum;
     // in case of pipeline_dop <= 0 and avgNumCores < 2: return 1;
     // in case of pipeline_dop <= 0 and avgNumCores >=2; return avgNumCores;
-    public int getDegreeOfParallelism() {
+    public int getDegreeOfParallelism(long warehouseId) {
         if (enablePipelineEngine) {
             if (pipelineDop > 0) {
                 return pipelineDop;
             }
             if (maxPipelineDop <= 0) {
-                return BackendResourceStat.getInstance().getDefaultDOP();
+                return BackendResourceStat.getInstance().getDefaultDOP(warehouseId);
             }
-            return Math.min(maxPipelineDop, BackendResourceStat.getInstance().getDefaultDOP());
+            return Math.min(maxPipelineDop, BackendResourceStat.getInstance().getDefaultDOP(warehouseId));
         } else {
             return parallelExecInstanceNum;
         }
     }
 
-    public int getSinkDegreeOfParallelism() {
+    public int getSinkDegreeOfParallelism(long warehouseId) {
         if (enablePipelineEngine) {
             if (pipelineDop > 0) {
                 return pipelineDop;
             }
             if (maxPipelineDop <= 0) {
-                return BackendResourceStat.getInstance().getSinkDefaultDOP();
+                return BackendResourceStat.getInstance().getSinkDefaultDOP(warehouseId);
             }
-            return Math.min(maxPipelineDop, BackendResourceStat.getInstance().getSinkDefaultDOP());
+            return Math.min(maxPipelineDop, BackendResourceStat.getInstance().getSinkDefaultDOP(warehouseId));
         } else {
             return parallelExecInstanceNum;
         }

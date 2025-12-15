@@ -1190,7 +1190,22 @@ public class SystemInfoService implements GsonPostProcessable {
         // BackendCoreStat is a global state, checkpoint should not modify it.
         if (!GlobalStateMgr.isCheckpointThread()) {
             // remove from BackendCoreStat
+<<<<<<< HEAD
             BackendResourceStat.getInstance().removeBe(computeNodeId);
+=======
+            BackendResourceStat.getInstance().removeBe(cn.getWarehouseId(), dropComputeNodeLog.getComputeNodeId());
+        }
+
+        return cn;
+    }
+
+    public void replayDropComputeNode(DropComputeNodeLog dropComputeNodeLog) {
+        LOG.debug("replayDropComputeNode: {}", dropComputeNodeLog);
+
+        ComputeNode cn = removeComputeNode(dropComputeNodeLog);
+        if (cn == null) {
+            return;
+>>>>>>> 6fe67cb798 ([Enhancement] Support multi-warehouse for BackendResourceStat and pipeline_dop (#66632))
         }
 
         // clear map in starosAgent
@@ -1217,7 +1232,7 @@ public class SystemInfoService implements GsonPostProcessable {
         // BackendCoreStat is a global state, checkpoint should not modify it.
         if (!GlobalStateMgr.isCheckpointThread()) {
             // remove from BackendCoreStat
-            BackendResourceStat.getInstance().removeBe(backend.getId());
+            BackendResourceStat.getInstance().removeBe(backend.getWarehouseId(), backend.getId());
         }
 
         // clear map in starosAgent
@@ -1396,12 +1411,14 @@ public class SystemInfoService implements GsonPostProcessable {
         if (!GlobalStateMgr.isCheckpointThread()) {
             // update BackendCoreStat
             for (ComputeNode node : idToBackendRef.values()) {
-                BackendResourceStat.getInstance().setNumHardwareCoresOfBe(node.getId(), node.getCpuCores());
-                BackendResourceStat.getInstance().setMemLimitBytesOfBe(node.getId(), node.getMemLimitBytes());
+                BackendResourceStat.getInstance().setNumCoresOfBe(node.getWarehouseId(), node.getId(), node.getCpuCores());
+                BackendResourceStat.getInstance()
+                        .setMemLimitBytesOfBe(node.getWarehouseId(), node.getId(), node.getMemLimitBytes());
             }
             for (ComputeNode node : idToComputeNodeRef.values()) {
-                BackendResourceStat.getInstance().setNumHardwareCoresOfBe(node.getId(), node.getCpuCores());
-                BackendResourceStat.getInstance().setMemLimitBytesOfBe(node.getId(), node.getMemLimitBytes());
+                BackendResourceStat.getInstance().setNumCoresOfBe(node.getWarehouseId(), node.getId(), node.getCpuCores());
+                BackendResourceStat.getInstance()
+                        .setMemLimitBytesOfBe(node.getWarehouseId(), node.getId(), node.getMemLimitBytes());
             }
         }
     }
