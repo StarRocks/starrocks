@@ -243,9 +243,9 @@ public class MaterializedViewTextBasedRewriteTest extends MaterializedViewTestBa
                         "  |  order by: <slot 2> 2: user_id ASC, <slot 1> 1: time ASC\n" +
                         "  |  offset: 0")
                 .contains("  1:Project\n" +
-                        "  |  <slot 1> : 10: time\n" +
-                        "  |  <slot 2> : 9: user_id\n" +
-                        "  |  <slot 5> : 11: sum(tag_id)");
+                        "  |  <slot 1> : 7: time\n" +
+                        "  |  <slot 2> : 6: user_id\n" +
+                        "  |  <slot 5> : 8: sum(tag_id)");
     }
 
     @Test
@@ -427,6 +427,7 @@ public class MaterializedViewTextBasedRewriteTest extends MaterializedViewTestBa
             MaterializedView actualMV = result.iterator().next();
             MaterializedView expectedMV = getMv(MATERIALIZED_DB_NAME, "test_mv0");
             Assert.assertEquals(expectedMV, actualMV);
+            starRocksAssert.dropMaterializedView("test_mv0");
         }
     }
 }
