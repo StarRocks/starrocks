@@ -1190,22 +1190,7 @@ public class SystemInfoService implements GsonPostProcessable {
         // BackendCoreStat is a global state, checkpoint should not modify it.
         if (!GlobalStateMgr.isCheckpointThread()) {
             // remove from BackendCoreStat
-<<<<<<< HEAD
-            BackendResourceStat.getInstance().removeBe(computeNodeId);
-=======
-            BackendResourceStat.getInstance().removeBe(cn.getWarehouseId(), dropComputeNodeLog.getComputeNodeId());
-        }
-
-        return cn;
-    }
-
-    public void replayDropComputeNode(DropComputeNodeLog dropComputeNodeLog) {
-        LOG.debug("replayDropComputeNode: {}", dropComputeNodeLog);
-
-        ComputeNode cn = removeComputeNode(dropComputeNodeLog);
-        if (cn == null) {
-            return;
->>>>>>> 6fe67cb798 ([Enhancement] Support multi-warehouse for BackendResourceStat and pipeline_dop (#66632))
+            BackendResourceStat.getInstance().removeBe(cn.getWarehouseId(), computeNodeId);
         }
 
         // clear map in starosAgent
