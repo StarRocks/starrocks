@@ -25,6 +25,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.ExpressionStatisticCalculator;
 import com.starrocks.sql.optimizer.statistics.Statistics;
+import com.starrocks.system.SystemInfoService;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -88,9 +89,10 @@ public class HashJoinCostModel {
         double probeCost;
         double leftOutput = leftStatistics.getOutputSize(context.getChildOutputColumns(0));
         double rightOutput = rightStatistics.getOutputSize(context.getChildOutputColumns(1));
-        int parallelFactor = Math.max(ConnectContext.get().getAliveBackendNumber() +
-                ConnectContext.get().getGlobalStateMgr().getNodeMgr().getClusterInfo().getAliveComputeNodeNumber(),
-                ConnectContext.get().getSessionVariable().getDegreeOfParallelism());
+        ConnectContext connectContext = ConnectContext.get();
+        SystemInfoService clusterInfo = connectContext.getGlobalStateMgr().getNodeMgr().getClusterInfo();
+        int parallelFactor = Math.max(connectContext.getAliveBackendNumber() + clusterInfo.getAliveComputeNodeNumber(),
+                connectContext.getSessionVariable().getDegreeOfParallelism(connectContext.getCurrentWarehouseId()));
         switch (execMode) {
             case BROADCAST:
                 buildCost = rightOutput;
@@ -133,12 +135,13 @@ public class HashJoinCostModel {
         JoinExecMode execMode = deriveJoinExecMode();
         double keySize = calculateKeySize();
 
-        double cachePenaltyFactor;
-        int parallelFactor = Math.max(ConnectContext.get().getAliveBackendNumber() +
-                ConnectContext.get().getGlobalStateMgr().getNodeMgr().getClusterInfo().getAliveComputeNodeNumber(),
-                ConnectContext.get().getSessionVariable().getDegreeOfParallelism()) * 2;
+        ConnectContext connectContext = ConnectContext.get();
+        SystemInfoService clusterInfo = connectContext.getGlobalStateMgr().getNodeMgr().getClusterInfo();
+        int parallelFactor = Math.max(connectContext.getAliveBackendNumber() + clusterInfo.getAliveComputeNodeNumber(),
+                connectContext.getSessionVariable().getDegreeOfParallelism(connectContext.getCurrentWarehouseId())) * 2;
         double mapSize = Math.min(1, keySize) * rightStatistics.getOutputRowCount();
 
+        double cachePenaltyFactor;
         if (JoinExecMode.BROADCAST == execMode) {
             cachePenaltyFactor = Math.max(1, Math.log(mapSize / BOTTOM_NUMBER));
             // normalize ration when it hits the limit

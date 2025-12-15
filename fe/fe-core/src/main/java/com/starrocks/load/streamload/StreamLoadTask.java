@@ -917,7 +917,6 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
                 streamLoadInfo.getNegative(), channelNum, streamLoadInfo.getColumnExprDescs(), streamLoadInfo, label,
                 streamLoadInfo.getTimeout());
 
-        loadPlanner.setComputeResource(streamLoadInfo.getComputeResource());
         loadPlanner.plan();
 
         coord = getCoordinatorFactory().createStreamLoadScheduler(loadPlanner);
