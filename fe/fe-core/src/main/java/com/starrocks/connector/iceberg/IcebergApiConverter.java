@@ -472,7 +472,10 @@ public class IcebergApiConverter {
         } else if (fileFormat != null) {
             throw new IllegalArgumentException("Unsupported format in USING: " + fileFormat);
         }
-        tableProperties.put(TableProperties.FORMAT_VERSION, "2");
+
+        if (!createProperties.containsKey(TableProperties.FORMAT_VERSION)) {
+            tableProperties.put(TableProperties.FORMAT_VERSION, "2");
+        }
 
         return tableProperties.build();
     }
