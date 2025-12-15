@@ -161,8 +161,6 @@ public class ShowCreateTableStmtTest {
         ShowResultSet resultSet = ShowExecutor.execute(showCreateTableStmt, ctx);
         Assertions.assertTrue(resultSet.getResultRows().get(0).get(1).contains("partition_live_number"));
     }
-<<<<<<< HEAD
-=======
 
     @Test
     public void test() throws Exception {
@@ -293,5 +291,4 @@ public class ShowCreateTableStmtTest {
         Assertions.assertTrue(createTable3.contains("parent1_k1") && createTable3.contains("parent1_k2"),
                 "foreign_key_constraints should include child column names. Got: " + createTable3);
     }
->>>>>>> eb4b6f1edc ([BugFix] Fix foreign key constraints lost after FE restart (#66474))
 }
