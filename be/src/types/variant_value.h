@@ -83,6 +83,7 @@ public:
 
     const std::string& get_metadata() const { return _metadata; }
     const std::string& get_value() const { return _value; }
+    Variant to_variant() const;
 
     // Variant value has a maximum size limit of 16MB to prevent excessive memory usage.
     static constexpr uint32_t kMaxVariantSize = 16 * 1024 * 1024;

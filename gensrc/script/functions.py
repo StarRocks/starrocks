@@ -900,6 +900,8 @@ vectorized_functions = [
     [110204, "get_variant_string", False, True, "VARCHAR", ["VARIANT", "VARCHAR"],
      "VariantFunctions::get_variant_string",
      "VariantFunctions::variant_segments_prepare", "VariantFunctions::variant_segments_close"],
+    [110205, "variant_typeof", False, False, "VARCHAR", ["VARIANT", "VARCHAR"], "VariantFunctions::variant_typeof",
+     "VariantFunctions::variant_segments_prepare", "VariantFunctions::variant_segments_close"],
 
     # aes and base64 function
     # aes_encrypt: 2-parameter version (data, key) for backward compatibility with old FE
