@@ -270,11 +270,13 @@ public class PlanFragment extends TreeNode<PlanFragment> {
      */
     private void setParallelExecNumIfExists() {
         if (ConnectContext.get() != null) {
-            if (ConnectContext.get().getSessionVariable().isEnablePipelineEngine()) {
+            ConnectContext connectContext = ConnectContext.get();
+            SessionVariable sv = connectContext.getSessionVariable();
+            if (sv.isEnablePipelineEngine()) {
                 this.parallelExecNum = 1;
-                this.pipelineDop = ConnectContext.get().getSessionVariable().getDegreeOfParallelism();
+                this.pipelineDop = sv.getDegreeOfParallelism(connectContext.getCurrentWarehouseId());
             } else {
-                this.parallelExecNum = ConnectContext.get().getSessionVariable().getParallelExecInstanceNum();
+                this.parallelExecNum = sv.getParallelExecInstanceNum();
                 this.pipelineDop = 1;
             }
         }

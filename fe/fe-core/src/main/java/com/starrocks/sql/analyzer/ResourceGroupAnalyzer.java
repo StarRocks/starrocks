@@ -155,7 +155,7 @@ public class ResourceGroupAnalyzer {
     // ('cpu_weight'='n', 'mem_limit'='m%', 'concurrency_limit'='n', 'type'='normal|default|realtime')
     public static void analyzeProperties(ResourceGroup resourceGroup, Map<String, String> properties)
             throws SemanticException {
-        final int avgCoreNum = BackendResourceStat.getInstance().getAvgNumHardwareCoresOfBe();
+        final int avgCoreNum = BackendResourceStat.getInstance().getAvgNumCoresOfBe();
         for (Map.Entry<String, String> e : properties.entrySet()) {
             String key = e.getKey();
             String value = e.getValue();

@@ -341,7 +341,8 @@ public class ComputeNode implements IComputable, Writable, GsonPostProcessable {
         this.heartbeatPort = heartbeatPort;
     }
 
-    /** Set liveness and adjust the Internal status accordingly
+    /**
+     * Set liveness and adjust the Internal status accordingly
      * |    Status    |  IsAlive |
      * |  CONNECTING  |   false  |
      * |     OK       |   true   |
@@ -459,8 +460,6 @@ public class ComputeNode implements IComputable, Writable, GsonPostProcessable {
         ));
         groupIdToUsage.set(newGroupIdToUsage);
     }
-
-
 
     @Override
     public int hashCode() {
@@ -613,7 +612,8 @@ public class ComputeNode implements IComputable, Writable, GsonPostProcessable {
 
                 // BackendCoreStat is a global state, checkpoint should not modify it.
                 if (!GlobalStateMgr.isCheckpointThread()) {
-                    BackendResourceStat.getInstance().setNumHardwareCoresOfBe(hbResponse.getBeId(), hbResponse.getCpuCores());
+                    BackendResourceStat.getInstance()
+                            .setNumCoresOfBe(warehouseId, hbResponse.getBeId(), hbResponse.getCpuCores());
                 }
             }
 
@@ -623,7 +623,8 @@ public class ComputeNode implements IComputable, Writable, GsonPostProcessable {
 
                 // BackendCoreStat is a global state, checkpoint should not modify it.
                 if (!GlobalStateMgr.isCheckpointThread()) {
-                    BackendResourceStat.getInstance().setMemLimitBytesOfBe(hbResponse.getBeId(), hbResponse.getMemLimitBytes());
+                    BackendResourceStat.getInstance()
+                            .setMemLimitBytesOfBe(warehouseId, hbResponse.getBeId(), hbResponse.getMemLimitBytes());
                 }
             }
 

@@ -358,8 +358,13 @@ column statistics:
   },
   "be_number": 3,
   "be_core_stat": {
-    "numOfHardwareCoresPerBe": "{}",
-    "cachedAvgNumOfHardwareCores": -1
+    "cachedAvgNumOfHardwareCores": -1,
+    "numOfHardwareCoresPerBe": "{}"
+  },
+  "be_core_stat_v2": {
+    "cachedAvgNumOfHardwareCores": -1,
+    "warehouses": [],
+    "currentWarehouseId": 0
   },
   "exception": []
 }
