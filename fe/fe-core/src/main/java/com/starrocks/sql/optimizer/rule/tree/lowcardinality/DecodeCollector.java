@@ -67,6 +67,7 @@ import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.MatchExprOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
+import com.starrocks.sql.optimizer.operator.scalar.SubfieldOperator;
 import com.starrocks.sql.optimizer.rule.tree.JsonPathRewriteRule;
 import com.starrocks.sql.optimizer.statistics.CacheDictManager;
 import com.starrocks.sql.optimizer.statistics.CacheRelaxDictManager;
@@ -76,6 +77,7 @@ import com.starrocks.sql.optimizer.statistics.IDictManager;
 import com.starrocks.sql.optimizer.statistics.IRelaxDictManager;
 import com.starrocks.thrift.TAccessPathType;
 import com.starrocks.type.ArrayType;
+import com.starrocks.type.StructType;
 import com.starrocks.type.Type;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
@@ -85,6 +87,7 @@ import org.jetbrains.annotations.TestOnly;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -130,6 +133,9 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
                     FunctionSet.SPLIT_PART, FunctionSet.SUBSTR, FunctionSet.SUBSTRING, FunctionSet.SUBSTRING_INDEX,
                     FunctionSet.TRIM, FunctionSet.UPPER, FunctionSet.IF, FunctionSet.LENGTH, FunctionSet.CHAR_LENGTH);
 
+    public static final Set<String> LOW_CARD_STRUCT_FUNCTIONS =
+            ImmutableSet.of(FunctionSet.NAMED_STRUCT, FunctionSet.STRUCT, FunctionSet.ROW);
+
     // array<string> support:
     //  array<string> -> array<string>: array function
     //  array<string> -> string       : array element
@@ -157,6 +163,11 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
     private final Map<Integer, Integer> tableFunctionDependencies = Maps.newHashMap();
 
     private final Map<Integer, ScalarOperator> stringRefToDefineExprMap = Maps.newHashMap();
+
+    // Maintains a mapping from structsRefs to columnRefs to use for encoded fields. Currently only fields which
+    // correspond to a column ref can be encoded.
+    private final Map<ScalarOperator, Map<String, ColumnRefOperator>> structRefToFieldUseStringRef =
+            Maps.newIdentityHashMap();
 
     // string column use counter, 0 meanings decoded immediately after it was generated.
     // for compute global dict define expressions
@@ -264,6 +275,14 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
                 }
             }
         }
+
+        // Disabling struct columns which don't have any field which is not disabled.
+        structRefToFieldUseStringRef.entrySet().stream()
+                .filter(e -> e.getKey().isColumnRef()
+                        && e.getValue().values().stream().allMatch(disableRewriteStringColumns::contains))
+                .forEach(e -> {
+                    disableRewriteStringColumns.union((ColumnRefOperator) e.getKey());
+                });
     }
 
     private void unionAll(ColumnRefSet columnRefSet, Set<Integer> cids) {
@@ -390,9 +409,32 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
                 context.operatorDecodeInfo.put(operator, info);
             }
         }
+
+        context.structOpToFieldUseStringRefMap = structRefToFieldUseStringRef.entrySet().stream()
+                //.filter(e -> e.getKey().isColumnRef())
+                .map(e -> new Pair<>(
+                        e.getKey(),
+                        e.getValue().entrySet().stream()
+                                .filter(e2 -> !disableRewriteStringColumns.contains(e2.getValue()))
+                                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue))))
+                .filter(k -> !k.second.isEmpty())
+                .collect(Collectors.toMap(
+                        p -> p.first,
+                        p -> p.second,
+                        (oldVal, newVal) -> oldVal,
+                        IdentityHashMap::new));
+
+        context.structRefToFieldUseStringRefMap = context.structOpToFieldUseStringRefMap.entrySet().stream()
+                .filter(e -> e.getKey().isColumnRef())
+                .map(e -> new Pair<>(
+                        ((ColumnRefOperator) e.getKey()).getId(),
+                        e.getValue()))
+                .collect(Collectors.toMap(p -> p.first, p -> p.second));
     }
 
     private boolean checkDependOnExpr(int cid, Collection<Integer> checkList) {
+        return true;
+        /*
         if (checkList.contains(cid)) {
             return true;
         }
@@ -400,6 +442,11 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
             return false;
         }
         ScalarOperator define = stringRefToDefineExprMap.get(cid);
+        // For structs, not all fields need to be dict encoded. We ensure that only non-disabled fields will be encoded
+        // later.
+        if (define.getType().isStructType()) {
+            return true;
+        }
         for (ColumnRefOperator ref : define.getColumnRefs()) {
             if (ref.getId() == cid) {
                 return false;
@@ -409,6 +456,7 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
             }
         }
         return true;
+        */
     }
 
     private DecodeInfo collectImpl(OptExpression optExpression, OptExpression parent) {
@@ -1145,7 +1193,8 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
         if (operator.getPredicate() == null) {
             return;
         }
-        DictExpressionCollector dictExpressionCollector = new DictExpressionCollector(info.outputStringColumns);
+        DictExpressionCollector dictExpressionCollector = new DictExpressionCollector(info.outputStringColumns,
+                structRefToFieldUseStringRef);
         dictExpressionCollector.collect(operator.getPredicate());
 
         info.outputStringColumns.getStream().forEach(c -> {
@@ -1172,7 +1221,8 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
                 continue;
             }
 
-            DictExpressionCollector dictExpressionCollector = new DictExpressionCollector(decodeInput);
+            DictExpressionCollector dictExpressionCollector = new DictExpressionCollector(decodeInput,
+                    structRefToFieldUseStringRef);
 
             ScalarOperator value = operator.getProjection().getColumnRefMap().get(key);
             dictExpressionCollector.collect(value);
@@ -1187,10 +1237,23 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
 
                 // whole expression support dictionary, define new dict column
                 // only support varchar/array<varchar> column
-                if (exprs.contains(value) && supportLowCardinality(value.getType())) {
+                if (exprs.contains(value)
+                        && supportLowCardinality(value.getType())
+                        && !dictExpressionCollector.notEncodedExprs.contains(value)
+                        || structRefToFieldUseStringRef.containsKey(value)) {
                     stringRefToDefineExprMap.put(key.getId(), value);
                     expressionStringRefCounter.putIfAbsent(key.getId(), 0);
                     info.outputStringColumns.union(key.getId());
+                    if (structRefToFieldUseStringRef.containsKey(value)) {
+                        Preconditions.checkState(exprs.isEmpty());
+                        stringExpressions.computeIfAbsent(key.getId(), l -> Lists.newArrayList()).add(value);
+                        structRefToFieldUseStringRef.put(key, structRefToFieldUseStringRef.get(value));
+                        expressionStringRefCounter.put(key.getId(), 1);
+                        for (ColumnRefOperator fieldRef : structRefToFieldUseStringRef.get(value).values()) {
+                            expressionStringRefCounter.put(fieldRef.getId(),
+                                    expressionStringRefCounter.get(fieldRef.getId()) + 1);
+                        }
+                    }
                 }
                 info.usedStringColumns.union(c);
             });
@@ -1199,7 +1262,9 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
     }
 
     private static boolean supportLowCardinality(Type type) {
-        return type.isVarchar() || (type.isArrayType() && ((ArrayType) type).getItemType().isVarchar());
+        return type.isVarchar()
+                || (type.isArrayType() && ((ArrayType) type).getItemType().isVarchar()
+                || type.isStructType());
     }
 
     private boolean supportAndEnabledLowCardinality(Type type) {
@@ -1227,11 +1292,15 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
 
         private final ColumnRefSet allDictColumnRefs;
         private final Map<Integer, List<ScalarOperator>> dictExpressions = Maps.newHashMap();
+        private Map<ScalarOperator, Map<String, ColumnRefOperator>> structRefToFieldUseStringRef;
 
         private final ColumnRefSet matchChildren = new ColumnRefSet();
+        private final Set<ScalarOperator> notEncodedExprs = Collections.newSetFromMap(new IdentityHashMap<>());
 
-        public DictExpressionCollector(ColumnRefSet allDictColumnRefs) {
+        public DictExpressionCollector(ColumnRefSet allDictColumnRefs,
+                                       Map<ScalarOperator, Map<String, ColumnRefOperator>> structRefToFieldUseStringRef) {
             this.allDictColumnRefs = allDictColumnRefs;
+            this.structRefToFieldUseStringRef = structRefToFieldUseStringRef;
         }
 
         public void collect(ScalarOperator scalarOperator) {
@@ -1243,7 +1312,7 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
             if (dictColumn.isColumnRef()) {
                 dictExpressions.computeIfAbsent(((ColumnRefOperator) dictColumn).getId(),
                         x -> Lists.newArrayList()).add(dictExpr);
-            } else if (!dictColumn.isConstant()) {
+            } else if (!dictColumn.isConstant() && !dictColumn.getType().isStructType()) {
                 // array[x], array_min(x)
                 List<ColumnRefOperator> used = dictColumn.getColumnRefs();
                 Preconditions.checkState(used.stream().distinct().count() == 1);
@@ -1274,8 +1343,7 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
             }
 
             long variableExpr = collectors.stream().filter(VARIABLES::equals).count();
-            List<ScalarOperator> dictColumns = collectors.stream().filter(s -> !s.isConstant()).distinct()
-                    .collect(Collectors.toList());
+            List<ScalarOperator> dictColumns = collectors.stream().filter(s -> !s.isConstant()).distinct().toList();
             // only one scalar operator, and it's a dict column
             if (dictColumns.size() == 1 && variableExpr == 0) {
                 return dictColumns.get(0);
@@ -1348,6 +1416,30 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
                     LOW_CARD_AGGREGATE_FUNCTIONS.contains(call.getFnName())) {
                 return mergeWithArray(visitChildren(call, context), call);
             }
+            if (LOW_CARD_STRUCT_FUNCTIONS.contains(call.getFnName())) {
+                Map<String, ColumnRefOperator> fieldMap = Maps.newHashMap();
+                List<ScalarOperator> newChildren = visitChildren(call, context);
+                if (newChildren.stream().allMatch(CONSTANTS::equals)) {
+                    return CONSTANTS;
+                }
+                StructType structType = (StructType) call.getType();
+                for (int i = 0; i < newChildren.size(); ++i) {
+                    ScalarOperator newChild = newChildren.get(i);
+                    if (!CONSTANTS.equals(newChild) && !VARIABLES.equals(newChild)) {
+                        if (newChild.isColumnRef()) {
+                            int idx = FunctionSet.NAMED_STRUCT.equals(call.getFnName()) ? i / 2 : i;
+                            fieldMap.put(structType.getField(idx).getName(), (ColumnRefOperator) newChild);
+                        } else {
+                            saveDictExpr(newChild, call.getChild(i));
+                        }
+                    }
+                }
+                if (!fieldMap.isEmpty()) {
+                    structRefToFieldUseStringRef.put(call, fieldMap);
+                    return call;
+                }
+                return VARIABLES;
+            }
             return forbidden(visitChildren(call, context), call);
         }
 
@@ -1357,10 +1449,38 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
             if (supportLowCardinality(collectionElementOp.getChild(0).getType())) {
                 ScalarOperator result = mergeWithArray(children, collectionElementOp);
                 // for support: `dictExpr(array[0] = 'a')`, not `dictExpr(array[0]) = 'a'`
-                return !result.isConstant() ? collectionElementOp : result;
+                if (result.isConstant()) {
+                    return result;
+                } else if (result == collectionElementOp.getChild(0)) {
+                    return collectionElementOp;
+                } else {
+                    return new CollectionElementOperator(collectionElementOp.getType(),
+                            result,
+                            collectionElementOp.getChild(1),
+                            collectionElementOp.isCheckOutOfBounds()
+                    );
+                }
 
             }
             return forbidden(children, collectionElementOp);
+        }
+
+        @Override
+        public ScalarOperator visitSubfield(SubfieldOperator op, Void context) {
+            ScalarOperator result = mergeWithArray(visitChildren(op, context), op);
+            if (result.equals(CONSTANTS) || result.equals(VARIABLES)) {
+                return result;
+            }
+            ScalarOperator child = op.getChild(0);
+            if (op.getFieldNames().size() == 1 && structRefToFieldUseStringRef.get(child)
+                    .containsKey(op.getFieldNames().get(0))) {
+                return structRefToFieldUseStringRef.get(child).get(op.getFieldNames().get(0));
+            }
+            if (result.isColumnRef()) {
+                saveDictExpr(result, op);
+            }
+            notEncodedExprs.add(op);
+            return VARIABLES;
         }
 
         @Override

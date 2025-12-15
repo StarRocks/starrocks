@@ -635,9 +635,21 @@ public class ScalarOperatorToExpr {
         public Expr visitDictMappingOperator(DictMappingOperator operator, FormatterContext context) {
             // @todo: rewrite ScalarOperatorToExpr process when v1 is deprecated
             final ColumnRefOperator dictColumn = operator.getDictColumn();
-            final SlotRef dictExpr = (SlotRef) dictColumn.accept(this, context);
             final ScalarOperator call = operator.getOriginScalaOperator();
             final ColumnRefOperator key = call.getColumnRefs().get(0);
+            final SlotRef dictExpr;
+            if (context.colRefToExpr.containsKey(dictColumn)) {
+                dictExpr = (SlotRef) dictColumn.accept(this, context);
+            } else {
+                // Since dictColumn is a meta column, it may not be present. BE only needs the columnId for dictionary
+                // Lookup. We create a new slotRef with the columnId.
+                dictExpr = new SlotRef(new SlotDescriptor(
+                        new SlotId(dictColumn.getId()),
+                        dictColumn.getName(),
+                        dictColumn.getType(),
+                        dictColumn.isNullable()));
+                hackTypeNull(dictExpr);
+            }
             // Because we need to rewrite the string column to PlaceHolder when we build DictExpr,
             // the PlaceHolder and the original string column have the same id,
             // so we need to save the original string column first and restore it after we build the expression
