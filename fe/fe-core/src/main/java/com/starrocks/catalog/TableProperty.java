@@ -990,7 +990,11 @@ public class TableProperty implements Writable, GsonPostProcessable {
     }
 
     public int getPartitionRefreshNumber() {
-        return partitionRefreshNumber;
+        if (isSetPartitionRefreshNumber()) {
+            return partitionRefreshNumber;
+        } else {
+            return Config.default_mv_partition_refresh_number;
+        }
     }
 
     public boolean isSetPartitionRefreshStrategy() {
@@ -999,7 +1003,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
     }
 
     public String getPartitionRefreshStrategy() {
-        return Strings.isNullOrEmpty(partitionRefreshStrategy) ? Config.default_mv_partition_refresh_strategy
+        return isSetPartitionRefreshStrategy() ? Config.default_mv_partition_refresh_strategy
                 : partitionRefreshStrategy;
     }
 
