@@ -90,7 +90,17 @@ CREATE TABLE if not exists variant_test_cases (
     'format-version' = '3'  
 );
 
-shell: ossutil64 sync ./sql/test_iceberg/data/variant_query_1/ oss://${oss_bucket}/test_iceberg_variant_query_1/${uuid0}/variant_query_1/ > /dev/null
+shell: ossutil64 cp ./sql/test_iceberg/data/variant_query_1/data/00000-0-3f040690-719d-4a7c-aa99-f1ce04647eb9-0-00001.parquet oss://${oss_bucket}/test_iceberg_variant_query_1/${uuid0}/variant_query_1/data/00000-0-3f040690-719d-4a7c-aa99-f1ce04647eb9-0-00001.parquet > /dev/null
+shell: ossutil64 cp ./sql/test_iceberg/data/variant_query_1/data/00001-1-3f040690-719d-4a7c-aa99-f1ce04647eb9-0-00001.parquet oss://${oss_bucket}/test_iceberg_variant_query_1/${uuid0}/variant_query_1/data/00001-1-3f040690-719d-4a7c-aa99-f1ce04647eb9-0-00001.parquet > /dev/null
+shell: ossutil64 cp ./sql/test_iceberg/data/variant_query_1/data/00002-2-3f040690-719d-4a7c-aa99-f1ce04647eb9-0-00001.parquet oss://${oss_bucket}/test_iceberg_variant_query_1/${uuid0}/variant_query_1/data/00002-2-3f040690-719d-4a7c-aa99-f1ce04647eb9-0-00001.parquet > /dev/null
+shell: ossutil64 cp ./sql/test_iceberg/data/variant_query_1/data/00003-3-3f040690-719d-4a7c-aa99-f1ce04647eb9-0-00001.parquet oss://${oss_bucket}/test_iceberg_variant_query_1/${uuid0}/variant_query_1/data/00003-3-3f040690-719d-4a7c-aa99-f1ce04647eb9-0-00001.parquet > /dev/null
+shell: ossutil64 cp ./sql/test_iceberg/data/variant_query_1/data/00004-4-3f040690-719d-4a7c-aa99-f1ce04647eb9-0-00001.parquet oss://${oss_bucket}/test_iceberg_variant_query_1/${uuid0}/variant_query_1/data/00004-4-3f040690-719d-4a7c-aa99-f1ce04647eb9-0-00001.parquet > /dev/null
+shell: ossutil64 cp ./sql/test_iceberg/data/variant_query_1/data/00005-5-3f040690-719d-4a7c-aa99-f1ce04647eb9-0-00001.parquet oss://${oss_bucket}/test_iceberg_variant_query_1/${uuid0}/variant_query_1/data/00005-5-3f040690-719d-4a7c-aa99-f1ce04647eb9-0-00001.parquet > /dev/null
+shell: ossutil64 cp ./sql/test_iceberg/data/variant_query_1/data/00006-6-3f040690-719d-4a7c-aa99-f1ce04647eb9-0-00001.parquet oss://${oss_bucket}/test_iceberg_variant_query_1/${uuid0}/variant_query_1/data/00006-6-3f040690-719d-4a7c-aa99-f1ce04647eb9-0-00001.parquet > /dev/null
+shell: ossutil64 cp ./sql/test_iceberg/data/variant_query_1/data/00007-7-3f040690-719d-4a7c-aa99-f1ce04647eb9-0-00001.parquet oss://${oss_bucket}/test_iceberg_variant_query_1/${uuid0}/variant_query_1/data/00007-7-3f040690-719d-4a7c-aa99-f1ce04647eb9-0-00001.parquet > /dev/null
+shell: ossutil64 cp ./sql/test_iceberg/data/variant_query_1/data/00008-8-3f040690-719d-4a7c-aa99-f1ce04647eb9-0-00001.parquet oss://${oss_bucket}/test_iceberg_variant_query_1/${uuid0}/variant_query_1/data/00008-8-3f040690-719d-4a7c-aa99-f1ce04647eb9-0-00001.parquet > /dev/null
+shell: ossutil64 cp ./sql/test_iceberg/data/variant_query_1/data/00009-9-3f040690-719d-4a7c-aa99-f1ce04647eb9-0-00001.parquet oss://${oss_bucket}/test_iceberg_variant_query_1/${uuid0}/variant_query_1/data/00009-9-3f040690-719d-4a7c-aa99-f1ce04647eb9-0-00001.parquet > /dev/null
+
 alter table variant_test_cases execute add_files(location='oss://${oss_bucket}/test_iceberg_variant_query_1/${uuid0}/variant_query_1/data/00000-0-3f040690-719d-4a7c-aa99-f1ce04647eb9-0-00001.parquet', file_format='parquet');
 alter table variant_test_cases execute add_files(location='oss://${oss_bucket}/test_iceberg_variant_query_1/${uuid0}/variant_query_1/data/00001-1-3f040690-719d-4a7c-aa99-f1ce04647eb9-0-00001.parquet', file_format='parquet');
 alter table variant_test_cases execute add_files(location='oss://${oss_bucket}/test_iceberg_variant_query_1/${uuid0}/variant_query_1/data/00002-2-3f040690-719d-4a7c-aa99-f1ce04647eb9-0-00001.parquet', file_format='parquet');
@@ -537,11 +547,11 @@ SELECT
     'Roundtrip validation for all complex types' as validation_type,
     'Single transaction INSERT for all test data' as data_integrity;
 
--- Show test scenario distribution
+-- Show test scenario distribution (deterministic order for GROUP_CONCAT)
 SELECT
     test_scenario,
-    COUNT(*) as row_count,
-    GROUP_CONCAT(DISTINCT test_case) as test_cases
+    COUNT(*) AS row_count,
+    GROUP_CONCAT(DISTINCT test_case ORDER BY test_case SEPARATOR ',') AS test_cases
 FROM variant_test_cases
 GROUP BY test_scenario
 ORDER BY test_scenario;
