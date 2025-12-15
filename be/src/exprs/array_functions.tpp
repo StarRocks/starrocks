@@ -159,7 +159,7 @@ private:
 
         size_t chunk_size = columns[0]->size();
         ColumnPtr src_column = ColumnHelper::unpack_and_duplicate_const_column(chunk_size, columns[0]);
-        ColumnPtr dest_column_data = nullptr;
+        MutableColumnPtr dest_column_data = nullptr;
         ColumnPtr dest_column = nullptr;
 
         if constexpr (lt_is_decimal<LT>) {
@@ -177,10 +177,9 @@ private:
             const auto* src_nullable_column = down_cast<const NullableColumn*>(src_column.get());
             const auto* src_data_column = down_cast<const ArrayColumn*>(src_nullable_column->data_column_raw_ptr());
             auto src_null_data = src_nullable_column->immutable_null_column_data();
-            auto dest_column_imm = NullableColumn::create(
-                    ArrayColumn::create(dest_column_data, UInt32Column::create(src_data_column->offsets())),
+            auto dest_column_mut = NullableColumn::create(
+                    ArrayColumn::create(std::move(dest_column_data), UInt32Column::create(src_data_column->offsets())),
                     NullColumn::create());
-            MutableColumnPtr dest_column_mut = dest_column_imm->clone();
 
             auto& dest_nullable_column = down_cast<NullableColumn&>(*dest_column_mut->as_mutable_raw_ptr());
             auto& dest_null_data = dest_nullable_column.null_column_data();
@@ -203,9 +202,8 @@ private:
             }
         } else {
             const auto* src_data_column = down_cast<const ArrayColumn*>(src_column.get());
-            auto dest_column_imm =
-                    ArrayColumn::create(dest_column_data, UInt32Column::create(src_data_column->offsets()));
-            MutableColumnPtr dest_column_mut = dest_column_imm->clone();
+            auto dest_column_mut =
+                    ArrayColumn::create(std::move(dest_column_data), UInt32Column::create(src_data_column->offsets()));
 
             auto* dest_data_column = down_cast<ArrayColumn*>(dest_column_mut->as_mutable_raw_ptr());
             for (size_t i = 0; i < chunk_size; i++) {
@@ -376,7 +374,7 @@ private:
         const NullColumn* src_null_column = ColumnHelper::get_null_column(&column);
 
         if (src_null_column != nullptr) {
-            result_null_column = ColumnHelper::as_column<UInt8Column>(src_null_column->clone());
+            result_null_column = ColumnHelper::as_column<UInt8Column>(std::move(*src_null_column).mutate());
         }
 
         DCHECK(src_data_column->elements_column()->is_nullable());
@@ -823,7 +821,7 @@ public:
         }
 
         ColumnPtr src_column = ColumnHelper::unpack_and_duplicate_const_column(chunk_size, columns[0]);
-        ColumnPtr dest_column = src_column->clone();
+        MutableColumnPtr dest_column = std::move(*src_column).mutate();
 
         if (dest_column->is_nullable()) {
             _reverse_array_column(down_cast<NullableColumn*>(dest_column->as_mutable_raw_ptr())->data_column_raw_ptr(),
@@ -1749,125 +1747,125 @@ inline size_t calculate_accurate_step_count(
     return 0;
 }
 
-#define DEFINE_ARRAY_GENERATE_FN(NAME, TIME_UNIT)                                                                  \
-    template <LogicalType LType, LogicalType ResultType>                                                           \
-    static StatusOr<ColumnPtr> array_generate_function_##NAME(FunctionContext* ctx, const Columns& columns) {      \
-        RETURN_IF_COLUMNS_ONLY_NULL(columns);                                                                      \
-        RETURN_IF(columns.size() != 4, Status::InvalidArgument("expect 4 arguments"));                             \
-                                                                                                                   \
-        auto num_rows = columns[0]->size();                                                                        \
-                                                                                                                   \
-        NullColumn::MutablePtr nulls;                                                                              \
-        for (auto& column : columns) {                                                                             \
-            if (column->has_null()) {                                                                              \
-                const auto* nullable_column = down_cast<const NullableColumn*>(column.get());                      \
-                if (nulls == nullptr) {                                                                            \
-                    nulls = NullColumn::static_pointer_cast(nullable_column->null_column()->clone());              \
-                } else {                                                                                           \
-                    ColumnHelper::or_two_filters(num_rows, nulls->get_data().data(),                               \
-                                                 nullable_column->immutable_null_column_data().data());            \
-                }                                                                                                  \
-            }                                                                                                      \
-        }                                                                                                          \
-                                                                                                                   \
-        auto array_offsets = UInt32Column::create(0);                                                              \
-        auto array_elements = ColumnHelper::create_column(TypeDescriptor(ResultType), true, false, 0);             \
-                                                                                                                   \
-        auto offsets = array_offsets.get();                                                                        \
-        auto elements = down_cast<NullableColumn*>(array_elements.get());                                          \
-                                                                                                                   \
-        offsets->reserve(num_rows + 1);                                                                            \
-        offsets->append(0);                                                                                        \
-                                                                                                                   \
-        auto all_const_cols = columns[0]->is_constant() && columns[1]->is_constant() && columns[2]->is_constant(); \
-        auto num_rows_to_process = all_const_cols ? 1 : num_rows;                                                  \
-                                                                                                                   \
-        auto* data_column = elements->data_column_raw_ptr();                                                       \
-        auto* null_column = elements->null_column_raw_ptr();                                                       \
-        ColumnViewer<LType> start_viewer = ColumnViewer<LType>(columns[0]);                                        \
-        ColumnViewer<LType> stop_viewer = ColumnViewer<LType>(columns[1]);                                         \
-        ColumnViewer<TYPE_INT> step_viewer = ColumnViewer<TYPE_INT>(columns[2]);                                   \
-                                                                                                                   \
-        size_t total_elements = 0;                                                                                 \
-        for (size_t cur_row = 0; cur_row < num_rows_to_process; cur_row++) {                                       \
-            if (nulls && nulls->get_data()[cur_row]) {                                                             \
-                continue;                                                                                          \
-            }                                                                                                      \
-            auto start = start_viewer.value(cur_row);                                                              \
-            auto stop = stop_viewer.value(cur_row);                                                                \
-            auto step = step_viewer.value(cur_row);                                                                \
-                                                                                                                   \
-            if (step == 0 || !start.is_valid_non_strict() || !stop.is_valid_non_strict()) {                        \
-                continue;                                                                                          \
-            }                                                                                                      \
-                                                                                                                   \
-            size_t accurate_count = calculate_accurate_step_count<LType, TIME_UNIT>(start, stop, step);            \
-            total_elements += accurate_count;                                                                      \
-        }                                                                                                          \
-                                                                                                                   \
-        TRY_CATCH_BAD_ALLOC(data_column->reserve(total_elements));                                                 \
-                                                                                                                   \
-        size_t total_elements_num = 0;                                                                             \
-        for (size_t cur_row = 0; cur_row < num_rows_to_process; cur_row++) {                                       \
-            if (nulls && nulls->get_data()[cur_row]) {                                                             \
-                offsets->append(offsets->get_data().back());                                                       \
-                continue;                                                                                          \
-            }                                                                                                      \
-                                                                                                                   \
-            auto start = start_viewer.value(cur_row);                                                              \
-            auto stop = stop_viewer.value(cur_row);                                                                \
-            auto step = step_viewer.value(cur_row);                                                                \
-                                                                                                                   \
-            if (step == 0 || !start.is_valid_non_strict() || !stop.is_valid_non_strict()) {                        \
-                offsets->append(offsets->get_data().back());                                                       \
-                continue;                                                                                          \
-            }                                                                                                      \
-                                                                                                                   \
-            bool is_forward = (start <= stop);                                                                     \
-            int32_t actual_step = is_forward ? step : -step;                                                       \
-                                                                                                                   \
-            using ValueType = std::conditional_t<LType == TYPE_DATE, DateValue, TimestampValue>;                   \
-            ValueType current = start;                                                                             \
-            while (true) {                                                                                         \
-                if (is_forward) {                                                                                  \
-                    if (current > stop) break;                                                                     \
-                } else {                                                                                           \
-                    if (current < stop) break;                                                                     \
-                }                                                                                                  \
-                                                                                                                   \
-                data_column->append_datum(current);                                                                \
-                total_elements_num++;                                                                              \
-                                                                                                                   \
-                ValueType next = current.template add<TIME_UNIT>(actual_step);                                     \
-                                                                                                                   \
-                if (!next.is_valid_non_strict()) break;                                                            \
-                                                                                                                   \
-                if (next == current) break;                                                                        \
-                                                                                                                   \
-                current = next;                                                                                    \
-            }                                                                                                      \
-                                                                                                                   \
-            offsets->append(total_elements_num);                                                                   \
-        }                                                                                                          \
-                                                                                                                   \
-        null_column->get_data().resize(total_elements_num, 0);                                                     \
-        CHECK_EQ(offsets->get_data().back(), elements->size());                                                    \
-                                                                                                                   \
-        auto dst = ArrayColumn::create(std::move(array_elements), std::move(array_offsets));                       \
-                                                                                                                   \
-        if (all_const_cols) {                                                                                      \
-            if (nulls && nulls->is_null(0)) {                                                                      \
-                return ColumnHelper::create_const_null_column(num_rows);                                           \
-            } else {                                                                                               \
-                return ConstColumn::create(std::move(dst), num_rows);                                              \
-            }                                                                                                      \
-        }                                                                                                          \
-                                                                                                                   \
-        if (nulls == nullptr) {                                                                                    \
-            return std::move(dst);                                                                                 \
-        } else {                                                                                                   \
-            return NullableColumn::create(std::move(dst), std::move(nulls));                                       \
-        }                                                                                                          \
+#define DEFINE_ARRAY_GENERATE_FN(NAME, TIME_UNIT)                                                                   \
+    template <LogicalType LType, LogicalType ResultType>                                                            \
+    static StatusOr<ColumnPtr> array_generate_function_##NAME(FunctionContext* ctx, const Columns& columns) {       \
+        RETURN_IF_COLUMNS_ONLY_NULL(columns);                                                                       \
+        RETURN_IF(columns.size() != 4, Status::InvalidArgument("expect 4 arguments"));                              \
+                                                                                                                    \
+        auto num_rows = columns[0]->size();                                                                         \
+                                                                                                                    \
+        NullColumn::MutablePtr nulls;                                                                               \
+        for (auto& column : columns) {                                                                              \
+            if (column->has_null()) {                                                                               \
+                const auto* nullable_column = down_cast<const NullableColumn*>(column.get());                       \
+                if (nulls == nullptr) {                                                                             \
+                    nulls = NullColumn::static_pointer_cast(std::move(*(nullable_column->null_column())).mutate()); \
+                } else {                                                                                            \
+                    ColumnHelper::or_two_filters(num_rows, nulls->get_data().data(),                                \
+                                                 nullable_column->immutable_null_column_data().data());             \
+                }                                                                                                   \
+            }                                                                                                       \
+        }                                                                                                           \
+                                                                                                                    \
+        auto array_offsets = UInt32Column::create(0);                                                               \
+        auto array_elements = ColumnHelper::create_column(TypeDescriptor(ResultType), true, false, 0);              \
+                                                                                                                    \
+        auto offsets = array_offsets.get();                                                                         \
+        auto elements = down_cast<NullableColumn*>(array_elements.get());                                           \
+                                                                                                                    \
+        offsets->reserve(num_rows + 1);                                                                             \
+        offsets->append(0);                                                                                         \
+                                                                                                                    \
+        auto all_const_cols = columns[0]->is_constant() && columns[1]->is_constant() && columns[2]->is_constant();  \
+        auto num_rows_to_process = all_const_cols ? 1 : num_rows;                                                   \
+                                                                                                                    \
+        auto* data_column = elements->data_column_raw_ptr();                                                        \
+        auto* null_column = elements->null_column_raw_ptr();                                                        \
+        ColumnViewer<LType> start_viewer = ColumnViewer<LType>(columns[0]);                                         \
+        ColumnViewer<LType> stop_viewer = ColumnViewer<LType>(columns[1]);                                          \
+        ColumnViewer<TYPE_INT> step_viewer = ColumnViewer<TYPE_INT>(columns[2]);                                    \
+                                                                                                                    \
+        size_t total_elements = 0;                                                                                  \
+        for (size_t cur_row = 0; cur_row < num_rows_to_process; cur_row++) {                                        \
+            if (nulls && nulls->get_data()[cur_row]) {                                                              \
+                continue;                                                                                           \
+            }                                                                                                       \
+            auto start = start_viewer.value(cur_row);                                                               \
+            auto stop = stop_viewer.value(cur_row);                                                                 \
+            auto step = step_viewer.value(cur_row);                                                                 \
+                                                                                                                    \
+            if (step == 0 || !start.is_valid_non_strict() || !stop.is_valid_non_strict()) {                         \
+                continue;                                                                                           \
+            }                                                                                                       \
+                                                                                                                    \
+            size_t accurate_count = calculate_accurate_step_count<LType, TIME_UNIT>(start, stop, step);             \
+            total_elements += accurate_count;                                                                       \
+        }                                                                                                           \
+                                                                                                                    \
+        TRY_CATCH_BAD_ALLOC(data_column->reserve(total_elements));                                                  \
+                                                                                                                    \
+        size_t total_elements_num = 0;                                                                              \
+        for (size_t cur_row = 0; cur_row < num_rows_to_process; cur_row++) {                                        \
+            if (nulls && nulls->get_data()[cur_row]) {                                                              \
+                offsets->append(offsets->get_data().back());                                                        \
+                continue;                                                                                           \
+            }                                                                                                       \
+                                                                                                                    \
+            auto start = start_viewer.value(cur_row);                                                               \
+            auto stop = stop_viewer.value(cur_row);                                                                 \
+            auto step = step_viewer.value(cur_row);                                                                 \
+                                                                                                                    \
+            if (step == 0 || !start.is_valid_non_strict() || !stop.is_valid_non_strict()) {                         \
+                offsets->append(offsets->get_data().back());                                                        \
+                continue;                                                                                           \
+            }                                                                                                       \
+                                                                                                                    \
+            bool is_forward = (start <= stop);                                                                      \
+            int32_t actual_step = is_forward ? step : -step;                                                        \
+                                                                                                                    \
+            using ValueType = std::conditional_t<LType == TYPE_DATE, DateValue, TimestampValue>;                    \
+            ValueType current = start;                                                                              \
+            while (true) {                                                                                          \
+                if (is_forward) {                                                                                   \
+                    if (current > stop) break;                                                                      \
+                } else {                                                                                            \
+                    if (current < stop) break;                                                                      \
+                }                                                                                                   \
+                                                                                                                    \
+                data_column->append_datum(current);                                                                 \
+                total_elements_num++;                                                                               \
+                                                                                                                    \
+                ValueType next = current.template add<TIME_UNIT>(actual_step);                                      \
+                                                                                                                    \
+                if (!next.is_valid_non_strict()) break;                                                             \
+                                                                                                                    \
+                if (next == current) break;                                                                         \
+                                                                                                                    \
+                current = next;                                                                                     \
+            }                                                                                                       \
+                                                                                                                    \
+            offsets->append(total_elements_num);                                                                    \
+        }                                                                                                           \
+                                                                                                                    \
+        null_column->get_data().resize(total_elements_num, 0);                                                      \
+        CHECK_EQ(offsets->get_data().back(), elements->size());                                                     \
+                                                                                                                    \
+        auto dst = ArrayColumn::create(std::move(array_elements), std::move(array_offsets));                        \
+                                                                                                                    \
+        if (all_const_cols) {                                                                                       \
+            if (nulls && nulls->is_null(0)) {                                                                       \
+                return ColumnHelper::create_const_null_column(num_rows);                                            \
+            } else {                                                                                                \
+                return ConstColumn::create(std::move(dst), num_rows);                                               \
+            }                                                                                                       \
+        }                                                                                                           \
+                                                                                                                    \
+        if (nulls == nullptr) {                                                                                     \
+            return std::move(dst);                                                                                  \
+        } else {                                                                                                    \
+            return NullableColumn::create(std::move(dst), std::move(nulls));                                        \
+        }                                                                                                           \
     }
 
 // Generate functions for all supported time units (lowercase names)
@@ -1998,7 +1996,7 @@ public:
                 if (column->has_null()) {
                     const auto* nullable_column = down_cast<const NullableColumn*>(column.get());
                     if (nulls == nullptr) {
-                        nulls = NullColumn::static_pointer_cast(nullable_column->null_column()->clone());
+                        nulls = NullColumn::static_pointer_cast(std::move(*(nullable_column->null_column())).mutate());
                     } else {
                         ColumnHelper::or_two_filters(num_rows, nulls->get_data().data(),
                                                      nullable_column->immutable_null_column_data().data());
@@ -2201,7 +2199,7 @@ public:
 
         // wrap nullable and const column for result
         if (is_nullable_array) {
-            result_column = NullableColumn::create(std::move(result_column), array_null_column->clone());
+            result_column = NullableColumn::create(std::move(result_column), std::move(*array_null_column).mutate());
             result_column->check_or_die();
         }
         if (is_const_array && is_const_target) {

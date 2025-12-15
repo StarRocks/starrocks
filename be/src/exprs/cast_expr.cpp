@@ -420,7 +420,7 @@ ColumnPtr cast_int_from_string_fn(ColumnPtr& column) {
     auto& res_data = res_data_column->get_data();
     if (column->is_nullable()) {
         const auto* input_column = down_cast<const NullableColumn*>(column.get());
-        auto null_column_ptr = input_column->null_column()->clone();
+        auto null_column_ptr = std::move(*(input_column->null_column())).mutate();
         auto* null_column = down_cast<NullColumn*>(null_column_ptr->as_mutable_raw_ptr());
         const auto* data_column = down_cast<const BinaryColumn*>(input_column->data_column_raw_ptr());
         auto& null_data = null_column->get_data();
@@ -888,7 +888,7 @@ static ColumnPtr cast_from_string_to_datetime_fn(ColumnPtr& column) {
         const auto* input_column = down_cast<const NullableColumn*>(column.get());
         const auto* data_column = down_cast<const BinaryColumn*>(input_column->data_column_raw_ptr());
 
-        auto null_column_ptr = input_column->null_column()->clone();
+        auto null_column_ptr = std::move(*(input_column->null_column())).mutate();
         auto* null_column = down_cast<NullColumn*>(null_column_ptr->as_mutable_raw_ptr());
         auto& null_data = null_column->get_data();
 

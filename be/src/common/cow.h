@@ -250,10 +250,6 @@ protected:
     // trigger clone-on-write, deep clone if the data is shared with others, otherwise shadow clone.
     MutablePtr try_mutate() const {
         uint32_t ref_count = this->use_count();
-#ifndef NDEBUG
-        DLOG(INFO) << "[Cow] trigger COW: " << this << ", use_count=" << ref_count << ", try to "
-                   << (ref_count > 1 ? "deep" : "shadow") << " clone";
-#endif
         if (ref_count > 1) {
             return derived()->clone();
         } else {
@@ -280,10 +276,11 @@ public:
     // cast the data as mutable ptr if it's mutable no matter it's mutable or immutable.
     // NOTE:  ptr's use_count will be added by 1, and this is not safe because the data may be shared with others.
     // DCHECK added to catch potential misuse in debug builds.
+    // DROPPED: because it's not safe to use, it may break COW semantics.
     MutablePtr as_mutable_ptr() const {
 #ifndef NDEBUG
         uint32_t ref_count = use_count();
-        if (ref_count > 2) {
+        if (ref_count > 1) {
             DLOG(INFO) << "[Cow] as_mutable_ptr() called on heavily shared object (use_count=" << ref_count
                        << "). This may be unsafe! Consider using try_mutate() for proper COW semantics.";
         }
@@ -297,16 +294,7 @@ public:
     // - Object lifetime is guaranteed (reference won't outlive the object)
     // - High performance is needed for frequent access
     // - The modification is local and temporary
-    Derived* as_mutable_raw_ptr() const {
-#ifndef NDEBUG
-        uint32_t ref_count = use_count();
-        if (ref_count > 2) {
-            DLOG(INFO) << "[Cow] as_mutable_raw_ptr() called on heavily shared object (use_count=" << ref_count
-                       << "). This may break COW semantics! Consider using try_mutate() instead.";
-        }
-#endif
-        return const_cast<Derived*>(derived());
-    }
+    Derived* as_mutable_raw_ptr() const { return const_cast<Derived*>(derived()); }
 
     // Get mutable reference without reference counting overhead.
     Derived& as_mutable_ref() const { return *as_mutable_raw_ptr(); }

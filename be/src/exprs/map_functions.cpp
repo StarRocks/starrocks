@@ -74,14 +74,14 @@ StatusOr<ColumnPtr> MapFunctions::map_from_arrays(FunctionContext* context, cons
         NullColumn::MutablePtr null_column;
         if (keys_null != nullptr) {
             if (values_null != nullptr) {
-                null_column = NullColumn::static_pointer_cast(keys_null->clone());
+                null_column = NullColumn::static_pointer_cast(std::move(*keys_null).mutate());
                 ColumnHelper::or_two_filters(num_rows, null_column->get_data().data(),
                                              values_null->immutable_data().data());
             } else {
-                null_column = NullColumn::static_pointer_cast(keys_null->clone());
+                null_column = NullColumn::static_pointer_cast(std::move(*keys_null).mutate());
             }
         } else {
-            null_column = NullColumn::static_pointer_cast(values_null->clone());
+            null_column = NullColumn::static_pointer_cast(std::move(*values_null).mutate());
         }
         // check and construct offset column
         auto& null_bits = null_column->get_data();
@@ -158,12 +158,13 @@ StatusOr<ColumnPtr> MapFunctions::map_keys(FunctionContext* context, const Colum
     auto arg0 = ColumnHelper::unpack_and_duplicate_const_column(columns[0]->size(), columns[0]);
     const auto* col_map = down_cast<const MapColumn*>(ColumnHelper::get_data_column(arg0.get()));
     const auto& map_keys = col_map->keys_column();
-    auto map_keys_array = ArrayColumn::create(map_keys->clone(), UInt32Column::create(col_map->offsets()));
+    auto map_keys_array = ArrayColumn::create(std::move(*map_keys).mutate(), UInt32Column::create(col_map->offsets()));
 
     if (arg0->has_null()) {
         return NullableColumn::create(
                 std::move(map_keys_array),
-                NullColumn::static_pointer_cast(down_cast<const NullableColumn*>(arg0.get())->null_column()->clone()));
+                NullColumn::static_pointer_cast(
+                        std::move(*down_cast<const NullableColumn*>(arg0.get())->null_column()).mutate()));
     } else {
         return map_keys_array;
     }
@@ -177,12 +178,14 @@ StatusOr<ColumnPtr> MapFunctions::map_values(FunctionContext* context, const Col
 
     const auto* col_map = down_cast<const MapColumn*>(ColumnHelper::get_data_column(arg0.get()));
     const auto& map_values = col_map->values_column();
-    auto map_values_array = ArrayColumn::create(map_values->clone(), UInt32Column::create(col_map->offsets()));
+    auto map_values_array =
+            ArrayColumn::create(std::move(*map_values).mutate(), UInt32Column::create(col_map->offsets()));
 
     if (arg0->has_null()) {
         return NullableColumn::create(
                 std::move(map_values_array),
-                NullColumn::static_pointer_cast(down_cast<const NullableColumn*>(arg0.get())->null_column()->clone()));
+                NullColumn::static_pointer_cast(
+                        std::move(*down_cast<const NullableColumn*>(arg0.get())->null_column()).mutate()));
     } else {
         return map_values_array;
     }
@@ -204,8 +207,8 @@ StatusOr<ColumnPtr> MapFunctions::map_entries(FunctionContext* context, const Co
 
     // Construct StructColumn with two fields: key and value
     Columns struct_fields;
-    struct_fields.emplace_back(map_keys->clone());
-    struct_fields.emplace_back(map_values->clone());
+    struct_fields.emplace_back(std::move(*map_keys).mutate());
+    struct_fields.emplace_back(std::move(*map_values).mutate());
 
     // Provide field names to avoid anonymous struct check failure
     std::vector<std::string> field_names = {"key", "value"};
@@ -218,7 +221,8 @@ StatusOr<ColumnPtr> MapFunctions::map_entries(FunctionContext* context, const Co
     if (arg0->has_null()) {
         return NullableColumn::create(
                 std::move(result_array),
-                NullColumn::static_pointer_cast(down_cast<const NullableColumn*>(arg0.get())->null_column()->clone()));
+                NullColumn::static_pointer_cast(
+                        std::move(*down_cast<const NullableColumn*>(arg0.get())->null_column()).mutate()));
     } else {
         return result_array;
     }
@@ -383,14 +387,15 @@ StatusOr<ColumnPtr> MapFunctions::distinct_map_keys(FunctionContext* context, co
             }
         }
     } else { // avoid changing original map column
-        new_keys = keys->clone();
-        new_values = values->clone();
+        new_keys = std::move(*keys).mutate();
+        new_values = std::move(*values).mutate();
     }
     auto map = MapColumn::create(std::move(new_keys), std::move(new_values), std::move(new_offsets));
     if (arg0->has_null()) {
         return NullableColumn::create(
                 std::move(map),
-                NullColumn::static_pointer_cast(down_cast<const NullableColumn*>(arg0.get())->null_column()->clone()));
+                NullColumn::static_pointer_cast(
+                        std::move(*down_cast<const NullableColumn*>(arg0.get())->null_column()).mutate()));
     }
     return map;
 }
@@ -404,7 +409,7 @@ static inline std::tuple<NullColumn::Ptr, const Column*, const Column*, const UI
     if (map->is_nullable()) {
         auto nullable = down_cast<const NullableColumn*>(map.get());
         map_col = down_cast<const MapColumn*>(nullable->data_column().get());
-        map_null = nullable->null_column();
+        map_null = NullColumn::static_pointer_cast(std::move(*nullable->null_column()).mutate());
     } else {
         map_null = NullColumn::create(input->size(), 0);
         map_col = down_cast<const MapColumn*>(map.get());
@@ -520,7 +525,7 @@ StatusOr<ColumnPtr> MapFunctions::map_concat(FunctionContext* context, const Col
     }
 
     auto map_column = MapColumn::create(std::move(dest_keys), std::move(dest_values),
-                                        UInt32Column::static_pointer_cast(dest_offsets->as_mutable_ptr()));
+                                        UInt32Column::static_pointer_cast(std::move(*dest_offsets).mutate()));
     return NullableColumn::create(std::move(map_column), std::move(dest_null));
 }
 

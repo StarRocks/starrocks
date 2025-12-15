@@ -353,7 +353,7 @@ void ChunkHelper::padding_char_column(const starrocks::TabletSchemaCSPtr& tschem
 
     if (field.is_nullable()) {
         auto* nullable_column = down_cast<NullableColumn*>(column);
-        auto null_column = NullColumn::static_pointer_cast(nullable_column->null_column()->as_mutable_ptr());
+        auto null_column = NullColumn::static_pointer_cast(std::move(*nullable_column->null_column()).mutate());
         auto new_column = NullableColumn::create(std::move(new_binary), std::move(null_column));
         new_column->swap_column(*column);
     } else {

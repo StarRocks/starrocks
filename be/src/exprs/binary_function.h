@@ -276,7 +276,7 @@ public:
             NullColumn::MutablePtr null_flags;
             if (data->is_nullable()) {
                 auto nullable_column = ColumnHelper::as_raw_column<NullableColumn>(data);
-                null_flags = NullColumn::static_pointer_cast(nullable_column->null_column()->as_mutable_ptr());
+                null_flags = NullColumn::static_pointer_cast(std::move(*nullable_column->null_column()).mutate());
             } else {
                 null_flags = RunTimeColumnType<TYPE_NULL>::create();
                 null_flags->resize(data->size());
@@ -366,7 +366,7 @@ public:
 
         ColumnPtr produce_null = PRODUCE_NULL_FN::template evaluate<LType, RType, TYPE_NULL>(data1, data2);
 
-        NullColumn::MutablePtr null_result = ColumnHelper::as_column<NullColumn>(produce_null->as_mutable_ptr());
+        NullColumn::MutablePtr null_result = ColumnHelper::as_column<NullColumn>(std::move(*produce_null).mutate());
         FunctionHelper::union_produce_nullable_column(v1, v2, &null_result);
 
         ColumnPtr data_result = FN::template evaluate<LType, RType, ResultType>(data1, data2);

@@ -86,6 +86,25 @@ Chunk::Chunk(Columns columns, SlotHashMap slot_map, ChunkExtraDataPtr extra_data
     // when use _slot_id_to_index, we don't need to rebuild_cid_index
 }
 
+Chunk::Chunk(MutableChunk&& other)
+        : _columns(ColumnHelper::to_columns(std::move(other._columns))),
+          _schema(std::move(other._schema)),
+          _extra_data(std::move(other._extra_data)) {
+    _slot_id_to_index = std::move(other._slot_id_to_index);
+    _cid_to_index = std::move(other._cid_to_index);
+    check_or_die();
+}
+
+Chunk& Chunk::operator=(MutableChunk&& other) {
+    _columns = ColumnHelper::to_columns(std::move(other._columns));
+    _schema = std::move(other._schema);
+    _extra_data = std::move(other._extra_data);
+    _slot_id_to_index = std::move(other._slot_id_to_index);
+    _cid_to_index = std::move(other._cid_to_index);
+    check_or_die();
+    return *this;
+}
+
 void Chunk::reset() {
     for (auto& c : _columns) {
         c->as_mutable_raw_ptr()->reset_column();
@@ -486,6 +505,488 @@ void Chunk::unpack_and_duplicate_const_columns() {
             update_column_by_index(std::move(unpack_column), i);
         }
     }
+}
+
+MutableChunk::MutableChunk() {
+    _slot_id_to_index.reserve(4);
+}
+
+Status MutableChunk::upgrade_if_overflow() {
+    for (auto& column : _columns) {
+        auto ret = column->upgrade_if_overflow();
+        if (!ret.ok()) {
+            return ret.status();
+        } else if (ret.value() != nullptr) {
+            column = std::move(ret.value());
+        }
+    }
+    return Status::OK();
+}
+
+Status MutableChunk::downgrade() {
+    for (auto& column : _columns) {
+        auto ret = column->downgrade();
+        if (!ret.ok()) {
+            return ret.status();
+        } else if (ret.value() != nullptr) {
+            column = std::move(ret.value());
+        }
+    }
+    return Status::OK();
+}
+
+bool MutableChunk::has_large_column() const {
+    for (const auto& column : _columns) {
+        if (column != nullptr && column->has_large_column()) {
+            return true;
+        }
+    }
+    return false;
+}
+
+MutableChunk::MutableChunk(MutableColumns columns, SchemaPtr schema)
+        : MutableChunk(std::move(columns), std::move(schema), nullptr) {}
+
+MutableChunk::MutableChunk(MutableColumns columns, SlotHashMap slot_map)
+        : MutableChunk(std::move(columns), std::move(slot_map), nullptr) {}
+
+MutableChunk::MutableChunk(MutableColumns columns, SchemaPtr schema, ChunkExtraDataPtr extra_data)
+        : _columns(std::move(columns)), _schema(std::move(schema)), _extra_data(std::move(extra_data)) {
+    _cid_to_index.reserve(std::max<size_t>(1, _columns.size() * 2));
+    _slot_id_to_index.reserve(std::max<size_t>(1, _columns.size() * 2));
+    rebuild_cid_index();
+    check_or_die();
+}
+
+MutableChunk::MutableChunk(MutableColumns columns, SlotHashMap slot_map, ChunkExtraDataPtr extra_data)
+        : _columns(std::move(columns)), _slot_id_to_index(std::move(slot_map)), _extra_data(std::move(extra_data)) {
+    // when use _slot_id_to_index, we don't need to rebuild_cid_index
+}
+
+void MutableChunk::reset() {
+    for (auto& c : _columns) {
+        c->reset_column();
+    }
+    _delete_state = DEL_NOT_SATISFIED;
+    _extra_data.reset();
+}
+
+void MutableChunk::swap_chunk(MutableChunk& other) {
+    _columns.swap(other._columns);
+    _schema.swap(other._schema);
+    _cid_to_index.swap(other._cid_to_index);
+    _slot_id_to_index.swap(other._slot_id_to_index);
+    std::swap(_delete_state, other._delete_state);
+    _extra_data.swap(other._extra_data);
+}
+
+void MutableChunk::set_num_rows(size_t count) {
+    for (auto& c : _columns) {
+        c->resize(count);
+    }
+}
+
+void MutableChunk::update_rows(const Chunk& src, const uint32_t* indexes) {
+    DCHECK(_columns.size() == src.num_columns());
+    for (int i = 0; i < _columns.size(); i++) {
+        _columns[i]->update_rows(*src.columns()[i], indexes);
+    }
+}
+
+std::string_view MutableChunk::get_column_name(size_t idx) const {
+    DCHECK_LT(idx, _columns.size());
+    return _schema->field(idx)->name();
+}
+
+void MutableChunk::append_column(MutableColumnPtr&& column, const FieldPtr& field) {
+    DCHECK(!_cid_to_index.contains(field->id()));
+    _cid_to_index[field->id()] = _columns.size();
+    _columns.emplace_back(std::move(column));
+    _schema->append(field);
+    check_or_die();
+}
+
+void MutableChunk::append_vector_column(MutableColumnPtr&& column, const FieldPtr& field, SlotId slot_id) {
+    DCHECK(!_cid_to_index.contains(field->id()));
+    _cid_to_index[field->id()] = _columns.size();
+    _slot_id_to_index[slot_id] = _columns.size();
+    _columns.emplace_back(std::move(column));
+    _schema->append(field);
+    check_or_die();
+}
+
+void MutableChunk::append_column(MutableColumnPtr&& column, SlotId slot_id) {
+    DCHECK(!_slot_id_to_index.contains(slot_id)) << "slot_id:" + std::to_string(slot_id) << std::endl;
+    if (UNLIKELY(_slot_id_to_index.contains(slot_id))) {
+        throw std::runtime_error(fmt::format("slot_id {} already exists", slot_id));
+    }
+    _slot_id_to_index[slot_id] = _columns.size();
+    _columns.emplace_back(std::move(column));
+    check_or_die();
+}
+
+void MutableChunk::update_column(MutableColumnPtr&& column, SlotId slot_id) {
+    _columns[_slot_id_to_index[slot_id]] = std::move(column);
+    check_or_die();
+}
+
+void MutableChunk::update_column_by_index(MutableColumnPtr&& column, size_t idx) {
+    _columns[idx] = std::move(column);
+    check_or_die();
+}
+
+void MutableChunk::append_or_update_column(MutableColumnPtr&& column, SlotId slot_id) {
+    if (_slot_id_to_index.contains(slot_id)) {
+        _columns[_slot_id_to_index[slot_id]] = std::move(column);
+    } else {
+        _slot_id_to_index[slot_id] = _columns.size();
+        _columns.emplace_back(std::move(column));
+        // only check it when append a new column
+        check_or_die();
+    }
+}
+
+void MutableChunk::insert_column(size_t idx, MutableColumnPtr&& column, const FieldPtr& field) {
+    DCHECK_LT(idx, _columns.size());
+    _columns.emplace(_columns.begin() + idx, std::move(column));
+    _schema->insert(idx, field);
+    rebuild_cid_index();
+    check_or_die();
+}
+
+void MutableChunk::append_default() {
+    for (auto& column : _columns) {
+        column->append_default();
+    }
+}
+
+void MutableChunk::remove_column_by_index(size_t idx) {
+    DCHECK_LT(idx, _columns.size());
+    _columns.erase(_columns.begin() + idx);
+    if (_schema != nullptr) {
+        _schema->remove(idx);
+        rebuild_cid_index();
+    }
+}
+
+void MutableChunk::remove_column_by_slot_id(SlotId slot_id) {
+    auto iter = _slot_id_to_index.find(slot_id);
+    if (iter != _slot_id_to_index.end()) {
+        auto idx = iter->second;
+        _columns.erase(_columns.begin() + idx);
+        if (_schema != nullptr) {
+            _schema->remove(idx);
+            rebuild_cid_index();
+        }
+        _slot_id_to_index.erase(iter);
+        for (auto& tmp_iter : _slot_id_to_index) {
+            if (tmp_iter.second > idx) {
+                tmp_iter.second--;
+            }
+        }
+    }
+}
+
+void MutableChunk::remove_columns_by_index(const std::vector<size_t>& indexes) {
+    DCHECK(std::is_sorted(indexes.begin(), indexes.end()));
+    for (size_t i = indexes.size(); i > 0; i--) {
+        _columns.erase(_columns.begin() + indexes[i - 1]);
+    }
+    if (_schema != nullptr && !indexes.empty()) {
+        for (size_t i = indexes.size(); i > 0; i--) {
+            _schema->remove(indexes[i - 1]);
+        }
+        rebuild_cid_index();
+    }
+}
+
+void MutableChunk::rebuild_cid_index() {
+    _cid_to_index.clear();
+    for (size_t i = 0; i < _schema->num_fields(); i++) {
+        _cid_to_index[_schema->field(i)->id()] = i;
+    }
+}
+
+MutableChunkPtr MutableChunk::clone_empty() const {
+    return clone_empty(num_rows());
+}
+
+MutableChunkPtr MutableChunk::clone_empty(size_t size) const {
+    if (_columns.size() == _slot_id_to_index.size()) {
+        return clone_empty_with_slot(size);
+    } else {
+        return clone_empty_with_schema(size);
+    }
+}
+
+MutableChunkPtr MutableChunk::clone_empty_with_slot() const {
+    return clone_empty_with_slot(num_rows());
+}
+
+MutableChunkPtr MutableChunk::clone_empty_with_slot(size_t size) const {
+    DCHECK_EQ(_columns.size(), _slot_id_to_index.size());
+    MutableColumns columns(_slot_id_to_index.size());
+    for (size_t i = 0; i < _slot_id_to_index.size(); i++) {
+        auto mutable_col = _columns[i]->clone_empty();
+        mutable_col->reserve(size);
+        columns[i] = std::move(mutable_col);
+    }
+    return std::make_shared<MutableChunk>(std::move(columns), _slot_id_to_index);
+}
+
+MutableChunkPtr MutableChunk::clone_empty_with_schema() const {
+    return clone_empty_with_schema(num_rows());
+}
+
+MutableChunkPtr MutableChunk::clone_empty_with_schema(size_t size) const {
+    MutableColumns columns(_columns.size());
+    for (size_t i = 0; i < _columns.size(); ++i) {
+        auto mutable_col = _columns[i]->clone_empty();
+        mutable_col->reserve(size);
+        columns[i] = std::move(mutable_col);
+    }
+    return std::make_shared<MutableChunk>(std::move(columns), _schema);
+}
+
+MutableChunkPtr MutableChunk::clone_unique() const {
+    MutableChunkPtr chunk = clone_empty(0);
+    for (size_t idx = 0; idx < _columns.size(); idx++) {
+        chunk->_columns[idx] = _columns[idx]->clone();
+    }
+    chunk->_owner_info = _owner_info;
+    chunk->_extra_data = std::move(_extra_data);
+    chunk->check_or_die();
+    return chunk;
+}
+
+void MutableChunk::append_selective(const Chunk& src, const uint32_t* indexes, uint32_t from, uint32_t size) {
+    DCHECK_EQ(_columns.size(), src.columns().size());
+    for (size_t i = 0; i < _columns.size(); ++i) {
+        _columns[i]->append_selective(*src.columns()[i].get(), indexes, from, size);
+    }
+}
+
+void MutableChunk::rolling_append_selective(Chunk& src, const uint32_t* indexes, uint32_t from, uint32_t size) {
+    size_t num_columns = _columns.size();
+    DCHECK_EQ(num_columns, src.columns().size());
+    for (size_t i = 0; i < num_columns; ++i) {
+        _columns[i]->append_selective(*src.columns()[i].get(), indexes, from, size);
+        src.columns()[i].reset();
+    }
+}
+
+size_t MutableChunk::filter(const Buffer<uint8_t>& selection, bool force) {
+    if (!force && SIMD::count_zero(selection) == 0) {
+        return num_rows();
+    }
+    for (auto& column : _columns) {
+        column->filter(selection);
+    }
+    return num_rows();
+}
+
+size_t MutableChunk::filter_range(const Buffer<uint8_t>& selection, size_t from, size_t to) {
+    for (auto& column : _columns) {
+        column->filter_range(selection, from, to);
+    }
+    return num_rows();
+}
+
+DatumTuple MutableChunk::get(size_t n) const {
+    DatumTuple res;
+    res.reserve(_columns.size());
+    for (const auto& column : _columns) {
+        res.append(column->get(n));
+    }
+    return res;
+}
+
+size_t MutableChunk::memory_usage() const {
+    size_t memory_usage = 0;
+    for (const auto& column : _columns) {
+        memory_usage += column->memory_usage();
+    }
+    return memory_usage;
+}
+
+size_t MutableChunk::container_memory_usage() const {
+    size_t container_memory_usage = 0;
+    for (const auto& column : _columns) {
+        container_memory_usage += column->container_memory_usage();
+    }
+    return container_memory_usage;
+}
+
+size_t MutableChunk::reference_memory_usage(size_t from, size_t size) const {
+    DCHECK_LE(from + size, num_rows()) << "Range error";
+    size_t reference_memory_usage = 0;
+    for (const auto& column : _columns) {
+        reference_memory_usage += column->reference_memory_usage(from, size);
+    }
+    return reference_memory_usage;
+}
+
+size_t MutableChunk::bytes_usage() const {
+    return bytes_usage(0, num_rows());
+}
+
+size_t MutableChunk::bytes_usage(size_t from, size_t size) const {
+    DCHECK_LE(from + size, num_rows()) << "Range error";
+    size_t bytes_usage = 0;
+    for (const auto& column : _columns) {
+        bytes_usage += column->byte_size(from, size);
+    }
+    return bytes_usage;
+}
+
+#ifndef NDEBUG
+void MutableChunk::check_or_die() {
+    if (_columns.empty()) {
+        CHECK(_schema == nullptr || _schema->fields().empty());
+        CHECK(_cid_to_index.empty());
+        CHECK(_slot_id_to_index.empty());
+    } else {
+        for (const MutableColumnPtr& c : _columns) {
+            if (!c->is_constant()) {
+                CHECK_EQ(num_rows(), c->size());
+            }
+            c->check_or_die();
+        }
+    }
+
+    if (_schema != nullptr) {
+        for (const auto& kv : _cid_to_index) {
+            ColumnId cid = kv.first;
+            size_t idx = kv.second;
+            CHECK_LT(idx, _columns.size());
+            CHECK_LT(idx, _schema->num_fields());
+            CHECK_EQ(cid, _schema->field(idx)->id());
+        }
+    }
+}
+#endif
+
+std::string MutableChunk::debug_row(size_t index) const {
+    std::stringstream os;
+    os << "[";
+    for (size_t col = 0; col < _columns.size() - 1; ++col) {
+        os << _columns[col]->debug_item(index);
+        os << ", ";
+    }
+    os << _columns[_columns.size() - 1]->debug_item(index) << "]";
+    return os.str();
+}
+
+std::string MutableChunk::rebuild_csv_row(size_t index, const std::string& delimiter) const {
+    std::stringstream os;
+    for (size_t col = 0; col < _columns.size() - 1; ++col) {
+        os << _columns[col]->debug_item(index);
+        os << delimiter;
+    }
+    if (_columns.size() > 0) {
+        os << _columns[_columns.size() - 1]->debug_item(index);
+    }
+    return os.str();
+}
+
+std::string MutableChunk::debug_columns() const {
+    std::stringstream os;
+    os << "nullable[";
+    for (size_t col = 0; col < _columns.size() - 1; ++col) {
+        os << _columns[col]->is_nullable();
+        os << ", ";
+    }
+    os << _columns[_columns.size() - 1]->is_nullable() << "]";
+    os << " const[";
+    for (size_t col = 0; col < _columns.size() - 1; ++col) {
+        os << _columns[col]->is_constant();
+        os << ", ";
+    }
+    os << _columns[_columns.size() - 1]->is_constant() << "]";
+    return os.str();
+}
+
+void MutableChunk::merge(MutableChunk&& src) {
+    DCHECK_EQ(src.num_rows(), num_rows());
+    for (auto& it : src._slot_id_to_index) {
+        SlotId slot_id = it.first;
+        size_t index = it.second;
+        MutableColumnPtr& c = src._columns[index];
+        append_column(std::move(c), slot_id);
+    }
+}
+
+void MutableChunk::append(const Chunk& src, size_t offset, size_t count) {
+    DCHECK_EQ(num_columns(), src.num_columns());
+    const size_t n = src.num_columns();
+    for (size_t i = 0; i < n; i++) {
+        _columns[i]->append(*src.get_column_by_index(i), offset, count);
+    }
+}
+
+void MutableChunk::append_safe(const Chunk& src, size_t offset, size_t count) {
+    DCHECK_EQ(num_columns(), src.num_columns());
+    const size_t n = src.num_columns();
+    size_t cur_rows = num_rows();
+    for (size_t i = 0; i < n; i++) {
+        auto& column = _columns[i];
+        if (column->size() == cur_rows) {
+            column->append(*src.get_column_by_index(i), offset, count);
+        }
+    }
+}
+
+void MutableChunk::reserve(size_t cap) {
+    for (auto& c : _columns) {
+        c->reserve(cap);
+    }
+}
+
+bool MutableChunk::has_const_column() const {
+    for (const auto& c : _columns) {
+        if (c->is_constant()) {
+            return true;
+        }
+    }
+    return false;
+}
+
+void MutableChunk::unpack_and_duplicate_const_columns() {
+    size_t num_rows = this->num_rows();
+    for (size_t i = 0; i < _columns.size(); i++) {
+        auto& column = _columns[i];
+        if (column->is_constant()) {
+            auto unpack_column = ColumnHelper::unpack_and_duplicate_const_column(num_rows, std::move(column));
+            _columns[i] = std::move(unpack_column);
+        }
+    }
+}
+
+Chunk MutableChunk::to_chunk() {
+    return Chunk(std::move(*this));
+}
+
+MutableChunk::MutableChunk(Chunk&& other)
+        : _columns(ColumnHelper::to_mutable_columns(std::move((other._columns)))),
+          _schema(std::move(other._schema)),
+          _extra_data(std::move(other._extra_data)) {
+    _slot_id_to_index = std::move(other._slot_id_to_index);
+    _cid_to_index = std::move(other._cid_to_index);
+    _delete_state = other._delete_state;
+    _owner_info = other._owner_info;
+    check_or_die();
+}
+
+MutableChunk& MutableChunk::operator=(Chunk&& other) {
+    _columns = ColumnHelper::to_mutable_columns(std::move((other._columns)));
+    _schema = std::move(other._schema);
+    _extra_data = std::move(other._extra_data);
+    _slot_id_to_index = std::move(other._slot_id_to_index);
+    _cid_to_index = std::move(other._cid_to_index);
+    _delete_state = other._delete_state;
+    _owner_info = other._owner_info;
+    check_or_die();
+    return *this;
 }
 
 } // namespace starrocks

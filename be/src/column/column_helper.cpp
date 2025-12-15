@@ -561,7 +561,7 @@ MutableColumns ColumnHelper::to_mutable_columns(const Columns& columns) {
     MutableColumns mutable_columns;
     mutable_columns.reserve(columns.size());
     for (auto& column : columns) {
-        mutable_columns.emplace_back(column->as_mutable_ptr());
+        mutable_columns.emplace_back(std::move(*column).mutate());
     }
     return mutable_columns;
 }
@@ -595,6 +595,30 @@ std::tuple<UInt32Column::Ptr, ColumnPtr, NullColumnPtr> ColumnHelper::unpack_arr
     auto null_column = down_cast<const NullableColumn*>(array_column->elements_column().get())->null_column();
     auto offsets_column = array_column->offsets_column();
     return {offsets_column, elements_column, null_column};
+}
+
+ColumnPtr ColumnHelper::unpack_and_duplicate_const_column(size_t chunk_size, const ColumnPtr& column) {
+    if (column->is_constant()) {
+        auto* const_column = as_raw_column<ConstColumn>(column->as_mutable_raw_ptr());
+        const_column->assign(chunk_size, 0);
+        return const_column->data_column();
+    } else {
+        return column;
+    }
+}
+
+MutableColumnPtr ColumnHelper::unpack_and_duplicate_const_column(size_t chunk_size, ColumnPtr&& column) {
+    return unpack_and_duplicate_const_column(chunk_size, Column::mutate(std::move(column)));
+}
+
+MutableColumnPtr ColumnHelper::unpack_and_duplicate_const_column(size_t chunk_size, MutableColumnPtr&& column) {
+    if (column->is_constant()) {
+        auto* const_column = down_cast<ConstColumn*>(column.get());
+        const_column->assign(chunk_size, 0);
+        return const_column->data_column()->as_mutable_ptr();
+    } else {
+        return std::move(column);
+    }
 }
 
 template <typename T, bool avx512f>

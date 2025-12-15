@@ -19,6 +19,7 @@
 #include "column/binary_column.h"
 #include "column/chunk_extra_data.h"
 #include "column/column_helper.h"
+#include "column/datum_tuple.h"
 #include "column/field.h"
 #include "column/fixed_length_column.h"
 #include "column/vectorized_fwd.h"
@@ -57,10 +58,10 @@ public:
         return column;
     }
 
-    Columns make_columns(size_t num_cols, size_t size = 100) {
+    Columns make_columns(size_t num_cols, size_t size = 100, size_t start = -1) {
         Columns columns;
         for (size_t i = 0; i < num_cols; i++) {
-            columns.emplace_back(make_column(i, size));
+            columns.emplace_back(make_column(start == -1 ? i : start, size));
         }
         return columns;
     }
@@ -86,6 +87,22 @@ public:
         }
         auto extra_data_cols = make_columns(num_cols, size);
         return std::make_shared<ChunkExtraColumnsData>(std::move(extra_data_metas), std::move(extra_data_cols));
+    }
+
+    MutableColumnPtr make_mutable_column(size_t start, size_t size = 100) {
+        auto column = FixedLengthColumn<int32_t>::create();
+        for (int i = 0; i < size; i++) {
+            column->append(start + i);
+        }
+        return column;
+    }
+
+    MutableColumns make_mutable_columns(size_t num_cols, size_t size = 100, size_t start = -1) {
+        MutableColumns columns;
+        for (size_t i = 0; i < num_cols; i++) {
+            columns.emplace_back(make_mutable_column(start == -1 ? i : start, size));
+        }
+        return columns;
     }
 };
 
@@ -445,6 +462,743 @@ TEST_F(ChunkTest, test_reset_with_extra_data) {
     ASSERT_EQ(2, chunk1->num_columns());
     ASSERT_EQ(0, chunk1->num_rows());
     ASSERT_TRUE(!chunk1->has_extra_data());
+}
+
+// ==================== MutableChunk Tests ====================
+
+// NOLINTNEXTLINE
+TEST_F(ChunkTest, test_mutable_chunk_construct_default) {
+    auto mutable_chunk = std::make_shared<MutableChunk>();
+    ASSERT_FALSE(mutable_chunk->has_rows());
+    ASSERT_FALSE(mutable_chunk->has_columns());
+    ASSERT_EQ(0, mutable_chunk->num_columns());
+    ASSERT_EQ(0, mutable_chunk->num_rows());
+}
+
+// NOLINTNEXTLINE
+TEST_F(ChunkTest, test_mutable_chunk_construct_with_schema) {
+    auto mutable_columns = make_mutable_columns(2);
+    auto schema = make_schema(2);
+    auto mutable_chunk = std::make_shared<MutableChunk>(std::move(mutable_columns), schema);
+
+    ASSERT_TRUE(mutable_chunk->has_rows());
+    ASSERT_TRUE(mutable_chunk->has_columns());
+    ASSERT_EQ(2, mutable_chunk->num_columns());
+    ASSERT_EQ(100, mutable_chunk->num_rows());
+    ASSERT_NE(nullptr, mutable_chunk->schema());
+}
+
+// NOLINTNEXTLINE
+TEST_F(ChunkTest, test_mutable_chunk_construct_with_slot_map) {
+    auto mutable_columns = make_mutable_columns(2);
+    MutableChunk::SlotHashMap slot_map;
+    slot_map[1] = 0;
+    slot_map[2] = 1;
+    auto mutable_chunk = std::make_shared<MutableChunk>(std::move(mutable_columns), std::move(slot_map));
+
+    ASSERT_TRUE(mutable_chunk->has_rows());
+    ASSERT_EQ(2, mutable_chunk->num_columns());
+    ASSERT_TRUE(mutable_chunk->is_slot_exist(1));
+    ASSERT_TRUE(mutable_chunk->is_slot_exist(2));
+    ASSERT_EQ(0, mutable_chunk->get_index_by_slot_id(1));
+    ASSERT_EQ(1, mutable_chunk->get_index_by_slot_id(2));
+}
+
+// NOLINTNEXTLINE
+TEST_F(ChunkTest, test_mutable_chunk_construct_with_extra_data) {
+    auto mutable_columns = make_mutable_columns(2);
+    auto schema = make_schema(2);
+    auto extra_data = make_extra_data(2);
+    auto mutable_chunk = std::make_shared<MutableChunk>(std::move(mutable_columns), schema, extra_data);
+
+    ASSERT_TRUE(mutable_chunk->has_extra_data());
+    ASSERT_EQ(2, mutable_chunk->num_columns());
+}
+
+// NOLINTNEXTLINE
+TEST_F(ChunkTest, test_mutable_chunk_from_chunk) {
+    auto chunk = std::make_unique<Chunk>(make_columns(2), make_schema(2));
+    auto mutable_chunk = std::make_shared<MutableChunk>(std::move(*chunk));
+
+    ASSERT_EQ(2, mutable_chunk->num_columns());
+    ASSERT_EQ(100, mutable_chunk->num_rows());
+    ASSERT_NE(nullptr, mutable_chunk->schema());
+}
+
+// NOLINTNEXTLINE
+TEST_F(ChunkTest, test_mutable_chunk_to_chunk) {
+    auto mutable_columns = make_mutable_columns(2);
+    auto schema = make_schema(2);
+    auto mutable_chunk = std::make_shared<MutableChunk>(std::move(mutable_columns), schema);
+
+    auto chunk = std::move(*mutable_chunk).to_chunk();
+    ASSERT_EQ(2, chunk.num_columns());
+    ASSERT_EQ(100, chunk.num_rows());
+}
+
+// NOLINTNEXTLINE
+TEST_F(ChunkTest, test_mutable_chunk_basic_operations) {
+    auto mutable_columns = make_mutable_columns(2);
+    auto schema = make_schema(2);
+    auto mutable_chunk = std::make_shared<MutableChunk>(std::move(mutable_columns), schema);
+
+    ASSERT_TRUE(mutable_chunk->has_rows());
+    ASSERT_FALSE(mutable_chunk->is_empty());
+    ASSERT_TRUE(mutable_chunk->has_columns());
+    ASSERT_EQ(2, mutable_chunk->num_columns());
+    ASSERT_EQ(100, mutable_chunk->num_rows());
+}
+
+// NOLINTNEXTLINE
+TEST_F(ChunkTest, test_mutable_chunk_set_num_rows) {
+    auto mutable_columns = make_mutable_columns(2);
+    auto schema = make_schema(2);
+    auto mutable_chunk = std::make_shared<MutableChunk>(std::move(mutable_columns), schema);
+
+    mutable_chunk->set_num_rows(50);
+    ASSERT_EQ(50, mutable_chunk->num_rows());
+
+    mutable_chunk->set_num_rows(150);
+    ASSERT_EQ(150, mutable_chunk->num_rows());
+}
+
+// NOLINTNEXTLINE
+TEST_F(ChunkTest, test_mutable_chunk_get_column_by_index) {
+    auto mutable_columns = make_mutable_columns(2);
+    auto schema = make_schema(2);
+    auto mutable_chunk = std::make_shared<MutableChunk>(std::move(mutable_columns), schema);
+
+    const auto& col0 = mutable_chunk->get_column_by_index(0);
+    auto* fixed_col = ColumnHelper::as_raw_column<FixedLengthColumn<int32_t>>(col0.get());
+    ASSERT_EQ(100, fixed_col->size());
+    ASSERT_EQ(0, fixed_col->get(0).get_int32());
+
+    auto& col1 = mutable_chunk->get_column_by_index(1);
+    auto* fixed_col1 = ColumnHelper::as_raw_column<FixedLengthColumn<int32_t>>(col1.get());
+    ASSERT_EQ(1, fixed_col1->get(0).get_int32());
+}
+
+// NOLINTNEXTLINE
+TEST_F(ChunkTest, test_mutable_chunk_get_column_by_slot_id) {
+    auto mutable_columns = make_mutable_columns(2);
+    MutableChunk::SlotHashMap slot_map;
+    slot_map[1] = 0;
+    slot_map[2] = 1;
+    auto mutable_chunk = std::make_shared<MutableChunk>(std::move(mutable_columns), std::move(slot_map));
+
+    const auto& col1 = mutable_chunk->get_column_by_slot_id(1);
+    auto* fixed_col = ColumnHelper::as_raw_column<FixedLengthColumn<int32_t>>(col1.get());
+    ASSERT_EQ(0, fixed_col->get(0).get_int32());
+
+    auto& col2 = mutable_chunk->get_column_by_slot_id(2);
+    auto* fixed_col2 = ColumnHelper::as_raw_column<FixedLengthColumn<int32_t>>(col2.get());
+    ASSERT_EQ(1, fixed_col2->get(0).get_int32());
+}
+
+// NOLINTNEXTLINE
+TEST_F(ChunkTest, test_mutable_chunk_get_column_by_name) {
+    auto mutable_columns = make_mutable_columns(2);
+    auto schema = make_schema(2);
+    auto mutable_chunk = std::make_shared<MutableChunk>(std::move(mutable_columns), schema);
+
+    const auto& col = mutable_chunk->get_column_by_name("c1");
+    auto* fixed_col = ColumnHelper::as_raw_column<FixedLengthColumn<int32_t>>(col.get());
+    check_column(fixed_col, 1);
+}
+
+// NOLINTNEXTLINE
+TEST_F(ChunkTest, test_mutable_chunk_get_column_by_id) {
+    auto mutable_columns = make_mutable_columns(2);
+    auto schema = make_schema(2);
+    auto mutable_chunk = std::make_shared<MutableChunk>(std::move(mutable_columns), schema);
+
+    const auto& col = mutable_chunk->get_column_by_id(1);
+    auto* fixed_col = ColumnHelper::as_raw_column<FixedLengthColumn<int32_t>>(col.get());
+    check_column(fixed_col, 1);
+}
+
+// NOLINTNEXTLINE
+TEST_F(ChunkTest, test_mutable_chunk_append_column_with_field) {
+    auto mutable_columns = make_mutable_columns(2);
+    auto schema = make_schema(2);
+    auto mutable_chunk = std::make_shared<MutableChunk>(std::move(mutable_columns), schema);
+
+    auto new_col = make_mutable_column(2);
+    mutable_chunk->append_column(std::move(new_col), make_field(2));
+
+    ASSERT_EQ(3, mutable_chunk->num_columns());
+    const auto& col = mutable_chunk->get_column_by_index(2);
+    auto* fixed_col = ColumnHelper::as_raw_column<FixedLengthColumn<int32_t>>(col.get());
+    check_column(fixed_col, 2);
+}
+
+// NOLINTNEXTLINE
+TEST_F(ChunkTest, test_mutable_chunk_append_column_with_slot_id) {
+    auto mutable_chunk = std::make_shared<MutableChunk>();
+    auto col1 = make_mutable_column(0);
+    auto col2 = make_mutable_column(1);
+
+    mutable_chunk->append_column(std::move(col1), 1);
+    mutable_chunk->append_column(std::move(col2), 2);
+
+    ASSERT_EQ(2, mutable_chunk->num_columns());
+    ASSERT_TRUE(mutable_chunk->is_slot_exist(1));
+    ASSERT_TRUE(mutable_chunk->is_slot_exist(2));
+}
+
+// NOLINTNEXTLINE
+TEST_F(ChunkTest, test_mutable_chunk_insert_column) {
+    auto mutable_columns = make_mutable_columns(2);
+    auto schema = make_schema(2);
+    auto mutable_chunk = std::make_shared<MutableChunk>(std::move(mutable_columns), schema);
+
+    auto new_col = make_mutable_column(2);
+    mutable_chunk->insert_column(1, std::move(new_col), make_field(2));
+
+    ASSERT_EQ(3, mutable_chunk->num_columns());
+    const auto& col0 = mutable_chunk->get_column_by_index(0);
+    const auto& col1 = mutable_chunk->get_column_by_index(1);
+    const auto& col2 = mutable_chunk->get_column_by_index(2);
+    auto* fixed_col0 = ColumnHelper::as_raw_column<FixedLengthColumn<int32_t>>(col0.get());
+    auto* fixed_col1 = ColumnHelper::as_raw_column<FixedLengthColumn<int32_t>>(col1.get());
+    auto* fixed_col2 = ColumnHelper::as_raw_column<FixedLengthColumn<int32_t>>(col2.get());
+    check_column(fixed_col0, 0);
+    check_column(fixed_col1, 2);
+    check_column(fixed_col2, 1);
+}
+
+// NOLINTNEXTLINE
+TEST_F(ChunkTest, test_mutable_chunk_update_column) {
+    auto mutable_columns = make_mutable_columns(2);
+    MutableChunk::SlotHashMap slot_map;
+    slot_map[1] = 0;
+    slot_map[2] = 1;
+    auto mutable_chunk = std::make_shared<MutableChunk>(std::move(mutable_columns), std::move(slot_map));
+
+    auto new_col = make_mutable_column(100);
+    mutable_chunk->update_column(std::move(new_col), 1);
+
+    const auto& col = mutable_chunk->get_column_by_slot_id(1);
+    auto* fixed_col = ColumnHelper::as_raw_column<FixedLengthColumn<int32_t>>(col.get());
+    check_column(fixed_col, 100);
+}
+
+// NOLINTNEXTLINE
+TEST_F(ChunkTest, test_mutable_chunk_update_column_by_index) {
+    auto mutable_columns = make_mutable_columns(2);
+    auto schema = make_schema(2);
+    auto mutable_chunk = std::make_shared<MutableChunk>(std::move(mutable_columns), schema);
+
+    auto new_col = make_mutable_column(100);
+    mutable_chunk->update_column_by_index(std::move(new_col), 0);
+
+    const auto& col = mutable_chunk->get_column_by_index(0);
+    auto* fixed_col = ColumnHelper::as_raw_column<FixedLengthColumn<int32_t>>(col.get());
+    check_column(fixed_col, 100);
+}
+
+// NOLINTNEXTLINE
+TEST_F(ChunkTest, test_mutable_chunk_append_or_update_column) {
+    auto mutable_chunk = std::make_shared<MutableChunk>();
+    auto col1 = make_mutable_column(0);
+    mutable_chunk->append_or_update_column(std::move(col1), 1);
+
+    ASSERT_EQ(1, mutable_chunk->num_columns());
+    ASSERT_TRUE(mutable_chunk->is_slot_exist(1));
+
+    auto col2 = make_mutable_column(100);
+    mutable_chunk->append_or_update_column(std::move(col2), 1);
+
+    ASSERT_EQ(1, mutable_chunk->num_columns());
+    const auto& col = mutable_chunk->get_column_by_slot_id(1);
+    auto* fixed_col = ColumnHelper::as_raw_column<FixedLengthColumn<int32_t>>(col.get());
+    check_column(fixed_col, 100);
+}
+
+// NOLINTNEXTLINE
+TEST_F(ChunkTest, test_mutable_chunk_remove_column_by_index) {
+    auto mutable_columns = make_mutable_columns(3);
+    auto schema = make_schema(3);
+    auto mutable_chunk = std::make_shared<MutableChunk>(std::move(mutable_columns), schema);
+
+    mutable_chunk->remove_column_by_index(1);
+    ASSERT_EQ(2, mutable_chunk->num_columns());
+
+    const auto& col0 = mutable_chunk->get_column_by_index(0);
+    const auto& col1 = mutable_chunk->get_column_by_index(1);
+    auto* fixed_col0 = ColumnHelper::as_raw_column<FixedLengthColumn<int32_t>>(col0.get());
+    auto* fixed_col1 = ColumnHelper::as_raw_column<FixedLengthColumn<int32_t>>(col1.get());
+    check_column(fixed_col0, 0);
+    check_column(fixed_col1, 2);
+}
+
+// NOLINTNEXTLINE
+TEST_F(ChunkTest, test_mutable_chunk_remove_column_by_slot_id) {
+    auto mutable_columns = make_mutable_columns(3);
+    MutableChunk::SlotHashMap slot_map;
+    slot_map[1] = 0;
+    slot_map[2] = 1;
+    slot_map[3] = 2;
+    auto mutable_chunk = std::make_shared<MutableChunk>(std::move(mutable_columns), std::move(slot_map));
+
+    mutable_chunk->remove_column_by_slot_id(2);
+    ASSERT_EQ(2, mutable_chunk->num_columns());
+    ASSERT_FALSE(mutable_chunk->is_slot_exist(2));
+    ASSERT_TRUE(mutable_chunk->is_slot_exist(1));
+    ASSERT_TRUE(mutable_chunk->is_slot_exist(3));
+}
+
+// NOLINTNEXTLINE
+TEST_F(ChunkTest, test_mutable_chunk_remove_columns_by_index) {
+    auto mutable_columns = make_mutable_columns(4);
+    auto schema = make_schema(4);
+    auto mutable_chunk = std::make_shared<MutableChunk>(std::move(mutable_columns), schema);
+
+    std::vector<size_t> indexes{1, 3};
+    mutable_chunk->remove_columns_by_index(indexes);
+    ASSERT_EQ(2, mutable_chunk->num_columns());
+
+    const auto& col0 = mutable_chunk->get_column_by_index(0);
+    const auto& col1 = mutable_chunk->get_column_by_index(1);
+    auto* fixed_col0 = ColumnHelper::as_raw_column<FixedLengthColumn<int32_t>>(col0.get());
+    auto* fixed_col1 = ColumnHelper::as_raw_column<FixedLengthColumn<int32_t>>(col1.get());
+    check_column(fixed_col0, 0);
+    check_column(fixed_col1, 2);
+}
+
+// NOLINTNEXTLINE
+TEST_F(ChunkTest, test_mutable_chunk_append_default) {
+    auto mutable_columns = make_mutable_columns(2);
+    auto schema = make_schema(2);
+    auto mutable_chunk = std::make_shared<MutableChunk>(std::move(mutable_columns), schema);
+
+    size_t old_size = mutable_chunk->num_rows();
+    mutable_chunk->append_default();
+    ASSERT_EQ(old_size + 1, mutable_chunk->num_rows());
+}
+
+// NOLINTNEXTLINE
+TEST_F(ChunkTest, test_mutable_chunk_clone_empty) {
+    auto mutable_columns = make_mutable_columns(2);
+    auto schema = make_schema(2);
+    auto mutable_chunk = std::make_shared<MutableChunk>(std::move(mutable_columns), schema);
+
+    auto cloned = mutable_chunk->clone_empty();
+    ASSERT_EQ(2, cloned->num_columns());
+    ASSERT_EQ(0, cloned->num_rows());
+    ASSERT_NE(nullptr, cloned->schema());
+}
+
+// NOLINTNEXTLINE
+TEST_F(ChunkTest, test_mutable_chunk_clone_empty_with_size) {
+    auto mutable_columns = make_mutable_columns(2);
+    auto schema = make_schema(2);
+    auto mutable_chunk = std::make_shared<MutableChunk>(std::move(mutable_columns), schema);
+
+    auto cloned = mutable_chunk->clone_empty(200);
+    ASSERT_EQ(2, cloned->num_columns());
+    ASSERT_EQ(0, cloned->num_rows());
+}
+
+// NOLINTNEXTLINE
+TEST_F(ChunkTest, test_mutable_chunk_clone_empty_with_slot) {
+    auto mutable_columns = make_mutable_columns(2);
+    MutableChunk::SlotHashMap slot_map;
+    slot_map[1] = 0;
+    slot_map[2] = 1;
+    auto mutable_chunk = std::make_shared<MutableChunk>(std::move(mutable_columns), std::move(slot_map));
+
+    auto cloned = mutable_chunk->clone_empty_with_slot();
+    ASSERT_EQ(2, cloned->num_columns());
+    ASSERT_EQ(0, cloned->num_rows());
+    ASSERT_TRUE(cloned->is_slot_exist(1));
+    ASSERT_TRUE(cloned->is_slot_exist(2));
+}
+
+// NOLINTNEXTLINE
+TEST_F(ChunkTest, test_mutable_chunk_clone_empty_with_schema) {
+    auto mutable_columns = make_mutable_columns(2);
+    auto schema = make_schema(2);
+    auto mutable_chunk = std::make_shared<MutableChunk>(std::move(mutable_columns), schema);
+
+    auto cloned = mutable_chunk->clone_empty_with_schema();
+    ASSERT_EQ(2, cloned->num_columns());
+    ASSERT_EQ(0, cloned->num_rows());
+    ASSERT_NE(nullptr, cloned->schema());
+}
+
+// NOLINTNEXTLINE
+TEST_F(ChunkTest, test_mutable_chunk_clone_unique) {
+    auto mutable_columns = make_mutable_columns(2);
+    auto schema = make_schema(2);
+    auto mutable_chunk = std::make_shared<MutableChunk>(std::move(mutable_columns), schema);
+
+    auto cloned = mutable_chunk->clone_unique();
+    ASSERT_EQ(2, cloned->num_columns());
+    ASSERT_EQ(100, cloned->num_rows());
+    cloned->check_or_die();
+}
+
+// NOLINTNEXTLINE
+TEST_F(ChunkTest, test_mutable_chunk_append) {
+    auto mutable_columns1 = make_mutable_columns(2, 50);
+    auto schema = make_schema(2);
+    auto mutable_chunk1 = std::make_shared<MutableChunk>(std::move(mutable_columns1), schema);
+
+    auto chunk2 = std::make_unique<Chunk>(make_columns(2, 30), make_schema(2));
+    mutable_chunk1->append(*chunk2);
+
+    ASSERT_EQ(80, mutable_chunk1->num_rows());
+}
+
+// NOLINTNEXTLINE
+TEST_F(ChunkTest, test_mutable_chunk_append_with_offset) {
+    auto mutable_columns1 = make_mutable_columns(2, 50);
+    auto schema = make_schema(2);
+    auto mutable_chunk1 = std::make_shared<MutableChunk>(std::move(mutable_columns1), schema);
+
+    auto chunk2 = std::make_unique<Chunk>(make_columns(2, 30), make_schema(2));
+    mutable_chunk1->append(*chunk2, 10, 20);
+
+    ASSERT_EQ(70, mutable_chunk1->num_rows());
+}
+
+// NOLINTNEXTLINE
+TEST_F(ChunkTest, test_mutable_chunk_append_safe) {
+    auto mutable_columns1 = make_mutable_columns(2, 50);
+    auto schema = make_schema(2);
+    auto mutable_chunk1 = std::make_shared<MutableChunk>(std::move(mutable_columns1), schema);
+
+    auto chunk2 = std::make_unique<Chunk>(make_columns(2, 30), make_schema(2));
+    mutable_chunk1->append_safe(*chunk2);
+
+    ASSERT_EQ(80, mutable_chunk1->num_rows());
+}
+
+// NOLINTNEXTLINE
+TEST_F(ChunkTest, test_mutable_chunk_append_selective) {
+    auto mutable_columns1 = make_mutable_columns(2, 10);
+    auto schema = make_schema(2);
+    auto mutable_chunk1 = std::make_shared<MutableChunk>(std::move(mutable_columns1), schema);
+
+    auto chunk2 = std::make_unique<Chunk>(make_columns(2, 10), make_schema(2));
+    uint32_t indexes[] = {0, 2, 4, 6, 8};
+    mutable_chunk1->append_selective(*chunk2, indexes, 0, 5);
+
+    ASSERT_EQ(15, mutable_chunk1->num_rows());
+}
+
+// NOLINTNEXTLINE
+TEST_F(ChunkTest, test_mutable_chunk_filter) {
+    auto mutable_columns = make_mutable_columns(2, 4);
+    auto schema = make_schema(2);
+    auto mutable_chunk = std::make_shared<MutableChunk>(std::move(mutable_columns), schema);
+
+    Buffer<uint8_t> selection{0, 1, 0, 1};
+    size_t filtered = mutable_chunk->filter(selection);
+    ASSERT_EQ(2, filtered);
+    ASSERT_EQ(2, mutable_chunk->num_rows());
+    mutable_chunk->check_or_die();
+}
+
+// NOLINTNEXTLINE
+TEST_F(ChunkTest, test_mutable_chunk_filter_range) {
+    auto mutable_columns = make_mutable_columns(2, 6);
+    auto schema = make_schema(2);
+    auto mutable_chunk = std::make_shared<MutableChunk>(std::move(mutable_columns), schema);
+
+    Buffer<uint8_t> selection{0, 1, 0, 1, 0, 1};
+    size_t filtered = mutable_chunk->filter_range(selection, 1, 4);
+    ASSERT_EQ(3, filtered);
+    ASSERT_EQ(3, mutable_chunk->num_rows());
+}
+
+// NOLINTNEXTLINE
+TEST_F(ChunkTest, test_mutable_chunk_get) {
+    auto mutable_columns = make_mutable_columns(2);
+    auto schema = make_schema(2);
+    auto mutable_chunk = std::make_shared<MutableChunk>(std::move(mutable_columns), schema);
+
+    auto tuple = mutable_chunk->get(0);
+    ASSERT_EQ(2, tuple.size());
+    ASSERT_EQ(0, tuple[0].get_int32());
+    ASSERT_EQ(1, tuple[1].get_int32());
+}
+
+// NOLINTNEXTLINE
+TEST_F(ChunkTest, test_mutable_chunk_swap_chunk) {
+    auto mutable_columns1 = make_mutable_columns(2);
+    auto schema1 = make_schema(2);
+    auto mutable_chunk1 = std::make_shared<MutableChunk>(std::move(mutable_columns1), schema1);
+    mutable_chunk1->set_delete_state(DEL_PARTIAL_SATISFIED);
+    mutable_chunk1->set_slot_id_to_index(1001, 0);
+
+    auto mutable_columns2 = make_mutable_columns(3);
+    auto schema2 = make_schema(3);
+    auto mutable_chunk2 = std::make_shared<MutableChunk>(std::move(mutable_columns2), schema2);
+    mutable_chunk2->set_delete_state(DEL_NOT_SATISFIED);
+
+    mutable_chunk1->swap_chunk(*mutable_chunk2);
+
+    ASSERT_EQ(3, mutable_chunk1->num_columns());
+    ASSERT_EQ(DEL_NOT_SATISFIED, mutable_chunk1->delete_state());
+    ASSERT_EQ(0, mutable_chunk1->get_slot_id_to_index_map().size());
+
+    ASSERT_EQ(2, mutable_chunk2->num_columns());
+    ASSERT_EQ(DEL_PARTIAL_SATISFIED, mutable_chunk2->delete_state());
+    ASSERT_EQ(1, mutable_chunk2->get_slot_id_to_index_map().size());
+}
+
+// NOLINTNEXTLINE
+TEST_F(ChunkTest, test_mutable_chunk_reset) {
+    auto mutable_columns = make_mutable_columns(2);
+    auto schema = make_schema(2);
+    auto mutable_chunk = std::make_shared<MutableChunk>(std::move(mutable_columns), schema);
+    mutable_chunk->set_delete_state(DEL_PARTIAL_SATISFIED);
+    mutable_chunk->set_slot_id_to_index(1, 0);
+
+    mutable_chunk->reset();
+    ASSERT_EQ(2, mutable_chunk->num_columns());
+    ASSERT_EQ(0, mutable_chunk->num_rows());
+    ASSERT_EQ(DEL_NOT_SATISFIED, mutable_chunk->delete_state());
+}
+
+// NOLINTNEXTLINE
+TEST_F(ChunkTest, test_mutable_chunk_reserve) {
+    auto mutable_columns = make_mutable_columns(2);
+    auto schema = make_schema(2);
+    auto mutable_chunk = std::make_shared<MutableChunk>(std::move(mutable_columns), schema);
+
+    mutable_chunk->reserve(200);
+    // Reserve doesn't change the number of rows, just capacity
+    ASSERT_EQ(100, mutable_chunk->num_rows());
+}
+
+// NOLINTNEXTLINE
+TEST_F(ChunkTest, test_mutable_chunk_memory_usage) {
+    auto mutable_columns = make_mutable_columns(2);
+    auto schema = make_schema(2);
+    auto mutable_chunk = std::make_shared<MutableChunk>(std::move(mutable_columns), schema);
+
+    size_t mem_usage = mutable_chunk->memory_usage();
+    ASSERT_GT(mem_usage, 0);
+
+    size_t container_mem = mutable_chunk->container_memory_usage();
+    ASSERT_GT(container_mem, 0);
+
+    size_t ref_mem = mutable_chunk->reference_memory_usage();
+    ASSERT_GE(ref_mem, 0);
+}
+
+// NOLINTNEXTLINE
+TEST_F(ChunkTest, test_mutable_chunk_bytes_usage) {
+    auto mutable_columns = make_mutable_columns(2);
+    auto schema = make_schema(2);
+    auto mutable_chunk = std::make_shared<MutableChunk>(std::move(mutable_columns), schema);
+
+    size_t bytes = mutable_chunk->bytes_usage();
+    ASSERT_GT(bytes, 0);
+
+    size_t bytes_range = mutable_chunk->bytes_usage(0, 50);
+    ASSERT_GT(bytes_range, 0);
+    ASSERT_LE(bytes_range, bytes);
+}
+
+// NOLINTNEXTLINE
+TEST_F(ChunkTest, test_mutable_chunk_has_const_column) {
+    auto mutable_columns = make_mutable_columns(2);
+    auto schema = make_schema(2);
+    auto mutable_chunk = std::make_shared<MutableChunk>(std::move(mutable_columns), schema);
+
+    ASSERT_FALSE(mutable_chunk->has_const_column());
+}
+
+// NOLINTNEXTLINE
+TEST_F(ChunkTest, test_mutable_chunk_materialized_nullable) {
+    auto col1 = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_INT), true);
+    col1->append_default();
+    auto col2 = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_INT), true);
+    col2->append_default();
+
+    MutableColumns mutable_columns;
+    mutable_columns.push_back(Column::mutate(std::move(col1)));
+    mutable_columns.push_back(Column::mutate(std::move(col2)));
+
+    auto schema = make_schema(2);
+    auto mutable_chunk = std::make_shared<MutableChunk>(std::move(mutable_columns), schema);
+
+    mutable_chunk->materialized_nullable();
+    mutable_chunk->check_or_die();
+}
+
+// NOLINTNEXTLINE
+TEST_F(ChunkTest, test_mutable_chunk_upgrade_if_overflow) {
+    size_t row_count = 1 << 20;
+    auto c1 = BinaryColumn::create();
+    c1->resize(row_count);
+    auto c2 = BinaryColumn::create();
+    for (size_t i = 0; i < row_count; i++) {
+        c2->append(std::to_string(i));
+    }
+
+    MutableColumns mutable_columns;
+    mutable_columns.push_back(Column::mutate(std::move(c1)));
+    mutable_columns.push_back(Column::mutate(std::move(c2)));
+
+    MutableChunk::SlotHashMap slot_map;
+    slot_map[1] = 0;
+    slot_map[2] = 1;
+    auto mutable_chunk = std::make_shared<MutableChunk>(std::move(mutable_columns), std::move(slot_map));
+
+    Status st = mutable_chunk->upgrade_if_overflow();
+    ASSERT_TRUE(st.ok());
+    ASSERT_TRUE(mutable_chunk->get_column_by_slot_id(1)->is_binary());
+    ASSERT_FALSE(mutable_chunk->get_column_by_slot_id(2)->is_large_binary());
+}
+
+// NOLINTNEXTLINE
+TEST_F(ChunkTest, test_mutable_chunk_downgrade) {
+    auto c1 = LargeBinaryColumn::create();
+    c1->append_string("1");
+    auto c2 = LargeBinaryColumn::create();
+    c2->append_string("2");
+
+    MutableColumns mutable_columns;
+    mutable_columns.push_back(Column::mutate(std::move(c1)));
+    mutable_columns.push_back(Column::mutate(std::move(c2)));
+
+    MutableChunk::SlotHashMap slot_map;
+    slot_map[1] = 0;
+    slot_map[2] = 1;
+    auto mutable_chunk = std::make_shared<MutableChunk>(std::move(mutable_columns), std::move(slot_map));
+
+    ASSERT_TRUE(mutable_chunk->has_large_column());
+    auto ret = mutable_chunk->downgrade();
+    ASSERT_TRUE(ret.ok());
+    ASSERT_FALSE(mutable_chunk->has_large_column());
+}
+
+// NOLINTNEXTLINE
+TEST_F(ChunkTest, test_mutable_chunk_has_large_column) {
+    auto c1 = BinaryColumn::create();
+    c1->append_string("1");
+    auto c2 = LargeBinaryColumn::create();
+    c2->append_string("2");
+
+    MutableColumns mutable_columns;
+    mutable_columns.push_back(Column::mutate(std::move(c1)));
+    mutable_columns.push_back(Column::mutate(std::move(c2)));
+
+    MutableChunk::SlotHashMap slot_map;
+    slot_map[1] = 0;
+    slot_map[2] = 1;
+    auto mutable_chunk = std::make_shared<MutableChunk>(std::move(mutable_columns), std::move(slot_map));
+
+    ASSERT_TRUE(mutable_chunk->has_large_column());
+}
+
+// NOLINTNEXTLINE
+TEST_F(ChunkTest, test_mutable_chunk_is_column_nullable) {
+    auto col1 = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_INT), false);
+    auto col2 = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_INT), true);
+
+    MutableColumns mutable_columns;
+    mutable_columns.push_back(Column::mutate(std::move(col1)));
+    mutable_columns.push_back(Column::mutate(std::move(col2)));
+
+    MutableChunk::SlotHashMap slot_map;
+    slot_map[1] = 0;
+    slot_map[2] = 1;
+    auto mutable_chunk = std::make_shared<MutableChunk>(std::move(mutable_columns), std::move(slot_map));
+
+    ASSERT_FALSE(mutable_chunk->is_column_nullable(1));
+    ASSERT_TRUE(mutable_chunk->is_column_nullable(2));
+}
+
+// NOLINTNEXTLINE
+TEST_F(ChunkTest, test_mutable_chunk_with_extra_data) {
+    auto mutable_columns = make_mutable_columns(2);
+    auto schema = make_schema(2);
+    auto extra_data = make_extra_data(2);
+    auto mutable_chunk = std::make_shared<MutableChunk>(std::move(mutable_columns), schema, extra_data);
+
+    ASSERT_TRUE(mutable_chunk->has_extra_data());
+    ASSERT_NE(nullptr, mutable_chunk->get_extra_data());
+
+    auto new_extra_data = make_extra_data(2);
+    mutable_chunk->set_extra_data(new_extra_data);
+    ASSERT_TRUE(mutable_chunk->has_extra_data());
+}
+
+// NOLINTNEXTLINE
+TEST_F(ChunkTest, test_mutable_chunk_get_column_name) {
+    auto mutable_columns = make_mutable_columns(2);
+    auto schema = make_schema(2);
+    auto mutable_chunk = std::make_shared<MutableChunk>(std::move(mutable_columns), schema);
+
+    std::string_view name0 = mutable_chunk->get_column_name(0);
+    ASSERT_EQ("c0", name0);
+
+    std::string_view name1 = mutable_chunk->get_column_name(1);
+    ASSERT_EQ("c1", name1);
+}
+
+// NOLINTNEXTLINE
+TEST_F(ChunkTest, test_mutable_chunk_merge) {
+    auto mutable_columns1 = make_mutable_columns(2, 40, 0);
+    auto schema = make_schema(2);
+    auto mutable_chunk1 = std::make_shared<MutableChunk>(std::move(mutable_columns1), schema);
+
+    auto mutable_columns2 = make_mutable_columns(2, 40, 0);
+    auto mutable_chunk2 = std::make_shared<MutableChunk>(std::move(mutable_columns2), schema);
+
+    mutable_chunk1->merge(std::move(*mutable_chunk2));
+    ASSERT_EQ(40, mutable_chunk1->num_rows());
+    ASSERT_EQ(2, mutable_chunk1->num_columns());
+}
+
+// NOLINTNEXTLINE
+TEST_F(ChunkTest, test_mutable_chunk_rolling_append_selective) {
+    auto mutable_columns1 = make_mutable_columns(2, 10);
+    auto schema = make_schema(2);
+    auto mutable_chunk1 = std::make_shared<MutableChunk>(std::move(mutable_columns1), schema);
+
+    auto chunk2 = std::make_unique<Chunk>(make_columns(2, 10), make_schema(2));
+    uint32_t indexes[] = {0, 2, 4, 6, 8};
+    mutable_chunk1->rolling_append_selective(*chunk2, indexes, 0, 5);
+
+    ASSERT_EQ(15, mutable_chunk1->num_rows());
+}
+
+// NOLINTNEXTLINE
+TEST_F(ChunkTest, test_mutable_chunk_update_rows) {
+    auto mutable_columns = make_mutable_columns(2, 5, 0);
+    auto schema = make_schema(2);
+    auto mutable_chunk = std::make_shared<MutableChunk>(std::move(mutable_columns), schema);
+
+    auto src_chunk = std::make_unique<Chunk>(make_columns(2, 3, 0), make_schema(2));
+    uint32_t indexes[] = {0, 1, 2};
+    mutable_chunk->update_rows(*src_chunk, indexes);
+
+    mutable_chunk->check_or_die();
+    ASSERT_EQ(5, mutable_chunk->num_rows());
+}
+
+// NOLINTNEXTLINE
+TEST_F(ChunkTest, test_mutable_chunk_unpack_and_duplicate_const_columns) {
+    auto const_col = ConstColumn::create(make_column(0, 1), 100);
+    auto normal_col = make_mutable_column(1);
+
+    MutableColumns mutable_columns;
+    mutable_columns.push_back(Column::mutate(std::move(const_col)));
+    mutable_columns.push_back(std::move(normal_col));
+
+    auto schema = make_schema(2);
+    auto mutable_chunk = std::make_shared<MutableChunk>(std::move(mutable_columns), schema);
+
+    mutable_chunk->unpack_and_duplicate_const_columns();
+    mutable_chunk->check_or_die();
+    ASSERT_FALSE(mutable_chunk->has_const_column());
 }
 
 } // namespace starrocks
