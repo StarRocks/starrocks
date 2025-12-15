@@ -31,6 +31,23 @@ struct CompactionCandidateResult {
     bool merge_base_level = false;
 };
 
+struct SizeTieredLevel {
+    std::vector<size_t> fileset_indexes; // indexes into filesets vector
+    int64_t level_size;
+    int64_t total_size;
+    double score;
+
+    SizeTieredLevel(std::vector<size_t> indexes, int64_t ls, int64_t ts, double sc)
+            : fileset_indexes(std::move(indexes)), level_size(ls), total_size(ts), score(sc) {}
+};
+
+struct LevelComparator {
+    bool operator()(const SizeTieredLevel* left, const SizeTieredLevel* right) const {
+        return left->score > right->score ||
+               (left->score == right->score && left->fileset_indexes[0] > right->fileset_indexes[0]);
+    }
+};
+
 class LakePersistentIndexSizeTieredCompactionStrategy {
 public:
     LakePersistentIndexSizeTieredCompactionStrategy() = default;
