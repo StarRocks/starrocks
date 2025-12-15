@@ -120,7 +120,7 @@ public class SqlDigestBlackList {
 
     @VisibleForTesting
     protected void cleanup() {
-        try (LockCloseable ignored = new LockCloseable(rwLock.readLock())) {
+        try (LockCloseable ignored = new LockCloseable(rwLock.writeLock())) {
             sqlDigestBlackList.clear();
         }
     }
