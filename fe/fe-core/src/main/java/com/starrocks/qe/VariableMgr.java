@@ -216,6 +216,20 @@ public class VariableMgr {
         return true;
     }
 
+    private void handleSetWarehouse(ConnectContext connectContext, SessionVariable sessionVariable, Field field, Object value)
+            throws DdlException {
+        final String originalWarehouseName = sessionVariable.getWarehouseName();
+        setParsedValue(sessionVariable, field, value);
+        final String newWarehouseName = sessionVariable.getWarehouseName();
+
+        // after set warehouse, need to reset compute resource
+        if (newWarehouseName != null && newWarehouseName.equalsIgnoreCase(originalWarehouseName)) {
+            connectContext.ensureCurrentComputeResourceAvailable();
+        } else {
+            connectContext.resetComputeResource();
+        }
+    }
+
     private Object parseValue(Class<?> type, String varName, String raw) throws DdlException {
         String v = VariableVarConverters.convert(varName, raw);
         try {
@@ -294,8 +308,8 @@ public class VariableMgr {
     // Input:
     //      sessionVariable: the variable of current session
     //      setVar: variable information that needs to be set
-    public void setSystemVariable(SessionVariable sessionVariable, SystemVariable setVar, boolean onlySetSessionVar)
-            throws DdlException {
+    public void setSystemVariable(SessionVariable sessionVariable, SystemVariable setVar, boolean onlySetSessionVar,
+                                  ConnectContext connectContext) throws DdlException {
         if (SessionVariable.DEPRECATED_VARIABLES.stream().anyMatch(c -> c.equalsIgnoreCase(setVar.getVariable()))) {
             return;
         }
@@ -327,7 +341,20 @@ public class VariableMgr {
         }
 
         // set session variable
+<<<<<<< HEAD
         setValue(sessionVariable, ctx.getField(), value);
+=======
+        if (SessionVariable.WAREHOUSE_NAME.equalsIgnoreCase(attr.name()) && connectContext != null) {
+            handleSetWarehouse(connectContext, sessionVariable, ctx.getField(), parsedVal);
+        } else {
+            setParsedValue(sessionVariable, ctx.getField(), parsedVal);
+        }
+    }
+
+    public void setSystemVariable(SessionVariable sessionVariable, SystemVariable setVar, boolean onlySetSessionVar)
+            throws DdlException {
+        setSystemVariable(sessionVariable, setVar, onlySetSessionVar, null);
+>>>>>>> 04bebb8e81 ([BugFix] Fix usage and record for changing warehouse in inline comment (#66677))
     }
 
     private void setGlobalVariableAndWriteEditLog(VarContext ctx, String name, String value) throws DdlException {
