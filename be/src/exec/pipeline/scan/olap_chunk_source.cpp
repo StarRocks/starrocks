@@ -14,6 +14,7 @@
 
 #include "exec/pipeline/scan/olap_chunk_source.h"
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <string_view>

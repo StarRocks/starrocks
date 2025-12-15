@@ -38,6 +38,19 @@ namespace java com.starrocks.thrift
 include "Types.thrift"
 include "Exprs.thrift"
 
+enum TRowPositionType {
+    ICEBERG_V3_ROW_POSITION,
+}
+
+// used to describe row position for different tables
+struct TRowPositionDescriptor {
+    1: optional TRowPositionType row_position_type;
+    // which node used to do fetch operation
+    2: optional Types.TSlotId row_source_slot;
+    3: optional list<Types.TSlotId> fetch_ref_slots;
+    4: optional list<Types.TSlotId> lookup_ref_slots;
+}
+
 struct TSlotDescriptor {
   1: optional Types.TSlotId id
   2: optional Types.TTupleId parent
