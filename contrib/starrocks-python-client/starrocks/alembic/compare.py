@@ -21,10 +21,10 @@ from alembic.autogenerate import comparators
 from alembic.autogenerate.api import AutogenContext
 from alembic.ddl import DefaultImpl
 from alembic.operations.ops import AlterColumnOp, AlterTableOp, UpgradeOps
-from sqlalchemy import Column, quoted_name
+from sqlalchemy import Column
 from sqlalchemy.engine.reflection import Inspector
 from sqlalchemy.exc import ArgumentError
-from sqlalchemy.sql import schema as sa_schema, sqltypes
+from sqlalchemy.sql import schema as sa_schema, sqltypes, quoted_name
 from sqlalchemy.sql.schema import Table
 from sqlalchemy.util import OrderedSet
 

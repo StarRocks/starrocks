@@ -27,7 +27,8 @@ issues where:
 """
 import logging
 
-from sqlalchemy import Column, Engine, MetaData, Table, text
+from sqlalchemy import Column, MetaData, Table, text
+from sqlalchemy.engine import Engine
 
 from starrocks.datatype import (
     ARRAY,

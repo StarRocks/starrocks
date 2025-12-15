@@ -19,7 +19,8 @@ import time
 from typing import Any, Dict, List, Optional
 
 import pytest
-from sqlalchemy import Column, Engine, Inspector, inspect
+from sqlalchemy import Column, inspect
+from sqlalchemy.engine import Engine, Inspector
 from sqlalchemy.orm import Mapped, declarative_base, mapped_column
 from sqlalchemy.testing.assertions import eq_
 from sqlalchemy.testing.suite import is_true

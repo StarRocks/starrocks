@@ -18,11 +18,11 @@ from typing import Union
 import pytest
 from sqlalchemy import Column, Integer, MetaData, String, Table, inspect, text
 from sqlalchemy.engine import Engine, Inspector
-from sqlalchemy.engine.interfaces import ReflectedColumn
 
 from starrocks.common.params import ColumnAggInfoKey, DialectName
 from starrocks.common.types import ColumnAggType
 from starrocks.datatype import BITMAP, HLL
+from starrocks.engine.interfaces import ReflectedColumn
 from test.conftest_sr import create_test_engine, test_default_schema
 
 

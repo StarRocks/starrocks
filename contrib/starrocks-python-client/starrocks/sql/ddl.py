@@ -14,7 +14,7 @@
 
 from typing import Any, Dict, Optional
 
-from sqlalchemy.sql.ddl import ExecutableDDLElement
+from sqlalchemy.sql.ddl import DDLElement as ExecutableDDLElement  # for 1.4 compatibility
 
 from .schema import MaterializedView, View
 
