@@ -14,11 +14,7 @@
 
 package com.starrocks.qe;
 
-<<<<<<< HEAD
-=======
 import com.starrocks.common.Config;
-import com.starrocks.mysql.MysqlSerializer;
->>>>>>> fa00773fe6 ([BugFix] set ExecTimeout for ANALYZE (backport #66361) (#66680))
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.parser.AstBuilder;
@@ -28,6 +24,7 @@ import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
 
 public class StmtExecutorTest {
 
