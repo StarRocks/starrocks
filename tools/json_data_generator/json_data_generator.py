@@ -248,6 +248,194 @@ class JSONDataGenerator:
         finally:
             if output_file and output != sys.stdout:
                 output.close()
+    
+    def generate_sample_records(self, num_samples: int = 100) -> List[Dict[str, Any]]:
+        """Generate sample records for query generation analysis."""
+        samples = []
+        for _ in range(num_samples):
+            samples.append(self.generate_record())
+        return samples
+
+
+class QueryGenerator:
+    """Generates SQL queries for testing JSON data."""
+    
+    def __init__(self, generator: 'JSONDataGenerator', sample_data: List[Dict[str, Any]]):
+        self.generator = generator
+        self.sample_data = sample_data
+        self.field_schemas = generator.field_schemas
+        self._analyze_sample_data()
+    
+    def _analyze_sample_data(self):
+        """Analyze sample data to extract value distributions for query generation."""
+        self.field_values = {}  # field_name -> list of values
+        
+        for schema in self.field_schemas:
+            values = []
+            for record in self.sample_data:
+                if schema.name in record:
+                    value = record[schema.name]
+                    # Only collect simple values (not nested objects/arrays for filter queries)
+                    if not isinstance(value, (dict, list)):
+                        values.append(value)
+            
+            if values:
+                self.field_values[schema.name] = values
+    
+    def _get_json_extraction_expr(self, field_name: str, field_type: str, json_column: str = "json_data") -> str:
+        """Generate JSON extraction expression using appropriate function based on field type."""
+        json_path = f"$.{field_name}"
+        
+        if field_type == 'int':
+            return f"get_json_int({json_column}, '{json_path}')"
+        elif field_type == 'string':
+            return f"get_json_string({json_column}, '{json_path}')"
+        elif field_type == 'bool':
+            # For boolean, use get_json_string and cast, or use get_json_int if stored as 0/1
+            # We'll use get_json_string and cast for better compatibility
+            return f"CAST(get_json_string({json_column}, '{json_path}') AS BOOLEAN)"
+        elif field_type == 'datetime':
+            return f"get_json_string({json_column}, '{json_path}')"
+        else:
+            # Default to string extraction
+            return f"get_json_string({json_column}, '{json_path}')"
+    
+    def generate_filter_query(self, table_name: str = "json_test_table", json_column: str = "json_data") -> str:
+        """Generate a filter query that is likely to return results."""
+        # Select 1-3 fields for filtering, prefer low/medium cardinality fields
+        filter_fields = []
+        for schema in self.field_schemas:
+            if schema.name in self.field_values and schema.cardinality in ['low', 'medium']:
+                filter_fields.append(schema)
+        
+        if not filter_fields:
+            # Fallback to any field with values
+            for schema in self.field_schemas:
+                if schema.name in self.field_values:
+                    filter_fields.append(schema)
+                    break
+        
+        if not filter_fields:
+            return f"SELECT * FROM {table_name} LIMIT 10;"
+        
+        # Select 1-2 fields randomly
+        num_filters = min(random.randint(1, 2), len(filter_fields))
+        selected_fields = random.sample(filter_fields, num_filters)
+        
+        conditions = []
+        for schema in selected_fields:
+            values = self.field_values[schema.name]
+            if not values:
+                continue
+            
+            # Pick a value that exists in the data
+            filter_value = random.choice(values)
+            
+            # Get JSON extraction expression for this field
+            json_expr = self._get_json_extraction_expr(schema.name, schema.field_type, json_column)
+            
+            if schema.field_type == 'string':
+                # String equality or LIKE
+                if random.random() < 0.7:
+                    # Exact match
+                    conditions.append(f"{json_expr} = '{filter_value}'")
+                else:
+                    # LIKE pattern (for low cardinality, use exact match)
+                    if schema.cardinality == 'low':
+                        conditions.append(f"{json_expr} = '{filter_value}'")
+                    else:
+                        # Use LIKE with prefix
+                        prefix = str(filter_value)[:min(5, len(str(filter_value)))]
+                        conditions.append(f"{json_expr} LIKE '{prefix}%'")
+            elif schema.field_type == 'int':
+                # Integer comparison
+                if random.random() < 0.5:
+                    # Equality
+                    conditions.append(f"{json_expr} = {filter_value}")
+                else:
+                    # Range query
+                    min_val = min([v for v in values if isinstance(v, int)], default=filter_value)
+                    max_val = max([v for v in values if isinstance(v, int)], default=filter_value)
+                    if min_val != max_val:
+                        threshold = random.randint(min_val, max_val)
+                        conditions.append(f"{json_expr} >= {threshold}")
+            elif schema.field_type == 'bool':
+                conditions.append(f"{json_expr} = {filter_value}")
+            elif schema.field_type == 'datetime':
+                conditions.append(f"{json_expr} = '{filter_value}'")
+        
+        if not conditions:
+            return f"SELECT * FROM {table_name} LIMIT 10;"
+        
+        where_clause = " AND ".join(conditions)
+        return f"SELECT * FROM {table_name} WHERE {where_clause} LIMIT 100;"
+    
+    def generate_aggregation_query(self, table_name: str = "json_test_table", json_column: str = "json_data") -> str:
+        """Generate an aggregation query (GROUP BY, COUNT, AVG, etc.)."""
+        # Find suitable fields for aggregation (prefer low/medium cardinality)
+        group_by_fields = []
+        aggregate_fields = []
+        
+        for schema in self.field_schemas:
+            if schema.name in self.field_values:
+                if schema.cardinality in ['low', 'medium'] and schema.field_type in ['string', 'int', 'bool']:
+                    group_by_fields.append(schema)
+                if schema.field_type == 'int':
+                    aggregate_fields.append(schema)
+        
+        if not group_by_fields and not aggregate_fields:
+            return f"SELECT COUNT(*) as cnt FROM {table_name};"
+        
+        # Generate GROUP BY query
+        if group_by_fields:
+            group_field = random.choice(group_by_fields)
+            group_expr = self._get_json_extraction_expr(group_field.name, group_field.field_type, json_column)
+            select_parts = [f"{group_expr} as {group_field.name}"]
+            
+            # Add aggregations
+            agg_alias = "cnt"
+            if aggregate_fields:
+                agg_field = random.choice(aggregate_fields)
+                agg_type = random.choice(['COUNT', 'AVG', 'SUM', 'MAX', 'MIN'])
+                if agg_type == 'COUNT':
+                    select_parts.append(f"COUNT(*) as {agg_alias}")
+                else:
+                    agg_alias = f"{agg_type.lower()}_value"
+                    agg_expr = self._get_json_extraction_expr(agg_field.name, agg_field.field_type, json_column)
+                    select_parts.append(f"{agg_type}({agg_expr}) as {agg_alias}")
+            else:
+                select_parts.append(f"COUNT(*) as {agg_alias}")
+            
+            return f"SELECT {', '.join(select_parts)} FROM {table_name} GROUP BY {group_expr} ORDER BY {agg_alias} DESC LIMIT 20;"
+        else:
+            # Simple aggregation without GROUP BY
+            if aggregate_fields:
+                agg_field = random.choice(aggregate_fields)
+                agg_type = random.choice(['AVG', 'SUM', 'MAX', 'MIN', 'COUNT'])
+                if agg_type == 'COUNT':
+                    return f"SELECT COUNT(*) as total_count FROM {table_name};"
+                else:
+                    agg_expr = self._get_json_extraction_expr(agg_field.name, agg_field.field_type, json_column)
+                    return f"SELECT {agg_type}({agg_expr}) as {agg_type.lower()}_value FROM {table_name};"
+            else:
+                return f"SELECT COUNT(*) as total_count FROM {table_name};"
+    
+    def generate_select_query(self, table_name: str = "json_test_table", json_column: str = "json_data") -> str:
+        """Generate a simple SELECT query with field projections."""
+        # Select 2-5 fields
+        available_fields = [s for s in self.field_schemas if s.name in self.field_values]
+        if not available_fields:
+            return f"SELECT * FROM {table_name} LIMIT 10;"
+        
+        num_fields = min(random.randint(2, 5), len(available_fields))
+        selected_fields = random.sample(available_fields, num_fields)
+        
+        select_parts = ["id"]
+        for schema in selected_fields:
+            json_expr = self._get_json_extraction_expr(schema.name, schema.field_type, json_column)
+            select_parts.append(f"{json_expr} as {schema.name}")
+        
+        return f"SELECT {', '.join(select_parts)} FROM {table_name} LIMIT 100;"
 
 
 def parse_field_types(field_types_str: str) -> List[str]:
@@ -303,6 +491,16 @@ Examples:
                        help='Output file path (default: stdout)')
     parser.add_argument('--pretty', action='store_true',
                        help='Pretty-print JSON (default: False)')
+    parser.add_argument('--gen-query-type', type=str,
+                       help='Generate queries of specified type(s). Can be a single type or comma-separated list: filter,aggregation,select')
+    parser.add_argument('--gen-query-num', type=int, default=10,
+                       help='Number of queries to generate per type (default: 10). If multiple types specified, total queries = num_types * gen-query-num')
+    parser.add_argument('--gen-query-output', type=str, default=None,
+                       help='Output file for generated queries (default: stdout)')
+    parser.add_argument('--gen-query-table', type=str, default='json_test_table',
+                       help='Table name to use in generated queries (default: json_test_table)')
+    parser.add_argument('--gen-query-column', type=str, default='json_data',
+                       help='JSON column name to use in generated queries (default: json_data)')
     
     args = parser.parse_args()
     
@@ -344,6 +542,48 @@ Examples:
     
     # Generate data
     generator.generate(args.num_records, args.output, args.pretty)
+    
+    # Generate queries if requested
+    if args.gen_query_type:
+        if args.gen_query_num < 1:
+            parser.error('--gen-query-num must be at least 1')
+        
+        # Parse query types (support comma-separated list)
+        valid_types = ['filter', 'aggregation', 'select']
+        query_types = [t.strip() for t in args.gen_query_type.split(',')]
+        
+        # Validate query types
+        for qtype in query_types:
+            if qtype not in valid_types:
+                parser.error(f'Invalid query type: {qtype}. Valid types are: {", ".join(valid_types)}')
+        
+        # Generate sample data for query analysis
+        sample_size = min(100, args.num_records)
+        sample_data = generator.generate_sample_records(sample_size)
+        
+        # Create query generator
+        query_gen = QueryGenerator(generator, sample_data)
+        
+        # Generate queries for each type
+        queries = []
+        for qtype in query_types:
+            for _ in range(args.gen_query_num):
+                if qtype == 'filter':
+                    query = query_gen.generate_filter_query(args.gen_query_table, args.gen_query_column)
+                elif qtype == 'aggregation':
+                    query = query_gen.generate_aggregation_query(args.gen_query_table, args.gen_query_column)
+                else:  # select
+                    query = query_gen.generate_select_query(args.gen_query_table, args.gen_query_column)
+                queries.append(query)
+        
+        # Output queries
+        query_output = open(args.gen_query_output, 'w') if args.gen_query_output else sys.stdout
+        try:
+            for query in queries:
+                query_output.write(query + '\n')
+        finally:
+            if args.gen_query_output and query_output != sys.stdout:
+                query_output.close()
 
 
 if __name__ == '__main__':
