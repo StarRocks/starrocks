@@ -67,8 +67,6 @@ public:
 
     size_t memory_usage() const;
 
-    Status flush(WritableFile* wf, uint64_t* filesize, PersistentIndexSstableRangePB* range_pb);
-
     Status minor_compact();
 
     void clear();
@@ -84,6 +82,7 @@ public:
     Status flush_status() const;
 
 private:
+    Status flush(WritableFile* wf, uint64_t* filesize, PersistentIndexSstableRangePB* range_pb);
     static void update_index_value(IndexValueWithVer* index_value_info, int64_t version, const IndexValue& value);
 
 private:

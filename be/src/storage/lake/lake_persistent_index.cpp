@@ -227,7 +227,7 @@ Status LakePersistentIndex::sync_flush_all_memtables() {
 // 5. Create new empty memtable for subsequent writes
 //
 // Parameters:
-// - force: If true, flush regardless of memtable size (used after parallel upsert batch completes)
+// - force: If true, flush regardless of memtable size (used before ingest sstables)
 //
 // Async Flush:
 // - Flushes are submitted to a dedicated thread pool for background processing
@@ -550,7 +550,8 @@ StatusOr<AsyncCompactCBPtr> LakePersistentIndex::early_sst_compact(
         _sstable_filesets[i]->get_all_sstable_pbs(&sstable_meta);
     }
     // 2. generate candidate filesets using size tiered compaction strategy.
-    ASSIGN_OR_RETURN(auto result, LakePersistentIndexSizeTieredCompactionStrategy::pick_compaction_candidates(sstable_meta));
+    ASSIGN_OR_RETURN(auto result,
+                     LakePersistentIndexSizeTieredCompactionStrategy::pick_compaction_candidates(sstable_meta));
     // 3. Do parallel compaction for each candidate set.
     ASSIGN_OR_RETURN(auto cb,
                      compact_mgr->async_compact(
@@ -590,7 +591,7 @@ Status LakePersistentIndex::parallel_major_compact(lake::LakePersistentIndexPara
     }
     // 1. Pick sstable for merge, using size tiered compaction strategy.
     ASSIGN_OR_RETURN(auto result, LakePersistentIndexSizeTieredCompactionStrategy::pick_compaction_candidates(
-            metadata->sstable_meta()));
+                                          metadata->sstable_meta()));
     if (result.candidate_filesets.empty()) {
         return Status::OK();
     }
