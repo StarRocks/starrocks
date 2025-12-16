@@ -49,6 +49,7 @@ import com.starrocks.rpc.ThriftConnectionPool;
 import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
+import com.starrocks.sql.ast.AnalyzeStmt;
 import com.starrocks.sql.ast.SetListItem;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.StatementBase;
@@ -103,7 +104,10 @@ public class LeaderOpExecutor {
         }
         // set thriftTimeoutMs to query_timeout + thrift_rpc_timeout_ms
         // so that we can return an execution timeout instead of a network timeout
-        this.thriftTimeoutMs = ctx.getSessionVariable().getQueryTimeoutS() * 1000 + Config.thrift_rpc_timeout_ms;
+        long timeout = (parsedStmt instanceof AnalyzeStmt ?
+                Config.statistic_collect_query_timeout : ctx.getSessionVariable().getQueryTimeoutS())
+                * 1000 + Config.thrift_rpc_timeout_ms;
+        this.thriftTimeoutMs = (int) timeout;
         if (this.thriftTimeoutMs < 0) {
             this.thriftTimeoutMs = ctx.getSessionVariable().getQueryTimeoutS() * 1000;
         }
