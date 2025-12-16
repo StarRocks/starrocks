@@ -2085,4 +2085,86 @@ INSTANTIATE_TEST_SUITE_P(
                                  R"({"a": 1})",
                                  "Root array selector on object (should ignore)"}));
 
+struct JsonPrettyTestParam {
+    std::string input_json;
+    std::string expected_output;
+    bool is_null;
+    std::string description;
+};
+
+class JsonPrettyTestFixture : public ::testing::TestWithParam<JsonPrettyTestParam> {};
+
+TEST_P(JsonPrettyTestFixture, json_pretty) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    auto param = GetParam();
+
+    Columns columns;
+    auto json_col = JsonColumn::create();
+
+    if (param.is_null) {
+        auto nullable_json = ColumnHelper::cast_to_nullable_column(json_col);
+        nullable_json->append_nulls(1);
+        columns.emplace_back(nullable_json);
+    } else {
+        auto json_val = JsonValue::parse(param.input_json);
+        ASSERT_TRUE(json_val.ok()) << "Failed to parse input JSON: " << param.input_json;
+        json_col->append(&*json_val);
+        columns.emplace_back(json_col);
+    }
+
+    auto result = JsonFunctions::json_pretty(ctx.get(), columns);
+    ASSERT_TRUE(result.ok());
+
+    auto res_col = result.value();
+
+    if (param.is_null) {
+        ASSERT_TRUE(res_col->is_null(0)) << "Expected NULL result for: " << param.description;
+    } else {
+        ASSERT_FALSE(res_col->is_null(0));
+        auto v_col = ColumnHelper::cast_to<TYPE_VARCHAR>(res_col);
+        std::string actual = v_col->get_data()[0].to_string();
+
+        ASSERT_EQ(param.expected_output, actual) << "Test Description: " << param.description << "\nExpected:\n"
+                                                 << param.expected_output << "\nActual:\n"
+                                                 << actual;
+    }
+}
+
+INSTANTIATE_TEST_SUITE_P(JsonPrettyTest, JsonPrettyTestFixture,
+                         ::testing::Values(JsonPrettyTestParam{R"({"a":1})",
+                                                               R"({
+  "a" : 1
+})",
+                                                               false, "Simple object formatting (Space before colon)"},
+                                           JsonPrettyTestParam{R"([1,2])",
+                                                               R"([
+  1,
+  2
+])",
+                                                               false, "Simple array formatting"},
+                                           JsonPrettyTestParam{R"({"b":3, "a":[1,2]})",
+                                                               R"({
+  "a" : [
+    1,
+    2
+  ],
+  "b" : 3
+})",
+                                                               false,
+                                                               "Nested structure formatting & Alphabetical sorting"},
+                                           JsonPrettyTestParam{R"({"key": "value with { braces }"})",
+                                                               R"({
+  "key" : "value with { braces }"
+})",
+                                                               false, "Braces inside string value should be preserved"},
+                                           JsonPrettyTestParam{R"({})",
+                                                               R"({
+})",
+                                                               false, "Empty object (Occupies lines)"},
+                                           JsonPrettyTestParam{R"([])",
+                                                               R"([
+])",
+                                                               false, "Empty array (Occupies lines)"},
+                                           JsonPrettyTestParam{"", "", true, "Null input should return null"}));
+
 } // namespace starrocks
