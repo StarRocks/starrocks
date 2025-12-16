@@ -449,8 +449,9 @@ Status SortedStreamingAggregator::_build_group_by_columns(size_t chunk_size, con
     }
 
     for (size_t i = 0; i < agg_group_by_columns.size(); ++i) {
-        RETURN_IF_ERROR(append_with_mask</*PositiveSelect=*/false>(agg_group_by_columns[i]->as_mutable_raw_ptr(), *_group_by_columns[i],
-                                                                   selector.data(), selector.size()));
+        RETURN_IF_ERROR(append_with_mask</*PositiveSelect=*/false>(agg_group_by_columns[i]->as_mutable_raw_ptr(),
+                                                                   *_group_by_columns[i], selector.data(),
+                                                                   selector.size()));
     }
     return Status::OK();
 }
