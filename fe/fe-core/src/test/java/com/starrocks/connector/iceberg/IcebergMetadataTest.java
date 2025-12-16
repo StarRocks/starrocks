@@ -2193,11 +2193,13 @@ public class IcebergMetadataTest extends TableTestBase {
                 "client.region", "ap-northeast-2"
         );
 
-        new Expectations() {{
-            icebergCatalog.getCatalogProperties();
-            result = expectedProps;
-            times = 1;
-        }};
+        new Expectations() {
+            {
+                icebergCatalog.getCatalogProperties();
+                result = expectedProps;
+                times = 1;
+            }
+        };
 
         IcebergMetadata metadata = new IcebergMetadata(
                 CATALOG_NAME,
@@ -2218,11 +2220,13 @@ public class IcebergMetadataTest extends TableTestBase {
 
     @Test
     public void testGetCatalogPropertiesEmpty(@Mocked IcebergCatalog icebergCatalog) {
-        new Expectations() {{
-            icebergCatalog.getCatalogProperties();
-            result = ImmutableMap.of();
-            times = 1;
-        }};
+        new Expectations() {
+            {
+                icebergCatalog.getCatalogProperties();
+                result = ImmutableMap.of();
+                times = 1;
+            }
+        };
 
         IcebergMetadata metadata = new IcebergMetadata(
                 CATALOG_NAME,
