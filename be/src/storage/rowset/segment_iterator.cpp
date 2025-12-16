@@ -611,6 +611,8 @@ Status SegmentIterator::_init() {
 
     /// the calling order matters, do not change unless you know why.
 
+    _segment->turn_on_batch_update_cache_size();
+    DeferOp op([&] { _segment->turn_off_batch_update_cache_size(); });
     // init stage
     // The main task is to do some initialization,
     // initialize the iterator and check if certain optimizations can be applied
