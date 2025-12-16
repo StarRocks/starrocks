@@ -281,7 +281,7 @@ StatusOr<Buffer<rowid_t>> BitmapIndexIterator::seek_dictionary_by_predicate(cons
     RETURN_IF_ERROR(next_batch_dictionary(&search_size, column.get()));
     ASSIGN_OR_RETURN(auto ret, predicate(*column));
 
-    auto hit_column = down_cast<BooleanColumn*>(ret.get());
+    const auto* hit_column = down_cast<const BooleanColumn*>(ret.get());
     Buffer<rowid_t> hit_rowids;
     for (int i = 0; i < hit_column->size(); ++i) {
         if (hit_column->get_data()[i]) {

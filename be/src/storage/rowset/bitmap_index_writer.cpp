@@ -183,7 +183,7 @@ public:
     }
 
     bool update_estimate_size(uint64_t* reverted_index_size) {
-        if (context()) {
+        if (is_context()) {
             return context()->update_estimate_size(reverted_index_size);
         } else {
             return false;
