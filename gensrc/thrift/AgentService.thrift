@@ -436,15 +436,16 @@ struct TRemoteSnapshotRequest {
  }
 
 struct TExternalClusterSnapshotRequest {
-    1: optional i64 job_id
+    1: optional i64 job_id // ExternalClusterSnapshot job id
     2: optional i64 db_id
     3: optional Types.TTableId table_id
     4: optional Types.TPartitionId partition_id
     5: optional Types.TPartitionId physical_partition_id
     6: optional Types.TVersion pre_version
     7: optional Types.TVersion new_version
-    8: optional Types.TTabletId virtual_tablet
-    9: optional map<Types.TBackend, list<Types.TTabletId>> node_to_tablets
+    8: optional Types.TTabletId dest_tablet // tablet id of the target storage volume
+    9: optional list<Types.TTabletId> src_tablets // tablets need to file synchronization
+    10: optional list<Types.TBackend> backends // candidate backends to do file sync
  }
 
 enum TTabletMetaType {
