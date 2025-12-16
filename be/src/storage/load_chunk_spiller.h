@@ -62,6 +62,8 @@ public:
 
     StatusOr<size_t> spill(const Chunk& chunk);
 
+    // `target_size` controls the maximum amount of data merged per operation,
+    // while `memory_usage_per_merge` controls the peak memory usage of each merge.
     Status merge_write(size_t target_size, size_t memory_usage_per_merge, bool do_sort, bool do_agg,
                        std::function<Status(Chunk*)> write_func, std::function<Status()> flush_func);
 
