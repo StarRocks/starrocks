@@ -52,7 +52,6 @@ import com.starrocks.sql.ast.ColumnRenameClause;
 import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import mockit.Expectations;
 import mockit.Invocation;
 import mockit.Mock;
 import mockit.MockUp;
@@ -64,6 +63,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class LocalMetaStoreTest {
     private static ConnectContext connectContext;
@@ -191,15 +191,14 @@ public class LocalMetaStoreTest {
         Database db = connectContext.getGlobalStateMgr().getLocalMetastore().getDb("test");
         Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "t1");
         Assertions.assertTrue(table instanceof OlapTable);
-        LocalMetastore localMetastore = connectContext.getGlobalStateMgr().getLocalMetastore();
+        AtomicInteger invokeCount = new AtomicInteger(0);
 
-        new Expectations(localMetastore) {
-            {
-                localMetastore.onCreate((Database) any, (Table) any, anyString, anyBoolean);
-                // don't expect any invoke to this method
-                minTimes = 0;
-                maxTimes = 0;
-                result = null;
+        new MockUp<LocalMetastore>() {
+            @Mock
+            public void onCreate(Invocation invocation, Database db, Table table, String storageVolumeId,
+                                 boolean isSetIfNotExists) throws DdlException {
+                invokeCount.incrementAndGet();
+                invocation.proceed(db, table, storageVolumeId, isSetIfNotExists);
             }
         };
 
@@ -214,6 +213,9 @@ public class LocalMetaStoreTest {
                     starRocksAssert.useDatabase("test").withTable(
                                 "CREATE TABLE test.t1(k1 int, k2 int, k3 int)" +
                                             " distributed by hash(k1) buckets 3 properties('replication_num' = '1');"));
+
+        // No invocation at all
+        Assertions.assertEquals(0, invokeCount.get());
     }
 
     @Test
