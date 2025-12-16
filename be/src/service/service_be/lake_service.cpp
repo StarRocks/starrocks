@@ -626,15 +626,16 @@ void LakeServiceImpl::abort_txn(::google::protobuf::RpcController* controller,
     brpc::ClosureGuard guard(done);
     (void)controller;
 
+    const std::string reason("transaction aborted via LakeService rpc");
     LOG(INFO) << "Aborting transactions. request=" << request->DebugString();
 
     // Cancel active tasks.
     if (LoadChannelMgr* load_mgr = _env->load_channel_mgr(); load_mgr != nullptr) {
         for (auto& txn_id : request->txn_ids()) { // For request sent by and older version FE
-            load_mgr->abort_txn(txn_id);
+            load_mgr->abort_txn(txn_id, reason);
         }
         for (auto& txn_info : request->txn_infos()) { // For request sent by a new version FE
-            load_mgr->abort_txn(txn_info.txn_id());
+            load_mgr->abort_txn(txn_info.txn_id(), reason);
         }
     }
 
