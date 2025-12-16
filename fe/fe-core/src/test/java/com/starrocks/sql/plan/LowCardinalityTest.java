@@ -15,8 +15,14 @@
 package com.starrocks.sql.plan;
 
 import com.starrocks.catalog.ColumnId;
+import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.Tablet;
 import com.starrocks.common.FeConstants;
 import com.starrocks.planner.OlapScanNode;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.StarRocksAssert;
@@ -26,6 +32,8 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 
 public class LowCardinalityTest extends PlanTestBase {
@@ -1600,22 +1608,51 @@ public class LowCardinalityTest extends PlanTestBase {
 
     @Test
     public void testMetaScanWithTabletHint() throws Exception {
-        // Test that tablet hint is properly passed to MetaScan operator
-        String sql = "select max(t1c), min(t1d) from test_all_type tablet(12345) [_META_]";
+        // Get actual tablet ID from test_all_type table
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState()
+                .getLocalMetastore().getDb("test").getTable("test_all_type");
+        Partition partition = table.getPartitions().iterator().next();
+        MaterializedIndex index = partition.getDefaultPhysicalPartition().getBaseIndex();
+        long actualTabletId = index.getTablets().get(0).getId();
+
+        String sql = "select max(t1c), min(t1d) from test_all_type tablet(" + actualTabletId + ") [_META_]";
         String plan = getFragmentPlan(sql);
         assertContains(plan, "0:MetaScan");
         assertContains(plan, "Table: test_all_type");
-        assertContains(plan, "TabletIds: [12345]");
+        assertContains(plan, "TabletIds: [" + actualTabletId + "]");
     }
 
     @Test
     public void testMetaScanWithMultipleTabletHints() throws Exception {
-        // Test multiple tablet hints
-        String sql = "select max(t1c), min(t1d) from test_all_type tablet(12345, 67890) [_META_]";
+        // Get actual tablet IDs from test_all_type table
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState()
+                .getLocalMetastore().getDb("test").getTable("test_all_type");
+        List<Long> tabletIds = new ArrayList<>();
+        for (Partition partition : table.getPartitions()) {
+            MaterializedIndex index = partition.getDefaultPhysicalPartition().getBaseIndex();
+            for (Tablet tablet : index.getTablets()) {
+                tabletIds.add(tablet.getId());
+                if (tabletIds.size() >= 2) {
+                    break;
+                }
+            }
+            if (tabletIds.size() >= 2) {
+                break;
+            }
+        }
+
+        String sql = "select max(t1c), min(t1d) from test_all_type tablet(" +
+                tabletIds.get(0) + ", " + tabletIds.get(1) + ") [_META_]";
         String plan = getFragmentPlan(sql);
         assertContains(plan, "0:MetaScan");
         assertContains(plan, "Table: test_all_type");
-        assertContains(plan, "TabletIds: [12345, 67890]");
+    }
+
+    @Test
+    public void testMetaScanWithInvalidTabletHint() {
+        // Test that invalid tablet ID throws error
+        String sql = "select max(t1c), min(t1d) from test_all_type tablet(99999) [_META_]";
+        Assertions.assertThrows(StarRocksPlannerException.class, () -> getFragmentPlan(sql));
     }
 
     @Test
