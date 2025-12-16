@@ -258,9 +258,10 @@ public class AsyncTaskQueue<T> {
             executor.execute(new RunnableTask(task));
             success = true;
             return true;
-        } catch (Exception e) {
-            LOG.error("Failed to execute task in AsyncTaskQueue", e);
-            updateTaskException(e);
+        } catch (Throwable t) {
+            LOG.error("Throwable occurred while triggering task in AsyncTaskQueue", t);
+            Exception exception = (t instanceof Exception) ? (Exception) t : new RuntimeException(t);
+            updateTaskException(exception);
         } finally {
             if (!success) {
                 runningTaskCount.decrementAndGet();
@@ -309,9 +310,10 @@ public class AsyncTaskQueue<T> {
                         taskQueueSize.addAndGet(1);
                         taskQueue.addLast(task);
                     }
-                } catch (Exception e) {
-                    LOG.error("Exception occurred while executing task in AsyncTaskQueue", e);
-                    updateTaskException(e);
+                } catch (Throwable t) {
+                    LOG.error("Throwable occurred while executing task in AsyncTaskQueue", t);
+                    Exception exception = (t instanceof Exception) ? (Exception) t : new RuntimeException(t);
+                    updateTaskException(exception);
                 }
             }
             runningTaskCount.decrementAndGet();
