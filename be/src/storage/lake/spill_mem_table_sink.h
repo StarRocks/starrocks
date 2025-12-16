@@ -17,6 +17,7 @@
 #include "storage/load_chunk_spiller.h"
 #include "storage/memtable_sink.h"
 #include "util/runtime_profile.h"
+#include "util/threadpool.h"
 
 namespace starrocks {
 
@@ -36,7 +37,6 @@ public:
               _merge_mem_tracker(merge_mem_tracker),
               _schema(schema),
               _task_index(task_index) {}
-    ~TabletInternalParallelMergeTask() override = default;
 
     void run() override;
 

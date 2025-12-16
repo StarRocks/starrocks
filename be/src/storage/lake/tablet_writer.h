@@ -168,6 +168,7 @@ protected:
     ThreadPool* _flush_pool;
     std::vector<FileInfo> _files;
     std::vector<FileInfo> _ssts;
+    std::vector<PersistentIndexSstableRangePB> _sst_ranges;
     int64_t _num_rows = 0;
     int64_t _data_size = 0;
     uint32_t _seg_id = 0;

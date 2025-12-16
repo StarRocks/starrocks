@@ -30,7 +30,7 @@
 namespace starrocks::lake {
 
 void TabletInternalParallelMergeTask::run() {
-    SCOPED_THREAD_LOCAL_MEM_SETTER(_merge_mem_tracker.get(), false);
+    SCOPED_THREAD_LOCAL_MEM_SETTER(_merge_mem_tracker, false);
     MonotonicStopWatch timer;
     timer.start();
     auto char_field_indexes = ChunkHelper::get_char_field_indexes(*_schema);
@@ -154,7 +154,7 @@ Status SpillMemTableSink::merge_blocks_to_segments() {
         }
         // 4. Submit all tasks to thread pool
         for (size_t i = 0; i < merge_iterators.size(); ++i) {
-            auto submit_st = token->submit_func(tasks[i]);
+            auto submit_st = token->submit(tasks[i]);
             if (!submit_st.ok()) {
                 tasks[i]->update_status(submit_st);
             }
