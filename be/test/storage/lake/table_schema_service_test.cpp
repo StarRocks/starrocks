@@ -456,9 +456,9 @@ TEST_F(TableSchemaServiceTest, rpc_request_fields_verify) {
                     ASSERT_EQ(req.source, TTableSchemaRequestSource::LOAD);
                     ASSERT_EQ(req.txn_id, txn_id);
                     ASSERT_EQ(req.tablet_id, tablet_id);
-                    ASSERT_EQ(req.schema_meta.schema_id, schema_id);
-                    ASSERT_EQ(req.schema_meta.db_id, 100);
-                    ASSERT_EQ(req.schema_meta.table_id, 101);
+                    ASSERT_EQ(req.schema_key.schema_id, schema_id);
+                    ASSERT_EQ(req.schema_key.db_id, 100);
+                    ASSERT_EQ(req.schema_key.table_id, 101);
                 },
                 schema_id);
 
@@ -481,9 +481,9 @@ TEST_F(TableSchemaServiceTest, rpc_request_fields_verify) {
                     ASSERT_EQ(req.source, TTableSchemaRequestSource::SCAN);
                     ASSERT_EQ(req.tablet_id, tablet_id);
                     ASSERT_EQ(req.query_id, query_id);
-                    ASSERT_EQ(req.schema_meta.schema_id, schema_id);
-                    ASSERT_EQ(req.schema_meta.db_id, 100);
-                    ASSERT_EQ(req.schema_meta.table_id, 101);
+                    ASSERT_EQ(req.schema_key.schema_id, schema_id);
+                    ASSERT_EQ(req.schema_key.db_id, 100);
+                    ASSERT_EQ(req.schema_key.table_id, 101);
                 },
                 schema_id);
 

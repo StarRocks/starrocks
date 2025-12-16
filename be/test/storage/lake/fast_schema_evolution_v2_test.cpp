@@ -409,7 +409,7 @@ TEST_F(FastSchemaEvolutionV2Test, apply_log_vector_updates_schema) {
             schema_id_to_version.emplace(schema_ids[i], returned_versions[i]);
         }
         install_rpc_hook([&](const RpcTestHookArgs& ctx) {
-            const int64_t req_schema_id = ctx.request->schema_meta.schema_id;
+            const int64_t req_schema_id = ctx.request->schema_key.schema_id;
             auto it = schema_id_to_version.find(req_schema_id);
             ASSERT_TRUE(it != schema_id_to_version.end()) << "unexpected schema_id: " << req_schema_id;
             *ctx.mock_thrift_rpc = true;

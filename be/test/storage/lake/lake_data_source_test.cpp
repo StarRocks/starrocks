@@ -236,7 +236,7 @@ TEST_F(LakeDataSourceTest, get_tablet_schema) {
 
     create_rowsets_for_testing(_tablet_metadata.get(), 2);
 
-    // 1) Build a TLakeScanNode with schema_meta.
+    // 1) Build a TLakeScanNode with schema_key.
     int64_t schema_id = next_id(); // Ensure schema_id misses local schema and triggers RPC fetch.
     if (schema_id == _tablet_metadata->schema().id()) {
         schema_id = next_id();
@@ -246,11 +246,11 @@ TEST_F(LakeDataSourceTest, get_tablet_schema) {
 
     TLakeScanNode lake_scan_node;
     lake_scan_node.__set_tuple_id(0);
-    TTableSchemaMeta schema_meta;
-    schema_meta.__set_schema_id(schema_id);
-    schema_meta.__set_db_id(db_id);
-    schema_meta.__set_table_id(table_id);
-    lake_scan_node.__set_schema_meta(schema_meta);
+    TTableSchemaKey schema_key;
+    schema_key.__set_schema_id(schema_id);
+    schema_key.__set_db_id(db_id);
+    schema_key.__set_table_id(table_id);
+    lake_scan_node.__set_schema_key(schema_key);
 
     TPlanNode plan_node;
     plan_node.__set_node_id(0);
@@ -303,9 +303,9 @@ TEST_F(LakeDataSourceTest, get_tablet_schema) {
         ASSERT_EQ(request_ptr->source, TTableSchemaRequestSource::SCAN);
         ASSERT_EQ(request_ptr->tablet_id, _tablet_metadata->id());
         ASSERT_EQ(request_ptr->query_id, runtime_state->query_id());
-        ASSERT_EQ(request_ptr->schema_meta.schema_id, schema_id);
-        ASSERT_EQ(request_ptr->schema_meta.db_id, db_id);
-        ASSERT_EQ(request_ptr->schema_meta.table_id, table_id);
+        ASSERT_EQ(request_ptr->schema_key.schema_id, schema_id);
+        ASSERT_EQ(request_ptr->schema_key.db_id, db_id);
+        ASSERT_EQ(request_ptr->schema_key.table_id, table_id);
 
         *mock_thrift_rpc = true;
         *status = Status::OK();

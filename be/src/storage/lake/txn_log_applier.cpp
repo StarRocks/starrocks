@@ -111,10 +111,11 @@ Status apply_alter_meta_log(TabletMetadataPB* metadata, const TxnLogPB_OpAlterMe
  * @param op_write The write operation from the transaction log.
  * @param txn_id The transaction ID.
  * @param tablet_meta Pointer to the mutable tablet metadata to be updated.
+ * @param tablet_mgr Pointer to the tablet manager.
  * @return Status::OK() on success or if no update is needed, otherwise an error status.
  */
 Status update_metadata_schema(const TxnLogPB_OpWrite& op_write, int64_t txn_id,
-                              const MutableTabletMetadataPtr& tablet_meta) {
+                              const MutableTabletMetadataPtr& tablet_meta, TabletManager* tablet_mgr) {
     if (!op_write.has_schema_key()) {
         // not fast schema evolution v2, skip to update
         return Status::OK();
@@ -124,9 +125,8 @@ Status update_metadata_schema(const TxnLogPB_OpWrite& op_write, int64_t txn_id,
         tablet_meta->historical_schemas().contains(schema_key.schema_id())) {
         return Status::OK();
     }
-    ASSIGN_OR_RETURN(auto new_schema,
-                     ExecEnv::GetInstance()->lake_tablet_manager()->table_schema_service()->get_schema_for_load(
-                             schema_key, tablet_meta->id(), txn_id, tablet_meta));
+    ASSIGN_OR_RETURN(auto new_schema, tablet_mgr->table_schema_service()->get_schema_for_load(
+                                              schema_key, tablet_meta->id(), txn_id, tablet_meta));
     auto& old_schema = tablet_meta->schema();
     if (new_schema->schema_version() <= old_schema.schema_version()) {
         return Status::OK();
@@ -272,7 +272,7 @@ public:
         for (const auto& log : txn_logs) {
             if (log->has_op_write()) {
                 const auto& op_write = log->op_write();
-                RETURN_IF_ERROR(update_metadata_schema(op_write, log->txn_id(), _metadata));
+                RETURN_IF_ERROR(update_metadata_schema(op_write, log->txn_id(), _metadata, _tablet.tablet_mgr()));
                 if (is_column_mode_partial_update(op_write)) {
                     RETURN_IF_ERROR(_tablet.update_mgr()->publish_column_mode_partial_update(
                             op_write, log->txn_id(), _metadata, &_tablet, _index_entry, &_builder, _base_version));
@@ -364,7 +364,7 @@ private:
     }
 
     Status apply_write_log(const TxnLogPB_OpWrite& op_write, int64_t txn_id) {
-        RETURN_IF_ERROR(update_metadata_schema(op_write, txn_id, _metadata));
+        RETURN_IF_ERROR(update_metadata_schema(op_write, txn_id, _metadata, _tablet.tablet_mgr()));
         // get lock to avoid gc
         _tablet.update_mgr()->lock_shard_pk_index_shard(_tablet.id());
         DeferOp defer([&]() { _tablet.update_mgr()->unlock_shard_pk_index_shard(_tablet.id()); });
@@ -597,7 +597,7 @@ public:
         for (const auto& log : txn_logs) {
             if (log->has_op_write()) {
                 const auto& op_write = log->op_write();
-                RETURN_IF_ERROR(update_metadata_schema(op_write, log->txn_id(), _metadata));
+                RETURN_IF_ERROR(update_metadata_schema(op_write, log->txn_id(), _metadata, _tablet.tablet_mgr()));
                 if (op_write.has_rowset() && op_write.rowset().num_rows() > 0) {
                     const auto& rowset = op_write.rowset();
 
@@ -700,7 +700,7 @@ public:
 private:
     Status apply_write_log(const TxnLogPB_OpWrite& op_write, int64_t txn_id) {
         TEST_ERROR_POINT("NonPrimaryKeyTxnLogApplier::apply_write_log");
-        RETURN_IF_ERROR(update_metadata_schema(op_write, txn_id, _metadata));
+        RETURN_IF_ERROR(update_metadata_schema(op_write, txn_id, _metadata, _tablet.tablet_mgr()));
         if (op_write.has_rowset() && (op_write.rowset().num_rows() > 0 || op_write.rowset().has_delete_predicate())) {
             auto rowset = _metadata->add_rowsets();
             rowset->CopyFrom(op_write.rowset());
