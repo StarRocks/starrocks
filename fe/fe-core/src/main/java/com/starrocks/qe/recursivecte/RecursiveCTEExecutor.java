@@ -62,6 +62,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 public class RecursiveCTEExecutor {
     private static final Logger LOG = LogManager.getLogger(RecursiveCTEExecutor.class);
@@ -112,11 +113,14 @@ public class RecursiveCTEExecutor {
     }
 
     public void prepareRecursiveCTE() throws Exception {
+        UUID origUUID = connectContext.getQueryId();
         try {
             prepareRecursiveCTEImpl();
         } catch (Exception e) {
             LOG.warn("Error occurred during preparing recursive CTE", e);
             throw e;
+        } finally {
+            connectContext.setQueryId(origUUID);
         }
     }
 
