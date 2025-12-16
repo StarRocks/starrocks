@@ -84,17 +84,17 @@ public class IndexInfoProcDir implements ProcDirInterface {
 
                 // indices order
                 List<Long> indices = Lists.newArrayList();
-                indices.add(olapTable.getBaseIndexId());
+                indices.add(olapTable.getBaseIndexMetaId());
                 indices.addAll(olapTable.getIndexIdListExceptBaseIndex());
 
                 for (long indexId : indices) {
-                    MaterializedIndexMeta indexMeta = olapTable.getIndexIdToMeta().get(indexId);
+                    MaterializedIndexMeta indexMeta = olapTable.getIndexMetaIdToMeta().get(indexId);
 
                     String type = olapTable.getKeysType().name();
                     StringBuilder builder = new StringBuilder();
                     builder.append(type).append("(");
                     List<String> columnNames = Lists.newArrayList();
-                    List<Column> columns = olapTable.getSchemaByIndexId(indexId);
+                    List<Column> columns = olapTable.getSchemaByIndexMetaId(indexId);
                     for (Column column : columns) {
                         if (column.isKey()) {
                             columnNames.add(column.getName());
@@ -103,7 +103,7 @@ public class IndexInfoProcDir implements ProcDirInterface {
                     builder.append(Joiner.on(", ").join(columnNames)).append(")");
 
                     result.addRow(Lists.newArrayList(String.valueOf(indexId),
-                            olapTable.getIndexNameById(indexId),
+                            olapTable.getIndexNameByMetaId(indexId),
                             String.valueOf(indexMeta.getSchemaVersion()),
                             String.valueOf(indexMeta.getSchemaHash()),
                             String.valueOf(indexMeta.getShortKeyColumnCount()),
@@ -144,7 +144,7 @@ public class IndexInfoProcDir implements ProcDirInterface {
             Set<String> bfColumns = null;
             if (table.getType() == TableType.OLAP) {
                 OlapTable olapTable = (OlapTable) table;
-                schema = olapTable.getSchemaByIndexId(idxId);
+                schema = olapTable.getSchemaByIndexMetaId(idxId);
                 if (schema == null) {
                     throw new AnalysisException("Index " + idxId + " does not exist");
                 }

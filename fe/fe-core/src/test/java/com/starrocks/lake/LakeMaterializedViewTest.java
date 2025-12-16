@@ -165,7 +165,7 @@ public class LakeMaterializedViewTest extends StarRocksTestBase {
         // Lake mv
         LakeMaterializedView mv = new LakeMaterializedView(mvId, dbId, "mv1", columns, KeysType.AGG_KEYS,
                 partitionInfo, distributionInfo, mvRefreshScheme);
-        Deencapsulation.setField(mv, "baseIndexId", indexId);
+        Deencapsulation.setField(mv, "baseIndexMetaId", indexId);
         mv.addPartition(partition);
         mv.setIndexMeta(indexId, "mv1", columns, 0, 0, (short) 1, TStorageType.COLUMN, KeysType.AGG_KEYS);
 
@@ -456,7 +456,7 @@ public class LakeMaterializedViewTest extends StarRocksTestBase {
         // Lake mv
         LakeMaterializedView mv = new LakeMaterializedView(mvId, dbId, "mv1", columns, KeysType.AGG_KEYS,
                 partitionInfo, distributionInfo, mvRefreshScheme);
-        Deencapsulation.setField(mv, "baseIndexId", indexId);
+        Deencapsulation.setField(mv, "baseIndexMetaId", indexId);
         mv.addPartition(partition1);
         mv.addPartition(partition2);
         mv.setIndexMeta(indexId, "mv1", columns, 0, 0, (short) 1, TStorageType.COLUMN, KeysType.AGG_KEYS);

@@ -89,7 +89,7 @@ public class MetaScanNode extends ScanNode {
         }
         for (PhysicalPartition partition : partitions) {
             MaterializedIndex index = partition.getBaseIndex();
-            int schemaHash = olapTable.getSchemaHashByIndexId(index.getId());
+            int schemaHash = olapTable.getSchemaHashByIndexMetaId(index.getId());
             List<Tablet> tablets = index.getTablets();
 
             long visibleVersion = partition.getVisibleVersion();

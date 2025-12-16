@@ -938,7 +938,7 @@ public class LeaderImpl {
                     tableMeta.addToBloomfilter_columns(bfColumn);
                 }
             }
-            tableMeta.setBase_index_id(olapTable.getBaseIndexId());
+            tableMeta.setBase_index_id(olapTable.getBaseIndexMetaId());
             tableMeta.setColocate_group(olapTable.getColocateGroup());
             tableMeta.setKey_type(olapTable.getKeysType().name());
 

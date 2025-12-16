@@ -184,11 +184,11 @@ public class ShowExecutorTest {
                 minTimes = 0;
                 result = new RandomDistributionInfo(10);
 
-                table.getIndexIdByName(anyString);
+                table.getIndexMetaIdByName(anyString);
                 minTimes = 0;
                 result = 0L;
 
-                table.getStorageTypeByIndexId(0L);
+                table.getStorageTypeByIndexMetaId(0L);
                 minTimes = 0;
                 result = TStorageType.COLUMN;
 

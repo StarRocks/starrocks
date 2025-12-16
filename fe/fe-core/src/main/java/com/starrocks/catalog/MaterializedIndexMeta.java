@@ -54,9 +54,16 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+// MaterializedIndexMeta is used to store metadata of a materialized index.
+// Previously, there was a one-to-one mapping between materialized index meta and materialized index,
+// therefore, the materialized index id was directly used as the index meta id.
+// To support multi-version materialized indexes for tablet split,
+// a single index meta may correspond to multiple materialized indexes, so the index meta requires its own id.
+// To maintain backward compatibility, the index meta id is initially set to be the same as the index id.
 public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
+    // index meta id, not change the SerializedName for compatibility
     @SerializedName(value = "indexId")
-    private long indexId;
+    private long indexMetaId;
     @SerializedName(value = "schema")
     private List<Column> schema;
     @SerializedName(value = "sortKeyIdxes")
@@ -98,16 +105,16 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
     public MaterializedIndexMeta() {
     }
 
-    public MaterializedIndexMeta(long indexId, List<Column> schema, int schemaVersion, int schemaHash,
+    public MaterializedIndexMeta(long indexMetaId, List<Column> schema, int schemaVersion, int schemaHash,
                                  short shortKeyColumnCount, TStorageType storageType, KeysType keysType,
                                  OriginStatementInfo defineStmt, List<Integer> sortKeyIdxes, List<Integer> sortKeyUniqueIds) {
-        this.indexId = indexId;
+        this.indexMetaId = indexMetaId;
         Preconditions.checkState(schema != null);
         Preconditions.checkState(!schema.isEmpty());
         this.schema = schema;
         this.schemaVersion = schemaVersion;
         this.schemaHash = schemaHash;
-        this.schemaId = indexId;
+        this.schemaId = indexMetaId;
         this.shortKeyColumnCount = shortKeyColumnCount;
         Preconditions.checkState(storageType != null);
         this.storageType = storageType;
@@ -118,25 +125,25 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
         this.sortKeyUniqueIds = sortKeyUniqueIds;
     }
 
-    public MaterializedIndexMeta(long indexId, List<Column> schema, int schemaVersion, int schemaHash,
+    public MaterializedIndexMeta(long indexMetaId, List<Column> schema, int schemaVersion, int schemaHash,
                                  short shortKeyColumnCount, TStorageType storageType, KeysType keysType,
                                  OriginStatementInfo defineStmt, List<Integer> sortKeyIdxes) {
-        this(indexId, schema, schemaVersion, schemaHash, shortKeyColumnCount, storageType, keysType, defineStmt,
+        this(indexMetaId, schema, schemaVersion, schemaHash, shortKeyColumnCount, storageType, keysType, defineStmt,
                 sortKeyIdxes, null);        
     }
 
-    public MaterializedIndexMeta(long indexId, List<Column> schema, int schemaVersion, int schemaHash,
+    public MaterializedIndexMeta(long indexMetaId, List<Column> schema, int schemaVersion, int schemaHash,
                                  short shortKeyColumnCount, TStorageType storageType, KeysType keysType,
                                  OriginStatementInfo defineStmt) {
-        this(indexId, schema, schemaVersion, schemaHash, shortKeyColumnCount, storageType, keysType, defineStmt, null);
+        this(indexMetaId, schema, schemaVersion, schemaHash, shortKeyColumnCount, storageType, keysType, defineStmt, null);
     }
 
-    public long getIndexId() {
-        return indexId;
+    public long getIndexMetaId() {
+        return indexMetaId;
     }
 
-    public void setIndexIdForRestore(long indexId) {
-        this.indexId = indexId;
+    public void setIndexMetaIdForRestore(long indexMetaId) {
+        this.indexMetaId = indexMetaId;
     }
 
     public KeysType getKeysType() {
@@ -272,7 +279,7 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
 
     @Override
     public int hashCode() {
-        return Long.hashCode(indexId);
+        return Long.hashCode(indexMetaId);
     }
 
     public void setSchema(List<Column> newSchema) {
@@ -285,7 +292,7 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
 
     public MaterializedIndexMeta shallowCopy() {
         MaterializedIndexMeta indexMeta = new MaterializedIndexMeta();
-        indexMeta.indexId = this.indexId;
+        indexMeta.indexMetaId = this.indexMetaId;
         indexMeta.schema = schema == null ? null : Lists.newArrayList(schema);
         indexMeta.sortKeyIdxes = sortKeyIdxes == null ? null : Lists.newArrayList(sortKeyIdxes);
         indexMeta.sortKeyUniqueIds = sortKeyUniqueIds == null ? null : Lists.newArrayList(sortKeyUniqueIds);
@@ -309,7 +316,7 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
             return false;
         }
         MaterializedIndexMeta indexMeta = (MaterializedIndexMeta) obj;
-        if (indexMeta.indexId != this.indexId) {
+        if (indexMeta.indexMetaId != this.indexMetaId) {
             return false;
         }
         if (indexMeta.schema.size() != this.schema.size() || !indexMeta.schema.containsAll(this.schema)) {
@@ -347,7 +354,7 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
     @Override
     public void gsonPostProcess() throws IOException {
         if (schemaId <= 0) {
-            schemaId = indexId;
+            schemaId = indexMetaId;
         }
         // analyze define stmt
         if (defineStmt == null) {

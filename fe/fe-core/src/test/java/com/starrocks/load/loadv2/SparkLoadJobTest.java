@@ -398,7 +398,7 @@ public class SparkLoadJobTest {
                 table.getPartitionInfo();
                 result = partitionInfo;
 
-                table.getSchemaByIndexId(Long.valueOf(12));
+                table.getSchemaByIndexMetaId(Long.valueOf(12));
                 result = Lists.newArrayList(new Column("k1", VarcharType.VARCHAR));
 
                 physicalPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
@@ -501,7 +501,7 @@ public class SparkLoadJobTest {
                 table.getPartitionInfo();
                 result = partitionInfo;
 
-                table.getSchemaByIndexId(Long.valueOf(12));
+                table.getSchemaByIndexMetaId(Long.valueOf(12));
                 result = Lists.newArrayList(new Column("k1", VarcharType.VARCHAR));
 
                 physicalPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL);

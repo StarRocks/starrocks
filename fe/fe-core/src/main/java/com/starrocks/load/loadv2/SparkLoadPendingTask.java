@@ -257,7 +257,7 @@ public class SparkLoadPendingTask extends LoadTask {
 
         for (Map.Entry<Long, List<Column>> entry : table.getIndexIdToSchema().entrySet()) {
             long indexId = entry.getKey();
-            int schemaHash = table.getSchemaHashByIndexId(indexId);
+            int schemaHash = table.getSchemaHashByIndexMetaId(indexId);
 
             // columns
             List<EtlColumn> etlColumns = Lists.newArrayList();
@@ -276,7 +276,7 @@ public class SparkLoadPendingTask extends LoadTask {
 
             // index type
             String indexType = null;
-            KeysType keysType = table.getKeysTypeByIndexId(indexId);
+            KeysType keysType = table.getKeysTypeByIndexMetaId(indexId);
             switch (keysType) {
                 case DUP_KEYS:
                     indexType = "DUPLICATE";
@@ -294,7 +294,7 @@ public class SparkLoadPendingTask extends LoadTask {
             }
 
             // is base index
-            boolean isBaseIndex = indexId == table.getBaseIndexId() ? true : false;
+            boolean isBaseIndex = indexId == table.getBaseIndexMetaId() ? true : false;
 
             etlIndexes.add(new EtlIndex(indexId, etlColumns, schemaHash, indexType, isBaseIndex));
         }

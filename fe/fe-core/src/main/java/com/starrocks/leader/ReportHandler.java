@@ -968,7 +968,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                         if (index == null) {
                             continue;
                         }
-                        int schemaHash = olapTable.getSchemaHashByIndexId(indexId);
+                        int schemaHash = olapTable.getSchemaHashByIndexMetaId(indexId);
 
                         LocalTablet tablet = (LocalTablet) index.getTablet(tabletId);
                         if (tablet == null) {
@@ -1213,7 +1213,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                                             .addColumns(indexMeta.getSchema())
                                             .setBloomFilterColumnNames(bfColumns)
                                             .setBloomFilterFpp(bfFpp)
-                                            .setIndexes(indexId == olapTable.getBaseIndexId() ?
+                                            .setIndexes(indexId == olapTable.getBaseIndexMetaId() ?
                                                         olapTable.getCopiedIndexes() :
                                                         OlapTable.getIndexesBySchema(
                                                         olapTable.getCopiedIndexes(), indexMeta.getSchema()))
@@ -1520,7 +1520,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                 }
 
                 // always get old schema hash(as effective one)
-                int schemaHash = table.getSchemaHashByIndexId(tabletMeta.getIndexId());
+                int schemaHash = table.getSchemaHashByIndexMetaId(tabletMeta.getIndexId());
 
                 boolean needRebuildPkIndex = false;
                 Locker locker = new Locker();
@@ -1619,7 +1619,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                         continue;
                     }
 
-                    int schemaHash = olapTable.getSchemaHashByIndexId(indexId);
+                    int schemaHash = olapTable.getSchemaHashByIndexMetaId(indexId);
 
                     LocalTablet tablet = (LocalTablet) index.getTablet(tabletId);
                     if (tablet == null) {
@@ -2052,9 +2052,9 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
             }
 
             // check schema hash
-            if (schemaHash != olapTable.getSchemaHashByIndexId(indexId)) {
+            if (schemaHash != olapTable.getSchemaHashByIndexMetaId(indexId)) {
                 throw new MetaNotFoundException("schema hash is diff[" + schemaHash + "-"
-                        + olapTable.getSchemaHashByIndexId(indexId) + "]");
+                        + olapTable.getSchemaHashByIndexMetaId(indexId) + "]");
             }
 
             // colocate table will delete Replica in meta when balancing,

@@ -109,7 +109,7 @@ public class LoadMgrEditLogTest {
         OlapTable olapTable = new OlapTable(tableId, tableName, columns, KeysType.DUP_KEYS,
                 partitionInfo, distributionInfo);
         olapTable.setIndexMeta(indexId, tableName, columns, 0, 0, (short) 1, TStorageType.COLUMN, KeysType.DUP_KEYS);
-        olapTable.setBaseIndexId(indexId);
+        olapTable.setBaseIndexMetaId(indexId);
         olapTable.addPartition(partition);
         
         // Register table to database

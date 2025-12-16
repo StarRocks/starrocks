@@ -79,7 +79,7 @@ public class OlapTableAlterJobV2Builder extends AlterJobV2Builder {
             while (currentSchemaHash == newSchemaHash) {
                 newSchemaHash = Util.generateSchemaHash();
             }
-            String newIndexName = SchemaChangeHandler.SHADOW_NAME_PREFIX + table.getIndexNameById(originIndexId);
+            String newIndexName = SchemaChangeHandler.SHADOW_NAME_PREFIX + table.getIndexNameByMetaId(originIndexId);
             short newShortKeyColumnCount = newIndexShortKeyCount.get(originIndexId);
             long shadowIndexId = globalStateMgr.getNextId();
 

@@ -691,7 +691,7 @@ public class QueryAnalyzer {
 
             if (node.isSyncMVQuery()) {
                 OlapTable olapTable = (OlapTable) table;
-                List<Column> mvSchema = olapTable.getSchemaByIndexId(olapTable.getBaseIndexId());
+                List<Column> mvSchema = olapTable.getSchemaByIndexMetaId(olapTable.getBaseIndexMetaId());
                 for (Column column : mvSchema) {
                     Field field = new Field(column.getName(), column.getType(), tableName,
                             new SlotRef(tableName, column.getName(), column.getName()), true, column.isAllowNull());
@@ -1838,7 +1838,7 @@ public class QueryAnalyzer {
                         OlapTable mvOlapTable = new OlapTable(mvTable.getType());
                         ((OlapTable) mvTable).copyOnlyForQuery(mvOlapTable);
                         // Copy the necessary olap table meta to avoid changing original meta;
-                        mvOlapTable.setBaseIndexId(materializedIndex.second.getIndexId());
+                        mvOlapTable.setBaseIndexMetaId(materializedIndex.second.getIndexMetaId());
                         table = mvOlapTable;
                     }
                 }

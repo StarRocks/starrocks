@@ -110,7 +110,7 @@ public class CoordinatorTest extends PlanTestBase {
         table.setDefaultDistributionInfo(new HashDistributionInfo(6, Collections.emptyList()));
         TupleDescriptor desc = new TupleDescriptor(new TupleId(0));
         desc.setTable(table);
-        OlapScanNode scanNode = new OlapScanNode(new PlanNodeId(0), desc, "test-scan-node", table.getBaseIndexId());
+        OlapScanNode scanNode = new OlapScanNode(new PlanNodeId(0), desc, "test-scan-node", table.getBaseIndexMetaId());
         scanNode.setSelectedPartitionIds(ImmutableList.of(0L, 1L));
         execFragment.getOrCreateColocatedAssignment(scanNode);
 

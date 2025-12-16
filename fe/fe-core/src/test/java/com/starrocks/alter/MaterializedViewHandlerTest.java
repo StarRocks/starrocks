@@ -116,7 +116,7 @@ public class MaterializedViewHandlerTest {
                 result = baseIndexName;
                 olapTable.getState();
                 result = OlapTable.OlapTableState.NORMAL;
-                olapTable.getIndexIdByName(baseIndexName);
+                olapTable.getIndexMetaIdByName(baseIndexName);
                 result = null;
             }
         };
@@ -146,7 +146,7 @@ public class MaterializedViewHandlerTest {
                 result = baseIndexName;
                 olapTable.getState();
                 result = OlapTable.OlapTableState.NORMAL;
-                olapTable.getIndexIdByName(baseIndexName);
+                olapTable.getIndexMetaIdByName(baseIndexName);
                 result = baseIndexId;
                 olapTable.getPhysicalPartitions();
                 result = Lists.newArrayList(partition);
@@ -335,9 +335,9 @@ public class MaterializedViewHandlerTest {
                 result = "table1";
                 olapTable.hasMaterializedIndex(mvName);
                 result = true;
-                olapTable.getIndexIdByName(mvName);
+                olapTable.getIndexMetaIdByName(mvName);
                 result = 1L;
-                olapTable.getSchemaHashByIndexId(1L);
+                olapTable.getSchemaHashByIndexMetaId(1L);
                 result = 1;
 
                 olapTable.getPhysicalPartitions();

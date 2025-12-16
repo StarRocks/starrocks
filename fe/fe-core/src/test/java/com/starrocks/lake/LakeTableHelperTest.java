@@ -185,7 +185,7 @@ public class LakeTableHelperTest {
         table.addPartition(partition);
         table.setIndexMeta(index.getId(), "t0", Arrays.asList(c0, c1), 0, 0, (short) 1, TStorageType.COLUMN,
                 keysType);
-        List<Column> newIndexSchema = table.getSchemaByIndexId(indexId);
+        List<Column> newIndexSchema = table.getSchemaByIndexMetaId(indexId);
         List<Column> baseSchema = table.getBaseSchema();
 
         {

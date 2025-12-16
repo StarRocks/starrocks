@@ -246,7 +246,7 @@ public class MetaUtils {
 
     public static List<String> getRangeDistributionColumnNames(OlapTable olapTable) {
         List<String> columnNames = new ArrayList<>();
-        MaterializedIndexMeta baseIndexMeta = olapTable.getIndexMetaByIndexId(olapTable.getBaseIndexId());
+        MaterializedIndexMeta baseIndexMeta = olapTable.getIndexMetaByIndexId(olapTable.getBaseIndexMetaId());
         List<Column> baseSchema = olapTable.getBaseSchema();
         if (baseIndexMeta.getSortKeyIdxes() != null) {
             for (Integer i : baseIndexMeta.getSortKeyIdxes()) {

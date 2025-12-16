@@ -286,7 +286,7 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
 
         try (AutoCloseableLock ignore =
                 new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(tbl.getId()), LockType.READ)) {
-            MaterializedIndexMeta index = tbl.getIndexMetaByIndexId(tbl.getBaseIndexId());
+            MaterializedIndexMeta index = tbl.getIndexMetaByIndexId(tbl.getBaseIndexMetaId());
             Preconditions.checkState(tbl.getState() == OlapTableState.ROLLUP);
             for (Map.Entry<Long, MaterializedIndex> entry : this.physicalPartitionIdToRollupIndex.entrySet()) {
                 long partitionId = entry.getKey();

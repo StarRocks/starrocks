@@ -205,12 +205,12 @@ public class OlapTable extends Table {
     @SerializedName(value = "state")
     protected OlapTableState state;
 
-    // index id -> index meta
+    // index meta id -> index meta, not change the SerializedName for compatibility
     @SerializedName(value = "indexIdToMeta")
-    protected Map<Long, MaterializedIndexMeta> indexIdToMeta = Maps.newHashMap();
-    // index name -> index id
+    protected Map<Long, MaterializedIndexMeta> indexMetaIdToMeta = Maps.newHashMap();
+    // index name -> index meta id, not change the SerializedName for compatibility
     @SerializedName(value = "indexNameToId")
-    protected Map<String, Long> indexNameToId = Maps.newHashMap();
+    protected Map<String, Long> indexNameToMetaId = Maps.newHashMap();
 
     @SerializedName(value = "keysType")
     protected KeysType keysType;
@@ -251,8 +251,10 @@ public class OlapTable extends Table {
     // So we add this 'baseIndexId' to explicitly specify the base index id,
     // which should be different with table id.
     // The init value is -1, which means there is not partition and index at all.
+    //
+    // base index meta id, not change the SerializedName for compatibility
     @SerializedName(value = "baseIndexId")
-    protected long baseIndexId = -1;
+    protected long baseIndexMetaId = -1;
 
     @SerializedName(value = "tableProperty")
     protected TableProperty tableProperty;
@@ -387,8 +389,8 @@ public class OlapTable extends Table {
         olapTable.nameToColumn = new CaseInsensitiveMap(this.nameToColumn);
         olapTable.idToColumn = new CaseInsensitiveMap(this.idToColumn);
         olapTable.state = this.state;
-        olapTable.indexNameToId = Maps.newHashMap(this.indexNameToId);
-        olapTable.indexIdToMeta = Maps.newHashMap(this.indexIdToMeta);
+        olapTable.indexNameToMetaId = Maps.newHashMap(this.indexNameToMetaId);
+        olapTable.indexMetaIdToMeta = Maps.newHashMap(this.indexMetaIdToMeta);
         olapTable.indexes = indexes == null ? null : indexes.shallowCopy();
         if (bfColumns != null) {
             olapTable.bfColumns = Sets.newTreeSet(ColumnId.CASE_INSENSITIVE_ORDER);
@@ -428,7 +430,7 @@ public class OlapTable extends Table {
         for (Partition tempPartition : this.getTempPartitions()) {
             olapTable.tempPartitions.addPartition(tempPartition.shallowCopy());
         }
-        olapTable.baseIndexId = this.baseIndexId;
+        olapTable.baseIndexMetaId = this.baseIndexMetaId;
         if (this.tableProperty != null) {
             olapTable.tableProperty = this.tableProperty.copy();
         }
@@ -570,12 +572,12 @@ public class OlapTable extends Table {
                 && tableProperty.getDynamicPartitionProperty().isExists();
     }
 
-    public void setBaseIndexId(long baseIndexId) {
-        this.baseIndexId = baseIndexId;
+    public void setBaseIndexMetaId(long baseIndexMetaId) {
+        this.baseIndexMetaId = baseIndexMetaId;
     }
 
-    public long getBaseIndexId() {
-        return baseIndexId;
+    public long getBaseIndexMetaId() {
+        return baseIndexMetaId;
     }
 
     public void setState(OlapTableState state) {
@@ -600,7 +602,7 @@ public class OlapTable extends Table {
 
     public void checkAndSetName(String newName, boolean onlyCheck) throws DdlException {
         // check if rollup has same name
-        for (String idxName : getIndexNameToId().keySet()) {
+        for (String idxName : getIndexNameToMetaId().keySet()) {
             if (idxName.equals(newName)) {
                 throw new DdlException("New name conflicts with rollup index name: " + idxName);
             }
@@ -613,8 +615,8 @@ public class OlapTable extends Table {
     public void setName(String newName) {
         // change name in indexNameToId
         if (this.name != null) {
-            long baseIndexId = indexNameToId.remove(this.name);
-            indexNameToId.put(newName, baseIndexId);
+            long baseIndexId = indexNameToMetaId.remove(this.name);
+            indexNameToMetaId.put(newName, baseIndexId);
         }
 
         // change name
@@ -661,7 +663,7 @@ public class OlapTable extends Table {
     }
 
     public boolean hasMaterializedIndex(String indexName) {
-        return indexNameToId.containsKey(indexName);
+        return indexNameToMetaId.containsKey(indexName);
     }
 
     public boolean hasGeneratedColumn() {
@@ -673,33 +675,33 @@ public class OlapTable extends Table {
         return false;
     }
 
-    public void setIndexMeta(long indexId, String indexName, List<Column> schema, int schemaVersion,
+    public void setIndexMeta(long indexMetaId, String indexName, List<Column> schema, int schemaVersion,
                              int schemaHash, short shortKeyColumnCount, TStorageType storageType, KeysType keysType) {
-        setIndexMeta(indexId, indexName, schema, schemaVersion, schemaHash, shortKeyColumnCount, storageType, keysType,
+        setIndexMeta(indexMetaId, indexName, schema, schemaVersion, schemaHash, shortKeyColumnCount, storageType, keysType,
                 null, null);
     }
 
-    public void setIndexMeta(long indexId, String indexName, List<Column> schema, int schemaVersion,
+    public void setIndexMeta(long indexMetaId, String indexName, List<Column> schema, int schemaVersion,
                              int schemaHash, short shortKeyColumnCount, TStorageType storageType, KeysType keysType,
                              OriginStatementInfo origStmt) {
-        setIndexMeta(indexId, indexName, schema, schemaVersion, schemaHash, shortKeyColumnCount, storageType, keysType,
+        setIndexMeta(indexMetaId, indexName, schema, schemaVersion, schemaHash, shortKeyColumnCount, storageType, keysType,
                 origStmt, null);
     }
 
-    public void setIndexMeta(long indexId, String indexName, List<Column> schema, int schemaVersion,
+    public void setIndexMeta(long indexMetaId, String indexName, List<Column> schema, int schemaVersion,
                              int schemaHash, short shortKeyColumnCount, TStorageType storageType, KeysType keysType,
                              OriginStatementInfo origStmt, List<Integer> sortColumns) {
-        setIndexMeta(indexId, indexName, schema, schemaVersion, schemaHash, shortKeyColumnCount, storageType, keysType,
+        setIndexMeta(indexMetaId, indexName, schema, schemaVersion, schemaHash, shortKeyColumnCount, storageType, keysType,
                 origStmt, sortColumns, null);
     }
 
-    public void setIndexMeta(long indexId, String indexName, List<Column> schema, int schemaVersion,
+    public void setIndexMeta(long indexMetaId, String indexName, List<Column> schema, int schemaVersion,
                              int schemaHash, short shortKeyColumnCount, TStorageType storageType, KeysType keysType,
                              OriginStatementInfo origStmt, List<Integer> sortColumns, List<Integer> sortColumnUniqueIds) {
         // Nullable when meta comes from schema change log replay.
         // The replay log only save the index id, so we need to get name by id.
         if (indexName == null) {
-            indexName = getIndexNameById(indexId);
+            indexName = getIndexNameByMetaId(indexMetaId);
             Preconditions.checkState(indexName != null);
         }
         // Nullable when meta is less then VERSION_74
@@ -708,7 +710,7 @@ public class OlapTable extends Table {
         }
         // Nullable when meta comes from schema change
         if (storageType == null) {
-            MaterializedIndexMeta oldIndexMeta = indexIdToMeta.get(indexId);
+            MaterializedIndexMeta oldIndexMeta = indexMetaIdToMeta.get(indexMetaId);
             Preconditions.checkState(oldIndexMeta != null);
             storageType = oldIndexMeta.getStorageType();
             Preconditions.checkState(storageType != null);
@@ -717,11 +719,11 @@ public class OlapTable extends Table {
             Preconditions.checkState(storageType == TStorageType.COLUMN || storageType == TStorageType.COLUMN_WITH_ROW);
         }
 
-        MaterializedIndexMeta indexMeta = new MaterializedIndexMeta(indexId, schema, schemaVersion,
+        MaterializedIndexMeta indexMeta = new MaterializedIndexMeta(indexMetaId, schema, schemaVersion,
                 schemaHash, shortKeyColumnCount, storageType, keysType, origStmt, sortColumns,
                 sortColumnUniqueIds);
-        indexIdToMeta.put(indexId, indexMeta);
-        indexNameToId.put(indexName, indexId);
+        indexMetaIdToMeta.put(indexMetaId, indexMeta);
+        indexNameToMetaId.put(indexName, indexMetaId);
     }
 
     public boolean hasMaterializedView() {
@@ -739,11 +741,11 @@ public class OlapTable extends Table {
     public void rebuildFullSchema() {
         List<Column> newFullSchema = new CopyOnWriteArrayList<>();
         Set<String> addedColumnNames = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
-        for (Column baseColumn : indexIdToMeta.get(baseIndexId).getSchema()) {
+        for (Column baseColumn : indexMetaIdToMeta.get(baseIndexMetaId).getSchema()) {
             newFullSchema.add(baseColumn);
             addedColumnNames.add(baseColumn.getName());
         }
-        for (MaterializedIndexMeta indexMeta : indexIdToMeta.values()) {
+        for (MaterializedIndexMeta indexMeta : indexMetaIdToMeta.values()) {
             for (Column column : indexMeta.getSchema()) {
                 if (!addedColumnNames.contains(column.getName())) {
                     newFullSchema.add(column);
@@ -764,35 +766,35 @@ public class OlapTable extends Table {
     }
 
     public boolean deleteIndexInfo(String indexName) {
-        if (!indexNameToId.containsKey(indexName)) {
+        if (!indexNameToMetaId.containsKey(indexName)) {
             return false;
         }
 
-        long indexId = this.indexNameToId.remove(indexName);
-        this.indexIdToMeta.remove(indexId);
+        long indexMetaId = this.indexNameToMetaId.remove(indexName);
+        this.indexMetaIdToMeta.remove(indexMetaId);
         // Some column of deleted index should be removed during `deleteIndexInfo` such
         // as `mv_bitmap_union_c1`
         // If deleted index id == base index id, the schema will not be rebuilt.
         // The reason is that the base index has been removed from indexIdToMeta while
         // the new base index hasn't changed.
         // The schema could not be rebuild in here with error base index id.
-        if (indexId != baseIndexId) {
+        if (indexMetaId != baseIndexMetaId) {
             rebuildFullSchema();
         }
         return true;
     }
 
-    public Map<String, Long> getIndexNameToId() {
-        return indexNameToId;
+    public Map<String, Long> getIndexNameToMetaId() {
+        return indexNameToMetaId;
     }
 
-    public Long getIndexIdByName(String indexName) {
-        return indexNameToId.get(indexName);
+    public Long getIndexMetaIdByName(String indexName) {
+        return indexNameToMetaId.get(indexName);
     }
 
-    public String getIndexNameById(long indexId) {
-        for (Map.Entry<String, Long> entry : indexNameToId.entrySet()) {
-            if (entry.getValue() == indexId) {
+    public String getIndexNameByMetaId(long indexMetaId) {
+        for (Map.Entry<String, Long> entry : indexNameToMetaId.entrySet()) {
+            if (entry.getValue() == indexMetaId) {
                 return entry.getKey();
             }
         }
@@ -803,10 +805,10 @@ public class OlapTable extends Table {
         List<MaterializedIndexMeta> visibleMVs = Lists.newArrayList();
         List<MaterializedIndex> mvs = getVisibleIndex();
         for (MaterializedIndex mv : mvs) {
-            if (!indexIdToMeta.containsKey(mv.getId())) {
+            if (!indexMetaIdToMeta.containsKey(mv.getId())) {
                 continue;
             }
-            visibleMVs.add(indexIdToMeta.get(mv.getId()));
+            visibleMVs.add(indexMetaIdToMeta.get(mv.getId()));
         }
         return visibleMVs;
     }
@@ -837,12 +839,12 @@ public class OlapTable extends Table {
 
     // this is only for schema change.
     public void renameIndexForSchemaChange(String name, String newName) {
-        long idxId = indexNameToId.remove(name);
-        indexNameToId.put(newName, idxId);
+        long idxId = indexNameToMetaId.remove(name);
+        indexNameToMetaId.put(newName, idxId);
     }
 
     public void renameColumnNamePrefix(long idxId) {
-        List<Column> columns = indexIdToMeta.get(idxId).getSchema();
+        List<Column> columns = indexMetaIdToMeta.get(idxId).getSchema();
         for (Column column : columns) {
             column.setName(Column.removeNamePrefix(column.getName()));
         }
@@ -909,22 +911,22 @@ public class OlapTable extends Table {
         return Status.OK;
     }
 
-    public Map<Long, MaterializedIndexMeta> getIndexIdToMeta() {
-        return indexIdToMeta;
+    public Map<Long, MaterializedIndexMeta> getIndexMetaIdToMeta() {
+        return indexMetaIdToMeta;
     }
 
     public Map<Long, MaterializedIndexMeta> getCopiedIndexIdToMeta() {
-        return new HashMap<>(indexIdToMeta);
+        return new HashMap<>(indexMetaIdToMeta);
     }
 
     public MaterializedIndexMeta getIndexMetaByIndexId(long indexId) {
-        return indexIdToMeta.get(indexId);
+        return indexMetaIdToMeta.get(indexId);
     }
 
     public List<Long> getIndexIdListExceptBaseIndex() {
         List<Long> result = Lists.newArrayList();
-        for (Long indexId : indexIdToMeta.keySet()) {
-            if (indexId != baseIndexId) {
+        for (Long indexId : indexMetaIdToMeta.keySet()) {
+            if (indexId != baseIndexMetaId) {
                 result.add(indexId);
             }
         }
@@ -934,14 +936,14 @@ public class OlapTable extends Table {
     // schema
     public Map<Long, List<Column>> getIndexIdToSchema() {
         Map<Long, List<Column>> result = Maps.newHashMap();
-        for (Map.Entry<Long, MaterializedIndexMeta> entry : indexIdToMeta.entrySet()) {
+        for (Map.Entry<Long, MaterializedIndexMeta> entry : indexMetaIdToMeta.entrySet()) {
             result.put(entry.getKey(), entry.getValue().getSchema());
         }
         return result;
     }
 
-    public List<Column> getSchemaByIndexId(Long indexId) {
-        MaterializedIndexMeta meta = indexIdToMeta.get(indexId);
+    public List<Column> getSchemaByIndexMetaId(Long indexMetaId) {
+        MaterializedIndexMeta meta = indexMetaIdToMeta.get(indexMetaId);
         if (meta != null) {
             return meta.getSchema();
         }
@@ -962,7 +964,7 @@ public class OlapTable extends Table {
 
     public List<Column> getKeyColumnsByIndexId(Long indexId) {
         ArrayList<Column> keyColumns = Lists.newArrayList();
-        List<Column> allColumns = this.getSchemaByIndexId(indexId);
+        List<Column> allColumns = this.getSchemaByIndexMetaId(indexId);
         for (Column column : allColumns) {
             if (column.isKey()) {
                 keyColumns.add(column);
@@ -975,22 +977,22 @@ public class OlapTable extends Table {
     // schemaHash
     public Map<Long, Integer> getIndexIdToSchemaHash() {
         Map<Long, Integer> result = Maps.newHashMap();
-        for (Map.Entry<Long, MaterializedIndexMeta> entry : indexIdToMeta.entrySet()) {
+        for (Map.Entry<Long, MaterializedIndexMeta> entry : indexMetaIdToMeta.entrySet()) {
             result.put(entry.getKey(), entry.getValue().getSchemaHash());
         }
         return result;
     }
 
-    public int getSchemaHashByIndexId(Long indexId) {
-        MaterializedIndexMeta indexMeta = indexIdToMeta.get(indexId);
+    public int getSchemaHashByIndexMetaId(Long indexMetaId) {
+        MaterializedIndexMeta indexMeta = indexMetaIdToMeta.get(indexMetaId);
         if (indexMeta == null) {
             return -1;
         }
         return indexMeta.getSchemaHash();
     }
 
-    public TStorageType getStorageTypeByIndexId(Long indexId) {
-        MaterializedIndexMeta indexMeta = indexIdToMeta.get(indexId);
+    public TStorageType getStorageTypeByIndexMetaId(Long indexMetaId) {
+        MaterializedIndexMeta indexMeta = indexMetaIdToMeta.get(indexMetaId);
         if (indexMeta == null) {
             return TStorageType.COLUMN;
         }
@@ -1001,9 +1003,9 @@ public class OlapTable extends Table {
         return keysType;
     }
 
-    public KeysType getKeysTypeByIndexId(long indexId) {
-        MaterializedIndexMeta indexMeta = indexIdToMeta.get(indexId);
-        Preconditions.checkNotNull(indexMeta, "index id:" + indexId + " meta is null");
+    public KeysType getKeysTypeByIndexMetaId(long indexMetaId) {
+        MaterializedIndexMeta indexMeta = indexMetaIdToMeta.get(indexMetaId);
+        Preconditions.checkNotNull(indexMeta, "index id:" + indexMetaId + " meta is null");
         return indexMeta.getKeysType();
     }
 
@@ -1676,7 +1678,7 @@ public class OlapTable extends Table {
         }
 
         // If there is only one meta, return false
-        if (indexIdToMeta.size() == 1) {
+        if (indexMetaIdToMeta.size() == 1) {
             return false;
         }
 
@@ -1688,8 +1690,8 @@ public class OlapTable extends Table {
 
         // If all indexes except the basic index are all colocate, we can use colocate
         // mv index optimization.
-        return indexIdToMeta.values().stream()
-                .filter(x -> x.getIndexId() != baseIndexId)
+        return indexMetaIdToMeta.values().stream()
+                .filter(x -> x.getIndexMetaId() != baseIndexMetaId)
                 .allMatch(MaterializedIndexMeta::isColocateMVIndex);
     }
 
@@ -1804,7 +1806,7 @@ public class OlapTable extends Table {
                     .map(p -> p.getMaterializedIndices(IndexExtState.SHADOW)).orElse(Lists.newArrayList());
             for (MaterializedIndex deleteIndex : shadowIndex) {
                 LOG.debug("copied table delete shadow index : {}", deleteIndex.getId());
-                copied.deleteIndexInfo(copied.getIndexNameById(deleteIndex.getId()));
+                copied.deleteIndexInfo(copied.getIndexNameByMetaId(deleteIndex.getId()));
             }
             copied.setState(OlapTableState.NORMAL);
             for (Partition partition : copied.getPartitions()) {
@@ -2019,7 +2021,7 @@ public class OlapTable extends Table {
 
     @Override
     public List<Column> getBaseSchema() {
-        return getSchemaByIndexId(baseIndexId);
+        return getSchemaByIndexMetaId(baseIndexMetaId);
     }
 
     @Override
@@ -2055,7 +2057,7 @@ public class OlapTable extends Table {
      */
     public List<Column> getBaseSchemaWithoutGeneratedColumn() {
         if (!hasGeneratedColumn()) {
-            return getSchemaByIndexId(baseIndexId);
+            return getSchemaByIndexMetaId(baseIndexMetaId);
         }
 
         List<Column> schema = Lists.newArrayList(getBaseSchema());
@@ -2954,14 +2956,14 @@ public class OlapTable extends Table {
      * Analyze defined expr of columns in rollup index meta.
      */
     private void analyzeRollupIndexMeta() {
-        if (indexIdToMeta.size() <= 1) {
+        if (indexMetaIdToMeta.size() <= 1) {
             return;
         }
         TableName tableName = new TableName(null, getName());
         ConnectContext session = ConnectContext.buildInner();
         Optional<SelectAnalyzer.SlotRefTableNameCleaner> visitorOpt = Optional.empty();
-        for (MaterializedIndexMeta indexMeta : indexIdToMeta.values()) {
-            if (indexMeta.getIndexId() == baseIndexId) {
+        for (MaterializedIndexMeta indexMeta : indexMetaIdToMeta.values()) {
+            if (indexMeta.getIndexMetaId() == baseIndexMetaId) {
                 continue;
             }
             List<Column> columns = indexMeta.getSchema();
@@ -2990,7 +2992,7 @@ public class OlapTable extends Table {
                                             .collect(Collectors.toList()))), session);
                 }
             } catch (Exception e) {
-                LOG.warn("Analyze rollup index meta failed, index id: {}, table:{}", indexMeta.getIndexId(), getName(), e);
+                LOG.warn("Analyze rollup index meta failed, index id: {}, table:{}", indexMeta.getIndexMetaId(), getName(), e);
             }
         }
     }

@@ -949,7 +949,7 @@ public class LoadPlannerTest {
                 result = KeysType.UNIQUE_KEYS;
                 table.getDefaultReplicationNum();
                 result = 3;
-                table.getBaseIndexId();
+                table.getBaseIndexMetaId();
                 result = 1;
                 table.getKeyColumnsByIndexId((long) 1);
                 result = keyColumns;
@@ -1067,7 +1067,7 @@ public class LoadPlannerTest {
                 result = KeysType.AGG_KEYS;
                 table.getDefaultReplicationNum();
                 result = 3;
-                table.getBaseIndexId();
+                table.getBaseIndexMetaId();
                 result = 1;
                 table.getIndexIdToSchema();
                 result = indexSchema;

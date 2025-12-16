@@ -240,7 +240,7 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
             List<Integer> sortKeyColumnUniqueIds = null;
 
             long orgIndexId = indexIdMap.get(shadowIdxId);
-            if (orgIndexId == table.getBaseIndexId()) {
+            if (orgIndexId == table.getBaseIndexMetaId()) {
                 sortKeyColumnIndexes = sortKeyIdxes;
                 sortKeyColumnUniqueIds = sortKeyUniqueIds;
             }
@@ -257,7 +257,7 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
 
             table.setIndexMeta(shadowIdxId, indexIdToName.get(shadowIdxId), columns, 0, 0,
                     indexShortKeyMap.get(shadowIdxId), TStorageType.COLUMN,
-                    table.getKeysTypeByIndexId(indexIdMap.get(shadowIdxId)), null, sortKeyColumnIndexes,
+                    table.getKeysTypeByIndexMetaId(indexIdMap.get(shadowIdxId)), null, sortKeyColumnIndexes,
                     sortKeyColumnUniqueIds);
             MaterializedIndexMeta orgIndexMeta = table.getIndexMetaByIndexId(orgIndexId);
             Preconditions.checkNotNull(orgIndexMeta);
@@ -377,7 +377,7 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
             }
             countDownLatch = new MarkedCountDownLatch<>((int) numTablets);
             createReplicaLatch = countDownLatch;
-            long baseIndexId = table.getBaseIndexId();
+            long baseIndexId = table.getBaseIndexMetaId();
             long gtid = getNextGtid();
             final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
             for (long physicalPartitionId : physicalPartitionIndexMap.rowKeySet()) {
@@ -394,7 +394,7 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
                     short shadowShortKeyColumnCount = indexShortKeyMap.get(shadowIdxId);
                     List<Column> shadowSchema = indexSchemaMap.get(shadowIdxId);
                     long originIndexId = indexIdMap.get(shadowIdxId);
-                    KeysType originKeysType = table.getKeysTypeByIndexId(originIndexId);
+                    KeysType originKeysType = table.getKeysTypeByIndexMetaId(originIndexId);
                     TTabletSchema tabletSchema = SchemaInfo.newBuilder()
                             .setId(shadowIdxId) // For newly create materialized index, schema id equals to index id
                             .setKeysType(originKeysType)
@@ -528,10 +528,10 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
 
                     boolean hasNewGeneratedColumn = false;
                     List<Column> diffGeneratedColumnSchema = Lists.newArrayList();
-                    if (originIndexId == table.getBaseIndexId()) {
-                        List<String> originSchema = table.getSchemaByIndexId(originIndexId).stream().map(col ->
+                    if (originIndexId == table.getBaseIndexMetaId()) {
+                        List<String> originSchema = table.getSchemaByIndexMetaId(originIndexId).stream().map(col ->
                                 new String(col.getName())).collect(Collectors.toList());
-                        List<String> newSchema = table.getSchemaByIndexId(shadowIdxId).stream().map(col ->
+                        List<String> newSchema = table.getSchemaByIndexMetaId(shadowIdxId).stream().map(col ->
                                 new String(col.getName())).collect(Collectors.toList());
 
                         if (originSchema.size() != 0 && newSchema.size() != 0) {
@@ -868,7 +868,7 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
             Long shadowIdxId = entry.getKey();
             long originIndexId = indexIdMap.get(shadowIdxId);
             List<Column> shadowSchema = entry.getValue();
-            List<Column> originSchema = tbl.getSchemaByIndexId(originIndexId);
+            List<Column> originSchema = tbl.getSchemaByIndexMetaId(originIndexId);
             modifiedColumns.addAll(AlterHelper.collectDroppedOrModifiedColumns(originSchema, shadowSchema));
         }
         return modifiedColumns;
@@ -1086,16 +1086,16 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
         for (Map.Entry<Long, Long> entry : indexIdMap.entrySet()) {
             long shadowIdxId = entry.getKey();
             long originIdxId = entry.getValue();
-            String shadowIdxName = table.getIndexNameById(shadowIdxId);
-            String originIdxName = table.getIndexNameById(originIdxId);
+            String shadowIdxName = table.getIndexNameByMetaId(shadowIdxId);
+            String originIdxName = table.getIndexNameByMetaId(originIdxId);
             table.deleteIndexInfo(originIdxName);
             // the shadow index name is '__starrocks_shadow_xxx', rename it to origin name 'xxx'
             // this will also remove the prefix of columns
             table.renameIndexForSchemaChange(shadowIdxName, originIdxName);
             table.renameColumnNamePrefix(shadowIdxId);
 
-            if (originIdxId == table.getBaseIndexId()) {
-                table.setBaseIndexId(shadowIdxId);
+            if (originIdxId == table.getBaseIndexMetaId()) {
+                table.setBaseIndexMetaId(shadowIdxId);
             }
         }
         // rebuild table's full schema

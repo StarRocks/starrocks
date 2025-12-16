@@ -69,7 +69,7 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
             long limit,
             ScalarOperator predicate) {
         this(table, colRefToColumnMetaMap, columnMetaToColRefMap, distributionSpec, limit, predicate,
-                ((OlapTable) table).getBaseIndexId(),
+                ((OlapTable) table).getBaseIndexMetaId(),
                 null,
                 null,
                 false,

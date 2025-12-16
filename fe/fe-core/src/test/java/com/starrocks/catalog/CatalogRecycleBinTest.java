@@ -303,7 +303,7 @@ public class CatalogRecycleBinTest {
 
         // Table
         OlapTable table = new OlapTable(tableId, "t1", columns, KeysType.AGG_KEYS, partitionInfo, distributionInfo);
-        Deencapsulation.setField(table, "baseIndexId", indexId);
+        Deencapsulation.setField(table, "baseIndexMetaId", indexId);
         table.addPartition(partition);
         table.setIndexMeta(indexId, "t1", columns, 0, 0, (short) 3, TStorageType.COLUMN, KeysType.AGG_KEYS);
 
@@ -375,7 +375,7 @@ public class CatalogRecycleBinTest {
 
         // Table
         OlapTable table = new OlapTable(tableId, "t1", columns, KeysType.AGG_KEYS, partitionInfo, distributionInfo);
-        Deencapsulation.setField(table, "baseIndexId", indexId);
+        Deencapsulation.setField(table, "baseIndexMetaId", indexId);
         table.addPartition(partition);
         table.setIndexMeta(indexId, "t1", columns, 0, 0, (short) 3, TStorageType.COLUMN, KeysType.AGG_KEYS);
 
