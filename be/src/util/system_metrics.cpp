@@ -391,6 +391,7 @@ void SystemMetrics::update_memory_metrics() {
     SET_MEM_METRIC_VALUE(clone_mem_tracker, clone_mem_bytes)
     SET_MEM_METRIC_VALUE(consistency_mem_tracker, consistency_mem_bytes)
     SET_MEM_METRIC_VALUE(datacache_mem_tracker, datacache_mem_bytes)
+    SET_MEM_METRIC_VALUE(replication_mem_tracker, replication_mem_bytes)
 #undef SET_MEM_METRIC_VALUE
 }
 

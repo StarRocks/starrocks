@@ -232,9 +232,11 @@ std::string dump_memory_tracker() {
     DUMP_METRIC(datacache, mem_metrics->datacache_mem_bytes.value())
     DUMP_METRIC(jit, mem_metrics->jit_cache_mem_bytes.value())
     DUMP_METRIC(brpc_iobuf, mem_metrics->brpc_iobuf_mem_bytes.value())
+    DUMP_METRIC(replication, mem_metrics->replication_mem_bytes.value())
 
     DUMP_METRIC(jemalloc_active, mem_metrics->jemalloc_active_bytes.value())
     DUMP_METRIC(jemalloc_allocated, mem_metrics->jemalloc_allocated_bytes.value())
+    DUMP_METRIC(jemalloc_metadata, mem_metrics->jemalloc_metadata_bytes.value())
     DUMP_METRIC(jemalloc_rss, mem_metrics->jemalloc_resident_bytes.value())
 
     return fmt::to_string(buffer);
