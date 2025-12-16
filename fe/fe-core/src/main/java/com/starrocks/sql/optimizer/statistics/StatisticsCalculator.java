@@ -571,33 +571,33 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
     private Void computeIcebergScanNode(Operator node, ExpressionContext context, Table table,
                                         Map<ColumnRefOperator, Column> colRefToColumnMetaMap) {
-        if (context.getStatistics() == null) {
-            String catalogName = table.getCatalogName();
-            TvrVersionRange version;
-            IcebergMORParams icebergMORParams;
-            if (node.isLogical()) {
-                version = ((LogicalIcebergScanOperator) node).getTvrVersionRange();
-                icebergMORParams = ((LogicalIcebergScanOperator) node).getMORParam();
-            } else {
-                version = ((PhysicalIcebergScanOperator) node).getTvrVersionRange();
-                icebergMORParams = ((PhysicalIcebergScanOperator) node).getMORParams();
-            }
+        // Existing context statistics describe the filtered/projected output, not the base scan.
+        // A real derivation must start from metadata/cache again to avoid filtering twice.
+        String catalogName = table.getCatalogName();
+        TvrVersionRange version;
+        IcebergMORParams icebergMORParams;
+        if (node.isLogical()) {
+            version = ((LogicalIcebergScanOperator) node).getTvrVersionRange();
+            icebergMORParams = ((LogicalIcebergScanOperator) node).getMORParam();
+        } else {
+            version = ((PhysicalIcebergScanOperator) node).getTvrVersionRange();
+            icebergMORParams = ((PhysicalIcebergScanOperator) node).getMORParams();
+        }
 
-            Statistics statistics;
-            if (icebergMORParams == IcebergMORParams.EMPTY || icebergMORParams == IcebergMORParams.DATA_FILE_WITHOUT_EQ_DELETE) {
-                statistics = GlobalStateMgr.getCurrentState().getMetadataMgr().getTableStatistics(
-                        optimizerContext, catalogName, table, colRefToColumnMetaMap, null,
-                        node.getPredicate(), node.getLimit(), version);
-            } else {
-                statistics = StatisticsUtils.buildDefaultStatistics(colRefToColumnMetaMap.keySet());
-            }
+        Statistics statistics;
+        if (icebergMORParams == IcebergMORParams.EMPTY || icebergMORParams == IcebergMORParams.DATA_FILE_WITHOUT_EQ_DELETE) {
+            statistics = GlobalStateMgr.getCurrentState().getMetadataMgr().getTableStatistics(
+                    optimizerContext, catalogName, table, colRefToColumnMetaMap, null,
+                    node.getPredicate(), node.getLimit(), version);
+        } else {
+            statistics = StatisticsUtils.buildDefaultStatistics(colRefToColumnMetaMap.keySet());
+        }
 
-            context.setStatistics(statistics);
-            if (node.isLogical()) {
-                boolean hasUnknownColumns = statistics.getColumnStatistics().values().stream()
-                        .anyMatch(ColumnStatistic::isUnknown);
-                ((LogicalIcebergScanOperator) node).setHasUnknownColumn(hasUnknownColumns);
-            }
+        context.setStatistics(statistics);
+        if (node.isLogical()) {
+            boolean hasUnknownColumns = statistics.getColumnStatistics().values().stream()
+                    .anyMatch(ColumnStatistic::isUnknown);
+            ((LogicalIcebergScanOperator) node).setHasUnknownColumn(hasUnknownColumns);
         }
 
         return visitOperator(node, context);
@@ -615,18 +615,18 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
     private Void computeDeltaLakeScanNode(Operator node, ExpressionContext context, Table table,
                                           Map<ColumnRefOperator, Column> columnRefOperatorColumnMap) {
-        if (context.getStatistics() == null) {
-            String catalogName = table.getCatalogName();
-            Statistics stats = GlobalStateMgr.getCurrentState().getMetadataMgr().getTableStatistics(
-                    optimizerContext, catalogName, table, columnRefOperatorColumnMap, null,
-                    node.getPredicate(), node.getLimit(), TvrTableSnapshot.empty());
-            context.setStatistics(stats);
+        // Existing context statistics describe the filtered/projected output, not the base scan.
+        // A real derivation must start from metadata/cache again to avoid filtering twice.
+        String catalogName = table.getCatalogName();
+        Statistics stats = GlobalStateMgr.getCurrentState().getMetadataMgr().getTableStatistics(
+                optimizerContext, catalogName, table, columnRefOperatorColumnMap, null,
+                node.getPredicate(), node.getLimit(), TvrTableSnapshot.empty());
+        context.setStatistics(stats);
 
-            if (node.isLogical()) {
-                boolean hasUnknownColumns = stats.getColumnStatistics().values().stream()
-                        .anyMatch(ColumnStatistic::isUnknown);
-                ((LogicalDeltaLakeScanOperator) node).setHasUnknownColumn(hasUnknownColumns);
-            }
+        if (node.isLogical()) {
+            boolean hasUnknownColumns = stats.getColumnStatistics().values().stream()
+                    .anyMatch(ColumnStatistic::isUnknown);
+            ((LogicalDeltaLakeScanOperator) node).setHasUnknownColumn(hasUnknownColumns);
         }
 
         return visitOperator(node, context);
@@ -747,17 +747,17 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
     private Void computePaimonScanNode(Operator node, ExpressionContext context, Table table,
                                        Map<ColumnRefOperator, Column> columnRefOperatorColumnMap,
                                        TvrVersionRange tvrVersionRange) {
-        if (context.getStatistics() == null) {
-            String catalogName = table.getCatalogName();
-            Statistics stats = GlobalStateMgr.getCurrentState().getMetadataMgr().getTableStatistics(
-                    optimizerContext, catalogName, table, columnRefOperatorColumnMap, null,
-                    node.getPredicate(), node.getLimit(), tvrVersionRange);
-            context.setStatistics(stats);
-            if (node.isLogical()) {
-                boolean hasUnknownColumns = stats.getColumnStatistics().values().stream()
-                        .anyMatch(ColumnStatistic::isUnknown);
-                ((LogicalPaimonScanOperator) node).setHasUnknownColumn(hasUnknownColumns);
-            }
+        // Existing context statistics describe the filtered/projected output, not the base scan.
+        // A real derivation must start from metadata/cache again to avoid filtering twice.
+        String catalogName = table.getCatalogName();
+        Statistics stats = GlobalStateMgr.getCurrentState().getMetadataMgr().getTableStatistics(
+                optimizerContext, catalogName, table, columnRefOperatorColumnMap, null,
+                node.getPredicate(), node.getLimit(), tvrVersionRange);
+        context.setStatistics(stats);
+        if (node.isLogical()) {
+            boolean hasUnknownColumns = stats.getColumnStatistics().values().stream()
+                    .anyMatch(ColumnStatistic::isUnknown);
+            ((LogicalPaimonScanOperator) node).setHasUnknownColumn(hasUnknownColumns);
         }
 
         return visitOperator(node, context);
@@ -775,12 +775,12 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
     private Void computeOdpsScanNode(Operator node, ExpressionContext context, Table table,
                                      Map<ColumnRefOperator, Column> columnRefOperatorColumnMap) {
-        if (context.getStatistics() == null) {
-            String catalogName = table.getCatalogName();
-            Statistics stats = GlobalStateMgr.getCurrentState().getMetadataMgr().getTableStatistics(
-                    optimizerContext, catalogName, table, columnRefOperatorColumnMap, null, node.getPredicate());
-            context.setStatistics(stats);
-        }
+        // Existing context statistics describe the filtered/projected output, not the base scan.
+        // A real derivation must start from metadata/cache again to avoid filtering twice.
+        String catalogName = table.getCatalogName();
+        Statistics stats = GlobalStateMgr.getCurrentState().getMetadataMgr().getTableStatistics(
+                optimizerContext, catalogName, table, columnRefOperatorColumnMap, null, node.getPredicate());
+        context.setStatistics(stats);
         return visitOperator(node, context);
     }
 
@@ -824,17 +824,17 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
     private Void computeFlussScanNode(Operator node, ExpressionContext context, Table table,
                                       Map<ColumnRefOperator, Column> columnRefOperatorColumnMap) {
-        if (context.getStatistics() == null) {
-            String catalogName = table.getCatalogName();
-            Statistics stats = GlobalStateMgr.getCurrentState().getMetadataMgr().getTableStatistics(
-                    optimizerContext, catalogName, table, columnRefOperatorColumnMap, null,
-                    node.getPredicate(), node.getLimit(), TvrTableSnapshot.empty());
-            context.setStatistics(stats);
-            if (node.isLogical()) {
-                boolean hasUnknownColumns = stats.getColumnStatistics().values().stream()
-                        .anyMatch(ColumnStatistic::isUnknown);
-                ((LogicalFlussScanOperator) node).setHasUnknownColumn(hasUnknownColumns);
-            }
+        // Existing context statistics describe the filtered/projected output, not the base scan.
+        // A real derivation must start from metadata/cache again to avoid filtering twice.
+        String catalogName = table.getCatalogName();
+        Statistics stats = GlobalStateMgr.getCurrentState().getMetadataMgr().getTableStatistics(
+                optimizerContext, catalogName, table, columnRefOperatorColumnMap, null,
+                node.getPredicate(), node.getLimit(), TvrTableSnapshot.empty());
+        context.setStatistics(stats);
+        if (node.isLogical()) {
+            boolean hasUnknownColumns = stats.getColumnStatistics().values().stream()
+                    .anyMatch(ColumnStatistic::isUnknown);
+            ((LogicalFlussScanOperator) node).setHasUnknownColumn(hasUnknownColumns);
         }
 
         return visitOperator(node, context);
