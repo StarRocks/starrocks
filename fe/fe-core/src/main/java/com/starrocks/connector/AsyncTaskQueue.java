@@ -21,6 +21,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.Executor;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.Condition;
@@ -163,7 +164,12 @@ public class AsyncTaskQueue<T> {
                     }
                     return;
                 }
-                outputQueueCondition.await();
+                // Use timeout await to avoid lost signal and potential deadlock
+                boolean signaled = outputQueueCondition.await(500, TimeUnit.MILLISECONDS);
+                if (!signaled) {
+                    LOG.debug("AsyncTaskQueue await timeout, will retry. taskQueueSize: {}, outputQueueSize: {}",
+                            taskQueueSize.get(), outputQueueSize.get());
+                }
             }
             while (maxSize > 0 && !outputQueue.isEmpty()) {
                 T output = outputQueue.remove(outputQueue.size() - 1);
@@ -173,7 +179,8 @@ public class AsyncTaskQueue<T> {
                 outputQueueSize.addAndGet(-size);
             }
         } catch (InterruptedException e) {
-            throw new RuntimeException(e);
+            Thread.currentThread().interrupt();
+            LOG.warn("Thread interrupted while waiting for outputs in AsyncTaskQueue", e);
         } finally {
             outputQueueLock.unlock();
         }
