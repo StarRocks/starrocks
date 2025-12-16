@@ -273,6 +273,7 @@ public class FunctionSet {
     public static final String JSON_LENGTH = "json_length";
     public static final String JSON_REMOVE = "json_remove";
     public static final String JSON_SET = "json_set";
+    public static final String JSON_PRETTY = "json_pretty";
 
     // Variant functions:
     public static final String VARIANT_QUERY = "variant_query";
@@ -943,8 +944,8 @@ public class FunctionSet {
                 || functionName.equalsIgnoreCase(LEAD)
                 || functionName.equalsIgnoreCase(LAG)
                 || functionName.equalsIgnoreCase(APPROX_TOP_K)) {
-            final ScalarType descArgType = (ScalarType) descArgTypes[0];
-            final ScalarType candidateArgType = (ScalarType) candidateArgTypes[0];
+            final Type descArgType = descArgTypes[0];
+            final Type candidateArgType = candidateArgTypes[0];
             if (functionName.equalsIgnoreCase(LEAD) ||
                     functionName.equalsIgnoreCase(LAG) ||
                     functionName.equalsIgnoreCase(APPROX_TOP_K)) {

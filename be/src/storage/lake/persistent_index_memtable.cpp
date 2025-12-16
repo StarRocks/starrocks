@@ -185,7 +185,7 @@ size_t PersistentIndexMemtable::memory_usage() const {
 }
 
 Status PersistentIndexMemtable::flush(WritableFile* wf, uint64_t* filesize) {
-    return PersistentIndexSstable::build_sstable(_map, wf, filesize);
+    return PersistentIndexSstable::build_sstable(_map, wf, filesize, nullptr);
 }
 
 void PersistentIndexMemtable::clear() {

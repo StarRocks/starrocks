@@ -21,6 +21,7 @@
 #include <mutex>
 #include <thread>
 
+#include "common/logging.h"
 #include "exec/data_sink.h"
 #include "exec/pipeline/group_execution/execution_group.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
@@ -209,6 +210,10 @@ void FragmentContext::set_final_status(const Status& status) {
 
         auto detailed_message = _s_status.detailed_message();
         bool is_timeout = detailed_message == "TimeOut";
+        if (is_timeout) {
+            hook_on_query_timeout(_query_id, _runtime_state->query_ctx()->get_query_expire_seconds());
+        }
+
         if (_s_status.is_cancelled()) {
             std::string cancel_msg =
                     fmt::format("[Driver] Canceled, query_id={}, instance_id={}, reason={}", print_id(_query_id),
