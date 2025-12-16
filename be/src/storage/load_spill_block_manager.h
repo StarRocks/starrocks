@@ -34,9 +34,13 @@ public:
 
     std::unique_ptr<ThreadPoolToken> create_token();
 
+    std::unique_ptr<ThreadPoolToken> create_tablet_internal_parallel_merge_token();
+
 private:
     // ThreadPool for merge.
     std::unique_ptr<ThreadPool> _merge_pool;
+    // ThreadPool for inter-tablet parallel merge
+    std::unique_ptr<ThreadPool> _tablet_internal_parallel_merge_pool;
 };
 
 class LoadSpillBlockContainer {

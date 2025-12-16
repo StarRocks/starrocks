@@ -57,4 +57,97 @@ TEST_F(LoadSpillBlockManagerTest, test_write_read) {
     ASSERT_OK(block_manager->release_block(block));
 }
 
+class LoadSpillBlockMergeExecutorTest : public ::testing::Test {
+public:
+    void SetUp() override {}
+    void TearDown() override {}
+};
+
+TEST_F(LoadSpillBlockMergeExecutorTest, test_init) {
+    LoadSpillBlockMergeExecutor executor;
+    ASSERT_OK(executor.init());
+    ASSERT_NE(executor.get_thread_pool(), nullptr);
+}
+
+TEST_F(LoadSpillBlockMergeExecutorTest, test_create_token) {
+    LoadSpillBlockMergeExecutor executor;
+    ASSERT_OK(executor.init());
+
+    // Test creating regular merge token
+    auto token = executor.create_token();
+    ASSERT_NE(token, nullptr);
+}
+
+TEST_F(LoadSpillBlockMergeExecutorTest, test_create_tablet_internal_parallel_merge_token) {
+    LoadSpillBlockMergeExecutor executor;
+    ASSERT_OK(executor.init());
+
+    // Test creating tablet internal parallel merge token
+    auto token = executor.create_tablet_internal_parallel_merge_token();
+    ASSERT_NE(token, nullptr);
+}
+
+TEST_F(LoadSpillBlockMergeExecutorTest, test_create_multiple_tokens) {
+    LoadSpillBlockMergeExecutor executor;
+    ASSERT_OK(executor.init());
+
+    // Test creating multiple tokens of different types
+    std::vector<std::unique_ptr<ThreadPoolToken>> tokens;
+    for (int i = 0; i < 5; i++) {
+        tokens.push_back(executor.create_token());
+        ASSERT_NE(tokens.back(), nullptr);
+    }
+
+    std::vector<std::unique_ptr<ThreadPoolToken>> parallel_tokens;
+    for (int i = 0; i < 5; i++) {
+        parallel_tokens.push_back(executor.create_tablet_internal_parallel_merge_token());
+        ASSERT_NE(parallel_tokens.back(), nullptr);
+    }
+}
+
+TEST_F(LoadSpillBlockMergeExecutorTest, test_refresh_max_thread_num) {
+    LoadSpillBlockMergeExecutor executor;
+    ASSERT_OK(executor.init());
+
+    // Test refreshing max thread number
+    ASSERT_OK(executor.refresh_max_thread_num());
+
+    // Verify the thread pool is still functional after refresh
+    auto token = executor.create_token();
+    ASSERT_NE(token, nullptr);
+
+    auto parallel_token = executor.create_tablet_internal_parallel_merge_token();
+    ASSERT_NE(parallel_token, nullptr);
+}
+
+TEST_F(LoadSpillBlockMergeExecutorTest, test_token_execution_mode) {
+    LoadSpillBlockMergeExecutor executor;
+    ASSERT_OK(executor.init());
+
+    // Create tokens and verify they can submit tasks
+    auto serial_token = executor.create_token();
+    auto parallel_token = executor.create_tablet_internal_parallel_merge_token();
+
+    std::atomic<int> serial_counter{0};
+    std::atomic<int> parallel_counter{0};
+
+    // Submit tasks to serial token
+    for (int i = 0; i < 10; i++) {
+        ASSERT_OK(serial_token->submit_func([&serial_counter]() { serial_counter++; }));
+    }
+
+    // Submit tasks to parallel token
+    for (int i = 0; i < 10; i++) {
+        ASSERT_OK(parallel_token->submit_func([&parallel_counter]() { parallel_counter++; }));
+    }
+
+    // Wait for completion
+    serial_token->wait();
+    parallel_token->wait();
+
+    // Verify all tasks executed
+    ASSERT_EQ(serial_counter, 10);
+    ASSERT_EQ(parallel_counter, 10);
+}
+
 } // namespace starrocks
