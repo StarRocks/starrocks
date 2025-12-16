@@ -253,21 +253,25 @@ CREATE TABLE t_tablet_hint (
     k2 int
 )
 DUPLICATE KEY(k1)
-PARTITION BY RANGE(k1) (
-    PARTITION p1 VALUES LESS THAN ("2020-01-01"),
-    PARTITION p2 VALUES LESS THAN ("2020-02-01"),
-    PARTITION p3 VALUES LESS THAN ("2020-03-01")
-)
+PARTITION BY date_trunc('month', k1)
 DISTRIBUTED BY HASH(k1) BUCKETS 3
 PROPERTIES ("replication_num" = "1");
 
 INSERT INTO t_tablet_hint VALUES ("2019-12-01", 10), ("2020-01-15", 20), ("2020-02-15", 30);
 
--- Test: Single tablet hint - EXPLAIN should show TabletIds
-EXPLAIN SELECT min(k2), max(k2) FROM t_tablet_hint TABLET(99999) [_META_];
+-- Test: Invalid tablet hint should throw error (similar to OlapScanNode behavior)
+SELECT min(k2), max(k2) FROM t_tablet_hint TABLET(99999) [_META_];
 
--- Test: Multiple tablet hints
-EXPLAIN SELECT min(k2), max(k2) FROM t_tablet_hint TABLET(11111, 22222) [_META_];
+-- Test: Multiple invalid tablet hints should throw error
+SELECT min(k2), max(k2) FROM t_tablet_hint TABLET(11111, 22222) [_META_];
 
--- Test: Partition + Tablet hint combination
-EXPLAIN SELECT min(k2), max(k2) FROM t_tablet_hint PARTITION(p1) TABLET(99999) [_META_];
+-- Test: Invalid tablet hint with partition should throw error (partition name is auto-generated like p201912)
+SELECT min(k2), max(k2) FROM t_tablet_hint PARTITION(p201912) TABLET(99999) [_META_];
+
+-- Test: Valid tablet hint should work correctly with EXPLAIN verification
+function: set_first_tablet_id("t_tablet_hint")
+EXPLAIN SELECT count(*) FROM t_tablet_hint TABLET(${tablet_id}) [_META_];
+
+-- Test: Valid partition and tablet hint together
+function: set_first_tablet_id("t_tablet_hint", "p201912")
+EXPLAIN SELECT min(k2), max(k2) FROM t_tablet_hint PARTITION(p201912) TABLET(${tablet_id}) [_META_];

@@ -56,6 +56,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.common.ErrorType.INTERNAL_ERROR;
+import static com.starrocks.sql.common.ErrorType.USER_ERROR;
 
 public class MetaScanNode extends AbstractOlapTableScanNode {
     private static final Logger LOG = LogManager.getLogger(MetaScanNode.class);
@@ -92,6 +93,24 @@ public class MetaScanNode extends AbstractOlapTableScanNode {
         // Build tablet hint set for filtering
         Set<Long> hintTabletSet = hintsTabletIds.isEmpty() ?
                 Collections.emptySet() : new HashSet<>(hintsTabletIds);
+
+        // Validate all tablet hints exist in the selected partitions - similar to OlapScanNode behavior
+        if (!hintsTabletIds.isEmpty()) {
+            Set<Long> allValidTabletIds = new HashSet<>();
+            for (PhysicalPartition partition : partitions) {
+                MaterializedIndex index = partition.getBaseIndex();
+                for (Tablet tablet : index.getTablets()) {
+                    allValidTabletIds.add(tablet.getId());
+                }
+            }
+
+            for (Long hintTabletId : hintsTabletIds) {
+                if (!allValidTabletIds.contains(hintTabletId)) {
+                    throw new StarRocksPlannerException(
+                            "Invalid tablet id: '" + hintTabletId + "'", USER_ERROR);
+                }
+            }
+        }
 
         for (PhysicalPartition partition : partitions) {
             MaterializedIndex index = partition.getBaseIndex();
