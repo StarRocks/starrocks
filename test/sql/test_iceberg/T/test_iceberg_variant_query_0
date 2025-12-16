@@ -82,9 +82,6 @@ alter table variant_test_cases execute add_files(location='oss://${oss_bucket}/t
 alter table variant_test_cases execute add_files(location='oss://${oss_bucket}/test_iceberg_variant_query_0/${uuid0}/variant_query_0/data/00003-3-968ed6e2-3543-431b-ba6c-b41704fb5cd7-0-00001.parquet', file_format='parquet');
 
 
--- select * from variant_test_cases order by case_id;
-
-
 -- ========================================
 -- Query 1: Scalar round-trip via get_variant_* helpers
 -- ========================================
@@ -94,6 +91,10 @@ SELECT
     get_variant_int(variant_from_int, '$')          AS variant_int_value,
     get_variant_double(variant_from_float, '$')     AS variant_float_value,
     get_variant_double(variant_from_decimal, '$')   AS variant_decimal_value,
+    variant_typeof(variant_query(variant_from_float, '$'))          AS variant_float_type,
+    variant_typeof(variant_query(variant_from_decimal, '$'))          AS variant_decimal_type,
+    cast(get_variant_string(variant_from_float, '$') as double)     AS variant_float_value_fix,
+    cast(get_variant_string(variant_from_decimal, '$') as double)   AS variant_decimal_value_fix,    
     get_variant_string(variant_from_string, '$')    AS variant_string_value
 FROM variant_test_cases
 ORDER BY case_id;
@@ -108,7 +109,11 @@ SELECT
     get_variant_int(variant_from_struct, '$.counters.success')    AS struct_success,
     get_variant_string(variant_from_map, '$.tier')                AS tier_label,
     get_variant_double(variant_from_array, '$[0]')                AS array_first,
-    get_variant_double(variant_from_array, '$[2]')                AS array_third
+    get_variant_double(variant_from_array, '$[2]')                AS array_third,
+    variant_typeof(variant_query(variant_from_array, '$[0]'))                AS array_first_type,
+    variant_typeof(variant_query(variant_from_array, '$[2]'))                AS array_third_type,
+    cast(get_variant_string(variant_from_array, '$[0]') as double)                AS array_first_fix,
+    cast(get_variant_string(variant_from_array, '$[2]') as double)               AS array_third_fix    
 FROM variant_test_cases
 ORDER BY case_id;
 
@@ -151,71 +156,72 @@ SELECT
     CAST(variant_query(variant_mixed, '$.typed.bool_true') AS BOOLEAN)       AS cast_bool_true,
     CAST(variant_query(variant_mixed, '$.typed.bool_false') AS BOOLEAN)      AS cast_bool_false,
     CAST(variant_query(variant_mixed, '$.typed.int_as_string') AS BIGINT)    AS cast_bigint_from_string,
-    CAST(variant_query(variant_mixed, '$.typed.decimal_text') AS DECIMAL(9, 3)) AS cast_decimal_text,
-    -- CAST(variant_query(variant_mixed, '$.typed.timestamp_text') AS DATETIME) AS cast_timestamp,
+    cast(CAST(variant_query(variant_mixed, '$.typed.int_as_string') AS string) as bigint)   AS cast_bigint_from_string_fix,
+    CAST(variant_query(variant_mixed, '$.typed.decimal_text') AS DECIMAL(9, 3)) AS cast_decimal_text,    
+    CAST(variant_query(variant_mixed, '$.typed.timestamp_text') AS STRING) AS cast_timestamp,
     CAST(variant_query(variant_mixed, '$.matrix[0][1].val') AS SMALLINT)     AS cast_smallint_nested
 FROM variant_test_cases
 ORDER BY case_id;
 
--- -- ========================================
--- -- Query 6: VARIANT -> STRUCT/MAP/ARRAY/JSON with deep path casts
--- -- ========================================
--- SELECT 'Query 6: Cast deeply nested Variant payloads into typed STRUCT/MAP/ARRAY/JSON constructs.' AS case_description;
--- WITH variant_complex AS (
---     SELECT
---         case_id,
---         CAST(variant_deep_struct AS STRUCT<
---             profile STRUCT<
---                 handle STRING,
---                 contact STRUCT<
---                     emails ARRAY<STRING>,
---                     phones ARRAY<STRUCT<channel STRING, number STRING>>
---                 >,
---                 preferences MAP<STRING, STRUCT<enabled BOOLEAN, path STRING>>
---             >,
---             history ARRAY<STRUCT<ts STRING, status STRING, meta MAP<STRING, STRING>>>
---         >) AS struct_from_variant,
---         CAST(variant_deep_map AS MAP<
---             STRING,
---             STRUCT<
---                 limits MAP<STRING, INT>,
---                 routes ARRAY<STRUCT<pattern STRING, methods ARRAY<STRING>>>,
---                 metadata STRUCT<label STRING, path STRING>
---             >
---         >) AS map_from_variant,
---         CAST(variant_deep_array AS ARRAY<
---             STRUCT<
---                 slot INT,
---                 nodes ARRAY<
---                     STRUCT<
---                         id STRING,
---                         status STRING,
---                         metrics MAP<STRING, DOUBLE>,
---                         transitions ARRAY<STRUCT<state STRING, at STRING>>
---                     >
---                 >
---             >
---         >) AS array_from_variant,
---         CAST(variant_deep_json AS JSON) AS json_from_variant
---     FROM variant_test_cases
--- )
--- SELECT
---     case_id,
---     struct_from_variant.profile.contact.phones[2].number           AS variant_struct_second_phone,
---     struct_from_variant.profile.preferences['routing.deep'].path   AS variant_struct_shadow_path,
---     struct_from_variant.history[2].meta['ticket']                  AS variant_struct_ticket,
---     map_from_variant['svc.alpha'].routes[2].pattern                AS variant_map_alpha_route,
---     map_from_variant['svc.gamma.route'].limits['crit']             AS variant_map_gamma_crit,
---     array_from_variant[2].nodes[1].transitions[2].state            AS variant_array_recover_state,
---     array_from_variant[2].nodes[2].metrics['iops']                 AS variant_array_node3_iops
---     CAST(json_query(json_from_variant, '$.envelope.layers[1].segments[0].steps[1].id') AS STRING) AS variant_json_dispatch_step,
---     CAST(json_query(json_from_variant, '$.flags["key.with.dot"].child.leaf') AS INT)             AS variant_json_dotted_leaf
--- FROM variant_complex
--- ORDER BY case_id;
+-- ========================================
+-- Query 6: VARIANT -> STRUCT/MAP/ARRAY/JSON with deep path casts
+-- ========================================
+SELECT 'Query 6: Cast deeply nested Variant payloads into typed STRUCT/MAP/ARRAY/JSON constructs.' AS case_description;
+WITH variant_complex AS (
+    SELECT
+        case_id,
+        CAST(variant_deep_struct AS STRUCT<
+            profile STRUCT<
+                handle STRING,
+                contact STRUCT<
+                    emails ARRAY<STRING>,
+                    phones ARRAY<STRUCT<channel STRING, number STRING>>
+                >,
+                preferences MAP<STRING, STRUCT<enabled BOOLEAN, path STRING>>
+            >,
+            history ARRAY<STRUCT<ts STRING, status STRING, meta MAP<STRING, STRING>>>
+        >) AS struct_from_variant,
+        CAST(variant_deep_map AS MAP<
+            STRING,
+            STRUCT<
+                limits MAP<STRING, INT>,
+                routes ARRAY<STRUCT<pattern STRING, methods ARRAY<STRING>>>,
+                metadata STRUCT<label STRING, path STRING>
+            >
+        >) AS map_from_variant,
+        CAST(variant_deep_array AS ARRAY<
+            STRUCT<
+                slot INT,
+                nodes ARRAY<
+                    STRUCT<
+                        id STRING,
+                        status STRING,
+                        metrics MAP<STRING, DECIMAL>,
+                        transitions ARRAY<STRUCT<state STRING, at STRING>>
+                    >
+                >
+            >
+        >) AS array_from_variant,
+        CAST(variant_deep_json AS JSON) AS json_from_variant
+    FROM variant_test_cases
+)
+SELECT
+    case_id,
+    struct_from_variant.profile.contact.phones[2].number           AS variant_struct_second_phone,
+    struct_from_variant.profile.preferences['routing.deep'].path   AS variant_struct_shadow_path,
+    struct_from_variant.history[2].meta['ticket']                  AS variant_struct_ticket,
+    map_from_variant['svc.alpha'].routes[2].pattern                AS variant_map_alpha_route,
+    map_from_variant['svc.gamma.route'].limits['crit']             AS variant_map_gamma_crit,
+    array_from_variant[2].nodes[1].transitions[2].state            AS variant_array_recover_state,
+    array_from_variant[2].nodes[2].metrics['iops']                 AS variant_array_node3_iops,
+    CAST(json_query(json_from_variant, '$.envelope.layers[1].segments[0].steps[1].id') AS STRING) AS variant_json_dispatch_step,
+    CAST(json_query(json_from_variant, '$.flags."key.with.dot".child.leaf') AS INT)             AS variant_json_dotted_leaf
+FROM variant_complex
+ORDER BY case_id;
 
--- ========================================
--- Query 7: STRUCT/MAP/ARRAY/JSON -> VARIANT round-trip coverage
--- ========================================
+-- -- ========================================
+-- -- Query 7: STRUCT/MAP/ARRAY/JSON -> VARIANT round-trip coverage
+-- -- ========================================
 -- SELECT 'Query 7: Round-trip complex types back into Variant and query nested members.' AS case_description;
 -- WITH typed_roundtrip AS (
 --     SELECT
@@ -238,7 +244,6 @@ ORDER BY case_id;
 --     CAST(variant_query(variant_from_json_cast, '$.envelope.layers[0].segments[0].path') AS STRING) AS json_cast_edge_path
 -- FROM typed_roundtrip
 -- ORDER BY case_id;
-
 
 
 shell: ossutil64 rm -rf oss://${oss_bucket}/test_iceberg_variant_query_0/${uuid0}/ > /dev/null
@@ -531,6 +536,3 @@ drop catalog iceberg_sql_test_${uuid0};
 --         parse_json('[{"slot":0,"nodes":[{"id":"node-g1","status":"online","metrics":{"cpu":0.56,"mem":0.72,"iops":220.0},"transitions":[{"state":"boot","at":"2024-03-02T10:00:00Z"},{"state":"ready","at":"2024-03-02T10:05:00Z"}]}]},{"slot":1,"nodes":[{"id":"node-g2","status":"degraded","metrics":{"cpu":0.91,"mem":0.88,"iops":540.0},"transitions":[{"state":"drain","at":"2024-04-01T21:15:00Z"},{"state":"recover","at":"2024-04-01T21:32:10Z"}]},{"id":"node-g3","status":"offline","metrics":{"cpu":0.0,"mem":0.1,"iops":0.0},"transitions":[{"state":"fail","at":"2024-04-04T03:45:00Z"}]}]}]'),
 --         parse_json('{"envelope":{"layers":[{"name":"edge","segments":[{"path":"/edge/**","status":"ok"}]},{"name":"core","segments":[{"path":"/core/{tenant}/**","status":"warn","steps":[{"id":"prep","ok":true},{"id":"dispatch","ok":false}]}]}]},"matrix":{"grid":[[{"val":11},{"val":22}],[{"val":33},{"val":44}]]},"flags":{"key.with.dot":{"child":{"leaf":456}},"key-with-dash":true}}')
 --     );
-
--- -- Optional sanity checks
--- SELECT 'variant_test_cases' AS table_name, COUNT(*) AS row_count FROM variant_test_cases;
