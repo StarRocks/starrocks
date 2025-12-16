@@ -990,7 +990,6 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return !isSetPartitionRefreshStrategy() ? Config.default_mv_partition_refresh_strategy
                 : partitionRefreshStrategy;
     }
-    }
 
     public void setPartitionRefreshNumber(int partitionRefreshNumber) {
         this.partitionRefreshNumber = partitionRefreshNumber;
