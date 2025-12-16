@@ -1045,26 +1045,6 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
         starRocksAssert.dropTable("list_partition_tbl1");
     }
 
-<<<<<<< HEAD
-=======
-    private Set<String> getPartitionNames(PCellSortedSet pCellWithNames) {
-        return pCellWithNames
-                .stream()
-                .map(PCellWithName::name)
-                .collect(Collectors.toSet());
-    }
-
-    private String get1thPartitionNameOfSet(Set<PCellWithName> pCellWithNames) {
-        Assertions.assertEquals(1, pCellWithNames.size());
-        return pCellWithNames.iterator().next().name();
-    }
-
-    private void  assertPCellNameEquals(String expect, PCellSortedSet pCellWithNames) {
-        Assertions.assertTrue(pCellWithNames.size() == 1, pCellWithNames.toString());
-        Assertions.assertEquals(expect, pCellWithNames.iterator().next().name(), pCellWithNames.toString());
-    }
-
->>>>>>> 1bdc8213dc ([UT] fix test_auto_refresh on cloud-native (#66728))
     @Test
     public void testFilterPartitionByRefreshNumberAndDescending() throws Exception {
         // PARTITION p0 values [('2021-12-01'),('2022-01-01'))
@@ -1087,12 +1067,9 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
         TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
         initAndExecuteTaskRun(taskRun);
 
-<<<<<<< HEAD
+        materializedView.getTableProperty().getProperties()
+                .put(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER, "1");
         materializedView.getTableProperty().setPartitionRefreshNumber(1);
-=======
-        mv.getTableProperty().getProperties().put(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER, "1");
-        mv.getTableProperty().setPartitionRefreshNumber(1);
->>>>>>> 1bdc8213dc ([UT] fix test_auto_refresh on cloud-native (#66728))
 
         PartitionBasedMvRefreshProcessor processor = createProcessor(taskRun, materializedView);
         Set<String> allPartitions = new HashSet<>(materializedView.getPartitionNames());

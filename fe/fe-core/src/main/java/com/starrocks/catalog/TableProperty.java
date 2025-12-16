@@ -969,14 +969,6 @@ public class TableProperty implements Writable, GsonPostProcessable {
         this.autoRefreshPartitionsLimit = autoRefreshPartitionsLimit;
     }
 
-<<<<<<< HEAD
-    public int getPartitionRefreshNumber() {
-        return partitionRefreshNumber;
-    }
-
-    public String getPartitionRefreshStrategy() {
-        return partitionRefreshStrategy;
-=======
     public boolean isSetPartitionRefreshNumber() {
         return properties != null && properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER);
     }
@@ -997,7 +989,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
     public String getPartitionRefreshStrategy() {
         return !isSetPartitionRefreshStrategy() ? Config.default_mv_partition_refresh_strategy
                 : partitionRefreshStrategy;
->>>>>>> 1bdc8213dc ([UT] fix test_auto_refresh on cloud-native (#66728))
+    }
     }
 
     public void setPartitionRefreshNumber(int partitionRefreshNumber) {
