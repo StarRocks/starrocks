@@ -1911,7 +1911,7 @@ public class StmtExecutor {
                 // Analyze the user variable expression to get its value
                 com.starrocks.sql.analyzer.ExpressionAnalyzer.analyzeExpressionIgnoreSlot(userVariableExpr, context);
                 Expr value = userVariableExpr.getValue();
-                if (value == null) {
+                if (value instanceof com.starrocks.sql.ast.expression.NullLiteral) {
                     throw new SemanticException("User variable '%s' is not set", userVariableExpr.getName());
                 }
                 if (!(value instanceof IntLiteral)) {
