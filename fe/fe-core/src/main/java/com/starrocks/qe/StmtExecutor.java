@@ -497,6 +497,108 @@ public class StmtExecutor {
         return null;
     }
 
+<<<<<<< HEAD
+=======
+    /**
+     * The execution timeout varies among different statements:
+     * 1. SELECT: use query_timeout
+     * 2. DML: use insert_timeout or statement-specified timeout
+     * 3. ANALYZE: use fe_conf.statistic_collect_query_timeout
+     */
+    public int getExecTimeout() {
+        return parsedStmt.getTimeout();
+    }
+
+    public String getExecType() {
+        if (parsedStmt instanceof InsertStmt || parsedStmt instanceof CreateTableAsSelectStmt) {
+            return "Insert";
+        } else if (parsedStmt instanceof UpdateStmt) {
+            return "Update";
+        } else if (parsedStmt instanceof DeleteStmt) {
+            return "Delete";
+        } else {
+            return "Query";
+        }
+    }
+
+    public boolean isExecLoadType() {
+        return parsedStmt instanceof DmlStmt || parsedStmt instanceof CreateTableAsSelectStmt;
+    }
+
+    private ExecPlan generateExecPlan() throws Exception {
+        // execPlan is the output of planner
+        ExecPlan execPlan = null;
+        try (Timer ignored = Tracers.watchScope("Total")) {
+            redirectStatus = parsedStmt.getRedirectStatus();
+            if (!isForwardToLeader()) {
+                if (context.shouldDumpQuery()) {
+                    if (context.getDumpInfo() == null) {
+                        context.setDumpInfo(new QueryDumpInfo(context));
+                    } else {
+                        context.getDumpInfo().reset();
+                    }
+                    context.getDumpInfo().setOriginStmt(parsedStmt.getOrigStmt().originStmt);
+                    context.getDumpInfo().setStatement(parsedStmt);
+                }
+                if (parsedStmt instanceof ShowStmt) {
+                    com.starrocks.sql.analyzer.Analyzer.analyze(parsedStmt, context);
+                    Authorizer.check(parsedStmt, context);
+
+                    QueryStatement selectStmt = ((ShowStmt) parsedStmt).toSelectStmt();
+                    if (selectStmt != null) {
+                        parsedStmt = selectStmt;
+                        execPlan = StatementPlanner.plan(parsedStmt, context);
+                    }
+                } else if (parsedStmt instanceof ExecuteStmt) {
+                    ExecuteStmt executeStmt = (ExecuteStmt) parsedStmt;
+                    com.starrocks.sql.analyzer.Analyzer.analyze(executeStmt, context);
+                    prepareStmtContext = context.getPreparedStmt(executeStmt.getStmtName());
+                    if (null == prepareStmtContext) {
+                        throw new StarRocksPlannerException(ErrorType.INTERNAL_ERROR,
+                                "prepare statement can't be found @ %s, maybe has expired",
+                                executeStmt.getStmtName());
+                    }
+                    PrepareStmt prepareStmt = prepareStmtContext.getStmt();
+                    parsedStmt = prepareStmt.assignValues(executeStmt.getParamsExpr());
+                    parsedStmt.setOrigStmt(originStmt);
+
+                    if (prepareStmt.getInnerStmt().isExistQueryScopeHint()) {
+                        processQueryScopeHint();
+                    }
+
+                    try {
+                        execPlan = PrepareStmtPlanner.plan(executeStmt, parsedStmt, context);
+                    } catch (SemanticException e) {
+                        if (e.getMessage().contains("Unknown partition")) {
+                            throw new SemanticException(e.getMessage() +
+                                    " maybe table partition changed after prepared statement creation");
+                        } else {
+                            throw e;
+                        }
+                    }
+                } else {
+                    execPlan = StatementPlanner.plan(parsedStmt, context);
+                    if (parsedStmt instanceof QueryStatement && context.shouldDumpQuery()) {
+                        context.getDumpInfo().setExplainInfo(execPlan.getExplainString(TExplainLevel.COSTS));
+                    }
+                }
+            }
+        } catch (SemanticException e) {
+            dumpException(e);
+            throw new AnalysisException(e.getMessage(), e);
+        } catch (StarRocksPlannerException e) {
+            dumpException(e);
+            if (e.getType().equals(ErrorType.USER_ERROR)) {
+                throw e;
+            } else {
+                LOG.warn("Planner error: " + originStmt.originStmt, e);
+                throw e;
+            }
+        }
+        return execPlan;
+    }
+
+>>>>>>> fa00773fe6 ([BugFix] set ExecTimeout for ANALYZE (backport #66361) (#66680))
     // Execute one statement.
     // Exception:
     //  IOException: talk with client failed.
