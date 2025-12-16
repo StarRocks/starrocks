@@ -136,7 +136,7 @@ private:
         }
 
         if (_always_const) {
-            auto res = _dict_opt_ctx->convert_column->clone();
+            auto res = std::move(*_dict_opt_ctx->convert_column).mutate();
             res->resize(num_rows);
             return res;
         }

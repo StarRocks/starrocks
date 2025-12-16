@@ -581,19 +581,17 @@ StatusOr<MutableColumnPtr> ArrayColumn::upgrade_if_overflow() {
         return Status::InternalError("Size of ArrayColumn exceed the limit");
     }
 
-    auto mutable_elements = _elements->as_mutable_ptr();
-    auto ret = upgrade_helper_func(&mutable_elements);
-    if (ret.ok()) {
-        _elements = std::move(mutable_elements);
+    auto ret = upgrade_helper_func(_elements->as_mutable_raw_ptr());
+    if (ret.ok() && ret.value() != nullptr) {
+        _elements = std::move(ret.value());
     }
     return ret;
 }
 
 StatusOr<MutableColumnPtr> ArrayColumn::downgrade() {
-    auto mutable_elements = _elements->as_mutable_ptr();
-    auto ret = downgrade_helper_func(&mutable_elements);
-    if (ret.ok()) {
-        _elements = std::move(mutable_elements);
+    auto ret = downgrade_helper_func(_elements->as_mutable_raw_ptr());
+    if (ret.ok() && ret.value() != nullptr) {
+        _elements = std::move(ret.value());
     }
     return ret;
 }

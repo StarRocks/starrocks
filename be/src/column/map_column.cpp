@@ -638,39 +638,37 @@ StatusOr<MutableColumnPtr> MapColumn::upgrade_if_overflow() {
         return Status::InternalError("Size of MapColumn exceed the limit");
     }
 
-    auto mutable_keys = _keys->as_mutable_ptr();
-    auto ret = upgrade_helper_func(&mutable_keys);
+    auto ret = upgrade_helper_func(_keys->as_mutable_raw_ptr());
     if (!ret.ok()) {
         return ret;
     }
-    _keys = std::move(mutable_keys);
-
-    auto mutable_values = _values->as_mutable_ptr();
-    ret = upgrade_helper_func(&mutable_values);
-    if (!ret.ok()) {
-        return ret;
+    if (ret.value() != nullptr) {
+        _keys = std::move(ret.value());
     }
-    _values = std::move(mutable_values);
 
-    return nullptr;
+    ret = upgrade_helper_func(_values->as_mutable_raw_ptr());
+    if (ret.ok() && ret.value() != nullptr) {
+        _values = std::move(ret.value());
+    }
+
+    return ret;
 }
 
 StatusOr<MutableColumnPtr> MapColumn::downgrade() {
-    auto mutable_keys = _keys->as_mutable_ptr();
-    auto ret = downgrade_helper_func(&mutable_keys);
+    auto ret = downgrade_helper_func(_keys->as_mutable_raw_ptr());
     if (!ret.ok()) {
         return ret;
     }
-    _keys = std::move(mutable_keys);
-
-    auto mutable_values = _values->as_mutable_ptr();
-    ret = downgrade_helper_func(&mutable_values);
-    if (!ret.ok()) {
-        return ret;
+    if (ret.value() != nullptr) {
+        _keys = std::move(ret.value());
     }
-    _values = std::move(mutable_values);
 
-    return nullptr;
+    ret = downgrade_helper_func(_values->as_mutable_raw_ptr());
+    if (ret.ok() && ret.value() != nullptr) {
+        _values = std::move(ret.value());
+    }
+
+    return ret;
 }
 
 Status MapColumn::unfold_const_children(const starrocks::TypeDescriptor& type) {

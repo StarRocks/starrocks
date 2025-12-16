@@ -242,10 +242,10 @@ public:
             auto dt_col = starrocks::ColumnHelper::cast_to<starrocks::TYPE_DATETIME>(dt_col_ptr);
             int64_t sum = 0;
             // Use const_cast for read-only benchmark access
-            auto* mutable_dt_col = dt_col->as_mutable_ptr();
             for (int i = 0; i < N; ++i) {
                 int year, month, day, hour, minute, second, usec;
-                mutable_dt_col->get_data()[i].to_timestamp(&year, &month, &day, &hour, &minute, &second, &usec);
+                dt_col->as_mutable_raw_ptr()->get_data()[i].to_timestamp(&year, &month, &day, &hour, &minute, &second,
+                                                                         &usec);
                 sum += hour;
             }
             benchmark::DoNotOptimize(sum);

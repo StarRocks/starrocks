@@ -483,12 +483,12 @@ protected:
     // if downgrade failed, return the error status.
     // if upgrade success, always return nullptr.
     // if downgrade's result is not nullptr, it will replace the input col with the new column.
-    static StatusOr<MutablePtr> downgrade_helper_func(MutablePtr* col);
+    static StatusOr<MutablePtr> downgrade_helper_func(Column* col);
     // Helper functions for upgrade and downgrade,
     // if upgrade failed, return the error status.
     // if upgrade success, always return nullptr.
     // if upgrade's result is not nullptr, it will replace the input col with the new column.
-    static StatusOr<MutablePtr> upgrade_helper_func(MutablePtr* col);
+    static StatusOr<MutablePtr> upgrade_helper_func(Column* col);
 
     DelCondSatisfied _delete_state = DEL_NOT_SATISFIED;
 };

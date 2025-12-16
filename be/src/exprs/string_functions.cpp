@@ -526,7 +526,7 @@ ColumnPtr string_func_const(StringConstFuncType func, const Columns& columns, Ar
             }
             if (binary->is_constant()) {
                 auto* dst_const = down_cast<ConstColumn*>(binary->as_mutable_raw_ptr());
-                auto data_mut = dst_const->data_column()->as_mutable_ptr();
+                auto data_mut = std::move(*(dst_const->data_column())).mutate();
                 data_mut->assign(dst_const->size(), 0);
                 return NullableColumn::create(std::move(data_mut), std::move(src_null));
             }
@@ -790,8 +790,8 @@ public:
         const auto len_array = len_column->immutable_data();
         const auto num_rows = len_column->size();
         NullableBinaryColumnBuilder builder;
-        auto& dst_bytes = builder.data_column()->get_bytes();
-        auto& dst_offsets = builder.data_column()->get_offset();
+        auto& dst_bytes = builder.data_column_raw_ptr()->get_bytes();
+        auto& dst_offsets = builder.data_column_raw_ptr()->get_offset();
         auto& nulls = builder.get_null_data();
 
         raw::make_room(&dst_offsets, num_rows + 1);
@@ -883,8 +883,8 @@ static inline ColumnPtr repeat_const_not_null(const Columns& columns, const Bina
 
     NullableBinaryColumnBuilder builder;
     auto& dst_nulls = builder.get_null_data();
-    auto& dst_offsets = builder.data_column()->get_offset();
-    auto& dst_bytes = builder.data_column()->get_bytes();
+    auto& dst_offsets = builder.data_column_raw_ptr()->get_offset();
+    auto& dst_bytes = builder.data_column_raw_ptr()->get_bytes();
 
     dst_nulls.resize(num_rows);
     bool has_null = false;
@@ -947,8 +947,8 @@ static inline ColumnPtr repeat_not_const(const Columns& columns) {
     const size_t num_rows = columns[0]->size();
     NullableBinaryColumnBuilder builder;
     auto& dst_nulls = builder.get_null_data();
-    auto& dst_offsets = builder.data_column()->get_offset();
-    auto& dst_bytes = builder.data_column()->get_bytes();
+    auto& dst_offsets = builder.data_column_raw_ptr()->get_offset();
+    auto& dst_bytes = builder.data_column_raw_ptr()->get_bytes();
     dst_nulls.resize(num_rows);
     raw::make_room(&dst_offsets, num_rows + 1);
     dst_offsets[0] = 0;
@@ -1242,8 +1242,8 @@ static inline ColumnPtr translate_with_utf8_const_nonnull_from_and_to(const Colu
     DCHECK(!state->is_ascii_map);
 
     NullableBinaryColumnBuilder builder;
-    auto& dst_offsets = builder.data_column()->get_offset();
-    auto& dst_bytes = builder.data_column()->get_bytes();
+    auto& dst_offsets = builder.data_column_raw_ptr()->get_offset();
+    auto& dst_bytes = builder.data_column_raw_ptr()->get_bytes();
     auto& dst_nulls = builder.get_null_data();
 
     const size_t num_rows = src->size();
@@ -1311,8 +1311,8 @@ ColumnPtr translate_with_non_const_from_or_to(const Columns& columns, const Tran
     ColumnViewer<TYPE_VARCHAR> to_viewer(columns[TranslateState::TO_STR_INDEX]);
 
     NullableBinaryColumnBuilder builder;
-    auto& dst_offsets = builder.data_column()->get_offset();
-    auto& dst_bytes = builder.data_column()->get_bytes();
+    auto& dst_offsets = builder.data_column_raw_ptr()->get_offset();
+    auto& dst_bytes = builder.data_column_raw_ptr()->get_bytes();
     auto& dst_nulls = builder.get_null_data();
 
     const size_t num_rows = columns[TranslateState::SRC_STR_INDEX]->size();
@@ -1501,7 +1501,7 @@ static inline ColumnPtr pad_utf8_const(Columns const& columns, const BinaryColum
     const auto num_rows = src->size();
     NullableBinaryColumnBuilder builder;
 
-    auto& dst_offsets = builder.data_column()->get_offset();
+    auto& dst_offsets = builder.data_column_raw_ptr()->get_offset();
     auto& dst_nulls = builder.get_null_data();
 
     raw::make_room(&dst_offsets, num_rows + 1);
@@ -1579,7 +1579,7 @@ static inline ColumnPtr pad_utf8_const(Columns const& columns, const BinaryColum
         dst_offsets[i + 1] = dst_off;
     }
     dst_bytes.resize(dst_off);
-    builder.data_column()->get_bytes().swap(reinterpret_cast<Bytes&>(dst_bytes));
+    builder.data_column_raw_ptr()->get_bytes().swap(reinterpret_cast<Bytes&>(dst_bytes));
     builder.set_has_null(has_null);
     return builder.build(ColumnHelper::is_all_const(columns));
 }
@@ -1645,7 +1645,7 @@ ColumnPtr pad_not_const(const Columns& columns, [[maybe_unused]] const PadState*
     const auto num_rows = columns[0]->size();
     NullableBinaryColumnBuilder builder;
     builder.resize(num_rows, 0);
-    auto& dst_offsets = builder.data_column()->get_offset();
+    auto& dst_offsets = builder.data_column_raw_ptr()->get_offset();
     auto& dst_nulls = builder.get_null_data();
     Bytes dst_bytes;
     dst_bytes.reserve(16ULL << 20);
@@ -1752,7 +1752,7 @@ ColumnPtr pad_not_const(const Columns& columns, [[maybe_unused]] const PadState*
         dst_offsets[i + 1] = dst_off;
     }
     DCHECK(dst_bytes.size() == dst_off);
-    builder.data_column()->get_bytes().swap(reinterpret_cast<Bytes&>(dst_bytes));
+    builder.data_column_raw_ptr()->get_bytes().swap(reinterpret_cast<Bytes&>(dst_bytes));
     builder.set_has_null(has_null);
     return builder.build(ColumnHelper::is_all_const(columns));
 }
@@ -2890,7 +2890,7 @@ StatusOr<ColumnPtr> StringFunctions::strpos_instance(FunctionContext* context, c
 static inline ColumnPtr concat_const_not_null(Columns const& columns, const BinaryColumn* src,
                                               const ConcatState* state) {
     NullableBinaryColumnBuilder builder;
-    auto* binary = down_cast<BinaryColumn*>(builder.data_column().get());
+    auto* binary = down_cast<BinaryColumn*>(builder.data_column_raw_ptr());
     auto& nulls = builder.get_null_data();
     auto& dst_offsets = binary->get_offset();
     auto& dst_bytes = binary->get_bytes();
@@ -2947,8 +2947,8 @@ static inline ColumnPtr concat_not_const_small(std::vector<ColumnViewer<TYPE_VAR
                                                const bool is_const) {
     NullableBinaryColumnBuilder builder;
     auto& dst_nulls = builder.get_null_data();
-    auto& dst_offsets = builder.data_column()->get_offset();
-    auto& dst_bytes = builder.data_column()->get_bytes();
+    auto& dst_offsets = builder.data_column_raw_ptr()->get_offset();
+    auto& dst_bytes = builder.data_column_raw_ptr()->get_bytes();
     dst_nulls.resize(num_rows);
     raw::make_room(&dst_offsets, num_rows + 1);
     dst_offsets[0] = 0;
@@ -3074,8 +3074,8 @@ ColumnPtr concat_ws_small(ColumnViewer<TYPE_VARCHAR>& sep_viewer, std::vector<Co
                           const size_t num_rows, const size_t dst_bytes_max_size, const bool is_const) {
     NullableBinaryColumnBuilder builder;
     auto& dst_nulls = builder.get_null_data();
-    auto& dst_offsets = builder.data_column()->get_offset();
-    auto& dst_bytes = builder.data_column()->get_bytes();
+    auto& dst_offsets = builder.data_column_raw_ptr()->get_offset();
+    auto& dst_bytes = builder.data_column_raw_ptr()->get_bytes();
     dst_nulls.resize(num_rows);
     raw::make_room(&dst_offsets, num_rows + 1);
     dst_offsets[0] = 0;
@@ -3660,7 +3660,7 @@ static ColumnPtr regexp_extract_all_const(re2::RE2* const_re, const Columns& col
     NullColumn::MutablePtr nl_col;
     if (columns[0]->is_nullable()) {
         auto x = down_cast<const NullableColumn*>(columns[0].get())->null_column();
-        nl_col = NullColumn::static_pointer_cast(x->clone());
+        nl_col = NullColumn::static_pointer_cast(std::move(*x).mutate());
     } else {
         nl_col = NullColumn::create(size, 0);
     }
@@ -3975,8 +3975,9 @@ StatusOr<ColumnPtr> StringFunctions::regexp_replace_use_hyperscan_vec(StringFunc
     ASSIGN_OR_RETURN(auto res, hyperscan_vec_evaluate(binary, state, rpl_value));
     if (columns[0]->is_nullable()) {
         return NullableColumn::create(
-                std::move(res), NullColumn::static_pointer_cast(
-                                        down_cast<const NullableColumn*>(columns[0].get())->null_column()->clone()));
+                std::move(res),
+                NullColumn::static_pointer_cast(
+                        std::move(*down_cast<const NullableColumn*>(columns[0].get())->null_column()).mutate()));
     } else if (columns[0]->is_constant()) {
         return ConstColumn::create(std::move(res), columns[0]->size());
     }
@@ -4100,7 +4101,7 @@ static StatusOr<ColumnPtr> regexp_split_const(re2::RE2* const_re, const Columns&
     NullColumn::MutablePtr nl_col;
     if (columns[0]->is_nullable()) {
         auto x = down_cast<const NullableColumn*>(columns[0].get())->null_column();
-        nl_col = NullColumn::static_pointer_cast(x->clone());
+        nl_col = NullColumn::static_pointer_cast((std::move(*x)).mutate());
     } else {
         nl_col = NullColumn::create(size, 0);
     }
@@ -4158,7 +4159,7 @@ static StatusOr<ColumnPtr> regexp_split_const_pattern(re2::RE2* const_re, const 
     NullColumn::MutablePtr nl_col;
     if (columns[0]->is_nullable()) {
         auto x = down_cast<const NullableColumn*>(columns[0].get())->null_column();
-        nl_col = NullColumn::static_pointer_cast(x->clone());
+        nl_col = NullColumn::static_pointer_cast(std::move(*x).mutate());
     } else {
         nl_col = NullColumn::create(size, 0);
     }

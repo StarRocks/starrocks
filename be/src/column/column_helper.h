@@ -106,29 +106,9 @@ public:
     }
 
     // If column is const column, duplicate the data column to chunk_size
-    static ColumnPtr unpack_and_duplicate_const_column(size_t chunk_size, const ColumnPtr& column) {
-        if (column->is_constant()) {
-            // use clone is not safe, because the new cloned data may be freed after the function returns.
-            return unpack_and_duplicate_const_column(chunk_size, column->as_mutable_ptr());
-        } else {
-            return column;
-        }
-    }
-
-    // If column is const column, duplicate the data column to chunk_size
-    static MutableColumnPtr unpack_and_duplicate_const_column(size_t chunk_size, ColumnPtr&& column) {
-        return unpack_and_duplicate_const_column(chunk_size, Column::mutate(std::move(column)));
-    }
-
-    static MutableColumnPtr unpack_and_duplicate_const_column(size_t chunk_size, MutableColumnPtr&& column) {
-        if (column->is_constant()) {
-            auto* const_column = down_cast<ConstColumn*>(column.get());
-            const_column->assign(chunk_size, 0);
-            return const_column->data_column()->as_mutable_ptr();
-        } else {
-            return std::move(column);
-        }
-    }
+    static ColumnPtr unpack_and_duplicate_const_column(size_t chunk_size, const ColumnPtr& column);
+    static MutableColumnPtr unpack_and_duplicate_const_column(size_t chunk_size, ColumnPtr&& column);
+    static MutableColumnPtr unpack_and_duplicate_const_column(size_t chunk_size, MutableColumnPtr&& column);
 
     static inline bool offsets_equal(const UInt32Column::Ptr& offset0, const UInt32Column::Ptr& offset1) {
         if (offset0->size() != offset1->size()) {
@@ -147,8 +127,7 @@ public:
             return col;
         } else if (column->is_constant()) {
             // use clone is not safe, because the new cloned data may be freed after the function returns.
-            auto mut_column = column->as_mutable_ptr();
-            auto* const_column = down_cast<ConstColumn*>(mut_column.get());
+            auto* const_column = down_cast<ConstColumn*>(column->as_mutable_raw_ptr());
             const_column->assign(size, 0);
             return const_column->data_column()->as_mutable_ptr();
         } else {
