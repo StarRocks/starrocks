@@ -363,7 +363,8 @@ Status ReplicationUtils::download_lake_segment_file(const std::string& src_file_
     }
 
     int64_t offset = 0;
-    size_t buff_size = config::lake_replication_read_buffer_size;
+    // assert min size is 1MB, if config value is greater than 1MB, use it
+    const size_t buff_size = std::max<size_t>(config::lake_replication_read_buffer_size, 1 * 1024 * 1024);
     char* buf = new char[buff_size];
     std::unique_ptr<char[]> guard(buf);
     int64_t read_count = 0;

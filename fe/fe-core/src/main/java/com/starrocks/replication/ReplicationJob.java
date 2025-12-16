@@ -1050,6 +1050,10 @@ public class ReplicationJob implements GsonPostProcessable {
         runningTasks.clear();
     }
 
+    public int getFinishedTaskNum() {
+        return this.finishedTasks.size();
+    }
+
     protected boolean isAllTaskFinished() {
         LOG.info("Replication job state: {}, finished tasks: {}/{}, database id: {}, table id: {}, transaction id: {}",
                 state, finishedTasks.size(), taskNum, databaseId, tableId, transactionId);

@@ -84,7 +84,13 @@ public class LakeReplicationJobTest {
 
     @BeforeEach
     public void setUp() throws Exception {
-        super.setUp();
+        partition.getDefaultPhysicalPartition().updateVersionForRestore(10);
+        srcPartition.getDefaultPhysicalPartition().updateVersionForRestore(100);
+        partition.getDefaultPhysicalPartition().setDataVersion(8);
+        partition.getDefaultPhysicalPartition().setNextDataVersion(9);
+        srcPartition.getDefaultPhysicalPartition().setDataVersion(98);
+        srcPartition.getDefaultPhysicalPartition().setNextDataVersion(99);
+
         long virtualTabletId = 1000;
         long srcDatabaseId = 100;
         long srcTableId = 100;
