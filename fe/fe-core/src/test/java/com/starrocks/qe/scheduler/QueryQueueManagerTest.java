@@ -1563,65 +1563,166 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
                     "|BEMemLimitBytes|BEMemPool|BEMemPoolInUseMemBytes|BEMemPoolMemLimitBytes\n");
         }
 
-        List<TResourceGroupUsage> groupUsages = ImmutableList.of(
-                new TResourceGroupUsage().setGroup_id(ResourceGroup.DEFAULT_WG_ID).setCpu_core_used_permille(3112)
-                        .setMem_used_bytes(39).setNum_running_queries(38),
-                new TResourceGroupUsage().setGroup_id(10L).setCpu_core_used_permille(112).setMem_used_bytes(9)
-                        .setNum_running_queries(8),
-                new TResourceGroupUsage().setGroup_id(11L).setCpu_core_used_permille(100),
-                new TResourceGroupUsage().setGroup_id(12L).setCpu_core_used_permille(120).setMem_used_bytes(7)
-                        .setNum_running_queries(6),
-                new TResourceGroupUsage().setGroup_id(13L).setCpu_core_used_permille(30)
-        );
-        backends.get(0).setMemLimitBytes(100L);
-        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().updateResourceUsage(0L, 0, 30, 0, groupUsages);
-        groupUsages = ImmutableList.of(
-                new TResourceGroupUsage().setGroup_id(ResourceGroup.DEFAULT_MV_WG_ID).setCpu_core_used_permille(4110)
-                        .setMem_used_bytes(49).setNum_running_queries(48),
-                new TResourceGroupUsage().setGroup_id(10L).setCpu_core_used_permille(1110).setMem_used_bytes(19)
-                        .setNum_running_queries(18),
-                new TResourceGroupUsage().setGroup_id(11L).setCpu_core_used_permille(1100),
-                new TResourceGroupUsage().setGroup_id(12L).setCpu_core_used_permille(1120).setMem_used_bytes(17)
-                        .setNum_running_queries(16),
-                new TResourceGroupUsage().setGroup_id(13L).setCpu_core_used_permille(130)
-        );
-        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().updateResourceUsage(1L, 0, 30, 0, groupUsages);
-
         {
-            String res = starRocksAssert.executeShowResourceUsageSql("SHOW USAGE RESOURCE GROUPS;");
-            assertThat(res).isEqualTo("Name|Id|Backend|BEInUseCpuCores|BEInUseMemBytes|BERunningQueries\n" +
-                    "default_wg|2|be0-host|3.112|39|38\n" +
-                    "default_mv_wg|3|be1-host|4.11|49|48\n" +
-                    "wg0|10|be0-host|0.112|9|8\n" +
-                    "wg0|10|be1-host|1.11|19|18\n" +
-                    "wg1|11|be0-host|0.1|0|0\n" +
-                    "wg1|11|be1-host|1.1|0|0\n" +
-                    "wg2|12|be0-host|0.12|7|6\n" +
-                    "wg2|12|be1-host|1.12|17|16\n" +
-                    "wg3|13|be0-host|0.03|0|0\n" +
-                    "wg3|13|be1-host|0.13|0|0");
+            {
+                final List<TResourceGroupUsage> groupUsages = ImmutableList.of(
+                        new TResourceGroupUsage()
+                                .setGroup_id(ResourceGroup.DEFAULT_WG_ID)
+                                .setMem_pool(ResourceGroup.DEFAULT_MEM_POOL)
+                                .setCpu_core_used_permille(3112)
+                                .setMem_used_bytes(39)
+                                .setMem_limit_bytes(40)
+                                .setNum_running_queries(38),
+                        new TResourceGroupUsage()
+                                .setGroup_id(10L)
+                                .setMem_pool(ResourceGroup.DEFAULT_MEM_POOL)
+                                .setCpu_core_used_permille(112)
+                                .setMem_used_bytes(9)
+                                .setMem_limit_bytes(10)
+                                .setNum_running_queries(8),
+                        new TResourceGroupUsage()
+                                .setGroup_id(11L)
+                                .setMem_pool(ResourceGroup.DEFAULT_MEM_POOL)
+                                .setCpu_core_used_permille(100),
+                        new TResourceGroupUsage()
+                                .setGroup_id(12L)
+                                .setMem_pool(ResourceGroup.DEFAULT_MEM_POOL)
+                                .setCpu_core_used_permille(120)
+                                .setMem_used_bytes(7)
+                                .setMem_limit_bytes(10)
+                                .setNum_running_queries(6),
+                        new TResourceGroupUsage()
+                                .setGroup_id(13L)
+                                .setMem_pool(ResourceGroup.DEFAULT_MEM_POOL)
+                                .setCpu_core_used_permille(30)
+                );
+
+                backends.get(0).setMemLimitBytes(100L);
+                final long memPoolMemLimitBytes = 100;
+                final long memPoolMemUsedBytes = groupUsages.stream().mapToLong(TResourceGroupUsage::getMem_used_bytes).sum();
+                groupUsages.forEach(usage -> {
+                    usage.setMem_pool_mem_used_bytes(memPoolMemUsedBytes);
+                    usage.setMem_pool_mem_limit_bytes(memPoolMemLimitBytes);
+                });
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().updateResourceUsage(0L, 0, 30, 0, groupUsages);
+            }
+            {
+                final List<TResourceGroupUsage> groupUsages = ImmutableList.of(
+                        new TResourceGroupUsage()
+                                .setGroup_id(ResourceGroup.DEFAULT_MV_WG_ID)
+                                .setMem_pool(ResourceGroup.DEFAULT_MEM_POOL)
+                                .setCpu_core_used_permille(4110)
+                                .setMem_used_bytes(49)
+                                .setMem_limit_bytes(50)
+                                .setNum_running_queries(48),
+                        new TResourceGroupUsage()
+                                .setGroup_id(10L)
+                                .setMem_pool(ResourceGroup.DEFAULT_MEM_POOL)
+                                .setCpu_core_used_permille(1110)
+                                .setMem_used_bytes(19)
+                                .setMem_limit_bytes(20)
+                                .setNum_running_queries(18),
+                        new TResourceGroupUsage()
+                                .setGroup_id(11L)
+                                .setMem_pool(ResourceGroup.DEFAULT_MEM_POOL)
+                                .setCpu_core_used_permille(1100),
+                        new TResourceGroupUsage()
+                                .setGroup_id(12L)
+                                .setMem_pool(ResourceGroup.DEFAULT_MEM_POOL)
+                                .setCpu_core_used_permille(1120)
+                                .setMem_used_bytes(17)
+                                .setMem_limit_bytes(20)
+                                .setNum_running_queries(16),
+                        new TResourceGroupUsage()
+                                .setGroup_id(13L)
+                                .setMem_pool(ResourceGroup.DEFAULT_MEM_POOL)
+                                .setCpu_core_used_permille(130)
+                );
+
+                backends.get(1).setMemLimitBytes(200L);
+                final long memPoolMemLimitBytes = 200;
+                final long memPoolMemUsedBytes = groupUsages.stream().mapToLong(TResourceGroupUsage::getMem_used_bytes).sum();
+                groupUsages.forEach(usage -> {
+                    usage.setMem_pool_mem_used_bytes(memPoolMemUsedBytes);
+                    usage.setMem_pool_mem_limit_bytes(memPoolMemLimitBytes);
+                });
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().updateResourceUsage(1L, 0, 30, 0, groupUsages);
+            }
+
+            final String result = starRocksAssert.executeShowResourceUsageSql("SHOW USAGE RESOURCE GROUPS;");
+            assertThat(result).isEqualTo("Name|Id|Backend|BEInUseCpuCores|BEInUseMemBytes|BERunningQueries" +
+                    "|BEMemLimitBytes|BEMemPool|BEMemPoolInUseMemBytes|BEMemPoolMemLimitBytes\n" +
+                    "default_wg|2|be0-host|3.112|39|38|40|default_mem_pool|55|100\n" +
+                    "default_mv_wg|3|be1-host|4.11|49|48|50|default_mem_pool|85|200\n" +
+                    "wg0|10|be0-host|0.112|9|8|10|default_mem_pool|55|100\n" +
+                    "wg0|10|be1-host|1.11|19|18|20|default_mem_pool|85|200\n" +
+                    "wg1|11|be0-host|0.1|0|0|0|default_mem_pool|55|100\n" +
+                    "wg1|11|be1-host|1.1|0|0|0|default_mem_pool|85|200\n" +
+                    "wg2|12|be0-host|0.12|7|6|10|default_mem_pool|55|100\n" +
+                    "wg2|12|be1-host|1.12|17|16|20|default_mem_pool|85|200\n" +
+                    "wg3|13|be0-host|0.03|0|0|0|default_mem_pool|55|100\n" +
+                    "wg3|13|be1-host|0.13|0|0|0|default_mem_pool|85|200"
+            );
         }
 
-        groupUsages = ImmutableList.of(
-                new TResourceGroupUsage().setGroup_id(10L).setCpu_core_used_permille(210).setMem_used_bytes(29)
-                        .setNum_running_queries(28),
-                new TResourceGroupUsage().setGroup_id(11L).setCpu_core_used_permille(200)
-        );
-        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().updateResourceUsage(0L, 0, 30, 0, groupUsages);
-        groupUsages = ImmutableList.of(
-                new TResourceGroupUsage().setGroup_id(12L).setCpu_core_used_permille(1220).setMem_used_bytes(27)
-                        .setNum_running_queries(26),
-                new TResourceGroupUsage().setGroup_id(13L).setCpu_core_used_permille(230)
-        );
-        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().updateResourceUsage(1L, 0, 30, 0, groupUsages);
-
         {
-            String res = starRocksAssert.executeShowResourceUsageSql("SHOW USAGE RESOURCE GROUPS;");
-            assertThat(res).isEqualTo("Name|Id|Backend|BEInUseCpuCores|BEInUseMemBytes|BERunningQueries\n" +
-                    "wg0|10|be0-host|0.21|29|28\n" +
-                    "wg1|11|be0-host|0.2|0|0\n" +
-                    "wg2|12|be1-host|1.22|27|26\n" +
-                    "wg3|13|be1-host|0.23|0|0");
+            {
+                final List<TResourceGroupUsage> groupUsages = ImmutableList.of(
+                        new TResourceGroupUsage()
+                                .setGroup_id(10L)
+                                .setMem_pool("mem_pool_0")
+                                .setCpu_core_used_permille(210)
+                                .setMem_used_bytes(29)
+                                .setMem_limit_bytes(30)
+                                .setNum_running_queries(28),
+                        new TResourceGroupUsage()
+                                .setGroup_id(11L)
+                                .setMem_pool("mem_pool_0")
+                                .setMem_limit_bytes(30)
+                                .setCpu_core_used_permille(200)
+                );
+                backends.get(0).setMemLimitBytes(100L);
+                final long memPoolMemLimitBytes = 100;
+                final long memPoolMemUsedBytes = groupUsages.stream().mapToLong(TResourceGroupUsage::getMem_used_bytes).sum();
+                groupUsages.forEach(usage -> {
+                    usage.setMem_pool_mem_used_bytes(memPoolMemUsedBytes);
+                    usage.setMem_pool_mem_limit_bytes(memPoolMemLimitBytes);
+                });
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().updateResourceUsage(0L, 0, 30, 0, groupUsages);
+            }
+            {
+                final List<TResourceGroupUsage> groupUsages = ImmutableList.of(
+                        new TResourceGroupUsage()
+                                .setGroup_id(12L)
+                                .setMem_pool("mem_pool_1")
+                                .setCpu_core_used_permille(1220)
+                                .setMem_used_bytes(27)
+                                .setMem_limit_bytes(50)
+                                .setNum_running_queries(26),
+                        new TResourceGroupUsage()
+                                .setGroup_id(13L)
+                                .setMem_pool("mem_pool_1")
+                                .setMem_limit_bytes(50)
+                                .setCpu_core_used_permille(230)
+                );
+                backends.get(1).setMemLimitBytes(200L);
+                final long memPoolMemLimitBytes = 200;
+                final long memPoolMemUsedBytes = groupUsages.stream().mapToLong(TResourceGroupUsage::getMem_used_bytes).sum();
+                groupUsages.forEach(usage -> {
+                    usage.setMem_pool_mem_used_bytes(memPoolMemUsedBytes);
+                    usage.setMem_pool_mem_limit_bytes(memPoolMemLimitBytes);
+                });
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().updateResourceUsage(1L, 0, 30, 0, groupUsages);
+            }
+
+            final String res = starRocksAssert.executeShowResourceUsageSql("SHOW USAGE RESOURCE GROUPS;");
+            assertThat(res).isEqualTo("Name|Id|Backend|BEInUseCpuCores|BEInUseMemBytes|BERunningQueries" +
+                    "|BEMemLimitBytes|BEMemPool|BEMemPoolInUseMemBytes|BEMemPoolMemLimitBytes\n" +
+                    "wg0|10|be0-host|0.21|29|28|30|mem_pool_0|29|100\n" +
+                    "wg1|11|be0-host|0.2|0|0|30|mem_pool_0|29|100\n" +
+                    "wg2|12|be1-host|1.22|27|26|50|mem_pool_1|27|200\n" +
+                    "wg3|13|be1-host|0.23|0|0|50|mem_pool_1|27|200"
+            );
         }
     }
 
