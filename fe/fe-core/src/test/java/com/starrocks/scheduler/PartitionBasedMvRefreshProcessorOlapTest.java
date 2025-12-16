@@ -30,6 +30,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.io.DeepCopy;
 import com.starrocks.common.util.DebugUtil;
+import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
@@ -1089,8 +1090,8 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
     }
 
     private void  assertPCellNameEquals(String expect, PCellSortedSet pCellWithNames) {
-        Assertions.assertTrue(pCellWithNames.size() == 1);
-        Assertions.assertEquals(expect, pCellWithNames.iterator().next().name());
+        Assertions.assertTrue(pCellWithNames.size() == 1, pCellWithNames.toString());
+        Assertions.assertEquals(expect, pCellWithNames.iterator().next().name(), pCellWithNames.toString());
     }
 
     @Test
@@ -1114,6 +1115,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
         TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
         initAndExecuteTaskRun(taskRun);
 
+        mv.getTableProperty().getProperties().put(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER, "1");
         mv.getTableProperty().setPartitionRefreshNumber(1);
 
         MVPCTBasedRefreshProcessor processor = createProcessor(taskRun, mv);

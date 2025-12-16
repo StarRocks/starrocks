@@ -1003,7 +1003,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
     }
 
     public String getPartitionRefreshStrategy() {
-        return isSetPartitionRefreshStrategy() ? Config.default_mv_partition_refresh_strategy
+        return !isSetPartitionRefreshStrategy() ? Config.default_mv_partition_refresh_strategy
                 : partitionRefreshStrategy;
     }
 
