@@ -1002,7 +1002,8 @@ public class IcebergScanNodeTest {
             @Mocked CatalogConnector connector,
             @Mocked ConnectorMetadata connectorMetadata,
             @Mocked IcebergTable icebergTable,
-            @Mocked Table icebergNativeTable) throws Exception {
+            @Mocked Table icebergNativeTable,
+            @Mocked org.apache.iceberg.io.FileIO fileIO) throws Exception {
         new Expectations() {{
             GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(icebergTable.getCatalogName());
             result = connector;
@@ -1010,11 +1011,20 @@ public class IcebergScanNodeTest {
             connector.getMetadata();
             result = connectorMetadata;
             minTimes = 0;
+            connectorMetadata.getCatalogProperties();
+            result = new HashMap<String, String>();
+            minTimes = 0;
             connectorMetadata.getCloudConfiguration();
             result = new CloudConfiguration();
             minTimes = 0;
             icebergTable.getNativeTable();
             result = icebergNativeTable;
+            minTimes = 0;
+            icebergNativeTable.io();
+            result = fileIO;
+            minTimes = 0;
+            fileIO.properties();
+            result = new HashMap<String, String>();
             minTimes = 0;
             icebergNativeTable.location();
             result = "s3://bucket/path/";
@@ -1029,6 +1039,212 @@ public class IcebergScanNodeTest {
         TIcebergTableSink tIceberg = tDataSink.getIceberg_table_sink();
         Assertions.assertEquals("main", sink.getTargetBranch());
         Assertions.assertTrue(tIceberg.isSetCloud_configuration());
+    }
+
+    @Test
+    public void testIcebergTableSinkCatalogConfigCredentialFallback(
+            @Mocked GlobalStateMgr globalStateMgr,
+            @Mocked CatalogConnector connector,
+            @Mocked ConnectorMetadata connectorMetadata,
+            @Mocked IcebergTable icebergTable,
+            @Mocked Table icebergNativeTable,
+            @Mocked org.apache.iceberg.io.FileIO fileIO) {
+
+        String catalogName = "rest_catalog";
+        Map<String, String> emptyFileIOProps = new HashMap<>();
+        Map<String, String> catalogConfigProps = new HashMap<>();
+        catalogConfigProps.put("s3.access-key-id", "AKIA_FROM_CONFIG");
+        catalogConfigProps.put("s3.secret-access-key", "secret_from_config");
+        catalogConfigProps.put("s3.session-token", "token_from_config");
+        catalogConfigProps.put("client.region", "us-west-2");
+
+        new Expectations() {{
+            GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalogName);
+            result = connector;
+            minTimes = 0;
+
+            connector.getMetadata();
+            result = connectorMetadata;
+            minTimes = 0;
+
+            connectorMetadata.getCatalogProperties();
+            result = catalogConfigProps;
+            minTimes = 0;
+
+            connectorMetadata.getCloudConfiguration();
+            result = CloudConfigurationFactory.buildCloudConfigurationForStorage(new HashMap<>());
+            minTimes = 0;
+
+            icebergTable.getCatalogName();
+            result = catalogName;
+            minTimes = 0;
+
+            icebergTable.getNativeTable();
+            result = icebergNativeTable;
+            minTimes = 0;
+
+            icebergNativeTable.io();
+            result = fileIO;
+            minTimes = 0;
+
+            fileIO.properties();
+            result = emptyFileIOProps;
+            minTimes = 0;
+
+            icebergNativeTable.location();
+            result = "s3://bucket/warehouse/db/table";
+            minTimes = 0;
+
+            icebergNativeTable.properties();
+            result = new HashMap<String, String>();
+            minTimes = 0;
+        }};
+
+        TupleDescriptor desc = new TupleDescriptor(new TupleId(0));
+        desc.setTable(icebergTable);
+        SessionVariable sessionVariable = new SessionVariable();
+        IcebergTableSink sink = new IcebergTableSink(icebergTable, desc, false, sessionVariable, "main");
+
+        CloudConfiguration cloudConfig = Deencapsulation.getField(sink, "cloudConfiguration");
+        Assertions.assertNotNull(cloudConfig);
+        // Verify that credentials came from catalog config
+        Assertions.assertEquals(CloudType.AWS, cloudConfig.getCloudType());
+        AwsCloudConfiguration awsConfig = (AwsCloudConfiguration) cloudConfig;
+        AwsCloudCredential credential = awsConfig.getAwsCloudCredential();
+        Assertions.assertEquals("AKIA_FROM_CONFIG", credential.getAccessKey());
+        Assertions.assertEquals("secret_from_config", credential.getSecretKey());
+    }
+
+    @Test
+    public void testIcebergTableSinkVendedCredentialsPriority(
+            @Mocked GlobalStateMgr globalStateMgr,
+            @Mocked CatalogConnector connector,
+            @Mocked ConnectorMetadata connectorMetadata,
+            @Mocked IcebergTable icebergTable,
+            @Mocked Table icebergNativeTable,
+            @Mocked org.apache.iceberg.io.FileIO fileIO) {
+
+        String catalogName = "rest_catalog";
+        Map<String, String> vendedCredentials = new HashMap<>();
+        vendedCredentials.put("s3.access-key-id", "AKIA_VENDED");
+        vendedCredentials.put("s3.secret-access-key", "secret_vended");
+        vendedCredentials.put("s3.session-token", "token_vended");
+        vendedCredentials.put("client.region", "eu-west-1");
+
+        new Expectations() {{
+            GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalogName);
+            result = connector;
+            minTimes = 0;
+
+            connector.getMetadata();
+            result = connectorMetadata;
+            minTimes = 0;
+
+            icebergTable.getCatalogName();
+            result = catalogName;
+            minTimes = 0;
+
+            icebergTable.getNativeTable();
+            result = icebergNativeTable;
+            minTimes = 0;
+
+            icebergNativeTable.io();
+            result = fileIO;
+            minTimes = 0;
+
+            fileIO.properties();
+            result = vendedCredentials;
+            minTimes = 0;
+
+            icebergNativeTable.location();
+            result = "s3://bucket/warehouse/db/table";
+            minTimes = 0;
+
+            icebergNativeTable.properties();
+            result = new HashMap<String, String>();
+            minTimes = 0;
+        }};
+
+        TupleDescriptor desc = new TupleDescriptor(new TupleId(0));
+        desc.setTable(icebergTable);
+        SessionVariable sessionVariable = new SessionVariable();
+        IcebergTableSink sink = new IcebergTableSink(icebergTable, desc, false, sessionVariable, "main");
+
+        CloudConfiguration cloudConfig = Deencapsulation.getField(sink, "cloudConfiguration");
+        Assertions.assertNotNull(cloudConfig);
+        // Verify that vended credentials take priority
+        Assertions.assertEquals(CloudType.AWS, cloudConfig.getCloudType());
+        AwsCloudConfiguration awsConfig = (AwsCloudConfiguration) cloudConfig;
+        AwsCloudCredential credential = awsConfig.getAwsCloudCredential();
+        Assertions.assertEquals("AKIA_VENDED", credential.getAccessKey());
+        Assertions.assertEquals("secret_vended", credential.getSecretKey());
+    }
+
+    @Test
+    public void testIcebergTableSinkUserProvidedFallback(
+            @Mocked GlobalStateMgr globalStateMgr,
+            @Mocked CatalogConnector connector,
+            @Mocked ConnectorMetadata connectorMetadata,
+            @Mocked IcebergTable icebergTable,
+            @Mocked Table icebergNativeTable,
+            @Mocked org.apache.iceberg.io.FileIO fileIO) {
+
+        String catalogName = "rest_catalog";
+        Map<String, String> emptyFileIOProps = new HashMap<>();
+        Map<String, String> emptyCatalogConfigProps = new HashMap<>();
+        CloudConfiguration userProvidedConfig = CloudConfigurationFactory.buildCloudConfigurationForStorage(
+                Map.of("aws.s3.access_key", "AKIA_USER", "aws.s3.secret_key", "secret_user"));
+
+        new Expectations() {{
+            GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalogName);
+            result = connector;
+            minTimes = 0;
+
+            connector.getMetadata();
+            result = connectorMetadata;
+            minTimes = 0;
+
+            connectorMetadata.getCatalogProperties();
+            result = emptyCatalogConfigProps;
+            minTimes = 0;
+
+            connectorMetadata.getCloudConfiguration();
+            result = userProvidedConfig;
+            minTimes = 0;
+
+            icebergTable.getCatalogName();
+            result = catalogName;
+            minTimes = 0;
+
+            icebergTable.getNativeTable();
+            result = icebergNativeTable;
+            minTimes = 0;
+
+            icebergNativeTable.io();
+            result = fileIO;
+            minTimes = 0;
+
+            fileIO.properties();
+            result = emptyFileIOProps;
+            minTimes = 0;
+
+            icebergNativeTable.location();
+            result = "s3://bucket/warehouse/db/table";
+            minTimes = 0;
+
+            icebergNativeTable.properties();
+            result = new HashMap<String, String>();
+            minTimes = 0;
+        }};
+
+        TupleDescriptor desc = new TupleDescriptor(new TupleId(0));
+        desc.setTable(icebergTable);
+        SessionVariable sessionVariable = new SessionVariable();
+        IcebergTableSink sink = new IcebergTableSink(icebergTable, desc, false, sessionVariable, "main");
+
+        CloudConfiguration cloudConfig = Deencapsulation.getField(sink, "cloudConfiguration");
+        Assertions.assertNotNull(cloudConfig);
+        Assertions.assertEquals(userProvidedConfig, cloudConfig);
     }
 
     @Test
