@@ -179,11 +179,12 @@ public class HeartbeatMgr extends FrontendDaemon {
                 // the heartbeat rpc's timeout is 5 seconds, so we will not be blocked here too long.
                 HeartbeatResponse response = future.get();
                 if (response.getStatus() != HbStatus.OK) {
-                    if ((response.getType() != HeartbeatResponse.Type.BACKEND ||
-                            !backendsForSuspendedWarehouse.contains(((BackendHbResponse) response).getBeId()))) {
-                        LOG.warn("get bad heartbeat response: {}", response);
-                    } else {
+                    boolean isBackendForSuspendedWarehouse = response.getType() == HeartbeatResponse.Type.BACKEND &&
+                            backendsForSuspendedWarehouse.contains(((BackendHbResponse) response).getBeId());
+                    if (isBackendForSuspendedWarehouse) {
                         LOG.debug("get bad heartbeat response: {}", response);
+                    } else {
+                        LOG.warn("get bad heartbeat response: {}", response);
                     }
                 }
                 isChanged = handleHbResponse(response, false);
