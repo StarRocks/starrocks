@@ -69,7 +69,6 @@ void SpillProcessChannel::close() {
     while (!_spill_tasks.empty()) {
         _spill_tasks.try_get(&task);
     }
-    DCHECK(task);
 
     // run the last task
     if (task) {
