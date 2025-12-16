@@ -164,4 +164,26 @@ public class AggTableTest extends PlanTestBase {
         String sql = getFragmentPlan("select NDV(v2) from test_agg group by k1");
         assertTestAggOFF(sql, "Aggregation function NDV just work on key column");
     }
+
+    @Test
+    public void testMultiDistinctCountWithSum() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `reproduce` (\n" +
+                "  `id` int(11) NULL COMMENT \"\",\n" +
+                "  `full_cafeteria` int(11) NULL COMMENT \"\",\n" +
+                "  `ATTENDANCE_BUDGET` int(11) NULL COMMENT \"\"\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`id`, `full_cafeteria`, `ATTENDANCE_BUDGET`)\n" +
+                "DISTRIBUTED BY HASH(`id`) BUCKETS 1\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");");
+
+        String sql = "select COUNT(distinct (case WHEN 1=2 THEN full_cafeteria else null end)) AS x0, " +
+                      "COUNT(distinct (case WHEN (true) THEN full_cafeteria else null end)) AS x1, " +
+                      "SUM((case WHEN (true) THEN ATTENDANCE_BUDGET else null end)) " +
+                      "FROM reproduce";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "output: multi_distinct_count(NULL), multi_distinct_count(2: full_cafeteria), sum(3: " +
+                "ATTENDANCE_BUDGET)");
+    }
 }
