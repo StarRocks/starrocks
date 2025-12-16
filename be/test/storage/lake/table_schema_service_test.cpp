@@ -243,12 +243,12 @@ protected:
         return metadata;
     }
 
-    TableSchemaMetaPB create_schema_info(int64_t schema_id, int64_t db_id, int64_t table_id) {
-        TableSchemaMetaPB schema_meta;
-        schema_meta.set_schema_id(schema_id);
-        schema_meta.set_db_id(db_id);
-        schema_meta.set_table_id(table_id);
-        return schema_meta;
+    TableSchemaKeyPB create_schema_info(int64_t schema_id, int64_t db_id, int64_t table_id) {
+        TableSchemaKeyPB schema_key;
+        schema_key.set_schema_id(schema_id);
+        schema_key.set_db_id(db_id);
+        schema_key.set_table_id(table_id);
+        return schema_key;
     }
 
     TUniqueId create_query_id() {
@@ -373,7 +373,7 @@ protected:
     TableSchemaService* _schema_service;
 };
 
-TEST_F(TableSchemaServiceTest, global_schema_cache_hit) {
+TEST_F(TableSchemaServiceTest, schema_cache_hit) {
     // 1) Put schema into global cache.
     // 2) Verify both LOAD and SCAN return from cache without RPC.
     int64_t schema_id = next_id();
@@ -637,7 +637,7 @@ TEST_F(TableSchemaServiceTest, rpc_request_deduplication) {
     });
 
     auto worker = [&](int64_t txn_id, StatusOr<TabletSchemaPtr>* out) {
-        *out = _schema_service->get_schema_for_load(create_schema_info(schema_id, 100, 101, tablet_id), txn_id);
+        *out = _schema_service->get_schema_for_load(create_schema_info(schema_id, 100, 101), tablet_id, txn_id);
     };
 
     StatusOr<TabletSchemaPtr> r1;
@@ -692,7 +692,7 @@ TEST_F(TableSchemaServiceTest, load_interference) {
     });
 
     auto call_load = [&](int64_t txn_id, StatusOr<TabletSchemaPtr>* out) {
-        *out = _schema_service->get_schema_for_load(create_schema_info(schema_id, 100, 101, tablet_id), txn_id);
+        *out = _schema_service->get_schema_for_load(create_schema_info(schema_id, 100, 101), tablet_id, txn_id);
     };
 
     std::thread t1(call_load, txn_a, &ra);
@@ -746,7 +746,7 @@ TEST_F(TableSchemaServiceTest, query_interference) {
     });
 
     auto call_scan = [&](const TUniqueId& q, StatusOr<TabletSchemaPtr>* out) {
-        *out = _schema_service->get_schema_for_scan(create_schema_info(schema_id, 100, 101, tablet_id), q, fe, nullptr);
+        *out = _schema_service->get_schema_for_scan(create_schema_info(schema_id, 100, 101), tablet_id, q, fe, nullptr);
     };
 
     std::thread t1(call_scan, q1, &r1);

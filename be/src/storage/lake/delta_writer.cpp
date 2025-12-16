@@ -411,12 +411,12 @@ inline Status DeltaWriterImpl::init_tablet_schema() {
     }
     ASSIGN_OR_RETURN(auto tablet, _tablet_manager->get_tablet(_tablet_id));
     TabletMetadataPtr latest_metadata = _tablet_manager->get_latest_cached_tablet_metadata(_tablet_id);
-    TableSchemaMetaPB schema_meta;
-    schema_meta.set_schema_id(_schema_id);
-    schema_meta.set_db_id(_db_id);
-    schema_meta.set_table_id(_table_id);
+    TableSchemaKeyPB schema_key;
+    schema_key.set_schema_id(_schema_id);
+    schema_key.set_db_id(_db_id);
+    schema_key.set_table_id(_table_id);
     ASSIGN_OR_RETURN(_tablet_schema, _tablet_manager->table_schema_service()->get_schema_for_load(
-                                             schema_meta, _tablet_id, _txn_id, latest_metadata));
+                                             schema_key, _tablet_id, _txn_id, latest_metadata));
     return Status::OK();
 }
 
@@ -621,10 +621,10 @@ StatusOr<TxnLogPtr> DeltaWriterImpl::finish_with_txnlog(DeltaWriterFinishMode mo
         *txn_log->mutable_load_id() = _load_id;
     }
     auto op_write = txn_log->mutable_op_write();
-    auto table_schema_meta = op_write->mutable_schema_meta();
-    table_schema_meta->set_db_id(_db_id);
-    table_schema_meta->set_table_id(_table_id);
-    table_schema_meta->set_schema_id(_tablet_schema->id());
+    auto table_schema_key = op_write->mutable_schema_key();
+    table_schema_key->set_db_id(_db_id);
+    table_schema_key->set_table_id(_table_id);
+    table_schema_key->set_schema_id(_tablet_schema->id());
 
     for (auto& f : _tablet_writer->files()) {
         if (is_segment(f.path)) {

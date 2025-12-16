@@ -298,10 +298,10 @@ TEST_F(LakeDeltaWriterTest, test_write) {
     ASSERT_FALSE(txnlog->op_write().rowset().overlapped());
     ASSERT_EQ(2 * kChunkSize, txnlog->op_write().rowset().num_rows());
     ASSERT_GT(txnlog->op_write().rowset().data_size(), 0);
-    ASSERT_TRUE(txnlog->op_write().has_schema_meta());
-    ASSERT_EQ(txnlog->op_write().schema_meta().db_id(), db_id);
-    ASSERT_EQ(txnlog->op_write().schema_meta().table_id(), table_id);
-    ASSERT_EQ(txnlog->op_write().schema_meta().schema_id(), _tablet_schema->id());
+    ASSERT_TRUE(txnlog->op_write().has_schema_key());
+    ASSERT_EQ(txnlog->op_write().schema_key().db_id(), db_id);
+    ASSERT_EQ(txnlog->op_write().schema_key().table_id(), table_id);
+    ASSERT_EQ(txnlog->op_write().schema_key().schema_id(), _tablet_schema->id());
 
     // Check segment file
     ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(kTestDirectory));
@@ -406,10 +406,10 @@ TEST_F(LakeDeltaWriterTest, test_finish_without_write_txn_log) {
     ASSERT_OK(finish_result.status());
     auto txn_log = finish_result.value();
     ASSERT_TRUE(txn_log->has_op_write());
-    ASSERT_TRUE(txn_log->op_write().has_schema_meta());
-    ASSERT_EQ(txn_log->op_write().schema_meta().db_id(), db_id);
-    ASSERT_EQ(txn_log->op_write().schema_meta().table_id(), table_id);
-    ASSERT_EQ(txn_log->op_write().schema_meta().schema_id(), _tablet_schema->id());
+    ASSERT_TRUE(txn_log->op_write().has_schema_key());
+    ASSERT_EQ(txn_log->op_write().schema_key().db_id(), db_id);
+    ASSERT_EQ(txn_log->op_write().schema_key().table_id(), table_id);
+    ASSERT_EQ(txn_log->op_write().schema_key().schema_id(), _tablet_schema->id());
 
     delta_writer->close();
 

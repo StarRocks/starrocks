@@ -46,6 +46,7 @@
 #include "storage/tablet_schema.h"
 #include "testutil/assert.h"
 #include "testutil/id_generator.h"
+#include "util/failpoint/fail_point.h"
 
 namespace starrocks::lake {
 
@@ -78,9 +79,25 @@ protected:
         _target_tablet_id = _target_tablet_metadata->id();
         // target visible version
         _version = _target_tablet_metadata->version();
+
+        PFailPointTriggerMode trigger_mode;
+        trigger_mode.set_mode(FailPointTriggerModeType::ENABLE);
+        auto fp = starrocks::failpoint::FailPointRegistry::GetInstance()->get(
+                "table_schema_service_disable_remote_schema_for_load");
+        if (fp != nullptr) {
+            fp->setMode(trigger_mode);
+        }
     }
 
     void TearDown() override {
+        PFailPointTriggerMode trigger_mode;
+        trigger_mode.set_mode(FailPointTriggerModeType::DISABLE);
+        auto fp = starrocks::failpoint::FailPointRegistry::GetInstance()->get(
+                "table_schema_service_disable_remote_schema_for_load");
+        if (fp != nullptr) {
+            fp->setMode(trigger_mode);
+        }
+
 #ifdef USE_STAROS
         if (config::starlet_cache_dir.compare(0, 5, std::string("/tmp/")) == 0) {
             // Clean cache directory

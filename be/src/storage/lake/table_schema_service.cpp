@@ -32,6 +32,7 @@
 #include "storage/metadata_util.h"
 #include "testutil/sync_point.h"
 #include "util/defer_op.h"
+#include "util/failpoint/fail_point.h"
 #include "util/thrift_rpc_helper.h"
 #include "util/uid_util.h"
 
@@ -53,6 +54,13 @@ bvar::Adder<int64_t> g_remote_fetch_retries("table_schema_service", "remote_fetc
 // This measures single RPC latency, while g_remote_fetch_latency_us measures total time including retries.
 bvar::LatencyRecorder g_schema_rpc_latency_us("table_schema_service", "schema_rpc");
 
+// Failpoint to disable remote schema fetching for load operations in tests.
+// Previously, tests would fallback to local tablet metadata files when schema is not in schema cache
+// and cached latest meta. After introducing remote schema service, these tests would normally need to
+// mock thrift RPC calls to fetch schemas, which requires significant effort. As a compromise, this
+// failpoint is introduced to maintain compatibility with existing tests.
+DEFINE_FAIL_POINT(table_schema_service_disable_remote_schema_for_load);
+
 std::string TableSchemaService::SingleFlightExecutionContext::to_string() const {
     std::stringstream ss;
     ss << "[target_fe: " << target_fe.hostname << ":" << target_fe.port
@@ -66,22 +74,22 @@ std::string TableSchemaService::SingleFlightExecutionContext::to_string() const 
     return ss.str();
 }
 
-StatusOr<TabletSchemaPtr> TableSchemaService::get_schema_for_load(const TableSchemaMetaPB& schema_meta,
-                                                                  int64_t tablet_id, int64_t txn_id,
+StatusOr<TabletSchemaPtr> TableSchemaService::get_schema_for_load(const TableSchemaKeyPB& schema_key, int64_t tablet_id,
+                                                                  int64_t txn_id,
                                                                   const TabletMetadataPtr& tablet_meta) {
-    int64_t schema_id = schema_meta.schema_id();
+    int64_t schema_id = schema_key.schema_id();
     TabletSchemaPtr schema = _get_local_schema(schema_id, tablet_meta);
     if (schema != nullptr) {
-        VLOG(2) << "get load schema from local. db_id: " << schema_meta.db_id()
-                << ", table_id: " << schema_meta.table_id() << ", schema_id: " << schema_id
+        VLOG(2) << "get load schema from local. db_id: " << schema_key.db_id()
+                << ", table_id: " << schema_key.table_id() << ", schema_id: " << schema_id
                 << ", tablet_id: " << tablet_id << ", txn_id: " << txn_id;
         return schema;
     }
 
     TTableSchemaMeta thrift_schema_meta;
     thrift_schema_meta.__set_schema_id(schema_id);
-    thrift_schema_meta.__set_db_id(schema_meta.db_id());
-    thrift_schema_meta.__set_table_id(schema_meta.table_id());
+    thrift_schema_meta.__set_db_id(schema_key.db_id());
+    thrift_schema_meta.__set_table_id(schema_key.table_id());
 
     TGetTableSchemaRequest request;
     request.__set_schema_meta(thrift_schema_meta);
@@ -91,6 +99,10 @@ StatusOr<TabletSchemaPtr> TableSchemaService::get_schema_for_load(const TableSch
 
     TNetworkAddress coordinator_fe = get_master_address();
     auto status_or_schema = _get_remote_schema(request, coordinator_fe);
+
+    FAIL_POINT_TRIGGER_EXECUTE(table_schema_service_disable_remote_schema_for_load,
+                               { status_or_schema = Status::NotSupported("disable remote schema for testing"); });
+
     if (status_or_schema.status().is_not_supported()) {
         // If FE doesn't support table schema service which indicates
         // fast schema change v2 does not work, fallback to schema file.
@@ -99,23 +111,23 @@ StatusOr<TabletSchemaPtr> TableSchemaService::get_schema_for_load(const TableSch
     return status_or_schema;
 }
 
-StatusOr<TabletSchemaPtr> TableSchemaService::get_schema_for_scan(const TableSchemaMetaPB& schema_meta,
-                                                                  int64_t tablet_id, const TUniqueId& query_id,
+StatusOr<TabletSchemaPtr> TableSchemaService::get_schema_for_scan(const TableSchemaKeyPB& schema_key, int64_t tablet_id,
+                                                                  const TUniqueId& query_id,
                                                                   const TNetworkAddress& coordinator_fe,
                                                                   const TabletMetadataPtr& tablet_meta) {
-    int64_t schema_id = schema_meta.schema_id();
+    int64_t schema_id = schema_key.schema_id();
     TabletSchemaPtr schema = _get_local_schema(schema_id, tablet_meta);
     if (schema != nullptr) {
-        VLOG(2) << "get scan schema from local. db_id: " << schema_meta.db_id()
-                << ", table_id: " << schema_meta.table_id() << ", schema_id: " << schema_id
+        VLOG(2) << "get scan schema from local. db_id: " << schema_key.db_id()
+                << ", table_id: " << schema_key.table_id() << ", schema_id: " << schema_id
                 << ", tablet_id: " << tablet_id << ", query_id: " << print_id(query_id);
         return schema;
     }
 
     TTableSchemaMeta thrift_schema_meta;
     thrift_schema_meta.__set_schema_id(schema_id);
-    thrift_schema_meta.__set_db_id(schema_meta.db_id());
-    thrift_schema_meta.__set_table_id(schema_meta.table_id());
+    thrift_schema_meta.__set_db_id(schema_key.db_id());
+    thrift_schema_meta.__set_table_id(schema_key.table_id());
 
     TGetTableSchemaRequest request;
     request.__set_schema_meta(thrift_schema_meta);

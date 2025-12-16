@@ -46,6 +46,7 @@
 #include "testutil/assert.h"
 #include "testutil/id_generator.h"
 #include "testutil/sync_point.h"
+#include "util/defer_op.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks::lake {
@@ -362,6 +363,7 @@ TEST_F(LakeDataSourceTest, get_tablet_schema) {
     RuntimeProfile parent_profile("LakeDataSourceTest");
     ds.set_runtime_profile(&parent_profile);
     ds.set_morsel(&morsel);
+    DeferOp close_guard([&] { ds.close(runtime_state.get()); });
     ASSERT_OK(ds.open(runtime_state.get()));
     ASSERT_TRUE(invoked.load());
 

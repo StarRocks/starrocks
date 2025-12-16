@@ -179,10 +179,10 @@ protected:
         TxnLogPB log;
         log.set_txn_id(txn_id);
         auto* op_write = log.mutable_op_write();
-        auto* schema_meta = op_write->mutable_schema_meta();
-        schema_meta->set_schema_id(schema_id);
-        schema_meta->set_db_id(db_id);
-        schema_meta->set_table_id(table_id);
+        auto* schema_key = op_write->mutable_schema_key();
+        schema_key->set_schema_id(schema_id);
+        schema_key->set_db_id(db_id);
+        schema_key->set_table_id(table_id);
         return log;
     }
 
@@ -191,10 +191,10 @@ protected:
         auto log = std::make_shared<TxnLogPB>();
         log->set_txn_id(txn_id);
         auto* op_write = log->mutable_op_write();
-        auto* schema_meta = op_write->mutable_schema_meta();
-        schema_meta->set_schema_id(schema_id);
-        schema_meta->set_db_id(db_id);
-        schema_meta->set_table_id(table_id);
+        auto* schema_key = op_write->mutable_schema_key();
+        schema_key->set_schema_id(schema_id);
+        schema_key->set_db_id(db_id);
+        schema_key->set_table_id(table_id);
         return log;
     }
 
@@ -202,12 +202,12 @@ protected:
 };
 
 TEST_F(FastSchemaEvolutionV2Test, no_schema_update) {
-    // Verify update is skipped when schema_meta is missing or schema_version is not newer.
-    const int64_t kOldSchemaId = 100;
+    // Verify update is skipped when schema_key is missing or schema_version is not newer.
+    const int64_t kOldSchemaId = next_id();
     const int32_t kOldSchemaVersion = 10;
 
     {
-        // 1) Prepare metadata with an existing schema.
+        // 1) Prepare metadata with an existing schema in TabletMetadataPB::schema.
         auto tablet_id = next_id();
         auto meta = make_meta(tablet_id, DUP_KEYS, kOldSchemaId, kOldSchemaVersion);
         auto applier = new_applier(tablet_id, meta);
@@ -216,7 +216,7 @@ TEST_F(FastSchemaEvolutionV2Test, no_schema_update) {
         bool invoked = false;
         install_rpc_hook([&](const RpcTestHookArgs&) { invoked = true; });
 
-        // 3) Apply an op_write without schema_meta.
+        // 3) Apply an op_write without schema_key.
         TxnLogPB log;
         log.set_txn_id(next_id());
         (void)log.mutable_op_write();
@@ -230,7 +230,7 @@ TEST_F(FastSchemaEvolutionV2Test, no_schema_update) {
     }
 
     {
-        // 1) Prepare metadata with an existing schema.
+        // 1) Prepare metadata with an existing schema in TabletMetadataPB::schema.
         auto tablet_id = next_id();
         auto meta = make_meta(tablet_id, DUP_KEYS, kOldSchemaId, kOldSchemaVersion);
         auto applier = new_applier(tablet_id, meta);
@@ -239,7 +239,7 @@ TEST_F(FastSchemaEvolutionV2Test, no_schema_update) {
         bool invoked = false;
         install_rpc_hook([&](const RpcTestHookArgs&) { invoked = true; });
 
-        // 3) Apply an op_write with schema_meta.schema_version == current.
+        // 3) Apply an op_write with schema_key.schema_id == current.
         auto log = make_write_log(next_id(), /*schema_id=*/kOldSchemaId, /*db_id=*/1, /*table_id=*/2);
 
         // 4) Assert: schema unchanged, and no remote schema fetch attempted.
@@ -251,18 +251,22 @@ TEST_F(FastSchemaEvolutionV2Test, no_schema_update) {
     }
 
     {
-        // 1) Prepare metadata with an existing schema.
+        // 1) Prepare metadata with two existing schema in TabletMetadataPB::schema and TabletMetadataPB::historical_schemas.
         auto tablet_id = next_id();
         auto meta = make_meta(tablet_id, DUP_KEYS, kOldSchemaId, kOldSchemaVersion);
+        const int64_t historical_schema_id = kOldSchemaId - 1;
+        TabletSchemaPB historical;
+        historical.set_id(historical_schema_id);
+        historical.set_schema_version(kOldSchemaVersion - 1);
+        meta->mutable_historical_schemas()->insert({historical_schema_id, historical});
         auto applier = new_applier(tablet_id, meta);
 
+        // 2) Install a hook to detect whether schema fetch is attempted.
+        bool invoked = false;
+        install_rpc_hook([&](const RpcTestHookArgs&) { invoked = true; });
 
-        // 2) Mock FE schema RPC to return an older schema (id/version controlled by the test).
-        const int64_t new_schema_id = next_id();
-        mock_schema_rpc(TKeysType::DUP_KEYS, new_schema_id, /*schema_version=*/5, /*num_columns=*/3);
-
-        // 3) Apply an op_write with schema_meta.schema_version == current.
-        auto log = make_write_log(next_id(), /*schema_id=*/new_schema_id, /*db_id=*/1, /*table_id=*/2);
+        // 3) Apply an op_write whose schema_id already exists in historical_schemas.
+        auto log = make_write_log(next_id(), /*schema_id=*/historical_schema_id, /*db_id=*/1, /*table_id=*/2);
 
         // 4) Assert: schema unchanged, and no remote schema fetch attempted.
         auto st = applier->apply(log);
@@ -270,15 +274,36 @@ TEST_F(FastSchemaEvolutionV2Test, no_schema_update) {
         ASSERT_FALSE(invoked);
         ASSERT_EQ(meta->schema().id(), kOldSchemaId);
         ASSERT_EQ(meta->schema().schema_version(), kOldSchemaVersion);
+        ASSERT_EQ(meta->historical_schemas().size(), 1);
+    }
+
+    {
+        // 1) Prepare metadata with an existing schema TabletMetadataPB::schema.
+        auto tablet_id = next_id();
+        auto meta = make_meta(tablet_id, DUP_KEYS, kOldSchemaId, kOldSchemaVersion);
+        auto applier = new_applier(tablet_id, meta);
+
+        // 2) Mock FE schema RPC to return an older schema (id/version controlled by the test).
+        const int64_t new_schema_id = next_id();
+        mock_schema_rpc(TKeysType::DUP_KEYS, new_schema_id, /*schema_version=*/5, /*num_columns=*/3);
+
+        // 3) Apply an op_write with schema_version < current.
+        auto log = make_write_log(next_id(), /*schema_id=*/new_schema_id, /*db_id=*/1, /*table_id=*/2);
+
+        // 4) Assert: schema unchanged, and no remote schema fetch attempted.
+        auto st = applier->apply(log);
+        ASSERT_TRUE(st.ok()) << st;
+        ASSERT_EQ(meta->schema().id(), kOldSchemaId);
+        ASSERT_EQ(meta->schema().schema_version(), kOldSchemaVersion);
     }
 }
 
 TEST_F(FastSchemaEvolutionV2Test, schema_update) {
-    // Verify metadata schema is updated when schema_meta.schema_version is newer.
+    // Verify metadata schema is updated when schema_key.schema_version is newer.
     for (auto keys_type : {DUP_KEYS, PRIMARY_KEYS}) {
         SCOPED_TRACE(keys_type == DUP_KEYS ? "dup_keys" : "primary_keys");
         auto tablet_id = next_id();
-        auto meta = make_meta(tablet_id, keys_type, /*schema_id=*/100, /*schema_version=*/10);
+        auto meta = make_meta(tablet_id, keys_type, /*schema_id=*/next_id(), /*schema_version=*/10);
         auto applier = new_applier(tablet_id, meta);
 
         // 1) Mock FE schema RPC to return a newer schema (id/version controlled by the test).
@@ -302,7 +327,8 @@ TEST_F(FastSchemaEvolutionV2Test, schema_update) {
 TEST_F(FastSchemaEvolutionV2Test, archive_to_history) {
     // Verify rowset_to_schema backfill and old schema is archived into historical_schemas.
     auto tablet_id = next_id();
-    auto meta = make_meta(tablet_id, DUP_KEYS, /*schema_id=*/100, /*schema_version=*/10);
+    const int64_t kOldSchemaId = next_id();
+    auto meta = make_meta(tablet_id, DUP_KEYS, kOldSchemaId, /*schema_version=*/10);
     auto* rs1 = meta->add_rowsets();
     rs1->set_id(111);
     auto* rs2 = meta->add_rowsets();
@@ -323,12 +349,12 @@ TEST_F(FastSchemaEvolutionV2Test, archive_to_history) {
     // 3) Assert: missing rowset_to_schema mappings are backfilled to old schema id.
     auto it1 = meta->rowset_to_schema().find(111);
     ASSERT_TRUE(it1 != meta->rowset_to_schema().end());
-    ASSERT_EQ(it1->second, 100);
+    ASSERT_EQ(it1->second, kOldSchemaId);
     auto it2 = meta->rowset_to_schema().find(222);
     ASSERT_TRUE(it2 != meta->rowset_to_schema().end());
-    ASSERT_EQ(it2->second, 100);
+    ASSERT_EQ(it2->second, kOldSchemaId);
     // 4) Assert: old schema archived.
-    auto hs_it = meta->historical_schemas().find(100);
+    auto hs_it = meta->historical_schemas().find(kOldSchemaId);
     ASSERT_TRUE(hs_it != meta->historical_schemas().end());
     ASSERT_EQ(hs_it->second.DebugString(), old_schema.DebugString());
 }
@@ -336,17 +362,18 @@ TEST_F(FastSchemaEvolutionV2Test, archive_to_history) {
 TEST_F(FastSchemaEvolutionV2Test, no_archive_to_history) {
     // Verify historical_schemas is not modified when no backfill is needed.
     auto tablet_id = next_id();
-    auto meta = make_meta(tablet_id, DUP_KEYS, /*schema_id=*/100, /*schema_version=*/10);
+    const int64_t kOldSchemaId = next_id();
+    auto meta = make_meta(tablet_id, DUP_KEYS, kOldSchemaId, /*schema_version=*/10);
     auto* rs1 = meta->add_rowsets();
     rs1->set_id(111);
     auto* rs2 = meta->add_rowsets();
     rs2->set_id(222);
-    meta->mutable_rowset_to_schema()->insert({111, 100});
-    meta->mutable_rowset_to_schema()->insert({222, 100});
+    meta->mutable_rowset_to_schema()->insert({111, kOldSchemaId});
+    meta->mutable_rowset_to_schema()->insert({222, kOldSchemaId});
     TabletSchemaPB existing;
-    existing.set_id(100);
+    existing.set_id(kOldSchemaId);
     existing.set_schema_version(777);
-    meta->mutable_historical_schemas()->insert({100, existing});
+    meta->mutable_historical_schemas()->insert({kOldSchemaId, existing});
 
     // 1) Prepare applier and mock schema fetch.
     auto applier = new_applier(tablet_id, meta);
@@ -360,7 +387,7 @@ TEST_F(FastSchemaEvolutionV2Test, no_archive_to_history) {
     ASSERT_TRUE(st.ok()) << st;
     // 3) Assert: existing historical schema entry remains unchanged.
     ASSERT_EQ(meta->historical_schemas().size(), 1);
-    auto hs_it = meta->historical_schemas().find(100);
+    auto hs_it = meta->historical_schemas().find(kOldSchemaId);
     ASSERT_TRUE(hs_it != meta->historical_schemas().end());
     ASSERT_EQ(hs_it->second.schema_version(), 777);
 }
@@ -370,7 +397,8 @@ TEST_F(FastSchemaEvolutionV2Test, apply_log_vector_updates_schema) {
     for (auto keys_type : {DUP_KEYS, PRIMARY_KEYS}) {
         SCOPED_TRACE(keys_type == DUP_KEYS ? "dup_keys" : "primary_keys");
         auto tablet_id = next_id();
-        auto meta = make_meta(tablet_id, keys_type, /*schema_id=*/100, /*schema_version=*/50);
+        const int64_t kOldSchemaId = next_id();
+        auto meta = make_meta(tablet_id, keys_type, kOldSchemaId, /*schema_version=*/50);
         auto applier = new_applier(tablet_id, meta);
 
         // 1) Mock schema fetch: each schema version has a different schema id, and newer schemas add new columns.
@@ -395,11 +423,11 @@ TEST_F(FastSchemaEvolutionV2Test, apply_log_vector_updates_schema) {
                                                  req_schema_id, it->second, /*num_columns=*/it->second - 98));
         });
 
-        // 2) Apply a log vector with increasing schema_meta.schema_version.
+        // 2) Apply a log vector with increasing schema_id.
         TxnLogVector logs;
-        logs.push_back(make_write_log_ptr(/*txn_id=*/100, schema_ids[0], /*db_id=*/1, /*table_id=*/2));
-        logs.push_back(make_write_log_ptr(/*txn_id=*/101, schema_ids[1], /*db_id=*/1, /*table_id=*/2));
-        logs.push_back(make_write_log_ptr(/*txn_id=*/102, schema_ids[2], /*db_id=*/1, /*table_id=*/2));
+        logs.push_back(make_write_log_ptr(next_id(), schema_ids[0], /*db_id=*/1, /*table_id=*/2));
+        logs.push_back(make_write_log_ptr(next_id(), schema_ids[1], /*db_id=*/1, /*table_id=*/2));
+        logs.push_back(make_write_log_ptr(next_id(), schema_ids[2], /*db_id=*/1, /*table_id=*/2));
 
         // 3) Assert: schema updated to latest.
         auto st = applier->apply(logs);

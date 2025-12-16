@@ -61,8 +61,8 @@ class TabletManager;
  *
  * 3. TabletMetadataPB::schema (Persistence/Metadata):
  *    A field in the tablet's metadata recording the "latest" schema version known to this tablet.
- *    - During Fast Schema Evolution, the tablet's metadata is updated to point to the new
- *      schema version (stored here), while historical versions might be referenced in
+ *    - After Fast Schema Evolution, new imports use the new schema to generate data.
+ *      This field is updated during publish, while historical versions might be referenced in
  *      `TabletMetadataPB::historical_schemas`.
  */
 class TableSchemaService {
@@ -73,26 +73,26 @@ public:
     /**
      * @brief Retrieves the table schema for a LOAD operation.
      * 
-     * @param schema_meta Basic information to identify the schema (db_id/table_id/schema_id).
+     * @param schema_key Basic information to identify the schema (db_id/table_id/schema_id).
      * @param tablet_id The tablet that sends the request.
      * @param txn_id The transaction ID associated with the load.
      * @param tablet_meta Optional pointer to tablet metadata for local lookup.
      * @return A shared pointer to the TabletSchema on success, or an error status.
      */
-    StatusOr<TabletSchemaPtr> get_schema_for_load(const TableSchemaMetaPB& schema_meta, int64_t tablet_id,
-                                                  int64_t txn_id, const TabletMetadataPtr& tablet_meta = nullptr);
+    StatusOr<TabletSchemaPtr> get_schema_for_load(const TableSchemaKeyPB& schema_key, int64_t tablet_id, int64_t txn_id,
+                                                  const TabletMetadataPtr& tablet_meta = nullptr);
 
     /**
      * @brief Retrieves the table schema for a SCAN operation.
      *
-     * @param schema_meta Identifiers for the target schema (db_id/table_id/schema_id).
+     * @param schema_key Identifiers for the target schema (db_id/table_id/schema_id).
      * @param tablet_id The tablet that sends the request.
      * @param query_id Query ID for the scan.
      * @param coordinator_fe Address of the coordinator FE.
      * @param tablet_meta Optional pointer to tablet metadata for local lookup.
      * @return A shared pointer to the TabletSchema on success, or an error status.
      */
-    StatusOr<TabletSchemaPtr> get_schema_for_scan(const TableSchemaMetaPB& schema_meta, int64_t tablet_id,
+    StatusOr<TabletSchemaPtr> get_schema_for_scan(const TableSchemaKeyPB& schema_key, int64_t tablet_id,
                                                   const TUniqueId& query_id, const TNetworkAddress& coordinator_fe,
                                                   const TabletMetadataPtr& tablet_meta = nullptr);
 

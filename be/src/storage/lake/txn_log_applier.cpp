@@ -113,25 +113,26 @@ Status apply_alter_meta_log(TabletMetadataPB* metadata, const TxnLogPB_OpAlterMe
  * @param tablet_meta Pointer to the mutable tablet metadata to be updated.
  * @return Status::OK() on success or if no update is needed, otherwise an error status.
  */
-Status update_metadata_schema(const TxnLogPB_OpWrite& op_write, int64_t txn_id, TabletMetadata* tablet_meta) {
-    if (!op_write.has_schema_meta()) {
+Status update_metadata_schema(const TxnLogPB_OpWrite& op_write, int64_t txn_id,
+                              const MutableTabletMetadataPtr& tablet_meta) {
+    if (!op_write.has_schema_key()) {
         // not fast schema evolution v2, skip to update
         return Status::OK();
     }
-    auto& schema_meta = op_write.schema_meta();
-    if (schema_meta.schema_id() == tablet_meta->schema().id() ||
-        tablet_meta->historical_schemas().contains(schema_meta.schema_id())) {
+    auto& schema_key = op_write.schema_key();
+    if (schema_key.schema_id() == tablet_meta->schema().id() ||
+        tablet_meta->historical_schemas().contains(schema_key.schema_id())) {
         return Status::OK();
     }
     ASSIGN_OR_RETURN(auto new_schema,
                      ExecEnv::GetInstance()->lake_tablet_manager()->table_schema_service()->get_schema_for_load(
-                             schema_meta, tablet_meta->id(), txn_id));
+                             schema_key, tablet_meta->id(), txn_id, tablet_meta));
     auto& old_schema = tablet_meta->schema();
     if (new_schema->schema_version() <= old_schema.schema_version()) {
         return Status::OK();
     }
 
-    LOG(INFO) << "update metadata schema. db_id: " << schema_meta.db_id() << ", table_id: " << schema_meta.table_id()
+    LOG(INFO) << "update metadata schema. db_id: " << schema_key.db_id() << ", table_id: " << schema_key.table_id()
               << ", tablet_id: " << tablet_meta->id() << ", metadata version: " << tablet_meta->version()
               << ", txn_id: " << txn_id << ", new schema id/version: " << new_schema->id() << "/"
               << new_schema->schema_version() << ", old schema id/version: " << old_schema.id() << "/"
@@ -271,7 +272,7 @@ public:
         for (const auto& log : txn_logs) {
             if (log->has_op_write()) {
                 const auto& op_write = log->op_write();
-                RETURN_IF_ERROR(update_metadata_schema(op_write, log->txn_id(), _metadata.get()));
+                RETURN_IF_ERROR(update_metadata_schema(op_write, log->txn_id(), _metadata));
                 if (is_column_mode_partial_update(op_write)) {
                     RETURN_IF_ERROR(_tablet.update_mgr()->publish_column_mode_partial_update(
                             op_write, log->txn_id(), _metadata, &_tablet, _index_entry, &_builder, _base_version));
@@ -363,7 +364,7 @@ private:
     }
 
     Status apply_write_log(const TxnLogPB_OpWrite& op_write, int64_t txn_id) {
-        RETURN_IF_ERROR(update_metadata_schema(op_write, txn_id, _metadata.get()));
+        RETURN_IF_ERROR(update_metadata_schema(op_write, txn_id, _metadata));
         // get lock to avoid gc
         _tablet.update_mgr()->lock_shard_pk_index_shard(_tablet.id());
         DeferOp defer([&]() { _tablet.update_mgr()->unlock_shard_pk_index_shard(_tablet.id()); });
@@ -596,7 +597,7 @@ public:
         for (const auto& log : txn_logs) {
             if (log->has_op_write()) {
                 const auto& op_write = log->op_write();
-                RETURN_IF_ERROR(update_metadata_schema(op_write, log->txn_id(), _metadata.get()));
+                RETURN_IF_ERROR(update_metadata_schema(op_write, log->txn_id(), _metadata));
                 if (op_write.has_rowset() && op_write.rowset().num_rows() > 0) {
                     const auto& rowset = op_write.rowset();
 
@@ -699,7 +700,7 @@ public:
 private:
     Status apply_write_log(const TxnLogPB_OpWrite& op_write, int64_t txn_id) {
         TEST_ERROR_POINT("NonPrimaryKeyTxnLogApplier::apply_write_log");
-        RETURN_IF_ERROR(update_metadata_schema(op_write, txn_id, _metadata.get()));
+        RETURN_IF_ERROR(update_metadata_schema(op_write, txn_id, _metadata));
         if (op_write.has_rowset() && (op_write.rowset().num_rows() > 0 || op_write.rowset().has_delete_predicate())) {
             auto rowset = _metadata->add_rowsets();
             rowset->CopyFrom(op_write.rowset());
