@@ -15,10 +15,7 @@
 
 package com.starrocks.sql.ast;
 
-import com.google.common.base.Preconditions;
 import com.starrocks.catalog.TableName;
-import com.starrocks.common.AnalysisException;
-import com.starrocks.common.proc.ProcNodeInterface;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.ArrayList;
@@ -44,7 +41,7 @@ public class DescribeStmt extends ShowStmt {
     public static final List<String> EMPTY_ROW = initEmptyRow();
 
     private final TableName dbTableName;
-    private ProcNodeInterface node;
+    private String procPath;
 
     List<List<String>> totalRows;
 
@@ -106,12 +103,12 @@ public class DescribeStmt extends ShowStmt {
         isAllTables = allTables;
     }
 
-    public ProcNodeInterface getNode() {
-        return node;
+    public String getProcPath() {
+        return procPath;
     }
 
-    public void setNode(ProcNodeInterface node) {
-        this.node = node;
+    public void setProcPath(String procPath) {
+        this.procPath = procPath;
     }
 
     public boolean isOlapTable() {
@@ -130,13 +127,8 @@ public class DescribeStmt extends ShowStmt {
         return tableFunctionProperties;
     }
 
-    public List<List<String>> getResultRows() throws AnalysisException {
-        if (isAllTables || isMaterializedView || isTableFunctionTable) {
-            return totalRows;
-        } else {
-            Preconditions.checkNotNull(node);
-            return node.fetchResult().getRows();
-        }
+    public List<List<String>> getResultRows() {
+        return totalRows;
     }
 
     private static List<String> initEmptyRow() {

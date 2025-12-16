@@ -17,7 +17,6 @@ package com.starrocks.sql.ast;
 
 import com.google.common.collect.ImmutableSet;
 import com.starrocks.catalog.TableName;
-import com.starrocks.common.proc.ProcNodeInterface;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.LimitElement;
 import com.starrocks.sql.parser.NodePosition;
@@ -50,7 +49,7 @@ public class ShowPartitionsStmt extends ShowStmt {
 
     private Map<String, Expr> filterMap;
 
-    private ProcNodeInterface node;
+    private String procPath;
 
     public ShowPartitionsStmt(TableName tableName, Expr whereClause, List<OrderByElement> orderByElements,
                               LimitElement limitElement, boolean isTempPartition) {
@@ -82,10 +81,6 @@ public class ShowPartitionsStmt extends ShowStmt {
 
     public Map<String, Expr> getFilterMap() {
         return filterMap;
-    }
-
-    public ProcNodeInterface getNode() {
-        return node;
     }
 
     public TableName getTbl() {
@@ -120,8 +115,12 @@ public class ShowPartitionsStmt extends ShowStmt {
         this.orderByPairs = orderByPairs;
     }
 
-    public void setNode(ProcNodeInterface node) {
-        this.node = node;
+    public String getProcPath() {
+        return procPath;
+    }
+
+    public void setProcPath(String procPath) {
+        this.procPath = procPath;
     }
 
     @Override

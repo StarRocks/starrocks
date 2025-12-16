@@ -18,45 +18,38 @@ package com.starrocks.sql.ast;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.parser.NodePosition;
 
-import java.util.UUID;
+public class CancelLoadStmt extends DdlStmt {
 
-import static com.starrocks.common.util.Util.normalizeName;
-
-/**
- * syntax:
- * CANCEL EXPORT FROM example_db WHERE queryid = "921d8f80-7c9d-11eb-9342-acde48001122"
- */
-public class CancelExportStmt extends DdlStmt {
     private String dbName;
-    private Expr whereClause;
+    private String label;
 
-    private UUID queryId;
+    private final Expr whereClause;
 
-    public void setDbName(String dbName) {
-        this.dbName = normalizeName(dbName);
+    public String getDbName() {
+        return dbName;
     }
 
-    public void setQueryId(UUID queryId) {
-        this.queryId = queryId;
+    public void setDbName(String dbName) {
+        this.dbName = dbName;
     }
 
     public Expr getWhereClause() {
         return whereClause;
     }
 
-    public String getDbName() {
-        return dbName;
+    public String getLabel() {
+        return label;
     }
 
-    public UUID getQueryId() {
-        return queryId;
+    public void setLabel(String label) {
+        this.label = label;
     }
 
-    public CancelExportStmt(String dbName, Expr whereClause) {
+    public CancelLoadStmt(String dbName, Expr whereClause) {
         this(dbName, whereClause, NodePosition.ZERO);
     }
 
-    public CancelExportStmt(String dbName, Expr whereClause, NodePosition pos) {
+    public CancelLoadStmt(String dbName, Expr whereClause, NodePosition pos) {
         super(pos);
         this.dbName = dbName;
         this.whereClause = whereClause;
@@ -64,6 +57,6 @@ public class CancelExportStmt extends DdlStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return ((AstVisitorExtendInterface<R, C>) visitor).visitCancelExportStatement(this, context);
+        return visitor.visitCancelLoadStatement(this, context);
     }
 }

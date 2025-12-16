@@ -631,7 +631,7 @@ public class MaterializedViewAnalyzer {
                     ErrorReport.reportSemanticException(ErrorCode.ERR_VIEW_WRONG_LIST);
                 }
                 for (ColWithComment colWithComment : colWithComments) {
-                    colWithComment.analyze();
+                    FeNameFormat.checkColumnName(colWithComment.getColName());
                 }
             }
             List<Column> mvColumns = Lists.newArrayList();
