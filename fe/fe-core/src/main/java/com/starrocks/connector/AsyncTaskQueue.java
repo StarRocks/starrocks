@@ -21,7 +21,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.Executor;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.Condition;
@@ -164,12 +163,7 @@ public class AsyncTaskQueue<T> {
                     }
                     return;
                 }
-                // Use timeout await to avoid lost signal and potential deadlock
-                boolean signaled = outputQueueCondition.await(500, TimeUnit.MILLISECONDS);
-                if (!signaled) {
-                    LOG.debug("AsyncTaskQueue await timeout, will retry. taskQueueSize: {}, outputQueueSize: {}",
-                            taskQueueSize.get(), outputQueueSize.get());
-                }
+                outputQueueCondition.await();
             }
             while (maxSize > 0 && !outputQueue.isEmpty()) {
                 T output = outputQueue.remove(outputQueue.size() - 1);
@@ -245,7 +239,7 @@ public class AsyncTaskQueue<T> {
         // 3. submit this task, and check if ok
         // 4. if not ok, dec running count.
         boolean success = false;
-        Task task = null;
+        Task<T> task = null;
         try {
             int count = runningTaskCount.incrementAndGet();
             if (count > maxRunningTaskCountValue) {
@@ -260,7 +254,7 @@ public class AsyncTaskQueue<T> {
             return true;
         } catch (Throwable t) {
             LOG.error("Throwable occurred while triggering task in AsyncTaskQueue", t);
-            Exception exception = (t instanceof Exception) ? (Exception) t : new RuntimeException(t);
+            Exception exception = new RuntimeException(t);
             updateTaskException(exception);
         } finally {
             if (!success) {
@@ -312,7 +306,10 @@ public class AsyncTaskQueue<T> {
                     }
                 } catch (Throwable t) {
                     LOG.error("Throwable occurred while executing task in AsyncTaskQueue", t);
-                    Exception exception = (t instanceof Exception) ? (Exception) t : new RuntimeException(t);
+                    if (t instanceof InterruptedException) {
+                        Thread.currentThread().interrupt();
+                    }
+                    Exception exception = new RuntimeException(t);
                     updateTaskException(exception);
                 }
             }
