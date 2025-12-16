@@ -96,8 +96,23 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
                 }
             }
 
+<<<<<<< HEAD
             sql = buildCollectHistogram(db, table, sampleRatio, bucketNum, mostCommonValues, columnName, columnType);
             collectStatisticSync(sql, context);
+=======
+            if (ndvMode == StatsConstants.HistogramCollectBucketNdvMode.NONE) {
+                sql = buildCollectHistogram(db, table, sampleRatio, bucketNum, mostCommonValues, columnName,
+                        columnType, false);
+            } else if (ndvMode == StatsConstants.HistogramCollectBucketNdvMode.SAMPLE) {
+                sql = buildCollectHistogram(db, table, sampleRatio, bucketNum, mostCommonValues, columnName,
+                        columnType, true);
+            } else if (ndvMode == StatsConstants.HistogramCollectBucketNdvMode.HLL) {
+                sql = buildCollectBucketsWithoutNdv(db, table, sampleRatio, bucketNum, mostCommonValues, columnName, columnType);
+                List<TStatisticData> buckets = statisticExecutor.executeStatisticDQL(context, sql);
+                sql = buildCollectHistogramWithHllNdv(db, table, mostCommonValues, buckets.get(0).histogram, columnName);
+            }
+            collectStatisticSync(sql, context, analyzeStatus);
+>>>>>>> 2509d54c60 ([BugFix] fix the behavior of fe_conf.statistic_collect_query_timeout (#66363))
 
             finishedSQLNum++;
             analyzeStatus.setProgress(finishedSQLNum * 100 / totalCollectSQL);
