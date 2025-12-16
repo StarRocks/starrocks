@@ -319,4 +319,24 @@ public class StatisticsExecutorTest extends PlanTestBase {
         Config.lake_background_warehouse = "default_warehouse";
         FeConstants.enableUnitStatistics = true;
     }
+
+    @Test
+    public void testDropHistogramWithEmptyColumnNames() {
+        // Test that dropHistogram and dropExternalHistogram methods handle empty column lists
+        // without throwing exceptions (which would happen if SQL with "in ()" was generated)
+        StatisticExecutor statisticExecutor = new StatisticExecutor();
+        ConnectContext context = StatisticUtils.buildConnectContext();
+
+        // Should not throw any exception when columnNames is empty
+        statisticExecutor.dropHistogram(context, 1L, Lists.newArrayList());
+        statisticExecutor.dropHistogram(context, 1L, null);
+
+        // Should not throw any exception when columnNames is empty for external histogram
+        statisticExecutor.dropExternalHistogram(context, "test-uuid", Lists.newArrayList());
+        statisticExecutor.dropExternalHistogram(context, "test-uuid", null);
+
+        // Should not throw any exception for the overloaded version with catalog/db/table names
+        statisticExecutor.dropExternalHistogram(context, "catalog", "db", "table", Lists.newArrayList());
+        statisticExecutor.dropExternalHistogram(context, "catalog", "db", "table", null);
+    }
 }
