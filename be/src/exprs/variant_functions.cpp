@@ -158,11 +158,7 @@ StatusOr<ColumnPtr> VariantFunctions::_do_variant_query(FunctionContext* context
 }
 
 StatusOr<ColumnPtr> VariantFunctions::variant_typeof(FunctionContext* context, const Columns& columns) {
-    auto st = _do_variant_query<TYPE_VARIANT>(context, columns);
-    if (!st.ok()) {
-        return st.status();
-    }
-    auto variant_column = st.value();
+    const auto& variant_column = columns[0];
     auto variant_viewer = ColumnViewer<TYPE_VARIANT>(variant_column);
     size_t num_rows = variant_column->size();
 
