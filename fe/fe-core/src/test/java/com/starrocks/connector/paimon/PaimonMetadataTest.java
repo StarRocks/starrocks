@@ -51,13 +51,18 @@ import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.OptimizerFactory;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
+import com.starrocks.sql.optimizer.operator.AggType;
+import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalPaimonScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalValuesOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.transformation.ExternalScanPartitionPruneRule;
+import com.starrocks.sql.optimizer.rule.transformation.RewriteSimpleAggToLogicalValuesRule;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.type.ArrayType;
 import com.starrocks.type.DateType;
@@ -141,6 +146,10 @@ import static org.apache.paimon.io.DataFileMeta.EMPTY_MAX_KEY;
 import static org.apache.paimon.io.DataFileMeta.EMPTY_MIN_KEY;
 import static org.apache.paimon.stats.SimpleStats.EMPTY_STATS;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class PaimonMetadataTest {
     @Mocked
@@ -216,7 +225,7 @@ public class PaimonMetadataTest {
         };
         com.starrocks.catalog.Table table = metadata.getTable(connectContext, "db1", "tbl1");
         PaimonTable paimonTable = (PaimonTable) table;
-        org.junit.jupiter.api.Assertions.assertTrue(metadata.tableExists(connectContext, "db1", "tbl1"));
+        assertTrue(metadata.tableExists(connectContext, "db1", "tbl1"));
         assertEquals("db1", paimonTable.getCatalogDBName());
         assertEquals("tbl1", paimonTable.getCatalogTableName());
         assertEquals("CREATE TABLE `tbl1` (\n" +
@@ -229,9 +238,9 @@ public class PaimonMetadataTest {
         assertEquals(Lists.newArrayList("col1"), paimonTable.getPartitionColumnNames());
         assertEquals("hdfs://127.0.0.1:10000/paimon", paimonTable.getTableLocation());
         assertEquals(IntegerType.INT, paimonTable.getBaseSchema().get(0).getType());
-        org.junit.jupiter.api.Assertions.assertTrue(paimonTable.getBaseSchema().get(0).isAllowNull());
+        assertTrue(paimonTable.getBaseSchema().get(0).isAllowNull());
         assertEquals(FloatType.DOUBLE, paimonTable.getBaseSchema().get(1).getType());
-        org.junit.jupiter.api.Assertions.assertTrue(paimonTable.getBaseSchema().get(1).isAllowNull());
+        assertTrue(paimonTable.getBaseSchema().get(1).isAllowNull());
         assertEquals("paimon_catalog", paimonTable.getCatalogName());
         assertEquals("paimon_catalog.null", paimonTable.getUUID());
     }
@@ -245,7 +254,7 @@ public class PaimonMetadataTest {
                 result = new Catalog.DatabaseNotExistException("Database does not exist");
             }
         };
-        org.junit.jupiter.api.Assertions.assertNull(metadata.getDb(connectContext, "nonexistentDb"));
+        assertNull(metadata.getDb(connectContext, "nonexistentDb"));
     }
 
     @Test
@@ -257,8 +266,8 @@ public class PaimonMetadataTest {
                 result = new Catalog.TableNotExistException(identifier);
             }
         };
-        org.junit.jupiter.api.Assertions.assertFalse(metadata.tableExists(connectContext, "nonexistentDb", "nonexistentTbl"));
-        org.junit.jupiter.api.Assertions.assertNull(metadata.getTable(connectContext, "nonexistentDb", "nonexistentTbl"));
+        assertFalse(metadata.tableExists(connectContext, "nonexistentDb", "nonexistentTbl"));
+        assertNull(metadata.getTable(connectContext, "nonexistentDb", "nonexistentTbl"));
     }
 
     @Test
@@ -630,8 +639,6 @@ public class PaimonMetadataTest {
         Map<ColumnRefOperator, Column> colRefToColumnMetaMap = new HashMap<>();
         Map<Column, ColumnRefOperator> columnMetaToColRefMap = new HashMap<>();
         colRefToColumnMetaMap.put(colRef1, col1);
-        colRefToColumnMetaMap.put(colRef1, col1);
-        columnMetaToColRefMap.put(col2, colRef2);
         columnMetaToColRefMap.put(col2, colRef2);
         OptExpression scan =
                 new OptExpression(new LogicalPaimonScanOperator(paimonTable, colRefToColumnMetaMap, columnMetaToColRefMap,
@@ -643,7 +650,7 @@ public class PaimonMetadataTest {
 
     @Test
     public void testCreatePaimonView() {
-        org.junit.jupiter.api.Assertions.assertThrows(StarRocksConnectorException.class,
+        assertThrows(StarRocksConnectorException.class,
                 () -> metadata.createView(connectContext,
                         new CreateViewStmt(false, false,
                                 new TableName("catalog", "db", "table"),
@@ -1012,5 +1019,475 @@ public class PaimonMetadataTest {
         catalog.dropTable(identifier, true);
         catalog.dropDatabase("test_db", true, true);
         Files.delete(tmpDir);
+    }
+
+    @Test
+    void testRewriteSimpleAggToProject(@Mocked FileStoreTable paimonNativeTable)
+            throws Catalog.TableNotExistException {
+        // Setup: Mock PaimonTable with partition column
+        new Expectations() {
+            {
+                paimonNativeCatalog.getTable((Identifier) any);
+                result = paimonNativeTable;
+                paimonNativeTable.rowType().getFields();
+                result = Lists.newArrayList();
+                paimonNativeTable.partitionKeys();
+                result = Lists.newArrayList("col1");
+            }
+        };
+        PaimonTable paimonTable = (PaimonTable) metadata.getTable(connectContext, "db1", "tbl1");
+        
+        ColumnRefOperator colRef1 = new ColumnRefOperator(1, IntegerType.INT, "f2", true);
+        Column col1 = new Column("f2", IntegerType.INT, true);
+        ColumnRefOperator colRef2 = new ColumnRefOperator(2, StringType.STRING, "dt", true);
+        Column col2 = new Column("dt", StringType.STRING, true);
+        ColumnRefOperator colRef3 = new ColumnRefOperator(3, IntegerType.INT, "col1", true);
+        Column col3 = new Column("col1", IntegerType.INT, true);
+
+        Map<ColumnRefOperator, Column> colRefToColumnMetaMap = new HashMap<>();
+        Map<Column, ColumnRefOperator> columnMetaToColRefMap = new HashMap<>();
+        colRefToColumnMetaMap.put(colRef1, col1);
+        colRefToColumnMetaMap.put(colRef3, col3);
+        columnMetaToColRefMap.put(col2, colRef2);
+        columnMetaToColRefMap.put(col3, colRef3);
+
+        // Helper function to create count function
+        Function countFn = GlobalStateMgr.getCurrentState().getFunction(
+                new Function(new FunctionName(FunctionSet.COUNT), Lists.newArrayList(), IntegerType.BIGINT, false),
+                Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+
+        // ========== Test 1: Basic case - PAIMON_SCAN_NO_PROJECT with count(*) ==========
+        {
+            setupMockMetadataMgrWithSplits();
+            setupMockDataSplitWithRowCount(450L);
+
+            RewriteSimpleAggToLogicalValuesRule rule0 = RewriteSimpleAggToLogicalValuesRule.PAIMON_SCAN_NO_PROJECT;
+            OptExpression scan = new OptExpression(new LogicalPaimonScanOperator(paimonTable, colRefToColumnMetaMap, 
+                    columnMetaToColRefMap, -1, null));
+
+            ColumnRefOperator countColRef = new ColumnRefOperator(10, IntegerType.BIGINT, "count", false);
+            CallOperator callOperator = new CallOperator(FunctionSet.COUNT, IntegerType.BIGINT, Lists.newArrayList(), countFn);
+            Map<ColumnRefOperator, CallOperator> columnRefToCallMap = new HashMap<>();
+            columnRefToCallMap.put(countColRef, callOperator);
+            LogicalAggregationOperator aggregationOperator = new LogicalAggregationOperator.Builder()
+                    .setAggregations(columnRefToCallMap)
+                    .setType(AggType.GLOBAL)
+                    .setGroupingKeys(new ArrayList<>())
+                    .setPartitionByColumns(new ArrayList<>())
+                    .build();
+            OptExpression agg = OptExpression.create(aggregationOperator, scan);
+            List<OptExpression> transformedOpt = rule0.transform(agg, optimizerContext);
+            assertEquals(900, ((ConstantOperator)
+                    ((LogicalValuesOperator) transformedOpt.get(0).getOp()).getRows().get(0).get(0)).getBigint());
+        }
+
+        // ========== Test 2: PAIMON_SCAN with PROJECT operator ==========
+        {
+            setupMockMetadataMgrWithSplits();
+            setupMockDataSplitWithRowCount(450L);
+
+            RewriteSimpleAggToLogicalValuesRule rule1 = RewriteSimpleAggToLogicalValuesRule.PAIMON_SCAN;
+            OptExpression scan = new OptExpression(new LogicalPaimonScanOperator(paimonTable, colRefToColumnMetaMap, 
+                    columnMetaToColRefMap, -1, null));
+            Map<ColumnRefOperator, ScalarOperator> projectMap = new HashMap<>();
+            projectMap.put(colRef1, colRef1);
+            LogicalProjectOperator projectOperator = new LogicalProjectOperator(projectMap);
+            OptExpression project = OptExpression.create(projectOperator, scan);
+
+            ColumnRefOperator countColRef = new ColumnRefOperator(10, IntegerType.BIGINT, "count", false);
+            CallOperator callOperator = new CallOperator(FunctionSet.COUNT, IntegerType.BIGINT, Lists.newArrayList(), countFn);
+            Map<ColumnRefOperator, CallOperator> columnRefToCallMap = new HashMap<>();
+            columnRefToCallMap.put(countColRef, callOperator);
+            LogicalAggregationOperator aggregationOperator = new LogicalAggregationOperator.Builder()
+                    .setAggregations(columnRefToCallMap)
+                    .setType(AggType.GLOBAL)
+                    .setGroupingKeys(new ArrayList<>())
+                    .setPartitionByColumns(new ArrayList<>())
+                    .build();
+            OptExpression agg = OptExpression.create(aggregationOperator, project);
+            List<OptExpression> transformedOpt = rule1.transform(agg, optimizerContext);
+            assertEquals(900, ((ConstantOperator)
+                    ((LogicalValuesOperator) transformedOpt.get(0).getOp()).getRows().get(0).get(0)).getBigint());
+        }
+
+        // ========== Test 3: SessionVariable check - enableRewriteSimpleAggToPaimonMetaScan = false ==========
+        {
+            optimizerContext.getSessionVariable().setEnableRewriteSimpleAggToPaimonMetaScan(false);
+            RewriteSimpleAggToLogicalValuesRule rule0 = RewriteSimpleAggToLogicalValuesRule.PAIMON_SCAN_NO_PROJECT;
+            OptExpression scan = new OptExpression(new LogicalPaimonScanOperator(paimonTable, colRefToColumnMetaMap, 
+                    columnMetaToColRefMap, -1, null));
+            ColumnRefOperator countColRef = new ColumnRefOperator(10, IntegerType.BIGINT, "count", false);
+            CallOperator callOperator = new CallOperator(FunctionSet.COUNT, IntegerType.BIGINT, Lists.newArrayList(), countFn);
+            Map<ColumnRefOperator, CallOperator> columnRefToCallMap = new HashMap<>();
+            columnRefToCallMap.put(countColRef, callOperator);
+            LogicalAggregationOperator aggregationOperator = new LogicalAggregationOperator.Builder()
+                    .setAggregations(columnRefToCallMap)
+                    .setType(AggType.GLOBAL)
+                    .setGroupingKeys(new ArrayList<>())
+                    .setPartitionByColumns(new ArrayList<>())
+                    .build();
+            OptExpression agg = OptExpression.create(aggregationOperator, scan);
+            assertFalse(rule0.check(agg, optimizerContext));
+            optimizerContext.getSessionVariable().setEnableRewriteSimpleAggToPaimonMetaScan(true);
+        }
+
+        // ========== Test 4: Limit check - scanOperator has limit ==========
+        {
+            RewriteSimpleAggToLogicalValuesRule rule0 = RewriteSimpleAggToLogicalValuesRule.PAIMON_SCAN_NO_PROJECT;
+            OptExpression scan = new OptExpression(new LogicalPaimonScanOperator(paimonTable, colRefToColumnMetaMap, 
+                    columnMetaToColRefMap, 10, null)); // limit = 10
+            ColumnRefOperator countColRef = new ColumnRefOperator(10, IntegerType.BIGINT, "count", false);
+            CallOperator callOperator = new CallOperator(FunctionSet.COUNT, IntegerType.BIGINT, Lists.newArrayList(), countFn);
+            Map<ColumnRefOperator, CallOperator> columnRefToCallMap = new HashMap<>();
+            columnRefToCallMap.put(countColRef, callOperator);
+            LogicalAggregationOperator aggregationOperator = new LogicalAggregationOperator.Builder()
+                    .setAggregations(columnRefToCallMap)
+                    .setType(AggType.GLOBAL)
+                    .setGroupingKeys(new ArrayList<>())
+                    .setPartitionByColumns(new ArrayList<>())
+                    .build();
+            OptExpression agg = OptExpression.create(aggregationOperator, scan);
+            assertFalse(rule0.check(agg, optimizerContext));
+        }
+
+        // ========== Test 5: Predicate check - predicate only involves partition keys ==========
+        {
+            setupMockMetadataMgrWithSplits();
+            setupMockDataSplitWithRowCount(450L);
+
+            RewriteSimpleAggToLogicalValuesRule rule0 = RewriteSimpleAggToLogicalValuesRule.PAIMON_SCAN_NO_PROJECT;
+            // Create predicate on partition column "col1"
+            BinaryPredicateOperator partitionPredicate = new BinaryPredicateOperator(BinaryType.EQ, colRef3, 
+                    ConstantOperator.createInt(100));
+            OptExpression scan = new OptExpression(new LogicalPaimonScanOperator(paimonTable, colRefToColumnMetaMap, 
+                    columnMetaToColRefMap, -1, partitionPredicate));
+            ColumnRefOperator countColRef = new ColumnRefOperator(10, IntegerType.BIGINT, "count", false);
+            CallOperator callOperator = new CallOperator(FunctionSet.COUNT, IntegerType.BIGINT, Lists.newArrayList(), countFn);
+            Map<ColumnRefOperator, CallOperator> columnRefToCallMap = new HashMap<>();
+            columnRefToCallMap.put(countColRef, callOperator);
+            LogicalAggregationOperator aggregationOperator = new LogicalAggregationOperator.Builder()
+                    .setAggregations(columnRefToCallMap)
+                    .setType(AggType.GLOBAL)
+                    .setGroupingKeys(new ArrayList<>())
+                    .setPartitionByColumns(new ArrayList<>())
+                    .build();
+            OptExpression agg = OptExpression.create(aggregationOperator, scan);
+            assertTrue(rule0.check(agg, optimizerContext));
+        }
+
+        // ========== Test 6: Predicate check - predicate involves non-partition keys ==========
+        {
+            RewriteSimpleAggToLogicalValuesRule rule0 = RewriteSimpleAggToLogicalValuesRule.PAIMON_SCAN_NO_PROJECT;
+            // Create predicate on non-partition column "f2"
+            BinaryPredicateOperator nonPartitionPredicate = new BinaryPredicateOperator(BinaryType.EQ, colRef1, 
+                    ConstantOperator.createInt(100));
+            OptExpression scan = new OptExpression(new LogicalPaimonScanOperator(paimonTable, colRefToColumnMetaMap, 
+                    columnMetaToColRefMap, -1, nonPartitionPredicate));
+            ColumnRefOperator countColRef = new ColumnRefOperator(10, IntegerType.BIGINT, "count", false);
+            CallOperator callOperator = new CallOperator(FunctionSet.COUNT, IntegerType.BIGINT, Lists.newArrayList(), countFn);
+            Map<ColumnRefOperator, CallOperator> columnRefToCallMap = new HashMap<>();
+            columnRefToCallMap.put(countColRef, callOperator);
+            LogicalAggregationOperator aggregationOperator = new LogicalAggregationOperator.Builder()
+                    .setAggregations(columnRefToCallMap)
+                    .setType(AggType.GLOBAL)
+                    .setGroupingKeys(new ArrayList<>())
+                    .setPartitionByColumns(new ArrayList<>())
+                    .build();
+            OptExpression agg = OptExpression.create(aggregationOperator, scan);
+            assertFalse(rule0.check(agg, optimizerContext));
+        }
+
+        // ========== Test 7: GroupingKeys check - has GROUP BY ==========
+        {
+            RewriteSimpleAggToLogicalValuesRule rule0 = RewriteSimpleAggToLogicalValuesRule.PAIMON_SCAN_NO_PROJECT;
+            OptExpression scan = new OptExpression(new LogicalPaimonScanOperator(paimonTable, colRefToColumnMetaMap, 
+                    columnMetaToColRefMap, -1, null));
+            ColumnRefOperator countColRef = new ColumnRefOperator(10, IntegerType.BIGINT, "count", false);
+            CallOperator callOperator = new CallOperator(FunctionSet.COUNT, IntegerType.BIGINT, Lists.newArrayList(), countFn);
+            Map<ColumnRefOperator, CallOperator> columnRefToCallMap = new HashMap<>();
+            columnRefToCallMap.put(countColRef, callOperator);
+            LogicalAggregationOperator aggregationOperator = new LogicalAggregationOperator.Builder()
+                    .setAggregations(columnRefToCallMap)
+                    .setType(AggType.GLOBAL)
+                    .setGroupingKeys(Lists.newArrayList(colRef1)) // has GROUP BY
+                    .setPartitionByColumns(new ArrayList<>())
+                    .build();
+            OptExpression agg = OptExpression.create(aggregationOperator, scan);
+            assertFalse(rule0.check(agg, optimizerContext));
+        }
+
+        // ========== Test 8: Aggregation predicate check - has HAVING ==========
+        {
+            RewriteSimpleAggToLogicalValuesRule rule0 = RewriteSimpleAggToLogicalValuesRule.PAIMON_SCAN_NO_PROJECT;
+            OptExpression scan = new OptExpression(new LogicalPaimonScanOperator(paimonTable, colRefToColumnMetaMap, 
+                    columnMetaToColRefMap, -1, null));
+            ColumnRefOperator countColRef = new ColumnRefOperator(10, IntegerType.BIGINT, "count", false);
+            CallOperator callOperator = new CallOperator(FunctionSet.COUNT, IntegerType.BIGINT, Lists.newArrayList(), countFn);
+            Map<ColumnRefOperator, CallOperator> columnRefToCallMap = new HashMap<>();
+            columnRefToCallMap.put(countColRef, callOperator);
+            BinaryPredicateOperator havingPredicate = new BinaryPredicateOperator(BinaryType.GT, countColRef, 
+                    ConstantOperator.createBigint(10));
+            LogicalAggregationOperator aggregationOperator = new LogicalAggregationOperator.Builder()
+                    .setAggregations(columnRefToCallMap)
+                    .setType(AggType.GLOBAL)
+                    .setGroupingKeys(new ArrayList<>())
+                    .setPartitionByColumns(new ArrayList<>())
+                    .setPredicate(havingPredicate) // has HAVING
+                    .build();
+            OptExpression agg = OptExpression.create(aggregationOperator, scan);
+            assertFalse(rule0.check(agg, optimizerContext));
+        }
+
+        // ========== Test 9: Empty aggregations check ==========
+        {
+            RewriteSimpleAggToLogicalValuesRule rule0 = RewriteSimpleAggToLogicalValuesRule.PAIMON_SCAN_NO_PROJECT;
+            OptExpression scan = new OptExpression(new LogicalPaimonScanOperator(paimonTable, colRefToColumnMetaMap, 
+                    columnMetaToColRefMap, -1, null));
+            LogicalAggregationOperator aggregationOperator = new LogicalAggregationOperator.Builder()
+                    .setAggregations(new HashMap<>()) // empty aggregations
+                    .setType(AggType.GLOBAL)
+                    .setGroupingKeys(new ArrayList<>())
+                    .setPartitionByColumns(new ArrayList<>())
+                    .build();
+            OptExpression agg = OptExpression.create(aggregationOperator, scan);
+            assertFalse(rule0.check(agg, optimizerContext));
+        }
+
+        // ========== Test 10: Non-COUNT function check - SUM ==========
+        {
+            Function sumFn = GlobalStateMgr.getCurrentState().getFunction(
+                    new Function(new FunctionName(FunctionSet.SUM), Lists.newArrayList(IntegerType.INT),
+                            IntegerType.BIGINT, false),
+                    Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+            RewriteSimpleAggToLogicalValuesRule rule0 = RewriteSimpleAggToLogicalValuesRule.PAIMON_SCAN_NO_PROJECT;
+            OptExpression scan = new OptExpression(new LogicalPaimonScanOperator(paimonTable, colRefToColumnMetaMap, 
+                    columnMetaToColRefMap, -1, null));
+            ColumnRefOperator sumColRef = new ColumnRefOperator(10, IntegerType.BIGINT, "sum", false);
+            CallOperator callOperator = new CallOperator(FunctionSet.SUM, IntegerType.BIGINT, Lists.newArrayList(colRef1), sumFn);
+            Map<ColumnRefOperator, CallOperator> columnRefToCallMap = new HashMap<>();
+            columnRefToCallMap.put(sumColRef, callOperator);
+            LogicalAggregationOperator aggregationOperator = new LogicalAggregationOperator.Builder()
+                    .setAggregations(columnRefToCallMap)
+                    .setType(AggType.GLOBAL)
+                    .setGroupingKeys(new ArrayList<>())
+                    .setPartitionByColumns(new ArrayList<>())
+                    .build();
+            OptExpression agg = OptExpression.create(aggregationOperator, scan);
+            assertFalse(rule0.check(agg, optimizerContext));
+        }
+
+        // ========== Test 11: COUNT DISTINCT check ==========
+        {
+            RewriteSimpleAggToLogicalValuesRule rule0 = RewriteSimpleAggToLogicalValuesRule.PAIMON_SCAN_NO_PROJECT;
+            OptExpression scan = new OptExpression(new LogicalPaimonScanOperator(paimonTable, colRefToColumnMetaMap, 
+                    columnMetaToColRefMap, -1, null));
+            ColumnRefOperator countColRef = new ColumnRefOperator(10, IntegerType.BIGINT, "count", false);
+            // distinct
+            CallOperator callOperator = new CallOperator(FunctionSet.COUNT, IntegerType.BIGINT,
+                    Lists.newArrayList(colRef1), countFn, true);
+            Map<ColumnRefOperator, CallOperator> columnRefToCallMap = new HashMap<>();
+            columnRefToCallMap.put(countColRef, callOperator);
+            LogicalAggregationOperator aggregationOperator = new LogicalAggregationOperator.Builder()
+                    .setAggregations(columnRefToCallMap)
+                    .setType(AggType.GLOBAL)
+                    .setGroupingKeys(new ArrayList<>())
+                    .setPartitionByColumns(new ArrayList<>())
+                    .build();
+            OptExpression agg = OptExpression.create(aggregationOperator, scan);
+            assertFalse(rule0.check(agg, optimizerContext));
+        }
+
+        // ========== Test 12: COUNT with NULL constant ==========
+        {
+            RewriteSimpleAggToLogicalValuesRule rule0 = RewriteSimpleAggToLogicalValuesRule.PAIMON_SCAN_NO_PROJECT;
+            OptExpression scan = new OptExpression(new LogicalPaimonScanOperator(paimonTable, colRefToColumnMetaMap, 
+                    columnMetaToColRefMap, -1, null));
+            ColumnRefOperator countColRef = new ColumnRefOperator(10, IntegerType.BIGINT, "count", false);
+            CallOperator callOperator = new CallOperator(FunctionSet.COUNT, IntegerType.BIGINT, 
+                    Lists.newArrayList(ConstantOperator.createNull(IntegerType.INT)), countFn);
+            Map<ColumnRefOperator, CallOperator> columnRefToCallMap = new HashMap<>();
+            columnRefToCallMap.put(countColRef, callOperator);
+            LogicalAggregationOperator aggregationOperator = new LogicalAggregationOperator.Builder()
+                    .setAggregations(columnRefToCallMap)
+                    .setType(AggType.GLOBAL)
+                    .setGroupingKeys(new ArrayList<>())
+                    .setPartitionByColumns(new ArrayList<>())
+                    .build();
+            OptExpression agg = OptExpression.create(aggregationOperator, scan);
+            assertFalse(rule0.check(agg, optimizerContext));
+        }
+
+        // ========== Test 13: calculateCount - fileInfos is empty ==========
+        {
+            new MockUp<MetadataMgr>() {
+                @Mock
+                public List<RemoteFileInfo> getRemoteFiles(Table table, GetRemoteFilesParams params) {
+                    return Lists.newArrayList(); // empty list
+                }
+            };
+
+            RewriteSimpleAggToLogicalValuesRule rule0 = RewriteSimpleAggToLogicalValuesRule.PAIMON_SCAN_NO_PROJECT;
+            OptExpression scan = new OptExpression(new LogicalPaimonScanOperator(paimonTable, colRefToColumnMetaMap, 
+                    columnMetaToColRefMap, -1, null));
+            ColumnRefOperator countColRef = new ColumnRefOperator(10, IntegerType.BIGINT, "count", false);
+            CallOperator callOperator = new CallOperator(FunctionSet.COUNT, IntegerType.BIGINT, Lists.newArrayList(), countFn);
+            Map<ColumnRefOperator, CallOperator> columnRefToCallMap = new HashMap<>();
+            columnRefToCallMap.put(countColRef, callOperator);
+            LogicalAggregationOperator aggregationOperator = new LogicalAggregationOperator.Builder()
+                    .setAggregations(columnRefToCallMap)
+                    .setType(AggType.GLOBAL)
+                    .setGroupingKeys(new ArrayList<>())
+                    .setPartitionByColumns(new ArrayList<>())
+                    .build();
+            OptExpression agg = OptExpression.create(aggregationOperator, scan);
+            List<OptExpression> transformedOpt = rule0.transform(agg, optimizerContext);
+            // Should return original input when count == -1
+            assertEquals(agg, transformedOpt.get(0));
+        }
+
+        // ========== Test 14: calculateCount - fileInfo.getFiles() is null ==========
+        {
+            new MockUp<MetadataMgr>() {
+                @Mock
+                public List<RemoteFileInfo> getRemoteFiles(Table table, GetRemoteFilesParams params) {
+                    return Lists.newArrayList(RemoteFileInfo.builder()
+                            .setFiles(null) // null files
+                            .build());
+                }
+            };
+
+            RewriteSimpleAggToLogicalValuesRule rule0 = RewriteSimpleAggToLogicalValuesRule.PAIMON_SCAN_NO_PROJECT;
+            OptExpression scan = new OptExpression(new LogicalPaimonScanOperator(paimonTable, colRefToColumnMetaMap, 
+                    columnMetaToColRefMap, -1, null));
+            ColumnRefOperator countColRef = new ColumnRefOperator(10, IntegerType.BIGINT, "count", false);
+            CallOperator callOperator = new CallOperator(FunctionSet.COUNT, IntegerType.BIGINT, Lists.newArrayList(), countFn);
+            Map<ColumnRefOperator, CallOperator> columnRefToCallMap = new HashMap<>();
+            columnRefToCallMap.put(countColRef, callOperator);
+            LogicalAggregationOperator aggregationOperator = new LogicalAggregationOperator.Builder()
+                    .setAggregations(columnRefToCallMap)
+                    .setType(AggType.GLOBAL)
+                    .setGroupingKeys(new ArrayList<>())
+                    .setPartitionByColumns(new ArrayList<>())
+                    .build();
+            OptExpression agg = OptExpression.create(aggregationOperator, scan);
+            List<OptExpression> transformedOpt = rule0.transform(agg, optimizerContext);
+            assertEquals(agg, transformedOpt.get(0));
+        }
+
+        // ========== Test 15: calculateCount - splits is empty ==========
+        {
+            new MockUp<MetadataMgr>() {
+                @Mock
+                public List<RemoteFileInfo> getRemoteFiles(Table table, GetRemoteFilesParams params) {
+                    return Lists.newArrayList(RemoteFileInfo.builder()
+                            .setFiles(Lists.newArrayList(PaimonRemoteFileDesc.createPaimonRemoteFileDesc(
+                                    new PaimonSplitsInfo(null, Lists.newArrayList())))) // empty splits
+                            .build());
+                }
+            };
+
+            RewriteSimpleAggToLogicalValuesRule rule0 = RewriteSimpleAggToLogicalValuesRule.PAIMON_SCAN_NO_PROJECT;
+            OptExpression scan = new OptExpression(new LogicalPaimonScanOperator(paimonTable, colRefToColumnMetaMap, 
+                    columnMetaToColRefMap, -1, null));
+            ColumnRefOperator countColRef = new ColumnRefOperator(10, IntegerType.BIGINT, "count", false);
+            CallOperator callOperator = new CallOperator(FunctionSet.COUNT, IntegerType.BIGINT, Lists.newArrayList(), countFn);
+            Map<ColumnRefOperator, CallOperator> columnRefToCallMap = new HashMap<>();
+            columnRefToCallMap.put(countColRef, callOperator);
+            LogicalAggregationOperator aggregationOperator = new LogicalAggregationOperator.Builder()
+                    .setAggregations(columnRefToCallMap)
+                    .setType(AggType.GLOBAL)
+                    .setGroupingKeys(new ArrayList<>())
+                    .setPartitionByColumns(new ArrayList<>())
+                    .build();
+            OptExpression agg = OptExpression.create(aggregationOperator, scan);
+            List<OptExpression> transformedOpt = rule0.transform(agg, optimizerContext);
+            assertEquals(agg, transformedOpt.get(0));
+        }
+
+        // ========== Test 16: calculateCount - mergedRowCountAvailable() returns false ==========
+        {
+            setupMockMetadataMgrWithSplits();
+            setupMockDataSplitUnavailable();
+
+            RewriteSimpleAggToLogicalValuesRule rule0 = RewriteSimpleAggToLogicalValuesRule.PAIMON_SCAN_NO_PROJECT;
+            OptExpression scan = new OptExpression(new LogicalPaimonScanOperator(paimonTable, colRefToColumnMetaMap, 
+                    columnMetaToColRefMap, -1, null));
+            ColumnRefOperator countColRef = new ColumnRefOperator(10, IntegerType.BIGINT, "count", false);
+            CallOperator callOperator = new CallOperator(FunctionSet.COUNT, IntegerType.BIGINT, Lists.newArrayList(), countFn);
+            Map<ColumnRefOperator, CallOperator> columnRefToCallMap = new HashMap<>();
+            columnRefToCallMap.put(countColRef, callOperator);
+            LogicalAggregationOperator aggregationOperator = new LogicalAggregationOperator.Builder()
+                    .setAggregations(columnRefToCallMap)
+                    .setType(AggType.GLOBAL)
+                    .setGroupingKeys(new ArrayList<>())
+                    .setPartitionByColumns(new ArrayList<>())
+                    .build();
+            OptExpression agg = OptExpression.create(aggregationOperator, scan);
+            List<OptExpression> transformedOpt = rule0.transform(agg, optimizerContext);
+            assertEquals(agg, transformedOpt.get(0));
+        }
+
+        // ========== Test 17: TvrVersionRange is null ==========
+        {
+            setupMockMetadataMgrWithSplits();
+            setupMockDataSplitWithRowCount(450L);
+
+            RewriteSimpleAggToLogicalValuesRule rule0 = RewriteSimpleAggToLogicalValuesRule.PAIMON_SCAN_NO_PROJECT;
+            LogicalPaimonScanOperator scanOp = new LogicalPaimonScanOperator(paimonTable, colRefToColumnMetaMap, 
+                    columnMetaToColRefMap, -1, null, null); // tvrVersionRange = null
+            OptExpression scan = new OptExpression(scanOp);
+            ColumnRefOperator countColRef = new ColumnRefOperator(10, IntegerType.BIGINT, "count", false);
+            CallOperator callOperator = new CallOperator(FunctionSet.COUNT, IntegerType.BIGINT, Lists.newArrayList(), countFn);
+            Map<ColumnRefOperator, CallOperator> columnRefToCallMap = new HashMap<>();
+            columnRefToCallMap.put(countColRef, callOperator);
+            LogicalAggregationOperator aggregationOperator = new LogicalAggregationOperator.Builder()
+                    .setAggregations(columnRefToCallMap)
+                    .setType(AggType.GLOBAL)
+                    .setGroupingKeys(new ArrayList<>())
+                    .setPartitionByColumns(new ArrayList<>())
+                    .build();
+            OptExpression agg = OptExpression.create(aggregationOperator, scan);
+            List<OptExpression> transformedOpt = rule0.transform(agg, optimizerContext);
+            assertEquals(900, ((ConstantOperator)
+                    ((LogicalValuesOperator) transformedOpt.get(0).getOp()).getRows().get(0).get(0)).getBigint());
+        }
+    }
+
+    // Helper method to setup mock for MetadataMgr with normal RemoteFileInfo
+    private void setupMockMetadataMgrWithSplits() {
+        new MockUp<MetadataMgr>() {
+            @Mock
+            public List<RemoteFileInfo> getRemoteFiles(Table table, GetRemoteFilesParams params) {
+                return Lists.newArrayList(RemoteFileInfo.builder()
+                        .setFiles(Lists.newArrayList(PaimonRemoteFileDesc.createPaimonRemoteFileDesc(
+                                new PaimonSplitsInfo(null, splits.stream().map(Split.class::cast).toList()))))
+                        .build());
+            }
+        };
+    }
+
+    // Helper method to setup mock for DataSplit with available row count
+    private void setupMockDataSplitWithRowCount(long rowCount) {
+        new MockUp<DataSplit>() {
+            @Mock
+            public boolean mergedRowCountAvailable() {
+                return true;
+            }
+
+            @Mock
+            public long mergedRowCount() {
+                return rowCount;
+            }
+        };
+    }
+
+    // Helper method to setup mock for DataSplit with unavailable row count
+    private void setupMockDataSplitUnavailable() {
+        new MockUp<DataSplit>() {
+            @Mock
+            public boolean mergedRowCountAvailable() {
+                return false;
+            }
+        };
     }
 }
