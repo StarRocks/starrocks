@@ -12,60 +12,44 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <iostream>
-#include <sstream>
-#include <random>
-#include <vector>
-#include <string>
-#include <iomanip>
-#include <chrono>
+#include <fmt/chrono.h>
+#include <fmt/format.h>
+
 #include <algorithm>
+#include <chrono>
 #include <cstring>
+#include <iostream>
+#include <random>
+#include <string>
+#include <vector>
 
-enum class FieldType {
-    STRING,
-    INT,
-    BOOL,
-    DATETIME,
-    ARRAY,
-    OBJECT
-};
+enum class FieldType { STRING, INT, BOOL, DATETIME, ARRAY, OBJECT };
 
-enum class Cardinality {
-    HIGH,
-    MEDIUM,
-    LOW
-};
+enum class Cardinality { HIGH, MEDIUM, LOW };
 
 class ValueGenerator {
 public:
-    explicit ValueGenerator(int64_t seed = -1) 
-        : rng_(seed >= 0 ? seed : std::random_device{}()),
-          string_counter_(0),
-          int_counter_(0) {
-    }
-    
+    explicit ValueGenerator(int64_t seed = -1)
+            : rng_(seed >= 0 ? seed : std::random_device{}()), string_counter_(0), int_counter_(0) {}
+
     std::string generate_string(Cardinality cardinality) {
         if (cardinality == Cardinality::HIGH) {
             string_counter_++;
             std::string random_part = generate_random_string(8);
-            return "unique_value_" + std::to_string(string_counter_) + "_" + random_part;
+            return fmt::format("unique_value_{}_{}", string_counter_, random_part);
         } else if (cardinality == Cardinality::LOW) {
-            static const std::vector<std::string> low_strings = {
-                "red", "green", "blue", "yellow", "purple", "orange", "pink", "brown", "black", "white"
-            };
+            static const std::vector<std::string> low_strings = {"red",    "green", "blue",  "yellow", "purple",
+                                                                 "orange", "pink",  "brown", "black",  "white"};
             std::uniform_int_distribution<size_t> dist(0, low_strings.size() - 1);
             return low_strings[dist(rng_)];
         } else { // MEDIUM
-            static const std::vector<std::string> bases = {
-                "value", "data", "item", "record", "entry"
-            };
+            static const std::vector<std::string> bases = {"value", "data", "item", "record", "entry"};
             std::uniform_int_distribution<size_t> base_dist(0, bases.size() - 1);
             std::uniform_int_distribution<int> num_dist(1, 100);
-            return bases[base_dist(rng_)] + "_" + std::to_string(num_dist(rng_));
+            return fmt::format("{}_{}", bases[base_dist(rng_)], num_dist(rng_));
         }
     }
-    
+
     int64_t generate_int(Cardinality cardinality) {
         if (cardinality == Cardinality::HIGH) {
             int_counter_++;
@@ -80,12 +64,12 @@ public:
             return dist(rng_);
         }
     }
-    
+
     bool generate_bool() {
         std::uniform_int_distribution<int> dist(0, 1);
         return dist(rng_) == 1;
     }
-    
+
     std::string generate_datetime() {
         auto start = std::chrono::system_clock::from_time_t(1577836800); // 2020-01-01
         auto end = std::chrono::system_clock::from_time_t(1767225600);   // 2025-12-31
@@ -96,16 +80,14 @@ public:
         auto time_point = std::chrono::system_clock::from_time_t(random_sec);
         auto time_t = std::chrono::system_clock::to_time_t(time_point);
         auto tm = *std::localtime(&time_t);
-        std::ostringstream oss;
-        oss << std::put_time(&tm, "%Y-%m-%d %H:%M:%S");
-        return oss.str();
+        return fmt::format("{:%Y-%m-%d %H:%M:%S}", tm);
     }
 
 private:
     std::mt19937 rng_;
     int64_t string_counter_;
     int64_t int_counter_;
-    
+
     std::string generate_random_string(int length) {
         const std::string chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
         std::uniform_int_distribution<int> dist(0, chars.size() - 1);
@@ -120,49 +102,38 @@ private:
 
 class JSONGenerator {
 public:
-    JSONGenerator(
-        int num_fields,
-        double sparsity,
-        int max_depth,
-        double nest_probability,
-        const std::vector<FieldType>& field_types,
-        int high_cardinality_fields,
-        int low_cardinality_fields,
-        int64_t seed
-    ) : num_fields_(num_fields),
-        sparsity_(sparsity),
-        max_depth_(max_depth),
-        nest_probability_(nest_probability),
-        field_types_(field_types.empty() ? std::vector<FieldType>{FieldType::STRING, FieldType::INT, FieldType::BOOL} : field_types),
-        high_cardinality_fields_(high_cardinality_fields),
-        low_cardinality_fields_(low_cardinality_fields),
-        rng_(seed >= 0 ? seed : std::random_device{}()),
-        value_gen_(seed) {
+    JSONGenerator(int num_fields, double sparsity, int max_depth, double nest_probability,
+                  const std::vector<FieldType>& field_types, int high_cardinality_fields, int low_cardinality_fields,
+                  int64_t seed)
+            : num_fields_(num_fields),
+              sparsity_(sparsity),
+              max_depth_(max_depth),
+              nest_probability_(nest_probability),
+              field_types_(field_types.empty()
+                                   ? std::vector<FieldType>{FieldType::STRING, FieldType::INT, FieldType::BOOL}
+                                   : field_types),
+              high_cardinality_fields_(high_cardinality_fields),
+              low_cardinality_fields_(low_cardinality_fields),
+              rng_(seed >= 0 ? seed : std::random_device{}()),
+              value_gen_(seed) {
         generate_field_schemas();
     }
-    
+
     std::string generate_record() {
-        std::ostringstream oss;
-        oss << "{";
-        
-        bool first = true;
+        std::vector<std::string> fields;
+        fields.reserve(field_schemas_.size());
+
         std::uniform_real_distribution<double> sparsity_dist(0.0, 1.0);
-        
+
         for (const auto& schema : field_schemas_) {
             if (sparsity_dist(rng_) < sparsity_) {
                 continue;
             }
-            
-            if (!first) {
-                oss << ",";
-            }
-            first = false;
-            
-            oss << escape_json_string(schema.name) << ":" << generate_value_json(schema);
+
+            fields.push_back(fmt::format("{}:{}", escape_json_string(schema.name), generate_value_json(schema)));
         }
-        
-        oss << "}";
-        return oss.str();
+
+        return fmt::format("{{{}}}", fmt::join(fields, ","));
     }
 
 private:
@@ -171,7 +142,7 @@ private:
         FieldType field_type;
         Cardinality cardinality;
     };
-    
+
     int num_fields_;
     double sparsity_;
     int max_depth_;
@@ -182,11 +153,11 @@ private:
     std::mt19937 rng_;
     ValueGenerator value_gen_;
     std::vector<FieldSchema> field_schemas_;
-    
+
     void generate_field_schemas() {
         field_schemas_.clear();
         field_schemas_.reserve(num_fields_);
-        
+
         for (int i = 0; i < num_fields_; ++i) {
             Cardinality cardinality;
             if (i < high_cardinality_fields_) {
@@ -196,19 +167,19 @@ private:
             } else {
                 cardinality = Cardinality::MEDIUM;
             }
-            
-            std::string field_name = "field_" + std::to_string(i + 1);
+
+            std::string field_name = fmt::format("field_{}", i + 1);
             FieldType field_type = choose_field_type();
-            
+
             field_schemas_.push_back({field_name, field_type, cardinality});
         }
     }
-    
+
     FieldType choose_field_type() {
         std::uniform_int_distribution<size_t> dist(0, field_types_.size() - 1);
         return field_types_[dist(rng_)];
     }
-    
+
     Cardinality choose_cardinality_for_nested() {
         std::uniform_real_distribution<double> dist(0.0, 1.0);
         double r = dist(rng_);
@@ -216,111 +187,102 @@ private:
         if (r < 0.5) return Cardinality::LOW;
         return Cardinality::MEDIUM;
     }
-    
+
     std::string escape_json_string(const std::string& str) {
-        std::ostringstream oss;
-        oss << "\"";
+        std::string result;
+        result.reserve(str.size() + 2); // Reserve space for quotes and potential escapes
+        result += "\"";
         for (char c : str) {
             if (c == '"' || c == '\\') {
-                oss << "\\" << c;
+                result += "\\";
+                result += c;
             } else if (c == '\n') {
-                oss << "\\n";
+                result += "\\n";
             } else if (c == '\r') {
-                oss << "\\r";
+                result += "\\r";
             } else if (c == '\t') {
-                oss << "\\t";
+                result += "\\t";
             } else {
-                oss << c;
+                result += c;
             }
         }
-        oss << "\"";
-        return oss.str();
+        result += "\"";
+        return result;
     }
-    
+
     std::string generate_nested_object_json(int depth) {
         if (depth >= max_depth_) {
             return escape_json_string(value_gen_.generate_string(Cardinality::MEDIUM));
         }
-        
-        std::ostringstream oss;
-        oss << "{";
-        
+
         std::uniform_int_distribution<int> num_fields_dist(2, std::min(5, num_fields_));
         int num_nested_fields = num_fields_dist(rng_);
-        
-        bool first = true;
+
+        std::vector<std::string> fields;
+        fields.reserve(num_nested_fields);
+
         for (int i = 0; i < num_nested_fields; ++i) {
-            if (!first) {
-                oss << ",";
-            }
-            first = false;
-            
-            std::string nested_field_name = "nested_" + std::to_string(depth) + "_" + std::to_string(i + 1);
+            std::string nested_field_name = fmt::format("nested_{}_{}", depth, i + 1);
             FieldType nested_type = choose_field_type();
             Cardinality nested_cardinality = choose_cardinality_for_nested();
-            
+
             FieldSchema nested_schema{nested_field_name, nested_type, nested_cardinality};
-            
-            oss << escape_json_string(nested_field_name) << ":";
-            
+
+            std::string value;
             if (nested_type == FieldType::OBJECT && depth + 1 < max_depth_) {
-                oss << generate_nested_object_json(depth + 1);
+                value = generate_nested_object_json(depth + 1);
             } else {
-                oss << generate_value_json(nested_schema, depth + 1);
+                value = generate_value_json(nested_schema, depth + 1);
             }
+
+            fields.push_back(fmt::format("{}:{}", escape_json_string(nested_field_name), value));
         }
-        
-        oss << "}";
-        return oss.str();
+
+        return fmt::format("{{{}}}", fmt::join(fields, ","));
     }
-    
+
     std::string generate_value_json(const FieldSchema& schema, int depth = 0) {
         std::uniform_real_distribution<double> dist(0.0, 1.0);
-        bool should_nest = (schema.field_type == FieldType::OBJECT) ||
-                           (depth < max_depth_ && 
-                            std::find(field_types_.begin(), field_types_.end(), schema.field_type) != field_types_.end() &&
-                            dist(rng_) < nest_probability_);
-        
+        bool should_nest =
+                (schema.field_type == FieldType::OBJECT) ||
+                (depth < max_depth_ &&
+                 std::find(field_types_.begin(), field_types_.end(), schema.field_type) != field_types_.end() &&
+                 dist(rng_) < nest_probability_);
+
         if (should_nest) {
             return generate_nested_object_json(depth + 1);
         }
-        
+
         switch (schema.field_type) {
-            case FieldType::STRING:
-                return escape_json_string(value_gen_.generate_string(schema.cardinality));
-            case FieldType::INT:
-                return std::to_string(value_gen_.generate_int(schema.cardinality));
-            case FieldType::BOOL:
-                return value_gen_.generate_bool() ? "true" : "false";
-            case FieldType::DATETIME:
-                return escape_json_string(value_gen_.generate_datetime());
-            case FieldType::ARRAY: {
-                FieldType array_type = FieldType::STRING;
-                for (FieldType t : field_types_) {
-                    if (t != FieldType::ARRAY) {
-                        array_type = t;
-                        break;
-                    }
+        case FieldType::STRING:
+            return escape_json_string(value_gen_.generate_string(schema.cardinality));
+        case FieldType::INT:
+            return std::to_string(value_gen_.generate_int(schema.cardinality));
+        case FieldType::BOOL:
+            return value_gen_.generate_bool() ? "true" : "false";
+        case FieldType::DATETIME:
+            return escape_json_string(value_gen_.generate_datetime());
+        case FieldType::ARRAY: {
+            FieldType array_type = FieldType::STRING;
+            for (FieldType t : field_types_) {
+                if (t != FieldType::ARRAY) {
+                    array_type = t;
+                    break;
                 }
-                std::ostringstream oss;
-                oss << "[";
-                int array_size = 3;
-                bool first = true;
-                for (int i = 0; i < array_size; ++i) {
-                    if (!first) {
-                        oss << ",";
-                    }
-                    first = false;
-                    FieldSchema array_schema{"", array_type, schema.cardinality};
-                    oss << generate_value_json(array_schema, depth);
-                }
-                oss << "]";
-                return oss.str();
             }
-            case FieldType::OBJECT:
-                return generate_nested_object_json(depth + 1);
-            default:
-                return escape_json_string(value_gen_.generate_string(schema.cardinality));
+            int array_size = 3;
+            std::vector<std::string> elements;
+            elements.reserve(array_size);
+            FieldSchema array_schema{"", array_type, schema.cardinality};
+            for (int i = 0; i < array_size; ++i) {
+                elements.push_back(generate_value_json(array_schema, depth));
+            }
+            return fmt::format("[{}]", fmt::join(elements, ","));
+        }
+        case FieldType::OBJECT:
+            return generate_nested_object_json(depth + 1);
+        default:
+            return escape_json_string(value_gen_.generate_string(schema.cardinality));
         }
     }
 };
@@ -347,7 +309,7 @@ std::vector<FieldType> parse_field_types(const char* types_str) {
         std::string type = str.substr(pos, comma - pos);
         // Trim whitespace
         while (!type.empty() && type[0] == ' ') type.erase(0, 1);
-        while (!type.empty() && type[type.length()-1] == ' ') type.erase(type.length()-1);
+        while (!type.empty() && type[type.length() - 1] == ' ') type.erase(type.length() - 1);
         if (!type.empty()) {
             result.push_back(parse_field_type(type.c_str()));
         }
@@ -368,7 +330,7 @@ int main(int argc, char* argv[]) {
     int low_cardinality_fields = 0;
     int64_t seed = -1;
     bool pretty = false;
-    
+
     // Parse command line arguments
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--num-records") == 0 && i + 1 < argc) {
@@ -393,17 +355,15 @@ int main(int argc, char* argv[]) {
             pretty = true;
         }
     }
-    
+
     // Create generator
-    JSONGenerator generator(
-        num_fields, sparsity, max_depth, nest_probability,
-        field_types, high_cardinality_fields, low_cardinality_fields, seed
-    );
-    
+    JSONGenerator generator(num_fields, sparsity, max_depth, nest_probability, field_types, high_cardinality_fields,
+                            low_cardinality_fields, seed);
+
     // Generate records
     for (int i = 0; i < num_records; ++i) {
         std::string json_str = generator.generate_record();
-        
+
         if (pretty) {
             // Simple pretty printing (basic indentation)
             // For full pretty printing, we'd need a JSON parser, but this is simpler
@@ -412,6 +372,6 @@ int main(int argc, char* argv[]) {
             std::cout << json_str << std::endl;
         }
     }
-    
+
     return 0;
 }
