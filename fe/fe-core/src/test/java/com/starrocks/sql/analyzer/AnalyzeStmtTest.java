@@ -648,7 +648,10 @@ public class AnalyzeStmtTest {
         StmtExecutor executor = StmtExecutor.newInternalExecutor(getConnectContext(), killAnalyzeStmt);
         executor.execute();
         Assertions.assertNull(getConnectContext().getState().getErrorCode());
-        Assertions.assertEquals("", getConnectContext().getState().getErrorMessage());
+        Assertions.assertEquals(
+                "Getting analyzing error. Detail message: User variable 'analyze_id' must be an integer, but got " +
+                        "varchar.",
+                getConnectContext().getState().getErrorMessage());
     }
 
     @Test
@@ -659,7 +662,7 @@ public class AnalyzeStmtTest {
         StmtExecutor executor = StmtExecutor.newInternalExecutor(getConnectContext(), killAnalyzeStmt);
         executor.execute();
         String message = getConnectContext().getState().getErrorMessage();
-        Assertions.assertTrue(message.contains("must be an integer"), message);
+        Assertions.assertTrue(message.contains("is not set"), message);
     }
 
     @Test
