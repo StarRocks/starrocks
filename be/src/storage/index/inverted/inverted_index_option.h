@@ -35,6 +35,8 @@ std::string get_parser_string_from_properties(const std::map<std::string, std::s
 
 int32_t get_gram_num_from_properties(const std::map<std::string, std::string>& properties);
 
+bool get_omit_term_freq_and_position(const std::map<std::string, std::string>& properties);
+
 bool is_tokenized_from_properties(const std::map<std::string, std::string>& properties);
 
 } // namespace starrocks

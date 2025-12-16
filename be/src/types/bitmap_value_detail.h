@@ -38,12 +38,12 @@
 // the detail class such as Roaring64Map.
 // So other files should not include this file except bitmap_value.cpp.
 #include <cstdint>
+#include <numeric>
 #include <optional>
+#include <ranges>
 
-#include "roaring/array_util.h"
-#include "roaring/bitset_util.h"
-#include "roaring/containers/containers.h"
 #include "roaring/roaring.h"
+#include "roaring/roaring.hh"
 #include "roaring/roaring_array.h"
 #include "util/coding.h"
 
@@ -154,6 +154,16 @@ public:
             ans.add(va_arg(vl, uint64_t));
         }
         va_end(vl);
+        return ans;
+    }
+
+    /**
+     * Construct a bitmap from a list of uint64_t values.
+     * E.g., bitmapOfList({1,2,3}).
+     */
+    static Roaring64Map bitmapOfList(std::initializer_list<uint64_t> l) {
+        Roaring64Map ans;
+        ans.addMany(l.size(), l.begin());
         return ans;
     }
 
@@ -761,6 +771,35 @@ public:
      * Return whether all elements can be represented in 32 bits
      */
     bool is32BitsEnough() const { return maximum() <= std::numeric_limits<uint32_t>::max(); }
+
+    /**
+     * Roaring64Map store 64-bit integers through std::map<uint32_t, Roaring>. So we can get low bits roaring for a
+     * high 32-bits.
+     *
+     * @param high get low bits roaring for this high
+     * @return low 32-bits roaring.
+     */
+    const Roaring& getLowBitsRoaring(uint32_t high) const {
+        const auto it = roarings.find(high);
+        if (it == roarings.end()) {
+            static const Roaring empty;
+            return empty;
+        }
+        return it->second;
+    }
+    /**
+     * Roaring64Map store 64-bit integers through std::map<uint32_t, Roaring>. So we can get all high bits roaring by
+     * iterating all keys.
+     *
+     * @return high 32-bits roaring.
+     */
+    roaring::Roaring getAllHighBits() const {
+        roaring::Roaring roaring;
+        for (const auto& high : roarings | std::views::keys) {
+            roaring.add(high);
+        }
+        return roaring;
+    }
 
     /**
      * Computes the intersection between two bitmaps and returns new bitmap.

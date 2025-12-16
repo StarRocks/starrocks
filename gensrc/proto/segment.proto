@@ -293,6 +293,8 @@ message BitmapIndexPB {
     optional IndexedColumnMetaPB ngram_dict_column = 5;
     // options: meta for ngram bitmaps part
     optional IndexedColumnMetaPB ngram_bitmap_column = 6;
+    // options: meta for Posting part
+    optional IndexedColumnMetaPB posting_column = 7;
 }
 
 enum HashStrategyPB {

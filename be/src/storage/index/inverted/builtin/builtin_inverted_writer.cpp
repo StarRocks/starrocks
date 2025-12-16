@@ -135,9 +135,10 @@ Status BuiltinInvertedWriterImpl<field_type>::finish(WritableFile* wfile, Column
 Status BuiltinInvertedWriter::create(const TypeInfoPtr& typeinfo, TabletIndex* tablet_index,
                                      std::unique_ptr<InvertedWriter>* res) {
     auto gram_num = get_gram_num_from_properties(tablet_index->index_properties());
+    bool without_position = get_omit_term_freq_and_position(tablet_index->index_properties());
 
     std::unique_ptr<BitmapIndexWriter> writer;
-    RETURN_IF_ERROR(BitmapIndexWriter::create(typeinfo, &writer, gram_num));
+    RETURN_IF_ERROR(BitmapIndexWriter::create(typeinfo, &writer, gram_num, !without_position));
     writer->set_dictionary_compression(CompressionTypePB::ZSTD);
 
     LogicalType type = typeinfo->type();

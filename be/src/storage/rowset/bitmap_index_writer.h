@@ -50,7 +50,8 @@ class WritableFile;
 
 class BitmapIndexWriter {
 public:
-    static Status create(const TypeInfoPtr& type_info, std::unique_ptr<BitmapIndexWriter>* res, int32_t gram_num = -1);
+    static Status create(const TypeInfoPtr& type_info, std::unique_ptr<BitmapIndexWriter>* res, int32_t gram_num = -1,
+                         bool position = false);
 
     BitmapIndexWriter() = default;
     virtual ~BitmapIndexWriter() = default;
@@ -74,7 +75,6 @@ protected:
     CompressionTypePB _dictionary_compression = LZ4;
 
 private:
-
     BitmapIndexWriter(const BitmapIndexWriter&) = delete;
     const BitmapIndexWriter& operator=(const BitmapIndexWriter&) = delete;
 };
