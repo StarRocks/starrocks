@@ -109,11 +109,21 @@ INSERT INTO test_array_value (col_1, arr1, arr2) VALUES
 -- !result
 SELECT col_1, arr1, LAG(arr1, 2, arr2) OVER (ORDER BY col_1) AS lag_result FROM test_array_value;
 -- result:
-E: (1064, "class com.starrocks.type.ArrayType cannot be cast to class com.starrocks.type.ScalarType (com.starrocks.type.ArrayType and com.starrocks.type.ScalarType are in unnamed module of loader 'app')")
+1	[1,11]	[101,111]
+2	[2,22]	[102,112]
+3	[3,33]	[1,11]
+4	None	[2,22]
+5	[5,55]	[3,33]
+6	[6,66]	None
 -- !result
 SELECT col_1, arr1, LEAD(arr1, 2, arr2) OVER (ORDER BY col_1) AS lead_result FROM test_array_value;
 -- result:
-E: (1064, "class com.starrocks.type.ArrayType cannot be cast to class com.starrocks.type.ScalarType (com.starrocks.type.ArrayType and com.starrocks.type.ScalarType are in unnamed module of loader 'app')")
+1	[1,11]	[3,33]
+2	[2,22]	None
+3	[3,33]	[5,55]
+4	None	[6,66]
+5	[5,55]	[105,115]
+6	[6,66]	[106,116]
 -- !result
 SET array_low_cardinality_optimize = true;
 -- result:
@@ -181,9 +191,19 @@ INSERT INTO test_array_varchar_value (col_1, arr1, arr2) VALUES
 -- !result
 SELECT  col_1, arr1, LAG(arr1, 2, arr2)  OVER (ORDER BY col_1) AS lag_result  FROM test_array_varchar_value;
 -- result:
-E: (1064, "class com.starrocks.type.ArrayType cannot be cast to class com.starrocks.type.ScalarType (com.starrocks.type.ArrayType and com.starrocks.type.ScalarType are in unnamed module of loader 'app')")
+1	["1","11"]	["101","111"]
+2	["2","22"]	["102","112"]
+3	["3","33"]	["1","11"]
+4	None	["2","22"]
+5	["5","55"]	["3","33"]
+6	["6","66"]	None
 -- !result
 SELECT  col_1, arr1, LEAD(arr1, 2, arr2) OVER (ORDER BY col_1) AS lead_result FROM test_array_varchar_value;
 -- result:
-E: (1064, "class com.starrocks.type.ArrayType cannot be cast to class com.starrocks.type.ScalarType (com.starrocks.type.ArrayType and com.starrocks.type.ScalarType are in unnamed module of loader 'app')")
+1	["1","11"]	["3","33"]
+2	["2","22"]	None
+3	["3","33"]	["5","55"]
+4	None	["6","66"]
+5	["5","55"]	["105","115"]
+6	["6","66"]	["106","116"]
 -- !result
