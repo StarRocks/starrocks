@@ -1839,8 +1839,8 @@ StatusOr<ColumnPtr> StringFunctions::append_trailing_char_if_absent(FunctionCont
             src = ColumnHelper::as_raw_column<BinaryColumn>(src_null->data_column());
 
             MutableColumnPtr data = RunTimeColumnType<TYPE_VARCHAR>::create();
+            binary_dst = ColumnHelper::as_raw_column<BinaryColumn>(data.get());
             dst = NullableColumn::create(std::move(data), Column::mutate(src_null->null_column()));
-            binary_dst = ColumnHelper::as_raw_column<BinaryColumn>(dst);
         } else {
             src = ColumnHelper::as_raw_column<BinaryColumn>(columns[0]);
             MutableColumnPtr data = RunTimeColumnType<TYPE_VARCHAR>::create();
