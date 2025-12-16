@@ -19,9 +19,10 @@
 #include <type_traits>
 #include <vector>
 
+#include "common/config.h"
 #include "gutil/casts.h"
 #include "logging.h"
-
+#include "util/stack_util.h"
 namespace starrocks {
 
 // A Clone-on-write base class inspired by Clickhouse and Rust.
@@ -231,8 +232,8 @@ protected:
         const T& operator*() const { return *value; }
         T& operator*() { return *get(); }
 
-        operator const ImmutPtr<T>&() const { return value; }
-        operator ImmutPtr<T>&() { return value; }
+        operator const ImmutPtr<T> &() const { return value; }
+        operator ImmutPtr<T> &() { return value; }
 
         operator bool() const { return value.get() != nullptr; }
         bool operator!() const { return value.get() == nullptr; }
@@ -253,6 +254,9 @@ protected:
         if (ref_count > 1) {
             return derived()->clone();
         } else {
+            if (config::cow_optimization_diagnose_level > 0) {
+                LOG(INFO) << "[Cow] trigger COW: " << this << ", use_count=" << ref_count << ", try to shadow clone";
+            }
             return as_mutable_ptr();
         }
     }
@@ -276,15 +280,17 @@ public:
     // cast the data as mutable ptr if it's mutable no matter it's mutable or immutable.
     // NOTE:  ptr's use_count will be added by 1, and this is not safe because the data may be shared with others.
     // DCHECK added to catch potential misuse in debug builds.
-    // DROPPED: because it's not safe to use, it may break COW semantics.
+    // NOTE: because it's not safe to use, it may break COW semantics.
     MutablePtr as_mutable_ptr() const {
-#ifndef NDEBUG
-        uint32_t ref_count = use_count();
-        if (ref_count > 1) {
-            DLOG(INFO) << "[Cow] as_mutable_ptr() called on heavily shared object (use_count=" << ref_count
-                       << "). This may be unsafe! Consider using try_mutate() for proper COW semantics.";
+        if (config::cow_optimization_diagnose_level > 0) {
+            auto ref_count = this->use_count();
+            if (ref_count > config::cow_optimization_diagnose_level) {
+                LOG(WARNING) << "[Cow] as_mutable_ptr() called on heavily shared object (use_count=" << ref_count
+                             << "). This may be unsafe! Consider using try_mutate() for proper COW semantics.\n"
+                             << ": stack = \n"
+                             << starrocks::get_stack_trace();
+            }
         }
-#endif
         return const_cast<Cow*>(this)->get_ptr();
     }
 
@@ -294,7 +300,19 @@ public:
     // - Object lifetime is guaranteed (reference won't outlive the object)
     // - High performance is needed for frequent access
     // - The modification is local and temporary
-    Derived* as_mutable_raw_ptr() const { return const_cast<Derived*>(derived()); }
+    // NOTE: because it's not safe to use, it may break COW semantics.
+    Derived* as_mutable_raw_ptr() const {
+        if (config::cow_optimization_diagnose_level > 0) {
+            auto ref_count = this->use_count();
+            if (ref_count > config::cow_optimization_diagnose_level) {
+                LOG(WARNING) << "[Cow] as_mutable_raw_ptr() called on heavily shared object (use_count=" << ref_count
+                             << "). This may break COW semantics! Consider using try_mutate() instead.\n"
+                             << ": stack = \n"
+                             << starrocks::get_stack_trace();
+            }
+        }
+        return const_cast<Derived*>(derived());
+    }
 
     // Get mutable reference without reference counting overhead.
     Derived& as_mutable_ref() const { return *as_mutable_raw_ptr(); }

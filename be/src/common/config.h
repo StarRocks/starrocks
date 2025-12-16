@@ -1798,4 +1798,10 @@ CONF_Int32(llm_max_queue_size, "4096");
 CONF_Int32(llm_max_concurrent_queries, "8");
 
 CONF_Int32(llm_cache_size, "131072");
+
+// Enable cow optimization for column operations, used to avoid the overhead of reference counting when accessing columns.
+CONF_mBool(enable_cow_optimization, "true");
+// The diagnose level for cow optimization, 0 means no diagnose, 1 means diagnose when use_count > 1, 2 means diagnose when use_count > 2.
+CONF_Int32(cow_optimization_diagnose_level, "0");
+
 } // namespace starrocks::config
