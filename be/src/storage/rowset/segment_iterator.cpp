@@ -1247,6 +1247,7 @@ StatusOr<size_t> SegmentIterator::_sample_predicate_columns(vector<rowid_t>* row
         return 0;
     }
 
+    SCOPED_RAW_TIMER(&_opts.stats->vec_cond_ns);
     // Similar to RuntimeFilterProbeCollector::update_selectivity
     // Use two selections:
     // 1. _selection: for merged result of all predicates (merged_selection)
@@ -1275,6 +1276,7 @@ StatusOr<size_t> SegmentIterator::_sample_predicate_columns(vector<rowid_t>* row
         auto& selection = use_merged_selection ? _selection : current_selection;
 
         if (has_compound_predicates) {
+            SCOPED_RAW_TIMER(&_opts.stats->vec_cond_evaluate_ns);
             // Use compound_and_predicates_evaluate to evaluate predicates
             // Similar to RuntimeFilter::evaluate
             RETURN_IF_ERROR(compound_and_predicates_evaluate(predicates, col, selection.data(), _selected_idx.data(), 0,
@@ -1313,7 +1315,12 @@ StatusOr<size_t> SegmentIterator::_sample_predicate_columns(vector<rowid_t>* row
     // Filter the entire chunk (including all columns and rowid) based on merged selection
     // _selection already contains the merged result, use it directly
     // This removes rows that don't pass all predicates
-    size_t filtered_chunk_size = _filter_chunk_by_selection(chunk, rowid, 0, chunk_size);
+    size_t filtered_chunk_size = 0;
+    {
+        SCOPED_RAW_TIMER(&_opts.stats->vec_cond_chunk_copy_ns);
+        filtered_chunk_size = _filter_chunk_by_selection(chunk, rowid, 0, chunk_size);
+    }
+    _opts.stats->rows_vec_cond_filtered += (chunk_size - filtered_chunk_size);
 
     // Update predicate order based on selectivity (lower selectivity = higher filtering = better)
     std::vector<ColumnId> new_order;
