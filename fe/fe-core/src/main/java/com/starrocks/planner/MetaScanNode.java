@@ -15,7 +15,9 @@
 package com.starrocks.planner;
 
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
+import com.starrocks.common.Pair;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndexMeta;
@@ -55,7 +57,7 @@ import static com.starrocks.sql.common.ErrorType.INTERNAL_ERROR;
 
 public class MetaScanNode extends ScanNode {
     private static final Logger LOG = LogManager.getLogger(MetaScanNode.class);
-    private final Map<Integer, String> columnIdToNames;
+    private final Map<Integer, Pair<String, Column>> columnIdToColumns;
     private final OlapTable olapTable;
     private final List<Column> tableSchema;
     private final List<String> selectPartitionNames;
@@ -63,12 +65,12 @@ public class MetaScanNode extends ScanNode {
     private long selectedIndexId = -1;
 
     public MetaScanNode(PlanNodeId id, TupleDescriptor desc, OlapTable olapTable,
-                        Map<Integer, String> columnIdToNames, List<String> selectPartitionNames,
+                        Map<Integer, Pair<String, Column>> aggColumnIdToColumns, List<String> selectPartitionNames,
                         long selectedIndexId, ComputeResource computeResource) {
         super(id, desc, "MetaScan");
         this.olapTable = olapTable;
         this.tableSchema = olapTable.getBaseSchema();
-        this.columnIdToNames = columnIdToNames;
+        this.columnIdToColumns = aggColumnIdToColumns;
         this.selectPartitionNames = selectPartitionNames;
         this.selectedIndexId = selectedIndexId;
         this.computeResource = computeResource;
@@ -177,11 +179,13 @@ public class MetaScanNode extends ScanNode {
             msg.node_type = TPlanNodeType.META_SCAN_NODE;
         }
         msg.meta_scan_node = new TMetaScanNode();
+        Map<Integer, String> columnIdToNames = buildColumnIdToNames(columnIdToColumns);
         msg.meta_scan_node.setId_to_names(columnIdToNames);
         msg.meta_scan_node.setLow_cardinality_threshold(CacheDictManager.LOW_CARDINALITY_THRESHOLD);
         List<TColumn> columnsDesc = Lists.newArrayList();
         for (Column column : tableSchema) {
             TColumn tColumn = column.toThrift();
+            tColumn.setColumn_name(column.getColumnId().getId());
             columnsDesc.add(tColumn);
         }
         msg.meta_scan_node.setColumns(columnsDesc);
@@ -198,16 +202,30 @@ public class MetaScanNode extends ScanNode {
         }
     }
 
+    private Map<Integer, String> buildColumnIdToNames(Map<Integer, Pair<String, Column>> aggColumnIdToColumns) {
+        Map<Integer, String> result = Maps.newHashMap();
+        for (Map.Entry<Integer, Pair<String, Column>> entry : aggColumnIdToColumns.entrySet()) {
+            String aggFuncName = entry.getValue().first;
+            String columnName = entry.getValue().second.getColumnId().getId();
+            result.put(entry.getKey(), aggFuncName + "_" + columnName);
+        }
+        return result;
+    }
+
     @Override
     protected String getNodeExplainString(String prefix, TExplainLevel detailLevel) {
         StringBuilder output = new StringBuilder();
         output.append(prefix).append("Table: ").append(olapTable.getName()).append("\n");
-        for (Map.Entry<Integer, String> kv : columnIdToNames.entrySet()) {
+        for (Map.Entry<Integer, Pair<String, Column>> entry : columnIdToColumns.entrySet()) {
             output.append(prefix);
+            String aggFuncName = entry.getValue().first;
+            String columnName = entry.getValue().second.getName();
             output.append("<id ").
-                    append(kv.getKey()).
+                    append(entry.getKey()).
                     append("> : ").
-                    append(kv.getValue()).
+                    append(aggFuncName).
+                    append("_").
+                    append(columnName).
                     append("\n");
         }
         if (!selectPartitionNames.isEmpty()) {
