@@ -22,6 +22,7 @@
 #include "column/column_visitor_mutable.h"
 #include "column/container_resource.h"
 #include "column/vectorized_fwd.h"
+#include "common/config.h"
 #include "common/cow.h"
 #include "common/statusor.h"
 #include "gutil/casts.h"
@@ -465,9 +466,13 @@ public:
 
     // mutate the column to mutable column, but doesn't reset the column
     MutablePtr mutate() const&& {
-        MutablePtr res = try_mutate();
-        res->mutate_each_subcolumn();
-        return res;
+        if (config::enable_cow_optimization) {
+            MutablePtr res = try_mutate();
+            res->mutate_each_subcolumn();
+            return res;
+        } else {
+            return clone();
+        }
     }
 
     // mutate the column to mutable column, and reset the column to nullptr

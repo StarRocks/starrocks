@@ -240,7 +240,7 @@ StatusOr<ColumnPtr> MapFunctions::map_filter(FunctionContext* context, const Col
     const ColumnPtr src_column = ColumnHelper::unpack_and_duplicate_const_column(chunk_size, columns[0]);
     MutableColumnPtr dest_column = src_column->clone_empty();
     if (columns[1]->only_null()) { // return empty map for non-null map by design, keep the same null with src.
-        Column* data_column_ptr = dest_column->as_mutable_raw_ptr();
+        Column* data_column_ptr = dest_column.get();
         if (dest_column->is_nullable()) {
             // set null from src
             auto* dest_nullable_column = down_cast<NullableColumn*>(data_column_ptr);
@@ -262,7 +262,7 @@ StatusOr<ColumnPtr> MapFunctions::map_filter(FunctionContext* context, const Col
         const auto& src_data_column = src_nullable_column->data_column();
         const auto& src_null_column = src_nullable_column->null_column();
 
-        auto* dest_nullable_column = down_cast<NullableColumn*>(dest_column->as_mutable_raw_ptr());
+        auto* dest_nullable_column = down_cast<NullableColumn*>(dest_column.get());
         auto* dest_null_column = dest_nullable_column->null_column_raw_ptr();
         auto* dest_data_column = dest_nullable_column->data_column_raw_ptr();
 
@@ -278,7 +278,7 @@ StatusOr<ColumnPtr> MapFunctions::map_filter(FunctionContext* context, const Col
                           down_cast<MapColumn*>(dest_data_column), dest_null_column);
     } else {
         _filter_map_items(down_cast<const MapColumn*>(src_column.get()), bool_column,
-                          down_cast<MapColumn*>(dest_column->as_mutable_raw_ptr()), nullptr);
+                          down_cast<MapColumn*>(dest_column.get()), nullptr);
     }
     return dest_column;
 }

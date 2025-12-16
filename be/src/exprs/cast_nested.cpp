@@ -41,7 +41,7 @@ StatusOr<ColumnPtr> CastMapExpr::evaluate_checked(ExprContext* context, Chunk* p
         field_chunk.append_column(src_keys_column, 0);
         ASSIGN_OR_RETURN(casted_key_column, _key_cast->evaluate_checked(context, &field_chunk));
     } else {
-        casted_key_column = std::move(*src_keys_column).mutate();
+        casted_key_column = src_keys_column->clone();
     }
     casted_key_column = NullableColumn::wrap_if_necessary(std::move(casted_key_column));
 
@@ -51,7 +51,7 @@ StatusOr<ColumnPtr> CastMapExpr::evaluate_checked(ExprContext* context, Chunk* p
         field_chunk.append_column(src_values_column, 0);
         ASSIGN_OR_RETURN(casted_value_column, _value_cast->evaluate_checked(context, &field_chunk));
     } else {
-        casted_value_column = std::move(*src_values_column).mutate();
+        casted_value_column = src_values_column->clone();
     }
     casted_value_column = NullableColumn::wrap_if_necessary(std::move(casted_value_column));
     auto casted_map = MapColumn::create(std::move(casted_key_column), std::move(casted_value_column),
@@ -74,23 +74,23 @@ StatusOr<ColumnPtr> CastStructExpr::evaluate_checked(ExprContext* context, Chunk
     }
     // NOTE: const(nullable) case is handled by last if case
     const auto* struct_column = down_cast<const StructColumn*>(ColumnHelper::get_data_column(orig_column.get()));
-    Columns casted_fields;
+    MutableColumns casted_fields;
     for (int i = 0; i < _field_casts.size(); ++i) {
         if (_field_casts[i] != nullptr) {
             Chunk field_chunk;
             field_chunk.append_column(struct_column->fields()[i], 0);
             ASSIGN_OR_RETURN(auto casted_field, _field_casts[i]->evaluate_checked(context, &field_chunk));
             casted_field = NullableColumn::wrap_if_necessary(std::move(casted_field));
-            casted_fields.emplace_back(std::move(casted_field));
+            casted_fields.emplace_back(std::move(*casted_field).mutate());
         } else {
-            auto& field_column = struct_column->fields()[i];
+            auto& field_column = struct_column->get_column_by_idx(i);
             casted_fields.emplace_back(NullableColumn::wrap_if_necessary(std::move(*field_column).mutate()));
         }
         DCHECK(casted_fields[i]->is_nullable());
     }
 
     auto casted_struct = StructColumn::create(std::move(casted_fields), _type.field_names);
-    RETURN_IF_ERROR(down_cast<StructColumn*>(casted_struct->as_mutable_raw_ptr())->unfold_const_children(_type));
+    RETURN_IF_ERROR(down_cast<StructColumn*>(casted_struct.get())->unfold_const_children(_type));
     if (!orig_column->is_nullable()) {
         return std::move(casted_struct);
     }
