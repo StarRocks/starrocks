@@ -2,6 +2,31 @@
 
 A Python tool for generating JSONL (JSON Lines) data files with configurable characteristics.
 
+## Performance Optimization
+
+This tool includes a high-performance C++ implementation that significantly improves data generation speed. The tool automatically uses the C++ executable if available, otherwise falls back to the pure Python implementation.
+
+### Building the C++ Program
+
+To build the C++ program for better performance:
+
+```bash
+cd tools/json_data_generator
+./build.sh
+```
+
+Or manually:
+
+```bash
+cd tools/json_data_generator
+g++ -std=c++17 -O3 -Wall -o json_generator json_generator.cpp
+```
+
+**Requirements:**
+- C++17 compatible compiler (g++ or clang++)
+
+The C++ executable will be automatically detected and used when available. If the executable is not built, the tool will use the pure Python implementation (slower but fully functional).
+
 ## Parameters
 
 | Argument | Type | Default | Description |

@@ -21,10 +21,10 @@
 import argparse
 import json
 import random
-import string
 import sys
-from datetime import datetime, timedelta
-from typing import Dict, List, Any, Optional, Tuple
+import subprocess
+import os
+from typing import Dict, List, Any, Optional
 
 
 class FieldSchema:
@@ -39,80 +39,12 @@ class FieldSchema:
         return f"FieldSchema(name={self.name}, type={self.field_type}, cardinality={self.cardinality})"
 
 
-class ValueGenerator:
-    """Generates values based on field type and cardinality."""
-    
-    def __init__(self, seed: Optional[int] = None):
-        if seed is not None:
-            random.seed(seed)
-        self._low_cardinality_strings = [
-            "red", "green", "blue", "yellow", "purple", "orange", "pink", "brown", "black", "white"
-        ]
-        self._low_cardinality_ints = [100, 200, 300, 400, 500]
-        self._string_counter = 0
-        self._int_counter = 0
-    
-    def generate_string(self, cardinality: str) -> str:
-        """Generate a string value based on cardinality."""
-        if cardinality == 'high':
-            # Generate unique or near-unique values
-            self._string_counter += 1
-            random_part = ''.join(random.choices(string.ascii_letters + string.digits, k=8))
-            return f"unique_value_{self._string_counter}_{random_part}"
-        elif cardinality == 'low':
-            # Generate from limited set
-            return random.choice(self._low_cardinality_strings)
-        else:  # medium
-            # Generate semi-unique values with some repetition
-            base = random.choice(["value", "data", "item", "record", "entry"])
-            num = random.randint(1, 100)
-            return f"{base}_{num}"
-    
-    def generate_int(self, cardinality: str) -> int:
-        """Generate an integer value based on cardinality."""
-        if cardinality == 'high':
-            # Generate unique or near-unique values
-            self._int_counter += 1
-            return random.randint(100000000, 999999999) + self._int_counter
-        elif cardinality == 'low':
-            # Generate from limited set
-            return random.choice(self._low_cardinality_ints)
-        else:  # medium
-            # Generate from moderate range
-            return random.randint(1, 10000)
-    
-    def generate_bool(self) -> bool:
-        """Generate a boolean value."""
-        return random.choice([True, False])
-    
-    def generate_datetime(self) -> str:
-        """Generate a datetime-formatted string."""
-        start_date = datetime(2020, 1, 1)
-        end_date = datetime(2025, 12, 31)
-        random_date = start_date + timedelta(
-            seconds=random.randint(0, int((end_date - start_date).total_seconds()))
-        )
-        return random_date.strftime('%Y-%m-%d %H:%M:%S')
-    
-    def generate_array(self, field_type: str, cardinality: str, size: int = 3) -> List[Any]:
-        """Generate an array of values."""
-        array = []
-        for _ in range(size):
-            if field_type == 'string':
-                array.append(self.generate_string(cardinality))
-            elif field_type == 'int':
-                array.append(self.generate_int(cardinality))
-            elif field_type == 'bool':
-                array.append(self.generate_bool())
-            elif field_type == 'datetime':
-                array.append(self.generate_datetime())
-            else:
-                array.append(self.generate_string(cardinality))
-        return array
-
-
 class JSONDataGenerator:
-    """Main class for generating JSON data with configurable characteristics."""
+    """Main class for generating JSON data with configurable characteristics.
+    
+    This class uses the C++ implementation for data generation. The C++ executable
+    must be built before use (run ./build.sh).
+    """
     
     def __init__(self, 
                  num_fields: int = 10,
@@ -132,122 +64,59 @@ class JSONDataGenerator:
         self.low_cardinality_fields = low_cardinality_fields
         self.seed = seed
         
-        if seed is not None:
-            random.seed(seed)
+        # Check if C++ executable exists
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        self._cpp_executable = os.path.join(script_dir, 'json_generator')
         
-        self.value_generator = ValueGenerator(seed)
-        self.field_schemas = self._generate_field_schemas()
-    
-    def _generate_field_schemas(self) -> List[FieldSchema]:
-        """Generate field schemas with types and cardinality assignments."""
-        schemas = []
-        
-        # Determine cardinality for each field
-        field_cardinalities = []
-        for i in range(self.num_fields):
-            if i < self.high_cardinality_fields:
-                field_cardinalities.append('high')
-            elif i < self.high_cardinality_fields + self.low_cardinality_fields:
-                field_cardinalities.append('low')
-            else:
-                field_cardinalities.append('medium')
-        
-        # Generate field schemas
-        for i in range(self.num_fields):
-            field_name = f"field_{i+1}"
-            field_type = random.choice(self.field_types)
-            cardinality = field_cardinalities[i]
-            schemas.append(FieldSchema(field_name, field_type, cardinality))
-        
-        return schemas
-    
-    def _generate_value(self, schema: FieldSchema, depth: int = 0) -> Any:
-        """Generate a value for a field schema, supporting nesting."""
-        # Check if we should create a nested object
-        if (schema.field_type == 'object' or 
-            (schema.field_type in self.field_types and 
-             depth < self.max_depth and 
-             random.random() < self.nest_probability)):
-            return self._generate_nested_object(depth + 1)
-        
-        # Generate value based on type
-        if schema.field_type == 'string':
-            return self.value_generator.generate_string(schema.cardinality)
-        elif schema.field_type == 'int':
-            return self.value_generator.generate_int(schema.cardinality)
-        elif schema.field_type == 'bool':
-            return self.value_generator.generate_bool()
-        elif schema.field_type == 'datetime':
-            return self.value_generator.generate_datetime()
-        elif schema.field_type == 'array':
-            # For arrays, use the first non-array type or default to string
-            array_type = next((t for t in self.field_types if t != 'array'), 'string')
-            return self.value_generator.generate_array(array_type, schema.cardinality)
-        elif schema.field_type == 'object':
-            return self._generate_nested_object(depth + 1)
-        else:
-            return self.value_generator.generate_string(schema.cardinality)
-    
-    def _generate_nested_object(self, depth: int = 0) -> Dict[str, Any]:
-        """Generate a nested object with random fields."""
-        if depth >= self.max_depth:
-            # At max depth, generate a simple value
-            return self.value_generator.generate_string('medium')
-        
-        nested_obj = {}
-        num_nested_fields = random.randint(2, min(5, self.num_fields))
-        
-        for i in range(num_nested_fields):
-            nested_field_name = f"nested_{depth}_{i+1}"
-            # Choose a type for nested field
-            nested_type = random.choice(self.field_types)
-            
-            # Determine cardinality (use medium for nested fields by default)
-            nested_cardinality = 'medium'
-            if random.random() < 0.3:  # 30% chance of high cardinality
-                nested_cardinality = 'high'
-            elif random.random() < 0.5:  # 50% chance of low cardinality
-                nested_cardinality = 'low'
-            
-            nested_schema = FieldSchema(nested_field_name, nested_type, nested_cardinality)
-            
-            # Recursively generate nested value
-            if nested_type == 'object' and depth + 1 < self.max_depth:
-                nested_obj[nested_field_name] = self._generate_nested_object(depth + 1)
-            else:
-                nested_obj[nested_field_name] = self._generate_value(nested_schema, depth + 1)
-        
-        return nested_obj
+        if not os.path.exists(self._cpp_executable) or not os.access(self._cpp_executable, os.X_OK):
+            raise RuntimeError(
+                f"C++ executable not found: {self._cpp_executable}\n"
+                "Please build it first by running: ./build.sh"
+            )
     
     def generate_record(self) -> Dict[str, Any]:
         """Generate a single JSON record."""
-        record = {}
+        cmd = [
+            self._cpp_executable,
+            '--num-records', '1',
+            '--num-fields', str(self.num_fields),
+            '--sparsity', str(self.sparsity),
+            '--max-depth', str(self.max_depth),
+            '--nest-probability', str(self.nest_probability),
+            '--field-types', ','.join(self.field_types),
+            '--high-cardinality-fields', str(self.high_cardinality_fields),
+            '--low-cardinality-fields', str(self.low_cardinality_fields),
+        ]
+        if self.seed is not None:
+            cmd.extend(['--seed', str(self.seed)])
         
-        for schema in self.field_schemas:
-            # Apply sparsity: randomly omit fields
-            if random.random() < self.sparsity:
-                continue  # Omit this field
-            
-            record[schema.name] = self._generate_value(schema)
-        
-        return record
+        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        json_str = result.stdout.strip()
+        return json.loads(json_str)
     
     def generate(self, num_records: int, output_file: Optional[str] = None, pretty: bool = False):
         """Generate JSONL records and write to file or stdout."""
-        output = open(output_file, 'w') if output_file else sys.stdout
+        cmd = [
+            self._cpp_executable,
+            '--num-records', str(num_records),
+            '--num-fields', str(self.num_fields),
+            '--sparsity', str(self.sparsity),
+            '--max-depth', str(self.max_depth),
+            '--nest-probability', str(self.nest_probability),
+            '--field-types', ','.join(self.field_types),
+            '--high-cardinality-fields', str(self.high_cardinality_fields),
+            '--low-cardinality-fields', str(self.low_cardinality_fields),
+        ]
+        if self.seed is not None:
+            cmd.extend(['--seed', str(self.seed)])
+        if pretty:
+            cmd.append('--pretty')
         
-        try:
-            for i in range(num_records):
-                record = self.generate_record()
-                if pretty:
-                    json_str = json.dumps(record, indent=2, ensure_ascii=False)
-                    output.write(json_str + '\n')
-                else:
-                    json_str = json.dumps(record, ensure_ascii=False)
-                    output.write(json_str + '\n')
-        finally:
-            if output_file and output != sys.stdout:
-                output.close()
+        if output_file:
+            with open(output_file, 'w') as f:
+                subprocess.run(cmd, stdout=f, check=True)
+        else:
+            subprocess.run(cmd, stdout=sys.stdout, check=True)
     
     def generate_sample_records(self, num_samples: int = 100) -> List[Dict[str, Any]]:
         """Generate sample records for query generation analysis."""
@@ -255,6 +124,33 @@ class JSONDataGenerator:
         for _ in range(num_samples):
             samples.append(self.generate_record())
         return samples
+    
+    @property
+    def field_schemas(self) -> List[FieldSchema]:
+        """Get field schemas. Reconstructs them for compatibility with QueryGenerator."""
+        if not hasattr(self, '_cached_field_schemas'):
+            schemas = []
+            field_cardinalities = []
+            for i in range(self.num_fields):
+                if i < self.high_cardinality_fields:
+                    field_cardinalities.append('high')
+                elif i < self.high_cardinality_fields + self.low_cardinality_fields:
+                    field_cardinalities.append('low')
+                else:
+                    field_cardinalities.append('medium')
+            
+            # Generate consistent field types using deterministic approach based on seed
+            if self.seed is not None:
+                random.seed(self.seed)
+            
+            for i in range(self.num_fields):
+                field_name = f"field_{i+1}"
+                field_type = random.choice(self.field_types)
+                cardinality = field_cardinalities[i]
+                schemas.append(FieldSchema(field_name, field_type, cardinality))
+            
+            self._cached_field_schemas = schemas
+        return self._cached_field_schemas
 
 
 class QueryGenerator:
