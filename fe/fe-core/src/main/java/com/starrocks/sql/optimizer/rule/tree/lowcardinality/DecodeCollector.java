@@ -28,12 +28,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.FeConstants;
-<<<<<<< HEAD
-=======
-import com.starrocks.common.Pair;
 import com.starrocks.common.util.UnionFind;
-import com.starrocks.connector.hive.HiveStorageFormat;
->>>>>>> 7fb4b2e406 ([BugFix] Fix lowcardinality forbidden bug (#66724))
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.OptExpression;
