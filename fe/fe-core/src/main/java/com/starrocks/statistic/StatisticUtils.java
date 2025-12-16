@@ -124,6 +124,7 @@ public class StatisticUtils {
         // default value is 4, avoid generate too many chunk source for collect stats in BE
         context.getSessionVariable().setConnectorIoTasksPerScanOperator(Config.collect_stats_io_tasks_per_connector_operator);
         context.getSessionVariable().setEnableSPMRewrite(false);
+        context.getSessionVariable().setSingleNodeExecPlan(false);
 
         WarehouseManager manager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
         Warehouse warehouse = manager.getBackgroundWarehouse();

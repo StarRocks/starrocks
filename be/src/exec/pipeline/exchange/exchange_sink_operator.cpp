@@ -396,6 +396,12 @@ Status ExchangeSinkOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Operator::prepare(state));
 
     _buffer->incr_sinker(state);
+    _buffer->attach_observer(state, observer());
+    return Status::OK();
+}
+
+Status ExchangeSinkOperator::prepare_local_state(RuntimeState* state) {
+    RETURN_IF_ERROR(Operator::prepare_local_state(state));
 
     _be_number = state->be_number();
     if (state->query_options().__isset.transmission_encode_level) {
@@ -467,7 +473,7 @@ Status ExchangeSinkOperator::prepare(RuntimeState* state) {
 
     _shuffle_channel_ids.resize(state->chunk_size());
     _row_indexes.resize(state->chunk_size());
-    _buffer->attach_observer(state, observer());
+
     return Status::OK();
 }
 

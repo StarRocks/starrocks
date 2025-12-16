@@ -247,7 +247,7 @@ public:
     }
 
     virtual Status open(RuntimeState* state);
-    Status prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* runtime_profile);
+    Status prepare(RuntimeState* state, RuntimeProfile* runtime_profile);
     void close(RuntimeState* state) override;
 
     const MemPool* mem_pool() const { return _mem_pool.get(); }
@@ -408,7 +408,10 @@ protected:
     bool _is_closed = false;
     RuntimeState* _state = nullptr;
 
-    ObjectPool* _pool;
+    // Expr/Object pool owned by Aggregator.
+    // Used to allocate ExprContext and other helper objects whose lifetime
+    // is tied to the Aggregator itself rather than a specific operator.
+    std::unique_ptr<ObjectPool> _pool;
     std::unique_ptr<MemPool> _mem_pool;
     // used to count heap memory usage of agg states
     std::unique_ptr<CountingAllocatorWithHook> _allocator;

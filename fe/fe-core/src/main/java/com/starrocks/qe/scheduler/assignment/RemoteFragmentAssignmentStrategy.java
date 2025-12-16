@@ -23,6 +23,7 @@ import com.starrocks.planner.PlanFragment;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariableConstants;
 import com.starrocks.qe.scheduler.WorkerProvider;
+import com.starrocks.qe.scheduler.dag.ExecutionDAG;
 import com.starrocks.qe.scheduler.dag.ExecutionFragment;
 import com.starrocks.qe.scheduler.dag.FragmentInstance;
 
@@ -86,9 +87,60 @@ public class RemoteFragmentAssignmentStrategy implements FragmentAssignmentStrat
     }
 
     private void assignGatherFragmentToWorker(ExecutionFragment execFragment) throws StarRocksException {
-        long workerId = workerProvider.selectNextWorker();
+        long workerId;
+        
+        // Check if gather fragment locality optimization is enabled
+        boolean enableOptimization = connectContext != null && 
+                connectContext.getSessionVariable() != null &&
+                connectContext.getSessionVariable().isEnableGatherFragmentLocalityOptimization();
+        
+        if (enableOptimization) {
+            // Check if all instances of other ExecutionFragments (except current one) are on the same node
+            Long commonWorkerId = findCommonWorkerIdForOtherFragments(execFragment);
+            if (commonWorkerId != null) {
+                // If all other fragments' instances are on the same node, choose that node
+                workerId = commonWorkerId;
+            } else {
+                // Otherwise, randomly select the next node
+                workerId = workerProvider.selectNextWorker();
+            }
+        } else {
+            // If optimization is disabled, directly randomly select the next node
+            workerId = workerProvider.selectNextWorker();
+        }
+        
         FragmentInstance instance = new FragmentInstance(workerProvider.getWorkerById(workerId), execFragment);
         execFragment.addInstance(instance);
+    }
+
+    /**
+     * Find if all instances of other ExecutionFragments (except current one) are on the same node
+     * @param currentFragment the current ExecutionFragment
+     * @return the node ID if all other fragments' instances are on the same node; otherwise return null
+     */
+    private Long findCommonWorkerIdForOtherFragments(ExecutionFragment currentFragment) {
+        ExecutionDAG executionDAG = currentFragment.getExecutionDAG();
+        List<ExecutionFragment> allFragments = executionDAG.getFragmentsInCreatedOrder();
+        
+        // Collect worker IDs of all instances from other fragments (except current one)
+        Set<Long> allWorkerIds = Sets.newHashSet();
+        for (ExecutionFragment fragment : allFragments) {
+            if (fragment != currentFragment) {
+                for (FragmentInstance instance : fragment.getInstances()) {
+                    allWorkerIds.add(instance.getWorkerId());
+                    if (allWorkerIds.size() > 1) {
+                        return null;
+                    }
+                }
+            }
+        }
+        
+        // If all other fragments' instances are on the same node, return that node ID
+        if (allWorkerIds.size() == 1) {
+            return allWorkerIds.iterator().next();
+        }
+        
+        return null;
     }
 
     private void assignRemoteFragmentToWorker(ExecutionFragment execFragment) {
