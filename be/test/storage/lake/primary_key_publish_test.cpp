@@ -2104,6 +2104,46 @@ TEST_P(LakePrimaryKeyPublishTest, test_write_with_delvec_corrupt) {
     ASSERT_ERROR(read(tablet_id, version));
 }
 
+TEST_P(LakePrimaryKeyPublishTest, test_parallel_upsert_with_async_flush) {
+    bool old_enable_pk_index_parallel_get = config::enable_pk_index_parallel_get;
+    int64_t old_pk_index_parallel_get_min_rows = config::pk_index_parallel_get_min_rows;
+    int64_t old_l0_max_mem_usage = config::l0_max_mem_usage;
+    config::l0_max_mem_usage = 10;
+    config::enable_pk_index_parallel_get = true;
+    config::pk_index_parallel_get_min_rows = 4096;
+    const int64_t chunk_size = 3 * 4096;
+    auto [chunk0, indexes] = gen_data_and_index(chunk_size, 0, true, true);
+    auto version = 1;
+    auto tablet_id = _tablet_metadata->id();
+    for (int i = 0; i < 3; i++) {
+        int64_t txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_profile(&_dummy_runtime_profile)
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(*chunk0, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        // Publish version
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        EXPECT_TRUE(_update_mgr->TEST_check_update_state_cache_absent(tablet_id, txn_id));
+        version++;
+    }
+    // update memory usage, should large than zero
+    EXPECT_TRUE(_update_mgr->mem_tracker()->consumption() > 0);
+    ASSERT_EQ(chunk_size, read_rows(tablet_id, version));
+    // reset configs
+    config::enable_pk_index_parallel_get = old_enable_pk_index_parallel_get;
+    config::pk_index_parallel_get_min_rows = old_pk_index_parallel_get_min_rows;
+    config::l0_max_mem_usage = old_l0_max_mem_usage;
+}
+
 INSTANTIATE_TEST_SUITE_P(LakePrimaryKeyPublishTest, LakePrimaryKeyPublishTest,
                          ::testing::Values(PrimaryKeyParam{true}, PrimaryKeyParam{false},
                                            PrimaryKeyParam{true, PersistentIndexTypePB::CLOUD_NATIVE},

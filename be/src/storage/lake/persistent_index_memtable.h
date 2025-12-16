@@ -28,6 +28,7 @@ class PersistentIndexMemtable : public Runnable {
 public:
     PersistentIndexMemtable(TabletManager* tablet_mgr = nullptr, int64_t tablet_id = 0, uint64_t max_rss_rowid = 0)
             : _tablet_mgr(tablet_mgr), _tablet_id(tablet_id), _max_rss_rowid(max_rss_rowid) {}
+    ~PersistentIndexMemtable();
     // |version|: version of index values
     Status upsert(size_t n, const Slice* keys, const IndexValue* values, IndexValue* old_values,
                   KeyIndexSet* not_founds, size_t* num_found, int64_t version);

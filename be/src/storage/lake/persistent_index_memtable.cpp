@@ -23,6 +23,8 @@
 
 namespace starrocks::lake {
 
+PersistentIndexMemtable::~PersistentIndexMemtable() = default;
+
 void PersistentIndexMemtable::update_index_value(IndexValueWithVer* index_value_info, int64_t version,
                                                  const IndexValue& value) {
     index_value_info->first = version;
