@@ -199,8 +199,11 @@ select sleep(3);
 insert into ss values('2002-01-08', 1, 2);
 select sleep(3);
 function: wait_alter_table_not_pending()
+<<<<<<< HEAD
 select * from ss;
 
+=======
+>>>>>>> 9ae133f2e0 ([UT] Fix unstable sql test (#66781))
 
 -- name: test_time_slice_with_minute_granularity
 create table tt(k datetime) partition by time_slice(k, interval 10 minute);
