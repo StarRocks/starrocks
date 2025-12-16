@@ -19,9 +19,7 @@
 #include "column/array_column.h"
 #include "column/binary_column.h"
 #include "column/column_helper.h"
-#include "column/column_visitor.h"
 #include "column/const_column.h"
-#include "column/decimalv3_column.h"
 #include "column/fixed_length_column.h"
 #include "column/json_column.h"
 #include "column/nullable_column.h"
@@ -30,6 +28,9 @@
 #include "gutil/strings/substitute.h"
 #include "testutil/assert.h"
 #include "testutil/parallel_test.h"
+#include "types/hll.h"
+#include "util/failpoint/fail_point.h"
+#include "util/hash_util.hpp"
 #include "util/json.h"
 #include "util/variant_util.h"
 
@@ -168,6 +169,46 @@ PARALLEL_TEST(ColumnArraySerdeTest, variant_column_failed_deserialize) {
     auto c2 = VariantColumn::create();
     ASSERT_ERROR(ColumnArraySerde::deserialize(buffer.data(), c2.get()));
     ASSERT_EQ(0, c2->size()); // Deserialization should fail, resulting in an empty column
+}
+
+// NOLINTNEXTLINE
+PARALLEL_TEST(ColumnArraySerdeTest, hll_column_failed_deserialize) {
+    auto c1 = HyperLogLogColumn::create();
+    // prepare a sparse-encoded HLL (few non-zero registers)
+    HyperLogLog sparse_hll;
+    for (int i = 0; i < 200; ++i) {
+        sparse_hll.update(HashUtil::murmur_hash64A(&i, sizeof(i), HashUtil::MURMUR_SEED));
+    }
+    // prepare a full-encoded HLL (many non-zero registers)
+    HyperLogLog full_hll;
+    for (int i = 0; i < 5000; ++i) {
+        full_hll.update(HashUtil::murmur_hash64A(&i, sizeof(i), HashUtil::MURMUR_SEED));
+    }
+    c1->append(&sparse_hll);
+    c1->append(&full_hll);
+    ASSERT_EQ(2, c1->size());
+
+    std::vector<uint8_t> buffer;
+    buffer.resize(ColumnArraySerde::max_serialized_size(*c1));
+    ASSERT_OK(ColumnArraySerde::serialize(*c1, buffer.data()));
+
+    auto* fp = failpoint::FailPointRegistry::GetInstance()->get("mem_chunk_allocator_allocate_fail");
+    ASSERT_NE(fp, nullptr);
+    PFailPointTriggerMode mode;
+    mode.set_mode(FailPointTriggerModeType::ENABLE);
+    fp->setMode(mode);
+
+    auto c2 = HyperLogLogColumn::create();
+    ASSERT_OK(ColumnArraySerde::deserialize(buffer.data(), c2.get()));
+    ASSERT_EQ(2, c2->size());
+    for (int i = 0; i < c2->size(); ++i) {
+        const HyperLogLog* h = c2->get(i).get_hyperloglog();
+        ASSERT_NE(h, nullptr);
+        EXPECT_EQ(0, h->estimate_cardinality()); // should be empty after failed deserialize
+    }
+
+    mode.set_mode(FailPointTriggerModeType::DISABLE);
+    fp->setMode(mode);
 }
 
 // NOLINTNEXTLINE
