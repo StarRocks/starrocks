@@ -682,6 +682,16 @@ public class Config extends ConfigBase {
     public static boolean net_use_ipv6_when_priority_networks_empty = false;
 
     /**
+     * DNS cache TTL (Time-To-Live) in seconds for successful DNS lookups.
+     * This sets the Java security property 'networkaddress.cache.ttl' which controls
+     * how long the JVM caches successful DNS lookups.
+     * Default is 60 seconds. Set to -1 to cache forever, 0 to disable caching.
+     * Note: This is a static configuration and requires FE restart to take effect.
+     */
+    @ConfField
+    public static int dns_cache_ttl_seconds = 60;
+
+    /**
      * Fe http port
      * Currently, all FEs' http port must be same.
      */
