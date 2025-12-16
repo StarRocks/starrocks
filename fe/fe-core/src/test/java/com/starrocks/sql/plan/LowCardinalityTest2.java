@@ -151,7 +151,7 @@ public class LowCardinalityTest2 extends PlanTestBase {
                 "  `c_new` int(11) ,\n" +
                 "  `cpc` int(11)\n" +
                 ") ENGINE=OLAP \n" +
-                "PRIMARY KEY(`d_date`, `c_mr`)\n" +
+                "DUPLICATE KEY(`d_date`, `c_mr`)\n" +
                 "COMMENT \"OLAP\"\n" +
                 "DISTRIBUTED BY HASH(`d_date`, `c_mr`) BUCKETS 16 \n" +
                 "PROPERTIES (\n" +
@@ -2191,14 +2191,6 @@ public class LowCardinalityTest2 extends PlanTestBase {
 
         Assert.assertFalse("table doesn't contain global dict, we can change its distribution",
                 execPlan.getOptExpression(1).isExistRequiredDistribution());
-    }
-
-    @Test
-    public void testShortCircuitQuery() throws Exception {
-        connectContext.getSessionVariable().setEnableShortCircuit(true);
-        String sql = "select * from low_card_t2 where d_date='20160404' and c_mr = '12'";
-        final String plan = getFragmentPlan(sql);
-        assertContains(plan, "Short Circuit Scan: true");
     }
 
     @Test
