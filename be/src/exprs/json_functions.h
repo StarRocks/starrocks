@@ -101,6 +101,13 @@ public:
      * @paramType: [JsonColumn]
      * @return: BinaryColumn
      */
+    DEFINE_VECTORIZED_FN(json_pretty);
+
+    /**
+     * @param: [json_column]
+     * @paramType: [JsonColumn]
+     * @return: BinaryColumn
+     */
     DEFINE_VECTORIZED_FN(json_string);
 
     /**
