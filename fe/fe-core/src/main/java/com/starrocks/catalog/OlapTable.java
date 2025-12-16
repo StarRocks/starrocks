@@ -167,9 +167,6 @@ import static com.starrocks.common.util.PropertyAnalyzer.PROPERTIES_STORAGE_TYPE
 /**
  * Internal representation of tableFamilyGroup-related metadata. A
  * OlaptableFamilyGroup contains several tableFamily.
- * Note: when you add a new olap table property, you should modify TableProperty
- * class
- * ATTN: serialize by gson is used by MaterializedView
  */
 public class OlapTable extends Table {
     private static final Logger LOG = LogManager.getLogger(OlapTable.class);
@@ -257,7 +254,7 @@ public class OlapTable extends Table {
     protected long baseIndexMetaId = -1;
 
     @SerializedName(value = "tableProperty")
-    protected TableProperty tableProperty;
+    protected TableProperty tableProperty = new TableProperty(Maps.newHashMap());
 
     @SerializedName(value = "maxColUniqueId")
     protected AtomicInteger maxColUniqueId = new AtomicInteger(-1);
@@ -316,8 +313,6 @@ public class OlapTable extends Table {
         this.colocateGroup = null;
 
         this.indexes = null;
-
-        this.tableProperty = null;
     }
 
     public OlapTable(long id, String tableName, List<Column> baseSchema, KeysType keysType,
@@ -350,8 +345,6 @@ public class OlapTable extends Table {
 
         this.indexes = indexes;
         tryToAssignIndexId();
-
-        this.tableProperty = null;
     }
 
     public static List<Index> getIndexesBySchema(List<Index> indexes, List<Column> schema) {
@@ -431,9 +424,7 @@ public class OlapTable extends Table {
             olapTable.tempPartitions.addPartition(tempPartition.shallowCopy());
         }
         olapTable.baseIndexMetaId = this.baseIndexMetaId;
-        if (this.tableProperty != null) {
-            olapTable.tableProperty = this.tableProperty.copy();
-        }
+        olapTable.tableProperty = this.tableProperty.copy();
 
         // Shallow copy shared data to check whether the copied table has changed or not.
         olapTable.lastSchemaUpdateTime = this.lastSchemaUpdateTime;
@@ -479,50 +470,30 @@ public class OlapTable extends Table {
     }
 
     public BinlogConfig getCurBinlogConfig() {
-        if (tableProperty != null) {
-            return tableProperty.getBinlogConfig();
-        }
-        return null;
+        return tableProperty.getBinlogConfig();
     }
 
     public void setCurBinlogConfig(BinlogConfig curBinlogConfig) {
-        if (tableProperty == null) {
-            tableProperty = new TableProperty(Maps.newHashMap());
-        }
         tableProperty.modifyTableProperties(curBinlogConfig.toProperties());
         tableProperty.setBinlogConfig(curBinlogConfig);
     }
 
     public void setFlatJsonConfig(FlatJsonConfig flatJsonConfig) {
-        if (tableProperty == null) {
-            tableProperty = new TableProperty(Maps.newHashMap());
-        }
         tableProperty.modifyTableProperties(flatJsonConfig.toProperties());
         tableProperty.setFlatJsonConfig(flatJsonConfig);
     }
 
     public FlatJsonConfig getFlatJsonConfig() {
-        if (tableProperty != null) {
-            return tableProperty.getFlatJsonConfig();
-        }
-        return null;
+        return tableProperty.getFlatJsonConfig();
     }
 
     public boolean containsBinlogConfig() {
-        if (tableProperty == null ||
-                tableProperty.getBinlogConfig() == null ||
-                tableProperty.getBinlogConfig().getVersion() == BinlogConfig.INVALID) {
-            return false;
-        }
-        return true;
+        return tableProperty.getBinlogConfig() != null
+                && tableProperty.getBinlogConfig().getVersion() != BinlogConfig.INVALID;
     }
 
     public boolean containsFlatJsonConfig() {
-        if (tableProperty == null ||
-                tableProperty.getFlatJsonConfig() == null) {
-            return false;
-        }
-        return true;
+        return tableProperty.getFlatJsonConfig() != null;
     }
 
     public long getBinlogTxnId() {
@@ -567,8 +538,7 @@ public class OlapTable extends Table {
     }
 
     public boolean dynamicPartitionExists() {
-        return tableProperty != null
-                && tableProperty.getDynamicPartitionProperty() != null
+        return tableProperty.getDynamicPartitionProperty() != null
                 && tableProperty.getDynamicPartitionProperty().isExists();
     }
 
@@ -642,23 +612,21 @@ public class OlapTable extends Table {
             expressionRangePartitionInfo.renameTableName("", newName);
         }
 
-        if (tableProperty != null) {
-            // renew unique constraints
-            List<UniqueConstraint> tpUniqueConstraints = tableProperty.getUniqueConstraints();
-            if (!CollectionUtils.isEmpty(tpUniqueConstraints)) {
-                for (UniqueConstraint constraint : tpUniqueConstraints) {
-                    constraint.onTableRename(this, oldTableName);
-                }
-                setUniqueConstraints(tpUniqueConstraints);
+        // renew unique constraints
+        List<UniqueConstraint> tpUniqueConstraints = tableProperty.getUniqueConstraints();
+        if (!CollectionUtils.isEmpty(tpUniqueConstraints)) {
+            for (UniqueConstraint constraint : tpUniqueConstraints) {
+                constraint.onTableRename(this, oldTableName);
             }
-            // renew foreign constraints
-            List<ForeignKeyConstraint> tpForeignConstraints = tableProperty.getForeignKeyConstraints();
-            if (!CollectionUtils.isEmpty(tpForeignConstraints)) {
-                for (ForeignKeyConstraint constraint : tpForeignConstraints) {
-                    constraint.onTableRename(this, oldTableName);
-                }
-                setForeignKeyConstraints(tpForeignConstraints);
+            setUniqueConstraints(tpUniqueConstraints);
+        }
+        // renew foreign constraints
+        List<ForeignKeyConstraint> tpForeignConstraints = tableProperty.getForeignKeyConstraints();
+        if (!CollectionUtils.isEmpty(tpForeignConstraints)) {
+            for (ForeignKeyConstraint constraint : tpForeignConstraints) {
+                constraint.onTableRename(this, oldTableName);
             }
+            setForeignKeyConstraints(tpForeignConstraints);
         }
     }
 
@@ -2100,53 +2068,32 @@ public class OlapTable extends Table {
     }
 
     public void setReplicationNum(Short replicationNum) {
-        if (tableProperty == null) {
-            tableProperty = new TableProperty(new HashMap<>());
-        }
         tableProperty.modifyTableProperties(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, replicationNum.toString());
         tableProperty.buildReplicationNum();
     }
 
     public Short getDefaultReplicationNum() {
-        if (tableProperty != null) {
-            return tableProperty.getReplicationNum();
-        }
-        return RunMode.defaultReplicationNum();
+        return tableProperty.getReplicationNum();
     }
 
     public Boolean isFileBundling() {
-        if (tableProperty != null) {
-            return tableProperty.isFileBundling();
-        }
-        return false;
+        return tableProperty.isFileBundling();
     }
 
     public Boolean enablePersistentIndex() {
-        if (tableProperty != null) {
-            return tableProperty.enablePersistentIndex();
-        }
-        return false;
+        return tableProperty.enablePersistentIndex();
     }
 
     public int primaryIndexCacheExpireSec() {
-        if (tableProperty != null) {
-            return tableProperty.primaryIndexCacheExpireSec();
-        }
-        return 0;
+        return tableProperty.primaryIndexCacheExpireSec();
     }
 
     public String getPersistentIndexTypeString() {
-        if (tableProperty != null) {
-            return tableProperty.getPersistentIndexTypeString();
-        }
-        return "";
+        return tableProperty.getPersistentIndexTypeString();
     }
 
     public TPersistentIndexType getPersistentIndexType() {
-        if (tableProperty != null) {
-            return tableProperty.getPersistentIndexType();
-        }
-        return null;
+        return tableProperty.getPersistentIndexType();
     }
 
     // Determine which situation supports importing and automatically creating
@@ -2156,24 +2103,21 @@ public class OlapTable extends Table {
     }
 
     public Boolean isBinlogEnabled() {
-        if (tableProperty == null || tableProperty.getBinlogConfig() == null) {
+        if (tableProperty.getBinlogConfig() == null) {
             return false;
         }
         return tableProperty.getBinlogConfig().getBinlogEnable();
     }
 
     public long getBinlogVersion() {
-        if (tableProperty == null || tableProperty.getBinlogConfig() == null) {
+        if (tableProperty.getBinlogConfig() == null) {
             return BinlogConfig.INVALID;
         }
         return tableProperty.getBinlogConfig().getVersion();
     }
 
     public String storageType() {
-        if (tableProperty != null) {
-            return tableProperty.storageType();
-        }
-        return PROPERTIES_STORAGE_TYPE_COLUMN;
+        return tableProperty.storageType();
     }
 
     public TStorageType getStorageType() {
@@ -2191,9 +2135,6 @@ public class OlapTable extends Table {
     }
 
     public void setStorageType(String storageType) {
-        if (tableProperty == null) {
-            tableProperty = new TableProperty(new HashMap<>());
-        }
         if (storageType == null) {
             storageType = PROPERTIES_STORAGE_TYPE_COLUMN;
         }
@@ -2202,9 +2143,6 @@ public class OlapTable extends Table {
     }
 
     public void setEnablePersistentIndex(boolean enablePersistentIndex) {
-        if (tableProperty == null) {
-            tableProperty = new TableProperty(new HashMap<>());
-        }
         tableProperty
                 .modifyTableProperties(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX,
                         Boolean.valueOf(enablePersistentIndex).toString());
@@ -2212,9 +2150,6 @@ public class OlapTable extends Table {
     }
 
     public void setPrimaryIndexCacheExpireSec(int primaryIndexCacheExpireSec) {
-        if (tableProperty == null) {
-            tableProperty = new TableProperty(new HashMap<>());
-        }
         tableProperty
                 .modifyTableProperties(PropertyAnalyzer.PROPERTIES_PRIMARY_INDEX_CACHE_EXPIRE_SEC,
                         Integer.valueOf(primaryIndexCacheExpireSec).toString());
@@ -2222,10 +2157,6 @@ public class OlapTable extends Table {
     }
 
     public void setPersistentIndexType(TPersistentIndexType persistentIndexType) {
-        if (tableProperty == null) {
-            tableProperty = new TableProperty(new HashMap<>());
-        }
-
         // only support LOCAL and CLOUD_NATIVE for now
         if (persistentIndexType == TPersistentIndexType.LOCAL || persistentIndexType == TPersistentIndexType.CLOUD_NATIVE) {
             tableProperty.modifyTableProperties(PropertyAnalyzer.PROPERTIES_PERSISTENT_INDEX_TYPE,
@@ -2240,17 +2171,10 @@ public class OlapTable extends Table {
     }
 
     public TCompactionStrategy getCompactionStrategy() {
-        if (tableProperty != null) {
-            return tableProperty.getCompactionStrategy();
-        }
-        return TCompactionStrategy.DEFAULT;
+        return tableProperty.getCompactionStrategy();
     }
 
     public void setCompactionStrategy(TCompactionStrategy compactionStrategy) {
-        if (tableProperty == null) {
-            tableProperty = new TableProperty(new HashMap<>());
-        }
-
         // only support DEFAULT and REAL_TIME for now
         if (compactionStrategy == TCompactionStrategy.DEFAULT || compactionStrategy == TCompactionStrategy.REAL_TIME) {
             tableProperty.modifyTableProperties(PropertyAnalyzer.PROPERTIES_COMPACTION_STRATEGY,
@@ -2265,32 +2189,19 @@ public class OlapTable extends Table {
     }
 
     public Multimap<String, String> getLocation() {
-        if (tableProperty != null) {
-            return tableProperty.getLocation();
-        }
-        return null;
+        return tableProperty.getLocation();
     }
 
     public void setLocation(String location) {
-        if (tableProperty == null) {
-            tableProperty = new TableProperty(new HashMap<>());
-        }
-
         tableProperty.modifyTableProperties(PropertyAnalyzer.PROPERTIES_LABELS_LOCATION, location);
         tableProperty.buildLocation();
     }
 
     public Boolean enableReplicatedStorage() {
-        if (tableProperty != null) {
-            return tableProperty.enableReplicatedStorage();
-        }
-        return false;
+        return tableProperty.enableReplicatedStorage();
     }
 
     public void setEnableReplicatedStorage(boolean enableReplicatedStorage) {
-        if (tableProperty == null) {
-            tableProperty = new TableProperty(new HashMap<>());
-        }
         tableProperty
                 .modifyTableProperties(PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE,
                         Boolean.valueOf(enableReplicatedStorage).toString());
@@ -2298,16 +2209,10 @@ public class OlapTable extends Table {
     }
 
     public boolean enableStatisticCollectOnFirstLoad() {
-        if (tableProperty != null) {
-            return tableProperty.enableStatisticCollectOnFirstLoad();
-        }
-        return true;
+        return tableProperty.enableStatisticCollectOnFirstLoad();
     }
 
     public void setEnableStatisticCollectOnFirstLoad(boolean enable) {
-        if (tableProperty == null) {
-            tableProperty = new TableProperty(new HashMap<>());
-        }
         tableProperty.modifyTableProperties(PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_COLLECT_ON_FIRST_LOAD,
                 Boolean.valueOf(enable).toString());
         tableProperty.buildEnableStatisticCollectOnFirstLoad();
@@ -2321,30 +2226,18 @@ public class OlapTable extends Table {
         if (!(defaultDistributionInfo instanceof RandomDistributionInfo) || !Config.enable_automatic_bucket) {
             return (long) 0;
         }
-        if (tableProperty != null) {
-            return tableProperty.getBucketSize();
-        }
-        return (long) 0;
+        return tableProperty.getBucketSize();
     }
 
     public Long getMutableBucketNum() {
-        if (tableProperty != null) {
-            return tableProperty.getMutableBucketNum();
-        }
-        return (long) 0;
+        return tableProperty.getMutableBucketNum();
     }
 
     public String getBaseCompactionForbiddenTimeRanges() {
-        if (tableProperty != null) {
-            return tableProperty.getBaseCompactionForbiddenTimeRanges();
-        }
-        return "";
+        return tableProperty.getBaseCompactionForbiddenTimeRanges();
     }
 
     public void setAutomaticBucketSize(long bucketSize) {
-        if (tableProperty == null) {
-            tableProperty = new TableProperty(new HashMap<>());
-        }
         tableProperty
                 .modifyTableProperties(PropertyAnalyzer.PROPERTIES_BUCKET_SIZE,
                         String.valueOf(bucketSize));
@@ -2352,9 +2245,6 @@ public class OlapTable extends Table {
     }
 
     public void setMutableBucketNum(long bucketNum) {
-        if (tableProperty == null) {
-            tableProperty = new TableProperty(new HashMap<>());
-        }
         tableProperty
                 .modifyTableProperties(PropertyAnalyzer.PROPERTIES_MUTABLE_BUCKET_NUM,
                         String.valueOf(bucketNum));
@@ -2362,16 +2252,10 @@ public class OlapTable extends Table {
     }
 
     public Boolean enableLoadProfile() {
-        if (tableProperty != null) {
-            return tableProperty.enableLoadProfile();
-        }
-        return false;
+        return tableProperty.enableLoadProfile();
     }
 
     public void setEnableLoadProfile(boolean enableLoadProfile) {
-        if (tableProperty == null) {
-            tableProperty = new TableProperty(new HashMap<>());
-        }
         tableProperty
                 .modifyTableProperties(PropertyAnalyzer.PROPERTIES_ENABLE_LOAD_PROFILE,
                         Boolean.valueOf(enableLoadProfile).toString());
@@ -2379,9 +2263,6 @@ public class OlapTable extends Table {
     }
 
     public void setBaseCompactionForbiddenTimeRanges(String baseCompactionForbiddenTimeRanges) {
-        if (tableProperty == null) {
-            tableProperty = new TableProperty(new HashMap<>());
-        }
         tableProperty
                 .modifyTableProperties(PropertyAnalyzer.PROPERTIES_BASE_COMPACTION_FORBIDDEN_TIME_RANGES,
                         baseCompactionForbiddenTimeRanges);
@@ -2404,16 +2285,10 @@ public class OlapTable extends Table {
     }
 
     public TWriteQuorumType writeQuorum() {
-        if (tableProperty != null) {
-            return tableProperty.writeQuorum();
-        }
-        return TWriteQuorumType.MAJORITY;
+        return tableProperty.writeQuorum();
     }
 
     public void setWriteQuorum(String writeQuorum) {
-        if (tableProperty == null) {
-            tableProperty = new TableProperty(new HashMap<>());
-        }
         tableProperty
                 .modifyTableProperties(PropertyAnalyzer.PROPERTIES_WRITE_QUORUM,
                         writeQuorum);
@@ -2421,9 +2296,6 @@ public class OlapTable extends Table {
     }
 
     public void setStorageMedium(TStorageMedium storageMedium) {
-        if (tableProperty == null) {
-            tableProperty = new TableProperty(new HashMap<>());
-        }
         tableProperty
                 .modifyTableProperties(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM, storageMedium.name());
     }
@@ -2434,57 +2306,36 @@ public class OlapTable extends Table {
     }
 
     public boolean hasDelete() {
-        if (tableProperty == null) {
-            return false;
-        }
         return tableProperty.hasDelete();
     }
 
     public void setHasDelete() {
-        if (tableProperty == null) {
-            tableProperty = new TableProperty(new HashMap<>());
-        }
         tableProperty.setHasDelete(true);
     }
 
     public void setDataCachePartitionDuration(PeriodDuration duration) {
-        if (tableProperty == null) {
-            tableProperty = new TableProperty(new HashMap<>());
-        }
         tableProperty.modifyTableProperties(PropertyAnalyzer.PROPERTIES_DATACACHE_PARTITION_DURATION,
                 TimeUtils.toHumanReadableString(duration));
         tableProperty.buildDataCachePartitionDuration();
     }
 
     public void setFileBundling(boolean fileBundling) {
-        if (tableProperty == null) {
-            tableProperty = new TableProperty(new HashMap<>());
-        }
         tableProperty.modifyTableProperties(PropertyAnalyzer.PROPERTIES_FILE_BUNDLING,
                 Boolean.valueOf(fileBundling).toString());
         tableProperty.buildFileBundling();
     }
 
     public void setStorageCoolDownTTL(PeriodDuration duration) {
-        if (tableProperty == null) {
-            tableProperty = new TableProperty(new HashMap<>());
-        }
         tableProperty.modifyTableProperties(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TTL,
                 TimeUtils.toHumanReadableString(duration));
         tableProperty.buildStorageCoolDownTTL();
     }
 
     public boolean hasForbiddenGlobalDict() {
-        if (tableProperty == null) {
-            return false;
-        }
         return tableProperty.hasForbiddenGlobalDict();
     }
 
     public void setHasForbiddenGlobalDict(boolean hasForbiddenGlobalDict) {
-        if (tableProperty == null) {
-            tableProperty = new TableProperty(new HashMap<>());
-        }
         tableProperty.setHasForbiddenGlobalDict(hasForbiddenGlobalDict);
     }
 
@@ -2711,38 +2562,23 @@ public class OlapTable extends Table {
     }
 
     public void setCompressionType(TCompressionType compressionType) {
-        if (tableProperty == null) {
-            tableProperty = new TableProperty(new HashMap<>());
-        }
         tableProperty.modifyTableProperties(PropertyAnalyzer.PROPERTIES_COMPRESSION, compressionType.name());
         tableProperty.buildCompressionType();
     }
 
     public void setCompressionLevel(int compressionLevel) {
-        if (tableProperty == null) {
-            tableProperty = new TableProperty(new HashMap<>());
-        }
         tableProperty.setCompressionLevel(compressionLevel);
     }
 
     public TCompressionType getCompressionType() {
-        if (tableProperty == null) {
-            return TCompressionType.LZ4_FRAME;
-        }
         return tableProperty.getCompressionType();
     }
 
     public int getCompressionLevel() {
-        if (tableProperty == null) {
-            return -1;
-        }
         return tableProperty.getCompressionLevel();
     }
 
     public void setPartitionLiveNumber(int number) {
-        if (tableProperty == null) {
-            tableProperty = new TableProperty(new HashMap<>());
-        }
         tableProperty.modifyTableProperties(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER, String.valueOf(number));
         tableProperty.buildPartitionLiveNumber();
     }
@@ -2758,24 +2594,15 @@ public class OlapTable extends Table {
     }
 
     public void setBinlogAvailableVersion(Map<String, String> properties) {
-        if (tableProperty == null) {
-            tableProperty = new TableProperty(new HashMap<>());
-        }
         tableProperty.modifyTableProperties(properties);
         tableProperty.buildBinlogAvailableVersion();
     }
 
     public Map<Long, Long> getBinlogAvailableVersion() {
-        if (tableProperty == null) {
-            return new HashMap<>();
-        }
         return tableProperty.getBinlogAvailableVersions();
     }
 
     public void clearBinlogAvailableVersion() {
-        if (tableProperty == null) {
-            return;
-        }
         tableProperty.clearBinlogAvailableVersion();
     }
 
@@ -2784,8 +2611,7 @@ public class OlapTable extends Table {
         if (keysType == KeysType.UNIQUE_KEYS || keysType == KeysType.PRIMARY_KEYS) {
             return true;
         }
-        return tableProperty != null &&
-                tableProperty.getUniqueConstraints() != null &&
+        return tableProperty.getUniqueConstraints() != null &&
                 !tableProperty.getUniqueConstraints().isEmpty();
     }
 
@@ -2800,7 +2626,7 @@ public class OlapTable extends Table {
                     new UniqueConstraint(null, null, getName(), getKeyColumns()
                             .stream().map(Column::getColumnId).collect(Collectors.toList())));
         }
-        if (tableProperty != null && tableProperty.getUniqueConstraints() != null) {
+        if (tableProperty.getUniqueConstraints() != null) {
             uniqueConstraints.addAll(tableProperty.getUniqueConstraints());
         }
         return uniqueConstraints;
@@ -2808,9 +2634,6 @@ public class OlapTable extends Table {
 
     @Override
     public void setUniqueConstraints(List<UniqueConstraint> uniqueConstraints) {
-        if (tableProperty == null) {
-            tableProperty = new TableProperty(new HashMap<>());
-        }
         Map<String, String> properties = Maps.newHashMap();
         String newProperty = uniqueConstraints.stream().map(UniqueConstraint::toString)
                 .collect(Collectors.joining(";"));
@@ -2821,9 +2644,6 @@ public class OlapTable extends Table {
 
     @Override
     public List<ForeignKeyConstraint> getForeignKeyConstraints() {
-        if (tableProperty == null) {
-            return null;
-        }
         return tableProperty.getForeignKeyConstraints();
     }
 
@@ -2833,14 +2653,11 @@ public class OlapTable extends Table {
      */
     @Override
     public boolean hasForeignKeyConstraints() {
-        return tableProperty != null && CollectionUtils.isNotEmpty(getForeignKeyConstraints());
+        return CollectionUtils.isNotEmpty(getForeignKeyConstraints());
     }
 
     @Override
     public void setForeignKeyConstraints(List<ForeignKeyConstraint> foreignKeyConstraints) {
-        if (tableProperty == null) {
-            tableProperty = new TableProperty(new HashMap<>());
-        }
         Map<String, String> properties = Maps.newHashMap();
         String newProperty = foreignKeyConstraints
                 .stream().map(ForeignKeyConstraint::toString).collect(Collectors.joining(";"));
@@ -2854,16 +2671,10 @@ public class OlapTable extends Table {
             // row storage type does not support fast schema evolution currently
             return false;
         }
-        if (tableProperty != null) {
-            return tableProperty.getUseFastSchemaEvolution();
-        }
-        return false;
+        return tableProperty.getUseFastSchemaEvolution();
     }
 
     public void setUseFastSchemaEvolution(boolean useFastSchemaEvolution) {
-        if (tableProperty == null) {
-            tableProperty = new TableProperty(new HashMap<>());
-        }
         tableProperty.modifyTableProperties(PropertyAnalyzer.PROPERTIES_USE_FAST_SCHEMA_EVOLUTION,
                 Boolean.valueOf(useFastSchemaEvolution).toString());
         tableProperty.buildUseFastSchemaEvolution();
@@ -3166,7 +2977,7 @@ public class OlapTable extends Table {
                     TableProperty.compactionStrategyToString(getCompactionStrategy()));
         }
 
-        Map<String, String> tableProperties = tableProperty != null ? tableProperty.getProperties() : Maps.newLinkedHashMap();
+        Map<String, String> tableProperties = tableProperty.getProperties();
         // partition live number
         String partitionLiveNumber = tableProperties.get(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER);
         if (partitionLiveNumber != null) {
@@ -3220,7 +3031,7 @@ public class OlapTable extends Table {
     // unique properties for olap table, cloud native table
     public Map<String, String> getUniqueProperties() {
         Map<String, String> properties = Maps.newHashMap();
-        Map<String, String> tableProperties = tableProperty != null ? tableProperty.getProperties() : Maps.newLinkedHashMap();
+        Map<String, String> tableProperties = tableProperty.getProperties();
 
         // storage medium
         String storageMedium = tableProperties.get(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM);
@@ -3313,7 +3124,7 @@ public class OlapTable extends Table {
     // ------ for lake table and lake materialized view start ------
     @Nullable
     public FilePathInfo getDefaultFilePathInfo() {
-        StorageInfo storageInfo = tableProperty != null ? tableProperty.getStorageInfo() : null;
+        StorageInfo storageInfo = tableProperty.getStorageInfo();
         return storageInfo != null ? storageInfo.getFilePathInfo() : null;
     }
 
@@ -3369,10 +3180,6 @@ public class OlapTable extends Table {
     }
 
     private boolean isEnableFillDataCacheImpl(Partition partition) throws AnalysisException {
-        if (tableProperty == null) {
-            return true;
-        }
-
         PeriodDuration cacheDuration = tableProperty.getDataCachePartitionDuration();
         if (cacheDuration == null) {
             return true;

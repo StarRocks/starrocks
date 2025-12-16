@@ -665,7 +665,6 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
 
     public MaterializedView() {
         super(TableType.MATERIALIZED_VIEW);
-        this.tableProperty = null;
         this.state = OlapTableState.NORMAL;
         this.active = true;
     }
@@ -711,9 +710,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         }
         this.idToPartition = idToPartitions;
         this.nameToPartition = nameToPartitions;
-        if (baseTable.tableProperty != null) {
-            this.tableProperty = baseTable.tableProperty.copy();
-        }
+        this.tableProperty = baseTable.tableProperty.copy();
     }
 
     public MvId getMvId() {
@@ -933,7 +930,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     }
 
     public RefreshMode getRefreshMode() {
-        if (tableProperty == null || StringUtils.isEmpty(tableProperty.getMvRefreshMode())) {
+        if (StringUtils.isEmpty(tableProperty.getMvRefreshMode())) {
             return RefreshMode.PCT;
         }
         return RefreshMode.valueOf(tableProperty.getMvRefreshMode().toUpperCase());
@@ -1588,9 +1585,6 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
      */
     public PartitionRefreshStrategy getPartitionRefreshStrategy() {
         TableProperty tableProperty = getTableProperty();
-        if (tableProperty == null) {
-            return PartitionRefreshStrategy.defaultValue();
-        }
 
         // otherwise, use `partition_refresh_strategy` property.
         PartitionRefreshStrategy partitionRefreshStrategy =
@@ -1619,9 +1613,6 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             return false;
         }
         TableProperty tableProperty = getTableProperty();
-        if (tableProperty == null) {
-            return true;
-        }
         return tableProperty.getMvQueryRewriteSwitch().isEnable();
     }
 
@@ -1635,10 +1626,6 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             return false;
         }
         TableProperty tableProperty = getTableProperty();
-        if (tableProperty == null) {
-            // default is false
-            return false;
-        }
         return tableProperty.getMvTransparentRewriteMode().isEnable();
     }
 
@@ -1647,9 +1634,6 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
      */
     public TableProperty.MVTransparentRewriteMode getTransparentRewriteMode() {
         TableProperty tableProperty = getTableProperty();
-        if (tableProperty == null) {
-            return TableProperty.MVTransparentRewriteMode.defaultValue();
-        }
         return tableProperty.getMvTransparentRewriteMode();
     }
 
@@ -1658,18 +1642,12 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             return false;
         }
         TableProperty tableProperty = getTableProperty();
-        if (tableProperty == null) {
-            return true;
-        }
         List<TableName> excludedTriggerTables = tableProperty.getExcludedTriggerTables();
         return matchTable(excludedTriggerTables, dbName, tableName);
     }
 
     public boolean shouldRefreshTable(String dbName, String tableName) {
         TableProperty tableProperty = getTableProperty();
-        if (tableProperty == null) {
-            return true;
-        }
         List<TableName> excludedRefreshTables = tableProperty.getExcludedRefreshTables();
         return matchTable(excludedRefreshTables, dbName, tableName);
     }
@@ -2247,7 +2225,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         // analyze partition columns for ref base tables
         analyzeRefBaseTablePartitionColumns();
         // analyze partition retention condition
-        analyzeMVRetentionCondition(connectContext);
+        analyzeAndSetMVRetentionCondition(connectContext);
 
         // add a check for partition columns to ensure they are not empty if the table is partitioned.
         // throw exception is ok which will make mv inactive to avoid using it in query rewrite.
@@ -2269,7 +2247,32 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         }
     }
 
-    public synchronized void analyzeMVRetentionCondition(ConnectContext connectContext) {
+    public synchronized Pair<Optional<Expr>, Optional<ScalarOperator>> analyzeMVRetentionCondition(
+            ConnectContext connectContext, String retentionCondition) {
+        PartitionInfo partitionInfo = getPartitionInfo();
+        if (partitionInfo.isUnPartitioned()) {
+            return null;
+        }
+
+        final Map<Table, List<Column>> refBaseTablePartitionColumns = getRefBaseTablePartitionColumns(false);
+        if (refBaseTablePartitionColumns == null || refBaseTablePartitionColumns.size() != 1) {
+            return null;
+        }
+        Table refBaseTable = refBaseTablePartitionColumns.keySet().iterator().next();
+        Optional<Expr> retentionConditionExprOpt =
+                MaterializedViewAnalyzer.analyzeMVRetentionCondition(connectContext, this, refBaseTable, retentionCondition);
+        Optional<ScalarOperator> retentionConditionScalarOpOpt = MaterializedViewAnalyzer.analyzeMVRetentionConditionOperator(
+                connectContext, this, refBaseTable, retentionConditionExprOpt);
+        return Pair.create(retentionConditionExprOpt, retentionConditionScalarOpOpt);
+    }
+
+    public void setMVRetentionCondition(Optional<Expr> retentionConditionExprOpt,
+                                        Optional<ScalarOperator> retentionConditionScalarOpOpt) {
+        this.retentionConditionExprOpt = retentionConditionExprOpt;
+        this.retentionConditionScalarOpOpt = retentionConditionScalarOpOpt;
+    }
+
+    public synchronized void analyzeAndSetMVRetentionCondition(ConnectContext connectContext) {
         PartitionInfo partitionInfo = getPartitionInfo();
         if (partitionInfo.isUnPartitioned()) {
             return;

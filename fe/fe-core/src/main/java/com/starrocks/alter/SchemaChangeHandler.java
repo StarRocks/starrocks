@@ -2756,46 +2756,44 @@ public class SchemaChangeHandler extends AlterHandler {
         TableProperty tableProperty = olapTable.getTableProperty();
 
         boolean hasChanged = false;
-        if (tableProperty != null) {
-            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT)) {
-                try {
-                    List<UniqueConstraint> newUniqueConstraints = PropertyAnalyzer.analyzeUniqueConstraint(properties, db,
-                            olapTable);
-                    List<UniqueConstraint> originalUniqueConstraints = tableProperty.getUniqueConstraints();
-                    if (originalUniqueConstraints == null
-                            || !newUniqueConstraints.toString().equals(originalUniqueConstraints.toString())) {
-                        hasChanged = true;
-                        String newProperty = newUniqueConstraints
-                                .stream().map(UniqueConstraint::toString).collect(Collectors.joining(";"));
-                        properties.put(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT, newProperty);
-                    } else {
-                        LOG.warn("unique constraint is the same as origin");
-                    }
-                } catch (SemanticException e) {
-                    throw new DdlException(
-                            String.format("analyze table unique constraint:%s failed, msg: %s",
-                                    properties.get(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT), e.getDetailMsg()), e);
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT)) {
+            try {
+                List<UniqueConstraint> newUniqueConstraints
+                        = PropertyAnalyzer.analyzeUniqueConstraint(properties, db, olapTable);
+                List<UniqueConstraint> originalUniqueConstraints = tableProperty.getUniqueConstraints();
+                if (originalUniqueConstraints == null
+                        || !newUniqueConstraints.toString().equals(originalUniqueConstraints.toString())) {
+                    hasChanged = true;
+                    String newProperty = newUniqueConstraints
+                            .stream().map(UniqueConstraint::toString).collect(Collectors.joining(";"));
+                    properties.put(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT, newProperty);
+                } else {
+                    LOG.warn("unique constraint is the same as origin");
                 }
+            } catch (SemanticException e) {
+                throw new DdlException(
+                        String.format("analyze table unique constraint:%s failed, msg: %s",
+                                properties.get(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT), e.getDetailMsg()), e);
             }
-            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT)) {
-                try {
-                    List<ForeignKeyConstraint> newForeignKeyConstraints =
-                            PropertyAnalyzer.analyzeForeignKeyConstraint(properties, db, olapTable);
-                    List<ForeignKeyConstraint> originalForeignKeyConstraints = tableProperty.getForeignKeyConstraints();
-                    if (originalForeignKeyConstraints == null
-                            || !newForeignKeyConstraints.toString().equals(originalForeignKeyConstraints.toString())) {
-                        hasChanged = true;
-                        String newProperty = newForeignKeyConstraints
-                                .stream().map(ForeignKeyConstraint::toString).collect(Collectors.joining(";"));
-                        properties.put(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT, newProperty);
-                    } else {
-                        LOG.warn("foreign constraint is the same as origin");
-                    }
-                } catch (SemanticException e) {
-                    throw new DdlException(
-                            String.format("analyze table foreign key constraint:%s failed, msg: %s",
-                                    properties.get(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT), e.getDetailMsg()), e);
+        }
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT)) {
+            try {
+                List<ForeignKeyConstraint> newForeignKeyConstraints =
+                        PropertyAnalyzer.analyzeForeignKeyConstraint(properties, db, olapTable);
+                List<ForeignKeyConstraint> originalForeignKeyConstraints = tableProperty.getForeignKeyConstraints();
+                if (originalForeignKeyConstraints == null
+                        || !newForeignKeyConstraints.toString().equals(originalForeignKeyConstraints.toString())) {
+                    hasChanged = true;
+                    String newProperty = newForeignKeyConstraints
+                            .stream().map(ForeignKeyConstraint::toString).collect(Collectors.joining(";"));
+                    properties.put(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT, newProperty);
+                } else {
+                    LOG.warn("foreign constraint is the same as origin");
                 }
+            } catch (SemanticException e) {
+                throw new DdlException(
+                        String.format("analyze table foreign key constraint:%s failed, msg: %s",
+                                properties.get(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT), e.getDetailMsg()), e);
             }
         }
 
@@ -2806,7 +2804,7 @@ public class SchemaChangeHandler extends AlterHandler {
         Locker locker = new Locker();
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.WRITE);
         try {
-            GlobalStateMgr.getCurrentState().getLocalMetastore().modifyTableConstraint(db, tableName, properties);
+            GlobalStateMgr.getCurrentState().getLocalMetastore().modifyTableConstraint(db, olapTable, properties);
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.WRITE);
         }
