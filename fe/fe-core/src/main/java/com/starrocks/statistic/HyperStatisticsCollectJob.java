@@ -107,6 +107,9 @@ public class HyperStatisticsCollectJob extends StatisticsCollectJob {
         long insertFailures = 0;
 
         for (int i = 0; i < queryJobs.size(); i++) {
+            // Calculate and set remaining timeout for this query job
+            calculateAndSetRemainingTimeout(context, analyzeStatus);
+
             HyperQueryJob queryJob = queryJobs.get(i);
             try {
                 queryJob.queryStatistics();
@@ -129,7 +132,7 @@ public class HyperStatisticsCollectJob extends StatisticsCollectJob {
             }
 
             try {
-                flushInsertStatisticsData(context);
+                flushInsertStatisticsData(context, analyzeStatus);
             } catch (Exception e) {
                 insertFailures++;
                 if (insertFailures > Config.statistic_full_statistics_failure_tolerance_ratio * queryJobs.size()) {
@@ -150,7 +153,7 @@ public class HyperStatisticsCollectJob extends StatisticsCollectJob {
         }
     }
 
-    private void flushInsertStatisticsData(ConnectContext context) throws Exception {
+    private void flushInsertStatisticsData(ConnectContext context, AnalyzeStatus analyzeStatus) throws Exception {
         if (rowsBuffer.isEmpty()) {
             return;
         }
@@ -159,6 +162,9 @@ public class HyperStatisticsCollectJob extends StatisticsCollectJob {
         int maxRetryTimes = 5;
         StatementBase insertStmt = createInsertStmt();
         do {
+            // Calculate and set remaining timeout for this insert task
+            calculateAndSetRemainingTimeout(context, analyzeStatus);
+
             LOG.debug("statistics insert sql size:" + rowsBuffer.size());
             StmtExecutor executor = StmtExecutor.newInternalExecutor(context, insertStmt);
 
