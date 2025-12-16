@@ -21,7 +21,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.Executor;
-import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.Condition;
@@ -239,23 +238,28 @@ public class AsyncTaskQueue<T> {
         // 3. submit this task, and check if ok
         // 4. if not ok, dec running count.
         boolean success = false;
+        Task task = null;
         try {
             int count = runningTaskCount.incrementAndGet();
             if (count > maxRunningTaskCountValue) {
                 return false;
             }
-            Task task = taskQueue.poll();
+            task = taskQueue.poll();
             if (task == null) {
                 return false;
             }
             executor.execute(new RunnableTask(task));
             success = true;
             return true;
-        } catch (RejectedExecutionException e) {
+        } catch (Exception e) {
+            LOG.error("Failed to execute task in AsyncTaskQueue", e);
             updateTaskException(e);
         } finally {
             if (!success) {
                 runningTaskCount.decrementAndGet();
+                if (task != null) {
+                    taskQueueSize.decrementAndGet();
+                }
             }
         }
         return false;
@@ -299,6 +303,7 @@ public class AsyncTaskQueue<T> {
                         taskQueue.addLast(task);
                     }
                 } catch (Exception e) {
+                    LOG.error("Exception occurred while executing task in AsyncTaskQueue", e);
                     updateTaskException(e);
                 }
             }
