@@ -328,6 +328,7 @@ inline void AsyncDeltaWriterImpl::close() {
 
         // Wait for block merge finished.
         if (_block_merge_token != nullptr) {
+            _block_merge_token->wait();
             _block_merge_token->shutdown();
             _block_merge_token.reset();
         }
