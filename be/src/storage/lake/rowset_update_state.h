@@ -91,14 +91,19 @@ public:
     bool done();
     Status status();
     void close();
-    // <Current pk column, begin rowid>
-    std::pair<Column*, size_t> current();
+    // <Current pk column chunk, begin rowid>
+    std::pair<ChunkPtr, size_t> current();
 
     // Return the memory usage of this encode pk column.
     // If _lazy_load is true, return 0, because memory allocation is lazy.
     size_t memory_usage() const { return _memory_usage; }
 
+    // Encode `pk_column_chunk` to the given |pk_column|
+    StatusOr<MutableColumnPtr> encoded_pk_column(const Chunk* chunk);
+
     // For large segment, we need to load segment file piece by piece.
+    ChunkUniquePtr pk_column_chunk;
+    // For no lazy load, we can load whole pk column at once.
     MutableColumnPtr pk_column;
 
 private:

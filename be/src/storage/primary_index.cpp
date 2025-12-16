@@ -22,6 +22,7 @@
 #include "io/io_profiler.h"
 #include "runtime/current_thread.h"
 #include "storage/chunk_helper.h"
+#include "storage/persistent_index_parallel_execution_context.h"
 #include "storage/primary_key_dump.h"
 #include "storage/primary_key_encoder.h"
 #include "storage/rowset/rowset.h"
@@ -1340,25 +1341,33 @@ Status PrimaryIndex::_insert_into_persistent_index(uint32_t rssid, const vector<
 }
 
 Status PrimaryIndex::_upsert_into_persistent_index(uint32_t rssid, uint32_t rowid_start, const Column& pks,
-                                                   uint32_t idx_begin, uint32_t idx_end, DeletesMap* deletes,
-                                                   IOStat* stat) {
+                                                   uint32_t idx_begin, uint32_t idx_end, IOStat* stat,
+                                                   ParallelExecutionContext* ctx) {
     auto scope = IOProfiler::scope(IOProfiler::TAG_PKINDEX, _tablet_id);
     Status st;
     uint32_t n = idx_end - idx_begin;
-    std::vector<Slice> keys;
-    std::vector<uint64_t> values;
-    values.reserve(n);
-    std::vector<uint64_t> old_values(n, NullIndexValue);
-    const Slice* vkeys = build_persistent_keys(pks, _key_size, idx_begin, idx_end, &keys);
-    RETURN_IF_ERROR(_build_persistent_values(rssid, rowid_start, idx_begin, idx_end, &values));
-    RETURN_IF_ERROR(_persistent_index->upsert(n, vkeys, reinterpret_cast<IndexValue*>(values.data()),
-                                              reinterpret_cast<IndexValue*>(old_values.data()), stat));
-    for (unsigned long old : old_values) {
+    ctx->slots.back()->values.reserve(n);
+    ctx->slots.back()->old_values.resize(n, NullIndexValue);
+    const Slice* vkeys = build_persistent_keys(pks, _key_size, idx_begin, idx_end, &ctx->slots.back()->keys);
+    RETURN_IF_ERROR(_build_persistent_values(rssid, rowid_start, idx_begin, idx_end, &ctx->slots.back()->values));
+    RETURN_IF_ERROR(_persistent_index->upsert(n, vkeys, reinterpret_cast<IndexValue*>(ctx->slots.back()->values.data()),
+                                              reinterpret_cast<IndexValue*>(ctx->slots.back()->old_values.data()), stat,
+                                              ctx));
+    return st;
+}
+
+Status PrimaryIndex::_upsert_into_persistent_index(uint32_t rssid, uint32_t rowid_start, const Column& pks,
+                                                   uint32_t idx_begin, uint32_t idx_end, DeletesMap* deletes,
+                                                   IOStat* stat) {
+    ParallelExecutionContext ctx;
+    ctx.extend_slots();
+    RETURN_IF_ERROR(_upsert_into_persistent_index(rssid, rowid_start, pks, idx_begin, idx_end, stat, &ctx));
+    for (unsigned long old : ctx.slots.back()->old_values) {
         if (old != NullIndexValue) {
             (*deletes)[(uint32_t)(old >> 32)].push_back((uint32_t)(old & ROWID_MASK));
         }
     }
-    return st;
+    return Status::OK();
 }
 
 Status PrimaryIndex::_erase_persistent_index(const Column& key_col, DeletesMap* deletes) {
@@ -1459,6 +1468,16 @@ Status PrimaryIndex::upsert(uint32_t rssid, uint32_t rowid_start, const Column& 
         auto st = _pkey_to_rssid_rowid->upsert(rssid, rowid_start, pks, idx_begin, idx_end, deletes);
         _calc_memory_usage();
         return st;
+    }
+}
+
+Status PrimaryIndex::upsert(uint32_t rssid, uint32_t rowid_start, const Column& pks, IOStat* stat,
+                            ParallelExecutionContext* ctx) {
+    DCHECK(_status.ok() && (_pkey_to_rssid_rowid || _persistent_index));
+    if (_persistent_index != nullptr) {
+        return _upsert_into_persistent_index(rssid, rowid_start, pks, 0, pks.size(), stat, ctx);
+    } else {
+        return Status::NotSupported("upsert with thread pool is not supported in memory primary index");
     }
 }
 

@@ -21,7 +21,9 @@
 #include "storage/lake/lake_persistent_index.h"
 #include "storage/lake/local_pk_index_manager.h"
 #include "storage/lake/rowset.h"
+#include "storage/lake/rowset_update_state.h"
 #include "storage/lake/tablet.h"
+#include "storage/persistent_index_parallel_execution_context.h"
 #include "storage/primary_key_encoder.h"
 #include "storage/tablet_meta_manager.h"
 #include "testutil/sync_point.h"
@@ -204,15 +206,16 @@ Status LakePrimaryIndex::apply_opcompaction(const TabletMetadata& metadata,
     return Status::OK();
 }
 
-Status LakePrimaryIndex::ingest_sst(const FileMetaPB& sst_meta, uint32_t rssid, int64_t version,
-                                    const DelvecPagePB& delvec_page, DelVectorPtr delvec) {
+Status LakePrimaryIndex::ingest_sst(const FileMetaPB& sst_meta, const PersistentIndexSstableRangePB& sst_range,
+                                    uint32_t rssid, int64_t version, const DelvecPagePB& delvec_page,
+                                    DelVectorPtr delvec) {
     if (!_enable_persistent_index) {
         return Status::OK();
     }
 
     auto* lake_persistent_index = dynamic_cast<LakePersistentIndex*>(_persistent_index.get());
     if (lake_persistent_index != nullptr) {
-        return lake_persistent_index->ingest_sst(sst_meta, rssid, version, delvec_page, std::move(delvec));
+        return lake_persistent_index->ingest_sst(sst_meta, sst_range, rssid, version, delvec_page, std::move(delvec));
     } else {
         return Status::InternalError("Persistent index is not a LakePersistentIndex.");
     }
@@ -313,6 +316,108 @@ Status LakePrimaryIndex::erase(const TabletMetadataPtr& metadata, const Column& 
         return Status::InternalError("Unsupported lake_persistent_index_type " +
                                      PersistentIndexTypePB_Name(metadata->persistent_index_type()));
     }
+}
+
+int32_t LakePrimaryIndex::current_fileset_index() const {
+    if (!_enable_persistent_index) {
+        return -1;
+    }
+    auto* lake_persistent_index = dynamic_cast<LakePersistentIndex*>(_persistent_index.get());
+    if (lake_persistent_index != nullptr) {
+        return lake_persistent_index->current_fileset_index();
+    } else {
+        return -1;
+    }
+}
+
+StatusOr<AsyncCompactCBPtr> LakePrimaryIndex::early_sst_compact(
+        lake::LakePersistentIndexParallelCompactMgr* compact_mgr, TabletManager* tablet_mgr,
+        const TabletMetadataPtr& metadata, int32_t fileset_start_idx) {
+    if (!_enable_persistent_index) {
+        return nullptr;
+    }
+    auto* lake_persistent_index = dynamic_cast<LakePersistentIndex*>(_persistent_index.get());
+    if (lake_persistent_index != nullptr) {
+        return lake_persistent_index->early_sst_compact(compact_mgr, tablet_mgr, metadata, fileset_start_idx);
+    } else {
+        return Status::InternalError("Persistent index is not a LakePersistentIndex.");
+    }
+}
+
+Status LakePrimaryIndex::flush_memtable(bool force) {
+    if (!_enable_persistent_index) {
+        return Status::OK();
+    }
+
+    auto* lake_persistent_index = dynamic_cast<LakePersistentIndex*>(_persistent_index.get());
+    if (lake_persistent_index != nullptr) {
+        return lake_persistent_index->flush_memtable(force);
+    }
+
+    return Status::OK();
+}
+
+Status LakePrimaryIndex::parallel_get(ParallelExecutionContext* context) {
+    auto current = context->segment_pk_encode_result->current();
+    auto func = [this, context, current]() {
+        // We can't return error directly, because we need to wait all previous tasks finish.
+        Status st = Status::OK();
+        auto pk_column_st = context->segment_pk_encode_result->encoded_pk_column(current.first.get());
+        context->extend_slots();
+        if (pk_column_st.ok()) {
+            context->slots.back()->pk_column = std::move(pk_column_st.value());
+            context->slots.back()->old_values.resize(context->slots.back()->pk_column->size(), NullIndexValue);
+            st = get(*context->slots.back()->pk_column, &context->slots.back()->old_values);
+        } else {
+            st = pk_column_st.status();
+        }
+        std::lock_guard<std::mutex> l(*context->mutex);
+        context->status->update(st);
+        if (context->status->ok()) {
+            for (unsigned long old : context->slots.back()->old_values) {
+                if (old != NullIndexValue) {
+                    (*context->deletes)[(uint32_t)(old >> 32)].push_back((uint32_t)(old & ROWID_MASK));
+                }
+            }
+        }
+    };
+    if (context->token) {
+        auto st = context->token->submit_func(func);
+        TRACE_COUNTER_INCREMENT("parallel_get_cnt", 1);
+        // collect status when submit fail, need to wait for previously submitted tasks
+        std::lock_guard<std::mutex> l(*context->mutex);
+        context->status->update(st);
+    } else {
+        func();
+        RETURN_IF_ERROR(*context->status);
+    }
+    return Status::OK();
+}
+
+Status LakePrimaryIndex::parallel_upsert(uint32_t rssid, ParallelExecutionContext* context) {
+    auto current = context->segment_pk_encode_result->current();
+    if (context->token) {
+        context->extend_slots();
+        // We can't return error directly, because we need to wait all previous tasks finish.
+        Status st = Status::OK();
+        auto pk_column_st = context->segment_pk_encode_result->encoded_pk_column(current.first.get());
+        if (pk_column_st.ok()) {
+            context->slots.back()->pk_column = std::move(pk_column_st.value());
+            auto st = upsert(rssid, current.second, *context->slots.back()->pk_column, nullptr, context);
+            TRACE_COUNTER_INCREMENT("parallel_upsert_cnt", 1);
+        } else {
+            st = pk_column_st.status();
+        }
+        if (!st.ok()) {
+            std::lock_guard<std::mutex> l(*context->mutex);
+            context->status->update(st);
+        }
+    } else {
+        ASSIGN_OR_RETURN(MutableColumnPtr pk_column,
+                         context->segment_pk_encode_result->encoded_pk_column(current.first.get()));
+        RETURN_IF_ERROR(upsert(rssid, current.second, *pk_column, context->deletes));
+    }
+    return Status::OK();
 }
 
 } // namespace starrocks::lake

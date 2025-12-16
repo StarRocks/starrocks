@@ -68,6 +68,9 @@ public:
 
     size_t memory_usage() const;
 
+    // Sample keys from the table for parallel compaction task splitting.
+    Status sample_keys(std::vector<std::string>* keys, size_t sample_interval_bytes) const;
+
     // `_delvec` should only be modified in `init()` via publish version thread
     // which is thread-safe. And after that, it should be immutable.
     DelVectorPtr delvec() const { return _delvec; }

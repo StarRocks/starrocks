@@ -88,6 +88,25 @@ Status Table::Open(const Options& options, RandomAccessFile* file, uint64_t size
     return s;
 }
 
+Status Table::sample_keys(std::vector<std::string>* keys, size_t sample_interval_bytes) const {
+    // create index block iterator
+    Iterator* iiter = rep_->index_block->NewIterator(rep_->options.comparator);
+    iiter->SeekToFirst();
+    // skip interval_step keys per sample
+    size_t interval_step = sample_interval_bytes / rep_->options.block_size + 1;
+    size_t index = 0;
+    while (iiter->Valid()) {
+        if (index % interval_step == 0) {
+            keys->emplace_back(iiter->key().to_string());
+        }
+        index++;
+        iiter->Next();
+    }
+    auto st = iiter->status();
+    delete iiter;
+    return st;
+}
+
 void Table::ReadMeta(const Footer& footer) {
     if (rep_->options.filter_policy == nullptr) {
         return; // Do not need any metadata

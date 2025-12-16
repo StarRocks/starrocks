@@ -37,33 +37,36 @@
 namespace starrocks::lake {
 
 Status SegmentPKEncodeResult::_load() {
-    // reset pk_column to empty
-    auto clone_pk_column = pk_column->clone_empty();
-    pk_column = std::move(clone_pk_column);
-    ChunkUniquePtr chunk_shared_ptr;
-    TRY_CATCH_BAD_ALLOC(chunk_shared_ptr = ChunkHelper::new_chunk(_pkey_schema, 4096));
-    auto chunk = chunk_shared_ptr.get();
+    TRY_CATCH_BAD_ALLOC(pk_column_chunk = ChunkHelper::new_chunk(_pkey_schema, 4096));
+    auto chunk_container = pk_column_chunk->clone_empty();
     if (_iter != nullptr) {
         while (true) {
-            chunk->reset();
-            auto st = _iter->get_next(chunk);
+            chunk_container->reset();
+            auto st = Status::OK();
+            {
+                TRACE_COUNTER_SCOPE_LATENCY_US("segment_get_next_us");
+                st = _iter->get_next(chunk_container.get());
+            }
             if (st.is_end_of_file()) {
                 break;
             } else if (!st.ok()) {
                 return st;
             } else {
-                TRY_CATCH_BAD_ALLOC(
-                        PrimaryKeyEncoder::encode(_pkey_schema, *chunk, 0, chunk->num_rows(), pk_column.get()));
-                if (_lazy_load && pk_column->memory_usage() >= config::pk_column_lazy_load_threshold_bytes) {
+                TRY_CATCH_BAD_ALLOC(pk_column_chunk->append(*chunk_container));
+                if (_lazy_load && (pk_column_chunk->memory_usage() >= config::pk_column_lazy_load_threshold_bytes ||
+                                   pk_column_chunk->num_rows() >= config::pk_index_parallel_get_min_rows)) {
                     break;
                 }
             }
         }
     }
-    if (pk_column->empty()) {
+    if (!_lazy_load) {
+        ASSIGN_OR_RETURN(pk_column, encoded_pk_column(pk_column_chunk.get()));
+    }
+    if (pk_column_chunk->num_rows() == 0) {
         return Status::OK();
     }
-    _current_rows += pk_column->size();
+    _current_rows += pk_column_chunk->num_rows();
     _begin_rowid_offsets.push_back(_current_rows);
     return Status::OK();
 }
@@ -73,17 +76,15 @@ Status SegmentPKEncodeResult::init(const ChunkIteratorPtr& iter, const Schema& p
     _pkey_schema = pkey_schema;
     _lazy_load = lazy_load;
     _begin_rowid_offsets.push_back(0);
-    RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(_pkey_schema, &pk_column));
     _status = _load();
     if (_status.ok()) {
-        TRY_CATCH_BAD_ALLOC(pk_column->raw_data());
-        _memory_usage = pk_column->memory_usage();
+        _memory_usage = pk_column_chunk->memory_usage() + (pk_column ? pk_column->memory_usage() : 0);
     }
     return _status;
 }
 
 bool SegmentPKEncodeResult::done() {
-    return pk_column->empty() || !_status.ok();
+    return pk_column_chunk->is_empty() || !_status.ok();
 }
 
 Status SegmentPKEncodeResult::status() {
@@ -97,8 +98,16 @@ void SegmentPKEncodeResult::next() {
     }
 }
 
-std::pair<Column*, size_t> SegmentPKEncodeResult::current() {
-    return std::make_pair(pk_column.get(), _begin_rowid_offsets[_current_pk_column_idx]);
+std::pair<ChunkPtr, size_t> SegmentPKEncodeResult::current() {
+    return std::pair<ChunkPtr, size_t>(std::move(pk_column_chunk), _begin_rowid_offsets[_current_pk_column_idx]);
+}
+
+StatusOr<MutableColumnPtr> SegmentPKEncodeResult::encoded_pk_column(const Chunk* chunk) {
+    TRACE_COUNTER_SCOPE_LATENCY_US("pk_encode_us");
+    MutableColumnPtr pk_column;
+    RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(_pkey_schema, &pk_column));
+    TRY_CATCH_BAD_ALLOC(PrimaryKeyEncoder::encode(_pkey_schema, *chunk, 0, chunk->num_rows(), pk_column.get()));
+    return std::move(pk_column);
 }
 
 void SegmentPKEncodeResult::close() {
@@ -267,6 +276,7 @@ void RowsetUpdateState::plan_read_by_rssid(const std::vector<uint64_t>& rowids, 
 
 Status RowsetUpdateState::_do_load_upserts(uint32_t segment_id, const RowsetUpdateStateParams& params) {
     CHECK_MEM_LIMIT("RowsetUpdateState::_do_load_upserts");
+    TRACE_COUNTER_SCOPE_LATENCY_US("do_load_upserts_us");
     vector<uint32_t> pk_columns;
     for (size_t i = 0; i < params.tablet_schema->num_key_columns(); i++) {
         pk_columns.push_back((uint32_t)i);

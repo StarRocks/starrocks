@@ -82,6 +82,18 @@ bool CompactionPolicy::is_real_time_compaction_strategy(const std::shared_ptr<co
     return metadata->has_compaction_strategy() && metadata->compaction_strategy() == CompactionStrategyPB::REAL_TIME;
 }
 
+uint32_t sstable_score(const std::shared_ptr<const TabletMetadataPB>& metadata) {
+    std::unordered_set<UniqueId> fileset_set;
+    for (const auto& sst_meta : metadata->sstable_meta().sstables()) {
+        if (sst_meta.has_fileset_id()) {
+            fileset_set.insert(UniqueId(sst_meta.fileset_id()));
+        } else {
+            fileset_set.insert(UniqueId::gen_uid());
+        }
+    }
+    return static_cast<uint32_t>((double)fileset_set.size() * config::pk_index_compaction_score_ratio);
+}
+
 StatusOr<uint32_t> primary_compaction_score_by_policy(TabletManager* tablet_mgr,
                                                       const std::shared_ptr<const TabletMetadataPB>& metadata) {
     PrimaryCompactionPolicy policy(tablet_mgr, metadata, false /* force_base_compaction */);
@@ -101,7 +113,7 @@ StatusOr<uint32_t> primary_compaction_score_by_policy(TabletManager* tablet_mgr,
         segment_num_score += current_score;
     }
     // Calculate the number of SSTables and use it as a score
-    uint32_t sst_num_score = metadata->sstable_meta().sstables_size();
+    uint32_t sst_num_score = sstable_score(metadata);
     // Return the maximum score between the segment number score and the SST number score
     return std::max(segment_num_score, sst_num_score);
 }

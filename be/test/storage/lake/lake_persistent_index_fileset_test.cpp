@@ -569,7 +569,6 @@ TEST_F(LakePersistentIndexFilesetTest, test_index_reload_after_minor_compaction)
     config::l0_max_mem_usage = l0_max_mem_usage;
 }
 
-/*
 TEST_F(LakePersistentIndexFilesetTest, test_index_reload_after_major_compaction) {
     auto l0_max_mem_usage = config::l0_max_mem_usage;
     config::l0_max_mem_usage = 10;
@@ -655,7 +654,7 @@ TEST_F(LakePersistentIndexFilesetTest, test_index_reload_after_major_compaction)
     }
 
     config::l0_max_mem_usage = l0_max_mem_usage;
-}*/
+}
 
 TEST_F(LakePersistentIndexFilesetTest, test_index_multiple_reload_cycles) {
     auto l0_max_mem_usage = config::l0_max_mem_usage;

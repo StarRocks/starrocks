@@ -33,6 +33,7 @@ class Tablet;
 class Schema;
 class Column;
 class PrimaryKeyDump;
+class ParallelExecutionContext;
 
 class TabletLoader {
 public:
@@ -729,7 +730,7 @@ public:
     // |old_values|: return old values for updates, or set to NullValue for inserts
     // |stat|: used for collect statistic
     virtual Status upsert(size_t n, const Slice* keys, const IndexValue* values, IndexValue* old_values,
-                          IOStat* stat = nullptr);
+                          IOStat* stat = nullptr, ParallelExecutionContext* ctx = nullptr);
 
     // batch replace without return old values
     // |n|: size of key/value array

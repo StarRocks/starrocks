@@ -71,6 +71,11 @@ StatusOr<CompactionCandidateResult> LakePersistentIndexSizeTieredCompactionStrat
             filesets.push_back(std::move(info));
         } else {
             size_t index = it->second;
+            if (filesets[index].sstable_indices.back() != i - 1) {
+                // Should not happen, filesets should be continuous in sstable list
+                LOG(ERROR) << fmt::format("Inconsistent fileset_id in sstables: {}", sstable_meta.ShortDebugString());
+                return Status::InternalError("inconsistent fileset_id in sstables");
+            }
             filesets[index].sstable_indices.push_back(i);
             filesets[index].total_size += sstable_pb.filesize();
         }
@@ -183,6 +188,7 @@ StatusOr<CompactionCandidateResult> LakePersistentIndexSizeTieredCompactionStrat
         result.candidate_filesets.push_back(std::move(fileset_sstables));
     }
     result.merge_base_level = merge_base_level;
+    result.max_max_rss_rowid = max_max_rss_rowid;
 
     return result;
 }
