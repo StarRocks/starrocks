@@ -752,38 +752,77 @@ Status UpdateManager::publish_column_mode_partial_update(const TxnLogPB_OpWrite&
     return Status::OK();
 }
 
+// Update primary index with new rows and collect rows to be deleted.
+// This method supports both serial and parallel execution modes.
+//
+// Parallel Execution:
+// When enabled (config::enable_pk_index_parallel_get && is_cloud_native_index), this method
+// uses a thread pool to process segments concurrently, significantly improving performance
+// for large tablets during publish operations.
+//
+// Parameters:
+//   rowset_id:            Base RSSID (RowSet Segment ID) for this rowset
+//   upsert_idx:           Segment offset within the rowset
+//   upsert:               Iterator over segments with encoded primary keys
+//   index:                Primary index to update
+//   new_deletes:          Output map of segment_id -> row_ids to mark as deleted
+//   read_only:            If true, only query index (no updates); used when index files already exist
+//   is_cloud_native_index: Whether using cloud-native persistent index
+//
+// Execution Flow:
+//   1. Setup parallel execution context if enabled (allocate thread pool token)
+//   2. For each segment:
+//      - read_only mode: Call parallel_get() to find existing rows to delete
+//      - write mode: Call parallel_upsert() to update index and find deletes
+//   3. Wait for all parallel tasks to complete
+//   4. Flush memtable if in write mode (batch writes to sstable)
 Status UpdateManager::_do_update(uint32_t rowset_id, int32_t upsert_idx, const SegmentPKEncodeResultPtr& upsert,
                                  LakePrimaryIndex& index, DeletesMap* new_deletes, bool read_only,
                                  bool is_cloud_native_index) {
     TRACE_COUNTER_SCOPE_LATENCY_US("do_update_latency_us");
+
+    // Prepare parallel execution infrastructure if enabled
     std::unique_ptr<ThreadPoolToken> token;
-    std::mutex mutex;
+    std::mutex mutex;  // Protects shared state (deletes, status) during parallel execution
     Status status = Status::OK();
+
+    // Enable parallel execution for cloud-native index when configured
     if (config::enable_pk_index_parallel_get && is_cloud_native_index) {
         token = ExecEnv::GetInstance()->pk_index_get_thread_pool()->new_token(ThreadPool::ExecutionMode::CONCURRENT);
     }
+
+    // Setup context shared across all parallel tasks
     ParallelExecutionContext ctx{.token = token.get(),
                                  .mutex = &mutex,
                                  .deletes = new_deletes,
                                  .status = &status,
                                  .segment_pk_encode_result = upsert.get()};
+
+    // Process each segment (serially or in parallel depending on token)
     for (; !upsert->done(); upsert->next()) {
         if (read_only && is_cloud_native_index) {
-            // Already generae sstable files during data load or compaction, no need to upsert again
+            // Read-only path: Index sstable files already exist from data load/compaction.
+            // Only need to query index to find existing rows to delete.
             RETURN_IF_ERROR(index.parallel_get(&ctx));
         } else {
-            // rowset_id + upsert_idx is the rssid of this segment
+            // Write path: Update index with new rows and collect rows to delete.
+            // rowset_id + upsert_idx forms the unique RSSID for this segment.
             RETURN_IF_ERROR(index.parallel_upsert(rowset_id + upsert_idx, &ctx));
         }
     }
+
+    // Synchronize parallel execution if enabled
     if (token) {
         TRACE_COUNTER_SCOPE_LATENCY_US("parallel_execution_wait_us");
-        token->wait();
+        token->wait();  // Wait for all submitted tasks to complete
+
+        // Flush accumulated updates to sstable file (batch optimization)
         if (!read_only && is_cloud_native_index) {
             RETURN_IF_ERROR(index.flush_memtable());
         }
     }
-    RETURN_IF_ERROR(status);
+
+    RETURN_IF_ERROR(status);  // Check for errors from parallel tasks
     return upsert->status();
 }
 

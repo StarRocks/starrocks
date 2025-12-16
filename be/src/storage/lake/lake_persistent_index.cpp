@@ -216,6 +216,23 @@ Status LakePersistentIndex::sync_flush_all_memtables() {
     return Status::OK();
 }
 
+// Flush accumulated updates from memtable to sstable.
+// This is called after batch parallel_upsert operations to persist the in-memory changes.
+//
+// Execution Flow:
+// 1. Check if flush is needed (force=true or memtable is full based on memory threshold)
+// 2. Process any previously submitted async flush tasks (check status and merge sstables)
+// 3. Move current memtable to inactive list for async processing
+// 4. Submit memtable flush task to thread pool (or sync flush if too many pending)
+// 5. Create new empty memtable for subsequent writes
+//
+// Parameters:
+// - force: If true, flush regardless of memtable size (used after parallel upsert batch completes)
+//
+// Async Flush:
+// - Flushes are submitted to a dedicated thread pool for background processing
+// - Multiple memtables can be flushing concurrently (up to pk_index_memtable_max_count)
+// - If too many pending flushes, switches to synchronous flush to avoid unbounded memory growth
 Status LakePersistentIndex::flush_memtable(bool force) {
     if (force || is_memtable_full()) {
         TRACE_COUNTER_SCOPE_LATENCY_US("flush_memtable_us");
