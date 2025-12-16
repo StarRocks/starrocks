@@ -32,6 +32,7 @@
 #include "storage/row_store_encoder_factory.h"
 #include "storage/tablet_schema.h"
 #include "types/logical_type_infra.h"
+#include "util/stack_util.h"
 #include "util/starrocks_metrics.h"
 #include "util/time.h"
 
@@ -124,7 +125,9 @@ MemTable::MemTable(int64_t tablet_id, const Schema* schema, MemTableSink* sink, 
     _init_aggregator_if_needed();
 }
 
-MemTable::~MemTable() = default;
+MemTable::~MemTable() {
+    LOG(INFO) << "Memtable destruct, tablet_id: " << _tablet_id << ", stack: " << get_stack_trace();
+}
 
 size_t MemTable::memory_usage() const {
     size_t size = 0;
