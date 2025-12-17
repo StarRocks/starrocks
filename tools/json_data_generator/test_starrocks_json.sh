@@ -236,6 +236,7 @@ import_data() {
         -H "format: json" \
         -H "columns: json_data" \
         -H "jsonpaths: [\"$\"]" \
+        -H "ignore_json_size: true" \
         -T "$DATA_FILE" -XPUT \
         "$url" 2>&1)
     
