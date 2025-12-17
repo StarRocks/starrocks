@@ -121,8 +121,6 @@ public:
 
     std::shared_ptr<TabletsChannel> get_tablets_channel(const TabletsChannelKey& key);
 
-    void remove_tablets_channel(const TabletsChannelKey& key);
-
     MemTracker* mem_tracker() { return _mem_tracker.get(); }
 
     Span get_span() { return _span; }
@@ -134,6 +132,7 @@ public:
                                  PLoadReplicaStatusResult* response);
 
 private:
+    void _remove_tablets_channel(const TabletsChannelKey& key);
     void _add_chunk(Chunk* chunk, const MonotonicStopWatch* watch, const PTabletWriterAddChunkRequest& request,
                     PTabletWriterAddBatchResult* response);
     Status _build_chunk_meta(const ChunkPB& pb_chunk);
