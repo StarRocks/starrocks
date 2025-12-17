@@ -39,8 +39,13 @@ struct DecimalDecimalCast {
 
         // source type and target type has the same logical type and scale
         if (to_scale == from_scale && Type == ResultType) {
+<<<<<<< HEAD
             auto result = column->clone_shared();
             ColumnHelper::cast_to_raw<Type>(result)->set_precision(to_precision);
+=======
+            auto result = column->clone();
+            ColumnHelper::cast_to_raw<Type>(result.get())->set_precision(to_precision);
+>>>>>>> 7567aba6dd ([BugFix] decimal2decimal cast returns input column directly as result unexpectedly (#66773))
             return result;
         }
 
