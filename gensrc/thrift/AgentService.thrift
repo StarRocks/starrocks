@@ -443,9 +443,9 @@ struct TExternalClusterSnapshotRequest {
     5: optional Types.TPartitionId physical_partition_id
     6: optional Types.TVersion pre_version
     7: optional Types.TVersion new_version
-    8: optional Types.TTabletId dest_tablet // tablet id of the target storage volume
+    8: optional Types.TTabletId dest_tablet_id // tablet id of the target storage volume
     9: optional list<Types.TTabletId> src_tablets // tablets need to file synchronization
-    10: optional list<Types.TBackend> backends // candidate backends to do file sync
+    10: optional list<Types.TBackend> compute_nodes  // candidate cn to do file sync
  }
 
 enum TTabletMetaType {
