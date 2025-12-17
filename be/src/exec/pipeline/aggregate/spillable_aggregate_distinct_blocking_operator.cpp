@@ -33,7 +33,7 @@ Status SpillableAggregateDistinctBlockingSinkOperator::set_finishing(RuntimeStat
     if (_is_finished) return Status::OK();
     ONCE_DETECT(_set_finishing_once);
     auto defer_set_finishing = DeferOp([this]() {
-        _aggregator->spill_channel()->set_finishing_if_not_reuseable();
+        _aggregator->spill_channel()->set_finishing();
         _is_finished = true;
     });
 
@@ -188,6 +188,9 @@ Status SpillableAggregateDistinctBlockingSourceOperator::prepare(RuntimeState* s
 }
 
 bool SpillableAggregateDistinctBlockingSourceOperator::has_output() const {
+    if (_is_finished) {
+        return false;
+    }
     if (AggregateDistinctBlockingSourceOperator::has_output()) {
         return true;
     }

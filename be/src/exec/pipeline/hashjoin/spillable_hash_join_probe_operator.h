@@ -113,6 +113,8 @@ private:
     // some DCHECK for hash table/partition num_rows
     void _check_partitions();
 
+    void _reset_load_partitions();
+
 private:
     SpillableHashJoinProbeMetrics metrics;
 
