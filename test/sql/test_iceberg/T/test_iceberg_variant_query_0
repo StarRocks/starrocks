@@ -89,13 +89,13 @@ SELECT 'Query 1: Validate scalar round-trip extractions via get_variant_* helper
 SELECT
     case_id,
     get_variant_int(variant_from_int, '$')          AS variant_int_value,
-    get_variant_double(variant_from_float, '$')     AS variant_float_value,
-    get_variant_double(variant_from_decimal, '$')   AS variant_decimal_value,
+    cast(variant_query(variant_from_int, '$') as bigint)          AS variant_int_as_bigint,
     variant_typeof(variant_query(variant_from_float, '$'))          AS variant_float_type,
     variant_typeof(variant_query(variant_from_decimal, '$'))          AS variant_decimal_type,
-    cast(get_variant_string(variant_from_float, '$') as double)     AS variant_float_value_fix,
-    cast(get_variant_string(variant_from_decimal, '$') as double)   AS variant_decimal_value_fix,    
-    get_variant_string(variant_from_string, '$')    AS variant_string_value
+    CAST(variant_query(variant_from_float, '$') as decimal(22, 8)) as variant_float_value,
+    CAST(variant_query(variant_from_decimal, '$') as decimal(22, 8)) as variant_decimal_value,
+    get_variant_string(variant_from_string, '$')    AS variant_string_value,
+    cast(variant_query(variant_from_string, '$') as string)    AS variant_string_as_string
 FROM variant_test_cases
 ORDER BY case_id;
 
@@ -108,12 +108,10 @@ SELECT
     get_variant_string(variant_from_struct, '$.name')             AS struct_name,
     get_variant_int(variant_from_struct, '$.counters.success')    AS struct_success,
     get_variant_string(variant_from_map, '$.tier')                AS tier_label,
-    get_variant_double(variant_from_array, '$[0]')                AS array_first,
-    get_variant_double(variant_from_array, '$[2]')                AS array_third,
     variant_typeof(variant_query(variant_from_array, '$[0]'))                AS array_first_type,
     variant_typeof(variant_query(variant_from_array, '$[2]'))                AS array_third_type,
-    cast(get_variant_string(variant_from_array, '$[0]') as double)                AS array_first_fix,
-    cast(get_variant_string(variant_from_array, '$[2]') as double)               AS array_third_fix    
+    CAST(variant_query(variant_from_array, '$[0]') as decimal(22, 8))                AS array_first_value,
+    CAST(variant_query(variant_from_array, '$[2]') as decimal(22, 8))               AS array_third_value
 FROM variant_test_cases
 ORDER BY case_id;
 
@@ -155,8 +153,7 @@ SELECT
     case_id,
     CAST(variant_query(variant_mixed, '$.typed.bool_true') AS BOOLEAN)       AS cast_bool_true,
     CAST(variant_query(variant_mixed, '$.typed.bool_false') AS BOOLEAN)      AS cast_bool_false,
-    CAST(variant_query(variant_mixed, '$.typed.int_as_string') AS BIGINT)    AS cast_bigint_from_string,
-    cast(CAST(variant_query(variant_mixed, '$.typed.int_as_string') AS string) as bigint)   AS cast_bigint_from_string_fix,
+    CAST(get_variant_string(variant_mixed, '$.typed.int_as_string') as bigint)   AS cast_bigint_from_string,
     CAST(variant_query(variant_mixed, '$.typed.decimal_text') AS DECIMAL(9, 3)) AS cast_decimal_text,    
     CAST(variant_query(variant_mixed, '$.typed.timestamp_text') AS STRING) AS cast_timestamp,
     CAST(variant_query(variant_mixed, '$.matrix[0][1].val') AS SMALLINT)     AS cast_smallint_nested

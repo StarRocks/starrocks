@@ -449,6 +449,10 @@ inline static StatusOr<bool> cast_variant_to_decimal(DecimalCppType* dst_value, 
     bool overflow = false;
 
     switch (type) {
+    case VariantType::NULL_TYPE: {
+        overflow = true;
+        break;
+    }
     case VariantType::DECIMAL4: {
         ASSIGN_OR_RETURN(auto src_decimal, variant.get_decimal4());
         overflow = convert_variant_decimal<int32_t, DecimalCppType>(src_decimal.value, src_decimal.scale, dst_value,
