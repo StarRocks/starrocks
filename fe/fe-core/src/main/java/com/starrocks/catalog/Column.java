@@ -232,7 +232,18 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         this.isAllowNull = isAllowNull;
         if (defaultValueDef != null) {
             if (defaultValueDef.expr instanceof StringLiteral) {
-                this.defaultValue = ((StringLiteral) defaultValueDef.expr).getValue();
+                String value = ((StringLiteral) defaultValueDef.expr).getValue();
+                if (type != null && type.getPrimitiveType() == PrimitiveType.BOOLEAN) {
+                    if (value.equalsIgnoreCase("true")) {
+                        this.defaultValue = "1";
+                    } else if (value.equalsIgnoreCase("false")) {
+                        this.defaultValue = "0";
+                    } else {
+                        this.defaultValue = value;
+                    }
+                } else {
+                    this.defaultValue = value;
+                }
             } else if (defaultValueDef.expr instanceof NullLiteral) {
                 // for default value is null or default value is not set the defaultExpr = null
                 this.defaultExpr = null;
