@@ -74,27 +74,7 @@ class JSONDataGenerator:
                 "Please build it first by running: ./build.sh"
             )
     
-    def generate_record(self) -> Dict[str, Any]:
-        """Generate a single JSON record."""
-        cmd = [
-            self._cpp_executable,
-            '--num-records', '1',
-            '--num-fields', str(self.num_fields),
-            '--sparsity', str(self.sparsity),
-            '--max-depth', str(self.max_depth),
-            '--nest-probability', str(self.nest_probability),
-            '--field-types', ','.join(self.field_types),
-            '--high-cardinality-fields', str(self.high_cardinality_fields),
-            '--low-cardinality-fields', str(self.low_cardinality_fields),
-        ]
-        if self.seed is not None:
-            cmd.extend(['--seed', str(self.seed)])
-        
-        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
-        json_str = result.stdout.strip()
-        return json.loads(json_str)
-    
-    def generate(self, num_records: int, output_file: Optional[str] = None, pretty: bool = False):
+    def generate(self, num_records: int, output_file: Optional[str] = None):
         """Generate JSONL records and write to file or stdout."""
         cmd = [
             self._cpp_executable,
@@ -109,8 +89,6 @@ class JSONDataGenerator:
         ]
         if self.seed is not None:
             cmd.extend(['--seed', str(self.seed)])
-        if pretty:
-            cmd.append('--pretty')
         
         if output_file:
             with open(output_file, 'w') as f:
@@ -120,9 +98,33 @@ class JSONDataGenerator:
     
     def generate_sample_records(self, num_samples: int = 100) -> List[Dict[str, Any]]:
         """Generate sample records for query generation analysis."""
-        samples = []
-        for _ in range(num_samples):
-            samples.append(self.generate_record())
+        if num_samples <= 0:
+            return []
+
+        cmd = [
+            self._cpp_executable,
+            '--num-records', str(num_samples),
+            '--num-fields', str(self.num_fields),
+            '--sparsity', str(self.sparsity),
+            '--max-depth', str(self.max_depth),
+            '--nest-probability', str(self.nest_probability),
+            '--field-types', ','.join(self.field_types),
+            '--high-cardinality-fields', str(self.high_cardinality_fields),
+            '--low-cardinality-fields', str(self.low_cardinality_fields),
+        ]
+        if self.seed is not None:
+            cmd.extend(['--seed', str(self.seed)])
+
+        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+
+        samples: List[Dict[str, Any]] = []
+        for line in result.stdout.splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            # The C++ generator outputs JSONL (one JSON object per line)
+            samples.append(json.loads(line))
+
         return samples
     
     @property
@@ -385,8 +387,6 @@ Examples:
                        help='Random seed for reproducible data generation (default: None)')
     parser.add_argument('--output', type=str, default=None,
                        help='Output file path (default: stdout)')
-    parser.add_argument('--pretty', action='store_true',
-                       help='Pretty-print JSON (default: False)')
     parser.add_argument('--gen-query-type', type=str,
                        help='Generate queries of specified type(s). Can be a single type or comma-separated list: filter,aggregation,select')
     parser.add_argument('--gen-query-num', type=int, default=10,
@@ -437,7 +437,7 @@ Examples:
     )
     
     # Generate data
-    generator.generate(args.num_records, args.output, args.pretty)
+    generator.generate(args.num_records, args.output)
     
     # Generate queries if requested
     if args.gen_query_type:

@@ -329,7 +329,6 @@ int main(int argc, char* argv[]) {
     int high_cardinality_fields = 0;
     int low_cardinality_fields = 0;
     int64_t seed = -1;
-    bool pretty = false;
 
     // Parse command line arguments
     for (int i = 1; i < argc; i++) {
@@ -351,8 +350,6 @@ int main(int argc, char* argv[]) {
             low_cardinality_fields = std::stoi(argv[++i]);
         } else if (strcmp(argv[i], "--seed") == 0 && i + 1 < argc) {
             seed = std::stoll(argv[++i]);
-        } else if (strcmp(argv[i], "--pretty") == 0) {
-            pretty = true;
         }
     }
 
@@ -362,15 +359,7 @@ int main(int argc, char* argv[]) {
 
     // Generate records
     for (int i = 0; i < num_records; ++i) {
-        std::string json_str = generator.generate_record();
-
-        if (pretty) {
-            // Simple pretty printing (basic indentation)
-            // For full pretty printing, we'd need a JSON parser, but this is simpler
-            std::cout << json_str << std::endl;
-        } else {
-            std::cout << json_str << std::endl;
-        }
+        std::cout << generator.generate_record() << "\n";
     }
 
     return 0;
