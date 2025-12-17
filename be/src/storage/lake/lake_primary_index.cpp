@@ -402,7 +402,7 @@ Status LakePrimaryIndex::parallel_get(ParallelPublishContext* context) {
         // Collect rows to delete: extract segment ID and row ID from old_values
         // Format: old_value = (segment_id << 32) | row_id
         if (context->status->ok()) {
-            for (unsigned long old : context->slots.back()->old_values) {
+            for (unsigned long old : slot.old_values) {
                 if (old != NullIndexValue) {
                     (*context->deletes)[(uint32_t)(old >> 32)].push_back((uint32_t)(old & ROWID_MASK));
                 }

@@ -247,15 +247,17 @@ Status LakePersistentIndex::flush_memtable(bool force) {
         if (finish_point >= 0) {
             _inactive_memtables.erase(_inactive_memtables.begin(), _inactive_memtables.begin() + finish_point + 1);
         }
-        // 3. move current memtable to inactive memtables
-        _inactive_memtables.push_back(_memtable);
-        // 4. flush current memtable
-        if (_inactive_memtables.size() >= config::pk_index_memtable_max_count) {
+        // 3. flush current memtable
+        if (_inactive_memtables.size() + 1 >= config::pk_index_memtable_max_count) {
             // If too many memtables, switch to sync flush.
             RETURN_IF_ERROR(_memtable->minor_compact());
+            auto sstable = _memtable->release_sstable();
+            RETURN_IF_ERROR(merge_sstable_into_fileset(sstable));
         } else {
             // submit this memtable to flush thread pool
             RETURN_IF_ERROR(ExecEnv::GetInstance()->pk_index_memtable_flush_thread_pool()->submit(_memtable));
+            // move current memtable to inactive memtables
+            _inactive_memtables.push_back(_memtable);
         }
         auto max_rss_rowid = _memtable->max_rss_rowid();
         _memtable = std::make_shared<PersistentIndexMemtable>(_tablet_mgr, _tablet_id, max_rss_rowid);
@@ -487,10 +489,11 @@ Status LakePersistentIndex::prepare_merging_iterator(
     }
     for (const auto& sstable_pb : sstables_to_merge) {
         // build sstable from meta, instead of reuse `_sstables`, to keep it thread safe
-        ASSIGN_OR_RETURN(auto merging_sstable,
+        ASSIGN_OR_RETURN(auto sstable,
                          PersistentIndexSstable::new_sstable(
                                  sstable_pb, tablet_mgr->sst_location(metadata->id(), sstable_pb.filename()), nullptr,
                                  false /* need filter */, nullptr, metadata, tablet_mgr));
+        PersistentIndexSstablePtr merging_sstable = std::move(sstable);
         merging_sstables->push_back(merging_sstable);
         // Pass `max_rss_rowid` to iterator, will be used when compaction.
         read_options.max_rss_rowid = sstable_pb.max_rss_rowid();
@@ -673,7 +676,7 @@ Status LakePersistentIndex::apply_opcompaction(const TxnLogPB_OpCompaction& op_c
                              PersistentIndexSstable::new_sstable(
                                      sstable_pb, _tablet_mgr->sst_location(_tablet_id, sstable_pb.filename()),
                                      block_cache->cache()));
-            new_sstables.push_back(std::move(*sstable));
+            new_sstables.push_back(std::move(sstable));
         }
         new_sstable_fileset = std::make_unique<PersistentIndexSstableFileset>();
         RETURN_IF_ERROR(new_sstable_fileset->init(new_sstables));
@@ -980,6 +983,9 @@ size_t LakePersistentIndex::memory_usage() const {
     size_t mem_usage = 0;
     if (_memtable != nullptr) {
         mem_usage += _memtable->memory_usage();
+    }
+    for (const auto& inactive_memtable : _inactive_memtables) {
+        mem_usage += inactive_memtable->memory_usage();
     }
     for (const auto& fileset_ptr : _sstable_filesets) {
         if (fileset_ptr != nullptr) {

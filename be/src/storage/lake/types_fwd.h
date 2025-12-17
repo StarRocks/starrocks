@@ -55,6 +55,7 @@ using KeyIndex = size_t;
 using KeyIndexSet = std::set<KeyIndex>;
 
 using PersistentIndexSstableUniquePtr = std::unique_ptr<PersistentIndexSstable>;
+using PersistentIndexSstablePtr = std::shared_ptr<PersistentIndexSstable>;
 
 } // namespace lake
 

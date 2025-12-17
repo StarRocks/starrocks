@@ -1888,7 +1888,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_individual_index_compaction) {
     ASSIGN_OR_ABORT(new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
     EXPECT_EQ(new_tablet_metadata->rowsets_size(), 52);
     EXPECT_EQ(new_tablet_metadata->rowsets(0).num_dels(), 0);
-    EXPECT_TRUE(new_tablet_metadata->sstable_meta().sstables_size() == 51);
+    EXPECT_EQ(new_tablet_metadata->sstable_meta().sstables_size(), 51);
     EXPECT_TRUE(compaction_score(_tablet_mgr.get(), new_tablet_metadata) > 10);
     // 3. compaction without sst
     {
@@ -1910,8 +1910,8 @@ TEST_P(LakePrimaryKeyPublishTest, test_individual_index_compaction) {
     EXPECT_EQ(new_tablet_metadata->rowsets_size(), 1);
     EXPECT_EQ(new_tablet_metadata->rowsets(0).num_dels(), 0);
     size_t sst_cnt = new_tablet_metadata->sstable_meta().sstables_size();
-    EXPECT_TRUE(sst_cnt == 51);
-    EXPECT_TRUE(compaction_score(_tablet_mgr.get(), new_tablet_metadata) == 76);
+    EXPECT_EQ(sst_cnt, 51);
+    EXPECT_EQ(compaction_score(_tablet_mgr.get(), new_tablet_metadata), 76.5);
     // 4. compaction with sst
     {
         int64_t txn_id = next_id();
@@ -1924,7 +1924,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_individual_index_compaction) {
     }
     ASSERT_EQ(kChunkSize, read_rows(tablet_id, version));
     ASSIGN_OR_ABORT(new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
-    EXPECT_TRUE(compaction_score(_tablet_mgr.get(), new_tablet_metadata) == 1);
+    EXPECT_EQ(compaction_score(_tablet_mgr.get(), new_tablet_metadata), 1.5);
     EXPECT_EQ(new_tablet_metadata->rowsets_size(), 1);
     EXPECT_EQ(new_tablet_metadata->rowsets(0).num_dels(), 0);
     EXPECT_TRUE(new_tablet_metadata->sstable_meta().sstables_size() == 1);
@@ -2108,9 +2108,11 @@ TEST_P(LakePrimaryKeyPublishTest, test_parallel_upsert_with_async_flush) {
     bool old_enable_pk_index_parallel_get = config::enable_pk_index_parallel_get;
     int64_t old_pk_index_parallel_get_min_rows = config::pk_index_parallel_get_min_rows;
     int64_t old_l0_max_mem_usage = config::l0_max_mem_usage;
+    int64_t old_pk_index_memtable_max_count = config::pk_index_memtable_max_count;
     config::l0_max_mem_usage = 10;
     config::enable_pk_index_parallel_get = true;
     config::pk_index_parallel_get_min_rows = 4096;
+    config::pk_index_memtable_max_count = 3;
     const int64_t chunk_size = 3 * 4096;
     auto [chunk0, indexes] = gen_data_and_index(chunk_size, 0, true, true);
     auto version = 1;
@@ -2142,6 +2144,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_parallel_upsert_with_async_flush) {
     config::enable_pk_index_parallel_get = old_enable_pk_index_parallel_get;
     config::pk_index_parallel_get_min_rows = old_pk_index_parallel_get_min_rows;
     config::l0_max_mem_usage = old_l0_max_mem_usage;
+    config::pk_index_memtable_max_count = old_pk_index_memtable_max_count;
 }
 
 INSTANTIATE_TEST_SUITE_P(LakePrimaryKeyPublishTest, LakePrimaryKeyPublishTest,
