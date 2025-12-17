@@ -51,7 +51,7 @@ The C++ executable will be automatically detected and used when available. If th
 ## Example
 
 ```bash
-python json_data_generator.py \
+./json_generator \
   --num-records 1000 \
   --num-fields 50 \
   --sparsity 0.3 \
@@ -72,7 +72,7 @@ Generate SQL queries for testing JSON data:
 
 ```bash
 # Generate filter queries (with WHERE conditions based on actual data values)
-python json_data_generator.py \
+./json_generator \
   --num-records 1000 \
   --num-fields 20 \
   --high-cardinality-fields 5 \
@@ -82,14 +82,14 @@ python json_data_generator.py \
   --gen-query-output queries_filter.sql
 
 # Generate aggregation queries (GROUP BY, COUNT, AVG, etc.)
-python json_data_generator.py \
+./json_generator \
   --num-records 1000 \
   --gen-query-type aggregation \
   --gen-query-num 10 \
   --gen-query-output queries_agg.sql
 
 # Generate select queries (field projections)
-python json_data_generator.py \
+./json_generator \
   --num-records 1000 \
   --gen-query-type select \
   --gen-query-num 15 \

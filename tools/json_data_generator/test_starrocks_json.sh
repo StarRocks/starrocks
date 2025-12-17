@@ -52,7 +52,7 @@ NUM_SEGMENTS=${NUM_SEGMENTS:-1}
 # Script directory
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DATA_FILE="${SCRIPT_DIR}/test_data.jsonl"
-GENERATOR_SCRIPT="${SCRIPT_DIR}/json_data_generator.py"
+GENERATOR_BIN="${SCRIPT_DIR}/json_generator"
 QUERY_FILE="${SCRIPT_DIR}/generated_queries.sql"
 
 # Colors for output
@@ -87,16 +87,10 @@ check_dependencies() {
         print_error "curl is not installed. Please install curl."
         exit 1
     fi
-    
-    if ! command -v python &> /dev/null && ! command -v python3 &> /dev/null; then
-        print_error "Python is not installed. Please install Python."
-        exit 1
-    fi
-    
-    PYTHON_CMD=$(command -v python3 || command -v python)
-    
-    if [ ! -f "$GENERATOR_SCRIPT" ]; then
-        print_error "JSON generator script not found: $GENERATOR_SCRIPT"
+
+    if [ ! -x "$GENERATOR_BIN" ]; then
+        print_error "JSON generator binary not found or not executable: $GENERATOR_BIN"
+        print_error "Please build it first by running: (cd $SCRIPT_DIR && ./build.sh)"
         exit 1
     fi
     
@@ -165,7 +159,7 @@ generate_data() {
         
         # Generate data and all query types together in a single call
         # Suppress stdout to avoid printing all generated data, but keep stderr for errors
-        if ! $PYTHON_CMD "$GENERATOR_SCRIPT" \
+        if ! "$GENERATOR_BIN" \
             --num-records "$NUM_RECORDS" \
             --num-fields "$NUM_FIELDS" \
             --sparsity "$SPARSITY" \
@@ -197,7 +191,7 @@ generate_data() {
         print_info "Parameters: records=${NUM_RECORDS}, fields=${NUM_FIELDS}, sparsity=${SPARSITY}"
         
         # Generate data only (no queries)
-        if ! $PYTHON_CMD "$GENERATOR_SCRIPT" \
+        if ! "$GENERATOR_BIN" \
             --num-records "$NUM_RECORDS" \
             --num-fields "$NUM_FIELDS" \
             --sparsity "$SPARSITY" \
