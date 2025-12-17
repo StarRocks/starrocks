@@ -498,6 +498,7 @@
                         "administration/management/timezone",
                         "administration/management/monitor_manage_big_queries",
                         "administration/management/compaction",
+                        "administration/management/graceful_exit",
                         {
                             "type": "category",
                             "label": "Resource management",
