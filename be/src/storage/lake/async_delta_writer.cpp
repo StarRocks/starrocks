@@ -188,7 +188,11 @@ inline int AsyncDeltaWriterImpl::execute(void* meta, bthread::TaskIterator<Async
         case kWriteTask: {
             auto write_task = std::static_pointer_cast<WriteTask>(task_ptr);
             if (st.ok()) {
-                st.update(delta_writer->write(*(write_task->chunk), write_task->indexes, write_task->indexes_size));
+                if (delta_writer->already_finished()) {
+                    st = Status::InternalError("DeltaWriter has already finished");
+                } else {
+                    st.update(delta_writer->write(*(write_task->chunk), write_task->indexes, write_task->indexes_size));
+                }
                 LOG_IF(ERROR, !st.ok()) << "Fail to write. tablet_id: " << delta_writer->tablet_id()
                                         << " txn_id: " << delta_writer->txn_id() << ": " << st;
             }
@@ -198,7 +202,13 @@ inline int AsyncDeltaWriterImpl::execute(void* meta, bthread::TaskIterator<Async
         case kFlushTask: {
             auto flush_task = std::static_pointer_cast<FlushTask>(task_ptr);
             if (st.ok()) {
-                st.update(delta_writer->manual_flush());
+                if (delta_writer->already_finished()) {
+                    st = Status::InternalError("DeltaWriter has already finished");
+                } else {
+                    st.update(delta_writer->manual_flush());
+                }
+                LOG_IF(ERROR, !st.ok()) << "Fail to flush. tablet_id: " << delta_writer->tablet_id()
+                                        << " txn_id: " << delta_writer->txn_id() << ": " << st;
             }
             flush_task->cb(st);
             break;
@@ -223,6 +233,7 @@ inline int AsyncDeltaWriterImpl::execute(void* meta, bthread::TaskIterator<Async
                                         << " txn_id: " << delta_writer->txn_id() << ": " << st;
                 finish_task->cb(std::move(res));
             }
+            delta_writer->set_already_finished(true);
             break;
         }
         }

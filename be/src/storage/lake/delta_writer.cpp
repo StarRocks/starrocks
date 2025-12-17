@@ -170,6 +170,10 @@ public:
 
     const GlobalDictByNameMaps* global_dicts() const { return _global_dicts; }
 
+    void set_already_finished(bool val) { _already_finished = val; }
+
+    bool already_finished() const { return _already_finished; }
+
 private:
     Status reset_memtable();
 
@@ -201,6 +205,7 @@ private:
 
     std::unique_ptr<TabletWriter> _tablet_writer;
     std::unique_ptr<MemTable> _mem_table;
+    std::atomic<bool> _is_mem_table_null{true};
     std::unique_ptr<MemTableSink> _mem_table_sink;
     std::unique_ptr<FlushToken> _flush_token;
 
@@ -255,6 +260,8 @@ private:
 
     GlobalDictByNameMaps* _global_dicts = nullptr;
     bool _is_multi_statements_txn = false;
+
+    bool _already_finished = false;
 };
 
 bool DeltaWriterImpl::is_immutable() const {
@@ -359,13 +366,14 @@ inline Status DeltaWriterImpl::reset_memtable() {
         _mem_table = std::make_unique<MemTable>(_tablet_id, &_write_schema_for_mem_table, _mem_table_sink.get(),
                                                 _max_buffer_size, _mem_tracker);
     }
+    _is_mem_table_null.store(false, std::memory_order_release);
     _mem_table->set_write_buffer_row(_max_buffer_rows);
     return Status::OK();
 }
 
 inline Status DeltaWriterImpl::flush_async() {
     Status st;
-    if (_mem_table != nullptr) {
+    if (!_is_mem_table_null.load(std::memory_order_acquire) && _mem_table != nullptr) {
         RETURN_IF_ERROR(_mem_table->finalize());
         if (_miss_auto_increment_column && _mem_table->get_result_chunk() != nullptr) {
             RETURN_IF_ERROR(fill_auto_increment_id(*_mem_table->get_result_chunk()));
@@ -390,6 +398,7 @@ inline Status DeltaWriterImpl::flush_async() {
                     }
                 });
         _mem_table.reset(nullptr);
+        _is_mem_table_null.store(true, std::memory_order_release);
         _last_write_ts = 0;
     }
     return st;
@@ -817,6 +826,7 @@ void DeltaWriterImpl::close() {
     }
     _tablet_writer.reset();
     _mem_table.reset();
+    _is_mem_table_null.store(true, std::memory_order_release);
     _mem_table_sink.reset();
     _flush_token.reset();
     _tablet_schema.reset();
