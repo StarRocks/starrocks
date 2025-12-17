@@ -320,8 +320,9 @@ public:
             if constexpr (field_type == TYPE_VARCHAR || field_type == TYPE_CHAR) {
                 size_t offset = 0;
                 UnorderedMemoryIndexType ngram_index;
+                std::vector<size_t> index_buffer; // use for ngram index calculation
                 for (const auto& dict : sorted_dicts) {
-                    RETURN_IF_ERROR(_build_ngram(ngram_index, &dict, offset++));
+                    RETURN_IF_ERROR(_build_ngram(ngram_index, &dict, offset++, index_buffer));
                 }
 
                 for (auto& it : ngram_index) {
@@ -362,13 +363,17 @@ public:
     inline void incre_rowid() override { _rid++; }
 
 private:
-    Status _build_ngram(UnorderedMemoryIndexType& ngram_index, const Slice* cur_slice, const size_t offset) {
+    Status _build_ngram(UnorderedMemoryIndexType& ngram_index, const Slice* cur_slice, const size_t offset,
+                        std::vector<size_t>& index) {
         if (_gram_num <= 0) {
             return Status::InvalidArgument(
                     "Invalid gram num while building ngram index for inverted index dictionary.");
         }
 
-        std::vector<size_t> index;
+        index.clear();
+        if (index.capacity() < cur_slice->get_size()) {
+            index.reserve(cur_slice->get_size());
+        }
         const size_t slice_gram_num = get_utf8_index(*cur_slice, &index);
 
         for (size_t j = 0; j + _gram_num <= slice_gram_num; ++j) {
@@ -377,14 +382,13 @@ private:
                     j + _gram_num < slice_gram_num ? index[j + _gram_num] - index[j] : cur_slice->get_size() - index[j];
             Slice cur_ngram(cur_slice->data + index[j], cur_ngram_length);
 
-            // add this ngram into set
-            auto it = ngram_index.find(cur_ngram);
-            if (it == ngram_index.end()) {
-                CppType new_value;
-                _typeinfo->deep_copy(&new_value, &cur_ngram, &_pool);
-                ngram_index.emplace(new_value, offset);
-            } else {
-                it->second.add(offset, &_pool);
+            // Use Slice pointing into dictionary memory as key; dictionary values are already deep-copied
+            // into `_pool` when building `_mem_index`, so this Slice remains valid for the lifetime of
+            // the bitmap index writer. This avoids an extra deep copy per distinct ngram.
+            auto [it, inserted] =
+                    ngram_index.try_emplace(cur_ngram, static_cast<uint32_t>(offset));
+            if (!inserted) {
+                it->second.add(static_cast<uint32_t>(offset));
             }
         }
         return Status::OK();
@@ -408,6 +412,7 @@ private:
     Status _write_bitmap(UnorderedMemoryIndexType& ordered_mem_index, const std::vector<CppType>& sorted_dicts,
                          WritableFile* wfile, IndexedColumnMetaPB* meta) {
         std::vector<BitmapUpdateContextRefOrSingleValue*> bitmaps;
+        bitmaps.reserve(sorted_dicts.size());
         for (const auto& dict : sorted_dicts) {
             auto it = ordered_mem_index.find(dict);
             if (it == ordered_mem_index.end()) {
@@ -419,6 +424,7 @@ private:
 
         uint32_t max_bitmap_size = 0;
         std::vector<uint32_t> bitmap_sizes;
+        bitmap_sizes.reserve(bitmaps.size());
         for (auto& bitmap : bitmaps) {
             uint32_t bitmap_size = 0;
             if (bitmap->is_context()) {
