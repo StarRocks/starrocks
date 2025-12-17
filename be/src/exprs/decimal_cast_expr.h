@@ -449,10 +449,6 @@ inline static StatusOr<bool> cast_variant_to_decimal(DecimalCppType* dst_value, 
     bool overflow = false;
 
     switch (type) {
-    case VariantType::NULL_TYPE: {
-        overflow = true;
-        break;
-    }
     case VariantType::DECIMAL4: {
         ASSIGN_OR_RETURN(auto src_decimal, variant.get_decimal4());
         overflow = convert_variant_decimal<int32_t, DecimalCppType>(src_decimal.value, src_decimal.scale, dst_value,
@@ -560,6 +556,15 @@ struct DecimalNonDecimalCast<overflow_mode, DecimalType, VariantType, DecimalLTG
         for (auto i = 0; i < num_rows; ++i) {
             const VariantValue* variant_value = variant_column->get_object(i);
             Variant variant(variant_value->get_metadata(), variant_value->get_value());
+
+            if constexpr (check_overflow<overflow_mode>) {
+                if (variant.type() == VariantType::NULL_TYPE) {
+                    has_null = true;
+                    nulls[i] = DATUM_NULL;
+                    continue;
+                }
+            }
+
             auto overflow = cast_variant_to_decimal<DecimalCppType>(&result_data[i], variant, precision, scale);
             if (!overflow.ok()) {
                 throw std::runtime_error(overflow.status().to_string());
