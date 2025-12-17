@@ -168,12 +168,12 @@ public class TableSchemaServiceTest extends StarRocksTestBase {
 
     private static Stream<Arguments> parameterValidationTestCases() {
         return Stream.of(
-                Arguments.of("MissingSchemaMeta",
+                Arguments.of("MissingSchemaKey",
                         (Consumer<TGetTableSchemaRequest>) request -> {
                             request.setSource(TTableSchemaRequestSource.SCAN);
                             request.setQuery_id(new TUniqueId(1, 1));
                         },
-                        "schema meta not set"),
+                        "schema key not set"),
                 Arguments.of("MissingRequestSource",
                         (Consumer<TGetTableSchemaRequest>) request -> {
                             request.setSchema_key(createSchemaKey(1L, 1L, 1L));
