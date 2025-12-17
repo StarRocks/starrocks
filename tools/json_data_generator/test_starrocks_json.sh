@@ -262,7 +262,7 @@ import_data() {
 
 # Step 4: Run generated queries
 run_queries() {
-    print_info "Step 5: Running generated queries..."
+    print_info "Step 4: Running generated queries..."
     
     local password_arg=""
     if [ -n "$SR_PASSWORD" ]; then
@@ -403,7 +403,7 @@ if [ "$1" == "--help" ] || [ "$1" == "-h" ]; then
     echo "  SR_DATABASE      Database name (default: json_test_db)"
     echo "  SR_TABLE         Table name (default: json_test_table)"
     echo "  NUM_RECORDS       Number of records to generate (default: 10000)"
-    echo "  NUM_FIELDS        Number of fields per record (default: 20)"
+    echo "  NUM_FIELDS        Number of fields per record (default: 30)"
     echo "  SPARSITY          Sparsity ratio 0.0-1.0 (default: 0.2)"
     echo "  MAX_DEPTH         Max nesting depth (default: 3)"
     echo "  NEST_PROBABILITY   Nesting probability 0.0-1.0 (default: 0.3)"
