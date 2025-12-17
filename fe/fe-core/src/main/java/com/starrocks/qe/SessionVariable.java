@@ -45,6 +45,7 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.ToNumberPolicy;
 import com.starrocks.catalog.InternalCatalog;
+import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
@@ -2323,12 +2324,17 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     }
 
     public void setExecMode(String execMode) {
+        final SessionVariable sv = DEFAULT_SESSION_VARIABLE;
         if (execMode.equalsIgnoreCase(SessionVariableConstants.ETL)) {
+            setEnableWaitDependentEvent(true);
             setEnablePhasedScheduler(true);
             setEnableSpill(true);
+            setEnableQueryQueue(Config.enable_query_queue_v2);
         } else {
-            setEnablePhasedScheduler(false);
-            setEnableSpill(false);
+            setEnableWaitDependentEvent(sv.enablePhasedScheduler);
+            setEnablePhasedScheduler(sv.enablePhasedScheduler);
+            setEnableSpill(sv.enableSpill);
+            setEnableQueryQueue(sv.enableQueryQueue);
         }
         this.execMode = execMode;
     }
@@ -2347,6 +2353,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableParallelMerge(boolean enableParallelMerge) {
         this.enableParallelMerge = enableParallelMerge;
+    }
+
+    public void setEnableQueryQueue(boolean enableQueryQueue) {
+        this.enableQueryQueue = enableQueryQueue;
     }
 
     public boolean isEnableQueryQueue() {
@@ -3078,6 +3088,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setPhasedSchedulerMaxConcurrency(int phasedSchedulerMaxConcurrency) {
         this.phasedSchedulerMaxConcurrency = phasedSchedulerMaxConcurrency;
+    }
+
+    public boolean enableWaitDependentEvent() {
+        return enableWaitDependentEvent;
+    }
+
+    public void setEnableWaitDependentEvent(boolean enableWaitDependentEvent) {
+        this.enableWaitDependentEvent = enableWaitDependentEvent;
     }
 
     public boolean enablePhasedScheduler() {
