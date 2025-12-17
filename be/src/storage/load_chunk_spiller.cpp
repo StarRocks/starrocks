@@ -262,7 +262,6 @@ Status LoadChunkSpiller::merge_write(size_t target_size, size_t memory_usage_per
     size_t total_chunk = 0;
 
     std::vector<ChunkIteratorPtr> merge_inputs;
-    size_t current_input_bytes = 0;
     auto merge_func = [&](const ChunkIteratorPtr& merge_itr) {
         total_merges++;
         auto chunk_shared_ptr = ChunkHelper::new_chunk(*_schema, config::vector_chunk_size);
