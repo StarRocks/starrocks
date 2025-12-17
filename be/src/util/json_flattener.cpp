@@ -312,16 +312,11 @@ JsonFlatPath* JsonFlatPath::normalize_from_path(const std::string_view& path, Js
         return root;
     }
     auto [key, next] = split_path(path);
-    auto iter = root->children.find(key);
-    JsonFlatPath* child_path = nullptr;
-
-    if (iter == root->children.end()) {
-        root->children.emplace(key, std::make_unique<JsonFlatPath>());
-        child_path = root->children[key].get();
-    } else {
-        child_path = iter->second.get();
+    auto [iter, inserted] = root->children.try_emplace(key);
+    if (inserted) {
+        iter->second = std::make_unique<JsonFlatPath>();
     }
-    return normalize_from_path(next, child_path);
+    return normalize_from_path(next, iter->second.get());
 }
 
 /*
@@ -437,17 +432,12 @@ JsonFlatPath* JsonPathDeriver::_normalize_exists_path(const std::string_view& pa
     _derived_maps[root].type = flat_json::JSON_BASE_TYPE_BITS;
 
     auto [key, next] = JsonFlatPath::split_path(path);
-    auto iter = root->children.find(key);
-    JsonFlatPath* child_path = nullptr;
-
-    if (iter == root->children.end()) {
-        root->children.emplace(key, std::make_unique<JsonFlatPath>());
-        child_path = root->children[key].get();
-    } else {
-        child_path = iter->second.get();
+    auto [iter, inserted] = root->children.try_emplace(key);
+    if (inserted) {
+        iter->second = std::make_unique<JsonFlatPath>();
     }
 
-    return _normalize_exists_path(next, child_path, hits);
+    return _normalize_exists_path(next, iter->second.get(), hits);
 }
 
 void JsonPathDeriver::derived(const std::vector<const ColumnReader*>& json_readers) {
@@ -603,10 +593,11 @@ void JsonPathDeriver::_visit_json_paths(const vpack::Slice& value, JsonFlatPath*
         auto v = current.value;
         auto k = current.key.stringView();
 
-        if (!root->children.contains(k)) {
-            root->children.emplace(k, std::make_unique<JsonFlatPath>());
+        auto [iter, inserted] = root->children.try_emplace(k);
+        if (inserted) {
+            iter->second = std::make_unique<JsonFlatPath>();
         }
-        auto child = root->children[k].get();
+        auto child = iter->second.get();
         auto desc = &_derived_maps[child];
         desc->hits++;
         desc->multi_times += (desc->last_row == mark_row);
@@ -1014,17 +1005,12 @@ void JsonMerger::_add_level_paths_impl(const std::string_view& path, JsonFlatPat
         return;
     }
 
-    auto iter = root->children.find(key);
-    JsonFlatPath* child_path = nullptr;
-
-    if (iter == root->children.end()) {
-        root->children.emplace(key, std::make_unique<JsonFlatPath>());
-        child_path = root->children[key].get();
-        child_path->op = JsonFlatPath::OP_NEW_LEVEL;
-    } else {
-        child_path = iter->second.get();
+    auto [iter, inserted] = root->children.try_emplace(key);
+    if (inserted) {
+        iter->second = std::make_unique<JsonFlatPath>();
+        iter->second->op = JsonFlatPath::OP_NEW_LEVEL;
     }
-    _add_level_paths_impl(next, child_path);
+    _add_level_paths_impl(next, iter->second.get());
 }
 
 void JsonMerger::add_level_paths(const std::vector<std::string>& level_paths) {
