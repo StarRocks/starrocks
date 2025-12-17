@@ -257,7 +257,9 @@ public class ColumnDefAnalyzer {
                     break;
                 case HLL:
                 case BITMAP:
-                    // HLL and BITMAP only support empty string "" as default value (creates empty object)
+                case VARBINARY:
+                    // HLL, BITMAP and VARBINARY only support empty string "" as default value
+                    // Empty string creates: empty HLL object, empty BITMAP object, or 0-byte binary data
                     if (!defaultValue.isEmpty()) {
                         throw new AnalysisException(
                                 String.format("Type '%s' only supports empty string \"\" as default value", type));
