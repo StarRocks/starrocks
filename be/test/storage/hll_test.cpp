@@ -19,8 +19,8 @@
 
 #include <gtest/gtest.h>
 
+#include "util/failpoint/fail_point.h"
 #include "util/hash_util.hpp"
-#include "util/phmap/phmap.h"
 #include "util/slice.h"
 
 namespace starrocks {
@@ -203,6 +203,51 @@ TEST_F(TestHll, InvalidPtr) {
         HyperLogLog hll(Slice(buf, 1));
         ASSERT_EQ(0, hll.estimate_cardinality());
     }
+}
+
+TEST_F(TestHll, AllocateFail) {
+    // prepare a FULL HLL (will allocate registers) with failpoint disabled
+    HyperLogLog full_hll;
+    for (int i = 0; i < 64 * 1024; ++i) {
+        full_hll.update(hash(64 * 1024 + i));
+    }
+    uint8_t buf[HLL_REGISTERS_COUNT + 1] = {0};
+    int len = full_hll.serialize(buf);
+    ASSERT_EQ(HLL_REGISTERS_COUNT + 1, len);
+
+    auto* fp = failpoint::FailPointRegistry::GetInstance()->get("mem_chunk_allocator_allocate_fail");
+    ASSERT_NE(fp, nullptr);
+    PFailPointTriggerMode mode;
+    mode.set_mode(FailPointTriggerModeType::ENABLE);
+    fp->setMode(mode);
+
+    // copy construction should throw when allocation fails
+    ASSERT_THROW(static_cast<void>(HyperLogLog(full_hll)), std::bad_alloc);
+
+    // update() will allocate when converting explicit -> registers, expect throw
+    {
+        HyperLogLog hll;
+        for (int i = 0; i <= HLL_EXPLICLIT_INT64_NUM; ++i) {
+            if (i == HLL_EXPLICLIT_INT64_NUM) {
+                ASSERT_THROW(hll.update(hash(i)), std::bad_alloc);
+            } else {
+                hll.update(hash(i));
+            }
+        }
+    }
+
+    // merge() will allocate registers when self is empty and other is full, expect throw
+    {
+        HyperLogLog empty_hll;
+        ASSERT_THROW(empty_hll.merge(full_hll), std::bad_alloc);
+    }
+
+    // deserialize should fail gracefully and leave object empty
+    HyperLogLog hll_after_fail(Slice((char*)buf, len));
+    EXPECT_EQ(0, hll_after_fail.estimate_cardinality());
+
+    mode.set_mode(FailPointTriggerModeType::DISABLE);
+    fp->setMode(mode);
 }
 
 } // namespace starrocks
