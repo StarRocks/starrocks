@@ -327,7 +327,7 @@ ADMIN SET FRONTEND CONFIG ("max_scheduling_tablets"="1000");
 ADMIN SET FRONTEND CONFIG ("max_balancing_tablets"="1000");
 ```
 
-## BACKUP 操作是串行的吗？似乎只有一个 HDFS 目录在变化。
+## BACKUP 操作是串行的吗？似乎只有一个 HDFS 目录在变化
 
 BACKUP 操作是并行的，但上传到 HDFS 使用单个工作线程，由 BE 配置 `upload_worker_count` 控制。调整时要谨慎，因为它可能会影响磁盘 I/O 和网络 I/O。
 
