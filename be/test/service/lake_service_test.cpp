@@ -3373,4 +3373,79 @@ TEST_F(LakeServiceTest, test_repair_tablet_metadata) {
     }
 }
 
+// Test cases for get_txn_ids_string function
+// This function extracts txn_ids from PublishVersionRequest, supporting both new and old FE versions
+TEST_F(LakeServiceTest, test_get_txn_ids_string_with_txn_infos) {
+    // Test case 1: txn_infos has data (new FE version)
+    {
+        PublishVersionRequest request;
+        auto* txn_info1 = request.add_txn_infos();
+        txn_info1->set_txn_id(12345);
+        auto* txn_info2 = request.add_txn_infos();
+        txn_info2->set_txn_id(67890);
+
+        std::string result = get_txn_ids_string(&request);
+        EXPECT_EQ("12345,67890", result);
+    }
+
+    // Test case 2: single txn_info
+    {
+        PublishVersionRequest request;
+        auto* txn_info = request.add_txn_infos();
+        txn_info->set_txn_id(99999);
+
+        std::string result = get_txn_ids_string(&request);
+        EXPECT_EQ("99999", result);
+    }
+}
+
+TEST_F(LakeServiceTest, test_get_txn_ids_string_with_txn_ids) {
+    // Test case 3: txn_ids has data (old FE version, txn_infos is empty)
+    {
+        PublishVersionRequest request;
+        request.add_txn_ids(11111);
+        request.add_txn_ids(22222);
+        request.add_txn_ids(33333);
+
+        std::string result = get_txn_ids_string(&request);
+        EXPECT_EQ("11111,22222,33333", result);
+    }
+
+    // Test case 4: single txn_id
+    {
+        PublishVersionRequest request;
+        request.add_txn_ids(44444);
+
+        std::string result = get_txn_ids_string(&request);
+        EXPECT_EQ("44444", result);
+    }
+}
+
+TEST_F(LakeServiceTest, test_get_txn_ids_string_empty) {
+    // Test case 5: both txn_infos and txn_ids are empty
+    {
+        PublishVersionRequest request;
+
+        std::string result = get_txn_ids_string(&request);
+        EXPECT_EQ("", result);
+    }
+}
+
+TEST_F(LakeServiceTest, test_get_txn_ids_string_priority) {
+    // Test case 6: both txn_infos and txn_ids have data, txn_infos takes priority
+    {
+        PublishVersionRequest request;
+        // Add txn_ids (old way)
+        request.add_txn_ids(11111);
+        request.add_txn_ids(22222);
+        // Add txn_infos (new way) - should take priority
+        auto* txn_info = request.add_txn_infos();
+        txn_info->set_txn_id(99999);
+
+        std::string result = get_txn_ids_string(&request);
+        // Should use txn_infos since it has data
+        EXPECT_EQ("99999", result);
+    }
+}
+
 } // namespace starrocks
