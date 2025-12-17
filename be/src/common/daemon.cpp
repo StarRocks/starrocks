@@ -294,6 +294,10 @@ Slice get_process_comm(pid_t pid, char* buffer, int max_size) {
     return Slice(buffer, static_cast<size_t>(n));
 }
 
+// Ideally, we should avoid calling any non-signal-safe functions within signal handler, such as malloc, open, or log.
+// This could potentially cause deadlocks or unexpected recursion.
+// Typically, the main thread receives SIGTERM, and under normal circumstances,
+// the main thread remains in a sleep state. Therefore, the current implementation is safe.
 void sigterm_handler(int signo, siginfo_t* info, void* context) {
     if (info == nullptr) {
         LOG(ERROR) << "got signal: " << strsignal(signo) << "from unknown pid, is going to exit";
