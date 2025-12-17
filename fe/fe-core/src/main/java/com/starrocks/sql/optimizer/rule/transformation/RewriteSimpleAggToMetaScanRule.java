@@ -286,6 +286,14 @@ public class RewriteSimpleAggToMetaScanRule extends TransformationRule {
         return allValid;
     }
 
+    private boolean containsAllPartitions(OlapTable table, List<Long> partitionIds) {
+        if (partitionIds == null) {
+            return true;
+        }
+        long allPartitionNum = table.getVisiblePartitions().stream().filter(Partition::hasData).count();
+        return partitionIds.size() == allPartitionNum;
+    }
+
     public Optional<OptExpression> tryReplaceByMetaData(OptExpression input,
                                                         OptimizerContext context, ColumnRefFactory factory) {
         if (context.getSessionVariable().getScanOlapPartitionNumLimit() != 0) {
@@ -293,11 +301,11 @@ public class RewriteSimpleAggToMetaScanRule extends TransformationRule {
         }
         LogicalAggregationOperator aggregationOperator = input.getOp().cast();
         LogicalOlapScanOperator scanOperator = input.inputAt(0).inputAt(0).getOp().cast();
-        if (!scanOperator.getSelectedPartitionId().isEmpty()) {
+        OlapTable table = (OlapTable) scanOperator.getTable();
+        if (!containsAllPartitions(table, scanOperator.getSelectedPartitionId())) {
             return Optional.empty();
         }
 
-        OlapTable table = (OlapTable) scanOperator.getTable();
         LocalDateTime lastUpdateTime = StatisticUtils.getTableLastUpdateTime(table);
         Long lastUpdateTimestamp = StatisticUtils.getTableLastUpdateTimestamp(table);
 
@@ -346,7 +354,10 @@ public class RewriteSimpleAggToMetaScanRule extends TransformationRule {
             } else if (call.getFnName().equals(FunctionSet.COUNT) && !call.isDistinct()
                     && call.getUsedColumns().size() <= 1 && GlobalStateMgr.getCurrentState().getTabletStatMgr()
                     .workTimeIsMustAfter(lastUpdateTime)) {
-                long count = table.getVisiblePartitions().stream().mapToLong(Partition::getRowCount).sum();
+                long count = table.getVisiblePartitions().stream()
+                        .flatMap(partition -> partition.getSubPartitions().stream())
+                        .mapToLong(physicalPartition -> physicalPartition.getBaseIndex().getRowCount())
+                        .sum();
                 constantMap.put(entry.getKey(), ConstantOperator.createBigint(count));
             } else {
                 newAggCalls.put(entry.getKey(), entry.getValue());
