@@ -2498,7 +2498,17 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
             if not res["status"]:
                 tools.assert_true(False, "acquire task state error")
             state = res["result"][0][0]
-            if status != "RUNNING":
+            if state != "RUNNING" and state != "PENDING" and state != "SUBMITTED":
+                return ""
+            time.sleep(1)
+
+    def wait_util_no_queries(self):
+        while True:
+            sql = "show proc '/current_queries'"
+            res = self.execute_sql(sql, True)
+            if not res["status"]:
+                tools.assert_true(False, "run current_queries error")
+            if len(res["result"]) == 0:
                 return ""
             time.sleep(1)
 

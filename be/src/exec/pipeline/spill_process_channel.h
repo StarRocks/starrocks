@@ -89,7 +89,7 @@ public:
     bool add_last_task(SpillProcessTask&& task) {
         DCHECK(!_is_finishing);
         _is_working = true;
-        auto defer = DeferOp([this]() { set_finishing_if_not_reuseable(); });
+        auto defer = DeferOp([this]() { set_finishing(); });
         return _spill_tasks.put(std::move(task));
     }
 
@@ -101,17 +101,14 @@ public:
     bool is_finishing() { return _is_finishing; }
     bool is_working() { return _is_working; }
 
-    void set_finishing_if_not_reuseable() {
-        if (!_is_reuseable) {
-            set_finishing();
-        }
-    }
-
-    void set_reuseable(bool reuseable) { _is_reuseable = reuseable; }
-
     SpillProcessTask& current_task() { return _current_task; }
 
-    bool has_output() { return (has_spill_task() || _current_task) && !_spiller->is_full(); }
+    bool has_output() {
+        if (is_finished()) {
+            return false;
+        }
+        return (has_spill_task() || _current_task) && !_spiller->is_full();
+    }
 
     bool has_task() { return has_spill_task() || _current_task; }
 
@@ -122,13 +119,16 @@ public:
 
     Status execute(SpillProcessTasksBuilder& task_builder);
 
+    void close();
+
 private:
-    bool _is_reuseable = false;
     bool _is_finishing = false;
     bool _is_working = false;
+    bool _is_closed = false;
     std::shared_ptr<spill::Spiller> _spiller;
     UnboundedBlockingQueue<SpillProcessTask> _spill_tasks;
     SpillProcessTask _current_task;
+    std::mutex _mutex;
 };
 
 class SpillProcessTasksBuilder {

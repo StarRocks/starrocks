@@ -44,7 +44,6 @@ struct BucketProcessContext {
 
     OperatorPtr source;
     OperatorPtr sink;
-    SpillProcessChannelPtr spill_channel;
 
     Status reset_operator_state(RuntimeState* state);
 

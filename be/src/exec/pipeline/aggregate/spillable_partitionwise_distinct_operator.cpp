@@ -37,7 +37,7 @@ Status SpillablePartitionWiseDistinctSinkOperator::set_finishing(RuntimeState* s
     }
     ONCE_DETECT(_set_finishing_once);
     auto defer_set_finishing = DeferOp([this]() {
-        _distinct_op->aggregator()->spill_channel()->set_finishing_if_not_reuseable();
+        _distinct_op->aggregator()->spill_channel()->set_finishing();
         _is_finished = true;
     });
 
