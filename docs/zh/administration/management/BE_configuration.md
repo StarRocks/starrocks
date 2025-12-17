@@ -583,6 +583,24 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 描述：发起 Hedged Read 请求前需要等待多少毫秒。例如，假设该参数设置为 `30`，那么如果一个 Read 任务未能在 30 毫秒内返回结果，则 HDFS 客户端会立即发起一个 Hedged Read，从目标数据块的副本上读取数据。该参数对应 HDFS 集群配置文件 **hdfs-site.xml** 中的 `dfs.client.hedged.read.threshold.millis` 参数。
 - 引入版本：v3.0
 
+##### hdfs_client_max_cache_size
+
+- 默认值：64
+- 类型：Int
+- 单位：-
+- 是否动态：否
+- 描述：StarRocks 层面缓存的 HDFS 客户端连接最大数量。默认最多缓存 64 个连接，缓存满时随机替换旧连接。
+- 引入版本：v3.0
+
+##### hdfs_client_force_new_instance
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：否
+- 描述：是否强制每次都创建新的 Hadoop FileSystem 实例。`true`（默认）：每次创建独立实例，安全但对重量级客户端（如 Curvine）可能导致线程耗尽。`false`：复用 Hadoop 缓存的 FileSystem，更高效，推荐 Curvine 等场景使用。注意：请求级参数 `disable_cache` 优先级高于此全局配置。
+- 引入版本：-
+
 ##### io_coalesce_adaptive_lazy_active
 
 - 默认值：true

@@ -1076,6 +1076,15 @@ CONF_Int32(hdfs_client_hedged_read_threadpool_size, "128");
 // dfs.client.hedged.read.threshold.millis
 CONF_Int32(hdfs_client_hedged_read_threshold_millis, "2500");
 CONF_Int32(hdfs_client_max_cache_size, "64");
+// If true, force create new Hadoop FileSystem instance for each connection,
+// bypassing Hadoop internal FileSystem cache. This prevents "FileSystem closed" errors
+// but may cause performance issues for heavy clients (e.g., Curvine) that create
+// many threads per FileSystem instance.
+// If false, Hadoop's internal FileSystem cache will be used, which is more efficient
+// but may cause "FileSystem closed" errors if the cache entry is evicted while in use.
+// Note: When set to false, FileSystem instances are managed by Hadoop's cache and
+// will not be disconnected when HdfsFsClient is destroyed.
+CONF_Bool(hdfs_client_force_new_instance, "true");
 CONF_Int32(hdfs_client_io_read_retry, "0");
 
 // Enable output trace logs in aws-sdk-cpp for diagnosis purpose.
