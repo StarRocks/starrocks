@@ -17,6 +17,7 @@
 
 #include "common/status.h"
 #include "storage/lake/compaction_scheduler.h"
+#include "storage/lake/lake_persistent_index_parallel_compact_mgr.h"
 #include "storage/lake/lake_primary_index.h"
 #include "storage/lake/replication_txn_manager.h"
 #include "storage/lake/rowset.h"
@@ -24,6 +25,7 @@
 #include "storage/lake/schema_change.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_reader.h"
+#include "storage/lake/tablet_write_log_manager.h"
 #include "storage/lake/update_compaction_state.h"
 #include "storage/lake/update_manager.h"
 #include "storage/options.h"
@@ -71,7 +73,8 @@ StatusOr<TabletAndRowsets> TabletManager::capture_tablet_and_rowsets(int64_t /*t
 
 void TabletManager::clean_in_writing_data_size() {}
 
-Status TabletReader::parse_seek_range(const TabletSchema& /*schema*/, TabletReaderParams::RangeStartOperation /*start_op*/,
+Status TabletReader::parse_seek_range(const TabletSchema& /*schema*/,
+                                      TabletReaderParams::RangeStartOperation /*start_op*/,
                                       TabletReaderParams::RangeEndOperation /*end_op*/,
                                       const std::vector<OlapTuple>& /*start_keys*/,
                                       const std::vector<OlapTuple>& /*end_keys*/, std::vector<SeekRange>* /*ranges*/,
@@ -116,5 +119,25 @@ void SegmentPKEncodeResult::close() {
     _memory_usage = 0;
     _status = Status::NotSupported("Lake rowset update is disabled on macOS");
 }
+
+// TabletWriteLogManager stubs
+TabletWriteLogManager::TabletWriteLogManager() = default;
+
+TabletWriteLogManager* TabletWriteLogManager::instance() {
+    static TabletWriteLogManager instance;
+    return &instance;
+}
+
+std::vector<TabletWriteLogEntry> TabletWriteLogManager::get_logs(int64_t /*table_id*/, int64_t /*partition_id*/,
+                                                                 int64_t /*tablet_id*/, int64_t /*log_type*/,
+                                                                 int64_t /*start_finish_time*/,
+                                                                 int64_t /*end_finish_time*/) const {
+    return {};
+}
+
+// LakePersistentIndexParallelCompactMgr stubs
+LakePersistentIndexParallelCompactMgr::~LakePersistentIndexParallelCompactMgr() = default;
+
+void LakePersistentIndexParallelCompactMgr::shutdown() {}
 
 } // namespace starrocks::lake
