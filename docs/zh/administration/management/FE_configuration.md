@@ -1587,6 +1587,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 - 引入版本：v3.1
 
+<<<<<<< HEAD
 ##### semi_sync_collect_statistic_await_seconds
 
 - 默认值：30
@@ -1647,11 +1648,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 <!--
 ##### statistic_check_expire_partition
+=======
+##### enable_statistic_collect_on_update
+>>>>>>> 9888c43137 ([Enhancement] add config enable_statistic_collect_on_update (#66794))
 
 - 默认值：true
 - 类型：Boolean
 - 单位：-
 - 是否动态：是
+<<<<<<< HEAD
 - 描述：
 - 引入版本：-
 -->
@@ -1839,6 +1844,12 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 引入版本：-
 
 ##### enable_manual_collect_array_ndv
+=======
+- 描述：控制 UPDATE 语句是否可以触发自动统计信息采集。启用时，修改表数据的 UPDATE 操作可以通过由 `enable_statistic_collect_on_first_load` 控制的基于导入的统计信息框架来调度统计信息采集。禁用此配置将跳过 UPDATE 语句的统计信息采集，同时保持由导入触发的统计信息采集行为不变。
+- 引入版本：v3.5.11, v4.0.4
+
+##### enable_udf
+>>>>>>> 9888c43137 ([Enhancement] add config enable_statistic_collect_on_update (#66794))
 
 - 默认值：false
 - 类型：Boolean
