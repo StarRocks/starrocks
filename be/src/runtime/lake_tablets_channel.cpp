@@ -60,8 +60,8 @@ class LakeTabletsChannel : public TabletsChannel {
     using TxnLogPtr = AsyncDeltaWriter::TxnLogPtr;
 
 public:
-    LakeTabletsChannel(LoadChannel* load_channel, lake::TabletManager* tablet_manager, const TabletsChannelKey& key,
-                       MemTracker* mem_tracker, RuntimeProfile* parent_profile);
+    LakeTabletsChannel(lake::TabletManager* tablet_manager, const TabletsChannelKey& key, MemTracker* mem_tracker,
+                       RuntimeProfile* parent_profile);
 
     ~LakeTabletsChannel() override;
 
@@ -218,7 +218,6 @@ private:
 
     void _update_tablet_profile(DeltaWriter* writer, RuntimeProfile* profile);
 
-    LoadChannel* _load_channel;
     lake::TabletManager* _tablet_manager;
 
     TabletsChannelKey _key;
@@ -280,11 +279,9 @@ private:
     std::unique_ptr<RuntimeProfile> _tablets_profile;
 };
 
-LakeTabletsChannel::LakeTabletsChannel(LoadChannel* load_channel, lake::TabletManager* tablet_manager,
-                                       const TabletsChannelKey& key, MemTracker* mem_tracker,
-                                       RuntimeProfile* parent_profile)
+LakeTabletsChannel::LakeTabletsChannel(lake::TabletManager* tablet_manager, const TabletsChannelKey& key,
+                                       MemTracker* mem_tracker, RuntimeProfile* parent_profile)
         : TabletsChannel(),
-          _load_channel(load_channel),
           _tablet_manager(tablet_manager),
           _key(key),
           _mem_tracker(mem_tracker),
@@ -607,7 +604,6 @@ void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequ
     COUNTER_UPDATE(_wait_writer_timer, wait_writer_ns);
 
     if (close_channel) {
-        _load_channel->remove_tablets_channel(_key);
         if (_finish_mode == lake::DeltaWriterFinishMode::kDontWriteTxnLog) {
             _txn_log_collector.notify();
         }
@@ -941,7 +937,9 @@ void LakeTabletsChannel::_update_tablet_profile(DeltaWriter* writer, RuntimeProf
 std::shared_ptr<TabletsChannel> new_lake_tablets_channel(LoadChannel* load_channel, lake::TabletManager* tablet_manager,
                                                          const TabletsChannelKey& key, MemTracker* mem_tracker,
                                                          RuntimeProfile* parent_profile) {
-    return std::make_shared<LakeTabletsChannel>(load_channel, tablet_manager, key, mem_tracker, parent_profile);
+    // NOTE: `load_channel` is not used for now, just keep it for now so that it could be used later and
+    // be consistent with LocalTabletsChannel.
+    return std::make_shared<LakeTabletsChannel>(tablet_manager, key, mem_tracker, parent_profile);
 }
 
 } // namespace starrocks
