@@ -1,0 +1,88 @@
+-- name: test_exchange_hash_function_version
+CREATE TABLE `t_hash_test` (
+  `c0` int DEFAULT NULL,
+  `c1` bigint DEFAULT NULL,
+  `c2` string DEFAULT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`c0`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`c0`) BUCKETS 4
+PROPERTIES (
+"replication_num" = "1"
+);
+-- result:
+-- !result
+insert into t_hash_test SELECT generate_series, generate_series, generate_series FROM TABLE(generate_series(1, 1000));
+-- result:
+-- !result
+set exchange_hash_function_version = 0;
+-- result:
+-- !result
+select count(*) from (select c0, c1 from t_hash_test group by c0, c1) t;
+-- result:
+1000
+-- !result
+select sum(c0), sum(c1) from (select c0, c1 from t_hash_test order by c0 limit 100) t;
+-- result:
+5050	5050
+-- !result
+set exchange_hash_function_version = 1;
+-- result:
+-- !result
+select count(*) from (select c0, c1 from t_hash_test group by c0, c1) t;
+-- result:
+1000
+-- !result
+select sum(c0), sum(c1) from (select c0, c1 from t_hash_test order by c0 limit 100) t;
+-- result:
+5050	5050
+-- !result
+set exchange_hash_function_version = 0;
+-- result:
+-- !result
+select count(*) from t_hash_test a join [shuffle] t_hash_test b on a.c0 = b.c0;
+-- result:
+1000
+-- !result
+set exchange_hash_function_version = 1;
+-- result:
+-- !result
+select count(*) from t_hash_test a join [shuffle] t_hash_test b on a.c0 = b.c0;
+-- result:
+1000
+-- !result
+set exchange_hash_function_version = 0;
+-- result:
+-- !result
+select c0 % 10 as bucket, count(*), sum(c1) from t_hash_test group by c0 % 10 order by bucket;
+-- result:
+0	100	50500
+1	100	49600
+2	100	49700
+3	100	49800
+4	100	49900
+5	100	50000
+6	100	50100
+7	100	50200
+8	100	50300
+9	100	50400
+-- !result
+set exchange_hash_function_version = 1;
+-- result:
+-- !result
+select c0 % 10 as bucket, count(*), sum(c1) from t_hash_test group by c0 % 10 order by bucket;
+-- result:
+0	100	50500
+1	100	49600
+2	100	49700
+3	100	49800
+4	100	49900
+5	100	50000
+6	100	50100
+7	100	50200
+8	100	50300
+9	100	50400
+-- !result
+DROP TABLE t_hash_test;
+-- result:
+-- !result
