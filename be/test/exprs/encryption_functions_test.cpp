@@ -1681,8 +1681,8 @@ TEST_F(EncryptionFunctionsTest, aes_encrypt_decrypt_2params_mixed_null_test) {
     ASSERT_EQ(decrypted->size(), 4);
 
     // For NullableColumn, we need to access the data_column
-    auto nullable_result = down_cast<NullableColumn*>(decrypted.get());
-    auto result = down_cast<BinaryColumn*>(nullable_result->data_column().get());
+    auto nullable_result = down_cast<const NullableColumn*>(decrypted.get());
+    auto result = down_cast<const BinaryColumn*>(nullable_result->data_column().get());
 
     ASSERT_FALSE(decrypted->is_null(0));
     ASSERT_EQ("data1", result->get_data()[0].to_string());
@@ -1989,7 +1989,7 @@ TEST_F(EncryptionFunctionsTest, md5ConstTest) {
 
     ColumnPtr result = EncryptionFunctions::md5(ctx.get(), columns).value();
 
-    ConstColumn::Ptr result2 = ColumnHelper::as_column<ConstColumn>(result);
+    auto result2 = ColumnHelper::as_column<ConstColumn>(result);
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result2->data_column());
 
     for (auto& result : results) {
@@ -2073,7 +2073,7 @@ TEST_F(EncryptionFunctionsTest, md5sum_numericTest) {
     auto v = ColumnHelper::cast_to<TYPE_LARGEINT>(result);
 
     for (int j = 0; j < sizeof(results) / sizeof(results[0]); ++j) {
-        ASSERT_EQ(results[j], v->get_data()[j]);
+        ASSERT_EQ(results[j], v->immutable_data()[j]);
     }
 }
 
@@ -2103,7 +2103,7 @@ TEST_F(EncryptionFunctionsTest, md5sum_numericNullTest) {
     auto v = ColumnHelper::cast_to<TYPE_LARGEINT>(result);
 
     for (int j = 0; j < sizeof(results) / sizeof(results[0]); ++j) {
-        ASSERT_EQ(results[j], v->get_data()[j]);
+        ASSERT_EQ(results[j], v->immutable_data()[j]);
     }
 }
 

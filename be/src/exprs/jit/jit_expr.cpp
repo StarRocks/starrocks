@@ -130,7 +130,7 @@ StatusOr<ColumnPtr> JITExpr::evaluate_checked(starrocks::ExprContext* context, C
         }
 
         if (column->is_constant()) {
-            column = ColumnHelper::unfold_const_column(child->type(), num_rows, column);
+            column = ColumnHelper::unfold_const_column(child->type(), num_rows, std::move(column));
         }
         DCHECK(num_rows == column->size())
                 << "size unequal " + std::to_string(num_rows) + " != " + std::to_string(column->size());

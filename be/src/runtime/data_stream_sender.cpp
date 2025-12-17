@@ -159,7 +159,7 @@ private:
 
     int64_t _request_seq{0};
 
-    std::unique_ptr<Chunk> _chunk;
+    ChunkUniquePtr _chunk;
     bool _is_first_chunk = true;
 
     bool _need_close{false};
@@ -318,7 +318,7 @@ Status DataStreamSender::Channel::_send_current_chunk(bool eos) {
 
     // we only clear column data, because we need to reuse column schema
     for (ColumnPtr& column : _chunk->columns()) {
-        column->resize(0);
+        column->as_mutable_ptr()->resize(0);
     }
     return Status::OK();
 }

@@ -83,7 +83,7 @@ Status ParquetScanner::initialize_src_chunk(ChunkPtr* chunk) {
         if (slot_desc == nullptr) {
             continue;
         }
-        ColumnPtr column;
+        MutableColumnPtr column;
         auto array_ptr = _batch->GetColumnByName(slot_desc->col_name());
         if (array_ptr == nullptr) {
             _cast_exprs[i] = _pool.add(new ColumnRef(slot_desc));
@@ -93,7 +93,7 @@ Status ParquetScanner::initialize_src_chunk(ChunkPtr* chunk) {
                                        &_cast_exprs[i], _pool, _strict_mode));
         }
         column->reserve(_max_chunk_size);
-        (*chunk)->append_column(column, slot_desc->id());
+        (*chunk)->append_column(std::move(column), slot_desc->id());
     }
     return Status::OK();
 }
@@ -109,7 +109,7 @@ Status ParquetScanner::append_batch_to_src_chunk(ChunkPtr* chunk) {
             continue;
         }
         _conv_ctx.current_slot = slot_desc;
-        auto& column = (*chunk)->get_column_by_slot_id(slot_desc->id());
+        auto* column = (*chunk)->get_column_raw_ptr_by_slot_id(slot_desc->id());
         auto array_ptr = _batch->GetColumnByName(slot_desc->col_name());
         if (array_ptr == nullptr) {
             (void)column->append_nulls(_batch->num_rows());
@@ -140,7 +140,7 @@ Status ParquetScanner::finalize_src_chunk(ChunkPtr* chunk) {
             }
 
             ASSIGN_OR_RETURN(auto column, _cast_exprs[i]->evaluate_checked(nullptr, (*chunk).get()));
-            column = ColumnHelper::unfold_const_column(slot_desc->type(), (*chunk)->num_rows(), column);
+            column = ColumnHelper::unfold_const_column(slot_desc->type(), (*chunk)->num_rows(), std::move(column));
             cast_chunk->append_column(column, slot_desc->id());
         }
         auto range = _scan_range.ranges.at(_next_file - 1);
@@ -294,8 +294,9 @@ Status ParquetScanner::build_dest(const arrow::DataType* arrow_type, const TypeD
     return Status::OK();
 }
 
-Status ParquetScanner::new_column(const arrow::DataType* arrow_type, const SlotDescriptor* slot_desc, ColumnPtr* column,
-                                  ConvertFuncTree* conv_func, Expr** expr, ObjectPool& pool, bool strict_mode) {
+Status ParquetScanner::new_column(const arrow::DataType* arrow_type, const SlotDescriptor* slot_desc,
+                                  MutableColumnPtr* column, ConvertFuncTree* conv_func, Expr** expr, ObjectPool& pool,
+                                  bool strict_mode) {
     auto& type_desc = slot_desc->type();
     auto* raw_type_desc = pool.add(new TypeDescriptor());
     bool need_cast = false;
@@ -317,7 +318,7 @@ Status ParquetScanner::new_column(const arrow::DataType* arrow_type, const SlotD
 }
 
 Status ParquetScanner::convert_array_to_column(ConvertFuncTree* conv_func, size_t num_elements,
-                                               const arrow::Array* array, ColumnPtr& column, size_t batch_start_idx,
+                                               const arrow::Array* array, Column* column, size_t batch_start_idx,
                                                size_t chunk_start_idx, Filter* chunk_filter,
                                                ArrowConvertContext* conv_ctx) {
     // for timestamp type, state->timezone which is specified by user. convert function
@@ -332,24 +333,24 @@ Status ParquetScanner::convert_array_to_column(ConvertFuncTree* conv_func, size_
     uint8_t* null_data;
     Column* data_column;
     if (column->is_nullable()) {
-        auto nullable_column = down_cast<NullableColumn*>(column.get());
-        auto null_column = nullable_column->mutable_null_column();
+        auto nullable_column = down_cast<NullableColumn*>(column);
+        auto null_column = nullable_column->null_column_raw_ptr();
         size_t null_count = fill_null_column(array, batch_start_idx, num_elements, null_column, chunk_start_idx);
         nullable_column->set_has_null(null_count != 0);
         null_data = &null_column->get_data().front() + chunk_start_idx;
-        data_column = nullable_column->data_column().get();
+        data_column = nullable_column->data_column_raw_ptr();
     } else {
         null_data = nullptr;
         // Fill nullable array into not-nullable column, positions of NULLs is marked as 1
         fill_filter(array, batch_start_idx, num_elements, chunk_filter, chunk_start_idx, conv_ctx);
-        data_column = column.get();
+        data_column = column;
     }
 
     auto st = conv_func->func(array, batch_start_idx, num_elements, data_column, chunk_start_idx, null_data,
                               chunk_filter, conv_ctx, conv_func);
     if (st.ok() && column->is_nullable()) {
         // in some scene such as string length exceeds limit, the column will be set NULL, so we need reset has_null
-        down_cast<NullableColumn*>(column.get())->update_has_null();
+        down_cast<NullableColumn*>(column)->update_has_null();
     }
     return st;
 }

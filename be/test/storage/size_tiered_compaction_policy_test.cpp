@@ -58,8 +58,8 @@ public:
         auto schema = ChunkHelper::convert_schema(_tablet_schema);
         auto chunk = ChunkHelper::new_chunk(schema, 1024);
         for (size_t i = 0; i < 1500 * pow(config::size_tiered_level_multiple + 3, level - 2); ++i) {
-            test_data.push_back("well" + std::to_string(id++));
-            auto& cols = chunk->columns();
+            test_data.emplace_back("well" + std::to_string(id++));
+            auto cols = chunk->mutable_columns();
             cols[0]->append_datum(Datum(static_cast<int32_t>(id++)));
             Slice field_1(test_data[i]);
             cols[1]->append_datum(Datum(field_1));
@@ -68,7 +68,7 @@ public:
         CHECK_OK(writer->add_chunk(*chunk));
     }
 
-    void write_new_version(TabletMetaSharedPtr tablet_meta, int64_t level = 2) {
+    void write_new_version(const TabletMetaSharedPtr& tablet_meta, int64_t level = 2) {
         RowsetWriterContext rowset_writer_context;
         create_rowset_writer_context(&rowset_writer_context, _version);
         _version++;
@@ -85,7 +85,7 @@ public:
         tablet_meta->add_rs_meta(src_rowset->rowset_meta());
     }
 
-    void write_specify_version(TabletSharedPtr tablet, int64_t version, int64_t level = 2) {
+    void write_specify_version(const TabletSharedPtr& tablet, int64_t version, int64_t level = 2) {
         RowsetWriterContext rowset_writer_context;
         create_rowset_writer_context(&rowset_writer_context, version);
         std::unique_ptr<RowsetWriter> rowset_writer;
@@ -101,7 +101,7 @@ public:
         ASSERT_TRUE(tablet->add_rowset(src_rowset).ok());
     }
 
-    void write_empty_version(TabletSharedPtr tablet) {
+    void write_empty_version(const TabletSharedPtr& tablet) {
         RowsetWriterContext rowset_writer_context;
         create_rowset_writer_context(&rowset_writer_context, _version);
         _version++;
@@ -140,13 +140,13 @@ public:
         return src_rowset;
     }
 
-    void write_delete_version(TabletMetaSharedPtr tablet_meta, int64_t version) {
+    void write_delete_version(const TabletMetaSharedPtr& tablet_meta, int64_t version) {
         auto src_rowset = generate_delete_rowset(version);
         ASSERT_NE(nullptr, src_rowset);
         tablet_meta->add_rs_meta(src_rowset->rowset_meta());
     }
 
-    void write_delete_version(TabletSharedPtr tablet, int64_t version) {
+    void write_delete_version(const TabletSharedPtr& tablet, int64_t version) {
         auto src_rowset = generate_delete_rowset(version);
         ASSERT_NE(nullptr, src_rowset);
         ASSERT_TRUE(tablet->add_rowset(src_rowset).ok());
@@ -225,7 +225,7 @@ public:
         tablet_meta->init_from_pb(&tablet_meta_pb);
     }
 
-    void init_compaction_context(TabletSharedPtr tablet) {
+    void init_compaction_context(const TabletSharedPtr& tablet) {
         std::unique_ptr<CompactionContext> compaction_context = std::make_unique<CompactionContext>();
         compaction_context->policy = std::make_unique<SizeTieredCompactionPolicy>(tablet.get());
         tablet->set_compaction_context(compaction_context);
@@ -255,7 +255,7 @@ public:
         return Status::OK();
     }
 
-    Status base_compact(TabletSharedPtr tablet, bool* is_shortcut_compaction = nullptr) {
+    Status base_compact(const TabletSharedPtr& tablet, bool* is_shortcut_compaction = nullptr) {
         if (!tablet->force_base_compaction()) {
             LOG(WARNING) << "no need compact";
             return Status::InternalError("no need compact");

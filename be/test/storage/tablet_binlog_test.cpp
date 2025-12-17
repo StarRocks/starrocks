@@ -61,7 +61,8 @@ public:
         return StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id, false);
     }
 
-    void create_rowset(TabletSharedPtr tablet, std::vector<int32_t> num_rows_per_segment, RowsetSharedPtr* rowset) {
+    void create_rowset(const TabletSharedPtr& tablet, std::vector<int32_t> num_rows_per_segment,
+                       RowsetSharedPtr* rowset) {
         RowsetWriterContext writer_context;
         RowsetId rowset_id = StorageEngine::instance()->next_rowset_id();
         writer_context.rowset_id = rowset_id;
@@ -81,7 +82,7 @@ public:
         for (int32_t i = 0, total_rows = 0; i < num_rows_per_segment.size(); i++) {
             int32_t num_rows = num_rows_per_segment[i];
             chunk->reset();
-            auto& cols = chunk->columns();
+            auto cols = chunk->mutable_columns();
             for (int32_t j = total_rows; j < total_rows + num_rows; j++) {
                 cols[0]->append_datum(Datum(static_cast<int32_t>(j)));
                 cols[1]->append_datum(Datum(static_cast<int32_t>(j + 1)));
@@ -107,26 +108,26 @@ public:
     }
 
 protected:
-    void ingest_random_binlog(TabletSharedPtr tablet, int64_t start_version, int64_t num_version,
+    void ingest_random_binlog(const TabletSharedPtr& tablet, int64_t start_version, int64_t num_version,
                               std::vector<DupKeyVersionInfo>* version_infos);
 
     TabletSharedPtr _tablet;
 };
 
-void TabletBinlogTest::ingest_random_binlog(TabletSharedPtr tablet, int64_t start_version, int64_t num_version,
+void TabletBinlogTest::ingest_random_binlog(const TabletSharedPtr& tablet, int64_t start_version, int64_t num_version,
                                             std::vector<DupKeyVersionInfo>* version_infos) {
     for (int32_t version = start_version; version < start_version + num_version; version++) {
         int32_t num_segments = std::rand() % 5;
         int32_t num_rows_per_segment = std::rand() % 100 + 1;
         std::vector<int32_t> segment_rows;
         for (int i = 0; i < num_segments; i++) {
-            segment_rows.push_back(num_rows_per_segment);
+            segment_rows.emplace_back(num_rows_per_segment);
         }
         RowsetSharedPtr rowset;
         create_rowset(tablet, segment_rows, &rowset);
         ASSERT_OK(tablet->add_inc_rowset(rowset, version));
         int64_t timestamp = rowset->creation_time() * 1000000;
-        version_infos->push_back(DupKeyVersionInfo(version, num_segments, num_rows_per_segment, timestamp));
+        version_infos->emplace_back(version, num_segments, num_rows_per_segment, timestamp);
     }
 }
 

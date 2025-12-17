@@ -84,7 +84,7 @@ public:
 };
 
 TEST_F(DictMappingTest, test1) {
-    auto origin = pool.add(new ProvideExpr([](ColumnPtr column) {
+    auto origin = pool.add(new ProvideExpr([](const ColumnPtr& column) {
         ColumnViewer<TYPE_VARCHAR> viewer(column);
         ColumnBuilder<TYPE_VARCHAR> builder(5);
         size_t num_rows = column->size();
@@ -121,7 +121,7 @@ TEST_F(DictMappingTest, test1) {
         dict_column->get_data().emplace_back(3);
         dict_column->get_data().emplace_back(4);
         auto nullable_column = NullableColumn::wrap_if_necessary(dict_column);
-        auto c = down_cast<NullableColumn*>(nullable_column.get());
+        auto c = down_cast<NullableColumn*>(nullable_column->as_mutable_raw_ptr());
         c->set_null(0);
         chunk->append_column(nullable_column, 1);
 
@@ -145,7 +145,7 @@ TEST_F(DictMappingTest, test1) {
     }
 }
 TEST_F(DictMappingTest, test_function_return_exception) {
-    auto origin = pool.add(new ProvideExpr([](ColumnPtr column) {
+    auto origin = pool.add(new ProvideExpr([](const ColumnPtr& column) {
         ColumnViewer<TYPE_VARCHAR> viewer(column);
         ColumnBuilder<TYPE_VARCHAR> builder(5);
         size_t num_rows = column->size();
@@ -183,7 +183,7 @@ TEST_F(DictMappingTest, test_function_return_exception) {
         dict_column->get_data().emplace_back(4);
         dict_column->get_data().emplace_back(5);
         auto nullable_column = NullableColumn::wrap_if_necessary(dict_column);
-        auto c = down_cast<NullableColumn*>(nullable_column.get());
+        auto c = down_cast<NullableColumn*>(nullable_column->as_mutable_raw_ptr());
         c->set_null(0);
         chunk->append_column(nullable_column, 1);
 

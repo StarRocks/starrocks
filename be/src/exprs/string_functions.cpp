@@ -66,7 +66,7 @@ static const RE2 SUBSTRING_RE(R"((?:\.\*)*([^\.\^\{\[\(\|\)\]\}\+\*\?\$\\]+)(?:\
 
 #define THROW_RUNTIME_ERROR_IF_EXCEED_LIMIT(col, func_name)                        \
     if (UNLIKELY(!col->capacity_limit_reached().ok())) {                           \
-        col->reset_column();                                                       \
+        col->as_mutable_raw_ptr()->reset_column();                                 \
         throw RuntimeException("binary column exceed 4G in function " #func_name); \
     }
 
@@ -416,7 +416,7 @@ static inline void column_builder_non_empty_op(uint8_t* begin, uint8_t* end, Nul
 }
 
 ColumnPtr substr_const_not_null(const Columns& columns, const BinaryColumn* src, SubstrState* state) {
-    MutableColumnPtr result = BinaryColumn::create();
+    auto result = BinaryColumn::create();
     auto* binary = down_cast<BinaryColumn*>(result.get());
     Bytes& bytes = binary->get_bytes();
     Offsets& offsets = binary->get_offset();
@@ -473,7 +473,7 @@ ColumnPtr substr_const_not_null(const Columns& columns, const BinaryColumn* src,
 }
 
 ColumnPtr right_const_not_null(const Columns& columns, const BinaryColumn* src, SubstrState* state) {
-    MutableColumnPtr result = BinaryColumn::create();
+    auto result = BinaryColumn::create();
     auto* binary = down_cast<BinaryColumn*>(result.get());
     Bytes& bytes = binary->get_bytes();
     Offsets& offsets = binary->get_offset();
@@ -525,12 +525,13 @@ ColumnPtr string_func_const(StringConstFuncType func, const Columns& columns, Ar
                 return binary;
             }
             if (binary->is_constant()) {
-                auto* dst_const = down_cast<ConstColumn*>(binary.get());
-                dst_const->data_column()->assign(dst_const->size(), 0);
-                return NullableColumn::create(dst_const->data_column(), std::move(src_null));
+                auto* dst_const = down_cast<ConstColumn*>(binary->as_mutable_raw_ptr());
+                auto data_mut = dst_const->data_column()->as_mutable_ptr();
+                data_mut->assign(dst_const->size(), 0);
+                return NullableColumn::create(std::move(data_mut), std::move(src_null));
             }
             if (binary->is_nullable()) {
-                auto* binary_nullable = down_cast<NullableColumn*>(binary.get());
+                auto* binary_nullable = down_cast<NullableColumn*>(binary->as_mutable_raw_ptr());
                 if (binary_nullable->has_null()) {
                     // case 2: some rows are nulls and some rows are non-nulls, merge the column
                     // inside original result and the null column inside the columns[0].
@@ -1830,20 +1831,21 @@ StatusOr<ColumnPtr> StringFunctions::append_trailing_char_if_absent(FunctionCont
             return ColumnHelper::create_const_null_column(columns[0]->size());
         }
 
-        BinaryColumn* src = nullptr;
-        ColumnPtr dst = nullptr;
+        const BinaryColumn* src = nullptr;
+        MutableColumnPtr dst = nullptr;
         BinaryColumn* binary_dst = nullptr;
         if (columns[0]->is_nullable()) {
             auto* src_null = ColumnHelper::as_raw_column<NullableColumn>(columns[0]);
             src = ColumnHelper::as_raw_column<BinaryColumn>(src_null->data_column());
 
-            ColumnPtr data = RunTimeColumnType<TYPE_VARCHAR>::create();
-            dst = NullableColumn::create(data, src_null->null_column());
-            binary_dst = ColumnHelper::as_raw_column<BinaryColumn>(data);
+            MutableColumnPtr data = RunTimeColumnType<TYPE_VARCHAR>::create();
+            dst = NullableColumn::create(std::move(data), Column::mutate(src_null->null_column()));
+            binary_dst = ColumnHelper::as_raw_column<BinaryColumn>(dst);
         } else {
             src = ColumnHelper::as_raw_column<BinaryColumn>(columns[0]);
-            dst = RunTimeColumnType<TYPE_VARCHAR>::create();
-            binary_dst = ColumnHelper::as_raw_column<BinaryColumn>(dst);
+            MutableColumnPtr data = RunTimeColumnType<TYPE_VARCHAR>::create();
+            binary_dst = ColumnHelper::as_raw_column<BinaryColumn>(data.get());
+            dst = std::move(data);
         }
         const auto& src_data = src->get_bytes();
         const auto& src_offsets = src->get_offset();
@@ -1880,7 +1882,7 @@ StatusOr<ColumnPtr> StringFunctions::append_trailing_char_if_absent(FunctionCont
             dst_data.resize(dst_offsets.back());
         }
 
-        RETURN_COLUMN(dst, "append_trailing_char_if_absent");
+        RETURN_COLUMN(std::move(dst), "append_trailing_char_if_absent");
     } else {
         ColumnViewer<TYPE_VARCHAR> src_viewer(columns[0]);
         ColumnViewer<TYPE_VARCHAR> tailing_viewer(columns[1]);

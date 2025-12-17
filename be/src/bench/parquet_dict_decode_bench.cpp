@@ -59,7 +59,7 @@ static void BM_DictDecoder(benchmark::State& state) {
             ColumnHelper::as_column<NullableColumn>(ColumnHelper::create_column(TypeDescriptor{TYPE_INT}, true));
     NullableColumn* nulls = nulls_ptr.get();
     nulls->resize(kTestChunkSize);
-    uint8_t* null_data = nulls->mutable_null_column()->mutable_raw_data();
+    uint8_t* null_data = nulls->null_column_raw_ptr()->mutable_raw_data();
 
     std::random_device rd;
     std::mt19937 rng(rd());

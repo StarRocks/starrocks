@@ -23,13 +23,25 @@
 
 namespace starrocks::lake {
 
-inline void notify_and_wait_latch(std::shared_ptr<CountDownLatch> l1, std::shared_ptr<CountDownLatch> l2) {
+inline void notify_and_wait_latch(const std::shared_ptr<CountDownLatch>& l1,
+                                  const std::shared_ptr<CountDownLatch>& l2) {
     l1->count_down();
     l2->wait();
 }
 
-inline void notify(std::shared_ptr<CountDownLatch> latch) {
+inline void notify(const std::shared_ptr<CountDownLatch>& latch) {
     latch->count_down();
+}
+
+// Wrapper functions for NewCallback compatibility (takes by value to match NewCallback's template deduction)
+// NOLINTNEXTLINE(performance-unnecessary-value-param)
+inline void notify_and_wait_latch_for_callback(std::shared_ptr<CountDownLatch> l1, std::shared_ptr<CountDownLatch> l2) {
+    notify_and_wait_latch(l1, l2);
+}
+
+// NOLINTNEXTLINE(performance-unnecessary-value-param)
+inline void notify_for_callback(std::shared_ptr<CountDownLatch> latch) {
+    notify(latch);
 }
 
 class LakeCompactionSchedulerTest : public TestBase {
@@ -58,7 +70,7 @@ TEST_F(LakeCompactionSchedulerTest, test_task_queue) {
     std::vector<std::unique_ptr<CompactionTaskContext>> v;
     auto ctx2 = std::make_unique<CompactionTaskContext>(101 /* txn_id */, 102 /* tablet_id */, 1 /* version */,
                                                         false /* force_base_compaction */, false, nullptr);
-    v.push_back(std::move(ctx2));
+    v.emplace_back(std::move(ctx2));
     queue.put_by_txn_id(101 /* txn_id */, v);
 }
 
@@ -78,7 +90,7 @@ TEST_F(LakeCompactionSchedulerTest, test_list_tasks) {
     request.set_txn_id(txn_id);
     request.set_version(1);
     ASSIGN_OR_ABORT(auto tid, bthreads::start_bthread([&, l1, l2]() {
-                        auto cb = ::google::protobuf::NewCallback(notify_and_wait_latch, l1, l2);
+                        auto cb = ::google::protobuf::NewCallback(notify_and_wait_latch_for_callback, l1, l2);
                         _compaction_scheduler.compact(nullptr, &request, &response, cb);
                     }));
 
@@ -124,9 +136,9 @@ TEST_F(LakeCompactionSchedulerTest, test_abort_all) {
     { // task 0: block the execution done until l2.count_down()
         auto txn_id = next_id();
         auto request = std::make_shared<CompactRequest>();
-        requests.push_back(request);
+        requests.emplace_back(request);
         auto response = std::make_shared<CompactResponse>();
-        responses.push_back(response);
+        responses.emplace_back(response);
         auto meta = generate_simple_tablet_metadata(DUP_KEYS);
         CHECK_OK(_tablet_mgr->put_tablet_metadata(meta));
         request->add_tablet_ids(meta->id());
@@ -135,10 +147,10 @@ TEST_F(LakeCompactionSchedulerTest, test_abort_all) {
         request->set_version(1);
         // wait l2, count down l0
         ASSIGN_OR_ABORT(auto tid, bthreads::start_bthread([&, l1, l2, request, response]() {
-                            auto cb = ::google::protobuf::NewCallback(notify_and_wait_latch, l0, l2);
+                            auto cb = ::google::protobuf::NewCallback(notify_and_wait_latch_for_callback, l0, l2);
                             _compaction_scheduler.compact(nullptr, request.get(), response.get(), cb);
                         }));
-        tids.push_back(tid);
+        tids.emplace_back(tid);
     }
     // Wait for task0 complete
     l0->wait();
@@ -146,9 +158,9 @@ TEST_F(LakeCompactionSchedulerTest, test_abort_all) {
     for (int i = 0; i < num_tasks; ++i) {
         auto txn_id = next_id();
         auto request = std::make_shared<CompactRequest>();
-        requests.push_back(request);
+        requests.emplace_back(request);
         auto response = std::make_shared<CompactResponse>();
-        responses.push_back(response);
+        responses.emplace_back(response);
         auto meta = generate_simple_tablet_metadata(DUP_KEYS);
         CHECK_OK(_tablet_mgr->put_tablet_metadata(meta));
         request->add_tablet_ids(meta->id());
@@ -157,11 +169,11 @@ TEST_F(LakeCompactionSchedulerTest, test_abort_all) {
         request->set_version(1);
         // wait l2, count down l1
         ASSIGN_OR_ABORT(auto tid, bthreads::start_bthread([&, l1, l2, l3, request, response]() {
-                            auto cb = ::google::protobuf::NewCallback(notify_and_wait_latch, l1, l2);
+                            auto cb = ::google::protobuf::NewCallback(notify_and_wait_latch_for_callback, l1, l2);
                             l3->count_down();
                             _compaction_scheduler.compact(nullptr, request.get(), response.get(), cb);
                         }));
-        tids.push_back(tid);
+        tids.emplace_back(tid);
     }
     // wait until all bthreads run
     l3->wait();
@@ -173,12 +185,12 @@ TEST_F(LakeCompactionSchedulerTest, test_abort_all) {
     // l1 should be properly count down by all the tasks
     l1->wait();
 
-    for (auto tid : tids) {
+    for (const auto& tid : tids) {
         bthread_join(tid, nullptr);
     }
 
     int aborted = 0;
-    for (auto response : responses) {
+    for (const auto& response : responses) {
         if (response->status().status_code() == TStatusCode::ABORTED) {
             ++aborted;
         }
@@ -198,7 +210,7 @@ TEST_F(LakeCompactionSchedulerTest, test_submit_compact_after_stop) {
     request.set_timeout_ms(60 * 1000);
     request.set_txn_id(next_id());
     request.set_version(1);
-    auto cb = ::google::protobuf::NewCallback(notify, l1);
+    auto cb = ::google::protobuf::NewCallback(notify_for_callback, l1);
     _compaction_scheduler.compact(nullptr, &request, &response, cb);
     l1->wait();
     EXPECT_EQ(response.status().status_code(), TStatusCode::ABORTED);
@@ -267,7 +279,7 @@ TEST_F(LakeCompactionSchedulerTest, test_issue44136) {
     request.set_timeout_ms(/*1 minute=*/60 * 1000);
     request.set_txn_id(txn_id);
     request.set_version(1);
-    auto cb = ::google::protobuf::NewCallback(notify, latch);
+    auto cb = ::google::protobuf::NewCallback(notify_for_callback, latch);
     _compaction_scheduler.compact(nullptr, &request, &response, cb);
 
     _compaction_scheduler.abort(txn_id);
@@ -285,7 +297,7 @@ TEST_F(LakeCompactionSchedulerTest, test_abort_with_not_write_txnlog) {
     request.set_txn_id(txn_id);
     request.set_version(1);
     request.set_skip_write_txnlog(true);
-    auto cb = ::google::protobuf::NewCallback(notify, latch);
+    auto cb = ::google::protobuf::NewCallback(notify_for_callback, latch);
     TEST_ENABLE_ERROR_POINT("VerticalCompactionTask::execute::1", Status::IOError("injected error"));
     TEST_ENABLE_ERROR_POINT("HorizontalCompactionTask::execute::1", Status::IOError("injected error"));
     TEST_ENABLE_ERROR_POINT("CloudNativeIndexCompactionTask::execute::1", Status::IOError("injected error"));

@@ -283,8 +283,8 @@ StatusOr<ChunkPtr> LocalPartitionTopnContext::pull_one_chunk_from_sorters() {
     return chunk;
 }
 
-Columns LocalPartitionTopnContext::_create_agg_result_columns(size_t num_rows) {
-    Columns agg_result_columns(_pre_agg->_agg_fn_types.size());
+MutableColumns LocalPartitionTopnContext::_create_agg_result_columns(size_t num_rows) {
+    MutableColumns agg_result_columns(_pre_agg->_agg_fn_types.size());
     for (size_t i = 0; i < _pre_agg->_agg_fn_types.size(); ++i) {
         // For count, count distinct, bitmap_union_int such as never return null function,
         // we need to create a not-nullable column.
@@ -301,7 +301,7 @@ void LocalPartitionTopnContext::output_agg_result(Chunk* chunk, bool eos, bool i
 
     auto agg_state = _pre_agg->_managed_fn_states[_sorter_index]->mutable_data();
 
-    Columns agg_result_columns = _create_agg_result_columns(chunk->num_rows());
+    MutableColumns agg_result_columns = _create_agg_result_columns(chunk->num_rows());
 
     if (is_first_chunk) {
         for (size_t i = 0; i < _pre_agg->_agg_fn_ctxs.size(); i++) {
@@ -333,11 +333,11 @@ void LocalPartitionTopnContext::output_agg_result(Chunk* chunk, bool eos, bool i
 
 Status LocalPartitionTopnContext::output_agg_streaming(Chunk* chunk) {
     RETURN_IF_ERROR(_evaluate_agg_input_columns(chunk));
-    Columns agg_result_column = _create_agg_result_columns(chunk->num_rows());
+    MutableColumns agg_result_column = _create_agg_result_columns(chunk->num_rows());
     for (size_t i = 0; i < _pre_agg->_agg_fn_ctxs.size(); i++) {
         auto slot_id = _pre_agg->_t_pre_agg_output_slot_id[i];
         _pre_agg->_agg_functions[i]->convert_to_serialize_format(
-                _pre_agg->_agg_fn_ctxs[i], _pre_agg->_agg_input_columns[i], chunk->num_rows(), &agg_result_column[i]);
+                _pre_agg->_agg_fn_ctxs[i], _pre_agg->_agg_input_columns[i], chunk->num_rows(), agg_result_column[i]);
         chunk->append_column(std::move(agg_result_column[i]), slot_id);
     }
     return Status::OK();
@@ -353,7 +353,7 @@ Status LocalPartitionTopnContext::_evaluate_agg_input_columns(Chunk* chunk) {
             // if first column is const, we have to unpack it. Most agg function only has one arg, and treat it as non-const column
             if (j == 0) {
                 _pre_agg->_agg_input_columns[i][j] =
-                        ColumnHelper::unpack_and_duplicate_const_column(chunk->num_rows(), col);
+                        ColumnHelper::unpack_and_duplicate_const_column(chunk->num_rows(), std::move(col));
             } else {
                 // if function has at least two argument, unpack const column selectively
                 // for function like corr, FE forbid second args to be const, we will always unpack const column for it
@@ -362,7 +362,7 @@ Status LocalPartitionTopnContext::_evaluate_agg_input_columns(Chunk* chunk) {
                     _pre_agg->_agg_input_columns[i][j] = std::move(col);
                 } else {
                     _pre_agg->_agg_input_columns[i][j] =
-                            ColumnHelper::unpack_and_duplicate_const_column(chunk->num_rows(), col);
+                            ColumnHelper::unpack_and_duplicate_const_column(chunk->num_rows(), std::move(col));
                 }
             }
             _pre_agg->_agg_input_raw_columns[i][j] = _pre_agg->_agg_input_columns[i][j].get();

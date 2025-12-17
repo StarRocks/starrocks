@@ -576,21 +576,32 @@ std::string ArrayColumn::debug_string() const {
     return ss.str();
 }
 
-StatusOr<ColumnPtr> ArrayColumn::upgrade_if_overflow() {
+StatusOr<MutableColumnPtr> ArrayColumn::upgrade_if_overflow() {
     if (_offsets->size() > Column::MAX_CAPACITY_LIMIT) {
         return Status::InternalError("Size of ArrayColumn exceed the limit");
     }
 
-    return upgrade_helper_func(&_elements);
+    auto mutable_elements = _elements->as_mutable_ptr();
+    auto ret = upgrade_helper_func(&mutable_elements);
+    if (ret.ok()) {
+        _elements = std::move(mutable_elements);
+    }
+    return ret;
 }
 
-StatusOr<ColumnPtr> ArrayColumn::downgrade() {
-    return downgrade_helper_func(&_elements);
+StatusOr<MutableColumnPtr> ArrayColumn::downgrade() {
+    auto mutable_elements = _elements->as_mutable_ptr();
+    auto ret = downgrade_helper_func(&mutable_elements);
+    if (ret.ok()) {
+        _elements = std::move(mutable_elements);
+    }
+    return ret;
 }
 
 Status ArrayColumn::unfold_const_children(const starrocks::TypeDescriptor& type) {
     DCHECK(type.children.size() == 1) << "Array schema does not match data's";
-    _elements = ColumnHelper::unfold_const_column(type.children[0], _elements->size(), _elements);
+    size_t col_size = _elements->size();
+    _elements = ColumnHelper::unfold_const_column(type.children[0], col_size, std::move(_elements));
     return Status::OK();
 }
 

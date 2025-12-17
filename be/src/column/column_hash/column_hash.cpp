@@ -234,7 +234,12 @@ public:
     Status do_visit(const BinaryColumnBase<SizeT>& column) {
         const auto& offsets = column.get_offset();
         const auto& bytes = column.get_bytes();
+        const auto column_size = column.size();
         _selector.for_each([&](uint32_t idx) {
+            // Skip out-of-bounds indices (preserve hash seed)
+            if (idx >= column_size) {
+                return;
+            }
             uint32_t* slot_ptr = slot(idx);
             auto len = offsets[idx + 1] - offsets[idx];
             // For empty strings, don't modify the hash (hash with 0 bytes preserves the seed)

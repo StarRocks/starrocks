@@ -153,7 +153,7 @@ StatusOr<std::unique_ptr<orc::ColumnVectorBatch>> ORCFileWriter::_convert(Chunk*
     return cvb;
 }
 
-Status ORCFileWriter::_write_column(orc::ColumnVectorBatch& orc_column, ColumnPtr& column,
+Status ORCFileWriter::_write_column(orc::ColumnVectorBatch& orc_column, const ColumnPtr& column,
                                     const TypeDescriptor& type_desc) {
     switch (type_desc.type) {
     case TYPE_BOOLEAN: {
@@ -214,7 +214,7 @@ inline const uint8_t* get_raw_null_column(const ColumnPtr& col) {
     if (!col->has_null()) {
         return nullptr;
     }
-    auto& null_column = down_cast<const NullableColumn*>(col.get())->null_column();
+    auto null_column = down_cast<const NullableColumn*>(col.get())->null_column();
     auto* raw_column = null_column->immutable_data().data();
     return raw_column;
 }
@@ -227,7 +227,7 @@ inline const RunTimeCppType<lt>* get_raw_data_column(const ColumnPtr& col) {
 }
 
 template <LogicalType Type, typename VectorBatchType>
-Status ORCFileWriter::_write_number(orc::ColumnVectorBatch& orc_column, ColumnPtr& column) {
+Status ORCFileWriter::_write_number(orc::ColumnVectorBatch& orc_column, const ColumnPtr& column) {
     auto& number_orc_column = dynamic_cast<VectorBatchType&>(orc_column);
     auto column_size = column->size();
     orc_column.resize(column_size);
@@ -245,7 +245,7 @@ Status ORCFileWriter::_write_number(orc::ColumnVectorBatch& orc_column, ColumnPt
     return Status::OK();
 }
 
-Status ORCFileWriter::_write_string(orc::ColumnVectorBatch& orc_column, ColumnPtr& column) {
+Status ORCFileWriter::_write_string(orc::ColumnVectorBatch& orc_column, const ColumnPtr& column) {
     auto& string_orc_column = dynamic_cast<orc::StringVectorBatch&>(orc_column);
     auto column_size = column->size();
     orc_column.resize(column_size);
@@ -266,8 +266,8 @@ Status ORCFileWriter::_write_string(orc::ColumnVectorBatch& orc_column, ColumnPt
 }
 
 template <LogicalType DecimalType, typename VectorBatchType, typename T>
-Status ORCFileWriter::_write_decimal32or64or128(orc::ColumnVectorBatch& orc_column, ColumnPtr& column, int precision,
-                                                int scale) {
+Status ORCFileWriter::_write_decimal32or64or128(orc::ColumnVectorBatch& orc_column, const ColumnPtr& column,
+                                                int precision, int scale) {
     auto& decimal_orc_column = dynamic_cast<VectorBatchType&>(orc_column);
     auto column_size = column->size();
     using Type = RunTimeCppType<DecimalType>;
@@ -297,7 +297,7 @@ Status ORCFileWriter::_write_decimal32or64or128(orc::ColumnVectorBatch& orc_colu
     return Status::OK();
 }
 
-Status ORCFileWriter::_write_date(orc::ColumnVectorBatch& orc_column, ColumnPtr& column) {
+Status ORCFileWriter::_write_date(orc::ColumnVectorBatch& orc_column, const ColumnPtr& column) {
     auto& date_orc_column = dynamic_cast<orc::LongVectorBatch&>(orc_column);
     auto column_size = column->size();
 
@@ -316,7 +316,7 @@ Status ORCFileWriter::_write_date(orc::ColumnVectorBatch& orc_column, ColumnPtr&
     return Status::OK();
 }
 
-Status ORCFileWriter::_write_datetime(orc::ColumnVectorBatch& orc_column, ColumnPtr& column) {
+Status ORCFileWriter::_write_datetime(orc::ColumnVectorBatch& orc_column, const ColumnPtr& column) {
     auto& timestamp_orc_column = dynamic_cast<orc::TimestampVectorBatch&>(orc_column);
     auto column_size = column->size();
 
@@ -336,7 +336,8 @@ Status ORCFileWriter::_write_datetime(orc::ColumnVectorBatch& orc_column, Column
     return Status::OK();
 }
 
-Status ORCFileWriter::_write_map(const TypeDescriptor& type, orc::ColumnVectorBatch& orc_column, ColumnPtr& column) {
+Status ORCFileWriter::_write_map(const TypeDescriptor& type, orc::ColumnVectorBatch& orc_column,
+                                 const ColumnPtr& column) {
     auto& map_column = dynamic_cast<orc::MapVectorBatch&>(orc_column);
     auto column_size = column->size();
 
@@ -344,11 +345,12 @@ Status ORCFileWriter::_write_map(const TypeDescriptor& type, orc::ColumnVectorBa
     map_column.numElements = column_size;
 
     auto* null_col = get_raw_null_column(column);
-    auto* data_col = down_cast<RunTimeColumnType<TYPE_MAP>*>(ColumnHelper::get_data_column(column.get()));
+    auto* data_col =
+            down_cast<RunTimeColumnType<TYPE_MAP>*>(ColumnHelper::get_data_column(column->as_mutable_raw_ptr()));
 
     _populate_orc_notnull(orc_column, null_col, column_size);
 
-    auto& offsets = data_col->offsets_column()->get_data();
+    auto& offsets = data_col->offsets_column()->immutable_data();
     for (size_t i = 0; i < offsets.size(); i++) {
         map_column.offsets[i] = static_cast<int64_t>(offsets[i]);
     }

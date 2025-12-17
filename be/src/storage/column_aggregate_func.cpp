@@ -146,7 +146,7 @@ public:
     }
 
     void append_data(Column* agg) override {
-        auto* col = down_cast<BinaryColumn*>(agg);
+        auto* col = static_cast<BinaryColumn*>(agg);
         // NOTE: assume the storage pointed by |this->data().slice()| not destroyed.
         col->append(this->data().slice());
     }
@@ -207,8 +207,8 @@ public:
         _aggregate_column = agg;
 
         auto* n = down_cast<NullableColumn*>(agg);
-        _child->update_aggregate(n->data_column().get());
-        _null_child->update_aggregate(n->null_column().get());
+        _child->update_aggregate(n->data_column_raw_ptr());
+        _null_child->update_aggregate(n->null_column_raw_ptr());
 
         reset();
     }
@@ -223,7 +223,7 @@ public:
         _null_child->finalize();
 
         auto p = down_cast<NullableColumn*>(_aggregate_column);
-        p->set_has_null(SIMD::count_nonzero(p->null_column()->get_data()));
+        p->set_has_null(SIMD::count_nonzero(p->immutable_null_column_data()));
         _aggregate_column = nullptr;
     }
 

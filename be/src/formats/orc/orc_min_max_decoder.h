@@ -33,7 +33,7 @@ class OrcMinMaxDecoder {
 public:
     // to decode min and max value from column stats.
     static Status decode(SlotDescriptor* slot, const orc::Type* type, const orc::proto::ColumnStatistics& stats,
-                         ColumnPtr min_col, ColumnPtr max_col, int64_t tz_offset_in_seconds);
+                         Column* min_col, Column* max_col, int64_t tz_offset_in_seconds);
 };
 
 } // namespace starrocks

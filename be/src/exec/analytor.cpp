@@ -573,7 +573,7 @@ void Analytor::_remove_unused_rows(RuntimeState* state) {
         SCOPED_TIMER(_column_resize_timer);
         for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
             for (size_t j = 0; j < _agg_expr_ctxs[i].size(); j++) {
-                _agg_intput_columns[i][j]->remove_first_n_values(remove_rows);
+                _agg_intput_columns[i][j]->as_mutable_raw_ptr()->remove_first_n_values(remove_rows);
             }
         }
         for (size_t i = 0; i < _partition_ctxs.size(); i++) {
@@ -622,7 +622,8 @@ Status Analytor::_add_chunk(const ChunkPtr& chunk) {
                 ASSIGN_OR_RETURN(ColumnPtr column, _agg_expr_ctxs[i][j]->evaluate(chunk.get()));
 
                 // When chunk's column is const, maybe need to unpack it.
-                TRY_CATCH_BAD_ALLOC(_append_column(chunk_size, _agg_intput_columns[i][j].get(), column));
+                TRY_CATCH_BAD_ALLOC(
+                        _append_column(chunk_size, _agg_intput_columns[i][j]->as_mutable_raw_ptr(), column));
 
                 RETURN_IF_ERROR(_agg_intput_columns[i][j]->capacity_limit_reached());
             }
@@ -656,9 +657,10 @@ void Analytor::_append_column(size_t chunk_size, Column* dst_column, ColumnPtr& 
         static_cast<void>(dst_column->append_nulls(chunk_size));
     } else if (src_column->is_constant() && !dst_column->is_constant()) {
         // Unpack const column, then append it to dst.
-        auto* const_column = down_cast<ConstColumn*>(src_column.get());
-        const_column->data_column()->assign(chunk_size, 0);
-        dst_column->append(*const_column->data_column(), 0, chunk_size);
+        auto* const_column = down_cast<ConstColumn*>(src_column->as_mutable_raw_ptr());
+        auto* data_column = const_column->data_column_raw_ptr();
+        data_column->assign(chunk_size, 0);
+        dst_column->append(*data_column, 0, chunk_size);
     } else {
         // Most cases.
         dst_column->append(*src_column, 0, chunk_size);

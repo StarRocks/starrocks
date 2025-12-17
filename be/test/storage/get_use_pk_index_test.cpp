@@ -14,8 +14,10 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <chrono>
 #include <memory>
+#include <random>
 #include <string>
 #include <thread>
 
@@ -65,7 +67,7 @@ public:
         for (size_t i = 0; i < segments.size(); i++) {
             auto& segment = segments[i];
             auto chunk = ChunkHelper::new_chunk(schema, segment.size());
-            auto& cols = chunk->columns();
+            auto cols = chunk->mutable_columns();
             for (auto& row : segment) {
                 CHECK(cols.size() == row.size());
                 for (size_t j = 0; j < row.size(); j++) {

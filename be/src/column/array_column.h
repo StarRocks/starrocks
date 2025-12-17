@@ -175,11 +175,19 @@ public:
 
     const Column& elements() const { return *_elements; }
     Column& elements() { return *_elements; }
+
+    const Column* elements_column_raw_ptr() const { return _elements.get(); }
+    Column* elements_column_raw_ptr() { return _elements.get(); }
+
     ColumnPtr& elements_column() { return _elements; }
     const ColumnPtr& elements_column() const { return _elements; }
 
     OffsetColumn& offsets() { return *_offsets; }
     const OffsetColumn& offsets() const { return *_offsets; }
+
+    const OffsetColumn* offsets_column_raw_ptr() const { return _offsets.get(); }
+    OffsetColumn* offsets_column_raw_ptr() { return _offsets.get(); }
+
     const OffsetColumnPtr& offsets_column() const { return _offsets; }
     OffsetColumnPtr& offsets_column() { return _offsets; }
 
@@ -194,9 +202,9 @@ public:
         return _offsets->capacity_limit_reached();
     }
 
-    StatusOr<ColumnPtr> upgrade_if_overflow() override;
+    StatusOr<MutableColumnPtr> upgrade_if_overflow() override;
 
-    StatusOr<ColumnPtr> downgrade() override;
+    StatusOr<MutableColumnPtr> downgrade() override;
 
     bool has_large_column() const override { return _elements->has_large_column(); }
 
@@ -225,12 +233,12 @@ private:
                                              const NullColumnPtr& null_data);
 
     // Elements must be NullableColumn to facilitate handling nested types.
-    ColumnPtr _elements;
+    Column::WrappedPtr _elements;
     // Offsets column will store the start position of every array element.
     // Offsets store more one data to indicate the end position.
     // For example, [1, 2, 3], [4, 5, 6].
     // The two element array has three offsets(0, 3, 6)
-    UInt32Column::Ptr _offsets;
+    UInt32Column::WrappedPtr _offsets;
 };
 
 extern template bool ArrayColumn::is_all_array_lengths_equal<true>(const ColumnPtr& v1, const ColumnPtr& v2,

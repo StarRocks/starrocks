@@ -41,7 +41,7 @@ struct AggInRuntimeFilterBuilderImpl {
             using ResultVector = typename HashMapWithKey::ResultVector;
             auto& hash_map = hash_map_with_key.hash_map;
             const size_t hash_map_size = hash_map_variant.size();
-            Columns group_by_columns = aggregator->create_group_by_columns(hash_map_size);
+            MutableColumns group_by_columns = aggregator->create_group_by_columns(hash_map_size);
             {
                 ResultVector result_vector;
                 result_vector.resize(hash_map_size);

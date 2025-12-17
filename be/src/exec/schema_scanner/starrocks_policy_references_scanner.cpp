@@ -59,13 +59,13 @@ Status StarrocksPolicyReferencesScanner::fill_chunk(ChunkPtr* chunk) {
         case 1: {
             // POLICY_DATABASE
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(1);
+                Column* column = (*chunk)->get_column_raw_ptr_by_slot_id(index);
                 if (policy_reference_item.__isset.policy_database) {
                     const std::string* str = &policy_reference_item.policy_database;
                     Slice value(str->c_str(), str->length());
-                    fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+                    fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&value);
                 } else {
-                    fill_data_column_with_null(column.get());
+                    fill_data_column_with_null(column);
                 }
             }
             break;
@@ -73,13 +73,13 @@ Status StarrocksPolicyReferencesScanner::fill_chunk(ChunkPtr* chunk) {
         case 2: {
             // POLICY_NAME
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(2);
+                Column* column = (*chunk)->get_column_raw_ptr_by_slot_id(index);
                 if (policy_reference_item.__isset.policy_name) {
                     const std::string* str = &policy_reference_item.policy_name;
                     Slice value(str->c_str(), str->length());
-                    fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+                    fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&value);
                 } else {
-                    fill_data_column_with_null(column.get());
+                    fill_data_column_with_null(column);
                 }
             }
             break;
@@ -87,13 +87,13 @@ Status StarrocksPolicyReferencesScanner::fill_chunk(ChunkPtr* chunk) {
         case 3: {
             // POLICY_TYPE
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(3);
+                Column* column = (*chunk)->get_column_raw_ptr_by_slot_id(index);
                 if (policy_reference_item.__isset.policy_type) {
                     const std::string* str = &policy_reference_item.policy_type;
                     Slice value(str->c_str(), str->length());
-                    fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+                    fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&value);
                 } else {
-                    fill_data_column_with_null(column.get());
+                    fill_data_column_with_null(column);
                 }
             }
             break;
@@ -101,13 +101,13 @@ Status StarrocksPolicyReferencesScanner::fill_chunk(ChunkPtr* chunk) {
         case 4: {
             // REF_CATALOG
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(4);
+                Column* column = (*chunk)->get_column_raw_ptr_by_slot_id(index);
                 if (policy_reference_item.__isset.ref_catalog) {
                     const std::string* str = &policy_reference_item.ref_catalog;
                     Slice value(str->c_str(), str->length());
-                    fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+                    fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&value);
                 } else {
-                    fill_data_column_with_null(column.get());
+                    fill_data_column_with_null(column);
                 }
             }
             break;
@@ -115,13 +115,13 @@ Status StarrocksPolicyReferencesScanner::fill_chunk(ChunkPtr* chunk) {
         case 5: {
             // REF_DATABASE
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(5);
+                Column* column = (*chunk)->get_column_raw_ptr_by_slot_id(index);
                 if (policy_reference_item.__isset.ref_database) {
                     const std::string* str = &policy_reference_item.ref_database;
                     Slice value(str->c_str(), str->length());
-                    fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+                    fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&value);
                 } else {
-                    fill_data_column_with_null(column.get());
+                    fill_data_column_with_null(column);
                 }
             }
             break;
@@ -129,13 +129,13 @@ Status StarrocksPolicyReferencesScanner::fill_chunk(ChunkPtr* chunk) {
         case 6: {
             // REF_OBJECT_NAME
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(6);
+                Column* column = (*chunk)->get_column_raw_ptr_by_slot_id(index);
                 if (policy_reference_item.__isset.ref_object_name) {
                     const std::string* str = &policy_reference_item.ref_object_name;
                     Slice value(str->c_str(), str->length());
-                    fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+                    fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&value);
                 } else {
-                    fill_data_column_with_null(column.get());
+                    fill_data_column_with_null(column);
                 }
             }
             break;
@@ -143,13 +143,13 @@ Status StarrocksPolicyReferencesScanner::fill_chunk(ChunkPtr* chunk) {
         case 7: {
             // REF_COLUMN
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(7);
+                Column* column = (*chunk)->get_column_raw_ptr_by_slot_id(index);
                 if (policy_reference_item.__isset.ref_column) {
                     const std::string* str = &policy_reference_item.ref_column;
                     Slice value(str->c_str(), str->length());
-                    fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+                    fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&value);
                 } else {
-                    fill_data_column_with_null(column.get());
+                    fill_data_column_with_null(column);
                 }
             }
             break;

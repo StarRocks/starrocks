@@ -52,7 +52,7 @@ void ConstColumn::append_value_multiple_times(const Column& src, uint32_t index,
     append(src, index, size);
 }
 
-StatusOr<ColumnPtr> ConstColumn::replicate(const Buffer<uint32_t>& offsets) {
+StatusOr<MutableColumnPtr> ConstColumn::replicate(const Buffer<uint32_t>& offsets) {
     return ConstColumn::create(this->_data->clone(), offsets.back());
 }
 
@@ -93,16 +93,26 @@ void ConstColumn::check_or_die() const {
     _data->check_or_die();
 }
 
-StatusOr<ColumnPtr> ConstColumn::upgrade_if_overflow() {
+StatusOr<MutableColumnPtr> ConstColumn::upgrade_if_overflow() {
     if (_size > Column::MAX_CAPACITY_LIMIT) {
         return Status::InternalError("Size of ConstColumn exceed the limit");
     }
 
-    return upgrade_helper_func(&_data);
+    auto mutable_data_col = _data->as_mutable_ptr();
+    auto ret = upgrade_helper_func(&mutable_data_col);
+    if (ret.ok()) {
+        _data = std::move(mutable_data_col);
+    }
+    return ret;
 }
 
-StatusOr<ColumnPtr> ConstColumn::downgrade() {
-    return downgrade_helper_func(&_data);
+StatusOr<MutableColumnPtr> ConstColumn::downgrade() {
+    auto mutable_data_col = _data->as_mutable_ptr();
+    auto ret = downgrade_helper_func(&mutable_data_col);
+    if (ret.ok()) {
+        _data = std::move(mutable_data_col);
+    }
+    return ret;
 }
 
 } // namespace starrocks

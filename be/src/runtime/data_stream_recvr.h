@@ -94,8 +94,8 @@ public:
     ~DataStreamRecvr();
     void bind_profile(int32_t driver_sequence, const std::shared_ptr<RuntimeProfile>& profile);
 
-    Status get_chunk(std::unique_ptr<Chunk>* chunk);
-    Status get_chunk_for_pipeline(std::unique_ptr<Chunk>* chunk, const int32_t driver_sequence);
+    Status get_chunk(ChunkUniquePtr* chunk);
+    Status get_chunk_for_pipeline(ChunkUniquePtr* chunk, const int32_t driver_sequence);
 
     // Deregister from DataStreamMgr instance, which shares ownership of this instance.
     void close();

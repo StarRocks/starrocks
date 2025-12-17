@@ -299,12 +299,12 @@ Status ExecNode::get_next_big_chunk(RuntimeState* state, ChunkPtr* chunk, bool* 
                     return Status::OK();
                 } else {
                     // TODO: copy the small chunk to big chunk
-                    auto& dest_columns = pre_output_chunk->columns();
                     auto& src_columns = cur_chunk->columns();
                     size_t num_rows = cur_size;
                     // copy the new read chunk to the reserved
+                    auto& dest_columns = pre_output_chunk->columns();
                     for (size_t i = 0; i < dest_columns.size(); i++) {
-                        dest_columns[i]->append(*src_columns[i], 0, num_rows);
+                        dest_columns[i]->as_mutable_raw_ptr()->append(*src_columns[i], 0, num_rows);
                     }
                     continue;
                 }

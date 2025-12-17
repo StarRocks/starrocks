@@ -47,8 +47,8 @@ TEST_F(FunctionHelperTest, testMergeConstColumnMergeWithNullColumn) {
     auto result_column = FunctionHelper::merge_column_and_null_column(std::move(const_column), std::move(null_column));
     ASSERT_TRUE(result_column->is_nullable());
     ASSERT_EQ(result_column->size(), 10);
-    auto* result_nullable_column = down_cast<NullableColumn*>(result_column.get());
-    auto* result_data_column = down_cast<Decimal128Column*>(result_nullable_column->data_column().get());
+    auto* result_nullable_column = down_cast<const NullableColumn*>(result_column.get());
+    auto* result_data_column = down_cast<const Decimal128Column*>(result_nullable_column->data_column().get());
     auto& result_data = result_data_column->get_data();
     for (int i = 0; i < 10; ++i) {
         if (i % 2 == 0) {
@@ -80,8 +80,8 @@ TEST_F(FunctionHelperTest, testMergeNullableColumnMergeWithNullColumn) {
             FunctionHelper::merge_column_and_null_column(std::move(nullable_column), std::move(null_column));
     ASSERT_TRUE(result_column->is_nullable());
     ASSERT_EQ(result_column->size(), 10);
-    auto* result_nullable_column = down_cast<NullableColumn*>(result_column.get());
-    auto* result_data_column = down_cast<Decimal128Column*>(result_nullable_column->data_column().get());
+    auto* result_nullable_column = down_cast<const NullableColumn*>(result_column.get());
+    auto* result_data_column = down_cast<const Decimal128Column*>(result_nullable_column->data_column().get());
     auto& result_data = result_data_column->get_data();
     for (int i = 0; i < 10; ++i) {
         if (i % 2 == 0 && i % 3 != 0) {
@@ -106,8 +106,8 @@ TEST_F(FunctionHelperTest, testMergeNotNullableColumnMergeWithNullColumn) {
     auto result_column = FunctionHelper::merge_column_and_null_column(std::move(data_column), std::move(null_column));
     ASSERT_TRUE(result_column->is_nullable());
     ASSERT_EQ(result_column->size(), 10);
-    auto* result_nullable_column = down_cast<NullableColumn*>(result_column.get());
-    auto* result_data_column = down_cast<Decimal128Column*>(result_nullable_column->data_column().get());
+    auto* result_nullable_column = down_cast<const NullableColumn*>(result_column.get());
+    auto* result_data_column = down_cast<const Decimal128Column*>(result_nullable_column->data_column().get());
     auto& result_data = result_data_column->get_data();
     for (int i = 0; i < 10; ++i) {
         if (i % 2 == 0) {

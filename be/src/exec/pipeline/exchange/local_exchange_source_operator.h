@@ -46,7 +46,7 @@ class LocalExchangeSourceOperator final : public SourceOperator {
     };
 
     struct PartialChunks {
-        std::queue<std::unique_ptr<Chunk>> queue;
+        std::queue<ChunkUniquePtr> queue;
         int64_t num_rows{0};
         size_t memory_usage{0};
         std::vector<std::pair<TypeDescriptor, ColumnPtr>> partition_key_datum;
@@ -66,8 +66,7 @@ public:
                      uint32_t size, size_t memory_bytes);
 
     Status add_chunk(const std::vector<std::optional<std::string>>& partition_key,
-                     const std::vector<std::pair<TypeDescriptor, ColumnPtr>>& partition_datum,
-                     std::unique_ptr<Chunk> chunk);
+                     const std::vector<std::pair<TypeDescriptor, ColumnPtr>>& partition_datum, ChunkUniquePtr chunk);
 
     bool has_output() const override;
 

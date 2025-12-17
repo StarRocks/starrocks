@@ -25,7 +25,7 @@
 
 namespace starrocks {
 
-StatusOr<ColumnPtr> ArrayViewColumn::replicate(const Buffer<uint32_t>& offsets) {
+StatusOr<MutableColumnPtr> ArrayViewColumn::replicate(const Buffer<uint32_t>& offsets) {
     auto dest_size = offsets.size() - 1;
     auto new_offsets = UInt32Column::create();
     auto new_lengths = UInt32Column::create();
@@ -37,7 +37,7 @@ StatusOr<ColumnPtr> ArrayViewColumn::replicate(const Buffer<uint32_t>& offsets) 
         new_offsets->append_value_multiple_times(*_offsets, i, repeat_times);
         new_lengths->append_value_multiple_times(*_lengths, i, repeat_times);
     }
-    return ArrayViewColumn::create(_elements, std::move(new_offsets), std::move(new_lengths));
+    return ArrayViewColumn::create(_elements->as_mutable_ptr(), std::move(new_offsets), std::move(new_lengths));
 }
 
 void ArrayViewColumn::assign(size_t n, size_t idx) {
@@ -301,7 +301,7 @@ ColumnPtr ArrayViewColumn::to_array_column() const {
 //  elements column: [1,2,3,4]
 //  offsets column: [0,2,2,3]
 //  length column:  [2,0,0,1]
-ColumnPtr ArrayViewColumn::from_array_column(const ColumnPtr& column) {
+MutableColumnPtr ArrayViewColumn::from_array_column(const ColumnPtr& column) {
     if (!column->is_array()) {
         throw std::runtime_error("input column must be an array column");
     }
@@ -356,8 +356,7 @@ ColumnPtr ArrayViewColumn::to_array_column(const ColumnPtr& column) {
         DCHECK(nullable_column != nullptr);
         auto array_view_column = down_cast<const ArrayViewColumn*>(nullable_column->data_column().get());
         auto array_column = array_view_column->to_array_column();
-        return NullableColumn::create(std::move(array_column)->as_mutable_ptr(),
-                                      nullable_column->null_column()->as_mutable_ptr());
+        return NullableColumn::create(std::move(array_column), std::move(nullable_column->null_column()));
     }
     auto array_view_column = down_cast<const ArrayViewColumn*>(column.get());
     return array_view_column->to_array_column();

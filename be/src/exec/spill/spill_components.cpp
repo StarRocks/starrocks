@@ -685,7 +685,7 @@ Status PartitionedSpillerWriter::_compact_skew_chunks(size_t num_rows, std::vect
         }
         const auto& curr_chunk = chunks[curr_chunk_idx];
         const auto row_idx = idx - (curr_num_rows - curr_chunk->num_rows());
-        auto* hash_column = down_cast<UInt32Column*>(curr_chunk->columns().back().get());
+        auto* hash_column = down_cast<const UInt32Column*>(curr_chunk->columns().back().get());
         auto hash_value = hash_column->get_data()[row_idx];
         ++hash_value_counts[hash_value];
     }
@@ -694,7 +694,7 @@ Status PartitionedSpillerWriter::_compact_skew_chunks(size_t num_rows, std::vect
         if (curr_chunk == nullptr || curr_chunk->is_empty()) {
             continue;
         }
-        auto* hash_column = down_cast<UInt32Column*>(curr_chunk->columns().back().get());
+        auto* hash_column = down_cast<const UInt32Column*>(curr_chunk->columns().back().get());
         auto& hash_values = hash_column->get_data();
         for (auto& hash_value : hash_values) {
             auto it = hash_value_counts.find(hash_value);
@@ -726,7 +726,7 @@ Status PartitionedSpillerWriter::_compact_skew_chunks(size_t num_rows, std::vect
         if (chunk == nullptr || chunk->is_empty()) {
             continue;
         }
-        auto* hash_column = down_cast<UInt32Column*>(chunk->columns().back().get());
+        auto* hash_column = down_cast<const UInt32Column*>(chunk->columns().back().get());
         auto& hash_values = hash_column->get_data();
         std::vector<uint32_t> indices;
         Filter filter;
@@ -824,7 +824,7 @@ Status PartitionedSpillerWriter::_split_partition(workgroup::YieldContext& yield
                 if (chunk->is_empty()) {
                     continue;
                 }
-                auto hash_column = down_cast<SpillHashColumn*>(chunk->columns().back().get());
+                auto hash_column = down_cast<const SpillHashColumn*>(chunk->columns().back().get());
                 const auto& hash_data = hash_column->get_data();
                 // hash data
                 std::vector<uint32_t> shuffle_result;

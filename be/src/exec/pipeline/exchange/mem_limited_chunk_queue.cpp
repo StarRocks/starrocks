@@ -518,8 +518,9 @@ Status MemLimitedChunkQueue::_load(Block* block) {
     for (auto& chunk : chunks) {
         chunk = _chunk_builder->clone_empty();
         for (auto& column : chunk->columns()) {
-            ASSIGN_OR_RETURN(read_cursor, serde::ColumnArraySerde::deserialize(read_cursor, column.get(), false,
-                                                                               _opts.encode_level));
+            ASSIGN_OR_RETURN(read_cursor,
+                             serde::ColumnArraySerde::deserialize(read_cursor, column->as_mutable_raw_ptr(), false,
+                                                                  _opts.encode_level));
         }
     }
     {

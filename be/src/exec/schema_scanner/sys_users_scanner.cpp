@@ -54,56 +54,56 @@ Status SysUsersScanner::fill_chunk(ChunkPtr* chunk) {
         case 1: {
             // HOST
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(1);
+                Column* column = (*chunk)->get_column_raw_ptr_by_slot_id(1);
                 const std::string* str = &user_item.host;
                 Slice value(str->c_str(), str->length());
-                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+                fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&value);
             }
             break;
         }
         case 2: {
             // USER
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(2);
+                Column* column = (*chunk)->get_column_raw_ptr_by_slot_id(2);
                 const std::string* str = &user_item.user;
                 Slice value(str->c_str(), str->length());
-                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+                fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&value);
             }
             break;
         }
         case 3: {
             // PASSWORD_EXPIRED
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(3);
-                fill_column_with_slot<TYPE_BOOLEAN>(column.get(), (void*)&user_item.password_expired);
+                Column* column = (*chunk)->get_column_raw_ptr_by_slot_id(3);
+                fill_column_with_slot<TYPE_BOOLEAN>(column, (void*)&user_item.password_expired);
             }
             break;
         }
         case 4: {
             // PASSWORD_POLICY
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(4);
+                Column* column = (*chunk)->get_column_raw_ptr_by_slot_id(4);
                 const std::string* str = &user_item.password_policy;
                 Slice value(str->c_str(), str->length());
-                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+                fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&value);
             }
             break;
         }
         case 5: {
             // PASSWORD_LAST_CHANGED
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(5);
+                Column* column = (*chunk)->get_column_raw_ptr_by_slot_id(5);
                 const std::string* str = &user_item.password_last_change;
                 Slice value(str->c_str(), str->length());
-                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+                fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&value);
             }
             break;
         }
         case 6: {
             // IS_LOCKED
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(6);
-                fill_column_with_slot<TYPE_BOOLEAN>(column.get(), (void*)&user_item.is_locked);
+                Column* column = (*chunk)->get_column_raw_ptr_by_slot_id(6);
+                fill_column_with_slot<TYPE_BOOLEAN>(column, (void*)&user_item.is_locked);
             }
             break;
         }

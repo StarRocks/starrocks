@@ -56,7 +56,7 @@ public:
                                     const std::shared_ptr<arrow::Schema>& arrow_schema, arrow::MemoryPool* pool)
             : RecordBatchToChunkConverter(sr_schema, arrow_schema, pool) {}
 
-    arrow::Result<std::unique_ptr<Chunk>> convert(const std::shared_ptr<arrow::RecordBatch> recordBatch) override {
+    arrow::Result<ChunkUniquePtr> convert(const std::shared_ptr<arrow::RecordBatch> recordBatch) override {
         if (!recordBatch) {
             return nullptr;
         }

@@ -529,7 +529,7 @@ public:
     void convert_hash_set_to_chunk(int32_t chunk_size, ChunkPtr* chunk);
 
     bool is_pre_cache() { return _aggr_mode == AM_BLOCKING_PRE_CACHE || _aggr_mode == AM_STREAMING_PRE_CACHE; }
-    Columns create_group_by_columns(size_t num_rows) const { return _create_group_by_columns(num_rows); }
+    MutableColumns create_group_by_columns(size_t num_rows) const { return _create_group_by_columns(num_rows); }
 
 protected:
     bool _reached_limit() { return _limit != -1 && _num_rows_returned >= _limit; }
@@ -556,14 +556,16 @@ protected:
     Status _evaluate_const_columns(int i);
 
     // Create new aggregate function result column by type
-    Columns _create_agg_result_columns(size_t num_rows, bool use_intermediate);
-    Columns _create_group_by_columns(size_t num_rows) const;
+    MutableColumns _create_agg_result_columns(size_t num_rows, bool use_intermediate);
+    MutableColumns _create_group_by_columns(size_t num_rows) const;
 
-    void _serialize_to_chunk(ConstAggDataPtr __restrict state, Columns& agg_result_columns);
-    void _finalize_to_chunk(ConstAggDataPtr __restrict state, Columns& agg_result_columns);
+    void _serialize_to_chunk(ConstAggDataPtr __restrict state, MutableColumns& agg_result_columns);
+    void _finalize_to_chunk(ConstAggDataPtr __restrict state, MutableColumns& agg_result_columns);
     void _destroy_state(AggDataPtr __restrict state);
 
     ChunkPtr _build_output_chunk(const Columns& group_by_columns, const Columns& agg_result_columns,
+                                 bool use_intermediate);
+    ChunkPtr _build_output_chunk(MutableColumns&& group_by_columns, MutableColumns&& agg_result_columns,
                                  bool use_intermediate);
 
     void _set_passthrough(bool flag) { _is_passthrough = flag; }

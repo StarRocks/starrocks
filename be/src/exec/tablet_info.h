@@ -170,11 +170,11 @@ private:
 
 struct ChunkRow {
     ChunkRow() = default;
-    ChunkRow(const Columns* columns_, uint32_t index_) : columns(columns_), index(index_) {}
+    ChunkRow(const MutableColumns* columns_, uint32_t index_) : columns(columns_), index(index_) {}
 
     std::string debug_string();
 
-    const Columns* columns = nullptr;
+    const MutableColumns* columns = nullptr;
     uint32_t index = 0;
 };
 
@@ -198,7 +198,9 @@ struct PartionKeyComparator {
         DCHECK_EQ(lhs->columns->size(), rhs->columns->size());
 
         for (size_t i = 0; i < lhs->columns->size(); ++i) {
-            int cmp = _compare_at((*lhs->columns)[i], (*rhs->columns)[i], lhs->index, rhs->index);
+            const Column* lc = (*lhs->columns)[i].get();
+            const Column* rc = (*rhs->columns)[i].get();
+            int cmp = _compare_at(lc, rc, lhs->index, rhs->index);
             if (cmp != 0) {
                 return cmp < 0;
             }
@@ -216,12 +218,12 @@ private:
      * @param r_idx  right column index
      * @return 0 if equal or left & right both null, -1 if left < right or left is null, 1 if left > right or right is null
      */
-    int _compare_at(const ColumnPtr& lc, const ColumnPtr& rc, uint32_t l_idx, uint32_t r_idx) const {
+    int _compare_at(const Column* lc, const Column* rc, uint32_t l_idx, uint32_t r_idx) const {
         bool is_l_null = lc->is_null(l_idx);
         bool is_r_null = rc->is_null(r_idx);
         if (!is_l_null && !is_r_null) {
-            const Column* ldc = ColumnHelper::get_data_column(lc.get());
-            const Column* rdc = ColumnHelper::get_data_column(rc.get());
+            const Column* ldc = ColumnHelper::get_data_column(lc);
+            const Column* rdc = ColumnHelper::get_data_column(rc);
             return ldc->compare_at(l_idx, r_idx, *rdc, -1);
         } else {
             if (is_l_null && is_r_null) {
@@ -284,7 +286,7 @@ private:
      * @param partition_not_exist_row_values  output partition not exist row values
      * @return Status 
      */
-    Status _find_tablets_with_range_partition(Chunk* chunk, const Columns& partition_columns,
+    Status _find_tablets_with_range_partition(Chunk* chunk, const MutableColumns& partition_columns,
                                               const std::vector<uint32_t>& hashes,
                                               std::vector<OlapTablePartition*>* partitions,
                                               std::vector<uint8_t>* selection, std::vector<int>* invalid_row_indexs,
@@ -301,7 +303,7 @@ private:
      * @param partition_not_exist_row_values  output partition not exist row values
      * @return Status 
      */
-    Status _find_tablets_with_list_partition(Chunk* chunk, const Columns& partition_columns,
+    Status _find_tablets_with_list_partition(Chunk* chunk, const MutableColumns& partition_columns,
                                              const std::vector<uint32_t>& hashes,
                                              std::vector<OlapTablePartition*>* partitions,
                                              std::vector<uint8_t>* selection, std::vector<int>* invalid_row_indexs,
@@ -326,7 +328,7 @@ private:
 
     std::vector<SlotDescriptor*> _partition_slot_descs;
     std::vector<SlotDescriptor*> _distributed_slot_descs;
-    Columns _partition_columns;
+    MutableColumns _partition_columns;
     std::vector<const Column*> _distributed_columns;
     std::vector<ExprContext*> _partitions_expr_ctxs;
 

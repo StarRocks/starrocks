@@ -75,8 +75,8 @@ public:
         // TODO serialize
         if (to->is_nullable()) {
             auto* null_column = down_cast<NullableColumn*>(to);
-            null_column->null_column()->append(DATUM_NOT_NULL);
-            column = down_cast<BinaryColumn*>(null_column->data_column().get());
+            null_column->null_column_raw_ptr()->append(DATUM_NOT_NULL);
+            column = down_cast<BinaryColumn*>(null_column->data_column_raw_ptr());
         } else {
             DCHECK(to->is_binary());
             column = down_cast<BinaryColumn*>(to);
@@ -110,7 +110,7 @@ public:
     }
 
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t batch_size,
-                                     ColumnPtr* dst) const final {
+                                     MutableColumnPtr& dst) const final {
         auto& helper = JVMFunctionHelper::getInstance();
         auto* env = helper.getEnv();
         auto* udf_ctxs = ctx->udaf_ctxs();
@@ -172,7 +172,7 @@ public:
             offsets += slice_sz[i];
         }
         // append result to dst column
-        CHECK((*dst)->append_strings(slices));
+        CHECK(dst->append_strings(slices));
     }
 
     // State Data
@@ -434,7 +434,7 @@ public:
         // For nullable inputs, our UDAF does not produce nullable results
         if (!to->is_nullable()) {
             MutableColumnPtr wrapper = const_cast<Column*>(to)->as_mutable_ptr();
-            MutableColumnPtr output = NullableColumn::create(std::move(wrapper), NullColumn::create());
+            auto output = NullableColumn::create(std::move(wrapper), NullColumn::create());
             helper.get_result_from_boxed_array(ctx, type, output.get(), res, batch_size);
         } else {
             helper.get_result_from_boxed_array(ctx, type, to, res, batch_size);

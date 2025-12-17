@@ -114,7 +114,8 @@ StatusOr<TFetchDataResultPtr> StatisticResultWriter::_process_chunk(Chunk* chunk
     DCHECK(!result_columns[0]->empty());
     DCHECK(!result_columns[0]->is_null(0));
 
-    int version = down_cast<Int32Column*>(ColumnHelper::get_data_column(result_columns[0].get()))->get_data()[0];
+    int version =
+            down_cast<const Int32Column*>(ColumnHelper::get_data_column(result_columns[0].get()))->immutable_data()[0];
 
     std::unique_ptr<TFetchDataResult> result(new (std::nothrow) TFetchDataResult());
     if (!result) {
@@ -213,7 +214,7 @@ Status StatisticResultWriter::_fill_statistic_data_v1(int version, const Columns
     auto& updateTimes = ColumnHelper::cast_to_raw<TYPE_DATETIME>(columns[1])->get_data();
     auto& dbIds = ColumnHelper::cast_to_raw<TYPE_BIGINT>(columns[2])->get_data();
     auto& tableIds = ColumnHelper::cast_to_raw<TYPE_BIGINT>(columns[3])->get_data();
-    BinaryColumn* nameColumn = ColumnHelper::cast_to_raw<TYPE_VARCHAR>(columns[4]);
+    const BinaryColumn* nameColumn = ColumnHelper::cast_to_raw<TYPE_VARCHAR>(columns[4]);
     const auto* rowCounts = down_cast<const Int64Column*>(ColumnHelper::get_data_column(columns[5].get()));
     const auto* dataSizes = down_cast<const Int64Column*>(ColumnHelper::get_data_column(columns[6].get()));
     const auto* countDistincts = down_cast<const Int64Column*>(ColumnHelper::get_data_column(columns[7].get()));
@@ -260,7 +261,7 @@ Status StatisticResultWriter::_fill_statistic_data_v2(int version, const Columns
     auto& updateTimes = ColumnHelper::cast_to_raw<TYPE_DATETIME>(columns[1])->get_data();
     auto& dbIds = ColumnHelper::cast_to_raw<TYPE_BIGINT>(columns[2])->get_data();
     auto& tableIds = ColumnHelper::cast_to_raw<TYPE_BIGINT>(columns[3])->get_data();
-    BinaryColumn* nameColumn = ColumnHelper::cast_to_raw<TYPE_VARCHAR>(columns[4]);
+    const BinaryColumn* nameColumn = ColumnHelper::cast_to_raw<TYPE_VARCHAR>(columns[4]);
     auto* rowCounts = down_cast<const Int64Column*>(ColumnHelper::get_data_column(columns[5].get()));
     auto* dataSizes = down_cast<const Int64Column*>(ColumnHelper::get_data_column(columns[6].get()));
     auto* countDistincts = down_cast<const Int64Column*>(ColumnHelper::get_data_column(columns[7].get()));
@@ -738,7 +739,7 @@ Status StatisticResultWriter::_fill_multi_columns_statistics_data_for_query(int 
 
     auto& dbIds = ColumnHelper::cast_to_raw<TYPE_BIGINT>(columns[1])->get_data();
     auto& tableIds = ColumnHelper::cast_to_raw<TYPE_BIGINT>(columns[2])->get_data();
-    BinaryColumn* nameColumn = ColumnHelper::cast_to_raw<TYPE_VARCHAR>(columns[3]);
+    const BinaryColumn* nameColumn = ColumnHelper::cast_to_raw<TYPE_VARCHAR>(columns[3]);
     auto& countDistincts = ColumnHelper::cast_to_raw<TYPE_BIGINT>(columns[4])->get_data();
 
     std::vector<TStatisticData> data_list;

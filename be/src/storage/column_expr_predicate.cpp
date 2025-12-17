@@ -109,8 +109,8 @@ Status ColumnExprPredicate::evaluate(const Column* column, uint8_t* selection, u
     // deal with nullable.
     if (bits->is_nullable()) {
         auto* null_column = ColumnHelper::as_raw_column<NullableColumn>(bits);
-        uint8_t* null_value = null_column->null_column_data().data();
-        uint8_t* data_value = ColumnHelper::get_cpp_data<TYPE_BOOLEAN>(null_column->data_column());
+        const uint8_t* null_value = null_column->null_column_data().data();
+        const uint8_t* data_value = ColumnHelper::get_cpp_data<TYPE_BOOLEAN>(null_column->data_column());
         for (uint16_t i = from; i < to; i++) {
             selection[i] = (!null_value[i]) & (data_value[i]);
         }
@@ -118,7 +118,7 @@ Status ColumnExprPredicate::evaluate(const Column* column, uint8_t* selection, u
     }
 
     // deal with non-nullable.
-    uint8_t* data_value = ColumnHelper::get_cpp_data<TYPE_BOOLEAN>(bits);
+    const uint8_t* data_value = ColumnHelper::get_cpp_data<TYPE_BOOLEAN>(bits);
     memcpy(selection + from, data_value, (to - from));
     return Status::OK();
 }

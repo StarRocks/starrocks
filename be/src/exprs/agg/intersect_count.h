@@ -123,7 +123,7 @@ public:
     }
 
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
-                                     ColumnPtr* dst) const override {
+                                     MutableColumnPtr& dst) const override {
         DCHECK(src[0]->is_object());
 
         // initial keys in BitmapIntersect.
@@ -165,7 +165,7 @@ public:
             intersect_chunks.emplace_back(intersect_per_row);
         }
 
-        auto* dst_column = down_cast<BinaryColumn*>((*dst).get());
+        auto* dst_column = down_cast<BinaryColumn*>(dst.get());
         Bytes& bytes = dst_column->get_bytes();
         size_t old_size = bytes.size();
         bytes.resize(new_size);

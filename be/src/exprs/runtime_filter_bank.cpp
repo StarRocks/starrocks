@@ -491,7 +491,7 @@ StatusOr<ExprContext*> RuntimeFilterHelper::rewrite_runtime_filter_in_cross_join
         if (res->is_null(0)) {
             col = ColumnHelper::create_const_null_column(1);
         } else {
-            auto data_col = down_cast<NullableColumn*>(res.get())->data_column();
+            auto data_col = down_cast<NullableColumn*>(res->as_mutable_raw_ptr())->data_column();
             col = ConstColumn::create(std::move(data_col), 1);
         }
     } else {
@@ -867,7 +867,7 @@ void RuntimeFilterProbeCollector::evaluate_partial_chunk(Chunk* partial_chunk,
     }
 }
 
-void RuntimeFilterProbeCollector::compute_hash_values(Chunk* chunk, Column* column,
+void RuntimeFilterProbeCollector::compute_hash_values(Chunk* chunk, const Column* column,
                                                       RuntimeFilterProbeDescriptor* rf_desc,
                                                       RuntimeMembershipFilterEvalContext& eval_context) {
     // TODO: Hash values will be computed multi times for runtime filters with the same partition_by_exprs.
@@ -882,7 +882,7 @@ void RuntimeFilterProbeCollector::compute_hash_values(Chunk* chunk, Column* colu
         filter->compute_partition_index(rf_desc->layout(), {column}, &eval_context.running_context);
     } else {
         // Used to hold generated columns
-        std::vector<ColumnPtr> column_holders;
+        Columns column_holders;
         std::vector<const Column*> partition_by_columns;
         for (auto& partition_ctx : *(rf_desc->partition_by_expr_contexts())) {
             ColumnPtr partition_column = EVALUATE_NULL_IF_ERROR(partition_ctx, partition_ctx->root(), chunk);

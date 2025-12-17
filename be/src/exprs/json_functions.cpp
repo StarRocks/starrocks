@@ -573,7 +573,7 @@ static StatusOr<ColumnPtr> _extract_with_hyper(NativeJsonState* state, const std
     transform.init_read_task(json_column->flat_column_paths(), json_column->flat_column_types(),
                              json_column->has_remain());
 
-    RETURN_IF_ERROR(transform.trans(json_column->get_flat_fields_ptrs()));
+    RETURN_IF_ERROR(transform.trans(json_column->get_flat_fields()));
     auto res = transform.mutable_result();
     DCHECK_EQ(1, res.size());
     res[0]->check_or_die();

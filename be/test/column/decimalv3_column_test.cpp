@@ -28,7 +28,7 @@
 namespace starrocks {
 
 template <typename T>
-ColumnPtr create_decimal_column(int precision, int scale, size_t num_rows, const std::string& prefix) {
+MutableColumnPtr create_decimal_column(int precision, int scale, size_t num_rows, const std::string& prefix) {
     auto col = DecimalV3Column<T>::create(precision, scale, num_rows);
     auto& data = down_cast<DecimalV3Column<T>*>(col.get())->get_data();
     for (auto i = 0; i < num_rows; ++i) {
@@ -40,11 +40,11 @@ ColumnPtr create_decimal_column(int precision, int scale, size_t num_rows, const
 // NOLINTNEXTLINE
 TEST(DecimalV3ColumnTest, test_crc32_hash_decimal128p27s9) {
     constexpr auto num_rows = 17;
-    auto col0 = create_decimal_column<int128_t>(27, 9, num_rows, "123456789.111");
+    MutableColumnPtr col0 = create_decimal_column<int128_t>(27, 9, num_rows, "123456789.111");
     std::vector<uint32_t> hash0(num_rows, 0);
     col0->crc32_hash(&hash0.front(), 0, num_rows);
 
-    DecimalColumn::Ptr col1 = DecimalColumn::create();
+    MutableColumnPtr col1 = DecimalColumn::create();
     auto& data0 = ColumnHelper::cast_to_raw<TYPE_DECIMAL128>(col0.get())->get_data();
     auto& data1 = ColumnHelper::cast_to_raw<TYPE_DECIMALV2>(col1.get())->get_data();
     std::swap((DecimalColumn::Container&)data0, data1);
@@ -58,11 +58,11 @@ TEST(DecimalV3ColumnTest, test_crc32_hash_decimal128p27s9) {
 // NOLINTNEXTLINE
 TEST(DecimalV3ColumnTest, test_crc32_hash_decimal128p27s10) {
     constexpr auto num_rows = 17;
-    auto col0 = create_decimal_column<int128_t>(27, 10, num_rows, "123456789.111");
+    MutableColumnPtr col0 = create_decimal_column<int128_t>(27, 10, num_rows, "123456789.111");
     std::vector<uint32_t> hash0(num_rows, 0);
     col0->crc32_hash(&hash0.front(), 0, num_rows);
 
-    Int128Column::Ptr col1 = Int128Column::create();
+    MutableColumnPtr col1 = Int128Column::create();
     auto& data0 = ColumnHelper::cast_to_raw<TYPE_DECIMAL128>(col0.get())->get_data();
     auto& data1 = ColumnHelper::cast_to_raw<TYPE_LARGEINT>(col1.get())->get_data();
     std::swap(data0, data1);
@@ -76,11 +76,11 @@ TEST(DecimalV3ColumnTest, test_crc32_hash_decimal128p27s10) {
 // NOLINTNEXTLINE
 TEST(DecimalV3ColumnTest, test_crc32_hash_decimal64p15s6) {
     constexpr auto num_rows = 17;
-    auto col0 = create_decimal_column<int64_t>(15, 6, num_rows, "123456.65");
+    MutableColumnPtr col0 = create_decimal_column<int64_t>(15, 6, num_rows, "123456.65");
     std::vector<uint32_t> hash0(17, 0);
     col0->crc32_hash(&hash0.front(), 0, num_rows);
 
-    Int64Column::Ptr col1 = Int64Column::create();
+    MutableColumnPtr col1 = Int64Column::create();
     auto& data0 = ColumnHelper::cast_to_raw<TYPE_DECIMAL64>(col0.get())->get_data();
     auto& data1 = ColumnHelper::cast_to_raw<TYPE_BIGINT>(col1.get())->get_data();
     std::swap(data0, data1);
@@ -93,7 +93,7 @@ TEST(DecimalV3ColumnTest, test_crc32_hash_decimal64p15s6) {
 
 TEST(DecimalV3ColumnTest, test_xor_checksum_decimal128p27s10) {
     constexpr auto num_rows = 101;
-    auto col0 = create_decimal_column<int128_t>(27, 10, num_rows, "18446744073709551616.1");
+    MutableColumnPtr col0 = create_decimal_column<int128_t>(27, 10, num_rows, "18446744073709551616.1");
     int64_t checksum = col0->xor_checksum(0, 101);
     int64_t expected_checksum = 9995422848;
     ASSERT_EQ(checksum, expected_checksum);

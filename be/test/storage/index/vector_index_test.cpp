@@ -73,7 +73,7 @@ protected:
         element->append(1);
         element->append(2);
         element->append(3);
-        NullColumnPtr null_column = NullColumn::create(element->size(), 0);
+        auto null_column = NullColumn::create(element->size(), 0);
         auto nullable_column = NullableColumn::create(std::move(element), std::move(null_column));
         auto offsets = UInt32Column::create();
         offsets->append(0);
@@ -87,7 +87,7 @@ protected:
             offsets->append((i + 2) * 3);
         }
 
-        ArrayColumn::Ptr array_column = ArrayColumn::create(std::move(nullable_column), std::move(offsets));
+        auto array_column = ArrayColumn::create(std::move(nullable_column), std::move(offsets));
 
         CHECK_OK(vector_index_writer->append(*array_column));
 
@@ -128,7 +128,7 @@ TEST_F(VectorIndexWriterTest, test_write_vector_index) {
         auto status = get_vector_meta(tablet_index, empty_meta);
 
         CHECK_OK(status);
-        auto meta = status.value();
+        const auto& meta = status.value();
 
         // read and search index
         tenann::IndexReaderRef index_reader = tenann::IndexFactory::CreateReaderFromMeta(meta);
