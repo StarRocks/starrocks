@@ -815,6 +815,11 @@ void Aggregator::close(RuntimeState* state) {
     } else {
         (void)agg_close();
     }
+<<<<<<< HEAD
+=======
+#endif
+    _spiller.reset();
+>>>>>>> 690f168836 ([Enhancement] release spill operator memory in advance (#66669))
 }
 
 bool Aggregator::is_chunk_buffer_empty() {

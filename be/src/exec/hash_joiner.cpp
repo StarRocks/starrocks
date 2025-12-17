@@ -326,6 +326,7 @@ StatusOr<ChunkPtr> HashJoiner::_pull_probe_output_chunk(RuntimeState* state) {
 }
 
 void HashJoiner::close(RuntimeState* state) {
+    _spiller.reset();
     _hash_join_builder->close();
 }
 
