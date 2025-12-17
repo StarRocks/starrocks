@@ -74,7 +74,7 @@ struct CliOptions {
 
 class ValueGenerator {
 public:
-    explicit ValueGenerator(int64_t seed = -1) : rng_(seed >= 0 ? seed : std::random_device{}()), , {}
+    explicit ValueGenerator(int64_t seed = -1) : rng_(seed >= 0 ? seed : std::random_device{}()) {}
 
     std::string generate_string(Cardinality cardinality) {
         if (cardinality == Cardinality::HIGH) {
@@ -167,10 +167,10 @@ public:
         std::vector<std::string> fields;
         fields.reserve(field_schemas_.size());
 
-        std::uniform_real_distribution<double> sparsity_dist(0.0, 1.0);
+        std::uniform_int_distribution<int> sparsity_dist(0, 9999);
 
         for (const auto& schema : field_schemas_) {
-            if (sparsity_dist(rng_) < sparsity_) {
+            if (sparsity_dist(rng_) < sparsity_ * 10000) {
                 continue;
             }
 
@@ -244,10 +244,10 @@ private:
     }
 
     Cardinality choose_cardinality_for_nested() {
-        std::uniform_real_distribution<double> dist(0.0, 1.0);
-        double r = dist(rng_);
-        if (r < 0.3) return Cardinality::HIGH;
-        if (r < 0.5) return Cardinality::LOW;
+        std::uniform_int_distribution<int> dist(0, 99);
+        int r = dist(rng_);
+        if (r < 30) return Cardinality::HIGH;
+        if (r < 50) return Cardinality::LOW;
         return Cardinality::MEDIUM;
     }
 
@@ -305,12 +305,12 @@ private:
     }
 
     std::string generate_value_json(const FieldSchema& schema, int depth = 0) {
-        std::uniform_real_distribution<double> dist(0.0, 1.0);
+        std::uniform_int_distribution<int> dist(0, 9999);
         bool should_nest =
                 (schema.field_type == FieldType::OBJECT) ||
                 (depth < max_depth_ &&
                  std::find(field_types_.begin(), field_types_.end(), schema.field_type) != field_types_.end() &&
-                 dist(rng_) < nest_probability_);
+                 dist(rng_) < nest_probability_ * 10000);
 
         if (should_nest) {
             return generate_nested_object_json(depth + 1);
@@ -646,8 +646,8 @@ private:
             if (st.values_as_string.empty()) return std::nullopt;
             std::uniform_int_distribution<size_t> dist(0, st.values_as_string.size() - 1);
             const std::string& v = st.values_as_string[dist(rng)];
-            std::uniform_real_distribution<double> p(0.0, 1.0);
-            if (p(rng) < 0.7 || card == Cardinality::LOW) {
+            std::uniform_int_distribution<int> p(0, 99);
+            if (p(rng) < 70 || card == Cardinality::LOW) {
                 return fmt::format("{} = '{}'", json_expr, escape_sql_string(v));
             } else {
                 std::string prefix = v.substr(0, std::min<size_t>(5, v.size()));
@@ -657,8 +657,8 @@ private:
             if (st.values_as_int.empty()) return std::nullopt;
             std::uniform_int_distribution<size_t> dist(0, st.values_as_int.size() - 1);
             int64_t v = st.values_as_int[dist(rng)];
-            std::uniform_real_distribution<double> p(0.0, 1.0);
-            if (p(rng) < 0.5) {
+            std::uniform_int_distribution<int> p(0, 99);
+            if (p(rng) < 50) {
                 return fmt::format("{} = {}", json_expr, v);
             } else {
                 auto [min_it, max_it] = std::minmax_element(st.values_as_int.begin(), st.values_as_int.end());
