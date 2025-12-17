@@ -190,4 +190,19 @@ public class QueryDumperTest extends PlanTestBase {
                             "\"currentWarehouseId\":1}");
         }
     }
+
+    @Test
+    public void testDumpQueryWithLabeledStatistics() {
+        // Test that labeled statistics format is properly supported when enabled
+        connectContext.getSessionVariable().setEnableLabeledColumnStatisticOutput(true);
+        try {
+            Pair<HttpResponseStatus, String> statusAndRes =
+                    QueryDumper.dumpQuery("default_catalog", "test", "select count(v1) from t0", false);
+            assertThat(statusAndRes.first).isEqualTo(HttpResponseStatus.OK);
+            // Should contain labeled format statistics with labels like MIN:, MAX:, etc.
+            assertThat(statusAndRes.second).containsPattern("\"column_statistics\":\\{.+\\}");
+        } finally {
+            connectContext.getSessionVariable().setEnableLabeledColumnStatisticOutput(false);
+        }
+    }
 }
