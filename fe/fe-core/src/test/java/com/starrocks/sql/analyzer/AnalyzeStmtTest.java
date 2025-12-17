@@ -27,6 +27,7 @@ import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
+import com.starrocks.qe.SetExecutor;
 import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.scheduler.history.TableKeeper;
@@ -40,6 +41,7 @@ import com.starrocks.sql.ast.DropStatsStmt;
 import com.starrocks.sql.ast.KillAnalyzeStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.SetUserPropertyStmt;
 import com.starrocks.sql.ast.ShowAnalyzeJobStmt;
 import com.starrocks.sql.ast.ShowAnalyzeStatusStmt;
@@ -624,6 +626,60 @@ public class AnalyzeStmtTest {
         GlobalStateMgr.getCurrentState().getAnalyzeMgr().unregisterConnection(1, true);
         Assertions.assertThrows(SemanticException.class,
                 () -> GlobalStateMgr.getCurrentState().getAnalyzeMgr().unregisterConnection(1, true));
+    }
+
+    @Test
+    public void testKillAnalyzeWithUserVariable() throws Exception {
+        // Set user variable
+        String setSql = "set @analyze_id = 123";
+        SetStmt setStmt = (SetStmt) analyzeSuccess(setSql);
+        SetExecutor setExecutor = new SetExecutor(getConnectContext(), setStmt);
+        setExecutor.execute();
+
+        // Test parsing and analyzing kill analyze with user variable
+        String killSql = "kill analyze @analyze_id";
+        KillAnalyzeStmt killAnalyzeStmt = (KillAnalyzeStmt) analyzeSuccess(killSql);
+        Assertions.assertTrue(killAnalyzeStmt.hasUserVariable());
+        Assertions.assertNotNull(killAnalyzeStmt.getUserVariableExpr());
+        Assertions.assertEquals("analyze_id", killAnalyzeStmt.getUserVariableExpr().getName());
+
+        // Test execution
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().registerConnection(123, getConnectContext());
+        StmtExecutor executor = StmtExecutor.newInternalExecutor(getConnectContext(), killAnalyzeStmt);
+        executor.execute();
+        Assertions.assertNull(getConnectContext().getState().getErrorCode());
+        Assertions.assertEquals(
+                "Getting analyzing error. Detail message: User variable 'analyze_id' must be an integer, but got " +
+                        "varchar.",
+                getConnectContext().getState().getErrorMessage());
+    }
+
+    @Test
+    public void testKillAnalyzeWithUserVariableNotSet() throws Exception {
+        // Test with unset user variable
+        String killSql = "kill analyze @unset_var";
+        KillAnalyzeStmt killAnalyzeStmt = (KillAnalyzeStmt) analyzeSuccess(killSql);
+        StmtExecutor executor = StmtExecutor.newInternalExecutor(getConnectContext(), killAnalyzeStmt);
+        executor.execute();
+        String message = getConnectContext().getState().getErrorMessage();
+        Assertions.assertTrue(message.contains("is not set"), message);
+    }
+
+    @Test
+    public void testKillAnalyzeWithUserVariableNonInteger() throws Exception {
+        // Set user variable to string
+        String setSql = "set @analyze_id = 'not_a_number'";
+        SetStmt setStmt = (SetStmt) analyzeSuccess(setSql);
+        SetExecutor setExecutor = new SetExecutor(getConnectContext(), setStmt);
+        setExecutor.execute();
+
+        // Test kill analyze with non-integer user variable
+        String killSql = "kill analyze @analyze_id";
+        KillAnalyzeStmt killAnalyzeStmt = (KillAnalyzeStmt) analyzeSuccess(killSql);
+        StmtExecutor executor = StmtExecutor.newInternalExecutor(getConnectContext(), killAnalyzeStmt);
+        executor.execute();
+        String message = getConnectContext().getState().getErrorMessage();
+        Assertions.assertTrue(message.contains("must be an integer"), message);
     }
 
     @Test

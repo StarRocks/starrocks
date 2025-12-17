@@ -1646,7 +1646,7 @@ showHistogramMetaStatement
     ;
 
 killAnalyzeStatement
-    : KILL ANALYZE INTEGER_VALUE
+    : KILL ANALYZE (INTEGER_VALUE | userVariable)
     | KILL ALL PENDING ANALYZE
     ;
 
