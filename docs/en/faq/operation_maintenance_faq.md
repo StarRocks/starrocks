@@ -329,7 +329,7 @@ ADMIN SET FRONTEND CONFIG ("max_scheduling_tablets"="1000");
 ADMIN SET FRONTEND CONFIG ("max_balancing_tablets"="1000");
 ```
 
-## Is BACKUP operation serial? It seems only one HDFS directory is changing.
+## Is BACKUP operation serial? It seems only one HDFS directory is changing
 
 BACKUP operations are parallel, but upload to HDFS uses a single worker, which is controlled by the BE configuration `upload_worker_count`. Adjust it with caution because it might affect the disk I/O and network I/O.
 
