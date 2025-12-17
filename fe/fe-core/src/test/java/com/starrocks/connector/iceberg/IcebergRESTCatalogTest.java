@@ -523,4 +523,69 @@ public class IcebergRESTCatalogTest {
 
         Assertions.assertTrue(result.isEmpty());
     }
+
+    @Test
+    public void testBuildContextWithNonJwtSecurityAndOidcAuth(@Mocked RESTSessionCatalog restCatalog) {
+        // Test that user's OIDC token is NOT passed to REST Catalog when security mode is NONE or OAUTH2.
+        // This is a regression test for the bug where user's OIDC token was incorrectly passed
+        // to REST Catalog regardless of the catalog's security configuration.
+
+        // Create a mock ConnectContext with auth token (simulating OIDC authenticated user)
+        new MockUp<ConnectContext>() {
+            @Mock
+            public String getQualifiedUser() {
+                return "oidc_user";
+            }
+
+            @Mock
+            public String getSessionId() {
+                return "oidc_session";
+            }
+
+            @Mock
+            public String getAuthToken() {
+                return "user_oidc_access_token";
+            }
+
+            @Mock
+            public UserIdentity getCurrentUserIdentity() {
+                return new UserIdentity("oidc_user", "%");
+            }
+        };
+
+        // Test with security=NONE (default)
+        Map<String, String> propertiesNone = new HashMap<>();
+        IcebergRESTCatalog catalogNone = new IcebergRESTCatalog(
+                "test_catalog", new Configuration(), propertiesNone);
+        SessionCatalog.SessionContext sessionContextNone =
+                Deencapsulation.invoke(catalogNone, "buildContext", connectContext);
+        // Should return empty context, NOT passing user's OIDC token
+        // credentials() may be null for empty context, which is also acceptable
+        assertTrue(sessionContextNone.credentials() == null || sessionContextNone.credentials().isEmpty(),
+                "When security=NONE, user's OIDC token should NOT be passed to REST Catalog");
+
+        // Test with explicit security=NONE
+        Map<String, String> propertiesExplicitNone = new HashMap<>();
+        propertiesExplicitNone.put(ICEBERG_CATALOG_SECURITY, "NONE");
+        IcebergRESTCatalog catalogExplicitNone = new IcebergRESTCatalog(
+                "test_catalog", new Configuration(), propertiesExplicitNone);
+        SessionCatalog.SessionContext sessionContextExplicitNone =
+                Deencapsulation.invoke(catalogExplicitNone, "buildContext", connectContext);
+        assertTrue(sessionContextExplicitNone.credentials() == null || sessionContextExplicitNone.credentials().isEmpty(),
+                "When security=NONE (explicit), user's OIDC token should NOT be passed to REST Catalog");
+
+        // Test with security=OAUTH2 (catalog has its own OAuth2 credentials)
+        Map<String, String> propertiesOauth2 = new HashMap<>();
+        propertiesOauth2.put(ICEBERG_CATALOG_SECURITY, "OAUTH2");
+        propertiesOauth2.put("iceberg.catalog.oauth2.credential", "catalog_client_id:catalog_client_secret");
+        IcebergRESTCatalog catalogOauth2 = new IcebergRESTCatalog(
+                "test_catalog", new Configuration(), propertiesOauth2);
+        SessionCatalog.SessionContext sessionContextOauth2 =
+                Deencapsulation.invoke(catalogOauth2, "buildContext", connectContext);
+        // Should return empty context, NOT passing user's OIDC token
+        // (REST Catalog should use its own oauth2.credential instead)
+        assertTrue(sessionContextOauth2.credentials() == null || sessionContextOauth2.credentials().isEmpty(),
+                "When security=OAUTH2, user's OIDC token should NOT be passed to REST Catalog. " +
+                        "Catalog should use its own configured oauth2.credential instead");
+    }
 }
