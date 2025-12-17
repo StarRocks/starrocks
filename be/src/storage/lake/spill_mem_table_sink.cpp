@@ -119,6 +119,7 @@ Status SpillMemTableSink::merge_blocks_to_segments() {
             auto submit_st = token->submit(tasks[i]);
             if (!submit_st.ok()) {
                 tasks[i]->update_status(submit_st);
+                break;
             }
         }
         token->wait();
