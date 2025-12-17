@@ -59,11 +59,18 @@ private:
 };
 
 static void BM_JsonPathDeriver(benchmark::State& state) {
-    const char* bench_file = std::getenv("BENCH_FILE");
-    std::string path = bench_file ? bench_file : "";
-    if (path.empty()) {
-        state.SkipWithError("empty BENCH_FILE");
-        return;
+    int num_fields = state.range(0);
+    std::string path;
+    if (num_fields == 0) {
+        // read from env
+        const char* bench_file = std::getenv("BENCH_FILE");
+        path = bench_file ? bench_file : "";
+        if (path.empty()) {
+            state.SkipWithError("empty BENCH_FILE");
+            return;
+        }
+    } else {
+        path = fmt::format("test_{}.json", num_fields);
     }
 
     JsonPathDeriverBench bench;
@@ -82,7 +89,8 @@ static void BM_JsonPathDeriver(benchmark::State& state) {
     }
 }
 
-BENCHMARK(BM_JsonPathDeriver)->Unit(benchmark::kMillisecond);
+// BENCHMARK(BM_JsonPathDeriver)->Unit(benchmark::kMillisecond);
+BENCHMARK(BM_JsonPathDeriver)->Unit(benchmark::kMillisecond)->Arg(10)->Arg(20)->Arg(40)->Arg(80);
 
 } // namespace starrocks
 
