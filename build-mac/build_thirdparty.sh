@@ -379,8 +379,8 @@ build_gflags() {
         -DGFLAGS_BUILD_TESTING=OFF \
         -DCMAKE_POLICY_VERSION_MINIMUM=3.5
 
-    make -j"$PARALLEL_JOBS"
-    make install
+    cmake --build . --parallel "$PARALLEL_JOBS"
+    cmake --install .
 
     log_success "gflags built successfully"
 }
@@ -433,8 +433,8 @@ build_glog() {
         -DWITH_GTEST=OFF \
         -DCMAKE_POLICY_VERSION_MINIMUM=3.5
 
-    make -j"$PARALLEL_JOBS"
-    make install
+    cmake --build . --parallel "$PARALLEL_JOBS"
+    cmake --install .
 
     log_success "glog built successfully"
 }
@@ -887,8 +887,8 @@ build_brpc() {
         -DGLOG_LIB="$INSTALL_DIR/lib/libglog.a" \
         -DCMAKE_POLICY_VERSION_MINIMUM=3.5
 
-    make -j"$PARALLEL_JOBS"
-    make install
+    cmake --build . --parallel "$PARALLEL_JOBS"
+    cmake --install .
 
     # Verify brpc library
     ls -la "$INSTALL_DIR/lib/libbrpc.a"
@@ -960,8 +960,8 @@ build_rocksdb() {
         -DWITH_TOOLS=OFF \
         -DCMAKE_POLICY_VERSION_MINIMUM=3.5
 
-    make -j"$PARALLEL_JOBS" rocksdb
-    make install
+    cmake --build . --parallel "$PARALLEL_JOBS" --target rocksdb
+    cmake --install .
 
     log_success "rocksdb built successfully"
 }
@@ -1006,8 +1006,8 @@ build_velocypack() {
         -DBuildAsmTest=OFF \
         -DCMAKE_POLICY_VERSION_MINIMUM=3.5
 
-    make -j"$PARALLEL_JOBS"
-    make install
+    cmake --build . --parallel "$PARALLEL_JOBS"
+    cmake --install .
 
     log_success "velocypack built successfully"
 }
@@ -1380,9 +1380,11 @@ build_vectorscan() {
         -DCMAKE_POLICY_VERSION_MINIMUM=3.5
 
     # Build only the main library components, skip all tests
-    make -j"$PARALLEL_JOBS" hs hs_compile hs_runtime
+    cmake --build . --parallel "$PARALLEL_JOBS" --target hs
+    cmake --build . --parallel "$PARALLEL_JOBS" --target hs_compile
+    cmake --build . --parallel "$PARALLEL_JOBS" --target hs_runtime
     # Install the libraries that were built
-    make install
+    cmake --install .
 
     # Inject libc++ hash memory shim into libhs.a for macOS arm64
     if [[ -f "$INSTALL_DIR/lib/libhs.a" ]]; then
@@ -1506,8 +1508,8 @@ build_simdutf() {
         -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
         -DBUILD_SHARED_LIBS=OFF
 
-    make -j"$PARALLEL_JOBS"
-    make install
+    cmake --build . --parallel "$PARALLEL_JOBS"
+    cmake --install .
 
     log_success "simdutf built successfully"
 }
@@ -1548,8 +1550,8 @@ build_fmt() {
         -DFMT_DOC=OFF \
         -DCMAKE_POLICY_VERSION_MINIMUM=3.5
 
-    make -j"$PARALLEL_JOBS"
-    make install
+    cmake --build . --parallel "$PARALLEL_JOBS"
+    cmake --install .
 
     log_success "fmt built successfully"
 }
@@ -1812,8 +1814,8 @@ EOF
         fi
     else
         # CMake succeeded, continue with normal build
-        make -j"$PARALLEL_JOBS"
-        make install
+        cmake --build . --parallel "$PARALLEL_JOBS"
+        cmake --install .
 
         # Copy C++ header if exists (CMake might not install it)
         if [[ -f "../cpp/roaring.hh" ]]; then
