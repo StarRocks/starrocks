@@ -235,11 +235,7 @@ Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicate
 
     RETURN_IF_ERROR(_tablet_manager->put_txn_log(txn_log));
 
-    VLOG(3) << "Replicated lake remote files, txn_id: " << txn_id << ", tablet_id: " << target_tablet_id
-            << ", src_tablet_id: " << src_tablet_id << ", src_db_id: " << src_db_id
-            << ", src_table_id: " << src_table_id << ", src_partition_id: " << src_partition_id
-            << ", visible_version: " << target_visible_version << ", data_version: " << data_version
-            << ", virtual_tablet_id: " << virtual_tablet_id << ", src_visible_version: " << src_visible_version;
+    VLOG(3) << "Replicate lake remote files finished, txn_id: " << txn_id << ", tablet_id: " << target_tablet_id;
 
     clean_files.cancel();
     return Status::OK();

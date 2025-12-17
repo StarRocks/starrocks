@@ -14,6 +14,7 @@
 
 package com.starrocks.replication;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
@@ -141,6 +142,11 @@ public class ReplicationMgr extends FrontendDaemon {
         for (ReplicationJob job : toRemovedJobs) {
             runningJobs.remove(job.getTableId(), job);
         }
+    }
+
+    @VisibleForTesting
+    public void removeRunningJob(ReplicationJob job) {
+        runningJobs.remove(job.getTableId(), job);
     }
 
     public void finishRemoteSnapshotTask(RemoteSnapshotTask task, TFinishTaskRequest request) {

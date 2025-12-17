@@ -377,22 +377,22 @@ Status ReplicationUtils::download_lake_segment_file(const std::string& src_file_
 
         // Record read_at_fully request count and latency
         {
-            TRACE_COUNTER_SCOPE_LATENCY_US("lake_replication_read_at_fully_cost_us");
+            TRACE_COUNTER_SCOPE_LATENCY_US("lake_replication_read_io_cost_us");
             RETURN_IF_ERROR(src_file->read_at_fully(offset, buf, count));
             read_count++;
         }
-        TRACE_COUNTER_INCREMENT("lake_replication_read_at_fully_cnt", 1);
+        TRACE_COUNTER_INCREMENT("lake_replication_read_io_count", 1);
 
         offset += count;
 
         // Record converter append latency
         {
-            TRACE_COUNTER_SCOPE_LATENCY_US("lake_replication_converter_append_cost_us");
+            TRACE_COUNTER_SCOPE_LATENCY_US("lake_replication_write_io_cost_us");
             RETURN_IF_ERROR(converter->append(buf, count));
         }
     }
 
-    TRACE_COUNTER_INCREMENT("lake_replication_total_read_cnt", read_count);
+    TRACE_COUNTER_INCREMENT("lake_replication_total_read_io_count", read_count);
     RETURN_IF_ERROR(converter->close());
 
     // Get the final output file size after conversion
@@ -400,10 +400,6 @@ Status ReplicationUtils::download_lake_segment_file(const std::string& src_file_
     if (final_file_size != nullptr) {
         *final_file_size = output_size;
     }
-
-    VLOG(3) << "Finish read lake segment file, src file: " << src_file_path << ", src file size: " << src_file_size
-            << ", final file size: " << output_size << ", read count: " << read_count
-            << ", size changed: " << (output_size != src_file_size ? "YES" : "NO");
 
     TRACE("Finish download_lake_segment_file, read_count: $0, final_size: $1", read_count, output_size);
 
