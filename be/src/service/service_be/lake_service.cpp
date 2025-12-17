@@ -1109,6 +1109,17 @@ void LakeServiceImpl::warm_up_segment(::google::protobuf::RpcController* control
     VLOG(2) << "Received warmup request. tablet_id=" << request->tablet_id() << " blocks=" << request->blocks_size()
             << " attachment_size=" << attachment.size();
 
+    // Copy request data BEFORE releasing guard to avoid race condition
+    // The request object can be destroyed after guard is released
+    int64_t tablet_id = request->tablet_id();
+    std::string segment_path = request->segment_path();
+    std::vector<BlockData> blocks(request->blocks().begin(), request->blocks().end());
+    
+    // Copy attachment data for async processing
+    // We need to copy because the attachment will be destroyed after RPC returns
+    butil::IOBuf attachment_copy;
+    attachment_copy.append(attachment);
+
     // Return success immediately and process blocks asynchronously
     // This avoids blocking the RPC thread
     response->set_cached_block_count(request->blocks_size());
@@ -1117,15 +1128,9 @@ void LakeServiceImpl::warm_up_segment(::google::protobuf::RpcController* control
     // Release the guard to send response immediately
     guard.reset(nullptr);
 
-    // Copy attachment data for async processing
-    // We need to copy because the attachment will be destroyed after RPC returns
-    butil::IOBuf attachment_copy;
-    attachment_copy.append(attachment);
-
     // Process blocks asynchronously in thread pool
-    auto task = [tablet_id = request->tablet_id(), segment_path = request->segment_path(),
-                 blocks = std::vector<BlockData>(request->blocks().begin(), request->blocks().end()),
-                 attachment_copy = std::move(attachment_copy), block_cache]() mutable {
+    auto task = [tablet_id = std::move(tablet_id), segment_path = std::move(segment_path),
+                 blocks = std::move(blocks), attachment_copy = std::move(attachment_copy), block_cache]() mutable {
         int32_t cached_count = 0;
 
         // Read block data from attachment (zero-copy)
