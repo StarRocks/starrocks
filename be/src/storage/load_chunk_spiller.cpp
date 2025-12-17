@@ -210,6 +210,7 @@ StatusOr<SpillBlockIteratorTasks> LoadChunkSpiller::get_spill_block_iterators(si
     SpillBlockIteratorTasks result;
     auto& groups = _block_manager->block_container()->block_groups();
     RETURN_IF(groups.empty(), result);
+    result.group_count = groups.size();
     std::vector<ChunkIteratorPtr> merge_inputs;
     size_t current_input_bytes = 0;
     for (size_t i = 0; i < groups.size(); ++i) {
@@ -297,7 +298,7 @@ Status LoadChunkSpiller::merge_write(size_t target_size, size_t memory_usage_per
             (std::ostringstream() << _block_manager->fragment_instance_id()).str(), groups.size(),
             spill_block_iterator_tasks.total_blocks, spill_block_iterator_tasks.total_block_bytes, total_merges,
             total_rows, total_chunk, duration_ms);
-    COUNTER_UPDATE(ADD_COUNTER(_profile, "SpillMergeInputGroups", TUnit::UNIT), groups.size());
+    COUNTER_UPDATE(ADD_COUNTER(_profile, "SpillMergeInputGroups", TUnit::UNIT), spill_block_iterator_tasks.group_count);
     COUNTER_UPDATE(ADD_COUNTER(_profile, "SpillMergeInputBytes", TUnit::BYTES),
                    spill_block_iterator_tasks.total_block_bytes);
     COUNTER_UPDATE(ADD_COUNTER(_profile, "SpillMergeCount", TUnit::UNIT), total_merges);

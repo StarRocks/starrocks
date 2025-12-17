@@ -55,16 +55,17 @@ private:
     int64_t _append_bytes = 0;
 };
 
+struct SpillBlockIteratorTasks {
+    std::vector<ChunkIteratorPtr> iterators;
+    size_t total_blocks = 0;
+    size_t total_block_bytes = 0;
+    size_t group_count = 0;
+};
+
 class LoadChunkSpiller {
 public:
     LoadChunkSpiller(LoadSpillBlockManager* block_manager, RuntimeProfile* profile);
     ~LoadChunkSpiller() = default;
-
-    struct SpillBlockIteratorTasks {
-        std::vector<ChunkIteratorPtr> iterators;
-        size_t total_blocks = 0;
-        size_t total_block_bytes = 0;
-    };
 
     StatusOr<size_t> spill(const Chunk& chunk);
 
@@ -83,6 +84,8 @@ public:
     SchemaPtr schema() { return _schema; }
 
     size_t total_bytes() const;
+
+    RuntimeProfile* profile() { return _profile; }
 
 private:
     Status _prepare(const ChunkPtr& chunk_ptr);
