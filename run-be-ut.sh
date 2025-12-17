@@ -264,7 +264,7 @@ export TERM=xterm
 export UDF_RUNTIME_DIR=${STARROCKS_HOME}/lib/udf-runtime
 export LOG_DIR=${STARROCKS_HOME}/log
 export LSAN_OPTIONS=suppressions=${STARROCKS_HOME}/conf/asan_suppressions.conf
-for i in `sed 's/ //g' $STARROCKS_HOME/conf/be_test.conf | egrep "^[[:upper:]]([[:upper:]]|_|[[:digit:]])*="`; do
+for i in `sed 's/ //g' $STARROCKS_HOME/conf/be_test.conf | grep -E "^[[:upper:]]([[:upper:]]|_|[[:digit:]])*="`; do
     eval "export $i";
 done
 
