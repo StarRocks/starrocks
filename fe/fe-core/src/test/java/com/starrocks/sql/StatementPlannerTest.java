@@ -15,9 +15,16 @@
 package com.starrocks.sql;
 
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.TableFunctionTable;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.FeConstants;
+<<<<<<< HEAD
+=======
+import com.starrocks.planner.OlapTableSink;
+import com.starrocks.planner.PlanFragment;
+import com.starrocks.sql.analyzer.Analyzer;
+>>>>>>> 14827a423f ([BugFix] Fix NPE in query planning during schema change (backport #66811) (#66828))
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.PlannerMetaLocker;
 import com.starrocks.sql.analyzer.QueryAnalyzer;
@@ -32,11 +39,24 @@ import com.starrocks.sql.ast.SetOperationRelation;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.ValuesRelation;
+<<<<<<< HEAD
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Test;
+=======
+import com.starrocks.sql.plan.ExecPlan;
+import com.starrocks.sql.plan.PlanFragmentBuilder;
+import com.starrocks.sql.plan.PlanTestBase;
+import com.starrocks.thrift.TPartialUpdateMode;
+import com.starrocks.thrift.TResultSinkType;
+import com.starrocks.utframe.UtFrameUtils;
+import org.junit.jupiter.api.Test;
+import org.mockito.MockedStatic;
+import org.mockito.Mockito;
+>>>>>>> 14827a423f ([BugFix] Fix NPE in query planning during schema change (backport #66811) (#66828))
 
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
@@ -45,7 +65,19 @@ import java.util.stream.Collectors;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+<<<<<<< HEAD
+=======
+import static org.junit.jupiter.api.Assertions.assertNotSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+>>>>>>> 14827a423f ([BugFix] Fix NPE in query planning during schema change (backport #66811) (#66828))
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mockStatic;
+import static org.mockito.Mockito.times;
 
 public class StatementPlannerTest extends PlanTestBase {
 
@@ -284,4 +316,197 @@ public class StatementPlannerTest extends PlanTestBase {
             FeConstants.runningUnitTest = originalRunningUnitTest;
         }
     }
+<<<<<<< HEAD
 }
+=======
+
+    @Test
+    public void testFilesOnlyVisitorProcessesCteQueries() throws Exception {
+        boolean originalRunningUnitTest = FeConstants.runningUnitTest;
+        try {
+            FeConstants.runningUnitTest = false;
+            String sql = "with source as (select * from files(\"path\"=\"fake://cte\", \"format\"=\"csv\") as f) "
+                    + "select * from source";
+            StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+            QueryStatement queryStatement = (QueryStatement) stmt;
+
+            QueryRelation queryRelation = queryStatement.getQueryRelation();
+            assertEquals(1, queryRelation.getCteRelations().size());
+            CTERelation cteRelation = queryRelation.getCteRelations().get(0);
+
+            List<FileTableFunctionRelation> cteRelations =
+                    AnalyzerUtils.collectFileTableFunctionRelation(cteRelation.getCteQueryStatement());
+            assertEquals(1, cteRelations.size());
+            FileTableFunctionRelation fileRelation = cteRelations.get(0);
+
+            TableFunctionTable originalTable = (TableFunctionTable) fileRelation.getTable();
+            if (originalTable != null) {
+                fileRelation.setTable(null);
+            }
+
+            new QueryAnalyzer(connectContext).analyzeFilesOnly(queryStatement);
+
+            assertNotNull(fileRelation.getTable());
+            assertTrue(fileRelation.getTable() instanceof TableFunctionTable);
+            if (originalTable != null) {
+                assertNotSame(originalTable, fileRelation.getTable());
+            }
+
+            List<FileTableFunctionRelation> allRelations =
+                    AnalyzerUtils.collectFileTableFunctionRelation(queryStatement);
+            assertTrue(allRelations.contains(fileRelation));
+        } finally {
+            FeConstants.runningUnitTest = originalRunningUnitTest;
+        }
+    }
+
+    @Test
+    public void testInsertPartialUpdateMode() throws Exception {
+        {
+            FeConstants.runningUnitTest = true;
+            connectContext.getSessionVariable().setPartialUpdateMode("column");
+            String sql = "insert into tprimary_multi_cols (pk, v1) values (1, '1')";
+            StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+            InsertPlanner planner = new InsertPlanner();
+            ExecPlan plan = planner.plan((InsertStmt) stmt, connectContext);
+            assertEquals(TPartialUpdateMode.COLUMN_UPSERT_MODE, getPartialUpdateMode(plan));
+        }
+
+        {
+            FeConstants.runningUnitTest = true;
+            connectContext.getSessionVariable().setPartialUpdateMode("auto");
+            String sql = "insert into tprimary_multi_cols (pk, v1) values (1, '1')";
+            StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+            InsertPlanner planner = new InsertPlanner();
+            ExecPlan plan = planner.plan((InsertStmt) stmt, connectContext);
+            assertEquals(TPartialUpdateMode.COLUMN_UPSERT_MODE, getPartialUpdateMode(plan));
+        }
+
+        {
+            FeConstants.runningUnitTest = true;
+            connectContext.getSessionVariable().setPartialUpdateMode("auto");
+            String sql = "insert into tprimary_multi_cols (pk, v1, v2) values (1, '1', 1)";
+            StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+            InsertPlanner planner = new InsertPlanner();
+            ExecPlan plan = planner.plan((InsertStmt) stmt, connectContext);
+            assertEquals(TPartialUpdateMode.AUTO_MODE, getPartialUpdateMode(plan));
+        }
+    }
+
+    private TPartialUpdateMode getPartialUpdateMode(ExecPlan plan) {
+        PlanFragment fragment = plan.getFragments().get(0);
+        OlapTableSink sink = (OlapTableSink) fragment.getSink();
+        return sink.getPartialUpdateMode();
+    }
+
+    @Test
+    public void testPlanExceptionWithoutSchemaChange() throws Exception {
+        // Exception occurs in plan builder, schema is valid, exception should be re-thrown
+        FeConstants.runningUnitTest = false;
+        String sql = "select * from t1";
+        StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        QueryStatement queryStmt = (QueryStatement) stmt;
+        Analyzer.analyze(queryStmt, connectContext);
+        PlannerMetaLocker plannerMetaLocker = new PlannerMetaLocker(connectContext, queryStmt);
+        try (MockedStatic<PlanFragmentBuilder> mockedPlanFragmentBuilder = mockStatic(PlanFragmentBuilder.class);
+                MockedStatic<OptimisticVersion> mockedOptimisticVersion =
+                        mockStatic(OptimisticVersion.class)) {
+            // Mock PlanFragmentBuilder.createPhysicalPlan to throw exception
+            RuntimeException testException = new RuntimeException("Test exception during ExecPlanBuild");
+            mockedPlanFragmentBuilder.when(() -> PlanFragmentBuilder.createPhysicalPlan(
+                    any(), any(), anyList(), any(), anyList(), any(), anyBoolean(), anyBoolean()))
+                    .thenThrow(testException);
+
+            // Mock OptimisticVersion.validateTableUpdate to return true (schema is valid)
+            mockedOptimisticVersion.when(() -> com.starrocks.sql.OptimisticVersion.validateTableUpdate(
+                    any(OlapTable.class), anyLong())).thenReturn(true);
+
+            // Call createQueryPlanWithReTry and verify exception is re-thrown
+            long planStartTime = OptimisticVersion.generate();
+            RuntimeException thrownException = assertThrows(RuntimeException.class, () ->
+                    StatementPlanner.createQueryPlanWithReTry(
+                            queryStmt, connectContext, TResultSinkType.MYSQL_PROTOCAL,
+                            plannerMetaLocker, planStartTime));
+
+            assertEquals("Test exception during ExecPlanBuild", thrownException.getMessage());
+
+            // Verify that OptimisticVersion.validateTableUpdate was called in the catch block
+            Set<OlapTable> olapTables = StatementPlanner.collectOriginalOlapTables(connectContext, queryStmt);
+            if (!olapTables.isEmpty()) {
+                mockedOptimisticVersion.verify(() -> OptimisticVersion.validateTableUpdate(
+                        any(OlapTable.class), eq(planStartTime)), times(olapTables.size()));
+            }
+        }
+    }
+
+    @Test
+    public void testPlanExceptionWithSchemaChange() throws Exception {
+        // Exception occurs, schema is invalid, should retry instead of re-throwing
+        FeConstants.runningUnitTest = false;
+        String sql = "select * from t1";
+        StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        QueryStatement queryStmt = (QueryStatement) stmt;
+        Analyzer.analyze(queryStmt, connectContext);
+        PlannerMetaLocker plannerMetaLocker = new PlannerMetaLocker(connectContext, queryStmt);
+
+        // Collect olap tables before mocking
+        Set<OlapTable> olapTables = StatementPlanner.collectOriginalOlapTables(connectContext, queryStmt);
+        int tableCount = olapTables.size();
+        try (MockedStatic<PlanFragmentBuilder> mockedPlanFragmentBuilder = mockStatic(PlanFragmentBuilder.class);
+                MockedStatic<com.starrocks.sql.OptimisticVersion> mockedOptimisticVersion =
+                        mockStatic(com.starrocks.sql.OptimisticVersion.class)) {
+
+            // Mock PlanFragmentBuilder.createPhysicalPlan
+            // First call throws exception, second call returns a plan
+            RuntimeException testException = new RuntimeException("Test exception during ExecPlanBuild");
+            ExecPlan mockPlan = Mockito.mock(ExecPlan.class);
+            AtomicInteger callCount = new AtomicInteger(0);
+            mockedPlanFragmentBuilder.when(() -> PlanFragmentBuilder.createPhysicalPlan(
+                    any(), any(), anyList(), any(), anyList(), any(), anyBoolean(), anyBoolean()))
+                    .thenAnswer(invocation -> {
+                        int count = callCount.incrementAndGet();
+                        if (count == 1) {
+                            throw testException;
+                        } else {
+                            return mockPlan;
+                        }
+                    });
+
+            // Mock OptimisticVersion.validateTableUpdate
+            // First call (in catch block) returns false (schema invalid), triggering retry
+            // Second call (in normal flow) returns true (schema valid after retry)
+            AtomicInteger validateCallCount = new AtomicInteger(0);
+            mockedOptimisticVersion.when(() -> OptimisticVersion.validateTableUpdate(
+                    any(OlapTable.class), anyLong())).thenAnswer(invocation -> {
+                        int count = validateCallCount.incrementAndGet();
+                        // First validation (in catch block) returns false, subsequent returns true
+                        // For each table, we expect: first call (in catch) returns false, second call (in normal flow) returns true
+                        return count > tableCount;
+                    });
+
+            // Call createQueryPlanWithReTry
+            // Since schema is invalid on first exception, it should retry and succeed
+            long planStartTime = OptimisticVersion.generate();
+            ExecPlan result = StatementPlanner.createQueryPlanWithReTry(
+                    queryStmt, connectContext, TResultSinkType.MYSQL_PROTOCAL,
+                    plannerMetaLocker, planStartTime);
+
+            // Verify that a plan was returned (retry succeeded)
+            assertNotNull(result);
+
+            // Verify that PlanFragmentBuilder.createPhysicalPlan was called twice
+            // (once throwing exception, once succeeding)
+            mockedPlanFragmentBuilder.verify(() -> PlanFragmentBuilder.createPhysicalPlan(
+                    any(), any(), anyList(), any(), anyList(), any(), anyBoolean(), anyBoolean()),
+                    times(2));
+
+            // Verify that OptimisticVersion.validateTableUpdate was called
+            // (at least once in catch block, and once in normal flow)
+            if (!olapTables.isEmpty()) {
+                mockedOptimisticVersion.verify(() -> OptimisticVersion.validateTableUpdate(
+                        any(OlapTable.class), anyLong()), Mockito.atLeast(tableCount * 2));
+            }
+        }
+    }
+}
+>>>>>>> 14827a423f ([BugFix] Fix NPE in query planning during schema change (backport #66811) (#66828))
