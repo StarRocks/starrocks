@@ -2181,6 +2181,9 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static boolean enable_statistic_collect_on_first_load = true;
 
+    @ConfField(mutable = true, comment = "Whether trigger statistic collection on update statement")
+    public static boolean enable_statistic_collect_on_update = true;
+
     /**
      * Max await time for semi-sync statistics collection during data loading (DML operations).
      * This applies to INSERT and INSERT OVERWRITE statements where sync=true.

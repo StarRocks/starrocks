@@ -133,11 +133,14 @@ public class StatisticsCollectionTrigger {
         if (!Config.enable_statistic_collect_on_first_load) {
             return;
         }
+        if (!Config.enable_statistic_collect_on_update && dmlType.equals(DmlType.UPDATE)) {
+            return;
+        }
         // check if it's in black-list
         if (StatisticUtils.statisticDatabaseBlackListCheck(db.getFullName())) {
             return;
         }
-        // check it's the first-load
+        // prepare analyze job for various statements
         if (txnState != null) {
             if (txnState.getIdToTableCommitInfos() == null) {
                 return;
@@ -155,11 +158,15 @@ public class StatisticsCollectionTrigger {
             return;
         }
 
+        // Handle overwrite and load differently:
+        // - For INSERT_OVERWRITE: if data change is small (analyzeType == null), copy statistics from source
+        //   partition to target partition instead of recollecting, which is more efficient.
+        // - For LOAD: if analyzeType == null, skip collection; if analyzeType != null, recollect statistics.
+        //   Load operations don't have the copy optimization since there's no source partition to copy from.
         if (dmlType == DmlType.INSERT_OVERWRITE && analyzeType == null) {
             executeOverWrite();
             waitFinish();
         } else if (analyzeType != null) {
-            // collect
             executeCollect();
             waitFinish();
         }
