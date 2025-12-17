@@ -62,7 +62,7 @@ Status TabletManager::put_combined_txn_log(const CombinedTxnLogPB& /*log*/) {
 
 void TabletManager::update_metacache_limit(size_t /*limit*/) {}
 
-void TabletManager::update_segment_cache_size(std::string_view /*key*/, intptr_t /*segment_addr_hint*/) {}
+void TabletManager::update_segment_cache_size(std::string_view /*key*/, size_t /*mem_cost*/, intptr_t /*segment_addr_hint*/) {}
 
 StatusOr<TabletAndRowsets> TabletManager::capture_tablet_and_rowsets(int64_t /*tablet_id*/, int64_t /*from_version*/,
                                                                      int64_t /*to_version*/) {

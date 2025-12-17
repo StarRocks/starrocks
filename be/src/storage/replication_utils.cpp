@@ -366,7 +366,7 @@ Status ReplicationUtils::download_lake_segment_file(const std::string& src_file_
         if (offset >= src_file_size) {
             break;
         }
-        int64_t count = std::min(buff_size, src_file_size - offset);
+        int64_t count = std::min<size_t>(buff_size, src_file_size - offset);
         RETURN_IF_ERROR(src_file->read_at_fully(offset, buf, count));
         offset += count;
         RETURN_IF_ERROR(converter->append(buf, count));
