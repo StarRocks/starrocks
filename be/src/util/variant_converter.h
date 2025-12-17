@@ -55,6 +55,9 @@ Status cast_variant_to_arithmetic(const Variant& variant, ColumnBuilder<ResultTy
         VARIANT_CAST_CASE(INT64, get_int64)
         VARIANT_CAST_CASE(FLOAT, get_float)
         VARIANT_CAST_CASE(DOUBLE, get_double)
+        VARIANT_CAST_CASE(DECIMAL4, get_decimal4)
+        VARIANT_CAST_CASE(DECIMAL8, get_decimal8)
+        VARIANT_CAST_CASE(DECIMAL16, get_decimal16)
     default:
         return VARIANT_CAST_NOT_SUPPORT(type, ResultType);
     }

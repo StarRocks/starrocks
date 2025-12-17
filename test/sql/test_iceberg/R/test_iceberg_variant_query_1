@@ -187,28 +187,33 @@ SELECT
     variant_from_int,
     get_variant_int(variant_from_int, '$') as extracted_int,
     CAST(variant_query(variant_from_int, '$') AS DECIMAL(22,8)) as extracted_int_dec,
+    get_variant_double(variant_from_int, '$') as extracted_int_dec2,
 
     -- BIGINT
     bigint_val as original_bigint,
     CAST(bigint_val AS DECIMAL(22,8)) as original_bigint_dec,
     get_variant_int(variant_from_bigint, '$') as extracted_bigint,
     CAST(variant_query(variant_from_bigint, '$') AS DECIMAL(22,8)) as extracted_bigint_dec,
+    get_variant_double(variant_from_bigint, '$') as extracted_bigint_dec2,
 
     -- FLOAT
     float_val as original_float,
     CAST(float_val AS DECIMAL(22,8)) as original_float_dec,
     CAST(variant_query(variant_from_float, '$') AS DECIMAL(22,8)) as extracted_float_dec,
+    get_variant_double(variant_from_float, '$') as extracted_float_dec2,
 
     -- DOUBLE
     double_val as original_double,
     CAST(double_val AS DECIMAL(22,8)) as original_double_dec,
     CAST(variant_query(variant_from_double, '$') AS DECIMAL(22,8)) as extracted_double_dec,
+    get_variant_double(variant_from_double, '$') as extracted_double_dec2,
 
     -- DECIMAL
     decimal_val as original_decimal,
     CAST(decimal_val AS DECIMAL(22,8)) as original_decimal_dec,
     variant_from_decimal,
     CAST(variant_query(variant_from_decimal, '$') AS DECIMAL(22,8)) as extracted_decimal_from_variant,
+    get_variant_double(variant_from_decimal, '$') as extracted_decimal_from_variant2,
 
     -- STRING / BOOLEAN (keep originals and extractions)
     string_val as original_string,
@@ -219,10 +224,10 @@ FROM variant_test_unified
 WHERE test_scenario = 'basic_types'
 ORDER BY id;
 -- result:
-1	positive_values	100	100.00000000	100	100	100.00000000	1000000	1000000.00000000	1000000	1000000.00000000	3.14	3.14000010	3.14000000	2.718281828	2.71828183	2.71828183	123.45	123.45000000	123.45	123.45000000	hello	hello	1	1
-2	negative_values	-50	-50.00000000	-50	-50	-50.00000000	-500000	-500000.00000000	-500000	-500000.00000000	-1.5	-1.50000000	-1.50000000	-0.5	-0.50000000	-0.50000000	-99.99	-99.99000000	-99.99	-99.99000000	world	world	0	0
-3	zero_and_empty	0	0E-8	0	0	0E-8	0	0E-8	0	0E-8	0.0	0E-8	0E-8	0.0	0E-8	0E-8	0.00	0E-8	0.0	0E-8			None	None
-4	all_null	None	None	null	None	None	None	None	None	None	None	None	None	None	None	None	None	None	null	None	None	None	None	None
+1	positive_values	100	100.00000000	100	100	100.00000000	100.0	1000000	1000000.00000000	1000000	1000000.00000000	1000000.0	3.14	3.14000010	3.14000000	3.14	2.718281828	2.71828183	2.71828183	2.718281828	123.45	123.45000000	123.45	123.45000000	123.45	hello	hello	1	1
+2	negative_values	-50	-50.00000000	-50	-50	-50.00000000	-50.0	-500000	-500000.00000000	-500000	-500000.00000000	-500000.0	-1.5	-1.50000000	-1.50000000	-1.5	-0.5	-0.50000000	-0.50000000	-0.5	-99.99	-99.99000000	-99.99	-99.99000000	-99.99	world	world	0	0
+3	zero_and_empty	0	0E-8	0	0	0E-8	0.0	0	0E-8	0	0E-8	0.0	0.0	0E-8	0E-8	0.0	0.0	0E-8	0E-8	0.0	0.00	0E-8	0.0	0E-8	0.0			None	None
+4	all_null	None	None	null	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	null	None	None	None	None	None	None
 -- !result
 SELECT
     id,

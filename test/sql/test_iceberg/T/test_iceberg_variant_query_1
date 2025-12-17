@@ -127,28 +127,33 @@ SELECT
     variant_from_int,
     get_variant_int(variant_from_int, '$') as extracted_int,
     CAST(variant_query(variant_from_int, '$') AS DECIMAL(22,8)) as extracted_int_dec,
+    get_variant_double(variant_from_int, '$') as extracted_int_dec_double,    
 
     -- BIGINT
     bigint_val as original_bigint,
     CAST(bigint_val AS DECIMAL(22,8)) as original_bigint_dec,
     get_variant_int(variant_from_bigint, '$') as extracted_bigint,
     CAST(variant_query(variant_from_bigint, '$') AS DECIMAL(22,8)) as extracted_bigint_dec,
+    get_variant_double(variant_from_bigint, '$') as extracted_bigint_dec2,
 
     -- FLOAT
     float_val as original_float,
     CAST(float_val AS DECIMAL(22,8)) as original_float_dec,
     CAST(variant_query(variant_from_float, '$') AS DECIMAL(22,8)) as extracted_float_dec,
+    get_variant_double(variant_from_float, '$') as extracted_float_dec2,
 
     -- DOUBLE
     double_val as original_double,
     CAST(double_val AS DECIMAL(22,8)) as original_double_dec,
     CAST(variant_query(variant_from_double, '$') AS DECIMAL(22,8)) as extracted_double_dec,
+    get_variant_double(variant_from_double, '$') as extracted_double_dec2,
 
     -- DECIMAL
     decimal_val as original_decimal,
     CAST(decimal_val AS DECIMAL(22,8)) as original_decimal_dec,
     variant_from_decimal,
     CAST(variant_query(variant_from_decimal, '$') AS DECIMAL(22,8)) as extracted_decimal_from_variant,
+    get_variant_double(variant_from_decimal, '$') as extracted_decimal_from_variant2,
 
     -- STRING / BOOLEAN (keep originals and extractions)
     string_val as original_string,
