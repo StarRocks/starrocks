@@ -967,6 +967,14 @@ const GlobalDictByNameMaps* DeltaWriter::global_dict_map() const {
     return _impl->global_dicts();
 }
 
+void DeltaWriter::set_already_finished(bool val) {
+    _impl->set_already_finished(val);
+}
+
+bool DeltaWriter::already_finished() const {
+    return _impl->already_finished();
+}
+
 ThreadPool* DeltaWriter::io_threads() {
     if (UNLIKELY(StorageEngine::instance() == nullptr)) {
         return nullptr;

@@ -124,7 +124,10 @@ MemTable::MemTable(int64_t tablet_id, const Schema* schema, MemTableSink* sink, 
     _init_aggregator_if_needed();
 }
 
-MemTable::~MemTable() = default;
+MemTable::~MemTable() {
+    LOG(INFO) << "Memtable destruct, tablet_id: " << _tablet_id << ", this: " << this
+              << ", stack: " << get_stack_trace();
+}
 
 size_t MemTable::memory_usage() const {
     size_t size = 0;

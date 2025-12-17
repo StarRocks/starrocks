@@ -163,6 +163,10 @@ public:
     const DictColumnsValidMap* global_dict_columns_valid_info() const;
     const GlobalDictByNameMaps* global_dict_map() const;
 
+    void set_already_finished(bool val);
+
+    bool already_finished() const;
+
 private:
     DeltaWriterImpl* _impl;
 };
