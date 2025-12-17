@@ -14,8 +14,6 @@
 
 #include "exprs/variant_functions.h"
 
-#include <memory>
-
 #include "column/column_builder.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"

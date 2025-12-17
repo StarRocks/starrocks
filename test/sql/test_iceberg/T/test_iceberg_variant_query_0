@@ -94,6 +94,8 @@ SELECT
     variant_typeof(variant_query(variant_from_decimal, '$'))          AS variant_decimal_type,
     CAST(variant_query(variant_from_float, '$') as decimal(22, 8)) as variant_float_value,
     CAST(variant_query(variant_from_decimal, '$') as decimal(22, 8)) as variant_decimal_value,
+    get_variant_double(variant_from_float, '$') as variant_float_value2,
+    get_variant_double(variant_from_decimal, '$') as variant_decimal_value2,
     get_variant_string(variant_from_string, '$')    AS variant_string_value,
     cast(variant_query(variant_from_string, '$') as string)    AS variant_string_as_string
 FROM variant_test_cases
@@ -111,7 +113,9 @@ SELECT
     variant_typeof(variant_query(variant_from_array, '$[0]'))                AS array_first_type,
     variant_typeof(variant_query(variant_from_array, '$[2]'))                AS array_third_type,
     CAST(variant_query(variant_from_array, '$[0]') as decimal(22, 8))                AS array_first_value,
-    CAST(variant_query(variant_from_array, '$[2]') as decimal(22, 8))               AS array_third_value
+    CAST(variant_query(variant_from_array, '$[2]') as decimal(22, 8))               AS array_third_value,
+    get_variant_double(variant_from_array, '$[0]') AS array_first_value2,
+    get_variant_double(variant_from_array, '$[2]') AS array_third_value2
 FROM variant_test_cases
 ORDER BY case_id;
 
