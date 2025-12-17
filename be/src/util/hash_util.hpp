@@ -142,6 +142,8 @@ public:
     static constexpr uint32_t FNV_SEED = 0x811C9DC5; // 2166136261
     static const uint64_t MURMUR_PRIME = 0xc6a4a7935bd1e995ULL;
     static const uint32_t MURMUR_SEED = 0xadc83b19ULL;
+    static constexpr uint64_t XXH3_SEED = 0x9E3779B185EBCA87ULL;
+    static constexpr uint32_t XXH3_SEED_32 = 0x9E3779B1;
     // Implementation of the Fowler-Noll-Vo hash function.  This is not as performant
     // as boost's hash on int types (2x slower) but has bit entropy.
     // For ints, boost just returns the value of the int which can be pathological.
