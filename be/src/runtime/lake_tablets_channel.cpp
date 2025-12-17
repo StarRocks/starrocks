@@ -71,8 +71,8 @@ public:
     Status open(const PTabletWriterOpenRequest& params, PTabletWriterOpenResult* result,
                 std::shared_ptr<OlapTableSchemaParam> schema, bool is_incremental) override;
 
-    void add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequest& request,
-                   PTabletWriterAddBatchResult* response) override;
+    void add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequest& request, PTabletWriterAddBatchResult* response,
+                   bool* close_channel_ptr) override;
 
     Status incremental_open(const PTabletWriterOpenRequest& params, PTabletWriterOpenResult* result,
                             std::shared_ptr<OlapTableSchemaParam> schema) override;
@@ -165,40 +165,6 @@ private:
 
     void _flush_stale_memtables();
 
-<<<<<<< HEAD
-    LoadChannel* _load_channel;
-=======
-    void _update_tablet_profile(const DeltaWriter* writer, RuntimeProfile* profile) const;
-
-    static bool _is_data_file_bundle_enabled(const PTabletWriterOpenRequest& params);
-
-    static bool _is_multi_statements_txn(const PTabletWriterOpenRequest& params);
-
-    Status log_and_error_tablet_not_found(int64_t tablet_id, const PUniqueId& id, std::string_view signature) const;
-
-    // write access to the delta writers map
-    inline std::unordered_map<int64_t, std::unique_ptr<AsyncDeltaWriter>>* mutable_delta_writers() {
-        return _delta_writers_impl.mutable_delta_writers();
-    };
-
-private:
-    // A nested class to encapsulate the access to _delta_writers.
-    class DeltaWritersImpl {
-    private:
-        // tablet_id -> std::unique_ptr<AsyncDeltaWriter>
-        std::unordered_map<int64_t, std::unique_ptr<AsyncDeltaWriter>> _delta_writers;
-
-    public:
-        inline std::unordered_map<int64_t, std::unique_ptr<AsyncDeltaWriter>>* mutable_delta_writers() {
-            return &_delta_writers;
-        }
-
-        inline const std::unordered_map<int64_t, std::unique_ptr<AsyncDeltaWriter>>& delta_writers() {
-            return _delta_writers;
-        }
-    };
-
->>>>>>> 00bb241374 ([BugFix] fix LocalTabletsChannel and LakeTabletsChannel dead lock (#66748))
     lake::TabletManager* _tablet_manager;
 
     TabletsChannelKey _key;
@@ -328,7 +294,7 @@ Status LakeTabletsChannel::open(const PTabletWriterOpenRequest& params, PTabletW
 }
 
 void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequest& request,
-                                   PTabletWriterAddBatchResult* response) {
+                                   PTabletWriterAddBatchResult* response, bool* close_channel_ptr) {
     MonotonicStopWatch watch;
     watch.start();
     std::shared_lock<bthreads::BThreadSharedMutex> rolk(_rw_mtx);
@@ -453,7 +419,8 @@ void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequ
     // _channel_row_idx_start_points no longer used, free its memory.
     context->_channel_row_idx_start_points.reset();
 
-    bool close_channel = false;
+    bool& close_channel = *close_channel_ptr;
+    close_channel = false;
 
     // Submit `AsyncDeltaWriter::finish()` tasks if needed
     if (request.eos()) {
@@ -563,30 +530,6 @@ void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequ
     COUNTER_UPDATE(_add_row_num, total_row_num);
     COUNTER_UPDATE(_wait_flush_timer, wait_memtable_flush_time_ns);
     COUNTER_UPDATE(_wait_writer_timer, wait_writer_ns);
-
-    if (close_channel) {
-<<<<<<< HEAD
-        _load_channel->remove_tablets_channel(_key);
-=======
-        if (_finish_mode == lake::DeltaWriterFinishMode::kDontWriteTxnLog) {
-            _txn_log_collector.notify();
-        }
-    }
-
-    // Sender 0 is responsible for waiting for all other senders to finish and collecting txn logs
-    if (_finish_mode == lake::kDontWriteTxnLog && request.eos() && (request.sender_id() == 0) &&
-        response->status().status_code() == TStatusCode::OK) {
-        rolk.unlock();
-        auto t = request.timeout_ms() - (int64_t)(watch.elapsed_time() / 1000 / 1000);
-        auto ok = _txn_log_collector.wait(t);
-        auto st = ok ? _txn_log_collector.status() : Status::TimedOut(fmt::format("wait txn log timed out: {}", t));
-        if (st.ok()) {
-            context->add_txn_logs(_txn_log_collector.logs());
-        } else {
-            context->update_status(st);
-        }
->>>>>>> 00bb241374 ([BugFix] fix LocalTabletsChannel and LakeTabletsChannel dead lock (#66748))
-    }
 }
 
 int LakeTabletsChannel::_close_sender(const int64_t* partitions, size_t partitions_size) {

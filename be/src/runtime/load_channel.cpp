@@ -164,22 +164,11 @@ void LoadChannel::_add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequest& r
                 fmt::format("cannot find the tablets channel associated with the key {}", key.to_string()));
         return;
     }
-<<<<<<< HEAD
-    channel->add_chunk(chunk, request, response);
-=======
     bool close_channel = false;
     channel->add_chunk(chunk, request, response, &close_channel);
     if (close_channel) {
         _remove_tablets_channel(key);
-        if ((_should_enable_profile() ||
-             (watch != nullptr && watch->elapsed_time() > request.timeout_ms() * 1000000))) {
-            // If close_channel is true, the channel is removed from _tablets_channels,
-            // there will be no chance to get the channel to update the profile later.
-            // So update the profile here.
-            channel->update_profile();
-        }
     }
->>>>>>> 00bb241374 ([BugFix] fix LocalTabletsChannel and LakeTabletsChannel dead lock (#66748))
 }
 
 void LoadChannel::add_chunk(const PTabletWriterAddChunkRequest& request, PTabletWriterAddBatchResult* response) {

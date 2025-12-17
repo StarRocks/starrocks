@@ -121,13 +121,8 @@ public:
     void report_profile(PTabletWriterAddBatchResult* result, bool print_profile);
 
 private:
-<<<<<<< HEAD
     void _add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequest& request, PTabletWriterAddBatchResult* response);
-=======
     void _remove_tablets_channel(const TabletsChannelKey& key);
-    void _add_chunk(Chunk* chunk, const MonotonicStopWatch* watch, const PTabletWriterAddChunkRequest& request,
-                    PTabletWriterAddBatchResult* response);
->>>>>>> 00bb241374 ([BugFix] fix LocalTabletsChannel and LakeTabletsChannel dead lock (#66748))
     Status _build_chunk_meta(const ChunkPB& pb_chunk);
     Status _deserialize_chunk(const ChunkPB& pchunk, Chunk& chunk, faststring* uncompressed_buffer);
 

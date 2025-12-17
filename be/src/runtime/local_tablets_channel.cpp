@@ -196,7 +196,7 @@ void LocalTabletsChannel::add_segment(brpc::Controller* cntl, const PTabletWrite
 }
 
 void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequest& request,
-                                    PTabletWriterAddBatchResult* response) {
+                                    PTabletWriterAddBatchResult* response, bool* close_channel_ptr) {
     MonotonicStopWatch watch;
     watch.start();
     std::shared_lock<bthreads::BThreadSharedMutex> lk(_rw_mtx);
@@ -346,7 +346,8 @@ void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkReq
     // _channel_row_idx_start_points no longer used, release it to free memory.
     context->_channel_row_idx_start_points.reset();
 
-    bool close_channel = false;
+    bool& close_channel = *close_channel_ptr;
+    close_channel = false;
 
     // NOTE: Must close sender *AFTER* the write requests submitted, otherwise a delta writer commit request may
     // be executed ahead of the write requests submitted by other senders.
