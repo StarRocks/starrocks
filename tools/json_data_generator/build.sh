@@ -13,7 +13,7 @@ FMT_LIB="-lfmt"
 
 # Build
 echo "Compiling with $CXX..."
-$CXX -std=c++17 -O3 -Wall -o json_generator json_generator.cpp $FMT_LIB
+$CXX -std=c++17 -O3 -gdwarf-5 -fno-omit-frame-pointer -Wall -o json_generator json_generator.cpp $FMT_LIB
 
 if [ -f json_generator ]; then
     echo "Build successful! Executable: ./json_generator"

@@ -253,23 +253,40 @@ private:
 
     std::string escape_json_string(const std::string& str) {
         std::string result;
-        result.reserve(str.size() + 2); // Reserve space for quotes and potential escapes
-        result += "\"";
-        for (char c : str) {
-            if (c == '"' || c == '\\') {
-                result += "\\";
-                result += c;
-            } else if (c == '\n') {
-                result += "\\n";
-            } else if (c == '\r') {
-                result += "\\r";
-            } else if (c == '\t') {
-                result += "\\t";
-            } else {
-                result += c;
-            }
+        // Optimize: Reserve space to minimize reallocations.
+        // Assuming ~12.5% expansion for escaped chars + 2 quotes.
+        result.reserve(str.size() + str.size() / 8 + 2);
+        result.push_back('"');
+
+        const char* p = str.data();
+        size_t len = str.size();
+        size_t last_pos = 0;
+
+        for (size_t i = 0; i < len; ++i) {
+            char c = p[i];
+            char replacement = 0;
+
+            if (c == '"')
+                replacement = '"';
+            else if (c == '\\')
+                replacement = '\\';
+            else if (c == '\n')
+                replacement = 'n';
+            else if (c == '\r')
+                replacement = 'r';
+            else if (c == '\t')
+                replacement = 't';
+            else
+                continue;
+
+            result.append(p + last_pos, i - last_pos);
+            result.push_back('\\');
+            result.push_back(replacement);
+            last_pos = i + 1;
         }
-        result += "\"";
+
+        result.append(p + last_pos, len - last_pos);
+        result.push_back('"');
         return result;
     }
 
