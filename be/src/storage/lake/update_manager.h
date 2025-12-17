@@ -225,7 +225,7 @@ public:
 private:
     // print memory tracker state
     void _print_memory_stats();
-    Status _do_update(uint32_t rowset_id, int32_t upsert_idx, const SegmentPKEncodeResultPtr& upsert,
+    Status _do_update(uint32_t rowset_id, int32_t upsert_idx, const SegmentPKIteratorPtr& upsert,
                       LakePrimaryIndex& index, DeletesMap* new_deletes, bool read_only, bool is_cloud_native_index);
 
     Status _do_update_with_condition(const RowsetUpdateStateParams& params, uint32_t rowset_id, int32_t upsert_idx,

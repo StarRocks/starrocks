@@ -172,6 +172,20 @@ Status PersistentIndexSstable::sample_keys(std::vector<std::string>* keys, size_
     return _sst->sample_keys(keys, sample_interval_bytes);
 }
 
+StatusOr<PersistentIndexSstableUniquePtr> PersistentIndexSstable::new_sstable(
+        const PersistentIndexSstablePB& sstable_pb, const std::string& location, Cache* cache, bool need_filter,
+        DelVectorPtr delvec, const TabletMetadataPtr& metadata, TabletManager* tablet_mgr) {
+    auto sstable = std::make_unique<PersistentIndexSstable>();
+    RandomAccessFileOptions opts;
+    if (!sstable_pb.encryption_meta().empty()) {
+        ASSIGN_OR_RETURN(auto info, KeyCache::instance().unwrap_encryption_meta(sstable_pb.encryption_meta()));
+        opts.encryption_info = std::move(info);
+    }
+    ASSIGN_OR_RETURN(auto rf, fs::new_random_access_file(opts, location));
+    RETURN_IF_ERROR(sstable->init(std::move(rf), sstable_pb, cache, need_filter, delvec, metadata, tablet_mgr));
+    return std::move(sstable);
+}
+
 PersistentIndexSstableStreamBuilder::PersistentIndexSstableStreamBuilder(std::unique_ptr<WritableFile> wf,
                                                                          std::string encryption_meta)
         : _wf(std::move(wf)), _finished(false), _encryption_meta(std::move(encryption_meta)) {

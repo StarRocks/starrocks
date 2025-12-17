@@ -524,8 +524,8 @@ void LakePersistentIndexParallelCompactMgr::TEST_generate_compaction_tasks(
 }
 
 Status LakePersistentIndexParallelCompactMgr::TEST_sample_keys_from_sstable(const PersistentIndexSstablePB& sstable_pb,
-                                                                             const TabletMetadataPtr& metadata,
-                                                                             std::vector<std::string>* sample_keys) {
+                                                                            const TabletMetadataPtr& metadata,
+                                                                            std::vector<std::string>* sample_keys) {
     return sample_keys_from_sstable(sstable_pb, metadata, sample_keys);
 }
 

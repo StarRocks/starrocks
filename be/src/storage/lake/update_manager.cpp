@@ -30,7 +30,7 @@
 #include "storage/lake/rowset.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/update_compaction_state.h"
-#include "storage/persistent_index_parallel_execution_context.h"
+#include "storage/persistent_index_parallel_publish_context.h"
 #include "storage/primary_key_encoder.h"
 #include "storage/rows_mapper.h"
 #include "storage/rowset/column_iterator.h"
@@ -776,14 +776,14 @@ Status UpdateManager::publish_column_mode_partial_update(const TxnLogPB_OpWrite&
 //      - write mode: Call parallel_upsert() to update index and find deletes
 //   3. Wait for all parallel tasks to complete
 //   4. Flush memtable if in write mode (batch writes to sstable)
-Status UpdateManager::_do_update(uint32_t rowset_id, int32_t upsert_idx, const SegmentPKEncodeResultPtr& upsert,
+Status UpdateManager::_do_update(uint32_t rowset_id, int32_t upsert_idx, const SegmentPKIteratorPtr& upsert,
                                  LakePrimaryIndex& index, DeletesMap* new_deletes, bool read_only,
                                  bool is_cloud_native_index) {
     TRACE_COUNTER_SCOPE_LATENCY_US("do_update_latency_us");
 
     // Prepare parallel execution infrastructure if enabled
     std::unique_ptr<ThreadPoolToken> token;
-    std::mutex mutex;  // Protects shared state (deletes, status) during parallel execution
+    std::mutex mutex; // Protects shared state (deletes, status) during parallel execution
     Status status = Status::OK();
 
     // Enable parallel execution for cloud-native index when configured
@@ -792,11 +792,11 @@ Status UpdateManager::_do_update(uint32_t rowset_id, int32_t upsert_idx, const S
     }
 
     // Setup context shared across all parallel tasks
-    ParallelExecutionContext ctx{.token = token.get(),
-                                 .mutex = &mutex,
-                                 .deletes = new_deletes,
-                                 .status = &status,
-                                 .segment_pk_encode_result = upsert.get()};
+    ParallelPublishContext ctx{.token = token.get(),
+                               .mutex = &mutex,
+                               .deletes = new_deletes,
+                               .status = &status,
+                               .segment_pk_iterator = upsert.get()};
 
     // Process each segment (serially or in parallel depending on token)
     for (; !upsert->done(); upsert->next()) {
@@ -814,7 +814,7 @@ Status UpdateManager::_do_update(uint32_t rowset_id, int32_t upsert_idx, const S
     // Synchronize parallel execution if enabled
     if (token) {
         TRACE_COUNTER_SCOPE_LATENCY_US("parallel_execution_wait_us");
-        token->wait();  // Wait for all submitted tasks to complete
+        token->wait(); // Wait for all submitted tasks to complete
 
         // Flush accumulated updates to sstable file (batch optimization)
         if (!read_only && is_cloud_native_index) {
@@ -822,7 +822,7 @@ Status UpdateManager::_do_update(uint32_t rowset_id, int32_t upsert_idx, const S
         }
     }
 
-    RETURN_IF_ERROR(status);  // Check for errors from parallel tasks
+    RETURN_IF_ERROR(status); // Check for errors from parallel tasks
     return upsert->status();
 }
 

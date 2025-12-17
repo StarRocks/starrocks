@@ -24,7 +24,7 @@
 
 namespace starrocks {
 
-class ParallelExecutionContext;
+class ParallelPublishContext;
 
 namespace lake {
 
@@ -98,14 +98,14 @@ public:
                                                   int32_t fileset_start_idx);
 
     // This function could be called in cloud native persistent index only.
-    Status parallel_get(ParallelExecutionContext* context);
+    Status parallel_get(ParallelPublishContext* context);
 
     // This function will be called when parallel upsert happens.
     // The process flow of parallel upsert is:
     // 1. upsert into memtable. (serialize)
     // 2. parallel get from inactive memtables and sstables. (parallel)
     // 3. Call `flush_memtable`, and flush memtable into sstable when memtable is full. (serialize)
-    Status parallel_upsert(uint32_t rssid, ParallelExecutionContext* context);
+    Status parallel_upsert(uint32_t rssid, ParallelPublishContext* context);
 
     // Flush memtable data into sstable.
     Status flush_memtable(bool force = false);

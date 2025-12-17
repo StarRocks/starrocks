@@ -25,27 +25,30 @@ namespace starrocks {
 class ThreadPoolToken;
 
 namespace lake {
-class SegmentPKEncodeResult;
+class SegmentPKIterator;
 }
 
-// ParallelExecutionSlot represents a working slot for one parallel task.
+// ParallelPublishSlot represents a working slot for one parallel task.
 // Each parallel get/upsert task will have its own slot to store intermediate results,
 // avoiding data races between concurrent tasks.
-struct ParallelExecutionSlot {
-    std::vector<Slice> keys;         // Primary keys for this task
-    std::vector<uint64_t> values;    // New row IDs (rssid + segment row id) to be inserted/updated
+struct ParallelPublishSlot {
+    MutableColumnPtr pk_column;       // Encoded primary key column for this batch
+    std::vector<Slice> keys;          // Primary keys for this task, data inside slices owned by `pk_column`.
+    std::vector<uint64_t> values;     // New row IDs (rssid + segment row id) to be inserted/updated
     std::vector<uint64_t> old_values; // Existing row IDs found in the index (for get operations)
-    MutableColumnPtr pk_column;      // Encoded primary key column for this batch
 };
 
-// ParallelExecutionContext manages the shared state and coordination for parallel index operations.
+// ParallelPublishContext is used during the PK publish phase to manage the state for
+// parallel PK index get and parallel upsert operations.
+//
+// ParallelPublishContext manages the shared state and coordination for parallel index operations.
 // It enables concurrent get/upsert operations on the persistent index during tablet publish.
 //
 // Thread Safety:
 // - Multiple threads can execute get/upsert operations concurrently using different slots
 // - The mutex protects shared state (deletes, status) when tasks complete
 // - Each task gets its own slot to avoid contention during execution
-struct ParallelExecutionContext {
+struct ParallelPublishContext {
     // Thread pool token for submitting parallel tasks. If nullptr, operations run serially.
     ThreadPoolToken* token = nullptr;
 
@@ -61,13 +64,14 @@ struct ParallelExecutionContext {
     Status* status = nullptr;
 
     // Iterator over segments to process. Each task gets the next segment via current().
-    lake::SegmentPKEncodeResult* segment_pk_encode_result = nullptr;
+    lake::SegmentPKIterator* segment_pk_iterator = nullptr;
 
     // Working slots for parallel tasks. Each task allocates one slot via extend_slots().
     // Slots are accessed sequentially (no concurrent access to the same slot).
-    std::vector<std::unique_ptr<ParallelExecutionSlot>> slots;
+    std::vector<ParallelPublishSlot> slots;
 
     // Allocates a new slot for a parallel task. Called sequentially before submitting tasks.
-    void extend_slots() { slots.emplace_back(std::make_unique<ParallelExecutionSlot>()); }
+    // Not thread-safe
+    void extend_slots() { slots.emplace_back(ParallelPublishSlot()); }
 };
 } // namespace starrocks

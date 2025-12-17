@@ -29,7 +29,7 @@
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/update_manager.h"
 #include "storage/lake/utils.h"
-#include "storage/persistent_index_parallel_execution_context.h"
+#include "storage/persistent_index_parallel_publish_context.h"
 #include "storage/primary_key_encoder.h"
 #include "storage/sstable/iterator.h"
 #include "storage/sstable/merger.h"
@@ -59,16 +59,10 @@ Status LakePersistentIndex::init(const TabletMetadataPtr& metadata) {
     uint64_t max_rss_rowid = 0;
     std::vector<std::unique_ptr<PersistentIndexSstable>> cur_fileset;
     for (auto& sstable_pb : sstable_meta.sstables()) {
-        RandomAccessFileOptions opts;
-        if (!sstable_pb.encryption_meta().empty()) {
-            ASSIGN_OR_RETURN(auto info, KeyCache::instance().unwrap_encryption_meta(sstable_pb.encryption_meta()));
-            opts.encryption_info = std::move(info);
-        }
-        ASSIGN_OR_RETURN(auto rf, fs::new_random_access_file(
-                                          opts, _tablet_mgr->sst_location(_tablet_id, sstable_pb.filename())));
-        auto sstable = std::make_unique<PersistentIndexSstable>();
-        RETURN_IF_ERROR(sstable->init(std::move(rf), sstable_pb, block_cache->cache(), true /* need filter */,
-                                      nullptr /* delvec */, metadata, _tablet_mgr));
+        ASSIGN_OR_RETURN(auto sstable,
+                         PersistentIndexSstable::new_sstable(
+                                 sstable_pb, _tablet_mgr->sst_location(_tablet_id, sstable_pb.filename()),
+                                 block_cache->cache(), true /* need filter */, nullptr, metadata, _tablet_mgr));
         if (cur_fileset.empty() ||
             (cur_fileset.back()->sstable_pb().has_fileset_id() &&
              UniqueId(cur_fileset.back()->sstable_pb().fileset_id()) == UniqueId(sstable_pb.fileset_id()))) {
@@ -314,7 +308,7 @@ Status LakePersistentIndex::get(size_t n, const Slice* keys, IndexValue* values)
 }
 
 Status LakePersistentIndex::upsert(size_t n, const Slice* keys, const IndexValue* values, IndexValue* old_values,
-                                   IOStat* stat, ParallelExecutionContext* ctx) {
+                                   IOStat* stat, ParallelPublishContext* ctx) {
     std::shared_ptr<std::set<KeyIndex>> not_founds = std::make_shared<std::set<KeyIndex>>();
     size_t num_found;
     RETURN_IF_ERROR(
@@ -493,16 +487,10 @@ Status LakePersistentIndex::prepare_merging_iterator(
     }
     for (const auto& sstable_pb : sstables_to_merge) {
         // build sstable from meta, instead of reuse `_sstables`, to keep it thread safe
-        RandomAccessFileOptions opts;
-        if (!sstable_pb.encryption_meta().empty()) {
-            ASSIGN_OR_RETURN(auto info, KeyCache::instance().unwrap_encryption_meta(sstable_pb.encryption_meta()));
-            opts.encryption_info = std::move(info);
-        }
-        ASSIGN_OR_RETURN(auto rf, fs::new_random_access_file(
-                                          opts, tablet_mgr->sst_location(metadata->id(), sstable_pb.filename())));
-        auto merging_sstable = std::make_shared<PersistentIndexSstable>();
-        RETURN_IF_ERROR(merging_sstable->init(std::move(rf), sstable_pb, nullptr, false /** no filter **/,
-                                              nullptr /* delvec */, metadata, tablet_mgr));
+        ASSIGN_OR_RETURN(auto merging_sstable,
+                         PersistentIndexSstable::new_sstable(
+                                 sstable_pb, tablet_mgr->sst_location(metadata->id(), sstable_pb.filename()), nullptr,
+                                 false /* need filter */, nullptr, metadata, tablet_mgr));
         merging_sstables->push_back(merging_sstable);
         // Pass `max_rss_rowid` to iterator, will be used when compaction.
         read_options.max_rss_rowid = sstable_pb.max_rss_rowid();
@@ -673,30 +661,19 @@ Status LakePersistentIndex::apply_opcompaction(const TxnLogPB_OpCompaction& op_c
         sstable_pb.CopyFrom(op_compaction.output_sstable());
         sstable_pb.set_max_rss_rowid(
                 op_compaction.input_sstables(op_compaction.input_sstables().size() - 1).max_rss_rowid());
-        auto sstable = std::make_unique<PersistentIndexSstable>();
-        RandomAccessFileOptions opts;
-        if (!sstable_pb.encryption_meta().empty()) {
-            ASSIGN_OR_RETURN(auto info, KeyCache::instance().unwrap_encryption_meta(sstable_pb.encryption_meta()));
-            opts.encryption_info = std::move(info);
-        }
-        ASSIGN_OR_RETURN(auto rf, fs::new_random_access_file(
-                                          opts, _tablet_mgr->sst_location(_tablet_id, sstable_pb.filename())));
-        RETURN_IF_ERROR(sstable->init(std::move(rf), sstable_pb, block_cache->cache()));
+        ASSIGN_OR_RETURN(auto sstable, PersistentIndexSstable::new_sstable(
+                                               sstable_pb, _tablet_mgr->sst_location(_tablet_id, sstable_pb.filename()),
+                                               block_cache->cache()));
         new_sstable_fileset = std::make_unique<PersistentIndexSstableFileset>();
         RETURN_IF_ERROR(new_sstable_fileset->init(sstable));
     } else if (!op_compaction.output_sstables().empty()) {
         std::vector<std::unique_ptr<PersistentIndexSstable>> new_sstables;
         for (const auto& sstable_pb : op_compaction.output_sstables()) {
-            auto sstable = std::make_unique<PersistentIndexSstable>();
-            RandomAccessFileOptions opts;
-            if (!sstable_pb.encryption_meta().empty()) {
-                ASSIGN_OR_RETURN(auto info, KeyCache::instance().unwrap_encryption_meta(sstable_pb.encryption_meta()));
-                opts.encryption_info = std::move(info);
-            }
-            ASSIGN_OR_RETURN(auto rf, fs::new_random_access_file(
-                                              opts, _tablet_mgr->sst_location(_tablet_id, sstable_pb.filename())));
-            RETURN_IF_ERROR(sstable->init(std::move(rf), sstable_pb, block_cache->cache()));
-            new_sstables.push_back(std::move(sstable));
+            ASSIGN_OR_RETURN(auto sstable,
+                             PersistentIndexSstable::new_sstable(
+                                     sstable_pb, _tablet_mgr->sst_location(_tablet_id, sstable_pb.filename()),
+                                     block_cache->cache()));
+            new_sstables.push_back(std::move(*sstable));
         }
         new_sstable_fileset = std::make_unique<PersistentIndexSstableFileset>();
         RETURN_IF_ERROR(new_sstable_fileset->init(new_sstables));

@@ -64,10 +64,14 @@ Status Footer::DecodeFrom(Slice* input) {
     return result;
 }
 
-Status ReadBlock(RandomAccessFile* file, const ReadOptions& options, const BlockHandle& handle, BlockContents* result) {
+Status ReadBlock(RandomAccessFile* input_file, const ReadOptions& options, const BlockHandle& handle,
+                 BlockContents* result) {
+    RandomAccessFile* file = nullptr;
     if (options.file != nullptr) {
-        // use specified file
+        // use specified file.
         file = options.file;
+    } else {
+        file = input_file;
     }
     result->data = Slice();
     result->cachable = false;

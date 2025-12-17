@@ -36,7 +36,7 @@
 
 namespace starrocks::lake {
 
-Status SegmentPKEncodeResult::_load() {
+Status SegmentPKIterator::_load() {
     TRY_CATCH_BAD_ALLOC(pk_column_chunk = ChunkHelper::new_chunk(_pkey_schema, 4096));
     auto chunk_container = pk_column_chunk->clone_empty();
     if (_iter != nullptr) {
@@ -71,7 +71,7 @@ Status SegmentPKEncodeResult::_load() {
     return Status::OK();
 }
 
-Status SegmentPKEncodeResult::init(const ChunkIteratorPtr& iter, const Schema& pkey_schema, bool lazy_load) {
+Status SegmentPKIterator::init(const ChunkIteratorPtr& iter, const Schema& pkey_schema, bool lazy_load) {
     _iter = iter;
     _pkey_schema = pkey_schema;
     _lazy_load = lazy_load;
@@ -83,26 +83,26 @@ Status SegmentPKEncodeResult::init(const ChunkIteratorPtr& iter, const Schema& p
     return _status;
 }
 
-bool SegmentPKEncodeResult::done() {
+bool SegmentPKIterator::done() {
     return pk_column_chunk->is_empty() || !_status.ok();
 }
 
-Status SegmentPKEncodeResult::status() {
+Status SegmentPKIterator::status() {
     return _status;
 }
 
-void SegmentPKEncodeResult::next() {
+void SegmentPKIterator::next() {
     _status = _load();
     if (_status.ok()) {
         _current_pk_column_idx++;
     }
 }
 
-std::pair<ChunkPtr, size_t> SegmentPKEncodeResult::current() {
+std::pair<ChunkPtr, size_t> SegmentPKIterator::current() {
     return std::pair<ChunkPtr, size_t>(std::move(pk_column_chunk), _begin_rowid_offsets[_current_pk_column_idx]);
 }
 
-StatusOr<MutableColumnPtr> SegmentPKEncodeResult::encoded_pk_column(const Chunk* chunk) {
+StatusOr<MutableColumnPtr> SegmentPKIterator::encoded_pk_column(const Chunk* chunk) {
     TRACE_COUNTER_SCOPE_LATENCY_US("pk_encode_us");
     MutableColumnPtr pk_column;
     RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(_pkey_schema, &pk_column));
@@ -110,7 +110,7 @@ StatusOr<MutableColumnPtr> SegmentPKEncodeResult::encoded_pk_column(const Chunk*
     return std::move(pk_column);
 }
 
-void SegmentPKEncodeResult::close() {
+void SegmentPKIterator::close() {
     _iter->close();
 }
 
@@ -288,7 +288,7 @@ Status RowsetUpdateState::_do_load_upserts(uint32_t segment_id, const RowsetUpda
     }
     RETURN_ERROR_IF_FALSE(_segment_iters.size() == _rowset_ptr->num_segments());
     auto& iter = _segment_iters[segment_id];
-    SegmentPKEncodeResultPtr result = std::make_unique<SegmentPKEncodeResult>();
+    SegmentPKIteratorPtr result = std::make_unique<SegmentPKIterator>();
     // If this txn contains partial update or auto increment partial update, can't support lazy load now.
     RETURN_IF_ERROR(result->init(iter, pkey_schema, !params.op_write.has_txn_meta()));
     _upserts[segment_id] = std::move(result);

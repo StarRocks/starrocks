@@ -40,6 +40,7 @@ class FilterPolicy;
 namespace lake {
 // <version, IndexValue>
 using IndexValueWithVer = std::pair<int64_t, IndexValue>;
+class PersistentIndexBlockCache;
 
 class PersistentIndexSstable {
 public:
@@ -78,6 +79,12 @@ public:
     void set_fileset_id(const UniqueId& fileset_id) {
         _sstable_pb.mutable_fileset_id()->CopyFrom(fileset_id.to_proto());
     }
+
+    static StatusOr<PersistentIndexSstableUniquePtr> new_sstable(const PersistentIndexSstablePB& sstable_pb,
+                                                                 const std::string& location, Cache* cache,
+                                                                 bool need_filter = true, DelVectorPtr delvec = nullptr,
+                                                                 const TabletMetadataPtr& metadata = nullptr,
+                                                                 TabletManager* tablet_mgr = nullptr);
 
 private:
     std::unique_ptr<sstable::Table> _sst{nullptr};

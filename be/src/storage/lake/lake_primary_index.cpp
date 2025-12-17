@@ -23,7 +23,7 @@
 #include "storage/lake/rowset.h"
 #include "storage/lake/rowset_update_state.h"
 #include "storage/lake/tablet.h"
-#include "storage/persistent_index_parallel_execution_context.h"
+#include "storage/persistent_index_parallel_publish_context.h"
 #include "storage/primary_key_encoder.h"
 #include "storage/tablet_meta_manager.h"
 #include "testutil/sync_point.h"
@@ -373,8 +373,8 @@ Status LakePrimaryIndex::flush_memtable(bool force) {
 // - Each task allocates its own slot to avoid data races during parallel execution
 // - Shared state (deletes, status) is protected by mutex when updated
 // - Errors are accumulated in context->status for later checking
-Status LakePrimaryIndex::parallel_get(ParallelExecutionContext* context) {
-    auto current = context->segment_pk_encode_result->current();
+Status LakePrimaryIndex::parallel_get(ParallelPublishContext* context) {
+    auto current = context->segment_pk_iterator->current();
 
     // Define the task to execute (either async in thread pool or inline)
     auto func = [this, context, current]() {
@@ -382,14 +382,15 @@ Status LakePrimaryIndex::parallel_get(ParallelExecutionContext* context) {
         Status st = Status::OK();
 
         // Encode primary keys for this segment
-        auto pk_column_st = context->segment_pk_encode_result->encoded_pk_column(current.first.get());
-        context->extend_slots();  // Allocate a slot for this task's working data
+        auto pk_column_st = context->segment_pk_iterator->encoded_pk_column(current.first.get());
+        context->extend_slots(); // Allocate a slot for this task's working data
+        auto& slot = context->slots.back();
 
         if (pk_column_st.ok()) {
             // Query index for existing rows with these primary keys
-            context->slots.back()->pk_column = std::move(pk_column_st.value());
-            context->slots.back()->old_values.resize(context->slots.back()->pk_column->size(), NullIndexValue);
-            st = get(*context->slots.back()->pk_column, &context->slots.back()->old_values);
+            slot.pk_column = std::move(pk_column_st.value());
+            slot.old_values.resize(slot.pk_column->size(), NullIndexValue);
+            st = get(*slot.pk_column, &slot.old_values);
         } else {
             st = pk_column_st.status();
         }
@@ -443,23 +444,24 @@ Status LakePrimaryIndex::parallel_get(ParallelExecutionContext* context) {
 // - context: Parallel execution context with thread pool token, mutex, and slots
 //
 // Note: Unlike parallel_get which is read-only, this writes to the index memtable
-Status LakePrimaryIndex::parallel_upsert(uint32_t rssid, ParallelExecutionContext* context) {
-    auto current = context->segment_pk_encode_result->current();
+Status LakePrimaryIndex::parallel_upsert(uint32_t rssid, ParallelPublishContext* context) {
+    auto current = context->segment_pk_iterator->current();
     if (context->token) {
         // Parallel mode: Allocate a slot for this task to store its pk_column
         context->extend_slots();
+        auto& slot = context->slots.back();
 
         // We can't return error directly, because we need to wait all previous tasks finish.
         // Instead, we accumulate errors in context->status for later checking.
         Status st = Status::OK();
-        auto pk_column_st = context->segment_pk_encode_result->encoded_pk_column(current.first.get());
+        auto pk_column_st = context->segment_pk_iterator->encoded_pk_column(current.first.get());
         if (pk_column_st.ok()) {
             // Store pk_column in this task's slot to avoid data races
-            context->slots.back()->pk_column = std::move(pk_column_st.value());
+            slot.pk_column = std::move(pk_column_st.value());
 
             // Submit upsert task to thread pool. Pass nullptr for deletes since we collect
             // them in the context (not used for upsert, only for parallel_get)
-            auto st = upsert(rssid, current.second, *context->slots.back()->pk_column, nullptr, context);
+            auto st = upsert(rssid, current.second, *slot.pk_column, nullptr, context);
             TRACE_COUNTER_INCREMENT("parallel_upsert_cnt", 1);
         } else {
             st = pk_column_st.status();
@@ -473,7 +475,7 @@ Status LakePrimaryIndex::parallel_upsert(uint32_t rssid, ParallelExecutionContex
     } else {
         // Serial mode: Execute inline with direct error propagation
         ASSIGN_OR_RETURN(MutableColumnPtr pk_column,
-                         context->segment_pk_encode_result->encoded_pk_column(current.first.get()));
+                         context->segment_pk_iterator->encoded_pk_column(current.first.get()));
         RETURN_IF_ERROR(upsert(rssid, current.second, *pk_column, context->deletes));
     }
     return Status::OK();

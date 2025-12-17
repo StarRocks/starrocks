@@ -41,6 +41,7 @@ class Rowset;
 class Tablet;
 class CompactionTask;
 class LocationProvider;
+class PersistentIndexSstable;
 
 using RowsetPtr = std::shared_ptr<starrocks::lake::Rowset>;
 using SegmentPtr = std::shared_ptr<starrocks::Segment>;
@@ -52,6 +53,8 @@ using DelVectorPtr = std::shared_ptr<DelVector>;
 
 using KeyIndex = size_t;
 using KeyIndexSet = std::set<KeyIndex>;
+
+using PersistentIndexSstableUniquePtr = std::unique_ptr<PersistentIndexSstable>;
 
 } // namespace lake
 

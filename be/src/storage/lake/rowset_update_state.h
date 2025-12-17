@@ -82,10 +82,10 @@ struct RowsetUpdateStateParams {
     const RssidFileInfoContainer& container;
 };
 
-class SegmentPKEncodeResult {
+class SegmentPKIterator {
 public:
-    SegmentPKEncodeResult() = default;
-    ~SegmentPKEncodeResult() { close(); }
+    SegmentPKIterator() = default;
+    ~SegmentPKIterator() { close(); }
     Status init(const ChunkIteratorPtr& iter, const Schema& pkey_schema, bool load_whole);
     void next();
     bool done();
@@ -129,7 +129,7 @@ private:
     size_t _memory_usage = 0;
 };
 
-using SegmentPKEncodeResultPtr = std::unique_ptr<SegmentPKEncodeResult>;
+using SegmentPKIteratorPtr = std::unique_ptr<SegmentPKIterator>;
 
 class RowsetUpdateState {
 public:
@@ -173,7 +173,7 @@ public:
     // Release `del_id`-th delete file's state.
     void release_delete(uint32_t del_id);
 
-    const SegmentPKEncodeResultPtr& upserts(uint32_t segment_id) const { return _upserts[segment_id]; }
+    const SegmentPKIteratorPtr& upserts(uint32_t segment_id) const { return _upserts[segment_id]; }
     const MutableColumnPtr& deletes(uint32_t segment_id) const { return _deletes[segment_id]; }
 
     std::size_t memory_usage() const { return _memory_usage; }
@@ -214,7 +214,7 @@ private:
     void _reset();
 
     // one for each segment file
-    std::vector<SegmentPKEncodeResultPtr> _upserts;
+    std::vector<SegmentPKIteratorPtr> _upserts;
     // one for each delete file
     MutableColumns _deletes;
     size_t _memory_usage = 0;
