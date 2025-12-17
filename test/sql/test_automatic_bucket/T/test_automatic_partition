@@ -1,4 +1,4 @@
--- name: test_bucket_size
+-- name: test_bucket_size @native
 create table t(k int);
 show create table t;
 alter table t set('bucket_size'='1024');
@@ -12,7 +12,7 @@ alter table t set('bucket_size'='0');
 alter table t set('bucket_size'='-1');
 alter table t set('bucket_size'='2048');
 
--- name: test_automatic_bucket
+-- name: test_automatic_bucket @native
 create database kkk;
 use kkk;
 create table t(k int);

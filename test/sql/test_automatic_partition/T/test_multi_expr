@@ -186,7 +186,7 @@ select * from test;
 delete from test where k1 = '2020-04-01';
 select * from test;
 
--- name: test_create_table_like
+-- name: test_create_table_like @native
 CREATE TABLE base_tbl (
                     `k1`  date,
                     `k2`  datetime,
