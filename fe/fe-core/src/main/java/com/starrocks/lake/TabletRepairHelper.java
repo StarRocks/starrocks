@@ -48,20 +48,22 @@ public class TabletRepairHelper {
 
     private static final long BATCH_VERSION_NUM = 5L;
 
+    // the version range [minVersion, maxVersion] is used to find valid tablet metadatas, both are included
     record PhysicalPartitionInfo(
             long physicalPartitionId,
             List<Long> allTablets, // all tablets in one physical partition
-            Set<Long> leftTablets, // tablets whose valid metadata still need to be found
+            Set<Long> unverifiedTablets, // tablets whose valid metadata still need to be found
             Map<ComputeNode, Set<Long>> nodeToTablets,
-            long maxVersion,
-            long minVersion
+            long maxVersion, // physical partition visible version
+            long minVersion  // the min version that has not been vacuumed
     ) {
     }
 
+    // returns a map of tablet IDs to valid tablet metadatas within the version range [minVersion, maxVersion]
     private static Map<Long, Map<Long, TabletMetadataPB>> getTabletMetadatas(PhysicalPartitionInfo info, long maxVersion,
                                                                              long minVersion) throws Exception {
         long physicalPartitionId = info.physicalPartitionId;
-        Set<Long> leftTablets = info.leftTablets;
+        Set<Long> unverifiedTablets = info.unverifiedTablets;
         Map<ComputeNode, Set<Long>> nodeToTablets = info.nodeToTablets;
 
         List<Future<GetTabletMetadatasResponse>> responses = Lists.newArrayList();
@@ -70,7 +72,7 @@ public class TabletRepairHelper {
             ComputeNode node = entry.getKey();
             Set<Long> tabletIds = Sets.newHashSet(entry.getValue());
 
-            tabletIds.retainAll(leftTablets);
+            tabletIds.retainAll(unverifiedTablets);
             if (tabletIds.isEmpty()) {
                 continue;
             }
@@ -92,6 +94,7 @@ public class TabletRepairHelper {
             }
         }
 
+        // map<tablet id, map<version, TabletMetadataPB>>
         Map<Long, Map<Long, TabletMetadataPB>> tabletVersionMetadatas = Maps.newHashMap();
         for (int i = 0; i < responses.size(); ++i) {
             try {
@@ -385,7 +388,7 @@ public class TabletRepairHelper {
                                                              boolean allowEmptyTabletRecovery, boolean isFileBundling)
             throws Exception {
         List<Long> allTablets = info.allTablets;
-        Set<Long> leftTablets = info.leftTablets;
+        Set<Long> unverifiedTablets = info.unverifiedTablets;
         long partitionMaxVersion = info.maxVersion;
         long partitionMinVersion = info.minVersion;
         Map<Long, TabletMetadataPB> validMetadatas = Maps.newHashMap();
@@ -400,10 +403,10 @@ public class TabletRepairHelper {
             findValidTabletMetadata(info, tabletVersionMetadatas, maxVersion, minVersion, enforceConsistentVersion,
                     validMetadatas);
 
+            unverifiedTablets.removeAll(validMetadatas.keySet());
             if (validMetadatas.keySet().containsAll(allTablets)) {
+                Preconditions.checkState(unverifiedTablets.isEmpty());
                 break;
-            } else {
-                leftTablets.removeAll(validMetadatas.keySet());
             }
         }
 
