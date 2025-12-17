@@ -295,8 +295,6 @@ Then, analyze UnhealthyTablets with `SHOW TABLET tablet_id`.
 
 If the result shows that two replicas have consistent data but one replica has inconsistent data—meaning two out of three replicas completed the write successfully—this is considered a successful write. You can then check whether the tablets in UnhealthyTablets are fixed. If they are fixed, it indicates an issue. If the status is changing, you can adjust the loading frequency for the corresponding table.
 
-Translated with DeepL.com (free version)
-
 ## Error: "SyntaxErrorException: Reach limit of connections". How to troubleshoot?
 
 Increase per-user limits by running the following command:
