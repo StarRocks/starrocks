@@ -154,6 +154,7 @@ StatusOr<std::unique_ptr<TabletWriter>> HorizontalPkTabletWriter::clone() const 
     if (enable_pk_parallel_execution()) {
         writer->force_set_enable_pk_parallel_execution();
     }
+    writer->set_auto_flush(auto_flush());
     return writer;
 }
 

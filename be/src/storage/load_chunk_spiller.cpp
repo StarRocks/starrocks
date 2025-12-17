@@ -218,13 +218,15 @@ StatusOr<std::vector<ChunkIteratorPtr>> LoadChunkSpiller::get_spill_block_iterat
         auto& group = groups[i];
         merge_inputs.push_back(std::make_shared<BlockGroupIterator>(*_schema, *_spiller->serde(), group.blocks()));
         current_input_bytes += group.data_size();
+        total_block_bytes += group.data_size();
+        total_blocks += group.blocks().size();
         // We need to stop merging if:
         // 1. The current input block group size exceed the target_size,
         //    because we don't want to generate too large segment file.
         // 2. The input chunks memory usage exceed the load_spill_memory_usage_per_merge,
         //    because we don't want each thread cost too much memory.
         if (merge_inputs.size() > 0 &&
-            (current_input_bytes >= target_size ||
+            (current_input_bytes + group.data_size() >= target_size ||
              merge_inputs.size() * config::load_spill_max_chunk_bytes >= memory_usage_per_merge)) {
             auto tmp_itr = do_sort ? new_heap_merge_iterator(merge_inputs) : new_union_iterator(merge_inputs);
             auto merge_itr = do_agg ? new_aggregate_iterator(tmp_itr) : tmp_itr;
@@ -233,8 +235,6 @@ StatusOr<std::vector<ChunkIteratorPtr>> LoadChunkSpiller::get_spill_block_iterat
             merge_inputs.clear();
             current_input_bytes = 0;
         }
-        total_block_bytes += group.data_size();
-        total_blocks += group.blocks().size();
     }
     if (!merge_inputs.empty()) {
         auto tmp_itr = do_sort ? new_heap_merge_iterator(merge_inputs) : new_union_iterator(merge_inputs);

@@ -600,7 +600,7 @@ TEST_P(LakeTabletWriterTest, test_merge_other_writers) {
     }
 
     // Merge other writers into main writer
-    main_writer->merge_other_writers(other_writers);
+    ASSERT_OK(main_writer->merge_other_writers(other_writers));
 
     // Verify merged results
     ASSERT_EQ(expected_rows, main_writer->num_rows());
@@ -666,7 +666,7 @@ TEST_P(LakeTabletWriterTest, test_merge_writers_with_global_dict) {
     }
 
     // Merge other writers
-    main_writer->merge_other_writers(other_writers);
+    ASSERT_OK(main_writer->merge_other_writers(other_writers));
 
     // Verify merged global dict info
     const auto& dict_info = main_writer->global_dict_columns_valid_info();
@@ -702,7 +702,7 @@ TEST_P(LakeTabletWriterTest, test_merge_empty_writers) {
 
     // Merge with empty vector
     std::vector<std::unique_ptr<TabletWriter>> empty_writers;
-    writer->merge_other_writers(empty_writers);
+    ASSERT_OK(writer->merge_other_writers(empty_writers));
 
     // Verify nothing changed
     ASSERT_EQ(original_rows, writer->num_rows());

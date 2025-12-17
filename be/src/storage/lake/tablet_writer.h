@@ -132,7 +132,7 @@ public:
 
     virtual StatusOr<std::unique_ptr<TabletWriter>> clone() const { return Status::NotSupported("Not implemented"); }
 
-    void merge_other_writers(const std::vector<std::unique_ptr<TabletWriter>>& other_writers);
+    Status merge_other_writers(const std::vector<std::unique_ptr<TabletWriter>>& other_writers);
 
     // allow to set custom tablet schema for writer, used in partial update
     void set_tablet_schema(TabletSchemaCSPtr schema) { _schema = std::move(schema); }
@@ -140,6 +140,8 @@ public:
     const starrocks::TabletSchemaCSPtr& tablet_schema() const { return _schema; }
 
     void set_auto_flush(bool auto_flush) { _auto_flush = auto_flush; }
+
+    bool auto_flush() const { return _auto_flush; }
 
     void set_fs(const std::shared_ptr<FileSystem> fs) { _fs = std::move(fs); }
     void set_location_provider(const std::shared_ptr<LocationProvider> location_provider) {

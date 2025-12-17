@@ -58,7 +58,7 @@ void TabletWriter::check_global_dict(SegmentWriter* segment_writer) {
     }
 }
 
-void TabletWriter::merge_other_writers(const std::vector<std::unique_ptr<TabletWriter>>& other_writers) {
+Status TabletWriter::merge_other_writers(const std::vector<std::unique_ptr<TabletWriter>>& other_writers) {
     // merge other writers' files into current writer
     for (const auto& writer : other_writers) {
         _files.insert(_files.end(), writer->_files.begin(), writer->_files.end());
@@ -75,6 +75,7 @@ void TabletWriter::merge_other_writers(const std::vector<std::unique_ptr<TabletW
             }
         }
     }
+    return Status::OK();
 }
 
 } // namespace starrocks::lake

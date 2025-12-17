@@ -21,6 +21,7 @@
 #include "runtime/runtime_state.h"
 #include "storage/aggregate_iterator.h"
 #include "storage/chunk_helper.h"
+#include "storage/lake/tablet_internal_parallel_merge_task.h"
 #include "storage/lake/tablet_writer.h"
 #include "storage/load_spill_block_manager.h"
 #include "storage/merge_iterator.h"
@@ -28,45 +29,6 @@
 #include "util/runtime_profile.h"
 
 namespace starrocks::lake {
-
-void TabletInternalParallelMergeTask::run() {
-    SCOPED_THREAD_LOCAL_MEM_SETTER(_merge_mem_tracker, false);
-    MonotonicStopWatch timer;
-    timer.start();
-    auto char_field_indexes = ChunkHelper::get_char_field_indexes(*_schema);
-    auto chunk_shared_ptr = ChunkHelper::new_chunk(*_schema, config::vector_chunk_size);
-    auto chunk = chunk_shared_ptr.get();
-    auto st = Status::OK();
-    while (true) {
-        chunk->reset();
-        auto itr_st = _block_iterator->get_next(chunk);
-        if (itr_st.is_end_of_file()) {
-            break;
-        } else if (itr_st.ok()) {
-            ChunkHelper::padding_char_columns(char_field_indexes, *_schema, _writer->tablet_schema(), chunk);
-            st = _writer->write(*chunk, nullptr);
-            if (!st.ok()) {
-                break;
-            }
-        } else {
-            st = itr_st;
-            break;
-        }
-    }
-    if (st.ok()) {
-        st = _writer->flush();
-    }
-    timer.stop();
-    LOG(INFO) << fmt::format(
-            "SpillMemTableSink parallel merge blocks to segment finished, txn:{} tablet:{} "
-            "task_index:{}, cost {} ms",
-            _writer->txn_id(), _writer->tablet_id(), _task_index, timer.elapsed_time() / 1000000);
-    _status.update(st);
-}
-
-void TabletInternalParallelMergeTask::update_status(const Status& st) {
-    _status.update(st);
-}
 
 SpillMemTableSink::SpillMemTableSink(LoadSpillBlockManager* block_manager, TabletWriter* writer,
                                      RuntimeProfile* profile) {
@@ -165,7 +127,7 @@ Status SpillMemTableSink::merge_blocks_to_segments() {
             RETURN_IF_ERROR(task->status());
         }
         // 6. merge all writers' result
-        _writer->merge_other_writers(writers);
+        RETURN_IF_ERROR(_writer->merge_other_writers(writers));
         return Status::OK();
     } else {
         auto char_field_indexes = ChunkHelper::get_char_field_indexes(*schema);
