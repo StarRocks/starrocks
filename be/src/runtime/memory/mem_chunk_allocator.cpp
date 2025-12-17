@@ -61,8 +61,11 @@ void MemChunkAllocator::init_metrics() {
     REGISTER_METIRC(system_free_cost_ns);
 }
 
+DEFINE_FAIL_POINT(mem_chunk_allocator_allocate_fail);
+
 bool MemChunkAllocator::allocate(size_t size, MemChunk* chunk) {
     FAIL_POINT_TRIGGER_RETURN(random_error, false);
+    FAIL_POINT_TRIGGER_RETURN(mem_chunk_allocator_allocate_fail, false);
 
     chunk->size = size;
 
