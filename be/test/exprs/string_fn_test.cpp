@@ -4404,4 +4404,46 @@ PARALLEL_TEST(VecStringFunctionsTest, regexpCountTest) {
     }
 }
 
+PARALLEL_TEST(VecStringFunctionsTest, initcapTest) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    Columns columns;
+    auto str = BinaryColumn::create();
+
+    // 1. Normal lowercase -> Title Case
+    str->append("hello world");
+    // 2. All uppercase -> Title Case
+    str->append("HELLO WORLD");
+    // 3. Mixed case -> Title Case
+    str->append("hElLo wOrLd");
+    // 4. Already Title Case -> Title Case
+    str->append("Starrocks Database");
+    // 5. Numbers and Punctuation (delimiters)
+    str->append("1st place, in-the-world!");
+    // 6. Multiple spaces (delimiters)
+    str->append("   hello   world   ");
+    // 7. Underscores and other symbols
+    str->append("abc_def.ghi+jkl");
+    // 8. Single letter
+    str->append("a");
+    // 9. Empty string
+    str->append("");
+
+    columns.emplace_back(str);
+
+    ColumnPtr result = StringFunctions::initcap(ctx.get(), columns).value();
+    ASSERT_EQ(9, result->size());
+
+    auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
+
+    ASSERT_EQ("Hello World", v->get_data()[0].to_string());
+    ASSERT_EQ("Hello World", v->get_data()[1].to_string());
+    ASSERT_EQ("Hello World", v->get_data()[2].to_string());
+    ASSERT_EQ("Starrocks Database", v->get_data()[3].to_string());
+    ASSERT_EQ("1st Place, In-The-World!", v->get_data()[4].to_string());
+    ASSERT_EQ("   Hello   World   ", v->get_data()[5].to_string());
+    ASSERT_EQ("Abc_Def.Ghi+Jkl", v->get_data()[6].to_string());
+    ASSERT_EQ("A", v->get_data()[7].to_string());
+    ASSERT_EQ("", v->get_data()[8].to_string());
+}
+
 } // namespace starrocks

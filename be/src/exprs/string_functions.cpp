@@ -5044,6 +5044,43 @@ StatusOr<ColumnPtr> StringFunctions::format_bytes(FunctionContext* context, cons
 
     return result.build(ColumnHelper::is_all_const(columns));
 }
+
+DEFINE_STRING_UNARY_FN_WITH_IMPL(initcapImpl, str) {
+    if (str.size == 0) {
+        return std::string("");
+    }
+
+    std::string result;
+    result.resize(str.size);
+
+    const char* src = str.data;
+    char* dst = result.data();
+    size_t len = str.size;
+
+    bool word_start = true;
+
+    for (size_t i = 0; i < len; ++i) {
+        unsigned char c = static_cast<unsigned char>(src[i]);
+
+        if (std::isalnum(c)) {
+            if (word_start) {
+                dst[i] = std::toupper(c);
+                word_start = false;
+            } else {
+                dst[i] = std::tolower(c);
+            }
+        } else {
+            dst[i] = c;
+            word_start = true;
+        }
+    }
+
+    return result;
+}
+
+StatusOr<ColumnPtr> StringFunctions::initcap(FunctionContext* context, const Columns& columns) {
+    return VectorizedStringStrictUnaryFunction<initcapImpl>::evaluate<TYPE_VARCHAR, TYPE_VARCHAR>(columns[0]);
+}
 } // namespace starrocks
 
 #include "gen_cpp/opcode/StringFunctions.inc"
