@@ -81,11 +81,13 @@ protected:
     }
 
     void TearDown() override {
+#ifdef USE_STAROS
         if (config::starlet_cache_dir.compare(0, 5, std::string("/tmp/")) == 0) {
             // Clean cache directory
             std::string cmd = fmt::format("rm -rf {}", config::starlet_cache_dir);
             ::system(cmd.c_str());
         }
+#endif
 
         config::enable_transparent_data_encryption = false;
 
