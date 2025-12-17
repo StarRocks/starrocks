@@ -59,8 +59,8 @@ class LakeTabletsChannel : public TabletsChannel {
     using TxnLogPtr = AsyncDeltaWriter::TxnLogPtr;
 
 public:
-    LakeTabletsChannel(LoadChannel* load_channel, lake::TabletManager* tablet_manager, const TabletsChannelKey& key,
-                       MemTracker* mem_tracker, RuntimeProfile* parent_profile);
+    LakeTabletsChannel(lake::TabletManager* tablet_manager, const TabletsChannelKey& key, MemTracker* mem_tracker,
+                       RuntimeProfile* parent_profile);
 
     ~LakeTabletsChannel() override;
 
@@ -71,8 +71,8 @@ public:
     Status open(const PTabletWriterOpenRequest& params, PTabletWriterOpenResult* result,
                 std::shared_ptr<OlapTableSchemaParam> schema, bool is_incremental) override;
 
-    void add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequest& request,
-                   PTabletWriterAddBatchResult* response) override;
+    void add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequest& request, PTabletWriterAddBatchResult* response,
+                   bool* close_channel_ptr) override;
 
     Status incremental_open(const PTabletWriterOpenRequest& params, PTabletWriterOpenResult* result,
                             std::shared_ptr<OlapTableSchemaParam> schema) override;
@@ -165,7 +165,6 @@ private:
 
     void _flush_stale_memtables();
 
-    LoadChannel* _load_channel;
     lake::TabletManager* _tablet_manager;
 
     TabletsChannelKey _key;
@@ -221,11 +220,9 @@ private:
     RuntimeProfile::Counter* _wait_writer_timer = nullptr;
 };
 
-LakeTabletsChannel::LakeTabletsChannel(LoadChannel* load_channel, lake::TabletManager* tablet_manager,
-                                       const TabletsChannelKey& key, MemTracker* mem_tracker,
-                                       RuntimeProfile* parent_profile)
+LakeTabletsChannel::LakeTabletsChannel(lake::TabletManager* tablet_manager, const TabletsChannelKey& key,
+                                       MemTracker* mem_tracker, RuntimeProfile* parent_profile)
         : TabletsChannel(),
-          _load_channel(load_channel),
           _tablet_manager(tablet_manager),
           _key(key),
           _mem_tracker(mem_tracker),
@@ -297,7 +294,7 @@ Status LakeTabletsChannel::open(const PTabletWriterOpenRequest& params, PTabletW
 }
 
 void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequest& request,
-                                   PTabletWriterAddBatchResult* response) {
+                                   PTabletWriterAddBatchResult* response, bool* close_channel_ptr) {
     MonotonicStopWatch watch;
     watch.start();
     std::shared_lock<bthreads::BThreadSharedMutex> rolk(_rw_mtx);
@@ -422,7 +419,8 @@ void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequ
     // _channel_row_idx_start_points no longer used, free its memory.
     context->_channel_row_idx_start_points.reset();
 
-    bool close_channel = false;
+    bool& close_channel = *close_channel_ptr;
+    close_channel = false;
 
     // Submit `AsyncDeltaWriter::finish()` tasks if needed
     if (request.eos()) {
@@ -532,10 +530,6 @@ void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequ
     COUNTER_UPDATE(_add_row_num, total_row_num);
     COUNTER_UPDATE(_wait_flush_timer, wait_memtable_flush_time_ns);
     COUNTER_UPDATE(_wait_writer_timer, wait_writer_ns);
-
-    if (close_channel) {
-        _load_channel->remove_tablets_channel(_key);
-    }
 }
 
 int LakeTabletsChannel::_close_sender(const int64_t* partitions, size_t partitions_size) {
@@ -754,7 +748,9 @@ Status LakeTabletsChannel::incremental_open(const PTabletWriterOpenRequest& para
 std::shared_ptr<TabletsChannel> new_lake_tablets_channel(LoadChannel* load_channel, lake::TabletManager* tablet_manager,
                                                          const TabletsChannelKey& key, MemTracker* mem_tracker,
                                                          RuntimeProfile* parent_profile) {
-    return std::make_shared<LakeTabletsChannel>(load_channel, tablet_manager, key, mem_tracker, parent_profile);
+    // NOTE: `load_channel` is not used for now, just keep it for now so that it could be used later and
+    // be consistent with LocalTabletsChannel.
+    return std::make_shared<LakeTabletsChannel>(tablet_manager, key, mem_tracker, parent_profile);
 }
 
 } // namespace starrocks

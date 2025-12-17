@@ -60,7 +60,7 @@ public:
                                     std::shared_ptr<OlapTableSchemaParam> schema) = 0;
 
     virtual void add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequest& request,
-                           PTabletWriterAddBatchResult* response) = 0;
+                           PTabletWriterAddBatchResult* response, bool* close_channel_ptr) = 0;
 
     virtual void cancel() = 0;
 
