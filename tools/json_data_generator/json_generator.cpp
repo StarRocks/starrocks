@@ -74,8 +74,7 @@ struct CliOptions {
 
 class ValueGenerator {
 public:
-    explicit ValueGenerator(int64_t seed = -1)
-            : rng_(seed >= 0 ? seed : std::random_device{}()), string_counter_(0), int_counter_(0) {}
+    explicit ValueGenerator(int64_t seed = -1) : rng_(seed >= 0 ? seed : std::random_device{}()), , {}
 
     std::string generate_string(Cardinality cardinality) {
         if (cardinality == Cardinality::HIGH) {
@@ -130,8 +129,8 @@ public:
 
 private:
     std::mt19937 rng_;
-    int64_t string_counter_;
-    int64_t int_counter_;
+    int64_t string_counter_ = 0;
+    int64_t int_counter_ = 0;
 
     std::string generate_random_string(int length) {
         const std::string chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
@@ -543,7 +542,7 @@ public:
 
         auto selected = pick_random(rng, available, 2, 5);
         std::vector<std::string> select_parts;
-        select_parts.push_back("id");
+        select_parts.emplace_back("id");
         for (size_t idx : selected) {
             const auto& name = field_names_[idx];
             FieldType t = field_types_[idx];
@@ -581,14 +580,14 @@ public:
                 std::uniform_int_distribution<size_t> td(0, agg_types.size() - 1);
                 std::string agg_type = agg_types[td(rng)];
                 if (agg_type == "COUNT") {
-                    select_parts.push_back("COUNT(*) as cnt");
+                    select_parts.emplace_back("COUNT(*) as cnt");
                 } else {
                     agg_alias = to_lower(agg_type) + "_value";
                     std::string agg_expr = json_extract_expr(field_names_[agg_idx], field_types_[agg_idx], json_column);
                     select_parts.push_back(fmt::format("{}({}) as {}", agg_type, agg_expr, agg_alias));
                 }
             } else {
-                select_parts.push_back("COUNT(*) as cnt");
+                select_parts.emplace_back("COUNT(*) as cnt");
             }
             return fmt::format("SELECT {} FROM {} GROUP BY {} ORDER BY {} DESC LIMIT 20;",
                                join_strings(select_parts, ", "), table_name, group_expr, agg_alias);
