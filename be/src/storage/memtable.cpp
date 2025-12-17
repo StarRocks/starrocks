@@ -32,6 +32,7 @@
 #include "storage/row_store_encoder_factory.h"
 #include "storage/tablet_schema.h"
 #include "types/logical_type_infra.h"
+#include "util/stack_util.h"
 #include "util/starrocks_metrics.h"
 #include "util/time.h"
 
