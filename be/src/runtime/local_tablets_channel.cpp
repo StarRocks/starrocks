@@ -504,11 +504,6 @@ void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkReq
     COUNTER_UPDATE(_wait_flush_timer, wait_memtable_flush_time_us * 1000);
     COUNTER_UPDATE(_wait_write_timer, wait_writer_ns);
     COUNTER_UPDATE(_wait_replica_timer, wait_replica_ns);
-
-    // remove tablets channel and load channel after all things done
-    if (close_channel) {
-        _load_channel->remove_tablets_channel(_key);
-    }
 }
 
 void LocalTabletsChannel::_flush_stale_memtables() {

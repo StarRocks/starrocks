@@ -59,8 +59,8 @@ class LakeTabletsChannel : public TabletsChannel {
     using TxnLogPtr = AsyncDeltaWriter::TxnLogPtr;
 
 public:
-    LakeTabletsChannel(LoadChannel* load_channel, lake::TabletManager* tablet_manager, const TabletsChannelKey& key,
-                       MemTracker* mem_tracker, RuntimeProfile* parent_profile);
+    LakeTabletsChannel(lake::TabletManager* tablet_manager, const TabletsChannelKey& key, MemTracker* mem_tracker,
+                       RuntimeProfile* parent_profile);
 
     ~LakeTabletsChannel() override;
 
@@ -165,7 +165,40 @@ private:
 
     void _flush_stale_memtables();
 
+<<<<<<< HEAD
     LoadChannel* _load_channel;
+=======
+    void _update_tablet_profile(const DeltaWriter* writer, RuntimeProfile* profile) const;
+
+    static bool _is_data_file_bundle_enabled(const PTabletWriterOpenRequest& params);
+
+    static bool _is_multi_statements_txn(const PTabletWriterOpenRequest& params);
+
+    Status log_and_error_tablet_not_found(int64_t tablet_id, const PUniqueId& id, std::string_view signature) const;
+
+    // write access to the delta writers map
+    inline std::unordered_map<int64_t, std::unique_ptr<AsyncDeltaWriter>>* mutable_delta_writers() {
+        return _delta_writers_impl.mutable_delta_writers();
+    };
+
+private:
+    // A nested class to encapsulate the access to _delta_writers.
+    class DeltaWritersImpl {
+    private:
+        // tablet_id -> std::unique_ptr<AsyncDeltaWriter>
+        std::unordered_map<int64_t, std::unique_ptr<AsyncDeltaWriter>> _delta_writers;
+
+    public:
+        inline std::unordered_map<int64_t, std::unique_ptr<AsyncDeltaWriter>>* mutable_delta_writers() {
+            return &_delta_writers;
+        }
+
+        inline const std::unordered_map<int64_t, std::unique_ptr<AsyncDeltaWriter>>& delta_writers() {
+            return _delta_writers;
+        }
+    };
+
+>>>>>>> 00bb241374 ([BugFix] fix LocalTabletsChannel and LakeTabletsChannel dead lock (#66748))
     lake::TabletManager* _tablet_manager;
 
     TabletsChannelKey _key;
@@ -221,11 +254,9 @@ private:
     RuntimeProfile::Counter* _wait_writer_timer = nullptr;
 };
 
-LakeTabletsChannel::LakeTabletsChannel(LoadChannel* load_channel, lake::TabletManager* tablet_manager,
-                                       const TabletsChannelKey& key, MemTracker* mem_tracker,
-                                       RuntimeProfile* parent_profile)
+LakeTabletsChannel::LakeTabletsChannel(lake::TabletManager* tablet_manager, const TabletsChannelKey& key,
+                                       MemTracker* mem_tracker, RuntimeProfile* parent_profile)
         : TabletsChannel(),
-          _load_channel(load_channel),
           _tablet_manager(tablet_manager),
           _key(key),
           _mem_tracker(mem_tracker),
@@ -534,7 +565,27 @@ void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequ
     COUNTER_UPDATE(_wait_writer_timer, wait_writer_ns);
 
     if (close_channel) {
+<<<<<<< HEAD
         _load_channel->remove_tablets_channel(_key);
+=======
+        if (_finish_mode == lake::DeltaWriterFinishMode::kDontWriteTxnLog) {
+            _txn_log_collector.notify();
+        }
+    }
+
+    // Sender 0 is responsible for waiting for all other senders to finish and collecting txn logs
+    if (_finish_mode == lake::kDontWriteTxnLog && request.eos() && (request.sender_id() == 0) &&
+        response->status().status_code() == TStatusCode::OK) {
+        rolk.unlock();
+        auto t = request.timeout_ms() - (int64_t)(watch.elapsed_time() / 1000 / 1000);
+        auto ok = _txn_log_collector.wait(t);
+        auto st = ok ? _txn_log_collector.status() : Status::TimedOut(fmt::format("wait txn log timed out: {}", t));
+        if (st.ok()) {
+            context->add_txn_logs(_txn_log_collector.logs());
+        } else {
+            context->update_status(st);
+        }
+>>>>>>> 00bb241374 ([BugFix] fix LocalTabletsChannel and LakeTabletsChannel dead lock (#66748))
     }
 }
 
@@ -754,7 +805,9 @@ Status LakeTabletsChannel::incremental_open(const PTabletWriterOpenRequest& para
 std::shared_ptr<TabletsChannel> new_lake_tablets_channel(LoadChannel* load_channel, lake::TabletManager* tablet_manager,
                                                          const TabletsChannelKey& key, MemTracker* mem_tracker,
                                                          RuntimeProfile* parent_profile) {
-    return std::make_shared<LakeTabletsChannel>(load_channel, tablet_manager, key, mem_tracker, parent_profile);
+    // NOTE: `load_channel` is not used for now, just keep it for now so that it could be used later and
+    // be consistent with LocalTabletsChannel.
+    return std::make_shared<LakeTabletsChannel>(tablet_manager, key, mem_tracker, parent_profile);
 }
 
 } // namespace starrocks
