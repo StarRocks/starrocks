@@ -41,11 +41,7 @@ import com.starrocks.alter.AlterJobV2;
 import com.starrocks.alter.BatchAlterJobPersistInfo;
 import com.starrocks.alter.reshard.TabletReshardJob;
 import com.starrocks.authentication.AuthenticationMgr;
-import com.starrocks.authentication.UserAuthenticationInfo;
-import com.starrocks.authentication.UserProperty;
 import com.starrocks.authentication.UserPropertyInfo;
-import com.starrocks.authorization.RolePrivilegeCollectionV2;
-import com.starrocks.authorization.UserPrivilegeCollectionV2;
 import com.starrocks.backup.BackupJob;
 import com.starrocks.backup.Repository;
 import com.starrocks.backup.RestoreJob;
@@ -121,7 +117,6 @@ import org.apache.logging.log4j.Logger;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ExecutionException;
 import java.util.regex.Pattern;
@@ -2057,60 +2052,32 @@ public class EditLog {
         return submitLog(OperationType.OP_STARMGR, journal, -1);
     }
 
-    public void logCreateUser(
-            UserIdentity userIdentity,
-            UserAuthenticationInfo authenticationInfo,
-            UserProperty userProperty,
-            UserPrivilegeCollectionV2 privilegeCollection,
-            short pluginId,
-            short pluginVersion) {
-        CreateUserInfo info = new CreateUserInfo(
-                userIdentity, authenticationInfo, userProperty, privilegeCollection, pluginId, pluginVersion);
-        logJsonObject(OperationType.OP_CREATE_USER_V2, info);
+    public void logCreateUser(CreateUserInfo info, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_CREATE_USER_V2, info, walApplier);
     }
 
-    public void logAlterUser(UserIdentity userIdentity, UserAuthenticationInfo authenticationInfo,
-                             Map<String, String> properties) {
-        AlterUserInfo info = new AlterUserInfo(userIdentity, authenticationInfo, properties);
-        logJsonObject(OperationType.OP_ALTER_USER_V2, info);
+    public void logAlterUser(AlterUserInfo info, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_ALTER_USER_V2, info, walApplier);
     }
 
-    public void logUpdateUserPropertyV2(UserPropertyInfo propertyInfo) {
-        logJsonObject(OperationType.OP_UPDATE_USER_PROP_V3, propertyInfo);
+    public void logUpdateUserPropertyV2(UserPropertyInfo propertyInfo, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_UPDATE_USER_PROP_V3, propertyInfo, walApplier);
     }
 
-    public void logDropUser(UserIdentity userIdentity) {
-        logJsonObject(OperationType.OP_DROP_USER_V3, userIdentity);
+    public void logDropUser(UserIdentity userIdentity, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_DROP_USER_V3, userIdentity, walApplier);
     }
 
-    public void logUpdateUserPrivilege(
-            UserIdentity userIdentity,
-            UserPrivilegeCollectionV2 privilegeCollection,
-            short pluginId,
-            short pluginVersion) {
-        UserPrivilegeCollectionInfo info = new UserPrivilegeCollectionInfo(
-                userIdentity, privilegeCollection, pluginId, pluginVersion);
-        logJsonObject(OperationType.OP_UPDATE_USER_PRIVILEGE_V2, info);
+    public void logUpdateUserPrivilege(UserPrivilegeCollectionInfo info, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_UPDATE_USER_PRIVILEGE_V2, info, walApplier);
     }
 
-    public void logUpdateRolePrivilege(
-            Map<Long, RolePrivilegeCollectionV2> rolePrivCollectionModified,
-            short pluginId,
-            short pluginVersion) {
-        RolePrivilegeCollectionInfo info = new RolePrivilegeCollectionInfo(rolePrivCollectionModified, pluginId, pluginVersion);
-        logUpdateRolePrivilege(info);
+    public void logUpdateRolePrivilege(RolePrivilegeCollectionInfo info, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_UPDATE_ROLE_PRIVILEGE_V2, info, walApplier);
     }
 
-    public void logUpdateRolePrivilege(RolePrivilegeCollectionInfo info) {
-        logJsonObject(OperationType.OP_UPDATE_ROLE_PRIVILEGE_V2, info);
-    }
-
-    public void logDropRole(
-            Map<Long, RolePrivilegeCollectionV2> rolePrivCollectionModified,
-            short pluginId,
-            short pluginVersion) {
-        RolePrivilegeCollectionInfo info = new RolePrivilegeCollectionInfo(rolePrivCollectionModified, pluginId, pluginVersion);
-        logJsonObject(OperationType.OP_DROP_ROLE_V2, info);
+    public void logDropRole(RolePrivilegeCollectionInfo info, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_DROP_ROLE_V2, info, walApplier);
     }
 
     public void logCreateSecurityIntegration(SecurityIntegrationPersistInfo info, WALApplier walApplier) {
