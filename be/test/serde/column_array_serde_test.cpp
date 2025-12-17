@@ -18,8 +18,8 @@
 
 #include "column/array_column.h"
 #include "column/binary_column.h"
-#include "column/column_visitor.h"
 #include "column/column_helper.h"
+#include "column/column_visitor.h"
 #include "column/const_column.h"
 #include "column/fixed_length_column.h"
 #include "column/json_column.h"
