@@ -80,7 +80,9 @@ public class SSLDecoder {
                     appBuffer.flip();
                     return appBuffer;
                 case CLOSED:
-                    throw new IOException("SSL engine closed");
+                    netBuffer.compact();
+                    appBuffer.flip();
+                    return appBuffer;
                 default:
                     throw new IllegalStateException("Unexpected SSL status: " + result.getStatus());
             }

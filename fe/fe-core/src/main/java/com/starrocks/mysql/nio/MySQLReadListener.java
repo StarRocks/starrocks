@@ -27,6 +27,7 @@ import org.xnio.ChannelListener;
 import org.xnio.conduits.ConduitStreamSourceChannel;
 
 import java.nio.ByteBuffer;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class MySQLReadListener implements ChannelListener<ConduitStreamSourceChannel> {
     private static final Logger LOG = LogManager.getLogger(MySQLReadListener.class);
@@ -37,6 +38,8 @@ public class MySQLReadListener implements ChannelListener<ConduitStreamSourceCha
     protected static final int DEFAULT_BUFFER_SIZE = 16 * 1024;
     private final ByteBuffer readBuffer = ByteBuffer.allocate(DEFAULT_BUFFER_SIZE);
     private final SSLDecoder sslDecoder;
+    private volatile boolean terminated = false;
+    private final AtomicInteger pendingTasks = new AtomicInteger(0);
 
     public MySQLReadListener(ConnectContext connectContext, ConnectProcessor connectProcessor) {
         this.ctx = connectContext;
@@ -55,15 +58,14 @@ public class MySQLReadListener implements ChannelListener<ConduitStreamSourceCha
                 }
 
                 if (bytesRead == -1) {
+                    terminated = true;
                     LOG.info("Client closed connection: {} remote={}", ctx.getConnectionId(),
                             ctx.getMysqlChannel().getRemoteHostPortString());
-                    if (!Config.mysql_service_kill_after_disconnect) {
-                        return;
+                    if (Config.mysql_service_kill_after_disconnect) {
+                        killRunningQuery();
+                    } else {
+                        tryCleanup();
                     }
-                    if (!ctx.isKilled() && ctx.getState().isRunning()) {
-                        ctx.kill(false, "client closed");
-                    }
-                    ctx.cleanup();
                     return;
                 }
 
@@ -81,6 +83,7 @@ public class MySQLReadListener implements ChannelListener<ConduitStreamSourceCha
                 RequestPackage pkg;
                 while ((pkg = packageDecoder.poll()) != null) {
                     final RequestPackage req = pkg;
+                    pendingTasks.incrementAndGet();
                     channel.getWorker().execute(() -> {
                         handleRequest(req);
                     });
@@ -93,11 +96,29 @@ public class MySQLReadListener implements ChannelListener<ConduitStreamSourceCha
         }
     }
 
+    private void tryCleanup() {
+        if (terminated && pendingTasks.get() == 0) {
+            ctx.cleanup();
+        }
+    }
+
+    private void taskCompleted() {
+        pendingTasks.decrementAndGet();
+        tryCleanup();
+    }
+
+    private void killRunningQuery() {
+        if (!ctx.isKilled() && ctx.getState().isRunning()) {
+            ctx.kill(false, "client closed");
+        }
+        ctx.cleanup();
+    }
+
     private synchronized void handleRequest(RequestPackage req) {
         ctx.setThreadLocalInfo();
         try {
             connectProcessor.processOnce(req);
-            if (ctx.isKilled()) {
+            if (ctx.isKilled() || terminated) {
                 ctx.stopAcceptQuery();
                 ctx.cleanup();
             }
@@ -110,6 +131,7 @@ public class MySQLReadListener implements ChannelListener<ConduitStreamSourceCha
             ctx.setKilled();
             ctx.cleanup();
         } finally {
+            taskCompleted();
             ConnectContext.remove();
         }
     }
