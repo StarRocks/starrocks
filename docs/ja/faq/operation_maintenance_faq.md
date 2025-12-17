@@ -327,7 +327,7 @@ ADMIN SET FRONTEND CONFIG ("max_scheduling_tablets"="1000");
 ADMIN SET FRONTEND CONFIG ("max_balancing_tablets"="1000");
 ```
 
-## BACKUP 操作は直列ですか？HDFS ディレクトリが 1 つだけ変更されているように見えます。
+## BACKUP 操作は直列ですか？HDFS ディレクトリが 1 つだけ変更されているように見えます
 
 BACKUP 操作は並行して行われますが、HDFS へのアップロードは単一のワーカーを使用します。これは BE 設定 `upload_worker_count` によって制御されます。ディスク I/O とネットワーク I/O に影響を与える可能性があるため、注意して調整してください。
 
