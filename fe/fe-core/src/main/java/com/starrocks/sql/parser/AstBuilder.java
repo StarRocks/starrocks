@@ -25,7 +25,7 @@ import com.starrocks.authentication.UserProperty;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.KeysType;
+import com.starrocks.catalog.PartitionNames;
 import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.combinator.AggStateUtils;
 import com.starrocks.common.AnalysisException;
@@ -236,6 +236,7 @@ import com.starrocks.sql.ast.JoinOperator;
 import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.KeyPartitionRef;
 import com.starrocks.sql.ast.KeysDesc;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.KillAnalyzeStmt;
 import com.starrocks.sql.ast.KillStmt;
 import com.starrocks.sql.ast.LabelName;
@@ -261,7 +262,6 @@ import com.starrocks.sql.ast.OutFileClause;
 import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.PartitionKeyDesc;
-import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.ast.PartitionRangeDesc;
 import com.starrocks.sql.ast.PartitionRef;
 import com.starrocks.sql.ast.PartitionRenameClause;
@@ -855,7 +855,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         PartitionRef partitionRef = null;
         if (context.partitionNames() != null) {
             stop = context.partitionNames().stop;
-            PartitionNames partitionNames = (PartitionNames) visit(context.partitionNames());
+            PartitionRef partitionNames = (PartitionRef) visit(context.partitionNames());
             partitionRef = new PartitionRef(partitionNames.getPartitionNames(), partitionNames.isTemp(), partitionNames.getPos());
         }
 
@@ -1399,7 +1399,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         PartitionRef partitionRef = null;
         if (context.partitionNames() != null) {
             stop = context.partitionNames().stop;
-            PartitionNames partitionNames = (PartitionNames) visit(context.partitionNames());
+            PartitionRef partitionNames = (PartitionRef) visit(context.partitionNames());
             if (partitionNames.isKeyPartitionNames()) {
                 KeyPartitionRef keyPartitionRef = new KeyPartitionRef(partitionNames.getPartitionColNames(),
                         partitionNames.getPartitionColValues(), createPos(context.partitionNames()));
@@ -1927,9 +1927,9 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         } else {
             QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
             TableName dbTblName = qualifiedNameToTableName(qualifiedName);
-            PartitionNames partitionNames = null;
+            PartitionRef partitionNames = null;
             if (context.partitionNames() != null) {
-                partitionNames = (PartitionNames) visit(context.partitionNames());
+                partitionNames = (PartitionRef) visit(context.partitionNames());
             }
             Expr where = null;
             if (context.expression() != null) {
@@ -2485,9 +2485,9 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         if (context.qualifiedName() != null) {
             QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
             TableName targetTableName = qualifiedNameToTableName(qualifiedName);
-            PartitionNames partitionNames = null;
+            PartitionRef partitionNames = null;
             if (context.partitionNames() != null) {
-                partitionNames = (PartitionNames) visit(context.partitionNames());
+                partitionNames = (PartitionRef) visit(context.partitionNames());
             }
 
             String targetBranch = null;
@@ -2591,9 +2591,9 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         }
         QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
         TableName targetTableName = qualifiedNameToTableName(qualifiedName);
-        PartitionNames partitionNames = null;
+        PartitionRef partitionNames = null;
         if (context.partitionNames() != null) {
-            partitionNames = (PartitionNames) visit(context.partitionNames());
+            partitionNames = (PartitionRef) visit(context.partitionNames());
         }
         List<Relation> usingRelations = context.using != null ? visit(context.using.relation(), Relation.class) : null;
         Expr where = context.where != null ? (Expr) visit(context.where) : null;
@@ -2784,7 +2784,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         PartitionRef partitionRef = null;
         if (context.partitionNames() != null) {
             stop = context.partitionNames().stop;
-            PartitionNames partitionNames = (PartitionNames) visit(context.partitionNames());
+            PartitionRef partitionNames = (PartitionRef) visit(context.partitionNames());
             partitionRef = new PartitionRef(partitionNames.getPartitionNames(), partitionNames.isTemp(), partitionNames.getPos());
         }
 
@@ -2803,7 +2803,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         PartitionRef partitionRef = null;
         if (context.partitionNames() != null) {
             stop = context.partitionNames().stop;
-            PartitionNames partitionNames = (PartitionNames) visit(context.partitionNames());
+            PartitionRef partitionNames = (PartitionRef) visit(context.partitionNames());
             partitionRef = new PartitionRef(partitionNames.getPartitionNames(), partitionNames.isTemp(), partitionNames.getPos());
         }
 
@@ -2821,7 +2821,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         PartitionRef partitionRef = null;
         if (context.partitionNames() != null) {
             stop = context.partitionNames().stop;
-            PartitionNames partitionNames = (PartitionNames) visit(context.partitionNames());
+            PartitionRef partitionNames = (PartitionRef) visit(context.partitionNames());
             partitionRef = new PartitionRef(partitionNames.getPartitionNames(), partitionNames.isTemp(), partitionNames.getPos());
         }
 
@@ -2841,7 +2841,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         PartitionRef partitionRef = null;
         if (context.partitionNames() != null) {
             stop = context.partitionNames().stop;
-            PartitionNames partitionNames = (PartitionNames) visit(context.partitionNames());
+            PartitionRef partitionNames = (PartitionRef) visit(context.partitionNames());
             partitionRef = new PartitionRef(partitionNames.getPartitionNames(), partitionNames.isTemp(), partitionNames.getPos());
         }
 
@@ -3011,9 +3011,9 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
 
     @Override
     public ParseNode visitAnalyzeStatement(com.starrocks.sql.parser.StarRocksParser.AnalyzeStatementContext context) {
-        PartitionNames partitionNames = null;
+        PartitionRef partitionNames = null;
         if (context.partitionNames() != null) {
-            partitionNames = (PartitionNames) visit(context.partitionNames());
+            partitionNames = (PartitionRef) visit(context.partitionNames());
         }
 
         TableName tableName = qualifiedNameToTableName(getQualifiedName(context.tableName().qualifiedName()));
@@ -3355,7 +3355,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
     private DataDescription getDataDescription(com.starrocks.sql.parser.StarRocksParser.DataDescContext context) {
         NodePosition pos = createPos(context);
         String dstTableName = normalizeName(((Identifier) visit(context.dstTableName)).getValue());
-        PartitionNames partitionNames = (PartitionNames) visitIfPresent(context.partitions);
+        PartitionRef partitionNames = (PartitionRef) visitIfPresent(context.partitions);
         Expr whereExpr = (Expr) visitIfPresent(context.where);
         List<Expr> colMappingList = null;
         if (context.colMappingList != null) {
@@ -3807,7 +3807,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         QualifiedName qualifiedName = getQualifiedName(qualifiedNameContext);
         PartitionRef partitionRef = null;
         if (partitionNamesContext != null) {
-            PartitionNames partitionNames = (PartitionNames) visit(partitionNamesContext);
+            PartitionRef partitionNames = (PartitionRef) visit(partitionNamesContext);
             partitionRef = new PartitionRef(partitionNames.getPartitionNames(), partitionNames.isTemp(),
                     partitionNames.getPos());
         }
@@ -4263,10 +4263,14 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         Token stop = qualifiedNameContext.stop;
         QualifiedName qualifiedName = getQualifiedName(qualifiedNameContext);
         TableName tableName = qualifiedNameToTableName(qualifiedName);
-        PartitionNames partitionNames = null;
+        PartitionRef partitionRef = null;
         if (context.tableDesc().partitionNames() != null) {
             stop = context.tableDesc().partitionNames().stop;
-            partitionNames = (PartitionNames) visit(context.tableDesc().partitionNames());
+            partitionRef = (PartitionRef) visit(context.tableDesc().partitionNames());
+        }
+        PartitionNames partitionNames = null;
+        if (partitionRef != null) {
+            partitionNames = new PartitionNames(partitionRef.isTemp(), partitionRef.getPartitionNames(), partitionRef.getPos());
         }
         TableRefPersist tableRef = new TableRefPersist(tableName, null, partitionNames, createPos(start, stop));
 
@@ -4969,7 +4973,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
                 context.partitionDesc() == null ? null : getPartitionDesc(context.partitionDesc(), null),
                 context.distributionDesc() == null ? null : (DistributionDesc) visit(context.distributionDesc()),
                 context.orderByDesc() == null ? null : visit(context.orderByDesc().sortItem(), OrderByElement.class),
-                context.partitionNames() == null ? null : (PartitionNames) visit(context.partitionNames()),
+                context.partitionNames() == null ? null : (PartitionRef) visit(context.partitionNames()),
                 context.optimizeRange() == null ? null : (OptimizeRange) visit(context.optimizeRange()),
                 createPos(context));
     }
@@ -5224,7 +5228,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
     @Override
     public ParseNode visitSplitTabletClause(com.starrocks.sql.parser.StarRocksParser.SplitTabletClauseContext context) {
         return new SplitTabletClause(
-                context.partitionNames() == null ? null : (PartitionNames) visit(context.partitionNames()),
+                context.partitionNames() == null ? null : (PartitionRef) visit(context.partitionNames()),
                 context.tabletList() == null ? null : (TabletList) visit(context.tabletList()),
                 getCaseSensitiveProperties(context.properties()),
                 createPos(context));
@@ -5293,9 +5297,9 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
     @Override
     public ParseNode visitTruncatePartitionClause(
             com.starrocks.sql.parser.StarRocksParser.TruncatePartitionClauseContext context) {
-        PartitionNames partitionNames = null;
+        PartitionRef partitionNames = null;
         if (context.partitionNames() != null) {
-            partitionNames = (PartitionNames) visit(context.partitionNames());
+            partitionNames = (PartitionRef) visit(context.partitionNames());
         }
         return new TruncatePartitionClause(partitionNames, createPos(context));
     }
@@ -5320,10 +5324,10 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
 
     @Override
     public ParseNode visitReplacePartitionClause(com.starrocks.sql.parser.StarRocksParser.ReplacePartitionClauseContext context) {
-        PartitionNames partitionNames = (PartitionNames) visit(context.parName);
-        PartitionNames newPartitionNames = (PartitionNames) visit(context.tempParName);
+        PartitionRef partitionNames = (PartitionRef) visit(context.parName);
+        PartitionRef newPartitionRef = (PartitionRef) visit(context.tempParName);
 
-        return new ReplacePartitionClause(partitionNames, newPartitionNames,
+        return new ReplacePartitionClause(partitionNames, newPartitionRef,
                 getCaseSensitiveProperties(context.properties()), createPos(context));
     }
 
@@ -6136,10 +6140,10 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         Token stop = context.stop;
         QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
         TableName tableName = qualifiedNameToTableName(qualifiedName);
-        PartitionNames partitionNames = null;
+        PartitionRef partitionNames = null;
         if (context.partitionNames() != null) {
             stop = context.partitionNames().stop;
-            partitionNames = (PartitionNames) visit(context.partitionNames());
+            partitionNames = (PartitionRef) visit(context.partitionNames());
         }
 
         List<Long> tabletIds = Lists.newArrayList();
@@ -6416,9 +6420,8 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         }
 
         List<Identifier> identifierList = visit(context.identifierOrString(), Identifier.class);
-        return new PartitionNames(context.TEMPORARY() != null,
-                identifierList.stream().map(Identifier::getValue).collect(toList()),
-                createPos(context));
+        return new PartitionRef(identifierList.stream().map(Identifier::getValue).collect(toList()),
+                context.TEMPORARY() != null, createPos(context));
     }
 
     @Override
@@ -6438,7 +6441,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             partitionColValues.add(partitionValue);
         }
 
-        return new PartitionNames(false, new ArrayList<>(), partitionColNames, partitionColValues, NodePosition.ZERO);
+        return new PartitionRef(new ArrayList<>(), false, partitionColNames, partitionColValues, NodePosition.ZERO);
     }
 
     @Override

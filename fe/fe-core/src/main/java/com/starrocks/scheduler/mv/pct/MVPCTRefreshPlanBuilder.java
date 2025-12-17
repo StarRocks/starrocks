@@ -36,7 +36,7 @@ import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.QueryAnalyzer;
 import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.ast.InsertStmt;
-import com.starrocks.sql.ast.PartitionNames;
+import com.starrocks.sql.ast.PartitionRef;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectList;
@@ -54,6 +54,7 @@ import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.common.PCellSetMapping;
 import com.starrocks.sql.common.PCellSortedSet;
 import com.starrocks.sql.common.PCellUtils;
+import com.starrocks.sql.parser.NodePosition;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.Logger;
 
@@ -340,7 +341,7 @@ public class MVPCTRefreshPlanBuilder {
                         "relation {}, filtered partition names:{} ",
                 mv.getName(), tableRelation.getName(), tablePartitionNames);
         tableRelation.setPartitionNames(
-                new PartitionNames(false, new ArrayList<>(tablePartitionNames.getPartitionNames())));
+                new PartitionRef(new ArrayList<>(tablePartitionNames.getPartitionNames()), false, NodePosition.ZERO));
         tracePartitionNames(table, tablePartitionNames);
         return true;
     }

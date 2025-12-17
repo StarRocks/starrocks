@@ -31,6 +31,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.datacache.DataCacheMgr;
 import com.starrocks.datacache.DataCacheSelectExecutor;
@@ -141,6 +142,7 @@ import com.starrocks.sql.ast.RevokePrivilegeStmt;
 import com.starrocks.sql.ast.RevokeRoleStmt;
 import com.starrocks.sql.ast.SetDefaultStorageVolumeStmt;
 import com.starrocks.sql.ast.SetUserPropertyStmt;
+import com.starrocks.sql.ast.SetUserPropertyVar;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.StopRoutineLoadStmt;
 import com.starrocks.sql.ast.SubmitTaskStmt;
@@ -706,8 +708,12 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitSetUserPropertyStatement(SetUserPropertyStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().getAuthenticationMgr().updateUserProperty(stmt.getUser(),
-                        stmt.getPropertyPairList());
+                List<Pair<String, String>> list = Lists.newArrayList();
+                for (SetUserPropertyVar var : stmt.getPropertyList()) {
+                    list.add(Pair.create(var.getPropertyKey(), var.getPropertyValue()));
+                }
+
+                context.getGlobalStateMgr().getAuthenticationMgr().updateUserProperty(stmt.getUser(), list);
 
             });
             return null;

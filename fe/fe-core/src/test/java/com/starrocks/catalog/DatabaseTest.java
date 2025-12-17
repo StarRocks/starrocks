@@ -36,6 +36,7 @@ package com.starrocks.catalog;
 
 import com.starrocks.catalog.MaterializedIndex.IndexState;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.thrift.TFunctionBinaryType;
 import com.starrocks.type.FloatType;
 import com.starrocks.type.IntegerType;

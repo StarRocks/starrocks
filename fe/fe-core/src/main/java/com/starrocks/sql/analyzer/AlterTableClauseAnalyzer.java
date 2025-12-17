@@ -30,7 +30,6 @@ import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.Index;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -83,6 +82,7 @@ import com.starrocks.sql.ast.ExpressionPartitionDesc;
 import com.starrocks.sql.ast.HashDistributionDesc;
 import com.starrocks.sql.ast.IndexDef.IndexType;
 import com.starrocks.sql.ast.KeysDesc;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.ListPartitionDesc;
 import com.starrocks.sql.ast.ModifyColumnClause;
 import com.starrocks.sql.ast.ModifyColumnCommentClause;
@@ -94,7 +94,7 @@ import com.starrocks.sql.ast.OptimizeClause;
 import com.starrocks.sql.ast.OrderByElement;
 import com.starrocks.sql.ast.PartitionConvertContext;
 import com.starrocks.sql.ast.PartitionDesc;
-import com.starrocks.sql.ast.PartitionNames;
+import com.starrocks.sql.ast.PartitionRef;
 import com.starrocks.sql.ast.PartitionRenameClause;
 import com.starrocks.sql.ast.ProcedureArgument;
 import com.starrocks.sql.ast.RandomDistributionDesc;
@@ -647,7 +647,7 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
         }
 
         // analyze partitions
-        PartitionNames partitionNames = clause.getPartitionNames();
+        PartitionRef partitionNames = clause.getPartitionNames();
         if (partitionNames != null) {
             if (clause.getSortKeys() != null || clause.getKeysDesc() != null) {
                 throw new SemanticException("not support change sort keys or keys type when specify partitions");

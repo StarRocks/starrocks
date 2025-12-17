@@ -28,6 +28,7 @@ import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.PartitionNames;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableFunction;
 import com.starrocks.catalog.View;
@@ -655,7 +656,9 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
                         .setDistributionSpec(distributionSpec)
                         .setSelectedIndexId(((OlapTable) node.getTable()).getBaseIndexId())
                         .setGtid(node.getGtid())
-                        .setPartitionNames(node.getPartitionNames())
+                        .setPartitionNames(node.getPartitionNames() == null ? null
+                                : new PartitionNames(node.getPartitionNames().isTemp(),
+                                node.getPartitionNames().getPartitionNames(), node.getPartitionNames().getPos()))
                         .setSelectedTabletId(Lists.newArrayList())
                         .setHintsTabletIds(node.getTabletIds())
                         .setHintsReplicaIds(node.getReplicaIds())

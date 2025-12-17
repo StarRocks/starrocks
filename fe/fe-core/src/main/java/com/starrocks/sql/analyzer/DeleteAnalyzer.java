@@ -18,7 +18,6 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
@@ -30,8 +29,9 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.JoinRelation;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.LoadStmt;
-import com.starrocks.sql.ast.PartitionNames;
+import com.starrocks.sql.ast.PartitionRef;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.SelectList;
@@ -154,7 +154,7 @@ public class DeleteAnalyzer {
     }
 
     private static void analyzeNonPrimaryKey(DeleteStmt deleteStatement) {
-        PartitionNames partitionNames = deleteStatement.getPartitionNames();
+        PartitionRef partitionNames = deleteStatement.getPartitionNames();
         if (partitionNames != null) {
             if (partitionNames.isTemp()) {
                 throw new SemanticException("Do not support deleting temp partitions", partitionNames.getPos());

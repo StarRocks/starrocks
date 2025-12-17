@@ -20,9 +20,10 @@ import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionName;
 import com.starrocks.planner.SlotDescriptor;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
-import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.AssertNumRowsElement;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.JoinOperator;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.expression.AnalyticExpr;
 import com.starrocks.sql.ast.expression.AnalyticWindow;
@@ -97,6 +98,7 @@ import com.starrocks.thrift.TInPredicate;
 import com.starrocks.thrift.TInfoFunc;
 import com.starrocks.thrift.TIntLiteral;
 import com.starrocks.thrift.TJoinOp;
+import com.starrocks.thrift.TKeysType;
 import com.starrocks.thrift.TLargeIntLiteral;
 import com.starrocks.thrift.TPlaceHolder;
 import com.starrocks.thrift.TSlotRef;
@@ -203,6 +205,16 @@ public final class ExprToThrift {
             return SetType.VERBOSE;
         }
         return SetType.SESSION;
+    }
+
+    public static TKeysType keysTypeToThrift(KeysType keysType) {
+        Preconditions.checkNotNull(keysType, "Keys type should not be null");
+        return switch (keysType) {
+            case PRIMARY_KEYS -> TKeysType.PRIMARY_KEYS;
+            case DUP_KEYS -> TKeysType.DUP_KEYS;
+            case UNIQUE_KEYS -> TKeysType.UNIQUE_KEYS;
+            case AGG_KEYS -> TKeysType.AGG_KEYS;
+        };
     }
 
     public static TExprOpcode compoundPredicateOperatorToThrift(CompoundPredicate.Operator operator) {

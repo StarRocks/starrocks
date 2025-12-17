@@ -25,8 +25,8 @@ import java.util.Map;
 // eg:
 // ALTER TABLE tbl REPLACE PARTITION (p1, p2, p3) WITH TEMPORARY PARTITION(tp1, tp2);
 public class ReplacePartitionClause extends AlterTableClause {
-    private PartitionNames partitionNames;
-    private PartitionNames tempPartitionNames;
+    private PartitionRef partitionNames;
+    private PartitionRef tempPartitionNames;
     private Map<String, String> properties = Maps.newHashMap();
 
     // "isStrictMode" is got from property "strict_range", and default is true.
@@ -46,12 +46,12 @@ public class ReplacePartitionClause extends AlterTableClause {
     //      but if "use_temp_partition_name" is true, the partition names will be "tp1" and "tp2".
     private boolean useTempPartitionName;
 
-    public ReplacePartitionClause(PartitionNames partitionNames, PartitionNames tempPartitionNames,
+    public ReplacePartitionClause(PartitionRef partitionNames, PartitionRef tempPartitionNames,
                                   Map<String, String> properties) {
         this(partitionNames, tempPartitionNames, properties, NodePosition.ZERO);
     }
 
-    public ReplacePartitionClause(PartitionNames partitionNames, PartitionNames tempPartitionNames,
+    public ReplacePartitionClause(PartitionRef partitionNames, PartitionRef tempPartitionNames,
                                   Map<String, String> properties, NodePosition pos) {
         super(pos);
         this.partitionNames = partitionNames;
@@ -67,11 +67,11 @@ public class ReplacePartitionClause extends AlterTableClause {
         return tempPartitionNames.getPartitionNames();
     }
 
-    public PartitionNames getPartition() {
+    public PartitionRef getPartition() {
         return partitionNames;
     }
 
-    public PartitionNames getTempPartition() {
+    public PartitionRef getTempPartition() {
         return tempPartitionNames;
     }
 

@@ -29,7 +29,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.OrderByElement;
 import com.starrocks.sql.ast.OrderByPair;
-import com.starrocks.sql.ast.PartitionNames;
+import com.starrocks.sql.ast.PartitionRef;
 import com.starrocks.sql.ast.ShowTabletStmt;
 import com.starrocks.sql.ast.expression.BinaryPredicate;
 import com.starrocks.sql.ast.expression.BinaryType;
@@ -72,7 +72,7 @@ public class ShowTabletStmtAnalyzer {
             statement.setDbName(dbName);
 
             // partitionNames.
-            PartitionNames partitionNames = statement.getPartitionNames();
+            PartitionRef partitionNames = statement.getPartitionNames();
             if (partitionNames != null) {
                 // check if partition name is not empty string
                 if (partitionNames.getPartitionNames().stream().anyMatch(entity -> Strings.isNullOrEmpty(entity))) {

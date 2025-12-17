@@ -24,7 +24,6 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.IcebergTable;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -43,8 +42,9 @@ import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.FileTableFunctionRelation;
 import com.starrocks.sql.ast.InsertStmt;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.LoadStmt;
-import com.starrocks.sql.ast.PartitionNames;
+import com.starrocks.sql.ast.PartitionRef;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.SelectListItem;
@@ -128,7 +128,7 @@ public class InsertAnalyzer {
         if (table instanceof OlapTable) {
             OlapTable olapTable = (OlapTable) table;
             List<Long> targetPartitionIds = Lists.newArrayList();
-            PartitionNames targetPartitionNames = insertStmt.getTargetPartitionNames();
+            PartitionRef targetPartitionNames = insertStmt.getTargetPartitionNames();
 
             if (insertStmt.isSpecifyPartitionNames()) {
                 if (targetPartitionNames.getPartitionNames().isEmpty()) {
@@ -139,8 +139,8 @@ public class InsertAnalyzer {
                 List<String> deduplicatePartitionNames =
                         targetPartitionNames.getPartitionNames().stream().distinct().collect(Collectors.toList());
                 if (deduplicatePartitionNames.size() != targetPartitionNames.getPartitionNames().size()) {
-                    insertStmt.setTargetPartitionNames(new PartitionNames(targetPartitionNames.isTemp(),
-                            deduplicatePartitionNames, targetPartitionNames.getPartitionColNames(),
+                    insertStmt.setTargetPartitionNames(new PartitionRef(deduplicatePartitionNames,
+                            targetPartitionNames.isTemp(), targetPartitionNames.getPartitionColNames(),
                             targetPartitionNames.getPartitionColValues(), targetPartitionNames.getPos()));
                 }
                 for (String partitionName : deduplicatePartitionNames) {
@@ -182,7 +182,7 @@ public class InsertAnalyzer {
                         ((HiveTable) table).getHiveTableType());
             }
 
-            PartitionNames targetPartitionNames = insertStmt.getTargetPartitionNames();
+            PartitionRef targetPartitionNames = insertStmt.getTargetPartitionNames();
             List<String> tablePartitionColumnNames = table.getPartitionColumnNames();
             if (insertStmt.getTargetColumnNames() != null) {
                 for (String partitionColName : tablePartitionColumnNames) {
@@ -523,7 +523,7 @@ public class InsertAnalyzer {
         return true;
     }
 
-    private static void checkStaticKeyPartitionInsert(InsertStmt insertStmt, Table table, PartitionNames targetPartitionNames) {
+    private static void checkStaticKeyPartitionInsert(InsertStmt insertStmt, Table table, PartitionRef targetPartitionNames) {
         List<String> partitionColNames = targetPartitionNames.getPartitionColNames();
         List<Expr> partitionColValues = targetPartitionNames.getPartitionColValues();
         List<String> tablePartitionColumnNames = table.getPartitionColumnNames();

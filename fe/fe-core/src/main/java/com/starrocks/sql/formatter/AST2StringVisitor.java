@@ -20,7 +20,6 @@ import com.starrocks.authorization.ObjectType;
 import com.starrocks.authorization.PEntryObject;
 import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.common.Pair;
 import com.starrocks.common.util.ParseUtil;
 import com.starrocks.common.util.PrintableMap;
 import com.starrocks.common.util.SqlCredentialRedactor;
@@ -78,6 +77,7 @@ import com.starrocks.sql.ast.SetQualifier;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.SetUserPropertyStmt;
+import com.starrocks.sql.ast.SetUserPropertyVar;
 import com.starrocks.sql.ast.SubmitTaskStmt;
 import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.SystemVariable;
@@ -410,11 +410,11 @@ public class AST2StringVisitor implements AstVisitorEPack<String, Void> {
         StringBuilder sb = new StringBuilder();
         sb.append("SET PROPERTY FOR ").append('\'').append(stmt.getUser()).append('\'');
         int idx = 0;
-        for (Pair<String, String> stringStringPair : stmt.getPropertyPairList()) {
+        for (SetUserPropertyVar property : stmt.getPropertyList()) {
             if (idx != 0) {
                 sb.append(", ");
             }
-            sb.append(stringStringPair.first).append(" = ").append(stringStringPair.second);
+            sb.append(property.getPropertyKey()).append(" = ").append(property.getPropertyValue());
             idx++;
         }
         return sb.toString();
