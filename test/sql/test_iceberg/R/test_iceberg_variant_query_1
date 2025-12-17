@@ -187,7 +187,7 @@ SELECT
     variant_from_int,
     get_variant_int(variant_from_int, '$') as extracted_int,
     CAST(variant_query(variant_from_int, '$') AS DECIMAL(22,8)) as extracted_int_dec,
-    get_variant_double(variant_from_int, '$') as extracted_int_dec2,
+    get_variant_double(variant_from_int, '$') as extracted_int_dec_double,
 
     -- BIGINT
     bigint_val as original_bigint,
