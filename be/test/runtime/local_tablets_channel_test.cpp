@@ -232,7 +232,8 @@ TEST_F(LocalTabletsChannelTest, test_profile) {
     }
 
     PTabletWriterAddBatchResult add_chunk_response;
-    _tablets_channel->add_chunk(&chunk, add_chunk_request, &add_chunk_response);
+    bool close_channel = false;
+    _tablets_channel->add_chunk(&chunk, add_chunk_request, &add_chunk_response, &close_channel);
     ASSERT_TRUE(add_chunk_response.status().status_code() == TStatusCode::OK)
             << add_chunk_response.status().error_msgs(0);
 
@@ -263,7 +264,8 @@ TEST_F(LocalTabletsChannelTest, test_add_chunk_not_exist_tablet) {
     add_chunk_request.add_tablet_ids(non_exist_tablet_id);
 
     PTabletWriterAddBatchResult add_chunk_response;
-    _tablets_channel->add_chunk(nullptr, add_chunk_request, &add_chunk_response);
+    bool close_channel = false;
+    _tablets_channel->add_chunk(nullptr, add_chunk_request, &add_chunk_response, &close_channel);
     ASSERT_EQ(TStatusCode::INTERNAL_ERROR, add_chunk_response.status().status_code()) << add_chunk_response.status();
     _tablets_channel->abort();
 }
@@ -294,7 +296,8 @@ TEST_F(LocalTabletsChannelTest, test_add_chunk_not_exist_tablet_for_chunk_rows) 
             }
             add_chunk_request.add_partition_ids(_partition_id);
         }
-        _tablets_channel->add_chunk(&chunk, add_chunk_request, &add_chunk_response);
+        bool close_channel = false;
+        _tablets_channel->add_chunk(&chunk, add_chunk_request, &add_chunk_response, &close_channel);
         // chunk is released when out of the scope, simulating the resource release after RPC done.
     }
 
@@ -349,7 +352,9 @@ void LocalTabletsChannelTest::test_cancel_secondary_replica_base(bool is_empty_t
     });
 
     PTabletWriterAddBatchResult add_chunk_response;
-    _tablets_channel->add_chunk(is_empty_tablet ? nullptr : &chunk, add_chunk_request, &add_chunk_response);
+    bool close_channel = false;
+    _tablets_channel->add_chunk(is_empty_tablet ? nullptr : &chunk, add_chunk_request, &add_chunk_response,
+                                &close_channel);
     ASSERT_TRUE(add_chunk_response.status().status_code() == TStatusCode::OK)
             << add_chunk_response.status().error_msgs(0);
     ASSERT_EQ(1, num_cancel);
@@ -392,7 +397,8 @@ TEST_F(LocalTabletsChannelTest, test_cancel_secondary_replica_rpc_fail) {
     });
 
     PTabletWriterAddBatchResult add_chunk_response;
-    _tablets_channel->add_chunk(nullptr, add_chunk_request, &add_chunk_response);
+    bool close_channel = false;
+    _tablets_channel->add_chunk(nullptr, add_chunk_request, &add_chunk_response, &close_channel);
     ASSERT_TRUE(add_chunk_response.status().status_code() == TStatusCode::OK)
             << add_chunk_response.status().error_msgs(0);
     ASSERT_EQ(1, num_cancel);
