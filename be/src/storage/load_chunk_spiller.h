@@ -60,6 +60,12 @@ public:
     LoadChunkSpiller(LoadSpillBlockManager* block_manager, RuntimeProfile* profile);
     ~LoadChunkSpiller() = default;
 
+    struct SpillBlockIteratorTasks {
+        std::vector<ChunkIteratorPtr> iterators;
+        size_t total_blocks = 0;
+        size_t total_block_bytes = 0;
+    };
+
     StatusOr<size_t> spill(const Chunk& chunk);
 
     // `target_size` controls the maximum amount of data merged per operation,
@@ -67,8 +73,8 @@ public:
     Status merge_write(size_t target_size, size_t memory_usage_per_merge, bool do_sort, bool do_agg,
                        std::function<Status(Chunk*)> write_func, std::function<Status()> flush_func);
 
-    StatusOr<std::vector<ChunkIteratorPtr>> get_spill_block_iterators(size_t target_size, size_t memory_usage_per_merge,
-                                                                      bool do_sort, bool do_agg);
+    StatusOr<SpillBlockIteratorTasks> get_spill_block_iterators(size_t target_size, size_t memory_usage_per_merge,
+                                                                bool do_sort, bool do_agg);
 
     bool empty();
 

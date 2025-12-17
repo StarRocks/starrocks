@@ -98,21 +98,22 @@ Status SpillMemTableSink::merge_blocks_to_segments() {
                              ->load_spill_block_merge_executor()
                              ->create_tablet_internal_parallel_merge_token();
         // 1. Get all spill block iterators
-        ASSIGN_OR_RETURN(auto merge_iterators,
+        ASSIGN_OR_RETURN(auto spill_block_iterator_tasks,
                          _load_chunk_spiller->get_spill_block_iterators(config::load_spill_max_merge_bytes,
                                                                         config::load_spill_memory_usage_per_merge,
                                                                         true /* do_sort */, do_agg));
         // 2. Prepare all tablet writers
         std::vector<std::unique_ptr<TabletWriter>> writers;
-        for (size_t i = 0; i < merge_iterators.size(); ++i) {
+        for (size_t i = 0; i < spill_block_iterator_tasks.iterators.size(); ++i) {
             ASSIGN_OR_RETURN(auto writer, _writer->clone());
             writers.push_back(std::move(writer));
         }
         // 3. Prepare all parallel merge tasks
         std::vector<std::shared_ptr<TabletInternalParallelMergeTask>> tasks;
-        for (size_t i = 0; i < merge_iterators.size(); ++i) {
+        for (size_t i = 0; i < spill_block_iterator_tasks.iterators.size(); ++i) {
             tasks.push_back(std::make_shared<TabletInternalParallelMergeTask>(
-                    writers[i].get(), merge_iterators[i].get(), _merge_mem_tracker.get(), schema.get(), i));
+                    writers[i].get(), spill_block_iterator_tasks.iterators[i].get(), _merge_mem_tracker.get(),
+                    schema.get(), i));
         }
         // 4. Submit all tasks to thread pool
         for (size_t i = 0; i < merge_iterators.size(); ++i) {

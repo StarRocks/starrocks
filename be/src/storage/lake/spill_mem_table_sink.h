@@ -28,31 +28,6 @@ namespace lake {
 
 class TabletWriter;
 
-class TabletInternalParallelMergeTask : public Runnable {
-public:
-    TabletInternalParallelMergeTask(TabletWriter* writer, ChunkIterator* block_iterator, MemTracker* merge_mem_tracker,
-                                    Schema* schema, int32_t task_index)
-            : _writer(writer),
-              _block_iterator(block_iterator),
-              _merge_mem_tracker(merge_mem_tracker),
-              _schema(schema),
-              _task_index(task_index) {}
-
-    void run() override;
-
-    void update_status(const Status& st);
-
-    const Status& status() const { return _status; }
-
-private:
-    TabletWriter* _writer = nullptr;
-    ChunkIterator* _block_iterator = nullptr;
-    MemTracker* _merge_mem_tracker = nullptr;
-    Schema* _schema = nullptr;
-    int32_t _task_index = 0;
-    Status _status;
-};
-
 class SpillMemTableSink : public MemTableSink {
 public:
     SpillMemTableSink(LoadSpillBlockManager* block_manager, TabletWriter* writer, RuntimeProfile* profile);
