@@ -32,6 +32,7 @@ class FilesClause(ClauseElement):
     __visit_name__ = 'files'
 
     def __init__(self, format: "FilesFormat", options: "_FilesOptions" = None):
+        super().__init__()
         self.format = format
         self.options = options
 
