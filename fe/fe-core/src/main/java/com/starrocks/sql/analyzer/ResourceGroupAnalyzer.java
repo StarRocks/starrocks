@@ -380,11 +380,15 @@ public class ResourceGroupAnalyzer {
                     tempResourceGroup.getBigQueryCpuSecondLimit() == null &&
                     tempResourceGroup.getBigQueryMemLimit() == null &&
                     tempResourceGroup.getBigQueryScanRowsLimit() == null &&
-                    tempResourceGroup.getSpillMemLimitThreshold() == null) {
+                    tempResourceGroup.getSpillMemLimitThreshold() == null &&
+                    tempResourceGroup.getPlanScanPartitionsLimit() == null &&
+                    tempResourceGroup.getPlanScanRowsLimit() == null &&
+                    tempResourceGroup.getPlanScanTabletsLimit() == null
+            ) {
                 throw new SemanticException("At least one of ('cpu_weight','exclusive_cpu_cores','mem_limit'," +
                         "'max_cpu_cores','concurrency_limit','big_query_mem_limit', 'big_query_scan_rows_limit'," +
-                        "'big_query_cpu_second_limit','spill_mem_limit_threshold', 'plan_scan_partitions'," +
-                        "'plan_scan_rows', 'plan_scan_tablets') " +
+                        "'big_query_cpu_second_limit','spill_mem_limit_threshold', 'plan_scan_partitions_limit'," +
+                        "'plan_scan_rows_limit', 'plan_scan_tablets_limit') " +
                         "should be specified");
             }
         }
