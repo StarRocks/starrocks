@@ -439,3 +439,61 @@ SELECT c_city, sum(tax) FROM tbl GROUP BY c_city;
 CREATE MATERIALIZED VIEW mv3 REFRESH ASYNC AS
 SELECT dt, c_city, sum(tax) FROM tbl GROUP BY dt, c_city;
 ```
+
+## FAQ
+
+#### 非同期マテリアライズドビューのリソースを制御するリソースグループはどれですか？その設定を調整するにはどうすればよいですか？
+
+非同期マテリアライズドビューを作成する際に `resource_group` プロパティが指定されていない場合、システムはそれをデフォルトのリソースグループ `default_mv_wg` に割り当てます。そのデフォルト設定は次のとおりです：
+- `cpu_core_limit`: 1
+- `mem_limit`: 80%
+- `concurrency_limit`: 0
+- `spill_mem_limit_threshold`: 80%
+
+次のBE設定項目を通じて、CPU制限、メモリ制限、同時実行制限、スピルしきい値を調整できます：
+- `default_mv_resource_group_cpu_limit`
+- `default_mv_resource_group_memory_limit`
+- `default_mv_resource_group_concurrency_limit`
+- `default_mv_resource_group_spill_mem_limit_threshold`
+
+`resource_group` プロパティを指定することで、マテリアライズドビューに専用のリソースグループを割り当てることもできます。
+
+例:
+
+```SQL
+CREATE MATERIALIZED VIEW IF NOT EXISTS mv_test.test_1
+PARTITION BY `metric_date`
+REFRESH MANUAL
+PROPERTIES (
+  "replicated_storage" = "true",
+  "partition_refresh_number" = "1",
+  "force_external_table_query_rewrite" = "CHECKED",
+  "query_rewrite_consistency" = "LOOSE",
+  "replication_num" = "1",
+  "storage_medium" = "HDD",
+  # highlight-start
+  "resource_group" = "rg_mv"
+  # highlight-end
+) AS ...
+```
+
+#### 非同期マテリアライズドビューが1分ごとにリフレッシュされるようにスケジュールされている場合、リフレッシュが1分以上かかるとどうなりますか？
+
+システムはこれを自動的に処理します：
+
+- キューに保留中のタスクがある場合、新しくトリガーされたタスクはマージされます（ステータス `MERGED`）。
+- 保留中のタスクがない場合（実行中または成功/失敗したタスクのみ）、新しくトリガーされたタスクは現在の実行中のタスクが終了するまで待機してから実行されます。
+
+制限：1つのマテリアライズドビューにつき、同時に実行できるリフレッシュタスクは1つだけです。
+
+#### auto_refresh_partitions_limit を設定した後、システムは常にその数のパーティションを正確にリフレッシュしますか？
+
+いいえ。このパラメータは上限を表します。システムが変更されたベーステーブルのパーティションが少ないと検出した場合、実際のパーティションのみがリフレッシュされます。
+
+#### マテリアライズドビューは5分ごとにリフレッシュするように設定されていますが、`information_schema.task_runs` では5秒ごとにリフレッシュされているように見えるのはなぜですか？
+
+v3.3以降、`partition_refresh_number` のデフォルト値は-1から1に変更されました。これは、各リフレッシュ操作が一度に1つのパーティションのみを処理することを意味します。多くのパーティションをリフレッシュする必要がある場合、システムは作業を複数のサブタスクに分割し、これにより `task_runs` におけるスケジューリングエントリがユーザー定義のリフレッシュ間隔よりも頻繁になります。
+
+#### 複数の非同期マテリアライズドビューをネストできますか？何か推奨事項はありますか？
+
+ネストはサポートされていますが、ネストの深さを最小限に抑えることをお勧めします。過度のネストはトラブルシューティングの複雑さを大幅に増加させます。
