@@ -84,6 +84,9 @@ public:
     }
 
     void add_and_flush_if_needed(rowid_t rid) {
+        if (!_pending_adds.empty() && _pending_adds.back() == rid) {
+            return;
+        }
         _pending_adds.push_back(rid);
         if (_pending_adds.size() >= _ADD_BATCH_SIZE) {
             flush_pending_adds();
@@ -170,6 +173,9 @@ public:
         if (is_context()) {
             context()->add_and_flush_if_needed(rid);
         } else {
+            if (value() == rid) {
+                return;
+            }
             auto* context = new BitmapUpdateContext(value(), rid);
             _value = reinterpret_cast<uint64_t>(context); // NOLINT
         }
