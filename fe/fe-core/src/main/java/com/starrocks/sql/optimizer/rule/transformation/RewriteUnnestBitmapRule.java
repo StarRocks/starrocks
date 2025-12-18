@@ -112,7 +112,7 @@ public class RewriteUnnestBitmapRule extends TransformationRule {
                 (TableFunction) ExprUtils.getBuiltinFunction(FunctionSet.UNNEST_BITMAP, new Type[] {BitmapType.BITMAP},
                         Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
         List<Pair<ColumnRefOperator, ScalarOperator>> fnParamColumnProject =
-                Lists.newArrayList(Pair.create(bitmapColumn, bitmapColumn));
+                Lists.newArrayList(Pair.create(newBitmapColumn, newBitmapColumn));
 
         LogicalTableFunctionOperator newTableFunctionOperator =
                 new LogicalTableFunctionOperator(originalTableFunctionOperator.getFnResultColRefs(), unnestBitmapFn,
