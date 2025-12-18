@@ -57,4 +57,21 @@ public abstract class Warehouse implements Writable {
     public abstract List<List<String>> getWarehouseNodesInfo();
 
     public abstract ProcResult fetchResult();
+<<<<<<< HEAD
+=======
+
+    public abstract void createCNGroup(CreateCnGroupStmt stmt) throws DdlException;
+
+    public abstract void dropCNGroup(DropCnGroupStmt stmt) throws DdlException;
+
+    public abstract void enableCNGroup(EnableDisableCnGroupStmt stmt) throws DdlException;
+
+    public abstract void disableCNGroup(EnableDisableCnGroupStmt stmt) throws DdlException;
+
+    public abstract void alterCNGroup(AlterCnGroupStmt stmt) throws DdlException;
+
+    public abstract void replayInternalOpLog(String payload);
+
+    public abstract boolean isAvailable();
+>>>>>>> afc0438d2b ([Enhancement] Eliminate heartbeat error logs for backends in suspended warehouses (#66733))
 }

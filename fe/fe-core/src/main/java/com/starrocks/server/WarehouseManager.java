@@ -93,6 +93,15 @@ public class WarehouseManager implements Writable {
         }
     }
 
+    public Set<Long> getAliveWarehouseIds() {
+        try (LockCloseable ignored = new LockCloseable(rwLock.readLock())) {
+            return nameToWh.values().stream()
+                    .filter(Warehouse::isAvailable)
+                    .map(Warehouse::getId)
+                    .collect(Collectors.toSet());
+        }
+    }
+
     public Warehouse getWarehouse(String warehouseName) {
         try (LockCloseable ignored = new LockCloseable(rwLock.readLock())) {
             Warehouse warehouse = nameToWh.get(warehouseName);
