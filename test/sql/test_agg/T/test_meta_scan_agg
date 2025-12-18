@@ -47,8 +47,6 @@ select count(c1) from t1 TEMPORARY PARTITION(tp202403);
 select min(c0), max(c0) from t1 TEMPORARY PARTITION(tp202403);
 select min(c1), max(c1) from t1 TEMPORARY PARTITION(tp202403);
 select min(c0), max(c0), min(c1), max(c1) from t1 TEMPORARY PARTITION(tp202403);
-<<<<<<< HEAD
-=======
 
 -- name: test_meta_scan_with_renamed_column
 create table t2 (
@@ -72,4 +70,3 @@ select count(*) from t2;
 
 
 
->>>>>>> 0463439c6b ([BugFix] fix issues when querying renamed column with meta scan (#66819))

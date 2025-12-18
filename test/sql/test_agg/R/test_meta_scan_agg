@@ -108,8 +108,6 @@ select min(c0), max(c0), min(c1), max(c1) from t1 TEMPORARY PARTITION(tp202403);
 -- result:
 2024-03-10	2024-03-20	50	70
 -- !result
-<<<<<<< HEAD
-=======
 -- name: test_meta_scan_with_renamed_column
 create table t2 (
     c0 INT
@@ -149,4 +147,3 @@ select count(*) from t2;
 -- result:
 3
 -- !result
->>>>>>> 0463439c6b ([BugFix] fix issues when querying renamed column with meta scan (#66819))

@@ -25,15 +25,8 @@ import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
-<<<<<<< HEAD
 import com.starrocks.catalog.Type;
-=======
 import com.starrocks.common.Pair;
-import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.RunMode;
-import com.starrocks.sql.ast.KeysType;
-import com.starrocks.sql.ast.expression.ExprUtils;
->>>>>>> 0463439c6b ([BugFix] fix issues when querying renamed column with meta scan (#66819))
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
@@ -150,12 +143,7 @@ public class RewriteSimpleAggToMetaScanRule extends TransformationRule {
             } else {
                 newScanColumnRefs.put(metaColumn, c);
             }
-<<<<<<< HEAD
-=======
-            copiedColumn.setIsAllowNull(true);
-            newScanColumnRefs.put(metaColumn, copiedColumn);
-            aggColumnIdToColumns.put(metaColumn.getId(), Pair.create(aggFuncName, copiedColumn));
->>>>>>> 0463439c6b ([BugFix] fix issues when querying renamed column with meta scan (#66819))
+            aggColumnIdToColumns.put(metaColumn.getId(), Pair.create(aggFuncName, newScanColumnRefs.get(metaColumn)));
 
             Function aggFunction = aggCall.getFunction();
             String newAggFnName = aggCall.getFnName();
