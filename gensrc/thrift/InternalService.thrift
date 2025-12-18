@@ -54,6 +54,11 @@ enum TFunctionVersion {
     RUNTIME_FILTER_SERIALIZE_VERSION_3 = 8,
 }
 
+enum TArrowFlightSQLVersion {
+  V0 = 0,
+  V1 = 1,
+}
+
 enum TQueryType {
     SELECT,
     LOAD,
@@ -529,6 +534,8 @@ struct TExecPlanFragmentParams {
   60: optional TPredicateTreeParams pred_tree_params
 
   61: optional list<i32> exec_stats_node_ids;
+
+  62: optional i32 arrow_flight_sql_version;
 }
 
 struct TExecPlanFragmentResult {

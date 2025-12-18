@@ -128,11 +128,14 @@ import com.starrocks.qe.feedback.skeleton.SkeletonBuilder;
 import com.starrocks.qe.feedback.skeleton.SkeletonNode;
 import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.qe.scheduler.FeExecuteCoordinator;
+import com.starrocks.qe.scheduler.dag.ExecutionFragment;
+import com.starrocks.qe.scheduler.dag.FragmentInstance;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.GracefulExitFlag;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.ExecuteEnv;
 import com.starrocks.service.arrow.flight.sql.ArrowFlightSqlConnectContext;
+import com.starrocks.service.arrow.flight.sql.ArrowFlightSqlResultDescriptor;
 import com.starrocks.sql.ExplainAnalyzer;
 import com.starrocks.sql.PrepareStmtPlanner;
 import com.starrocks.sql.StatementPlanner;
@@ -234,6 +237,7 @@ import com.starrocks.statistic.StatisticExecutor;
 import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.statistic.StatisticsCollectJobFactory;
 import com.starrocks.statistic.StatsConstants;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.system.Frontend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.LoadEtlTask;
@@ -256,6 +260,7 @@ import com.starrocks.transaction.TransactionStmtExecutor;
 import com.starrocks.transaction.VisibleStateWaiter;
 import com.starrocks.type.TypeFactory;
 import com.starrocks.warehouse.WarehouseIdleChecker;
+import org.apache.arrow.vector.types.pojo.Schema;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang.exception.ExceptionUtils;
 import org.apache.commons.lang3.StringUtils;
@@ -277,6 +282,7 @@ import java.util.Optional;
 import java.util.Queue;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.RejectedExecutionException;
@@ -288,6 +294,7 @@ import java.util.regex.PatternSyntaxException;
 import java.util.stream.Collectors;
 
 import static com.starrocks.common.ErrorCode.ERR_NO_ROWS_IMPORTED;
+import static com.starrocks.service.arrow.flight.sql.ArrowFlightSqlServiceImpl.buildSchema;
 import static com.starrocks.sql.parser.ErrorMsgProxy.PARSER_ERROR_MSG;
 import static com.starrocks.statistic.AnalyzeMgr.IS_MULTI_COLUMN_STATS;
 
@@ -323,8 +330,15 @@ public class StmtExecutor {
     private PrepareStmtContext prepareStmtContext = null;
     private boolean isInternalStmt = false;
 
+    private final CompletableFuture<ArrowFlightSqlResultDescriptor> deploymentFinished;
+
     public StmtExecutor(ConnectContext ctx, StatementBase parsedStmt) {
         this(ctx, parsedStmt, false);
+    }
+
+    public StmtExecutor(ConnectContext ctx, StatementBase parsedStmt,
+                        CompletableFuture<ArrowFlightSqlResultDescriptor> deploymentFinished) {
+        this(ctx, parsedStmt, false, deploymentFinished);
     }
 
     public static StmtExecutor newInternalExecutor(ConnectContext ctx, StatementBase parsedStmt) {
@@ -336,12 +350,18 @@ public class StmtExecutor {
     }
 
     private StmtExecutor(ConnectContext ctx, StatementBase parsedStmt, boolean isInternalStmt) {
+        this(ctx, parsedStmt, isInternalStmt, null);
+    }
+
+    private StmtExecutor(ConnectContext ctx, StatementBase parsedStmt, boolean isInternalStmt,
+                         CompletableFuture<ArrowFlightSqlResultDescriptor> deploymentFinished) {
         this.context = ctx;
         this.parsedStmt = Preconditions.checkNotNull(parsedStmt);
         this.originStmt = parsedStmt.getOrigStmt();
         this.serializer = context.getSerializer();
         this.isProxy = false;
         this.isInternalStmt = isInternalStmt;
+        this.deploymentFinished = deploymentFinished;
     }
 
     public void setProxy() {
@@ -794,7 +814,7 @@ public class StmtExecutor {
                     } catch (Exception e) {
                         // For Arrow Flight SQL, FE doesn't know whether the client has already pull data from BE.
                         // So FE cannot decide whether it is able to retry.
-                        if (i == retryTime - 1 || context instanceof ArrowFlightSqlConnectContext) {
+                        if (i == retryTime - 1 || context.isArrowFlightSql()) {
                             throw e;
                         }
                         ExecuteExceptionHandler.handle(e, retryContext);
@@ -1188,7 +1208,8 @@ public class StmtExecutor {
         }
         try {
             context.incPendingForwardRequest();
-            leaderOpExecutor = new LeaderOpExecutor(parsedStmt, originStmt, context, redirectStatus, isInternalStmt);
+            leaderOpExecutor =
+                    new LeaderOpExecutor(parsedStmt, originStmt, context, redirectStatus, isInternalStmt, deploymentFinished);
             LOG.debug("need to transfer to Leader. stmt: {}", context.getStmtId());
             leaderOpExecutor.execute();
         } finally {
@@ -1473,7 +1494,7 @@ public class StmtExecutor {
 
         // TODO(liuzihe): support execute in FE for Arrow Flight SQL.
         boolean executeInFe = !isExplainAnalyze && !isSchedulerExplain && !isOutfileQuery
-                && canExecuteInFe(context, execPlan.getPhysicalPlan()) && !(context instanceof ArrowFlightSqlConnectContext);
+                && canExecuteInFe(context, execPlan.getPhysicalPlan()) && !(context.isArrowFlightSql());
 
         if (isExplainAnalyze) {
             context.getSessionVariable().setEnableProfile(true);
@@ -1527,13 +1548,27 @@ public class StmtExecutor {
         RowBatch batch = null;
         if (context instanceof HttpConnectContext) {
             batch = httpResultSender.sendQueryResult(coord, execPlan, parsedStmt.getOrigStmt().getOrigStmt());
-        } else if (context instanceof ArrowFlightSqlConnectContext) {
-            ArrowFlightSqlConnectContext ctx = (ArrowFlightSqlConnectContext) context;
-            ctx.setReturnResultFromFE(false);
-            ctx.setDeploymentFinished(coord);
         } else {
-            boolean needSendResult = !isPlanAdvisorAnalyze && !isExplainAnalyze
-                    && !context.getSessionVariable().isEnableExecutionOnly();
+            final boolean isArrowFlight = context.isArrowFlightSql() && deploymentFinished != null;
+            if (isArrowFlight && !isExplainAnalyze && !isOutfileQuery) {
+                Preconditions.checkState(coord instanceof DefaultCoordinator,
+                        "Coordinator is not DefaultCoordinator, cannot proceed with BE execution.");
+                DefaultCoordinator defaultCoordinator = (DefaultCoordinator) coord;
+
+                ExecutionFragment rootFragment = defaultCoordinator.getExecutionDAG().getRootFragment();
+                FragmentInstance rootFragmentInstance = rootFragment.getInstances().get(0);
+                ComputeNode worker = rootFragmentInstance.getWorker();
+                TUniqueId rootFragmentInstanceId = rootFragmentInstance.getInstanceId();
+                Schema schema = buildSchema(execPlan);
+
+                ArrowFlightSqlResultDescriptor backendResultDesc =
+                        new ArrowFlightSqlResultDescriptor(worker.getId(), rootFragmentInstanceId, schema);
+
+                deploymentFinished.complete(backendResultDesc);
+            }
+
+            final boolean needSendResult = !isPlanAdvisorAnalyze && !isExplainAnalyze
+                    && !context.getSessionVariable().isEnableExecutionOnly() && !isArrowFlight;
             // send mysql result
             // 1. If this is a query with OUTFILE clause, eg: select * from tbl1 into outfile xxx,
             //    We will not send real query result to client. Instead, we only send OK to client with
@@ -1570,21 +1605,15 @@ public class StmtExecutor {
                             channel.sendOnePacket(row);
                         }
                     }
+                }
+                if (batch.getBatch() != null) {
                     context.updateReturnRows(batch.getBatch().getRows().size());
                 }
             } while (!batch.isEos());
-            if (!isSendFields && !isOutfileQuery && !isExplainAnalyze && !isPlanAdvisorAnalyze) {
+
+            if (!isSendFields && !isOutfileQuery && !isExplainAnalyze && !isPlanAdvisorAnalyze && !isArrowFlight) {
                 sendFields(colNames, outputExprs);
             }
-        }
-
-        if (context instanceof ArrowFlightSqlConnectContext) {
-            coord.join(context.getSessionVariable().getQueryTimeoutS());
-            if (!isOutfileQuery) {
-                context.getState().setEof();
-            }
-            // TODO(liuzihe): process query statistics for Arrow Flight SQL. For now query statistics is passed by the final
-            //  batch, so we need to change the implementation to support Arrow Flight SQL.
         }
 
         processQueryStatisticsFromResult(batch, execPlan, isOutfileQuery);
@@ -1603,12 +1632,16 @@ public class StmtExecutor {
                 context.getState().setOk(statisticsForAuditLog.returnedRows, 0, "");
             }
 
-            if (null != statisticsForAuditLog) {
-                analyzePlanWithExecStats(execPlan);
+            if (null == statisticsForAuditLog) {
+                return;
             }
 
-            if (null == statisticsForAuditLog || null == statisticsForAuditLog.statsItems ||
-                    statisticsForAuditLog.statsItems.isEmpty()) {
+            analyzePlanWithExecStats(execPlan);
+            if (context.isArrowFlightSql()) {
+                context.updateReturnRows(statisticsForAuditLog.getReturnedRows());
+            }
+
+            if (null == statisticsForAuditLog.statsItems || statisticsForAuditLog.statsItems.isEmpty()) {
                 return;
             }
 
@@ -2177,7 +2210,7 @@ public class StmtExecutor {
         }
 
         // Send result set for Arrow Flight SQL.
-        if (context instanceof ArrowFlightSqlConnectContext) {
+        if (context.isArrowFlightSql()) {
             ArrowFlightSqlConnectContext ctx = (ArrowFlightSqlConnectContext) context;
             ctx.addShowResult(DebugUtil.printId(ctx.getExecutionId()), resultSet);
             context.getState().setEof();
@@ -2221,33 +2254,37 @@ public class StmtExecutor {
     }
 
     private void handleExplainStmt(String explainString) throws IOException {
-        if (context instanceof HttpConnectContext) {
-            httpResultSender.sendExplainResult(explainString);
-            return;
-        }
 
         if (context.getQueryDetail() != null) {
             context.getQueryDetail().setExplain(explainString);
         }
 
-        ShowResultSetMetaData metaData =
-                ShowResultSetMetaData.builder()
-                        .addColumn(new Column("Explain String", TypeFactory.createVarcharType(20)))
-                        .build();
-        sendMetaData(metaData);
-
-        if (isProxy) {
-            proxyResultSet = new ShowResultSet(metaData,
-                    Arrays.stream(explainString.split("\n")).map(Collections::singletonList).collect(
-                            Collectors.toList()));
+        if (context instanceof HttpConnectContext) {
+            httpResultSender.sendExplainResult(explainString);
+        } else if (context.isArrowFlightSql()) {
+            ArrowFlightSqlConnectContext ctx = (ArrowFlightSqlConnectContext) context;
+            ctx.addExplainResult(DebugUtil.printId(ctx.getExecutionId()), explainString);
         } else {
-            // Send result set.
-            for (String item : explainString.split("\n")) {
-                serializer.reset();
-                serializer.writeLenEncodedString(item);
-                context.getMysqlChannel().sendOnePacket(serializer.toByteBuffer());
+            ShowResultSetMetaData metaData =
+                    ShowResultSetMetaData.builder()
+                            .addColumn(new Column("Explain String", TypeFactory.createVarcharType(20)))
+                            .build();
+            sendMetaData(metaData);
+
+            if (isProxy) {
+                proxyResultSet = new ShowResultSet(metaData,
+                        Arrays.stream(explainString.split("\n")).map(Collections::singletonList).collect(
+                                Collectors.toList()));
+            } else {
+                // Send result set.
+                for (String item : explainString.split("\n")) {
+                    serializer.reset();
+                    serializer.writeLenEncodedString(item);
+                    context.getMysqlChannel().sendOnePacket(serializer.toByteBuffer());
+                }
             }
         }
+
         context.getState().setEof();
     }
 

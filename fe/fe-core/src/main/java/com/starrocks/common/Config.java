@@ -3872,6 +3872,11 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int arrow_max_service_task_threads_num = 4096;
 
+    // Maximum time in milliseconds that a subsequent query on the same Arrow Flight SQL connection will wait
+    // for the previous query to finish before returning an error.
+    @ConfField(mutable = true)
+    public static long arrow_flight_sql_connection_query_wait_timeout_ms = 10_000;
+
     @ConfField(mutable = false)
     public static int query_deploy_threadpool_size = max(50, getRuntime().availableProcessors() * 10);
 

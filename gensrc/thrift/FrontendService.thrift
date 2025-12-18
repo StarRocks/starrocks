@@ -840,7 +840,20 @@ struct TMasterOpRequest {
     37: optional i64 txn_id;
     38: optional bool isInternalStmt;
 
+    39: optional bool is_arrow_flight_sql;
+
     101: optional i64 warehouse_id    // begin from 101, in case of conflict with other's change
+}
+
+struct TNotifyForwardDeploymentFinishedRequest {
+    1: optional Types.TUniqueId query_id
+    2: optional Types.TUniqueId arrow_flight_sql_result_fragment_id;
+    3: optional i64 arrow_flight_sql_result_backend_id;
+    4: optional binary arrow_flight_sql_result_schema;
+}
+
+struct TNotifyForwardDeploymentFinishedRespone {
+    1: optional Status.TStatus status
 }
 
 struct TColumnDefinition {
@@ -2296,6 +2309,7 @@ service FrontendService {
 
     //NOTE: Do not add numbers to the parameters, otherwise it will cause compatibility problems
     TMasterOpResult forward(TMasterOpRequest params)
+    TNotifyForwardDeploymentFinishedRespone notifyForwardDeploymentFinished(TNotifyForwardDeploymentFinishedRequest request)
 
     TListTableStatusResult listTableStatus(1:TGetTablesParams params)
     TListMaterializedViewStatusResult listMaterializedViewStatus(1:TGetTablesParams params)
