@@ -16,6 +16,7 @@
 // under the License.
 
 #include "connector/connector.h"
+#include "connector/hive_connector.h"
 
 namespace starrocks::connector {
 
@@ -35,7 +36,9 @@ ConnectorManager* ConnectorManager::default_instance() {
     return &instance;
 }
 
-const Connector* ConnectorManager::get(const std::string& /*name*/) { return nullptr; }
+const Connector* ConnectorManager::get(const std::string& /*name*/) {
+    return nullptr;
+}
 void ConnectorManager::put(const std::string& /*name*/, std::unique_ptr<Connector> /*connector*/) {}
 
 // DataSource implementations (from connector_core_shim.cpp)
@@ -45,7 +48,9 @@ void DataSource::update_has_any_predicate() {
     _has_any_predicate = (!_conjunct_ctxs.empty()) || (_runtime_filters != nullptr && _runtime_filters->size() > 0);
 }
 
-Status DataSource::parse_runtime_filters(RuntimeState*) { return Status::OK(); }
+Status DataSource::parse_runtime_filters(RuntimeState*) {
+    return Status::OK();
+}
 
 void DataSource::update_profile(const Profile&) {}
 
