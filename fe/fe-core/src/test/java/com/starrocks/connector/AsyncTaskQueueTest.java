@@ -179,7 +179,7 @@ public class AsyncTaskQueueTest {
             }
         }
 
-        Executor executor = Executors.newFixedThreadPool(2);
+        ExecutorService executor = Executors.newFixedThreadPool(2);
         AsyncTaskQueue<String> asyncTaskQueue = new AsyncTaskQueue<>(executor);
 
         List<SimpleTask> tasks = new ArrayList<>();
@@ -195,6 +195,7 @@ public class AsyncTaskQueueTest {
         Assertions.assertNotNull(exception.getCause(), "Should have cause exception");
         Assertions.assertTrue(exception.getCause().getMessage().contains("Task execution failed"),
                             "Should propagate original task exception as cause");
+        executor.shutdown();
     }
 
     @Test
