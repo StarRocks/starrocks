@@ -2823,9 +2823,12 @@ public class StmtExecutor {
                     planMaxScanRows = Math.max(planMaxScanRows, scanNode.getCardinality());
                 }
             }
-            context.getAuditEventBuilder().setPlanMaxScanRows(planMaxScanRows);
-            context.getAuditEventBuilder().setPlanMaxScanPartitions(planMaxScanPartitions);
-            context.getAuditEventBuilder().setPlanMaxScanTablets(planMaxScanTablets);
+            context.getAuditEventBuilder()
+                    .setPlanMaxScanRows(planMaxScanRows)
+                    .setPlanMaxScanPartitions(planMaxScanPartitions)
+                    .setPlanMaxScanTablets(planMaxScanTablets);
+
+            LOG.info("audit log record is {},{},{}", planMaxScanRows, planMaxScanPartitions, planMaxScanTablets);
 
             checkScanLimit(planMaxScanRows,
                     context.getResourceGroup().getPlan_scan_rows_limit(),
