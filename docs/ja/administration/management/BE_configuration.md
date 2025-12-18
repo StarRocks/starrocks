@@ -180,6 +180,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 説明: bRPC の最大ボディサイズ。
 - 導入バージョン: -
 
+##### brpc_max_connections_per_server
+
+- デフォルト: 1
+- タイプ: Int
+- 単位: -
+- 変更可能: No
+- 説明: クライアントが各リモートサーバーエンドポイントごとに維持する永続的な bRPC 接続の最大数。各エンドポイントについて `BrpcStubCache` は `_stubs` ベクタをこのサイズに予約した `StubPool` を作成します。初回アクセス時には制限に達するまで新しい stub が作成され、その後は既存の stub がラウンドロビン方式で返されます。この値を増やすと、ファイルディスクリプタ、メモリ、およびチャネルを多く消費する代わりにエンドポイントごとの並列度（単一チャネル上の競合を低減）が上がります。
+- 導入バージョン: v3.2.0
+
 ##### brpc_num_threads
 
 - デフォルト: -1
@@ -296,6 +305,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 可変: いいえ
 - 説明: BE プロセスのメモリ上限。パーセンテージ ("80%") または物理的な制限 ("100G") として設定できます。デフォルトのハードリミットはサーバーのメモリサイズの 90% で、ソフトリミットは 80% です。同じサーバーで他のメモリ集約型サービスと一緒に StarRocks をデプロイしたい場合、このパラメータを設定する必要があります。
 - 導入バージョン: -
+
+##### memory_urgent_level
+
+- デフォルト: 85
+- タイプ: long
+- 単位: Percentage (0-100)
+- 変更可能: Yes
+- 説明: プロセスのメモリ制限に対するパーセンテージで表現された緊急メモリ水位。プロセスのメモリ使用量が `(limit * memory_urgent_level / 100)` を超えると、BE は即時メモリ回収をトリガーします。これによりデータキャッシュの縮小、更新キャッシュの追い出しが強制され、persistent/lake MemTable が「満杯」と見なされて近いうちにフラッシュ/コンパクトされます。コードはこの設定が `memory_high_level` より大きく、`memory_high_level` は `1` 以上かつ `100` 以下であることを検証します。値を低くするとより積極的で早期の回収（キャッシュの追い出しやフラッシュがより頻繁に発生）を引き起こします。値を高くすると回収が遅れ、100 に近すぎると OOM のリスクがあります。この項目は `memory_high_level` や Data Cache 関連の自動調整設定と合わせて調整してください。
+- 導入バージョン: v3.2.0
 
 ##### net_use_ipv6_when_priority_networks_empty
 
@@ -445,6 +463,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 導入バージョン: v4.0.0
 
 ### クエリエンジン
+
+##### dictionary_speculate_min_chunk_size
+
+- デフォルト: 10000
+- タイプ: Int
+- 単位: Rows
+- 変更可能: No
+- 説明: StringColumnWriter と DictColumnWriter が辞書エンコーディングの推測を開始するために使用する最小行数（チャンクサイズ）。入ってくるカラム（または蓄積バッファに入ってくる行を加えた合計）が `dictionary_speculate_min_chunk_size` 以上のサイズであれば、ライターは即座に推測を実行してエンコーディング（DICT、PLAIN、または BIT_SHUFFLE のいずれか）を設定し、さらに行をバッファリングしません。推測では文字列カラムに対しては `dictionary_encoding_ratio`、数値／非文字列カラムに対しては `dictionary_encoding_ratio_for_non_string_column` を使用して、辞書エンコーディングが有利かどうかを判断します。さらに、カラムのバイトサイズが大きく（UINT32_MAX 以上）なる場合は `BinaryColumn<uint32_t>` のオーバーフローを避けるために即座に推測が強制されます。
+- 導入バージョン: v3.2.0
 
 ##### disable_storage_page_cache
 
@@ -1103,6 +1130,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 説明: 有効にすると、load-channel の open RPC（例: PTabletWriterOpen）の処理が BRPC ワーカーから専用のスレッドプールへオフロードされます。リクエストハンドラは ChannelOpenTask を生成して内部 `_async_rpc_pool` に投入し、`LoadChannelMgr::_open` をインラインで実行しません。これにより BRPC スレッド内の作業量とブロッキングが減少し、`load_channel_rpc_thread_pool_num` と `load_channel_rpc_thread_pool_queue_size` で同時実行性を調整できるようになります。スレッドプールへの投入が失敗する（プールが満杯またはシャットダウン済み）と、リクエストはキャンセルされエラー状態が返されます。プールは `LoadChannelMgr::close()` でシャットダウンされるため、有効化する際は容量とライフサイクルを考慮し、リクエストの拒否や処理遅延を避けるようにしてください。
 - 導入バージョン: v3.5.0
 
+##### enable_streaming_load_thread_pool
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 変更可能: Yes
+- 説明: ストリーミングロードのスキャナを専用の streaming load thread pool に送るかどうかを制御します。有効でかつクエリが `TLoadJobType::STREAM_LOAD` の LOAD の場合、ConnectorScanNode はスキャナタスクを `streaming_load_thread_pool` に送信します（このプールは INT32_MAX のスレッドとキューサイズで構成されており、実質的に無制限です）。無効にすると、スキャナは一般的な `thread_pool` とその `PriorityThreadPool` の送信ロジック（優先度計算、try_offer/offer の挙動）を使用します。有効にするとストリーミングロードの作業を通常のクエリ実行から分離して干渉を減らせますが、専用プールが実質無制限であるため、重いストリーミングロードトラフィック下で同時実行スレッド数やリソース使用量が増える可能性があります。このオプションはデフォルトで有効で、通常は変更の必要はありません。
+- 導入バージョン: v3.2.0
+
 ##### es_http_timeout_ms
 
 - デフォルト: 5000
@@ -1350,6 +1386,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 説明: 各行ブロックに格納できる最大行数。
 - 導入バージョン: -
 
+##### delete_worker_count_high_priority
+
+- デフォルト: 1
+- タイプ: Int
+- 単位: Threads
+- 変更可能: No
+- 説明: DeleteTaskWorkerPool内でHIGH優先の削除スレッドとして割り当てられるワーカースレッド数。起動時にAgentServerは削除プールを total threads = delete_worker_count_normal_priority + delete_worker_count_high_priority で作成し、最初の delete_worker_count_high_priority スレッドは TPriority::HIGH タスクのみを排他的に取り出そうとするようマークされます（高優先削除タスクをポーリングし、利用可能なタスクがなければスリープ/ループします）。この値を増やすと高優先削除リクエストの並列度が上がり、減らすと専用容量が減少して高優先削除のレイテンシが増加する可能性があります。
+- 導入バージョン: v3.2.0
+
 ##### disk_stat_monitor_interval
 
 - デフォルト: 5
@@ -1412,6 +1457,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 可変: いいえ
 - 説明: イベントベースのコンパクションフレームワークを有効にするかどうか。`true` はイベントベースのコンパクションフレームワークが有効であることを示し、`false` は無効であることを示します。イベントベースのコンパクションフレームワークを有効にすると、多くのタブレットがある場合や単一のタブレットに大量のデータがある場合のコンパクションのオーバーヘッドを大幅に削減できます。
 - 導入バージョン: -
+
+##### enable_lazy_delta_column_compaction
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 変更可能: Yes
+- 説明: 有効にすると、部分カラム更新によって生成されるデルタカラムに対して compaction が「遅延」戦略を優先します。StarRocks はデルタカラムのファイルをメインのセグメントファイルに即座にマージするのを避け、compaction の I/O を節約します。実際には compaction 選択コードが部分カラム更新の rowset と複数候補の存在を確認し、これらが見つかりかつこのフラグが true の場合、エンジンは compaction にさらに入力を追加するのを止めるか、空の rowset（レベル -1）だけをマージし、デルタカラムを分離したままにします。これにより compaction 時の即時の I/O と CPU が削減されますが、統合が遅延する（セグメントが増える、一時的なストレージオーバーヘッドが発生する可能性がある）というトレードオフがあります。正しさやクエリのセマンティクスに変更はありません。
+- 導入バージョン: v3.2.3
 
 ##### enable_new_load_on_memory_limit_exceeded
 
@@ -1692,6 +1746,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 説明: ストレージボリュームのガーベジコレクションの最小時間間隔。この設定は v3.0 以降、動的に変更されました。
 - 導入バージョン: -
 
+##### parallel_clone_task_per_path
+
+- デフォルト: 8
+- タイプ: Int
+- 単位: Threads
+- 変更可能: Yes
+- 説明: BE上の各ストレージパスに割り当てられる並列クローンワーカースレッド数。BE起動時にクローンスレッドプールの最大スレッド数は max(number_of_store_paths * parallel_clone_task_per_path, MIN_CLONE_TASK_THREADS_IN_POOL) として計算されます。例えばストレージパスが4つでデフォルトが8の場合、クローンプールの最大は32になります。この設定はBEが処理するCLONEタスク（tabletレプリカのコピー）の並列度を直接制御します：値を上げると並列クローンスループットは向上しますがCPU、ディスク、ネットワークの競合も増えます；値を下げると同時実行クローンタスクが制限され、FEがスケジュールしたクローン操作がスロットリングされる可能性があります。この値は動的なクローンスレッドプールに適用され、update-config経由でランタイムに変更可能です（agent_serverがクローンプールの最大スレッド数を更新します）。
+- 導入バージョン: v3.2.0
+
 ##### pending_data_expire_time_sec
 
 - デフォルト: 1800
@@ -1710,22 +1773,13 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 説明: ディスク上のコンパクションの最大同時実行数。これは、コンパクションによるディスク間の不均一な I/O の問題に対処します。この問題は、特定のディスクに対して過度に高い I/O を引き起こす可能性があります。
 - 導入バージョン: v3.0.9
 
-##### pk_parallel_execution_threshold_bytes
-
-- デフォルト: 104857600
-- タイプ: Int
-- 単位: -
-- 可変: はい
-- 説明: enable_pk_parallel_execution が true に設定されている場合、インポートまたはコンパクションで生成されるデータがこの閾値を超えると、Primary Key テーブルの並列実行戦略が有効になります。デフォルトは 100MB です。
-- 導入バージョン: -
-
-##### pk_index_parallel_compaction_threadpool_max_threads
+##### pk_index_memtable_flush_threadpool_max_threads
 
 - デフォルト: 4
 - タイプ: Int
 - 単位: -
 - 可変: はい
-- 説明: 共有データモードでのクラウドネイティブプライマリキーインデックス並列コンパクション用のスレッドプールの最大スレッド数。
+- 説明: 共有データモードでのプライマリキーインデックス Memtable フラッシュ用のスレッドプールの最大スレッド数。
 - 導入バージョン: -
 
 ##### pk_index_parallel_compaction_task_split_threshold_bytes
@@ -1737,58 +1791,13 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 説明: プライマリキーインデックスコンパクションタスクの分割閾値。タスクに関連するファイルの合計サイズがこの閾値より小さい場合、タスクは分割されません。デフォルトは 100MB です。
 - 導入バージョン: -
 
-##### pk_index_target_file_size
+##### pk_index_parallel_compaction_threadpool_max_threads
 
-- デフォルト: 67108864
+- デフォルト: 4
 - タイプ: Int
 - 単位: -
 - 可変: はい
-- 説明: 共有データモードでのプライマリキーインデックスのターゲットファイルサイズ。デフォルトは 64MB です。
-- 導入バージョン: -
-
-##### pk_index_compaction_score_ratio
-
-- デフォルト: 1.5
-- タイプ: Double
-- 単位: -
-- 可変: はい
-- 説明: 共有データモードでのプライマリキーインデックスのコンパクションスコア比率。たとえば、N 個のファイルセットがある場合、コンパクションスコアは N * pk_index_compaction_score_ratio になります。
-- 導入バージョン: -
-
-##### pk_index_ingest_sst_compaction_threshold
-
-- デフォルト: 5
-- タイプ: Int
-- 単位: -
-- 可変: はい
-- 説明: 共有データモードでのプライマリキーインデックス Ingest SST コンパクションの閾値。
-- 導入バージョン: -
-
-##### enable_pk_index_parallel_compaction
-
-- デフォルト: false
-- タイプ: Boolean
-- 単位: -
-- 可変: はい
-- 説明: 共有データモードでプライマリキーインデックスの並列コンパクションを有効にするかどうか。
-- 導入バージョン: -
-
-##### enable_pk_index_parallel_get
-
-- デフォルト: false
-- タイプ: Boolean
-- 単位: -
-- 可変: はい
-- 説明: 共有データモードでプライマリキーインデックスの並列取得を有効にするかどうか。
-- 導入バージョン: -
-
-##### pk_index_parallel_get_min_rows
-
-- デフォルト: 16384
-- タイプ: Int
-- 単位: -
-- 可変: はい
-- 説明: 共有データモードでプライマリキーインデックスの並列取得を有効にするための最小行数閾値。
+- 説明: 共有データモードでのクラウドネイティブプライマリキーインデックス並列コンパクション用のスレッドプールの最大スレッド数。
 - 導入バージョン: -
 
 ##### pk_index_parallel_get_threadpool_max_threads
@@ -1800,22 +1809,22 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 説明: 共有データモードでのプライマリキーインデックス並列取得用のスレッドプールの最大スレッド数。0 は自動設定を意味します。
 - 導入バージョン: -
 
-##### pk_index_memtable_flush_threadpool_max_threads
+##### pk_index_size_tiered_level_multiplier
 
-- デフォルト: 4
+- デフォルト: 10
 - タイプ: Int
 - 単位: -
 - 可変: はい
-- 説明: 共有データモードでのプライマリキーインデックス Memtable フラッシュ用のスレッドプールの最大スレッド数。
+- 説明: プライマリキーインデックス Size-Tiered コンパクション戦略のレベル倍数パラメータ。
 - 導入バージョン: -
 
-##### pk_index_memtable_max_count
+##### pk_index_size_tiered_max_level
 
-- デフォルト: 3
+- デフォルト: 5
 - タイプ: Int
 - 単位: -
 - 可変: はい
-- 説明: 共有データモードでのプライマリキーインデックスの最大 Memtable 数。
+- 説明: プライマリキーインデックス Size-Tiered コンパクション戦略のレベル数パラメータ。
 - 導入バージョン: -
 
 ##### pk_index_size_tiered_min_level_size
@@ -1827,22 +1836,22 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 説明: プライマリキーインデックス Size-Tiered コンパクション戦略の最小レベルサイズパラメータ。
 - 導入バージョン: -
 
-##### pk_index_size_tiered_level_multiplier 
+##### pk_index_target_file_size
 
-- デフォルト: 10
+- デフォルト: 67108864
 - タイプ: Int
 - 単位: -
 - 可変: はい
-- 説明: プライマリキーインデックス Size-Tiered コンパクション戦略のレベル倍数パラメータ。
+- 説明: 共有データモードでのプライマリキーインデックスのターゲットファイルサイズ。デフォルトは 64MB です。
 - 導入バージョン: -
 
-##### pk_index_size_tiered_max_level 
+##### pk_parallel_execution_threshold_bytes
 
-- デフォルト: 5
+- デフォルト: 104857600
 - タイプ: Int
 - 単位: -
 - 可変: はい
-- 説明: プライマリキーインデックス Size-Tiered コンパクション戦略のレベル数パラメータ。
+- 説明: enable_pk_parallel_execution が true に設定されている場合、インポートまたはコンパクションで生成されるデータがこの閾値を超えると、Primary Key テーブルの並列実行戦略が有効になります。デフォルトは 100MB です。
 - 導入バージョン: -
 
 ##### primary_key_limit_size
@@ -2099,6 +2108,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 可変: はい
 - 説明: 主キーテーブルのコンパクションをチェックする時間間隔。
 - 導入バージョン: -
+
+##### update_compaction_chunk_size_for_row_store
+
+- デフォルト: 0
+- タイプ: Int
+- 単位: Rows
+- 変更可能: Yes
+- 説明: column-with-row-store 表現を使用する tablet に対する update compaction 時に使用されるチャンクサイズ（チャンクあたりの行数）を上書きします。デフォルト（0）の場合、StarRocks は compaction メモリ制限、ベクタチャンクサイズ、総入力行数およびメモリフットプリントに基づいて CompactionUtils::get_read_chunk_size でカラムグループごとのチャンクサイズを算出します。この設定が正の整数に設定され、tablet.is_column_with_row_store() が true の場合、RowsetMerger は水平および垂直の update compaction 両経路で _chunk_size をこの値に強制します（rowset_merger.cpp）。自動計算が最適でない結果を出している場合にのみ非ゼロ値を使用してください；値を大きくするとライター/IO のオーバーヘッドを減らせますがピークメモリ使用量が増加し、値を小さくするとメモリプレッシャーは低下しますがチャンク数が増え、性能に影響する可能性があります。
+- 導入バージョン: v3.2.3
 
 ##### update_compaction_delvec_file_io_amp_ratio
 
