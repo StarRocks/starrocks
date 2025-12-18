@@ -312,16 +312,11 @@ JsonFlatPath* JsonFlatPath::normalize_from_path(const std::string_view& path, Js
         return root;
     }
     auto [key, next] = split_path(path);
-    auto iter = root->children.find(key);
-    JsonFlatPath* child_path = nullptr;
-
-    if (iter == root->children.end()) {
-        root->children.emplace(key, std::make_unique<JsonFlatPath>());
-        child_path = root->children[key].get();
-    } else {
-        child_path = iter->second.get();
+    auto [iter, inserted] = root->children.try_emplace(key);
+    if (inserted) {
+        iter->second = std::make_unique<JsonFlatPath>();
     }
-    return normalize_from_path(next, child_path);
+    return normalize_from_path(next, iter->second.get());
 }
 
 /*
@@ -401,7 +396,7 @@ void JsonPathDeriver::init_flat_json_config(const FlatJsonConfig* flat_json_conf
 void JsonPathDeriver::derived(const std::vector<const Column*>& json_datas) {
     DCHECK(_paths.empty());
     DCHECK(_types.empty());
-    DCHECK(_derived_maps.empty());
+    // DCHECK(_derived_maps.empty());
     DCHECK(_path_root == nullptr);
 
     if (json_datas.empty()) {
@@ -433,27 +428,22 @@ JsonFlatPath* JsonPathDeriver::_normalize_exists_path(const std::string_view& pa
         return root;
     }
 
-    _derived_maps[root].hits += hits;
-    _derived_maps[root].type = flat_json::JSON_BASE_TYPE_BITS;
+    root->hits += hits;
+    root->json_type = flat_json::JSON_BASE_TYPE_BITS;
 
     auto [key, next] = JsonFlatPath::split_path(path);
-    auto iter = root->children.find(key);
-    JsonFlatPath* child_path = nullptr;
-
-    if (iter == root->children.end()) {
-        root->children.emplace(key, std::make_unique<JsonFlatPath>());
-        child_path = root->children[key].get();
-    } else {
-        child_path = iter->second.get();
+    auto [iter, inserted] = root->children.try_emplace(key);
+    if (inserted) {
+        iter->second = std::make_unique<JsonFlatPath>();
     }
 
-    return _normalize_exists_path(next, child_path, hits);
+    return _normalize_exists_path(next, iter->second.get(), hits);
 }
 
 void JsonPathDeriver::derived(const std::vector<const ColumnReader*>& json_readers) {
     DCHECK(_paths.empty());
     DCHECK(_types.empty());
-    DCHECK(_derived_maps.empty());
+    // DCHECK(_derived_maps.empty());
     DCHECK(_path_root == nullptr);
 
     if (json_readers.empty()) {
@@ -476,11 +466,10 @@ void JsonPathDeriver::derived(const std::vector<const ColumnReader*>& json_reade
             const auto& sub = (*reader->sub_readers())[i];
             // compaction only extract common leaf, extract parent node need more compute on remain, it's bad performance
             auto leaf = _normalize_exists_path(sub->name(), _path_root.get(), 0);
-            _derived_maps[leaf].type &= flat_json::LOGICAL_TYPE_TO_JSON_BITS.at(sub->column_type());
-            _derived_maps[leaf].hits += reader->num_rows();
+            leaf->json_type &= flat_json::LOGICAL_TYPE_TO_JSON_BITS.at(sub->column_type());
+            leaf->hits += reader->num_rows();
         }
     }
-    _derived_maps.erase(_path_root.get());
 
     _min_json_sparsity_factory = 1; // only extract common schema
     _finalize();
@@ -510,11 +499,10 @@ void JsonPathDeriver::_derived_on_flat_json(const std::vector<const Column*>& js
 
         for (size_t i = 0; i < paths.size(); i++) {
             auto leaf = _normalize_exists_path(paths[i], _path_root.get(), hits);
-            _derived_maps[leaf].type &= flat_json::LOGICAL_TYPE_TO_JSON_BITS.at(types[i]);
-            _derived_maps[leaf].hits += hits;
+            leaf->json_type &= flat_json::LOGICAL_TYPE_TO_JSON_BITS.at(types[i]);
+            leaf->hits += hits;
         }
     }
-    _derived_maps.erase(_path_root.get());
 }
 
 void JsonPathDeriver::_derived(const Column* col, size_t mark_row) {
@@ -573,13 +561,12 @@ void JsonPathDeriver::_clean_sparsity_path(const std::string_view& name, JsonFla
     }
     auto iter = node->children.begin();
     while (iter != node->children.end()) {
-        auto desc = _derived_maps[iter->second.get()];
-        if (desc.hits < check_hits_min) {
+        auto child = iter->second.get();
+        if (child->hits < check_hits_min) {
             if (_generate_filter) {
                 _remain_keys.insert(iter->first);
             }
             node->remain = true;
-            _derived_maps.erase(iter->second.get());
             iter = node->children.erase(iter);
         } else {
             iter++;
@@ -603,14 +590,14 @@ void JsonPathDeriver::_visit_json_paths(const vpack::Slice& value, JsonFlatPath*
         auto v = current.value;
         auto k = current.key.stringView();
 
-        if (!root->children.contains(k)) {
-            root->children.emplace(k, std::make_unique<JsonFlatPath>());
+        auto [iter, inserted] = root->children.try_emplace(k);
+        if (inserted) {
+            iter->second = std::make_unique<JsonFlatPath>();
         }
-        auto child = root->children[k].get();
-        auto desc = &_derived_maps[child];
-        desc->hits++;
-        desc->multi_times += (desc->last_row == mark_row);
-        desc->last_row = mark_row;
+        auto child = iter->second.get();
+        child->hits++;
+        child->multi_times += (child->last_row == mark_row);
+        child->last_row = mark_row;
 
         if (v.isObject()) {
             // Accumulate remain status: if node is ever empty in any row, mark as remain
@@ -618,10 +605,11 @@ void JsonPathDeriver::_visit_json_paths(const vpack::Slice& value, JsonFlatPath*
             // If this node was previously visited as primitive (desc->type != JSON_BASE_TYPE_BITS and != initial value),
             // but now we see an object, this indicates a type mismatch.
             // Mark the parent node as remain to preserve the actual data structure.
-            if (desc->type != flat_json::JSON_BASE_TYPE_BITS && desc->type != flat_json::JSON_NULL_TYPE_BITS) {
+            if (child->json_type != flat_json::JSON_BASE_TYPE_BITS &&
+                child->json_type != flat_json::JSON_NULL_TYPE_BITS) {
                 root->remain = true;
             }
-            desc->type = flat_json::JSON_BASE_TYPE_BITS;
+            child->json_type = flat_json::JSON_BASE_TYPE_BITS;
             _visit_json_paths(v, child, mark_row);
         } else {
             // If this node has children (was previously visited as object), but now we see a primitive,
@@ -631,12 +619,23 @@ void JsonPathDeriver::_visit_json_paths(const vpack::Slice& value, JsonFlatPath*
                 root->remain = true;
             }
             vpack::ValueType json_type = v.type();
-            desc->type = flat_json::get_compatibility_type(json_type, desc->type);
-            desc->base_type_count += flat_json::JSON_BASE_TYPE.count(json_type);
+            child->json_type = flat_json::get_compatibility_type(json_type, child->json_type);
+            child->base_type_count += flat_json::JSON_BASE_TYPE.count(json_type);
             if (json_type == vpack::ValueType::UInt) {
-                desc->max = std::max(desc->max, v.getUIntUnchecked());
+                child->max_uint = std::max(child->max_uint, v.getUIntUnchecked());
             }
         }
+    }
+}
+
+// Helper to check and update uint to bigint recursively
+void dfs_downgrade_uint(JsonFlatPath* node) {
+    int128_t max = RunTimeTypeLimits<TYPE_BIGINT>::max_value();
+    if (node->json_type == flat_json::JSON_TYPE_BITS.at(vpack::ValueType::UInt) && node->max_uint <= max) {
+        node->json_type = flat_json::JSON_BIGINT_TYPE_BITS;
+    }
+    for (auto& [_, child] : node->children) {
+        dfs_downgrade_uint(child.get());
     }
 }
 
@@ -645,8 +644,7 @@ uint32_t JsonPathDeriver::_dfs_finalize(JsonFlatPath* node, const std::string& a
                                         std::vector<std::pair<JsonFlatPath*, std::string>>* hit_leaf) {
     // Type conflict: node has both object and primitive values, flatten as TYPE_JSON
     if (!absolute_path.empty() && !node->children.empty()) {
-        auto it = _derived_maps.find(node);
-        if (it != _derived_maps.end() && it->second.base_type_count > 0) {
+        if (node->base_type_count > 0) {
             for (auto& [key, child] : node->children) {
                 child->remain = true;
             }
@@ -675,13 +673,12 @@ uint32_t JsonPathDeriver::_dfs_finalize(JsonFlatPath* node, const std::string& a
     if (flat_count == 0 && !absolute_path.empty()) {
         // leaf node or all children is remain
         // check sparsity, same key may appear many times in json, so we need avoid duplicate compute hits
-        auto desc = _derived_maps[node];
 
-        bool is_base_type = desc.base_type_count >= desc.hits - (desc.hits * config::json_flat_complex_type_factor);
+        bool is_base_type = node->base_type_count >= node->hits - (node->hits * config::json_flat_complex_type_factor);
         bool type_check = config::enable_json_flat_complex_type || is_base_type;
-        if (type_check && desc.multi_times <= 0 && desc.hits >= _total_rows * _min_json_sparsity_factory) {
+        if (type_check && node->multi_times <= 0 && node->hits >= _total_rows * _min_json_sparsity_factory) {
             hit_leaf->emplace_back(node, absolute_path);
-            node->type = flat_json::JSON_BITS_TO_LOGICAL_TYPE.at(desc.type);
+            node->type = flat_json::JSON_BITS_TO_LOGICAL_TYPE.at(node->json_type);
             node->remain = false;
             return 1;
         } else {
@@ -715,25 +712,17 @@ void dfs_add_remain_keys(JsonFlatPath* node, std::unordered_set<std::string_view
 
 void JsonPathDeriver::_finalize() {
     // try downgrade json-uint to bigint
-    int128_t max = RunTimeTypeLimits<TYPE_BIGINT>::max_value();
-    for (auto& [name, desc] : _derived_maps) {
-        if (desc.type == flat_json::JSON_TYPE_BITS.at(vpack::ValueType::UInt) && desc.max <= max) {
-            desc.type = flat_json::JSON_BIGINT_TYPE_BITS;
-        }
-    }
+    dfs_downgrade_uint(_path_root.get());
 
     std::vector<std::pair<JsonFlatPath*, std::string>> hit_leaf;
     _dfs_finalize(_path_root.get(), "", &hit_leaf);
 
     // sort by name, just for stable order
-    std::sort(hit_leaf.begin(), hit_leaf.end(), [&](const auto& a, const auto& b) {
-        auto desc_a = _derived_maps[a.first];
-        auto desc_b = _derived_maps[b.first];
-        return desc_a.hits > desc_b.hits;
-    });
+    std::sort(hit_leaf.begin(), hit_leaf.end(),
+              [&](const auto& a, const auto& b) { return a.first->hits > b.first->hits; });
     size_t limit = _max_column > 0 ? _max_column : std::numeric_limits<size_t>::max();
     for (size_t i = limit; i < hit_leaf.size(); i++) {
-        if (!hit_leaf[i].first->remain && _derived_maps[hit_leaf[i].first].hits >= _total_rows) {
+        if (!hit_leaf[i].first->remain && hit_leaf[i].first->hits >= _total_rows) {
             limit++;
             continue;
         }
@@ -1014,17 +1003,12 @@ void JsonMerger::_add_level_paths_impl(const std::string_view& path, JsonFlatPat
         return;
     }
 
-    auto iter = root->children.find(key);
-    JsonFlatPath* child_path = nullptr;
-
-    if (iter == root->children.end()) {
-        root->children.emplace(key, std::make_unique<JsonFlatPath>());
-        child_path = root->children[key].get();
-        child_path->op = JsonFlatPath::OP_NEW_LEVEL;
-    } else {
-        child_path = iter->second.get();
+    auto [iter, inserted] = root->children.try_emplace(key);
+    if (inserted) {
+        iter->second = std::make_unique<JsonFlatPath>();
+        iter->second->op = JsonFlatPath::OP_NEW_LEVEL;
     }
-    _add_level_paths_impl(next, child_path);
+    _add_level_paths_impl(next, iter->second.get());
 }
 
 void JsonMerger::add_level_paths(const std::vector<std::string>& level_paths) {
