@@ -421,9 +421,6 @@ CONF_mBool(enable_load_channel_rpc_async, "true");
 CONF_mInt32(load_channel_rpc_thread_pool_num, "-1");
 // The queue size for Load channel rpc thread pool
 CONF_Int32(load_channel_rpc_thread_pool_queue_size, "1024000");
-<<<<<<< HEAD
-CONF_mInt32(number_tablet_writer_threads, "16");
-=======
 // Time(seconds) for load channel to wait for clean up load id after aborted.
 //
 // When a load job is cancelled or failed, load channel will be aborted.
@@ -435,10 +432,7 @@ CONF_mInt32(number_tablet_writer_threads, "16");
 // In production, the minimum interval is 60 seconds.
 // Default is 600 seconds.
 CONF_mInt32(load_channel_abort_clean_up_delay_seconds, "600");
-// Number of thread for async delta writer.
-// Default value is max(cpucores/2, 16)
-CONF_mInt32(number_tablet_writer_threads, "0");
->>>>>>> 5b7877e008 ([BugFix] Prevent reopening of aborted load channels (#66793))
+CONF_mInt32(number_tablet_writer_threads, "16");
 CONF_mInt64(max_queueing_memtable_per_tablet, "2");
 // when memory limit exceed and memtable last update time exceed this time, memtable will be flushed
 // 0 means disable
