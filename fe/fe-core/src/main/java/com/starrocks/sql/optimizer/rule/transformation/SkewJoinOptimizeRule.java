@@ -198,7 +198,7 @@ public class SkewJoinOptimizeRule extends TransformationRule {
         ColumnRefSet rightOutputColumns = input.inputAt(1).getOutputColumns();
 
         ScalarOperator skewColumn = oldJoinOperator.getSkewColumn();
-        ScalarOperator rightSkewColumn = null;
+        ScalarOperator otherSideSkewColumn = null;
 
         List<BinaryPredicateOperator> equalConjs = JoinHelper.
                 getEqualsPredicate(leftOutputColumns, rightOutputColumns,
@@ -208,10 +208,10 @@ public class SkewJoinOptimizeRule extends TransformationRule {
             ScalarOperator child1 = equalConj.getChild(1);
             // skew column may be left or right column of the equal predicate
             if (skewColumn.equals(child0)) {
-                rightSkewColumn = child1;
+                otherSideSkewColumn = child1;
                 break;
             } else if (skewColumn.equals(child1)) {
-                rightSkewColumn = child0;
+                otherSideSkewColumn = child0;
                 break;
             } else {
                 // find the skew column in the left/right child project map
@@ -223,34 +223,41 @@ public class SkewJoinOptimizeRule extends TransformationRule {
                     ScalarOperator rewriteChild1 = rewriter.rewrite(child1);
                     if (skewColumn.equals(rewriteChild0)) {
                         skewColumn = rewriteChild0;
-                        rightSkewColumn = child1;
+                        otherSideSkewColumn = child1;
                         break;
                     } else if (rewriteChild0.isCast() && skewColumn.equals(rewriteChild0.getChild(0))) {
                         skewColumn = rewriteChild0.getChild(0);
-                        rightSkewColumn = child1;
+                        otherSideSkewColumn = child1;
                     } else if (skewColumn.equals(rewriteChild1)) {
                         skewColumn = rewriteChild1;
-                        rightSkewColumn = child0;
+                        otherSideSkewColumn = child0;
                         break;
                     } else if (rewriteChild1.isCast() && skewColumn.equals(rewriteChild1.getChild(0))) {
                         skewColumn = rewriteChild1.getChild(0);
-                        rightSkewColumn = child0;
+                        otherSideSkewColumn = child0;
                     }
                 }
             }
         }
         // when use hint, we should check the skew column, and throw exception if not found
-        if (rightSkewColumn == null && oldJoinOperator.getJoinHint().equals(HintNode.HINT_JOIN_SKEW)) {
+        if (otherSideSkewColumn == null && oldJoinOperator.getJoinHint().equals(HintNode.HINT_JOIN_SKEW)) {
             throw new StarRocksConnectorException("Can't find skew column");
-        } else if (rightSkewColumn == null) {
+        } else if (otherSideSkewColumn == null) {
             return Lists.newArrayList();
         }
 
-        // 1. add salt for left child
-        OptExpression newLeftChild = addSaltForLeftChild(input.inputAt(0), skewColumn,
-                oldJoinOperator.getSkewValues(), context);
-        // 2. add salt for right child
-        OptExpression newRightChild = addSaltForRightChild(oldJoinOperator, input.inputAt(1), rightSkewColumn, context);
+        // 1. add salt for skew child and other child
+        OptExpression newLeftChild;
+        OptExpression newRightChild;
+        if (leftOutputColumns.containsAll(skewColumn.getUsedColumns())) {
+            newLeftChild = addSaltForSkewChild(input.inputAt(0), skewColumn,
+                    oldJoinOperator.getSkewValues(), context);
+            newRightChild = addSaltForOtherChild(oldJoinOperator, input.inputAt(1), otherSideSkewColumn, context);
+        } else {
+            newRightChild = addSaltForSkewChild(input.inputAt(1), skewColumn,
+                    oldJoinOperator.getSkewValues(), context);
+            newLeftChild = addSaltForOtherChild(oldJoinOperator, input.inputAt(0), otherSideSkewColumn, context);
+        }
 
         Map<ColumnRefOperator, ScalarOperator> leftProjectMap = ((LogicalProjectOperator) newLeftChild.getOp()).
                 getColumnRefMap();
@@ -289,7 +296,7 @@ public class SkewJoinOptimizeRule extends TransformationRule {
         return Lists.newArrayList(joinExpression);
     }
 
-    private OptExpression addSaltForLeftChild(OptExpression input, ScalarOperator skewColumn,
+    private OptExpression addSaltForSkewChild(OptExpression input, ScalarOperator skewColumn,
                                               List<ScalarOperator> skewValues,
                                               OptimizerContext context) {
         ColumnRefSet columnRefSet = input.getOutputColumns();
@@ -424,8 +431,8 @@ public class SkewJoinOptimizeRule extends TransformationRule {
                 generateSeriesOpt);
     }
 
-    private OptExpression addSaltForRightChild(LogicalJoinOperator oldJoinOperator, OptExpression input,
-                                               ScalarOperator rightSkewColumn, OptimizerContext context) {
+    private OptExpression addSaltForOtherChild(LogicalJoinOperator oldJoinOperator, OptExpression input,
+                                               ScalarOperator otherSideSkewColumn, OptimizerContext context) {
         List<ScalarOperator> skewValues = oldJoinOperator.getSkewValues();
         OptExpression skewValueSaltOpt = createSkewValueSaltTable(skewValues, context);
         Map<ColumnRefOperator, ScalarOperator> skewValueSaltProjects =
@@ -440,8 +447,8 @@ public class SkewJoinOptimizeRule extends TransformationRule {
             }
         }
 
-        // right table join with skew value salt table
-        ScalarOperator onPredicate = BinaryPredicateOperator.eq(rightSkewColumn, unnestColumn);
+        // other table join with skew value salt table
+        ScalarOperator onPredicate = BinaryPredicateOperator.eq(otherSideSkewColumn, unnestColumn);
         ScalarOperatorRewriter rewriter = new ScalarOperatorRewriter();
         onPredicate = rewriter.rewrite(onPredicate, ScalarOperatorRewriter.DEFAULT_REWRITE_RULES);
 
