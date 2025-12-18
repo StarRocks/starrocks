@@ -97,6 +97,10 @@ public class ArrowFlightSqlConnectContext extends ConnectContext {
                 );
             }
             this.query = query;
+            removeAllResults();
+            coordinatorFuture.complete(null);
+            coordinatorFuture = new CompletableFuture<>();
+
             this.setQueryId(UUIDUtil.genUUID());
             this.setExecutionId(UUIDUtil.toTUniqueId(this.getQueryId()));
         } finally {
@@ -109,11 +113,7 @@ public class ArrowFlightSqlConnectContext extends ConnectContext {
         try {
             this.query = ""; 
             this.statement = null; 
-
-            coordinatorFuture.complete(null);
-            coordinatorFuture = new CompletableFuture<>();
-            returnResultFromFE = true; 
-            removeAllResults();
+            this.returnResultFromFE = true; 
         } finally {
             queryLock.unlock();
         }
