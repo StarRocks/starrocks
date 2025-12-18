@@ -112,7 +112,7 @@ select count(*) from ss1;
 -- result:
 1
 -- !result
--- name: test_alter_multi_partition_ttl
+-- name: test_alter_multi_partition_ttl @native
 create database db_${uuid0};
 -- result:
 -- !result
