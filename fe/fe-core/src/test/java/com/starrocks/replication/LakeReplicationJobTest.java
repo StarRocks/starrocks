@@ -14,7 +14,9 @@
 
 package com.starrocks.replication;
 
+import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
 import com.starrocks.common.io.DeepCopy;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.leader.LeaderImpl;
@@ -40,7 +42,15 @@ import org.junit.jupiter.api.Test;
 
 import java.util.Map;
 
-public class LakeReplicationJobTest extends ReplicationJobTest {
+public class LakeReplicationJobTest {
+    protected static StarRocksAssert starRocksAssert;
+
+    protected static Database db;
+    protected static OlapTable table;
+    protected static OlapTable srcTable;
+    protected static Partition partition;
+    protected static Partition srcPartition;
+    protected ReplicationJob job;
 
     @BeforeAll
     public static void beforeClass() throws Exception {
@@ -74,7 +84,13 @@ public class LakeReplicationJobTest extends ReplicationJobTest {
 
     @BeforeEach
     public void setUp() throws Exception {
-        super.setUp();
+        partition.getDefaultPhysicalPartition().updateVersionForRestore(10);
+        srcPartition.getDefaultPhysicalPartition().updateVersionForRestore(100);
+        partition.getDefaultPhysicalPartition().setDataVersion(8);
+        partition.getDefaultPhysicalPartition().setNextDataVersion(9);
+        srcPartition.getDefaultPhysicalPartition().setDataVersion(98);
+        srcPartition.getDefaultPhysicalPartition().setNextDataVersion(99);
+
         long virtualTabletId = 1000;
         long srcDatabaseId = 100;
         long srcTableId = 100;
@@ -83,7 +99,6 @@ public class LakeReplicationJobTest extends ReplicationJobTest {
     }
 
     @Test
-    @Override
     public void testNormal() throws Exception {
         Assertions.assertFalse(ReplicationJobState.INITIALIZING.equals(job));
         Assertions.assertEquals(ReplicationJobState.INITIALIZING, job.getState());
@@ -115,7 +130,6 @@ public class LakeReplicationJobTest extends ReplicationJobTest {
     }
 
     @Test
-    @Override
     public void testCommittedCancel() {
         Assertions.assertEquals(ReplicationJobState.INITIALIZING, job.getState());
 
@@ -140,7 +154,6 @@ public class LakeReplicationJobTest extends ReplicationJobTest {
     }
 
     @Test
-    @Override
     public void testReplicatingCancel() {
         Assertions.assertEquals(ReplicationJobState.INITIALIZING, job.getState());
 
@@ -155,7 +168,6 @@ public class LakeReplicationJobTest extends ReplicationJobTest {
     }
 
     @Test
-    @Override
     public void testReplicatingFailed() throws Exception {
         Assertions.assertEquals(ReplicationJobState.INITIALIZING, job.getState());
 
@@ -176,15 +188,4 @@ public class LakeReplicationJobTest extends ReplicationJobTest {
         job.run();
         Assertions.assertEquals(ReplicationJobState.ABORTED, job.getState());
     }
-
-    @Override
-    public void testSnapshotingCancel() {
-        // skip
-    }
-
-    @Override
-    public void testSnapshotingFailed() {
-        // skip
-    }
-
 }

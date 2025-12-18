@@ -28,6 +28,7 @@
 #include "storage/lake/tablet_manager.h"
 #include "storage/segment_stream_converter.h"
 #include "util/dynamic_cache.h"
+#include "util/trace.h"
 #include "vacuum.h"
 
 namespace starrocks::lake {
@@ -88,9 +89,9 @@ Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicate
                      _tablet_manager->get_tablet_metadata(src_tablet_id, src_visible_version, false, 0, nullptr));
 #endif
 
-    LOG(INFO) << "Lake replicate storage task, built source meta and data dir, meta dir: " << src_meta_dir
-              << ", data dir: " << src_data_dir << ", txn_id: " << txn_id << ", src_tablet_id: " << src_tablet_id
-              << ", tablet_id: " << target_tablet_id;
+    VLOG(3) << "Lake replicate storage task, built source meta and data dir, meta dir: " << src_meta_dir
+            << ", data dir: " << src_data_dir << ", txn_id: " << txn_id << ", src_tablet_id: " << src_tablet_id
+            << ", tablet_id: " << target_tablet_id;
 
     // `file_locations` is the mapping between source and target file locations,
     // it contains all files that need to replicate from source to target storage
@@ -114,9 +115,6 @@ Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicate
                      convert_and_build_new_tablet_meta(src_tablet_meta, target_tablet_meta, src_tablet_id,
                                                        target_tablet_id, txn_id, data_version, src_data_dir,
                                                        segment_name_to_size_map, file_locations, filename_map));
-
-    VLOG(3) << "Lake replicate storage task, have built new tablet meta, tablet_id: " << target_tablet_id
-            << ", txn_id:" << txn_id << ", start calculate column unique id map..";
     // calc column unique id to adapt for fast schema change
     if (!src_tablet_meta->has_schema()) {
         LOG(WARNING) << "Failed to get source schema, source tablet: " << src_tablet_id
@@ -128,8 +126,10 @@ Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicate
     ReplicationUtils::calc_column_unique_id_map(source_schema_pb.column(), target_tablet_meta->schema().column(),
                                                 &column_unique_id_map);
 
-    LOG(INFO) << "Lake replicate storage task, start to replicate files from src to target cluster, txn_id: " << txn_id
-              << ", tablet_id: " << target_tablet_id << ", unique_id_map size: " << column_unique_id_map.size();
+    if (column_unique_id_map.size() > 0) {
+        LOG(INFO) << "Lake replicate storage task, need rebuild column unique id, txn_id: " << txn_id
+                  << ", tablet_id: " << target_tablet_id << ", unique_id_map size: " << column_unique_id_map.size();
+    }
     std::vector<std::string> files_to_delete;
     CancelableDefer clean_files([&files_to_delete]() { lake::delete_files_async(std::move(files_to_delete)); });
 
@@ -150,15 +150,24 @@ Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicate
             return Status::Corruption("Found invalid file location, src file location: " + src_file_location);
         }
         const auto& target_file_location = it->second;
+        LOG(INFO) << "Start replicate src file: " << src_file_location << ", target: " << target_file_location
+                  << ", txn_id: " << txn_id << ", tablet_id: " << target_tablet_id;
 
-        VLOG(3) << "Lake replicate storage task, start to replicate file, src file: " << src_file_location
-                << ", target: " << target_file_location;
+        // Create trace for this file replication
+        scoped_refptr<Trace> file_trace(new Trace);
+        ADOPT_TRACE(file_trace.get());
+        TRACE("Start replicate file, txn_id: $0, tablet_id: $1, src: $2, target: $3", txn_id, target_tablet_id,
+              src_file_location, target_file_location);
+        TRACE_COUNTER_INCREMENT("txn_id", txn_id);
+        TRACE_COUNTER_INCREMENT("tablet_id", target_tablet_id);
+
+        size_t final_file_size = 0;
+        auto start_ts = butil::gettimeofday_us();
         if (is_segment(src_file_name)) {
             // For segment files, use download_lake_segment_file which supports schema conversion
             // via SegmentStreamConverter when column_unique_id_map is not empty.
             // file_size might be available in segment_name_to_size_map
             auto src_file_size = segment_name_to_size_map[src_file_name];
-            size_t final_file_size = 0;
             RETURN_IF_ERROR(ReplicationUtils::download_lake_segment_file(
                     src_file_location, src_file_name, src_file_size, shared_src_fs, file_converters, &final_file_size));
             // Update the segment size map with the actual converted file size
@@ -169,7 +178,6 @@ Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicate
                           << ", target_file: " << target_file_name << ", original size: " << src_file_size
                           << ", final size: " << final_file_size;
             }
-            total_file_size += final_file_size;
         } else {
             // For non-segment files (.del, .sst, .delvec, .cols), use streaming copy with encryption support.
             // These files are typically small, so streaming copy is efficient and avoids an extra
@@ -179,13 +187,21 @@ Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicate
                 // Apply encryption info from filename_map to ensure file content matches metadata
                 opts.encryption_info = pair.second.second.info;
             }
-            ASSIGN_OR_RETURN(auto file_size, fs::copy_file(src_file_location, shared_src_fs, target_file_location,
-                                                           nullptr, opts, 1024 * 1024));
+            ASSIGN_OR_RETURN(final_file_size, fs::copy_file(src_file_location, shared_src_fs, target_file_location,
+                                                            nullptr, opts, 1024 * 1024));
             // Track this file for cleanup on failure, similar to how segment files are tracked via file_converters
             files_to_delete.push_back(target_file_location);
-            total_file_size += file_size;
-            LOG(INFO) << "Finished to replicate lake remote file, src file: " << src_file_location
-                      << ", target: " << target_file_location << ", txn_id: " << txn_id << ", size: " << file_size;
+        }
+        total_file_size += final_file_size;
+        auto cost = butil::gettimeofday_us() - start_ts;
+        auto is_slow = cost >= config::lake_replication_slow_log_ms * 1000;
+        TRACE("Finished replicate file, final_size: $0, cost_us: $1", final_file_size, cost);
+
+        if (is_slow) {
+            LOG(INFO) << "Finished replicate src file: " << src_file_location << ", target: " << target_file_location
+                      << ", txn_id: " << txn_id << ", tablet_id: " << target_tablet_id << ", size: " << final_file_size
+                      << ", cost(s): " << cost / 1000. / 1000. << "\n"
+                      << ",trace: " << file_trace->MetricsAsJSON();
         }
     }
     double total_time_sec = watch.elapsed_time() / 1000. / 1000. / 1000.;
@@ -193,8 +209,9 @@ Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicate
     if (total_time_sec > 0) {
         copy_rate = (total_file_size / 1024. / 1024.) / total_time_sec;
     }
-    LOG(INFO) << "Copied tablet file count: " << filename_map.size() << ", total bytes: " << total_file_size
-              << ", cost: " << total_time_sec << "s, rate: " << copy_rate << "MB/s, txn_id: " << txn_id;
+    LOG(INFO) << "Replicated tablet file count: " << filename_map.size() << ", total bytes: " << total_file_size
+              << ", cost: " << total_time_sec << "s, rate: " << copy_rate << "MB/s, txn_id: " << txn_id
+              << ", tablet_id: " << target_tablet_id;
 
     // Update segment sizes in tablet_metadata if there are any changes
     if (!segment_size_changes.empty()) {
@@ -218,11 +235,7 @@ Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicate
 
     RETURN_IF_ERROR(_tablet_manager->put_txn_log(txn_log));
 
-    LOG(INFO) << "Replicated lake remote files, txn_id: " << txn_id << ", tablet_id: " << target_tablet_id
-              << ", src_tablet_id: " << src_tablet_id << ", src_db_id: " << src_db_id
-              << ", src_table_id: " << src_table_id << ", src_partition_id: " << src_partition_id
-              << ", visible_version: " << target_visible_version << ", data_version: " << data_version
-              << ", virtual_tablet_id: " << virtual_tablet_id << ", src_visible_version: " << src_visible_version;
+    VLOG(3) << "Replicate lake remote files finished, txn_id: " << txn_id << ", tablet_id: " << target_tablet_id;
 
     clean_files.cancel();
     return Status::OK();
@@ -315,8 +328,8 @@ StatusOr<std::shared_ptr<TabletMetadataPB>> LakeReplicationTxnManager::convert_a
         std::unordered_map<std::string, size_t>& segment_name_to_size_map,
         std::map<std::string, std::string>& file_locations,
         std::unordered_map<std::string, std::pair<std::string, FileEncryptionPair>>& filename_map) {
-    LOG(INFO) << "Lake replicate storage task, building new tablet meta for tablet: " << target_tablet_id
-              << ", src_tablet_id: " << src_tablet_id << ", txn_id: " << txn_id << ", data_version: " << data_version;
+    VLOG(3) << "Lake replicate storage task, building new tablet meta for tablet: " << target_tablet_id
+            << ", src_tablet_id: " << src_tablet_id << ", txn_id: " << txn_id << ", data_version: " << data_version;
     // find all files that already replicated to target storage in previous txns
     ASSIGN_OR_RETURN(auto target_data_version_tablet_meta,
                      _tablet_manager->get_tablet_metadata(target_tablet_id, data_version, false, 0, nullptr));
@@ -558,7 +571,6 @@ StatusOr<bool> LakeReplicationTxnManager::determine_final_filename(
     if (UNLIKELY(final_filename.empty())) {
         return Status::Corruption("Failed to generate new filename from: " + src_filename);
     }
-    LOG(INFO) << "Generated new file: " << final_filename << " for src file: " << src_filename;
 
     // Build file_locations map
     auto target_file_path = _tablet_manager->segment_location(target_tablet_id, final_filename);
