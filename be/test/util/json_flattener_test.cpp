@@ -593,13 +593,8 @@ public:
         }
 
         JsonFlattener flattener(paths, types, has_remain);
-<<<<<<< HEAD
         flattener.flatten(json_input);
         return flattener.mutable_result();
-=======
-        flattener.flatten(input.get());
-        return ColumnHelper::to_columns(flattener.mutable_result());
->>>>>>> c6e21a21b8 ([Enhancement] optimize performance of flatjson path derive  (#66850))
     }
 };
 
