@@ -4043,7 +4043,7 @@ When this value is set to less than `0`, the system uses the product of its abso
 
 ##### datacache_auto_adjust_enable
 
-- Default: false
+- Default: true
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
