@@ -197,6 +197,7 @@ set(STORAGE_FILES
     lake/pk_tablet_sst_writer.cpp
     lake/primary_key_compaction_policy.cpp
     lake/replication_txn_manager.cpp
+    lake/lake_replication_txn_manager.cpp
     lake/rowset.cpp
     lake/schema_change.cpp
     lake/starlet_location_provider.cpp
@@ -218,6 +219,10 @@ set(STORAGE_FILES
     lake/spill_mem_table_sink.cpp
     lake/tablet_retain_info.cpp
     lake/tablet_writer.cpp
+    lake/lake_persistent_index_parallel_compact_mgr.cpp
+    lake/lake_persistent_index_size_tiered_compaction_strategy.cpp
+    lake/persistent_index_sstable_fileset.cpp
+    lake/lake_persistent_index_key_value_merger.cpp
     load_spill_block_manager.cpp
     load_chunk_spiller.cpp
     sstable/block_builder.cpp
@@ -233,6 +238,7 @@ set(STORAGE_FILES
     sstable/iterator.cpp
     sstable/options.cpp
     sstable/merger.cpp
+    sstable/concatenating_iterator.cpp
     lake/lake_delvec_loader.cpp
     binlog_util.cpp
     binlog_file_writer.cpp
@@ -254,6 +260,7 @@ set(STORAGE_FILES
     lake/persistent_index_sstable.cpp
     lake/lake_primary_key_compaction_conflict_resolver.cpp
     lake/column_mode_partial_update_handler.cpp
+    lake/tablet_write_log_manager.cpp
     sstable/sstable_predicate.cpp
     sstable/sstable_predicate_utils.cpp
     primary_key_dump.cpp

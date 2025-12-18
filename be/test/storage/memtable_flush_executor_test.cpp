@@ -164,9 +164,9 @@ static const std::vector<SlotDescriptor*>* create_tuple_desc_slots(RuntimeState*
 
 static shared_ptr<Chunk> gen_chunk(const std::vector<SlotDescriptor*>& slots, size_t size) {
     shared_ptr<Chunk> ret = ChunkHelper::new_chunk(slots, size);
-    auto& cols = ret->columns();
+    auto cols = ret->mutable_columns();
     for (int ci = 0; ci < cols.size(); ci++) {
-        ColumnPtr& c = cols[ci];
+        auto& c = cols[ci];
         Datum v;
         string strv;
         for (size_t i = 0; i < size; i++) {
@@ -238,7 +238,7 @@ public:
         rs_opts.stats = &stats;
         auto itr = rowset->new_iterator(*read_schema, rs_opts);
         ASSERT_TRUE(itr.ok()) << itr.status().to_string();
-        std::shared_ptr<Chunk> chunk = ChunkHelper::new_chunk(*read_schema, 4096);
+        ChunkPtr chunk = ChunkHelper::new_chunk(*read_schema, 4096);
         size_t pkey_read = 0;
         while (true) {
             Status st = (*itr)->get_next(chunk.get());

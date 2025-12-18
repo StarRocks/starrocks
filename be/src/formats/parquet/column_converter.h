@@ -47,9 +47,9 @@ public:
     }
 
     // create column according parquet data type
-    ColumnPtr create_src_column();
+    MutableColumnPtr create_src_column();
 
-    virtual Status convert(const ColumnPtr& src, Column* dst) { return Status::OK(); };
+    virtual Status convert(const Column* src, Column* dst) { return Status::OK(); };
 
 public:
     bool need_convert = false;

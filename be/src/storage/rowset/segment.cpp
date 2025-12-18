@@ -651,7 +651,8 @@ size_t Segment::_column_index_mem_usage() const {
 
 void Segment::update_cache_size() {
     if (_tablet_manager != nullptr) {
-        _tablet_manager->update_segment_cache_size(file_name(), reinterpret_cast<intptr_t>(this));
+        auto mem_cost = mem_usage();
+        _tablet_manager->update_segment_cache_size(file_name(), mem_cost, reinterpret_cast<intptr_t>(this));
     }
 }
 

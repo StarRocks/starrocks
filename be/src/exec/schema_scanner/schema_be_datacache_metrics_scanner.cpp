@@ -119,7 +119,7 @@ Status SchemaBeDataCacheMetricsScanner::get_next(ChunkPtr* chunk, bool* eos) {
     }
 
     for (const auto& [slot_id, index] : (*chunk)->get_slot_id_to_index_map()) {
-        ColumnPtr& column = (*chunk)->get_column_by_slot_id(slot_id);
+        auto* column = (*chunk)->get_column_raw_ptr_by_slot_id(slot_id);
         column->append_datum(row[slot_id - 1]);
     }
 

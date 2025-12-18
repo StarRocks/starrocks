@@ -15,8 +15,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.google.common.collect.Lists;
-import com.starrocks.common.Pair;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
@@ -47,18 +45,8 @@ public class SetUserPropertyStmt extends DdlStmt {
         return this.propertyList;
     }
 
-    // using List because we need retain the origin property order
-    public List<Pair<String, String>> getPropertyPairList() {
-        List<Pair<String, String>> list = Lists.newArrayList();
-        for (SetUserPropertyVar var : propertyList) {
-            list.add(Pair.create(var.getPropertyKey(), var.getPropertyValue()));
-        }
-        return list;
-    }
-
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return ((AstVisitorExtendInterface<R, C>) visitor).visitSetUserPropertyStatement(this, context);
     }
 }
-

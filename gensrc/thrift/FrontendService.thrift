@@ -1509,7 +1509,7 @@ struct TPartitionMetaInfo {
     14: optional string storage_medium
     15: optional i64 cooldown_time
     16: optional i64 last_consistency_check_time
-    17: optional bool is_in_memory
+    17: optional bool is_in_memory // Deprecated
     18: optional bool is_temp
     19: optional string data_size
     20: optional i64 row_count
@@ -1524,7 +1524,7 @@ struct TPartitionMetaInfo {
     29: optional i64 storage_size
     30: optional bool tablet_balanced
     31: optional i64 metadata_switch_version
-    32: optional i64 path_id
+    32: optional i64 path_id // deprecated
 }
 
 struct TGetPartitionsMetaResponse {
@@ -1929,6 +1929,7 @@ struct TPartitionReplicationInfo {
     2: optional i64 src_version
     3: optional map<i64, TIndexReplicationInfo> index_replication_infos
     4: optional i64 src_version_epoch
+    5: optional i64 src_partition_id
 }
 
 struct TTableReplicationRequest {
@@ -1941,6 +1942,11 @@ struct TTableReplicationRequest {
     7: optional i64 src_table_data_size
     8: optional map<i64, TPartitionReplicationInfo> partition_replication_infos
     9: optional string job_id
+    10: optional Types.TRunMode src_cluster_run_mode
+    11: optional string src_storage_volume_name
+    12: optional string src_service_id
+    13: optional i64 src_database_id
+    14: optional i64 src_table_id
 }
 
 struct TTableReplicationResponse {
@@ -2223,6 +2229,35 @@ struct TRefreshConnectionsResponse {
     1: optional Status.TStatus status;
 }
 
+enum TTableSchemaRequestSource {
+    SCAN = 0,
+    LOAD = 1
+}
+
+struct TGetTableSchemaRequest {
+    1: optional PlanNodes.TTableSchemaMeta schema_meta;
+    2: optional TTableSchemaRequestSource source;
+    3: optional i64 tablet_id;
+    // Valid if request_source is SCAN
+    4: optional Types.TUniqueId query_id;
+    // Valid if request_source is LOAD
+    5: optional i64 txn_id;
+}
+
+struct TGetTableSchemaResponse {
+    1: optional Status.TStatus status;
+    2: optional AgentService.TTabletSchema schema;
+}
+
+struct TBatchGetTableSchemaRequest {
+    1: optional list<TGetTableSchemaRequest> requests;
+}
+
+struct TBatchGetTableSchemaResponse {
+    1: optional Status.TStatus status;
+    2: optional list<TGetTableSchemaResponse> responses;
+}
+
 service FrontendService {
     TGetDbsResult getDbNames(1:TGetDbsParams params)
     TGetTablesResult getTableNames(1:TGetTablesParams params)
@@ -2371,5 +2406,7 @@ service FrontendService {
     TTabletReshardJobsResponse getTabletReshardJobsInfo(1: TTabletReshardJobsRequest request)
 
     TRefreshConnectionsResponse refreshConnections(1: TRefreshConnectionsRequest request)
+
+    TBatchGetTableSchemaResponse getTableSchema(1: TBatchGetTableSchemaRequest request)
 }
 

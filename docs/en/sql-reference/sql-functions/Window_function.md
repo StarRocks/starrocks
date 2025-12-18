@@ -46,7 +46,20 @@ The window clause is used to specify a range of rows for operations (the precedi
 
 ```SQL
 ROWS BETWEEN [ { m | UNBOUNDED } PRECEDING | CURRENT ROW] [ AND [CURRENT ROW | { UNBOUNDED | n } FOLLOWING] ]
+RANGE BETWEEN [ { m | UNBOUNDED } PRECEDING | CURRENT ROW] [ AND [CURRENT ROW | { UNBOUNDED | n } FOLLOWING] ]
 ```
+
+:::note
+**ARRAY_AGG() window frame limitation:** When using ARRAY_AGG() as a window function, only RANGE frames are supported. ROWS frames are NOT supported. For example:
+
+```SQL
+-- Supported: RANGE frame
+array_agg(col) OVER (PARTITION BY x ORDER BY y RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
+
+-- NOT Supported: ROWS frame (will cause error)
+array_agg(col) OVER (PARTITION BY x ORDER BY y ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING)
+```
+:::
 
 ## Window function sample table
 
@@ -150,6 +163,220 @@ Output:
 ```
 
 For example, `12.87500000` in the first row is the average value of closing prices on "2014-10-02" (`12.86`), its previous day "2014-10-01" (null), and its following day "2014-10-03" (`12.89`).
+
+### ARRAY_AGG()
+
+Aggregates values (including NULL values) in a window into an array. You can use the optional `ORDER BY` clause to sort the elements within the array.
+
+This function is supported from v3.4.
+
+:::tip
+**Important limitation:** ARRAY_AGG() as a window function **only supports RANGE window frames**. ROWS window frames are NOT supported. If no window frame is specified, the default `RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW` is used.
+:::
+
+**Syntax:**
+
+```SQL
+ARRAY_AGG([DISTINCT] expr [ORDER BY expr [ASC | DESC]]) OVER([partition_by_clause] [order_by_clause] [window_clause])
+```
+
+**Parameters:**
+
+- `expr`: The expression to aggregate. It can be a column of any supported data type.
+- `DISTINCT`: Optional. Eliminates duplicate values from the result array.
+- `ORDER BY`: Optional. Specifies the order of elements within the array.
+
+**Return value:**
+
+Returns an ARRAY containing all values in the window.
+
+**Usage notes:**
+
+- **ROWS frames are NOT supported.** Only RANGE frames can be used with ARRAY_AGG() as a window function. Using ROWS frames will result in an error.
+- NULL values are included in the result array.
+- When `DISTINCT` is specified, duplicate values are removed from the array.
+- When `ORDER BY` is specified within ARRAY_AGG(), the elements in the resulting array are sorted accordingly.
+
+**Examples:**
+
+This example uses the data in the [Sample table](#window-function-sample-table) `scores`.
+
+**Example 1: Basic ARRAY_AGG() over window**
+
+Collect all scores within each subject partition:
+
+```SQL
+SELECT *,
+    array_agg(score)
+        OVER (
+            PARTITION BY subject
+            ORDER BY score
+        ) AS score_array
+FROM scores
+WHERE subject = 'math';
+```
+
+Output:
+
+```plaintext
++------+-------+---------+-------+----------------------+
+| id   | name  | subject | score | score_array          |
++------+-------+---------+-------+----------------------+
+|    1 | lily  | math    |  NULL | [null]               |
+|    5 | mike  | math    |    70 | [null,70]            |
+|    2 | tom   | math    |    80 | [null,70,80,80]      |
+|    4 | amy   | math    |    80 | [null,70,80,80]      |
+|    6 | amber | math    |    92 | [null,70,80,80,92]   |
+|    3 | jack  | math    |    95 | [null,70,80,80,92,95]|
++------+-------+---------+-------+----------------------+
+```
+
+Note: Rows with the same `score` value (tom and amy both have 80) receive the same array due to the RANGE frame semantics.
+
+**Example 2: ARRAY_AGG(DISTINCT) over window**
+
+Collect distinct scores within each subject partition:
+
+```SQL
+SELECT *,
+    array_agg(DISTINCT score)
+        OVER (
+            PARTITION BY subject
+            ORDER BY score
+        ) AS distinct_scores
+FROM scores
+WHERE subject = 'math';
+```
+
+Output:
+
+```plaintext
++------+-------+---------+-------+-------------------+
+| id   | name  | subject | score | distinct_scores   |
++------+-------+---------+-------+-------------------+
+|    1 | lily  | math    |  NULL | [null]            |
+|    5 | mike  | math    |    70 | [null,70]         |
+|    2 | tom   | math    |    80 | [null,70,80]      |
+|    4 | amy   | math    |    80 | [null,70,80]      |
+|    6 | amber | math    |    92 | [null,70,80,92]   |
+|    3 | jack  | math    |    95 | [null,70,80,92,95]|
++------+-------+---------+-------+-------------------+
+```
+
+**Example 3: ARRAY_AGG() with ORDER BY**
+
+Collect scores sorted in descending order within the array:
+
+```SQL
+SELECT *,
+    array_agg(score ORDER BY score DESC)
+        OVER (
+            PARTITION BY subject
+        ) AS scores_desc
+FROM scores
+WHERE subject = 'math';
+```
+
+Output:
+
+```plaintext
++------+-------+---------+-------+----------------------+
+| id   | name  | subject | score | scores_desc          |
++------+-------+---------+-------+----------------------+
+|    1 | lily  | math    |  NULL | [95,92,80,80,70,null]|
+|    5 | mike  | math    |    70 | [95,92,80,80,70,null]|
+|    2 | tom   | math    |    80 | [95,92,80,80,70,null]|
+|    4 | amy   | math    |    80 | [95,92,80,80,70,null]|
+|    6 | amber | math    |    92 | [95,92,80,80,70,null]|
+|    3 | jack  | math    |    95 | [95,92,80,80,70,null]|
++------+-------+---------+-------+----------------------+
+```
+
+**Example 4: ARRAY_AGG() with RANGE frame**
+
+Collect all scores in the entire partition using RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING:
+
+```SQL
+SELECT *,
+    array_agg(score)
+        OVER (
+            PARTITION BY subject
+            ORDER BY score
+            RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
+        ) AS all_scores
+FROM scores
+WHERE subject = 'math';
+```
+
+Output:
+
+```plaintext
++------+-------+---------+-------+----------------------+
+| id   | name  | subject | score | all_scores           |
++------+-------+---------+-------+----------------------+
+|    1 | lily  | math    |  NULL | [null,70,80,80,92,95]|
+|    5 | mike  | math    |    70 | [null,70,80,80,92,95]|
+|    2 | tom   | math    |    80 | [null,70,80,80,92,95]|
+|    4 | amy   | math    |    80 | [null,70,80,80,92,95]|
+|    6 | amber | math    |    92 | [null,70,80,80,92,95]|
+|    3 | jack  | math    |    95 | [null,70,80,80,92,95]|
++------+-------+---------+-------+----------------------+
+```
+
+**Example 5: Collect names partitioned by score ranges**
+
+Using the `stock_ticker` table, collect stock symbols in a moving window:
+
+```SQL
+SELECT
+    stock_symbol,
+    closing_date,
+    closing_price,
+    array_agg(closing_price)
+        OVER (
+            PARTITION BY stock_symbol
+            ORDER BY closing_date
+        ) AS price_history
+FROM stock_ticker;
+```
+
+Output:
+
+```plaintext
++--------------+---------------------+---------------+---------------------------------------+
+| stock_symbol | closing_date        | closing_price | price_history                         |
++--------------+---------------------+---------------+---------------------------------------+
+| JDR          | 2014-10-02 00:00:00 |         12.86 | [12.86]                               |
+| JDR          | 2014-10-03 00:00:00 |         12.89 | [12.86,12.89]                         |
+| JDR          | 2014-10-04 00:00:00 |         12.94 | [12.86,12.89,12.94]                   |
+| JDR          | 2014-10-05 00:00:00 |         12.55 | [12.86,12.89,12.94,12.55]             |
+| JDR          | 2014-10-06 00:00:00 |         14.03 | [12.86,12.89,12.94,12.55,14.03]       |
+| JDR          | 2014-10-07 00:00:00 |         14.75 | [12.86,12.89,12.94,12.55,14.03,14.75] |
+| JDR          | 2014-10-08 00:00:00 |         13.98 | [12.86,12.89,12.94,12.55,14.03,14.75,13.98] |
++--------------+---------------------+---------------+---------------------------------------+
+```
+
+**Example 6: Invalid usage - ROWS frame (will cause error)**
+
+The following query will fail because ROWS frames are not supported:
+
+```SQL
+-- This will cause an error!
+SELECT *,
+    array_agg(score)
+        OVER (
+            PARTITION BY subject
+            ORDER BY score
+            ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING  -- NOT SUPPORTED!
+        ) AS score_array
+FROM scores;
+```
+
+Error message:
+
+```plaintext
+ERROR: array_agg as window function does not support ROWS frame type. Please use RANGE frame instead.
+```
 
 ### COUNT()
 

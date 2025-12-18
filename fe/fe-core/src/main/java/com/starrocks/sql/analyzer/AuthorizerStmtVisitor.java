@@ -2646,7 +2646,12 @@ public class AuthorizerStmtVisitor implements AstVisitorExtendInterface<Void, Co
 
     @Override
     public Void visitCreateFunctionStatement(CreateFunctionStmt statement, ConnectContext context) {
-        FunctionName name = statement.getFunctionName();
+        String defaultDb = statement.getFunctionRef().isGlobalFunction()
+                ? FunctionRefAnalyzer.GLOBAL_UDF_DB
+                : context.getDatabase();
+        FunctionSearchDesc searchDesc = FunctionRefAnalyzer.buildFunctionSearchDesc(
+                statement.getFunctionRef(), statement.getArgsDef(), defaultDb);
+        FunctionName name = searchDesc.getName();
         if (name.isGlobalFunction()) {
             try {
                 Authorizer.checkSystemAction(context,
@@ -2679,10 +2684,11 @@ public class AuthorizerStmtVisitor implements AstVisitorExtendInterface<Void, Co
 
     @Override
     public Void visitDropFunctionStatement(DropFunctionStmt statement, ConnectContext context) {
-        FunctionName functionName = statement.getFunctionName();
+        FunctionSearchDesc functionSearchDesc = FunctionRefAnalyzer.buildFunctionSearchDesc(
+                statement.getFunctionRef(), statement.getArgsDef(), context.getDatabase());
+        FunctionName functionName = functionSearchDesc.getName();
         // global function.
         if (functionName.isGlobalFunction()) {
-            FunctionSearchDesc functionSearchDesc = statement.getFunctionSearchDesc();
             Function function = GlobalStateMgr.getCurrentState().getGlobalFunctionMgr().getFunction(functionSearchDesc);
             if (function != null) {
                 try {
@@ -2704,7 +2710,7 @@ public class AuthorizerStmtVisitor implements AstVisitorExtendInterface<Void, Co
             Locker locker = new Locker();
             try {
                 locker.lockDatabase(db.getId(), LockType.READ);
-                Function function = db.getFunction(statement.getFunctionSearchDesc());
+                Function function = db.getFunction(functionSearchDesc);
                 if (null != function) {
                     try {
                         Authorizer.checkFunctionAction(context,

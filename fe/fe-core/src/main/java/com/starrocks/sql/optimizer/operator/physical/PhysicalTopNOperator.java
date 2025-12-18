@@ -216,6 +216,7 @@ public class PhysicalTopNOperator extends PhysicalOperator {
             builder.isSplit = operator.isSplit;
             builder.isEnforced = operator.isEnforced;
             builder.perPipeline = operator.perPipeline;
+            builder.preAggCall = operator.preAggCall;
             return this;
         }
 

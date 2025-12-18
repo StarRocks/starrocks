@@ -121,6 +121,8 @@ public:
     static StatusOr<TabletMetadataPtrs> get_metas_from_bundle_tablet_metadata(const std::string& location,
                                                                               FileSystem* input_fs = nullptr);
 
+    // NOTICE : latest_cached_tablet_metadata may contain a tablet meta that
+    // is either older or newer than the FE visible version.
     TabletMetadataPtr get_latest_cached_tablet_metadata(int64_t tablet_id);
 
     StatusOr<TabletMetadataIter> list_tablet_metadata(int64_t tablet_id);
@@ -168,6 +170,7 @@ public:
 #endif
 #endif // USE_STAROS
 
+    Status drop_local_cache(const std::string& path);
     void prune_metacache();
 
     // TODO: remove this method
@@ -233,7 +236,7 @@ public:
     // If segment_addr_hint is provided and it's non-zero, the cache size will be only updated when the
     // instance address matches the address provided by the segment_addr_hint. This is used to prevent
     // updating the cache size where the cached object is not the one as expected.
-    void update_segment_cache_size(std::string_view key, intptr_t segment_addr_hint = 0);
+    void update_segment_cache_size(std::string_view key, size_t mem_cost, intptr_t segment_addr_hint = 0);
 
     StatusOr<SegmentPtr> load_segment(const FileInfo& segment_info, int segment_id, size_t* footer_size_hint,
                                       const LakeIOOptions& lake_io_opts, bool fill_meta_cache,
@@ -260,7 +263,6 @@ private:
     static std::string global_schema_cache_key(int64_t index_id);
     static std::string tablet_schema_cache_key(int64_t tablet_id);
     static std::string tablet_latest_metadata_cache_key(int64_t tablet_id);
-    static Status drop_local_cache(const std::string& path);
 
     StatusOr<TabletSchemaPtr> load_and_parse_schema_file(const std::string& path);
     StatusOr<TabletSchemaPtr> get_tablet_schema_by_id(int64_t tablet_id, int64_t schema_id);

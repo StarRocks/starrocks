@@ -85,7 +85,7 @@ public:
         EXPECT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &writer).ok());
         auto schema = ChunkHelper::convert_schema(tablet->tablet_schema());
         auto chunk = ChunkHelper::new_chunk(schema, keys.size());
-        auto& cols = chunk->columns();
+        auto cols = chunk->mutable_columns();
         for (long key : keys) {
             cols[0]->append_datum(Datum(key));
             cols[1]->append_datum(Datum((int16_t)(key % 100 + 1)));
@@ -152,8 +152,9 @@ public:
     }
 
     RowsetSharedPtr create_partial_rowset(const TabletSharedPtr& tablet, const vector<int64_t>& keys,
-                                          std::vector<int32_t>& column_indexes, std::function<int16_t(int64_t)> v1_func,
-                                          std::function<int32_t(int64_t)> v2_func,
+                                          std::vector<int32_t>& column_indexes,
+                                          const std::function<int16_t(int64_t)>& v1_func,
+                                          const std::function<int32_t(int64_t)>& v2_func,
                                           const std::shared_ptr<TabletSchema>& partial_schema, int segment_num,
                                           PartialUpdateMode mode = PartialUpdateMode::COLUMN_UPDATE_MODE,
                                           bool spilt_keys = false) {
@@ -180,16 +181,16 @@ public:
         auto schema = ChunkHelper::convert_schema(partial_schema);
 
         auto chunk = ChunkHelper::new_chunk(schema, keys.size());
-        auto& cols = chunk->columns();
         for (long key : keys) {
             int idx = 0;
             for (int colid : column_indexes) {
+                auto col = chunk->get_column_raw_ptr_by_index(idx);
                 if (colid == 0) {
-                    cols[idx]->append_datum(Datum(key));
+                    col->append_datum(Datum(key));
                 } else if (colid == 1) {
-                    cols[idx]->append_datum(Datum(v1_func(key)));
+                    col->append_datum(Datum(v1_func(key)));
                 } else {
-                    cols[idx]->append_datum(Datum(v2_func(key)));
+                    col->append_datum(Datum(v2_func(key)));
                 }
                 idx++;
             }
@@ -199,7 +200,7 @@ public:
                 auto tmp_chunk = ChunkHelper::new_chunk(schema, keys.size() / segment_num);
                 std::vector<uint32_t> indexes;
                 for (int j = i; j < chunk->num_rows(); j += segment_num) {
-                    indexes.push_back(j);
+                    indexes.emplace_back(j);
                 }
                 tmp_chunk->append_selective(*chunk, indexes.data(), 0, indexes.size());
                 CHECK_OK(writer->flush_chunk(*tmp_chunk));
@@ -251,7 +252,7 @@ static ChunkIteratorPtr create_tablet_iterator(TabletReader& reader, Schema& sch
 }
 
 static bool check_until_eof(const ChunkIteratorPtr& iter, int64_t check_rows_cnt,
-                            std::function<bool(int64_t, int16_t, int32_t, int32_t)> check_fn, bool check_v3) {
+                            const std::function<bool(int64_t, int16_t, int32_t, int32_t)>& check_fn, bool check_v3) {
     auto chunk = ChunkHelper::new_chunk(iter->schema(), 100);
     int64_t rows_cnt = 0;
     while (true) {
@@ -277,7 +278,8 @@ static bool check_until_eof(const ChunkIteratorPtr& iter, int64_t check_rows_cnt
 }
 
 static bool check_tablet(const TabletSharedPtr& tablet, int64_t version, int64_t check_rows_cnt,
-                         std::function<bool(int64_t, int16_t, int32_t, int32_t)> check_fn, bool check_v3 = false) {
+                         const std::function<bool(int64_t, int16_t, int32_t, int32_t)>& check_fn,
+                         bool check_v3 = false) {
     Schema schema = ChunkHelper::convert_schema(tablet->tablet_schema());
     TabletReader reader(tablet, Version(0, version), schema);
     auto iter = create_tablet_iterator(reader, schema);
@@ -437,7 +439,7 @@ static void prepare_tablet(RowsetColumnPartialUpdateTest* self, const TabletShar
         // partial update v1 and v2 one by one
         for (int i = 0; i < 10; i++) {
             std::vector<int32_t> column_indexes = {0, (i % 2) + 1};
-            partial_schemas.push_back(TabletSchema::create(tablet->tablet_schema(), column_indexes));
+            partial_schemas.emplace_back(TabletSchema::create(tablet->tablet_schema(), column_indexes));
             rowsets.emplace_back(
                     self->create_partial_rowset(tablet, keys, column_indexes, v1_func, v2_func, partial_schemas[i], 5));
             ASSERT_EQ(rowsets[i]->num_update_files(), 5);
@@ -576,7 +578,7 @@ TEST_P(RowsetColumnPartialUpdateTest, partial_update_diff_column_and_check) {
     // partial update v1 and v2 one by one
     for (int i = 0; i < 10; i++) {
         std::vector<int32_t> column_indexes = {0, (i % 2) + 1};
-        partial_schemas.push_back(TabletSchema::create(tablet->tablet_schema(), column_indexes));
+        partial_schemas.emplace_back(TabletSchema::create(tablet->tablet_schema(), column_indexes));
         rowsets.emplace_back(
                 create_partial_rowset(tablet, keys, column_indexes, v1_func, v2_func, partial_schemas[i], 1));
     }
@@ -610,7 +612,7 @@ TEST_P(RowsetColumnPartialUpdateTest, partial_update_multi_segment_and_check) {
     // partial update v1 and v2 one by one
     for (int i = 0; i < 10; i++) {
         std::vector<int32_t> column_indexes = {0, (i % 2) + 1};
-        partial_schemas.push_back(TabletSchema::create(tablet->tablet_schema(), column_indexes));
+        partial_schemas.emplace_back(TabletSchema::create(tablet->tablet_schema(), column_indexes));
         rowsets.emplace_back(
                 create_partial_rowset(tablet, keys, column_indexes, v1_func, v2_func, partial_schemas[i], 5));
         ASSERT_EQ(rowsets.back()->num_update_files(), 5);
@@ -839,10 +841,10 @@ TEST_P(RowsetColumnPartialUpdateTest, test_get_column_values) {
         std::vector<uint32_t> column_ids = {0, 1, 2};
         std::map<uint32_t, std::vector<uint32_t>> rowids_by_rssid;
         for (int rowid = 0; rowid < N; rowid++) {
-            rowids_by_rssid[9].push_back(rowid);
+            rowids_by_rssid[9].emplace_back(rowid);
         }
         auto read_column_schema = ChunkHelper::convert_schema(tablet->tablet_schema(), column_ids);
-        vector<MutableColumnPtr> columns(column_ids.size());
+        MutableColumns columns(column_ids.size());
         for (int colid = 0; colid < column_ids.size(); colid++) {
             auto column = ChunkHelper::column_from_field(*read_column_schema.field(colid).get());
             columns[colid] = column->clone_empty();
@@ -881,7 +883,7 @@ TEST_P(RowsetColumnPartialUpdateTest, test_upsert) {
         // upsert v1 and v2 one by one
         for (int i = 0; i < 10; i++) {
             std::vector<int32_t> column_indexes = {0, (i % 2) + 1};
-            partial_schemas.push_back(TabletSchema::create(tablet->tablet_schema(), column_indexes));
+            partial_schemas.emplace_back(TabletSchema::create(tablet->tablet_schema(), column_indexes));
             rowsets.emplace_back(create_partial_rowset(tablet, keys, column_indexes, v1_func, v2_func,
                                                        partial_schemas[i], 5, PartialUpdateMode::COLUMN_UPSERT_MODE));
             ASSERT_EQ(rowsets[i]->num_update_files(), 5);
@@ -1003,7 +1005,7 @@ TEST_P(RowsetColumnPartialUpdateTest, partial_update_too_many_segment_and_check)
     // partial update v1 and v2 one by one
     for (int i = 0; i < 10; i++) {
         std::vector<int32_t> column_indexes = {0, (i % 2) + 1};
-        partial_schemas.push_back(TabletSchema::create(tablet->tablet_schema(), column_indexes));
+        partial_schemas.emplace_back(TabletSchema::create(tablet->tablet_schema(), column_indexes));
         rowsets.emplace_back(
                 create_partial_rowset(tablet, keys, column_indexes, v1_func, v2_func, partial_schemas[i], M));
         ASSERT_EQ(rowsets.back()->num_update_files(), M);
@@ -1040,7 +1042,7 @@ TEST_P(RowsetColumnPartialUpdateTest, partial_update_too_many_segment_and_limit_
     // partial update v1 and v2 one by one
     for (int i = 0; i < 10; i++) {
         std::vector<int32_t> column_indexes = {0, (i % 2) + 1};
-        partial_schemas.push_back(TabletSchema::create(tablet->tablet_schema(), column_indexes));
+        partial_schemas.emplace_back(TabletSchema::create(tablet->tablet_schema(), column_indexes));
         rowsets.emplace_back(
                 create_partial_rowset(tablet, keys, column_indexes, v1_func, v2_func, partial_schemas[i], M));
         ASSERT_EQ(rowsets.back()->num_update_files(), M);
@@ -1086,7 +1088,7 @@ TEST_P(RowsetColumnPartialUpdateTest, partial_update_with_memory_limit) {
     // partial update v1 and v2 one by one
     for (int i = 0; i < 10; i++) {
         std::vector<int32_t> column_indexes = {0, (i % 2) + 1};
-        partial_schemas.push_back(TabletSchema::create(tablet->tablet_schema(), column_indexes));
+        partial_schemas.emplace_back(TabletSchema::create(tablet->tablet_schema(), column_indexes));
         rowsets.emplace_back(create_partial_rowset(tablet, partial_keys, column_indexes, v1_func, v2_func,
                                                    partial_schemas[i], M, PartialUpdateMode::COLUMN_UPDATE_MODE, true));
         ASSERT_EQ(rowsets.back()->num_update_files(), M);
@@ -1132,7 +1134,7 @@ TEST_P(RowsetColumnPartialUpdateTest, partial_update_multi_column_batch) {
     // partial update v1 and v2 at once
     for (int i = 0; i < 10; i++) {
         std::vector<int32_t> column_indexes = {0, 1, 2};
-        partial_schemas.push_back(TabletSchema::create(tablet->tablet_schema(), column_indexes));
+        partial_schemas.emplace_back(TabletSchema::create(tablet->tablet_schema(), column_indexes));
         rowsets.emplace_back(
                 create_partial_rowset(tablet, keys, column_indexes, v1_func, v2_func, partial_schemas[i], M));
         ASSERT_EQ(rowsets.back()->num_update_files(), M);
@@ -1163,9 +1165,9 @@ TEST_P(RowsetColumnPartialUpdateTest, partial_update_multi_segment_and_column_ba
     for (int i = 0; i < N; i++) {
         keys[i] = i;
         if (i % 2 == 0) {
-            partial_keys1.push_back(i);
+            partial_keys1.emplace_back(i);
         } else {
-            partial_keys2.push_back(i);
+            partial_keys2.emplace_back(i);
         }
     }
     auto v1_func = [](int64_t k1) { return (int16_t)(k1 % 100 + 3); };
@@ -1183,7 +1185,7 @@ TEST_P(RowsetColumnPartialUpdateTest, partial_update_multi_segment_and_column_ba
     // partial update v1 and v2 at once
     for (int i = 0; i < 10; i++) {
         std::vector<int32_t> column_indexes = {0, 1, 2};
-        partial_schemas.push_back(TabletSchema::create(tablet->tablet_schema(), column_indexes));
+        partial_schemas.emplace_back(TabletSchema::create(tablet->tablet_schema(), column_indexes));
         rowsets.emplace_back(
                 create_partial_rowset(tablet, keys, column_indexes, v1_func, v2_func, partial_schemas[i], M));
         ASSERT_EQ(rowsets.back()->num_update_files(), M);
@@ -1228,7 +1230,7 @@ TEST_P(RowsetColumnPartialUpdateTest, partial_update_with_source_chunk_limit) {
     // partial update v1 and v2 one by one
     for (int i = 0; i < 10; i++) {
         std::vector<int32_t> column_indexes = {0, (i % 2) + 1};
-        partial_schemas.push_back(TabletSchema::create(tablet->tablet_schema(), column_indexes));
+        partial_schemas.emplace_back(TabletSchema::create(tablet->tablet_schema(), column_indexes));
         rowsets.emplace_back(create_partial_rowset(tablet, partial_keys, column_indexes, v1_func, v2_func,
                                                    partial_schemas[i], M, PartialUpdateMode::COLUMN_UPDATE_MODE, true));
         ASSERT_EQ(rowsets.back()->num_update_files(), M);
@@ -1307,7 +1309,7 @@ TEST_P(RowsetColumnPartialUpdateTest, partial_update_with_fast_schema_evolution)
     // 4. compaction with rowset 0 - 9
     vector<uint32_t> input_rowset_ids;
     for (int i = 0; i <= 9; i++) {
-        input_rowset_ids.push_back(i);
+        input_rowset_ids.emplace_back(i);
     }
     tablet->updates()->compaction(_compaction_mem_tracker.get(), input_rowset_ids);
     // check data
@@ -1357,7 +1359,7 @@ TEST_P(RowsetColumnPartialUpdateTest, partial_update_with_compaction) {
     // compaction with rowset 0 - 9
     vector<uint32_t> input_rowset_ids;
     for (int i = 0; i <= 9; i++) {
-        input_rowset_ids.push_back(i);
+        input_rowset_ids.emplace_back(i);
     }
     ASSERT_TRUE(tablet->updates()->compaction(_compaction_mem_tracker.get(), input_rowset_ids).ok());
     // check data
@@ -1420,7 +1422,7 @@ TEST_P(RowsetColumnPartialUpdateTest, partial_update_with_compaction_conflict_ch
     // compaction with rowset 0 - 9
     vector<uint32_t> input_rowset_ids;
     for (int i = 0; i <= 9; i++) {
-        input_rowset_ids.push_back(i);
+        input_rowset_ids.emplace_back(i);
     }
     ASSERT_FALSE(tablet->updates()->compaction(_compaction_mem_tracker.get(), input_rowset_ids).ok());
     // check data

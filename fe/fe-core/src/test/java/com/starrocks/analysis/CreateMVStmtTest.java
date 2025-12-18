@@ -15,13 +15,13 @@
 package com.starrocks.analysis;
 
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.AggregateType;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.CreateMaterializedViewStmt;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.MVColumnItem;
 import com.starrocks.type.FloatType;
 import com.starrocks.type.IntegerType;

@@ -435,11 +435,11 @@ public class IcebergTable extends Table {
                                     throw new SemanticException("Unsupported function call %s", expr.toString());
                                 }
                                 Function builtinFunction = ExprUtils.getBuiltinFunction(
-                                        ((FunctionCallExpr) expr).getFnName().getFunction(),
+                                        ((FunctionCallExpr) expr).getFunctionName(),
                                         args, Function.CompareMode.IS_IDENTICAL);
                                 ((FunctionCallExpr) expr).setFn(builtinFunction);
 
-                                if (((FunctionCallExpr) expr).getFnName().getFunction().equals(
+                                if (((FunctionCallExpr) expr).getFunctionName().equals(
                                         FeConstants.ICEBERG_TRANSFORM_EXPRESSION_PREFIX + "truncate")) {
                                     ((FunctionCallExpr) expr).setType(column.getType());
                                 } else {
@@ -528,6 +528,11 @@ public class IcebergTable extends Table {
     @Override
     public boolean supportInsert() {
         // for now, only support writing iceberg table with parquet file format
+        return getNativeTable().properties().getOrDefault(DEFAULT_FILE_FORMAT, DEFAULT_FILE_FORMAT_DEFAULT)
+                .equalsIgnoreCase(PARQUET_FORMAT);
+    }
+
+    public boolean isParquetFormat() {
         return getNativeTable().properties().getOrDefault(DEFAULT_FILE_FORMAT, DEFAULT_FILE_FORMAT_DEFAULT)
                 .equalsIgnoreCase(PARQUET_FORMAT);
     }

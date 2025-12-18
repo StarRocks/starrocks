@@ -101,7 +101,7 @@ public class TimeDriftConstraint {
         }
         FunctionCallExpr fcall = (FunctionCallExpr) expr;
 
-        String fname = fcall.getFnName().getFunction();
+        String fname = fcall.getFunctionName();
         if (!SUPPORT_BOUND_FUNCTIONS.containsKey(fname)) {
             throw new SemanticException(ERR_MSG_FORMAT, spec);
         }

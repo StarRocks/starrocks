@@ -412,7 +412,16 @@ Status TabletManager::drop_tablet(TTabletId tablet_id, TabletDropFlag flag) {
         auto it = tablet_map.find(tablet_id);
         if (it == tablet_map.end()) {
             LOG(WARNING) << "Fail to drop nonexistent tablet " << tablet_id;
-            return Status::NotFound(strings::Substitute("tablet $0 not fount", tablet_id));
+            return Status::NotFound(strings::Substitute("tablet $0 not found", tablet_id));
+        }
+
+        // Check if there is an ongoing CLONE task for this tablet.
+        // This check must be done while holding the shard lock to prevent race conditions.
+        // The CLONE task registers itself in tablets_under_clone while holding the same lock.
+        TabletsShard& shard = _get_tablets_shard(tablet_id);
+        if (shard.tablets_under_clone.count(tablet_id) > 0) {
+            LOG(INFO) << "DROP tablet skipped because CLONE task is in progress for tablet_id: " << tablet_id;
+            return Status::InternalError("DROP tablet skipped because CLONE task is in progress");
         }
 
         VLOG(3) << "Start to drop tablet " << tablet_id;

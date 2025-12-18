@@ -19,7 +19,6 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.FunctionName;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.TableName;
 import com.starrocks.common.util.DateUtils;
@@ -499,8 +498,8 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
                 if (!arg.getChildren().isEmpty()) {
                     // need to covert array[row(1,2), row(3,4))] to array[1,3], array[2,4], so SR could unnest it
                     Expr firstArrayElement = arg.getChildren().get(0);
-                    if (firstArrayElement instanceof FunctionCallExpr && ((FunctionCallExpr) firstArrayElement).getFnName().
-                            getFunction().equalsIgnoreCase("row")) {
+                    if (firstArrayElement instanceof FunctionCallExpr && ((FunctionCallExpr) firstArrayElement).getFunctionName().
+                            equalsIgnoreCase("row")) {
                         List<List<Expr>> items = new ArrayList<>();
                         for (Expr row : arg.getChildren()) {
                             int rowIndex = 0;
@@ -1081,9 +1080,7 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
     @Override
     protected ParseNode visitCoalesceExpression(CoalesceExpression node, ParseTreeContext context) {
         List<Expr> children = visit(node, context, Expr.class);
-        FunctionName fnName = FunctionName.createFnName("coalesce");
-
-        return new FunctionCallExpr(fnName, new FunctionParams(false, children));
+        return new FunctionCallExpr("coalesce", new FunctionParams(false, children));
     }
 
     @Override

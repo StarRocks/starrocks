@@ -246,11 +246,11 @@ private:
 
     size_t _max_parallel_request_size = 1;
     std::vector<ReusableClosure<PTabletWriterAddBatchResult>*> _add_batch_closures;
-    std::unique_ptr<Chunk> _cur_chunk;
+    ChunkUniquePtr _cur_chunk;
     int64_t _cur_chunk_mem_usage = 0;
 
     PTabletWriterAddChunksRequest _rpc_request;
-    using AddMultiChunkReq = std::pair<std::unique_ptr<Chunk>, PTabletWriterAddChunksRequest>;
+    using AddMultiChunkReq = std::pair<ChunkUniquePtr, PTabletWriterAddChunksRequest>;
     std::deque<AddMultiChunkReq> _request_queue;
 
     size_t _current_request_index = 0;

@@ -196,7 +196,7 @@ public class OlapTableTxnLogApplier implements TransactionLogApplier {
 
             if (!partitionCommitInfo.getInvalidDictCacheColumns().isEmpty()) {
                 for (ColumnId column : partitionCommitInfo.getInvalidDictCacheColumns()) {
-                    IDictManager.getInstance().removeGlobalDict(tableId, column);
+                    IDictManager.getInstance().removeGlobalDict(table, column);
                 }
             }
             if (!partitionCommitInfo.getValidDictCacheColumns().isEmpty()) {
@@ -222,7 +222,7 @@ public class OlapTableTxnLogApplier implements TransactionLogApplier {
                 ColumnId columnName = validDictCacheColumns.get(i);
                 long collectedVersion = dictCollectedVersions.get(i);
                 IDictManager.getInstance()
-                        .updateGlobalDict(tableId, columnName, collectedVersion, maxPartitionVersionTime);
+                        .updateGlobalDict(table, columnName, collectedVersion, maxPartitionVersionTime);
             }
         }
     }

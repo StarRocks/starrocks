@@ -17,7 +17,6 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.DataProperty;
@@ -37,6 +36,7 @@ import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.server.RunMode;
+import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.ExpressionPartitionDesc;
 import com.starrocks.sql.ast.ListPartitionDesc;
@@ -61,7 +61,6 @@ import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.ast.expression.TimestampArithmeticExpr;
 import com.starrocks.thrift.TStorageMedium;
-import com.starrocks.thrift.TTabletType;
 import com.starrocks.type.DateType;
 import com.starrocks.type.Type;
 import org.apache.logging.log4j.util.Strings;
@@ -203,7 +202,7 @@ public class PartitionDescAnalyzer {
             ExpressionRangePartitionInfo exprRangePartitionInfo = (ExpressionRangePartitionInfo) partitionInfo;
             Expr partitionExpr = exprRangePartitionInfo.getPartitionExprs(idToColumn).get(0);
             FunctionCallExpr functionCallExpr = (FunctionCallExpr) partitionExpr;
-            String functionName = functionCallExpr.getFnName().getFunction();
+            String functionName = functionCallExpr.getFunctionName();
 
             String partitionGranularity;
             long partitionStep;
@@ -244,7 +243,7 @@ public class PartitionDescAnalyzer {
 
         Expr partitionExpr = exprRangePartitionInfo.getPartitionExprs(idToColumn).get(0);
         FunctionCallExpr functionCallExpr = (FunctionCallExpr) partitionExpr;
-        String functionName = functionCallExpr.getFnName().getFunction();
+        String functionName = functionCallExpr.getFunctionName();
 
         String partitionGranularity;
         long partitionStep;
@@ -460,7 +459,7 @@ public class PartitionDescAnalyzer {
                     FunctionCallExpr functionCallExpr = (FunctionCallExpr) expr;
                     List<String> autoPartitionSupportFunctions = Lists.newArrayList(FunctionSet.TIME_SLICE,
                             FunctionSet.DATE_TRUNC);
-                    if (!autoPartitionSupportFunctions.contains(functionCallExpr.getFnName().getFunction())) {
+                    if (!autoPartitionSupportFunctions.contains(functionCallExpr.getFunctionName())) {
                         throw new SemanticException("Only support date_trunc and time_slice as partition expression");
                     }
                 }
@@ -483,7 +482,7 @@ public class PartitionDescAnalyzer {
                     Preconditions.checkState(columnDef.isPresent());
                     slotRef.setType(columnDef.get().getType());
 
-                    String functionName = ((FunctionCallExpr) expr).getFnName().getFunction().toLowerCase();
+                    String functionName = ((FunctionCallExpr) expr).getFunctionName().toLowerCase();
                     if (functionName.equals(FunctionSet.STR2DATE)) {
                         desc.setPartitionType(DateType.DATE);
                         if (!PartitionFunctionChecker.checkStr2date(expr)) {
@@ -747,11 +746,11 @@ public class PartitionDescAnalyzer {
         // analyze version info
         Long versionInfo = PropertyAnalyzer.analyzeVersionInfo(partitionAndTableProperties);
 
-        // analyze in memory
-        boolean isInMemory = PropertyAnalyzer
-                .analyzeBooleanProp(partitionAndTableProperties, PropertyAnalyzer.PROPERTIES_INMEMORY, false);
+        // consume deprecated in_memory property if present
+        PropertyAnalyzer.analyzeBooleanProp(partitionAndTableProperties,
+                PropertyAnalyzer.PROPERTIES_INMEMORY, false);
 
-        TTabletType tabletType = PropertyAnalyzer.analyzeTabletType(partitionAndTableProperties);
+        PropertyAnalyzer.analyzeTabletType(partitionAndTableProperties);
 
         DataCacheInfo dataCacheInfo = PropertyAnalyzer.analyzeDataCacheInfo(partitionAndTableProperties);
 
@@ -759,8 +758,6 @@ public class PartitionDescAnalyzer {
         desc.setPartitionDataProperty(partitionDataProperty);
         desc.setReplicationNum(replicationNum);
         desc.setVersionInfo(versionInfo);
-        desc.setInMemory(isInMemory);
-        desc.setTabletType(tabletType);
         desc.setDataCacheInfo(dataCacheInfo);
 
         if (desc.getProperties() != null) {

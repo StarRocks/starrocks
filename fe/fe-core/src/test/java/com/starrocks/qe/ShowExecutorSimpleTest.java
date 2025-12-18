@@ -47,7 +47,6 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.HiveTable;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
@@ -81,6 +80,7 @@ import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.DescribeStmt;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.LabelName;
 import com.starrocks.sql.ast.QualifiedName;
 import com.starrocks.sql.ast.SetType;
@@ -222,11 +222,11 @@ public class ShowExecutorSimpleTest {
                 minTimes = 0;
                 result = new RandomDistributionInfo(10);
 
-                table.getIndexIdByName(anyString);
+                table.getIndexMetaIdByName(anyString);
                 minTimes = 0;
                 result = 0L;
 
-                table.getStorageTypeByIndexId(0L);
+                table.getStorageTypeByIndexMetaId(0L);
                 minTimes = 0;
                 result = TStorageType.COLUMN;
 

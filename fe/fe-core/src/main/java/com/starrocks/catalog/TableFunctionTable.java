@@ -64,7 +64,6 @@ import com.starrocks.type.IntegerType;
 import com.starrocks.type.StringType;
 import com.starrocks.type.Type;
 import com.starrocks.type.TypeDeserializer;
-import com.starrocks.type.TypeFactory;
 import com.starrocks.type.VarcharType;
 import org.apache.commons.collections4.ListUtils;
 import org.apache.hadoop.fs.FileStatus;
@@ -706,7 +705,7 @@ public class TableFunctionTable extends Table {
     private List<Column> getSchemaFromPath() {
         List<Column> columns = new ArrayList<>();
         for (String colName : columnsFromPath) {
-            columns.add(new Column(colName, TypeFactory.createDefaultString(), true));
+            columns.add(new Column(colName, StringType.DEFAULT_STRING, true));
         }
         return columns;
     }

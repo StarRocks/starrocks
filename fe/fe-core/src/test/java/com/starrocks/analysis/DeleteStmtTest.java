@@ -39,11 +39,12 @@ import com.starrocks.catalog.TableName;
 import com.starrocks.mysql.privilege.MockedAuth;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.DeleteStmt;
-import com.starrocks.sql.ast.PartitionNames;
+import com.starrocks.sql.ast.PartitionRef;
 import com.starrocks.sql.ast.expression.BinaryPredicate;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.StringLiteral;
+import com.starrocks.sql.parser.NodePosition;
 import mockit.Mocked;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
@@ -63,7 +64,7 @@ public class DeleteStmtTest {
         BinaryPredicate wherePredicate = new BinaryPredicate(BinaryType.EQ, new SlotRef(null, "k1"),
                 new StringLiteral("abc"));
         DeleteStmt deleteStmt = new DeleteStmt(new TableName("testDb", "testTbl"),
-                new PartitionNames(false, Lists.newArrayList("partition")), wherePredicate);
+                new PartitionRef(Lists.newArrayList("partition"), false, NodePosition.ZERO), wherePredicate);
 
         Assertions.assertEquals("testDb", deleteStmt.getTableName().getDb());
         Assertions.assertEquals("testTbl", deleteStmt.getTableName().getTbl());

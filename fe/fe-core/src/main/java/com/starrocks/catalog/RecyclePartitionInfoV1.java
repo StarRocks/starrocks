@@ -27,8 +27,8 @@ public class RecyclePartitionInfoV1 extends RecyclePartitionInfo {
     }
 
     public RecyclePartitionInfoV1(long dbId, long tableId, Partition partition, Range<PartitionKey> range,
-                                  DataProperty dataProperty, short replicationNum, boolean isInMemory) {
-        super(dbId, tableId, partition, dataProperty, replicationNum, isInMemory);
+                                  DataProperty dataProperty, short replicationNum) {
+        super(dbId, tableId, partition, dataProperty, replicationNum);
         this.range = range;
     }
 

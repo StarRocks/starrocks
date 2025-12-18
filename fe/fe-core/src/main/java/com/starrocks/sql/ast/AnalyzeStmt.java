@@ -30,7 +30,7 @@ public class AnalyzeStmt extends StatementBase {
     private final boolean isSample;
     private boolean isAsync;
     private boolean isExternal = false;
-    private final PartitionNames partitionNames;
+    private final PartitionRef partitionNames;
     private List<Long> partitionIds = null;
     private Map<String, String> properties;
     private final AnalyzeTypeDesc analyzeTypeDesc;
@@ -42,7 +42,7 @@ public class AnalyzeStmt extends StatementBase {
     private final boolean usePredicateColumns;
     // Mode 3: all columns, identical to empty columns
 
-    public AnalyzeStmt(TableName tbl, List<Expr> columns, PartitionNames partitionNames, Map<String, String> properties,
+    public AnalyzeStmt(TableName tbl, List<Expr> columns, PartitionRef partitionNames, Map<String, String> properties,
                        boolean isSample, boolean isAsync, boolean usePredicateColumns,
                        AnalyzeTypeDesc analyzeTypeDesc, NodePosition pos) {
         super(pos);
@@ -116,7 +116,7 @@ public class AnalyzeStmt extends StatementBase {
         this.isExternal = isExternal;
     }
 
-    public PartitionNames getPartitionNames() {
+    public PartitionRef getPartitionNames() {
         return partitionNames;
     }
 

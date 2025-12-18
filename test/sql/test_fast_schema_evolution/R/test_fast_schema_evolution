@@ -601,6 +601,10 @@ function: wait_alter_table_finish("ROLLUP", 8)
 -- result:
 None
 -- !result
+function: wait_table_state_normal("test_fast_schema_evolution_and_mv", "tab1")
+-- result:
+None
+-- !result
 ALTER TABLE tab1 DROP COLUMN v5;
 -- result:
 E: (1064, 'No key column left. index[mv1]')
@@ -628,6 +632,10 @@ CREATE MATERIALIZED VIEW mv2
 -- result:
 -- !result
 function: wait_alter_table_finish("ROLLUP", 8)
+-- result:
+None
+-- !result
+function: wait_table_state_normal("test_fast_schema_evolution_and_mv", "tab1")
 -- result:
 None
 -- !result
@@ -796,10 +804,18 @@ function: wait_alter_table_finish("ROLLUP", 8)
 -- result:
 None
 -- !result
+function: wait_table_state_normal("test_alter_with_rollup", "tab1")
+-- result:
+None
+-- !result
 alter table tab1 add column v6 bigint default "1";
 -- result:
 -- !result
 function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+function: wait_table_state_normal("test_alter_with_rollup", "tab1")
 -- result:
 None
 -- !result
@@ -816,6 +832,10 @@ alter table tab1 drop column v2;
 -- result:
 -- !result
 function: wait_alter_table_finish("ROLLUP", 8)
+-- result:
+None
+-- !result
+function: wait_table_state_normal("test_alter_with_rollup", "tab1")
 -- result:
 None
 -- !result

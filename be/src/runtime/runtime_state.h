@@ -577,6 +577,10 @@ public:
         return _query_options.__isset.lower_upper_support_utf8 && _query_options.lower_upper_support_utf8;
     }
 
+    bool enable_global_late_materialization() const {
+        return _query_options.__isset.enable_global_late_materialization &&
+               _query_options.enable_global_late_materialization;
+    }
     DebugActionMgr& debug_action_mgr() { return _debug_action_mgr; }
 
     bool fragment_prepared() const { return _fragment_prepared; }

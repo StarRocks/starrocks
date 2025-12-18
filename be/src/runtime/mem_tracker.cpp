@@ -54,6 +54,7 @@ static std::vector<std::pair<MemTrackerType, std::string>> s_mem_types = {
         {MemTrackerType::SCHEMA_CHANGE, "schema_change"},
         {MemTrackerType::JEMALLOC, "jemalloc_metadata"},
         {MemTrackerType::PASSTHROUGH, "passthrough"},
+        {MemTrackerType::BRPC_IOBUF, "brpc_iobuf"},
         {MemTrackerType::CONNECTOR_SCAN, "connector_scan"},
         {MemTrackerType::METADATA, "metadata"},
         {MemTrackerType::TABLET_METADATA, "tablet_metadata"},

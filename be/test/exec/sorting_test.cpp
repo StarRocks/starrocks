@@ -42,7 +42,8 @@
 
 namespace starrocks {
 
-static ColumnPtr build_sorted_column(const TypeDescriptor& type_desc, int32_t start, int32_t count, int32_t step) {
+static MutableColumnPtr build_sorted_column(const TypeDescriptor& type_desc, int32_t start, int32_t count,
+                                            int32_t step) {
     DCHECK_EQ(TYPE_INT, type_desc.type);
 
     MutableColumnPtr column = ColumnHelper::create_column(type_desc, false);
@@ -52,9 +53,9 @@ static ColumnPtr build_sorted_column(const TypeDescriptor& type_desc, int32_t st
     return column;
 }
 
-static Columns build_random_sorted_columns(const TypeDescriptor& type_desc, int32_t segment_num,
-                                           const std::vector<std::pair<size_t, size_t>>& paddings, int32_t start,
-                                           int32_t total_row_count, int32_t max_step) {
+static MutableColumns build_random_sorted_columns(const TypeDescriptor& type_desc, int32_t segment_num,
+                                                  const std::vector<std::pair<size_t, size_t>>& paddings, int32_t start,
+                                                  int32_t total_row_count, int32_t max_step) {
     DCHECK_EQ(TYPE_INT, type_desc.type);
     static std::default_random_engine e(0);
     std::uniform_int_distribution<int32_t> u32(0, max_step);
@@ -62,7 +63,7 @@ static Columns build_random_sorted_columns(const TypeDescriptor& type_desc, int3
     const int32_t avg_row_count = total_row_count / segment_num;
     int32_t val = start;
     int32_t cnt = 0;
-    Columns columns;
+    MutableColumns columns;
     for (int seg_idx = 0; seg_idx < segment_num; seg_idx++) {
         MutableColumnPtr column = ColumnHelper::create_column(type_desc, false);
         int32_t row_count;
@@ -76,7 +77,7 @@ static Columns build_random_sorted_columns(const TypeDescriptor& type_desc, int3
             column->append_datum(Datum(val));
             val += u32(e);
         }
-        columns.emplace_back(std::move(column));
+        columns.push_back(std::move(column));
 
         cnt += row_count;
     }
@@ -123,7 +124,7 @@ TEST_P(MergeTestFixture, merge_sorter_chunks_two_way) {
     }
 
     for (int i = 0; i < total_columns; i++) {
-        ColumnPtr col = ColumnHelper::create_column(type_desc, false);
+        MutableColumnPtr col = ColumnHelper::create_column(type_desc, false);
         auto& data = sorting_data[i];
         for (int j : data) {
             col->append_datum(Datum(j));
@@ -131,14 +132,14 @@ TEST_P(MergeTestFixture, merge_sorter_chunks_two_way) {
         if (i < total_columns / 2) {
             left_rows = data.size();
             map[i] = i;
-            left_columns.push_back(col);
+            left_columns.emplace_back(std::move(col));
         } else {
             right_rows = data.size();
-            right_columns.push_back(col);
+            right_columns.emplace_back(std::move(col));
         }
     }
-    auto left_chunk = std::make_unique<Chunk>(left_columns, map);
-    auto right_chunk = std::make_unique<Chunk>(right_columns, map);
+    auto left_chunk = std::make_unique<Chunk>(std::move(left_columns), map);
+    auto right_chunk = std::make_unique<Chunk>(std::move(right_columns), map);
     Permutation perm;
     SortDescs sort_desc(std::vector<int>(num_columns, 1), std::vector<int>(num_columns, -1));
 
@@ -147,8 +148,8 @@ TEST_P(MergeTestFixture, merge_sorter_chunks_two_way) {
     DeferOp defer([&]() { clear_exprs(sort_exprs); });
     for (int slot_index : sort_slots) {
         auto expr = std::make_unique<ColumnRef>(type_desc, slot_index);
-        exprs.push_back(std::move(expr));
-        sort_exprs.push_back(new ExprContext(exprs.back().get()));
+        exprs.emplace_back(std::move(expr));
+        sort_exprs.emplace_back(new ExprContext(exprs.back().get()));
     }
 
     ASSERT_OK(Expr::prepare(sort_exprs, runtime_state.get()));
@@ -168,8 +169,8 @@ TEST_P(MergeTestFixture, merge_sorter_chunks_two_way) {
     for (int i = 0; i < output->num_rows(); i++) {
         std::vector<int> row;
         for (int slot_index : sort_slots) {
-            Column* output_col = output->get_column_by_index(slot_index).get();
-            row.push_back(output_col->get(i).get_int32());
+            const Column* output_col = output->get_column_by_index(slot_index).get();
+            row.emplace_back(output_col->get(i).get_int32());
         }
         output_data.emplace_back(row);
     }
@@ -225,12 +226,12 @@ INSTANTIATE_TEST_SUITE_P(
                         ));
 
 TEST(SortingTest, materialize_by_permutation_binary) {
-    BinaryColumn::Ptr input1 = BinaryColumn::create();
-    BinaryColumn::Ptr input2 = BinaryColumn::create();
-    input1->append_string("star");
-    input2->append_string("rock");
+    auto input1 = BinaryColumn::create();
+    auto input2 = BinaryColumn::create();
+    down_cast<BinaryColumn*>(input1.get())->append_string("star");
+    down_cast<BinaryColumn*>(input2.get())->append_string("rock");
 
-    ColumnPtr merged = BinaryColumn::create();
+    auto merged = BinaryColumn::create();
     Permutation perm{{0, 0}, {1, 0}};
     materialize_column_by_permutation(merged.get(), {input1, input2}, perm);
     ASSERT_EQ(2, merged->size());
@@ -239,13 +240,13 @@ TEST(SortingTest, materialize_by_permutation_binary) {
 }
 
 TEST(SortingTest, materialize_by_permutation_int) {
-    Int32Column::Ptr input1 = Int32Column::create();
-    Int32Column::Ptr input2 = Int32Column::create();
+    auto input1 = Int32Column::create();
+    auto input2 = Int32Column::create();
     input1->append(1024);
     input2->append(2048);
 
     {
-        ColumnPtr merged = Int32Column::create();
+        auto merged = Int32Column::create();
         Permutation perm{{0, 0}, {1, 0}};
         materialize_column_by_permutation(merged.get(), {input1, input2}, perm);
         ASSERT_EQ(2, merged->size());
@@ -254,7 +255,7 @@ TEST(SortingTest, materialize_by_permutation_int) {
     }
     // Empty permutation
     {
-        ColumnPtr merged = Int32Column::create();
+        auto merged = Int32Column::create();
         Permutation perm{};
         materialize_column_by_permutation(merged.get(), {input1, input2}, perm);
         ASSERT_EQ(0, merged->size());
@@ -263,15 +264,15 @@ TEST(SortingTest, materialize_by_permutation_int) {
 
 TEST(SortingTest, materialize_by_permutation_decimalv3) {
     using ColumnType = DecimalV3Column<int32_t>;
-    ColumnType::Ptr input1 = ColumnType::create();
-    ColumnType::Ptr input2 = ColumnType::create();
+    auto input1 = ColumnType::create();
+    auto input2 = ColumnType::create();
     input1->append(1024);
     input1->append(1337);
     input2->append(2048);
     input2->append(2456);
 
     {
-        ColumnPtr merged = input1->clone_empty();
+        auto merged = input1->clone_empty();
         Permutation perm{{0, 1}, {1, 1}, {1, 0}, {0, 0}};
         materialize_column_by_permutation(merged.get(), {input1, input2}, perm);
         ASSERT_EQ(4, merged->size());
@@ -282,7 +283,7 @@ TEST(SortingTest, materialize_by_permutation_decimalv3) {
     }
     // Empty permutation
     {
-        ColumnPtr merged = input1->clone_empty();
+        auto merged = input1->clone_empty();
         Permutation perm{};
         materialize_column_by_permutation(merged.get(), {input1, input2}, perm);
         ASSERT_EQ(0, merged->size());
@@ -303,7 +304,7 @@ TEST(SortingTest, materialize_by_permutation_array) {
     offsets_col->append_numbers(offsets.data(), sizeof(uint32_t) * offsets.size());
     auto array_data_col = ArrayColumn::create(std::move(int_col), std::move(offsets_col));
 
-    ColumnPtr materialized = array_data_col->clone_empty();
+    auto materialized = array_data_col->clone_empty();
     SmallPermutation perm{{0}, {2}, {4}, {1}, {3}, {5}};
     materialize_column_by_permutation_single(materialized.get(), array_data_col, perm);
 
@@ -329,9 +330,9 @@ TEST(SortingTest, materialize_by_permutation_array) {
 
 TEST(SortingTest, materialize_by_permutation_struct) {
     std::vector<std::string> field_name{"id", "name"};
-    NullableColumn::Ptr id = NullableColumn::create(UInt64Column::create(), NullColumn::create());
-    NullableColumn::Ptr name = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
-    StructColumn::Ptr column = StructColumn::create(Columns{id, name}, field_name);
+    auto id = NullableColumn::create(UInt64Column::create(), NullColumn::create());
+    auto name = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
+    auto column = StructColumn::create(ColumnHelper::to_mutable_columns({std::move(id), std::move(name)}), field_name);
 
     ASSERT_TRUE(column->is_struct());
     ASSERT_FALSE(column->is_nullable());
@@ -340,11 +341,11 @@ TEST(SortingTest, materialize_by_permutation_struct) {
     DatumStruct struct1{uint64_t(1), Slice("smith")};
     DatumStruct struct2{uint64_t(2), Slice("cruise")};
     DatumStruct struct3{uint64_t(3), Slice("hello")};
-    column->append_datum(struct1);
-    column->append_datum(struct2);
-    column->append_datum(struct3);
+    column->as_mutable_ptr()->append_datum(struct1);
+    column->as_mutable_ptr()->append_datum(struct2);
+    column->as_mutable_ptr()->append_datum(struct3);
 
-    ColumnPtr materialized = column->clone_empty();
+    auto materialized = column->clone_empty();
     SmallPermutation perm{{2}, {0}, {1}};
     materialize_column_by_permutation_single(materialized.get(), column, perm);
     ASSERT_EQ(3, materialized->size());
@@ -362,11 +363,11 @@ TEST(SortingTest, materialize_by_permutation_json) {
     };
     // clang-format on
 
-    ColumnPtr json_column = JsonColumn::create();
+    auto json_column = JsonColumn::create();
     for (auto& json : jsons) {
         json_column->append_datum(&json);
     }
-    ColumnPtr materialized = json_column->clone_empty();
+    auto materialized = json_column->clone_empty();
     SmallPermutation perm{{1}, {2}, {0}};
     materialize_column_by_permutation_single(materialized.get(), json_column, perm);
     ASSERT_EQ(3, materialized->size());
@@ -379,7 +380,7 @@ TEST(SortingTest, steal_chunk) {
     ColumnPtr col1 = build_sorted_column(TypeDescriptor(TYPE_INT), 0, 100, 1);
     ColumnPtr col2 = build_sorted_column(TypeDescriptor(TYPE_INT), 0, 100, 1);
     Chunk::SlotHashMap slot_map{{0, 0}, {1, 1}};
-    ChunkPtr chunk = std::make_shared<Chunk>(Columns{col1, col2}, slot_map);
+    ChunkPtr chunk = std::make_shared<Chunk>(Columns{std::move(col1), std::move(col2)}, slot_map);
 
     for (size_t chunk_size : std::vector<size_t>{1, 3, 4, 5, 7, 33, 101, 205}) {
         SortedRun run(chunk, chunk->columns());
@@ -399,7 +400,7 @@ TEST(SortingTest, sorted_runs) {
     ColumnPtr col1 = build_sorted_column(TypeDescriptor(TYPE_INT), 0, 100, 1);
     ColumnPtr col2 = build_sorted_column(TypeDescriptor(TYPE_INT), 0, 100, 1);
     Chunk::SlotHashMap slot_map{{0, 0}, {1, 1}};
-    ChunkPtr chunk = std::make_shared<Chunk>(Columns{col1, col2}, slot_map);
+    ChunkPtr chunk = std::make_shared<Chunk>(Columns{std::move(col1), std::move(col2)}, slot_map);
 
     SortedRuns runs;
     runs.chunks.emplace_back(chunk, chunk->columns());
@@ -429,18 +430,18 @@ TEST(SortingTest, merge_sorted_chunks) {
                                                 {-2118, -2065, -1328, -1103, -1099, -1093},
                                                 {-950, -807, -604}};
     for (auto& input_numbers : input_runs) {
-        ColumnPtr column = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), false);
+        MutableColumnPtr column = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), false);
         for (int x : input_numbers) {
             column->append_datum(Datum((int32_t)x));
         }
-        auto chunk = std::make_unique<Chunk>(Columns{column}, slot_map);
+        auto chunk = std::make_unique<Chunk>(Columns{std::move(column)}, slot_map);
         input_chunks.emplace_back(std::move(chunk));
     }
 
     std::vector<std::unique_ptr<ColumnRef>> exprs;
     std::vector<ExprContext*> sort_exprs;
-    exprs.push_back(std::make_unique<ColumnRef>(TypeDescriptor(TYPE_INT), 0));
-    sort_exprs.push_back(new ExprContext(exprs.back().get()));
+    exprs.emplace_back(std::make_unique<ColumnRef>(TypeDescriptor(TYPE_INT), 0));
+    sort_exprs.emplace_back(new ExprContext(exprs.back().get()));
     ASSERT_OK(Expr::prepare(sort_exprs, runtime_state.get()));
     ASSERT_OK(Expr::open(sort_exprs, runtime_state.get()));
 
@@ -466,7 +467,7 @@ TEST(SortingTest, merge_sorted_stream) {
     for (int i = 0; i < num_columns; i++) {
         auto expr = std::make_unique<ColumnRef>(type_desc, i);
         exprs.emplace_back(std::move(expr));
-        sort_exprs.push_back(new ExprContext(exprs.back().get()));
+        sort_exprs.emplace_back(new ExprContext(exprs.back().get()));
         map[i] = i;
     }
     ASSERT_OK(Expr::prepare(sort_exprs, runtime_state.get()));
@@ -486,9 +487,9 @@ TEST(SortingTest, merge_sorted_stream) {
                 Columns columns;
                 for (int col_idx = 0; col_idx < num_columns; col_idx++) {
                     auto column = build_sorted_column(type_desc, col_idx * 10 * chunk_probe_index[run], 10, col_idx);
-                    columns.emplace_back(std::move(column));
+                    columns.push_back(std::move(column));
                 }
-                *output = std::make_unique<Chunk>(columns, map);
+                *output = std::make_unique<Chunk>(std::move(columns), map);
             }
             return true;
         };
@@ -497,12 +498,12 @@ TEST(SortingTest, merge_sorted_stream) {
 
     std::vector<std::unique_ptr<SimpleChunkSortCursor>> input_cursors;
     for (int run = 0; run < num_runs; run++) {
-        input_cursors.push_back(std::make_unique<SimpleChunkSortCursor>(chunk_providers[run], &sort_exprs));
+        input_cursors.emplace_back(std::make_unique<SimpleChunkSortCursor>(chunk_providers[run], &sort_exprs));
     }
 
     std::vector<ChunkUniquePtr> output_chunks;
     ASSERT_OK(merge_sorted_cursor_cascade(sort_desc, std::move(input_cursors), [&](ChunkUniquePtr chunk) {
-        output_chunks.push_back(std::move(chunk));
+        output_chunks.emplace_back(std::move(chunk));
         return Status::OK();
     }));
 
@@ -533,7 +534,7 @@ static void test_merge_path(const size_t num_cols, const size_t left_start, cons
     for (int i = 0; i < num_cols; i++) {
         auto expr = std::make_unique<ColumnRef>(type_desc, i);
         exprs.emplace_back(std::move(expr));
-        sort_exprs.push_back(new ExprContext(exprs.back().get()));
+        sort_exprs.emplace_back(new ExprContext(exprs.back().get()));
         map[i] = i;
     }
     ASSERT_OK(Expr::prepare(sort_exprs, runtime_state.get()));
@@ -548,7 +549,7 @@ static void test_merge_path(const size_t num_cols, const size_t left_start, cons
     if (left_segment_num > left_num_rows) {
         left_segment_num = 1;
     }
-    std::vector<Columns> left_segment_columns(left_segment_num);
+    std::vector<MutableColumns> left_segment_columns(left_segment_num);
     // make SortedRun::range be the subpart of the whole chunk, like:
     // (left_pad, start_index, ...., end_index, right_pad)
     std::vector<std::pair<size_t, size_t>> left_segment_paddings;
@@ -564,13 +565,13 @@ static void test_merge_path(const size_t num_cols, const size_t left_start, cons
     }
     size_t left_cnt = 0;
     for (size_t seg = 0; seg < left_segment_num; seg++) {
-        auto left_chunk = std::make_shared<Chunk>(left_segment_columns[seg], map);
+        auto left_chunk = std::make_shared<Chunk>(ColumnHelper::to_columns(std::move(left_segment_columns[seg])), map);
         size_t start_index = left_segment_paddings[seg].first;
         size_t end_index = left_chunk->num_rows() - left_segment_paddings[seg].second;
         SortedRun left_run(std::move(left_chunk), &sort_exprs);
         left_run.set_range(start_index, end_index);
         left_cnt += left_run.num_rows();
-        left_runs.chunks.push_back(std::move(left_run));
+        left_runs.chunks.emplace_back(std::move(left_run));
     }
     ASSERT_EQ(left_num_rows, left_cnt);
 
@@ -579,7 +580,7 @@ static void test_merge_path(const size_t num_cols, const size_t left_start, cons
     if (right_segment_num > right_num_rows) {
         right_segment_num = 1;
     }
-    std::vector<Columns> right_segment_columns(right_segment_num);
+    std::vector<MutableColumns> right_segment_columns(right_segment_num);
     // make SortedRun::range be the subpart of the whole chunk, like:
     // (left_pad, start_index, ...., end_index, right_pad)
     std::vector<std::pair<size_t, size_t>> right_segment_paddings;
@@ -595,22 +596,23 @@ static void test_merge_path(const size_t num_cols, const size_t left_start, cons
     }
     size_t right_cnt = 0;
     for (size_t seg = 0; seg < right_segment_num; seg++) {
-        auto right_chunk = std::make_shared<Chunk>(right_segment_columns[seg], map);
+        auto right_chunk =
+                std::make_shared<Chunk>(ColumnHelper::to_columns(std::move(right_segment_columns[seg])), map);
         size_t start_index = right_segment_paddings[seg].first;
         size_t end_index = right_chunk->num_rows() - right_segment_paddings[seg].second;
         SortedRun right_run(std::move(right_chunk), &sort_exprs);
         right_run.set_range(start_index, end_index);
         right_cnt += right_run.num_rows();
-        right_runs.chunks.push_back(std::move(right_run));
+        right_runs.chunks.emplace_back(std::move(right_run));
     }
     ASSERT_EQ(right_num_rows, right_cnt);
 
-    Columns dest_columns;
+    MutableColumns dest_columns;
     for (size_t col = 0; col < num_cols; col++) {
         auto column = ColumnHelper::create_column(type_desc, false);
-        dest_columns.push_back(std::move(column));
+        dest_columns.emplace_back(std::move(column));
     }
-    auto primitive_dest_chunk = std::make_shared<Chunk>(dest_columns, map);
+    auto primitive_dest_chunk = std::make_shared<Chunk>(ColumnHelper::to_columns(std::move(dest_columns)), map);
 
     ASSERT_LE(left_start, left_num_rows);
     ASSERT_LE(right_start, right_num_rows);
@@ -626,8 +628,8 @@ static void test_merge_path(const size_t num_cols, const size_t left_start, cons
         std::vector<int32_t> orderby_indexes;
         for (size_t col = 0; col < num_cols; col++) {
             auto column = ColumnHelper::create_column(type_desc, false);
-            dest_orderby.push_back(std::move(column));
-            orderby_indexes.push_back(-1);
+            dest_orderby.emplace_back(std::move(column));
+            orderby_indexes.emplace_back(-1);
         }
         SortedRun dest_run(std::move(dest_chunk), std::move(dest_orderby));
         dests.emplace_back(std::move(dest_run), std::move(orderby_indexes), dest_num_rows);
@@ -648,7 +650,7 @@ static void test_merge_path(const size_t num_cols, const size_t left_start, cons
     for (size_t processor_idx = 1; processor_idx < processor_num; processor_idx++) {
         gathered_dest_chunk->append(*dests[processor_idx].run.chunk);
         for (int col = 0; col < num_cols; col++) {
-            gathered_dest_orderby[col]->append(*dests[processor_idx].run.orderby[col]);
+            gathered_dest_orderby[col]->as_mutable_raw_ptr()->append(*dests[processor_idx].run.orderby[col]);
         }
     }
 
@@ -667,7 +669,7 @@ static void test_merge_path(const size_t num_cols, const size_t left_start, cons
             }
         }
         for (size_t col = 0; col < num_cols; col++) {
-            auto column = gathered_dest_orderby[col];
+            auto& column = gathered_dest_orderby[col];
             auto cmp = column->compare_at(row - 1, row, *column, sort_descs.get_column_desc(col).null_first);
             ASSERT_TRUE(cmp <= 0);
             if (cmp < 0) {

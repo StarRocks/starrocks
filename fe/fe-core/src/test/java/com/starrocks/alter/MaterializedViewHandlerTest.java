@@ -36,15 +36,15 @@ package com.starrocks.alter;
 
 import com.google.api.client.util.Sets;
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.CreateMaterializedViewStmt;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.MVColumnItem;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.VarcharType;
@@ -116,7 +116,7 @@ public class MaterializedViewHandlerTest {
                 result = baseIndexName;
                 olapTable.getState();
                 result = OlapTable.OlapTableState.NORMAL;
-                olapTable.getIndexIdByName(baseIndexName);
+                olapTable.getIndexMetaIdByName(baseIndexName);
                 result = null;
             }
         };
@@ -146,7 +146,7 @@ public class MaterializedViewHandlerTest {
                 result = baseIndexName;
                 olapTable.getState();
                 result = OlapTable.OlapTableState.NORMAL;
-                olapTable.getIndexIdByName(baseIndexName);
+                olapTable.getIndexMetaIdByName(baseIndexName);
                 result = baseIndexId;
                 olapTable.getPhysicalPartitions();
                 result = Lists.newArrayList(partition);
@@ -335,9 +335,9 @@ public class MaterializedViewHandlerTest {
                 result = "table1";
                 olapTable.hasMaterializedIndex(mvName);
                 result = true;
-                olapTable.getIndexIdByName(mvName);
+                olapTable.getIndexMetaIdByName(mvName);
                 result = 1L;
-                olapTable.getSchemaHashByIndexId(1L);
+                olapTable.getSchemaHashByIndexMetaId(1L);
                 result = 1;
 
                 olapTable.getPhysicalPartitions();

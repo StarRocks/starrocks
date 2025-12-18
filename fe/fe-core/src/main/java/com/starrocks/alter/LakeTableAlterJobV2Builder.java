@@ -65,7 +65,7 @@ public class LakeTableAlterJobV2Builder extends AlterJobV2Builder {
         for (Map.Entry<Long, List<Column>> entry : newIndexSchema.entrySet()) {
             long originIndexId = entry.getKey();
             // 1. get new schema version/schema version hash, short key column count
-            String newIndexName = SchemaChangeHandler.SHADOW_NAME_PREFIX + table.getIndexNameById(originIndexId);
+            String newIndexName = SchemaChangeHandler.SHADOW_NAME_PREFIX + table.getIndexNameByMetaId(originIndexId);
             short newShortKeyColumnCount = newIndexShortKeyCount.get(originIndexId);
             long shadowIndexId = globalStateMgr.getNextId();
 
@@ -85,7 +85,7 @@ public class LakeTableAlterJobV2Builder extends AlterJobV2Builder {
                 properties.put(LakeTablet.PROPERTY_KEY_PARTITION_ID, Long.toString(physicalPartitionId));
                 properties.put(LakeTablet.PROPERTY_KEY_INDEX_ID, Long.toString(shadowIndexId));
                 List<Long> shadowTabletIds = createShards(originTablets.size(),
-                        table.getPartitionFilePathInfo(physicalPartition.getPathId()),
+                        table.getPartitionFilePathInfo(physicalPartitionId),
                         table.getPartitionFileCacheInfo(physicalPartitionId), shardGroupId,
                         originTabletIds, properties, computeResource);
                 Preconditions.checkState(originTablets.size() == shadowTabletIds.size());

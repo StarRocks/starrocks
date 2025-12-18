@@ -65,6 +65,7 @@ import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
 import java.util.stream.Collectors;
 
+import static com.starrocks.common.util.Util.normalizeName;
 import static com.starrocks.connector.PartitionUtil.createPartitionKey;
 import static com.starrocks.connector.PartitionUtil.toPartitionValues;
 
@@ -237,7 +238,7 @@ public class AnalyzeStmtAnalyzer {
                     String catalogName = Strings.isNullOrEmpty(tbl.getCatalog()) ?
                             session.getCurrentCatalog() : tbl.getCatalog();
                     tbl.setCatalog(catalogName);
-                    statement.setCatalogName(catalogName);
+                    statement.setCatalogName(normalizeName(catalogName));
                     String dbName = Strings.isNullOrEmpty(tbl.getDb()) ?
                             session.getDatabase() : tbl.getDb();
                     tbl.setDb(dbName);

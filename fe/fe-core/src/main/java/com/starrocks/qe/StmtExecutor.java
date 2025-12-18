@@ -34,7 +34,6 @@
 
 package com.starrocks.qe;
 
-import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
@@ -196,9 +195,11 @@ import com.starrocks.sql.ast.UseCatalogStmt;
 import com.starrocks.sql.ast.UseDbStmt;
 import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.Parameter;
 import com.starrocks.sql.ast.expression.SetVarHint;
 import com.starrocks.sql.ast.expression.StringLiteral;
+import com.starrocks.sql.ast.expression.UserVariableExpr;
 import com.starrocks.sql.ast.expression.UserVariableHint;
 import com.starrocks.sql.ast.feedback.PlanAdvisorStmt;
 import com.starrocks.sql.ast.translate.TranslateStmt;
@@ -286,7 +287,7 @@ import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
 import java.util.stream.Collectors;
 
-import static com.starrocks.common.ErrorCode.ERR_NO_PARTITIONS_HAVE_DATA_LOAD;
+import static com.starrocks.common.ErrorCode.ERR_NO_ROWS_IMPORTED;
 import static com.starrocks.sql.parser.ErrorMsgProxy.PARSER_ERROR_MSG;
 import static com.starrocks.statistic.AnalyzeMgr.IS_MULTI_COLUMN_STATS;
 
@@ -546,6 +547,12 @@ public class StmtExecutor {
         return null;
     }
 
+    /**
+     * The execution timeout varies among different statements:
+     * 1. SELECT: use query_timeout
+     * 2. DML: use insert_timeout or statement-specified timeout
+     * 3. ANALYZE: use fe_conf.statistic_collect_query_timeout
+     */
     public int getExecTimeout() {
         if (parsedStmt instanceof CreateTableAsSelectStmt ctas) {
             Map<String, String> properties = ctas.getInsertStmt().getProperties();
@@ -567,6 +574,8 @@ public class StmtExecutor {
                 }
             }
             return ConnectContext.get().getSessionVariable().getInsertTimeoutS();
+        } else if (parsedStmt instanceof AnalyzeStmt) {
+            return (int) Config.statistic_collect_query_timeout;
         } else {
             return ConnectContext.get().getSessionVariable().getQueryTimeoutS();
         }
@@ -684,8 +693,8 @@ public class StmtExecutor {
         }
 
         final boolean shouldMarkIdleCheck = shouldMarkIdleCheck(parsedStmt);
-        final long originWarehouseId = context.getCurrentWarehouseId();
-        if (shouldMarkIdleCheck) {
+        final Long originWarehouseId = context.getCurrentWarehouseIdAllowNull();
+        if (shouldMarkIdleCheck && originWarehouseId != null) {
             WarehouseIdleChecker.increaseRunningSQL(originWarehouseId);
         }
 
@@ -974,7 +983,7 @@ public class StmtExecutor {
             // restore session variable in connect context
             context.setSessionVariable(sessionVariableBackup);
 
-            if (shouldMarkIdleCheck) {
+            if (shouldMarkIdleCheck && originWarehouseId != null) {
                 WarehouseIdleChecker.decreaseRunningSQL(originWarehouseId);
             }
 
@@ -1020,19 +1029,46 @@ public class StmtExecutor {
         }
     }
 
+    public void processQueryScopeSetVarHint() throws DdlException {
+        if (!parsedStmt.isExistQueryScopeHint()) {
+            return;
+        }
+
+        SessionVariable clonedSessionVariable = null;
+        for (HintNode hint : parsedStmt.getAllQueryScopeHints()) {
+            if (!(hint instanceof SetVarHint)) {
+                continue;
+            }
+
+            if (clonedSessionVariable == null) {
+                clonedSessionVariable = (SessionVariable) context.sessionVariable.clone();
+            }
+            for (Map.Entry<String, String> entry : hint.getValue().entrySet()) {
+                GlobalStateMgr.getCurrentState().getVariableMgr().setSystemVariable(clonedSessionVariable,
+                        new SystemVariable(entry.getKey(), new StringLiteral(entry.getValue())), true, context);
+            }
+        }
+
+        if (clonedSessionVariable == null) {
+            return;
+        }
+
+        context.setSessionVariable(clonedSessionVariable);
+    }
+
     // support select hint e.g. select /*+ SET_VAR(query_timeout=1) */ sleep(3);
-    @VisibleForTesting
     public void processQueryScopeHint() throws DdlException {
         SessionVariable clonedSessionVariable = null;
         UUID queryId = context.getQueryId();
         final TUniqueId executionId = context.getExecutionId();
-        Map<String, UserVariable> clonedUserVars = new ConcurrentHashMap<>();
-        clonedUserVars.putAll(context.getUserVariables());
+
+        Map<String, UserVariable> clonedUserVars = new ConcurrentHashMap<>(context.getUserVariables());
         boolean hasUserVariableHint = parsedStmt.getAllQueryScopeHints()
                 .stream().anyMatch(hint -> hint instanceof UserVariableHint);
         if (hasUserVariableHint) {
             context.modifyUserVariablesCopyInWrite(clonedUserVars);
         }
+
         boolean executeSuccess = true;
         try {
             for (HintNode hint : parsedStmt.getAllQueryScopeHints()) {
@@ -1042,7 +1078,7 @@ public class StmtExecutor {
                     }
                     for (Map.Entry<String, String> entry : hint.getValue().entrySet()) {
                         GlobalStateMgr.getCurrentState().getVariableMgr().setSystemVariable(clonedSessionVariable,
-                                new SystemVariable(entry.getKey(), new StringLiteral(entry.getValue())), true);
+                                new SystemVariable(entry.getKey(), new StringLiteral(entry.getValue())), true, context);
                     }
                 }
 
@@ -1869,7 +1905,23 @@ public class StmtExecutor {
         if (killAnalyzeStmt.isKillAllPendingTasks()) {
             analyzeManager.killAllPendingTasks();
         } else {
-            long analyzeId = killAnalyzeStmt.getAnalyzeId();
+            long analyzeId;
+            if (killAnalyzeStmt.hasUserVariable()) {
+                UserVariableExpr userVariableExpr = killAnalyzeStmt.getUserVariableExpr();
+                // Analyze the user variable expression to get its value
+                com.starrocks.sql.analyzer.ExpressionAnalyzer.analyzeExpressionIgnoreSlot(userVariableExpr, context);
+                Expr value = userVariableExpr.getValue();
+                if (value instanceof com.starrocks.sql.ast.expression.NullLiteral) {
+                    throw new SemanticException("User variable '%s' is not set", userVariableExpr.getName());
+                }
+                if (!(value instanceof IntLiteral)) {
+                    throw new SemanticException("User variable '%s' must be an integer, but got %s",
+                            userVariableExpr.getName(), value.getType().toSql());
+                }
+                analyzeId = ((IntLiteral) value).getLongValue();
+            } else {
+                analyzeId = killAnalyzeStmt.getAnalyzeId();
+            }
             checkPrivilegeForKillAnalyzeStmt(context, analyzeId);
             // Try to kill the job anyway.
             analyzeManager.killConnection(analyzeId);
@@ -2180,7 +2232,7 @@ public class StmtExecutor {
 
         ShowResultSetMetaData metaData =
                 ShowResultSetMetaData.builder()
-                        .addColumn(new Column("Explain String", TypeFactory.createVarchar(20)))
+                        .addColumn(new Column("Explain String", TypeFactory.createVarcharType(20)))
                         .build();
         sendMetaData(metaData);
 
@@ -2806,8 +2858,7 @@ public class StmtExecutor {
                             targetTable.isHiveTable() || targetTable.isTableFunctionTable() ||
                             targetTable.isBlackHoleTable())) {
                         // schema table and iceberg table does not need txn
-                        mgr.abortTransaction(database.getId(), transactionId,
-                                ERR_NO_PARTITIONS_HAVE_DATA_LOAD.formatErrorMsg(),
+                        mgr.abortTransaction(database.getId(), transactionId, ERR_NO_ROWS_IMPORTED.formatErrorMsg(),
                                 Coordinator.getCommitInfos(coord), Coordinator.getFailInfos(coord), null);
                     }
                     context.getState().setOk();
@@ -3174,38 +3225,50 @@ public class StmtExecutor {
         if (!Config.enable_collect_query_detail_info) {
             return;
         }
-        String sql = parsedStmt.getOrigStmt().originStmt;
-        boolean needEncrypt = AuditEncryptionChecker.needEncrypt(parsedStmt);
-        if (needEncrypt || Config.enable_sql_desensitize_in_log) {
-            sql = AstToSQLBuilder.toSQL(parsedStmt, FormatOptions.allEnable()
-                            .setColumnSimplifyTableName(false)
-                            .setHideCredential(needEncrypt)
-                            .setEnableDigest(Config.enable_sql_desensitize_in_log))
-                    .orElse("this is a desensitized sql");
+
+        SessionVariable sessionVariableBackup = context.getSessionVariable();
+        try {
+            processQueryScopeSetVarHint();
+        } catch (DdlException e) {
+            LOG.warn("Failed to process query scope set variable.", e);
         }
 
-        boolean isQuery = context.isQueryStmt(parsedStmt);
+        try {
+            String sql = parsedStmt.getOrigStmt().originStmt;
+            boolean needEncrypt = AuditEncryptionChecker.needEncrypt(parsedStmt);
+            if (needEncrypt || Config.enable_sql_desensitize_in_log) {
+                sql = AstToSQLBuilder.toSQL(parsedStmt, FormatOptions.allEnable()
+                                .setColumnSimplifyTableName(false)
+                                .setHideCredential(needEncrypt)
+                                .setEnableDigest(Config.enable_sql_desensitize_in_log))
+                        .orElse("this is a desensitized sql");
+            }
 
-        QueryDetail queryDetail = new QueryDetail(
-                DebugUtil.printId(context.getQueryId()),
-                isQuery,
-                context.connectionId,
-                context.getMysqlChannel() != null ? context.getMysqlChannel().getRemoteIp() : "System",
-                context.getStartTime(), -1, -1,
-                QueryDetail.QueryMemState.RUNNING,
-                context.getDatabase(),
-                sql,
-                context.getQualifiedUser(),
-                Optional.ofNullable(context.getResourceGroup()).map(TWorkGroup::getName).orElse(""),
-                context.getCurrentWarehouseName(),
-                context.getCurrentCatalog(),
-                context.getCommandStr(),
-                getPreparedStmtId());
-        // Set query source from context
-        queryDetail.setQuerySource(context.getQuerySource());
-        context.setQueryDetail(queryDetail);
-        // copy queryDetail, cause some properties can be changed in future
-        QueryDetailQueue.addQueryDetail(queryDetail.copy());
+            boolean isQuery = context.isQueryStmt(parsedStmt);
+
+            QueryDetail queryDetail = new QueryDetail(
+                    DebugUtil.printId(context.getQueryId()),
+                    isQuery,
+                    context.connectionId,
+                    context.getMysqlChannel() != null ? context.getMysqlChannel().getRemoteIp() : "System",
+                    context.getStartTime(), -1, -1,
+                    QueryDetail.QueryMemState.RUNNING,
+                    context.getDatabase(),
+                    sql,
+                    context.getQualifiedUser(),
+                    Optional.ofNullable(context.getResourceGroup()).map(TWorkGroup::getName).orElse(""),
+                    context.getCurrentWarehouseName(),
+                    context.getCurrentCatalog(),
+                    context.getCommandStr(),
+                    getPreparedStmtId());
+            // Set query source from context
+            queryDetail.setQuerySource(context.getQuerySource());
+            context.setQueryDetail(queryDetail);
+            // copy queryDetail, cause some properties can be changed in future
+            QueryDetailQueue.addQueryDetail(queryDetail.copy());
+        } finally {
+            context.setSessionVariable(sessionVariableBackup);
+        }
     }
 
     /*

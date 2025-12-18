@@ -152,10 +152,6 @@ public:
 
     int compare_at(size_t left, size_t right, const Column& rhs, int nan_direction_hint) const override;
 
-    void fnv_hash(uint32_t* seed, uint32_t from, uint32_t to) const override;
-
-    void crc32_hash(uint32_t* hash, uint32_t from, uint32_t to) const override;
-
     int64_t xor_checksum(uint32_t from, uint32_t to) const override;
 
     void put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx, bool is_binary_protocol = false) const override;
@@ -236,9 +232,9 @@ public:
         return Status::OK();
     }
 
-    StatusOr<ColumnPtr> upgrade_if_overflow() override;
+    StatusOr<MutableColumnPtr> upgrade_if_overflow() override;
 
-    StatusOr<ColumnPtr> downgrade() override { return nullptr; }
+    StatusOr<MutableColumnPtr> downgrade() override { return nullptr; }
 
     bool has_large_column() const override { return false; }
 

@@ -103,7 +103,7 @@ public class DefaultExpr {
                 argumentTypes = exprs.stream().map(Expr::getType).toArray(Type[]::new);
             }
             FunctionCallExpr functionCallExpr =
-                    new FunctionCallExpr(new FunctionName(functionName), new FunctionParams(false, exprs));
+                    new FunctionCallExpr(functionName, new FunctionParams(false, exprs));
             Function fn = ExprUtils.getBuiltinFunction(functionName, argumentTypes, Function.CompareMode.IS_IDENTICAL);
             functionCallExpr.setFn(fn);
             functionCallExpr.setType(fn.getReturnType());

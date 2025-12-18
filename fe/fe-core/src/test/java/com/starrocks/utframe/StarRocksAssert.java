@@ -88,6 +88,7 @@ import com.starrocks.schema.MSchema;
 import com.starrocks.schema.MTable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Analyzer;
+import com.starrocks.sql.analyzer.FunctionRefAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.analyzer.TypeDefAnalyzer;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
@@ -114,6 +115,7 @@ import com.starrocks.sql.ast.DropMaterializedViewStmt;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.DropTemporaryTableStmt;
 import com.starrocks.sql.ast.FunctionArgsDef;
+import com.starrocks.sql.ast.FunctionRef;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.ModifyTablePropertiesClause;
@@ -148,6 +150,8 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+
+import static com.starrocks.server.WarehouseManager.DEFAULT_WAREHOUSE_ID;
 
 public class StarRocksAssert {
     private static final Logger LOG = LogManager.getLogger(StarRocksAssert.class);
@@ -344,13 +348,15 @@ public class StarRocksAssert {
     }
 
     public static void utCreateFunctionMock(CreateFunctionStmt createFunctionStmt, ConnectContext ctx) throws Exception {
-        FunctionName functionName = createFunctionStmt.getFunctionName();
-        functionName.analyze(ctx.getDatabase());
+        FunctionRef functionRef = createFunctionStmt.getFunctionRef();
+        String defaultDb = functionRef.isGlobalFunction() ? FunctionRefAnalyzer.GLOBAL_UDF_DB : ctx.getDatabase();
+        FunctionRefAnalyzer.analyzeFunctionRef(functionRef, defaultDb);
         FunctionArgsDef argsDef = createFunctionStmt.getArgsDef();
         TypeDef returnType = createFunctionStmt.getReturnType();
         // check argument
-        argsDef.analyze();
+        FunctionRefAnalyzer.analyzeArgsDef(argsDef);
         TypeDefAnalyzer.analyze(returnType);
+        FunctionName functionName = FunctionRefAnalyzer.resolveFunctionName(functionRef, defaultDb);
 
         Function function = ScalarFunction.createUdf(
                 functionName, argsDef.getArgTypes(),
@@ -919,7 +925,7 @@ public class StarRocksAssert {
             return;
         }
         OlapTable olapTable = (OlapTable) table;
-        for (MaterializedIndexMeta indexMeta : olapTable.getIndexIdToMeta().values()) {
+        for (MaterializedIndexMeta indexMeta : olapTable.getIndexMetaIdToMeta().values()) {
             Assertions.assertFalse(MVUtils.containComplexExpresses(indexMeta));
         }
     }
@@ -1106,7 +1112,7 @@ public class StarRocksAssert {
 
     public void executeResourceGroupDdlSql(String sql) throws Exception {
         ConnectContext ctx = UtFrameUtils.createDefaultCtx();
-        BackendResourceStat.getInstance().setNumHardwareCoresOfBe(1, 32);
+        BackendResourceStat.getInstance().setNumCoresOfBe(DEFAULT_WAREHOUSE_ID, 1, 32);
         StatementBase statement = com.starrocks.sql.parser.SqlParser.parse(sql, ctx.getSessionVariable()).get(0);
         Analyzer.analyze(statement, ctx);
 
@@ -1118,7 +1124,7 @@ public class StarRocksAssert {
 
     public List<List<String>> executeResourceGroupShowSql(String sql) throws Exception {
         ConnectContext ctx = UtFrameUtils.createDefaultCtx();
-        BackendResourceStat.getInstance().setNumHardwareCoresOfBe(1, 32);
+        BackendResourceStat.getInstance().setNumCoresOfBe(DEFAULT_WAREHOUSE_ID, 1, 32);
 
         StatementBase statement = com.starrocks.sql.parser.SqlParser.parse(sql, ctx.getSessionVariable().getSqlMode()).get(0);
         Analyzer.analyze(statement, ctx);

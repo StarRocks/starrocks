@@ -163,7 +163,7 @@ TEST_F(ExchangeBucketAwareTest, test_exchange_bucket_aware) {
 
     int row_num = 0;
 
-    std::unique_ptr<Chunk> received_chunk = nullptr;
+    ChunkUniquePtr received_chunk = nullptr;
     do {
         std::ignore = _recvr->get_chunk_for_pipeline(&received_chunk, 0);
         if (received_chunk != nullptr) {

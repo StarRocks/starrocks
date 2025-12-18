@@ -20,6 +20,7 @@ import com.starrocks.common.util.ParseUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AlterDatabaseQuotaStmt;
 
+import static com.starrocks.common.util.Util.normalizeName;
 import static com.starrocks.sql.parser.ErrorMsgProxy.PARSER_ERROR_MSG;
 
 public class AlterDbQuotaAnalyzer {
@@ -28,7 +29,10 @@ public class AlterDbQuotaAnalyzer {
             if (Strings.isNullOrEmpty(context.getCurrentCatalog())) {
                 throw new SemanticException(PARSER_ERROR_MSG.noCatalogSelected());
             }
-            statement.setCatalogName(context.getCurrentCatalog());
+
+            String catalog = context.getCurrentCatalog();
+            catalog = normalizeName(catalog);
+            statement.setCatalogName(catalog);
         }
 
         AlterDatabaseQuotaStmt.QuotaType quotaType = statement.getQuotaType();

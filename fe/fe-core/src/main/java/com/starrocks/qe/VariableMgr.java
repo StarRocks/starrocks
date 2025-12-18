@@ -44,7 +44,6 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.PatternMatcher;
-import com.starrocks.persist.EditLog;
 import com.starrocks.persist.GlobalVarPersistInfo;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
@@ -205,27 +204,46 @@ public class VariableMgr {
         return defaultSessionVariable;
     }
 
-    // Set value to a variable
-    private boolean setValue(Object obj, Field field, String value) throws DdlException {
-        VarAttr attr = field.getAnnotation(VarAttr.class);
-
-        String varName = attr.show().isEmpty() ? attr.name() : attr.show();
+    private void setParsedValue(Object obj, Field field, Object parsedVal) throws DdlException {
+        String varName = getVarName(field);
         Method setter = SessionVariable.SETTER_MAP.get(field.getName());
-        Object parsed = parseValue(field.getType(), varName, value);
 
         try {
             if (setter != null) {
-                setter.invoke(obj, parsed);
+                setter.invoke(obj, parsedVal);
             } else {
-                field.set(obj, parsed);
+                field.set(obj, parsedVal);
             }
         } catch (NumberFormatException e) {
             ErrorReport.reportDdlException(ErrorCode.ERR_WRONG_TYPE_FOR_VAR, varName);
         } catch (IllegalAccessException | IllegalArgumentException | InvocationTargetException e) {
-            ErrorReport.reportDdlException(ErrorCode.ERR_WRONG_VALUE_FOR_VAR, varName, value);
+            ErrorReport.reportDdlException(ErrorCode.ERR_WRONG_VALUE_FOR_VAR, varName, parsedVal);
         }
+    }
 
-        return true;
+    // Set value to a variable
+    private void setValue(Object obj, Field field, String value) throws DdlException {
+        Object parsedVal = parseValue(field.getType(), getVarName(field), value);
+        setParsedValue(obj, field, parsedVal);
+    }
+
+    private String getVarName(Field field) {
+        VarAttr attr = field.getAnnotation(VarAttr.class);
+        return attr.show().isEmpty() ? attr.name() : attr.show();
+    }
+
+    private void handleSetWarehouse(ConnectContext connectContext, SessionVariable sessionVariable, Field field, Object value)
+            throws DdlException {
+        final String originalWarehouseName = sessionVariable.getWarehouseName();
+        setParsedValue(sessionVariable, field, value);
+        final String newWarehouseName = sessionVariable.getWarehouseName();
+
+        // after set warehouse, need to reset compute resource
+        if (newWarehouseName != null && newWarehouseName.equalsIgnoreCase(originalWarehouseName)) {
+            connectContext.ensureCurrentComputeResourceAvailable();
+        } else {
+            connectContext.resetComputeResource();
+        }
     }
 
     private Object parseValue(Class<?> type, String varName, String raw) throws DdlException {
@@ -306,8 +324,8 @@ public class VariableMgr {
     // Input:
     //      sessionVariable: the variable of current session
     //      setVar: variable information that needs to be set
-    public void setSystemVariable(SessionVariable sessionVariable, SystemVariable setVar, boolean onlySetSessionVar)
-            throws DdlException {
+    public void setSystemVariable(SessionVariable sessionVariable, SystemVariable setVar, boolean onlySetSessionVar,
+                                  ConnectContext connectContext) throws DdlException {
         if (SessionVariable.DEPRECATED_VARIABLES.stream().anyMatch(c -> c.equalsIgnoreCase(setVar.getVariable()))) {
             return;
         }
@@ -334,23 +352,37 @@ public class VariableMgr {
             }
         }
 
+        Object parsedVal = parseValue(ctx.getField().getType(), getVarName(ctx.getField()), value);
+
         if (!onlySetSessionVar && setVar.getType() == SetType.GLOBAL) {
-            setGlobalVariableAndWriteEditLog(ctx, attr.name(), value);
+            setGlobalVariableAndWriteEditLog(ctx, attr.name(), parsedVal);
         }
 
         // set session variable
-        setValue(sessionVariable, ctx.getField(), value);
+        if (SessionVariable.WAREHOUSE_NAME.equalsIgnoreCase(attr.name()) && connectContext != null) {
+            handleSetWarehouse(connectContext, sessionVariable, ctx.getField(), parsedVal);
+        } else {
+            setParsedValue(sessionVariable, ctx.getField(), parsedVal);
+        }
     }
 
-    private void setGlobalVariableAndWriteEditLog(VarContext ctx, String name, String value) throws DdlException {
+    public void setSystemVariable(SessionVariable sessionVariable, SystemVariable setVar, boolean onlySetSessionVar)
+            throws DdlException {
+        setSystemVariable(sessionVariable, setVar, onlySetSessionVar, null);
+    }
+
+    private void setGlobalVariableAndWriteEditLog(VarContext ctx, String name, Object parsedVal) throws DdlException {
         wLock.lock();
         try {
-            setValue(ctx.getObj(), ctx.getField(), value);
             // write edit log
-            GlobalVarPersistInfo info =
-                    new GlobalVarPersistInfo(defaultSessionVariable, Lists.newArrayList(name));
-            EditLog editLog = GlobalStateMgr.getCurrentState().getEditLog();
-            editLog.logGlobalVariableV2(info);
+            GlobalVarPersistInfo info = new GlobalVarPersistInfo(name, parsedVal);
+            GlobalStateMgr.getCurrentState().getEditLog().logGlobalVariableV2(info, wal -> {
+                try {
+                    setParsedValue(ctx.getObj(), ctx.getField(), parsedVal);
+                } catch (DdlException e) {
+                    LOG.warn("set variable failed, should not happen", e);
+                }
+            });
         } finally {
             wLock.unlock();
         }
@@ -358,8 +390,7 @@ public class VariableMgr {
 
     public void setCaseInsensitive(boolean caseInsensitive) throws DdlException {
         VarContext ctx = getVarContext(GlobalVariable.ENABLE_TABLE_NAME_CASE_INSENSITIVE);
-        setGlobalVariableAndWriteEditLog(ctx, GlobalVariable.ENABLE_TABLE_NAME_CASE_INSENSITIVE,
-                String.valueOf(caseInsensitive));
+        setGlobalVariableAndWriteEditLog(ctx, GlobalVariable.ENABLE_TABLE_NAME_CASE_INSENSITIVE, caseInsensitive);
     }
 
     public void save(ImageWriter imageWriter) throws IOException, SRMetaBlockException {

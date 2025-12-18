@@ -97,13 +97,14 @@ import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.ModifyColumnClause;
 import com.starrocks.sql.ast.MultiItemListPartitionDesc;
 import com.starrocks.sql.ast.PartitionDesc;
-import com.starrocks.sql.ast.PartitionNames;
+import com.starrocks.sql.ast.PartitionRef;
 import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
 import com.starrocks.sql.ast.ReorderColumnsClause;
 import com.starrocks.sql.ast.SingleItemListPartitionDesc;
 import com.starrocks.sql.ast.TruncatePartitionClause;
 import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.ast.expression.DateLiteral;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.type.DateType;
@@ -718,18 +719,6 @@ public class AlterTest {
         }
         Assertions.assertEquals(Short.valueOf("1"), Short.valueOf(tbl4.getPartitionInfo().getReplicationNum(p3.getId())));
 
-        // batch update in_memory property
-        stmt = "alter table test.tbl4 modify partition (p1, p2, p3) set ('in_memory' = 'true')";
-        partitionList = Lists.newArrayList(p1, p2, p3);
-        for (Partition partition : partitionList) {
-            Assertions.assertEquals(false, tbl4.getPartitionInfo().getIsInMemory(partition.getId()));
-        }
-        alterTableWithNewParser(stmt, false);
-        for (Partition partition : partitionList) {
-            Assertions.assertEquals(true, tbl4.getPartitionInfo().getIsInMemory(partition.getId()));
-        }
-        Assertions.assertEquals(false, tbl4.getPartitionInfo().getIsInMemory(p4.getId()));
-
         // batch update storage_medium and storage_cool_down properties
         stmt = "alter table test.tbl4 modify partition (p2, p3, p4) set ('storage_medium' = 'HDD')";
         DateLiteral dateLiteral = new DateLiteral(DateUtils.parseStrictDateTime("9999-12-31 00:00:00"),
@@ -990,8 +979,8 @@ public class AlterTest {
         Assertions.assertEquals(3,
                     replace2.getPartition("replace2").getDefaultPhysicalPartition()
                             .getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE).size());
-        Assertions.assertEquals("replace1", replace1.getIndexNameById(replace1.getBaseIndexId()));
-        Assertions.assertEquals("replace2", replace2.getIndexNameById(replace2.getBaseIndexId()));
+        Assertions.assertEquals("replace1", replace1.getIndexNameByMetaId(replace1.getBaseIndexMetaId()));
+        Assertions.assertEquals("replace2", replace2.getIndexNameByMetaId(replace2.getBaseIndexMetaId()));
     }
 
     @Test
@@ -2240,10 +2229,9 @@ public class AlterTest {
         List<String> values = partitionInfo.getIdToValues().get(partitionId);
         DataProperty dataProperty = partitionInfo.getDataProperty(partitionId);
         short replicationNum = partitionInfo.getReplicationNum(partitionId);
-        boolean isInMemory = partitionInfo.getIsInMemory(partitionId);
         boolean isTempPartition = false;
         ListPartitionPersistInfo partitionPersistInfoOut = new ListPartitionPersistInfo(dbId, tableId, partition,
-                    dataProperty, replicationNum, isInMemory, isTempPartition, values, new ArrayList<>(),
+                    dataProperty, replicationNum, isTempPartition, values, new ArrayList<>(),
                     partitionInfo.getDataCacheInfo(partitionId));
 
         // replay log
@@ -2289,10 +2277,9 @@ public class AlterTest {
         List<List<String>> multiValues = partitionInfo.getIdToMultiValues().get(partitionId);
         DataProperty dataProperty = partitionInfo.getDataProperty(partitionId);
         short replicationNum = partitionInfo.getReplicationNum(partitionId);
-        boolean isInMemory = partitionInfo.getIsInMemory(partitionId);
         boolean isTempPartition = false;
         ListPartitionPersistInfo partitionPersistInfoIn = new ListPartitionPersistInfo(dbId, tableId, partition,
-                    dataProperty, replicationNum, isInMemory, isTempPartition, new ArrayList<>(), multiValues,
+                    dataProperty, replicationNum, isTempPartition, new ArrayList<>(), multiValues,
                     partitionInfo.getDataCacheInfo(partitionId));
 
         List<List<String>> assertMultiValues = partitionPersistInfoIn.asListPartitionPersistInfo().getMultiValues();
@@ -2502,7 +2489,7 @@ public class AlterTest {
                     + "`col2` int(11) not null default \"0\" comment \"\") in `testTable`;";
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(stmt, starRocksAssert.getCtx());
         AddColumnsClause clause = (AddColumnsClause) alterTableStmt.getAlterClauseList().get(0);
-        Assertions.assertEquals(2, clause.getColumns().size());
+        Assertions.assertEquals(2, clause.getColumnDefs().size());
         Assertions.assertEquals(0, clause.getProperties().size());
         Assertions.assertEquals("testTable", clause.getRollupName());
 
@@ -2711,7 +2698,7 @@ public class AlterTest {
                 }
             };
             List<AlterClause> cList = new ArrayList<>();
-            PartitionNames partitionNames = new PartitionNames(true, Arrays.asList("p1"));
+            PartitionRef partitionNames = new PartitionRef(Arrays.asList("p1"), true, NodePosition.ZERO);
             TruncatePartitionClause clause = new TruncatePartitionClause(partitionNames);
             cList.add(clause);
             AlterJobMgr alter = new AlterJobMgr(

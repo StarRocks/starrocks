@@ -438,12 +438,15 @@ drop stats test_array_collection_size;
 drop table test_array_collection_size;
 -- result:
 -- !result
+delete from _statistics_.column_statistics where table_name = 'test_array_stats.test_array_collection_size';
+-- result:
+-- !result
 CREATE TABLE test_array_collection_size(
     k1 int,
     p_date date,
     int_arr array<int>,
     str_arr array<string>
-) 
+)
 DISTRIBUTED BY HASH(k1) BUCKETS 10
 PROPERTIES ("replication_num"="1");
 -- result:

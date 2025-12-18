@@ -89,7 +89,7 @@ public class TrinoParserUtils {
         if (expr.getType().isDate()) {
             return true;
         } else if (expr instanceof FunctionCallExpr) {
-            return DATE_RETURNING_FUNCTIONS.contains(((FunctionCallExpr) expr).getFnName().getFunction().toLowerCase());
+            return DATE_RETURNING_FUNCTIONS.contains(((FunctionCallExpr) expr).getFunctionName().toLowerCase());
         } else if (expr instanceof CastExpr) {
             return ((CastExpr) expr).getTargetTypeDef().getType().isDate();
         } else if (expr instanceof StringLiteral) {

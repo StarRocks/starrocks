@@ -83,9 +83,9 @@ public:
         return *this;
     }
 
-    StatusOr<ColumnPtr> upgrade_if_overflow() override;
+    StatusOr<MutableColumnPtr> upgrade_if_overflow() override;
 
-    StatusOr<ColumnPtr> downgrade() override;
+    StatusOr<MutableColumnPtr> downgrade() override;
 
     bool has_large_column() const override;
 
@@ -223,7 +223,7 @@ public:
         _slices_cache = false;
     }
 
-    StatusOr<ColumnPtr> replicate(const Buffer<uint32_t>& offsets) override;
+    StatusOr<MutableColumnPtr> replicate(const Buffer<uint32_t>& offsets) override;
 
     void fill_default(const Filter& filter) override;
 
@@ -275,16 +275,6 @@ public:
     size_t filter_range(const Filter& filter, size_t start, size_t to) override;
 
     int compare_at(size_t left, size_t right, const Column& rhs, int nan_direction_hint) const override;
-
-    void fnv_hash(uint32_t* hashes, uint32_t from, uint32_t to) const override;
-    void fnv_hash_with_selection(uint32_t* seed, uint8_t* selection, uint16_t from, uint16_t to) const override;
-    void fnv_hash_selective(uint32_t* hashes, uint16_t* sel, uint16_t sel_size) const override;
-
-    void crc32_hash(uint32_t* hash, uint32_t from, uint32_t to) const override;
-    void crc32_hash_with_selection(uint32_t* seed, uint8_t* selection, uint16_t from, uint16_t to) const override;
-    void crc32_hash_selective(uint32_t* hashes, uint16_t* sel, uint16_t sel_size) const override;
-
-    void murmur_hash3_x86_32(uint32_t* hash, uint32_t from, uint32_t to) const override;
 
     int64_t xor_checksum(uint32_t from, uint32_t to) const override;
 

@@ -80,6 +80,7 @@ private:
 
 protected:
     ChunkPtr _late_materialize(const ChunkPtr& chunk);
+    void _reset();
 
     size_t _total_rows = 0; // Total rows of sorting data
     size_t _staging_unsorted_rows = 0;

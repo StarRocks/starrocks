@@ -148,8 +148,8 @@ public:
     }
 
     void convert_to_serialize_format([[maybe_unused]] FunctionContext* ctx, const Columns& src, size_t chunk_size,
-                                     ColumnPtr* dst) const override {
-        auto& dst_data = down_cast<ResultColumnType*>((*dst).get())->get_data();
+                                     MutableColumnPtr& dst) const override {
+        auto& dst_data = down_cast<ResultColumnType*>(dst.get())->get_data();
         const auto* src_data = down_cast<const InputColumnType*>(src[0].get())->immutable_data().data();
 
         dst_data.resize(chunk_size);

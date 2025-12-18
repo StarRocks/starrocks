@@ -38,11 +38,13 @@ import com.starrocks.catalog.MvUpdateInfo;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
+import com.starrocks.catalog.PartitionNames;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.RandomDistributionInfo;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.mv.MVPlanValidationResult;
+import com.starrocks.catalog.mv.MVTimelinessArbiter;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
@@ -58,7 +60,6 @@ import com.starrocks.lake.LakeMaterializedView;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.common.PCellSortedSet;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
@@ -194,11 +195,20 @@ public class MvRewritePreprocessor {
                 if (queryMaterializationContext.getValidCandidateMVs().size() > 1) {
                     queryMaterializationContext.setEnableQueryContextCache(true);
                 }
+
+                // record the current MV plan cache stats
+                Tracers.record("MVPlanCacheStats", CachingMvPlanContextBuilder.getMVPlanCacheStats());
             } catch (Exception e) {
-                List<String> tableNames = queryTables.stream().map(Table::getName).collect(Collectors.toList());
-                logMVPrepare(connectContext, "Prepare query tables {} for mv failed:{}",
-                        tableNames, DebugUtil.getStackTrace(e));
-                LOG.warn("Prepare query tables {} for mv failed", tableNames, e);
+                try {
+                    List<String> tableNames = queryTables.stream().map(Table::getName).collect(Collectors.toList());
+                    logMVPrepare(connectContext, "Prepare query tables {} for mv failed:{}",
+                            tableNames, DebugUtil.getStackTrace(e));
+                    LOG.warn("Prepare query tables {} for mv failed", tableNames, e);
+                } catch (Throwable traceLogException) {
+                    // ignore all exception in mv rewrite prepare
+                    LOG.warn("Failed to log mv rewrite prepare exception: {}",
+                            DebugUtil.getStackTrace(traceLogException));
+                }
             }
         }
     }
@@ -644,8 +654,8 @@ public class MvRewritePreprocessor {
     private Set<MaterializedView> getTableRelatedSyncMVs(OlapTable olapTable) {
         Set<MaterializedView> relatedMvs = Sets.newHashSet();
         for (MaterializedIndexMeta indexMeta : olapTable.getVisibleIndexMetas()) {
-            long indexId = indexMeta.getIndexId();
-            if (indexMeta.getIndexId() == olapTable.getBaseIndexId()) {
+            long indexId = indexMeta.getIndexMetaId();
+            if (indexMeta.getIndexMetaId() == olapTable.getBaseIndexMetaId()) {
                 continue;
             }
             // Old sync mv may not contain the index define sql.
@@ -661,7 +671,7 @@ public class MvRewritePreprocessor {
             try {
                 long dbId = indexMeta.getDbId();
                 String viewDefineSql = indexMeta.getViewDefineSql();
-                String mvName = olapTable.getIndexNameById(indexId);
+                String mvName = olapTable.getIndexNameByMetaId(indexId);
                 Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
 
                 // distribution info
@@ -713,7 +723,7 @@ public class MvRewritePreprocessor {
                 }
 
                 mv.setViewDefineSql(viewDefineSql);
-                mv.setBaseIndexId(indexId);
+                mv.setBaseIndexMetaId(indexId);
                 relatedMvs.add(mv);
             } catch (Exception e) {
                 logMVPrepare(connectContext, "Fail to get the related sync materialized views from table:{}, " +
@@ -731,11 +741,13 @@ public class MvRewritePreprocessor {
 
         List<Pair<MaterializedViewWrapper, MvUpdateInfo>> mvInfos =
                 Lists.newArrayListWithExpectedSize(mvWithPlanContexts.size());
+        MVTimelinessArbiter.QueryRewriteParams queryRewriteParams =
+                MVTimelinessArbiter.QueryRewriteParams.ofQueryRewrite(context);
         for (MaterializedViewWrapper wrapper : mvWithPlanContexts) {
             MaterializedView mv = wrapper.getMV();
             try {
                 // mv's partitions to refresh
-                MvUpdateInfo mvUpdateInfo = queryMaterializationContext.getOrInitMVTimelinessInfos(mv);
+                MvUpdateInfo mvUpdateInfo = queryMaterializationContext.getOrInitMVTimelinessInfos(mv, queryRewriteParams);
                 if (mvUpdateInfo == null || !mvUpdateInfo.isValidRewrite()) {
                     OptimizerTraceUtil.logMVRewriteFailReason(mv.getName(), "stale partitions {}", mvUpdateInfo);
                     continue;
@@ -766,6 +778,9 @@ public class MvRewritePreprocessor {
                 candidateMvNames);
     }
 
+    /**
+     * Since this method is executed in parallel for multiple MVs, it must be thread-safe.
+     */
     private void prepareMV(Tracers tracers, Set<Table> queryTables, MaterializedViewWrapper mvWithPlanContext,
                            MvUpdateInfo mvUpdateInfo, long timeoutMs) {
         MaterializedView mv = mvWithPlanContext.getMV();
@@ -774,6 +789,7 @@ public class MvRewritePreprocessor {
         if (!checkMvPartitionNamesToRefresh(connectContext, mv, partitionNamesToRefresh, mvPlanContext)) {
             return;
         }
+
         if (partitionNamesToRefresh.isEmpty()) {
             logMVPrepare(tracers, connectContext, mv, "MV {} has no partitions to refresh", mv.getName());
         } else {
@@ -791,8 +807,8 @@ public class MvRewritePreprocessor {
         // to avoid race condition when multiple threads are adding valid candidate mvs to query materialization context
         synchronized (queryMaterializationContext) {
             queryMaterializationContext.addValidCandidateMV(materializationContext);
+            logMVPrepare(tracers, connectContext, mv, "Prepare MV {} success", mv.getName());
         }
-        logMVPrepare(tracers, connectContext, mv, "Prepare MV {} success", mv.getName());
     }
 
     /**
@@ -855,7 +871,8 @@ public class MvRewritePreprocessor {
             
             try {
                 future.get(individualTimeoutMs, TimeUnit.MILLISECONDS);
-                // Success - no action needed
+                // record MV global cache stats after successful preparation
+                Tracers.record("MVGlobalCacheStats", CachingMvPlanContextBuilder.getMVGlobalContextCacheStats(mv));
             } catch (TimeoutException e) {
                 LOG.warn("MV {} preparation timeout after {} ms", mvName, individualTimeoutMs);
                 timeoutMvNames.add(mvName);
@@ -1100,7 +1117,7 @@ public class MvRewritePreprocessor {
                 selectPartitionIds.add(p.getId());
                 selectedPartitionNames.add(p.getName());
                 for (PhysicalPartition physicalPartition : p.getSubPartitions()) {
-                    MaterializedIndex materializedIndex = physicalPartition.getIndex(mv.getBaseIndexId());
+                    MaterializedIndex materializedIndex = physicalPartition.getIndex(mv.getBaseIndexMetaId());
                     selectTabletIds.addAll(materializedIndex.getTabletIdsInOrder());
                 }
             }
@@ -1112,7 +1129,7 @@ public class MvRewritePreprocessor {
                 .setColRefToColumnMetaMap(colRefToColumnMetaMapBuilder.build())
                 .setColumnMetaToColRefMap(columnMetaToColRefMap)
                 .setDistributionSpec(getTableDistributionSpec(mv, columnMetaToColRefMap))
-                .setSelectedIndexId(mv.getBaseIndexId())
+                .setSelectedIndexId(mv.getBaseIndexMetaId())
                 .setSelectedPartitionId(selectPartitionIds)
                 .setPartitionNames(partitionNames)
                 .setSelectedTabletId(selectTabletIds)

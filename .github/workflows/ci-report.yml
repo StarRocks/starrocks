@@ -36,6 +36,7 @@ jobs:
       BASE_REF: ${{ steps.pr_details.outputs.BASE_REF }}
       PR_STATE: ${{ steps.pr_details.outputs.PR_STATE }}
       BUCKET_PREFIX: ${{ steps.bucket_info.outputs.bucket_prefix }}
+      SKIP_COV: ${{ steps.pr_details.outputs.SKIP_COV }}
     steps:
       - run: |
           sleep 10
@@ -67,12 +68,19 @@ jobs:
           REPO: ${{ github.repository }}
         run: |
           PR_NUMBER=`echo ${PR_NUMBER}`
-          pr_info=`gh pr view ${PR_NUMBER} -R ${REPO} --json baseRefName,state`
+          pr_info=`gh pr view ${PR_NUMBER} -R ${REPO} --json baseRefName,state,title`
           base_ref=$(echo ${pr_info} | jq -r .baseRefName)
           pr_state=$(echo ${pr_info} | jq -r .state)
+          pr_title=$(echo ${pr_info} | jq -r .title)
           echo "BASE_REF=${base_ref}" >> $GITHUB_OUTPUT
           echo "PR_STATE=${pr_state}" >> $GITHUB_OUTPUT
           echo "PR_NUMBER=${PR_NUMBER}" >> $GITHUB_OUTPUT
+
+          if [[ "${pr_title}" == *"[UT]"* || "${pr_title}" == *"[Doc]"* ]]; then
+            echo "SKIP_COV=true" >> $GITHUB_OUTPUT
+          else
+            echo "SKIP_COV=false" >> $GITHUB_OUTPUT
+          fi
 
       - name: INFO
         id: info
@@ -88,6 +96,7 @@ jobs:
       PR_NUMBER: ${{ needs.INFO.outputs.PR_NUMBER }}
       BASE_REF: ${{ needs.INFO.outputs.BASE_REF }}
       bucket_prefix: ${{ needs.INFO.outputs.BUCKET_PREFIX }}
+      SKIP_COV: ${{ needs.INFO.outputs.SKIP_COV }}
     steps:
       - name: CLEAN
         run: |
@@ -99,7 +108,7 @@ jobs:
           oss_path=oss://${bucket_prefix}-ci-release/$BASE_REF/Release/pr/UT-Report/${PR_NUMBER}
           size=$(ossutil64 --config-file ~/.ossutilconfig ls ${oss_path}/fe_ut_report.tar.gz | grep "Object Number is" | awk '{print $NF}')
           echo "size=${size}" >> $GITHUB_OUTPUT
-          if [[ "$size" != "0" ]]; then
+          if [[ "$size" != "0" && "${SKIP_COV}" != "true" ]]; then
             mkdir fe && cd fe
             ossutil64 --config-file ~/.ossutilconfig cp ${oss_path}/ . --recursive
             tar zxf fe_ut_report.tar.gz
@@ -115,7 +124,7 @@ jobs:
       - name: Publish UT Report
         uses: mikepenz/action-junit-report@v4
         id: publish_report
-        if: steps.download-ut-xml.outputs.size != '0'
+        if: steps.download-ut-xml.outputs.size != '0' && env.SKIP_COV != 'true'
         env:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -135,11 +144,16 @@ jobs:
           export JAVA_HOME=/var/local/env/jdk1.8.0_202;
           export PATH=$JAVA_HOME/bin:$PATH;
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
-          if [[ -e ${fe_path}/test.exec && -e ${fe_path}/test_admit.exec ]]; then
+          if [[ -e ${fe_path}/test.exec || -e ${fe_path}/test_admit.exec ]]; then
+            if [[ -e ${fe_path}/test.exec ]]; then
+              file_str="${fe_path}/test.exec"
+            fi
+            if [[ -e ${fe_path}/test_admit.exec ]]; then
+              file_str="${file_str} ${fe_path}/test_admit.exec"
+            fi
+
             java -jar package/jacococli.jar merge \
-              ${fe_path}/fe-core/target/jacoco.exec \
-              ${fe_path}/test.exec \
-              ${fe_path}/test_admit.exec \
+              ${fe_path}/fe-core/target/jacoco.exec ${file_str} \
               --destfile ${fe_path}/merge.exec
           else
             cp ${fe_path}/fe-core/target/jacoco.exec ${fe_path}/merge.exec
@@ -219,6 +233,7 @@ jobs:
       PR_NUMBER: ${{ needs.INFO.outputs.PR_NUMBER }}
       BASE_REF: ${{ needs.INFO.outputs.BASE_REF }}
       bucket_prefix: ${{ needs.INFO.outputs.BUCKET_PREFIX }}
+      SKIP_COV: ${{ needs.INFO.outputs.SKIP_COV }}
     steps:
       - name: CLEAN
         run: |
@@ -235,7 +250,7 @@ jobs:
           be_ut_res_path=${oss_path}/flag/be_ut_res
           size=$(ossutil64 --config-file ~/.ossutilconfig ls ${be_ut_res_path} | grep "Object Number is" | awk '{print $NF}')
           echo "size=${size}" >> $GITHUB_OUTPUT
-          if [[ "$size" != "0" ]]; then
+          if [[ "$size" != "0" && "$SKIP_COV" != "true" ]]; then
             ossutil64 --config-file ~/.ossutilconfig cp ${be_ut_res_path} . >/dev/null
             res=`cat be_ut_res`
             if [[ "$res" != "0" ]]; then
@@ -258,7 +273,7 @@ jobs:
 
       - name: Merge BE Total Coverage
         id: merge
-        if: github.repository == 'StarRocks/starrocks' && steps.download-ut-xml.outputs.size != '0' && steps.download-ut-xml.outcome == 'success'
+        if: github.repository == 'StarRocks/starrocks' && steps.download-ut-xml.outputs.size != '0' && steps.download-ut-xml.outcome == 'success' && env.SKIP_COV != 'true'
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
 

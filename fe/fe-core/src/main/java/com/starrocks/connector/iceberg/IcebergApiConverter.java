@@ -193,7 +193,7 @@ public class IcebergApiConverter {
             if (colName.startsWith(FeConstants.GENERATED_PARTITION_COLUMN_PREFIX)) {
                 Expr partExpr = desc.getPartitionExprs().get(idx++);
                 if (partExpr instanceof FunctionCallExpr) {
-                    String fn = ((FunctionCallExpr) partExpr).getFnName().getFunction();
+                    String fn = ((FunctionCallExpr) partExpr).getFunctionName();
                     Expr child = ((FunctionCallExpr) partExpr).getChild(0);
                     if (child instanceof SlotRef) {
                         colName = ((SlotRef) child).getColumnName();

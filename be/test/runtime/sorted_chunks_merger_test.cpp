@@ -33,15 +33,15 @@ public:
 
         const auto& int_type_desc = TypeDescriptor(TYPE_INT);
         const auto& varchar_type_desc = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
-        ColumnPtr col_cust_key_1 = ColumnHelper::create_column(int_type_desc, false);
-        ColumnPtr col_cust_key_2 = ColumnHelper::create_column(int_type_desc, false);
-        ColumnPtr col_cust_key_3 = ColumnHelper::create_column(int_type_desc, false);
-        ColumnPtr col_nation_1 = ColumnHelper::create_column(varchar_type_desc, true);
-        ColumnPtr col_nation_2 = ColumnHelper::create_column(varchar_type_desc, true);
-        ColumnPtr col_nation_3 = ColumnHelper::create_column(varchar_type_desc, true);
-        ColumnPtr col_region_1 = ColumnHelper::create_column(varchar_type_desc, true);
-        ColumnPtr col_region_2 = ColumnHelper::create_column(varchar_type_desc, true);
-        ColumnPtr col_region_3 = ColumnHelper::create_column(varchar_type_desc, true);
+        MutableColumnPtr col_cust_key_1 = ColumnHelper::create_column(int_type_desc, false);
+        MutableColumnPtr col_cust_key_2 = ColumnHelper::create_column(int_type_desc, false);
+        MutableColumnPtr col_cust_key_3 = ColumnHelper::create_column(int_type_desc, false);
+        MutableColumnPtr col_nation_1 = ColumnHelper::create_column(varchar_type_desc, true);
+        MutableColumnPtr col_nation_2 = ColumnHelper::create_column(varchar_type_desc, true);
+        MutableColumnPtr col_nation_3 = ColumnHelper::create_column(varchar_type_desc, true);
+        MutableColumnPtr col_region_1 = ColumnHelper::create_column(varchar_type_desc, true);
+        MutableColumnPtr col_region_2 = ColumnHelper::create_column(varchar_type_desc, true);
+        MutableColumnPtr col_region_3 = ColumnHelper::create_column(varchar_type_desc, true);
 
         col_cust_key_1->append_datum(int32_t(71));
         col_cust_key_1->append_datum(int32_t(70));
@@ -185,7 +185,8 @@ TEST_F(SortedChunksMergerTest, one_supplier) {
             size_t row_num = src_chunk->num_rows();
             *cnk = src_chunk->clone_empty_with_slot(row_num).release();
             for (size_t c = 0; c < src_chunk->num_columns(); ++c) {
-                (*cnk)->get_column_by_index(c)->append(*(src_chunk->get_column_by_index(c)), 0, row_num);
+                (*cnk)->get_column_raw_ptr_by_index(c)->append(*(src_chunk->get_column_raw_ptr_by_index(c)), 0,
+                                                               row_num);
             }
             ++chunk_index;
         } else {
@@ -231,7 +232,8 @@ TEST_F(SortedChunksMergerTest, two_suppliers) {
                 size_t row_num = src_chunk->num_rows();
                 *cnk = src_chunk->clone_empty_with_slot(row_num).release();
                 for (size_t c = 0; c < src_chunk->num_columns(); ++c) {
-                    (*cnk)->get_column_by_index(c)->append(*(src_chunk->get_column_by_index(c)), 0, row_num);
+                    (*cnk)->get_column_raw_ptr_by_index(c)->append(*(src_chunk->get_column_raw_ptr_by_index(c)), 0,
+                                                                   row_num);
                 }
                 chunk = nullptr;
             } else {
@@ -281,7 +283,8 @@ TEST_F(SortedChunksMergerTest, three_suppliers) {
                 size_t row_num = src_chunk->num_rows();
                 *cnk = src_chunk->clone_empty_with_slot(row_num).release();
                 for (size_t c = 0; c < src_chunk->num_columns(); ++c) {
-                    (*cnk)->get_column_by_index(c)->append(*(src_chunk->get_column_by_index(c)), 0, row_num);
+                    (*cnk)->get_column_raw_ptr_by_index(c)->append(*(src_chunk->get_column_raw_ptr_by_index(c)), 0,
+                                                                   row_num);
                 }
                 chunk = nullptr;
             } else {

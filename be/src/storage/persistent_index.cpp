@@ -34,6 +34,7 @@
 #include "storage/tablet_meta_manager.h"
 #include "storage/tablet_updates.h"
 #include "storage/update_manager.h"
+#include "testutil/sync_point.h"
 #include "util/bit_util.h"
 #include "util/coding.h"
 #include "util/crc32c.h"
@@ -2754,7 +2755,7 @@ Status ImmutableIndex::_get_in_shard_by_page(size_t shard_idx, size_t n, const S
                                              IOStat* stat) const {
     const auto& shard_info = _shards[shard_idx];
     std::map<size_t, LargeIndexPage> pages;
-    for (auto [pageid, keys_info] : keys_info_by_page) {
+    for (const auto& [pageid, keys_info] : keys_info_by_page) {
         LargeIndexPage page(shard_info.page_size / kPageSize);
         RETURN_IF_ERROR(_read_page(shard_idx, pageid, &page, stat));
         pages[pageid] = std::move(page);
@@ -3500,7 +3501,7 @@ Status PersistentIndex::_insert_rowsets(TabletLoader* loader, const Schema& pkey
                 } else if (!st.ok()) {
                     return st;
                 } else {
-                    Column* pkc = nullptr;
+                    const Column* pkc = nullptr;
                     if (pk_column != nullptr) {
                         pk_column->reset_column();
                         TRY_CATCH_BAD_ALLOC(
@@ -5127,7 +5128,12 @@ Status PersistentIndex::major_compaction(DataDir* data_dir, int64_t tablet_id, s
         RETURN_IF_ERROR(modify_l2_versions(l2_versions, new_l2_version, index_meta));
         RETURN_IF_ERROR(TabletMetaManager::write_persistent_index_meta(data_dir, tablet_id, index_meta));
         // reload new l2 versions
-        RETURN_IF_ERROR(_reload(index_meta));
+        auto st = _reload(index_meta);
+        TEST_SYNC_POINT_CALLBACK("persistent_index_major_compaction_reload_fail", &st);
+        if (!st.ok()) {
+            _set_need_rebuild(true);
+            return st;
+        }
         // delete useless files
         const MutableIndexMetaPB& l0_meta = index_meta.l0_meta();
         EditVersion l0_version = l0_meta.snapshot().version();

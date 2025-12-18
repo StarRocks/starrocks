@@ -194,7 +194,7 @@ public class Explain {
             PhysicalOlapScanOperator scan = (PhysicalOlapScanOperator) optExpression.getOp();
 
             StringBuilder sb = new StringBuilder("- SCAN [")
-                    .append(((OlapTable) scan.getTable()).getIndexNameById(scan.getSelectedIndexId()))
+                    .append(((OlapTable) scan.getTable()).getIndexNameByMetaId(scan.getSelectedIndexId()))
                     .append("]")
                     .append(buildOutputColumns(scan,
                             "[" + scan.getOutputColumns().stream().map(EXPR_PRINTER::print)

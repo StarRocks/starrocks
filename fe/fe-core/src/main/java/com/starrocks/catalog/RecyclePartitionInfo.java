@@ -33,8 +33,6 @@ public abstract class RecyclePartitionInfo extends JsonWriter {
     protected DataProperty dataProperty;
     @SerializedName(value = "replicationNum")
     protected short replicationNum;
-    @SerializedName(value = "isInMemory")
-    protected boolean isInMemory;
     @SerializedName(value = "recoverable")
     protected boolean recoverable;
 
@@ -49,14 +47,12 @@ public abstract class RecyclePartitionInfo extends JsonWriter {
     }
 
     public RecyclePartitionInfo(long dbId, long tableId, Partition partition,
-                                   DataProperty dataProperty, short replicationNum,
-                                   boolean isInMemory) {
+                                DataProperty dataProperty, short replicationNum) {
         this.dbId = dbId;
         this.tableId = tableId;
         this.partition = partition;
         this.dataProperty = dataProperty;
         this.replicationNum = replicationNum;
-        this.isInMemory = isInMemory;
         this.recoverable = true;
         this.retentionPeriod = 0L;
     }
@@ -79,10 +75,6 @@ public abstract class RecyclePartitionInfo extends JsonWriter {
 
     public short getReplicationNum() {
         return replicationNum;
-    }
-
-    public boolean isInMemory() {
-        return isInMemory;
     }
 
     public void setDbId(long dbId) {
@@ -136,7 +128,6 @@ public abstract class RecyclePartitionInfo extends JsonWriter {
         partitionInfo.setRange(partitionId, false, recoverRange);
         partitionInfo.setDataProperty(partitionId, recyclePartitionInfo.getDataProperty());
         partitionInfo.setReplicationNum(partitionId, recyclePartitionInfo.getReplicationNum());
-        partitionInfo.setIsInMemory(partitionId, recyclePartitionInfo.isInMemory());
         if (recyclePartitionInfo.getDataCacheInfo() != null) {
             partitionInfo.setDataCacheInfo(partitionId, recyclePartitionInfo.getDataCacheInfo());
         }

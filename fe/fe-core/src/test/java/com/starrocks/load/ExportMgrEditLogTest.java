@@ -20,7 +20,6 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HashDistributionInfo;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
 import com.starrocks.catalog.OlapTable;
@@ -35,6 +34,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.BrokerDesc;
 import com.starrocks.sql.ast.ExportStmt;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.UtFrameUtils;
@@ -102,7 +102,7 @@ public class ExportMgrEditLogTest {
         testTable = new OlapTable(TEST_TABLE_ID, TEST_TABLE_NAME, columns, KeysType.DUP_KEYS,
                 partitionInfo, distributionInfo);
         testTable.setIndexMeta(indexId, TEST_TABLE_NAME, columns, 0, 0, (short) 1, TStorageType.COLUMN, KeysType.DUP_KEYS);
-        testTable.setBaseIndexId(indexId);
+        testTable.setBaseIndexMetaId(indexId);
         testTable.addPartition(partition);
         
         testDatabase.registerTableUnlocked(testTable);

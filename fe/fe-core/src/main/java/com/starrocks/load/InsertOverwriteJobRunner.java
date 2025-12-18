@@ -46,11 +46,12 @@ import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.ListPartitionDesc;
 import com.starrocks.sql.ast.PartitionDesc;
-import com.starrocks.sql.ast.PartitionNames;
+import com.starrocks.sql.ast.PartitionRef;
 import com.starrocks.sql.ast.RangePartitionDesc;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.common.DmlException;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.transaction.InsertOverwriteJobStats;
 import com.starrocks.transaction.InsertTxnCommitAttachment;
@@ -701,7 +702,7 @@ public class InsertOverwriteJobRunner {
             List<String> tmpPartitionNames = job.getTmpPartitionIds().stream()
                     .map(partitionId -> targetTable.getPartition(partitionId).getName())
                     .collect(Collectors.toList());
-            PartitionNames partitionNames = new PartitionNames(true, tmpPartitionNames);
+            PartitionRef partitionNames = new PartitionRef(tmpPartitionNames, true, NodePosition.ZERO);
             // change the TargetPartitionNames from source partitions to new tmp partitions
             // should replan when load data
             if (insertStmt.getTargetPartitionNames() == null) {

@@ -21,13 +21,11 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Sets;
-import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.HashDistributionInfo;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
@@ -50,6 +48,8 @@ import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.sql.ast.AggregateType;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.system.Backend;
 import com.starrocks.system.BackendHbResponse;
@@ -64,7 +64,6 @@ import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletLocation;
-import com.starrocks.thrift.TTabletType;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TWriteQuorumType;
 import com.starrocks.type.IntegerType;
@@ -108,11 +107,11 @@ public class OlapTableSinkTest {
 
         // k2
         SlotDescriptor k2 = descTable.addSlotDescriptor(tuple);
-        k2.setColumn(new Column("k2", TypeFactory.createVarchar(25)));
+        k2.setColumn(new Column("k2", TypeFactory.createVarcharType(25)));
         k2.setIsMaterialized(true);
         // v1
         SlotDescriptor v1 = descTable.addSlotDescriptor(tuple);
-        v1.setColumn(new Column("v1", TypeFactory.createVarchar(25)));
+        v1.setColumn(new Column("v1", TypeFactory.createVarcharType(25)));
         v1.setIsMaterialized(true);
         // v2
         SlotDescriptor v2 = descTable.addSlotDescriptor(tuple);
@@ -260,8 +259,6 @@ public class OlapTableSinkTest {
         DistributionInfo distributionInfo = new HashDistributionInfo(1, Lists.newArrayList(k1));
         PartitionInfo partitionInfo = new SinglePartitionInfo();
         partitionInfo.setDataProperty(partitionId, new DataProperty(TStorageMedium.SSD));
-        partitionInfo.setIsInMemory(partitionId, false);
-        partitionInfo.setTabletType(partitionId, TTabletType.TABLET_TYPE_DISK);
         partitionInfo.setReplicationNum(partitionId, (short) 3);
 
         // Index
@@ -274,7 +271,7 @@ public class OlapTableSinkTest {
 
         // Table
         OlapTable table = new OlapTable(tableId, "t1", columns, KeysType.AGG_KEYS, partitionInfo, distributionInfo);
-        Deencapsulation.setField(table, "baseIndexId", indexId);
+        Deencapsulation.setField(table, "baseIndexMetaId", indexId);
         table.addPartition(partition);
         table.setIndexMeta(indexId, "t1", columns, 0, 0, (short) 3, TStorageType.COLUMN, KeysType.AGG_KEYS);
 
@@ -372,8 +369,6 @@ public class OlapTableSinkTest {
         DistributionInfo distributionInfo = new HashDistributionInfo(1, Lists.newArrayList(k1));
         PartitionInfo partitionInfo = new SinglePartitionInfo();
         partitionInfo.setDataProperty(partitionId, new DataProperty(TStorageMedium.SSD));
-        partitionInfo.setIsInMemory(partitionId, false);
-        partitionInfo.setTabletType(partitionId, TTabletType.TABLET_TYPE_DISK);
         partitionInfo.setReplicationNum(partitionId, (short) 3);
 
         // Partition
@@ -381,7 +376,7 @@ public class OlapTableSinkTest {
 
         // Table
         OlapTable table = new OlapTable(tableId, "t1", columns, KeysType.AGG_KEYS, partitionInfo, distributionInfo);
-        Deencapsulation.setField(table, "baseIndexId", indexId);
+        Deencapsulation.setField(table, "baseIndexMetaId", indexId);
         table.addPartition(partition);
         table.setIndexMeta(indexId, "t1", columns, 0, 0, (short) 3, TStorageType.COLUMN, KeysType.AGG_KEYS);
 
@@ -713,8 +708,6 @@ public class OlapTableSinkTest {
         DistributionInfo distributionInfo = new HashDistributionInfo(1, Lists.newArrayList(k1));
         PartitionInfo partitionInfo = new SinglePartitionInfo();
         partitionInfo.setDataProperty(partitionId, new DataProperty(TStorageMedium.SSD));
-        partitionInfo.setIsInMemory(partitionId, false);
-        partitionInfo.setTabletType(partitionId, TTabletType.TABLET_TYPE_DISK);
         partitionInfo.setReplicationNum(partitionId, (short) 3);
         // Index
         MaterializedIndex index = new MaterializedIndex(indexId, MaterializedIndex.IndexState.NORMAL);
@@ -724,7 +717,7 @@ public class OlapTableSinkTest {
         Partition partition = new Partition(partitionId, physicalPartitionId, "p1", index, distributionInfo);
         // Table
         OlapTable table = new LakeTable(tableId, "t1", columns, KeysType.AGG_KEYS, partitionInfo, distributionInfo);
-        Deencapsulation.setField(table, "baseIndexId", indexId);
+        Deencapsulation.setField(table, "baseIndexMetaId", indexId);
         table.addPartition(partition);
         table.setIndexMeta(indexId, "t1", columns, 0, 0, (short) 3, TStorageType.COLUMN, KeysType.AGG_KEYS);
 

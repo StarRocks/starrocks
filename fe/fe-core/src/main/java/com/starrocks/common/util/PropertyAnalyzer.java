@@ -43,14 +43,12 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Sets;
 import com.google.common.collect.Streams;
-import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.InternalCatalog;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MaterializedViewRefreshType;
 import com.starrocks.catalog.OlapTable;
@@ -78,6 +76,8 @@ import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.IndexAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.analyzer.SetStmtAnalyzer;
+import com.starrocks.sql.ast.AggregateType;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.Property;
 import com.starrocks.sql.ast.SetListItem;
 import com.starrocks.sql.ast.SetStmt;
@@ -1437,7 +1437,7 @@ public class PropertyAnalyzer {
         if (parentTable.isNativeTableOrMaterializedView()) {
             OlapTable parentOlapTable = (OlapTable) parentTable;
             parentTableKeyType =
-                    parentOlapTable.getIndexMetaByIndexId(parentOlapTable.getBaseIndexId()).getKeysType();
+                    parentOlapTable.getIndexMetaByIndexId(parentOlapTable.getBaseIndexMetaId()).getKeysType();
         }
 
         List<UniqueConstraint> mvUniqueConstraints = Lists.newArrayList();
@@ -1662,6 +1662,8 @@ public class PropertyAnalyzer {
             short replicationNum = RunMode.defaultReplicationNum();
             if (properties.containsKey(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM)) {
                 if (FeConstants.isReplayFromQueryDump) {
+                    // still call analyzeReplicationNum to check the validity of replication_num
+                    PropertyAnalyzer.analyzeReplicationNum(properties, replicationNum);
                     replicationNum = 1;
                 } else {
                     replicationNum = PropertyAnalyzer.analyzeReplicationNum(properties, replicationNum);
@@ -1944,7 +1946,7 @@ public class PropertyAnalyzer {
             }
         } catch (AnalysisException e) {
             if (FeConstants.isReplayFromQueryDump) {
-                LOG.warn("Ignore MV properties analysis error during replay from query dump: ", e);
+                LOG.warn("Ignore MV properties analysis error during replay from query dump: " + e.getMessage());
             } else {
                 if (materializedView.isCloudNativeMaterializedView()) {
                     GlobalStateMgr.getCurrentState().getStorageVolumeMgr()

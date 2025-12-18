@@ -102,7 +102,7 @@ import javax.annotation.Nullable;
 import javax.validation.constraints.NotNull;
 
 import static com.starrocks.common.ErrorCode.ERR_LOCK_ERROR;
-import static com.starrocks.common.ErrorCode.ERR_NO_PARTITIONS_HAVE_DATA_LOAD;
+import static com.starrocks.common.ErrorCode.ERR_NO_ROWS_IMPORTED;
 
 /**
  * Transaction Manager in database level, as a component in GlobalTransactionMgr
@@ -367,10 +367,10 @@ public class DatabaseTransactionMgr {
                 return;
             }
             // For compatible reason, the default behavior of empty load is still returning
-            // "No partitions have data available for loading" and abort transaction.
+            // "No rows were imported from upstream" and abort transaction.
             if (Config.empty_load_as_error && tabletCommitInfos.isEmpty()
                     && transactionState.getSourceType() != TransactionState.LoadJobSourceType.INSERT_STREAMING) {
-                throw new TransactionCommitFailedException(ERR_NO_PARTITIONS_HAVE_DATA_LOAD.formatErrorMsg());
+                throw new TransactionCommitFailedException(ERR_NO_ROWS_IMPORTED.formatErrorMsg());
             }
 
             if (transactionState.getWriteEndTimeMs() < 0) {

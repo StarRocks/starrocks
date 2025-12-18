@@ -64,7 +64,7 @@ public class SqlBlackList {
                 Matcher m = patternAndId.pattern.matcher(formatSql);
                 if (m.find()) {
                     MetricRepo.COUNTER_SQL_BLOCK_HIT_COUNT.increase(1L);
-                    ErrorReport.reportAnalysisException(ErrorCode.ERR_SQL_IN_BLACKLIST_ERROR);
+                    ErrorReport.reportAnalysisException(ErrorCode.ERR_SQL_IN_BLACKLIST_ERROR, patternAndId.id);
                 }
             }
         }
@@ -137,6 +137,7 @@ public class SqlBlackList {
             for (Map.Entry<String, BlackListSql> entry : sqlBlackListMap.entrySet()) {
                 if (entry.getValue().id == id) {
                     sqlBlackListMap.remove(entry.getKey());
+                    return;
                 }
             }
         }

@@ -23,12 +23,12 @@ import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionKey;
+import com.starrocks.catalog.PartitionNames;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.pseudocluster.PseudoCluster;
-import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.ast.expression.DateLiteral;
@@ -387,7 +387,7 @@ public class PartitionPruneRuleTest {
         PartitionNames partitionNames = new PartitionNames(true, Lists.newArrayList("p1", "p2"));
         LogicalOlapScanOperator operator =
                 new LogicalOlapScanOperator(olapTable, scanColumnMap, columnMetaToColRefMap,
-                        null, -1, null, olapTable.getBaseIndexId(),
+                        null, -1, null, olapTable.getBaseIndexMetaId(),
                         null, partitionNames, false, Lists.newArrayList(), Lists.newArrayList(), null, false);
 
         Partition part1 = new Partition(10001L, 10003L, "p1", null, null);

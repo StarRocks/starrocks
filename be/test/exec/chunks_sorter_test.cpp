@@ -38,6 +38,7 @@
 #include "runtime/types.h"
 #include "testutil/assert.h"
 #include "testutil/column_test_helper.h"
+#include "util/defer_op.h"
 #include "util/json.h"
 
 namespace starrocks {
@@ -536,7 +537,14 @@ protected:
     std::unique_ptr<ColumnRef> _expr_ranking_key;
 };
 
-static void clear_sort_exprs(std::vector<ExprContext*>& exprs) {
+static void clear_sort_exprs(std::vector<ExprContext*>& exprs, RuntimeState* state = nullptr) {
+    if (state != nullptr) {
+        for (ExprContext* ctx : exprs) {
+            if (ctx != nullptr) {
+                ctx->close(state);
+            }
+        }
+    }
     for (ExprContext* ctx : exprs) {
         delete ctx;
     }
@@ -593,6 +601,8 @@ TEST_F(ChunksSorterTest, full_sort_incremental) {
     std::vector<ExprContext*> sort_exprs;
     sort_exprs.push_back(new ExprContext(_expr_region.get()));
     sort_exprs.push_back(new ExprContext(_expr_cust_key.get()));
+    // Use DeferOp to ensure cleanup happens even if assertions fail
+    DeferOp defer([&]() { clear_sort_exprs(sort_exprs, _runtime_state.get()); });
     ASSERT_OK(Expr::prepare(sort_exprs, _runtime_state.get()));
     ASSERT_OK(Expr::open(sort_exprs, _runtime_state.get()));
     auto pool = std::make_unique<ObjectPool>();
@@ -618,8 +628,6 @@ TEST_F(ChunksSorterTest, full_sort_incremental) {
         result.push_back(page_1->get(i).get(0).get_int32());
     }
     EXPECT_EQ(permutation, result);
-
-    clear_sort_exprs(sort_exprs);
 }
 
 // NOTE: this test case runs too slow
@@ -682,7 +690,7 @@ TEST_F(ChunksSorterTest, topn_sort_limit_prune) {
         auto data = std::vector<int32_t>{0, 0, 0, 2, 2, 2, 3, 3, 4, 5, 6};
         auto null_data = std::vector<uint8_t>{1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0};
         ColumnPtr column = ColumnTestHelper::build_nullable_column(data, null_data);
-        std::vector<ColumnPtr> columns{column};
+        Columns columns{column};
         auto null_pred = [&](PermutationItem item) { return column->is_null(item.index_in_chunk); };
         std::pair<int, int> range{0, column->size()};
 
@@ -716,6 +724,8 @@ TEST_F(ChunksSorterTest, topn_sort_with_limit) {
         std::vector<ExprContext*> sort_exprs;
         sort_exprs.push_back(new ExprContext(column));
         sort_exprs.push_back(new ExprContext(_expr_cust_key.get()));
+        // Use DeferOp to ensure cleanup happens even if assertions fail
+        DeferOp defer([&]() { clear_sort_exprs(sort_exprs, _runtime_state.get()); });
         ASSERT_OK(Expr::prepare(sort_exprs, _runtime_state.get()));
         ASSERT_OK(Expr::open(sort_exprs, _runtime_state.get()));
 
@@ -741,8 +751,6 @@ TEST_F(ChunksSorterTest, topn_sort_with_limit) {
             permutation.resize(limit);
             EXPECT_EQ(permutation, result);
         }
-
-        clear_sort_exprs(sort_exprs);
     }
 }
 
@@ -752,6 +760,8 @@ TEST_F(ChunksSorterTest, rank_topn) {
     std::vector<bool> is_null_first{true};
     std::vector<ExprContext*> sort_exprs;
     sort_exprs.push_back(new ExprContext(_expr_ranking_key.get()));
+    // Use DeferOp to ensure cleanup happens even if assertions fail
+    DeferOp defer([&]() { clear_sort_exprs(sort_exprs, _runtime_state.get()); });
     ASSERT_OK(Expr::prepare(sort_exprs, _runtime_state.get()));
     ASSERT_OK(Expr::open(sort_exprs, _runtime_state.get()));
 
@@ -791,8 +801,6 @@ TEST_F(ChunksSorterTest, rank_topn) {
             EXPECT_EQ(permutation, result);
         }
     }
-
-    clear_sort_exprs(sort_exprs);
 }
 
 // NOLINTNEXTLINE
@@ -805,6 +813,8 @@ TEST_F(ChunksSorterTest, full_sort_by_2_columns_null_first) {
     std::vector<ExprContext*> sort_exprs;
     sort_exprs.push_back(new ExprContext(_expr_region.get()));
     sort_exprs.push_back(new ExprContext(_expr_cust_key.get()));
+    // Use DeferOp to ensure cleanup happens even if assertions fail
+    DeferOp defer([&]() { clear_sort_exprs(sort_exprs, _runtime_state.get()); });
     ASSERT_OK(Expr::prepare(sort_exprs, _runtime_state.get()));
     ASSERT_OK(Expr::open(sort_exprs, _runtime_state.get()));
 
@@ -831,8 +841,6 @@ TEST_F(ChunksSorterTest, full_sort_by_2_columns_null_first) {
         result.push_back(page_1->get(i).get(0).get_int32());
     }
     EXPECT_EQ(permutation, result);
-
-    clear_sort_exprs(sort_exprs);
 }
 
 // NOLINTNEXTLINE
@@ -845,6 +853,8 @@ TEST_F(ChunksSorterTest, full_sort_by_2_columns_null_last) {
     std::vector<ExprContext*> sort_exprs;
     sort_exprs.push_back(new ExprContext(_expr_region.get()));
     sort_exprs.push_back(new ExprContext(_expr_cust_key.get()));
+    // Use DeferOp to ensure cleanup happens even if assertions fail
+    DeferOp defer([&]() { clear_sort_exprs(sort_exprs, _runtime_state.get()); });
     ASSERT_OK(Expr::prepare(sort_exprs, _runtime_state.get()));
     ASSERT_OK(Expr::open(sort_exprs, _runtime_state.get()));
 
@@ -871,8 +881,6 @@ TEST_F(ChunksSorterTest, full_sort_by_2_columns_null_last) {
         result.push_back(page_1->get(i).get(0).get_int32());
     }
     EXPECT_EQ(permutation, result);
-
-    clear_sort_exprs(sort_exprs);
 }
 
 // NOLINTNEXTLINE
@@ -888,6 +896,8 @@ TEST_F(ChunksSorterTest, full_sort_by_3_columns) {
     sort_exprs.push_back(new ExprContext(_expr_region.get()));
     sort_exprs.push_back(new ExprContext(_expr_nation.get()));
     sort_exprs.push_back(new ExprContext(_expr_cust_key.get()));
+    // Use DeferOp to ensure cleanup happens even if assertions fail
+    DeferOp defer([&]() { clear_sort_exprs(sort_exprs, _runtime_state.get()); });
     ASSERT_OK(Expr::prepare(sort_exprs, _runtime_state.get()));
     ASSERT_OK(Expr::open(sort_exprs, _runtime_state.get()));
 
@@ -914,8 +924,6 @@ TEST_F(ChunksSorterTest, full_sort_by_3_columns) {
         result.push_back(page_1->get(i).get(0).get_int32());
     }
     ASSERT_EQ(permutation, result);
-
-    clear_sort_exprs(sort_exprs);
 }
 
 // NOLINTNEXTLINE
@@ -934,6 +942,9 @@ TEST_F(ChunksSorterTest, full_sort_by_4_columns) {
     sort_exprs.push_back(new ExprContext(_expr_region.get()));
     sort_exprs.push_back(new ExprContext(_expr_nation.get()));
     sort_exprs.push_back(new ExprContext(_expr_cust_key.get()));
+    // Use DeferOp to ensure cleanup happens even if assertions fail
+    DeferOp defer([&]() { clear_sort_exprs(sort_exprs, _runtime_state.get()); });
+
     ASSERT_OK(Expr::prepare(sort_exprs, _runtime_state.get()));
     ASSERT_OK(Expr::open(sort_exprs, _runtime_state.get()));
 
@@ -961,8 +972,6 @@ TEST_F(ChunksSorterTest, full_sort_by_4_columns) {
         result.push_back(page_1->get(i).get(0).get_int32());
     }
     EXPECT_EQ(permutation, result);
-
-    clear_sort_exprs(sort_exprs);
 }
 
 // NOLINTNEXTLINE
@@ -978,6 +987,8 @@ TEST_F(ChunksSorterTest, part_sort_by_3_columns_null_fisrt) {
     sort_exprs.push_back(new ExprContext(_expr_region.get()));
     sort_exprs.push_back(new ExprContext(_expr_nation.get()));
     sort_exprs.push_back(new ExprContext(_expr_cust_key.get()));
+    // Use DeferOp to ensure cleanup happens even if assertions fail
+    DeferOp defer([&]() { clear_sort_exprs(sort_exprs, _runtime_state.get()); });
     ASSERT_OK(Expr::prepare(sort_exprs, _runtime_state.get()));
     ASSERT_OK(Expr::open(sort_exprs, _runtime_state.get()));
 
@@ -1000,8 +1011,6 @@ TEST_F(ChunksSorterTest, part_sort_by_3_columns_null_fisrt) {
     for (size_t i = 0; i < Size; ++i) {
         ASSERT_EQ(permutation[i], page_1->get(i).get(0).get_int32());
     }
-
-    clear_sort_exprs(sort_exprs);
 }
 
 // NOLINTNEXTLINE
@@ -1017,6 +1026,8 @@ TEST_F(ChunksSorterTest, part_sort_by_3_columns_null_last) {
     sort_exprs.push_back(new ExprContext(_expr_region.get()));
     sort_exprs.push_back(new ExprContext(_expr_nation.get()));
     sort_exprs.push_back(new ExprContext(_expr_cust_key.get()));
+    // Use DeferOp to ensure cleanup happens even if assertions fail
+    DeferOp defer([&]() { clear_sort_exprs(sort_exprs, _runtime_state.get()); });
     ASSERT_OK(Expr::prepare(sort_exprs, _runtime_state.get()));
     ASSERT_OK(Expr::open(sort_exprs, _runtime_state.get()));
 
@@ -1055,8 +1066,6 @@ TEST_F(ChunksSorterTest, part_sort_by_3_columns_null_last) {
         page_1 = consume_page_from_sorter(sorter2);
         ASSERT_TRUE(page_1 == nullptr);
     }
-
-    clear_sort_exprs(sort_exprs);
 }
 
 // NOLINTNEXTLINE
@@ -1069,6 +1078,8 @@ TEST_F(ChunksSorterTest, order_by_with_unequal_sized_chunks) {
     std::vector<ExprContext*> sort_exprs;
     sort_exprs.push_back(new ExprContext(_expr_nation.get()));
     sort_exprs.push_back(new ExprContext(_expr_cust_key.get()));
+    // Use DeferOp to ensure cleanup happens even if assertions fail
+    DeferOp defer([&]() { clear_sort_exprs(sort_exprs, _runtime_state.get()); });
     ASSERT_OK(Expr::prepare(sort_exprs, _runtime_state.get()));
     ASSERT_OK(Expr::open(sort_exprs, _runtime_state.get()));
 
@@ -1079,8 +1090,8 @@ TEST_F(ChunksSorterTest, order_by_with_unequal_sized_chunks) {
     ChunkPtr chunk_1 = _chunk_1->clone_empty();
     ChunkPtr chunk_2 = _chunk_2->clone_empty();
     for (size_t i = 0; i < _chunk_1->num_columns(); ++i) {
-        chunk_1->get_column_by_index(i)->append(*(_chunk_1->get_column_by_index(i)), 0, 1);
-        chunk_2->get_column_by_index(i)->append(*(_chunk_2->get_column_by_index(i)), 0, 1);
+        chunk_1->get_column_raw_ptr_by_index(i)->append(*(_chunk_1->get_column_raw_ptr_by_index(i)), 0, 1);
+        chunk_2->get_column_raw_ptr_by_index(i)->append(*(_chunk_2->get_column_raw_ptr_by_index(i)), 0, 1);
     }
     ASSERT_OK(full_sorter.update(_runtime_state.get(), chunk_1));
     ASSERT_OK(full_sorter.update(_runtime_state.get(), chunk_2));
@@ -1095,8 +1106,6 @@ TEST_F(ChunksSorterTest, order_by_with_unequal_sized_chunks) {
     for (size_t i = 0; i < Size; ++i) {
         ASSERT_EQ(permutation[i], page_1->get(i).get(0).get_int32());
     }
-
-    clear_sort_exprs(sort_exprs);
 }
 
 static void reset_permutation(SmallPermutation& permutation, int n) {
@@ -1109,8 +1118,8 @@ static void reset_permutation(SmallPermutation& permutation, int n) {
 TEST_F(ChunksSorterTest, stable_sort) {
     constexpr int N = 7;
     TypeDescriptor type_desc = TypeDescriptor(TYPE_INT);
-    ColumnPtr col1 = ColumnHelper::create_column(type_desc, false);
-    ColumnPtr col2 = ColumnHelper::create_column(type_desc, false);
+    MutableColumnPtr col1 = ColumnHelper::create_column(type_desc, false);
+    MutableColumnPtr col2 = ColumnHelper::create_column(type_desc, false);
     Columns columns{col1, col2};
     std::vector<int32_t> elements_col1{3, 1, 1, 2, 1, 2, 3};
     std::vector<int32_t> elements_col2{3, 2, 1, 3, 1, 2, 3};
@@ -1226,7 +1235,7 @@ TEST_F(ChunksSorterTest, get_filter_test) {
 
 TEST_F(ChunksSorterTest, column_incremental_sort) {
     TypeDescriptor type_desc = TypeDescriptor(TYPE_INT);
-    ColumnPtr nullable_column = ColumnHelper::create_column(type_desc, true);
+    MutableColumnPtr nullable_column = ColumnHelper::create_column(type_desc, true);
 
     // sort empty column
     SmallPermutation permutation;
@@ -1340,7 +1349,7 @@ TEST_F(ChunksSorterTest, test_compare_column) {
 
     // get filter array x < 1
     TypeDescriptor type_desc = TypeDescriptor(TYPE_INT);
-    ColumnPtr nullable_column = ColumnHelper::create_column(type_desc, true);
+    MutableColumnPtr nullable_column = ColumnHelper::create_column(type_desc, true);
 
     nullable_column->append_datum(Datum(1));
     nullable_column->append_datum(Datum(2));

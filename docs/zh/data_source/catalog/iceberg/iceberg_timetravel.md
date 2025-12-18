@@ -20,7 +20,7 @@ import Beta from '../../../_assets/commonMarkdown/_beta.mdx'
 
 ### 创建分支
 
-**语法**
+**`CREATE BRANCH` 语法**
 
 ```SQL
 ALTER TABLE [catalog.][database.]table_name
@@ -73,7 +73,7 @@ WITH SNAPSHOT RETENTION 2 SNAPSHOTS 2 DAYS;
 
 ### 将数据导入到表的特定分支
 
-**语法**
+**`VERSION AS OF` 语法**
 
 ```SQL
 INSERT INTO [catalog.][database.]table_name
@@ -98,7 +98,7 @@ SELECT c1, k1 FROM tbl;
 
 ### 创建标记
 
-**语法**
+**`CREATE TAG` 语法**
 
 ```SQL
 ALTER TABLE [catalog.][database.]table_name
@@ -125,7 +125,7 @@ RETAIN 7 DAYS;
 
 ### 快进一个分支到另一个分支
 
-**语法**
+**`fast_forward` 语法**
 
 ```SQL
 ALTER TABLE [catalog.][database.]table_name
@@ -150,7 +150,7 @@ EXECUTE fast_forward('main', 'test-branch');
 
 您可以拣选一个特定的快照并将其应用到表的当前状态。此操作将基于现有快照创建一个新快照，原始快照不会受到影响。
 
-**语法**
+**`cherrypick_snapshot` 语法**
 
 ```SQL
 ALTER TABLE [catalog.][database.]table_name
@@ -172,7 +172,7 @@ EXECUTE cherrypick_snapshot(54321);
 
 您可以使快照在特定时间点之前过期。此操作将删除过期快照的数据文件。
 
-**语法**
+**`expire_snapshot` 语法**
 
 ```SQL
 ALTER TABLE [catalog.][database.]table_name
@@ -188,7 +188,7 @@ EXECUTE expire_snapshot('2023-12-17 00:14:38')
 
 ### 删除分支或标记
 
-**语法**
+**`DROP BRANCH`、`DROP TAG` 语法**
 
 ```SQL
 ALTER TABLE [catalog.][database.]table_name
@@ -209,7 +209,7 @@ DROP TAG `test-tag`;
 
 ### 时间旅行到特定分支或标记
 
-**语法**
+**`VERSION AS OF` 语法**
 
 ```SQL
 [FOR] VERSION AS OF '<branch_or_tag>'
@@ -230,7 +230,7 @@ SELECT * FROM iceberg.sales.order VERSION AS OF 'test-tag';
 
 ### 时间旅行到特定快照
 
-**语法**
+**`VERSION AS OF` 语法**
 
 ```SQL
 [FOR] VERSION AS OF '<snapshot_id>'
@@ -248,7 +248,7 @@ SELECT * FROM iceberg.sales.order VERSION AS OF 12345;
 
 ### 时间旅行到特定日期时间或日期
 
-**语法**
+**`TIMESTAMP AS OF` 语法**
 
 ```SQL
 [FOR] TIMESTAMP AS OF { '<datetime>' | '<date>' | date_and_time_function }

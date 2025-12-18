@@ -48,6 +48,7 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.UnitTestUtil;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.IndexDef;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.expression.LiteralExprFactory;
 import com.starrocks.type.DateType;
 import com.starrocks.type.PrimitiveType;

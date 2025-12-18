@@ -44,6 +44,7 @@
 #include "exec/query_cache/cache_manager.h"
 #include "exec/workgroup/work_group_fwd.h"
 #include "runtime/base_load_path_mgr.h"
+#include "runtime/lookup_stream_mgr.h"
 #include "runtime/mem_tracker.h"
 #include "storage/options.h"
 #include "util/threadpool.h"
@@ -53,7 +54,6 @@
 
 namespace starrocks {
 class AgentServer;
-class BfdParser;
 class BrokerMgr;
 class BrpcStubCache;
 class DataStreamMgr;
@@ -62,6 +62,7 @@ class ExternalScanContextMgr;
 class FragmentMgr;
 class LoadPathMgr;
 class LoadStreamMgr;
+class LookUpDispatcherMgr;
 class StreamContextMgr;
 class TransactionMgr;
 class BatchWriteMgr;
@@ -102,6 +103,7 @@ class LocationProvider;
 class TabletManager;
 class UpdateManager;
 class ReplicationTxnManager;
+class LakePersistentIndexParallelCompactMgr;
 } // namespace lake
 namespace spill {
 class DirManager;
@@ -157,6 +159,7 @@ public:
     MemTracker* jit_cache_mem_tracker() { return _jit_cache_mem_tracker.get(); }
     MemTracker* update_mem_tracker() { return _update_mem_tracker.get(); }
     MemTracker* passthrough_mem_tracker() { return _passthrough_mem_tracker.get(); }
+    MemTracker* brpc_iobuf_mem_tracker() { return _brpc_iobuf_mem_tracker.get(); }
     MemTracker* clone_mem_tracker() { return _clone_mem_tracker.get(); }
     MemTracker* consistency_mem_tracker() { return _consistency_mem_tracker.get(); }
     MemTracker* replication_mem_tracker() { return _replication_mem_tracker.get(); }
@@ -225,6 +228,7 @@ private:
 
     // record mem usage in passthrough
     std::shared_ptr<MemTracker> _passthrough_mem_tracker;
+    std::shared_ptr<MemTracker> _brpc_iobuf_mem_tracker;
 
     std::shared_ptr<MemTracker> _clone_mem_tracker;
 
@@ -266,6 +270,7 @@ public:
     ExternalScanContextMgr* external_scan_context_mgr() { return _external_scan_context_mgr; }
     MetricRegistry* metrics() const { return _metrics; }
     DataStreamMgr* stream_mgr() { return _stream_mgr; }
+    LookUpDispatcherMgr* lookup_dispatcher_mgr() { return _lookup_dispatcher_mgr; }
     ResultBufferMgr* result_mgr() { return _result_mgr; }
     ResultQueueMgr* result_queue_mgr() { return _result_queue_mgr; }
     ClientCache<BackendServiceClient>* client_cache() { return _backend_client_cache; }
@@ -296,7 +301,6 @@ public:
     ThreadPool* dictionary_cache_pool() { return _dictionary_cache_pool.get(); }
     FragmentMgr* fragment_mgr() { return _fragment_mgr; }
     BaseLoadPathMgr* load_path_mgr() { return _load_path_mgr; }
-    BfdParser* bfd_parser() const { return _bfd_parser; }
     BrokerMgr* broker_mgr() const { return _broker_mgr; }
     BrpcStubCache* brpc_stub_cache() const { return _brpc_stub_cache; }
     LoadChannelMgr* load_channel_mgr() { return _load_channel_mgr; }
@@ -353,6 +357,12 @@ public:
 
     ThreadPool* put_aggregate_metadata_thread_pool() { return _put_aggregate_metadata_thread_pool.get(); }
 
+    lake::LakePersistentIndexParallelCompactMgr* parallel_compact_mgr() { return _parallel_compact_mgr.get(); }
+
+    ThreadPool* pk_index_get_thread_pool() { return _pk_index_get_thread_pool.get(); }
+
+    ThreadPool* pk_index_memtable_flush_thread_pool() { return _pk_index_memtable_flush_thread_pool.get(); }
+
     void try_release_resource_before_core_dump();
 
     DiagnoseDaemon* diagnose_daemon() const { return _diagnose_daemon; }
@@ -395,7 +405,6 @@ private:
 
     BaseLoadPathMgr* _load_path_mgr = nullptr;
 
-    BfdParser* _bfd_parser = nullptr;
     BrokerMgr* _broker_mgr = nullptr;
     LoadChannelMgr* _load_channel_mgr = nullptr;
     LoadStreamMgr* _load_stream_mgr = nullptr;
@@ -425,11 +434,15 @@ private:
     lake::UpdateManager* _lake_update_manager = nullptr;
     lake::ReplicationTxnManager* _lake_replication_txn_manager = nullptr;
     std::unique_ptr<ThreadPool> _put_aggregate_metadata_thread_pool = nullptr;
+    std::unique_ptr<lake::LakePersistentIndexParallelCompactMgr> _parallel_compact_mgr;
+    std::unique_ptr<ThreadPool> _pk_index_get_thread_pool = nullptr;
+    std::unique_ptr<ThreadPool> _pk_index_memtable_flush_thread_pool = nullptr;
 
     AgentServer* _agent_server = nullptr;
     query_cache::CacheManagerRawPtr _cache_mgr;
     std::shared_ptr<spill::DirManager> _spill_dir_mgr;
     DiagnoseDaemon* _diagnose_daemon = nullptr;
+    LookUpDispatcherMgr* _lookup_dispatcher_mgr;
 };
 
 template <>

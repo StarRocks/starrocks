@@ -23,7 +23,6 @@ set(UTIL_FILES
   arrow/starrocks_column_to_arrow.cpp
   arrow/utils.cpp
   await.cpp
-  bfd_parser.cpp
   base85.cpp
   bloom_filter.cpp
   block_split_bloom_filter.cpp

@@ -734,12 +734,12 @@ public final class SqlToScalarOperatorTranslator {
 
             // for nonDeterministicFunctions, we need add an argument as its unique id to distinguish
             // the reusing behavior in common exprs
-            if (FunctionSet.nonDeterministicFunctions.contains(node.getFnName().getFunction())) {
+            if (FunctionSet.nonDeterministicFunctions.contains(node.getFunctionName())) {
                 arguments.add(ConstantOperator.createInt(columnRefFactory.getNextUniqueId()));
             }
 
             CallOperator callOperator = new CallOperator(
-                    node.getFnName().getFunction(),
+                    node.getFunctionName(),
                     node.getType(),
                     arguments,
                     node.getFn(),
@@ -757,7 +757,7 @@ public final class SqlToScalarOperatorTranslator {
                     .map(child -> visit(child, context.clone(node)))
                     .collect(Collectors.toList());
             CallOperator callOperator =
-                    new CallOperator(functionCallExpr.getFnName().getFunction(), functionCallExpr.getType(), arguments,
+                    new CallOperator(functionCallExpr.getFunctionName(), functionCallExpr.getType(), arguments,
                             functionCallExpr.getFn(), functionCallExpr.getParams().isDistinct());
             callOperator.setIgnoreNulls(functionCallExpr.getIgnoreNulls());
             return callOperator;

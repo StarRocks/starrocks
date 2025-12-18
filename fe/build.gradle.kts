@@ -63,6 +63,7 @@ subprojects {
         set("jackson.version", "2.15.2")
         set("jetty.version", "9.4.57.v20241219")
         set("jprotobuf-starrocks.version", "1.0.0")
+        set("junit.version", "5.8.2")
         set("kafka-clients.version", "3.4.0")
         set("kudu.version", "1.17.1")
         set("log4j.version", "2.19.0")
@@ -75,6 +76,7 @@ subprojects {
         set("spark.version", "3.5.5")
         set("staros.version", "4.0.0")
         set("tomcat.version", "8.5.70")
+        set("lz4-java.version", "1.10.1")
         // var sync end
     }
 
@@ -82,6 +84,8 @@ subprojects {
         implementation(platform("com.azure:azure-sdk-bom:${project.ext["azure.version"]}"))
         implementation(platform("io.opentelemetry:opentelemetry-bom:1.14.0"))
         implementation(platform("software.amazon.awssdk:bom:${project.ext["aws-v2-sdk.version"]}"))
+        // Enforce the same JUnit 5 versions as Maven (via `junit.version`) across all FE subprojects.
+        testImplementation(enforcedPlatform("org.junit:junit-bom:${project.ext["junit.version"]}"))
 
         constraints {
             // dependency sync start
@@ -222,7 +226,7 @@ subprojects {
             implementation("org.jboss.xnio:xnio-nio:3.8.16.Final")
             implementation("org.jdom:jdom2:2.0.6.1")
             implementation("org.json:json:20231013")
-            implementation("org.junit.jupiter:junit-jupiter:5.8.2")
+            implementation("org.junit.jupiter:junit-jupiter:${project.ext["junit.version"]}")
             implementation("org.mariadb.jdbc:mariadb-java-client:3.3.2")
             implementation("org.owasp.encoder:encoder:1.3.1")
             implementation("org.postgresql:postgresql:42.4.4")
@@ -232,7 +236,24 @@ subprojects {
             implementation("org.xerial.snappy:snappy-java:1.1.10.5")
             implementation("software.amazon.awssdk:bundle:${project.ext["aws-v2-sdk.version"]}")
             implementation("tools.profiler:async-profiler:${project.ext["async-profiler.version"]}")
+            implementation("at.yawk.lz4:lz4-java:${project.ext["lz4-java.version"]}")
             // dependency sync end
+        }
+    }
+
+    // Resolve capability conflicts: at.yawk.lz4:lz4-java replaces org.lz4:lz4-java and org.lz4:lz4-pure-java
+    configurations.all {
+        resolutionStrategy.capabilitiesResolution {
+            withCapability("org.lz4:lz4-java") {
+                select("at.yawk.lz4:lz4-java:${project.ext["lz4-java.version"]}")
+                because("Use at.yawk.lz4:lz4-java instead of vulnerable org.lz4:lz4-java")
+            }
+        }
+        resolutionStrategy.dependencySubstitution {
+            substitute(module("org.lz4:lz4-java")).using(module("at.yawk.lz4:lz4-java:${project.ext["lz4-java.version"]}"))
+                .because("Replace org.lz4:lz4-java with at.yawk.lz4:lz4-java")
+            substitute(module("org.lz4:lz4-pure-java")).using(module("at.yawk.lz4:lz4-java:${project.ext["lz4-java.version"]}"))
+                .because("Replace org.lz4:lz4-pure-java with at.yawk.lz4:lz4-java")
         }
     }
 

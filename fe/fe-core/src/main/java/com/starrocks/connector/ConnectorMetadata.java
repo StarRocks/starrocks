@@ -360,6 +360,10 @@ public interface ConnectorMetadata {
         throw new StarRocksConnectorException("This connector doesn't support getting cloud configuration");
     }
 
+    default Map<String, String> getCatalogProperties() {
+        return Map.of();
+    }
+
     default Set<DeleteFile> getDeleteFiles(IcebergTable icebergTable, Long snapshotId,
                                            ScalarOperator predicate, FileContent fileContent) {
         throw new StarRocksConnectorException("This connector doesn't support getting delete files");

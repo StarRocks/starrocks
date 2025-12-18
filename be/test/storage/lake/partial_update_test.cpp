@@ -147,7 +147,7 @@ public:
         }
     }
 
-    int64_t check(int64_t version, std::function<bool(int c0, int c1, int c2)> check_fn) {
+    int64_t check(int64_t version, const std::function<bool(int c0, int c1, int c2)>& check_fn) {
         ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(_tablet_metadata->id(), version));
         auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), metadata, *_schema);
         CHECK_OK(reader->prepare());
@@ -874,7 +874,7 @@ TEST_P(LakePartialUpdateTest, test_resolve_conflict) {
     // concurrent partial update
     for (int i = 0; i < 3; i++) {
         auto txn_id = next_id();
-        txn_ids.push_back(txn_id);
+        txn_ids.emplace_back(txn_id);
         ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
                                                    .set_tablet_manager(_tablet_mgr.get())
                                                    .set_tablet_id(tablet_id)
@@ -950,7 +950,7 @@ TEST_P(LakePartialUpdateTest, test_resolve_conflict_multi_segment) {
     std::vector<int64_t> txn_ids;
     for (int i = 0; i < 3; i++) {
         auto txn_id = next_id();
-        txn_ids.push_back(txn_id);
+        txn_ids.emplace_back(txn_id);
         ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
                                                    .set_tablet_manager(_tablet_mgr.get())
                                                    .set_tablet_id(tablet_id)
@@ -1033,7 +1033,7 @@ TEST_P(LakePartialUpdateTest, test_resolve_conflict2) {
     // concurrent partial update
     for (int i = 0; i < 2; i++) {
         auto txn_id = next_id();
-        txn_ids.push_back(txn_id);
+        txn_ids.emplace_back(txn_id);
         ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
                                                    .set_tablet_manager(_tablet_mgr.get())
                                                    .set_tablet_id(tablet_id)
@@ -1891,7 +1891,7 @@ private:
 
 class ModifyColumnType : public SchemaModifier {
 public:
-    explicit ModifyColumnType(int column_idx, std::string target_type)
+    explicit ModifyColumnType(int column_idx, const std::string& target_type)
             : _column_idx(column_idx), _target_type(std::move(target_type)) {}
 
     void modify(TabletSchemaPB* schema) override {
@@ -1909,7 +1909,7 @@ private:
 
 class AddColumn : public SchemaModifier {
 public:
-    explicit AddColumn(int pos, std::string type, bool nullable, std::string default_value)
+    explicit AddColumn(int pos, const std::string& type, bool nullable, const std::string& default_value)
             : _pos(pos), _type(std::move(type)), _nullable(nullable), _default_value(std::move(default_value)) {}
 
     void modify(TabletSchemaPB* schema) override {
@@ -2607,7 +2607,7 @@ TEST_F(LakeColumnUpsertModeTest, test_delete_handling_with_upsert) {
     std::vector<int64_t> txn_ids;
     for (int i = 0; i < 3; i++) {
         auto txn_id = next_id();
-        txn_ids.push_back(txn_id);
+        txn_ids.emplace_back(txn_id);
         ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
                                                    .set_tablet_manager(_tablet_mgr.get())
                                                    .set_tablet_id(tablet_id)

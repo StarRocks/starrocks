@@ -80,10 +80,6 @@ static void clear_remote_snapshot_async(TabletManager* tablet_mgr, int64_t table
 int64_t cal_new_base_version(int64_t tablet_id, TabletManager* tablet_mgr, int64_t base_version, int64_t new_version,
                              const std::span<const TxnInfoPB>& txns) {
     int64_t version = base_version;
-    auto metadata = tablet_mgr->get_latest_cached_tablet_metadata(tablet_id);
-    if (metadata != nullptr && metadata->version() <= new_version) {
-        version = std::max(version, metadata->version());
-    }
 
     auto index_version = tablet_mgr->update_mgr()->get_primary_index_data_version(tablet_id);
     if (index_version > new_version) {

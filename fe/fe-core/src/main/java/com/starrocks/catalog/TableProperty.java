@@ -247,8 +247,6 @@ public class TableProperty implements Writable, GsonPostProcessable {
     private MVQueryRewriteSwitch mvQueryRewriteSwitch = MVQueryRewriteSwitch.DEFAULT;
     private MVTransparentRewriteMode mvTransparentRewriteMode = MVTransparentRewriteMode.FALSE;
 
-    private boolean isInMemory = false;
-
     private boolean enablePersistentIndex = false;
 
     // Only meaningful when enablePersistentIndex = true.
@@ -382,9 +380,6 @@ public class TableProperty implements Writable, GsonPostProcessable {
             case OperationType.OP_MODIFY_REPLICATION_NUM:
                 buildReplicationNum();
                 break;
-            case OperationType.OP_MODIFY_IN_MEMORY:
-                buildInMemory();
-                break;
             case OperationType.OP_MODIFY_ENABLE_PERSISTENT_INDEX:
                 buildEnablePersistentIndex();
                 buildPersistentIndexType();
@@ -437,6 +432,13 @@ public class TableProperty implements Writable, GsonPostProcessable {
                 break;
             default:
                 break;
+        }
+        return this;
+    }
+
+    public TableProperty buildInMemory() {
+        if (properties != null) {
+            properties.remove(PropertyAnalyzer.PROPERTIES_INMEMORY);
         }
         return this;
     }
@@ -727,11 +729,6 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return this;
     }
 
-    public TableProperty buildInMemory() {
-        isInMemory = Boolean.parseBoolean(properties.getOrDefault(PropertyAnalyzer.PROPERTIES_INMEMORY, "false"));
-        return this;
-    }
-
     public TableProperty buildStorageVolume() {
         storageVolume = properties.getOrDefault(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME,
                 RunMode.isSharedDataMode() ? "default" : "local");
@@ -989,19 +986,24 @@ public class TableProperty implements Writable, GsonPostProcessable {
     }
 
     public boolean isSetPartitionRefreshNumber() {
-        return partitionRefreshNumber != INVALID;
+        return properties != null && properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER);
     }
 
     public int getPartitionRefreshNumber() {
-        return partitionRefreshNumber == INVALID ? Config.default_mv_partition_refresh_number : partitionRefreshNumber;
+        if (isSetPartitionRefreshNumber()) {
+            return partitionRefreshNumber;
+        } else {
+            return Config.default_mv_partition_refresh_number;
+        }
     }
 
     public boolean isSetPartitionRefreshStrategy() {
-        return !Strings.isNullOrEmpty(partitionRefreshStrategy);
+        return properties != null && properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_STRATEGY)
+                && !Strings.isNullOrEmpty(partitionRefreshStrategy);
     }
 
     public String getPartitionRefreshStrategy() {
-        return Strings.isNullOrEmpty(partitionRefreshStrategy) ? Config.default_mv_partition_refresh_strategy
+        return !isSetPartitionRefreshStrategy() ? Config.default_mv_partition_refresh_strategy
                 : partitionRefreshStrategy;
     }
 
@@ -1083,10 +1085,6 @@ public class TableProperty implements Writable, GsonPostProcessable {
 
     public MVTransparentRewriteMode getMvTransparentRewriteMode() {
         return this.mvTransparentRewriteMode;
-    }
-
-    public boolean isInMemory() {
-        return isInMemory;
     }
 
     public boolean enablePersistentIndex() {

@@ -54,7 +54,7 @@ class MockPartitionChunkWriter : public PartitionChunkWriter {
 public:
     MockPartitionChunkWriter(std::string partition, std::vector<int8_t> partition_field_null_list,
                              const std::shared_ptr<PartitionChunkWriterContext>& ctx)
-            : PartitionChunkWriter(partition, partition_field_null_list, ctx) {}
+            : PartitionChunkWriter(std::move(partition), std::move(partition_field_null_list), ctx) {}
 
     MOCK_METHOD(Status, init, (), (override));
     MOCK_METHOD(Status, write, (const starrocks::ChunkPtr&), (override));

@@ -135,6 +135,9 @@ message PTransmitRuntimeFilterParams {
     optional bool is_skew_broadcast_join = 12;
     optional PTypeDesc columnType = 13;
     optional int32 skew_shuffle_filter_id = 14;
+
+    optional int32 transmit_timeout_ms = 15;
+    optional int64 transmit_via_http_min_size = 16;
 };
 
 message PTransmitRuntimeFilterResult {
@@ -433,6 +436,8 @@ message PExecPlanFragmentResult {
 };
 
 message PExecBatchPlanFragmentsRequest {
+     // describe attachment protocol: binary, compact, json
+    optional string attachment_protocol = 1;
 };
 
 message PExecBatchPlanFragmentsResult {
@@ -741,6 +746,26 @@ message PUpdateTransactionStateResponse {
     repeated StatusPB results = 1;
 }
 
+message PColumn {
+    optional int32 slot_id = 1;
+    optional int64 data_size = 2;
+    optional bytes data = 3;
+}
+
+message PLookUpRequest {
+    optional PUniqueId query_id = 1;
+    optional int32 lookup_node_id = 2;
+    optional int32 request_tuple_id = 3;
+    repeated PColumn request_columns = 4;
+    repeated PSlotDescriptor lookup_slots = 5;
+}
+
+message PLookUpResponse {
+    optional StatusPB status = 1;
+    repeated PColumn columns = 2;
+}
+
+
 service PInternalService {
     rpc transmit_data(PTransmitDataParams) returns (PTransmitDataResult);
     rpc exec_plan_fragment(PExecPlanFragmentRequest) returns (PExecPlanFragmentResult);
@@ -791,4 +816,5 @@ service PInternalService {
     rpc stream_load(PStreamLoadRequest) returns (PStreamLoadResponse);
 
     rpc update_transaction_state(PUpdateTransactionStateRequest) returns (PUpdateTransactionStateResponse);
+    rpc lookup(PLookUpRequest) returns (PLookUpResponse);
 };

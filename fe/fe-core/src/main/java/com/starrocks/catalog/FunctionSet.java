@@ -272,6 +272,11 @@ public class FunctionSet {
     public static final String GET_JSON_OBJECT = "get_json_object";
     public static final String JSON_LENGTH = "json_length";
     public static final String JSON_REMOVE = "json_remove";
+    public static final String JSON_SET = "json_set";
+    public static final String JSON_PRETTY = "json_pretty";
+
+    // Variant functions:
+    public static final String VARIANT_QUERY = "variant_query";
 
     // Matching functions:
     public static final String ILIKE = "ilike";
@@ -403,6 +408,7 @@ public class FunctionSet {
     public static final String ARRAY_MIN = "array_min";
     public static final String ARRAY_POSITION = "array_position";
     public static final String ARRAY_SORT = "array_sort";
+    public static final String ARRAY_SORT_LAMBDA = "array_sort_lambda";
     public static final String ARRAY_SUM = "array_sum";
     public static final String ARRAY_REMOVE = "array_remove";
     public static final String ARRAY_FILTER = "array_filter";
@@ -559,6 +565,10 @@ public class FunctionSet {
     public static final Function JSON_QUERY_FUNC = new Function(
             new FunctionName(JSON_QUERY), new Type[] {JsonType.JSON, VarcharType.VARCHAR}, JsonType.JSON, false);
 
+    // VARIANT functions
+    public static final Function VARIANT_QUERY_FUNC = new Function(
+            new FunctionName(VARIANT_QUERY), new Type[] {VariantType.VARIANT, VarcharType.VARCHAR}, VariantType.VARIANT, false);
+
     // dict query function
     public static final String DICT_MAPPING = "dict_mapping";
 
@@ -598,6 +608,7 @@ public class FunctionSet {
     public static final String CURRENT_USER = "current_user";
     public static final String CURRENT_ROLE = "current_role";
     public static final String CURRENT_GROUP = "current_group";
+    public static final String CURRENT_WAREHOUSE = "current_warehouse";
 
     // scalar function
     public static final String STATE_SUFFIX = "_state";
@@ -868,6 +879,7 @@ public class FunctionSet {
             .add(CURRENT_USER)
             .add(CURRENT_ROLE)
             .add(CURRENT_GROUP)
+            .add(CURRENT_WAREHOUSE)
             .build();
 
     public static final java.util.function.Function<Type, ArrayType> APPROX_TOP_N_RET_TYPE_BUILDER =
@@ -932,8 +944,8 @@ public class FunctionSet {
                 || functionName.equalsIgnoreCase(LEAD)
                 || functionName.equalsIgnoreCase(LAG)
                 || functionName.equalsIgnoreCase(APPROX_TOP_K)) {
-            final ScalarType descArgType = (ScalarType) descArgTypes[0];
-            final ScalarType candidateArgType = (ScalarType) candidateArgTypes[0];
+            final Type descArgType = descArgTypes[0];
+            final Type candidateArgType = candidateArgTypes[0];
             if (functionName.equalsIgnoreCase(LEAD) ||
                     functionName.equalsIgnoreCase(LAG) ||
                     functionName.equalsIgnoreCase(APPROX_TOP_K)) {
@@ -1256,7 +1268,7 @@ public class FunctionSet {
 
         addBuiltin(AggregateFunction.createBuiltin(ARRAY_AGG,
                 Lists.newArrayList(AnyElementType.ANY_ELEMENT), AnyArrayType.ANY_ARRAY, AnyStructType.ANY_STRUCT, true,
-                true, false, false));
+                true, true, false));
 
         addBuiltin(AggregateFunction.createBuiltin(GROUP_CONCAT,
                 Lists.newArrayList(AnyElementType.ANY_ELEMENT), VarcharType.VARCHAR, AnyStructType.ANY_STRUCT, true,
@@ -1697,24 +1709,24 @@ public class FunctionSet {
             Type arrayType = new ArrayType(type);
             addBuiltin(AggregateFunction.createBuiltin(FunctionSet.ARRAY_AGG_DISTINCT,
                     Lists.newArrayList(type), arrayType, arrayType,
-                    false, false, false));
+                    false, true, false));
         }
         for (ScalarType type : STRING_TYPES) {
             Type arrayType = new ArrayType(type);
             addBuiltin(AggregateFunction.createBuiltin(FunctionSet.ARRAY_AGG_DISTINCT,
                     Lists.newArrayList(type), arrayType, arrayType,
-                    false, false, false));
+                    false, true, false));
         }
 
         for (ScalarType type : DateType.DATE_TYPES) {
             Type arrayType = new ArrayType(type);
             addBuiltin(AggregateFunction.createBuiltin(FunctionSet.ARRAY_AGG_DISTINCT,
                     Lists.newArrayList(type), arrayType, arrayType,
-                    false, false, false));
+                    false, true, false));
         }
         addBuiltin(AggregateFunction.createBuiltin(FunctionSet.ARRAY_AGG_DISTINCT,
                 Lists.newArrayList(DateType.TIME), ArrayType.ARRAY_DATETIME, ArrayType.ARRAY_DATETIME,
-                false, false, false));
+                false, true, false));
     }
 
     private void registerBuiltinMapAggFunction() {

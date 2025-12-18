@@ -72,32 +72,50 @@ Operator::Operator(OperatorFactory* factory, int32_t id, std::string name, int32
 
 Status Operator::prepare(RuntimeState* state) {
     FAIL_POINT_TRIGGER_RETURN_ERROR(random_error);
+
+    if (state->query_ctx() && state->query_ctx()->spill_manager()) {
+        _mem_resource_manager.prepare(this, state->query_ctx()->spill_manager());
+    }
+
+    return Status::OK();
+}
+
+Status Operator::prepare_local_state(RuntimeState* state) {
     _mem_tracker = std::make_shared<MemTracker>();
+
     _total_timer = ADD_TIMER(_common_metrics, "OperatorTotalTime");
     _push_timer = ADD_TIMER(_common_metrics, "PushTotalTime");
     _pull_timer = ADD_TIMER(_common_metrics, "PullTotalTime");
     _finishing_timer = ADD_TIMER_WITH_THRESHOLD(_common_metrics, "SetFinishingTime", 1_ms);
     _finished_timer = ADD_TIMER_WITH_THRESHOLD(_common_metrics, "SetFinishedTime", 1_ms);
     _close_timer = ADD_TIMER_WITH_THRESHOLD(_common_metrics, "CloseTime", 1_ms);
-    _prepare_timer = ADD_TIMER_WITH_THRESHOLD(_common_metrics, "PrepareTime", 1_ms);
-
+    _local_prepare_timer = ADD_TIMER_WITH_THRESHOLD(_common_metrics, "LocalPrepareTime", 1_ms);
+    if (_global_prepare_time_ns > 1) {
+        _global_prepare_timer = ADD_TIMER_WITH_THRESHOLD(_common_metrics, "GlobalPrepareTime", 1_ms);
+        COUNTER_SET(_global_prepare_timer, _global_prepare_time_ns);
+    }
     _push_chunk_num_counter = ADD_COUNTER(_common_metrics, "PushChunkNum", TUnit::UNIT);
     _push_row_num_counter = ADD_COUNTER(_common_metrics, "PushRowNum", TUnit::UNIT);
     _pull_chunk_num_counter = ADD_COUNTER(_common_metrics, "PullChunkNum", TUnit::UNIT);
     _pull_row_num_counter = ADD_COUNTER(_common_metrics, "PullRowNum", TUnit::UNIT);
     _pull_chunk_bytes_counter = ADD_COUNTER(_common_metrics, "OutputChunkBytes", TUnit::BYTES);
-    if (state->query_ctx() && state->query_ctx()->spill_manager()) {
-        _mem_resource_manager.prepare(this, state->query_ctx()->spill_manager());
-    }
+
     for_each_child_operator([&](Operator* child) {
         child->_common_metrics->add_info_string("IsSubordinate");
         child->_common_metrics->add_info_string("IsChild");
     });
+
     return Status::OK();
 }
 
 void Operator::set_prepare_time(int64_t cost_ns) {
-    COUNTER_SET(_prepare_timer, cost_ns);
+    _global_prepare_time_ns = cost_ns;
+}
+
+void Operator::set_local_prepare_time(int64_t cost_ns) {
+    if (_local_prepare_timer != nullptr) {
+        COUNTER_SET(_local_prepare_timer, cost_ns);
+    }
 }
 
 void Operator::set_precondition_ready(RuntimeState* state) {

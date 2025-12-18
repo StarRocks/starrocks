@@ -246,6 +246,7 @@ fi
 
 if [[ -z ${CCACHE} ]] && [[ -x "$(command -v ccache)" ]]; then
     CCACHE=ccache
+    export CCACHE_SLOPPINESS="pch_defines,include_file_mtime,time_macros"
 fi
 
 if [ -e /proc/cpuinfo ] ; then

@@ -17,11 +17,11 @@ package com.starrocks.catalog;
 import com.google.common.collect.Lists;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.analyzer.PartitionDescAnalyzer;
+import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.MultiItemListPartitionDesc;
 import com.starrocks.sql.ast.expression.TypeDef;
 import com.starrocks.thrift.TStorageMedium;
-import com.starrocks.thrift.TTabletType;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.TypeFactory;
 import com.starrocks.utframe.UtFrameUtils;
@@ -68,7 +68,7 @@ public class MultiListPartitionDescTest {
 
     @Test
     public void testGetMethods() throws ParseException, AnalysisException {
-        ColumnDef province = new ColumnDef("province", new TypeDef(TypeFactory.createVarchar(64)));
+        ColumnDef province = new ColumnDef("province", new TypeDef(TypeFactory.createVarcharType(64)));
         province.setAggregateType(AggregateType.NONE);
         ColumnDef dt = new ColumnDef("dt", new TypeDef(TypeFactory.createType(PrimitiveType.DATE)));
         dt.setAggregateType(AggregateType.NONE);
@@ -91,8 +91,6 @@ public class MultiListPartitionDescTest {
 
         Assertions.assertEquals(partitionName, partitionDesc.getPartitionName());
         Assertions.assertEquals(1, partitionDesc.getReplicationNum());
-        Assertions.assertEquals(TTabletType.TABLET_TYPE_MEMORY, partitionDesc.getTabletType());
-        Assertions.assertEquals(true, partitionDesc.isInMemory());
 
         DataProperty dataProperty = partitionDesc.getPartitionDataProperty();
         Assertions.assertEquals(TStorageMedium.SSD, dataProperty.getStorageMedium());

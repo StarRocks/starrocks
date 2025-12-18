@@ -35,14 +35,14 @@
 package com.starrocks.analysis;
 
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.FunctionName;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.sql.ast.ColumnSeparator;
 import com.starrocks.sql.ast.DataDescription;
-import com.starrocks.sql.ast.PartitionNames;
+import com.starrocks.sql.ast.FunctionRef;
+import com.starrocks.sql.ast.PartitionRef;
 import com.starrocks.sql.ast.expression.BinaryPredicate;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.ast.expression.Expr;
@@ -50,6 +50,7 @@ import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.NullLiteral;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.StringLiteral;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
@@ -129,7 +130,8 @@ public class DataDescriptionTest {
                 desc.toString());
 
         // with partition
-        desc = new DataDescription("testTable", new PartitionNames(false, Lists.newArrayList("p1", "p2")),
+        desc = new DataDescription("testTable", new PartitionRef(Lists.newArrayList("p1", "p2"), false,
+                NodePosition.ZERO),
                 Lists.newArrayList("abc.txt"),
                 null, null, null, null, false, null);
         desc.analyze("testDb");
@@ -141,7 +143,8 @@ public class DataDescriptionTest {
         params.add(new SlotRef(null, "k2"));
         BinaryPredicate predicate = new BinaryPredicate(BinaryType.EQ, new SlotRef(null, "k1"),
                 new FunctionCallExpr(FunctionSet.ALIGNMENT_TIMESTAMP, params));
-        desc = new DataDescription("testTable", new PartitionNames(false, Lists.newArrayList("p1", "p2")),
+        desc = new DataDescription("testTable", new PartitionRef(Lists.newArrayList("p1", "p2"), false,
+                NodePosition.ZERO),
                 Lists.newArrayList("abc.txt"),
                 Lists.newArrayList("k2", "k3"), null, null, null, false,
                 Lists.newArrayList((Expr) predicate));
@@ -155,7 +158,8 @@ public class DataDescriptionTest {
         params.add(new StringLiteral("10"));
         predicate = new BinaryPredicate(BinaryType.EQ, new SlotRef(null, "k1"),
                 new FunctionCallExpr(FunctionSet.REPLACE_VALUE, params));
-        desc = new DataDescription("testTable", new PartitionNames(false, Lists.newArrayList("p1", "p2")),
+        desc = new DataDescription("testTable", new PartitionRef(Lists.newArrayList("p1", "p2"), false,
+                NodePosition.ZERO),
                 Lists.newArrayList("abc.txt"),
                 Lists.newArrayList("k2", "k3"), null, null, null,
                 false, Lists.newArrayList((Expr) predicate));
@@ -169,7 +173,8 @@ public class DataDescriptionTest {
         params.add(new NullLiteral());
         predicate = new BinaryPredicate(BinaryType.EQ, new SlotRef(null, "k1"),
                 new FunctionCallExpr(FunctionSet.REPLACE_VALUE, params));
-        desc = new DataDescription("testTable", new PartitionNames(false, Lists.newArrayList("p1", "p2")),
+        desc = new DataDescription("testTable", new PartitionRef(Lists.newArrayList("p1", "p2"), false,
+                NodePosition.ZERO),
                 Lists.newArrayList("abc.txt"),
                 Lists.newArrayList("k2", "k3"), null, null, null, false,
                 Lists.newArrayList((Expr) predicate));
@@ -182,7 +187,8 @@ public class DataDescriptionTest {
         params.add(new SlotRef(null, "k2"));
         predicate = new BinaryPredicate(BinaryType.EQ, new SlotRef(null, "k1"),
                 new FunctionCallExpr("bitmap_dict", params));
-        desc = new DataDescription("testTable", new PartitionNames(false, Lists.newArrayList("p1", "p2")),
+        desc = new DataDescription("testTable", new PartitionRef(Lists.newArrayList("p1", "p2"), false,
+                NodePosition.ZERO),
                 "testHiveTable", false, Lists.newArrayList(predicate), null);
         desc.analyze("testDb");
         sql = "DATA FROM TABLE testHiveTable INTO TABLE testTable PARTITIONS (p1, p2) SET (`k1` = (bitmap_dict(`k2`)))";
@@ -241,7 +247,7 @@ public class DataDescriptionTest {
                                                               @Injectable SlotRef column2,
                                                               @Injectable FunctionCallExpr expr1,
                                                               @Injectable FunctionCallExpr expr2,
-                                                              @Injectable FunctionName functionName) {
+                                                              @Injectable FunctionRef functionName) {
         List<String> columns = Lists.newArrayList();
         columns.add("tmp_col1");
         columns.add("tmp_col2");
@@ -260,10 +266,10 @@ public class DataDescriptionTest {
                 columnMapping1.getChild(1);
                 minTimes = 0;
                 result = expr1;
-                expr1.getFnName();
+                expr1.getFnRef();
                 minTimes = 0;
                 result = functionName;
-                functionName.getFunction();
+                functionName.getDbName();
                 minTimes = 0;
                 result = "test";
                 column1.getColumnName();

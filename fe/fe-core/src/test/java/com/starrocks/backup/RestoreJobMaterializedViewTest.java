@@ -25,7 +25,6 @@ import com.starrocks.backup.BackupJobInfo.BackupTabletInfo;
 import com.starrocks.backup.RestoreJob.RestoreJobState;
 import com.starrocks.backup.mv.MvRestoreContext;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.MaterializedView;
@@ -48,6 +47,7 @@ import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.ast.BrokerDesc;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.parser.AstBuilder;
 import com.starrocks.sql.parser.SqlParser;
@@ -337,8 +337,8 @@ public class RestoreJobMaterializedViewTest extends StarRocksTestBase {
                     .getMaterializedIndices(IndexExtState.VISIBLE)) {
                 BackupIndexInfo idxInfo = new BackupIndexInfo();
                 idxInfo.id = index.getId();
-                idxInfo.name = olapTable.getIndexNameById(index.getId());
-                idxInfo.schemaHash = olapTable.getSchemaHashByIndexId(index.getId());
+                idxInfo.name = olapTable.getIndexNameByMetaId(index.getId());
+                idxInfo.schemaHash = olapTable.getSchemaHashByIndexMetaId(index.getId());
                 partInfo.indexes.put(idxInfo.name, idxInfo);
 
                 for (Tablet tablet : index.getTablets()) {

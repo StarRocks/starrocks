@@ -150,6 +150,10 @@ public class ExecutionDAG {
                 .collect(Collectors.toList());
     }
 
+    public int getWorkerNum() {
+        return workerIdToNumInstances.size();
+    }
+
     public List<ExecutionFragment> getFragmentsInCreatedOrder() {
         return fragments;
     }

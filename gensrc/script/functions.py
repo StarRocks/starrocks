@@ -881,9 +881,15 @@ vectorized_functions = [
      "JsonFunctions::native_json_path_prepare", "JsonFunctions::native_json_path_close"],
     [110024, "json_remove", False, False, "JSON", ["JSON", "VARCHAR", "..."], "JsonFunctions::json_remove",
      "JsonFunctions::native_json_path_prepare", "JsonFunctions::native_json_path_close"],
+    [110025, "json_set", False, False, "JSON", ["JSON", "JSON", "..."], "JsonFunctions::json_set"],
+    [110026, "json_pretty", False, True, "VARCHAR", ["JSON"], "JsonFunctions::json_pretty"],
     [110100, "to_json", False, False, "JSON", ["ANY_MAP"], "JsonFunctions::to_json"],
     [110101, "to_json", False, False, "JSON", ["ANY_STRUCT"], "JsonFunctions::to_json"],
     [110112, "json_contains", False, False, "BOOLEAN", ["JSON", "JSON"], "JsonFunctions::json_contains"],
+
+    # variant type function
+    [110200, "variant_query", False, False, "VARIANT", ["VARIANT", "VARCHAR"], "VariantFunctions::variant_query",
+     "VariantFunctions::variant_segments_prepare", "VariantFunctions::variant_segments_close"],
 
     # aes and base64 function
     # aes_encrypt: 2-parameter version (data, key) for backward compatibility with old FE
@@ -1112,6 +1118,7 @@ vectorized_functions = [
      'ArrayFunctions::array_sort<TYPE_DATETIME>'],
     [150121, 'array_sort', True, False, 'ARRAY_DATE', ['ARRAY_DATE'], 'ArrayFunctions::array_sort<TYPE_DATE>'],
     [150122, 'array_sort', True, False, 'ARRAY_JSON', ['ARRAY_JSON'], 'ArrayFunctions::array_sort<TYPE_JSON>'],
+    [150126, 'array_sort_lambda', True, False, 'ANY_ARRAY', ['ANY_ARRAY', 'FUNCTION'], 'ArrayFunctions::array_sort_lambda'],
 
     [150130, 'reverse', True, False, 'ARRAY_BOOLEAN', ['ARRAY_BOOLEAN'], 'ArrayFunctions::array_reverse<TYPE_BOOLEAN>'],
     [150131, 'reverse', True, False, 'ARRAY_TINYINT', ['ARRAY_TINYINT'], 'ArrayFunctions::array_reverse<TYPE_TINYINT>'],

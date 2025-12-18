@@ -49,17 +49,17 @@ public class WarehouseQueriesSystemTable extends SystemTable {
                 Table.TableType.SCHEMA,
                 builder()
                         .column("WAREHOUSE_ID", IntegerType.BIGINT)
-                        .column("WAREHOUSE_NAME", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                        .column("QUERY_ID", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                        .column("STATE", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                        .column("EST_COSTS_SLOTS", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                        .column("ALLOCATE_SLOTS", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                        .column("QUEUED_WAIT_SECONDS", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                        .column("QUERY", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                        .column("QUERY_START_TIME", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                        .column("QUERY_END_TIME", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                        .column("QUERY_DURATION", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                        .column("EXTRA_MESSAGE", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("WAREHOUSE_NAME", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("QUERY_ID", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("STATE", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("EST_COSTS_SLOTS", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("ALLOCATE_SLOTS", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("QUEUED_WAIT_SECONDS", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("QUERY", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("QUERY_START_TIME", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("QUERY_END_TIME", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("QUERY_DURATION", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("EXTRA_MESSAGE", TypeFactory.createVarcharType(NAME_CHAR_LEN))
                         .build(), TSchemaTableType.SCH_WAREHOUSE_QUERIES);
     }
 

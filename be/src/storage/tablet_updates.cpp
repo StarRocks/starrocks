@@ -1940,7 +1940,7 @@ Status TabletUpdates::_wait_for_version(const EditVersion& version, int64_t time
 }
 
 Status TabletUpdates::_do_update(uint32_t rowset_id, int32_t upsert_idx, int32_t condition_column, int64_t read_version,
-                                 const std::vector<MutableColumnPtr>& upserts, PrimaryIndex& index, int64_t tablet_id,
+                                 const MutableColumns& upserts, PrimaryIndex& index, int64_t tablet_id,
                                  DeletesMap* new_deletes, const TabletSchemaCSPtr& tablet_schema) {
     TEST_SYNC_POINT_CALLBACK("TabletUpdates::_do_update", &rowset_id);
     RETURN_IF_ERROR(breakpoint_check());
@@ -2178,6 +2178,13 @@ Status TabletUpdates::_commit_compaction(std::unique_ptr<CompactionInfo>* pinfo,
                                          EditVersion* commit_version) {
     auto span = Tracer::Instance().start_trace_tablet("commit_compaction", _tablet.tablet_id());
     auto scoped_span = trace::Scope(span);
+    bool add_rowset_succ = false;
+    DeferOp rowset_gc_defer([&]() {
+        // release rowsetid if rowset commit failed
+        if (!add_rowset_succ) {
+            StorageEngine::instance()->release_rowset_id(rowset->rowset_id());
+        }
+    });
     _compaction_state = std::make_unique<CompactionState>();
     if (!config::enable_light_pk_compaction_publish) {
         // Skip load compaction state when enable light pk compaction
@@ -2275,6 +2282,7 @@ Status TabletUpdates::_commit_compaction(std::unique_ptr<CompactionInfo>* pinfo,
     {
         std::lock_guard<std::mutex> lg(_rowsets_lock);
         _rowsets[rowsetid] = rowset;
+        add_rowset_succ = true;
     }
     {
         auto rowset_stats = std::make_unique<RowsetStats>();
@@ -5272,7 +5280,7 @@ static StatusOr<std::unique_ptr<ColumnIterator>> new_dcg_column_iterator(GetDelt
 
 Status TabletUpdates::get_column_values(const std::vector<uint32_t>& column_ids, int64_t read_version,
                                         bool with_default, std::map<uint32_t, std::vector<uint32_t>>& rowids_by_rssid,
-                                        vector<MutableColumnPtr>* columns, void* state,
+                                        MutableColumns* columns, void* state,
                                         const TabletSchemaCSPtr& read_tablet_schema,
                                         const std::map<string, string>* column_to_expr_value) {
     std::vector<uint32_t> unique_column_ids;

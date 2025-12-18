@@ -574,7 +574,10 @@ Buffer<DecimalV2Value> convert_orc_to_starrocks_decimalv2(RuntimeState* state, O
     auto nullable = NullableColumn::static_pointer_cast(chunk->get_column_by_index(0));
     CHECK(!nullable->has_null());
     auto decimal_col = DecimalColumn::static_pointer_cast(nullable->data_column());
-    return decimal_col->get_data();
+    const auto span = decimal_col->get_data();
+    Buffer<DecimalV2Value> result;
+    result.assign(span.begin(), span.end());
+    return result;
 }
 
 TEST_F(OrcChunkReaderTest, TestDecimal64) {
@@ -888,7 +891,7 @@ Buffer<TimestampValue> convert_orc_to_starrocks_timestamp(RuntimeState* state, O
 
     Status status = DescriptorTbl::create(state, pool, builder.desc_tbl(), &tbl, config::vector_chunk_size);
     DCHECK(status.ok()) << status.message();
-    slots.push_back(tbl->get_slot_descriptor(0));
+    slots.emplace_back(tbl->get_slot_descriptor(0));
 
     OrcChunkReader reader(state->chunk_size(), slots);
     reader.set_timezone(reader_tz);
@@ -909,7 +912,10 @@ Buffer<TimestampValue> convert_orc_to_starrocks_timestamp(RuntimeState* state, O
     auto nullable = NullableColumn::static_pointer_cast(chunk->get_column_by_index(0));
     CHECK(!nullable->has_null());
     auto ts_col = TimestampColumn::static_pointer_cast(nullable->data_column());
-    return ts_col->get_data();
+    const auto span = ts_col->get_data();
+    Buffer<TimestampValue> result;
+    result.assign(span.begin(), span.end());
+    return result;
 }
 
 TEST_F(OrcChunkReaderTest, TestTimestamp) {

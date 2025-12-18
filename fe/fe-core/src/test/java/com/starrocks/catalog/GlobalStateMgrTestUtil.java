@@ -43,6 +43,8 @@ import com.starrocks.common.DdlException;
 import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
+import com.starrocks.sql.ast.AggregateType;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.PartitionKeyDesc;
 import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.sql.ast.SingleRangePartitionDesc;
@@ -231,7 +233,7 @@ public class GlobalStateMgrTestUtil {
         table.addPartition(partition);
         table.setIndexMeta(indexId, testIndex1, columns, 0, testSchemaHash1, (short) 1, TStorageType.COLUMN,
                 KeysType.AGG_KEYS);
-        table.setBaseIndexId(indexId);
+        table.setBaseIndexMetaId(indexId);
         table.setReplicationNum((short) 3);
         // db
         Database db = new Database(dbId, testDb1);

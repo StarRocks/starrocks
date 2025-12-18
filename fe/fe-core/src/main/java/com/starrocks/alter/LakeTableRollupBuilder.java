@@ -54,7 +54,7 @@ public class LakeTableRollupBuilder extends AlterJobV2Builder {
          * create all rollup indexes. and set state.
          * After setting, Tables' state will be ROLLUP
          */
-        int baseSchemaHash = olapTable.getSchemaHashByIndexId(baseIndexId);
+        int baseSchemaHash = olapTable.getSchemaHashByIndexMetaId(baseIndexId);
         // mvSchemaVersion will keep same with the src MaterializedIndex
         int mvSchemaVersion = olapTable.getIndexMetaByIndexId(baseIndexId).getSchemaVersion();
         int mvSchemaHash = Util.schemaHash(0 /* init schema version */, rollupColumns, olapTable.getBfColumnNames(),
@@ -97,7 +97,7 @@ public class LakeTableRollupBuilder extends AlterJobV2Builder {
                         .collect(Collectors.toList());
                 List<Long> shadowTabletIds = GlobalStateMgr.getCurrentState().getStarOSAgent().createShards(
                         originTablets.size(),
-                        olapTable.getPartitionFilePathInfo(physicalPartition.getPathId()),
+                        olapTable.getPartitionFilePathInfo(physicalPartitionId),
                         olapTable.getPartitionFileCacheInfo(physicalPartitionId),
                         shardGroupId, originTableIds, shardProperties, computeResource);
                 Preconditions.checkState(originTablets.size() == shadowTabletIds.size());

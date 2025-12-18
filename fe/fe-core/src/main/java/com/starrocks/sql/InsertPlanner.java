@@ -24,7 +24,6 @@ import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.IcebergTable;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MysqlTable;
@@ -64,6 +63,7 @@ import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.InsertStmt;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectListItem;
@@ -492,12 +492,12 @@ public class InsertPlanner {
                     // If you want to set tablet sink dop > 1, please enable single tablet loading and disable shuffle service
                     sinkFragment.setPipelineDop(1);
                 } else {
-                    if (ConnectContext.get().getSessionVariable().getEnableAdaptiveSinkDop()) {
-                        sinkFragment.setPipelineDop(
-                                ConnectContext.get().getSessionVariable().getSinkDegreeOfParallelism());
+                    SessionVariable sv = session.getSessionVariable();
+                    if (sv.getEnableAdaptiveSinkDop()) {
+                        long warehouseId = session.getCurrentComputeResource().getWarehouseId();
+                        sinkFragment.setPipelineDop(sv.getSinkDegreeOfParallelism(warehouseId));
                     } else {
-                        sinkFragment
-                                .setPipelineDop(ConnectContext.get().getSessionVariable().getParallelExecInstanceNum());
+                        sinkFragment.setPipelineDop(sv.getParallelExecInstanceNum());
                     }
                 }
 
@@ -791,8 +791,8 @@ public class InsertPlanner {
                     // Only olap table can have the synchronized materialized view.
                     OlapTable targetOlapTable = (OlapTable) targetTable;
                     MaterializedIndexMeta targetIndexMeta = null;
-                    for (MaterializedIndexMeta indexMeta : targetOlapTable.getIndexIdToMeta().values()) {
-                        if (indexMeta.getIndexId() == targetOlapTable.getBaseIndexId()) {
+                    for (MaterializedIndexMeta indexMeta : targetOlapTable.getIndexMetaIdToMeta().values()) {
+                        if (indexMeta.getIndexMetaId() == targetOlapTable.getBaseIndexMetaId()) {
                             continue;
                         }
                         for (Column column : indexMeta.getSchema()) {
@@ -803,7 +803,7 @@ public class InsertPlanner {
                         }
                     }
                     String targetIndexMetaName = targetIndexMeta == null ? "" :
-                            targetOlapTable.getIndexNameById(targetIndexMeta.getIndexId());
+                            targetOlapTable.getIndexNameByMetaId(targetIndexMeta.getIndexMetaId());
                     throw new SemanticException(
                             "The define expr of shadow column " + targetColumn.getName() + " is null, " +
                                     "please check the associated materialized view " + targetIndexMetaName
@@ -837,20 +837,20 @@ public class InsertPlanner {
 
             // columnIdx >= outputColumns.size() mean this is a new add schema change column
             if (columnIdx >= outputColumns.size()) {
-                ColumnRefOperator columnRefOperator = columnRefFactory.create(
-                        targetColumn.getName(), targetColumn.getType(), targetColumn.isAllowNull());
-                outputColumns.add(columnRefOperator);
-
+                ScalarOperator scalarOperator = null;
                 Column.DefaultValueType defaultValueType = targetColumn.getDefaultValueType();
                 if (defaultValueType == Column.DefaultValueType.NULL) {
-                    columnRefMap.put(columnRefOperator, ConstantOperator.createNull(targetColumn.getType()));
+                    scalarOperator = ConstantOperator.createNull(targetColumn.getType());
                 } else if (defaultValueType == Column.DefaultValueType.CONST) {
-                    columnRefMap.put(columnRefOperator, ConstantOperator.createVarchar(
-                            targetColumn.calculatedDefaultValue()));
+                    scalarOperator = ConstantOperator.createVarchar(targetColumn.calculatedDefaultValue());
                 } else if (defaultValueType == Column.DefaultValueType.VARY) {
                     throw new SemanticException("Column:" + targetColumn.getName() + " has unsupported default value:"
                             + targetColumn.getDefaultExpr().getExpr());
                 }
+                ColumnRefOperator col = columnRefFactory
+                        .create(scalarOperator, scalarOperator.getType(), scalarOperator.isNullable());
+                outputColumns.add(col);
+                columnRefMap.put(col, scalarOperator);
             } else {
                 columnRefMap.put(outputColumns.get(columnIdx), outputColumns.get(columnIdx));
             }
@@ -958,7 +958,7 @@ public class InsertPlanner {
         Preconditions.checkState(columns.size() == outputColumns.size(),
                 "outputColumn's size must equal with table's column size");
 
-        List<Column> keyColumns = table.getKeyColumnsByIndexId(table.getBaseIndexId());
+        List<Column> keyColumns = table.getKeyColumnsByIndexId(table.getBaseIndexMetaId());
         List<Integer> keyColumnIds = Lists.newArrayList();
         keyColumns.forEach(column -> {
             int index = columns.indexOf(column);

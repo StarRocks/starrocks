@@ -19,15 +19,11 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.aws.AwsCloudConfiguration;
-import com.starrocks.persist.DropStorageVolumeLog;
-import com.starrocks.persist.EditLog;
-import com.starrocks.persist.SetDefaultStorageVolumeLog;
 import com.starrocks.storagevolume.StorageVolume;
-import mockit.Expectations;
-import mockit.Mock;
-import mockit.MockUp;
-import mockit.Mocked;
+import com.starrocks.utframe.UtFrameUtils;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
@@ -42,27 +38,20 @@ import static com.starrocks.connector.share.credential.CloudConfigurationConstan
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR;
 
 public class SharedNothingStorageVolumeMgrTest {
-    @Mocked
-    private EditLog editLog;
+
+    @BeforeEach
+    public void setUp() throws Exception {
+        // Initialize test environment
+        UtFrameUtils.setUpForPersistTest();
+    }
+
+    @AfterEach
+    public void tearDown() {
+        UtFrameUtils.tearDownForPersisTest();
+    }
 
     @Test
     public void testStorageVolumeCRUD() throws AlreadyExistsException, DdlException, MetaNotFoundException {
-        new MockUp<GlobalStateMgr>() {
-            @Mock
-            public EditLog getEditLog() {
-                return editLog;
-            }
-        };
-
-        new Expectations() {
-            {
-                editLog.logSetDefaultStorageVolume((SetDefaultStorageVolumeLog) any);
-                editLog.logCreateStorageVolume((StorageVolume) any);
-                editLog.logUpdateStorageVolume((StorageVolume) any);
-                editLog.logDropStorageVolume((DropStorageVolumeLog) any);
-            }
-        };
-
         String svName = "test";
         String svName1 = "test1";
         // create

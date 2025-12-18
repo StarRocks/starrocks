@@ -20,7 +20,6 @@ import com.google.common.collect.Sets;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MaterializedViewRefreshType;
@@ -61,6 +60,7 @@ import com.starrocks.sql.analyzer.SetStmtAnalyzer;
 import com.starrocks.sql.analyzer.mv.IVMAnalyzer;
 import com.starrocks.sql.ast.AlterMaterializedViewStatusClause;
 import com.starrocks.sql.ast.AsyncRefreshSchemeDesc;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.ModifyTablePropertiesClause;
 import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.ast.QueryStatement;
@@ -822,16 +822,16 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
         }
 
         // If there is synchronized materialized view referring the column, throw exception.
-        if (olapTable.getIndexNameToId().size() > 1) {
-            Map<Long, MaterializedIndexMeta> metaMap = olapTable.getIndexIdToMeta();
+        if (olapTable.getIndexNameToMetaId().size() > 1) {
+            Map<Long, MaterializedIndexMeta> metaMap = olapTable.getIndexMetaIdToMeta();
             for (Map.Entry<Long, MaterializedIndexMeta> entry : metaMap.entrySet()) {
                 Long id = entry.getKey();
-                if (id == olapTable.getBaseIndexId()) {
+                if (id == olapTable.getBaseIndexMetaId()) {
                     continue;
                 }
                 MaterializedIndexMeta meta = entry.getValue();
                 List<Column> schema = meta.getSchema();
-                String indexName = olapTable.getIndexNameById(id);
+                String indexName = olapTable.getIndexNameByMetaId(id);
                 // ignore agg_keys type because it's like duplicated without agg functions
                 boolean hasAggregateFunction = olapTable.getKeysType() != KeysType.AGG_KEYS &&
                         schema.stream().anyMatch(x -> x.isAggregated());

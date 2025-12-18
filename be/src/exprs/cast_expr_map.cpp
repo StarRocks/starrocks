@@ -64,14 +64,14 @@ StatusOr<ColumnPtr> CastJsonToMap::evaluate_checked(ExprContext* context, Chunk*
         SlotId slot_id = down_cast<ColumnRef*>(_key_cast_expr->get_child(0))->slot_id();
         chunk->append_column(keys_column, slot_id);
         ASSIGN_OR_RETURN(auto result, _key_cast_expr->evaluate_checked(context, chunk.get()));
-        keys_column = ColumnHelper::cast_to_nullable_column(result);
+        keys_column = ColumnHelper::cast_to_nullable_column(std::move(result));
     }
     if (_value_cast_expr != nullptr) {
         ChunkPtr chunk = std::make_shared<Chunk>();
         SlotId slot_id = down_cast<ColumnRef*>(_value_cast_expr->get_child(0))->slot_id();
         chunk->append_column(values_column, slot_id);
         ASSIGN_OR_RETURN(auto result, _value_cast_expr->evaluate_checked(context, chunk.get()));
-        values_column = ColumnHelper::cast_to_nullable_column(result);
+        values_column = ColumnHelper::cast_to_nullable_column(std::move(result));
     }
 
     auto map_column = MapColumn::create(std::move(keys_column), std::move(values_column), std::move(offsets_column));

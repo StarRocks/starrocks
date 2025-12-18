@@ -28,6 +28,7 @@ import com.starrocks.type.DateType;
 import com.starrocks.type.DecimalType;
 import com.starrocks.type.FloatType;
 import com.starrocks.type.FunctionType;
+import com.starrocks.type.HLLType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.InvalidType;
 import com.starrocks.type.JsonType;
@@ -570,7 +571,7 @@ public class TypeManager {
         boolean t2IsHLL = t2.getType() == PrimitiveType.HLL;
         if (t1IsHLL || t2IsHLL) {
             if (t1IsHLL && t2IsHLL) {
-                return TypeFactory.createHllType();
+                return HLLType.HLL;
             }
             return InvalidType.INVALID;
         }

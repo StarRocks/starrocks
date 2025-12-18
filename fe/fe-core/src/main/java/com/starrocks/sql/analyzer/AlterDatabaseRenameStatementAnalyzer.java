@@ -19,6 +19,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AlterDatabaseRenameStatement;
 
 import static com.starrocks.catalog.InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
+import static com.starrocks.common.util.Util.normalizeName;
 import static com.starrocks.sql.parser.ErrorMsgProxy.PARSER_ERROR_MSG;
 
 public class AlterDatabaseRenameStatementAnalyzer {
@@ -27,7 +28,9 @@ public class AlterDatabaseRenameStatementAnalyzer {
             if (Strings.isNullOrEmpty(context.getCurrentCatalog())) {
                 throw new SemanticException(PARSER_ERROR_MSG.noCatalogSelected());
             }
-            statement.setCatalogName(context.getCurrentCatalog());
+            String catalog = context.getCurrentCatalog();
+            catalog = normalizeName(catalog);
+            statement.setCatalogName(catalog);
         }
 
         if (!DEFAULT_INTERNAL_CATALOG_NAME.equalsIgnoreCase(statement.getCatalogName())) {

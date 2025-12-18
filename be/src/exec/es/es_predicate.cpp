@@ -104,7 +104,7 @@ VExtLiteral::VExtLiteral(LogicalType type, ColumnPtr column, const std::string& 
     } else if (type == TYPE_DECIMAL32 || type == TYPE_DECIMAL64 || type == TYPE_DECIMAL128) {
         DCHECK(!column->is_null(0));
         if (column->is_constant()) {
-            _value = down_cast<ConstColumn*>(column.get())->data_column()->debug_item(0);
+            _value = down_cast<const ConstColumn*>(column.get())->data_column()->debug_item(0);
         } else {
             _value = column->debug_item(0);
         }

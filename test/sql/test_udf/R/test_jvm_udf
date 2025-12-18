@@ -309,3 +309,30 @@ select id, sum_map(data) from map_table group by id order by id;
 1	{"a":30,"b":20,"c":20}
 2	{null:40,"d":50,"e":30}
 -- !result
+CREATE FUNCTION echoint(int)
+RETURNS int
+symbol = "Echoint"
+type = "StarrocksJar"
+file = "${udf_url}/starrocks-jdbc/udf.jar";
+-- result:
+-- !result
+CREATE TABLE `t1` (
+  `c0` int DEFAULT NULL,
+  `c1` int DEFAULT NULL,
+  `c2` array<int> DEFAULT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`c0`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`c0`) BUCKETS 4
+PROPERTIES (
+"replication_num" = "1"
+);
+-- result:
+-- !result
+insert into t1 SELECT generate_series, 4096 - generate_series, [generate_series] FROM TABLE(generate_series(1,  40960));
+-- result:
+-- !result
+select count(*) from (select * from t1 where any_match((x)->cast(echoint(1) as boolean), c2)) t;
+-- result:
+40960
+-- !result

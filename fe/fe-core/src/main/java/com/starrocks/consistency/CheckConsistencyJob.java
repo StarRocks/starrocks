@@ -174,7 +174,7 @@ public class CheckConsistencyJob {
             }
 
             checkedVersion = physicalPartition.getVisibleVersion();
-            checkedSchemaHash = olapTable.getSchemaHashByIndexId(tabletMeta.getIndexId());
+            checkedSchemaHash = olapTable.getSchemaHashByIndexMetaId(tabletMeta.getIndexId());
 
             int sentTaskReplicaNum = 0;
             long maxDataSize = 0;
@@ -292,9 +292,9 @@ public class CheckConsistencyJob {
             }
 
             // check if schema has changed
-            if (checkedSchemaHash != olapTable.getSchemaHashByIndexId(tabletMeta.getIndexId())) {
+            if (checkedSchemaHash != olapTable.getSchemaHashByIndexMetaId(tabletMeta.getIndexId())) {
                 LOG.info("index[{}]'s schema hash has been changed. [{} -> {}]. retry", tabletMeta.getIndexId(),
-                            checkedSchemaHash, olapTable.getSchemaHashByIndexId(tabletMeta.getIndexId()));
+                            checkedSchemaHash, olapTable.getSchemaHashByIndexMetaId(tabletMeta.getIndexId()));
                 return -1;
             }
 

@@ -48,7 +48,6 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Index;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
@@ -88,6 +87,7 @@ import com.starrocks.sql.analyzer.RelationFields;
 import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.analyzer.SelectAnalyzer.RewriteAliasVisitor;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.SlotRef;
@@ -107,6 +107,7 @@ import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletSchema;
+import com.starrocks.thrift.TTabletType;
 import com.starrocks.thrift.TTaskType;
 import io.opentelemetry.api.trace.StatusCode;
 import org.apache.logging.log4j.LogManager;
@@ -358,9 +359,9 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
         Locker locker = new Locker();
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.READ);
         try {
-            long baseIndexId = tbl.getBaseIndexId();
+            long baseIndexId = tbl.getBaseIndexMetaId();
             Preconditions.checkState(tbl.getState() == OlapTableState.SCHEMA_CHANGE);
-            MaterializedIndexMeta index = tbl.getIndexMetaByIndexId(tbl.getBaseIndexId());
+            MaterializedIndexMeta index = tbl.getIndexMetaByIndexId(tbl.getBaseIndexMetaId());
             for (long partitionId : physicalPartitionIndexMap.rowKeySet()) {
                 PhysicalPartition partition = tbl.getPhysicalPartition(partitionId);
                 if (partition == null) {
@@ -379,7 +380,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                     int shadowSchemaHash = indexSchemaVersionAndHashMap.get(shadowIdxId).schemaHash;
                     int shadowSchemaVersion = indexSchemaVersionAndHashMap.get(shadowIdxId).schemaVersion;
                     long originIndexId = indexIdMap.get(shadowIdxId);
-                    KeysType originKeysType = tbl.getKeysTypeByIndexId(originIndexId);
+                    KeysType originKeysType = tbl.getKeysTypeByIndexMetaId(originIndexId);
                     TTabletSchema tabletSchema = SchemaInfo.newBuilder()
                             .setId(shadowIdxId) // For newly created materialized, schema id equals to index id
                             .setKeysType(originKeysType)
@@ -415,7 +416,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                                     .setLatch(countDownLatch)
                                     .setEnablePersistentIndex(tbl.enablePersistentIndex())
                                     .setPrimaryIndexCacheExpireSec(tbl.primaryIndexCacheExpireSec())
-                                    .setTabletType(tbl.getPartitionInfo().getTabletType(partition.getParentId()))
+                                    .setTabletType(TTabletType.TABLET_TYPE_DISK)
                                     .setCompressionType(tbl.getCompressionType())
                                     .setCompressionLevel(tbl.getCompressionLevel())
                                     .setBaseTabletId(baseTabletId)
@@ -516,7 +517,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
             List<Integer> sortKeyColumnUniqueIds = null;
 
             long orgIndexId = indexIdMap.get(shadowIdxId);
-            if (orgIndexId == tbl.getBaseIndexId()) {
+            if (orgIndexId == tbl.getBaseIndexMetaId()) {
                 sortKeyColumnIndexes = sortKeyIdxes;
                 sortKeyColumnUniqueIds = sortKeyUniqueIds;
             }
@@ -526,7 +527,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                     indexSchemaVersionAndHashMap.get(shadowIdxId).schemaVersion,
                     indexSchemaVersionAndHashMap.get(shadowIdxId).schemaHash,
                     indexShortKeyMap.get(shadowIdxId), TStorageType.COLUMN,
-                    tbl.getKeysTypeByIndexId(orgIndexId), null, sortKeyColumnIndexes,
+                    tbl.getKeysTypeByIndexMetaId(orgIndexId), null, sortKeyColumnIndexes,
                     sortKeyColumnUniqueIds);
             MaterializedIndexMeta orgIndexMeta = tbl.getIndexMetaByIndexId(orgIndexId);
             Preconditions.checkNotNull(orgIndexMeta);
@@ -589,10 +590,10 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
 
                     boolean hasNewGeneratedColumn = false;
                     List<Column> diffGeneratedColumnSchema = Lists.newArrayList();
-                    if (originIdxId == tbl.getBaseIndexId()) {
-                        List<String> originSchema = tbl.getSchemaByIndexId(originIdxId).stream().map(col ->
+                    if (originIdxId == tbl.getBaseIndexMetaId()) {
+                        List<String> originSchema = tbl.getSchemaByIndexMetaId(originIdxId).stream().map(col ->
                                 new String(col.getName())).collect(Collectors.toList());
-                        List<String> newSchema = tbl.getSchemaByIndexId(shadowIdxId).stream().map(col ->
+                        List<String> newSchema = tbl.getSchemaByIndexMetaId(shadowIdxId).stream().map(col ->
                                 new String(col.getName())).collect(Collectors.toList());
 
                         if (originSchema.size() != 0 && newSchema.size() != 0) {
@@ -706,10 +707,10 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                         generatedColumnReq.setMc_exprs(mcExprs);
                     }
                     int shadowSchemaHash = indexSchemaVersionAndHashMap.get(shadowIdxId).schemaHash;
-                    int originSchemaHash = tbl.getSchemaHashByIndexId(indexIdMap.get(shadowIdxId));
+                    int originSchemaHash = tbl.getSchemaHashByIndexMetaId(indexIdMap.get(shadowIdxId));
                     List<TColumn> originSchemaTColumns = indexToThriftColumns.get(originIdxId);
                     if (originSchemaTColumns == null) {
-                        originSchemaTColumns = tbl.getSchemaByIndexId(originIdxId).stream()
+                        originSchemaTColumns = tbl.getSchemaByIndexMetaId(originIdxId).stream()
                                 .map(Column::toThrift)
                                 .collect(Collectors.toList());
                         indexToThriftColumns.put(originIdxId, originSchemaTColumns);
@@ -863,7 +864,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
             Long shadowIdxId = entry.getKey();
             long originIndexId = indexIdMap.get(shadowIdxId);
             List<Column> shadowSchema = entry.getValue();
-            List<Column> originSchema = tbl.getSchemaByIndexId(originIndexId);
+            List<Column> originSchema = tbl.getSchemaByIndexMetaId(originIndexId);
             if (shadowSchema.size() == originSchema.size()) {
                 // modify column
                 for (Column col : shadowSchema) {
@@ -898,7 +899,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
         // dictionary invalid after schema change.
         for (Column column : tbl.getColumns()) {
             if (column.getType().isVarchar()) {
-                IDictManager.getInstance().removeGlobalDict(tbl.getId(), column.getColumnId());
+                IDictManager.getInstance().removeGlobalDict(tbl, column.getColumnId());
             }
         }
         // replace the origin index with shadow index, set index state as NORMAL
@@ -953,17 +954,17 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
         for (Map.Entry<Long, Long> entry : indexIdMap.entrySet()) {
             long shadowIdxId = entry.getKey();
             long originIdxId = entry.getValue();
-            String shadowIdxName = tbl.getIndexNameById(shadowIdxId);
-            String originIdxName = tbl.getIndexNameById(originIdxId);
+            String shadowIdxName = tbl.getIndexNameByMetaId(shadowIdxId);
+            String originIdxName = tbl.getIndexNameByMetaId(originIdxId);
             tbl.deleteIndexInfo(originIdxName);
             // the shadow index name is '__starrocks_shadow_xxx', rename it to origin name 'xxx'
             // this will also remove the prefix of columns
             tbl.renameIndexForSchemaChange(shadowIdxName, originIdxName);
             tbl.renameColumnNamePrefix(shadowIdxId);
 
-            if (originIdxId == tbl.getBaseIndexId()) {
+            if (originIdxId == tbl.getBaseIndexMetaId()) {
                 // set base index
-                tbl.setBaseIndexId(shadowIdxId);
+                tbl.setBaseIndexMetaId(shadowIdxId);
             }
         }
         // rebuild table's full schema

@@ -148,7 +148,7 @@ public class ArrowFlightSqlConnectContextTest {
     public void testAddShowResultAndGetResult() {
         String queryId = "query-2";
 
-        Column column = new Column("col1", TypeFactory.createVarchar(20));
+        Column column = new Column("col1", TypeFactory.createVarcharType(20));
         ShowResultSetMetaData metaData = new ShowResultSetMetaData(Collections.singletonList(column));
         ShowResultSet showResultSet = new ShowResultSet(metaData, List.of(Collections.singletonList("value1")));
 

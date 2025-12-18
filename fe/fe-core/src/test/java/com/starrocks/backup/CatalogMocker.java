@@ -37,14 +37,12 @@ package com.starrocks.backup;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
-import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.FakeEditLog;
 import com.starrocks.catalog.HashDistributionInfo;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
@@ -71,6 +69,8 @@ import com.starrocks.load.Load;
 import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AggregateType;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TStorageMedium;
@@ -273,12 +273,11 @@ public class CatalogMocker {
                         TEST_SINGLE_PARTITION_NAME, baseIndex, distributionInfo);
         PartitionInfo partitionInfo = new SinglePartitionInfo();
         partitionInfo.setReplicationNum(TEST_SINGLE_PARTITION_ID, (short) 3);
-        partitionInfo.setIsInMemory(TEST_SINGLE_PARTITION_ID, false);
         DataProperty dataProperty = new DataProperty(TStorageMedium.HDD);
         partitionInfo.setDataProperty(TEST_SINGLE_PARTITION_ID, dataProperty);
         OlapTable olapTable = new OlapTable(TEST_TBL_ID, TEST_TBL_NAME, TEST_TBL_BASE_SCHEMA,
                 KeysType.AGG_KEYS, partitionInfo, distributionInfo);
-        Deencapsulation.setField(olapTable, "baseIndexId", TEST_TBL_ID);
+        Deencapsulation.setField(olapTable, "baseIndexMetaId", TEST_TBL_ID);
 
         LocalTablet tablet0 = new LocalTablet(TEST_TABLET0_ID);
         TabletMeta tabletMeta = new TabletMeta(TEST_DB_ID, TEST_TBL_ID, TEST_SINGLE_PARTITION_ID,
@@ -331,7 +330,7 @@ public class CatalogMocker {
                 PartitionKey.createPartitionKey(Lists.newArrayList(new PartitionValue("10")),
                         Lists.newArrayList(TEST_TBL_BASE_SCHEMA.get(0)));
         Range<PartitionKey> rangeP1 = Range.closedOpen(rangeP1Lower, rangeP1Upper);
-        rangePartitionInfo.addPartition(TEST_PARTITION1_ID, false, rangeP1, dataPropertyP1, (short) 3, false);
+        rangePartitionInfo.addPartition(TEST_PARTITION1_ID, false, rangeP1, dataPropertyP1, (short) 3, null);
 
         DataProperty dataPropertyP2 = new DataProperty(TStorageMedium.HDD);
         PartitionKey rangeP2Lower =
@@ -341,11 +340,11 @@ public class CatalogMocker {
                 PartitionKey.createPartitionKey(Lists.newArrayList(new PartitionValue("20")),
                         Lists.newArrayList(TEST_TBL_BASE_SCHEMA.get(0)));
         Range<PartitionKey> rangeP2 = Range.closedOpen(rangeP2Lower, rangeP2Upper);
-        rangePartitionInfo.addPartition(TEST_PARTITION2_ID, false, rangeP2, dataPropertyP2, (short) 3, false);
+        rangePartitionInfo.addPartition(TEST_PARTITION2_ID, false, rangeP2, dataPropertyP2, (short) 3, null);
 
         OlapTable olapTable2 = new OlapTable(TEST_TBL2_ID, TEST_TBL2_NAME, TEST_TBL_BASE_SCHEMA,
                 KeysType.AGG_KEYS, rangePartitionInfo, distributionInfo2);
-        Deencapsulation.setField(olapTable2, "baseIndexId", TEST_TBL2_ID);
+        Deencapsulation.setField(olapTable2, "baseIndexMetaId", TEST_TBL2_ID);
 
         LocalTablet baseTabletP1 = new LocalTablet(TEST_BASE_TABLET_P1_ID);
         TabletMeta tabletMetaBaseTabletP1 = new TabletMeta(TEST_DB_ID, TEST_TBL2_ID, TEST_PARTITION1_ID,
@@ -452,7 +451,7 @@ public class CatalogMocker {
 
         OlapTable olapTable3 = new OlapTable(TEST_TBL3_ID, TEST_TBL3_NAME, TEST_TBL_BASE_SCHEMA,
                 KeysType.PRIMARY_KEYS, partitionInfo, distributionInfo);
-        Deencapsulation.setField(olapTable3, "baseIndexId", TEST_TBL3_ID);
+        Deencapsulation.setField(olapTable3, "baseIndexMetaId", TEST_TBL3_ID);
 
         LocalTablet baseTabletP1Pk = new LocalTablet(TEST_BASE_TABLET_P1_PK_ID);
         TabletMeta tabletMetaBaseTabletP1Pk = new TabletMeta(TEST_DB_ID, TEST_TBL3_ID, TEST_PARTITION1_PK_ID,
@@ -502,7 +501,7 @@ public class CatalogMocker {
             partition1.addSubPartition(physicalPartition3);
 
             rangePartitionInfo = new RangePartitionInfo(Lists.newArrayList(TEST_TBL_BASE_SCHEMA.get(0)));
-            rangePartitionInfo.addPartition(TEST_PARTITION1_ID, false, rangeP1, dataPropertyP1, (short) 3, false);
+            rangePartitionInfo.addPartition(TEST_PARTITION1_ID, false, rangeP1, dataPropertyP1, (short) 3, null);
 
             baseTabletP1 = new LocalTablet(TEST_BASE_TABLET_P1_ID);
             tabletMetaBaseTabletP1 = new TabletMeta(TEST_DB_ID, TEST_TBL4_ID, TEST_PARTITION1_ID,
@@ -530,7 +529,7 @@ public class CatalogMocker {
 
             OlapTable olapTable4 = new OlapTable(TEST_TBL4_ID, TEST_TBL4_NAME, TEST_TBL_BASE_SCHEMA,
                     KeysType.DUP_KEYS, rangePartitionInfo, distributionInfo4);
-            Deencapsulation.setField(olapTable4, "baseIndexId", TEST_TBL4_ID);
+            Deencapsulation.setField(olapTable4, "baseIndexMetaId", TEST_TBL4_ID);
             olapTable4.setIndexMeta(TEST_TBL4_ID, TEST_TBL4_NAME, TEST_TBL_BASE_SCHEMA, 0, SCHEMA_HASH, (short) 1,
                             TStorageType.COLUMN, KeysType.DUP_KEYS);
 
@@ -551,7 +550,6 @@ public class CatalogMocker {
                     Lists.newArrayList(TEST_TBL_BASE_SCHEMA.get(0)));
             listPartitionInfo.setValues(TEST_PARTITION1_ID, Lists.newArrayList("10"));
             listPartitionInfo.setReplicationNum(TEST_PARTITION1_ID, (short) 3);
-            listPartitionInfo.setIsInMemory(TEST_PARTITION1_ID, false);
             listPartitionInfo.setDataProperty(TEST_PARTITION1_ID, dataPropertyP1);
 
             baseTabletP1 = new LocalTablet(TEST_BASE_TABLET_P1_ID);
@@ -580,7 +578,7 @@ public class CatalogMocker {
 
             OlapTable olapTable5 = new OlapTable(TEST_TBL5_ID, TEST_TBL5_NAME, TEST_TBL_BASE_SCHEMA,
                     KeysType.DUP_KEYS, listPartitionInfo, distributionInfo5);
-            Deencapsulation.setField(olapTable5, "baseIndexId", TEST_TBL5_ID);
+            Deencapsulation.setField(olapTable5, "baseIndexMetaId", TEST_TBL5_ID);
             olapTable5.setIndexMeta(TEST_TBL5_ID, TEST_TBL5_NAME, TEST_TBL_BASE_SCHEMA, 0, SCHEMA_HASH, (short) 1,
                     TStorageType.COLUMN, KeysType.DUP_KEYS);
 

@@ -34,8 +34,6 @@ import com.starrocks.sql.parser.NodePosition;
 import java.util.List;
 import java.util.Optional;
 
-import static com.starrocks.common.util.Util.normalizeName;
-
 public class ShowPipeStmt extends ShowStmt {
     private String dbName;
     private final String like;
@@ -90,7 +88,7 @@ public class ShowPipeStmt extends ShowStmt {
     }
 
     public void setDbName(String dbName) {
-        this.dbName = normalizeName(dbName);
+        this.dbName = dbName;
     }
 
     public String getDbName() {

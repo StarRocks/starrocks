@@ -154,7 +154,29 @@ public:
     }
 
     Status do_visit(const StructColumn& column) {
-        return Status::NotSupported("Unsupported struct column in column wise comparator");
+        size_t num_rows = column.size();
+        if (!_first_column->empty()) {
+            _cmp_vector[0] |= _first_column->compare_at(0, 0, column, 1) != 0;
+        } else {
+            _cmp_vector[0] |= 1;
+        }
+
+        if (!_null_masks.empty()) {
+            DCHECK_EQ(_null_masks.size(), num_rows);
+            for (size_t i = 1; i < num_rows; ++i) {
+                if (_null_masks[i - 1] == 0 && _null_masks[i] == 0) {
+                    _cmp_vector[i] |= column.compare_at(i - 1, i, column, true) != 0;
+                } else {
+                    _cmp_vector[i] |= _null_masks[i - 1] != _null_masks[i];
+                }
+            }
+        } else {
+            for (size_t i = 1; i < num_rows; ++i) {
+                _cmp_vector[i] |= column.compare_at(i - 1, i, column, true) != 0;
+            }
+        }
+
+        return Status::OK();
     }
 
 private:
@@ -178,10 +200,10 @@ public:
 
     Status do_visit(NullableColumn* column) {
         auto col = down_cast<NullableColumn*>(_column);
-        AppendWithMask data_appender(col->data_column().get(), _sel_mask, _selected_size);
-        RETURN_IF_ERROR(column->data_column()->accept_mutable(&data_appender));
-        AppendWithMask null_appender(col->null_column().get(), _sel_mask, _selected_size);
-        RETURN_IF_ERROR(column->null_column()->accept_mutable(&null_appender));
+        AppendWithMask data_appender(col->data_column_raw_ptr(), _sel_mask, _selected_size);
+        RETURN_IF_ERROR(column->data_column_raw_ptr()->accept_mutable(&data_appender));
+        AppendWithMask null_appender(col->null_column_raw_ptr(), _sel_mask, _selected_size);
+        RETURN_IF_ERROR(column->null_column_raw_ptr()->accept_mutable(&null_appender));
         column->update_has_null();
         return Status::OK();
     }
@@ -251,7 +273,15 @@ public:
     }
 
     Status do_visit(StructColumn* column) {
-        return Status::NotSupported("Unsupported struct column in column wise comparator");
+        auto col = down_cast<StructColumn*>(_column);
+
+        for (size_t i = 0; i < _sel_mask.size(); ++i) {
+            if (_sel_mask[i] == 0) {
+                column->append(*col, i, 1);
+            }
+        }
+
+        return Status::OK();
     }
 
 private:
@@ -347,14 +377,15 @@ StatusOr<ChunkPtr> SortedStreamingAggregator::streaming_compute_agg_state(size_t
     // combine group by keys
     auto res_group_by_columns = _create_group_by_columns(chunk_size);
     RETURN_IF_ERROR(_build_group_by_columns(chunk_size, selected_size, selector, res_group_by_columns));
-    auto result_chunk = _build_output_chunk(res_group_by_columns, agg_result_columns, use_intermediate);
+    auto result_chunk =
+            _build_output_chunk(std::move(res_group_by_columns), std::move(agg_result_columns), use_intermediate);
 
     // prepare for next
     for (size_t i = 0; i < _last_columns.size(); ++i) {
         // last column should never be the same column with new input column
         DCHECK_NE(_last_columns[i].get(), _group_by_columns[i].get());
-        _last_columns[i]->reset_column();
-        _last_columns[i]->append(*_group_by_columns[i], chunk_size - 1, 1);
+        _last_columns[i]->as_mutable_raw_ptr()->reset_column();
+        _last_columns[i]->as_mutable_raw_ptr()->append(*_group_by_columns[i], chunk_size - 1, 1);
     }
     _last_state = _tmp_agg_states[chunk_size - 1];
     DCHECK(!_group_by_columns[0]->empty());
@@ -381,14 +412,14 @@ StatusOr<ChunkPtr> SortedStreamingAggregator::streaming_compute_distinct(size_t 
     size_t selected_size = _init_selector(selector, chunk_size);
     auto res_group_by_columns = _create_group_by_columns(chunk_size);
     RETURN_IF_ERROR(_build_group_by_columns(chunk_size, selected_size, selector, res_group_by_columns));
-    auto result_chunk = _build_output_chunk(res_group_by_columns, {}, false);
+    auto result_chunk = _build_output_chunk(std::move(res_group_by_columns), {}, false);
 
     // prepare for next
     for (size_t i = 0; i < _last_columns.size(); ++i) {
         // last column should never be the same column with new input column
         DCHECK_NE(_last_columns[i].get(), _group_by_columns[i].get());
-        _last_columns[i]->reset_column();
-        _last_columns[i]->append(*_group_by_columns[i], chunk_size - 1, 1);
+        _last_columns[i]->as_mutable_raw_ptr()->reset_column();
+        _last_columns[i]->as_mutable_raw_ptr()->append(*_group_by_columns[i], chunk_size - 1, 1);
     }
 
     return result_chunk;
@@ -475,7 +506,7 @@ Status SortedStreamingAggregator::_update_states(size_t chunk_size, bool is_upda
 }
 
 Status SortedStreamingAggregator::_get_agg_result_columns(size_t chunk_size, const Buffer<uint8_t>& selector,
-                                                          Columns& agg_result_columns) {
+                                                          MutableColumns& agg_result_columns) {
     SCOPED_THREAD_LOCAL_STATE_ALLOCATOR_SETTER(_allocator.get());
     TRY_CATCH_ALLOC_SCOPE_START()
     auto use_intermediate = _use_intermediate_as_output();
@@ -518,7 +549,8 @@ void SortedStreamingAggregator::_close_group_by(size_t chunk_size, const Filter&
 }
 
 Status SortedStreamingAggregator::_build_group_by_columns(size_t chunk_size, size_t selected_size,
-                                                          const Filter& selector, Columns& agg_group_by_columns) {
+                                                          const Filter& selector,
+                                                          MutableColumns& agg_group_by_columns) {
     SCOPED_TIMER(_agg_stat->agg_append_timer);
     if (_cmp_vector[0] != 0 && !_last_columns.empty() && !_last_columns.back()->empty()) {
         for (size_t i = 0; i < agg_group_by_columns.size(); ++i) {
@@ -527,7 +559,7 @@ Status SortedStreamingAggregator::_build_group_by_columns(size_t chunk_size, siz
     }
 
     for (size_t i = 0; i < agg_group_by_columns.size(); ++i) {
-        AppendWithMask appender(_group_by_columns[i].get(), selector, selected_size);
+        AppendWithMask appender(_group_by_columns[i]->as_mutable_raw_ptr(), selector, selected_size);
         RETURN_IF_ERROR(agg_group_by_columns[i]->accept_mutable(&appender));
     }
     return Status::OK();
@@ -550,7 +582,8 @@ StatusOr<ChunkPtr> SortedStreamingAggregator::pull_eos_chunk() {
     _last_state = nullptr;
     _last_columns.clear();
 
-    return _build_output_chunk(group_by_columns, agg_result_columns, use_intermediate);
+    return _build_output_chunk(std::move(group_by_columns), ColumnHelper::to_columns(std::move(agg_result_columns)),
+                               use_intermediate);
 }
 
 } // namespace starrocks

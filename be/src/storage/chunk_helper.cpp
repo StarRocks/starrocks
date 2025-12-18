@@ -253,13 +253,13 @@ struct ColumnPtrBuilder {
         };
 
         if constexpr (ftype == TYPE_ARRAY) {
-            auto elements = NullableColumn::wrap_if_necessary(field.sub_field(0).create_column())->as_mutable_ptr();
+            auto elements = NullableColumn::wrap_if_necessary(field.sub_field(0).create_column());
             auto offsets = UInt32Column::create();
             auto array = ArrayColumn::create(std::move(elements), std::move(offsets));
             return NullableIfNeed(std::move(array));
         } else if constexpr (ftype == TYPE_MAP) {
-            auto keys = NullableColumn::wrap_if_necessary(field.sub_field(0).create_column())->as_mutable_ptr();
-            auto values = NullableColumn::wrap_if_necessary(field.sub_field(1).create_column())->as_mutable_ptr();
+            auto keys = NullableColumn::wrap_if_necessary(field.sub_field(0).create_column());
+            auto values = NullableColumn::wrap_if_necessary(field.sub_field(1).create_column());
             auto offsets = get_column_ptr<UInt32Column>();
             auto map = MapColumn::create(std::move(keys), std::move(values), std::move(offsets));
             return NullableIfNeed(std::move(map));
@@ -290,7 +290,7 @@ struct ColumnPtrBuilder {
     }
 };
 
-ColumnPtr column_from_pool(const Field& field) {
+MutableColumnPtr column_from_pool(const Field& field) {
     auto precision = field.type()->precision();
     auto scale = field.type()->scale();
     return field_type_dispatch_column(field.type()->type(), ColumnPtrBuilder(), field, precision, scale);
@@ -353,7 +353,8 @@ void ChunkHelper::padding_char_column(const starrocks::TabletSchemaCSPtr& tschem
 
     if (field.is_nullable()) {
         auto* nullable_column = down_cast<NullableColumn*>(column);
-        auto new_column = NullableColumn::create(std::move(new_binary), nullable_column->null_column());
+        auto null_column = NullColumn::static_pointer_cast(nullable_column->null_column()->as_mutable_ptr());
+        auto new_column = NullableColumn::create(std::move(new_binary), std::move(null_column));
         new_column->swap_column(*column);
     } else {
         new_binary->swap_column(*column);
@@ -363,7 +364,7 @@ void ChunkHelper::padding_char_column(const starrocks::TabletSchemaCSPtr& tschem
 void ChunkHelper::padding_char_columns(const std::vector<size_t>& char_column_indexes, const Schema& schema,
                                        const starrocks::TabletSchemaCSPtr& tschema, Chunk* chunk) {
     for (auto field_index : char_column_indexes) {
-        Column* column = chunk->get_column_by_index(field_index).get();
+        Column* column = chunk->get_column_raw_ptr_by_index(field_index);
         padding_char_column(tschema, *schema.field(field_index), column);
     }
 }
@@ -378,10 +379,13 @@ struct ColumnBuilder {
 
         if constexpr (ftype == TYPE_ARRAY) {
             CHECK(false) << "array not supported";
+            return nullptr;
         } else if constexpr (ftype == TYPE_MAP) {
             CHECK(false) << "array not supported";
+            return nullptr;
         } else if constexpr (ftype == TYPE_STRUCT) {
             CHECK(false) << "array not supported";
+            return nullptr;
         } else {
             return NullableIfNeed(CppColumnTraits<ftype>::ColumnType::create());
         }
@@ -434,8 +438,9 @@ ChunkUniquePtr ChunkHelper::new_chunk(const Schema& schema, size_t n) {
     columns.reserve(fields);
     for (size_t i = 0; i < fields; i++) {
         const FieldPtr& f = schema.field(i);
-        columns.emplace_back(column_from_field(*f));
-        columns.back()->reserve(n);
+        auto col = column_from_field(*f);
+        col->reserve(n);
+        columns.emplace_back(std::move(col));
     }
     return std::make_unique<Chunk>(std::move(columns), std::make_shared<Schema>(schema));
 }
@@ -687,15 +692,19 @@ public:
     Status do_visit(const FixedLengthColumnBase<T>& column) {
         using ColumnT = FixedLengthColumn<T>;
         using ContainerT = typename ColumnT::Container;
+        using ImmContainerT = typename ColumnT::ImmContainer;
 
         _result = column.clone_empty();
-        auto output = ColumnHelper::as_column<ColumnT>(_result);
+        auto* output = down_cast<ColumnT*>(_result->as_mutable_raw_ptr());
         const size_t segment_size = _segment_column->segment_size();
 
-        std::vector<const ContainerT*> buffers;
+        std::vector<ImmContainerT> imm_containers;
+        std::vector<const T*> buffers;
         auto columns = _segment_column->columns();
         for (auto& seg_column : columns) {
-            buffers.push_back(&(ColumnHelper::as_column<ColumnT>(seg_column)->get_data()));
+            auto imm_data = ColumnHelper::as_column<ColumnT>(seg_column)->immutable_data();
+            imm_containers.push_back(imm_data);
+            buffers.push_back(imm_data.data());
         }
 
         ContainerT& output_items = output->get_data();
@@ -707,7 +716,7 @@ public:
             DCHECK_LT(segment_id, columns.size());
             DCHECK_LT(segment_offset, columns[segment_id]->size());
 
-            output_items[i] = (*buffers[segment_id])[segment_offset];
+            output_items[i] = buffers[segment_id][segment_offset];
         }
         return {};
     }
@@ -722,18 +731,19 @@ public:
         using Offsets = typename ColumnT::Offsets;
 
         _result = column.clone_empty();
-        auto output = ColumnHelper::as_column<ColumnT>(_result);
+        auto* output = down_cast<ColumnT*>(_result->as_mutable_raw_ptr());
         auto& output_offsets = output->get_offset();
         auto& output_bytes = output->get_bytes();
         const size_t segment_size = _segment_column->segment_size();
 
         // input
         auto columns = _segment_column->columns();
-        std::vector<Bytes*> input_bytes;
-        std::vector<Offsets*> input_offsets;
+        std::vector<const Bytes*> input_bytes;
+        std::vector<const Offsets*> input_offsets;
         for (auto& seg_column : columns) {
-            input_bytes.push_back(&ColumnHelper::as_column<ColumnT>(seg_column)->get_bytes());
-            input_offsets.push_back(&ColumnHelper::as_column<ColumnT>(seg_column)->get_offset());
+            auto col_ptr = ColumnHelper::as_column<ColumnT>(seg_column);
+            input_bytes.push_back(&col_ptr->get_bytes());
+            input_offsets.push_back(&col_ptr->get_offset());
         }
 
 #ifndef NDEBUG
@@ -752,7 +762,7 @@ public:
             DCHECK_LT(segment_id, columns.size());
             DCHECK_LT(segment_offset, columns[segment_id]->size());
 
-            Offsets& src_offsets = *input_offsets[segment_id];
+            const Offsets& src_offsets = *input_offsets[segment_id];
             Offset str_size = src_offsets[segment_offset + 1] - src_offsets[segment_offset];
 
             output_offsets[i + 1] = output_offsets[i] + str_size;
@@ -765,10 +775,10 @@ public:
         for (size_t i = 0; i < _size; i++) {
             size_t idx = _indexes[from + i];
             auto [segment_id, segment_offset] = _segment_address(idx, segment_size);
-            Bytes& src_bytes = *input_bytes[segment_id];
-            Offsets& src_offsets = *input_offsets[segment_id];
+            const Bytes& src_bytes = *input_bytes[segment_id];
+            const Offsets& src_offsets = *input_offsets[segment_id];
             Offset str_size = src_offsets[segment_offset + 1] - src_offsets[segment_offset];
-            Byte* str_data = src_bytes.data() + src_offsets[segment_offset];
+            const Byte* str_data = src_bytes.data() + src_offsets[segment_offset];
 
             strings::memcpy_inlined(dest_bytes + output_offsets[i], str_data, str_size);
         }
@@ -784,7 +794,7 @@ public:
     template <class ColumnT>
     typename std::enable_if_t<is_object<ColumnT>, Status> do_visit(const ColumnT& column) {
         _result = column.clone_empty();
-        auto output = ColumnHelper::as_column<ColumnT>(_result);
+        auto* output = down_cast<ColumnT*>(_result->as_mutable_raw_ptr());
         const size_t segment_size = _segment_column->segment_size();
         output->reserve(_size);
 
@@ -859,7 +869,7 @@ ColumnPtr SegmentedColumn::materialize() const {
     if (actual_columns.empty()) {
         return {};
     }
-    ColumnPtr result = actual_columns[0]->clone_empty();
+    MutableColumnPtr result = actual_columns[0]->clone_empty();
     for (size_t i = 0; i < actual_columns.size(); i++) {
         result->append(*actual_columns[i]);
     }
@@ -911,7 +921,7 @@ Columns SegmentedColumn::columns() const {
 void SegmentedColumn::upgrade_to_nullable() {
     for (auto& segment : _chunk.lock()->segments()) {
         auto& column = segment->get_column_by_index(_column_index);
-        column = NullableColumn::wrap_if_necessary(column);
+        column = NullableColumn::wrap_if_necessary(std::move(column));
     }
 }
 
@@ -940,7 +950,7 @@ void SegmentedChunk::append_chunk(const ChunkPtr& chunk, const std::vector<SlotI
         for (int i = 0; i < slots.size(); i++) {
             SlotId slot = slots[i];
             ColumnPtr column = chunk->get_column_by_slot_id(slot);
-            open_segment->columns()[i]->append(*column, append_index, open_segment_append_rows);
+            open_segment->get_column_raw_ptr_by_index(i)->append(*column, append_index, open_segment_append_rows);
         }
         append_index += open_segment_append_rows;
         append_rows -= open_segment_append_rows;

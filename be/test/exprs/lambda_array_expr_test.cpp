@@ -479,7 +479,7 @@ TEST_F(VectorizedLambdaFunctionExprTest, array_map_lambda_test_const_array) {
                     data_column = FunctionHelper::get_data_column_of_const(data_column);
                 }
                 if (data_column->is_nullable()) {
-                    data_column = down_cast<NullableColumn*>(data_column.get())->data_column();
+                    data_column = down_cast<const NullableColumn*>(data_column.get())->data_column();
                 }
                 auto array_col = ArrayColumn::dynamic_pointer_cast(data_column);
                 ASSERT_EQ(2, array_col->elements_column()->type_size());

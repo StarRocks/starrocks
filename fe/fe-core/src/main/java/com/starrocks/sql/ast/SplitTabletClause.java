@@ -22,7 +22,7 @@ import java.util.Map;
 
 public class SplitTabletClause extends AlterTableClause {
 
-    private final PartitionNames partitionNames;
+    private final PartitionRef partitionNames;
 
     private final TabletList tabletList;
 
@@ -36,14 +36,14 @@ public class SplitTabletClause extends AlterTableClause {
     }
 
     public SplitTabletClause(
-            PartitionNames partitionNames,
+            PartitionRef partitionNames,
             TabletList tabletList,
             Map<String, String> properties) {
         this(partitionNames, tabletList, properties, NodePosition.ZERO);
     }
 
     public SplitTabletClause(
-            PartitionNames partitionNames,
+            PartitionRef partitionNames,
             TabletList tabletList,
             Map<String, String> properties,
             NodePosition pos) {
@@ -53,7 +53,7 @@ public class SplitTabletClause extends AlterTableClause {
         this.properties = properties;
     }
 
-    public PartitionNames getPartitionNames() {
+    public PartitionRef getPartitionNames() {
         return partitionNames;
     }
 

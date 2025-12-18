@@ -109,7 +109,7 @@ Status ColumnModePartialUpdateHandler::_load_upserts(const RowsetUpdateStatePara
         return Status::InternalError(err_msg);
     }
 
-    std::shared_ptr<Chunk> chunk_shared_ptr = ChunkHelper::new_chunk(pkey_schema, DEFAULT_CHUNK_SIZE);
+    ChunkPtr chunk_shared_ptr = ChunkHelper::new_chunk(pkey_schema, DEFAULT_CHUNK_SIZE);
 
     // alloc first BatchPKsPtr
     auto header_ptr = std::make_shared<BatchPKs>();

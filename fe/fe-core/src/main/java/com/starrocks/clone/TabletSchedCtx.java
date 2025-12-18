@@ -43,7 +43,6 @@ import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.catalog.ColocateTableIndex.GroupId;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.LocalTablet.TabletHealthStatus;
 import com.starrocks.catalog.MaterializedIndex;
@@ -68,6 +67,7 @@ import com.starrocks.persist.ReplicaPersistInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Authorizer;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentTaskQueue;
@@ -81,6 +81,7 @@ import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TTabletInfo;
 import com.starrocks.thrift.TTabletSchedule;
 import com.starrocks.thrift.TTabletSchema;
+import com.starrocks.thrift.TTabletType;
 import com.starrocks.thrift.TTaskType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -980,7 +981,7 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
                     .setStorageMedium(TStorageMedium.HDD)
                     .setEnablePersistentIndex(olapTable.enablePersistentIndex())
                     .setPrimaryIndexCacheExpireSec(olapTable.primaryIndexCacheExpireSec())
-                    .setTabletType(olapTable.getPartitionInfo().getTabletType(physicalPartition.getParentId()))
+                    .setTabletType(TTabletType.TABLET_TYPE_DISK)
                     .setCompressionType(olapTable.getCompressionType())
                     .setCompressionLevel(olapTable.getCompressionLevel())
                     .setRecoverySource(RecoverySource.SCHEDULER)
@@ -1080,9 +1081,9 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
                 throw new SchedException(Status.UNRECOVERABLE, "index does not exist");
             }
 
-            if (schemaHash != olapTable.getSchemaHashByIndexId(indexId)) {
+            if (schemaHash != olapTable.getSchemaHashByIndexMetaId(indexId)) {
                 throw new SchedException(Status.UNRECOVERABLE, "schema hash is not consistent. index's: "
-                        + olapTable.getSchemaHashByIndexId(indexId)
+                        + olapTable.getSchemaHashByIndexMetaId(indexId)
                         + ", task's: " + schemaHash);
             }
 

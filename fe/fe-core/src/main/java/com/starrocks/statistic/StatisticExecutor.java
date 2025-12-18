@@ -291,6 +291,9 @@ public class StatisticExecutor {
     }
 
     public void dropHistogram(ConnectContext statsConnectCtx, Long tableId, List<String> columnNames) {
+        if (columnNames == null || columnNames.isEmpty()) {
+            return;
+        }
         String sql = StatisticSQLBuilder.buildDropHistogramSQL(tableId, columnNames);
         boolean result = executeDML(statsConnectCtx, sql);
         if (!result) {
@@ -299,6 +302,9 @@ public class StatisticExecutor {
     }
 
     public void dropExternalHistogram(ConnectContext statsConnectCtx, String tableUUID, List<String> columnNames) {
+        if (columnNames == null || columnNames.isEmpty()) {
+            return;
+        }
         String sql = StatisticSQLBuilder.buildDropExternalHistogramSQL(tableUUID, columnNames);
         boolean result = executeDML(statsConnectCtx, sql);
         if (!result) {
@@ -308,6 +314,9 @@ public class StatisticExecutor {
 
     public void dropExternalHistogram(ConnectContext statsConnectCtx, String catalogName, String dbName, String tableName,
                                       List<String> columnNames) {
+        if (columnNames == null || columnNames.isEmpty()) {
+            return;
+        }
         String sql = StatisticSQLBuilder.buildDropExternalHistogramSQL(catalogName, dbName, tableName, columnNames);
         boolean result = executeDML(statsConnectCtx, sql);
         if (!result) {
@@ -520,6 +529,10 @@ public class StatisticExecutor {
 
         try {
             Stopwatch watch = Stopwatch.createStarted();
+            // Set start time if not already set
+            if (analyzeStatus.getStartTime() == null) {
+                analyzeStatus.setStartTime(LocalDateTime.now());
+            }
             statsConnectCtx.getSessionVariable().setEnableProfile(Config.enable_statistics_collect_profile);
             GlobalStateMgr.getCurrentState().getAnalyzeMgr().registerConnection(analyzeStatus.getId(), statsConnectCtx);
             // Only update running status without edit log, make restart job status is failed

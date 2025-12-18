@@ -48,6 +48,7 @@ import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonPreProcessable;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
+import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.IndexDef;
 import com.starrocks.sql.ast.expression.Expr;
@@ -231,7 +232,18 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         this.isAllowNull = isAllowNull;
         if (defaultValueDef != null) {
             if (defaultValueDef.expr instanceof StringLiteral) {
-                this.defaultValue = ((StringLiteral) defaultValueDef.expr).getValue();
+                String value = ((StringLiteral) defaultValueDef.expr).getValue();
+                if (type != null && type.getPrimitiveType() == PrimitiveType.BOOLEAN) {
+                    if (value.equalsIgnoreCase("true")) {
+                        this.defaultValue = "1";
+                    } else if (value.equalsIgnoreCase("false")) {
+                        this.defaultValue = "0";
+                    } else {
+                        this.defaultValue = value;
+                    }
+                } else {
+                    this.defaultValue = value;
+                }
             } else if (defaultValueDef.expr instanceof NullLiteral) {
                 // for default value is null or default value is not set the defaultExpr = null
                 this.defaultExpr = null;
@@ -537,7 +549,7 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
             }
         }
         if (getPrimitiveType().isJsonType() && other.getPrimitiveType().isCharFamily()) {
-            if (other.getStrLen() <= getPrimitiveType().getTypeSize()) {
+            if (other.getStrLen() < getPrimitiveType().getTypeSize()) {
                 throw new DdlException("JSON needs minimum length of " + getPrimitiveType().getTypeSize());
             }
         }

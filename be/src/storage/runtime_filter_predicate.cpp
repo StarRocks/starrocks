@@ -36,7 +36,9 @@ Status RuntimeFilterPredicate::evaluate(Chunk* chunk, uint8_t* selection, uint16
     auto column = chunk->get_column_by_id(_column_id);
     if (_rf->num_hash_partitions() > 0) {
         hash_values.resize(column->size());
-        _rf->compute_partition_index(_rf_desc->layout(), {column.get()}, selection, from, to, hash_values);
+        RuntimeFilter::RunningContext ctx;
+        ctx.exchange_hash_function_version = _rf_desc->exchange_hash_function_version();
+        _rf->compute_partition_index(_rf_desc->layout(), {column.get()}, selection, from, to, hash_values, &ctx);
     }
     _rf->evaluate(column.get(), hash_values, selection, from, to);
     return Status::OK();
@@ -50,7 +52,9 @@ StatusOr<uint16_t> RuntimeFilterPredicate::evaluate(Chunk* chunk, uint16_t* sel,
     auto column = chunk->get_column_by_id(_column_id);
     if (_rf->num_hash_partitions() > 0) {
         hash_values.resize(column->size());
-        _rf->compute_partition_index(_rf_desc->layout(), {column.get()}, sel, sel_size, hash_values);
+        RuntimeFilter::RunningContext ctx;
+        ctx.exchange_hash_function_version = _rf_desc->exchange_hash_function_version();
+        _rf->compute_partition_index(_rf_desc->layout(), {column.get()}, sel, sel_size, hash_values, &ctx);
     }
     uint16_t ret = _rf->evaluate(column.get(), hash_values, sel, sel_size, target_sel);
     return ret;
@@ -145,6 +149,7 @@ Status DictColumnRuntimeFilterPredicate::prepare() {
     ctx.use_merged_selection = false;
     ctx.compatibility = false;
     ctx.selection.assign(_dict_words.size(), 1);
+    ctx.exchange_hash_function_version = _rf_desc->exchange_hash_function_version();
 
     if (_rf->num_hash_partitions() > 0) {
         // compute hash

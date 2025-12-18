@@ -118,10 +118,6 @@ public class OperationType {
     @IgnorableOnReplayFailed
     public static final short OP_MODIFY_REPLICATION_NUM = 266;
 
-    // set table in memory
-    @IgnorableOnReplayFailed
-    public static final short OP_MODIFY_IN_MEMORY = 267;
-
     // global dict
     @IgnorableOnReplayFailed
     public static final short OP_SET_FORBIDDEN_GLOBAL_DICT = 268;
@@ -204,6 +200,9 @@ public class OperationType {
     // workgroup 10021 ~ 10030
     @IgnorableOnReplayFailed
     public static final short OP_RESOURCE_GROUP = 10021;
+
+    @IgnorableOnReplayFailed
+    public static final short OP_ALTER_RESOURCE_GROUP = 10022;
 
     // external hive table column change
     @IgnorableOnReplayFailed
@@ -438,6 +437,13 @@ public class OperationType {
     @IgnorableOnReplayFailed
     public static final short OP_CREATE_REPOSITORY_V2 = 12152;
 
+    // Pipe operations log
+    @IgnorableOnReplayFailed
+    public static final short OP_PIPE = 12200;
+
+    @IgnorableOnReplayFailed
+    public static final short OP_ALTER_PIPE = 12201;
+
     //Table/Partition json format log
 
     public static final short OP_CREATE_TABLE_V2 = 13000;
@@ -564,10 +570,6 @@ public class OperationType {
     @IgnorableOnReplayFailed
     public static final short OP_UPDATE_TABLE_STORAGE_INFOS = 13104;
 
-    // Pipe operations log
-    @IgnorableOnReplayFailed
-    public static final short OP_PIPE = 12200;
-
     // Primary key
     @IgnorableOnReplayFailed
     public static final short OP_MODIFY_PRIMARY_INDEX_CACHE_EXPIRE_SEC = 13200;
@@ -586,6 +588,9 @@ public class OperationType {
 
     @IgnorableOnReplayFailed
     public static final short OP_MODIFY_DICTIONARY_MGR = 13402;
+
+    @IgnorableOnReplayFailed
+    public static final short OP_MODIFY_DICTIONARY_MGR_V2 = 13403;
 
     // Replication job
     @IgnorableOnReplayFailed
@@ -655,7 +660,10 @@ public class OperationType {
     @IgnorableOnReplayFailed
     public static final short OP_DROP_REPOSITORY_V2 = 13556;
 
-    /**
+    @IgnorableOnReplayFailed
+    public static final short OP_ALTER_RESOURCE = 13557;
+
+    /*
      * NOTICE: OperationType cannot use a value exceeding 20000, please follow the above sequence number
      */
     public static final short OP_TYPE_EOF = 20000;

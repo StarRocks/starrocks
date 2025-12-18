@@ -881,6 +881,12 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 单位：秒
 * 类型：Int
 
+### interpolate_passthrough
+
+* 描述：是否为某些算子添加 local-exchang-passthrough。当前支持算子包括 Streaming Aggregates 等。添加 local-exchange-passthrough 会降低数据倾斜的影响，但是会稍微增加内存使用。
+* 默认值：true
+* 引入版本：v3.2
+
 ### io_tasks_per_scan_operator
 
 * 每个 Scan 算子能同时下发的 I/0 任务的数量。如果使用远端存储系统（比如 HDFS 或 S3）且时延较长，可以增加该值。但是值过大会增加内存消耗。

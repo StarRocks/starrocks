@@ -313,6 +313,11 @@ public class QueryOptimizer extends Optimizer {
         Set<Long> currentSqlDbIds = context.getConnectContext().getCurrentSqlDbIds();
         mvScan.stream().map(scan -> ((MaterializedView) scan.getTable()).getDbId()).forEach(currentSqlDbIds::add);
 
+        if (connectContext.getSessionVariable().isEnableGlobalLateMaterialization()) {
+            LateMaterializationRewriter lateMaterializationRewriter = new LateMaterializationRewriter();
+            finalPlan = lateMaterializationRewriter.rewrite(finalPlan, context);
+        }
+
         try (Timer ignored = Tracers.watchScope("PlanValidate")) {
             rootTaskContext.getPlanValidator().enableAllCheckers();
             // valid the final plan
@@ -462,7 +467,6 @@ public class QueryOptimizer extends Optimizer {
         if (mvRewriteStrategy.enableViewBasedRewrite && viewBasedMvRuleRewrite(tree, rootTaskContext)) {
             return;
         }
-
         if (mvRewriteStrategy.enableForceRBORewrite) {
             // use rule based mv rewrite strategy to do mv rewrite for multi tables query
             if (mvRewriteStrategy.enableMultiTableRewrite) {
@@ -936,6 +940,7 @@ public class QueryOptimizer extends Optimizer {
         context.setInMemoPhase(true);
         OptExpression tree = memo.getRootGroup().extractLogicalTree();
         SessionVariable sessionVariable = connectContext.getSessionVariable();
+        CTEUtils.collectCteOperators(tree, context);
         // add CboTablePruneRule
         if (Utils.countJoinNodeSize(tree, CboTablePruneRule.JOIN_TYPES) < 10 &&
                 sessionVariable.isEnableCboTablePrune()) {

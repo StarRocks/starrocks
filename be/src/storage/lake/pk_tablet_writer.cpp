@@ -129,6 +129,7 @@ Status HorizontalPkTabletWriter::flush_segment_writer(SegmentPB* segment) {
             segment->set_path(segment_path);
             segment->set_encryption_meta(_seg_writer->encryption_meta());
         }
+        check_global_dict(_seg_writer.get());
         _seg_writer.reset();
     }
     if (_pk_sst_writer && _pk_sst_writer->has_file_info()) {

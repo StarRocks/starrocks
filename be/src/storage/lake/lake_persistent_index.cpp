@@ -36,137 +36,6 @@
 
 namespace starrocks::lake {
 
-Status KeyValueMerger::merge(const sstable::Iterator* iter_ptr) {
-    const std::string& key = iter_ptr->key().to_string();
-    const std::string& value = iter_ptr->value().to_string();
-    uint64_t max_rss_rowid = iter_ptr->max_rss_rowid();
-    const auto& predicate = iter_ptr->predicate();
-
-    IndexValuesWithVerPB index_value_ver;
-    if (!index_value_ver.ParseFromString(value)) {
-        return Status::InternalError("Failed to parse index value ver");
-    }
-    if (index_value_ver.values_size() == 0) {
-        return Status::OK();
-    }
-    // filter rows which already been deleted in this sst
-    if (iter_ptr->delvec() != nullptr && !iter_ptr->delvec()->empty() &&
-        iter_ptr->delvec()->roaring()->contains(index_value_ver.values(0).rowid())) {
-        // this row has been deleted in this sst, skip it
-        return Status::OK();
-    }
-    // fill shared version & rssid if have
-    if (iter_ptr->shared_version() > 0) {
-        for (size_t i = 0; i < index_value_ver.values_size(); ++i) {
-            index_value_ver.mutable_values(i)->set_version(iter_ptr->shared_version());
-            index_value_ver.mutable_values(i)->set_rssid(iter_ptr->shared_rssid());
-        }
-    }
-
-    /*
-     * Do not distinguish between base compaction and cumulative compaction here.
-     * Currently we use predicate after tablet split and make predicate available
-     * for both base compaction and cumulative compaction is useful and will not
-     * cause any problem.
-     *
-     * But if caller for another purpose to use this predicate here, should pay attention
-     * if it is only used for base compaction or cumulative compaction.
-    */
-    if (predicate != nullptr) {
-        uint8_t selection = 0;
-        RETURN_IF_ERROR(_predicate_evaluator.evaluate_with_cache(predicate, key, &selection));
-        if (!selection) {
-            // If the key is not hit, we skip it.
-            return Status::OK();
-        }
-    }
-
-    auto version = index_value_ver.values(0).version();
-    auto index_value = build_index_value(index_value_ver.values(0));
-    if (_key == key) {
-        if (_index_value_vers.empty()) {
-            _max_rss_rowid = max_rss_rowid;
-            _index_value_vers.emplace_front(version, index_value);
-        } else if ((version > _index_value_vers.front().first) ||
-                   (version == _index_value_vers.front().first && max_rss_rowid > _max_rss_rowid) ||
-                   (version == _index_value_vers.front().first && max_rss_rowid == _max_rss_rowid &&
-                    index_value.get_value() == NullIndexValue)) {
-            // NOTICE: we need both version and max_rss_rowid here to decide the order of keys.
-            // Consider the following 3 scenarios:
-            // 1. Same keys are from two different Rowsets, and we can decide their order by version recorded
-            //    in Rowset.
-            //   | ------- ver1 --------- | + | -------- ver2 ----------|
-            //   | k1 k2 k3(1)            |   | k3(2) k4                |
-            //
-            //   =
-            //   | ------- ver2 --------- |
-            //   | k1 k2 k3(2) k4         |
-            //   k3 in ver2 will replace k3 in ver1, because it has a larger version.
-            //
-            // 2. Same keys are from same Rowset, and they have same version. Now we use `max_rss_rowid` in sst to
-            //    decide their order.
-            //   | ------- ver1 --------- | + | -------- ver1 ----------|
-            //   | k1 k2 k3(1)            |   | k3(2) k4                |
-            //   | max_rss_rowid = 2      |   | max_rss_rowid = 4       |
-            //   =
-            //   | ------- ver1 --------- |
-            //   | k1 k2 k3(2) k4         |
-            //   | max_rss_rowid = 4      |
-            //
-            //   k3 with larger max_rss_rowid will replace previous one, because max_rss_rowid is incremental,
-            //   larger max_rss_rowid means it was generated later.
-            //
-            // 3. Same keys are from same Rowset, and they have same version. And they also have same `max_rss_rowid`
-            //    because one of them is delete flag.
-            //   | ------- ver1 --------- | + | -------- ver1 ----------|
-            //   | k1 k2 k3 k4(del)       |   | k3(del)      k4(del)    |
-            //   | max_rss_rowid = MAX    |   | max_rss_rowid = MAX     |
-            //   =
-            //   | ------- ver1 --------- |
-            //   | k1 k2                  |
-            //   | max_rss_rowid = MAX    |
-            //
-            //   Because we use UINT32_TMAX as delete flag key's rowid, so two sst will have same
-            //   max_rss_rowid, when the second one is only contains delete flag keys.
-            //   k3 with delete flag will replace previous one.
-            _max_rss_rowid = max_rss_rowid;
-            std::list<std::pair<int64_t, IndexValue>> t;
-            t.emplace_front(version, index_value);
-            _index_value_vers.swap(t);
-        }
-    } else {
-        RETURN_IF_ERROR(flush());
-        _key = key;
-        _max_rss_rowid = max_rss_rowid;
-        _index_value_vers.emplace_front(version, index_value);
-    }
-    return Status::OK();
-}
-
-Status KeyValueMerger::flush() {
-    if (_index_value_vers.empty()) {
-        return Status::OK();
-    }
-
-    IndexValuesWithVerPB index_value_pb;
-    for (const auto& index_value_with_ver : _index_value_vers) {
-        if (_merge_base_level && index_value_with_ver.second == IndexValue(NullIndexValue)) {
-            // deleted
-            continue;
-        }
-        auto* value = index_value_pb.add_values();
-        value->set_version(index_value_with_ver.first);
-        value->set_rssid(index_value_with_ver.second.get_rssid());
-        value->set_rowid(index_value_with_ver.second.get_rowid());
-    }
-    if (index_value_pb.values_size() > 0) {
-        RETURN_IF_ERROR(_builder->Add(Slice(_key), Slice(index_value_pb.SerializeAsString())));
-    }
-    _index_value_vers.clear();
-
-    return Status::OK();
-}
-
 LakePersistentIndex::LakePersistentIndex(TabletManager* tablet_mgr, int64_t tablet_id)
         : PersistentIndex(""), _tablet_mgr(tablet_mgr), _tablet_id(tablet_id) {}
 
@@ -533,17 +402,17 @@ Status LakePersistentIndex::prepare_merging_iterator(
     return Status::OK();
 }
 
-Status LakePersistentIndex::merge_sstables(std::unique_ptr<sstable::Iterator> iter_ptr, sstable::TableBuilder* builder,
-                                           bool base_level_merge) {
-    auto merger = std::make_unique<KeyValueMerger>(iter_ptr->key().to_string(), iter_ptr->max_rss_rowid(), builder,
-                                                   base_level_merge);
+StatusOr<std::vector<KeyValueMerger::KeyValueMergerOutput>> LakePersistentIndex::merge_sstables(
+        std::unique_ptr<sstable::Iterator> iter_ptr, bool base_level_merge, TabletManager* tablet_mgr,
+        int64_t tablet_id) {
+    auto merger = std::make_unique<KeyValueMerger>(iter_ptr->key().to_string(), iter_ptr->max_rss_rowid(),
+                                                   base_level_merge, tablet_mgr, tablet_id, false);
     while (iter_ptr->Valid()) {
         RETURN_IF_ERROR(merger->merge(iter_ptr.get()));
         iter_ptr->Next();
     }
     RETURN_IF_ERROR(iter_ptr->status());
-    RETURN_IF_ERROR(merger->finish());
-    return builder->Finish();
+    return merger->finish();
 }
 
 Status LakePersistentIndex::major_compact(TabletManager* tablet_mgr, const TabletMetadataPtr& metadata,
@@ -565,34 +434,28 @@ Status LakePersistentIndex::major_compact(TabletManager* tablet_mgr, const Table
     if (!merging_iter_ptr->Valid()) {
         return merging_iter_ptr->status();
     }
-
-    auto filename = gen_sst_filename();
-    auto location = tablet_mgr->sst_location(metadata->id(), filename);
-    WritableFileOptions wopts;
-    std::string encryption_meta;
-    if (config::enable_transparent_data_encryption) {
-        ASSIGN_OR_RETURN(auto pair, KeyCache::instance().create_encryption_meta_pair_using_current_kek());
-        wopts.encryption_info = pair.info;
-        encryption_meta.swap(pair.encryption_meta);
+    // merge sstable files.
+    ASSIGN_OR_RETURN(auto merge_results,
+                     merge_sstables(std::move(merging_iter_ptr), merge_base_level, tablet_mgr, metadata->id()));
+    if (merge_results.empty()) {
+        // no output file generated.
+        return Status::OK();
     }
-    ASSIGN_OR_RETURN(auto wf, fs::new_writable_file(wopts, location));
-    sstable::Options options;
-    std::unique_ptr<sstable::FilterPolicy> filter_policy;
-    filter_policy.reset(const_cast<sstable::FilterPolicy*>(sstable::NewBloomFilterPolicy(10)));
-    options.filter_policy = filter_policy.get();
-    sstable::TableBuilder builder(options, wf.get());
-    RETURN_IF_ERROR(merge_sstables(std::move(merging_iter_ptr), &builder, merge_base_level));
-    RETURN_IF_ERROR(wf->close());
 
-    // record output sstable pb
-    txn_log->mutable_op_compaction()->mutable_output_sstable()->set_filename(filename);
-    txn_log->mutable_op_compaction()->mutable_output_sstable()->set_filesize(builder.FileSize());
-    txn_log->mutable_op_compaction()->mutable_output_sstable()->set_encryption_meta(encryption_meta);
+    // record output sstable pb, there will be only one output file.
+    txn_log->mutable_op_compaction()->mutable_output_sstable()->set_filename(merge_results[0].filename);
+    txn_log->mutable_op_compaction()->mutable_output_sstable()->set_filesize(merge_results[0].filesize);
+    txn_log->mutable_op_compaction()->mutable_output_sstable()->set_encryption_meta(merge_results[0].encryption_meta);
+    txn_log->mutable_op_compaction()->mutable_output_sstable()->mutable_range()->set_start_key(
+            merge_results[0].start_key);
+    txn_log->mutable_op_compaction()->mutable_output_sstable()->mutable_range()->set_end_key(merge_results[0].end_key);
+    txn_log->mutable_op_compaction()->mutable_output_sstable()->mutable_fileset_id()->CopyFrom(
+            UniqueId::gen_uid().to_proto());
     return Status::OK();
 }
 
 Status LakePersistentIndex::apply_opcompaction(const TxnLogPB_OpCompaction& op_compaction) {
-    if (op_compaction.input_sstables().empty() || !op_compaction.has_output_sstable()) {
+    if (op_compaction.input_sstables().empty()) {
         return Status::OK();
     }
     auto* block_cache = _tablet_mgr->update_mgr()->block_cache();
@@ -600,19 +463,22 @@ Status LakePersistentIndex::apply_opcompaction(const TxnLogPB_OpCompaction& op_c
         return Status::InternalError("Block cache is null.");
     }
 
-    PersistentIndexSstablePB sstable_pb;
-    sstable_pb.CopyFrom(op_compaction.output_sstable());
-    sstable_pb.set_max_rss_rowid(
-            op_compaction.input_sstables(op_compaction.input_sstables().size() - 1).max_rss_rowid());
-    auto sstable = std::make_unique<PersistentIndexSstable>();
-    RandomAccessFileOptions opts;
-    if (!sstable_pb.encryption_meta().empty()) {
-        ASSIGN_OR_RETURN(auto info, KeyCache::instance().unwrap_encryption_meta(sstable_pb.encryption_meta()));
-        opts.encryption_info = std::move(info);
+    std::unique_ptr<PersistentIndexSstable> sstable;
+    if (op_compaction.has_output_sstable()) {
+        PersistentIndexSstablePB sstable_pb;
+        sstable_pb.CopyFrom(op_compaction.output_sstable());
+        sstable_pb.set_max_rss_rowid(
+                op_compaction.input_sstables(op_compaction.input_sstables().size() - 1).max_rss_rowid());
+        RandomAccessFileOptions opts;
+        if (!sstable_pb.encryption_meta().empty()) {
+            ASSIGN_OR_RETURN(auto info, KeyCache::instance().unwrap_encryption_meta(sstable_pb.encryption_meta()));
+            opts.encryption_info = std::move(info);
+        }
+        ASSIGN_OR_RETURN(auto rf, fs::new_random_access_file(
+                                          opts, _tablet_mgr->sst_location(_tablet_id, sstable_pb.filename())));
+        sstable = std::make_unique<PersistentIndexSstable>();
+        RETURN_IF_ERROR(sstable->init(std::move(rf), sstable_pb, block_cache->cache()));
     }
-    ASSIGN_OR_RETURN(auto rf,
-                     fs::new_random_access_file(opts, _tablet_mgr->sst_location(_tablet_id, sstable_pb.filename())));
-    RETURN_IF_ERROR(sstable->init(std::move(rf), sstable_pb, block_cache->cache()));
 
     std::unordered_set<std::string> filenames;
     for (const auto& input_sstable : op_compaction.input_sstables()) {
@@ -625,12 +491,14 @@ Status LakePersistentIndex::apply_opcompaction(const TxnLogPB_OpCompaction& op_c
                                    }),
                     _sstables.end());
     // Insert sstable to sstable list by `max_rss_rowid` order.
-    auto lower_it = std::lower_bound(
-            _sstables.begin(), _sstables.end(), sstable,
-            [](const std::unique_ptr<PersistentIndexSstable>& a, const std::unique_ptr<PersistentIndexSstable>& b) {
-                return a->sstable_pb().max_rss_rowid() < b->sstable_pb().max_rss_rowid();
-            });
-    _sstables.insert(lower_it, std::move(sstable));
+    if (sstable) {
+        auto lower_it = std::lower_bound(
+                _sstables.begin(), _sstables.end(), sstable,
+                [](const std::unique_ptr<PersistentIndexSstable>& a, const std::unique_ptr<PersistentIndexSstable>& b) {
+                    return a->sstable_pb().max_rss_rowid() < b->sstable_pb().max_rss_rowid();
+                });
+        _sstables.insert(lower_it, std::move(sstable));
+    }
     return Status::OK();
 }
 
@@ -845,7 +713,7 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
                         PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(), pk_column.get());
                         pkc = pk_column.get();
                     } else {
-                        pkc = chunk->columns()[0].get();
+                        pkc = const_cast<Column*>(chunk->columns()[0].get());
                     }
                     uint32_t rssid = rowset->id() + i;
                     uint64_t base = ((uint64_t)rssid) << 32;

@@ -21,7 +21,6 @@ import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.HashDistributionInfo;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.SinglePartitionInfo;
@@ -29,7 +28,7 @@ import com.starrocks.common.Config;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.OperationType;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.thrift.TTabletType;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.AfterEach;
@@ -78,8 +77,6 @@ public class AnalyzeMgrEditLogTest {
         PartitionInfo partitionInfo = new SinglePartitionInfo();
         partitionInfo.setDataProperty(testPartitionId, DataProperty.DEFAULT_DATA_PROPERTY);
         partitionInfo.setReplicationNum(testPartitionId, (short) 1);
-        partitionInfo.setIsInMemory(testPartitionId, false);
-        partitionInfo.setTabletType(testPartitionId, TTabletType.TABLET_TYPE_DISK);
 
         // Create distribution info
         DistributionInfo distributionInfo = new HashDistributionInfo(1, Lists.newArrayList(col1));

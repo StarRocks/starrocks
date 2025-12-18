@@ -33,10 +33,10 @@ public class UserPrivilegesSystemTable {
                 NAME,
                 Table.TableType.SCHEMA,
                 builder()
-                        .column("GRANTEE", TypeFactory.createVarchar(81))
-                        .column("TABLE_CATALOG", TypeFactory.createVarchar(FN_REFLEN))
-                        .column("PRIVILEGE_TYPE", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                        .column("IS_GRANTABLE", TypeFactory.createVarchar(3))
+                        .column("GRANTEE", TypeFactory.createVarcharType(81))
+                        .column("TABLE_CATALOG", TypeFactory.createVarcharType(FN_REFLEN))
+                        .column("PRIVILEGE_TYPE", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("IS_GRANTABLE", TypeFactory.createVarcharType(3))
                         .build(), TSchemaTableType.SCH_USER_PRIVILEGES);
     }
 }

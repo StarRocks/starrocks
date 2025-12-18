@@ -209,7 +209,7 @@ protected:
         _tablet_manager->prune_metacache();
     }
 
-    std::shared_ptr<Chunk> read_segment(int64_t tablet_id, const std::string& filename) {
+    ChunkUniquePtr read_segment(int64_t tablet_id, const std::string& filename) {
         // Check segment file
         ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(_test_directory));
         auto path = _location_provider->segment_location(tablet_id, filename);

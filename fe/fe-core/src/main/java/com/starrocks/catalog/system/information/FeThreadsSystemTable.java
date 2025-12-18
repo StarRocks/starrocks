@@ -57,10 +57,10 @@ public class FeThreadsSystemTable {
                 NAME,
                 Table.TableType.SCHEMA,
                 builder()
-                        .column("FE_ADDRESS", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("FE_ADDRESS", TypeFactory.createVarcharType(NAME_CHAR_LEN))
                         .column("THREAD_ID", TypeFactory.createType(PrimitiveType.BIGINT))
-                        .column("THREAD_NAME", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                        .column("THREAD_STATE", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("THREAD_NAME", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("THREAD_STATE", TypeFactory.createVarcharType(NAME_CHAR_LEN))
                         .column("IS_DAEMON", TypeFactory.createType(PrimitiveType.BOOLEAN))
                         .column("PRIORITY", TypeFactory.createType(PrimitiveType.INT))
                         .column("CPU_TIME_MS", TypeFactory.createType(PrimitiveType.BIGINT))

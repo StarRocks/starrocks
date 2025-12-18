@@ -1083,6 +1083,12 @@ Used for MySQL client compatibility. No practical usage.
 
 Used for MySQL client compatibility. No practical usage.
 
+### interpolate_passthrough
+
+* **Description**: Whether to add local-exchange-passthrough for certain operators. Currently supported operators include streaming aggregates, etc. Adding local-exchange can mitigate the impact of data skew on computation, but will slightly increase memory usage. 
+* **Default**: true
+* **Introduced in**: v3.2
+
 ### io_tasks_per_scan_operator
 
 * **Description**: The number of concurrent I/O tasks that can be issued by a scan operator. Increase this value if you want to access remote storage systems such as HDFS or S3 but the latency is high. However, a larger value causes more memory consumption.

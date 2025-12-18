@@ -35,3 +35,21 @@ StarRocks はロード時にデータの変換をサポートしています。�
 
 - `seq -w 0 n` を使用して、ソースデータファイルをより小さなファイルに分割します。
 - `curl -XPOST http://be_host:http_port/api/update_config?streaming_load_max_mb=<file_size>` を使用して、[BE configuration item](../../administration/management/BE_configuration.md#configure-be-dynamic-parameters) `streaming_load_max_mb` の値を調整し、最大ファイルサイズを増やします。
+
+## 4. Stream Load を介して文字列列に "null" を書き込む代わりに、実際の NULL 値をロードするにはどうすればよいですか？
+
+replace 関数を使用します。
+
+```Bash
+-H "columns: pk, temp, pd_type=replace(temp,'NULL',NULL)"
+```
+
+## 5. フィールド名 "role" が Stream Load エラーを引き起こすのはなぜですか？列名はどのように指定すればよいですか？
+
+`role` は予約キーワードです。名前に使用する場合は、予約キーワードをバッククォートで囲みます。
+
+例：
+
+```Bash
+-H $'columns:k1,`role`'
+```

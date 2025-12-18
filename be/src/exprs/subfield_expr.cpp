@@ -53,14 +53,14 @@ public:
 
             // merge null flags for each level
             if (col->is_nullable()) {
-                auto* nullable = down_cast<NullableColumn*>(col.get());
+                const auto* nullable = down_cast<const NullableColumn*>(col.get());
                 union_null_column =
                         FunctionHelper::union_null_column(std::move(union_null_column), nullable->null_column());
             }
 
-            Column* tmp_col = ColumnHelper::get_data_column(col.get());
+            const Column* tmp_col = ColumnHelper::get_data_column(col.get());
             DCHECK(tmp_col->is_struct());
-            auto* struct_column = down_cast<StructColumn*>(tmp_col);
+            const auto* struct_column = down_cast<const StructColumn*>(tmp_col);
             col = struct_column->field_column(fieldname);
             if (col == nullptr) {
                 return Status::InternalError("Struct subfield name: " + fieldname + " not found!");
@@ -68,7 +68,7 @@ public:
         }
 
         if (col->is_nullable()) {
-            auto* nullable = down_cast<NullableColumn*>(col.get());
+            const auto* nullable = down_cast<const NullableColumn*>(col.get());
             union_null_column =
                     FunctionHelper::union_null_column(std::move(union_null_column), nullable->null_column());
             col = nullable->data_column();

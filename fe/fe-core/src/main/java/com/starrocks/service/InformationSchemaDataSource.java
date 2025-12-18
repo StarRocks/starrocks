@@ -28,7 +28,6 @@ import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.InternalCatalog;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
@@ -55,6 +54,7 @@ import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.TemporaryTableMgr;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.thrift.TApplicableRolesInfo;
 import com.starrocks.thrift.TAuthInfo;
 import com.starrocks.thrift.TGetApplicableRolesRequest;
@@ -321,7 +321,7 @@ public class InformationSchemaDataSource {
         tableConfigInfo.setDistribute_key(distributionInfo.getDistributionKey(olapTable.getIdToColumn()));
 
         // SORT KEYS
-        MaterializedIndexMeta index = olapTable.getIndexMetaByIndexId(olapTable.getBaseIndexId());
+        MaterializedIndexMeta index = olapTable.getIndexMetaByIndexId(olapTable.getBaseIndexMetaId());
         if (index.getSortKeyIdxes() == null) {
             tableConfigInfo.setSort_key(pkSb);
         } else {
@@ -466,8 +466,6 @@ public class InformationSchemaDataSource {
         partitionMetaInfo.setCooldown_time(dataProperty.getCooldownTimeMs() / 1000);
         // LAST_CONSISTENCY_CHECK_TIME
         partitionMetaInfo.setLast_consistency_check_time(partition.getLastCheckTime() / 1000);
-        // IS_IN_MEMORY
-        partitionMetaInfo.setIs_in_memory(partitionInfo.getIsInMemory(partition.getId()));
         // ROW_COUNT
         partitionMetaInfo.setRow_count(physicalPartition.storageRowCount());
         // IS_TEMP
@@ -491,11 +489,9 @@ public class InformationSchemaDataSource {
             partitionMetaInfo.setMax_cs(compactionScore != null ? compactionScore.getMax() : 0.0);
             // STORAGE_PATH
             partitionMetaInfo.setStorage_path(
-                    table.getPartitionFilePathInfo(physicalPartition.getPathId()).getFullPath());
+                    table.getPartitionFilePathInfo(physicalPartition.getId()).getFullPath());
             // METADATA_SWITCH_VERSION
             partitionMetaInfo.setMetadata_switch_version(physicalPartition.getMetadataSwitchVersion());
-            // PATH_ID
-            partitionMetaInfo.setPath_id(physicalPartition.getPathId());
         }
 
         partitionMetaInfo.setData_version(physicalPartition.getDataVersion());

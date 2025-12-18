@@ -155,7 +155,6 @@ public class BalanceStatProcNodeTest {
             PartitionInfo listPartition = new ListPartitionInfo(PartitionType.LIST, cols);
             long partitionId = 1025L;
             listPartition.setDataProperty(partitionId, DataProperty.DEFAULT_DATA_PROPERTY);
-            listPartition.setIsInMemory(partitionId, false);
             listPartition.setReplicationNum(partitionId, (short) 1);
             OlapTable olapTable = new OlapTable(1024L, "olap_table", cols, null, listPartition, null);
 
@@ -165,7 +164,7 @@ public class BalanceStatProcNodeTest {
             index.addTablet(new LocalTablet(tablet1Id), tabletMeta);
             long tablet2Id = 1011L;
             index.addTablet(new LocalTablet(tablet2Id), tabletMeta);
-            Map<String, Long> indexNameToId = olapTable.getIndexNameToId();
+            Map<String, Long> indexNameToId = olapTable.getIndexNameToMetaId();
             indexNameToId.put("index1", index.getId());
 
             // balance stat
@@ -191,7 +190,6 @@ public class BalanceStatProcNodeTest {
             PartitionInfo listPartition = new ListPartitionInfo(PartitionType.LIST, cols);
             long partitionId = 1125L;
             listPartition.setDataProperty(partitionId, DataProperty.DEFAULT_DATA_PROPERTY);
-            listPartition.setIsInMemory(partitionId, false);
             listPartition.setReplicationNum(partitionId, (short) 1);
             OlapTable olapTable = new OlapTable(1124L, "colocate_table", cols, null, listPartition, null);
 
@@ -201,7 +199,7 @@ public class BalanceStatProcNodeTest {
             index.addTablet(new LocalTablet(tablet1Id), tabletMeta);
             long tablet2Id = 1111L;
             index.addTablet(new LocalTablet(tablet2Id), tabletMeta);
-            Map<String, Long> indexNameToId = olapTable.getIndexNameToId();
+            Map<String, Long> indexNameToId = olapTable.getIndexNameToMetaId();
             indexNameToId.put("index1", index.getId());
 
             // balance stat
@@ -235,7 +233,6 @@ public class BalanceStatProcNodeTest {
             PartitionInfo listPartition = new ListPartitionInfo(PartitionType.LIST, cols);
             long partitionId = 1225L;
             listPartition.setDataProperty(partitionId, DataProperty.DEFAULT_DATA_PROPERTY);
-            listPartition.setIsInMemory(partitionId, false);
             listPartition.setReplicationNum(partitionId, (short) 1);
             OlapTable olapTable = new OlapTable(1224L, "location_table", cols, null, listPartition, null);
 
@@ -245,7 +242,7 @@ public class BalanceStatProcNodeTest {
             index.addTablet(new LocalTablet(tablet1Id), tabletMeta);
             long tablet2Id = 1211L;
             index.addTablet(new LocalTablet(tablet2Id), tabletMeta);
-            Map<String, Long> indexNameToId = olapTable.getIndexNameToId();
+            Map<String, Long> indexNameToId = olapTable.getIndexNameToMetaId();
             indexNameToId.put("index1", index.getId());
 
             // balance stat

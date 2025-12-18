@@ -37,6 +37,7 @@
 #include <fmt/format.h>
 
 #include <atomic>
+#include <future>
 #include <memory>
 #include <shared_mutex>
 #include <sstream>
@@ -49,12 +50,14 @@
 #include "cache/datacache.h"
 #include "column/stream_chunk.h"
 #include "common/closure_guard.h"
+#include "common/compiler_util.h"
 #include "common/config.h"
 #include "common/process_exit.h"
 #include "common/status.h"
 #include "exec/file_scanner/file_scanner.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/fragment_executor.h"
+#include "exec/pipeline/lookup_request.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/stream_epoch_manager.h"
@@ -343,22 +346,121 @@ void PInternalServiceImplBase<T>::_exec_batch_plan_fragments(google::protobuf::R
     {
         const auto* buf = (const uint8_t*)ser_request.data();
         uint32_t len = ser_request.size();
-        if (Status status = deserialize_thrift_msg(buf, &len, TProtocolType::BINARY, t_batch_requests.get());
+        if (Status status = deserialize_thrift_msg(buf, &len, request->attachment_protocol(), t_batch_requests.get());
             !status.ok()) {
             status.to_protobuf(response->mutable_status());
             return;
         }
     }
 
+    bool is_pipeline = t_batch_requests->common_param.__isset.is_pipeline && t_batch_requests->common_param.is_pipeline;
+    if (!is_pipeline) {
+        Status::InvalidArgument(
+                "non-pipeline engine is no longer supported since 3.2, please set enable_pipeline_engine=true.")
+                .to_protobuf(response->mutable_status());
+        return;
+    }
+
     auto& common_request = t_batch_requests->common_param;
     auto& unique_requests = t_batch_requests->unique_param_per_instance;
+    std::string instances_id;
+    for (const auto& unique_request : unique_requests) {
+        instances_id.append(print_id(unique_request.params.fragment_instance_id) + " ");
+    }
+    VLOG(1) << "exec plan batch plan_fragments:, query id=" << print_id(common_request.params.query_id)
+            << ", instance id:" << instances_id;
 
     if (unique_requests.empty()) {
         Status::OK().to_protobuf(response->mutable_status());
         return;
     }
 
-    Status status = _exec_plan_fragment_by_pipeline(common_request, unique_requests[0]);
+    SignalTimerGuard guard(config::pipeline_prepare_timeout_guard_ms);
+
+    // prepare query context and desc table first
+    pipeline::FragmentExecutor fragment_executor;
+    Status status = fragment_executor.prepare_global_state(_exec_env, common_request);
+    if (!status.ok()) {
+        status.to_protobuf(response->mutable_status());
+        return;
+    }
+
+    // prepare fragment instance in parallel
+    std::vector<PromiseStatusSharedPtr> promise_statuses;
+    std::vector<std::shared_future<Status>> prepare_futures;
+    // must use shared_ptr to avoid uaf
+    std::shared_ptr<std::vector<pipeline::FragmentExecutor>> fragment_executors =
+            std::make_shared<std::vector<pipeline::FragmentExecutor>>(unique_requests.size());
+    size_t failed_idx = unique_requests.size();
+    bool submitted = true;
+    for (int i = 0; i < unique_requests.size(); ++i) {
+        PromiseStatusSharedPtr ms = std::make_shared<PromiseStatus>();
+        submitted = _exec_env->pipeline_prepare_pool()->try_offer([ms, i, fragment_executors, t_batch_requests, this] {
+            auto& unique_requests = t_batch_requests->unique_param_per_instance;
+            auto& req = unique_requests[i];
+            auto& fragment_executor = fragment_executors->at(i);
+            ms->set_value(fragment_executor.prepare(_exec_env, req, req));
+        });
+        if (!submitted) {
+            failed_idx = i;
+            break;
+        }
+        prepare_futures.emplace_back(ms->get_future().share());
+        promise_statuses.emplace_back(std::move(ms));
+    }
+
+    // if some fragments submitted to prepare, and the following fragment submit failed
+    // wait the former fragments prepared, then clean up the query context
+    if (failed_idx != unique_requests.size()) {
+        // Drain remaining preparations and release their query context references to avoid leaks when execute() is skipped.
+        auto query_ctx = _exec_env->query_context_mgr()->get(common_request.params.query_id);
+        for (size_t j = 0; j < failed_idx; ++j) {
+            Status prepare_status = prepare_futures[j].get();
+            if (prepare_status.ok() && query_ctx != nullptr) {
+                fragment_executors->at(j)._fail_cleanup(true);
+            }
+        }
+        Status::ServiceUnavailable("submit exec_batch_plan_fragment task failed")
+                .to_protobuf(response->mutable_status());
+        return;
+    }
+
+    failed_idx = unique_requests.size();
+    for (size_t i = 0; i < unique_requests.size(); ++i) {
+        // When a preparation fails, return error immediately. The other unfinished preparation is safe,
+        // since they can use the shared pointer of promise/t_batch_requests/fragment_executors
+        status = prepare_futures[i].get();
+        if (status.ok()) {
+            status = fragment_executors->at(i).execute(_exec_env);
+        } else if (status.is_duplicate_rpc_invocation()) {
+            status = Status::OK();
+        }
+        if (!status.ok()) {
+            failed_idx = i;
+            break;
+        }
+    }
+
+    // fragment[failed_idx] prpare failed, but fragment[1..failed_idx-1] already executed
+    // only wait fragment[failed_idx+1..., end] prepare finished and clean them
+    // for fragment[1...fragment-1], let FE cancel them
+    if (failed_idx != unique_requests.size()) {
+        // Drain remaining preparations and release their query context references to avoid leaks when execute() is skipped.
+        auto query_ctx = _exec_env->query_context_mgr()->get(common_request.params.query_id);
+        for (size_t j = failed_idx + 1; j < unique_requests.size(); ++j) {
+            Status prepare_status = prepare_futures[j].get();
+            if (prepare_status.ok() && query_ctx != nullptr) {
+                fragment_executors->at(j)._fail_cleanup(true);
+            }
+        }
+    }
+
+    // prepare_global_state is success when reach here, so we must count down once
+    pipeline::QueryContext* query_context = _exec_env->query_context_mgr()->get(common_request.params.query_id).get();
+    if (query_context != nullptr) {
+        query_context->count_down_fragments();
+    }
+
     status.to_protobuf(response->mutable_status());
 }
 
@@ -525,6 +627,14 @@ inline std::string cancel_reason_to_string(::starrocks::PPlanFragmentCancelReaso
     }
 }
 
+// Check if a cancel reason should be logged.
+// Normal cancellations (LIMIT_REACH, QUERY_FINISHED) should not be logged to reduce log noise.
+// Exceptional cancellations (INTERNAL_ERROR, TIMEOUT, USER_CANCEL, UnknownReason) should be logged.
+inline bool should_log_cancel_reason(::starrocks::PPlanFragmentCancelReason reason) {
+    return reason != ::starrocks::PPlanFragmentCancelReason::LIMIT_REACH &&
+           reason != ::starrocks::PPlanFragmentCancelReason::QUERY_FINISHED;
+}
+
 template <typename T>
 void PInternalServiceImplBase<T>::cancel_plan_fragment(google::protobuf::RpcController* cntl_base,
                                                        const PCancelPlanFragmentRequest* request,
@@ -551,11 +661,17 @@ void PInternalServiceImplBase<T>::_cancel_plan_fragment(google::protobuf::RpcCon
     auto reason_string =
             request->has_cancel_reason() ? cancel_reason_to_string(request->cancel_reason()) : "UnknownReason";
     bool cancel_query_ctx = tid.hi == 0 && tid.lo == 0;
-    if (cancel_query_ctx) {
-        DCHECK(request->has_query_id());
-        LOG(INFO) << "cancel query ctx, query_id=" << print_id(request->query_id()) << ", reason: " << reason_string;
-    } else {
-        LOG(INFO) << "cancel fragment, fragment_instance_id=" << print_id(tid) << ", reason: " << reason_string;
+    // Only log cancellations for exceptional reasons (errors, timeouts, user cancels).
+    // Skip logging for normal cancellations (LIMIT_REACH, QUERY_FINISHED) to reduce log noise.
+    bool should_log = !request->has_cancel_reason() || should_log_cancel_reason(request->cancel_reason());
+    if (should_log) {
+        if (cancel_query_ctx) {
+            DCHECK(request->has_query_id());
+            LOG(INFO) << "cancel query ctx, query_id=" << print_id(request->query_id())
+                      << ", reason: " << reason_string;
+        } else {
+            LOG(INFO) << "cancel fragment, fragment_instance_id=" << print_id(tid) << ", reason: " << reason_string;
+        }
     }
 
     if (request->has_is_pipeline() && request->is_pipeline()) {
@@ -594,7 +710,6 @@ void PInternalServiceImplBase<T>::_cancel_plan_fragment(google::protobuf::RpcCon
         if (request->has_cancel_reason()) {
             st = _exec_env->fragment_mgr()->cancel(tid, request->cancel_reason());
         } else {
-            LOG(INFO) << "cancel fragment, fragment_instance_id=" << print_id(tid);
             st = _exec_env->fragment_mgr()->cancel(tid);
         }
         if (!st.ok()) {
@@ -1290,7 +1405,7 @@ void PInternalServiceImplBase<T>::update_fail_point_status(google::protobuf::Rpc
                                                            google::protobuf::Closure* done) {
     ClosureGuard closure_guard(done);
 #ifdef FIU_ENABLE
-    const auto name = request->fail_point_name();
+    const auto& name = request->fail_point_name();
     auto fp = starrocks::failpoint::FailPointRegistry::GetInstance()->get(name);
     if (fp == nullptr) {
         Status::InvalidArgument(fmt::format("FailPoint {} is not existed.", name))
@@ -1375,6 +1490,48 @@ void PInternalServiceImplBase<T>::update_transaction_state(google::protobuf::Rpc
                                                            google::protobuf::Closure* done) {
     ClosureGuard closure_guard(done);
     _exec_env->batch_write_mgr()->update_transaction_state(request, response);
+}
+
+template <typename T>
+void PInternalServiceImplBase<T>::lookup(google::protobuf::RpcController* cntl_base, const PLookUpRequest* request,
+                                         PLookUpResponse* response, google::protobuf::Closure* done) {
+    auto* cntl = static_cast<brpc::Controller*>(cntl_base);
+    auto* req = const_cast<PLookUpRequest*>(request);
+
+    Status st;
+    DeferOp defer([&]() {
+        if (!st.ok()) {
+            st.to_protobuf(response->mutable_status());
+            done->Run();
+        }
+    });
+
+    if (cntl->request_attachment().size() > 0) {
+        // parse chunk
+        butil::IOBuf& io_buf = cntl->request_attachment();
+        for (size_t i = 0; i < request->request_columns_size(); i++) {
+            auto pcolumn = req->mutable_request_columns(i);
+            if (UNLIKELY(io_buf.size() < pcolumn->data_size())) {
+                auto msg = fmt::format("io_buf size {} is less than column data size {}", io_buf.size(),
+                                       pcolumn->data_size());
+                LOG(WARNING) << msg;
+                st = Status::InternalError(msg);
+                return;
+            }
+            size_t size = io_buf.cutn(pcolumn->mutable_data(), pcolumn->data_size());
+            if (UNLIKELY(size != pcolumn->data_size())) {
+                auto msg = fmt::format("iobuf read {} != expected {}", size, pcolumn->data_size());
+                LOG(WARNING) << msg;
+                st = Status::InternalError(msg);
+                return;
+            }
+        }
+    } else {
+        st = Status::InternalError("no attachment in lookup request");
+        return;
+    }
+    auto request_ctx = std::make_shared<pipeline::RemoteLookUpRequestContext>(cntl, req, response, done);
+    st = _exec_env->lookup_dispatcher_mgr()->lookup(std::move(request_ctx));
 }
 
 template class PInternalServiceImplBase<PInternalService>;

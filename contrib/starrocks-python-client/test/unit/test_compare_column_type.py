@@ -110,9 +110,36 @@ simple_type_params = [
 
     # 1.4 Edge cases with parameters
     pytest.param(TINYINT(2), BOOLEAN(), True, id="TINYINT(2) vs BOOLEAN (not equivalent)"),
+    pytest.param(TINYINT(4), BOOLEAN(), True, id="TINYINT(4) vs BOOLEAN (not equivalent)"),
+    pytest.param(BOOLEAN(), TINYINT(2), True, id="BOOLEAN vs TINYINT(2) (not equivalent)"),
+    pytest.param(BOOLEAN(), TINYINT(4), True, id="BOOLEAN vs TINYINT(4) (not equivalent)"),
     pytest.param(VARCHAR(65532), STRING(), True, id="VARCHAR(65532) vs STRING (not equivalent)"),
     pytest.param(DECIMAL(1, 0), DECIMAL(1, 1), True, id="DECIMAL precision/scale difference"),
-    pytest.param(FLOAT(10), FLOAT(20), False, id="FLOAT precision difference (ignored)"),
+    pytest.param(FLOAT(10), FLOAT(20), False, id="FLOAT precision difference (ignored, StarRocks doesn't support FLOAT precision)"),
+
+    # 1.5 Integer types with different display_width (should be ignored)
+    pytest.param(TINYINT(1), TINYINT(2), False, id="TINYINT(1) vs TINYINT(2) (display_width ignored)"),
+    pytest.param(TINYINT(2), TINYINT(1), False, id="TINYINT(2) vs TINYINT(1) (display_width ignored)"),
+    pytest.param(TINYINT(), TINYINT(1), False, id="TINYINT() vs TINYINT(1) (display_width ignored)"),
+    pytest.param(TINYINT(1), TINYINT(), False, id="TINYINT(1) vs TINYINT() (display_width ignored)"),
+    pytest.param(TINYINT(5), TINYINT(10), False, id="TINYINT(5) vs TINYINT(10) (display_width ignored)"),
+    pytest.param(SMALLINT(1), SMALLINT(2), False, id="SMALLINT(1) vs SMALLINT(2) (display_width ignored)"),
+    pytest.param(SMALLINT(2), SMALLINT(1), False, id="SMALLINT(2) vs SMALLINT(1) (display_width ignored)"),
+    pytest.param(SMALLINT(), SMALLINT(1), False, id="SMALLINT() vs SMALLINT(1) (display_width ignored)"),
+    pytest.param(SMALLINT(1), SMALLINT(), False, id="SMALLINT(1) vs SMALLINT() (display_width ignored)"),
+    pytest.param(SMALLINT(5), SMALLINT(10), False, id="SMALLINT(5) vs SMALLINT(10) (display_width ignored)"),
+    pytest.param(INTEGER(1), INTEGER(2), False, id="INTEGER(1) vs INTEGER(2) (display_width ignored)"),
+    pytest.param(INTEGER(2), INTEGER(1), False, id="INTEGER(2) vs INTEGER(1) (display_width ignored)"),
+    pytest.param(INTEGER(), INTEGER(1), False, id="INTEGER() vs INTEGER(1) (display_width ignored)"),
+    pytest.param(INTEGER(1), INTEGER(), False, id="INTEGER(1) vs INTEGER() (display_width ignored)"),
+    pytest.param(INTEGER(5), INTEGER(10), False, id="INTEGER(5) vs INTEGER(10) (display_width ignored)"),
+    pytest.param(INTEGER(11), INTEGER(20), False, id="INTEGER(11) vs INTEGER(20) (display_width ignored)"),
+    pytest.param(BIGINT(1), BIGINT(2), False, id="BIGINT(1) vs BIGINT(2) (display_width ignored)"),
+    pytest.param(BIGINT(2), BIGINT(1), False, id="BIGINT(2) vs BIGINT(1) (display_width ignored)"),
+    pytest.param(BIGINT(), BIGINT(1), False, id="BIGINT() vs BIGINT(1) (display_width ignored)"),
+    pytest.param(BIGINT(1), BIGINT(), False, id="BIGINT(1) vs BIGINT() (display_width ignored)"),
+    pytest.param(BIGINT(5), BIGINT(10), False, id="BIGINT(5) vs BIGINT(10) (display_width ignored)"),
+    pytest.param(BIGINT(11), BIGINT(20), False, id="BIGINT(11) vs BIGINT(20) (display_width ignored)"),
 ]
 
 # 2. Complex type vs Simple type
@@ -334,9 +361,12 @@ class TestCompareColumnType:
         assert run_compare(DECIMAL(38, 18), DECIMAL(38, 18)) is False
         assert run_compare(DECIMAL(38, 18), DECIMAL(38, 17)) is True
 
-        # TINYINT display width edge cases
-        assert run_compare(TINYINT(1), TINYINT(1)) is False
-        assert run_compare(TINYINT(1), TINYINT(2)) is False  # no print width in SR?
+        # FLOAT precision edge cases - StarRocks doesn't support FLOAT precision, so all FLOAT types are the same
+        assert run_compare(FLOAT(), FLOAT()) is False
+        assert run_compare(FLOAT(10), FLOAT(10)) is False
+        assert run_compare(FLOAT(10), FLOAT(20)) is False  # precision ignored
+        assert run_compare(FLOAT(), FLOAT(10)) is False  # precision ignored
+        assert run_compare(FLOAT(10), FLOAT()) is False  # precision ignored
 
     def test_special_equivalence_in_deep_nesting(self):
         """Test that special equivalence rules work correctly in deeply nested structures."""
@@ -352,16 +382,24 @@ class TestCompareColumnType:
             metadata=MAP(STRING, BOOLEAN)
         )))
 
-        # Should be equivalent due to special rules
+        # Should be equivalent due to special rules (BOOLEAN <-> TINYINT(1))
         assert run_compare(deep1, deep2) is False
 
-        # But this should be different (TINYINT(2) != BOOLEAN)
+        # TINYINT(2) is NOT equivalent to BOOLEAN (only TINYINT(1) is)
         deep3 = ARRAY(MAP(STRING, STRUCT(
             flags=ARRAY(TINYINT(2)),  # Not equivalent to BOOLEAN
             metadata=MAP(STRING, BOOLEAN)
         )))
 
         assert run_compare(deep1, deep3) is True
+
+        # INTEGER is also different from BOOLEAN
+        deep4 = ARRAY(MAP(STRING, STRUCT(
+            flags=ARRAY(INTEGER),  # Different type, not equivalent to BOOLEAN
+            metadata=MAP(STRING, BOOLEAN)
+        )))
+
+        assert run_compare(deep1, deep4) is True
 
     def test_case_sensitivity_in_struct_fields(self):
         """Test case sensitivity behavior in STRUCT field names."""

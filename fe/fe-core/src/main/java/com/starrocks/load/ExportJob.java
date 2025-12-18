@@ -44,6 +44,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MysqlTable;
+import com.starrocks.catalog.PartitionNames;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
@@ -92,7 +93,6 @@ import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.BrokerDesc;
 import com.starrocks.sql.ast.ExportStmt;
 import com.starrocks.sql.ast.LoadStmt;
-import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.system.Backend;
@@ -405,12 +405,11 @@ public class ExportJob implements Writable, GsonPostProcessable {
         switch (exportTable.getType()) {
             case OLAP:
             case CLOUD_NATIVE:
-                scanNode = new OlapScanNode(new PlanNodeId(0), exportTupleDesc, "OlapScanNodeForExport", computeResource);
+                scanNode = new OlapScanNode(new PlanNodeId(0), exportTupleDesc, "OlapScanNodeForExport", -1, computeResource);
                 scanNode.setColumnFilters(Maps.newHashMap());
                 ((OlapScanNode) scanNode).setIsPreAggregation(false, "This an export operation");
                 ((OlapScanNode) scanNode).setCanTurnOnPreAggr(false);
                 ((OlapScanNode) scanNode).computePartitionInfo();
-                ((OlapScanNode) scanNode).selectBestRollupByRollupSelector();
                 break;
             case MYSQL:
                 scanNode = new MysqlScanNode(new PlanNodeId(0), exportTupleDesc, (MysqlTable) this.exportTable);
@@ -522,12 +521,11 @@ public class ExportJob implements Writable, GsonPostProcessable {
             throw new StarRocksException("SubExportTask " + taskIndex + " scan range is empty");
         }
 
-        OlapScanNode newOlapScanNode = new OlapScanNode(new PlanNodeId(0), exportTupleDesc, "OlapScanNodeForExport");
+        OlapScanNode newOlapScanNode = new OlapScanNode(new PlanNodeId(0), exportTupleDesc, "OlapScanNodeForExport", -1);
         newOlapScanNode.setColumnFilters(Maps.newHashMap());
         newOlapScanNode.setIsPreAggregation(false, "This an export operation");
         newOlapScanNode.setCanTurnOnPreAggr(false);
         newOlapScanNode.computePartitionInfo();
-        newOlapScanNode.selectBestRollupByRollupSelector();
         List<TScanRangeLocations> newLocations = newOlapScanNode.updateScanRangeLocations(locations, computeResource);
 
         // random select a new location for each TScanRangeLocations

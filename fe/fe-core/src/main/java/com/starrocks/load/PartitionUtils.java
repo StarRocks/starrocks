@@ -88,7 +88,6 @@ public class PartitionUtils {
                 partitionInfo.addPartition(newTempPartitions.get(i).getId(),
                         partitionInfo.getDataProperty(sourcePartitionId),
                         partitionInfo.getReplicationNum(sourcePartitionId),
-                        partitionInfo.getIsInMemory(sourcePartitionId),
                         partitionInfo.getDataCacheInfo(sourcePartitionId));
                 Partition partition = newTempPartitions.get(i);
 
@@ -102,14 +101,12 @@ public class PartitionUtils {
                     info = new RangePartitionPersistInfo(db.getId(), targetTable.getId(),
                             partition, partitionInfo.getDataProperty(partition.getId()),
                             partitionInfo.getReplicationNum(partition.getId()),
-                            partitionInfo.getIsInMemory(partition.getId()), true,
-                            range, partitionInfo.getDataCacheInfo(partition.getId()));
+                            true, range, partitionInfo.getDataCacheInfo(partition.getId()));
                 } else if (partitionInfo.isUnPartitioned()) {
                     info = new SinglePartitionPersistInfo(db.getId(), targetTable.getId(),
                             partition, partitionInfo.getDataProperty(partition.getId()),
                             partitionInfo.getReplicationNum(partition.getId()),
-                            partitionInfo.getIsInMemory(partition.getId()), true,
-                            partitionInfo.getDataCacheInfo(partition.getId()));
+                            true, partitionInfo.getDataCacheInfo(partition.getId()));
                 } else if (partitionInfo.isListPartition()) {
                     ListPartitionInfo listPartitionInfo = (ListPartitionInfo) partitionInfo;
 
@@ -131,8 +128,7 @@ public class PartitionUtils {
                     info = new ListPartitionPersistInfo(db.getId(), targetTable.getId(),
                             partition, partitionInfo.getDataProperty(partition.getId()),
                             partitionInfo.getReplicationNum(partition.getId()),
-                            partitionInfo.getIsInMemory(partition.getId()), true,
-                            values, multiValues, partitionInfo.getDataCacheInfo(partition.getId()));
+                            true, values, multiValues, partitionInfo.getDataCacheInfo(partition.getId()));
                 } else {
                     throw new DdlException("Unsupported partition persist info.");
                 }

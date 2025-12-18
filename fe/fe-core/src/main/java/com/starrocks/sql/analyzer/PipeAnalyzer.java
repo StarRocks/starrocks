@@ -52,6 +52,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+import static com.starrocks.common.util.Util.normalizeName;
+
 public class PipeAnalyzer {
 
     public static final String TASK_VARIABLES_PREFIX = "TASK.";
@@ -74,6 +76,7 @@ public class PipeAnalyzer {
             if (Strings.isNullOrEmpty(defaultDbName)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_NO_DB_ERROR);
             }
+            defaultDbName = normalizeName(defaultDbName);
             pipeName.setDbName(defaultDbName);
         }
         if (Strings.isNullOrEmpty(pipeName.getPipeName())) {

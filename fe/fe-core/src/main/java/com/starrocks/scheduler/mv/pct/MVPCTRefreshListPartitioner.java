@@ -87,7 +87,7 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
                                        MaterializedView mv,
                                        MVRefreshParams mvRefreshParams) {
         super(mvContext, context, db, mv, mvRefreshParams);
-        this.differ = new ListPartitionDiffer(mv, false);
+        this.differ = new ListPartitionDiffer(mv, queryRewriteParams);
         this.logger = MVTraceUtils.getLogger(mv, MVPCTRefreshListPartitioner.class);
     }
 

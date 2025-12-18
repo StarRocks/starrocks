@@ -271,6 +271,7 @@ Status FileReader::_init_group_readers() {
     _group_reader_param.modification_time = _datacache_options.modification_time;
     _group_reader_param.file_size = _file_size;
     _group_reader_param.datacache_options = &_datacache_options;
+    _group_reader_param.scan_range_id = fd_scanner_ctx.scan_range_id;
 
     int64_t row_group_first_row_id = _scanner_ctx->scan_range->first_row_id;
     int64_t row_group_first_row = 0;

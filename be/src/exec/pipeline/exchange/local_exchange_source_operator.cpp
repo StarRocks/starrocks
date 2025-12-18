@@ -59,7 +59,7 @@ Status LocalExchangeSourceOperator::add_chunk(ChunkPtr chunk, const std::shared_
 
 Status LocalExchangeSourceOperator::add_chunk(const std::vector<std::optional<std::string>>& partition_key,
                                               const std::vector<std::pair<TypeDescriptor, ColumnPtr>>& partition_datum,
-                                              std::unique_ptr<Chunk> chunk) {
+                                              ChunkUniquePtr chunk) {
     auto notify = defer_notify();
     std::lock_guard<std::mutex> l(_chunk_lock);
     if (_is_finished) {

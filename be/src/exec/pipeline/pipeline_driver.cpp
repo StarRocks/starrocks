@@ -75,18 +75,7 @@ void PipelineDriver::check_operator_close_states(const std::string& func_name) {
     }
 }
 
-Status PipelineDriver::prepare(RuntimeState* runtime_state) {
-    DeferOp defer([&]() {
-        if (this->_state != DriverState::READY) {
-            LOG(WARNING) << to_readable_string() << " prepare failed";
-        }
-    });
-
-    _runtime_state = runtime_state;
-
-    auto* prepare_timer = ADD_TIMER_WITH_THRESHOLD(_runtime_profile, "DriverPrepareTime", 1_ms);
-    SCOPED_TIMER(prepare_timer);
-
+void PipelineDriver::prepare_profile() {
     // TotalTime is reserved name
     _total_timer = ADD_TIMER(_runtime_profile, "DriverTotalTime");
     _active_timer = ADD_TIMER(_runtime_profile, "ActiveTime");
@@ -114,6 +103,19 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
 
     _peak_driver_queue_size_counter = _runtime_profile->AddHighWaterMarkCounter(
             "PeakDriverQueueSize", TUnit::UNIT, RuntimeProfile::Counter::create_strategy(TUnit::UNIT));
+}
+
+Status PipelineDriver::prepare(RuntimeState* runtime_state) {
+    DeferOp defer([&]() {
+        if (this->_state != DriverState::READY) {
+            LOG(WARNING) << to_readable_string() << " prepare failed";
+        }
+    });
+
+    _runtime_state = runtime_state;
+
+    auto* prepare_timer = ADD_TIMER_WITH_THRESHOLD(_runtime_profile, "DriverPrepareTime", 1_ms);
+    SCOPED_TIMER(prepare_timer);
 
     DCHECK(_state == DriverState::NOT_READY);
 
@@ -242,6 +244,22 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
     return Status::OK();
 }
 
+Status PipelineDriver::prepare_local_state(RuntimeState* runtime_state) {
+    prepare_profile();
+    for (auto& op : _operators) {
+        int64_t time_spent = 0;
+        {
+            SCOPED_RAW_TIMER(&time_spent);
+            RETURN_IF_ERROR(op->prepare_local_state(runtime_state));
+        }
+        op->set_local_prepare_time(time_spent);
+    }
+
+    _local_prepare_is_done = true;
+
+    return Status::OK();
+}
+
 void PipelineDriver::update_peak_driver_queue_size_counter(size_t new_value) {
     if (_peak_driver_queue_size_counter != nullptr) {
         _peak_driver_queue_size_counter->set(new_value);
@@ -252,6 +270,7 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
     COUNTER_UPDATE(_schedule_counter, 1);
     SCOPED_TIMER(_active_timer);
     QUERY_TRACE_SCOPED("process", _driver_name);
+    DCHECK(_local_prepare_is_done);
     set_driver_state(DriverState::RUNNING);
     size_t total_chunks_moved = 0;
     size_t total_rows_moved = 0;
@@ -327,6 +346,7 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
                 StatusOr<ChunkPtr> maybe_chunk;
                 {
                     SCOPED_TIMER(curr_op->_pull_timer);
+                    SCOPED_SET_TRACE_PLAN_NODE_ID(curr_op->get_plan_node_id());
                     QUERY_TRACE_SCOPED(curr_op->get_name(), "pull_chunk");
                     maybe_chunk = curr_op->pull_chunk(runtime_state);
                 }
@@ -374,6 +394,7 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
                         {
                             SCOPED_TIMER(next_op->_push_timer);
                             QUERY_TRACE_SCOPED(next_op->get_name(), "push_chunk");
+                            SCOPED_SET_TRACE_PLAN_NODE_ID(curr_op->get_plan_node_id());
                             _adjust_memory_usage(runtime_state, query_mem_tracker.get(), next_op, maybe_chunk.value());
                             RELEASE_RESERVED_GUARD();
                             return_status = next_op->push_chunk(runtime_state, maybe_chunk.value());
@@ -666,7 +687,7 @@ void PipelineDriver::_adjust_memory_usage(RuntimeState* state, MemTracker* track
     }
 }
 
-const double release_buffer_mem_ratio = 0.8;
+const double release_buffer_mem_ratio = 0.5;
 
 void PipelineDriver::_try_to_release_buffer(RuntimeState* state, OperatorPtr& op) {
     if (state->enable_spill() && op->releaseable()) {
@@ -729,6 +750,7 @@ void PipelineDriver::finalize(RuntimeState* runtime_state, DriverState state) {
 }
 
 void PipelineDriver::_update_driver_level_timer() {
+    DCHECK(_local_prepare_is_done) << to_readable_string();
     // Total Time
     COUNTER_SET(_total_timer, static_cast<int64_t>(_total_timer_sw->elapsed_time()));
 

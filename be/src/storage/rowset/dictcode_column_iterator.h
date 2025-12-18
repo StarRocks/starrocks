@@ -115,7 +115,7 @@ private:
     int16_t* _local_to_global;
     int32_t _dict_size;
 
-    ColumnPtr _local_dict_code_col;
+    MutableColumnPtr _local_dict_code_col;
 };
 
 } // namespace starrocks

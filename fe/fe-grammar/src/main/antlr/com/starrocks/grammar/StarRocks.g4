@@ -1439,7 +1439,7 @@ showHistogramMetaStatement
     ;
 
 killAnalyzeStatement
-    : KILL ANALYZE INTEGER_VALUE
+    : KILL ANALYZE (INTEGER_VALUE | userVariable)
     | KILL ALL PENDING ANALYZE
     ;
 
@@ -1929,7 +1929,7 @@ backupStatement
     : BACKUP (ALL EXTERNAL CATALOGS | EXTERNAL (CATALOG | CATALOGS) identifierList)? (DATABASE dbName=identifier)?
     SNAPSHOT qualifiedName TO repoName=identifier
     (ON '(' backupRestoreObjectDesc (',' backupRestoreObjectDesc) * ')')?
-    (PROPERTIES propertyList)?
+    properties?
     ;
 
 cancelBackupStatement
@@ -1946,7 +1946,7 @@ restoreStatement
     (ALL EXTERNAL CATALOGS | EXTERNAL (CATALOG | CATALOGS) identifierWithAliasList)?
     (DATABASE dbName=identifier (AS dbAlias=identifier)?)?
     (ON '(' backupRestoreObjectDesc (',' backupRestoreObjectDesc) * ')')?
-    (PROPERTIES propertyList)?
+    properties?
     ;
 
 cancelRestoreStatement
@@ -1966,7 +1966,7 @@ createRepositoryStatement
     : CREATE (READ ONLY)? REPOSITORY repoName=identifier
     WITH BROKER brokerName=identifierOrString?
     ON LOCATION location=string
-    (PROPERTIES propertyList)?
+    properties?
     ;
 
 dropRepositoryStatement
@@ -2353,6 +2353,7 @@ rowConstructor
 
 sortItem
     : expression ordering = (ASC | DESC)? (NULLS nullOrdering=(FIRST | LAST))?
+    | ALL ordering = (ASC | DESC)? (NULLS nullOrdering=(FIRST | LAST))?
     ;
 
 limitConstExpr
@@ -2733,6 +2734,7 @@ informationFunctionExpression
     | name = CURRENT_USER ('(' ')')?
     | name = CURRENT_ROLE ('(' ')')?
     | name = CURRENT_GROUP ('(' ')')?
+    | name = CURRENT_WAREHOUSE ('(' ')')?
     ;
 
 specialDateTimeExpression
@@ -2961,7 +2963,7 @@ statusDesc
     ;
 
 properties
-    : PROPERTIES '(' property (',' property)* ')'
+    : PROPERTIES propertyList
     ;
 
 extProperties

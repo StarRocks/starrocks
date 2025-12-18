@@ -32,6 +32,8 @@
 #include "storage/lake/compaction_policy.h"
 #include "storage/lake/compaction_scheduler.h"
 #include "storage/lake/compaction_task.h"
+#include "storage/lake/local_pk_index_manager.h"
+#include "storage/lake/metacache.h"
 #include "storage/lake/options.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/transactions.h"
@@ -140,6 +142,21 @@ std::string txn_info_string(const TxnInfoPB& info) {
 
 } // namespace
 
+// Get txn_ids string from request (compatible with both new and old FE versions)
+// New FE uses txn_infos field, old FE uses deprecated txn_ids field
+std::string get_txn_ids_string(const PublishVersionRequest* request) {
+    if (request->txn_infos_size() > 0) {
+        std::vector<int64_t> ids;
+        ids.reserve(request->txn_infos_size());
+        for (const auto& info : request->txn_infos()) {
+            ids.push_back(info.txn_id());
+        }
+        return JoinInts(ids, ",");
+    } else {
+        return JoinInts(request->txn_ids(), ",");
+    }
+}
+
 using BThreadCountDownLatch = GenericCountDownLatch<bthread::Mutex, bthread::ConditionVariable>;
 
 LakeServiceImpl::LakeServiceImpl(ExecEnv* env, lake::TabletManager* tablet_mgr) : _env(env), _tablet_mgr(tablet_mgr) {}
@@ -180,9 +197,8 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
     bthread::Mutex response_mtx;
     scoped_refptr<Trace> trace_gurad = scoped_refptr<Trace>(new Trace());
     Trace* trace = trace_gurad.get();
-    TRACE_TO(trace, "got request. txn_ids=$0 base_version=$1 new_version=$2 #tablets=$3",
-             JoinInts(request->txn_ids(), ","), request->base_version(), request->new_version(),
-             request->tablet_ids_size());
+    TRACE_TO(trace, "got request. txn_ids=$0 base_version=$1 new_version=$2 #tablets=$3", get_txn_ids_string(request),
+             request->base_version(), request->new_version(), request->tablet_ids_size());
 
     Status::OK().to_protobuf(response->mutable_status());
     std::unordered_set<int64> rebuild_pindex_tablets;
@@ -300,7 +316,7 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
         if (!st.ok()) {
             g_publish_version_failed_tasks << 1;
             LOG(WARNING) << "Fail to submit publish version task: " << st << ". tablet_id=" << tablet_id
-                         << " txn_ids=" << JoinInts(request->txn_ids(), ",");
+                         << " txn_ids=" << get_txn_ids_string(request);
             std::lock_guard l(response_mtx);
             response->add_failed_tablets(tablet_id);
             st.to_protobuf(response->mutable_status());
@@ -312,10 +328,10 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
     auto cost = butil::gettimeofday_us() - start_ts;
     auto is_slow = cost >= config::lake_publish_version_slow_log_ms * 1000;
     if (config::lake_enable_publish_version_trace_log && is_slow) {
-        LOG(INFO) << "Published txns=" << JoinInts(request->txn_ids(), ",") << ". cost=" << cost << "us\n"
+        LOG(INFO) << "Published txns=" << get_txn_ids_string(request) << ". cost=" << cost << "us\n"
                   << trace->DumpToString();
     } else if (is_slow) {
-        LOG(INFO) << "Published txns=" << JoinInts(request->txn_ids(), ",")
+        LOG(INFO) << "Published txns=" << get_txn_ids_string(request)
                   << ". tablets=" << JoinInts(request->tablet_ids(), ",") << " cost=" << cost
                   << "us, trace: " << trace->MetricsAsJSON();
     }
@@ -1373,6 +1389,320 @@ void LakeServiceImpl::vacuum_full(::google::protobuf::RpcController* controller,
     }
 
     latch.wait();
+}
+
+// Get metadatas for a list of tablets within a specified version range.
+// This function supports concurrent processing of tablet metadata fetch tasks.
+void LakeServiceImpl::get_tablet_metadatas(::google::protobuf::RpcController* controller,
+                                           const ::starrocks::GetTabletMetadatasRequest* request,
+                                           ::starrocks::GetTabletMetadatasResponse* response,
+                                           ::google::protobuf::Closure* done) {
+    brpc::ClosureGuard guard(done);
+
+    if (request->tablet_ids_size() == 0) {
+        Status::InvalidArgument("missing tablet_ids").to_protobuf(response->mutable_status());
+        return;
+    }
+    if (!request->has_max_version()) {
+        Status::InvalidArgument("missing max_version").to_protobuf(response->mutable_status());
+        return;
+    }
+    if (!request->has_min_version()) {
+        Status::InvalidArgument("missing min_version").to_protobuf(response->mutable_status());
+        return;
+    }
+    if (request->max_version() < request->min_version()) {
+        Status::InvalidArgument("max_version should be >= min_version").to_protobuf(response->mutable_status());
+        return;
+    }
+    auto thread_pool = get_tablet_stats_thread_pool(_env);
+    if (UNLIKELY(thread_pool == nullptr)) {
+        Status::ServiceUnavailable("tablet stats thread pool is null").to_protobuf(response->mutable_status());
+        return;
+    }
+
+    Status::OK().to_protobuf(response->mutable_status());
+    auto latch = BThreadCountDownLatch(request->tablet_ids_size());
+    int64_t max_version = request->max_version();
+    int64_t min_version = request->min_version();
+
+    response->mutable_tablet_metadatas()->Reserve(request->tablet_ids_size());
+    for (int i = 0; i < request->tablet_ids_size(); ++i) {
+        response->add_tablet_metadatas();
+    }
+
+    // traverse each tablet_id and submit get tablet metadatas task
+    for (int i = 0; i < request->tablet_ids_size(); ++i) {
+        auto tablet_id = request->tablet_ids(i);
+        auto* tablet_metadatas = response->mutable_tablet_metadatas(i);
+        tablet_metadatas->set_tablet_id(tablet_id);
+
+        auto task = std::make_shared<CancellableRunnable>(
+                [&, tablet_id, max_version, min_version, tablet_metadatas] {
+                    DeferOp defer([&] { latch.count_down(); });
+
+                    // get tablet metadatas within the specified version range
+                    std::vector<TabletMetadataPtr> metadatas;
+                    for (int64_t version = max_version; version >= min_version; --version) {
+                        // don't fill meta cache to avoid polluting the cache
+                        lake::CacheOptions cache_opts{.fill_meta_cache = false, .fill_data_cache = true};
+                        auto tablet_metadata_or = _tablet_mgr->get_tablet_metadata(tablet_id, version, cache_opts);
+                        const auto& st = tablet_metadata_or.status();
+                        if (st.ok()) {
+                            metadatas.emplace_back(std::move(tablet_metadata_or).value());
+                        } else if (!st.is_not_found()) {
+                            st.to_protobuf(tablet_metadatas->mutable_status());
+                            return;
+                        }
+                    }
+
+                    if (metadatas.empty()) {
+                        auto st = Status::NotFound(fmt::format("tablet {} metadata not found in version range [{}, {}]",
+                                                               tablet_id, min_version, max_version));
+                        st.to_protobuf(tablet_metadatas->mutable_status());
+                    } else {
+                        Status::OK().to_protobuf(tablet_metadatas->mutable_status());
+                        for (const auto& metadata : metadatas) {
+                            (*tablet_metadatas->mutable_version_metadatas())[metadata->version()].CopyFrom(*metadata);
+                        }
+                    }
+                },
+                [&, tablet_id, tablet_metadatas] {
+                    auto st = Status::Cancelled(
+                            fmt::format("get tablet metadatas task has been cancelled. tablet: {}", tablet_id));
+                    st.to_protobuf(tablet_metadatas->mutable_status());
+                    latch.count_down();
+                });
+
+        auto st = thread_pool->submit(std::move(task));
+        if (!st.ok()) {
+            st.to_protobuf(tablet_metadatas->mutable_status());
+            latch.count_down();
+        }
+    }
+
+    latch.wait();
+
+    // add a warning log if any tablets fail, show the first 10 failed tablets
+    std::vector<std::string> messages;
+    size_t failed_count = 0;
+    for (const auto& tm : response->tablet_metadatas()) {
+        if (tm.status().status_code() != 0) {
+            ++failed_count;
+            if (messages.size() < 10) {
+                std::string error_msg;
+                for (const auto& msg : tm.status().error_msgs()) {
+                    error_msg += msg;
+                }
+                messages.emplace_back(fmt::format("{{tablet_id: {}, status_code: {}, error_msg: {}}}", tm.tablet_id(),
+                                                  tm.status().status_code(), error_msg));
+            }
+        }
+    }
+    if (!messages.empty()) {
+        LOG(WARNING) << "Get tablet metadatas failed for " << failed_count << " tablets, the first " << messages.size()
+                     << " tablets: [" << JoinStrings(messages, "; ") << "]";
+    }
+}
+
+// clean up before repairing tablet metadata
+// 1. drop local data cache
+// 2. drop meta cache
+// 3. drop bundle local data cache
+// 4. clear primary key index
+Status LakeServiceImpl::_cleanup_before_repair(const ::starrocks::RepairTabletMetadataRequest* request) {
+    // we only need any tablet id to compute the bundle metadata location
+    int64_t any_tablet_id = -1;
+    // all tablets share the same version
+    int64_t version = 0;
+    for (const auto& metadata_pb : request->tablet_metadatas()) {
+        auto tablet_id = metadata_pb.id();
+        any_tablet_id = tablet_id;
+        version = metadata_pb.version();
+        auto tablet_metadata_location = _tablet_mgr->tablet_metadata_location(tablet_id, version);
+
+        // drop local data cache
+        auto st = _tablet_mgr->drop_local_cache(tablet_metadata_location);
+        RETURN_IF(!st.ok() && !st.is_not_found(), st);
+
+        // drop meta cache
+        _tablet_mgr->metacache()->erase(tablet_metadata_location);
+
+        // clear primary key index
+        if (metadata_pb.schema().keys_type() == PRIMARY_KEYS) {
+            // remove from memory
+            _tablet_mgr->update_mgr()->unload_and_remove_primary_index(tablet_id);
+            auto persistent_index_type = metadata_pb.persistent_index_type();
+
+            // cloud native pk index does not need to rebuild
+            if (persistent_index_type == PersistentIndexTypePB::LOCAL) {
+                st = lake::LocalPkIndexManager::clear_persistent_index(tablet_id);
+                RETURN_IF(!st.ok() && !st.is_not_found(), st);
+            }
+        }
+    }
+
+    // drop bundle local data cache
+    auto bundle_location = _tablet_mgr->bundle_tablet_metadata_location(any_tablet_id, version);
+    auto st = _tablet_mgr->drop_local_cache(bundle_location);
+    return st.is_not_found() ? Status::OK() : st;
+}
+
+// Repair bundling or non-bundling tablet metadata for all tablets in one physical partition.
+// 1. Receive a list of tablet metadatas sent from FE, check tablet metadatas.
+// 2. Do some cleanup work, such as drop cache, clear primary key index.
+// 3. Put the new metadatas through the tablet manager based on whether file bundling is enabled.
+// This function supports concurrent processing of tablet metadata repair tasks.
+void LakeServiceImpl::repair_tablet_metadata(::google::protobuf::RpcController* controller,
+                                             const ::starrocks::RepairTabletMetadataRequest* request,
+                                             ::starrocks::RepairTabletMetadataResponse* response,
+                                             ::google::protobuf::Closure* done) {
+    brpc::ClosureGuard guard(done);
+    Status::OK().to_protobuf(response->mutable_status());
+
+    // 1. check tablet metadatas
+    if (request->tablet_metadatas_size() == 0) {
+        Status::InvalidArgument("missing tablet_metadatas").to_protobuf(response->mutable_status());
+        return;
+    }
+
+    std::unordered_set<int64_t> tablet_ids;
+    int64_t version = 0;
+    for (const auto& metadata_pb : request->tablet_metadatas()) {
+        // check metadata have the same version
+        if (version == 0) {
+            version = metadata_pb.version();
+            if (version <= 0) {
+                Status::InvalidArgument(fmt::format("invalid version: {}", version))
+                        .to_protobuf(response->mutable_status());
+                return;
+            }
+        } else if (version != metadata_pb.version()) {
+            Status::InvalidArgument("tablet metadatas should have the same version")
+                    .to_protobuf(response->mutable_status());
+            return;
+        }
+
+        // check duplicated tablet
+        if (!tablet_ids.insert(metadata_pb.id()).second) {
+            Status::InvalidArgument(fmt::format("duplicated tablet id: {}", metadata_pb.id()))
+                    .to_protobuf(response->mutable_status());
+            return;
+        }
+    }
+
+    auto thread_pool = publish_version_thread_pool(_env);
+    if (UNLIKELY(thread_pool == nullptr)) {
+        Status::ServiceUnavailable("publish version thread pool is null").to_protobuf(response->mutable_status());
+        return;
+    }
+
+    // 2. do some cleanup before repairing tablet metadata, such as drop local data cache and meta cache
+    auto st = _cleanup_before_repair(request);
+    if (!st.ok()) {
+        // cleanup failure will affect correctness, so the rpc should fail immediately when cleanup fails
+        st.to_protobuf(response->mutable_status());
+        return;
+    }
+
+    // 3. put new tablet metadatas
+    bool enable_file_bundling = request->has_enable_file_bundling() && request->enable_file_bundling();
+    bool write_bundling_file = request->has_write_bundling_file() && request->write_bundling_file();
+    if (enable_file_bundling && !write_bundling_file) {
+        // if not write bundling file, only do some cleanup
+        return;
+    }
+
+    if (enable_file_bundling) {
+        // bundling tablet metadata
+        std::map<int64_t, TabletMetadata> tablet_metadatas;
+        for (const auto& metadata_pb : request->tablet_metadatas()) {
+            tablet_metadatas.emplace(metadata_pb.id(), metadata_pb);
+        }
+
+        auto* repair_status = response->add_tablet_repair_statuses();
+        // set tablet_id to 0 for bundling metadata
+        repair_status->set_tablet_id(0);
+
+        // submit one put bundling tablet metadata task
+        auto latch = BThreadCountDownLatch(1);
+        auto task = std::make_shared<CancellableRunnable>(
+                [&, repair_status] {
+                    DeferOp defer([&] { latch.count_down(); });
+                    auto st = _tablet_mgr->put_bundle_tablet_metadata(tablet_metadatas);
+                    st.to_protobuf(repair_status->mutable_status());
+                },
+                [&, version, repair_status] {
+                    auto st = Status::Cancelled(fmt::format(
+                            "repair bundling tablet metadata task has been cancelled. version: {}", version));
+                    st.to_protobuf(repair_status->mutable_status());
+                    latch.count_down();
+                });
+
+        auto st = thread_pool->submit(std::move(task));
+        if (!st.ok()) {
+            st.to_protobuf(repair_status->mutable_status());
+            latch.count_down();
+        }
+
+        latch.wait();
+    } else {
+        // non-bundling tablet metadata
+        // traverse each tablet metadata and submit put tablet metadata task
+        auto latch = BThreadCountDownLatch(request->tablet_metadatas_size());
+        response->mutable_tablet_repair_statuses()->Reserve(request->tablet_metadatas_size());
+        for (const auto& metadata_pb : request->tablet_metadatas()) {
+            auto tablet_id = metadata_pb.id();
+
+            auto* repair_status = response->add_tablet_repair_statuses();
+            repair_status->set_tablet_id(tablet_id);
+
+            auto task = std::make_shared<CancellableRunnable>(
+                    [&, metadata_pb, repair_status] {
+                        DeferOp defer([&] { latch.count_down(); });
+                        auto metadata_ptr = std::make_shared<const TabletMetadataPB>(metadata_pb);
+                        auto st = _tablet_mgr->put_tablet_metadata(metadata_ptr);
+                        st.to_protobuf(repair_status->mutable_status());
+                    },
+                    [&, tablet_id, repair_status] {
+                        auto st = Status::Cancelled(
+                                fmt::format("repair tablet metadata task has been cancelled. tablet: {}", tablet_id));
+                        st.to_protobuf(repair_status->mutable_status());
+                        latch.count_down();
+                    });
+
+            auto st = thread_pool->submit(std::move(task));
+            if (!st.ok()) {
+                st.to_protobuf(repair_status->mutable_status());
+                latch.count_down();
+            }
+        }
+
+        latch.wait();
+    }
+
+    // add a warning log if any tablets fail, at most 10 failed tablets
+    std::vector<std::string> messages;
+    size_t failed_count = 0;
+    for (const auto& tr : response->tablet_repair_statuses()) {
+        if (tr.status().status_code() != 0) {
+            ++failed_count;
+            if (messages.size() < 10) {
+                std::string error_msg;
+                for (const auto& msg : tr.status().error_msgs()) {
+                    error_msg += msg;
+                }
+                messages.emplace_back(fmt::format("{{tablet_id: {}, status_code: {}, error_msg: {}}}", tr.tablet_id(),
+                                                  tr.status().status_code(), error_msg));
+            }
+        }
+    }
+    if (!messages.empty()) {
+        std::string file_bundling_msg = enable_file_bundling ? "bundling" : "non-bundling";
+        LOG(WARNING) << "Repair " << file_bundling_msg << " tablet metadata failed for " << failed_count
+                     << " tablets, the first " << messages.size() << " tablets: [" << JoinStrings(messages, "; ")
+                     << "]";
+    }
 }
 
 } // namespace starrocks
