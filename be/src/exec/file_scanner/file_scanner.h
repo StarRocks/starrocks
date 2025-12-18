@@ -83,6 +83,8 @@ public:
 protected:
     void fill_columns_from_path(ChunkPtr& chunk, int slot_start, const std::vector<std::string>& columns_from_path,
                                 int size);
+    // fill the file path column with the full file path for all rows in the chunk
+    void fill_file_path_column(ChunkPtr& chunk, int slot_index, const std::string& file_path, int size);
     // materialize is used to transform source chunk depicted by src_slot_descriptors into destination
     // chunk depicted by dest_slot_descriptors
     StatusOr<ChunkPtr> materialize(const starrocks::ChunkPtr& src, starrocks::ChunkPtr& cast);

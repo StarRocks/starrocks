@@ -362,4 +362,90 @@ public class TableFunctionTableTest {
                 "Invalid parquet.version: '2.0'. Expected values should be 2.4, 2.6, 1.0",
                 () -> new TableFunctionTable(new ArrayList<>(), properties, new SessionVariable()));
     }
+
+    @Test
+    public void testPathColumn() {
+        // Test path_column property parsing
+        Assertions.assertDoesNotThrow(() -> {
+            Map<String, String> properties = newProperties();
+            properties.put("path_column", "_filepath");
+            TableFunctionTable table = new TableFunctionTable(properties);
+
+            // Check path_column is parsed correctly
+            Assertions.assertTrue(table.hasPathColumn());
+            Assertions.assertEquals("_filepath", table.getPathColumnName());
+
+            // Check schema includes path column after columns_from_path
+            List<Column> schema = table.getFullSchema();
+            // Schema: col_int, col_string (from file) + col_path1, col_path2, col_path3 (from path) + _filepath (path column)
+            Assertions.assertEquals(6, schema.size());
+            Assertions.assertEquals(new Column("col_int", IntegerType.INT), schema.get(0));
+            Assertions.assertEquals(new Column("col_string", VarcharType.VARCHAR), schema.get(1));
+            Assertions.assertEquals(new Column("col_path1", StringType.DEFAULT_STRING, true), schema.get(2));
+            Assertions.assertEquals(new Column("col_path2", StringType.DEFAULT_STRING, true), schema.get(3));
+            Assertions.assertEquals(new Column("col_path3", StringType.DEFAULT_STRING, true), schema.get(4));
+            Assertions.assertEquals(new Column("_filepath", StringType.DEFAULT_STRING, true), schema.get(5));
+        });
+    }
+
+    @Test
+    public void testPathColumnWithoutColumnsFromPath() {
+        // Test path_column without columns_from_path
+        Assertions.assertDoesNotThrow(() -> {
+            Map<String, String> properties = new HashMap<>();
+            properties.put("path", "fake://some_bucket/some_path/*");
+            properties.put("format", "ORC");
+            properties.put("path_column", "source_file");
+            TableFunctionTable table = new TableFunctionTable(properties);
+
+            Assertions.assertTrue(table.hasPathColumn());
+            Assertions.assertEquals("source_file", table.getPathColumnName());
+
+            // Schema: col_int, col_string (from file) + source_file (path column)
+            List<Column> schema = table.getFullSchema();
+            Assertions.assertEquals(3, schema.size());
+            Assertions.assertEquals(new Column("source_file", StringType.DEFAULT_STRING, true), schema.get(2));
+        });
+    }
+
+    @Test
+    public void testNoPathColumn() {
+        // Test without path_column
+        Assertions.assertDoesNotThrow(() -> {
+            Map<String, String> properties = newProperties();
+            TableFunctionTable table = new TableFunctionTable(properties);
+
+            Assertions.assertFalse(table.hasPathColumn());
+            Assertions.assertNull(table.getPathColumnName());
+        });
+    }
+
+    @Test
+    public void testDuplicatePathColumnName() {
+        // Test duplicate path_column name with file column
+        Map<String, String> properties = newProperties();
+        properties.put("path_column", "col_int");
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                "Duplicate column name 'col_int'",
+                () -> new TableFunctionTable(properties));
+
+        // Test duplicate path_column name with columns_from_path
+        properties.put("path_column", "col_path1");
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                "Duplicate column name 'col_path1'",
+                () -> new TableFunctionTable(properties));
+    }
+
+    @Test
+    public void testPathColumnWithWhitespace() {
+        // Test path_column with leading/trailing whitespace
+        Assertions.assertDoesNotThrow(() -> {
+            Map<String, String> properties = newProperties();
+            properties.put("path_column", "  _filepath  ");
+            TableFunctionTable table = new TableFunctionTable(properties);
+
+            Assertions.assertTrue(table.hasPathColumn());
+            Assertions.assertEquals("_filepath", table.getPathColumnName());
+        });
+    }
 }

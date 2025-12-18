@@ -147,6 +147,10 @@ StatusOr<ChunkPtr> ORCScanner::_next_orc_chunk() {
         if (range.__isset.num_of_columns_from_file) {
             fill_columns_from_path(chunk, range.num_of_columns_from_file, range.columns_from_path, chunk->num_rows());
         }
+        if (range.__isset.include_file_path_column && range.include_file_path_column) {
+            int path_column_slot = range.num_of_columns_from_file + range.columns_from_path.size();
+            fill_file_path_column(chunk, path_column_slot, range.path, chunk->num_rows());
+        }
         return std::move(chunk);
     } catch (orc::ParseError& e) {
         std::string s = strings::Substitute("ParseError: $0", e.what());

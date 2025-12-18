@@ -192,7 +192,9 @@ Status CSVScanner::open() {
         if (rng.num_of_columns_from_file != first_range.num_of_columns_from_file) {
             return Status::InvalidArgument("CSV column count of range mismatch");
         }
-        if (rng.num_of_columns_from_file + rng.columns_from_path.size() != _src_slot_descriptors.size()) {
+        int path_column_count = (rng.__isset.include_file_path_column && rng.include_file_path_column) ? 1 : 0;
+        if (rng.num_of_columns_from_file + rng.columns_from_path.size() + path_column_count !=
+            _src_slot_descriptors.size()) {
             return Status::InvalidArgument("slot descriptor and column count mismatch");
         }
     }
@@ -331,8 +333,12 @@ StatusOr<ChunkPtr> CSVScanner::get_next() {
         }
     } while ((src_chunk)->num_rows() == 0);
 
-    fill_columns_from_path(src_chunk, _num_fields_in_csv, _scan_range.ranges[_curr_file_index].columns_from_path,
-                           src_chunk->num_rows());
+    const auto& range = _scan_range.ranges[_curr_file_index];
+    fill_columns_from_path(src_chunk, _num_fields_in_csv, range.columns_from_path, src_chunk->num_rows());
+    if (range.__isset.include_file_path_column && range.include_file_path_column) {
+        int path_column_slot = _num_fields_in_csv + range.columns_from_path.size();
+        fill_file_path_column(src_chunk, path_column_slot, range.path, src_chunk->num_rows());
+    }
     ASSIGN_OR_RETURN(chunk, materialize(nullptr, src_chunk));
 
     return std::move(chunk);

@@ -577,7 +577,9 @@ public class FileScanNode extends LoadScanNode {
             TFileFormatType formatType = Load.getFormatType(context.fileGroup.getFileFormat(), fileStatus.path);
             List<String> columnsFromPath = HdfsUtil.parseColumnsFromPath(fileStatus.path,
                     context.fileGroup.getColumnsFromPath());
-            int numberOfColumnsFromFile = context.slotDescByName.size() - columnsFromPath.size();
+            boolean hasPathColumn = context.fileGroup.hasPathColumn();
+            int numberOfColumnsFromFile = context.slotDescByName.size() - columnsFromPath.size()
+                    - (hasPathColumn ? 1 : 0);
 
             smallestLocations = locationsHeap.poll();
             long leftBytes = fileStatus.size - curFileOffset;
@@ -595,7 +597,7 @@ public class FileScanNode extends LoadScanNode {
 
             TBrokerRangeDesc rangeDesc =
                     createBrokerRangeDesc(curFileOffset, fileStatus, formatType, rangeBytes, columnsFromPath,
-                            numberOfColumnsFromFile);
+                            numberOfColumnsFromFile, hasPathColumn);
 
             rangeDesc.setStrip_outer_array(jsonOptions.stripOuterArray);
             rangeDesc.setJsonpaths(jsonOptions.jsonPaths);
@@ -630,7 +632,8 @@ public class FileScanNode extends LoadScanNode {
 
     private TBrokerRangeDesc createBrokerRangeDesc(long curFileOffset, TBrokerFileStatus fileStatus,
                                                    TFileFormatType formatType, long rangeBytes,
-                                                   List<String> columnsFromPath, int numberOfColumnsFromFile) {
+                                                   List<String> columnsFromPath, int numberOfColumnsFromFile,
+                                                   boolean hasPathColumn) {
         TBrokerRangeDesc rangeDesc = new TBrokerRangeDesc();
         rangeDesc.setFile_type(TFileType.FILE_BROKER);
         rangeDesc.setFormat_type(formatType);
@@ -641,6 +644,7 @@ public class FileScanNode extends LoadScanNode {
         rangeDesc.setFile_size(fileStatus.size);
         rangeDesc.setNum_of_columns_from_file(numberOfColumnsFromFile);
         rangeDesc.setColumns_from_path(columnsFromPath);
+        rangeDesc.setInclude_file_path_column(hasPathColumn);
         return rangeDesc;
     }
 
