@@ -76,3 +76,24 @@ HDFS クラスターで Hedged Read 機能を有効にして設定するには�
 | TotalHedgedReadOps             | 開始された Hedged Read の数。                 |
 | TotalHedgedReadOpsInCurThread  | Hedged Read スレッドプールが `hdfs_client_hedged_read_threadpool_size` パラメータで指定された最大サイズに達したため、StarRocks が新しいスレッドではなく現在のスレッドで Hedged Read を開始しなければならなかった回数。 |
 | TotalHedgedReadOpsWin          | Hedged Read が元の読み取りに勝った回数。 |
+
+## Hive Catalog のテーブルをクエリする際に「ERROR 1064 (HY000): Type mismatches on column [is_refund], JDBC result type is Integer, please set the type to one of tinyint,smallint,int,bigint」というエラーを解決するにはどうすればよいですか？
+
+この問題は、不正な JDBC 接続設定によって引き起こされます。この問題を防ぐために、JDBC URI にパラメータ `tinyInt1isBit=false` を追加してください。
+
+```SQL
+"jdbc_uri" = "jdbc:mysql://xxx:3306?database=yl_spmibill&tinyInt1isBit=false"
+```
+
+## Iceberg Catalog で最新の更新データをクエリできないのはなぜですか（リフレッシュやカタログの再構築後でも）？また、どのようにトラブルシューティングすればよいですか？
+
+まず、Data Cache が有効になっていることが原因かどうかを確認してください。次の手順で確認します。
+
+1. StarRocks と Spark の間でスキャンされたデータファイルを比較します。
+
+   - StarRocks で: `select file_path, spec_id from db.table_name$files;`
+   - Spark で: `select file_path, spec_id from db.table_name.files;`
+
+2. 結果が一致する場合、Data Cache を無効にして再度クエリを実行し、問題が解決するかどうかを確認してトラブルシューティングを続けます。
+
+根本原因: Iceberg テーブルデータを更新するには古いファイルを上書きする必要がありますが、これは Iceberg の履歴データを破損させます。正しい動作は、更新を書き込む際に新しいファイル名を生成することです。StarRocks Data Cache は、キャッシュされたデータが有効かどうかを判断するためにファイル名、ファイルサイズ、および変更時間を使用します。Iceberg はファイルを上書きせず、変更時間が常に 0 であるため、StarRocks はファイルが変更されていないと誤って判断し、キャッシュから読み取るため、古いクエリ結果が得られます。
