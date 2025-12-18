@@ -262,6 +262,13 @@ struct TColumn {
     21: optional Types.TTypeDesc type_desc         
 }
 
+// Key information for locating a specific table schema version.
+struct TTableSchemaKey {
+  1: optional i64 db_id
+  2: optional i64 table_id
+  3: optional i64 schema_id
+}
+
 struct TOlapTableTablet {
     1: optional i64 id // tablet id
     2: optional Types.TTabletRange range

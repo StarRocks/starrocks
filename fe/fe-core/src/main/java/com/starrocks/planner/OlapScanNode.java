@@ -109,7 +109,7 @@ import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TTableSampleOptions;
-import com.starrocks.thrift.TTableSchemaMeta;
+import com.starrocks.thrift.TTableSchemaKey;
 import com.starrocks.type.Type;
 import com.starrocks.type.TypeSerializer;
 import com.starrocks.warehouse.Warehouse;
@@ -1129,14 +1129,14 @@ public class OlapScanNode extends ScanNode {
             }
 
             msg.lake_scan_node.setOutput_asc_hint(sortKeyAscHint);
-            TTableSchemaMeta schemaMeta = new TTableSchemaMeta();
-            schemaMeta.setDb_id(MetaUtils.lookupDbIdByTable(olapTable));
-            schemaMeta.setTable_id(olapTable.getId());
+            TTableSchemaKey schemaKey = new TTableSchemaKey();
+            schemaKey.setDb_id(MetaUtils.lookupDbIdByTable(olapTable));
+            schemaKey.setTable_id(olapTable.getId());
             Preconditions.checkState(index.schema.isPresent(), String.format(
                     "schema not cached, table name: %s, table id: %s, index id: %s",
                     olapTable.getName(), olapTable.getId(), index.indexId));
-            schemaMeta.setSchema_id(index.schema.get().getId());
-            msg.lake_scan_node.setSchema_meta(schemaMeta);
+            schemaKey.setSchema_id(index.schema.get().getId());
+            msg.lake_scan_node.setSchema_key(schemaKey);
         } else { // If you find yourself changing this code block, see also the above code block
             msg.node_type = TPlanNodeType.OLAP_SCAN_NODE;
             msg.olap_scan_node =

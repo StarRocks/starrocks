@@ -231,6 +231,7 @@ message BundleTabletMetadataPB {
 }
 
 message TxnLogPB {
+
     message OpWrite {
         optional RowsetMetadataPB rowset = 1;
         // some txn semantic information bind to this rowset
@@ -241,6 +242,8 @@ message TxnLogPB {
         repeated bytes del_encryption_metas = 5;
         repeated FileMetaPB ssts = 6;
         repeated PersistentIndexSstableRangePB sst_ranges = 7;
+        // The specific table schema used to generate this rowset
+        optional TableSchemaKeyPB schema_key = 8;
     }
 
     message OpCompaction {

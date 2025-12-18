@@ -104,6 +104,7 @@ public:
     void SetUp() override {
         clear_and_init_test_dir();
         CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
+        CHECK_OK(_tablet_mgr->create_schema_file(_tablet_metadata->id(), _tablet_metadata->schema()));
     }
 
     void TearDown() override {
@@ -3178,7 +3179,7 @@ TEST_F(LakeColumnUpsertModeTest, test_bundle_files_and_encryption_handling) {
                                                    .set_txn_id(txn_id)
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
-                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_schema_id(tablet_schema->id())
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunk_full, indexes.data(), indexes.size()));
@@ -3212,7 +3213,7 @@ TEST_F(LakeColumnUpsertModeTest, test_bundle_files_and_encryption_handling) {
                                                    .set_txn_id(txn_id)
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
-                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_schema_id(tablet_schema->id())
                                                    .set_slot_descriptors(&slot_pointers)
                                                    .set_partial_update_mode(PartialUpdateMode::COLUMN_UPSERT_MODE)
                                                    .build());
@@ -3360,7 +3361,7 @@ TEST_F(LakeColumnUpsertModeTest, test_default_value_and_null_handling) {
                                                    .set_txn_id(txn_id)
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
-                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_schema_id(tablet_schema->id())
                                                    .set_slot_descriptors(&slot_pointers)
                                                    .set_partial_update_mode(PartialUpdateMode::COLUMN_UPSERT_MODE)
                                                    .build());

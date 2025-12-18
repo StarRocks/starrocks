@@ -21,6 +21,7 @@
 #include "storage/lake/lake_primary_index.h"
 #include "storage/lake/lake_primary_key_recover.h"
 #include "storage/lake/meta_file.h"
+#include "storage/lake/table_schema_service.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/update_manager.h"
@@ -99,6 +100,60 @@ Status apply_alter_meta_log(TabletMetadataPB* metadata, const TxnLogPB_OpAlterMe
     }
     return Status::OK();
 }
+
+/**
+ * @brief Updates the tablet metadata with the latest schema from the transaction log.
+ * 
+ * If the write operation contains a newer schema version than the current tablet schema,
+ * this function attempts to fetch the new schema via TableSchemaService and update
+ * the tablet metadata. It also archives the old schema into the historical schemas list.
+ * 
+ * @param op_write The write operation from the transaction log.
+ * @param txn_id The transaction ID.
+ * @param tablet_meta Pointer to the mutable tablet metadata to be updated.
+ * @param tablet_mgr Pointer to the tablet manager.
+ * @return Status::OK() on success or if no update is needed, otherwise an error status.
+ */
+Status update_metadata_schema(const TxnLogPB_OpWrite& op_write, int64_t txn_id,
+                              const MutableTabletMetadataPtr& tablet_meta, TabletManager* tablet_mgr) {
+    if (!op_write.has_schema_key()) {
+        // not fast schema evolution v2, skip to update
+        return Status::OK();
+    }
+    auto& schema_key = op_write.schema_key();
+    if (schema_key.schema_id() == tablet_meta->schema().id() ||
+        tablet_meta->historical_schemas().contains(schema_key.schema_id())) {
+        return Status::OK();
+    }
+    ASSIGN_OR_RETURN(auto new_schema, tablet_mgr->table_schema_service()->get_schema_for_load(
+                                              schema_key, tablet_meta->id(), txn_id, tablet_meta));
+    auto& old_schema = tablet_meta->schema();
+    if (new_schema->schema_version() <= old_schema.schema_version()) {
+        return Status::OK();
+    }
+
+    LOG(INFO) << "update metadata schema. db_id: " << schema_key.db_id() << ", table_id: " << schema_key.table_id()
+              << ", tablet_id: " << tablet_meta->id() << ", metadata version: " << tablet_meta->version()
+              << ", txn_id: " << txn_id << ", new schema id/version: " << new_schema->id() << "/"
+              << new_schema->schema_version() << ", old schema id/version: " << old_schema.id() << "/"
+              << old_schema.schema_version();
+
+    bool record_old_schema_in_history = false;
+    for (auto& rowset : tablet_meta->rowsets()) {
+        if (tablet_meta->rowset_to_schema().count(rowset.id()) <= 0) {
+            record_old_schema_in_history = true;
+            tablet_meta->mutable_rowset_to_schema()->insert({rowset.id(), old_schema.id()});
+        }
+    }
+    if (record_old_schema_in_history && tablet_meta->historical_schemas().count(old_schema.id()) <= 0) {
+        auto& item = (*tablet_meta->mutable_historical_schemas())[old_schema.id()];
+        item.CopyFrom(old_schema);
+    }
+    tablet_meta->mutable_schema()->Clear();
+    new_schema->to_schema_pb(tablet_meta->mutable_schema());
+    return Status::OK();
+}
+
 } // namespace
 
 class PrimaryKeyTxnLogApplier : public TxnLogApplier {
@@ -217,6 +272,7 @@ public:
         for (const auto& log : txn_logs) {
             if (log->has_op_write()) {
                 const auto& op_write = log->op_write();
+                RETURN_IF_ERROR(update_metadata_schema(op_write, log->txn_id(), _metadata, _tablet.tablet_mgr()));
                 if (is_column_mode_partial_update(op_write)) {
                     RETURN_IF_ERROR(_tablet.update_mgr()->publish_column_mode_partial_update(
                             op_write, log->txn_id(), _metadata, &_tablet, _index_entry, &_builder, _base_version));
@@ -308,6 +364,7 @@ private:
     }
 
     Status apply_write_log(const TxnLogPB_OpWrite& op_write, int64_t txn_id) {
+        RETURN_IF_ERROR(update_metadata_schema(op_write, txn_id, _metadata, _tablet.tablet_mgr()));
         // get lock to avoid gc
         _tablet.update_mgr()->lock_shard_pk_index_shard(_tablet.id());
         DeferOp defer([&]() { _tablet.update_mgr()->unlock_shard_pk_index_shard(_tablet.id()); });
@@ -504,7 +561,7 @@ public:
 
     Status apply(const TxnLogPB& log) override {
         if (log.has_op_write()) {
-            RETURN_IF_ERROR(apply_write_log(log.op_write()));
+            RETURN_IF_ERROR(apply_write_log(log.op_write(), log.txn_id()));
         }
         if (log.has_op_compaction()) {
             RETURN_IF_ERROR(apply_compaction_log(log.op_compaction()));
@@ -540,6 +597,7 @@ public:
         for (const auto& log : txn_logs) {
             if (log->has_op_write()) {
                 const auto& op_write = log->op_write();
+                RETURN_IF_ERROR(update_metadata_schema(op_write, log->txn_id(), _metadata, _tablet.tablet_mgr()));
                 if (op_write.has_rowset() && op_write.rowset().num_rows() > 0) {
                     const auto& rowset = op_write.rowset();
 
@@ -640,8 +698,9 @@ public:
     }
 
 private:
-    Status apply_write_log(const TxnLogPB_OpWrite& op_write) {
+    Status apply_write_log(const TxnLogPB_OpWrite& op_write, int64_t txn_id) {
         TEST_ERROR_POINT("NonPrimaryKeyTxnLogApplier::apply_write_log");
+        RETURN_IF_ERROR(update_metadata_schema(op_write, txn_id, _metadata, _tablet.tablet_mgr()));
         if (op_write.has_rowset() && (op_write.rowset().num_rows() > 0 || op_write.rowset().has_delete_predicate())) {
             auto rowset = _metadata->add_rowsets();
             rowset->CopyFrom(op_write.rowset());
@@ -833,7 +892,7 @@ private:
         int64_t base_version = _metadata->version();
         if (txn_meta.incremental_snapshot()) {
             for (const auto& op_write : op_replication.op_writes()) {
-                RETURN_IF_ERROR(apply_write_log(op_write));
+                RETURN_IF_ERROR(apply_write_log(op_write, txn_meta.txn_id()));
             }
             LOG(INFO) << "Apply incremental replication log finish. tablet_id: " << _tablet.id()
                       << ", base_version: " << base_version << ", new_version: " << _new_version
@@ -878,7 +937,7 @@ private:
                 _metadata->mutable_rowsets()->Clear();
 
                 for (const auto& op_write : op_replication.op_writes()) {
-                    RETURN_IF_ERROR(apply_write_log(op_write));
+                    RETURN_IF_ERROR(apply_write_log(op_write, txn_meta.txn_id()));
                 }
 
                 _metadata->set_cumulative_point(0);

@@ -1864,4 +1864,7 @@ CONF_mInt64(max_batch_num_per_fetch_operator, "8");
 CONF_mInt64(max_chunk_num_per_fetch_batch, "8");
 CONF_mBool(enable_fetch_local_pass_through, "true");
 CONF_mInt64(max_lookup_batch_request, "8");
+
+// For table schema service: max retry attempts for fetching schema from FE.
+CONF_mInt32(table_schema_service_max_retries, "3");
 } // namespace starrocks::config

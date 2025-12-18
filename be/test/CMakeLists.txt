@@ -629,6 +629,8 @@ SET(DW_TEST_FILES
     ./storage/update_manager_test.cpp
     ./storage/utils_test.cpp
     ./storage/version_graph_test.cpp
+    ./storage/lake/table_schema_service_test.cpp
+    ./storage/lake/fast_schema_evolution_v2_test.cpp
 )
 
 if ("${WITH_STARCACHE}" STREQUAL "ON")
