@@ -586,20 +586,20 @@ PROPERTIES ("replication_num" = "1");
 INSERT INTO t_tablet_hint VALUES ("2019-12-01", 10), ("2020-01-15", 20), ("2020-02-15", 30);
 -- result:
 -- !result
--- Test: Invalid tablet hint should throw error (similar to OlapScanNode behavior)
+-- Test: Invalid tablet hint should return empty result (no matching tablets)
 SELECT min(k2), max(k2) FROM t_tablet_hint TABLET(99999) [_META_];
 -- result:
-E: (1064, "Invalid tablet id: '99999'")
+None	None
 -- !result
--- Test: Multiple invalid tablet hints should throw error
+-- Test: Multiple invalid tablet hints should return empty result
 SELECT min(k2), max(k2) FROM t_tablet_hint TABLET(11111, 22222) [_META_];
 -- result:
-E: (1064, "Invalid tablet id: '11111'")
+None	None
 -- !result
--- Test: Invalid tablet hint with partition should throw error (partition name is auto-generated like p201912)
+-- Test: Invalid tablet hint with partition should return empty result (partition name is auto-generated like p201912)
 SELECT min(k2), max(k2) FROM t_tablet_hint PARTITION(p201912) TABLET(99999) [_META_];
 -- result:
-E: (1064, "Invalid tablet id: '99999'")
+None	None
 -- !result
 -- Test: Valid tablet hint should work correctly with EXPLAIN verification
 function: set_first_tablet_id("t_tablet_hint")

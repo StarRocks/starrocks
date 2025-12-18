@@ -22,7 +22,6 @@ import com.starrocks.catalog.Tablet;
 import com.starrocks.common.FeConstants;
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.StarRocksAssert;
@@ -1649,10 +1648,13 @@ public class LowCardinalityTest extends PlanTestBase {
     }
 
     @Test
-    public void testMetaScanWithInvalidTabletHint() {
-        // Test that invalid tablet ID throws error
+    public void testMetaScanWithInvalidTabletHint() throws Exception {
+        // Test that invalid tablet ID returns empty result (no tablets scanned)
         String sql = "select max(t1c), min(t1d) from test_all_type tablet(99999) [_META_]";
-        Assertions.assertThrows(StarRocksPlannerException.class, () -> getFragmentPlan(sql));
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "MetaScan");
+        // TabletIds should show empty list when hint provided but no match
+        assertContains(plan, "TabletIds: []");
     }
 
     @Test
