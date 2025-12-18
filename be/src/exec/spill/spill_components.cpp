@@ -592,13 +592,23 @@ Status PartitionedSpillerWriter::_split_input_partitions(workgroup::YieldContext
 // undergoing flushing that are skewed and merge the duplicated rows into one row, so that the skewed data
 // can be eliminated.
 Status PartitionedSpillerWriter::_pick_and_compact_skew_partitions(std::vector<SpilledPartition*>& partitions) {
+    if (partitions.empty()) {
+        return Status::OK();
+    }
     // opt_aggregator_params is set when spill_partitionwise_agg_skew_elimination is true, so
     // it indicates that the skew elimination is enabled.
     if (!_spiller->options().opt_aggregator_params.has_value()) {
-        return Status::OK();
-    }
-
-    if (partitions.empty()) {
+        for (auto& partition : partitions) {
+            auto mem_table = std::dynamic_pointer_cast<UnorderedMemTable>(partition->spill_writer->mem_table());
+            auto& chunks = mem_table->get_chunks();
+            // if the partition are not spilttable, we can remove the hash column to save serde/flush time.
+            if (!_spiller->options().splittable) {
+                std::for_each(chunks.begin(), chunks.end(), [](auto& chunk) {
+                    DCHECK(chunk != nullptr);
+                    chunk->remove_column_by_slot_id(Chunk::HASH_AGG_SPILL_HASH_SLOT_ID);
+                });
+            }
+        }
         return Status::OK();
     }
 

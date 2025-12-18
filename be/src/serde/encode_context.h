@@ -43,7 +43,10 @@ public:
     // update encode_level for each column
     void update(const int col_id, uint64_t mem_bytes, uint64_t encode_byte);
 
-    int get_encode_level(const int col_id) { return _column_encode_level[col_id]; }
+    int get_encode_level(const int col_id) {
+        DCHECK(col_id < _column_encode_level.size()) << "Mismatch the number of columns and encode levels.";
+        return _column_encode_level[col_id];
+    }
 
     const std::vector<uint32_t>& get_encode_levels() const { return _column_encode_level; }
 
