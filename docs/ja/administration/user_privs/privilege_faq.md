@@ -41,9 +41,6 @@ GRANT CREATE TABLE ON DATABASE <db_name> TO USER <user_identity>;
 GRANT SELECT ON ALL TABLES IN DATABASE <db_name> TO USER <user_identity>;
 ```
 
-<<<<<<< HEAD:docs/ja/administration/user_privs/privilege_faq.md
-上記のステートメントは、v3.0 より前のバージョンで使用されていた `GRANT select_priv ON db.* TO <user_identity>;` と同等です。
-=======
 上記のステートメントは、v3.0 より前のバージョンで使用されていた `GRANT select_priv ON db.* TO <user_identity>;` と同等です。
 
 ## StarRocks Web Console `http://<fe_ip>:<fe_http_port>` にアクセスするために必要な権限は何ですか？
@@ -113,4 +110,3 @@ echo "All user privileges have been written to $OUTPUT_FILE"
 ## 通常の関数に USAGE を付与すると「Unexpected input 'IN', the most similar input is {'TO'}」というエラーが発生するのはなぜですか？関数に対する権限を付与する正しい方法は何ですか？
 
 通常の関数は IN ALL DATABASES を使用して付与することはできません。現在のデータベース内でのみ付与できます。一方、グローバル関数は ALL DATABASES スケールで付与されます。
->>>>>>> fe946c41b7 ([Doc] Add New Privilege FAQ (#66322)):docs/ja/administration/user_privs/authorization/privilege_faq.md
