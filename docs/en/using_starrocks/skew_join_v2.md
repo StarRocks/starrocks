@@ -218,6 +218,8 @@ Follow these rules to choose the appropriate skew values:
   The support for complex expressions in Join conditions is limited.
 - **Skew Table**
   Skew Join V2 can only handle scenarios where the large table in the JOIN operation is skewed, and the large table must be used as the left table.
+- **Join Reordering**
+  Using the `skew` hint will prevent the optimizer from reordering the Join. The Join will be executed in the order specified in the SQL, and the optimizer will not attempt to change the Join order or swap the left and right tables of the Join node containing the hint.
 
 ## Troubleshooting
 
