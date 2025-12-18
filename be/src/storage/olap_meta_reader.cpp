@@ -26,6 +26,8 @@
 #include "storage/rowset/column_reader.h"
 #include "storage/rowset/rowset.h"
 #include "storage/tablet.h"
+#include "storage/tablet_meta_manager.h"
+#include "storage/update_manager.h"
 
 namespace starrocks {
 
@@ -102,12 +104,15 @@ Status OlapMetaReader::_build_collect_context(const OlapMetaReaderParams& read_p
 
 Status OlapMetaReader::_init_seg_meta_collecters(const OlapMetaReaderParams& params) {
     std::vector<SegmentSharedPtr> segments;
-    RETURN_IF_ERROR(_get_segments(params.tablet, params.version, &segments));
+    std::vector<SegmentMetaCollectOptions> options_list;
+    RETURN_IF_ERROR(_get_segments(params.tablet, params.version, &segments, &options_list));
 
-    for (auto& segment : segments) {
+    for (size_t i = 0; i < segments.size(); ++i) {
+        auto& segment = segments[i];
+        auto& options = options_list[i];
         auto seg_collecter = std::make_unique<SegmentMetaCollecter>(segment);
 
-        RETURN_IF_ERROR(seg_collecter->init(&_collect_context.seg_collecter_params));
+        RETURN_IF_ERROR(seg_collecter->init(&_collect_context.seg_collecter_params, options));
         _collect_context.seg_collecters.emplace_back(std::move(seg_collecter));
     }
 
@@ -115,7 +120,8 @@ Status OlapMetaReader::_init_seg_meta_collecters(const OlapMetaReaderParams& par
 }
 
 Status OlapMetaReader::_get_segments(const TabletSharedPtr& tablet, const Version& version,
-                                     std::vector<SegmentSharedPtr>* segments) {
+                                     std::vector<SegmentSharedPtr>* segments,
+                                     std::vector<SegmentMetaCollectOptions>* options_list) {
     Status acquire_rowset_st;
     {
         std::shared_lock l(tablet->get_header_lock());
@@ -133,7 +139,20 @@ Status OlapMetaReader::_get_segments(const TabletSharedPtr& tablet, const Versio
 
     for (auto& rowset : _rowsets) {
         RETURN_IF_ERROR(rowset->load());
-        for (const auto& seg : rowset->segments()) {
+        for (int32_t seg_id = 0; seg_id < rowset->num_segments(); ++seg_id) {
+            const auto& seg = rowset->get_segments()[seg_id];
+            SegmentMetaCollectOptions options;
+            options.is_primary_keys = tablet->keys_type() == KeysType::PRIMARY_KEYS;
+            options.tablet_id = tablet->tablet_id();
+            options.segment_id = seg_id;
+            options.version = version.second;
+            if (options.is_primary_keys) {
+                options.pk_rowsetid = rowset->rowset_meta()->get_rowset_seg_id();
+            } else {
+                options.rowsetid = rowset->rowset_id();
+            }
+            options.dcg_loader = std::make_shared<LocalDeltaColumnGroupLoader>(tablet->data_dir()->get_meta());
+            options_list->emplace_back(options);
             segments->emplace_back(seg);
         }
     }

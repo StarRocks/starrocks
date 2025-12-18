@@ -62,7 +62,8 @@ private:
 
     Status _init_seg_meta_collecters(const lake::VersionedTablet& tablet, const LakeMetaReaderParams& read_params);
 
-    Status _get_segments(const lake::VersionedTablet& tablet, std::vector<SegmentSharedPtr>* segments);
+    Status _get_segments(const lake::VersionedTablet& tablet, std::vector<SegmentSharedPtr>* segments,
+                         std::vector<SegmentMetaCollectOptions>* options_list);
 };
 
 } // namespace starrocks
