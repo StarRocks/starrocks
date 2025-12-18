@@ -212,13 +212,8 @@ void LoadChannelMgr::cancel(brpc::Controller* cntl, const PTabletWriterCancelReq
                            request.reason());
         }
     } else {
-<<<<<<< HEAD
-        if (auto channel = remove_load_channel(load_id); channel != nullptr) {
-            channel->cancel();
-=======
         if (auto channel = _abort_load_channel(load_id, request.reason()); channel != nullptr) {
-            channel->cancel(request.reason());
->>>>>>> 5b7877e008 ([BugFix] Prevent reopening of aborted load channels (#66793))
+            channel->cancel();
             channel->abort();
         }
     }
@@ -360,13 +355,9 @@ void LoadChannelMgr::abort_txn(int64_t txn_id, const std::string& reason) {
     if (channel != nullptr) {
         LOG(INFO) << "Aborting load channel because transaction was aborted. load_id=" << channel->load_id()
                   << " txn_id=" << txn_id;
-<<<<<<< HEAD
-        channel->cancel();
-=======
         // remove the channel and added into aborted list
         _remove_load_channel(channel->load_id(), true, reason);
-        channel->cancel(reason);
->>>>>>> 5b7877e008 ([BugFix] Prevent reopening of aborted load channels (#66793))
+        channel->cancel();
         channel->abort();
     }
 }

@@ -12,41 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-<<<<<<< HEAD:be/src/exec/hash_map.h
 #pragma once
 
 #include "util/phmap/phmap.h"
-=======
-#include <bthread/condition_variable.h>
-#include <bthread/mutex.h>
-
-#include <atomic>
-
-#include "google/protobuf/stubs/callback.h"
-#include "util/countdown_latch.h"
->>>>>>> 5b7877e008 ([BugFix] Prevent reopening of aborted load channels (#66793)):be/test/service/brpc_service_test_util.h
 
 namespace starrocks {
 
 using AggDataPtr = uint8_t*;
 using Int32AggHashMap = phmap::flat_hash_map<int32_t, AggDataPtr>;
 using Int32AggTwoLevelHashMap = phmap::parallel_flat_hash_map<int32_t, AggDataPtr>;
-
-class MockCountDownClosure : public MockClosure {
-public:
-    using BThreadCountDownLatch = GenericCountDownLatch<bthread::Mutex, bthread::ConditionVariable>;
-    MockCountDownClosure() : _latch(1) {}
-    ~MockCountDownClosure() override = default;
-
-    void wait() { _latch.wait(); }
-
-    void Run() override {
-        MockClosure::Run();
-        _latch.count_down();
-    }
-
-private:
-    BThreadCountDownLatch _latch;
-};
 
 } // namespace starrocks

@@ -122,16 +122,7 @@ public:
     void cancel(brpc::Controller* cntl, const PTabletWriterCancelRequest& request, PTabletWriterCancelResult* response,
                 google::protobuf::Closure* done);
 
-<<<<<<< HEAD
-=======
-    void get_load_replica_status(brpc::Controller* cntl, const PLoadReplicaStatusRequest* request,
-                                 PLoadReplicaStatusResult* response, google::protobuf::Closure* done);
-
-    void load_diagnose(brpc::Controller* cntl, const PLoadDiagnoseRequest* request, PLoadDiagnoseResult* response,
-                       google::protobuf::Closure* done);
-
     // This method should be only called when the load is finished normally.
->>>>>>> 5b7877e008 ([BugFix] Prevent reopening of aborted load channels (#66793))
     std::shared_ptr<LoadChannel> remove_load_channel(const UniqueId& load_id);
 
     void abort_txn(int64_t txn_id, const std::string& reason);
@@ -139,10 +130,6 @@ public:
     void close();
 
 private:
-<<<<<<< HEAD
-=======
-    friend class ChannelOpenTask;
-
     std::shared_ptr<LoadChannel> _abort_load_channel(const UniqueId& load_id, const std::string& abort_reason);
 
     // the actual implementation of remove_load_channel
@@ -153,7 +140,6 @@ private:
 
     void _fail_rpc_request(const UniqueId& load_id, StatusPB* response_status);
 
->>>>>>> 5b7877e008 ([BugFix] Prevent reopening of aborted load channels (#66793))
     static void* load_channel_clean_bg_worker(void* arg);
 
     Status _start_bg_worker();
