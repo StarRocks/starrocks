@@ -344,18 +344,20 @@ private:
     }
 
     Status _write_posting(const std::vector<CppType>& sorted_dicts, WritableFile* wfile, BitmapIndexPB* meta) {
-        TypeInfoPtr bigint_typeinfo = get_type_info(TYPE_BIGINT);
+        TypeInfoPtr int_typeinfo = get_type_info(TYPE_INT);
         IndexedColumnWriterOptions dict_options;
         dict_options.write_ordinal_index = true;
-        dict_options.write_value_index = true;
-        dict_options.encoding = EncodingInfo::get_default_encoding(bigint_typeinfo->type(), true);
+        dict_options.write_value_index = false;
+        dict_options.encoding = EncodingInfo::get_default_encoding(int_typeinfo->type(), true);
         dict_options.compression = _dictionary_compression;
-        IndexedColumnWriter dict_column_writer(dict_options, bigint_typeinfo, wfile);
+        IndexedColumnWriter dict_column_writer(dict_options, int_typeinfo, wfile);
         RETURN_IF_ERROR(dict_column_writer.init());
 
         std::vector<PostingList*> posting_lists;
         posting_lists.reserve(sorted_dicts.size());
 
+        uint32_t offset = 0;
+        dict_column_writer.add(&offset);
         for (uint32_t dict_id = 0; dict_id < sorted_dicts.size(); ++dict_id) {
             const auto& dict = sorted_dicts[dict_id];
             auto mit = _mem_index.find(dict);
@@ -371,11 +373,8 @@ private:
 
             auto& posting_list = it->second;
             posting_lists.emplace_back(&posting_list);
-
-            for (const auto& doc_id : posting_list.get_all_doc_ids()) {
-                uint64_t key = static_cast<uint64_t>(dict_id) << 32 | doc_id;
-                dict_column_writer.add(&key);
-            }
+            offset += posting_list.get_num_doc_ids();
+            dict_column_writer.add(&offset);
         }
         dict_column_writer.finish(meta->mutable_posting_index_column());
 

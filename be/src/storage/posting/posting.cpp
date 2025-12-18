@@ -26,6 +26,11 @@ void PostingList::add_posting(rowid_t doc_id, rowid_t pos) {
     }
 }
 
+uint32_t PostingList::get_num_doc_ids() const {
+    const auto postings = _internal_get_all_postings();
+    return postings.getHighBitsCount();
+}
+
 roaring::Roaring PostingList::get_all_doc_ids() const {
     const auto postings = _internal_get_all_postings();
     return postings.getAllHighBits();

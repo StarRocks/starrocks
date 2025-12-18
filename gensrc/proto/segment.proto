@@ -293,7 +293,7 @@ message BitmapIndexPB {
     optional IndexedColumnMetaPB ngram_dict_column = 5;
     // options: meta for ngram bitmaps part
     optional IndexedColumnMetaPB ngram_bitmap_column = 6;
-    // options: meta for posting index part (dict_id << 32 | row_id)
+    // options: meta for posting index part only store offsets in posting_position_column
     optional IndexedColumnMetaPB posting_index_column = 7;
     // options: meta for posting part
     optional IndexedColumnMetaPB posting_position_column = 8;

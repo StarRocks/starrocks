@@ -104,6 +104,7 @@ class Roaring64MapSetBitForwardIterator;
 // What we change includes
 // - added clear() and is32BitsEnough()
 // - a custom serialization format is used inside read()/write()/getSizeInBytes()
+// - added getLowBitsRoaring()/getHighBitsCount()/getAllHighBits()
 class Roaring64Map {
 public:
     /**
@@ -787,6 +788,16 @@ public:
         }
         return it->second;
     }
+
+    /**
+     * return how many high bits we stored in this Roaring64Map
+     *
+     * @return High bits count
+     */
+    uint32_t getHighBitsCount() const {
+        return roarings.size();
+    }
+
     /**
      * Roaring64Map store 64-bit integers through std::map<uint32_t, Roaring>. So we can get all high bits roaring by
      * iterating all keys.

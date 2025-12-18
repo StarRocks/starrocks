@@ -37,6 +37,8 @@ public:
 
     void add_posting(rowid_t doc_id, rowid_t pos);
 
+    uint32_t get_num_doc_ids() const;
+
     roaring::Roaring get_all_doc_ids() const;
 
     roaring::Roaring get_positions(rowid_t doc_id) const;
