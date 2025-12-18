@@ -837,7 +837,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
     public Void visitLogicalMetaScan(LogicalMetaScanOperator node, ExpressionContext context) {
         Statistics.Builder builder = StatisticsCalcUtils.estimateScanColumns(node.getTable(),
                 node.getColRefToColumnMetaMap(), optimizerContext);
-        builder.setOutputRowCount(node.getAggColumnIdToNames().size());
+        builder.setOutputRowCount(node.getAggColumnIdToColumns().size());
 
         context.setStatistics(builder.build());
         return visitOperator(node, context);
@@ -847,7 +847,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
     public Void visitPhysicalMetaScan(PhysicalMetaScanOperator node, ExpressionContext context) {
         Statistics.Builder builder = StatisticsCalcUtils.estimateScanColumns(node.getTable(),
                 node.getColRefToColumnMetaMap(), optimizerContext);
-        builder.setOutputRowCount(node.getAggColumnIdToNames().size());
+        builder.setOutputRowCount(node.getAggColumnIdToColumns().size());
 
         context.setStatistics(builder.build());
         return visitOperator(node, context);
