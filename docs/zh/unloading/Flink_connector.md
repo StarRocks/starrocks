@@ -350,6 +350,12 @@ Flink Connector 支持两种数据读取方式：Flink SQL 和 Flink DataStream�
        }
    ```
 
+## FAQ
+
+#### 在使用 Flink Connector 导出数据时，我收到错误提示 “Failed to get next from be”，该如何处理？
+
+您可以将 BE 配置项 `scan_context_gc_interval_min`（默认值：5，单位：分钟）设置为更大数值，以延长 Scan Context 清理的时间间隔。
+
 ## 后续操作
 
 Flink 成功读取 StarRocks 中的数据后，您可以使用 Flink 官方的 [Flink WebUI](https://nightlies.apache.org/flink/flink-docs-master/zh/docs/try-flink/flink-operations-playground/#flink-webui-界面) 界面观察读取任务，比如，可以在 **Metrics** 页面上查看 `totalScannedRows` 指标，从而获悉成功读取的数据行数。您还可以使用 Flink SQL 对读取的数据进行计算，比如 Join。
