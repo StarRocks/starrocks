@@ -121,7 +121,16 @@ public class IcebergRESTCatalog implements IcebergCatalog {
     }
 
     @Override
+<<<<<<< HEAD
     public Table getTable(String dbName, String tableName) throws StarRocksConnectorException {
+=======
+    public Map<String, String> getCatalogProperties() {
+        return delegate.properties();
+    }
+
+    @Override
+    public Table getTable(ConnectContext context, String dbName, String tableName) throws StarRocksConnectorException {
+>>>>>>> ec4fda6d86 ([Enhancement] Add catalog config credential fallback for Iceberg REST Catalog (#66700))
         try {
             return delegate.loadTable(TableIdentifier.of(convertDbNameToNamespace(dbName), tableName));
         } catch (RESTException re) {

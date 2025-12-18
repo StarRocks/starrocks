@@ -171,8 +171,18 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     }
 
     @Override
+<<<<<<< HEAD
     public List<String> listAllDatabases() {
         return delegate.listAllDatabases();
+=======
+    public Map<String, String> getCatalogProperties() {
+        return delegate.getCatalogProperties();
+    }
+
+    @Override
+    public List<String> listAllDatabases(ConnectContext connectContext) {
+        return delegate.listAllDatabases(connectContext);
+>>>>>>> ec4fda6d86 ([Enhancement] Add catalog config credential fallback for Iceberg REST Catalog (#66700))
     }
 
     public void createDB(String dbName, Map<String, String> properties) {

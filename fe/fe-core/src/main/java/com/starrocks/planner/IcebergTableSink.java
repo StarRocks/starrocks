@@ -70,13 +70,32 @@ public class IcebergTableSink extends DataSink {
         Preconditions.checkState(connector != null,
                 String.format("connector of catalog %s should not be null", catalogName));
 
+<<<<<<< HEAD
         // Try to set for tabular
         CloudConfiguration tabularTempCloudConfiguration = CloudConfigurationFactory.
                 buildCloudConfigurationForVendedCredentials(icebergTable.getNativeTable().io().properties());
         if (tabularTempCloudConfiguration.getCloudType() != CloudType.DEFAULT) {
             this.cloudConfiguration = tabularTempCloudConfiguration;
+=======
+        // Try to get vended credentials from loadTable response
+        CloudConfiguration vendedCredentialsCloudConfiguration = CloudConfigurationFactory.
+                buildCloudConfigurationForVendedCredentials(icebergTable.getNativeTable().io().properties(),
+                        this.tableLocation);
+        if (vendedCredentialsCloudConfiguration.getCloudType() != CloudType.DEFAULT) {
+            this.cloudConfiguration = vendedCredentialsCloudConfiguration;
+>>>>>>> ec4fda6d86 ([Enhancement] Add catalog config credential fallback for Iceberg REST Catalog (#66700))
         } else {
-            this.cloudConfiguration = connector.getMetadata().getCloudConfiguration();
+            // Try to get credentials from catalog config (/v1/config response).
+            // This is used as fallback when STS is unavailable (e.g., Apache Polaris without STS).
+            CloudConfiguration catalogConfigCloudConfiguration = CloudConfigurationFactory.
+                    buildCloudConfigurationForVendedCredentials(connector.getMetadata().getCatalogProperties(),
+                            this.tableLocation);
+            if (catalogConfigCloudConfiguration.getCloudType() != CloudType.DEFAULT) {
+                this.cloudConfiguration = catalogConfigCloudConfiguration;
+            } else {
+                // Fall back to user-provided catalog credentials
+                this.cloudConfiguration = connector.getMetadata().getCloudConfiguration();
+            }
         }
 
         Preconditions.checkState(cloudConfiguration != null,

@@ -1629,4 +1629,65 @@ public class IcebergMetadataTest extends TableTestBase {
                 icebergHiveCatalog.getTable(tableName.getDb(), tableName.getTbl()), icebergHiveCatalog, HDFS_ENVIRONMENT);
         executor.execute();
     }
+<<<<<<< HEAD
 }
+=======
+
+    @Test
+    public void testGetCatalogProperties(@Mocked IcebergCatalog icebergCatalog) {
+        Map<String, String> expectedProps = ImmutableMap.of(
+                "s3.access-key-id", "AKIA_TEST_KEY",
+                "s3.secret-access-key", "test_secret_key",
+                "client.region", "ap-northeast-2"
+        );
+
+        new Expectations() {
+            {
+                icebergCatalog.getCatalogProperties();
+                result = expectedProps;
+                times = 1;
+            }
+        };
+
+        IcebergMetadata metadata = new IcebergMetadata(
+                CATALOG_NAME,
+                HDFS_ENVIRONMENT,
+                icebergCatalog,
+                Executors.newSingleThreadExecutor(),
+                Executors.newSingleThreadExecutor(),
+                DEFAULT_CATALOG_PROPERTIES
+        );
+
+        Map<String, String> result = metadata.getCatalogProperties();
+
+        Assertions.assertEquals(expectedProps, result);
+        Assertions.assertEquals("AKIA_TEST_KEY", result.get("s3.access-key-id"));
+        Assertions.assertEquals("test_secret_key", result.get("s3.secret-access-key"));
+        Assertions.assertEquals("ap-northeast-2", result.get("client.region"));
+    }
+
+    @Test
+    public void testGetCatalogPropertiesEmpty(@Mocked IcebergCatalog icebergCatalog) {
+        new Expectations() {
+            {
+                icebergCatalog.getCatalogProperties();
+                result = ImmutableMap.of();
+                times = 1;
+            }
+        };
+
+        IcebergMetadata metadata = new IcebergMetadata(
+                CATALOG_NAME,
+                HDFS_ENVIRONMENT,
+                icebergCatalog,
+                Executors.newSingleThreadExecutor(),
+                Executors.newSingleThreadExecutor(),
+                DEFAULT_CATALOG_PROPERTIES
+        );
+
+        Map<String, String> result = metadata.getCatalogProperties();
+
+        Assertions.assertTrue(result.isEmpty());
+    }
+}
+>>>>>>> ec4fda6d86 ([Enhancement] Add catalog config credential fallback for Iceberg REST Catalog (#66700))

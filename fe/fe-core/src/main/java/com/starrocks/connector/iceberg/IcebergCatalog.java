@@ -222,8 +222,17 @@ public interface IcebergCatalog extends MemoryTrackable {
                 srScanContext);
     }
 
+<<<<<<< HEAD
     default String defaultTableLocation(Namespace ns, String tableName) {
         Map<String, String> properties = loadNamespaceMetadata(ns);
+=======
+    default Map<String, String> getCatalogProperties() {
+        return new HashMap<>();
+    }
+
+    default String defaultTableLocation(ConnectContext context, Namespace ns, String tableName) {
+        Map<String, String> properties = loadNamespaceMetadata(context, ns);
+>>>>>>> ec4fda6d86 ([Enhancement] Add catalog config credential fallback for Iceberg REST Catalog (#66700))
         String databaseLocation = properties.get(LOCATION_PROPERTY);
         checkArgument(databaseLocation != null, "location must be set for %s.%s", ns, tableName);
 

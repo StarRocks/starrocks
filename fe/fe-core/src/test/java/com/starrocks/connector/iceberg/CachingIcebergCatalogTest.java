@@ -185,6 +185,155 @@ public class CachingIcebergCatalogTest {
     }
 
     @Test
+<<<<<<< HEAD
+=======
+    public void testTableCacheEnabled_hitsDelegateOnce(@Mocked IcebergCatalog delegate,
+                                                       @Mocked IcebergCatalogProperties props,
+                                                       @Mocked ConnectContext ctx,
+                                                       @Mocked org.apache.iceberg.Table nativeTable) throws Exception {
+        new Expectations() {
+            {
+                props.isEnableIcebergMetadataCache(); 
+                result = true;
+                props.isEnableIcebergTableCache(); 
+                result = true;
+                props.getIcebergMetaCacheTtlSec(); 
+                result = 24L * 60 * 60;
+                props.getIcebergDataFileCacheMemoryUsageRatio(); 
+                result = 0.0;
+                props.getIcebergDeleteFileCacheMemoryUsageRatio(); 
+                result = 0.0;
+
+                delegate.getTable(ctx, "db1", "t1"); 
+                result = nativeTable; 
+                minTimes = 0;
+            }
+        };
+
+        ExecutorService es = Executors.newFixedThreadPool(5);
+        try {
+            CachingIcebergCatalog catalog =
+                    new CachingIcebergCatalog("iceberg0", delegate, props, es);
+
+            org.apache.iceberg.Table r1 = catalog.getTable(ctx, "db1", "t1");
+            org.apache.iceberg.Table r2 = catalog.getTable(ctx, "db1", "t1");
+
+            org.junit.jupiter.api.Assertions.assertSame(r1, r2);
+
+            new Verifications() {
+                {
+                    delegate.getTable(ctx, "db1", "t1"); 
+                    times = 1;
+                }
+            };
+        } finally {
+            es.shutdownNow();
+        }
+    }
+
+    @Test
+    public void testTableCacheDisabled_hitsDelegateTwice(@Mocked IcebergCatalog delegate,
+                                                         @Mocked IcebergCatalogProperties props,
+                                                         @Mocked ConnectContext ctx,
+                                                         @Mocked org.apache.iceberg.Table nativeTable1,
+                                                         @Mocked org.apache.iceberg.Table nativeTable2) throws Exception {
+        new Expectations() {
+            {
+                props.isEnableIcebergMetadataCache(); 
+                result = true;
+                props.isEnableIcebergTableCache(); 
+                result = false;
+                props.getIcebergMetaCacheTtlSec(); 
+                result = 60;
+                props.getIcebergDataFileCacheMemoryUsageRatio(); 
+                result = 0.0;
+                props.getIcebergDeleteFileCacheMemoryUsageRatio(); 
+                result = 0.0;
+
+                delegate.getTable(ctx, "db1", "t1"); 
+                result = nativeTable1;
+                minTimes = 0;
+            }
+        };
+
+        ExecutorService es = Executors.newFixedThreadPool(5);
+        try {
+            CachingIcebergCatalog catalog =
+                    new CachingIcebergCatalog("iceberg0", delegate, props, es);
+
+            org.apache.iceberg.Table r1 = catalog.getTable(ctx, "db1", "t1");
+            org.apache.iceberg.Table r2 = catalog.getTable(ctx, "db1", "t1");
+
+            new Verifications() {
+                {
+                    delegate.getTable(ctx, "db1", "t1"); 
+                    times = 2; //caffeine has a diff with guava here
+                }
+            };
+        } finally {
+            es.shutdownNow();
+        }
+    }
+
+    @Test
+    public void testEstimateCountReflectsTableCache(@Mocked IcebergCatalog icebergCatalog, @Mocked Table nativeTable) {
+        new Expectations() {
+            {
+                icebergCatalog.getTable(connectContext, "db2", "tbl2");
+                result = nativeTable;
+                times = 1;
+            }
+        };
+        CachingIcebergCatalog cachingIcebergCatalog = new CachingIcebergCatalog(CATALOG_NAME, icebergCatalog,
+                DEFAULT_CATALOG_PROPERTIES, Executors.newSingleThreadExecutor());
+        cachingIcebergCatalog.getTable(connectContext, "db2", "tbl2");
+        Map<String, Long> counts = cachingIcebergCatalog.estimateCount();
+        Assertions.assertEquals(1L, counts.get("Table"));
+    }
+
+    @Test
+    public void testGetTableBypassCacheForRestCatalogWhenAuthToken(@Mocked IcebergRESTCatalog restCatalog,
+                                                                   @Mocked Table nativeTable) {
+        ConnectContext ctx = new ConnectContext();
+        ctx.setAuthToken("token");
+        new Expectations() {
+            {
+                restCatalog.getTable(ctx, "db3", "tbl3");
+                result = nativeTable;
+                times = 2;
+            }
+        };
+
+        CachingIcebergCatalog cachingIcebergCatalog = new CachingIcebergCatalog(CATALOG_NAME, restCatalog,
+                DEFAULT_CATALOG_PROPERTIES, Executors.newSingleThreadExecutor());
+        Assertions.assertEquals(nativeTable, cachingIcebergCatalog.getTable(ctx, "db3", "tbl3"));
+        Assertions.assertEquals(nativeTable, cachingIcebergCatalog.getTable(ctx, "db3", "tbl3"));
+    }
+
+    @Test
+    public void testGetCatalogPropertiesDelegatesToWrappedCatalog() {
+        Map<String, String> expectedProperties = new HashMap<>();
+        expectedProperties.put("s3.access-key-id", "test-key");
+        expectedProperties.put("s3.secret-access-key", "test-secret");
+
+        // Use Mockito for this test since JMockit doesn't properly handle default interface methods
+        IcebergCatalog delegate = Mockito.mock(IcebergCatalog.class);
+        Mockito.when(delegate.getCatalogProperties()).thenReturn(expectedProperties);
+
+        CachingIcebergCatalog cachingIcebergCatalog = new CachingIcebergCatalog(CATALOG_NAME, delegate,
+                DEFAULT_CATALOG_PROPERTIES, Executors.newSingleThreadExecutor());
+
+        Map<String, String> actualProperties = cachingIcebergCatalog.getCatalogProperties();
+        Assertions.assertEquals(expectedProperties, actualProperties);
+        Assertions.assertEquals("test-key", actualProperties.get("s3.access-key-id"));
+        Assertions.assertEquals("test-secret", actualProperties.get("s3.secret-access-key"));
+
+        // Verify that getCatalogProperties was called on the delegate
+        Mockito.verify(delegate).getCatalogProperties();
+    }
+
+    @Test
+>>>>>>> ec4fda6d86 ([Enhancement] Add catalog config credential fallback for Iceberg REST Catalog (#66700))
     public void testCacheFreshnessBug(@Mocked IcebergCatalog delegate, @Mocked PartitionSpec spec) {
         //this test will fail on 3.5.9
         System.out.println("Starting testCacheFreshnessBug");
