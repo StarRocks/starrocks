@@ -30,11 +30,7 @@ BE をインストールすると、システムは起動エラーを報告し�
 
 ## ERROR 1064 (HY000): Could not initialize class com.starrocks.rpc.BackendServiceProxy というエラーが発生した場合はどうすればよいですか？
 
-<<<<<<< HEAD
-このエラーは、Java Runtime Environment (JRE) でプログラムを実行すると発生します。この問題を解決するには、JRE を Java Development Kit (JDK) に置き換えてください。Oracle の JDK 1.8 以降を使用することをお勧めします。
-=======
 このエラーは、Java Runtime Environment (JRE) でプログラムを実行するときに発生します。この問題を解決するには、JRE を Java Development Kit (JDK) に置き換えてください。Oracle の JDK 17 以降を使用することをお勧めします。
->>>>>>> 6d5a0dd513 ([Doc] Add New Deploy FAQ (#66333))
 
 ## FE と BE の設定項目を変更して、クラスタを再起動せずに反映させることはできますか？
 
@@ -114,9 +110,6 @@ OpenSSH Daemon (sshd) が有効になっているかどうかを確認してく�
 
 ## FE が実行中でログに `transfer: follower` と表示されるとき、なぜ Alive が `false` になるのですか？
 
-<<<<<<< HEAD
-この問題は、Java Virtual Machine (JVM) のメモリの半分以上が使用され、チェックポイントがマークされていない場合に発生します。一般的に、システムが 50,000 件のログを蓄積した後にチェックポイントがマークされます。各 FE の JVM パラメータを変更し、これらの FE が重くロードされていないときに再起動することをお勧めします。
-=======
 この問題は、Java Virtual Machine (JVM) のメモリの半分以上が使用され、チェックポイントがマークされていない場合に発生します。通常、システムが 50,000 件のログを蓄積した後にチェックポイントがマークされます。各 FE の JVM パラメータを変更し、これらの FEs が重くロードされていないときに再起動することをお勧めします。
 
 クエリエラー: "could not initialize class com.starrocks.rpc.BackendServiceProxy"。この問題を解決するにはどうすればよいですか？
@@ -159,4 +152,3 @@ JDK のインストールに問題があります。JDK 環境を再インスト
 ## StarRocks は AMD AVX2 での実行をサポートしていますか？Intel と AMD サーバーを混在させると問題が発生しますか？
 
 StarRocks は AMD で実行できます。Intel と AMD サーバーを混在させることは推奨されません。ハードウェアの異質性が問題を引き起こす可能性があるためです。AMD への移行前に StarRocks を十分にテストすることをお勧めします。
->>>>>>> 6d5a0dd513 ([Doc] Add New Deploy FAQ (#66333))
