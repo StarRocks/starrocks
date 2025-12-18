@@ -374,7 +374,7 @@ private:
             auto& posting_list = it->second;
             posting_lists.emplace_back(&posting_list);
             offset += posting_list.get_num_doc_ids();
-            dict_column_writer.add(&offset);
+            RETURN_IF_ERROR(dict_column_writer.add(&offset));
         }
         dict_column_writer.finish(meta->mutable_posting_index_column());
 
@@ -393,7 +393,7 @@ private:
                 roaring::Roaring positions = posting->get_positions(doc_id);
                 auto encoded = encoder->encode(positions);
                 Slice tmp(encoded.data(), encoded.size());
-                posting_writer.add(&tmp);
+                RETURN_IF_ERROR(posting_writer.add(&tmp));
             }
         }
         return posting_writer.finish(meta->mutable_posting_position_column());

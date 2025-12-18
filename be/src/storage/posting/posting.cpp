@@ -43,16 +43,16 @@ roaring::Roaring PostingList::get_positions(rowid_t doc_id) const {
 
 detail::Roaring64Map PostingList::_internal_get_all_postings() const {
     if (_postings == nullptr) {
-        return {};
+        return detail::Roaring64Map();
     }
 
     _postings->flush_pending_adds();
 
     detail::Roaring64Map roaring;
     if (_postings->is_context()) {
-        roaring.add(_postings->value());
+        roaring = *_postings->roaring();
     } else {
-        roaring = *(_postings->roaring());
+        roaring.add(_postings->value());
     }
     return roaring;
 }
