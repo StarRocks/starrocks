@@ -71,14 +71,12 @@ import com.starrocks.sql.ast.warehouse.ShowWarehousesStmt;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.system.ComputeNode;
-import com.starrocks.type.PrimitiveType;
 import com.starrocks.warehouse.Warehouse;
 
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
-import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -296,8 +294,8 @@ public class ShowExecutorVisitorEPack extends ShowExecutor.ShowExecutorVisitor
             info.add(roleMapping instanceof LDAPRoleMapping ?
                     String.join(";", ((LDAPRoleMapping) roleMapping).getGroupSet()) : FeConstants.NULL_STRING);
             info.add(securityIntegration instanceof LDAPSecurityIntegration ?
-                    TimeUtils.format(new Date(((LDAPSecurityIntegration) securityIntegration).getLastRefreshTime()),
-                            PrimitiveType.DATETIME) : FeConstants.NULL_STRING);
+                    TimeUtils.longToTimeString(((LDAPSecurityIntegration) securityIntegration).getLastRefreshTime())
+                    : FeConstants.NULL_STRING);
             infos.add(info);
         }
 

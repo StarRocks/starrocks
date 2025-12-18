@@ -136,7 +136,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.time.LocalDateTime;
-import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -1645,11 +1644,11 @@ public class AnalyzerUtils {
         if (partitionType.isDate()) {
             outputDateFormat = DateUtils.DATE_FORMATTER_UNIX;
             isMaxValue =
-                    endTime.isAfter(TimeUtils.MAX_DATE.toInstant().atZone(ZoneId.systemDefault()).toLocalDateTime());
+                    endTime.isAfter(TimeUtils.MAX_DATE.atTime(0, 0, 0));
         } else if (partitionType.isDatetime()) {
             outputDateFormat = DateUtils.DATE_TIME_FORMATTER_UNIX;
             isMaxValue = endTime.isAfter(
-                    TimeUtils.MAX_DATETIME.toInstant().atZone(ZoneId.systemDefault()).toLocalDateTime());
+                    TimeUtils.MAX_DATETIME);
         } else {
             throw new AnalysisException(String.format("failed to analyse partition value:%s", partitionType));
         }
