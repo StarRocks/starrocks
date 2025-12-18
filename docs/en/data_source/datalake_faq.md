@@ -76,3 +76,24 @@ If the value of any of the following metrics in your query profiles exceeds `0`,
 | TotalHedgedReadOps             | The number of hedged reads that are started up.                 |
 | TotalHedgedReadOpsInCurThread  | The number of times that StarRocks has to start up a hedged read in the current thread instead of in a new thread because the Hedged Read thread pool has reached its maximum size specified by the `hdfs_client_hedged_read_threadpool_size` parameter. |
 | TotalHedgedReadOpsWin          | The number of times that a hedged read beats its original read. |
+
+## How do I resolve the error “ERROR 1064 (HY000): Type mismatches on column [is_refund], JDBC result type is Integer, please set the type to one of tinyint,smallint,int,bigint” when querying a table in the Hive Catalog?
+
+This issue is caused by an incorrect JDBC connection configuration. Add the parameter `tinyInt1isBit=false` to your JDBC URI to prevent this issue:
+
+```SQL
+"jdbc_uri" = "jdbc:mysql://xxx:3306?database=yl_spmibill&tinyInt1isBit=false"
+```
+
+## Why can’t I query the latest updated data in the Iceberg Catalog (even after refresh or catalog rebuild), and how should I troubleshoot this?
+
+First check whether the issue is caused by Data Cache being enabled. Follow these steps to verify:
+
+1. Compare the scanned data files between StarRocks and Spark:
+
+   - In StarRocks: `select file_path, spec_id from db.table_name$files;`
+   - In Spark: `select file_path, spec_id from db.table_name.files;`
+
+2. If the results are consistent, continue troubleshooting by disabling Data Cache and querying again to see whether the issue persists.
+
+Root cause: To update the Iceberg table data is to overwrite old files, which corrupts Iceberg’s historical data. The correct behavior is to generate new file names when writing updates. StarRocks Data Cache uses the file name, file size, and modification time to determine whether cached data is valid. Since Iceberg does not overwrite files and the modification time is always 0, StarRocks incorrectly treats the files as unchanged and reads from cache, resulting in outdated query results.
