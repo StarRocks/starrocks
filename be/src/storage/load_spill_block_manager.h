@@ -39,7 +39,7 @@ public:
 private:
     // ThreadPool for merge.
     std::unique_ptr<ThreadPool> _merge_pool;
-    // ThreadPool for inter-tablet parallel merge
+    // ThreadPool for internal-tablet parallel merge
     std::unique_ptr<ThreadPool> _tablet_internal_parallel_merge_pool;
 };
 

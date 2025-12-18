@@ -101,9 +101,9 @@ Status SpillMemTableSink::merge_blocks_to_segments() {
                              ->create_tablet_internal_parallel_merge_token();
         // 1. Get all spill block iterators
         ASSIGN_OR_RETURN(auto spill_block_iterator_tasks,
-                         _load_chunk_spiller->get_spill_block_iterators(config::load_spill_max_merge_bytes,
-                                                                        config::load_spill_memory_usage_per_merge,
-                                                                        true /* do_sort */, do_agg));
+                         _load_chunk_spiller->generate_spill_block_input_tasks(
+                                 config::load_spill_max_merge_bytes, config::load_spill_memory_usage_per_merge,
+                                 true /* do_sort */, do_agg));
         // 2. Prepare all tablet writers
         std::vector<std::unique_ptr<TabletWriter>> writers;
         for (size_t i = 0; i < spill_block_iterator_tasks.iterators.size(); ++i) {

@@ -17,7 +17,6 @@
 #include "storage/load_chunk_spiller.h"
 #include "storage/memtable_sink.h"
 #include "util/runtime_profile.h"
-#include "util/threadpool.h"
 
 namespace starrocks {
 

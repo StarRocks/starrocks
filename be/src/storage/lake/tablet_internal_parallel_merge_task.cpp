@@ -29,6 +29,21 @@
 
 namespace starrocks::lake {
 
+TabletInternalParallelMergeTask::TabletInternalParallelMergeTask(TabletWriter* writer, ChunkIterator* block_iterator,
+                                                                 MemTracker* merge_mem_tracker, Schema* schema,
+                                                                 int32_t task_index)
+        : _writer(writer),
+          _block_iterator(block_iterator),
+          _merge_mem_tracker(merge_mem_tracker),
+          _schema(schema),
+          _task_index(task_index) {}
+
+TabletInternalParallelMergeTask::~TabletInternalParallelMergeTask() {
+    if (_block_iterator != nullptr) {
+        _block_iterator->close();
+    }
+}
+
 void TabletInternalParallelMergeTask::run() {
     SCOPED_THREAD_LOCAL_MEM_SETTER(_merge_mem_tracker, false);
     MonotonicStopWatch timer;

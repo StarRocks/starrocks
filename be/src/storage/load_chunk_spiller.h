@@ -55,7 +55,7 @@ private:
     int64_t _append_bytes = 0;
 };
 
-struct SpillBlockIteratorTasks {
+struct SpillBlockInputTasks {
     std::vector<ChunkIteratorPtr> iterators;
     size_t total_blocks = 0;
     size_t total_block_bytes = 0;
@@ -74,8 +74,10 @@ public:
     Status merge_write(size_t target_size, size_t memory_usage_per_merge, bool do_sort, bool do_agg,
                        std::function<Status(Chunk*)> write_func, std::function<Status()> flush_func);
 
-    StatusOr<SpillBlockIteratorTasks> get_spill_block_iterators(size_t target_size, size_t memory_usage_per_merge,
-                                                                bool do_sort, bool do_agg);
+    // Traverse all load spill block files produced during ingestion, and split the input into multiple input tasks
+    // according to specific constraints.
+    StatusOr<SpillBlockInputTasks> generate_spill_block_input_tasks(size_t target_size, size_t memory_usage_per_merge,
+                                                                    bool do_sort, bool do_agg);
 
     bool empty();
 
@@ -85,7 +87,7 @@ public:
 
     size_t total_bytes() const;
 
-    RuntimeProfile* profile() { return _profile; }
+    RuntimeProfile* profile() const { return _profile; }
 
 private:
     Status _prepare(const ChunkPtr& chunk_ptr);

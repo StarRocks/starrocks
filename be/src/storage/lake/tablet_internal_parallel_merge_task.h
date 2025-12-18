@@ -14,12 +14,14 @@
 
 #pragma once
 
-#include "storage/load_chunk_spiller.h"
-#include "storage/memtable_sink.h"
-#include "util/runtime_profile.h"
+#include "common/status.h"
 #include "util/threadpool.h"
 
 namespace starrocks {
+
+class ChunkIterator;
+class MemTracker;
+class Schema;
 
 namespace lake {
 
@@ -28,12 +30,9 @@ class TabletWriter;
 class TabletInternalParallelMergeTask : public Runnable {
 public:
     TabletInternalParallelMergeTask(TabletWriter* writer, ChunkIterator* block_iterator, MemTracker* merge_mem_tracker,
-                                    Schema* schema, int32_t task_index)
-            : _writer(writer),
-              _block_iterator(block_iterator),
-              _merge_mem_tracker(merge_mem_tracker),
-              _schema(schema),
-              _task_index(task_index) {}
+                                    Schema* schema, int32_t task_index);
+
+    ~TabletInternalParallelMergeTask();
 
     void run() override;
 
