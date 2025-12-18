@@ -526,7 +526,7 @@ public class SplitTabletJob extends TabletReshardJob {
                 for (ReshardingMaterializedIndex reshardingIndex : reshardingPhysicalPartition
                         .getReshardingIndexes().values()) {
                     MaterializedIndex newIndex = reshardingIndex.getMaterializedIndex();
-                    if (newIndex.getId() == olapTable.getBaseIndexMetaId()) {
+                    if (newIndex.getMetaId() == olapTable.getBaseIndexMetaId()) {
                         physicalPartition.setBaseIndex(newIndex);
                     } else {
                         physicalPartition.createRollupIndex(newIndex);

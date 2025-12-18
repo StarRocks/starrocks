@@ -894,32 +894,32 @@ public class RestoreJob extends AbstractJob {
                                      OlapTable remoteOlapTbl,
                                      Database db, int restoreReplicationNum,
                                      MvRestoreContext mvRestoreContext) {
-        Map<String, Long> indexNameToId = remoteOlapTbl.getIndexNameToMetaId();
+        Map<String, Long> indexNameToMetaId = remoteOlapTbl.getIndexNameToMetaId();
 
-        // copy an origin index id to name map
-        Map<Long, String> origIdxIdToName = Maps.newHashMap();
-        for (Map.Entry<String, Long> entry : indexNameToId.entrySet()) {
-            origIdxIdToName.put(entry.getValue(), entry.getKey());
+        // copy an origin index meta id to name map
+        Map<Long, String> origIdxMetaIdToName = Maps.newHashMap();
+        for (Map.Entry<String, Long> entry : indexNameToMetaId.entrySet()) {
+            origIdxMetaIdToName.put(entry.getValue(), entry.getKey());
         }
 
         // reset table id
         remoteOlapTbl.setId(globalStateMgr.getNextId());
 
-        // reset all 'indexIdToXXX' map
-        Map<Long, MaterializedIndexMeta> indexIdToMeta = remoteOlapTbl.getIndexMetaIdToMeta();
-        Map<Long, MaterializedIndexMeta> origIndexIdToMeta = Maps.newHashMap(indexIdToMeta);
-        indexIdToMeta.clear();
-        for (Map.Entry<Long, String> entry : origIdxIdToName.entrySet()) {
-            long newIdxId = globalStateMgr.getNextId();
+        // reset all 'indexMetaIdToXXX' map
+        Map<Long, MaterializedIndexMeta> indexMetaIdToMeta = remoteOlapTbl.getIndexMetaIdToMeta();
+        Map<Long, MaterializedIndexMeta> origIndexMetaIdToMeta = Maps.newHashMap(indexMetaIdToMeta);
+        indexMetaIdToMeta.clear();
+        for (Map.Entry<Long, String> entry : origIdxMetaIdToName.entrySet()) {
+            long newIdxMetaId = globalStateMgr.getNextId();
             if (entry.getValue().equals(remoteOlapTbl.getName())) {
                 // base index
-                remoteOlapTbl.setBaseIndexMetaId(newIdxId);
+                remoteOlapTbl.setBaseIndexMetaId(newIdxMetaId);
             }
-            MaterializedIndexMeta indexMeta = origIndexIdToMeta.get(entry.getKey());
-            indexMeta.setIndexMetaIdForRestore(newIdxId);
-            indexMeta.setSchemaId(newIdxId);
-            indexIdToMeta.put(newIdxId, indexMeta);
-            indexNameToId.put(entry.getValue(), newIdxId);
+            MaterializedIndexMeta indexMeta = origIndexMetaIdToMeta.get(entry.getKey());
+            indexMeta.setIndexMetaIdForRestore(newIdxMetaId);
+            indexMeta.setSchemaId(newIdxMetaId);
+            indexMetaIdToMeta.put(newIdxMetaId, indexMeta);
+            indexNameToMetaId.put(entry.getValue(), newIdxMetaId);
         }
 
         // generate a partition old id to new id map
@@ -974,22 +974,22 @@ public class RestoreJob extends AbstractJob {
         for (Map.Entry<Long, Partition> entry : idToPartition.entrySet()) {
             Partition partition = entry.getValue();
             for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
-                Map<Long, MaterializedIndex> origIdToIndex = Maps.newHashMapWithExpectedSize(origIdxIdToName.size());
-                for (Map.Entry<Long, String> entry2 : origIdxIdToName.entrySet()) {
+                Map<Long, MaterializedIndex> origIdToIndex = Maps.newHashMapWithExpectedSize(origIdxMetaIdToName.size());
+                for (Map.Entry<Long, String> entry2 : origIdxMetaIdToName.entrySet()) {
                     MaterializedIndex idx = physicalPartition.getIndex(entry2.getKey());
                     origIdToIndex.put(entry2.getKey(), idx);
-                    long newIdxId = indexNameToId.get(entry2.getValue());
-                    if (newIdxId != remoteOlapTbl.getBaseIndexMetaId()) {
+                    long newIdxMetaId = indexNameToMetaId.get(entry2.getValue());
+                    if (newIdxMetaId != remoteOlapTbl.getBaseIndexMetaId()) {
                         // not base table, delete old index
                         physicalPartition.deleteRollupIndex(entry2.getKey());
                     }
                 }
-                for (Map.Entry<Long, String> entry2 : origIdxIdToName.entrySet()) {
+                for (Map.Entry<Long, String> entry2 : origIdxMetaIdToName.entrySet()) {
                     MaterializedIndex idx = origIdToIndex.get(entry2.getKey());
-                    long newIdxId = indexNameToId.get(entry2.getValue());
-                    int schemaHash = indexIdToMeta.get(newIdxId).getSchemaHash();
-                    idx.setIdForRestore(newIdxId);
-                    if (newIdxId != remoteOlapTbl.getBaseIndexMetaId()) {
+                    long newIdxMetaId = indexNameToMetaId.get(entry2.getValue());
+                    int schemaHash = indexMetaIdToMeta.get(newIdxMetaId).getSchemaHash();
+                    idx.setIdForRestore(newIdxMetaId);
+                    if (newIdxMetaId != remoteOlapTbl.getBaseIndexMetaId()) {
                         // not base table, reset
                         physicalPartition.createRollupIndex(idx);
                     }
@@ -1199,7 +1199,7 @@ public class RestoreJob extends AbstractJob {
                         jobId, db.getId(),
                         tbl.getId(), physicalPartition.getId(), index.getId(), tablet.getId(),
                         physicalPartition.getVisibleVersion(),
-                        tbl.getSchemaHashByIndexMetaId(index.getId()), timeoutMs,
+                        tbl.getSchemaHashByIndexMetaId(index.getMetaId()), timeoutMs,
                         true /* is restore task*/);
                 batchTask.addTask(task);
                 unfinishedSignatureToId.put(signature, tablet.getId());
@@ -1270,7 +1270,7 @@ public class RestoreJob extends AbstractJob {
         double bfFpp = localTbl.getBfFpp();
         for (PhysicalPartition physicalPartition : restorePart.getSubPartitions()) {
             for (MaterializedIndex restoredIdx : physicalPartition.getMaterializedIndices(IndexExtState.VISIBLE)) {
-                MaterializedIndexMeta indexMeta = localTbl.getIndexMetaByIndexId(restoredIdx.getId());
+                MaterializedIndexMeta indexMeta = localTbl.getIndexMetaByMetaId(restoredIdx.getMetaId());
                 TabletMeta tabletMeta = new TabletMeta(dbId, localTbl.getId(), physicalPartition.getId(),
                         restoredIdx.getId(), TStorageMedium.HDD);
                 TTabletSchema tabletSchema = SchemaInfo.newBuilder()
@@ -1333,16 +1333,16 @@ public class RestoreJob extends AbstractJob {
         remotePart.setIdForRestore(newLogicalPartId);
 
         // indexes
-        Map<String, Long> localIdxNameToId = localTbl.getIndexNameToMetaId();
-        for (String localIdxName : localIdxNameToId.keySet()) {
+        Map<String, Long> localIdxNameToMetaId = localTbl.getIndexNameToMetaId();
+        for (String localIdxName : localIdxNameToMetaId.keySet()) {
             // set ids of indexes in remote partition to the local index ids
-            long remoteIdxId = remoteTbl.getIndexMetaIdByName(localIdxName);
-            MaterializedIndex remoteIdx = remotePart.getDefaultPhysicalPartition().getIndex(remoteIdxId);
-            long localIdxId = localIdxNameToId.get(localIdxName);
-            remoteIdx.setIdForRestore(localIdxId);
-            if (localIdxId != localTbl.getBaseIndexMetaId()) {
+            long remoteIdxMetaId = remoteTbl.getIndexMetaIdByName(localIdxName);
+            MaterializedIndex remoteIdx = remotePart.getDefaultPhysicalPartition().getIndex(remoteIdxMetaId);
+            long localIdxMetaId = localIdxNameToMetaId.get(localIdxName);
+            remoteIdx.setIdForRestore(localIdxMetaId);
+            if (localIdxMetaId != localTbl.getBaseIndexMetaId()) {
                 // not base table, reset
-                remotePart.getDefaultPhysicalPartition().deleteRollupIndex(remoteIdxId);
+                remotePart.getDefaultPhysicalPartition().deleteRollupIndex(remoteIdxMetaId);
                 remotePart.getDefaultPhysicalPartition().createRollupIndex(remoteIdx);
             }
         }
@@ -1371,7 +1371,7 @@ public class RestoreJob extends AbstractJob {
 
             // tablets
             for (MaterializedIndex remoteIdx : physicalPartition.getMaterializedIndices(IndexExtState.VISIBLE)) {
-                int schemaHash = remoteTbl.getSchemaHashByIndexMetaId(remoteIdx.getId());
+                int schemaHash = remoteTbl.getSchemaHashByIndexMetaId(remoteIdx.getMetaId());
                 int remotetabletSize = remoteIdx.getTablets().size();
                 remoteIdx.clearTabletsForRestore();
                 // generate new table
@@ -1405,7 +1405,7 @@ public class RestoreJob extends AbstractJob {
                                                BackupPartitionInfo backupPartInfo, boolean overwrite) {
         for (MaterializedIndex localIdx : localPartition.getDefaultPhysicalPartition()
                 .getMaterializedIndices(IndexExtState.VISIBLE)) {
-            BackupIndexInfo backupIdxInfo = backupPartInfo.getIdx(localTbl.getIndexNameByMetaId(localIdx.getId()));
+            BackupIndexInfo backupIdxInfo = backupPartInfo.getIdx(localTbl.getIndexNameByMetaId(localIdx.getMetaId()));
             Preconditions.checkState(backupIdxInfo.tablets.size() == localIdx.getTablets().size());
             for (int i = 0; i < localIdx.getTablets().size(); i++) {
                 LocalTablet localTablet = (LocalTablet) localIdx.getTablets().get(i);
@@ -1432,7 +1432,7 @@ public class RestoreJob extends AbstractJob {
             for (MaterializedIndex localIdx : localPartition.getDefaultPhysicalPartition()
                     .getMaterializedIndices(IndexExtState.VISIBLE)) {
                 BackupIndexInfo backupIdxInfo =
-                        physicalPartitionInfo.getIdx(localTbl.getIndexNameByMetaId(localIdx.getId()));
+                        physicalPartitionInfo.getIdx(localTbl.getIndexNameByMetaId(localIdx.getMetaId()));
                 Preconditions.checkState(backupIdxInfo.tablets.size() == localIdx.getTablets().size());
                 for (int i = 0; i < localIdx.getTablets().size(); i++) {
                     LocalTablet localTablet = (LocalTablet) localIdx.getTablets().get(i);
@@ -1457,7 +1457,7 @@ public class RestoreJob extends AbstractJob {
 
                 for (MaterializedIndex localIdx : physicalPartition.getMaterializedIndices(IndexExtState.VISIBLE)) {
                     BackupIndexInfo backupIdxInfo =
-                            physicalPartitionInfo.getIdx(localTbl.getIndexNameByMetaId(localIdx.getId()));
+                            physicalPartitionInfo.getIdx(localTbl.getIndexNameByMetaId(localIdx.getMetaId()));
                     Preconditions.checkState(backupIdxInfo.tablets.size() == localIdx.getTablets().size());
                     for (int i = 0; i < localIdx.getTablets().size(); i++) {
                         LocalTablet localTablet = (LocalTablet) localIdx.getTablets().get(i);
@@ -1542,7 +1542,6 @@ public class RestoreJob extends AbstractJob {
         // ensure modify for all physical partitions, not only for the first one (default physical partition)
         for (PhysicalPartition physicalPartition : restorePart.getSubPartitions()) {
             for (MaterializedIndex restoreIdx : physicalPartition.getMaterializedIndices(IndexExtState.VISIBLE)) {
-                int schemaHash = restoreTbl.getSchemaHashByIndexMetaId(restoreIdx.getId());
                 TabletMeta tabletMeta = new TabletMeta(dbId, restoreTbl.getId(), physicalPartition.getId(),
                         restoreIdx.getId(), TStorageMedium.HDD);
                 for (Tablet restoreTablet : restoreIdx.getTablets()) {
@@ -2210,11 +2209,10 @@ public class RestoreJob extends AbstractJob {
         Set<String> indexNames = Sets.newTreeSet();
         indexNames.addAll(table.getIndexNameToMetaId().keySet());
         for (String indexName : indexNames) {
-            long indexId = table.getIndexNameToMetaId().get(indexName);
+            long indexMetaId = table.getIndexNameToMetaId().get(indexName);
             adler32.update(indexName.getBytes(StandardCharsets.UTF_8));
             LOG.debug("signature. index name: {}", indexName);
-            MaterializedIndexMeta indexMeta = table.getIndexMetaIdToMeta().get(indexId);
-            // schema hash
+            MaterializedIndexMeta indexMeta = table.getIndexMetaByMetaId(indexMetaId);
             // schema hash will change after finish schema change. It is make no sense
             // that check the schema hash here when doing restore
             if (!isRestore) {
@@ -2294,10 +2292,10 @@ public class RestoreJob extends AbstractJob {
         Set<String> indexNames = Sets.newTreeSet();
         indexNames.addAll(table.getIndexNameToMetaId().keySet());
         for (String indexName : indexNames) {
-            long indexId = table.getIndexNameToMetaId().get(indexName);
+            long indexMetaId = table.getIndexMetaIdByName(indexName);
             adler32.update(indexName.getBytes(StandardCharsets.UTF_8));
             checkSumList.add(new Pair(Math.abs((int) adler32.getValue()), "indexName is inconsistent"));
-            MaterializedIndexMeta indexMeta = table.getIndexMetaIdToMeta().get(indexId);
+            MaterializedIndexMeta indexMeta = table.getIndexMetaByMetaId(indexMetaId);
             // short key column count
             adler32.update(indexMeta.getShortKeyColumnCount());
             checkSumList.add(new Pair(Math.abs((int) adler32.getValue()), "short key column count is inconsistent"));

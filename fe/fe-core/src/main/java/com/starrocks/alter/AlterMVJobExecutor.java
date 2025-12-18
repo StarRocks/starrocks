@@ -964,13 +964,13 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
         if (olapTable.getIndexNameToMetaId().size() > 1) {
             Map<Long, MaterializedIndexMeta> metaMap = olapTable.getIndexMetaIdToMeta();
             for (Map.Entry<Long, MaterializedIndexMeta> entry : metaMap.entrySet()) {
-                Long id = entry.getKey();
-                if (id == olapTable.getBaseIndexMetaId()) {
+                Long indexMetaId = entry.getKey();
+                if (indexMetaId == olapTable.getBaseIndexMetaId()) {
                     continue;
                 }
                 MaterializedIndexMeta meta = entry.getValue();
                 List<Column> schema = meta.getSchema();
-                String indexName = olapTable.getIndexNameByMetaId(id);
+                String indexName = olapTable.getIndexNameByMetaId(indexMetaId);
                 // ignore agg_keys type because it's like duplicated without agg functions
                 boolean hasAggregateFunction = olapTable.getKeysType() != KeysType.AGG_KEYS &&
                         schema.stream().anyMatch(x -> x.isAggregated());

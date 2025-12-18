@@ -952,9 +952,14 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
             if (physicalPartition == null) {
                 throw new SchedException(Status.UNRECOVERABLE, "physical partition " + physicalPartitionId + " does not exist");
             }
-            MaterializedIndexMeta indexMeta = olapTable.getIndexMetaByIndexId(indexId);
+            MaterializedIndex index = physicalPartition.getIndex(indexId);
+            if (index == null) {
+                throw new SchedException(Status.UNRECOVERABLE, "materialized index " + indexId + " does not exist");
+            }
+            long indexMetaId = index.getMetaId();
+            MaterializedIndexMeta indexMeta = olapTable.getIndexMetaByMetaId(indexMetaId);
             if (indexMeta == null) {
-                throw new SchedException(Status.UNRECOVERABLE, "materialized view " + indexId + " does not exist");
+                throw new SchedException(Status.UNRECOVERABLE, "materialized index meta " + indexMetaId + " does not exist");
             }
             TTabletSchema tabletSchema = SchemaInfo.newBuilder()
                     .setId(indexMeta.getSchemaId())
@@ -1082,9 +1087,9 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
                 throw new SchedException(Status.UNRECOVERABLE, "index does not exist");
             }
 
-            if (schemaHash != olapTable.getSchemaHashByIndexMetaId(indexId)) {
+            if (schemaHash != olapTable.getSchemaHashByIndexMetaId(index.getMetaId())) {
                 throw new SchedException(Status.UNRECOVERABLE, "schema hash is not consistent. index's: "
-                        + olapTable.getSchemaHashByIndexMetaId(indexId)
+                        + olapTable.getSchemaHashByIndexMetaId(index.getMetaId())
                         + ", task's: " + schemaHash);
             }
 

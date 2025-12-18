@@ -164,7 +164,6 @@ public class LocalMetaStoreTest {
         Database db = connectContext.getGlobalStateMgr().getLocalMetastore().getDb("test");
         OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "t1");
         PhysicalPartition p = table.getPartitions().stream().findFirst().get().getDefaultPhysicalPartition();
-        int schemaHash = table.getSchemaHashByIndexMetaId(p.getBaseIndex().getId());
         MaterializedIndex index = new MaterializedIndex();
         TabletMeta tabletMeta = new TabletMeta(db.getId(), table.getId(), p.getId(),
                     index.getId(), table.getPartitionInfo().getDataProperty(p.getParentId()).getStorageMedium());

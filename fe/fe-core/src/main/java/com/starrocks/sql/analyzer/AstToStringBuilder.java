@@ -206,7 +206,7 @@ public class AstToStringBuilder {
             }
 
             // order by
-            MaterializedIndexMeta index = olapTable.getIndexMetaByIndexId(olapTable.getBaseIndexMetaId());
+            MaterializedIndexMeta index = olapTable.getIndexMetaByMetaId(olapTable.getBaseIndexMetaId());
             if (index.getSortKeyIdxes() != null) {
                 sb.append("\nORDER BY(");
                 List<String> sortKeysColumnNames = Lists.newArrayList();

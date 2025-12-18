@@ -982,7 +982,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                         if (index == null) {
                             continue;
                         }
-                        int schemaHash = olapTable.getSchemaHashByIndexMetaId(indexId);
+                        int schemaHash = olapTable.getSchemaHashByIndexMetaId(index.getMetaId());
 
                         LocalTablet tablet = (LocalTablet) index.getTablet(tabletId);
                         if (tablet == null) {
@@ -1214,7 +1214,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                                     LOG.warn("tablet {} has only one replica {} on backend {}"
                                                     + " and it is lost. create an empty replica to recover it",
                                             tabletId, replica.getId(), backendId);
-                                    MaterializedIndexMeta indexMeta = olapTable.getIndexMetaByIndexId(indexId);
+                                    MaterializedIndexMeta indexMeta = olapTable.getIndexMetaByMetaId(index.getMetaId());
                                     Set<ColumnId> bfColumns = olapTable.getBfColumnIds();
                                     double bfFpp = olapTable.getBfFpp();
                                     TTabletSchema tabletSchema = SchemaInfo.newBuilder()
@@ -1227,7 +1227,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                                             .addColumns(indexMeta.getSchema())
                                             .setBloomFilterColumnNames(bfColumns)
                                             .setBloomFilterFpp(bfFpp)
-                                            .setIndexes(indexId == olapTable.getBaseIndexMetaId() ?
+                                            .setIndexes(index.getMetaId() == olapTable.getBaseIndexMetaId() ?
                                                         olapTable.getCopiedIndexes() :
                                                         OlapTable.getIndexesBySchema(
                                                         olapTable.getCopiedIndexes(), indexMeta.getSchema()))
@@ -1534,27 +1534,38 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                     continue;
                 }
 
-                if (!migrateTablet(db, table, tabletMeta.getPhysicalPartitionId(), tabletMeta.getIndexId(), tabletId)) {
+                long partitionId = tabletMeta.getPhysicalPartitionId();
+                long indexId = tabletMeta.getIndexId();
+                long indexMetaId = -1L;
+
+                if (!migrateTablet(db, table, partitionId, indexId, tabletId)) {
                     continue;
                 }
-
-                // always get old schema hash(as effective one)
-                int schemaHash = table.getSchemaHashByIndexMetaId(tabletMeta.getIndexId());
 
                 boolean needRebuildPkIndex = false;
                 Locker locker = new Locker();
                 locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
                 try {
-                    PhysicalPartition partition = table.getPhysicalPartition(tabletMeta.getPhysicalPartitionId());
-                    if (partition == null) {
+                    PhysicalPartition physicalPartition = table.getPhysicalPartition(tabletMeta.getPhysicalPartitionId());
+                    if (physicalPartition == null) {
                         continue;
                     }
+
+                    MaterializedIndex index = physicalPartition.getIndex(indexId);
+                    if (index == null) {
+                        continue;
+                    }
+
+                    indexMetaId = index.getMetaId();
                     needRebuildPkIndex = table.getKeysType() == KeysType.PRIMARY_KEYS
-                            && System.currentTimeMillis() - partition.getVisibleVersionTime()
+                            && System.currentTimeMillis() - physicalPartition.getVisibleVersionTime()
                                 < Config.tablet_sched_pk_index_rebuild_threshold_seconds * 1000;
                 } finally {
                     locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
                 }
+
+                // always get old schema hash(as effective one)
+                int schemaHash = table.getSchemaHashByIndexMetaId(indexMetaId);
 
                 StorageMediaMigrationTask task = new StorageMediaMigrationTask(backendId, tabletId, schemaHash,
                         storageMedium, needRebuildPkIndex);
@@ -1829,6 +1840,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
 
                 long dbId = tabletMeta.getDbId();
                 long tableId = tabletMeta.getTableId();
+                long physicalPartitionId = tabletMeta.getPhysicalPartitionId();
                 long indexId = tabletMeta.getIndexId();
 
                 Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
@@ -1848,20 +1860,33 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                     if (olapTable.getMaxColUniqueId() <= Column.COLUMN_UNIQUE_ID_INIT_VALUE) {
                         continue;
                     }
-                    MaterializedIndexMeta indexMeta = olapTable.getIndexMetaByIndexId(indexId);
+
+                    PhysicalPartition physicalPartition = olapTable.getPhysicalPartition(physicalPartitionId);
+                    if (physicalPartition == null) {
+                        continue;
+                    }
+
+                    MaterializedIndex index = physicalPartition.getIndex(indexId);
+                    if (index == null) {
+                        continue;
+                    }
+
+                    long indexMetaId = index.getMetaId();
+
+                    MaterializedIndexMeta indexMeta = olapTable.getIndexMetaByMetaId(indexMetaId);
                     if (indexMeta == null) {
                         continue;
                     }
                     int schemaVersion = tabletInfo.tablet_schema_version;
                     int latestSchemaVersion = indexMeta.getSchemaVersion();
                     if (schemaVersion < latestSchemaVersion) {
-                        List<Long> tabletsList = tableToIndexTabletMap.get(tableId, indexId);
+                        List<Long> tabletsList = tableToIndexTabletMap.get(tableId, indexMetaId);
                         if (tabletsList != null) {
                             tabletsList.add(Long.valueOf(tabletId));
                         } else {
                             tabletsList = Lists.newArrayList();
                             tabletsList.add(Long.valueOf(tabletId));
-                            tableToIndexTabletMap.put(tableId, indexId, tabletsList);
+                            tableToIndexTabletMap.put(tableId, indexMetaId, tabletsList);
                         }
                         tableToDb.put(tableId, dbId);
                     }
@@ -1875,7 +1900,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
         AgentBatchTask updateSchemaBatchTask = new AgentBatchTask();
         for (Table.Cell<Long, Long, List<Long>> cell : tableToIndexTabletMap.cellSet()) {
             Long tableId = cell.getRowKey();
-            Long indexId = cell.getColumnKey();
+            Long indexMetaId = cell.getColumnKey();
             List<Long> tablets = cell.getValue();
             Long dbId = tableToDb.get(tableId);
 
@@ -1891,7 +1916,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
             Locker locker = new Locker();
             locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.READ);
             try {
-                MaterializedIndexMeta indexMeta = olapTable.getIndexMetaByIndexId(indexId);
+                MaterializedIndexMeta indexMeta = olapTable.getIndexMetaByMetaId(indexMetaId);
                 if (indexMeta == null) {
                     continue;
                 }
@@ -1917,7 +1942,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                         indexMeta.getShortKeyColumnCount());
 
                 UpdateSchemaTask task = new UpdateSchemaTask(backendId, db.getId(), olapTable.getId(),
-                        indexId, tablets, indexMeta.getSchemaId(), indexMeta.getSchemaVersion(),
+                        indexMetaId, tablets, indexMeta.getSchemaId(), indexMeta.getSchemaVersion(),
                         columnParam);
                 updateSchemaBatchTask.addTask(task);
                 indexMeta.addUpdateSchemaBackend(backendId);
@@ -2079,9 +2104,9 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
             }
 
             // check schema hash
-            if (schemaHash != olapTable.getSchemaHashByIndexMetaId(indexId)) {
+            if (schemaHash != olapTable.getSchemaHashByIndexMetaId(materializedIndex.getMetaId())) {
                 throw new MetaNotFoundException("schema hash is diff[" + schemaHash + "-"
-                        + olapTable.getSchemaHashByIndexMetaId(indexId) + "]");
+                        + olapTable.getSchemaHashByIndexMetaId(materializedIndex.getMetaId()) + "]");
             }
 
             // colocate table will delete Replica in meta when balancing,
