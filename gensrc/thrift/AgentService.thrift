@@ -435,6 +435,19 @@ struct TRemoteSnapshotRequest {
      19: optional Types.TPartitionId src_partition_id
  }
 
+struct TExternalClusterSnapshotRequest {
+    1: optional i64 job_id // ExternalClusterSnapshot job id
+    2: optional i64 db_id
+    3: optional Types.TTableId table_id
+    4: optional Types.TPartitionId partition_id
+    5: optional Types.TPartitionId physical_partition_id
+    6: optional Types.TVersion pre_version
+    7: optional Types.TVersion new_version
+    8: optional Types.TTabletId dest_tablet_id // tablet id of the target storage volume
+    9: optional list<Types.TTabletId> src_tablets // tablets need to file synchronization
+    10: optional list<Types.TBackend> compute_nodes  // candidate cn to do file sync
+ }
+
 enum TTabletMetaType {
     PARTITIONID,
     INMEMORY,
@@ -520,6 +533,7 @@ struct TAgentTaskRequest {
     30: optional TReplicateSnapshotRequest replicate_snapshot_req
     31: optional TUpdateSchemaReq update_schema_req
     32: optional TCompactionControlReq compaction_control_req
+    33: optional TExternalClusterSnapshotRequest external_cluster_snapshot_req
 }
 
 struct TAgentResult {
