@@ -94,24 +94,6 @@ public class MetaScanNode extends AbstractOlapTableScanNode {
         Set<Long> hintTabletSet = hintsTabletIds.isEmpty() ?
                 Collections.emptySet() : new HashSet<>(hintsTabletIds);
 
-        // Validate all tablet hints exist in the selected partitions - similar to OlapScanNode behavior
-        if (!hintsTabletIds.isEmpty()) {
-            Set<Long> allValidTabletIds = new HashSet<>();
-            for (PhysicalPartition partition : partitions) {
-                MaterializedIndex index = partition.getBaseIndex();
-                for (Tablet tablet : index.getTablets()) {
-                    allValidTabletIds.add(tablet.getId());
-                }
-            }
-
-            for (Long hintTabletId : hintsTabletIds) {
-                if (!allValidTabletIds.contains(hintTabletId)) {
-                    throw new StarRocksPlannerException(
-                            "Invalid tablet id: '" + hintTabletId + "'", USER_ERROR);
-                }
-            }
-        }
-
         for (PhysicalPartition partition : partitions) {
             MaterializedIndex index = partition.getBaseIndex();
             int schemaHash = olapTable.getSchemaHashByIndexMetaId(index.getId());
@@ -257,8 +239,12 @@ public class MetaScanNode extends AbstractOlapTableScanNode {
         if (!selectPartitionNames.isEmpty()) {
             output.append(prefix).append("Partitions: ").append(selectPartitionNames).append("\n");
         }
+        // Only show TabletIds when tablet hint was provided
         if (!hintsTabletIds.isEmpty()) {
-            output.append(prefix).append("TabletIds: ").append(hintsTabletIds).append("\n");
+            List<Long> tabletIds = result.stream()
+                    .map(loc -> loc.getScan_range().getInternal_scan_range().getTablet_id())
+                    .collect(Collectors.toList());
+            output.append(prefix).append("TabletIds: ").append(tabletIds).append("\n");
         }
 
         if (detailLevel == TExplainLevel.VERBOSE) {
