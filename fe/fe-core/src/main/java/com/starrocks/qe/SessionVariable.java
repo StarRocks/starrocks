@@ -2331,7 +2331,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
             setEnableSpill(true);
             setEnableQueryQueue(Config.enable_query_queue_v2);
         } else {
-            setEnableWaitDependentEvent(sv.enablePhasedScheduler);
+            setEnableWaitDependentEvent(sv.enableWaitDependentEvent);
             setEnablePhasedScheduler(sv.enablePhasedScheduler);
             setEnableSpill(sv.enableSpill);
             setEnableQueryQueue(sv.enableQueryQueue);
