@@ -385,4 +385,9 @@ public class CatalogConnectorMetadata implements ConnectorMetadata {
     public CloudConfiguration getCloudConfiguration() {
         return normal.getCloudConfiguration();
     }
+
+    @Override
+    public Map<String, String> getCatalogProperties() {
+        return normal.getCatalogProperties();
+    }
 }

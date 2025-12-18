@@ -146,6 +146,11 @@ public class IcebergRESTCatalog implements IcebergCatalog {
     }
 
     @Override
+    public Map<String, String> getCatalogProperties() {
+        return delegate.properties();
+    }
+
+    @Override
     public Table getTable(ConnectContext context, String dbName, String tableName) throws StarRocksConnectorException {
         try {
             return delegate.loadTable(buildContext(context), TableIdentifier.of(convertDbNameToNamespace(dbName), tableName));

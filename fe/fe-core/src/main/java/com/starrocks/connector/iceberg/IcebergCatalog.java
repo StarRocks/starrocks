@@ -241,6 +241,10 @@ public interface IcebergCatalog extends MemoryTrackable {
                 srScanContext);
     }
 
+    default Map<String, String> getCatalogProperties() {
+        return new HashMap<>();
+    }
+
     default String defaultTableLocation(ConnectContext context, Namespace ns, String tableName) {
         Map<String, String> properties = loadNamespaceMetadata(context, ns);
         String databaseLocation = properties.get(LOCATION_PROPERTY);
