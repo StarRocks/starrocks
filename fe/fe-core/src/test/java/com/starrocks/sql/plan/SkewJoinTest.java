@@ -101,7 +101,7 @@ public class SkewJoinTest extends PlanTestBase {
     public void testSkewJoinWithRightSideHint() throws Exception {
         String sql = "select * from t0 left join [skew|t1.v4(100)] t1 on t0.v1 = t1.v4";
         String sqlPlan = getFragmentPlan(sql);
-        assertCContains(sqlPlan, "equal join conjunct: 7: rand_col = 14: rand_col");
+        assertCContains(sqlPlan, "equal join conjunct: 14: rand_col = 7: rand_col");
         assertCContains(sqlPlan, "equal join conjunct: 1: v1 = 4: v4");
     }
 
