@@ -91,7 +91,7 @@ Status Table::Open(const Options& options, RandomAccessFile* file, uint64_t size
 Status Table::sample_keys(std::vector<std::string>* keys, size_t sample_interval_bytes) const {
     // create index block iterator
     std::unique_ptr<Iterator> iiter =
-            std::make_unique<Iterator>(rep_->index_block->NewIterator(rep_->options.comparator));
+            std::unique_ptr<Iterator>(rep_->index_block->NewIterator(rep_->options.comparator));
     iiter->SeekToFirst();
     // skip interval_step keys per sample
     size_t interval_step = sample_interval_bytes / rep_->options.block_size + 1;
