@@ -1576,6 +1576,11 @@ public class IcebergMetadata implements ConnectorMetadata {
     }
 
     @Override
+    public Map<String, String> getCatalogProperties() {
+        return icebergCatalog.getCatalogProperties();
+    }
+
+    @Override
     public Procedure getProcedure(DatabaseTableName procedureName) {
         Procedure procedure = procedureRegistry.find(procedureName);
         if (procedure == null) {

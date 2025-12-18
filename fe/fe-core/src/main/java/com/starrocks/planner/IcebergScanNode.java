@@ -197,22 +197,33 @@ public class IcebergScanNode extends ScanNode {
             return;
         }
 
-        // Hard coding here
-        // Try to get tabular signed temporary credential
+        // Try to get vended credentials from loadTable response
         CloudConfiguration vendedCredentialsCloudConfiguration = CloudConfigurationFactory.
                 buildCloudConfigurationForVendedCredentials(icebergTable.getNativeTable().io().properties(),
                         icebergTable.getNativeTable().location());
         if (vendedCredentialsCloudConfiguration.getCloudType() != CloudType.DEFAULT) {
-            // If we get CloudConfiguration succeed from iceberg FileIO's properties, we just using it.
             cloudConfiguration = vendedCredentialsCloudConfiguration;
-        } else {
-            CatalogConnector connector = GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalogName);
-            Preconditions.checkState(connector != null,
-                    String.format("connector of catalog %s should not be null", catalogName));
-            cloudConfiguration = connector.getMetadata().getCloudConfiguration();
-            Preconditions.checkState(cloudConfiguration != null,
-                    String.format("cloudConfiguration of catalog %s should not be null", catalogName));
+            return;
         }
+
+        CatalogConnector connector = GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalogName);
+        Preconditions.checkState(connector != null,
+                String.format("connector of catalog %s should not be null", catalogName));
+
+        // Try to get credentials from catalog config (/v1/config response).
+        // This is used as fallback when STS is unavailable (e.g., Apache Polaris without STS).
+        CloudConfiguration catalogConfigCloudConfiguration = CloudConfigurationFactory.
+                buildCloudConfigurationForVendedCredentials(connector.getMetadata().getCatalogProperties(),
+                        icebergTable.getNativeTable().location());
+        if (catalogConfigCloudConfiguration.getCloudType() != CloudType.DEFAULT) {
+            cloudConfiguration = catalogConfigCloudConfiguration;
+            return;
+        }
+
+        // Fall back to user-provided catalog credentials
+        cloudConfiguration = connector.getMetadata().getCloudConfiguration();
+        Preconditions.checkState(cloudConfiguration != null,
+                String.format("cloudConfiguration of catalog %s should not be null", catalogName));
     }
 
     public void setCloudConfiguration(CloudConfiguration cloudConfiguration) {
