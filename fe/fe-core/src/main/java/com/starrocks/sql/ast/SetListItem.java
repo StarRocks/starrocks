@@ -12,10 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/sql/ast/SetListItem.java
 package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.sql.parser.NodePosition;
+=======
+#include <bthread/condition_variable.h>
+#include <bthread/mutex.h>
+
+#include <atomic>
+
+#include "google/protobuf/stubs/callback.h"
+#include "util/countdown_latch.h"
+>>>>>>> 5b7877e008 ([BugFix] Prevent reopening of aborted load channels (#66793)):be/test/service/brpc_service_test_util.h
 
 public class SetListItem implements ParseNode {
 
@@ -25,8 +35,35 @@ public class SetListItem implements ParseNode {
         this.pos = pos;
     }
 
+<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/sql/ast/SetListItem.java
     @Override
     public NodePosition getPos() {
         return pos;
     }
 }
+=======
+    bool has_run() { return _run.load(); }
+
+private:
+    std::atomic_bool _run = false;
+};
+
+class MockCountDownClosure : public MockClosure {
+public:
+    using BThreadCountDownLatch = GenericCountDownLatch<bthread::Mutex, bthread::ConditionVariable>;
+    MockCountDownClosure() : _latch(1) {}
+    ~MockCountDownClosure() override = default;
+
+    void wait() { _latch.wait(); }
+
+    void Run() override {
+        MockClosure::Run();
+        _latch.count_down();
+    }
+
+private:
+    BThreadCountDownLatch _latch;
+};
+
+} // namespace starrocks
+>>>>>>> 5b7877e008 ([BugFix] Prevent reopening of aborted load channels (#66793)):be/test/service/brpc_service_test_util.h
