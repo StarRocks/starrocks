@@ -259,12 +259,6 @@ private:
 
     GlobalDictByNameMaps* _global_dicts = nullptr;
     bool _is_multi_statements_txn = false;
-<<<<<<< HEAD
-=======
-
-    // Record the time when DeltaWriter is opened
-    int64_t _begin_time_ms = 0;
-
     // Whether finish() has been called. Used to prevent write/flush tasks after finish task.
     // This is critical because:
     // 1. During load spill, finish task may run in a separate thread pool, causing concurrent
@@ -272,7 +266,6 @@ private:
     // 2. After finish completes, txnlog is generated with all data files. Any subsequent write
     //    tasks will have their data discarded, resulting in data loss.
     bool _already_finished = false;
->>>>>>> c6158cd71a ([BugFix] avoid upcomming write or flush tasks after finish task in delta writer (#66943))
 };
 
 bool DeltaWriterImpl::is_immutable() const {
