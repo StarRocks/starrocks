@@ -2495,9 +2495,14 @@ public class PlanFragmentBuilder {
                     replaceExpr.setType(functionCallExpr.getType());
                 } else if (functionName.equals(FunctionSet.ARRAY_AGG)) {
                     replaceExpr = new FunctionCallExpr(FunctionSet.ARRAY_AGG_DISTINCT, functionCallExpr.getParams());
-                    replaceExpr.setFn(ExprUtils.getBuiltinFunction(FunctionSet.ARRAY_AGG_DISTINCT,
-                            functionCallExpr.getFn().getArgs(),
-                            IS_NONSTRICT_SUPERTYPE_OF));
+                    AggregateFunction fn =
+                            (AggregateFunction) ExprUtils.getBuiltinFunction(FunctionSet.ARRAY_AGG_DISTINCT,
+                                    functionCallExpr.getFn().getArgs(),
+                                    IS_NONSTRICT_SUPERTYPE_OF);
+                    fn = DecimalV3FunctionAnalyzer.rectifyAggregationFunction(
+                            fn, functionCallExpr.getFn().getArgs()[0], functionCallExpr.getFn().getReturnType());
+
+                    replaceExpr.setFn(fn);
                     replaceExpr.getParams().setIsDistinct(false);
                     replaceExpr.setType(functionCallExpr.getType());
                 }
@@ -3174,9 +3179,28 @@ public class PlanFragmentBuilder {
                         new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr()));
                 // if local partition topn can preAgg, then it's output is binary format
                 // which means analytic node should call function's merge method instead of update
+                FunctionCallExpr call = (FunctionCallExpr) analyticFunction;
                 if (node.isInputIsBinary()) {
-                    ((FunctionCallExpr) analyticFunction).setMergeAggFn();
+                    call.setMergeAggFn();
                 }
+
+                // Only boolean/numeric/string type can be optimized via array_agg_distinct
+                if (call.isDistinct() && call.getFunctionName().equals(FunctionSet.ARRAY_AGG) &&
+                        call.getFnParams().exprs().size() == 1 && (
+                        call.getFn().getArgs()[0].isNumericType() || call.getFn().getArgs()[0].isStringType() ||
+                                call.getFn().getArgs()[0].isBoolean())) {
+                    FunctionCallExpr newCall = new FunctionCallExpr(FunctionSet.ARRAY_AGG_DISTINCT, call.getParams());
+                    AggregateFunction fn =
+                            (AggregateFunction) ExprUtils.getBuiltinFunction(FunctionSet.ARRAY_AGG_DISTINCT,
+                                    call.getFn().getArgs(), IS_NONSTRICT_SUPERTYPE_OF);
+                    fn = DecimalV3FunctionAnalyzer.rectifyAggregationFunction(
+                            fn, call.getFn().getArgs()[0], call.getFn().getReturnType());
+                    newCall.setFn(fn);
+                    newCall.getParams().setIsDistinct(false);
+                    newCall.setType(call.getType());
+                    analyticFunction = newCall;
+                }
+
                 analyticFnCalls.add(analyticFunction);
 
                 SlotDescriptor slotDesc = context.getDescTbl()

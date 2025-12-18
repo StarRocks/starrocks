@@ -402,7 +402,9 @@ public class AnalyticAnalyzer {
         final Set<String> supportFunctions = ImmutableSet.of(
                 FunctionSet.SUM,
                 FunctionSet.AVG,
-                FunctionSet.COUNT);
+                FunctionSet.COUNT,
+                FunctionSet.ARRAY_AGG,
+                FunctionSet.ARRAY_AGG_DISTINCT);
 
         return supportFunctions.contains(fnCall.getFunctionName());
     }
