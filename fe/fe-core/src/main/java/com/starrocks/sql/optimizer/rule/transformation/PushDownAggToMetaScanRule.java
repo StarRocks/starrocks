@@ -22,12 +22,8 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
-<<<<<<< HEAD
 import com.starrocks.catalog.Type;
-=======
 import com.starrocks.common.Pair;
-import com.starrocks.sql.ast.expression.ExprUtils;
->>>>>>> 0463439c6b ([BugFix] fix issues when querying renamed column with meta scan (#66819))
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;

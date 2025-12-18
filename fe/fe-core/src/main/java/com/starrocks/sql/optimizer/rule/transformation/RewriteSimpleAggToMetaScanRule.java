@@ -27,11 +27,8 @@ import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
-<<<<<<< HEAD
 import com.starrocks.catalog.Type;
-=======
 import com.starrocks.common.Pair;
->>>>>>> 0463439c6b ([BugFix] fix issues when querying renamed column with meta scan (#66819))
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.optimizer.OptExpression;

@@ -15,11 +15,8 @@
 package com.starrocks.planner;
 
 import com.google.common.collect.Lists;
-<<<<<<< HEAD
-import com.starrocks.analysis.TupleDescriptor;
-=======
 import com.google.common.collect.Maps;
->>>>>>> 0463439c6b ([BugFix] fix issues when querying renamed column with meta scan (#66819))
+import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.Column;
 import com.starrocks.common.Pair;
 import com.starrocks.catalog.LocalTablet;
