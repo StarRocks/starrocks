@@ -169,7 +169,6 @@ public class OlapScanNode extends ScanNode {
     private final SelectedIndex index;
     private long selectedTabletsNum = 0;
     private long totalTabletsNum = 0;
-    private int selectedPartitionNum = 0;
     private List<Long> selectedPartitionIds = Lists.newArrayList();
     private long actualRows = 0;
     // List of tablets will be scanned by current olap_scan_node
