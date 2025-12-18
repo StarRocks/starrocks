@@ -57,7 +57,7 @@ using Roaring = roaring::Roaring;
 
 class BitmapIndexReader {
 public:
-    BitmapIndexReader(int32_t gram_num = -1);
+    BitmapIndexReader(int32_t gram_num = -1, bool with_position = false);
     ~BitmapIndexReader();
 
     // Load index data into memory.
@@ -86,6 +86,8 @@ public:
         }
         return 0;
     }
+
+    bool with_position() const { return _with_position; }
 
     const TypeInfoPtr& type_info() { return _typeinfo; }
 
@@ -116,6 +118,7 @@ private:
     Status _do_load(const IndexReadOptions& opts, const BitmapIndexPB& meta);
 
     int32_t _gram_num;
+    bool _with_position;
 
     OnceFlag _load_once;
     TypeInfoPtr _typeinfo;
@@ -123,6 +126,8 @@ private:
     std::unique_ptr<IndexedColumnReader> _bitmap_column_reader;
     std::unique_ptr<IndexedColumnReader> _ngram_dict_column_reader;
     std::unique_ptr<IndexedColumnReader> _ngram_bitmap_column_reader;
+    std::unique_ptr<IndexedColumnReader> _posting_index_reader;
+    std::unique_ptr<IndexedColumnReader> _posting_position_reader;
     bool _has_null = false;
 };
 
@@ -133,12 +138,16 @@ public:
     BitmapIndexIterator(BitmapIndexReader* reader, std::unique_ptr<IndexedColumnIterator> dict_iter,
                         std::unique_ptr<IndexedColumnIterator> bitmap_iter,
                         std::unique_ptr<IndexedColumnIterator> ngram_dict_iter,
-                        std::unique_ptr<IndexedColumnIterator> ngram_bitmap_iter, bool has_null, rowid_t num_bitmap)
+                        std::unique_ptr<IndexedColumnIterator> ngram_bitmap_iter,
+                        std::unique_ptr<IndexedColumnIterator> posting_index_iter,
+                        std::unique_ptr<IndexedColumnIterator> posting_position_iter, bool has_null, rowid_t num_bitmap)
             : _reader(reader),
               _dict_column_iter(std::move(dict_iter)),
               _bitmap_column_iter(std::move(bitmap_iter)),
               _ngram_dict_column_iter(std::move(ngram_dict_iter)),
               _ngram_bitmap_column_iter(std::move(ngram_bitmap_iter)),
+              _posting_index_iter(std::move(posting_index_iter)),
+              _posting_position_iter(std::move(posting_position_iter)),
               _has_null(has_null),
               _num_bitmap(num_bitmap) {}
 
@@ -152,6 +161,8 @@ public:
     // used for test
     Status next_batch_ngram(rowid_t ordinal, size_t* n, Column* column) const;
     Status read_ngram_bitmap(rowid_t ordinal, Roaring* result) const;
+
+    StatusOr<std::vector<roaring::Roaring>> read_positions(rowid_t dict_id, const std::vector<uint64_t>& doc_ranks) const;
 
     // Seek the dictionary to the first value that is >= the given value.
     //
@@ -209,6 +220,8 @@ private:
     std::unique_ptr<IndexedColumnIterator> _bitmap_column_iter;
     std::unique_ptr<IndexedColumnIterator> _ngram_dict_column_iter;
     std::unique_ptr<IndexedColumnIterator> _ngram_bitmap_column_iter;
+    std::unique_ptr<IndexedColumnIterator> _posting_index_iter;
+    std::unique_ptr<IndexedColumnIterator> _posting_position_iter;
     bool _has_null;
     rowid_t _num_bitmap;
     rowid_t _current_rowid{0};

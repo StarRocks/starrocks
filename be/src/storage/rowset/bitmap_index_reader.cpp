@@ -45,6 +45,7 @@
 #include "exprs/like_predicate.h"
 #include "runtime/exec_env.h"
 #include "storage/chunk_helper.h"
+#include "storage/posting/encoder.h"
 #include "storage/range.h"
 #include "storage/types.h"
 #include "util/utf8.h"
@@ -53,7 +54,8 @@ namespace starrocks {
 
 using Roaring = roaring::Roaring;
 
-BitmapIndexReader::BitmapIndexReader(int32_t gram_num) : _gram_num(gram_num) {
+BitmapIndexReader::BitmapIndexReader(int32_t gram_num, bool with_position)
+        : _gram_num(gram_num), _with_position(with_position) {
     MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->bitmap_index_mem_tracker(), sizeof(BitmapIndexReader));
 }
 
@@ -101,6 +103,17 @@ Status BitmapIndexReader::_do_load(const IndexReadOptions& opts, const BitmapInd
         _ngram_dict_column_reader = nullptr;
         _ngram_bitmap_column_reader = nullptr;
     }
+    if (meta.has_posting_index_column() && meta.has_posting_position_column()) {
+        const IndexedColumnMetaPB& posting_meta = meta.posting_index_column();
+        const IndexedColumnMetaPB& posting_position_meta = meta.posting_position_column();
+        _posting_index_reader = std::make_unique<IndexedColumnReader>(posting_meta);
+        _posting_position_reader = std::make_unique<IndexedColumnReader>(posting_position_meta);
+        RETURN_IF_ERROR(_posting_index_reader->load(opts));
+        RETURN_IF_ERROR(_posting_position_reader->load(opts));
+    } else {
+        _posting_index_reader = nullptr;
+        _posting_position_reader = nullptr;
+    }
     return Status::OK();
 }
 
@@ -109,14 +122,21 @@ Status BitmapIndexReader::new_iterator(const IndexReadOptions& opts, BitmapIndex
     std::unique_ptr<IndexedColumnIterator> bitmap_iter;
     std::unique_ptr<IndexedColumnIterator> ngram_dict_iter = nullptr;
     std::unique_ptr<IndexedColumnIterator> ngram_bitmap_iter = nullptr;
+    std::unique_ptr<IndexedColumnIterator> posting_index_iter = nullptr;
+    std::unique_ptr<IndexedColumnIterator> posting_position_iter = nullptr;
     RETURN_IF_ERROR(_dict_column_reader->new_iterator(opts, &dict_iter));
     RETURN_IF_ERROR(_bitmap_column_reader->new_iterator(opts, &bitmap_iter));
     if (_ngram_dict_column_reader != nullptr && _ngram_bitmap_column_reader != nullptr) {
         RETURN_IF_ERROR(_ngram_dict_column_reader->new_iterator(opts, &ngram_dict_iter));
         RETURN_IF_ERROR(_ngram_bitmap_column_reader->new_iterator(opts, &ngram_bitmap_iter));
     }
+    if (_posting_index_reader != nullptr && _posting_position_reader != nullptr) {
+        RETURN_IF_ERROR(_posting_index_reader->new_iterator(opts, &posting_index_iter));
+        RETURN_IF_ERROR(_posting_position_reader->new_iterator(opts, &posting_position_iter));
+    }
     *iterator = new BitmapIndexIterator(this, std::move(dict_iter), std::move(bitmap_iter), std::move(ngram_dict_iter),
-                                        std::move(ngram_bitmap_iter), _has_null, bitmap_nums());
+                                        std::move(ngram_bitmap_iter), std::move(posting_index_iter),
+                                        std::move(posting_position_iter), _has_null, bitmap_nums());
     return Status::OK();
 }
 
@@ -257,6 +277,56 @@ Status BitmapIndexIterator::read_ngram_bitmap(rowid_t ordinal, Roaring* result) 
         *result = Roaring::read(value.data, false);
     }
     return Status::OK();
+}
+
+StatusOr<std::vector<roaring::Roaring>> BitmapIndexIterator::read_positions(
+        rowid_t dict_id, const std::vector<uint64_t>& doc_ranks) const {
+    if (!_reader->with_position()) {
+        return Status::InvalidArgument(fmt::format("Reading positions but position is not enabled."));
+    }
+    RETURN_IF(_posting_index_iter == nullptr,
+              Status::InternalError("Reading positions but no posting index reader provided"));
+    RETURN_IF(_posting_position_iter == nullptr,
+              Status::InternalError("Reading positions but no posting position reader provided"));
+
+    RETURN_IF_ERROR(_posting_index_iter->seek_to_ordinal(dict_id));
+
+    auto col = ChunkHelper::column_from_field_type(TYPE_INT, false);
+
+    size_t num_to_read = 1;
+    size_t num_read = num_to_read;
+    RETURN_IF_ERROR(_posting_index_iter->next_batch(&num_read, col.get()));
+    RETURN_IF(num_to_read != num_read,
+              Status::InternalError(fmt::format("read position index column failed, expect {} rows, but got {} rows.",
+                                                num_to_read, num_read)));
+
+    const ColumnViewer<TYPE_INT> viewer(std::move(col));
+    const auto offset = viewer.value(0);
+
+    std::vector<roaring::Roaring> result;
+    result.reserve(num_to_read);
+
+    const auto encoder = EncoderFactory::createEncoder(EncodingType::VARINT);
+    for (const auto& doc_rank : doc_ranks) {
+        const ordinal_t ordinal = offset + doc_rank;
+        RETURN_IF_ERROR(_posting_position_iter->seek_to_ordinal(ordinal));
+
+        auto position_col = ChunkHelper::column_from_field_type(TYPE_VARBINARY, false);
+        num_to_read = 1;
+        num_read = num_to_read;
+        RETURN_IF_ERROR(_posting_position_iter->next_batch(&num_read, col.get()));
+        RETURN_IF(
+                num_to_read != num_read,
+                Status::InternalError(fmt::format("read position index column failed, expect {} rows, but got {} rows.",
+                                                  num_to_read, num_read)));
+
+        const ColumnViewer<TYPE_VARCHAR> position_viewer(std::move(position_col));
+        const Slice encoded_positions = position_viewer.value(0);
+        auto positions = encoder->decode(reinterpret_cast<const uint8_t*>(encoded_positions.get_data()),
+                                         encoded_positions.get_size());
+        result.push_back(positions);
+    }
+    return result;
 }
 
 Status BitmapIndexIterator::seek_dictionary(const void* value, bool* exact_match) {

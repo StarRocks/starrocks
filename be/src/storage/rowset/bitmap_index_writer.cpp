@@ -63,22 +63,17 @@ struct BitmapIndexSliceHash {
     inline size_t operator()(const Slice& v) const { return XXH3_64bits(v.data, v.size); }
 };
 
-struct BitmapIndexSlicePtrHash {
-    inline size_t operator()(const Slice* v) const { return reinterpret_cast<uint64_t>(v); }
-};
-
 template <typename CppType>
 struct BitmapIndexTraits {
     using UnorderedMemoryIndexType = phmap::flat_hash_map<CppType, BitmapUpdateContextRefOrSingleValue<rowid_t>>;
-    using PositionType = phmap::flat_hash_map<const CppType*, PostingList>;
+    using PositionType = phmap::flat_hash_map<CppType, PostingList>;
 };
 
 template <>
 struct BitmapIndexTraits<Slice> {
     using UnorderedMemoryIndexType = phmap::flat_hash_map<Slice, BitmapUpdateContextRefOrSingleValue<rowid_t>,
                                                           BitmapIndexSliceHash, std::equal_to<Slice>>;
-    using PositionType =
-            phmap::flat_hash_map<const Slice*, PostingList, BitmapIndexSlicePtrHash, std::equal_to<const Slice*>>;
+    using PositionType = phmap::flat_hash_map<Slice, PostingList, BitmapIndexSliceHash, std::equal_to<Slice>>;
 };
 
 // Builder for bitmap index. Bitmap index is comprised of two parts
@@ -137,15 +132,16 @@ public:
 
         if constexpr (field_type == TYPE_VARCHAR || field_type == TYPE_CHAR) {
             if (_posting_index.has_value()) {
-                auto idx_it = _mem_index.find(value);
-                const Slice* val_ptr = &idx_it->first;
-                auto pit = _posting_index->find(val_ptr);
+                auto pit = _posting_index->find(value);
                 if (pit != _posting_index->end()) {
                     pit->second.add_posting(_rid, _pos);
                 } else {
                     auto posting = PostingList();
                     posting.add_posting(_rid, _pos);
-                    _posting_index->emplace(val_ptr, std::move(posting));
+
+                    CppType new_value;
+                    _typeinfo->deep_copy(&new_value, &value, &_pool);
+                    _posting_index->emplace(new_value, std::move(posting));
                 }
             }
         }
@@ -360,12 +356,7 @@ private:
         dict_column_writer.add(&offset);
         for (uint32_t dict_id = 0; dict_id < sorted_dicts.size(); ++dict_id) {
             const auto& dict = sorted_dicts[dict_id];
-            auto mit = _mem_index.find(dict);
-            if (mit == _mem_index.end()) {
-                return Status::InternalError("No bitmap found for dict");
-            }
-            const Slice* val_ptr = &mit->first;
-            auto it = _posting_index->find(val_ptr);
+            auto it = _posting_index->find(dict);
             if (it == _posting_index->end()) {
                 // should never happen
                 return Status::InternalError("No posting found for dict");
@@ -376,7 +367,7 @@ private:
             offset += posting_list.get_num_doc_ids();
             RETURN_IF_ERROR(dict_column_writer.add(&offset));
         }
-        dict_column_writer.finish(meta->mutable_posting_index_column());
+        RETURN_IF_ERROR(dict_column_writer.finish(meta->mutable_posting_index_column()));
 
         TypeInfoPtr varbinary_typeinfo = get_type_info(TYPE_VARBINARY);
         IndexedColumnWriterOptions value_options;
