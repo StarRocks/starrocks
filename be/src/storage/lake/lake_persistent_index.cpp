@@ -199,7 +199,7 @@ Status LakePersistentIndex::sync_flush_all_memtables(int64_t wait_timeout_us) {
             }
         }
         if (!wait_success) {
-            return Status::Timeout(fmt::format("wait memtable flush timeout for tablet {}", _tablet_id));
+            return Status::TimedOut(fmt::format("wait memtable flush timeout for tablet {}", _tablet_id));
         }
     }
     _inactive_memtables.clear();
