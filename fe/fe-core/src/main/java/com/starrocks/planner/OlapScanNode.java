@@ -479,7 +479,7 @@ public class OlapScanNode extends ScanNode {
                 throw new StarRocksException("Tablet " + tabletId + " doesn't exist in partition " + physicalPartitionId);
             }
 
-            int schemaHash = olapTable.getSchemaHashByIndexId(selectedTable.getId());
+            int schemaHash = olapTable.getSchemaHashByIndexMetaId(selectedTable.getId());
             if (schemaHash != expectedSchemaHash) {
                 throw new StarRocksException("Tablet " + tabletId + " schema hash " + schemaHash +
                         " has changed, doesn't equal to expected schema hash " + expectedSchemaHash);
@@ -581,7 +581,7 @@ public class OlapScanNode extends ScanNode {
         boolean skipDiskCache = ConnectContext.get() != null && ConnectContext.get().getSessionVariable().isSkipLocalDiskCache();
         boolean skipPageCache = ConnectContext.get() != null && ConnectContext.get().getSessionVariable().isSkipPageCache();
         int logNum = 0;
-        int schemaHash = olapTable.getSchemaHashByIndexId(index.getId());
+        int schemaHash = olapTable.getSchemaHashByIndexMetaId(index.getId());
         String schemaHashStr = String.valueOf(schemaHash);
         long visibleVersion = physicalPartition.getVisibleVersion();
         scanPartitionVersions.put(physicalPartition.getId(), visibleVersion);
@@ -854,7 +854,7 @@ public class OlapScanNode extends ScanNode {
         } else {
             output.append(prefix).append("table: ").append(olapTable.getName())
                     .append(", ").append("rollup: ")
-                    .append(olapTable.getIndexNameById(selectedIndexId)).append("\n");
+                    .append(olapTable.getIndexNameByMetaId(selectedIndexId)).append("\n");
         }
 
         if (null != sortColumn) {
@@ -932,7 +932,7 @@ public class OlapScanNode extends ScanNode {
             output.append(prefix).append(String.format("partitions=%s/%s\n", selectedPartitionNum,
                     olapTable.getVisiblePartitionNames().size()));
 
-            String indexName = olapTable.getIndexNameById(selectedIndexId);
+            String indexName = olapTable.getIndexNameByMetaId(selectedIndexId);
             output.append(prefix).append(String.format("rollup: %s\n", indexName));
 
             output.append(prefix).append(String.format("tabletRatio=%s/%s\n", selectedTabletsNum, totalTabletsNum));
@@ -1059,7 +1059,7 @@ public class OlapScanNode extends ScanNode {
             MaterializedIndexMeta indexMeta = olapTable.getIndexMetaByIndexId(selectedIndexId);
             if (indexMeta != null) {
                 schemaId = indexMeta.getSchemaId();
-                for (Column col : olapTable.getSchemaByIndexId(selectedIndexId)) {
+                for (Column col : olapTable.getSchemaByIndexMetaId(selectedIndexId)) {
                     TColumn tColumn = col.toThrift();
                     tColumn.setColumn_name(col.getColumnId().getId());
                     col.setIndexFlag(tColumn, olapTable.getIndexes(), bfColumns);
@@ -1073,7 +1073,7 @@ public class OlapScanNode extends ScanNode {
                         keyColumnTypes.add(TypeSerializer.toThrift(col.getPrimitiveType()));
                     }
                 } else {
-                    for (Column col : olapTable.getSchemaByIndexId(selectedIndexId)) {
+                    for (Column col : olapTable.getSchemaByIndexMetaId(selectedIndexId)) {
                         if (!col.isKey()) {
                             continue;
                         }
@@ -1091,7 +1091,7 @@ public class OlapScanNode extends ScanNode {
             msg.lake_scan_node =
                     new TLakeScanNode(desc.getId().asInt(), keyColumnNames, keyColumnTypes, isPreAggregation);
             msg.lake_scan_node.setSort_key_column_names(keyColumnNames);
-            msg.lake_scan_node.setRollup_name(olapTable.getIndexNameById(selectedIndexId));
+            msg.lake_scan_node.setRollup_name(olapTable.getIndexNameByMetaId(selectedIndexId));
             if (enableTopnFilterBackPressure) {
                 msg.lake_scan_node.setEnable_topn_filter_back_pressure(true);
                 msg.lake_scan_node.setBack_pressure_max_rounds(backPressureMaxRounds);
@@ -1144,7 +1144,7 @@ public class OlapScanNode extends ScanNode {
             msg.olap_scan_node.setColumns_desc(columnsDesc);
             msg.olap_scan_node.setSchema_id(schemaId);
             msg.olap_scan_node.setSort_key_column_names(keyColumnNames);
-            msg.olap_scan_node.setRollup_name(olapTable.getIndexNameById(selectedIndexId));
+            msg.olap_scan_node.setRollup_name(olapTable.getIndexNameByMetaId(selectedIndexId));
             if (enableTopnFilterBackPressure) {
                 msg.olap_scan_node.setEnable_topn_filter_back_pressure(true);
                 msg.olap_scan_node.setBack_pressure_max_rounds(backPressureMaxRounds);
@@ -1270,7 +1270,7 @@ public class OlapScanNode extends ScanNode {
         long selectedIndexId = index.indexId;
         int backendSize = ctx.getTotalBackendNumber();
         int aliveBackendSize = ctx.getAliveBackendNumber();
-        int schemaHash = olapTable.getSchemaHashByIndexId(selectedIndexId);
+        int schemaHash = olapTable.getSchemaHashByIndexMetaId(selectedIndexId);
         for (Map.Entry<Long, List<Long>> entry : partitionToScanTabletMap.entrySet()) {
             PhysicalPartition partition = olapTable.getPhysicalPartition(entry.getKey());
             if (olapTable.getPartitionInfo().getReplicationNum(partition.getParentId()) < backendSize) {
@@ -1506,7 +1506,7 @@ public class OlapScanNode extends ScanNode {
                 return false;
             case DUP_KEYS:
             case AGG_KEYS: {
-                List<Column> columns = olapTable.getSchemaByIndexId(index.indexId);
+                List<Column> columns = olapTable.getSchemaByIndexMetaId(index.indexId);
                 return columns.stream().noneMatch(
                         c -> c.isAggregated() && c.getAggregationType().isReplaceFamily());
             }
@@ -1533,7 +1533,7 @@ public class OlapScanNode extends ScanNode {
             normalizer.setCanUseMultiVersion(canUseMultiVersionCache());
 
             List<Column> columns = selectedIndexId == -1 ? olapTable.getBaseSchema() :
-                    olapTable.getSchemaByIndexId(selectedIndexId);
+                    olapTable.getSchemaByIndexMetaId(selectedIndexId);
 
             Set<String> aggColumnNames =
                     columns.stream().filter(Column::isAggregated).map(Column::getName).collect(Collectors.toSet());
@@ -1569,7 +1569,7 @@ public class OlapScanNode extends ScanNode {
         List<String> keyColumnNames = new ArrayList<String>();
         List<TPrimitiveType> keyColumnTypes = new ArrayList<TPrimitiveType>();
         if (selectedIndexId != -1) {
-            for (Column col : olapTable.getSchemaByIndexId(selectedIndexId)) {
+            for (Column col : olapTable.getSchemaByIndexMetaId(selectedIndexId)) {
                 if (!col.isKey()) {
                     break;
                 }
@@ -1581,7 +1581,7 @@ public class OlapScanNode extends ScanNode {
         scanNode.setKey_column_types(keyColumnTypes);
         scanNode.setIs_preaggregation(isPreAggregation);
         scanNode.setSort_column(sortColumn);
-        scanNode.setRollup_name(olapTable.getIndexNameById(selectedIndexId));
+        scanNode.setRollup_name(olapTable.getIndexNameByMetaId(selectedIndexId));
 
         List<Integer> dictStringIds =
                 dictStringIdToIntIds.keySet().stream().sorted(Integer::compareTo).collect(Collectors.toList());
@@ -1721,7 +1721,7 @@ public class OlapScanNode extends ScanNode {
         }
 
         static SelectedIndex build(OlapTable olapTable, long selectedIndexId) {
-            long indexId = selectedIndexId == -1 ? olapTable.getBaseIndexId() : selectedIndexId;
+            long indexId = selectedIndexId == -1 ? olapTable.getBaseIndexMetaId() : selectedIndexId;
             SchemaInfo schema = null;
             if (olapTable.isCloudNativeTableOrMaterializedView()) {
                 MaterializedIndexMeta indexMeta = olapTable.getIndexMetaByIndexId(indexId);

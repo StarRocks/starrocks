@@ -925,7 +925,7 @@ public class StarRocksAssert {
             return;
         }
         OlapTable olapTable = (OlapTable) table;
-        for (MaterializedIndexMeta indexMeta : olapTable.getIndexIdToMeta().values()) {
+        for (MaterializedIndexMeta indexMeta : olapTable.getIndexMetaIdToMeta().values()) {
             Assertions.assertFalse(MVUtils.containComplexExpresses(indexMeta));
         }
     }

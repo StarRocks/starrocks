@@ -394,12 +394,12 @@ public class ShowExecutor {
                     } else if (table.isOlapOrCloudNativeTable()) {
                         OlapTable olapTable = (OlapTable) table;
                         List<MaterializedIndexMeta> visibleMaterializedViews = olapTable.getVisibleIndexMetas();
-                        long baseIdx = olapTable.getBaseIndexId();
+                        long baseIdx = olapTable.getBaseIndexMetaId();
                         for (MaterializedIndexMeta mvMeta : visibleMaterializedViews) {
-                            if (baseIdx == mvMeta.getIndexId()) {
+                            if (baseIdx == mvMeta.getIndexMetaId()) {
                                 continue;
                             }
-                            if (matcher != null && !matcher.match(olapTable.getIndexNameById(mvMeta.getIndexId()))) {
+                            if (matcher != null && !matcher.match(olapTable.getIndexNameByMetaId(mvMeta.getIndexMetaId()))) {
                                 continue;
                             }
                             singleTableMVs.add(Pair.create(olapTable, mvMeta));
@@ -772,9 +772,9 @@ public class ShowExecutor {
                                 List<MaterializedIndexMeta> visibleMaterializedViews =
                                         olapTable.getVisibleIndexMetas();
                                 for (MaterializedIndexMeta mvMeta : visibleMaterializedViews) {
-                                    if (olapTable.getIndexNameById(mvMeta.getIndexId()).equals(showStmt.getTable())) {
+                                    if (olapTable.getIndexNameByMetaId(mvMeta.getIndexMetaId()).equals(showStmt.getTable())) {
                                         if (mvMeta.getOriginStmt() == null) {
-                                            String mvName = olapTable.getIndexNameById(mvMeta.getIndexId());
+                                            String mvName = olapTable.getIndexNameByMetaId(mvMeta.getIndexMetaId());
                                             rows.add(Lists.newArrayList(showStmt.getTable(),
                                                     ShowMaterializedViewStatus.buildCreateMVSql(olapTable,
                                                             mvName, mvMeta), "utf8", "utf8_general_ci"));
@@ -1624,7 +1624,7 @@ public class ShowExecutor {
                     long totalReplicaCount = 0;
 
                     // sort by index name
-                    Map<String, Long> indexNames = olapTable.getIndexNameToId();
+                    Map<String, Long> indexNames = olapTable.getIndexNameToMetaId();
                     Map<String, Long> sortedIndexNames = new TreeMap<>(indexNames);
 
                     for (Long indexId : sortedIndexNames.values()) {
@@ -1645,12 +1645,12 @@ public class ShowExecutor {
                         List<String> row = null;
                         if (i == 0) {
                             row = Arrays.asList(tableName,
-                                    olapTable.getIndexNameById(indexId),
+                                    olapTable.getIndexNameByMetaId(indexId),
                                     readableSize, String.valueOf(indexReplicaCount),
                                     String.valueOf(indexRowCount));
                         } else {
                             row = Arrays.asList("",
-                                    olapTable.getIndexNameById(indexId),
+                                    olapTable.getIndexNameByMetaId(indexId),
                                     readableSize, String.valueOf(indexReplicaCount),
                                     String.valueOf(indexRowCount));
                         }
@@ -1815,7 +1815,7 @@ public class ShowExecutor {
                             isSync = false;
                             break;
                         }
-                        indexName = olapTable.getIndexNameById(indexId);
+                        indexName = olapTable.getIndexNameByMetaId(indexId);
 
                         if (table.isCloudNativeTableOrMaterializedView()) {
                             break;
@@ -1904,7 +1904,7 @@ public class ShowExecutor {
                     String indexName = statement.getIndexName();
                     long indexId = -1;
                     if (indexName != null) {
-                        Long id = olapTable.getIndexIdByName(indexName);
+                        Long id = olapTable.getIndexMetaIdByName(indexName);
                         if (id == null) {
                             // invalid indexName
                             ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR, statement.getIndexName());

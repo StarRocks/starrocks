@@ -197,7 +197,7 @@ public abstract class StarRocksHttpTestCase {
         table.addPartition(partition);
         table.setIndexMeta(testIndexId, "testIndex", columns, 0, testSchemaHash, (short) 1,
                 TStorageType.COLUMN, KeysType.AGG_KEYS);
-        table.setBaseIndexId(testIndexId);
+        table.setBaseIndexMetaId(testIndexId);
         return table;
     }
 
@@ -255,7 +255,7 @@ public abstract class StarRocksHttpTestCase {
         table.addPartition(partition);
         table.setIndexMeta(testIndexId, "testIndex", columns, 0, testSchemaHash, (short) 1,
                 TStorageType.COLUMN, KeysType.AGG_KEYS);
-        table.setBaseIndexId(testIndexId);
+        table.setBaseIndexMetaId(testIndexId);
         return table;
     }
 

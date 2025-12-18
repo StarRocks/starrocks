@@ -232,7 +232,7 @@ public class SharedDataStorageVolumeMgrEditLogTest {
                 partitionInfo, distributionInfo);
         testTable.setIndexMeta(TEST_INDEX_ID, "test_table", columns, 0, 0, (short) 1,
                 com.starrocks.thrift.TStorageType.COLUMN, KeysType.DUP_KEYS);
-        testTable.setBaseIndexId(TEST_INDEX_ID);
+        testTable.setBaseIndexMetaId(TEST_INDEX_ID);
         testTable.addPartition(partition);
 
         // Create TableProperty with StorageInfo
@@ -453,7 +453,7 @@ public class SharedDataStorageVolumeMgrEditLogTest {
                 partitionInfo, distributionInfo);
         table.setIndexMeta(TEST_INDEX_ID, "test_table", columns, 0, 0, (short) 1,
                 com.starrocks.thrift.TStorageType.COLUMN, KeysType.DUP_KEYS);
-        table.setBaseIndexId(TEST_INDEX_ID);
+        table.setBaseIndexMetaId(TEST_INDEX_ID);
         table.addPartition(partition);
 
         TableProperty tableProperty = new TableProperty(new HashMap<>());
@@ -505,7 +505,7 @@ public class SharedDataStorageVolumeMgrEditLogTest {
                 partitionInfo, distributionInfo);
         table.setIndexMeta(TEST_INDEX_ID, tableName, columns, 0, 0, (short) 1,
                 com.starrocks.thrift.TStorageType.COLUMN, KeysType.DUP_KEYS);
-        table.setBaseIndexId(TEST_INDEX_ID);
+        table.setBaseIndexMetaId(TEST_INDEX_ID);
         table.addPartition(partition);
 
         TableProperty tableProperty = new TableProperty(new HashMap<>());

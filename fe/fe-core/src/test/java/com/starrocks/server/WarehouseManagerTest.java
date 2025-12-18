@@ -405,7 +405,7 @@ public class WarehouseManagerTest {
         OlapTable table = new OlapTable();
         table.setDefaultDistributionInfo(new HashDistributionInfo(3, Collections.emptyList()));
         desc.setTable(table);
-        return new OlapScanNode(new PlanNodeId(1), desc, "OlapScanNode", table.getBaseIndexId());
+        return new OlapScanNode(new PlanNodeId(1), desc, "OlapScanNode", table.getBaseIndexMetaId());
     }
 
     @Test

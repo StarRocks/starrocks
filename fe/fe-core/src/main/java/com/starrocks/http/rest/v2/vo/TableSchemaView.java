@@ -100,10 +100,10 @@ public class TableSchemaView {
                         .collect(Collectors.toList()))
                 .ifPresent(svo::setColumns);
 
-        Optional.ofNullable(table.getIndexIdToMeta())
+        Optional.ofNullable(table.getIndexMetaIdToMeta())
                 .map(indexIdToMetas -> indexIdToMetas.values().stream()
                         .filter(Objects::nonNull)
-                        .sorted(Comparator.comparingLong(MaterializedIndexMeta::getIndexId))
+                        .sorted(Comparator.comparingLong(MaterializedIndexMeta::getIndexMetaId))
                         .map(MaterializedIndexMetaView::createFrom)
                         .collect(Collectors.toList()))
                 .ifPresent(svo::setIndexMetas);
@@ -123,7 +123,7 @@ public class TableSchemaView {
                         .collect(Collectors.toList()))
                 .ifPresent(svo::setIndexes);
 
-        svo.setBaseIndexId(table.getBaseIndexId());
+        svo.setBaseIndexId(table.getBaseIndexMetaId());
         svo.setMaxIndexId(table.getMaxIndexId());
         svo.setMaxColUniqueId(table.getMaxColUniqueId());
 

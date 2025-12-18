@@ -207,7 +207,7 @@ public class TableSchemaService {
         SchemaInfo schemaInfo = null;
         try (AutoCloseableLock ignore =
                 new AutoCloseableLock(new Locker(), dbId, Collections.singletonList(table.getId()), LockType.READ)) {
-            for (Map.Entry<Long, MaterializedIndexMeta> entry : table.getIndexIdToMeta().entrySet()) {
+            for (Map.Entry<Long, MaterializedIndexMeta> entry : table.getIndexMetaIdToMeta().entrySet()) {
                 MaterializedIndexMeta indexMeta = entry.getValue();
                 if (indexMeta.getSchemaId() == schemaId) {
                     schemaInfo = SchemaInfo.fromMaterializedIndex(table, entry.getKey(), indexMeta);

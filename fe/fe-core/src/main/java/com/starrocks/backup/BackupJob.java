@@ -524,7 +524,7 @@ public class BackupJob extends AbstractJob {
                         long visibleVersion = physicalPartition.getVisibleVersion();
                         List<MaterializedIndex> indexes = physicalPartition.getMaterializedIndices(IndexExtState.VISIBLE);
                         for (MaterializedIndex index : indexes) {
-                            int schemaHash = olapTbl.getSchemaHashByIndexId(index.getId());
+                            int schemaHash = olapTbl.getSchemaHashByIndexMetaId(index.getId());
                             for (Tablet tablet : index.getTablets()) {
                                 prepareSnapshotTask(physicalPartition, olapTbl, tablet, index, visibleVersion, schemaHash);
                                 if (status != Status.OK) {

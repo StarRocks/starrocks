@@ -275,7 +275,7 @@ public class OlapTableFactory implements AbstractTableFactory {
 
             // set base index id
             long baseIndexId = metastore.getNextId();
-            table.setBaseIndexId(baseIndexId);
+            table.setBaseIndexMetaId(baseIndexId);
 
             // get use light schema change
             try {
@@ -667,7 +667,7 @@ public class OlapTableFactory implements AbstractTableFactory {
             for (AlterClause alterClause : stmt.getRollupAlterClauseList()) {
                 AddRollupClause addRollupClause = (AddRollupClause) alterClause;
 
-                Long baseRollupIndex = table.getIndexIdByName(tableName);
+                Long baseRollupIndex = table.getIndexMetaIdByName(tableName);
 
                 // get storage type for rollup index
                 TStorageType rollupIndexStorageType = null;

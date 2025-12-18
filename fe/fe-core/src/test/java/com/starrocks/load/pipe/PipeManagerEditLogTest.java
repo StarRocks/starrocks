@@ -107,7 +107,7 @@ public class PipeManagerEditLogTest {
                 partitionInfo, distributionInfo);
         olapTable.setIndexMeta(testIndexId, PIPE_TEST_TABLE, columns, 0, 0, (short) 1, 
                 TStorageType.COLUMN, KeysType.DUP_KEYS);
-        olapTable.setBaseIndexId(testIndexId);
+        olapTable.setBaseIndexMetaId(testIndexId);
         olapTable.addPartition(partition);
 
         // Register table

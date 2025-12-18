@@ -102,7 +102,7 @@ public class TabletStatMgrTest {
         MaterializedIndex index = new MaterializedIndex(INDEX_ID, MaterializedIndex.IndexState.NORMAL);
         Partition partition = new Partition(PARTITION_ID, PH_PARTITION_ID, "p1", index, distributionInfo);
         OlapTable table = new OlapTable(TABLE_ID, "t1", columns, KeysType.AGG_KEYS, partitionInfo, distributionInfo);
-        Deencapsulation.setField(table, "baseIndexId", INDEX_ID);
+        Deencapsulation.setField(table, "baseIndexMetaId", INDEX_ID);
         table.addPartition(partition);
         table.setIndexMeta(INDEX_ID, "t1", columns, 0, 0, (short) 3, TStorageType.COLUMN, KeysType.AGG_KEYS);
 
@@ -168,7 +168,7 @@ public class TabletStatMgrTest {
 
         // Lake table
         LakeTable table = new LakeTable(TABLE_ID, "t1", columns, KeysType.AGG_KEYS, partitionInfo, distributionInfo);
-        Deencapsulation.setField(table, "baseIndexId", INDEX_ID);
+        Deencapsulation.setField(table, "baseIndexMetaId", INDEX_ID);
         table.addPartition(partition);
         table.setIndexMeta(INDEX_ID, "t1", columns, 0, 0, (short) 3, TStorageType.COLUMN, KeysType.AGG_KEYS);
 

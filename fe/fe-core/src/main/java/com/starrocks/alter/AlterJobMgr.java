@@ -158,9 +158,9 @@ public class AlterJobMgr {
                 if (t instanceof OlapTable) {
                     OlapTable olapTable = (OlapTable) t;
                     for (MaterializedIndexMeta mvMeta : olapTable.getVisibleIndexMetas()) {
-                        String indexName = olapTable.getIndexNameById(mvMeta.getIndexId());
+                        String indexName = olapTable.getIndexNameByMetaId(mvMeta.getIndexMetaId());
                         if (indexName == null) {
-                            LOG.warn("OlapTable {} miss index {}", olapTable.getName(), mvMeta.getIndexId());
+                            LOG.warn("OlapTable {} miss index {}", olapTable.getName(), mvMeta.getIndexMetaId());
                             continue;
                         }
                         if (indexName.equals(stmt.getMvName())) {

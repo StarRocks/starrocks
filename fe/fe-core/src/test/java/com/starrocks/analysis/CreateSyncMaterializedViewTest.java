@@ -515,7 +515,7 @@ public class CreateSyncMaterializedViewTest {
         List<MaterializedIndexMeta> materializedIndices = olapTable.getVisibleIndexMetas();
         Assertions.assertTrue(materializedIndices.size() == 2);
         MaterializedIndexMeta mvIndexMeta = materializedIndices.stream()
-                .filter(x -> x.getIndexId() != olapTable.getBaseIndexId())
+                .filter(x -> x.getIndexMetaId() != olapTable.getBaseIndexMetaId())
                 .findAny().get();
         List<Column> columns = mvIndexMeta.getSchema();
         Set<String> keyColumns = ImmutableSet.of("mv_month");
@@ -563,7 +563,7 @@ public class CreateSyncMaterializedViewTest {
         List<MaterializedIndexMeta> materializedIndices = olapTable.getVisibleIndexMetas();
         Assertions.assertTrue(materializedIndices.size() == 2);
         MaterializedIndexMeta mvIndexMeta = materializedIndices.stream()
-                .filter(x -> x.getIndexId() != olapTable.getBaseIndexId())
+                .filter(x -> x.getIndexMetaId() != olapTable.getBaseIndexMetaId())
                 .findAny().get();
         List<Column> columns = mvIndexMeta.getSchema();
         Set<String> keyColumns = ImmutableSet.of("k3", "mv_month");

@@ -318,7 +318,7 @@ public class SchemaInfo {
     }
 
     public static SchemaInfo fromMaterializedIndex(OlapTable table, long indexId, MaterializedIndexMeta indexMeta) {
-        List<Index> indexes = table.getBaseIndexId() == indexId ? table.getCopiedIndexes() :
+        List<Index> indexes = table.getBaseIndexMetaId() == indexId ? table.getCopiedIndexes() :
                 OlapTable.getIndexesBySchema(table.getCopiedIndexes(), indexMeta.getSchema());
         return SchemaInfo.newBuilder()
                 .setId(indexMeta.getSchemaId())

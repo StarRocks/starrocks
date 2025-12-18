@@ -198,7 +198,7 @@ public class TableSchemaServiceTest extends StarRocksTestBase {
     @Test
     public void testFoundInQueryCoordinator() throws Exception {
         LakeTable table = createTable("t_scan_coordinator");
-        long indexId = table.getBaseIndexId();
+        long indexId = table.getBaseIndexMetaId();
         SchemaInfo schemaInfo = SchemaInfo.fromMaterializedIndex(table, indexId, table.getIndexMetaByIndexId(indexId));
 
         // Execute query to create coordinator with scan nodes
@@ -228,7 +228,7 @@ public class TableSchemaServiceTest extends StarRocksTestBase {
     @Test
     public void testFoundInCatalog() throws Exception {
         LakeTable table = createTable("t_found_in_catalog");
-        long indexId = table.getBaseIndexId();
+        long indexId = table.getBaseIndexMetaId();
         SchemaInfo schemaInfo = SchemaInfo.fromMaterializedIndex(table, indexId, table.getIndexMetaByIndexId(indexId));
 
         // query fallback to catalog
@@ -252,7 +252,7 @@ public class TableSchemaServiceTest extends StarRocksTestBase {
     @Test
     public void testFoundInHistory() throws Exception {
         LakeTable table = createTable("t_found_in_history");
-        long indexId = table.getBaseIndexId();
+        long indexId = table.getBaseIndexMetaId();
         SchemaInfo oldSchemaInfo = SchemaInfo.fromMaterializedIndex(table, indexId, table.getIndexMetaByIndexId(indexId));
 
         // Begin a transaction before alter to prevent the history schema to be cleaned
@@ -273,7 +273,7 @@ public class TableSchemaServiceTest extends StarRocksTestBase {
         Assertions.assertEquals(historySchema.get(), oldSchemaInfo);
 
         // Verify that oldSchemaId is not in the current table's schemas
-        boolean oldSchemaIdInCurrentTable = table.getIndexIdToMeta().values().stream()
+        boolean oldSchemaIdInCurrentTable = table.getIndexMetaIdToMeta().values().stream()
                 .anyMatch(indexMeta -> indexMeta.getSchemaId() == oldSchemaInfo.getId());
         Assertions.assertFalse(oldSchemaIdInCurrentTable,
                 "Old schema ID should not exist in current table's schemas after alter");
@@ -308,7 +308,7 @@ public class TableSchemaServiceTest extends StarRocksTestBase {
     @Test
     public void testScanNotFound() throws Exception {
         LakeTable table = createTable("t_scan_not_found");
-        long indexId = table.getBaseIndexId();
+        long indexId = table.getBaseIndexMetaId();
         SchemaInfo schemaInfo = SchemaInfo.fromMaterializedIndex(table, indexId, table.getIndexMetaByIndexId(indexId));
 
         // query not exists, and schema not found in catalog and history
@@ -346,7 +346,7 @@ public class TableSchemaServiceTest extends StarRocksTestBase {
     @Test
     public void testLoadNotFound() throws Exception {
         LakeTable table = createTable("t_load_not_found");
-        long invalidSchemaId = table.getIndexMetaByIndexId(table.getBaseIndexId()).getSchemaId() - 1;
+        long invalidSchemaId = table.getIndexMetaByIndexId(table.getBaseIndexMetaId()).getSchemaId() - 1;
 
         // txn not exist
         {

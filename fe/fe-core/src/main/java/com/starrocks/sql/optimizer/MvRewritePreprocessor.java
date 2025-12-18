@@ -654,8 +654,8 @@ public class MvRewritePreprocessor {
     private Set<MaterializedView> getTableRelatedSyncMVs(OlapTable olapTable) {
         Set<MaterializedView> relatedMvs = Sets.newHashSet();
         for (MaterializedIndexMeta indexMeta : olapTable.getVisibleIndexMetas()) {
-            long indexId = indexMeta.getIndexId();
-            if (indexMeta.getIndexId() == olapTable.getBaseIndexId()) {
+            long indexId = indexMeta.getIndexMetaId();
+            if (indexMeta.getIndexMetaId() == olapTable.getBaseIndexMetaId()) {
                 continue;
             }
             // Old sync mv may not contain the index define sql.
@@ -671,7 +671,7 @@ public class MvRewritePreprocessor {
             try {
                 long dbId = indexMeta.getDbId();
                 String viewDefineSql = indexMeta.getViewDefineSql();
-                String mvName = olapTable.getIndexNameById(indexId);
+                String mvName = olapTable.getIndexNameByMetaId(indexId);
                 Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
 
                 // distribution info
@@ -723,7 +723,7 @@ public class MvRewritePreprocessor {
                 }
 
                 mv.setViewDefineSql(viewDefineSql);
-                mv.setBaseIndexId(indexId);
+                mv.setBaseIndexMetaId(indexId);
                 relatedMvs.add(mv);
             } catch (Exception e) {
                 logMVPrepare(connectContext, "Fail to get the related sync materialized views from table:{}, " +
@@ -1117,7 +1117,7 @@ public class MvRewritePreprocessor {
                 selectPartitionIds.add(p.getId());
                 selectedPartitionNames.add(p.getName());
                 for (PhysicalPartition physicalPartition : p.getSubPartitions()) {
-                    MaterializedIndex materializedIndex = physicalPartition.getIndex(mv.getBaseIndexId());
+                    MaterializedIndex materializedIndex = physicalPartition.getIndex(mv.getBaseIndexMetaId());
                     selectTabletIds.addAll(materializedIndex.getTabletIdsInOrder());
                 }
             }
@@ -1129,7 +1129,7 @@ public class MvRewritePreprocessor {
                 .setColRefToColumnMetaMap(colRefToColumnMetaMapBuilder.build())
                 .setColumnMetaToColRefMap(columnMetaToColRefMap)
                 .setDistributionSpec(getTableDistributionSpec(mv, columnMetaToColRefMap))
-                .setSelectedIndexId(mv.getBaseIndexId())
+                .setSelectedIndexId(mv.getBaseIndexMetaId())
                 .setSelectedPartitionId(selectPartitionIds)
                 .setPartitionNames(partitionNames)
                 .setSelectedTabletId(selectTabletIds)

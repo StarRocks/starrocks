@@ -339,7 +339,7 @@ public class LoadPlanner {
                 fragments.add(scanFragment);
 
                 // Exchange node
-                List<Column> keyColumns = olapDestTable.getKeyColumnsByIndexId(olapDestTable.getBaseIndexId());
+                List<Column> keyColumns = olapDestTable.getKeyColumnsByIndexId(olapDestTable.getBaseIndexMetaId());
                 List<Expr> partitionExprs = Lists.newArrayList();
                 keyColumns.forEach(column -> {
                     partitionExprs.add(new SlotRef(tupleDesc.getColumnSlot(column.getName())));

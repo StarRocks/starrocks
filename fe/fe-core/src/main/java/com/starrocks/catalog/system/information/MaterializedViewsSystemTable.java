@@ -301,14 +301,14 @@ public class MaterializedViewsSystemTable extends SystemTable {
         }
 
         List<MaterializedIndexMeta> visibleMaterializedViews = olapTable.getVisibleIndexMetas();
-        long baseIdx = olapTable.getBaseIndexId();
+        long baseIdx = olapTable.getBaseIndexMetaId();
         boolean caseSensitive = CaseSensibility.TABLE.getCaseSensibility();
         for (MaterializedIndexMeta mvMeta : visibleMaterializedViews) {
-            if (baseIdx == mvMeta.getIndexId()) {
+            if (baseIdx == mvMeta.getIndexMetaId()) {
                 continue;
             }
 
-            if (!PatternMatcher.matchPattern(params.getPattern(), olapTable.getIndexNameById(mvMeta.getIndexId()),
+            if (!PatternMatcher.matchPattern(params.getPattern(), olapTable.getIndexNameByMetaId(mvMeta.getIndexMetaId()),
                     matcher, caseSensitive)) {
                 continue;
             }
