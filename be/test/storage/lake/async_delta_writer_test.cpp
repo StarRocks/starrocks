@@ -880,7 +880,7 @@ TEST_F(LakeAsyncDeltaWriterTest, test_flush_after_finish) {
     // This is safe because flush is idempotent and doesn't cause data loss
     CountDownLatch flush_after_finish_latch(1);
     delta_writer->flush([&](const Status& st) {
-        ASSERT_OK(st);  // Should succeed
+        ASSERT_OK(st); // Should succeed
         flush_after_finish_latch.count_down();
     });
     flush_after_finish_latch.wait();
