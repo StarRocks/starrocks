@@ -177,6 +177,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 描述：bRPC 最大的包容量。
 - 引入版本：-
 
+##### brpc_max_connections_per_server
+
+- 默认值: 1
+- 类型: Int
+- 单位: -
+- 是否可变: 否
+- 描述: 客户端为每个远程服务器端点保持的最大持久 bRPC 连接数。对于每个端点，`BrpcStubCache` 会创建一个 `StubPool`，其 `_stubs` 向量会预留为此大小。首次访问时会创建新的 stub，直到达到限制。之后，现有的 stub 将以轮询方式返回。增加此值可以提高每个端点的并发度（降低单通道的争用），代价是更多的文件描述符、内存和通道数。
+- 引入版本: v3.2.0
+
 ##### brpc_num_threads
 
 - 默认值：-1
@@ -311,6 +320,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 是否可变: 是
 - 描述: 在决定是否以压缩形式通过网络发送序列化的 row-batches 时使用的阈值（uncompressed_size / compressed_size）。当尝试压缩时（例如在 DataStreamSender、exchange sink、tablet sink 的索引通道、dictionary cache writer 中），StarRocks 会计算 compress_ratio = uncompressed_size / compressed_size；仅当 compress_ratio `>` rpc_compress_ratio_threshold 时才使用压缩后的负载。默认值 1.1 意味着压缩数据必须至少比未压缩小约 9.1% 才会被使用。将该值调低以偏好压缩（以更多 CPU 换取更小的带宽）；将其调高以避免压缩开销，除非压缩能带来更大的尺寸缩减。注意：此项适用于 RPC/shuffle 序列化，仅在启用 row-batch 压缩（compress_rowbatches）时生效。
 - 引入版本: v3.2.0
+
+##### ssl_private_key_path
+
+- 默认值: 空字符串
+- 类型: String
+- 单位: -
+- 是否可变: 否
+- 描述: 文件系统中用于 BE 的 brpc 服务作为默认证书私钥的 TLS/SSL 私钥（PEM）文件路径。当 `enable_https` 设置为 `true` 时，系统在进程启动时将 `brpc::ServerOptions::ssl_options().default_cert.private_key` 设置为此路径。该文件必须对 BE 进程可访问，并且必须与由 `ssl_certificate_path` 提供的证书匹配。如果未设置此值或文件丢失或不可访问，则不会配置 HTTPS 并且 bRPC 服务器可能无法启动。请使用严格的文件系统权限（例如 600）保护此文件。
+- 引入版本: v4.0.0
 
 ##### thrift_client_retry_interval_ms
 
@@ -1166,6 +1184,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 描述：汇报磁盘状态的间隔。汇报各个磁盘的状态，以及其中数据量等。
 - 引入版本：-
 
+##### report_resource_usage_interval_ms
+
+- 默认值: 1000
+- 类型: Int
+- 単位: Milliseconds
+- 是否可变: Yes
+- 描述: 由 BE agent 定期向 FE（master）发送资源使用报告的间隔（毫秒）。agent 的 worker 线程会收集 TResourceUsage（正在运行的查询数、已用/限制内存、CPU 使用千分比以及 resource-group 使用情况），调用 report_task，然后睡眠此配置的间隔（参见 task_worker_pool）。较低的值能提高报告的及时性，但会增加 CPU、网络和 master 的负载；较高的值可降低开销但会使资源信息不够实时。上报会更新相关指标（report_resource_usage_requests_total、report_resource_usage_requests_failed）。请根据集群规模和 FE 负载调整。
+- 引入版本: v3.2.0
+
 ##### report_tablet_interval_seconds
 
 - 默认值：60
@@ -1411,6 +1438,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 描述：是否开启 Event-based Compaction Framework。`true` 代表开启。`false` 代表关闭。开启则能够在 Tablet 数比较多或者单个 Tablet 数据量比较大的场景下大幅降低 Compaction 的开销。
 - 引入版本：-
 
+##### enable_lazy_delta_column_compaction
+
+- 默认值: true
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: 启用后，compaction 将对由部分列更新产生的 delta 列采用“懒惰”策略：StarRocks 会避免将 delta-column 文件急切地合并回其主段文件以节省 compaction 的 I/O。实际上，compaction 选择代码会检查是否存在部分列更新的 rowset 和多个候选项；如果发现且此标志为 true，引擎要么停止向 compaction 添加更多输入，要么仅合并空的 rowset（level -1），将 delta 列保持分离。这会减少 compaction 期间的即时 I/O 和 CPU 开销，但以延迟合并为代价（可能产生更多段和临时存储开销）。正确性和查询语义不受影响。
+- 引入版本: v3.2.3
+
 ##### enable_new_load_on_memory_limit_exceeded
 
 - 默认值：false
@@ -1419,6 +1455,24 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 是否动态：是
 - 描述：在导入线程内存占用达到硬上限后，是否允许新的导入线程。`true` 表示允许新导入线程，`false` 表示拒绝新导入线程。
 - 引入版本：v3.3.2
+
+##### enable_pk_index_parallel_compaction
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：是否启用存算分离模式下主键索引的并行 Compaction。
+- 引入版本：-
+
+##### enable_pk_index_parallel_get
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：是否启用存算分离模式下主键索引的并行读取。
+- 引入版本：-
 
 ##### enable_pk_parallel_execution
 
@@ -1699,42 +1753,6 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 描述：每块盘 Compaction 的最大并发数，用于解决 Compaction 在磁盘之间不均衡导致个别磁盘 I/O 过高的问题。
 - 引入版本：v3.0.9
 
-##### pk_parallel_execution_threshold_bytes
-
-- 默认值：104857600
-- 类型：Int
-- 单位：-
-- 是否动态：是
-- 描述：当enable_pk_parallel_execution设置为true后，导入或者compaction生成的数据大于该阈值时，Primary Key 表并行执行策略将被启用。默认为 100MB。
-- 引入版本：-
-
-##### pk_index_parallel_compaction_threadpool_max_threads
-
-- 默认值：4
-- 类型：Int
-- 单位：-
-- 是否动态：是
-- 描述：存算分离模式下，主键索引并行 Compaction 的线程池最大线程数。
-- 引入版本：-
-
-##### pk_index_parallel_compaction_task_split_threshold_bytes
-
-- 默认值：104857600
-- 类型：Int
-- 单位：-
-- 是否动态：是
-- 描述：主键索引 Compaction 任务拆分的阈值。当任务涉及的文件总大小小于此阈值时，任务将不会被拆分。默认为 100MB。
-- 引入版本：-
-
-##### pk_index_target_file_size
-
-- 默认值：67108864
-- 类型：Int
-- 单位：-
-- 是否动态：是
-- 描述：存算分离模式下，主键索引的目标文件大小。默认为 64MB。
-- 引入版本：-
-
 ##### pk_index_compaction_score_ratio
 
 - 默认值：1.5
@@ -1751,42 +1769,6 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 单位：-
 - 是否动态：是
 - 描述：存算分离模式下，主键索引 Ingest SST Compaction 的阈值。
-- 引入版本：-
-
-##### enable_pk_index_parallel_compaction
-
-- 默认值：false
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：是否启用存算分离模式下主键索引的并行 Compaction。
-- 引入版本：-
-
-##### enable_pk_index_parallel_get
-
-- 默认值：false
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：是否启用存算分离模式下主键索引的并行读取。
-- 引入版本：-
-
-##### pk_index_parallel_get_min_rows
-
-- 默认值：16384
-- 类型：Int
-- 单位：-
-- 是否动态：是
-- 描述：存算分离模式下，启用主键索引并行读取的最小行数阈值。
-- 引入版本：-
-
-##### pk_index_parallel_get_threadpool_max_threads
-
-- 默认值：0
-- 类型：Int
-- 单位：-
-- 是否动态：是
-- 描述：存算分离模式下，主键索引并行读取的线程池最大线程数。0 表示自动配置。
 - 引入版本：-
 
 ##### pk_index_memtable_flush_threadpool_max_threads
@@ -1807,6 +1789,60 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 描述：存算分离模式下，主键索引的最大 Memtable 数量。
 - 引入版本：-
 
+##### pk_index_parallel_compaction_task_split_threshold_bytes
+
+- 默认值：104857600
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：主键索引 Compaction 任务拆分的阈值。当任务涉及的文件总大小小于此阈值时，任务将不会被拆分。默认为 100MB。
+- 引入版本：-
+
+##### pk_index_parallel_compaction_threadpool_max_threads
+
+- 默认值：4
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：存算分离模式下，主键索引并行 Compaction 的线程池最大线程数。
+- 引入版本：-
+
+##### pk_index_parallel_get_min_rows
+
+- 默认值：16384
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：存算分离模式下，启用主键索引并行读取的最小行数阈值。
+- 引入版本：-
+
+##### pk_index_parallel_get_threadpool_max_threads
+
+- 默认值：0
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：存算分离模式下，主键索引并行读取的线程池最大线程数。0 表示自动配置。
+- 引入版本：-
+
+##### pk_index_size_tiered_level_multiplier
+
+- 默认值：10
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：主键索引 Size-Tiered Compaction 策略的层级倍数参数。
+- 引入版本：-
+
+##### pk_index_size_tiered_max_level
+
+- 默认值：5
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：主键索引 Size-Tiered Compaction 策略的层级数量参数。
+- 引入版本：-
+
 ##### pk_index_size_tiered_min_level_size
 
 - 默认值：131072
@@ -1816,22 +1852,22 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 描述：主键索引 Size-Tiered Compaction 策略的最小层级大小参数。
 - 引入版本：-
 
-##### pk_index_size_tiered_level_multiplier 
+##### pk_index_target_file_size
 
-- 默认值：10
+- 默认值：67108864
 - 类型：Int
 - 单位：-
 - 是否动态：是
-- 描述：主键索引 Size-Tiered Compaction 策略的层级倍数参数。
+- 描述：存算分离模式下，主键索引的目标文件大小。默认为 64MB。
 - 引入版本：-
 
-##### pk_index_size_tiered_max_level 
+##### pk_parallel_execution_threshold_bytes
 
-- 默认值：5
+- 默认值：104857600
 - 类型：Int
 - 单位：-
 - 是否动态：是
-- 描述：主键索引 Size-Tiered Compaction 策略的层级数量参数。
+- 描述：当enable_pk_parallel_execution设置为true后，导入或者compaction生成的数据大于该阈值时，Primary Key 表并行执行策略将被启用。默认为 100MB。
 - 引入版本：-
 
 ##### primary_key_limit_size
@@ -2088,6 +2124,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 是否动态：是
 - 描述：主键表 Compaction 的检查间隔。
 - 引入版本：-
+
+##### update_compaction_chunk_size_for_row_store
+
+- 默认值: 0
+- 类型: Int
+- 单位: Rows
+- 是否可变: Yes
+- 描述: 覆盖对使用 column-with-row-store 表示的 tablet 在 update compaction 期间使用的 chunk 大小（每个 chunk 的行数）。默认（0）情况下，StarRocks 使用 CompactionUtils::get_read_chunk_size 基于 compaction 内存限制、vector chunk 大小、总输入行数和内存占用来计算每列组的 chunk 大小。当此配置被设置为正整数且 tablet.is_column_with_row_store() 为 true 时，RowsetMerger 会在水平和垂直更新 compaction 路径中强制将 _chunk_size 设为该值（见 rowset_merger.cpp）。仅在自动计算产生次优结果时使用非零值；增大该值可以减少写入者/IO 开销但会提高峰值内存使用，减小则可降低内存压力但会增加 chunk 数量并可能影响性能。
+- 引入版本: v3.2.3
 
 ##### update_compaction_delvec_file_io_amp_ratio
 
@@ -2591,6 +2636,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 是否动态：是
 - 描述：用于向 FE 汇报执行状态的 RPC 请求的重试次数。默认值为 10，意味着如果该 RPC 请求失败（仅限于 fragment instance 的 finish RPC），将最多重试 10 次。该请求对于导入任务（load job）非常重要，如果某个 fragment instance 的完成状态报告失败，整个导入任务将会一直挂起，直到超时。
 -引入版本：-
+
+##### sleep_one_second
+
+- 默认值: 1
+- 类型: Int
+- 単位: Seconds
+- 是否可变: No
+- 描述: 一个用于 BE agent worker 线程的全局短睡眠间隔（秒），当 master 地址/心跳尚不可用或需要短时间重试/退避时作为一秒的暂停。在代码中，多个 report worker pool（例如 ReportDiskStateTaskWorkerPool、ReportOlapTableTaskWorkerPool、ReportWorkgroupTaskWorkerPool）引用此值，以避免忙等（busy-waiting）并在重试时降低 CPU 消耗。增大此值会降低重试频率并减慢对 master 可用性的响应；减小会提高轮询频率并增加 CPU 使用。仅在权衡响应性与资源使用后调整。
+- 引入版本: v3.2.0
 
 ##### small_file_dir
 
