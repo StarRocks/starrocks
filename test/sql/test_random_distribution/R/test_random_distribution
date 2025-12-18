@@ -42,7 +42,7 @@ select * from t;
 -- result:
 1	1
 -- !result
--- name: test_automatic_partition_random_distribute
+-- name: test_automatic_partition_random_distribute @native
 create table t(k date, v int) partition by date_trunc('day', k) properties('replication_num'='3');
 -- result:
 -- !result
@@ -88,7 +88,7 @@ insert into t values(1,1),(1,2);
 select * from tva;
 -- result:
 -- !result
--- name: test_add_partition
+-- name: test_add_partition @native
 create table t(k int, v int) partition by range(k) (partition p1 values less than ("0")) distributed by random buckets 10;
 -- result:
 -- !result
@@ -193,7 +193,7 @@ select * from t;
 -1	-1
 5	5
 -- !result
--- name: test_create_random_distribution_table
+-- name: test_create_random_distribution_table @native
 create table t(k int, v int);
 -- result:
 -- !result

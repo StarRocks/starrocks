@@ -7,7 +7,7 @@ alter table t distributed by random buckets 10;
 E: (5064, 'Getting analyzing error. Detail message: Random distribution table already supports automatic scaling and does not require optimization.')
 -- !result
 
--- name: test_change_partial_partition_distribution
+-- name: test_change_partial_partition_distribution @native
 create table t(k int, k1 date) PARTITION BY RANGE(`k1`)
 (
     PARTITION `p202006` VALUES LESS THAN ("2020-07-01"),

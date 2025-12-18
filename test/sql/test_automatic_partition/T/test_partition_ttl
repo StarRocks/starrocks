@@ -17,7 +17,7 @@ insert into ss1 values(current_date(), 2);
 shell: curl --location-trusted -u root: "${url}/api/trigger?type=dynamic_partition&db=db_${uuid0}&tbl=ss1"
 select count(*) from ss1;
 
--- name: test_alter_multi_partition_ttl
+-- name: test_alter_multi_partition_ttl @native
 create database db_${uuid0};
 use db_${uuid0};
 CREATE TABLE ss1(event_day DATETIME, pv BIGINT) PARTITION BY pv, date_trunc('day', event_day) DISTRIBUTED BY HASH(event_day) PROPERTIES("partition_retention_condition" = "event_day >= current_date() - interval 3 day");

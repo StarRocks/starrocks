@@ -1,4 +1,4 @@
--- name: test_concurrent_create_partition
+-- name: test_concurrent_create_partition @native
 create table t(k int) distributed by random buckets 120;
 -- result:
 -- !result

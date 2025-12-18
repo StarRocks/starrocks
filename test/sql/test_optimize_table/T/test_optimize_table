@@ -88,7 +88,7 @@ function: wait_optimize_table_finish()
 show create table t;
 select * from t;
 
--- name: test_change_partial_partition_distribution
+-- name: test_change_partial_partition_distribution @native
 create table t(k int, k1 date) PARTITION BY RANGE(`k1`)
 (
     PARTITION `p202006` VALUES LESS THAN ("2020-07-01"),
