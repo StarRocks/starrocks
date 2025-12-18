@@ -41,8 +41,13 @@ SELECT distinct array_sort([], (x, y) -> IF(x < y, -1, IF(x = y, 0, 1)));
 SELECT distinct array_sort([5], (x, y) -> IF(x < y, -1, IF(x = y, 0, 1)));
 SELECT distinct array_sort([1, 1, 1, 1], (x, y) -> IF(x < y, -1, IF(x = y, 0, 1)));
 
-SELECT distinct array_sort([3, 2, 5, 1, 2], (x, y) -> k0%3-2) <=3 from t0;
-SELECT distinct array_sort(c0, (x, y) -> k0%3-2)<=array_max(c0) from t0;
+SELECT distinct array_min(array_sort([3, 2, 5, 1, 2], (x, y) -> k0%3-2)) <=3 from t0;
+SELECT distinct array_min(array_sort(c0, (x, y) -> k0%3-2))<=array_max(c0) from t0;
+
+SELECT array_sort([1,2,3,4,5,6,7,8], (x,y)->CASE WHEN x = 1 THEN -1 ELSE x - y END);
+SELECT array_sort([1,2,3,4,5,6,7,8], (x,y)->CASE WHEN (x = 1 and y = 2) or (y = 1 and x = 2) THEN -1 ELSE x - y END);
+SELECT array_sort([1,2,3,4,5,6,7,8], (x,y)->CASE  WHEN x = 1 and y = 2 THEN -1 WHEN x <= 6 and y <= 6 THEN 1  ELSE x - y END);
+SELECT array_sort([1,2,3,4,5,6,7,8], (x,y)->CASE WHEN (x = 1 and y = 2) or (x = 2 and y = 3) or (x = 3 and y = 1) THEN -1 WHEN x = 1 and y = 3 THEN 1 ELSE x - y END);
 
 with cte as (
 select array_agg(k0) as arr
