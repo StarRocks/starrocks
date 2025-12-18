@@ -1670,9 +1670,6 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 
 - Introduced in: v3.1
 
-<<<<<<< HEAD
-##### semi_sync_collect_statistic_await_seconds
-=======
 ##### enable_statistic_collect_on_update
 
 - Default: true
@@ -1682,8 +1679,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: Controls whether UPDATE statements can trigger automatic statistics collection. When enabled, UPDATE operations that modify table data may schedule statistics collection through the same ingestion-based statistics framework controlled by `enable_statistic_collect_on_first_load`. Disabling this configuration skips statistics collection for UPDATE statements while keeping load-triggered statistics collection behavior unchanged.
 - Introduced in: v3.5.11, v4.0.4
 
-##### enable_udf
->>>>>>> 9888c43137 ([Enhancement] add config enable_statistic_collect_on_update (#66794))
+##### semi_sync_collect_statistic_await_seconds
 
 - Default: 30
 - Type: Int
