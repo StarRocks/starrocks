@@ -415,6 +415,17 @@ CONF_Int32(arrow_flight_port, "-1");
 CONF_Int64(load_data_reserve_hours, "4");
 // log error log will be removed after this time
 CONF_mInt64(load_error_log_reserve_hours, "48");
+// Time(seconds) for load channel to wait for clean up load id after aborted.
+//
+// When a load job is cancelled or failed, load channel will be aborted.
+// In order to reject any late-arrival request, load channel will keep
+// the aborted load id for this duration before cleaning up.
+// * Setting it too small may cause late-arrival requests being accepted incorrectly.
+// * Setting it too large may cause resources to be held for a long time.
+// NOTE: The background thread will clean up periodically.
+// In production, the minimum interval is 60 seconds.
+// Default is 600 seconds.
+CONF_mInt32(load_channel_abort_clean_up_delay_seconds, "600");
 CONF_mInt32(number_tablet_writer_threads, "16");
 CONF_mInt64(max_queueing_memtable_per_tablet, "2");
 // when memory limit exceed and memtable last update time exceed this time, memtable will be flushed
