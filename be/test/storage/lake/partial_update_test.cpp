@@ -102,6 +102,7 @@ public:
     void SetUp() override {
         clear_and_init_test_dir();
         CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
+        CHECK_OK(_tablet_mgr->create_schema_file(_tablet_metadata->id(), _tablet_metadata->schema()));
     }
 
     void TearDown() override {

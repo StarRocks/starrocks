@@ -197,6 +197,7 @@ message BundleTabletMetadataPB {
 }
 
 message TxnLogPB {
+
     message OpWrite {
         optional RowsetMetadataPB rowset = 1;
         // some txn semantic information bind to this rowset
@@ -205,6 +206,10 @@ message TxnLogPB {
         // for partial update, record dest rewrite segment names to avoid gc
         repeated string rewrite_segments = 4;
         repeated bytes del_encryption_metas = 5;
+
+        // The specific table schema used to generate this rowset
+        // Note this field is backported from v4.1, so use the same id as in v4.1 for compatibility
+        optional TableSchemaKeyPB schema_key = 8;
     }
 
     message OpCompaction {

@@ -1775,4 +1775,6 @@ CONF_mInt64(two_level_memory_threshold, "-1");
 
 CONF_mBool(enable_pipeline_driver_parallel_prepare, "true");
 
+// For table schema service: max retry attempts for fetching schema from FE.
+CONF_mInt32(table_schema_service_max_retries, "3");
 } // namespace starrocks::config

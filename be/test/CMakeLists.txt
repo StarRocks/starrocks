@@ -584,6 +584,8 @@ set(EXEC_FILES
         ./udf/java/java_udf_test.cpp
         ./util/table_metrics_mgr_test.cpp
         ./util/jvm_metrics_test.cpp
+        ./storage/lake/table_schema_service_test.cpp
+        ./storage/lake/fast_schema_evolution_v2_test.cpp    
         )
 
 if (${USE_AVX512})

@@ -3633,6 +3633,16 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 描述：存算分离集群 Compaction 任务在远程 FS 读 I/O 阶段的 Buffer 大小。默认值为 1MB。您可以适当增大该配置项取值以加速 Compaction 任务。
 - 引入版本：v3.2.3
 
+=======
+##### table_schema_service_max_retries
+
+- 默认值：3
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：Table Schema Service 请求的最大重试次数。
+- 引入版本：v4.0
+
 <!--
 ##### experimental_lake_ignore_lost_segment
 
