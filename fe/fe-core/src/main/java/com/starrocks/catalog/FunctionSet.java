@@ -355,6 +355,7 @@ public class FunctionSet {
     public static final String FLAT_JSON_META = "flat_json_meta";
     public static final String COLUMN_SIZE = "column_size";
     public static final String COLUMN_COMPRESSED_SIZE = "column_compressed_size";
+    public static final String INDEX_SIZE = "index_size";
     public static final String MANN_WHITNEY_U_TEST = "mann_whitney_u_test";
 
     // Bitmap functions:
@@ -1539,6 +1540,12 @@ public class FunctionSet {
         addBuiltin(AggregateFunction.createBuiltin(COLUMN_SIZE, Lists.newArrayList(AnyElementType.ANY_ELEMENT),
                 IntegerType.BIGINT, IntegerType.BIGINT, false, false, false));
         addBuiltin(AggregateFunction.createBuiltin(COLUMN_COMPRESSED_SIZE, Lists.newArrayList(AnyElementType.ANY_ELEMENT),
+                IntegerType.BIGINT, IntegerType.BIGINT, false, false, false));
+        // index_size(column_ref) - returns total index size of all index types
+        addBuiltin(AggregateFunction.createBuiltin(INDEX_SIZE, Lists.newArrayList(AnyElementType.ANY_ELEMENT),
+                IntegerType.BIGINT, IntegerType.BIGINT, false, false, false));
+        // index_size(column_ref, index_type) - returns index size for specific index type (BITMAP, BLOOM, ZONEMAP, ALL)
+        addBuiltin(AggregateFunction.createBuiltin(INDEX_SIZE, Lists.newArrayList(AnyElementType.ANY_ELEMENT, VarcharType.VARCHAR),
                 IntegerType.BIGINT, IntegerType.BIGINT, false, false, false));
 
         Consumer<Type> registerLeadLagFunctions = t -> {

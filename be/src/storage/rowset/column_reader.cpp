@@ -611,6 +611,41 @@ int64_t ColumnReader::data_page_footprint() const {
     return total_size;
 }
 
+int64_t ColumnReader::get_index_size(const std::string& index_type) const {
+    int64_t total_size = 0;
+
+    bool include_all = (index_type == "ALL");
+    bool include_bitmap = include_all || (index_type == "BITMAP");
+    bool include_bloom = include_all || (index_type == "BLOOM");
+    bool include_zonemap = include_all || (index_type == "ZONEMAP");
+
+    // Bitmap index size
+    if (include_bitmap && _bitmap_index_meta != nullptr) {
+        if (_bitmap_index_meta->has_dict_column() && _bitmap_index_meta->dict_column().has_size()) {
+            total_size += _bitmap_index_meta->dict_column().size();
+        }
+        if (_bitmap_index_meta->has_bitmap_column() && _bitmap_index_meta->bitmap_column().has_size()) {
+            total_size += _bitmap_index_meta->bitmap_column().size();
+        }
+    }
+
+    // Bloom filter index size
+    if (include_bloom && _bloom_filter_index_meta != nullptr) {
+        if (_bloom_filter_index_meta->has_bloom_filter() && _bloom_filter_index_meta->bloom_filter().has_size()) {
+            total_size += _bloom_filter_index_meta->bloom_filter().size();
+        }
+    }
+
+    // Zone map index size
+    if (include_zonemap && _zonemap_index_meta != nullptr) {
+        if (_zonemap_index_meta->has_page_zone_maps() && _zonemap_index_meta->page_zone_maps().has_size()) {
+            total_size += _zonemap_index_meta->page_zone_maps().size();
+        }
+    }
+
+    return total_size;
+}
+
 Status ColumnReader::zone_map_filter(const std::vector<const ColumnPredicate*>& predicates,
                                      const ColumnPredicate* del_predicate,
                                      std::unordered_set<uint32_t>* del_partial_filtered_pages,

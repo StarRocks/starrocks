@@ -107,6 +107,7 @@ static const std::string META_FLAT_JSON_META = "flat_json_meta";
 static const std::string META_COUNT_COL = "count";
 static const std::string META_COLUMN_SIZE = "column_size";
 static const std::string META_COLUMN_COMPRESSED_SIZE = "column_compressed_size";
+static const std::string META_INDEX_SIZE = "index_size";
 
 class SegmentMetaCollecter {
 public:
@@ -139,12 +140,14 @@ private:
     Status _collect_flat_json(ColumnId cid, Column* column);
     Status _collect_column_size(ColumnId cid, Column* column, LogicalType type);
     Status _collect_column_compressed_size(ColumnId cid, Column* column, LogicalType type);
+    Status _collect_index_size(ColumnId cid, Column* column, LogicalType type, const std::string& index_type);
     template <bool is_max>
     Status __collect_max_or_min(ColumnId cid, Column* column, LogicalType type);
 
     // Recursive helper methods for collecting column sizes
     size_t _collect_column_size_recursive(ColumnReader* col_reader);
     int64_t _collect_column_compressed_size_recursive(ColumnReader* col_reader);
+    int64_t _collect_index_size_recursive(ColumnReader* col_reader, const std::string& index_type);
     SegmentSharedPtr _segment;
     std::vector<std::unique_ptr<ColumnIterator>> _column_iterators;
     const SegmentMetaCollecterParams* _params = nullptr;
