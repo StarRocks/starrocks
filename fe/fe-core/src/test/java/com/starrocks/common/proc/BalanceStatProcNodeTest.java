@@ -155,7 +155,6 @@ public class BalanceStatProcNodeTest {
             PartitionInfo listPartition = new ListPartitionInfo(PartitionType.LIST, cols);
             long partitionId = 1025L;
             listPartition.setDataProperty(partitionId, DataProperty.DEFAULT_DATA_PROPERTY);
-            listPartition.setIsInMemory(partitionId, false);
             listPartition.setReplicationNum(partitionId, (short) 1);
             OlapTable olapTable = new OlapTable(1024L, "olap_table", cols, null, listPartition, null);
 
@@ -191,7 +190,6 @@ public class BalanceStatProcNodeTest {
             PartitionInfo listPartition = new ListPartitionInfo(PartitionType.LIST, cols);
             long partitionId = 1125L;
             listPartition.setDataProperty(partitionId, DataProperty.DEFAULT_DATA_PROPERTY);
-            listPartition.setIsInMemory(partitionId, false);
             listPartition.setReplicationNum(partitionId, (short) 1);
             OlapTable olapTable = new OlapTable(1124L, "colocate_table", cols, null, listPartition, null);
 
@@ -235,7 +233,6 @@ public class BalanceStatProcNodeTest {
             PartitionInfo listPartition = new ListPartitionInfo(PartitionType.LIST, cols);
             long partitionId = 1225L;
             listPartition.setDataProperty(partitionId, DataProperty.DEFAULT_DATA_PROPERTY);
-            listPartition.setIsInMemory(partitionId, false);
             listPartition.setReplicationNum(partitionId, (short) 1);
             OlapTable olapTable = new OlapTable(1224L, "location_table", cols, null, listPartition, null);
 

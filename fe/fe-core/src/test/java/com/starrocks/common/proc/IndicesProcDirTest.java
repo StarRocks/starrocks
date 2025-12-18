@@ -48,7 +48,6 @@ public class IndicesProcDirTest {
         PartitionInfo listPartition = new ListPartitionInfo(PartitionType.LIST, col);
         long partitionId = 1025;
         listPartition.setDataProperty(partitionId, DataProperty.DEFAULT_DATA_PROPERTY);
-        listPartition.setIsInMemory(partitionId, false);
         listPartition.setReplicationNum(partitionId, (short) 1);
         OlapTable olapTable = new OlapTable(1024L, "olap_table", col, null, listPartition, null);
         MaterializedIndex index = new MaterializedIndex(1000L, IndexState.NORMAL);

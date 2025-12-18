@@ -269,7 +269,7 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
             String storageMedium = properties.remove("default." + PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM);
             properties.put(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM, storageMedium);
         } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_INMEMORY)) {
-            // do nothing
+            properties.remove(PropertyAnalyzer.PROPERTIES_INMEMORY);
         } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PRIMARY_INDEX_CACHE_EXPIRE_SEC)) {
             String valStr = properties.get(PropertyAnalyzer.PROPERTIES_PRIMARY_INDEX_CACHE_EXPIRE_SEC);
             try {

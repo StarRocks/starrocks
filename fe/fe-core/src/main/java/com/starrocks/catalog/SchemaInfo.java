@@ -139,7 +139,6 @@ public class SchemaInfo {
         tSchema.setId(id);
         tSchema.setSchema_version(version);
         tSchema.setSchema_hash(schemaHash);
-        tSchema.setIs_in_memory(false/*unused now*/);
 
         List<TColumn> tColumns = new ArrayList<TColumn>();
         for (Column column : columns) {

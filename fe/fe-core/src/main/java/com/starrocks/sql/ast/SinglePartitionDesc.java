@@ -19,7 +19,6 @@ import com.starrocks.catalog.DataProperty;
 import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.parser.NodePosition;
-import com.starrocks.thrift.TTabletType;
 
 import java.util.Map;
 
@@ -29,20 +28,16 @@ public abstract class SinglePartitionDesc extends PartitionDesc {
     private Map<String, String> properties;
     private Short replicationNum;
     private DataProperty partitionDataProperty;
-    private TTabletType tabletType;
     private Long versionInfo;
-    private boolean isInMemory;
     private DataCacheInfo dataCacheInfo;
 
     public SinglePartitionDesc(boolean ifNotExists, String partName, Short replicationNum, DataProperty dataProperty,
-            TTabletType tabletType, Long versionInfo, boolean isInMemory, DataCacheInfo dataCacheInfo) {
+                               Long versionInfo, DataCacheInfo dataCacheInfo) {
         this.partName = partName;
         this.ifNotExists = ifNotExists;
         this.replicationNum = replicationNum;
         this.partitionDataProperty = dataProperty;
-        this.tabletType = tabletType;
         this.versionInfo = versionInfo;
-        this.isInMemory = isInMemory;
         this.dataCacheInfo = dataCacheInfo;
         this.properties = Maps.newHashMap();
     }
@@ -54,9 +49,7 @@ public abstract class SinglePartitionDesc extends PartitionDesc {
         this.properties = properties;
         this.replicationNum = RunMode.defaultReplicationNum();
         this.partitionDataProperty = DataProperty.getInferredDefaultDataProperty();
-        this.tabletType = TTabletType.TABLET_TYPE_DISK;
         this.versionInfo = null;
-        this.isInMemory = false;
         this.dataCacheInfo = null;
     }
 
@@ -91,16 +84,6 @@ public abstract class SinglePartitionDesc extends PartitionDesc {
     }
 
     @Override
-    public TTabletType getTabletType() {
-        return tabletType;
-    }
-
-    @Override
-    public boolean isInMemory() {
-        return isInMemory;
-    }
-
-    @Override
     public DataCacheInfo getDataCacheInfo() {
         return dataCacheInfo;
     }
@@ -116,14 +99,6 @@ public abstract class SinglePartitionDesc extends PartitionDesc {
 
     public void setVersionInfo(Long versionInfo) {
         this.versionInfo = versionInfo;
-    }
-
-    public void setInMemory(boolean inMemory) {
-        this.isInMemory = inMemory;
-    }
-
-    public void setTabletType(TTabletType tabletType) {
-        this.tabletType = tabletType;
     }
 
     public void setDataCacheInfo(DataCacheInfo dataCacheInfo) {

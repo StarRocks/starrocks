@@ -245,8 +245,6 @@ public class PartitionInfoBuilder {
                                                long partitionId,
                                                boolean isTemp) {
         listPartitionInfo.setDataProperty(partitionId, desc.getPartitionDataProperty());
-        listPartitionInfo.setIsInMemory(partitionId, desc.isInMemory());
-        listPartitionInfo.setTabletType(partitionId, desc.getTabletType());
         listPartitionInfo.setReplicationNum(partitionId, desc.getReplicationNum());
         listPartitionInfo.setIdToIsTempPartition(partitionId, isTemp);
         listPartitionInfo.setDataCacheInfo(partitionId, desc.getDataCacheInfo());

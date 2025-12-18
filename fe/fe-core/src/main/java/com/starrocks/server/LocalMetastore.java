@@ -255,7 +255,6 @@ import com.starrocks.thrift.TGetTasksParams;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletMetaType;
-import com.starrocks.thrift.TTabletType;
 import com.starrocks.warehouse.Warehouse;
 import com.starrocks.warehouse.cngroup.CRAcquireContext;
 import com.starrocks.warehouse.cngroup.ComputeResource;
@@ -1010,9 +1009,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             Set<Long> tabletIdSet = Sets.newHashSet();
 
             copiedTable.getPartitionInfo().setDataProperty(partitionId, dataProperty);
-            copiedTable.getPartitionInfo().setTabletType(partitionId, partitionDesc.getTabletType());
             copiedTable.getPartitionInfo().setReplicationNum(partitionId, partitionDesc.getReplicationNum());
-            copiedTable.getPartitionInfo().setIsInMemory(partitionId, partitionDesc.isInMemory());
             copiedTable.getPartitionInfo().setDataCacheInfo(partitionId, partitionDesc.getDataCacheInfo());
 
             Partition partition =
@@ -1104,7 +1101,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             PartitionPersistInfoV2 info = new RangePartitionPersistInfo(db.getId(), olapTable.getId(), partition,
                     partitionDescs.get(0).getPartitionDataProperty(),
                     partitionInfo.getReplicationNum(partition.getId()),
-                    partitionInfo.getIsInMemory(partition.getId()), isTempPartition,
+                    isTempPartition,
                     ((RangePartitionInfo) partitionInfo).getRange(partition.getId()),
                     ((SingleRangePartitionDesc) partitionDescs.get(0)).getDataCacheInfo());
             partitionInfoV2List.add(info);
@@ -1120,7 +1117,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                     PartitionPersistInfoV2 info = new RangePartitionPersistInfo(db.getId(), olapTable.getId(),
                             partition, partitionDescs.get(i).getPartitionDataProperty(),
                             partitionInfo.getReplicationNum(partition.getId()),
-                            partitionInfo.getIsInMemory(partition.getId()), isTempPartition,
+                            isTempPartition,
                             ((RangePartitionInfo) partitionInfo).getRange(partition.getId()),
                             ((SingleRangePartitionDesc) partitionDescs.get(i)).getDataCacheInfo());
 
@@ -1160,7 +1157,6 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             PartitionPersistInfoV2 info = new ListPartitionPersistInfo(db.getId(), olapTable.getId(), partition,
                     partitionDescs.get(i).getPartitionDataProperty(),
                     partitionInfo.getReplicationNum(partitionId),
-                    partitionInfo.getIsInMemory(partitionId),
                     isTempPartition,
                     ((ListPartitionInfo) partitionInfo).getIdToValues().get(partitionId),
                     ((ListPartitionInfo) partitionInfo).getIdToMultiValues().get(partitionId),
@@ -1367,7 +1363,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             } else if (partitionType == PartitionType.UNPARTITIONED) {
                 // insert overwrite job will create temp partition and replace the single partition.
                 partitionInfo.addPartition(partition.getId(), info.getDataProperty(), info.getReplicationNum(),
-                        info.isInMemory(), info.getDataCacheInfo());
+                        info.getDataCacheInfo());
             } else {
                 throw new DdlException("Unsupported partition type: " + partitionType.name());
             }
@@ -2867,8 +2863,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                                     new ModifyPartitionInfo(db.getId(), olapTable.getId(),
                                             partition.getId(),
                                             hdd,
-                                            (short) -1,
-                                            partitionInfo.getIsInMemory(partition.getId()));
+                                            (short) -1);
                             GlobalStateMgr.getCurrentState().getEditLog().logModifyPartition(info);
                         }
                     } // end for partitions
@@ -3233,8 +3228,6 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         Preconditions.checkNotNull(dataProperty);
         partitionInfo.setDataProperty(partitionId, dataProperty);
         partitionInfo.setReplicationNum(partitionId, olapTable.getDefaultReplicationNum());
-        partitionInfo.setIsInMemory(partitionId, false);
-        partitionInfo.setTabletType(partitionId, TTabletType.TABLET_TYPE_DISK);
         StorageInfo storageInfo = olapTable.getTableProperty().getStorageInfo();
         partitionInfo.setDataCacheInfo(partitionId,
                 storageInfo == null ? null : storageInfo.getDataCacheInfo());
@@ -3999,7 +3992,6 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         }
 
         short replicationNum = Short.parseShort(properties.get(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM));
-        boolean isInMemory = partitionInfo.getIsInMemory(partition.getId());
         DataProperty newDataProperty = partitionInfo.getDataProperty(partition.getId());
         partitionInfo.setReplicationNum(partition.getId(), replicationNum);
 
@@ -4008,7 +4000,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
 
         // log
         ModifyPartitionInfo info = new ModifyPartitionInfo(db.getId(), table.getId(), partition.getId(),
-                newDataProperty, replicationNum, isInMemory);
+                newDataProperty, replicationNum);
         GlobalStateMgr.getCurrentState().getEditLog().logModifyPartition(info);
         LOG.info("modify partition[{}-{}-{}] replication num to {}", db.getOriginName(), table.getName(),
                 partition.getName(), replicationNum);
@@ -4121,25 +4113,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
 
     // The caller need to hold the db write lock
     public void modifyTableInMemoryMeta(Database db, OlapTable table, Map<String, String> properties) {
-        Locker locker = new Locker();
-        Preconditions.checkArgument(locker.isDbWriteLockHeldByCurrentThread(db));
-        TableProperty tableProperty = table.getTableProperty();
-        if (tableProperty == null) {
-            tableProperty = new TableProperty(properties);
-            table.setTableProperty(tableProperty);
-        } else {
-            tableProperty.modifyTableProperties(properties);
-        }
-        tableProperty.buildInMemory();
-
-        // need to update partition info meta
-        for (Partition partition : table.getPartitions()) {
-            table.getPartitionInfo().setIsInMemory(partition.getId(), tableProperty.isInMemory());
-        }
-
-        ModifyTablePropertyOperationLog info =
-                new ModifyTablePropertyOperationLog(db.getId(), table.getId(), properties);
-        GlobalStateMgr.getCurrentState().getEditLog().logModifyInMemory(info);
+        // in-memory property is deprecated; ignore updates
     }
 
     // The caller need to hold the db write lock
@@ -4291,7 +4265,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
     public void modifyTableMeta(Database db, OlapTable table, Map<String, String> properties,
                                 TTabletMetaType metaType) {
         if (metaType == TTabletMetaType.INMEMORY) {
-            modifyTableInMemoryMeta(db, table, properties);
+            return;
         } else if (metaType == TTabletMetaType.ENABLE_PERSISTENT_INDEX) {
             modifyTableEnablePersistentIndexMeta(db, table, properties);
         } else if (metaType == TTabletMetaType.WRITE_QUORUM) {
@@ -4434,11 +4408,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                 }
 
                 // need to replay partition info meta
-                if (opCode == OperationType.OP_MODIFY_IN_MEMORY) {
-                    for (Partition partition : olapTable.getPartitions()) {
-                        olapTable.getPartitionInfo().setIsInMemory(partition.getId(), tableProperty.isInMemory());
-                    }
-                } else if (opCode == OperationType.OP_MODIFY_REPLICATION_NUM) {
+                if (opCode == OperationType.OP_MODIFY_REPLICATION_NUM) {
                     // update partition replication num if this table is unpartitioned table
                     PartitionInfo partitionInfo = olapTable.getPartitionInfo();
                     if (partitionInfo.getType() == PartitionType.UNPARTITIONED) {
@@ -4651,8 +4621,6 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                 String newPartitionName = entry.getKey();
 
                 PartitionInfo partitionInfo = copiedTbl.getPartitionInfo();
-                partitionInfo.setTabletType(newPartitionId, partitionInfo.getTabletType(oldPartitionId));
-                partitionInfo.setIsInMemory(newPartitionId, partitionInfo.getIsInMemory(oldPartitionId));
                 partitionInfo.setReplicationNum(newPartitionId, partitionInfo.getReplicationNum(oldPartitionId));
                 partitionInfo.setDataProperty(newPartitionId, partitionInfo.getDataProperty(oldPartitionId));
 
@@ -5214,8 +5182,6 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                 continue;
             }
             PartitionInfo partitionInfo = copiedTbl.getPartitionInfo();
-            partitionInfo.setTabletType(newPartitionId, partitionInfo.getTabletType(sourcePartitionId));
-            partitionInfo.setIsInMemory(newPartitionId, partitionInfo.getIsInMemory(sourcePartitionId));
             partitionInfo.setReplicationNum(newPartitionId, partitionInfo.getReplicationNum(sourcePartitionId));
             partitionInfo.setDataProperty(newPartitionId, partitionInfo.getDataProperty(sourcePartitionId));
 

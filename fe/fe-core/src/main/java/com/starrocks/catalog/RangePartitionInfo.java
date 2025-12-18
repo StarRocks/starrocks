@@ -139,14 +139,14 @@ public class RangePartitionInfo extends PartitionInfo {
     }
 
     public void addPartition(long partitionId, boolean isTemp, Range<PartitionKey> range, DataProperty dataProperty,
-                             short replicationNum, boolean isInMemory, DataCacheInfo dataCacheInfo) {
-        addPartition(partitionId, dataProperty, replicationNum, isInMemory, dataCacheInfo);
+                             short replicationNum, DataCacheInfo dataCacheInfo) {
+        addPartition(partitionId, dataProperty, replicationNum, dataCacheInfo);
         setRangeInternal(partitionId, isTemp, range);
     }
 
     public void addPartition(long partitionId, boolean isTemp, Range<PartitionKey> range, DataProperty dataProperty,
-                             short replicationNum, boolean isInMemory) {
-        this.addPartition(partitionId, isTemp, range, dataProperty, replicationNum, isInMemory, null);
+                             short replicationNum) {
+        this.addPartition(partitionId, isTemp, range, dataProperty, replicationNum, null);
     }
 
     public Range<PartitionKey> checkAndCreateRange(Map<ColumnId, Column> schema, SingleRangePartitionDesc desc, boolean isTemp)
@@ -241,7 +241,7 @@ public class RangePartitionInfo extends PartitionInfo {
             // Range.closedOpen may throw this if (lower > upper)
             throw new DdlException("Invalid key range: " + e.getMessage());
         }
-        super.addPartition(partitionId, desc.getPartitionDataProperty(), desc.getReplicationNum(), desc.isInMemory(),
+        super.addPartition(partitionId, desc.getPartitionDataProperty(), desc.getReplicationNum(),
                 desc.getDataCacheInfo());
         return range;
     }
@@ -260,7 +260,7 @@ public class RangePartitionInfo extends PartitionInfo {
         } catch (AnalysisException e) {
             throw new DdlException("Invalid key range: " + e.getMessage());
         }
-        super.addPartition(partitionId, new DataProperty(TStorageMedium.HDD), Short.valueOf(replicateNum), false,
+        super.addPartition(partitionId, new DataProperty(TStorageMedium.HDD), Short.valueOf(replicateNum),
                 new DataCacheInfo(true, false));
     }
 
@@ -283,7 +283,7 @@ public class RangePartitionInfo extends PartitionInfo {
                         throw new DdlException("Invalid key range: " + e.getMessage());
                     }
                     super.addPartition(partitionId, desc.getPartitionDataProperty(), desc.getReplicationNum(),
-                            desc.isInMemory(), desc.getDataCacheInfo());
+                            desc.getDataCacheInfo());
                 }
             }
         } catch (Exception e) {
@@ -298,10 +298,9 @@ public class RangePartitionInfo extends PartitionInfo {
     }
 
     public void unprotectHandleNewSinglePartitionDesc(long partitionId, boolean isTemp, Range<PartitionKey> range,
-                                                      DataProperty dataProperty, short replicationNum,
-                                                      boolean isInMemory) {
+                                                      DataProperty dataProperty, short replicationNum) {
         setRangeInternal(partitionId, isTemp, range);
-        super.addPartition(partitionId, dataProperty, replicationNum, isInMemory);
+        super.addPartition(partitionId, dataProperty, replicationNum);
     }
 
     /**
@@ -312,8 +311,7 @@ public class RangePartitionInfo extends PartitionInfo {
         Partition partition = info.getPartition();
         long partitionId = partition.getId();
         setRangeInternal(partitionId, info.isTempPartition(), info.getRange());
-        super.addPartition(partitionId, info.getDataProperty(), info.getReplicationNum(), info.isInMemory(),
-                info.getDataCacheInfo());
+        super.addPartition(partitionId, info.getDataProperty(), info.getReplicationNum(), info.getDataCacheInfo());
     }
 
     public void setRange(long partitionId, boolean isTemp, Range<PartitionKey> range) {

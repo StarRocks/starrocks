@@ -387,7 +387,6 @@ public class TablePartitionActionTest extends StarRocksHttpTestCase {
                     partitionId,
                     new DataProperty(TStorageMedium.SSD),
                     (short) 1,
-                    false,
                     null,
                     new ArrayList<>(),
                     Collections.singletonList(Lists.newArrayList("list_partition_" + i)));

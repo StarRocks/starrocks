@@ -129,7 +129,6 @@ public class ReplaceLakePartitionTest {
         }
 
         partitionInfo.setReplicationNum(partitionId, (short) 1);
-        partitionInfo.setIsInMemory(partitionId, false);
         partitionInfo.setDataCacheInfo(partitionId, new DataCacheInfo(true, false));
 
         LakeTable table = new LakeTable(

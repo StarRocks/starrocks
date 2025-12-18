@@ -81,6 +81,7 @@ import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TTabletInfo;
 import com.starrocks.thrift.TTabletSchedule;
 import com.starrocks.thrift.TTabletSchema;
+import com.starrocks.thrift.TTabletType;
 import com.starrocks.thrift.TTaskType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -980,7 +981,7 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
                     .setStorageMedium(TStorageMedium.HDD)
                     .setEnablePersistentIndex(olapTable.enablePersistentIndex())
                     .setPrimaryIndexCacheExpireSec(olapTable.primaryIndexCacheExpireSec())
-                    .setTabletType(olapTable.getPartitionInfo().getTabletType(physicalPartition.getParentId()))
+                    .setTabletType(TTabletType.TABLET_TYPE_DISK)
                     .setCompressionType(olapTable.getCompressionType())
                     .setCompressionLevel(olapTable.getCompressionLevel())
                     .setRecoverySource(RecoverySource.SCHEDULER)

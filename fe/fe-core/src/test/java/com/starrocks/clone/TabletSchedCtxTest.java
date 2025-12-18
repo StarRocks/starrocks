@@ -123,7 +123,6 @@ public class TabletSchedCtxTest {
         baseIndex.addTablet(tablet, tabletMeta);
         PartitionInfo partitionInfo = new SinglePartitionInfo();
         partitionInfo.setReplicationNum(PART_ID, (short) 3);
-        partitionInfo.setIsInMemory(PART_ID, false);
         DataProperty dataProperty = new DataProperty(TStorageMedium.HDD);
         partitionInfo.setDataProperty(PART_ID, dataProperty);
         OlapTable olapTable =

@@ -18,7 +18,6 @@ import com.starrocks.catalog.DataProperty;
 import com.starrocks.common.util.PrintableMap;
 import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.sql.parser.NodePosition;
-import com.starrocks.thrift.TTabletType;
 
 import java.util.Map;
 
@@ -26,9 +25,9 @@ public class SingleRangePartitionDesc extends SinglePartitionDesc {
     private final PartitionKeyDesc partitionKeyDesc;
 
     public SingleRangePartitionDesc(boolean ifNotExists, String partName, Short replicationNum,
-                                    DataProperty dataProperty, TTabletType tabletType, Long versionInfo, boolean isInMemory,
+                                    DataProperty dataProperty, Long versionInfo,
                                     DataCacheInfo dataCacheInfo, PartitionKeyDesc partitionKeyDesc) {
-        super(ifNotExists, partName, replicationNum, dataProperty, tabletType, versionInfo, isInMemory, dataCacheInfo);
+        super(ifNotExists, partName, replicationNum, dataProperty, versionInfo, dataCacheInfo);
         this.partitionKeyDesc = partitionKeyDesc;
     }
 

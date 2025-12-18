@@ -291,7 +291,6 @@ public class LakeRestoreJob extends RestoreJob {
             DataProperty remoteDataProperty = remotePartitionInfo.getDataProperty(remotePartId);
             localPartitionInfo.addPartition(restorePart.getId(), false, remoteRange,
                     remoteDataProperty, (short) restoreReplicationNum,
-                    remotePartitionInfo.getIsInMemory(remotePartId),
                     remotePartitionInfo.getDataCacheInfo(remotePartId));
             localTbl.addPartition(restorePart);
             if (modify) {

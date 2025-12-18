@@ -20,7 +20,6 @@ import com.starrocks.common.util.PrintableMap;
 import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.parser.NodePosition;
-import com.starrocks.thrift.TTabletType;
 import com.starrocks.type.Type;
 
 import java.util.ArrayList;
@@ -40,10 +39,10 @@ public class MultiItemListPartitionDesc extends SinglePartitionDesc {
     private List<ColumnDef> columnDefList;
 
     public MultiItemListPartitionDesc(boolean ifNotExists, String partName, Short replicationNum,
-                                      DataProperty dataProperty, TTabletType tabletType, Long versionInfo, boolean isInMemory,
+                                      DataProperty dataProperty, Long versionInfo,
                                       DataCacheInfo dataCacheInfo, List<List<String>> multiValues,
                                       List<ColumnDef> columnDefList) {
-        super(ifNotExists, partName, replicationNum, dataProperty, tabletType, versionInfo, isInMemory, dataCacheInfo);
+        super(ifNotExists, partName, replicationNum, dataProperty, versionInfo, dataCacheInfo);
         this.multiValues = multiValues;
         this.columnDefList = columnDefList;
     }

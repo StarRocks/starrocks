@@ -296,7 +296,6 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
                 }
                 TStorageMedium storageMedium = tbl.getPartitionInfo()
                         .getDataProperty(partition.getParentId()).getStorageMedium();
-                TTabletType tabletType = tbl.getPartitionInfo().getTabletType(partition.getParentId());
                 MaterializedIndex rollupIndex = entry.getValue();
 
                 TTabletSchema tabletSchema = SchemaInfo.newBuilder()
@@ -334,7 +333,7 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
                                 .setLatch(countDownLatch)
                                 .setEnablePersistentIndex(tbl.enablePersistentIndex())
                                 .setPrimaryIndexCacheExpireSec(tbl.primaryIndexCacheExpireSec())
-                                .setTabletType(tabletType)
+                                .setTabletType(TTabletType.TABLET_TYPE_DISK)
                                 .setCompressionType(tbl.getCompressionType())
                                 .setCompressionLevel(tbl.getCompressionLevel())
                                 .setCreateSchemaFile(true)

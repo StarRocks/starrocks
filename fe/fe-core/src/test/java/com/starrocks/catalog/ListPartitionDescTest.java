@@ -29,7 +29,6 @@ import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.SingleItemListPartitionDesc;
 import com.starrocks.sql.ast.expression.TypeDef;
 import com.starrocks.thrift.TStorageMedium;
-import com.starrocks.thrift.TTabletType;
 import com.starrocks.type.DateType;
 import com.starrocks.type.DecimalType;
 import com.starrocks.type.IntegerType;
@@ -318,8 +317,6 @@ public class ListPartitionDescTest {
         Assertions.assertEquals(time, dataProperty.getCooldownTimeMs());
 
         Assertions.assertEquals(1, partitionInfo.getReplicationNum(10001L));
-        Assertions.assertEquals(TTabletType.TABLET_TYPE_MEMORY, partitionInfo.getTabletType(10001L));
-        Assertions.assertEquals(true, partitionInfo.getIsInMemory(10001L));
         Assertions.assertEquals(false, partitionInfo.isMultiColumnPartition());
     }
 
@@ -335,8 +332,6 @@ public class ListPartitionDescTest {
         Assertions.assertEquals(time, dataProperty.getCooldownTimeMs());
 
         Assertions.assertEquals(1, partitionInfo.getReplicationNum(10001L));
-        Assertions.assertEquals(TTabletType.TABLET_TYPE_MEMORY, partitionInfo.getTabletType(10001L));
-        Assertions.assertEquals(true, partitionInfo.getIsInMemory(10001L));
         Assertions.assertEquals(true, partitionInfo.isMultiColumnPartition());
     }
 

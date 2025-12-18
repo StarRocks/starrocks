@@ -130,9 +130,7 @@ public class CreateReplicatedPartitionJob extends FailoverGroupJob {
                 true, partitionName,
                 rangePartitionInfo.getReplicationNum(partitionId),
                 rangePartitionInfo.getDataProperty(partitionId),
-                rangePartitionInfo.getTabletType(partitionId),
                 Partition.PARTITION_INIT_VERSION,
-                rangePartitionInfo.getIsInMemory(partitionId),
                 rangePartitionInfo.getDataCacheInfo(partitionId),
                 partitionKeyDesc);
         singleRangePartitionDesc.setSystem(true);
@@ -165,9 +163,7 @@ public class CreateReplicatedPartitionJob extends FailoverGroupJob {
                     true, partitionName,
                     listPartitionInfo.getReplicationNum(partitionId),
                     listPartitionInfo.getDataProperty(partitionId),
-                    listPartitionInfo.getTabletType(partitionId),
                     Partition.PARTITION_INIT_VERSION,
-                    listPartitionInfo.getIsInMemory(partitionId),
                     listPartitionInfo.getDataCacheInfo(partitionId),
                     partitionValues,
                     partitionColumnDefs);
@@ -180,9 +176,7 @@ public class CreateReplicatedPartitionJob extends FailoverGroupJob {
                     true, partitionName,
                     listPartitionInfo.getReplicationNum(partitionId),
                     listPartitionInfo.getDataProperty(partitionId),
-                    listPartitionInfo.getTabletType(partitionId),
                     Partition.PARTITION_INIT_VERSION,
-                    listPartitionInfo.getIsInMemory(partitionId),
                     listPartitionInfo.getDataCacheInfo(partitionId),
                     partitionMultiValues,
                     partitionColumnDefs);

@@ -199,19 +199,16 @@ public class LakeTable extends OlapTable {
             return new RecycleLakeRangePartitionInfo(dbId, id, partition, range,
                     partitionInfo.getDataProperty(partition.getId()),
                     partitionInfo.getReplicationNum(partition.getId()),
-                    partitionInfo.getIsInMemory(partition.getId()),
                     partitionInfo.getDataCacheInfo(partition.getId()));
         } else if (partitionInfo.isListPartition()) {
             return new RecycleLakeListPartitionInfo(dbId, id, partition,
                     partitionInfo.getDataProperty(partition.getId()),
                     partitionInfo.getReplicationNum(partition.getId()),
-                    partitionInfo.getIsInMemory(partition.getId()),
                     partitionInfo.getDataCacheInfo(partition.getId()));
         } else if (partitionInfo.isUnPartitioned()) {
             return new RecycleLakeUnPartitionInfo(dbId, id, partition,
                     partitionInfo.getDataProperty(partition.getId()),
                     partitionInfo.getReplicationNum(partition.getId()),
-                    partitionInfo.getIsInMemory(partition.getId()),
                     partitionInfo.getDataCacheInfo(partition.getId()));
         } else {
             throw new RuntimeException("Unknown partition type: " + partitionInfo.getType());
