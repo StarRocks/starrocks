@@ -101,10 +101,7 @@ public:
     // Encode `pk_column_chunk` to the given |pk_column|
     StatusOr<MutableColumnPtr> encoded_pk_column(const Chunk* chunk);
 
-    // For large segment, we need to load segment file piece by piece.
-    ChunkUniquePtr pk_column_chunk;
-    // For no lazy load, we can load whole pk column at once.
-    MutableColumnPtr pk_column;
+    const MutableColumnPtr& standalone_pk_column() const { return _standalone_pk_column; }
 
 private:
     Status _load();
@@ -127,6 +124,10 @@ private:
     bool _lazy_load = false;
     // If enable lazy load, `_memory_usage` will record first piece of pk column memory usage.
     size_t _memory_usage = 0;
+    // For large segment, we need to load segment file piece by piece.
+    ChunkUniquePtr _pk_column_chunk;
+    // For no lazy load, we can load whole pk column and encode at once.
+    MutableColumnPtr _standalone_pk_column;
 };
 
 using SegmentPKIteratorPtr = std::unique_ptr<SegmentPKIterator>;

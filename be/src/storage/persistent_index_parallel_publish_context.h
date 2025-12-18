@@ -68,10 +68,11 @@ struct ParallelPublishContext {
 
     // Working slots for parallel tasks. Each task allocates one slot via extend_slots().
     // Slots are accessed sequentially (no concurrent access to the same slot).
-    std::vector<ParallelPublishSlot> slots;
+    // Notice : We use pointer as item, so the address of each slot is stable after extend_slots().
+    std::vector<std::unique_ptr<ParallelPublishSlot>> slots;
 
     // Allocates a new slot for a parallel task. Called sequentially before submitting tasks.
     // Not thread-safe
-    void extend_slots() { slots.emplace_back(ParallelPublishSlot()); }
+    void extend_slots() { slots.emplace_back(std::make_unique<ParallelPublishSlot>()); }
 };
 } // namespace starrocks

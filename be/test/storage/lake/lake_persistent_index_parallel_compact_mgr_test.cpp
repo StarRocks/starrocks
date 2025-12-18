@@ -23,6 +23,7 @@
 #include "storage/lake/join_path.h"
 #include "storage/lake/persistent_index_sstable.h"
 #include "storage/persistent_index.h"
+#include "storage/sstable/comparator.h"
 #include "storage/sstable/options.h"
 #include "storage/sstable/table_builder.h"
 #include "test_util.h"
@@ -845,7 +846,8 @@ TEST_F(LakePersistentIndexParallelCompactMgrTest, test_sample_keys_from_large_ss
 
     // Adjust the threshold to make a smaller sstable qualify as "large"
     auto old_interval = config::pk_index_sstable_sample_interval_bytes;
-    config::pk_index_sstable_sample_interval_bytes = 1024; // 1KB
+    config::pk_index_sstable_sample_interval_bytes = 10; // 10B
+    const sstable::Comparator* comparator = sstable::BytewiseComparator();
 
     // Create a sstable that exceeds the reduced threshold
     PersistentIndexSstablePB sst1;
@@ -862,12 +864,12 @@ TEST_F(LakePersistentIndexParallelCompactMgrTest, test_sample_keys_from_large_ss
 
     // Verify sample keys are sorted
     for (size_t i = 1; i < sample_keys.size(); i++) {
-        ASSERT_LT(sample_keys[i - 1], sample_keys[i]);
+        ASSERT_TRUE(comparator->Compare(sample_keys[i - 1], sample_keys[i]) < 0);
     }
 
     // Verify sample keys are within the sstable range
-    ASSERT_GE(sample_keys[0], sst1.range().start_key());
-    ASSERT_LE(sample_keys[sample_keys.size() - 1], sst1.range().end_key());
+    ASSERT_TRUE(comparator->Compare(sample_keys[0], sst1.range().start_key()) > 0);
+    ASSERT_TRUE(comparator->Compare(sample_keys[sample_keys.size() - 1], sst1.range().end_key()) < 0);
 
     // Restore original config
     config::pk_index_sstable_sample_interval_bytes = old_interval;

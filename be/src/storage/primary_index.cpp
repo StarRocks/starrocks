@@ -1347,13 +1347,13 @@ Status PrimaryIndex::_upsert_into_persistent_index(uint32_t rssid, uint32_t rowi
     Status st;
     uint32_t n = idx_end - idx_begin;
     DCHECK(ctx->slots.size() > 0);
-    auto& slot = ctx->slots.back();
-    slot.values.reserve(n);
-    slot.old_values.resize(n, NullIndexValue);
-    const Slice* vkeys = build_persistent_keys(pks, _key_size, idx_begin, idx_end, &slot.keys);
-    RETURN_IF_ERROR(_build_persistent_values(rssid, rowid_start, idx_begin, idx_end, &slot.values));
-    RETURN_IF_ERROR(_persistent_index->upsert(n, vkeys, reinterpret_cast<IndexValue*>(slot.values.data()),
-                                              reinterpret_cast<IndexValue*>(slot.old_values.data()), stat, ctx));
+    auto slot = ctx->slots.back().get();
+    slot->values.reserve(n);
+    slot->old_values.resize(n, NullIndexValue);
+    const Slice* vkeys = build_persistent_keys(pks, _key_size, idx_begin, idx_end, &slot->keys);
+    RETURN_IF_ERROR(_build_persistent_values(rssid, rowid_start, idx_begin, idx_end, &slot->values));
+    RETURN_IF_ERROR(_persistent_index->upsert(n, vkeys, reinterpret_cast<IndexValue*>(slot->values.data()),
+                                              reinterpret_cast<IndexValue*>(slot->old_values.data()), stat, ctx));
     return st;
 }
 
@@ -1362,9 +1362,9 @@ Status PrimaryIndex::_upsert_into_persistent_index(uint32_t rssid, uint32_t rowi
                                                    IOStat* stat) {
     ParallelPublishContext ctx;
     ctx.extend_slots();
-    auto& slot = ctx.slots.back();
+    auto slot = ctx.slots.back().get();
     RETURN_IF_ERROR(_upsert_into_persistent_index(rssid, rowid_start, pks, idx_begin, idx_end, stat, &ctx));
-    for (unsigned long old : slot.old_values) {
+    for (unsigned long old : slot->old_values) {
         if (old != NullIndexValue) {
             (*deletes)[(uint32_t)(old >> 32)].push_back((uint32_t)(old & ROWID_MASK));
         }

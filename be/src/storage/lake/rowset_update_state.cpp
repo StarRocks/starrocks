@@ -37,8 +37,8 @@
 namespace starrocks::lake {
 
 Status SegmentPKIterator::_load() {
-    TRY_CATCH_BAD_ALLOC(pk_column_chunk = ChunkHelper::new_chunk(_pkey_schema, 4096));
-    auto chunk_container = pk_column_chunk->clone_empty();
+    TRY_CATCH_BAD_ALLOC(_pk_column_chunk = ChunkHelper::new_chunk(_pkey_schema, 4096));
+    auto chunk_container = _pk_column_chunk->clone_empty();
     if (_iter != nullptr) {
         while (true) {
             chunk_container->reset();
@@ -52,21 +52,23 @@ Status SegmentPKIterator::_load() {
             } else if (!st.ok()) {
                 return st;
             } else {
-                TRY_CATCH_BAD_ALLOC(pk_column_chunk->append(*chunk_container));
-                if (_lazy_load && (pk_column_chunk->memory_usage() >= config::pk_column_lazy_load_threshold_bytes ||
-                                   pk_column_chunk->num_rows() >= config::pk_index_parallel_get_min_rows)) {
+                TRY_CATCH_BAD_ALLOC(_pk_column_chunk->append(*chunk_container));
+                if (_lazy_load && (_pk_column_chunk->memory_usage() >= config::pk_column_lazy_load_threshold_bytes ||
+                                   _pk_column_chunk->num_rows() >= config::pk_index_parallel_get_min_rows)) {
                     break;
                 }
             }
         }
     }
-    if (!_lazy_load) {
-        ASSIGN_OR_RETURN(pk_column, encoded_pk_column(pk_column_chunk.get()));
+    if (!_lazy_load && _standalone_pk_column == nullptr) {
+        // In some place, like partial update handler, we need to get standalone pk column,
+        // so we can't use lazy load mode.
+        ASSIGN_OR_RETURN(_standalone_pk_column, encoded_pk_column(_pk_column_chunk.get()));
     }
-    if (pk_column_chunk->num_rows() == 0) {
+    if (_pk_column_chunk->num_rows() == 0) {
         return Status::OK();
     }
-    _current_rows += pk_column_chunk->num_rows();
+    _current_rows += _pk_column_chunk->num_rows();
     _begin_rowid_offsets.push_back(_current_rows);
     return Status::OK();
 }
@@ -78,13 +80,14 @@ Status SegmentPKIterator::init(const ChunkIteratorPtr& iter, const Schema& pkey_
     _begin_rowid_offsets.push_back(0);
     _status = _load();
     if (_status.ok()) {
-        _memory_usage = pk_column_chunk->memory_usage() + (pk_column ? pk_column->memory_usage() : 0);
+        _memory_usage =
+                _pk_column_chunk->memory_usage() + (_standalone_pk_column ? _standalone_pk_column->memory_usage() : 0);
     }
     return _status;
 }
 
 bool SegmentPKIterator::done() {
-    return pk_column_chunk->is_empty() || !_status.ok();
+    return _pk_column_chunk->is_empty() || !_status.ok();
 }
 
 Status SegmentPKIterator::status() {
@@ -99,7 +102,7 @@ void SegmentPKIterator::next() {
 }
 
 std::pair<ChunkPtr, size_t> SegmentPKIterator::current() {
-    return std::pair<ChunkPtr, size_t>(std::move(pk_column_chunk), _begin_rowid_offsets[_current_pk_column_idx]);
+    return std::pair<ChunkPtr, size_t>(std::move(_pk_column_chunk), _begin_rowid_offsets[_current_pk_column_idx]);
 }
 
 StatusOr<MutableColumnPtr> SegmentPKIterator::encoded_pk_column(const Chunk* chunk) {
@@ -348,14 +351,15 @@ Status RowsetUpdateState::_prepare_auto_increment_partial_update_states(uint32_t
 
     _auto_increment_partial_update_states[segment_id].init(
             modified_columns_schema, txn_meta.auto_increment_partial_update_column_id(), segment_id);
-    _auto_increment_partial_update_states[segment_id].src_rss_rowids.resize(_upserts[segment_id]->pk_column->size());
+    _auto_increment_partial_update_states[segment_id].src_rss_rowids.resize(
+            _upserts[segment_id]->standalone_pk_column()->size());
     read_column.resize(1);
     read_column[0] = column->clone_empty();
     _auto_increment_partial_update_states[segment_id].write_column = column->clone_empty();
 
     // use upserts to get rowids in this segment
     RETURN_IF_ERROR(params.tablet->update_mgr()->get_rowids_from_pkindex(
-            params.tablet->id(), _base_versions[segment_id], _upserts[segment_id]->pk_column,
+            params.tablet->id(), _base_versions[segment_id], _upserts[segment_id]->standalone_pk_column(),
             &(_auto_increment_partial_update_states[segment_id].src_rss_rowids), need_lock));
 
     std::vector<uint32_t> rowids;
@@ -411,7 +415,7 @@ Status RowsetUpdateState::_prepare_auto_increment_partial_update_states(uint32_t
         *    different segment file.
         */
     _auto_increment_delete_pks[segment_id].reset();
-    _auto_increment_delete_pks[segment_id] = _upserts[segment_id]->pk_column->clone_empty();
+    _auto_increment_delete_pks[segment_id] = _upserts[segment_id]->standalone_pk_column()->clone_empty();
     std::vector<uint32_t> delete_idxes;
     const int64* data = nullptr;
     TRY_CATCH_BAD_ALLOC(data = reinterpret_cast<const int64*>(
@@ -427,7 +431,7 @@ Status RowsetUpdateState::_prepare_auto_increment_partial_update_states(uint32_t
 
     if (delete_idxes.size() != 0) {
         TRY_CATCH_BAD_ALLOC(_auto_increment_delete_pks[segment_id]->append_selective(
-                *(_upserts[segment_id]->pk_column), delete_idxes.data(), 0, delete_idxes.size()));
+                *(_upserts[segment_id]->standalone_pk_column()), delete_idxes.data(), 0, delete_idxes.size()));
         _memory_usage += _auto_increment_delete_pks[segment_id]->memory_usage();
     }
     return Status::OK();
@@ -447,7 +451,7 @@ Status RowsetUpdateState::_prepare_partial_update_states(uint32_t segment_id, co
     MutableColumns read_columns;
     read_columns.resize(read_column_ids.size());
     _partial_update_states[segment_id].write_columns.resize(read_columns.size());
-    _partial_update_states[segment_id].src_rss_rowids.resize(_upserts[segment_id]->pk_column->size());
+    _partial_update_states[segment_id].src_rss_rowids.resize(_upserts[segment_id]->standalone_pk_column()->size());
     for (uint32_t j = 0; j < read_columns.size(); ++j) {
         auto column = ChunkHelper::column_from_field(*read_column_schema.field(j).get());
         read_columns[j] = column->clone_empty();
@@ -456,7 +460,7 @@ Status RowsetUpdateState::_prepare_partial_update_states(uint32_t segment_id, co
 
     // use upsert to get rowids for this segment
     RETURN_IF_ERROR(params.tablet->update_mgr()->get_rowids_from_pkindex(
-            params.tablet->id(), _base_versions[segment_id], _upserts[segment_id]->pk_column,
+            params.tablet->id(), _base_versions[segment_id], _upserts[segment_id]->standalone_pk_column(),
             &(_partial_update_states[segment_id].src_rss_rowids), need_lock));
 
     size_t num_default = 0;
@@ -606,9 +610,10 @@ Status RowsetUpdateState::_resolve_conflict(uint32_t segment_id, const RowsetUpd
     }
 
     // use upserts to get rowids in this segment
-    std::vector<uint64_t> new_rss_rowids(_upserts[segment_id]->pk_column->size());
+    std::vector<uint64_t> new_rss_rowids(_upserts[segment_id]->standalone_pk_column()->size());
     RETURN_IF_ERROR(params.tablet->update_mgr()->get_rowids_from_pkindex(
-            params.tablet->id(), _base_versions[segment_id], _upserts[segment_id]->pk_column, &new_rss_rowids, false));
+            params.tablet->id(), _base_versions[segment_id], _upserts[segment_id]->standalone_pk_column(),
+            &new_rss_rowids, false));
 
     size_t total_conflicts = 0;
     std::shared_ptr<TabletSchema> tablet_schema = std::make_shared<TabletSchema>(params.metadata->schema());
@@ -758,7 +763,7 @@ Status RowsetUpdateState::_resolve_conflict_auto_increment(const RowsetUpdateSta
 
         // reslove delete-partial update conflict base on latest column values
         _auto_increment_delete_pks[segment_id].reset();
-        _auto_increment_delete_pks[segment_id] = _upserts[segment_id]->pk_column->clone_empty();
+        _auto_increment_delete_pks[segment_id] = _upserts[segment_id]->standalone_pk_column()->clone_empty();
         std::vector<uint32_t> delete_idxes;
         const int64* data = nullptr;
         TRY_CATCH_BAD_ALLOC(data = reinterpret_cast<const int64*>(
@@ -774,7 +779,7 @@ Status RowsetUpdateState::_resolve_conflict_auto_increment(const RowsetUpdateSta
 
         if (delete_idxes.size() != 0) {
             TRY_CATCH_BAD_ALLOC(_auto_increment_delete_pks[segment_id]->append_selective(
-                    *(_upserts[segment_id]->pk_column), delete_idxes.data(), 0, delete_idxes.size()));
+                    *(_upserts[segment_id]->standalone_pk_column()), delete_idxes.data(), 0, delete_idxes.size()));
         }
     }
     return Status::OK();
