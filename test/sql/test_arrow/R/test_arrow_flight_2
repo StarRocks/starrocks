@@ -66,9 +66,17 @@ DELETE FROM flight_demo.test WHERE id = 2;
 ALTER TABLE flight_demo.test ADD COLUMN age INT;
 -- result:
 -- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
 
 ALTER TABLE flight_demo.test MODIFY COLUMN name STRING;
 -- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
 -- !result
 
 INSERT INTO flight_demo.test (id, name, age) VALUES (5, 'Eve', 30);
