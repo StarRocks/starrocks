@@ -165,6 +165,12 @@ public:
     const DictColumnsValidMap* global_dict_columns_valid_info() const;
     const GlobalDictByNameMaps* global_dict_map() const;
 
+    // Set the finished state. Called after finish task completes to prevent subsequent write/flush tasks.
+    void set_already_finished(bool val);
+
+    // Check if finish() has been called. Used to guard against write/flush tasks after finish.
+    bool already_finished() const;
+
 private:
     DeltaWriterImpl* _impl;
 };
