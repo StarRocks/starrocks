@@ -1282,6 +1282,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Description: The time interval at which ColumnPool GC is triggered. StarRocks executes GC periodically and returns the released memory to the operating system.
 - Introduced in: -
 
+##### load_channel_abort_clean_up_delay_seconds
+
+- Default: 600
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: Controls how long (in seconds) LoadChannelMgr keeps the load IDs of aborted load channels before removing them from `_aborted_load_channels`. When a load job is cancelled or fails, the load ID stays recorded so any late-arriving load RPCs can be rejected immediately; once the delay expires, the entry is cleaned during the periodic background sweep (minimum sweep interval is 60 seconds). Setting the delay too low risks accepting stray RPCs after an abort, while setting it too high may retain state and consume resources longer than necessary. Tune this to balance correctness of late-request rejection and resource retention for aborted loads.
+- Introduced in: v3.5.11, v4.0.4
+
 ##### load_process_max_memory_limit_bytes
 
 - Default: 107374182400
