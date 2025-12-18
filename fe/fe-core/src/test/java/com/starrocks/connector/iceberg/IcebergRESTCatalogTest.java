@@ -481,4 +481,46 @@ public class IcebergRESTCatalogTest {
 
         Assertions.assertTrue(exception.getMessage().contains("View operations are disabled for this catalog"));
     }
+
+    @Test
+    public void testGetCatalogProperties(@Mocked RESTSessionCatalog restCatalog) {
+        Map<String, String> catalogProperties = ImmutableMap.of(
+                "s3.access-key-id", "AKIA_TEST_KEY",
+                "s3.secret-access-key", "test_secret_key",
+                "s3.session-token", "test_session_token",
+                "client.region", "us-east-1"
+        );
+
+        new Expectations() {
+            {
+                restCatalog.properties();
+                result = catalogProperties;
+                times = 1;
+            }
+        };
+
+        IcebergRESTCatalog icebergRESTCatalog = new IcebergRESTCatalog(restCatalog, new Configuration());
+        Map<String, String> result = icebergRESTCatalog.getCatalogProperties();
+
+        Assertions.assertEquals("AKIA_TEST_KEY", result.get("s3.access-key-id"));
+        Assertions.assertEquals("test_secret_key", result.get("s3.secret-access-key"));
+        Assertions.assertEquals("test_session_token", result.get("s3.session-token"));
+        Assertions.assertEquals("us-east-1", result.get("client.region"));
+    }
+
+    @Test
+    public void testGetCatalogPropertiesEmpty(@Mocked RESTSessionCatalog restCatalog) {
+        new Expectations() {
+            {
+                restCatalog.properties();
+                result = ImmutableMap.of();
+                times = 1;
+            }
+        };
+
+        IcebergRESTCatalog icebergRESTCatalog = new IcebergRESTCatalog(restCatalog, new Configuration());
+        Map<String, String> result = icebergRESTCatalog.getCatalogProperties();
+
+        Assertions.assertTrue(result.isEmpty());
+    }
 }

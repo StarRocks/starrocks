@@ -1633,8 +1633,22 @@ public class IcebergMetadata implements ConnectorMetadata {
     }
 
     @Override
+<<<<<<< HEAD
     public CloudConfiguration getCloudConfiguration() {
         return hdfsEnvironment.getCloudConfiguration();
+=======
+    public Map<String, String> getCatalogProperties() {
+        return icebergCatalog.getCatalogProperties();
+    }
+
+    @Override
+    public Procedure getProcedure(DatabaseTableName procedureName) {
+        Procedure procedure = procedureRegistry.find(procedureName);
+        if (procedure == null) {
+            throw new StarRocksConnectorException("No such iceberg procedure: %s", procedureName);
+        }
+        return procedure;
+>>>>>>> ec4fda6d86 ([Enhancement] Add catalog config credential fallback for Iceberg REST Catalog (#66700))
     }
 
     private static class FileScanTaskSchema {
