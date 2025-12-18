@@ -696,4 +696,23 @@ class ParserTest {
         SplitTabletClause splitTabletClause = new SplitTabletClause(null, null, null);
         Assertions.assertEquals(null, splitTabletClause.getPartitionNames());
     }
+
+    @Test
+    void testSkewHintWithNegativeValues() {
+        String[] sqls = {
+                "select * from t1 join [skew|t1.c_int(-100)] t2 on t1.c_int = t2.c_int",
+                "select * from t1 join [skew|t1.c_int(-100, -200)] t2 on t1.c_int = t2.c_int",
+                "select * from t1 join [skew|t1.c_float(-10.5)] t2 on t1.c_float = t2.c_float",
+                "select * from t1 join [skew|t1.c_decimal(-10.5)] t2 on t1.c_decimal = t2.c_decimal"
+        };
+        SessionVariable sessionVariable = new SessionVariable();
+        for (String sql : sqls) {
+            try {
+                SqlParser.parse(sql, sessionVariable);
+            } catch (Exception e) {
+                fail("sql should parse successfully: " + sql + ", error: " + e.getMessage());
+            }
+        }
+    }
+
 }

@@ -2678,7 +2678,7 @@ primaryExpression
     ;
 
 literalExpression
-    : number                                                                              #numericLiteral
+    : MINUS_SYMBOL? number                                                                #numericLiteral
     | NULL                                                                                #nullLiteral
     | booleanValue                                                                        #booleanLiteral
     | (DATE | DATETIME) string                                                            #dateLiteral

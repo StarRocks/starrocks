@@ -8032,7 +8032,27 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
 
     @Override
     public ParseNode visitNumericLiteral(com.starrocks.sql.parser.StarRocksParser.NumericLiteralContext context) {
-        return visit(context.number());
+        ParseNode node = visit(context.number());
+        if (context.MINUS_SYMBOL() != null) {
+            if (node instanceof IntLiteral) {
+                return new IntLiteral(-((IntLiteral) node).getLongValue(), node.getPos());
+            } else if (node instanceof LargeIntLiteral) {
+                BigInteger val = ((LargeIntLiteral) node).getValue();
+                val = val.negate();
+                if (val.compareTo(BigInteger.valueOf(Long.MIN_VALUE)) >= 0 &&
+                        val.compareTo(BigInteger.valueOf(Long.MAX_VALUE)) <= 0) {
+                    return new IntLiteral(val.longValue(), node.getPos());
+                }
+                return new LargeIntLiteral(val.toString(), node.getPos());
+            } else if (node instanceof DecimalLiteral) {
+                BigDecimal val = ((DecimalLiteral) node).getValue();
+                return new DecimalLiteral(val.negate(), node.getPos());
+            } else if (node instanceof FloatLiteral) {
+                double val = ((FloatLiteral) node).getDoubleValue();
+                return new FloatLiteral(-val, node.getPos());
+            }
+        }
+        return node;
     }
 
     @Override
