@@ -637,6 +637,9 @@ Status SchemaChangeUtils::parse_request_normal(const TabletSchemaCSPtr& base_sch
                 *sc_directly = true;
             }
 
+            LOG(ERROR) << "[DEFAULT_VALUE_PATH_3] Schema change parsing new column: " << new_column.name()
+                       << ", type: " << new_column.type() << ", has_default: " << (new_column.has_default_value())
+                       << ", default_value: " << new_column.default_value();
             if (!init_column_mapping(column_mapping, new_column, new_column.default_value()).ok()) {
                 LOG(WARNING) << "init column mapping failed. column=" << new_column.name();
                 return Status::InternalError("init column mapping failed");
@@ -818,8 +821,17 @@ Status SchemaChangeUtils::init_column_mapping(ColumnMapping* column_mapping, con
             break;
         }
         case TYPE_JSON: {
-            column_mapping->default_json = std::make_unique<JsonValue>(value);
-            column_mapping->default_value_datum.set_json(column_mapping->default_json.get());
+            auto json_or = JsonValue::parse_json_or_string(Slice(value));
+            if (!json_or.ok()) {
+                // If JSON parse fails, treat as NULL to avoid query errors
+                // This prevents returning malformed data when FE validation is bypassed
+                LOG(ERROR) << "Failed to parse JSON default value '" << value
+                           << "', treating as NULL: " << json_or.status();
+                column_mapping->default_value_datum.set_null();
+            } else {
+                column_mapping->default_json = std::make_unique<JsonValue>(std::move(json_or.value()));
+                column_mapping->default_value_datum.set_json(column_mapping->default_json.get());
+            }
             break;
         }
         default:

@@ -31,6 +31,7 @@
 #include "exec/pipeline/scan/olap_scan_context.h"
 #include "exec/pipeline/scan/scan_operator.h"
 #include "exec/workgroup/work_group.h"
+#include "exprs/jsonpath.h"
 #include "gen_cpp/Metrics_types.h"
 #include "gen_cpp/RuntimeProfile_types.h"
 #include "gutil/map_util.h"
@@ -47,6 +48,7 @@
 #include "storage/storage_engine.h"
 #include "storage/tablet_index.h"
 #include "types/logical_type.h"
+#include "util/json.h"
 #include "util/runtime_profile.h"
 #include "util/table_metrics.h"
 
@@ -520,6 +522,60 @@ Status OlapChunkSource::_extend_schema_by_access_paths() {
         // Record root column unique id to make it robust across schema changes
         int32_t root_uid = _tablet_schema->column(static_cast<size_t>(root_column_index)).unique_id();
         column.set_extended_info(std::make_unique<ExtendedColumnInfo>(path.get(), root_uid));
+
+        // Inherit default value from parent column if exists
+        const auto& root_column = _tablet_schema->column(static_cast<size_t>(root_column_index));
+        if (root_column.has_default_value() && root_column.type() == TYPE_JSON) {
+            const std::string& json_default = root_column.default_value();
+            auto json_or = JsonValue::parse_json_or_string(Slice(json_default));
+            if (json_or.ok()) {
+                // Extract the sub path from linear path, e.g. "profile.level" -> "$.level"
+                std::string linear = path->linear_path();
+                std::string parent = path->path();
+                std::string json_path_str;
+                if (linear.size() > parent.size() && linear.compare(0, parent.size(), parent) == 0) {
+                    // linear = "profile.level", parent = "profile" -> sub = ".level" -> "$level"
+                    json_path_str = "$" + linear.substr(parent.size());
+                } else {
+                    json_path_str = "$";
+                }
+
+                auto json_path_or = JsonPath::parse(Slice(json_path_str));
+                if (json_path_or.ok()) {
+                    vpack::Builder builder;
+                    vpack::Slice extracted = JsonPath::extract(&json_or.value(), json_path_or.value(), &builder);
+                    if (!extracted.isNone()) {
+                        std::string default_value_str;
+
+                        // For string types (VARCHAR/CHAR), extract the raw string value without JSON quotes
+                        // For other types (INT/DOUBLE/BOOLEAN/etc), use JSON representation
+                        if (value_type == TYPE_VARCHAR || value_type == TYPE_CHAR) {
+                            if (extracted.isString()) {
+                                default_value_str = extracted.copyString();
+                            } else {
+                                // If not a string in JSON, convert to JSON string
+                                JsonValue extracted_value(extracted);
+                                auto result_str = extracted_value.to_string();
+                                if (result_str.ok()) {
+                                    default_value_str = *result_str;
+                                }
+                            }
+                        } else {
+                            // For non-string types, use JSON representation
+                            JsonValue extracted_value(extracted);
+                            auto result_str = extracted_value.to_string();
+                            if (result_str.ok()) {
+                                default_value_str = *result_str;
+                            }
+                        }
+
+                        if (!default_value_str.empty()) {
+                            column.set_default_value(default_value_str);
+                        }
+                    }
+                }
+            }
+        }
 
         // For UNIQUE/AGG tables, extended flat JSON subcolumns act as value columns and
         // must have a valid aggregation method for pre-aggregation. Use REPLACE, which is

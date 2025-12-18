@@ -17,6 +17,8 @@ package com.starrocks.sql.analyzer;
 import com.google.api.client.util.Lists;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Sets;
+import com.google.gson.internal.Streams;
+import com.google.gson.stream.JsonReader;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
@@ -41,6 +43,7 @@ import com.starrocks.type.ScalarType;
 import com.starrocks.type.Type;
 import com.starrocks.type.TypeFactory;
 
+import java.io.StringReader;
 import java.util.List;
 import java.util.Set;
 
@@ -267,6 +270,17 @@ public class ColumnDefAnalyzer {
                     break;
                 case BITMAP:
                     break;
+                case JSON:
+                    try (JsonReader reader = new JsonReader(new StringReader(defaultValue))) {
+                        // Strict mode: reject non-standard JSON
+                        reader.setLenient(false);
+                        Streams.parse(reader);
+                    } catch (Exception e) {
+                        throw new AnalysisException(
+                                String.format("Invalid JSON format for default value: %s. Error: %s",
+                                        defaultValue, e.getMessage()));
+                    }
+                    break;
                 default:
                     throw new AnalysisException(String.format("Cannot add default value for type '%s'", type));
             }
@@ -303,4 +317,5 @@ public class ColumnDefAnalyzer {
             throw new AnalysisException(String.format("Unsupported expr %s for default value", defaultExpr));
         }
     }
+
 }
