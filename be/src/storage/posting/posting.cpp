@@ -26,7 +26,17 @@ void PostingList::add_posting(rowid_t doc_id, rowid_t pos) {
     }
 }
 
-std::vector<uint8_t> PostingList::encode(Encoder* encoder) const {
+roaring::Roaring PostingList::get_all_doc_ids() const {
+    const auto postings = _internal_get_all_postings();
+    return postings.getAllHighBits();
+}
+
+roaring::Roaring PostingList::get_positions(rowid_t doc_id) const {
+    const auto postings = _internal_get_all_postings();
+    return postings.getLowBitsRoaring(doc_id);
+}
+
+detail::Roaring64Map PostingList::_internal_get_all_postings() const {
     if (_postings == nullptr) {
         return {};
     }
@@ -39,15 +49,7 @@ std::vector<uint8_t> PostingList::encode(Encoder* encoder) const {
     } else {
         roaring = *(_postings->roaring());
     }
-
-    auto doc_ids = roaring.getAllHighBits();
-    auto result = encoder->encode(doc_ids);
-    for (const auto doc_id : doc_ids) {
-        auto positions = roaring.getLowBitsRoaring(doc_id);
-        auto encoded_positions = encoder->encode(positions);
-        result.insert(result.end(), encoded_positions.begin(), encoded_positions.end());
-    }
-    return result;
+    return roaring;
 }
 
 } // namespace starrocks

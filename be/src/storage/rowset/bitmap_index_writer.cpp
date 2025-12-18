@@ -205,7 +205,10 @@ public:
             }
 
             if (_posting_index.has_value()) {
-                RETURN_IF_ERROR(_write_posting(sorted_dicts, wfile, meta->mutable_posting_column()));
+                const auto start = wfile->size();
+                RETURN_IF_ERROR(_write_posting(sorted_dicts, wfile, meta));
+                const auto end = wfile->size();
+                LOG(INFO) << "##### writing posting: " << (end - start) << " bytes";
             }
         }
         return Status::OK();
@@ -340,10 +343,21 @@ private:
         return bitmap_column_writer.finish(meta);
     }
 
-    Status _write_posting(const std::vector<CppType>& sorted_dicts, WritableFile* wfile, IndexedColumnMetaPB* meta) {
-        std::vector<PostingList*> postings;
-        postings.reserve(sorted_dicts.size());
-        for (const auto& dict : sorted_dicts) {
+    Status _write_posting(const std::vector<CppType>& sorted_dicts, WritableFile* wfile, BitmapIndexPB* meta) {
+        TypeInfoPtr bigint_typeinfo = get_type_info(TYPE_BIGINT);
+        IndexedColumnWriterOptions dict_options;
+        dict_options.write_ordinal_index = true;
+        dict_options.write_value_index = true;
+        dict_options.encoding = EncodingInfo::get_default_encoding(bigint_typeinfo->type(), true);
+        dict_options.compression = _dictionary_compression;
+        IndexedColumnWriter dict_column_writer(dict_options, bigint_typeinfo, wfile);
+        RETURN_IF_ERROR(dict_column_writer.init());
+
+        std::vector<PostingList*> posting_lists;
+        posting_lists.reserve(sorted_dicts.size());
+
+        for (uint32_t dict_id = 0; dict_id < sorted_dicts.size(); ++dict_id) {
+            const auto& dict = sorted_dicts[dict_id];
             auto mit = _mem_index.find(dict);
             if (mit == _mem_index.end()) {
                 return Status::InternalError("No bitmap found for dict");
@@ -354,28 +368,36 @@ private:
                 // should never happen
                 return Status::InternalError("No posting found for dict");
             }
-            postings.push_back(&it->second);
+
+            auto& posting_list = it->second;
+            posting_lists.emplace_back(&posting_list);
+
+            for (const auto& doc_id : posting_list.get_all_doc_ids()) {
+                uint64_t key = static_cast<uint64_t>(dict_id) << 32 | doc_id;
+                dict_column_writer.add(&key);
+            }
         }
+        dict_column_writer.finish(meta->mutable_posting_index_column());
 
         TypeInfoPtr varbinary_typeinfo = get_type_info(TYPE_VARBINARY);
-
-        IndexedColumnWriterOptions options;
-        options.write_ordinal_index = true;
-        options.write_value_index = false;
-        options.encoding = EncodingInfo::get_default_encoding(varbinary_typeinfo->type(), false);
-        options.compression = LZ4;
-
-        IndexedColumnWriter posting_writer(options, varbinary_typeinfo, wfile);
+        IndexedColumnWriterOptions value_options;
+        value_options.write_ordinal_index = true;
+        value_options.write_value_index = false;
+        value_options.encoding = EncodingInfo::get_default_encoding(varbinary_typeinfo->type(), false);
+        value_options.compression = LZ4;
+        IndexedColumnWriter posting_writer(value_options, varbinary_typeinfo, wfile);
         RETURN_IF_ERROR(posting_writer.init());
 
         const auto encoder = EncoderFactory::createEncoder(EncodingType::VARINT);
-        for (size_t i = 0; i < postings.size(); ++i) {
-            auto encoded = postings[i]->encode(encoder.get());
-            LOG(INFO) << "##### write posting, encoded " << encoded.size() << " bytes";
-            Slice tmp(encoded.data(), encoded.size());
-            RETURN_IF_ERROR(posting_writer.add(&tmp));
+        for (const auto* posting : posting_lists) {
+            for (const auto& doc_id : posting->get_all_doc_ids()) {
+                roaring::Roaring positions = posting->get_positions(doc_id);
+                auto encoded = encoder->encode(positions);
+                Slice tmp(encoded.data(), encoded.size());
+                posting_writer.add(&tmp);
+            }
         }
-        return posting_writer.finish(meta);
+        return posting_writer.finish(meta->mutable_posting_position_column());
     }
 
     int32_t _gram_num;
