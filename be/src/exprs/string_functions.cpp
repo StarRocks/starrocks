@@ -23,8 +23,10 @@
 #endif
 
 #include <unicode/ucasemap.h>
+#include <unicode/uchar.h>
 #include <unicode/unistr.h>
 #include <unicode/urename.h>
+#include <unicode/utf8.h>
 #include <unicode/utypes.h>
 
 #include <algorithm>
