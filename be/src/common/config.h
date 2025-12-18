@@ -466,6 +466,8 @@ CONF_mInt32(pk_index_memtable_flush_threadpool_max_threads, "4");
 CONF_mInt32(pk_index_memtable_flush_threadpool_size, "1048576");
 // The maximum number of memtables for pk index in shared-data mode.
 CONF_mInt32(pk_index_memtable_max_count, "1");
+// The maximum wait flush timeout for pk index memtable in shared-data mode, in milliseconds.
+CONF_mInt64(pk_index_memtable_max_wait_flush_timeout_ms, "30000");
 // The parameters for pk index size-tiered compaction strategy.
 CONF_mInt64(pk_index_size_tiered_min_level_size, "131072");
 CONF_mInt64(pk_index_size_tiered_level_multiplier, "10");

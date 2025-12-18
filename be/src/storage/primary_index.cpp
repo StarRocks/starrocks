@@ -1346,6 +1346,7 @@ Status PrimaryIndex::_upsert_into_persistent_index(uint32_t rssid, uint32_t rowi
     auto scope = IOProfiler::scope(IOProfiler::TAG_PKINDEX, _tablet_id);
     Status st;
     uint32_t n = idx_end - idx_begin;
+    DCHECK(ctx->slots.size() > 0);
     auto& slot = ctx->slots.back();
     slot.values.reserve(n);
     slot.old_values.resize(n, NullIndexValue);

@@ -150,7 +150,7 @@ Status LakePersistentIndex::ingest_sst(const FileMetaPB& sst_meta, const Persist
     if (block_cache == nullptr) {
         return Status::InternalError("Block cache is null.");
     }
-    RETURN_IF_ERROR(sync_flush_all_memtables());
+    RETURN_IF_ERROR(sync_flush_all_memtables(config::pk_index_memtable_max_wait_flush_timeout_ms * 1000));
     TRACE_COUNTER_SCOPE_LATENCY_US("ingest_sst_latency_us");
     auto sstable = std::make_unique<PersistentIndexSstable>();
     RandomAccessFileOptions opts;
@@ -181,19 +181,25 @@ Status LakePersistentIndex::ingest_sst(const FileMetaPB& sst_meta, const Persist
     return Status::OK();
 }
 
-Status LakePersistentIndex::sync_flush_all_memtables() {
+Status LakePersistentIndex::sync_flush_all_memtables(int64_t wait_timeout_us) {
     TRACE_COUNTER_SCOPE_LATENCY_US("sync_flush_all_memtables_us");
     // 1. flush inactive memtables
     for (auto& memtable : _inactive_memtables) {
-        while (true) {
+        int64_t start_us = butil::gettimeofday_us();
+        bool wait_success = false;
+        while (butil::gettimeofday_us() - start_us < wait_timeout_us) {
             auto sstable = memtable->release_sstable();
             if (sstable != nullptr) {
                 // try to merge to a existing fileset
                 RETURN_IF_ERROR(merge_sstable_into_fileset(sstable));
+                wait_success = true;
                 break;
             } else {
-                usleep(100000); // wait for flush finish
+                usleep(3000000); // wait for flush finish, 3s
             }
+        }
+        if (!wait_success) {
+            return Status::Timeout(fmt::format("wait memtable flush timeout for tablet {}", _tablet_id));
         }
     }
     _inactive_memtables.clear();
@@ -691,7 +697,7 @@ Status LakePersistentIndex::apply_opcompaction(const TxnLogPB_OpCompaction& op_c
             standalone_sstable_filename.insert(input_sstable.filename());
         }
     }
-    // Whethere contains this fileset.
+    // Whether contains this fileset.
     auto fileset_contains_func = [&](const std::unique_ptr<PersistentIndexSstableFileset>& fileset) {
         if (fileset->is_standalone_sstable()) {
             return standalone_sstable_filename.contains(fileset->standalone_sstable_filename());

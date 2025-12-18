@@ -245,7 +245,7 @@ void PersistentIndexMemtable::clear() {
 void PersistentIndexMemtable::run() {
     auto st = minor_compact();
     if (!st.ok()) {
-        LOG(ERROR) << "PersistentIndexMemtable minor_compact failed: " << st;
+        LOG(ERROR) << "PersistentIndexMemtable minor_compact failed for tablet " << _tablet_id << ": " << st;
         std::lock_guard<std::mutex> lg(_flush_mutex);
         _flush_status = st;
     }

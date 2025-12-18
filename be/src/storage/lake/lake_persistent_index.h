@@ -150,7 +150,7 @@ public:
 
     Status flush_memtable(bool force = false);
 
-    Status sync_flush_all_memtables();
+    Status sync_flush_all_memtables(int64_t wait_timeout_us);
 
 private:
     bool is_memtable_full() const;

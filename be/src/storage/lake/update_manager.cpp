@@ -1325,7 +1325,7 @@ Status UpdateManager::light_publish_primary_compaction(const TxnLogPB_OpCompacti
     for (auto&& each : delvecs) {
         builder->append_delvec(each.second, each.first);
     }
-    // 4. early ssts to index
+    // 4. ingest ssts to index
     DCHECK(op_compaction.ssts_size() == 0 || delvecs.size() == op_compaction.ssts_size())
             << "delvecs.size(): " << delvecs.size() << ", op_compaction.ssts_size(): " << op_compaction.ssts_size();
     for (int i = 0; i < op_compaction.ssts_size() && use_cloud_native_pk_index(metadata); i++) {

@@ -2104,7 +2104,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_write_with_delvec_corrupt) {
     ASSERT_ERROR(read(tablet_id, version));
 }
 
-TEST_P(LakePrimaryKeyPublishTest, test_parallel_upsert_with_async_flush) {
+TEST_P(LakePrimaryKeyPublishTest, test_parallel_upsert_with_multiple_memtables) {
     bool old_enable_pk_index_parallel_get = config::enable_pk_index_parallel_get;
     int64_t old_pk_index_parallel_get_min_rows = config::pk_index_parallel_get_min_rows;
     int64_t old_l0_max_mem_usage = config::l0_max_mem_usage;

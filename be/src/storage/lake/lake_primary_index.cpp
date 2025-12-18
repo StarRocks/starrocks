@@ -383,6 +383,7 @@ Status LakePrimaryIndex::parallel_get(ParallelPublishContext* context) {
 
         // Encode primary keys for this segment
         auto pk_column_st = context->segment_pk_iterator->encoded_pk_column(current.first.get());
+        DCHECK(context->slots.size() > 0);
         auto& slot = context->slots.back();
 
         if (pk_column_st.ok()) {
@@ -463,7 +464,7 @@ Status LakePrimaryIndex::parallel_upsert(uint32_t rssid, ParallelPublishContext*
 
             // Submit upsert task to thread pool. Pass nullptr for deletes since we collect
             // them in the context (not used for upsert, only for parallel_get)
-            auto st = upsert(rssid, current.second, *slot.pk_column, nullptr, context);
+            auto st = upsert(rssid, current.second, *slot.pk_column, nullptr /* stat */, context);
             TRACE_COUNTER_INCREMENT("parallel_upsert_cnt", 1);
         } else {
             st = pk_column_st.status();
