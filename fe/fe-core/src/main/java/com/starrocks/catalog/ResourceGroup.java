@@ -134,13 +134,13 @@ public class ResourceGroup {
                     (rg, classifier) -> Objects.requireNonNullElse(rg.getMemPool(), DEFAULT_MEM_POOL), false),
             new ColumnMeta(
                     new Column(PLAN_SCAN_PARTITIONS_LIMIT, TypeFactory.createVarcharType(200)),
-                    (rg, classifier) -> "" + Objects.requireNonNullElse(rg.getBigQueryScanRowsLimit(), 0)),
+                    (rg, classifier) -> "" + Objects.requireNonNullElse(rg.getPlanScanPartitionsLimit(), 0)),
             new ColumnMeta(
                     new Column(PLAN_SCAN_ROWS_LIMIT, TypeFactory.createVarcharType(200)),
-                    (rg, classifier) -> "" + Objects.requireNonNullElse(rg.getBigQueryScanRowsLimit(), 0)),
+                    (rg, classifier) -> "" + Objects.requireNonNullElse(rg.getPlanScanRowsLimit(), 0)),
             new ColumnMeta(
                     new Column(PLAN_SCAN_TABLETS_LIMIT, TypeFactory.createVarcharType(200)),
-                    (rg, classifier) -> "" + Objects.requireNonNullElse(rg.getBigQueryScanRowsLimit(), 0))
+                    (rg, classifier) -> "" + Objects.requireNonNullElse(rg.getPlanScanTabletsLimit(), 0))
     );
 
     public static final ShowResultSetMetaData META_DATA;

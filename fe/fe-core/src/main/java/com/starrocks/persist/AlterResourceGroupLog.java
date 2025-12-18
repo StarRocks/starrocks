@@ -64,6 +64,15 @@ public class AlterResourceGroupLog implements Writable {
     @SerializedName(value = "version")
     private long version;
 
+    @SerializedName(value = "planScanPartitionsLimit")
+    private Long planScanPartitionsLimit;
+
+    @SerializedName(value = "planScanRowsLimit")
+    private Long planScanRowsLimit;
+
+    @SerializedName(value = "planScanTabletsLimit")
+    private Long planScanTabletsLimit;
+
     public List<ResourceGroupClassifier> getClassifiers() {
         return classifiers;
     }
@@ -174,5 +183,29 @@ public class AlterResourceGroupLog implements Writable {
 
     public void setVersion(long version) {
         this.version = version;
+    }
+
+    public Long getPlanScanPartitionsLimit() {
+        return planScanPartitionsLimit;
+    }
+
+    public void setPlanScanPartitionsLimit(Long planScanPartitionsLimit) {
+        this.planScanPartitionsLimit = planScanPartitionsLimit;
+    }
+
+    public Long getPlanScanRowsLimit() {
+        return planScanRowsLimit;
+    }
+
+    public void setPlanScanRowsLimit(Long planScanRowsLimit) {
+        this.planScanRowsLimit = planScanRowsLimit;
+    }
+
+    public Long getPlanScanTabletsLimit() {
+        return planScanTabletsLimit;
+    }
+
+    public void setPlanScanTabletsLimit(Long planScanTabletsLimit) {
+        this.planScanTabletsLimit = planScanTabletsLimit;
     }
 }
