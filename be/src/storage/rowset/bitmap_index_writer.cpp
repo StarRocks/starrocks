@@ -363,6 +363,8 @@ private:
             }
 
             auto& posting_list = it->second;
+            posting_list.finalize();
+
             posting_lists.emplace_back(&posting_list);
             offset += posting_list.get_num_doc_ids();
             RETURN_IF_ERROR(dict_column_writer.add(&offset));
