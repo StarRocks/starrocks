@@ -308,7 +308,7 @@ StatusOr<std::vector<roaring::Roaring>> BitmapIndexIterator::read_positions(
 
     const auto encoder = EncoderFactory::createEncoder(EncodingType::VARINT);
     for (const auto& doc_rank : doc_ranks) {
-        const ordinal_t ordinal = offset + doc_rank;
+        const ordinal_t ordinal = offset + doc_rank - 1;
         RETURN_IF_ERROR(_posting_position_iter->seek_to_ordinal(ordinal));
 
         auto position_col = ChunkHelper::column_from_field_type(TYPE_VARBINARY, false);

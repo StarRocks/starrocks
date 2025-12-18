@@ -162,7 +162,15 @@ public:
     Status next_batch_ngram(rowid_t ordinal, size_t* n, Column* column) const;
     Status read_ngram_bitmap(rowid_t ordinal, Roaring* result) const;
 
-    StatusOr<std::vector<roaring::Roaring>> read_positions(rowid_t dict_id, const std::vector<uint64_t>& doc_ranks) const;
+    /**
+     * read positions for all ranked docs.
+     *
+     * @param dict_id Dictionary Id that can be refer to ordinal_id.
+     * @param doc_ranks doc ranks, in which it should start from 1.
+     * @return positions.
+     */
+    StatusOr<std::vector<roaring::Roaring>> read_positions(rowid_t dict_id,
+                                                           const std::vector<uint64_t>& doc_ranks) const;
 
     // Seek the dictionary to the first value that is >= the given value.
     //
