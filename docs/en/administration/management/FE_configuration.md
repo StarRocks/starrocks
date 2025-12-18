@@ -384,6 +384,10 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 <!--
 ##### log_plan_cancelled_by_crash_be
 
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
 - Description: Whether to log the COSTS plan if the query is cancelled due to a BE crash or RpcException. This parameter is effective only when `enable_collect_query_detail_info` is set to `false`. When `enable_collect_query_detail_info` is set to `true`, the plan will be recorded in the query detail.
 - Introduced in: v3.1
 -->
@@ -391,6 +395,10 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 <!--
 ##### log_register_and_unregister_query_id
 
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
 - Description:
 - Introduced in: -
 -->
@@ -999,6 +1007,10 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ##### drop_backend_after_decommission
 
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
 - Description: Whether to delete a BE after the BE is decommissioned. `TRUE` indicates that the BE is deleted immediately after it is decommissioned. `FALSE` indicates that the BE is not deleted after it is decommissioned.
 - Introduced in: -
 
@@ -1210,11 +1222,19 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ##### enable_materialized_view
 
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
 - Description: Whether to enable the creation of materialized views.
 - Introduced in: -
 
 ##### enable_materialized_view_spill
 
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
 - Description: Whether to enable Intermediate Result Spilling for materialized view refresh tasks.
 - Introduced in: v3.1.1
 
@@ -1230,6 +1250,10 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 <!--
 ##### enable_show_materialized_views_include_all_task_runs
 
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
 - Description:
 - Introduced in: -
 -->
@@ -1258,36 +1282,64 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ##### enable_experimental_mv
 
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
 - Description: Whether to enable the asynchronous materialized view feature. TRUE indicates this feature is enabled. From v2.5.2 onwards, this feature is enabled by default. For versions earlier than v2.5.2, this feature is disabled by default.
 - Introduced in: v2.4
 
 ##### enable_colocate_mv_index
 
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
 - Description: Whether to support colocating the synchronous materialized view index with the base table when creating a synchronous materialized view. If this item is set to `true`, tablet sink will speed up the write performance of synchronous materialized views.
 - Introduced in: v3.2.0
 
 ##### default_mv_refresh_immediate
 
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
 - Description: Whether to refresh an asynchronous materialized view immediately after creation. When this item is set to `true`, newly created materialized view will be refreshed immediately.
 - Introduced in: v3.2.3
 
 ##### enable_materialized_view_metrics_collect
 
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
 - Description: Whether to collect monitoring metrics for asynchronous materialized views by default.
 - Introduced in: v3.1.11, v3.2.5
 
 ##### enable_materialized_view_text_based_rewrite
 
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
 - Description: Whether to enable text-based query rewrite by default. If this item is set to `true`, the system builds the abstract syntax tree while creating an asynchronous materialized view.
 - Introduced in: v3.2.5
 
 ##### enable_mv_automatic_active_check
 
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
 - Description: Whether to enable the system to automatically check and re-activate the asynchronous materialized views that are set inactive because their base tables (views) had undergone Schema Change or had been dropped and re-created. Please note that this feature will not re-activate the materialized views that are manually set inactive by users.
 - Introduced in: v3.1.6
 
 ##### enable_active_materialized_view_schema_strict_check
 
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
 - Description: Whether to strictly check the length consistency of data types when activating an inactive materialized view. When this item is set to `false`, the activation of the materialized view is not affected if the length of the data types has changed in the base table.
 - Introduced in: v3.3.4
 
@@ -1313,6 +1365,10 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 <!--
 ##### mv_auto_analyze_async
 
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
 - Description:
 - Introduced in: -
 -->
@@ -1328,6 +1384,10 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 
 ##### enable_decimal_v3
 
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
 - Description: Whether to support the DECIMAL V3 data type.
 - Introduced in: -
 
@@ -1342,6 +1402,10 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 
 ##### dynamic_partition_enable
 
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
 - Description: Whether to enable the dynamic partitioning feature. When this feature is enabled, StarRocks dynamically creates partitions for new data and automatically deletes expired partitions to ensure the freshness of data.
 - Introduced in: -
 
@@ -1368,6 +1432,10 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 <!--
 ##### memory_tracker_enable
 
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
 - Description:
 - Introduced in: -
 -->
@@ -1486,11 +1554,19 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 
 ##### enable_statistic_collect
 
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
 - Description: Whether to collect statistics for the CBO. This feature is enabled by default.
 - Introduced in: -
 
 ##### enable_statistic_collect_on_first_load
 
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
 - Description: Controls automatic statistics collection and maintenance triggered by data loading operations. This includes:
   - Statistics collection when data is first loaded into a partition (partition version equals 2).
   - Statistics collection when data is loaded into empty partitions of multi-partition tables.
@@ -1589,6 +1665,10 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 <!--
 ##### statistic_check_expire_partition
 
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
 - Description:
 - Introduced in: -
 -->
@@ -1668,6 +1748,10 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 
 ##### enable_collect_full_statistic
 
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
 - Description: Whether to enable automatic full statistics collection. This feature is enabled by default.
 - Introduced in: -
 
@@ -1791,6 +1875,10 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 
 ##### enable_predicate_columns_collection
 
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
 - Description: Whether to enable predicate columns collection. If disabled, predicate columns will not be recorded during query optimization.
 - Introduced in: -
 ##### histogram_buckets_size
@@ -2370,6 +2458,10 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 
 ##### empty_load_as_error
 
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
 - Description: Whether to return an error message "all partitions have no load data" if no data is loaded. Valid values:
   - `true`: If no data is loaded, the system displays a failure message and returns an error "all partitions have no load data".
   - `false`: If no data is loaded, the system displays a success message and returns OK, instead of an error.
@@ -2386,6 +2478,10 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 
 ##### enable_sync_publish
 
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
 - Description: Whether to synchronously execute the apply task at the publish phase of a load transaction. This parameter is applicable only to Primary Key tables. Valid values:
   - `TRUE` (default): The apply task is synchronously executed at the publish phase of a load transaction. It means that the load transaction is reported as successful only after the apply task is completed, and the loaded data can truly be queried. When a task loads a large volume of data at a time or loads data frequently, setting this parameter to `true` can improve query performance and stability, but may increase load latency.
   - `FALSE`: The apply task is asynchronously executed at the publish phase of a load transaction. It means that the load transaction is reported as successful after the apply task is submitted, but the loaded data cannot be immediately queried. In this case, concurrent queries need to wait for the apply task to complete or time out before they can continue. When a task loads a large volume of data at a time or loads data frequently, setting this parameter to `false` may affect query performance and stability.
@@ -2533,6 +2629,10 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 
 ##### enable_auto_tablet_distribution
 
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
 - Description: Whether to automatically set the number of buckets.
   - If this parameter is set to `TRUE`, you don't need to specify the number of buckets when you create a table or add a partition. StarRocks automatically determines the number of buckets.
   - If this parameter is set to `FALSE`, you need to manually specify the number of buckets when you create a table or add a partition. If you do not specify the bucket count when adding a new partition to a table, the new partition inherits the bucket count set at the creation of the table. However, you can also manually specify the number of buckets for the new partition.
@@ -2607,6 +2707,10 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 
 ##### enable_fast_schema_evolution
 
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
 - Description: Whether to enable fast schema evolution for all tables within the StarRocks cluster. Valid values are `TRUE` and `FALSE` (default). Enabling fast schema evolution can increase the speed of schema changes and reduce resource usage when columns are added or dropped.
 - Introduced in: v3.2.0
 
@@ -2703,6 +2807,10 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 <!--
 ##### tablet_sched_disable_colocate_overall_balance
 
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
 - Description:
 - Introduced in: -
 -->
@@ -3191,6 +3299,10 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 
 ##### azure_use_native_sdk
 
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
 - Description: Whether to use the native SDK to access Azure Blob Storage, thus allowing authentication with Managed Identities and Service Principals. If this item is set to `false`, only authentication with Shared Key and SAS Token is allowed.
 - Introduced in: v3.4.4
 
@@ -3373,6 +3485,10 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 
 ##### lake_enable_ingest_slowdown
 
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
 - Description: Whether to enable Data Ingestion Slowdown in a shared-data cluster. When Data Ingestion Slowdown is enabled, if the Compaction Score of a partition exceeds `lake_ingest_slowdown_threshold`, loading tasks on that partition will be throttled down. This configuration only takes effect when `run_mode` is set to `shared_data`. From v3.3.6 onwards, the default value is chenged from `false` to `true`.
 - Introduced in: v3.2.0
 
@@ -3423,11 +3539,19 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 
 ##### lake_compaction_allow_partial_success
 
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
 - Description: If this item is set to `true`, the system will consider the Compaction operation in a shared-data cluster as successful when one of the sub-tasks succeeds.
 - Introduced in: v3.5.2
 
 ##### lake_enable_balance_tablets_between_workers
 
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
 - Description: Whether to balance the number of tablets among Compute Nodes during the tablet migration of cloud-native tables in a shared-data cluster. `true` indicates to balance the tablets among Compute Nodes, and `false` indicates to disabling this feature.
 - Introduced in: v3.3.4
 
@@ -3489,6 +3613,10 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 
 ##### plugin_enable
 
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
 - Description: Whether plugins can be installed on FEs. Plugins can be installed or uninstalled only on the Leader FE.
 - Introduced in: -
 
@@ -3557,6 +3685,10 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 <!--
 ##### lake_enable_batch_publish_version 
 
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
 - Description:
 - Introduced in: -
 -->
@@ -3744,6 +3876,10 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 
 ##### enable_collect_tablet_num_in_show_proc_backend_disk_path
 
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
 - Description: Whether to enable the collection of tablet numbers for each disk in the `SHOW PROC /BACKENDS/{id}` command
 - Introduced in: v4.0.1, v3.5.8
 
@@ -3759,6 +3895,10 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 <!--
 ##### enable_replicated_storage_as_default_engine
 
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
 - Description:
 - Introduced in: -
 -->
@@ -3766,6 +3906,10 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 <!--
 ##### enable_schedule_insert_query_by_row_count
 
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
 - Description:
 - Introduced in: -
 -->
@@ -3800,6 +3944,10 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 <!--
 ##### enable_starrocks_external_table_auth_check
 
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
 - Description:
 - Introduced in: -
 -->
@@ -4064,6 +4212,10 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 <!--
 ##### authorization_enable_priv_collection_cache
 
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
 - Description:
 - Introduced in: -
 -->
@@ -4082,6 +4234,10 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 <!--
 ##### enable_automatic_bucket
 
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
 - Description:
 - Introduced in: -
 -->
@@ -4237,6 +4393,10 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 <!--
 ##### enable_hms_parallel_process_evens
 
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
 - Description:
 - Introduced in: -
 -->
@@ -4266,6 +4426,10 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 <!--
 ##### enable_refresh_hive_partitions_statistics
 
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
 - Description:
 - Introduced in: -
 -->
@@ -4414,6 +4578,10 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 <!--
 ##### vectorized_load_enable (Deprecated)
 
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
 - Description:
 - Introduced in: -
 -->
@@ -4421,6 +4589,10 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 <!--
 ##### enable_pipeline_load (Deprecated)
 
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
 - Description:
 - Introduced in: -
 -->
@@ -4428,6 +4600,10 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 <!--
 ##### enable_shuffle_load
 
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
 - Description:
 - Introduced in: -
 -->
@@ -4435,6 +4611,10 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 <!--
 ##### eliminate_shuffle_load_by_replicated_storage
 
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
 - Description:
 - Introduced in: -
 -->
@@ -4442,6 +4622,10 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 <!--
 ##### enable_vectorized_file_load (Deprecated)
 
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
 - Description:
 - Introduced in: -
 -->
@@ -4526,6 +4710,10 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 <!--
 ##### enable_dict_optimize_stream_load
 
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
 - Description:
 - Introduced in: -
 -->
@@ -4544,6 +4732,10 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 <!--
 ##### enable_password_reuse
 
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
 - Description:
 - Introduced in: -
 -->
@@ -4783,6 +4975,10 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 <!--
 ##### enable_check_db_state
 
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
 - Description:
 - Introduced in: -
 -->
@@ -4938,6 +5134,10 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 <!--
 ##### enable_persistent_index_by_default
 
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
 - Description:
 - Introduced in: -
 -->
@@ -4978,6 +5178,10 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 <!--
 ##### enable_show_external_catalog_privilege
 
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
 - Description:
 - Introduced in: -
 -->
@@ -5064,6 +5268,10 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 
 ##### enable_mv_query_context_cache
 
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
 - Description: Whether to enable query-level materialized view rewrite cache to improve query rewrite performance.
 - Introduced in: v3.3
 
@@ -5316,6 +5524,10 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 
 ##### mv_refresh_fail_on_filter_data
 
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
 - Description: Mv refresh fails if there is filtered data in refreshing, true by default, otherwise return success by ignoring the filtered data.
 - Introduced in: -
 
@@ -5403,12 +5615,20 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 
 ##### enable_mv_refresh_extra_prefix_logging
 
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
 - Description: Whether to enable prefixes with materialized view names in logs for better debug.
 - Introduced in: v3.4.0
 
 
 ##### enable_mv_post_image_reload_cache
 
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
 - Description: Whether to perform reload flag check after FE loaded an image. If the check is performed for a base materialized view, it is not needed for other materialized views that related to it.
 - Introduced in: v3.5.0
 

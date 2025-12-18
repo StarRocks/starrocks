@@ -385,6 +385,10 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 <!--
 ##### log_plan_cancelled_by_crash_be
 
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
 - 描述：是否在查询异常结束时，打印 COSTS 计划到日志中。只有在 `enable_collect_query_detail_info` 为 `false` 时有效，因为 `enable_collect_query_detail_info` 为 `true` 时，plan 会被记录到 query detail 中。
 - 引入版本：v3.1
 -->
@@ -392,6 +396,10 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 <!--
 ##### log_register_and_unregister_query_id
 
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
 - 描述：
 - 引入版本：-
 -->
@@ -991,6 +999,10 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ##### drop_backend_after_decommission
 
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
 - 描述：BE 被下线后，是否删除该 BE。true 代表 BE 被下线后会立即删除该 BE。False 代表下线完成后不删除 BE。
 - 引入版本：-
 
@@ -1202,11 +1214,19 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ##### enable_materialized_view
 
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
 - 描述：是否允许创建物化视图。
 - 引入版本：-
 
 ##### enable_materialized_view_spill
 
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
 - 描述：是否为物化视图的刷新任务开启中间结果落盘功能。
 - 引入版本：v3.1.1
 
@@ -1222,6 +1242,10 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 <!--
 ##### enable_show_materialized_views_include_all_task_runs
 
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
 - 描述：
 - 引入版本：-
 -->
@@ -1250,36 +1274,64 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ##### enable_experimental_mv
 
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
 - 描述：是否开启异步物化视图功能。`TRUE` 表示开启。从 2.5.2 版本开始，该功能默认开启。2.5.2 版本之前默认值为 `FALSE`。
 - 引入版本：v2.4
 
 ##### enable_colocate_mv_index
 
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
 - 描述：在创建同步物化视图时，是否将同步物化视图的索引与基表加入到相同的 Colocate Group。如果设置为 `true`，TabletSink 将加速同步物化视图的写入性能。
 - 引入版本：v3.2.0
 
 ##### default_mv_refresh_immediate
 
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
 - 描述：创建异步物化视图后，是否立即刷新该物化视图。当设置为 `true` 时，异步物化视图创建后会立即刷新。
 - 引入版本：v3.2.3
 
 ##### enable_materialized_view_metrics_collect
 
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
 - 描述：是否默认收集异步物化视图的监控指标。
 - 引入版本：v3.1.11，v3.2.5
 
 ##### enable_materialized_view_text_based_rewrite
 
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
 - 描述：是否默认启用基于文本的查询改写。如果此项设置为 `true`，则系统在创建异步物化视图时构建抽象语法树。
 - 引入版本：v3.2.5
 
 ##### enable_mv_automatic_active_check
 
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
 - 描述：是否允许系统自动检查和重新激活异步物化视图。启用此功能后，系统将会自动激活因基表（或视图）Schema Change 或重建而失效（Inactive）的物化视图。请注意，此功能不会激活由用户手动设置为 Inactive 的物化视图。
 - 引入版本：v3.1.6
 
 ##### enable_active_materialized_view_schema_strict_check
 
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
 - 描述：在激活失效物化视图时是否严格检查数据类型长度一致性。当设置为 `false` 时，如基表的数据类型长度有变化，也不影响物化视图的激活。
 - 引入版本：v3.3.4
 
@@ -1305,6 +1357,10 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 <!--
 ##### mv_auto_analyze_async
 
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
 - 描述：
 - 引入版本：-
 -->
@@ -1320,6 +1376,10 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ##### enable_decimal_v3
 
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
 - 描述：是否开启 Decimal V3。
 - 引入版本：-
 
@@ -1334,6 +1394,10 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ##### dynamic_partition_enable
 
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
 - 描述：是否开启动态分区功能。打开后，您可以按需为新数据动态创建分区，同时 StarRocks 会⾃动删除过期分区，从而确保数据的时效性。
 - 引入版本：-
 
@@ -1360,6 +1424,10 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 <!--
 ##### memory_tracker_enable
 
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
 - 描述：
 - 引入版本：-
 -->
@@ -1478,11 +1546,19 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ##### enable_statistic_collect
 
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
 - 描述：是否采集统计信息，该开关默认打开。
 - 引入版本：-
 
 ##### enable_statistic_collect_on_first_load
 
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
 - 描述：控制数据导入操作触发的自动统计信息采集和维护。包括：
   - 分区首次导入数据时的统计信息采集（分区版本号为 2）。
   - 多分区表的空分区导入数据时的统计信息采集。
@@ -1511,7 +1587,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 - 引入版本：v3.1
 
-
 ##### enable_statistic_collect_on_update
 
 - 默认值：true
@@ -1519,7 +1594,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 单位：-
 - 是否动态：是
 - 描述：控制 UPDATE 语句是否可以触发自动统计信息采集。启用时，修改表数据的 UPDATE 操作可以通过由 `enable_statistic_collect_on_first_load` 控制的基于导入的统计信息框架来调度统计信息采集。禁用此配置将跳过 UPDATE 语句的统计信息采集，同时保持由导入触发的统计信息采集行为不变。
-- 引入版本：v3.5.11, v4.0.4
 
 ##### semi_sync_collect_statistic_await_seconds
 
@@ -1582,6 +1656,10 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 <!--
 ##### statistic_check_expire_partition
 
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
 - 描述：
 - 引入版本：-
 -->
@@ -1661,6 +1739,10 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ##### enable_collect_full_statistic
 
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
 - 描述：是否开启自动全量统计信息采集，该开关默认打开。
 - 引入版本：-
 
@@ -1784,6 +1866,10 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ##### enable_predicate_columns_collection
 
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
 - 描述：是否启用 Predicate Column 采集。如果禁用，在查询优化期间将不会记录 Predicate Column。
 - 引入版本：-
 ##### histogram_buckets_size
@@ -2354,6 +2440,10 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ##### empty_load_as_error
 
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
 - 描述：导入数据为空时，是否返回报错提示 `all partitions have no load data`。有效值：
   - `true`：当导入数据为空时，显示导入失败，并返回报错提示 `all partitions have no load data`。
   - `false`：当导入数据为空时，显示导入成功，并返回 `OK`，不返回报错提示。
@@ -2370,6 +2460,10 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ##### enable_sync_publish
 
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
 - 描述：是否在导入事务 publish 阶段同步执行 apply 任务，仅适用于主键表。有效值：
   - `TRUE`：导入事务 publish 阶段同步执行 apply 任务，即 apply 任务完成后才会返回导入事务 publish 成功，此时所导入数据真正可查。因此当导入任务一次导入的数据量比较大，或者导入频率较高时，开启该参数可以提升查询性能和稳定性，但是会增加导入耗时。
   - `FALSE`：在导入事务 publish 阶段异步执行 apply 任务，即在导入事务 publish 阶段 apply 任务提交之后立即返回导入事务 publish 成功，然而此时导入数据并不真正可查。这时并发的查询需要等到 apply 任务完成或者超时，才能继续执行。因此当导入任务一次导入的数据量比较大，或者导入频率较高时，关闭该参数会影响查询性能和稳定性。
@@ -2517,6 +2611,10 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ##### enable_auto_tablet_distribution
 
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
 - 描述：是否开启自动设置分桶功能。
   - 设置为 `true` 表示开启，您在建表或新增分区时无需指定分桶数目，StarRocks 自动决定分桶数量。自动设置分桶数目的策略，请参见[设置分桶数量](../../table_design/data_distribution/Data_distribution.md#设置分桶数量)。
   - 设置为 `false` 表示关闭，您在建表时需要手动指定分桶数量。
@@ -2592,6 +2690,10 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ##### enable_fast_schema_evolution
 
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
 - 描述：是否开启集群内所有表的 fast schema evolution，取值：`TRUE` 或 `FALSE`。开启后增删列时可以提高 Schema Change 速度并降低资源使用。
 - 引入版本：v3.2.0
 
@@ -2688,6 +2790,10 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 <!--
 ##### tablet_sched_disable_colocate_overall_balance
 
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
 - 描述：
 - 引入版本：-
 -->
@@ -3176,6 +3282,10 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ##### azure_use_native_sdk
 
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
 - 描述：是否使用 Native SDK 访问 Azure Blob Storage，从而允许使用 Managed Identity 和 Service Principal 进行身份验证。如果该项设置为 `false`，则只允许使用 Shared Key 和 SAS 令牌进行身份验证。
 - 引入版本：v3.4.4
 
@@ -3353,6 +3463,10 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 
 ##### lake_enable_ingest_slowdown
 
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
 - 描述：是否为存算分离集群开启导入限速功能。开启导入限速功能后，当某个表分区的 Compaction Score 超过了 `lake_ingest_slowdown_threshold`，该表分区上的导入任务将会被限速。只有当 `run_mode` 设置为 `shared_data` 后，该配置项才会生效。自 v3.3.6 起，默认值由 `false` 变为 `true`。
 - 引入版本：v3.2.0
 
@@ -3416,6 +3530,10 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 
 ##### lake_enable_balance_tablets_between_workers
 
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
 - 描述：是否在存算分离集群内表的 Tablet 调度过程中平衡 CN 节点之间的 Tablet 数量。`true` 表示启用平衡 Tablet 数量，`false` 表示禁用此功能。
 - 引入版本：v3.3.4
 
@@ -3457,6 +3575,10 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 
 ##### lake_enable_batch_publish_version
 
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
 - 描述：当启用时，PublishVersionDaemon 会在存算分离模式（RunMode 为 shared_data）下，将同一Lake表/分区的待发布事务批量收集并一次性发布版本，而不是逐事务发布。它通过调用 `getReadyPublishTransactionsBatch()` 并使用 `publishVersionForLakeTableBatch(...)` 执行分组发布，以减少 RPC 次数并提升吞吐。如果关闭，则退回到 `publishVersionForLakeTable(...)` 的逐事务发布。实现内部使用集合协调在途任务以避免开关切换时的重复发布，线程池规模受 `lake_publish_version_max_threads` 影响。
 - 引入版本：v3.2.0
 
@@ -3482,6 +3604,10 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 
 ##### plugin_enable
 
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
 - 描述：是否开启了插件功能。只能在 Leader FE 安装/卸载插件。
 - 引入版本：-
 
@@ -3550,6 +3676,10 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 <!--
 ##### lake_enable_batch_publish_version 
 
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
 - 描述：
 - 引入版本：-
 -->
@@ -3747,6 +3877,10 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 <!--
 ##### enable_replicated_storage_as_default_engine
 
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
 - 描述：
 - 引入版本：-
 -->
@@ -3754,6 +3888,10 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 <!--
 ##### enable_schedule_insert_query_by_row_count
 
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
 - 描述：
 - 引入版本：-
 -->
@@ -3788,6 +3926,10 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 <!--
 ##### enable_starrocks_external_table_auth_check
 
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
 - 描述：
 - 引入版本：-
 -->
@@ -4052,6 +4194,10 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 <!--
 ##### authorization_enable_priv_collection_cache
 
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
 - 描述：
 - 引入版本：-
 -->
@@ -4070,6 +4216,10 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 <!--
 ##### enable_automatic_bucket
 
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
 - 描述：
 - 引入版本：-
 -->
@@ -4225,6 +4375,10 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 <!--
 ##### enable_hms_parallel_process_evens
 
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
 - 描述：
 - 引入版本：-
 -->
@@ -4254,6 +4408,10 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 <!--
 ##### enable_refresh_hive_partitions_statistics
 
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
 - 描述：
 - 引入版本：-
 -->
@@ -4402,6 +4560,10 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 <!--
 ##### vectorized_load_enable (Deprecated)
 
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
 - 描述：
 - 引入版本：-
 -->
@@ -4409,6 +4571,10 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 <!--
 ##### enable_pipeline_load (Deprecated)
 
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
 - 描述：
 - 引入版本：-
 -->
@@ -4416,6 +4582,10 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 <!--
 ##### enable_shuffle_load
 
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
 - 描述：
 - 引入版本：-
 -->
@@ -4423,6 +4593,10 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 <!--
 ##### eliminate_shuffle_load_by_replicated_storage
 
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
 - 描述：
 - 引入版本：-
 -->
@@ -4430,6 +4604,10 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 <!--
 ##### enable_vectorized_file_load (Deprecated)
 
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
 - 描述：
 - 引入版本：-
 -->
@@ -4514,6 +4692,10 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 <!--
 ##### enable_dict_optimize_stream_load
 
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
 - 描述：
 - 引入版本：-
 -->
@@ -4532,6 +4714,10 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 <!--
 ##### enable_password_reuse
 
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
 - 描述：
 - 引入版本：-
 -->
@@ -4760,6 +4946,10 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 <!--
 ##### enable_check_db_state
 
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
 - 描述：
 - 引入版本：-
 -->
@@ -4915,6 +5105,10 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 <!--
 ##### enable_persistent_index_by_default
 
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
 - 描述：
 - 引入版本：-
 -->
@@ -4955,6 +5149,10 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 <!--
 ##### enable_show_external_catalog_privilege
 
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
 - 描述：
 - 引入版本：-
 -->
