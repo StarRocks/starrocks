@@ -152,65 +152,79 @@ public class TabletRepairHelper {
 
     /**
      * Finds valid tablet metadata for a physical partition based on version consistency requirements.
-     * If `enforceConsistentVersion` is true, it attempts to find a single version for which all tablets in the
-     * physical partition have metadata. This ensures all tablets are repaired to a consistent state.
-     * If `enforceConsistentVersion` is false, it finds the latest available valid metadata for each individual tablet
-     * within the specified version range.
      * The identified valid metadata entries are stored in the `validMetadatas` map.
      */
     private static void findValidTabletMetadata(PhysicalPartitionInfo info,
                                                 Map<Long, Map<Long, TabletMetadataPB>> tabletVersionMetadatas, long maxVersion,
                                                 long minVersion, boolean enforceConsistentVersion,
                                                 Map<Long, TabletMetadataPB> validMetadatas) {
+        if (enforceConsistentVersion) {
+            findConsistentVersionTabletMetadata(info, tabletVersionMetadatas, maxVersion, minVersion, validMetadatas);
+        } else {
+            findLatestValidTabletMetadata(info, tabletVersionMetadatas, maxVersion, minVersion, validMetadatas);
+        }
+    }
+
+    /**
+     * Attempts to find a single version for which all tablets in the physical partition have metadata.
+     * This ensures all tablets are repaired to a consistent state.
+     */
+    private static void findConsistentVersionTabletMetadata(PhysicalPartitionInfo info,
+                                                            Map<Long, Map<Long, TabletMetadataPB>> tabletVersionMetadatas,
+                                                            long maxVersion, long minVersion,
+                                                            Map<Long, TabletMetadataPB> validMetadatas) {
+        Preconditions.checkState(validMetadatas.isEmpty());
         List<Long> allTablets = info.allTablets;
 
-        // try to find the valid tablet metadata
-        if (enforceConsistentVersion) {
-            // find consistent valid metadata version
-            Preconditions.checkState(validMetadatas.isEmpty());
-
-            long validVersion = 0;
-            for (long version = maxVersion; version >= minVersion; --version) {
-                boolean allTabletsMetadataExist = true;
-                for (long tabletId : allTablets) {
-                    Map<Long, TabletMetadataPB> versionMetadatas = tabletVersionMetadatas.get(tabletId);
-                    if (versionMetadatas == null || !versionMetadatas.containsKey(version)) {
-                        allTabletsMetadataExist = false;
-                        break;
-                    }
-                }
-
-                if (allTabletsMetadataExist) {
-                    validVersion = version;
+        long validVersion = 0;
+        for (long version = maxVersion; version >= minVersion; --version) {
+            boolean allTabletsMetadataExist = true;
+            for (long tabletId : allTablets) {
+                Map<Long, TabletMetadataPB> versionMetadatas = tabletVersionMetadatas.get(tabletId);
+                if (versionMetadatas == null || !versionMetadatas.containsKey(version)) {
+                    allTabletsMetadataExist = false;
                     break;
                 }
             }
 
-            if (validVersion != 0) {
-                for (long tabletId : allTablets) {
-                    validMetadatas.put(tabletId, tabletVersionMetadatas.get(tabletId).get(validVersion));
-                }
+            if (allTabletsMetadataExist) {
+                validVersion = version;
+                break;
             }
-        } else {
-            // find the latest valid metadata for each tablet
-            Preconditions.checkState(!validMetadatas.keySet().containsAll(allTablets));
+        }
 
+        if (validVersion != 0) {
             for (long tabletId : allTablets) {
-                if (validMetadatas.containsKey(tabletId)) {
-                    continue;
-                }
+                validMetadatas.put(tabletId, tabletVersionMetadatas.get(tabletId).get(validVersion));
+            }
+        }
+    }
 
-                Map<Long, TabletMetadataPB> versionMetadatas = tabletVersionMetadatas.get(tabletId);
-                if (versionMetadatas == null) {
-                    continue;
-                }
+    /**
+     * Attempts to find the latest available valid metadata for each individual tablet within the specified version range.
+     */
+    private static void findLatestValidTabletMetadata(PhysicalPartitionInfo info,
+                                                      Map<Long, Map<Long, TabletMetadataPB>> tabletVersionMetadatas,
+                                                      long maxVersion, long minVersion,
+                                                      Map<Long, TabletMetadataPB> validMetadatas) {
+        List<Long> allTablets = info.allTablets;
+        Preconditions.checkState(!validMetadatas.keySet().containsAll(allTablets));
 
-                for (long version = maxVersion; version >= minVersion; --version) {
-                    TabletMetadataPB metadata = versionMetadatas.get(version);
-                    if (metadata != null) {
-                        validMetadatas.put(tabletId, metadata);
-                        break;
-                    }
+        for (long tabletId : allTablets) {
+            if (validMetadatas.containsKey(tabletId)) {
+                continue;
+            }
+
+            Map<Long, TabletMetadataPB> versionMetadatas = tabletVersionMetadatas.get(tabletId);
+            if (versionMetadatas == null) {
+                continue;
+            }
+
+            for (long version = maxVersion; version >= minVersion; --version) {
+                TabletMetadataPB metadata = versionMetadatas.get(version);
+                if (metadata != null) {
+                    validMetadatas.put(tabletId, metadata);
+                    break;
                 }
             }
         }
