@@ -28,6 +28,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.util.ArrowUtil;
 import com.starrocks.common.util.DebugUtil;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.arrow.flight.sql.session.ArrowFlightSqlSessionManager;
 import com.starrocks.sql.ast.expression.Expr;
@@ -597,9 +598,9 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
             ComputeNode worker = clusterInfoService.getBackendOrComputeNode(workerId);
 
             SessionVariable sv = ctx.getSessionVariable();
-            Pair<Location, ByteString> parsedProxy = parseEndpoint(sv, ctx.getExecutionId(), worker, rootFragmentInstanceId);
-            Location endpoint = parsedProxy.first;
-            ByteString handle = parsedProxy.second;
+            Pair<Location, ByteString> parsedEndpoint = parseEndpoint(sv, ctx.getExecutionId(), worker, rootFragmentInstanceId);
+            Location endpoint = parsedEndpoint.first;
+            ByteString handle = parsedEndpoint.second;
 
             FlightSql.TicketStatementQuery ticketStatement =
                     FlightSql.TicketStatementQuery.newBuilder().setStatementHandle(handle).build();
