@@ -37,15 +37,18 @@
 #include <string>
 #include <thread>
 
+#include "column/column_viewer.h"
 #include "fs/fs_memory.h"
 #include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
+#include "storage/chunk_helper.h"
 #include "storage/key_coder.h"
 #include "storage/olap_common.h"
 #include "storage/rowset/bitmap_index_reader.h"
 #include "storage/rowset/bitmap_index_writer.h"
 #include "storage/types.h"
 #include "testutil/assert.h"
+#include "util/utf8.h"
 
 namespace starrocks {
 
@@ -66,9 +69,9 @@ protected:
     void TearDown() override {}
 
     void get_bitmap_reader_iter(RandomAccessFile* rfile, const ColumnIndexMetaPB& meta, BitmapIndexReader** reader,
-                                BitmapIndexIterator** iter) {
+                                BitmapIndexIterator** iter, int32_t gram_num = -1) {
         _opts.read_file = rfile;
-        *reader = new BitmapIndexReader();
+        *reader = new BitmapIndexReader(gram_num);
         ASSIGN_OR_ABORT(auto r, (*reader)->load(_opts, meta.bitmap_index()));
         ASSERT_TRUE(r);
         ASSERT_OK((*reader)->new_iterator(_opts, iter));
@@ -89,6 +92,23 @@ protected:
             ASSERT_EQ(BITMAP_INDEX, meta->type());
             ASSERT_TRUE(wfile->close().ok());
         }
+    }
+
+    void write_index_file_use_by_gin(const int32_t gram_num, const std::string& filename,
+                                     const std::vector<std::string>& values, ColumnIndexMetaPB* meta) const {
+        const TypeInfoPtr type_info = get_type_info(TYPE_VARCHAR);
+        ASSIGN_OR_ABORT(const auto wfile, _fs->new_writable_file(filename));
+
+        std::unique_ptr<BitmapIndexWriter> writer;
+        BitmapIndexWriter::create(type_info, &writer, gram_num);
+
+        for (size_t i = 0; i < values.size(); ++i) {
+            Slice tmp(values[i]);
+            writer->add_value_with_current_rowid(&tmp);
+        }
+        ASSERT_TRUE(writer->finish(wfile.get(), meta).ok());
+        ASSERT_EQ(BITMAP_INDEX, meta->type());
+        ASSERT_TRUE(wfile->close().ok());
     }
 
     std::shared_ptr<MemoryFileSystem> _fs = nullptr;
@@ -291,6 +311,74 @@ TEST_F(BitmapIndexTest, test_concurrent_load) {
 
     delete iter;
     delete[] val;
+}
+
+TEST_F(BitmapIndexTest, test_dict_ngram_index) {
+    constexpr int32_t num_keywords = 10;
+    constexpr int32_t gram_num = 3;
+
+    std::set<std::string> ngram;
+    std::vector<std::string> keywords;
+    for (int i = 0; i < num_keywords; ++i) {
+        // slice should be one of hel,ell,llo,low,wor,orl,rld,ld ,d {0,...,9}
+        const std::string keyword = "hello, world " + std::to_string(i);
+
+        std::vector<size_t> index;
+        Slice cur_slice(keyword);
+        const size_t slice_gram_num = get_utf8_index(cur_slice, &index);
+
+        for (size_t j = 0; j + gram_num <= slice_gram_num; ++j) {
+            // find next ngram
+            size_t cur_ngram_length =
+                    j + gram_num < slice_gram_num ? index[j + gram_num] - index[j] : cur_slice.get_size() - index[j];
+            Slice cur_ngram(cur_slice.data + index[j], cur_ngram_length);
+            ngram.emplace(cur_ngram.to_string());
+        }
+
+        keywords.emplace_back(keyword);
+    }
+
+    std::string file_name = kTestDir + "/dict_ngram_index";
+    ColumnIndexMetaPB meta;
+    write_index_file_use_by_gin(3, file_name, keywords, &meta);
+
+    {
+        BitmapIndexReader* reader = nullptr;
+        BitmapIndexIterator* iter = nullptr;
+        ASSIGN_OR_ABORT(const auto rfile, _fs->new_random_access_file(file_name));
+        get_bitmap_reader_iter(rfile.get(), meta, &reader, &iter, 3);
+
+        const size_t dict_num = reader->bitmap_nums();
+        ASSERT_EQ(dict_num, num_keywords);
+
+        const size_t ngram_num = reader->ngram_bitmap_nums();
+        ASSERT_EQ(ngram_num, ngram.size());
+
+        size_t to_read = ngram_num;
+        const auto col = ChunkHelper::column_from_field_type(TYPE_VARCHAR, false);
+        ASSERT_TRUE(iter->next_batch_ngram(0, &to_read, col.get()).ok());
+        ASSERT_EQ(ngram_num, to_read);
+
+        ColumnViewer<TYPE_VARCHAR> viewer(std::move(col));
+        ASSERT_EQ(ngram.size(), viewer.size());
+
+        auto it = ngram.begin();
+        for (rowid_t i = 0; i < viewer.size(); ++i) {
+            auto value = viewer.value(i);
+            ASSERT_EQ(*it, value.to_string());
+            ++it;
+
+            roaring::Roaring r1, r2;
+            ASSERT_TRUE(iter->read_ngram_bitmap(i, &r1).ok());
+            ASSERT_TRUE(iter->seek_dict_by_ngram(&value, &r2).ok());
+            ASSERT_EQ(r1, r2);
+            if (it->starts_with("d ")) {
+                ASSERT_EQ(1, r1.cardinality());
+            } else {
+                ASSERT_EQ(num_keywords, r1.cardinality());
+            }
+        }
+    }
 }
 
 } // namespace starrocks
