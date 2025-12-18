@@ -218,6 +218,8 @@ LIMIT 10;
   对 Join 条件中复杂表达式的支持有限。
 - **倾斜表**
   Skew Join V2 只能处理 JOIN 操作中大表倾斜的场景，并且大表必须用作左表。
+- **Join 重排序**
+  使用 `skew` hint 会阻止优化器对该 JOIN 进行重排序（Join Reorder）。该 JOIN 将按照 SQL 中指定的顺序执行，优化器不会尝试更改连接顺序，也不会交换包含该 hint 的 join 节点的左右表。
 
 ## 故障排除
 
