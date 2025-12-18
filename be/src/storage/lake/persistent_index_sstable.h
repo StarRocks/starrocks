@@ -82,7 +82,8 @@ public:
 
     static StatusOr<PersistentIndexSstableUniquePtr> new_sstable(const PersistentIndexSstablePB& sstable_pb,
                                                                  const std::string& location, Cache* cache,
-                                                                 bool need_filter = true, DelVectorPtr delvec = nullptr,
+                                                                 bool need_filter = true,
+                                                                 const DelVectorPtr& delvec = nullptr,
                                                                  const TabletMetadataPtr& metadata = nullptr,
                                                                  TabletManager* tablet_mgr = nullptr);
 

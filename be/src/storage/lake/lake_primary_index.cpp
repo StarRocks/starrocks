@@ -383,7 +383,6 @@ Status LakePrimaryIndex::parallel_get(ParallelPublishContext* context) {
 
         // Encode primary keys for this segment
         auto pk_column_st = context->segment_pk_iterator->encoded_pk_column(current.first.get());
-        context->extend_slots(); // Allocate a slot for this task's working data
         auto& slot = context->slots.back();
 
         if (pk_column_st.ok()) {
@@ -411,6 +410,8 @@ Status LakePrimaryIndex::parallel_get(ParallelPublishContext* context) {
     };
 
     if (context->token) {
+        // `extend_slots` is not thread-safe, must be called before submitting task
+        context->extend_slots(); // Allocate a slot for this task's working data
         // Parallel mode: Submit task to thread pool
         auto st = context->token->submit_func(func);
         TRACE_COUNTER_INCREMENT("parallel_get_cnt", 1);
@@ -420,6 +421,7 @@ Status LakePrimaryIndex::parallel_get(ParallelPublishContext* context) {
         context->status->update(st);
     } else {
         // Serial mode: Execute inline
+        context->extend_slots(); // Allocate a slot for this task's working data
         func();
         RETURN_IF_ERROR(*context->status);
     }

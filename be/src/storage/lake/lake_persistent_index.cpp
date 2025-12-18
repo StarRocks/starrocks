@@ -315,7 +315,7 @@ Status LakePersistentIndex::upsert(size_t n, const Slice* keys, const IndexValue
     size_t num_found;
     RETURN_IF_ERROR(
             _memtable->upsert(n, keys, values, old_values, not_founds.get(), &num_found, _version.major_number()));
-    if (ctx->token == nullptr) {
+    if (ctx == nullptr || ctx->token == nullptr) {
         RETURN_IF_ERROR(get_from_inactive_memtables(n, keys, old_values, not_founds.get(), -1));
         RETURN_IF_ERROR(get_from_sstables(n, keys, old_values, not_founds.get(), -1));
         RETURN_IF_ERROR(flush_memtable());

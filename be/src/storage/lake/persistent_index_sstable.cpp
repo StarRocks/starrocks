@@ -174,7 +174,7 @@ Status PersistentIndexSstable::sample_keys(std::vector<std::string>* keys, size_
 
 StatusOr<PersistentIndexSstableUniquePtr> PersistentIndexSstable::new_sstable(
         const PersistentIndexSstablePB& sstable_pb, const std::string& location, Cache* cache, bool need_filter,
-        DelVectorPtr delvec, const TabletMetadataPtr& metadata, TabletManager* tablet_mgr) {
+        const DelVectorPtr& delvec, const TabletMetadataPtr& metadata, TabletManager* tablet_mgr) {
     auto sstable = std::make_unique<PersistentIndexSstable>();
     RandomAccessFileOptions opts;
     if (!sstable_pb.encryption_meta().empty()) {
