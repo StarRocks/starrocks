@@ -364,7 +364,7 @@ StatusOr<ColumnPtr> CastVariantToArray::evaluate_checked(ExprContext* context, C
         const SlotId slot_id = down_cast<ColumnRef*>(_cast_elements_expr->get_child(0))->slot_id();
         chunk->append_column(elements, slot_id);
         ASSIGN_OR_RETURN(auto cast_res, _cast_elements_expr->evaluate_checked(context, chunk.get()));
-        elements = ColumnHelper::cast_to_nullable_column(cast_res);
+        elements = ColumnHelper::cast_to_nullable_column(std::move(cast_res));
     }
 
     // 3. Assemble elements into array column
