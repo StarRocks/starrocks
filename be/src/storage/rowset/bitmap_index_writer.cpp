@@ -353,7 +353,7 @@ private:
         posting_lists.reserve(sorted_dicts.size());
 
         uint32_t offset = 0;
-        dict_column_writer.add(&offset);
+        RETURN_IF_ERROR(dict_column_writer.add(&offset));
         for (uint32_t dict_id = 0; dict_id < sorted_dicts.size(); ++dict_id) {
             const auto& dict = sorted_dicts[dict_id];
             auto it = _posting_index->find(dict);

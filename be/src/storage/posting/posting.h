@@ -44,8 +44,6 @@ public:
     roaring::Roaring get_positions(rowid_t doc_id) const;
 
 private:
-    detail::Roaring64Map _internal_get_all_postings() const;
-
     std::unique_ptr<BitmapUpdateContextRefOrSingleValue<uint64_t>> _postings = nullptr;
 };
 

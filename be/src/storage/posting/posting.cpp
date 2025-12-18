@@ -27,34 +27,47 @@ void PostingList::add_posting(rowid_t doc_id, rowid_t pos) {
 }
 
 uint32_t PostingList::get_num_doc_ids() const {
-    const auto postings = _internal_get_all_postings();
-    return postings.getHighBitsCount();
-}
-
-roaring::Roaring PostingList::get_all_doc_ids() const {
-    const auto postings = _internal_get_all_postings();
-    return postings.getAllHighBits();
-}
-
-roaring::Roaring PostingList::get_positions(rowid_t doc_id) const {
-    const auto postings = _internal_get_all_postings();
-    return postings.getLowBitsRoaring(doc_id);
-}
-
-detail::Roaring64Map PostingList::_internal_get_all_postings() const {
     if (_postings == nullptr) {
-        return detail::Roaring64Map();
+        return 0;
     }
 
     _postings->flush_pending_adds();
-
-    detail::Roaring64Map roaring;
     if (_postings->is_context()) {
-        roaring = *_postings->roaring();
-    } else {
-        roaring.add(_postings->value());
+        _postings->roaring()->runOptimize();
+        return _postings->roaring()->getHighBitsCount();
     }
-    return roaring;
+    return 1;
+}
+
+roaring::Roaring PostingList::get_all_doc_ids() const {
+    if (_postings == nullptr) {
+        return roaring::Roaring();
+    }
+
+    _postings->flush_pending_adds();
+    if (_postings->is_context()) {
+        _postings->roaring()->runOptimize();
+        return _postings->roaring()->getAllHighBits();
+    }
+
+    return roaring::Roaring::bitmapOf(_postings->value());
+}
+
+roaring::Roaring PostingList::get_positions(rowid_t doc_id) const {
+    if (_postings == nullptr) {
+        return roaring::Roaring();
+    }
+    _postings->flush_pending_adds();
+    if (_postings->is_context()) {
+        _postings->roaring()->runOptimize();
+        return _postings->roaring()->getLowBitsRoaring(doc_id);
+    }
+    auto val = _postings->value();
+    rowid_t current = static_cast<rowid_t>(val >> 32);
+    if (current == doc_id) {
+        return roaring::Roaring::bitmapOf(static_cast<uint32_t>(val));
+    }
+    return roaring::Roaring();
 }
 
 } // namespace starrocks
