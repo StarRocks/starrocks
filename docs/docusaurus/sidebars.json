@@ -556,6 +556,7 @@
             },
             "items": [
                 "faq/Deploy_faq",
+                "faq/shared_data_faq",
                 {
                     "type": "category",
                     "label": "Data Migration",
