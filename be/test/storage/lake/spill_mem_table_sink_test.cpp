@@ -63,7 +63,11 @@ public:
         CHECK_OK(fs::create_directories(lake::join_path(kTestDir, lake::kTxnLogDirectoryName)));
     }
 
-    void TearDown() override { (void)FileSystem::Default()->delete_dir_recursive(kTestDir); }
+    void TearDown() override {
+        (void)FileSystem::Default()->delete_dir_recursive(kTestDir);
+        config::enable_load_spill_parallel_merge = _old_enable_load_spill_parallel_merge;
+        config::load_spill_max_merge_bytes = _old_load_spill_max_merge_bytes;
+    }
 
     ChunkPtr gen_data(int64_t chunk_size, int shift) {
         std::vector<int> v0(chunk_size);
