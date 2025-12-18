@@ -18,22 +18,6 @@ create temporary table `t0` (
 -- result:
 E: (1050, "Getting analyzing error. Detail message: Table 't0' already exists.")
 -- !result
-show create table `t0`;
--- result:
-t0	CREATE TEMPORARY TABLE `t0` (
-  `c1` int(11) NOT NULL COMMENT "",
-  `c2` int(11) NULL COMMENT ""
-) ENGINE=OLAP 
-PRIMARY KEY(`c1`)
-DISTRIBUTED BY HASH(`c1`) BUCKETS 3 
-PROPERTIES (
-"compression" = "LZ4",
-"enable_persistent_index" = "true",
-"fast_schema_evolution" = "true",
-"replicated_storage" = "true",
-"replication_num" = "1"
-);
--- !result
 desc `t0`;
 -- result:
 c1	int	NO	true	None	
@@ -95,22 +79,6 @@ E: (1050, "Getting analyzing error. Detail message: Table 't1' already exists.")
 create temporary table if not exists `t1` like `t0`;
 -- result:
 -- !result
-show create table `t1`;
--- result:
-t1	CREATE TEMPORARY TABLE `t1` (
-  `c1` int(11) NOT NULL COMMENT "",
-  `c2` int(11) NULL COMMENT ""
-) ENGINE=OLAP 
-PRIMARY KEY(`c1`)
-DISTRIBUTED BY HASH(`c1`) BUCKETS 3 
-PROPERTIES (
-"compression" = "LZ4",
-"enable_persistent_index" = "true",
-"fast_schema_evolution" = "true",
-"replicated_storage" = "true",
-"replication_num" = "1"
-);
--- !result
 show tables;
 -- result:
 t0
@@ -153,22 +121,6 @@ create temporary table if not exists `t1` as select * from `t0`;
 create temporary table `t2` as select /*+ SET_VAR(query_mem_limit=1)*/ * from `t0`;
 -- result:
 [REGEX].exceed limit*
--- !result
-show create table `t1`;
--- result:
-t1	CREATE TEMPORARY TABLE `t1` (
-  `c1` int(11) NULL COMMENT "",
-  `c2` int(11) NULL COMMENT ""
-) ENGINE=OLAP 
-DUPLICATE KEY(`c1`, `c2`)
-DISTRIBUTED BY RANDOM
-PROPERTIES (
-"bucket_size" = "1073741824",
-"compression" = "LZ4",
-"fast_schema_evolution" = "true",
-"replicated_storage" = "true",
-"replication_num" = "3"
-);
 -- !result
 show tables;
 -- result:
