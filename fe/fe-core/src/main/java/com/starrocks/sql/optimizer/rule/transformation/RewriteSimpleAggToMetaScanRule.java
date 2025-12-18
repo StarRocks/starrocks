@@ -299,12 +299,8 @@ public class RewriteSimpleAggToMetaScanRule extends TransformationRule {
         }
         LogicalAggregationOperator aggregationOperator = input.getOp().cast();
         LogicalOlapScanOperator scanOperator = input.inputAt(0).inputAt(0).getOp().cast();
-<<<<<<< HEAD
-        if (scanOperator.getSelectedPartitionId() != null && !scanOperator.getSelectedPartitionId().isEmpty()) {
-=======
         OlapTable table = (OlapTable) scanOperator.getTable();
         if (!containsAllPartitions(table, scanOperator.getSelectedPartitionId())) {
->>>>>>> 7264bb975c ([BugFix] fix wrong row count in meta scan rewrite rule (#66852))
             return Optional.empty();
         }
 
