@@ -14,6 +14,7 @@
 
 package com.starrocks.replication;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
@@ -65,7 +66,8 @@ public class ReplicationMgr extends FrontendDaemon {
     }
 
     public void addReplicationJob(TTableReplicationRequest request) throws StarRocksException {
-        LOG.info("Adding replication job, request: {}", request.toString());
+        LOG.debug("Add replication job, database id: {}, table id: {}, job id: {}",
+                request.getDatabase_id(), request.getTable_id(), request.getJob_id());
         ReplicationJob job = isLakeReplicationJob(request) ?
                 new LakeReplicationJob(request) : new ReplicationJob(request);
         addReplicationJob(job);
@@ -140,6 +142,11 @@ public class ReplicationMgr extends FrontendDaemon {
         for (ReplicationJob job : toRemovedJobs) {
             runningJobs.remove(job.getTableId(), job);
         }
+    }
+
+    @VisibleForTesting
+    public void removeRunningJob(ReplicationJob job) {
+        runningJobs.remove(job.getTableId(), job);
     }
 
     public void finishRemoteSnapshotTask(RemoteSnapshotTask task, TFinishTaskRequest request) {

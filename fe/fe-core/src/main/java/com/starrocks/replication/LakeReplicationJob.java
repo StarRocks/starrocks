@@ -105,9 +105,6 @@ public class LakeReplicationJob extends ReplicationJob {
                             getTabletType(super.getSrcTableType()),
                             indexInfo.getSrcSchemaHash(), partitionInfo.getSrcVersion(), encryptionMeta,
                             virtualTabletId, srcDatabaseId, srcTableId, partitionInfo.getSrcPartitionId());
-                    LOG.info("Add lake replicate snapshot task, tablet id: {}, txn id: {}, src partition info: {}/{}/{}",
-                            tabletInfo.getTabletId(), super.getTransactionId(), srcDatabaseId, srcTableId,
-                            partitionInfo.getSrcPartitionId());
                     runningTasks.put(task, task);
                 }
             }

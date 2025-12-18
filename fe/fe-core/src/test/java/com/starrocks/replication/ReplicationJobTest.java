@@ -14,13 +14,19 @@
 
 package com.starrocks.replication;
 
+import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Tablet;
+import com.starrocks.common.AlreadyExistsException;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.common.io.DeepCopy;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.common.proc.BaseProcResult;
+import com.starrocks.common.proc.ProcResult;
+import com.starrocks.common.proc.ReplicationsProcNode;
 import com.starrocks.leader.LeaderImpl;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
@@ -369,5 +375,23 @@ public class ReplicationJobTest {
         tSnapshotInfo.setSnapshot_path(snapshotPath);
         tSnapshotInfo.setIncremental_snapshot(incrementalSnapshot);
         return tSnapshotInfo;
+    }
+
+    @Test
+    public void testProcNodeFetchResultWithRunningJob() throws AnalysisException, AlreadyExistsException {
+        ReplicationJob jobProc = new ReplicationJob(null, "test_proc_token", db.getId(), table, srcTable,
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo());
+        GlobalStateMgr.getCurrentState().getReplicationMgr().addReplicationJob(jobProc);
+        ReplicationsProcNode node = new ReplicationsProcNode();
+        ProcResult result = node.fetchResult();
+
+        Assertions.assertNotNull(result);
+        Assertions.assertTrue(result instanceof BaseProcResult);
+        Assertions.assertEquals(1, result.getRows().size());
+        Assertions.assertEquals(
+                Lists.newArrayList("JobID", "DatabaseID", "TableID", "TxnID", "CreatedTime",
+                        "FinishedTime", "State", "Progress", "Error"),
+                result.getColumnNames());
+        GlobalStateMgr.getCurrentState().getReplicationMgr().removeRunningJob(jobProc);
     }
 }
