@@ -24,6 +24,16 @@ namespace starrocks::lake {
 class TabletManager;
 class PersistentIndexSstable;
 
+// PersistentIndexMemtable is an in-memory index for persistent index.
+// It supports upsert/insert/erase/replace/get operations.
+// That this class can be submitted to a thread pool for async flush,
+// after flush finish, we can get sstable via `release_sstable()`.
+// E.g.
+// PersistentIndexMemtable memtable;
+// thread_pool->submit(&memtable); // async flush
+// ...
+// RETURN_IF_ERROR(memtable.flush_status()); // check flush status
+// auto sstable = memtable.release_sstable(); // get sstable after flush finish
 class PersistentIndexMemtable : public Runnable {
 public:
     PersistentIndexMemtable(TabletManager* tablet_mgr = nullptr, int64_t tablet_id = 0, uint64_t max_rss_rowid = 0)

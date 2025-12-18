@@ -361,17 +361,12 @@ Status LakePersistentIndexParallelCompactMgr::sample_keys_from_sstable(const Per
         sample_keys->push_back(sstable_pb.range().start_key());
     } else {
         // get sample keys from large sstables
-        PersistentIndexSstable sstable;
-        RandomAccessFileOptions opts;
-        if (!sstable_pb.encryption_meta().empty()) {
-            ASSIGN_OR_RETURN(auto info, KeyCache::instance().unwrap_encryption_meta(sstable_pb.encryption_meta()));
-            opts.encryption_info = std::move(info);
-        }
-        ASSIGN_OR_RETURN(auto rf, fs::new_random_access_file(
-                                          opts, _tablet_mgr->sst_location(metadata->id(), sstable_pb.filename())));
         auto* block_cache = _tablet_mgr->update_mgr()->block_cache();
-        RETURN_IF_ERROR(sstable.init(std::move(rf), sstable_pb, block_cache ? block_cache->cache() : nullptr, false));
-        RETURN_IF_ERROR(sstable.sample_keys(sample_keys, config::pk_index_sstable_sample_interval_bytes));
+        ASSIGN_OR_RETURN(auto sstable,
+                         PersistentIndexSstable::new_sstable(
+                                 sstable_pb, _tablet_mgr->sst_location(metadata->id(), sstable_pb.filename()),
+                                 block_cache ? block_cache->cache() : nullptr, false));
+        RETURN_IF_ERROR(sstable->sample_keys(sample_keys, config::pk_index_sstable_sample_interval_bytes));
     }
     return Status::OK();
 }
