@@ -5050,31 +5050,60 @@ DEFINE_STRING_UNARY_FN_WITH_IMPL(initcapImpl, str) {
         return std::string("");
     }
 
-    std::string result;
-    result.resize(str.size);
+    if (validate_ascii_fast(str.data, str.size)) {
+        std::string result;
+        result.resize(str.size);
+        const char* src = str.data;
+        char* dst = result.data();
+        size_t len = str.size;
+        bool word_start = true;
 
-    const char* src = str.data;
-    char* dst = result.data();
-    size_t len = str.size;
-
-    bool word_start = true;
-
-    for (size_t i = 0; i < len; ++i) {
-        unsigned char c = static_cast<unsigned char>(src[i]);
-
-        if (std::isalnum(c)) {
-            if (word_start) {
-                dst[i] = std::toupper(c);
-                word_start = false;
+        for (size_t i = 0; i < len; ++i) {
+            unsigned char c = static_cast<unsigned char>(src[i]);
+            if (std::isalnum(c)) {
+                if (word_start) {
+                    dst[i] = std::toupper(c);
+                    word_start = false;
+                } else {
+                    dst[i] = std::tolower(c);
+                }
             } else {
-                dst[i] = std::tolower(c);
+                dst[i] = c;
+                word_start = true;
             }
-        } else {
-            dst[i] = c;
-            word_start = true;
         }
+        return result;
     }
 
+    std::string result;
+    result.reserve(str.size);
+    int32_t len = static_cast<int32_t>(str.size);
+    int32_t i = 0;
+    bool word_start = true;
+
+    while (i < len) {
+        UChar32 c;
+        U8_NEXT(str.data, i, len, c);
+
+        if (u_isalnum(c)) {
+            if (word_start) {
+                c = u_toupper(c);
+                word_start = false;
+            } else {
+                c = u_tolower(c);
+            }
+        } else {
+            word_start = true;
+        }
+
+        char temp[4];
+        int32_t offset = 0;
+        UBool is_error = false;
+        U8_APPEND(temp, offset, 4, c, is_error);
+        if (!is_error) {
+            result.append(temp, offset);
+        }
+    }
     return result;
 }
 

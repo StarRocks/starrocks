@@ -4409,6 +4409,7 @@ PARALLEL_TEST(VecStringFunctionsTest, initcapTest) {
     Columns columns;
     auto str = BinaryColumn::create();
 
+    // --- Fast Path (ASCII) Tests ---
     // 1. Normal lowercase -> Title Case
     str->append("hello world");
     // 2. All uppercase -> Title Case
@@ -4428,13 +4429,28 @@ PARALLEL_TEST(VecStringFunctionsTest, initcapTest) {
     // 9. Empty string
     str->append("");
 
+    // --- Slow Path (UTF-8/ICU) Tests ---
+    // 10. UTF-8: Accent inside word (Crucial check: previously broke word boundary)
+    str->append("héllo");
+    // 11. UTF-8: Accent at start of word
+    str->append("école");
+    // 12. UTF-8: All caps with accents
+    str->append("ÇA VA");
+    // 13. UTF-8: Mixed ASCII and UTF-8
+    str->append("café resumé");
+    // 14. Cyrillic (Russian) - different unicode block
+    str->append("привет мир");
+    // 15. Mixed delimiters with UTF-8
+    str->append("hello-wörld_123");
+
     columns.emplace_back(str);
 
     ColumnPtr result = StringFunctions::initcap(ctx.get(), columns).value();
-    ASSERT_EQ(9, result->size());
+    ASSERT_EQ(15, result->size());
 
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
 
+    // Fast Path Assertions
     ASSERT_EQ("Hello World", v->get_data()[0].to_string());
     ASSERT_EQ("Hello World", v->get_data()[1].to_string());
     ASSERT_EQ("Hello World", v->get_data()[2].to_string());
@@ -4444,6 +4460,14 @@ PARALLEL_TEST(VecStringFunctionsTest, initcapTest) {
     ASSERT_EQ("Abc_Def.Ghi+Jkl", v->get_data()[6].to_string());
     ASSERT_EQ("A", v->get_data()[7].to_string());
     ASSERT_EQ("", v->get_data()[8].to_string());
+
+    // Slow Path Assertions
+    ASSERT_EQ("Héllo", v->get_data()[9].to_string());
+    ASSERT_EQ("École", v->get_data()[10].to_string());
+    ASSERT_EQ("Ça Va", v->get_data()[11].to_string());
+    ASSERT_EQ("Café Resumé", v->get_data()[12].to_string());
+    ASSERT_EQ("Привет Мир", v->get_data()[13].to_string());
+    ASSERT_EQ("Hello-Wörld_123", v->get_data()[14].to_string());
 }
 
 } // namespace starrocks
