@@ -142,3 +142,39 @@ netstat  -anp  |grep  port
 
 * 请确认环境变量 `$JAVA_HOME` 是否为正确的 JDK 路径。
 * 请确认所有节点的 JDK 是否是同一个版本，所有节点需要使用相同版本的 JDK。
+
+## 安装 StarRocks 对 MySQL 版本有什么要求？
+
+建议使用 MySQL 5.7 或更高版本连接到 StarRocks。
+
+## 如果 FE 和 BE 部署在同一台机器上，我如何将它们分开？
+
+建议先扩展一个 BE 节点。集群完成平衡后，您可以缩减原始 BE 节点。
+
+## 当 FE 启动失败并出现错误 “Replica exceeds max permissible delta:5000ms” 时，我该怎么办？
+
+FE 节点之间的时钟不同步。FE 节点之间的时间差必须小于 5 秒。
+
+## 如果我在生产环境中有五台物理机器，推荐的 StarRocks 部署是什么？
+
+推荐的部署是 3 个 FE 节点和 5 个 BE 节点。
+
+## 我应该使用 root 用户安装 StarRocks 吗？
+
+不建议使用 root 用户，因为它具有过多的权限。请创建一个专用用户来安装 StarRocks。
+
+## 我可以在任何机器上安装 MySQL 客户端吗？
+
+可以。它只是一个客户端工具，不需要在与 StarRocks 相同的机器上运行。确保 MySQL 客户端可以访问集群。
+
+## BE 节点上的 tablet 数量有限制吗？例如，对于一台具有 64 GB RAM 和 16 核的服务器，合理的 tablet 数量范围是多少？
+
+tablet 数量没有严格限制。然而，对于 tablet 大小，建议保持每个 tablet 大约 1 GB。适当的分区和分桶策略将有助于提高查询性能。tablet 大小规划很重要。
+
+## 启动 BE 时，我看到错误 “error while loading shared libraries: libjvm.so: cannot open shared object file: No such file or directory”。在手动创建目录 `lib/starrocks_be` 后，我收到权限被拒绝的错误。我该怎么办？
+
+JDK 安装存在问题。请重新安装并正确配置您的 JDK 环境。
+
+## StarRocks 支持在 AMD AVX2 上运行吗？混合使用 Intel 和 AMD 服务器会导致问题吗？
+
+StarRocks 可以在 AMD 上运行。不建议混合使用 Intel 和 AMD 服务器，因为硬件异构性可能会导致问题。建议在迁移之前充分测试 StarRocks 在 AMD 上的运行情况。
