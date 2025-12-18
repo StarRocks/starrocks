@@ -15,12 +15,12 @@
 package com.starrocks.sql.optimizer.skew;
 
 import com.google.crypto.tink.subtle.Random;
+import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.statistics.Bucket;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Histogram;
 import com.starrocks.sql.optimizer.statistics.Statistics;
-import com.starrocks.type.IntegerType;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -33,7 +33,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 public class DataSkewTest {
 
     private static ColumnRefOperator createNewTestColumn() {
-        return new ColumnRefOperator(Random.randInt(), IntegerType.INT, UUID.randomUUID().toString(), true);
+        return new ColumnRefOperator(Random.randInt(), Type.INT, UUID.randomUUID().toString(), true);
     }
 
     @Test
