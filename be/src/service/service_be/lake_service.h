@@ -130,5 +130,10 @@ private:
     lake::TabletManager* _tablet_mgr;
 };
 
+// Get txn_ids string from PublishVersionRequest (compatible with both new and old FE versions)
+// New FE uses txn_infos field, old FE uses deprecated txn_ids field
+// This function is exposed for unit testing
+std::string get_txn_ids_string(const PublishVersionRequest* request);
+
 } // namespace starrocks
 #endif // __APPLE__

@@ -946,6 +946,7 @@ jobs:
           pr_pom_change: ${{ steps.parsing-fe-path-filter.outputs.pom_filter }}
           pr_be_change: ${{ steps.parsing-be-path-filter.outputs.src_filter }}
           pr_fe_change: ${{ steps.parsing-fe-path-filter.outputs.src_filter }}
+          pr_test_change: ${{ needs.test-checker.outputs.test_change }}
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
           if [[ "${{ steps.parsing-be-path-filter.outputs.thirdparty_filter }}" == 'true' ]]; then
@@ -956,7 +957,7 @@ jobs:
           ./bin/elastic-build.sh --pr ${PR_NUMBER} --repository ${{ github.repository }} --linuxdistro ${LINUX_DISTRO} --with-gcov --with-trivy
 
           if [[ "${sys_test_need}" == "" ]]; then
-            if [[ "${{ env.pr_pom_change}}" == 'true' || "${{ env.pr_be_change}}" == 'true' || "${{ env.pr_fe_change}}" == 'true' || "${{ needs.test-checker.outputs.test_change }}" == 'true' ]]; then
+            if [[ "${{ env.pr_pom_change}}" == 'true' || "${{ env.pr_be_change}}" == 'true' || "${{ env.pr_fe_change}}" == 'true' || "${{ env.pr_test_change }}" == 'true' ]]; then
               echo "sys_test_need=true" >> $GITHUB_OUTPUT
             fi
           else

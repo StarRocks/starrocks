@@ -20,8 +20,10 @@
 #include <memory>
 #include <utility>
 
+#include "agent/master_info.h"
 #include "column/chunk.h"
 #include "column/column.h"
+#include "common/config.h"
 #include "fs/bundle_file.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
@@ -35,6 +37,7 @@
 #include "storage/lake/spill_mem_table_sink.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"
+#include "storage/lake/tablet_write_log_manager.h"
 #include "storage/lake/tablet_writer.h"
 #include "storage/lake/update_manager.h"
 #include "storage/load_spill_block_manager.h"
@@ -255,6 +258,9 @@ private:
 
     GlobalDictByNameMaps* _global_dicts = nullptr;
     bool _is_multi_statements_txn = false;
+
+    // Record the time when DeltaWriter is opened
+    int64_t _begin_time_ms = 0;
 };
 
 bool DeltaWriterImpl::is_immutable() const {
@@ -444,6 +450,8 @@ Status DeltaWriterImpl::open() {
     if (_bundle_writable_file_context) {
         _bundle_writable_file_context->increase_active_writers();
     }
+    // Record the time when DeltaWriter is opened for write amplification tracking
+    _begin_time_ms = UnixMillis();
     return Status::OK();
 }
 
@@ -489,6 +497,7 @@ Status DeltaWriterImpl::write(const Chunk& chunk, const uint32_t* indexes, uint3
     RETURN_IF_ERROR(check_partial_update_with_sort_key(chunk));
     ADD_COUNTER_RELAXED(_stats.write_count, 1);
     ADD_COUNTER_RELAXED(_stats.row_count, indexes_size);
+    ADD_COUNTER_RELAXED(_stats.input_bytes, chunk.bytes_usage());
     auto start_time = MonotonicNanos();
     DeferOp defer([&]() { ADD_COUNTER_RELAXED(_stats.write_time_ns, MonotonicNanos() - start_time); });
     _last_write_ts = butil::gettimeofday_s();
@@ -737,6 +746,15 @@ StatusOr<TxnLogPtr> DeltaWriterImpl::finish_with_txnlog(DeltaWriterFinishMode mo
     StarRocksMetrics::instance()->delta_writer_pk_preload_duration_us.increment(pk_preload_duration_ns /
                                                                                 NANOSECS_PER_USEC);
     VLOG(2) << "txn_log: " << txn_log->DebugString();
+
+    if (config::enable_tablet_write_log) {
+        int64_t finish_time = UnixMillis();
+        TabletWriteLogManager::instance()->add_load_log(
+                get_backend_id().value_or(0), _txn_id, _tablet_id, _table_id, _partition_id, _stats.row_count,
+                _stats.input_bytes, _tablet_writer->num_rows(), _tablet_writer->data_size(),
+                op_write->rowset().segments_size(), UniqueId(_load_id).to_string(), _begin_time_ms, finish_time);
+    }
+
     return txn_log;
 }
 

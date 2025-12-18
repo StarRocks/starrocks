@@ -207,6 +207,8 @@ enum TSchemaTableType {
     SCH_RECYCLEBIN_CATALOGS,
 
     SCH_FE_THREADS,
+
+    SCH_BE_TABLET_WRITE_LOG
 }
 
 enum THdfsCompression {

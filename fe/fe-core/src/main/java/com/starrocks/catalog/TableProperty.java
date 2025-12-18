@@ -986,19 +986,24 @@ public class TableProperty implements Writable, GsonPostProcessable {
     }
 
     public boolean isSetPartitionRefreshNumber() {
-        return partitionRefreshNumber != INVALID;
+        return properties != null && properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER);
     }
 
     public int getPartitionRefreshNumber() {
-        return partitionRefreshNumber == INVALID ? Config.default_mv_partition_refresh_number : partitionRefreshNumber;
+        if (isSetPartitionRefreshNumber()) {
+            return partitionRefreshNumber;
+        } else {
+            return Config.default_mv_partition_refresh_number;
+        }
     }
 
     public boolean isSetPartitionRefreshStrategy() {
-        return !Strings.isNullOrEmpty(partitionRefreshStrategy);
+        return properties != null && properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_STRATEGY)
+                && !Strings.isNullOrEmpty(partitionRefreshStrategy);
     }
 
     public String getPartitionRefreshStrategy() {
-        return Strings.isNullOrEmpty(partitionRefreshStrategy) ? Config.default_mv_partition_refresh_strategy
+        return !isSetPartitionRefreshStrategy() ? Config.default_mv_partition_refresh_strategy
                 : partitionRefreshStrategy;
     }
 

@@ -32,9 +32,12 @@
 #include "gen_cpp/InternalService_types.h"
 #include "storage/chunk_helper.h"
 #include "util/defer_op.h"
+#include "util/failpoint/fail_point.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks::spill {
+DECLARE_FAIL_POINT(spill_restore_sleep);
+
 template <class TaskExecutor, class MemGuard>
 Status Spiller::spill(RuntimeState* state, const ChunkPtr& chunk, MemGuard&& guard) {
     SCOPED_TIMER(_metrics.append_data_timer);
@@ -257,8 +260,12 @@ Status SpillerReader::trigger_restore(RuntimeState* state, MemGuard&& guard) {
                 yield_ctx.time_spent_ns = 0;
                 yield_ctx.need_yield = false;
 
+                FAIL_POINT_TRIGGER_EXECUTE(spill_restore_sleep, { sleep(10); });
+
                 YieldableRestoreTask task(_stream);
                 res = task.do_read(yield_ctx, serd_ctx);
+
+                FAIL_POINT_TRIGGER_EXECUTE(spill_restore_sleep, { sleep(10); });
 
                 if (yield_ctx.need_yield && !yield_ctx.is_finished()) {
                     COUNTER_UPDATE(_spiller->metrics().restore_task_yield_times, 1);

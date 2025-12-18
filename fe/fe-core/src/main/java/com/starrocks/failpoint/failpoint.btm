@@ -6,12 +6,22 @@ IF shouldTrigger("bdb_ha_get_leader_exception")
 DO throw new RuntimeException("failpoint triggered");
 ENDRULE
 
+
+# Statistics Collection
 RULE stmt_executor_process_profile_async_exception
 CLASS com.starrocks.qe.StmtExecutor
 METHOD processProfileAsync(ExecPlan, int)
 HELPER com.starrocks.failpoint.FailPointHelper
 IF shouldTrigger("stmt_executor_process_profile_async_exception")
 DO throw new NullPointerException("failpoint triggered");
+ENDRULE
+
+RULE statistic_executor_collect_statistics
+CLASS com.starrocks.statistic.StatisticExecutor
+METHOD collectStatistics
+HELPER com.starrocks.failpoint.FailPointHelper
+IF shouldTrigger("statistic_executor_collect_statistics")
+DO sleep(10000);
 ENDRULE
 
 RULE bdb_write_jitter

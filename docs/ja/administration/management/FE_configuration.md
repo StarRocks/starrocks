@@ -1353,6 +1353,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 - 導入バージョン: v3.1
 
+##### enable_statistic_collect_on_update
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 変更可能: はい
+- 説明: UPDATE ステートメントが自動統計収集をトリガーできるかどうかを制御します。有効にすると、テーブルデータを変更する UPDATE 操作は、`enable_statistic_collect_on_first_load` によって制御されるインジェスションベースの統計フレームワークを通じて統計収集をスケジュールする場合があります。この設定を無効にすると、ロードによってトリガーされる統計収集の動作はそのままに、UPDATE ステートメントの統計収集がスキップされます。
+- 導入バージョン: v3.5.11, v4.0.4
+
 ##### enable_udf
 
 - デフォルト: false

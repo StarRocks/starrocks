@@ -40,6 +40,7 @@ import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.connector.ConnectorPartitionTraits;
 import com.starrocks.http.HttpConnectContext;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.DmlType;
 import com.starrocks.qe.SimpleExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
@@ -119,6 +120,10 @@ public class StatisticUtils {
         context.getSessionVariable().setEnableLoadProfile(false);
         context.getSessionVariable().setBigQueryProfileThreshold("0s");
         context.getSessionVariable().setParallelExecInstanceNum(1);
+        // Note: queryTimeoutS and insertTimeoutS will be set dynamically based on remaining job time
+        // in StatisticsCollectJob.calculateAndSetRemainingTimeout() to ensure the total job timeout
+        // is respected across all SQL tasks, not just individual task timeout.
+        // Set a default large value here, but it will be overridden per task.
         context.getSessionVariable().setQueryTimeoutS((int) Config.statistic_collect_query_timeout);
         context.getSessionVariable().setInsertTimeoutS((int) Config.statistic_collect_query_timeout);
         context.getSessionVariable().setEnablePipelineEngine(true);
@@ -161,7 +166,16 @@ public class StatisticUtils {
                                                     Table table,
                                                     boolean sync,
                                                     boolean useLock) {
-        StatisticsCollectionTrigger.triggerOnFirstLoad(txnState, db, table, sync, useLock);
+        triggerCollectionOnFirstLoad(txnState, db, table, sync, useLock, DmlType.INSERT_INTO);
+    }
+
+    public static void triggerCollectionOnFirstLoad(TransactionState txnState,
+                                                    Database db,
+                                                    Table table,
+                                                    boolean sync,
+                                                    boolean useLock,
+                                                    DmlType dmlType) {
+        StatisticsCollectionTrigger.triggerOnFirstLoad(txnState, db, table, sync, useLock, dmlType);
     }
 
     // check database in black list

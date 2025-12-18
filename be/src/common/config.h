@@ -1759,6 +1759,11 @@ CONF_mBool(enable_lake_compaction_use_partial_segments, "false");
 // chunk size used by lake compaction
 CONF_mInt32(lake_compaction_chunk_size, "4096");
 
+// Enable tablet write log tracking for write amplification analysis
+CONF_mBool(enable_tablet_write_log, "false");
+// Maximum number of log entries to keep in memory buffer (per CN/BE)
+CONF_mInt32(tablet_write_log_buffer_size, "100000");
+
 CONF_mBool(skip_schema_in_rowset_meta, "true");
 
 CONF_mBool(enable_bit_unpack_simd, "true");

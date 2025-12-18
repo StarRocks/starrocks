@@ -195,9 +195,11 @@ import com.starrocks.sql.ast.UseCatalogStmt;
 import com.starrocks.sql.ast.UseDbStmt;
 import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.Parameter;
 import com.starrocks.sql.ast.expression.SetVarHint;
 import com.starrocks.sql.ast.expression.StringLiteral;
+import com.starrocks.sql.ast.expression.UserVariableExpr;
 import com.starrocks.sql.ast.expression.UserVariableHint;
 import com.starrocks.sql.ast.feedback.PlanAdvisorStmt;
 import com.starrocks.sql.ast.translate.TranslateStmt;
@@ -1903,7 +1905,23 @@ public class StmtExecutor {
         if (killAnalyzeStmt.isKillAllPendingTasks()) {
             analyzeManager.killAllPendingTasks();
         } else {
-            long analyzeId = killAnalyzeStmt.getAnalyzeId();
+            long analyzeId;
+            if (killAnalyzeStmt.hasUserVariable()) {
+                UserVariableExpr userVariableExpr = killAnalyzeStmt.getUserVariableExpr();
+                // Analyze the user variable expression to get its value
+                com.starrocks.sql.analyzer.ExpressionAnalyzer.analyzeExpressionIgnoreSlot(userVariableExpr, context);
+                Expr value = userVariableExpr.getValue();
+                if (value instanceof com.starrocks.sql.ast.expression.NullLiteral) {
+                    throw new SemanticException("User variable '%s' is not set", userVariableExpr.getName());
+                }
+                if (!(value instanceof IntLiteral)) {
+                    throw new SemanticException("User variable '%s' must be an integer, but got %s",
+                            userVariableExpr.getName(), value.getType().toSql());
+                }
+                analyzeId = ((IntLiteral) value).getLongValue();
+            } else {
+                analyzeId = killAnalyzeStmt.getAnalyzeId();
+            }
             checkPrivilegeForKillAnalyzeStmt(context, analyzeId);
             // Try to kill the job anyway.
             analyzeManager.killConnection(analyzeId);

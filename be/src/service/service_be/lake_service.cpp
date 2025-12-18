@@ -142,6 +142,21 @@ std::string txn_info_string(const TxnInfoPB& info) {
 
 } // namespace
 
+// Get txn_ids string from request (compatible with both new and old FE versions)
+// New FE uses txn_infos field, old FE uses deprecated txn_ids field
+std::string get_txn_ids_string(const PublishVersionRequest* request) {
+    if (request->txn_infos_size() > 0) {
+        std::vector<int64_t> ids;
+        ids.reserve(request->txn_infos_size());
+        for (const auto& info : request->txn_infos()) {
+            ids.push_back(info.txn_id());
+        }
+        return JoinInts(ids, ",");
+    } else {
+        return JoinInts(request->txn_ids(), ",");
+    }
+}
+
 using BThreadCountDownLatch = GenericCountDownLatch<bthread::Mutex, bthread::ConditionVariable>;
 
 LakeServiceImpl::LakeServiceImpl(ExecEnv* env, lake::TabletManager* tablet_mgr) : _env(env), _tablet_mgr(tablet_mgr) {}
@@ -182,9 +197,8 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
     bthread::Mutex response_mtx;
     scoped_refptr<Trace> trace_gurad = scoped_refptr<Trace>(new Trace());
     Trace* trace = trace_gurad.get();
-    TRACE_TO(trace, "got request. txn_ids=$0 base_version=$1 new_version=$2 #tablets=$3",
-             JoinInts(request->txn_ids(), ","), request->base_version(), request->new_version(),
-             request->tablet_ids_size());
+    TRACE_TO(trace, "got request. txn_ids=$0 base_version=$1 new_version=$2 #tablets=$3", get_txn_ids_string(request),
+             request->base_version(), request->new_version(), request->tablet_ids_size());
 
     Status::OK().to_protobuf(response->mutable_status());
     std::unordered_set<int64> rebuild_pindex_tablets;
@@ -302,7 +316,7 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
         if (!st.ok()) {
             g_publish_version_failed_tasks << 1;
             LOG(WARNING) << "Fail to submit publish version task: " << st << ". tablet_id=" << tablet_id
-                         << " txn_ids=" << JoinInts(request->txn_ids(), ",");
+                         << " txn_ids=" << get_txn_ids_string(request);
             std::lock_guard l(response_mtx);
             response->add_failed_tablets(tablet_id);
             st.to_protobuf(response->mutable_status());
@@ -314,10 +328,10 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
     auto cost = butil::gettimeofday_us() - start_ts;
     auto is_slow = cost >= config::lake_publish_version_slow_log_ms * 1000;
     if (config::lake_enable_publish_version_trace_log && is_slow) {
-        LOG(INFO) << "Published txns=" << JoinInts(request->txn_ids(), ",") << ". cost=" << cost << "us\n"
+        LOG(INFO) << "Published txns=" << get_txn_ids_string(request) << ". cost=" << cost << "us\n"
                   << trace->DumpToString();
     } else if (is_slow) {
-        LOG(INFO) << "Published txns=" << JoinInts(request->txn_ids(), ",")
+        LOG(INFO) << "Published txns=" << get_txn_ids_string(request)
                   << ". tablets=" << JoinInts(request->tablet_ids(), ",") << " cost=" << cost
                   << "us, trace: " << trace->MetricsAsJSON();
     }

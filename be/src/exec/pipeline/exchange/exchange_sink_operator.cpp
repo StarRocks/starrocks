@@ -405,6 +405,10 @@ Status ExchangeSinkOperator::prepare_local_state(RuntimeState* state) {
     if (state->query_options().__isset.transmission_encode_level) {
         _encode_level = state->query_options().transmission_encode_level;
     }
+    // Set exchange hash function version, default to 0 (fnv_hash) for backward compatibility
+    if (state->query_options().__isset.exchange_hash_function_version) {
+        _exchange_hash_function_version = state->query_options().exchange_hash_function_version;
+    }
     // Set compression type according to query options
     if (state->query_options().__isset.transmission_compression_type) {
         TCompressionType::type type = state->query_options().transmission_compression_type;
@@ -441,6 +445,7 @@ Status ExchangeSinkOperator::prepare_local_state(RuntimeState* state) {
         _unique_metrics->add_info_string("ShuffleNumPerChannel", std::to_string(_num_shuffles_per_channel));
         _unique_metrics->add_info_string("TotalShuffleNum", std::to_string(_num_shuffles));
         _unique_metrics->add_info_string("PipelineLevelShuffle", _is_pipeline_level_shuffle ? "Yes" : "No");
+        _unique_metrics->add_info_string("HashFunction", _exchange_hash_function_version == 1 ? "xxh3" : "fnv");
     }
 
     // Randomize the order we open/transmit to channels to avoid thundering herd problems.
@@ -587,9 +592,18 @@ Status ExchangeSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chu
 
             // Compute hash for each partition column
             if (_part_type == TPartitionType::HASH_PARTITIONED) {
-                _hash_values.assign(num_rows, HashUtil::FNV_SEED);
-                for (const ColumnPtr& column : _partitions_columns) {
-                    column->fnv_hash(&_hash_values[0], 0, num_rows);
+                if (_exchange_hash_function_version == 1) {
+                    // Use xxh3_hash for better performance
+                    _hash_values.assign(num_rows, HashUtil::XXH3_SEED_32);
+                    for (const ColumnPtr& column : _partitions_columns) {
+                        column->xxh3_hash(&_hash_values[0], 0, num_rows);
+                    }
+                } else {
+                    // Default: use fnv_hash for backward compatibility
+                    _hash_values.assign(num_rows, HashUtil::FNV_SEED);
+                    for (const ColumnPtr& column : _partitions_columns) {
+                        column->fnv_hash(&_hash_values[0], 0, num_rows);
+                    }
                 }
             } else if (_bucket_properties.empty()) {
                 // The data distribution was calculated using CRC32_HASH,

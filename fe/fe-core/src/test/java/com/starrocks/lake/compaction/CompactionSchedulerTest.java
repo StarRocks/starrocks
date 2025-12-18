@@ -230,6 +230,12 @@ public class CompactionSchedulerTest {
             }
         };
 
+        new MockUp<AggregateCompactionTask>() {
+            @Mock
+            public void sendRequest() {
+            }
+        };
+
         CompactionWarehouseInfo info = new CompactionWarehouseInfo("aaa", WarehouseManager.DEFAULT_RESOURCE, 0, 0);
         table.setState(OlapTable.OlapTableState.NORMAL);
         compactionScheduler.startCompaction(snapshot, info);

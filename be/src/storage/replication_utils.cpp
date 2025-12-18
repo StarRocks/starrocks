@@ -373,7 +373,7 @@ Status ReplicationUtils::download_lake_segment_file(const std::string& src_file_
         if (offset >= src_file_size) {
             break;
         }
-        int64_t count = std::min(buff_size, src_file_size - offset);
+        int64_t count = std::min<size_t>(buff_size, src_file_size - offset);
 
         // Record read_at_fully request count and latency
         {

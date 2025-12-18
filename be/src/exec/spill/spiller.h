@@ -248,6 +248,11 @@ public:
 
     size_t max_sorted_block_cnt() const { return _max_sorted_block_cnt; }
 
+    void release() {
+        _writer.reset();
+        _reader.reset();
+    }
+
 private:
     Status _acquire_input_stream(RuntimeState* state);
 
