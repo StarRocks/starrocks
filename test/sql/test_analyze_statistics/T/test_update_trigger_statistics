@@ -18,14 +18,22 @@ select column_name, partition_name, row_count, max, min
 from _statistics_.column_statistics 
 where table_name = "test_update_trigger_statistics.test_update_stats" ;
 
+-- check if there's a new analyze job since last analyze id
 CREATE VIEW analyze_status_verify AS
 select `Table`, Columns, Type, 
-    IF(StartTime >= @last_analyze, 'new analyze', 'no analyze') as is_new 
+    IF(cast(Id as bigint) > @last_analyze_id, 'new analyze', 'no analyze') as is_new 
 from information_schema.analyze_status
 where 
     `Database` = 'test_update_trigger_statistics' 
     and `Table` = "test_update_stats" 
-order by StartTime desc limit 1;
+order by cast(Id as bigint) desc limit 1;
+
+-- last_id: last analyze id in information_schema.analyze_status
+CREATE VIEW last_analyze_id_view AS
+select ifnull(max(cast(Id as bigint)), 0) as last_id
+from information_schema.analyze_status 
+where `Database` = 'test_update_trigger_statistics' 
+  and `Table` = "test_update_stats";
 
 
 -- Clear any existing statistics
@@ -36,7 +44,7 @@ insert into test_update_stats select generate_series, 'data' from table(generate
 select * from statistic_verify order by column_name;
 
 -- UPDATE a few rows should not trigger statistics collection
-set @last_analyze=(select now());
+set @last_analyze_id=(select last_id from last_analyze_id_view);
 update test_update_stats set k3 = '1updated' where k2 = 1;
 select * from statistic_verify order by column_name;
 select * from analyze_status_verify;
@@ -45,13 +53,13 @@ select * from statistic_verify order by column_name;
 select * from analyze_status_verify;
 
 -- UPDATE lots of rows 
-set @last_analyze=(select now());
+set @last_analyze_id=(select last_id from last_analyze_id_view);
 update test_update_stats set k3 = '3updated3' where k2 < 200*1000;
 select * from statistic_verify order by column_name;
 select * from analyze_status_verify;
 
 -- UPDATE all rows 
-set @last_analyze=(select now());
+set @last_analyze_id=(select last_id from last_analyze_id_view);
 update test_update_stats set k3 = '4updated4' where k2 < 1000000000;
 -- sample result is not stable
 -- select * from statistic_verify order by column_name;
@@ -60,4 +68,5 @@ select * from analyze_status_verify;
 drop table test_update_stats;
 drop view  statistic_verify;
 drop view  analyze_status_verify;
+drop view  last_analyze_id_view;
 delete from _statistics_.column_statistics where table_name='test_update_trigger_statistics.test_update_stats';

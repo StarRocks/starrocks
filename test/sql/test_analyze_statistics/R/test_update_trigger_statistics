@@ -25,11 +25,18 @@ where table_name = "test_update_trigger_statistics.test_update_stats" ;
 -- !result
 CREATE VIEW analyze_status_verify AS
 select `Table`, Columns, Type, 
-    IF(StartTime >= @last_analyze, 'new analyze', 'no analyze') as is_new from information_schema.analyze_status
+    IF(cast(Id as bigint) > @last_analyze_id, 'new analyze', 'no analyze') as is_new from information_schema.analyze_status
 where 
     `Database` = 'test_update_trigger_statistics' 
     and `Table` = "test_update_stats" 
-order by StartTime desc limit 1;
+order by cast(Id as bigint) desc limit 1;
+-- result:
+-- !result
+CREATE VIEW last_analyze_id_view AS
+select ifnull(max(cast(Id as bigint)), 0) as last_id
+from information_schema.analyze_status 
+where `Database` = 'test_update_trigger_statistics' 
+  and `Table` = "test_update_stats";
 -- result:
 -- !result
 delete from _statistics_.column_statistics where table_name='test_update_trigger_statistics.test_update_stats';
@@ -43,7 +50,7 @@ select * from statistic_verify order by column_name;
 k2	test_update_stats	1000000	1000000	1
 k3	test_update_stats	1000000	data	data
 -- !result
-set @last_analyze=(select now());
+set @last_analyze_id=(select last_id from last_analyze_id_view);
 -- result:
 -- !result
 update test_update_stats set k3 = '1updated' where k2 = 1;
@@ -70,7 +77,7 @@ select * from analyze_status_verify;
 -- result:
 test_update_stats	ALL	SAMPLE	no analyze
 -- !result
-set @last_analyze=(select now());
+set @last_analyze_id=(select last_id from last_analyze_id_view);
 -- result:
 -- !result
 update test_update_stats set k3 = '3updated3' where k2 < 200*1000;
@@ -85,7 +92,7 @@ select * from analyze_status_verify;
 -- result:
 test_update_stats	ALL	FULL	new analyze
 -- !result
-set @last_analyze=(select now());
+set @last_analyze_id=(select last_id from last_analyze_id_view);
 -- result:
 -- !result
 update test_update_stats set k3 = '4updated4' where k2 < 1000000000;
@@ -102,6 +109,9 @@ drop view  statistic_verify;
 -- result:
 -- !result
 drop view  analyze_status_verify;
+-- result:
+-- !result
+drop view  last_analyze_id_view;
 -- result:
 -- !result
 delete from _statistics_.column_statistics where table_name='test_update_trigger_statistics.test_update_stats';
