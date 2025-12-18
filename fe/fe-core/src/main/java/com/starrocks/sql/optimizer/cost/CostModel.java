@@ -34,7 +34,6 @@ import com.starrocks.sql.optimizer.base.DistributionSpec;
 import com.starrocks.sql.optimizer.base.HashDistributionDesc;
 import com.starrocks.sql.optimizer.base.HashDistributionSpec;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
-import com.starrocks.sql.optimizer.operator.DataSkewInfo;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
@@ -59,7 +58,10 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalWindowOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.skew.DataSkew;
+import com.starrocks.sql.optimizer.skew.DataSkewInfo;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.sql.optimizer.statistics.StatisticsEstimateCoefficient;
@@ -70,6 +72,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
@@ -179,7 +182,6 @@ public class CostModel {
                     return adjustCostForMV(context);
                 }
             }
-
             return CostEstimate.of(statistics.getComputeSize(), 0, 0);
         }
 
@@ -281,15 +283,77 @@ public class CostModel {
                     0);
         }
 
+        private List<ColumnRefOperator> getGroupBysWithoutDistinctColumn(List<ColumnRefOperator> groupByList,
+                                                                         ColumnRefOperator distinctColRef) {
+            return groupByList.stream()
+                    .filter(groupBy -> !groupBy.equals(distinctColRef)) //
+                    .collect(Collectors.toList());
+        }
+
+        private boolean isGroupBySkewed(List<ColumnStatistic> groupByStats, Statistics statistics) {
+            // For now, we assume that if all group by columns are skewed that they are skewed "the same way" so we get
+            // large groups. This is of course a simplification.
+            if (groupByStats.isEmpty()) {
+                return false;
+            }
+
+            final var dataSkewRowPercentageThreshold =
+                    ConnectContext.get().getSessionVariable().getDataSkewRowPercentageThreshold();
+            final var skewThresholds = DataSkew.Thresholds.withRelativeRowThreshold(dataSkewRowPercentageThreshold);
+
+            return groupByStats.stream()
+                    .allMatch(groupByStat -> {
+                        return DataSkew.isColumnSkewed(statistics, groupByStat, skewThresholds);
+                    });
+        }
+
+        private boolean isGroupByLowCardinality(List<ColumnStatistic> groupByStatistics, Statistics statistics,
+                                                ColumnRefOperator distinctColumn) {
+            if (statistics.getOutputRowCount() < 1) {
+                return false;
+            }
+
+            if (groupByStatistics.stream().anyMatch(groupByStat -> groupByStat.isUnknown() || groupByStat.isUnknownValue())) {
+                // At least one group by column does not have statistics.
+                return false;
+            }
+
+            final var distColStat = statistics.getColumnStatistic(distinctColumn);
+            if (distColStat.isUnknown() || distColStat.isUnknownValue()) {
+                // No statistics on the distinct column.
+                return false;
+            }
+
+            double groupByColDistinctValues = groupByStatistics.stream()
+                    .mapToDouble(ColumnStatistic::getDistinctValuesCount) //
+                    .reduce(1, (lhsStat, rhsStat) -> lhsStat * rhsStat);
+
+            groupByColDistinctValues =
+                    Math.max(1.0, Math.min(groupByColDistinctValues, statistics.getOutputRowCount()));
+
+            final double groupByColDistinctHighWaterMark = 10000;
+            final double groupByColDistinctLowWaterMark = 100;
+            final double distColDistinctValuesCountWaterMark = 10000000;
+            final double distColDistinctValuesCount = distColStat.getDistinctValuesCount();
+            final double avgDistValuesPerGroup = distColDistinctValuesCount / groupByColDistinctValues;
+
+            return distColDistinctValuesCount > distColDistinctValuesCountWaterMark &&
+                    ((groupByColDistinctValues <= groupByColDistinctLowWaterMark) ||
+                            (groupByColDistinctValues < groupByColDistinctHighWaterMark &&
+                                    avgDistValuesPerGroup > 100));
+        }
+
         // Compute penalty factor for GroupByCountDistinctDataSkewEliminateRule
         // Reward good cases(give a penaltyFactor=0.5) while punish bad cases(give a penaltyFactor=1.5)
-        // Good cases as follows:
-        // 1. distinct cardinality of group-by column is less than 100
-        // 2. distinct cardinality of group-by column is less than 10000 and avgDistValuesPerGroup > 100
-        // Bad cases as follows: this Rule is conservative, the cases except good cases are all bad cases.
+        // We try to find good cases by looking at the
+        //  1) null fractions of the group by columns
+        //  2) histogram of the group by columns
+        //  3) distinct cardinality of group-by column is less than 100
+        //  4) distinct cardinality of group-by column is less than 10000 and avgDistValuesPerGroup > 100
         private double computeDataSkewPenaltyOfGroupByCountDistinct(PhysicalHashAggregateOperator node,
                                                                     Statistics inputStatistics) {
             DataSkewInfo skewInfo = node.getDistinctColumnDataSkew();
+
             if (skewInfo.getStage() != 1) {
                 return skewInfo.getPenaltyFactor();
             }
@@ -298,35 +362,25 @@ public class CostModel {
                 return 1.5;
             }
 
-            ColumnStatistic distColStat = inputStatistics.getColumnStatistic(skewInfo.getSkewColumnRef());
-            List<ColumnStatistic> groupByStats = node.getGroupBys().subList(0, node.getGroupBys().size() - 1)
-                    .stream().map(inputStatistics::getColumnStatistic).collect(Collectors.toList());
+            final var countDistinctColumnRef = skewInfo.getSkewColumnRef();
+            final var groupBys = getGroupBysWithoutDistinctColumn(node.getGroupBys(), countDistinctColumnRef);
+            final var groupByStatistics = groupBys.stream()
+                    .map(inputStatistics::getColumnStatistic) //
+                    .filter(Objects::nonNull) //
+                    .collect(Collectors.toList());
 
-            if (distColStat.isUnknownValue() || distColStat.isUnknown() ||
-                    groupByStats.stream().anyMatch(groupStat -> groupStat.isUnknown() || groupStat.isUnknownValue())) {
-                return 1.5;
+            // Basic skew detection on the group by columns. We are weighting this heavily if we know
+            // that group by columns are skewed since this optimization has significant speed up then.
+            if (isGroupBySkewed(groupByStatistics, inputStatistics)) {
+                return 0.2;
             }
-            double groupByColDistinctValues = 1.0;
-            for (ColumnStatistic groupStat : groupByStats) {
-                groupByColDistinctValues *= groupStat.getDistinctValuesCount();
-            }
-            groupByColDistinctValues =
-                    Math.max(1.0, Math.min(groupByColDistinctValues, inputStatistics.getOutputRowCount()));
 
-            final double groupByColDistinctHighWaterMark = 10000;
-            final double groupByColDistinctLowWaterMark = 100;
-            final double distColDistinctValuesCountWaterMark = 10000000;
-            final double distColDistinctValuesCount = distColStat.getDistinctValuesCount();
-            final double avgDistValuesPerGroup = distColDistinctValuesCount / groupByColDistinctValues;
-
-            if (distColDistinctValuesCount > distColDistinctValuesCountWaterMark &&
-                    ((groupByColDistinctValues <= groupByColDistinctLowWaterMark) ||
-                            (groupByColDistinctValues < groupByColDistinctHighWaterMark &&
-                                    avgDistValuesPerGroup > 100))) {
+            // Checking for the cardinality of the group by columns.
+            if (isGroupByLowCardinality(groupByStatistics, inputStatistics, skewInfo.getSkewColumnRef())) {
                 return 0.5;
-            } else {
-                return 1.5;
             }
+
+            return 1.5;
         }
 
         @Override
