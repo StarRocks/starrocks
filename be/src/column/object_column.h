@@ -55,7 +55,15 @@ public:
 
     ObjectColumn(const ObjectColumn& column) { DCHECK(false) << "Can't copy construct object column"; }
 
-    ObjectColumn(ObjectColumn&& object_column) noexcept : _pool(std::move(object_column._pool)) {}
+    ObjectColumn(ObjectColumn&& object_column) noexcept
+            : _pool(std::move(object_column._pool)),
+              _cache_ok(object_column._cache_ok),
+              _cache(std::move(object_column._cache)),
+              _slices(std::move(object_column._slices)),
+              _buffer(std::move(object_column._buffer)) {
+        // reset source column
+        object_column._cache_ok = false;
+    }
 
     void operator=(const ObjectColumn&) = delete;
 
@@ -90,9 +98,9 @@ public:
 
     size_t byte_size(size_t idx) const override;
 
-    void reserve(size_t n) override { _pool.reserve(n); }
+    void reserve(size_t n) override;
 
-    void resize(size_t n) override { _pool.resize(n); }
+    void resize(size_t n) override;
 
     void assign(size_t n, size_t idx) override;
 
