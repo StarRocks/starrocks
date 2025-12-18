@@ -1017,7 +1017,7 @@ public class PlanFragmentBuilder {
             tupleDescriptor.setTable(scan.getTable());
 
             MetaScanNode scanNode = new MetaScanNode(context.getNextNodeId(),
-                    tupleDescriptor, (OlapTable) scan.getTable(), scan.getAggColumnIdToNames(),
+                    tupleDescriptor, (OlapTable) scan.getTable(), scan.getAggColumnIdToColumns(),
                     scan.getSelectPartitionNames(), scan.getSelectedIndexId(),
                     context.getConnectContext().getCurrentWarehouseId());
             scanNode.computeRangeLocations();

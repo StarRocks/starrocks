@@ -47,3 +47,29 @@ select count(c1) from t1 TEMPORARY PARTITION(tp202403);
 select min(c0), max(c0) from t1 TEMPORARY PARTITION(tp202403);
 select min(c1), max(c1) from t1 TEMPORARY PARTITION(tp202403);
 select min(c0), max(c0), min(c1), max(c1) from t1 TEMPORARY PARTITION(tp202403);
+<<<<<<< HEAD
+=======
+
+-- name: test_meta_scan_with_renamed_column
+create table t2 (
+    c0 INT
+) DUPLICATE key (c0) DISTRIBUTED BY HASH(c0) BUCKETS 3 PROPERTIES('replication_num' = '1');
+
+insert into t2 values (1), (2), (3);
+
+select count(*) from t2[_META_];
+select count(*) from t2;
+
+alter table t2 rename column c0 to c1;
+
+select count(*) from t2[_META_];
+select count(*) from t2;
+
+alter table t2 rename column c1 to c2;
+
+select count(*) from t2[_META_];
+select count(*) from t2;
+
+
+
+>>>>>>> 0463439c6b ([BugFix] fix issues when querying renamed column with meta scan (#66819))
