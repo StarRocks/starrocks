@@ -1581,6 +1581,11 @@ public class StmtExecutor {
             boolean isSendFields = false;
             do {
                 batch = coord.getNext();
+                if (batch.getStatus() != null && batch.getErrorCode() != null) {
+                    processQueryStatisticsFromResult(batch, execPlan, isOutfileQuery);
+                    throw new StarRocksException(batch.getErrorCode(), batch.getStatus().getErrorMsg());
+                }
+
                 // for outfile query, there will be only one empty batch send back with eos flag
                 if (batch.getBatch() != null && !isOutfileQuery && needSendResult) {
                     // For some language driver, getting error packet after fields packet will be recognized as a success result
