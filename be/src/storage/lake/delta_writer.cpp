@@ -175,6 +175,10 @@ public:
 
     const GlobalDictByNameMaps* global_dicts() const { return _global_dicts; }
 
+    void set_already_finished(bool val) { _already_finished = val; }
+
+    bool already_finished() const { return _already_finished; }
+
 private:
     Status reset_memtable();
 
@@ -264,6 +268,14 @@ private:
 
     // Record the time when DeltaWriter is opened
     int64_t _begin_time_ms = 0;
+
+    // Whether finish() has been called. Used to prevent write/flush tasks after finish task.
+    // This is critical because:
+    // 1. During load spill, finish task may run in a separate thread pool, causing concurrent
+    //    memtable access with write/flush tasks that would still run in the original thread.
+    // 2. After finish completes, txnlog is generated with all data files. Any subsequent write
+    //    tasks will have their data discarded, resulting in data loss.
+    bool _already_finished = false;
 };
 
 bool DeltaWriterImpl::is_immutable() const {
@@ -984,6 +996,14 @@ const DictColumnsValidMap* DeltaWriter::global_dict_columns_valid_info() const {
 
 const GlobalDictByNameMaps* DeltaWriter::global_dict_map() const {
     return _impl->global_dicts();
+}
+
+void DeltaWriter::set_already_finished(bool val) {
+    _impl->set_already_finished(val);
+}
+
+bool DeltaWriter::already_finished() const {
+    return _impl->already_finished();
 }
 
 ThreadPool* DeltaWriter::io_threads() {
