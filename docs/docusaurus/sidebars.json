@@ -576,6 +576,7 @@
                 },
                 "faq/datalake",
                 "faq/Sql_faq",
+                "faq/table_design_faq",
                 "faq/Dump_query",
                 "faq/resource_isolation_faq",
                 "faq/fe_mem_faq",
