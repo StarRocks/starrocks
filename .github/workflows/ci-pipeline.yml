@@ -874,7 +874,8 @@ jobs:
       needs.thirdparty-info.result != 'failure' && 
       needs.fe-codestyle-check.result != 'failure' && 
       needs.clang-format.result != 'failure' &&
-      (needs.thirdparty-info.result == 'success' || needs.fe-codestyle-check.result == 'success' || needs.test-checker.outputs.test_change == 'true')
+      (needs.thirdparty-info.result == 'success' || needs.fe-codestyle-check.result == 'success' || needs.test-checker.outputs.test_change == 'true') &&
+      (needs.thirdparty-info.result != 'cancelled' && needs.fe-codestyle-check.result != 'cancelled' && needs.test-checker.outputs.test_change != 'cancelled')
     steps:
       - name: CLEAN
         run: |
