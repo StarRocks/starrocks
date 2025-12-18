@@ -85,18 +85,28 @@ public class SimpleExecutor {
     }
 
     public void executeDML(String sql) {
+        executeDMLOrControl(sql, SqlType.DML);
+    }
+
+    public void executeControl(String sql) {
+        executeDMLOrControl(sql, SqlType.CONTROL);
+    }
+
+    private void executeDMLOrControl(String sql, SqlType type) {
         ConnectContext prev = ConnectContext.get();
         try {
             ConnectContext context = createConnectContext();
             StatementBase parsedStmt = SqlParser.parseOneWithStarRocksDialect(sql, context.getSessionVariable());
             sql = formatSQL(sql, parsedStmt);
-            Preconditions.checkState(parsedStmt instanceof DmlStmt, "the statement should be dml");
+            if (type == SqlType.DML) {
+                Preconditions.checkState(parsedStmt instanceof DmlStmt, "the statement should be DML statement");
+            }
             StmtExecutor executor = StmtExecutor.newInternalExecutor(context, parsedStmt);
             context.setExecutor(executor);
             context.setQueryId(UUIDUtil.genUUID());
             context.getSessionVariable().setPipelineDop(dop);
-            AuditLog.getInternalAudit()
-                    .info("{} execute SQL | Query_id {} | DML {}", name, DebugUtil.printId(context.getQueryId()), sql);
+            AuditLog.getInternalAudit().info("{} execute SQL | Query_id {} | {} {}",
+                    name, DebugUtil.printId(context.getQueryId()), type.name(), sql);
             executor.execute();
         } catch (Exception e) {
             LOG.error(name + " execute SQL {} failed: {}", sql, e.getMessage(), e);
@@ -169,5 +179,10 @@ public class SimpleExecutor {
         context.setNeedQueued(false);
         context.setStartTime();
         return context;
+    }
+
+    private enum SqlType {
+        DML,
+        CONTROL
     }
 }

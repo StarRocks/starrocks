@@ -64,7 +64,12 @@ Status convert_to_arrow_schema(const RowDescriptor& row_desc,
                                const std::unordered_map<int64_t, std::string>& id_to_col_name,
                                std::shared_ptr<arrow::Schema>* result,
                                const std::vector<ExprContext*>& output_expr_ctxs,
-                               const std::vector<std::string>* output_column_names = nullptr);
+                               const std::vector<std::string>* output_column_names = nullptr,
+                               int32_t flight_sql_version = 0);
+
+Status convert_to_arrow_type_for_flight_sql(const TypeDescriptor& type, std::shared_ptr<arrow::DataType>* result);
+Status convert_to_arrow_field_for_flight_sql(const TypeDescriptor& desc, const std::string& col_name, bool is_nullable,
+                                             std::shared_ptr<arrow::Field>* field, int32_t version);
 
 Status serialize_record_batch(const arrow::RecordBatch& record_batch, std::string* result);
 

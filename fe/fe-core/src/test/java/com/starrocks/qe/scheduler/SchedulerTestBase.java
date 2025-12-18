@@ -39,6 +39,8 @@ import com.starrocks.thrift.FrontendService;
 import com.starrocks.thrift.TFinishSlotRequirementRequest;
 import com.starrocks.thrift.TFinishSlotRequirementResponse;
 import com.starrocks.thrift.TNetworkAddress;
+import com.starrocks.thrift.TNotifyForwardDeploymentFinishedRequest;
+import com.starrocks.thrift.TNotifyForwardDeploymentFinishedRespone;
 import com.starrocks.thrift.TReleaseSlotRequest;
 import com.starrocks.thrift.TReleaseSlotResponse;
 import com.starrocks.thrift.TRequireSlotRequest;
@@ -47,6 +49,7 @@ import com.starrocks.thrift.TWorkGroup;
 import com.starrocks.utframe.MockGenericPool;
 import mockit.Mock;
 import mockit.MockUp;
+import org.apache.thrift.TException;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
@@ -297,6 +300,12 @@ public class SchedulerTestBase extends SchedulerTestNoneDBBase {
         public TFinishSlotRequirementResponse finishSlotRequirement(TFinishSlotRequirementRequest request)
                 throws org.apache.thrift.TException {
             return frontendService.finishSlotRequirement(request);
+        }
+
+        @Override
+        public TNotifyForwardDeploymentFinishedRespone notifyForwardDeploymentFinished(
+                TNotifyForwardDeploymentFinishedRequest request) throws TException {
+            return frontendService.notifyForwardDeploymentFinished(request);
         }
     }
 

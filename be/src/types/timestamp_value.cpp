@@ -838,6 +838,16 @@ int64_t TimestampValue::to_unix_second() const {
 }
 
 // return microseconds since epoch.
+int64_t TimestampValue::to_unix_microsecond() const {
+    int64_t result = timestamp::to_julian(_timestamp);
+    result *= SECS_PER_DAY;
+    result -= timestamp::UNIX_EPOCH_SECONDS;
+    result *= USECS_PER_SEC;
+    result += timestamp::to_time(_timestamp);
+    return result;
+}
+
+// return milliseconds since epoch.
 int64_t TimestampValue::to_unixtime() const {
     int64_t result = timestamp::to_julian(_timestamp);
     result *= SECS_PER_DAY;

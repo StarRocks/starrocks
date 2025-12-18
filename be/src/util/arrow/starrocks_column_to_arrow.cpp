@@ -14,6 +14,10 @@
 
 #include "util/arrow/starrocks_column_to_arrow.h"
 
+#include <arrow/status.h>
+
+#include <array>
+
 #include "column/array_column.h"
 #include "column/column_helper.h"
 #include "column/map_column.h"
@@ -21,13 +25,14 @@
 #include "common/statusor.h"
 #include "exec/arrow_type_traits.h"
 #include "exprs/expr.h"
+#include "runtime/time_types.h"
 #include "runtime/types.h"
 #include "types/large_int_value.h"
 #include "util/raw_container.h"
 
 namespace starrocks {
 
-class ColumnContext;
+struct ColumnContext;
 
 // Function to convert the column data in the range [start_idx, end_idx) to arrow
 typedef arrow::Status (*StarRocksToArrowConvertFunc)(const ColumnPtr& column, int start_idx, int end_idx,
@@ -65,8 +70,19 @@ static inline arrow::Status check_const(const ColumnPtr& column) {
     return arrow::Status::Invalid(fmt::format("The column can not be constant"));
 }
 
+// For the HLL type, Arrow Flight SQL converts it to BINARY, while in all other cases it is converted to UTF8.
+// Therefore, we can use the condition `(lt == TYPE_HLL && at == ArrowTypeId::BINARY)` to determine that this is
+// the Arrow Flight SQL case.
+static constexpr bool is_always_convert_to_null(const LogicalType lt, const ArrowTypeId at) {
+    return lt == TYPE_OBJECT || lt == TYPE_PERCENTILE || (lt == TYPE_HLL && at == ArrowTypeId::BINARY);
+}
+
 template <LogicalType LT, ArrowTypeId AT, bool is_nullable, typename = guard::Guard>
 struct ColumnToArrowConverter;
+
+// ------------------------------------------------------------------------------------
+// ConvFloatAndInteger
+// ------------------------------------------------------------------------------------
 
 DEF_PRED_GUARD(ConvFloatAndIntegerGuard, is_conv_float_integer, LogicalType, LT, ArrowTypeId, AT)
 #define IS_CONV_FLOAT_INTEGER_CTOR(LT, AT) DEF_PRED_CASE_CTOR(is_conv_float_integer, LT, AT)
@@ -114,11 +130,95 @@ struct ColumnToArrowConverter<LT, AT, is_nullable, ConvFloatAndIntegerGuard<LT, 
     }
 };
 
+// ------------------------------------------------------------------------------------
+// ConvDateOrDatetime
+// ------------------------------------------------------------------------------------
+
+DEF_PRED_GUARD(ConvDateOrDatetimeGuard, is_date_or_datetime_guard, LogicalType, LT, ArrowTypeId, AT)
+#define IS_CONV_DATE_OR_DATETIME_CTOR(LT, AT) DEF_PRED_CASE_CTOR(is_date_or_datetime_guard, LT, AT)
+#define IS_CONV_DATE_OR_DATETIME(LT, ...) \
+    DEF_BINARY_RELATION_ENTRY_SEP_SEMICOLON(IS_CONV_DATE_OR_DATETIME_CTOR, LT, ##__VA_ARGS__)
+
+IS_CONV_DATE_OR_DATETIME_CTOR(TYPE_DATE, ArrowTypeId::DATE32)
+IS_CONV_DATE_OR_DATETIME_CTOR(TYPE_DATETIME, ArrowTypeId::TIMESTAMP)
+
+template <LogicalType LT, ArrowTypeId AT, bool is_nullable>
+struct ColumnToArrowConverter<LT, AT, is_nullable, ConvDateOrDatetimeGuard<LT, AT>> {
+    using StarRocksCppType = RunTimeCppType<LT>;
+    using StarRocksColumnType = RunTimeColumnType<LT>;
+    using ArrowType = ArrowTypeIdToType<AT>;
+    using ArrowBuilderType = typename arrow::TypeTraits<ArrowType>::BuilderType;
+
+    static inline auto convert_datum(const StarRocksCppType& datum, int64_t unit_scale_num, int64_t unit_scale_den) {
+        if constexpr (lt_is_date<LT>) {
+            return datum.to_days_since_unix_epoch();
+        } else if constexpr (lt_is_datetime<LT>) {
+            const int64_t micros = datum.to_unix_microsecond();
+            return (micros * unit_scale_num) / unit_scale_den;
+        } else {
+            static_assert(lt_is_date<LT> || lt_is_datetime<LT>, "Illegal LogicalType");
+        }
+    }
+
+    static inline arrow::Status convert(const ColumnPtr& column, int start_idx, int end_idx,
+                                        ColumnContext* column_context, arrow::ArrayBuilder* array_builder) {
+        ARROW_RETURN_NOT_OK(check_const(column));
+        ArrowBuilderType* builder = down_cast<ArrowBuilderType*>(array_builder);
+
+        // Pre-compute unit conversion once per column.
+        // For DATETIME we normalize StarRocks microseconds to the Arrow timestamp unit
+        // (SECOND/MILLI/MICRO/NANO) via a simple scale = unit_scale_num / unit_scale_den.
+        int64_t unit_scale_num = 1;
+        int64_t unit_scale_den = 1;
+        if constexpr (lt_is_datetime<LT>) {
+            auto ts_type = std::static_pointer_cast<arrow::TimestampType>(column_context->arrow_type);
+            switch (ts_type->unit()) {
+            case arrow::TimeUnit::SECOND:
+                unit_scale_den = USECS_PER_SEC;
+                break;
+            case arrow::TimeUnit::MILLI:
+                unit_scale_den = USECS_PER_MILLIS;
+                break;
+            case arrow::TimeUnit::MICRO:
+                break;
+            case arrow::TimeUnit::NANO:
+                unit_scale_num = NANOSECS_PER_USEC;
+                break;
+            }
+        }
+
+        if constexpr (is_nullable) {
+            const auto* nullable_column = down_cast<const NullableColumn*>(column.get());
+            const auto* data_column = down_cast<const StarRocksColumnType*>(nullable_column->data_column().get());
+            const auto data = data_column->immutable_data();
+            for (auto i = start_idx; i < end_idx; ++i) {
+                if (nullable_column->is_null(i)) {
+                    ARROW_RETURN_NOT_OK(builder->AppendNull());
+                } else {
+                    ARROW_RETURN_NOT_OK(builder->Append(convert_datum(data[i], unit_scale_num, unit_scale_den)));
+                }
+            }
+        } else {
+            const auto* data_column = down_cast<const StarRocksColumnType*>(column.get());
+            const auto data = data_column->immutable_data();
+            for (auto i = start_idx; i < end_idx; ++i) {
+                ARROW_RETURN_NOT_OK(builder->Append(convert_datum(data[i], unit_scale_num, unit_scale_den)));
+            }
+        }
+        return arrow::Status::OK();
+    }
+};
+
+// ------------------------------------------------------------------------------------
+// ConvDecimal
+// ------------------------------------------------------------------------------------
+
 DEF_PRED_GUARD(ConvDecimalGuard, is_conv_decimal, LogicalType, LT, ArrowTypeId, AT)
 #define IS_CONV_DECIMAL_CTOR(LT, AT) DEF_PRED_CASE_CTOR(is_conv_decimal, LT, AT)
 #define IS_CONV_DECIMAL_R(AT, ...) DEF_BINARY_RELATION_ENTRY_SEP_SEMICOLON_R(IS_CONV_DECIMAL_CTOR, AT, ##__VA_ARGS__)
 
-IS_CONV_DECIMAL_R(ArrowTypeId::DECIMAL, TYPE_DECIMALV2, TYPE_DECIMAL32, TYPE_DECIMAL64, TYPE_DECIMAL128)
+IS_CONV_DECIMAL_R(ArrowTypeId::DECIMAL, TYPE_DECIMALV2, TYPE_DECIMAL32, TYPE_DECIMAL64, TYPE_DECIMAL128, TYPE_LARGEINT)
+IS_CONV_DECIMAL_R(ArrowTypeId::DECIMAL256, TYPE_DECIMAL256)
 
 template <LogicalType LT, ArrowTypeId AT, bool is_nullable>
 struct ColumnToArrowConverter<LT, AT, is_nullable, ConvDecimalGuard<LT, AT>> {
@@ -127,18 +227,33 @@ struct ColumnToArrowConverter<LT, AT, is_nullable, ConvDecimalGuard<LT, AT>> {
     using ArrowType = ArrowTypeIdToType<AT>;
     using ArrowBuilderType = typename arrow::TypeTraits<ArrowType>::BuilderType;
 
-    static inline arrow::Decimal128 convert_datum(const StarRocksCppType& datum) {
-        int128_t value;
-        if constexpr (lt_is_decimalv2<LT>) {
-            value = datum.value();
-        } else if constexpr (lt_is_decimal<LT>) {
-            value = datum;
+    static inline auto convert_datum(const StarRocksCppType& datum) {
+        if constexpr (lt_is_decimal256<LT>) {
+            const int256_t& value = datum;
+            // Arrow Decimal256 uses little-endian word array: [word0, word1, word2, word3]
+            // where word0 is the least significant and word3 is the most significant
+            std::array<uint64_t, 4> words;
+            words[0] = static_cast<uint64_t>(value.low);
+            words[1] = static_cast<uint64_t>(value.low >> 64);
+            words[2] = static_cast<uint64_t>(value.high);
+            words[3] = static_cast<uint64_t>(value.high >> 64);
+            return arrow::Decimal256(words);
         } else {
-            static_assert(lt_is_decimalv2<LT> || lt_is_decimal<LT>, "Illegal LogicalType");
+            // For DECIMAL32/64/128/LARGEINT, convert to arrow::Decimal128
+            int128_t value;
+            if constexpr (lt_is_decimalv2<LT>) {
+                value = datum.value();
+            } else if constexpr (lt_is_decimal<LT>) {
+                value = datum;
+            } else if constexpr (lt_is_largeint<LT>) {
+                value = datum;
+            } else {
+                static_assert(lt_is_decimalv2<LT> || lt_is_decimal<LT> || lt_is_largeint<LT>, "Illegal LogicalType");
+            }
+            int64_t high = value >> 64;
+            uint64_t low = value;
+            return arrow::Decimal128(high, low);
         }
-        int64_t high = value >> 64;
-        uint64_t low = value;
-        return {high, low};
     }
 
     static inline arrow::Status convert(const ColumnPtr& column, int start_idx, int end_idx,
@@ -168,13 +283,18 @@ struct ColumnToArrowConverter<LT, AT, is_nullable, ConvDecimalGuard<LT, AT>> {
     }
 };
 
+// ------------------------------------------------------------------------------------
+// ConvBinary
+// ------------------------------------------------------------------------------------
+
 DEF_PRED_GUARD(ConvBinaryGuard, is_conv_binary, LogicalType, LT, ArrowTypeId, AT)
 #define IS_CONV_BINARY_CTOR(LT, AT) DEF_PRED_CASE_CTOR(is_conv_binary, LT, AT)
 #define IS_CONV_BINARY_R(AT, ...) DEF_BINARY_RELATION_ENTRY_SEP_SEMICOLON_R(IS_CONV_BINARY_CTOR, AT, ##__VA_ARGS__)
 
 IS_CONV_BINARY_R(ArrowTypeId::STRING, TYPE_VARCHAR, TYPE_HLL, TYPE_CHAR, TYPE_DATE, TYPE_DATETIME, TYPE_LARGEINT)
-IS_CONV_BINARY_R(ArrowTypeId::STRING, TYPE_DECIMALV2, TYPE_DECIMAL32, TYPE_DECIMAL64, TYPE_DECIMAL128)
+IS_CONV_BINARY_R(ArrowTypeId::STRING, TYPE_DECIMALV2, TYPE_DECIMAL32, TYPE_DECIMAL64, TYPE_DECIMAL128, TYPE_DECIMAL256)
 IS_CONV_BINARY_R(ArrowTypeId::STRING, TYPE_JSON)
+IS_CONV_BINARY_R(ArrowTypeId::BINARY, TYPE_VARBINARY, TYPE_HLL, TYPE_OBJECT, TYPE_PERCENTILE)
 
 template <LogicalType LT, ArrowTypeId AT, bool is_nullable>
 struct ColumnToArrowConverter<LT, AT, is_nullable, ConvBinaryGuard<LT, AT>> {
@@ -183,9 +303,11 @@ struct ColumnToArrowConverter<LT, AT, is_nullable, ConvBinaryGuard<LT, AT>> {
     using ArrowType = ArrowTypeIdToType<AT>;
     using ArrowBuilderType = typename arrow::TypeTraits<ArrowType>::BuilderType;
 
-    static inline std::string convert_datum(const StarRocksCppType& datum, [[maybe_unused]] int precision,
-                                            [[maybe_unused]] int scale) {
-        if constexpr (lt_is_string<LT> || lt_is_decimalv2<LT> || lt_is_date_or_datetime<LT>) {
+    static inline auto convert_datum(const StarRocksCppType& datum, [[maybe_unused]] int precision,
+                                     [[maybe_unused]] int scale) {
+        if constexpr (lt_is_string<LT> || lt_is_binary<LT>) {
+            return std::string_view(datum);
+        } else if constexpr (lt_is_decimalv2<LT> || lt_is_date_or_datetime<LT>) {
             return datum.to_string();
         } else if constexpr (lt_is_hll<LT>) {
             std::string s;
@@ -210,10 +332,19 @@ struct ColumnToArrowConverter<LT, AT, is_nullable, ConvBinaryGuard<LT, AT>> {
                                         arrow::ArrayBuilder* array_builder) {
         ARROW_RETURN_NOT_OK(check_const(column));
         ArrowBuilderType* builder = down_cast<ArrowBuilderType*>(array_builder);
+
+        if constexpr (is_always_convert_to_null(LT, AT)) {
+            DCHECK(is_nullable);
+            for (auto i = start_idx; i < end_idx; ++i) {
+                ARROW_RETURN_NOT_OK(builder->AppendNull());
+            }
+            return arrow::Status::OK();
+        }
+
         if constexpr (is_nullable) {
             const auto* nullable_column = down_cast<const NullableColumn*>(column.get());
             const auto* data_column = down_cast<const StarRocksColumnType*>(nullable_column->data_column().get());
-            if constexpr (lt_is_string<LT>) {
+            if constexpr (lt_is_string<LT> || lt_is_binary<LT>) {
                 const auto data = data_column->get_proxy_data();
                 for (auto i = start_idx; i < end_idx; ++i) {
                     if (nullable_column->is_null(i)) {
@@ -221,6 +352,11 @@ struct ColumnToArrowConverter<LT, AT, is_nullable, ConvBinaryGuard<LT, AT>> {
                     } else {
                         ARROW_RETURN_NOT_OK(builder->Append(convert_datum(data[i], -1, -1)));
                     }
+                }
+            } else if constexpr (LT == TYPE_OBJECT || LT == TYPE_PERCENTILE) {
+                // BITMAP,PERCENTILE are always converted to utf8 with null values, which is the same as MySQL output.
+                for (auto i = start_idx; i < end_idx; ++i) {
+                    ARROW_RETURN_NOT_OK(builder->AppendNull());
                 }
             } else {
                 const auto data = data_column->immutable_data();
@@ -240,7 +376,7 @@ struct ColumnToArrowConverter<LT, AT, is_nullable, ConvBinaryGuard<LT, AT>> {
             }
         } else {
             const auto* data_column = down_cast<const StarRocksColumnType*>(column.get());
-            if constexpr (lt_is_string<LT>) {
+            if constexpr (lt_is_string<LT> || lt_is_binary<LT>) {
                 const auto data = data_column->get_proxy_data();
                 for (auto i = start_idx; i < end_idx; ++i) {
                     ARROW_RETURN_NOT_OK(builder->Append(convert_datum(data[i], -1, -1)));
@@ -261,6 +397,10 @@ struct ColumnToArrowConverter<LT, AT, is_nullable, ConvBinaryGuard<LT, AT>> {
         return arrow::Status::OK();
     }
 };
+
+// ------------------------------------------------------------------------------------
+// ConvArray
+// ------------------------------------------------------------------------------------
 
 DEF_PRED_GUARD(ConvArrayGuard, is_conv_array, LogicalType, LT, ArrowTypeId, AT)
 #define IS_CONV_ARRAY_CTOR(LT, AT) DEF_PRED_CASE_CTOR(is_conv_array, LT, AT)
@@ -336,6 +476,10 @@ struct ColumnToArrowConverter<LT, AT, is_nullable, ConvArrayGuard<LT, AT>> {
     }
 };
 
+// ------------------------------------------------------------------------------------
+// ConvStruct
+// ------------------------------------------------------------------------------------
+
 DEF_PRED_GUARD(ConvStructGuard, is_conv_struct, LogicalType, LT, ArrowTypeId, AT)
 #define IS_CONV_STRUCT_CTOR(LT, AT) DEF_PRED_CASE_CTOR(is_conv_struct, LT, AT)
 #define IS_CONV_STRUCT_R(AT, ...) DEF_BINARY_RELATION_ENTRY_SEP_SEMICOLON_R(IS_CONV_STRUCT_CTOR, AT, ##__VA_ARGS__)
@@ -407,6 +551,10 @@ struct ColumnToArrowConverter<LT, AT, is_nullable, ConvStructGuard<LT, AT>> {
     }
 };
 
+// ------------------------------------------------------------------------------------
+// ConvMap
+// ------------------------------------------------------------------------------------
+
 DEF_PRED_GUARD(ConvMapGuard, is_conv_map, LogicalType, LT, ArrowTypeId, AT)
 #define IS_CONV_MAP_CTOR(LT, AT) DEF_PRED_CASE_CTOR(is_conv_map, LT, AT)
 #define IS_CONV_MAP_R(AT, ...) DEF_BINARY_RELATION_ENTRY_SEP_SEMICOLON_R(IS_CONV_MAP_CTOR, AT, ##__VA_ARGS__)
@@ -438,7 +586,8 @@ struct ColumnToArrowConverter<LT, AT, is_nullable, ConvMapGuard<LT, AT>> {
         bool key_is_nullable = data_column->keys_column()->is_nullable();
         // Arrow MAP does not allow null key. Just fail to convert currently. We can improve it by
         // skip null key in the future if needed.
-        if (data_column->keys_column()->has_null()) {
+        if (data_column->keys_column()->has_null() ||
+            is_always_convert_to_null(key_type_desc.type, key_arrow_type->id())) {
             return arrow::Status::TypeError(
                     fmt::format("Can't convert data to arrow because the map key can be null, but arrow does"
                                 " not allow null key. logical type: {}, arrow type: {}",
@@ -532,16 +681,24 @@ static const std::unordered_map<int32_t, StarRocksToArrowConvertFunc> global_sta
         STARROCKS_TO_ARROW_CONV_ENTRY_R(ArrowTypeId::INT64, TYPE_BIGINT),
         STARROCKS_TO_ARROW_CONV_ENTRY_R(ArrowTypeId::FLOAT, TYPE_FLOAT),
         STARROCKS_TO_ARROW_CONV_ENTRY_R(ArrowTypeId::DOUBLE, TYPE_DOUBLE, TYPE_TIME),
+        STARROCKS_TO_ARROW_CONV_ENTRY_R(ArrowTypeId::DATE32, TYPE_DATE),
+        STARROCKS_TO_ARROW_CONV_ENTRY_R(ArrowTypeId::TIMESTAMP, TYPE_DATETIME),
         STARROCKS_TO_ARROW_CONV_ENTRY_R(ArrowTypeId::DECIMAL, TYPE_DECIMALV2),
-        STARROCKS_TO_ARROW_CONV_ENTRY_R(ArrowTypeId::DECIMAL, TYPE_DECIMAL32, TYPE_DECIMAL64, TYPE_DECIMAL128),
+        STARROCKS_TO_ARROW_CONV_ENTRY_R(ArrowTypeId::DECIMAL, TYPE_DECIMAL32, TYPE_DECIMAL64, TYPE_DECIMAL128,
+                                        TYPE_LARGEINT),
+        STARROCKS_TO_ARROW_CONV_ENTRY_R(ArrowTypeId::DECIMAL256, TYPE_DECIMAL256),
         STARROCKS_TO_ARROW_CONV_ENTRY_R(ArrowTypeId::STRING, TYPE_VARCHAR, TYPE_CHAR, TYPE_HLL),
         STARROCKS_TO_ARROW_CONV_ENTRY_R(ArrowTypeId::STRING, TYPE_LARGEINT, TYPE_DATE, TYPE_DATETIME),
         STARROCKS_TO_ARROW_CONV_ENTRY_R(ArrowTypeId::STRING, TYPE_JSON),
+        STARROCKS_TO_ARROW_CONV_ENTRY_R(ArrowTypeId::BINARY, TYPE_VARBINARY, TYPE_HLL, TYPE_OBJECT, TYPE_PERCENTILE),
         STARROCKS_TO_ARROW_CONV_ENTRY_R(ArrowTypeId::LIST, TYPE_ARRAY),
         STARROCKS_TO_ARROW_CONV_ENTRY_R(ArrowTypeId::STRUCT, TYPE_STRUCT),
         STARROCKS_TO_ARROW_CONV_ENTRY_R(ArrowTypeId::MAP, TYPE_MAP)};
 
 static inline StarRocksToArrowConvertFunc resolve_convert_func(LogicalType lt, ArrowTypeId at, bool is_nullable) {
+    if (is_always_convert_to_null(lt, at)) {
+        is_nullable = true;
+    }
     const auto func_id = starrocks_to_arrow_convert_idx(lt, at, is_nullable);
     const auto end = global_starrocks_to_arrow_conv_table.end();
     auto it = global_starrocks_to_arrow_conv_table.find(func_id);
@@ -573,6 +730,7 @@ public:
     }
 
     DEF_VISIT_METHOD(Decimal128Type);
+    DEF_VISIT_METHOD(Decimal256Type);
     DEF_VISIT_METHOD(DoubleType);
     DEF_VISIT_METHOD(FloatType);
     DEF_VISIT_METHOD(BooleanType);
@@ -580,7 +738,10 @@ public:
     DEF_VISIT_METHOD(Int16Type);
     DEF_VISIT_METHOD(Int32Type);
     DEF_VISIT_METHOD(Int64Type);
+    DEF_VISIT_METHOD(Date32Type);
+    DEF_VISIT_METHOD(TimestampType);
     DEF_VISIT_METHOD(StringType);
+    DEF_VISIT_METHOD(BinaryType);
     DEF_VISIT_METHOD(ListType);
     DEF_VISIT_METHOD(StructType);
     DEF_VISIT_METHOD(MapType);
@@ -595,33 +756,36 @@ private:
     std::shared_ptr<arrow::Array>& _array;
 }; // namespace starrocks
 
-Status convert_chunk_to_arrow_batch(Chunk* chunk, std::vector<ExprContext*>& _output_expr_ctxs,
+Status convert_chunk_to_arrow_batch(Chunk* chunk, std::vector<ExprContext*>& output_expr_ctxs,
                                     const std::shared_ptr<arrow::Schema>& schema, arrow::MemoryPool* pool,
                                     std::shared_ptr<arrow::RecordBatch>* result) {
-    if (chunk->num_columns() != schema->num_fields()) {
-        return Status::InvalidArgument("number fields not match");
+    if (output_expr_ctxs.size() != schema->num_fields()) {
+        return Status::InvalidArgument(fmt::format("arrow schema fields({}) do not match output expressions({})",
+                                                   schema->num_fields(), output_expr_ctxs.size()));
     }
 
-    int result_num_column = _output_expr_ctxs.size();
-    std::vector<std::shared_ptr<arrow::Array>> arrays(result_num_column);
+    const size_t num_result_cols = output_expr_ctxs.size();
+    std::vector<std::shared_ptr<arrow::Array>> result_columns(num_result_cols);
 
-    size_t num_rows = chunk->num_rows();
-    for (auto i = 0; i < result_num_column; ++i) {
-        ASSIGN_OR_RETURN(ColumnPtr column, _output_expr_ctxs[i]->evaluate(chunk))
-        Expr* expr = _output_expr_ctxs[i]->root();
+    const size_t num_rows = chunk->num_rows();
+    for (auto i = 0; i < num_result_cols; ++i) {
+        ASSIGN_OR_RETURN(ColumnPtr column, output_expr_ctxs[i]->evaluate(chunk))
+
+        const Expr* expr = output_expr_ctxs[i]->root();
         if (column->is_constant()) {
             // Don't modify the column of src chunk, otherwise the memory statistics of query is invalid.
             column = ColumnHelper::copy_and_unfold_const_column(expr->type(), column->is_nullable(), std::move(column),
                                                                 num_rows);
         }
-        auto& array = arrays[i];
-        ColumnToArrowArrayConverter converter(column, pool, expr->type(), schema->field(i)->type(), array);
-        auto arrow_st = arrow::VisitTypeInline(*schema->field(i)->type(), &converter);
-        if (!arrow_st.ok()) {
+
+        ColumnToArrowArrayConverter converter(column, pool, expr->type(), schema->field(i)->type(), result_columns[i]);
+        if (const auto arrow_st = arrow::VisitTypeInline(*schema->field(i)->type(), &converter); !arrow_st.ok()) {
             return Status::InvalidArgument(arrow_st.ToString());
         }
     }
-    *result = arrow::RecordBatch::Make(schema, num_rows, std::move(arrays));
+
+    *result = arrow::RecordBatch::Make(schema, num_rows, std::move(result_columns));
+
     return Status::OK();
 }
 

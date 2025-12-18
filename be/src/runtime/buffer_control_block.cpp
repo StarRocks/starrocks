@@ -330,9 +330,8 @@ void BufferControlBlock::get_batch(GetResultBatchCtx* ctx) {
 Status BufferControlBlock::get_arrow_batch(std::shared_ptr<arrow::RecordBatch>* result) {
     auto notify = defer_notify();
     std::unique_lock<std::mutex> l(_lock);
-    if (!_status.ok()) {
-        return _status;
-    }
+
+    RETURN_IF_ERROR(_status);
 
     if (_is_cancelled) {
         return Status::Cancelled("Cancelled BufferControlBlock::get_arrow_batch");
@@ -341,6 +340,8 @@ Status BufferControlBlock::get_arrow_batch(std::shared_ptr<arrow::RecordBatch>* 
     while (_arrow_batch_queue.empty() && !_is_close && !_is_cancelled) {
         _data_arriaval.wait(l);
     }
+
+    RETURN_IF_ERROR(_status);
 
     if (_is_cancelled) {
         return Status::Cancelled("Cancelled BufferControlBlock::get_arrow_batch");
@@ -352,12 +353,13 @@ Status BufferControlBlock::get_arrow_batch(std::shared_ptr<arrow::RecordBatch>* 
         _arrow_batch_queue.pop_front();
         _arrow_rows -= batch->num_rows();
         _data_removal.notify_one();
+
         return Status::OK();
     }
 
     if (_is_close) {
         *result = nullptr;
-        return Status::OK();
+        return _status;
     }
 
     return Status::InternalError("Internal error, BufferControlBlock::get_arrow_batch");

@@ -1,4 +1,4 @@
--- name: test_array_stats @sequential
+-- name: test_array_stats @sequential @no_arrow_flight_sql
 DROP DATABASE IF EXISTS test_array_stats;
 -- result:
 -- !result

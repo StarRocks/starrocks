@@ -160,3 +160,6 @@ from t1 join t1 t2 on t1.c_bigint_null = t2.c_bigint_null and t1.c_int = t2.c_in
 
 select count(1)
 from t1 join t1 t2 on t1.c_datetime = t2.c_datetime and cast(t1.c_int as string) = cast(t2.c_int as string);
+
+select named_struct('a', json_object("a", 1, "b", "b1"));
+select named_struct('a', "str");

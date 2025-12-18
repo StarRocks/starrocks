@@ -660,6 +660,12 @@ void PInternalServiceImplBase<T>::_cancel_plan_fragment(google::protobuf::RpcCon
     Status st;
     auto reason_string =
             request->has_cancel_reason() ? cancel_reason_to_string(request->cancel_reason()) : "UnknownReason";
+
+    // Use error_message if provided (for INTERNAL_ERROR with actual error details)
+    if (request->has_error_message() && !request->error_message().empty()) {
+        reason_string = request->error_message();
+    }
+
     bool cancel_query_ctx = tid.hi == 0 && tid.lo == 0;
     // Only log cancellations for exceptional reasons (errors, timeouts, user cancels).
     // Skip logging for normal cancellations (LIMIT_REACH, QUERY_FINISHED) to reduce log noise.

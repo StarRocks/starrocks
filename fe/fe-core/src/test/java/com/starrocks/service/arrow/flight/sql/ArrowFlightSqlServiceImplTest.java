@@ -21,21 +21,13 @@ import com.starrocks.common.util.ArrowUtil;
 import com.starrocks.metric.LongCounterMetric;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.plugin.AuditEvent;
-import com.starrocks.qe.DefaultCoordinator;
 import com.starrocks.qe.QueryState;
 import com.starrocks.qe.SessionVariable;
-import com.starrocks.qe.scheduler.dag.ExecutionDAG;
-import com.starrocks.qe.scheduler.dag.ExecutionFragment;
-import com.starrocks.qe.scheduler.dag.FragmentInstance;
-import com.starrocks.qe.scheduler.dag.JobSpec;
 import com.starrocks.service.arrow.flight.sql.session.ArrowFlightSqlSessionManager;
 import com.starrocks.sql.ast.OriginStatement;
 import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.common.AuditEncryptionChecker;
-import com.starrocks.sql.plan.ExecPlan;
-import com.starrocks.system.ComputeNode;
-import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TUniqueId;
 import mockit.Expectations;
 import mockit.Mocked;
@@ -64,21 +56,13 @@ import org.apache.arrow.vector.types.pojo.Schema;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.MockedStatic;
-import org.mockito.Mockito;
 
 import java.lang.reflect.Field;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Answers.CALLS_REAL_METHODS;
@@ -88,7 +72,6 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.RETURNS_DEEP_STUBS;
 import static org.mockito.Mockito.doNothing;
-import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.mockStatic;
@@ -106,22 +89,20 @@ public class ArrowFlightSqlServiceImplTest {
     AuditEncryptionChecker mockChecker;
 
     @BeforeEach
-    public void setUp() throws IllegalAccessException, NoSuchFieldException {
+    public void setUp() throws IllegalAccessException, NoSuchFieldException, InterruptedException {
         sessionManager = mock(ArrowFlightSqlSessionManager.class);
         mockContext = mock(ArrowFlightSqlConnectContext.class, RETURNS_DEEP_STUBS);
         mockCallContext = mock(FlightProducer.CallContext.class);
         when(mockCallContext.peerIdentity()).thenReturn("token123");
         when(sessionManager.validateAndGetConnectContext("token123")).thenReturn(mockContext);
-        when(mockContext.getQuery()).thenReturn("SELECT 1");
         when(mockContext.getState()).thenReturn(mock(QueryState.class));
         when(mockContext.getResult(anyString())).thenReturn(mock(VectorSchemaRoot.class));
         when(mockContext.getExecutionId()).thenReturn(new com.starrocks.thrift.TUniqueId(1, 1));
-        when(mockContext.returnFromFE()).thenReturn(true);
-        when(mockContext.isFromFECoordinator()).thenReturn(true);
         when(mockContext.getArrowFlightSqlToken()).thenReturn("token123");
 
         SessionVariable mockSessionVariable = mock(SessionVariable.class);
         when(mockContext.getSessionVariable()).thenReturn(mockSessionVariable);
+        when(mockContext.acquireRunningToken(anyLong())).thenReturn(true);
         when(mockSessionVariable.getQueryTimeoutS()).thenReturn(10);
         when(mockSessionVariable.getQueryDeliveryTimeoutS()).thenReturn(10);
         when(mockSessionVariable.getSqlDialect()).thenReturn("mysql");
@@ -154,66 +135,8 @@ public class ArrowFlightSqlServiceImplTest {
 
         StatementBase mockStmtBase = mock(StatementBase.class);
         when(mockStmtBase.getOrigStmt()).thenReturn(new OriginStatement("SELECT 1", 0));
-        when(mockContext.getStatement()).thenReturn(mockStmtBase);
 
         service = new ArrowFlightSqlServiceImpl(sessionManager, Location.forGrpcInsecure("localhost", 1234));
-    }
-
-    @Test
-    public void testGetFlightInfoStatement() throws ExecutionException, InterruptedException, TimeoutException {
-        DefaultCoordinator mockCoordinator = mock(DefaultCoordinator.class);
-        JobSpec mockJobSpec = mock(JobSpec.class);
-        ExecPlan mockPlan = mock(ExecPlan.class);
-        when(mockContext.waitForDeploymentFinished(anyLong())).thenReturn(mockCoordinator);
-        when(mockCoordinator.getJobSpec()).thenReturn(mockJobSpec);
-        when(mockJobSpec.getExecPlan()).thenReturn(mockPlan);
-
-        FlightSql.CommandStatementQuery command = FlightSql.CommandStatementQuery.newBuilder()
-                .setQuery("SELECT 1").build();
-        FlightInfo info = service
-                .getFlightInfoStatement(command, mockCallContext, FlightDescriptor.command("SELECT 1".getBytes()));
-        assertNotNull(info);
-
-        when(mockContext.returnFromFE()).thenReturn(false);
-        when(mockContext.isFromFECoordinator()).thenReturn(false);
-
-        QueryState mockState = mock(QueryState.class);
-        when(mockContext.getState()).thenReturn(mockState);
-        when(mockState.isError()).thenReturn(false);
-
-        SessionVariable mockSessionVariable = mock(SessionVariable.class);
-        when(mockContext.getSessionVariable()).thenReturn(mockSessionVariable);
-        when(mockSessionVariable.getQueryTimeoutS()).thenReturn(10);
-        when(mockSessionVariable.getQueryDeliveryTimeoutS()).thenReturn(10);
-        when(mockSessionVariable.getSqlDialect()).thenReturn("mysql");
-
-
-        ExecutionDAG mockDAG = mock(ExecutionDAG.class);
-        when(mockCoordinator.getExecutionDAG()).thenReturn(mockDAG);
-
-        ExecutionFragment mockFragment = mock(ExecutionFragment.class);
-        when(mockDAG.getRootFragment()).thenReturn(mockFragment);
-
-        FragmentInstance mockInstance = mock(FragmentInstance.class);
-        when(mockFragment.getInstances()).thenReturn(Collections.singletonList(mockInstance));
-
-        ComputeNode mockNode = mock(ComputeNode.class);
-        when(mockInstance.getWorker()).thenReturn(mockNode);
-        when(mockNode.getHost()).thenReturn("127.0.0.1");
-        when(mockNode.getArrowFlightPort()).thenReturn(8815);
-        when(mockNode.getBrpcAddress()).thenReturn(new TNetworkAddress("127.0.0.1", 9020));
-
-        TUniqueId mockInstanceId = new TUniqueId(3, 4);
-        when(mockInstance.getInstanceId()).thenReturn(mockInstanceId);
-
-        ArrowFlightSqlServiceImpl spyService = Mockito.spy(service);
-        FlightInfo mockFlightInfo = mock(FlightInfo.class);
-        doReturn(mockFlightInfo).when(spyService).buildFlightInfo(any(), any(), any(), any());
-
-        FlightInfo beInfo = spyService
-                .getFlightInfoStatement(command, mockCallContext, FlightDescriptor.command("SELECT 1".getBytes()));
-        assertNotNull(beInfo);
-        assertEquals(mockFlightInfo, beInfo);
     }
 
     @Test
@@ -382,7 +305,6 @@ public class ArrowFlightSqlServiceImplTest {
         ArrowFlightSqlServiceImpl service = new ArrowFlightSqlServiceImpl(mock(ArrowFlightSqlSessionManager.class), null);
         ArrowFlightSqlSessionManager sessionManager = mock(ArrowFlightSqlSessionManager.class);
 
-        setFinalField(service, "executor", Executors.newSingleThreadExecutor());
         setFinalField(service, "sessionManager", sessionManager);
 
         // mock context
@@ -422,10 +344,6 @@ public class ArrowFlightSqlServiceImplTest {
         when(request.getSessionOptions()).thenReturn(options);
 
         service.setSessionOptions(request, context, listener);
-
-        ExecutorService executor = Deencapsulation.getField(service, "executor");
-        executor.shutdown();
-        executor.awaitTermination(2, TimeUnit.SECONDS);
     }
 
     private void setFinalField(Object target, String fieldName, Object value) {

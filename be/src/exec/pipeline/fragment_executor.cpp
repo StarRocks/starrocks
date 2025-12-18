@@ -259,6 +259,10 @@ Status FragmentExecutor::_prepare_runtime_state(ExecEnv* exec_env, const Unified
     runtime_state->set_func_version(func_version);
     runtime_state->init_mem_trackers(query_mem_tracker);
     runtime_state->set_be_number(request.backend_num());
+    const int arrow_flight_sql_version = request.common().__isset.arrow_flight_sql_version
+                                                 ? request.common().arrow_flight_sql_version
+                                                 : TArrowFlightSQLVersion::type::V0;
+    runtime_state->set_arrow_flight_sql_version(arrow_flight_sql_version);
 
     // RuntimeFilterWorker::open_query is idempotent
     const TRuntimeFilterParams* runtime_filter_params = nullptr;

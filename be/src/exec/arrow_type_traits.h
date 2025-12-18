@@ -49,6 +49,7 @@ M_ArrowTypeIdToTypeStruct(ArrowTypeId::FIXED_SIZE_BINARY, arrow::FixedSizeBinary
 M_ArrowTypeIdToTypeStruct(ArrowTypeId::LARGE_BINARY, arrow::LargeBinaryType);
 M_ArrowTypeIdToTypeStruct(ArrowTypeId::LARGE_STRING, arrow::LargeStringType);
 M_ArrowTypeIdToTypeStruct(ArrowTypeId::DECIMAL, arrow::Decimal128Type);
+M_ArrowTypeIdToTypeStruct(ArrowTypeId::DECIMAL256, arrow::Decimal256Type);
 M_ArrowTypeIdToTypeStruct(ArrowTypeId::DATE32, arrow::Date32Type);
 M_ArrowTypeIdToTypeStruct(ArrowTypeId::DATE64, arrow::Date64Type);
 M_ArrowTypeIdToTypeStruct(ArrowTypeId::TIMESTAMP, arrow::TimestampType);
@@ -81,6 +82,10 @@ struct ArrowTypeIdToCppTypeStruct<AT, BinaryATGuard<AT>> {
 };
 template <>
 struct ArrowTypeIdToCppTypeStruct<ArrowTypeId::DECIMAL, guard::Guard> {
+    using type = const uint8_t*;
+};
+template <>
+struct ArrowTypeIdToCppTypeStruct<ArrowTypeId::DECIMAL256, guard::Guard> {
     using type = const uint8_t*;
 };
 template <>

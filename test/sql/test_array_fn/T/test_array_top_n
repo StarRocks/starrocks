@@ -1,4 +1,4 @@
--- name: test_array_top_n_all_types
+-- name: test_array_top_n_all_types @no_arrow_flight_sql
 
 CREATE TABLE test_array_top_n (
     id INT,

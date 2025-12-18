@@ -1057,7 +1057,8 @@ public class DefaultCoordinator extends Coordinator {
     private void cancelInternal(PPlanFragmentCancelReason cancelReason) {
         jobSpec.getSlotProvider().cancelSlotRequirement(slot);
         if (!isInternalCancel(cancelReason) && StringUtils.isEmpty(connectContext.getState().getErrorMessage())) {
-            connectContext.getState().setError(cancelReason.toString());
+            String errorMsg = String.format("[reason=%s] [msg=%s]", cancelReason, queryStatus.getErrorMsg());
+            connectContext.getState().setError(errorMsg);
         }
         if (null != receiver) {
             receiver.cancel();
@@ -1085,16 +1086,27 @@ public class DefaultCoordinator extends Coordinator {
 
     // For phased schedule execution, we cancel the query context. (BE will cancel the relevant fragment internally)
     private void cancelRemoteQueryContext(PPlanFragmentCancelReason cancelReason) {
-        executionDAG.cancelQueryContext(cancelReason);
+        // Get the actual error message to propagate to BEs
+        String errorMessage = null;
+        if (cancelReason == PPlanFragmentCancelReason.INTERNAL_ERROR && !queryStatus.ok()) {
+            errorMessage = queryStatus.getErrorMsg();
+        }
+        executionDAG.cancelQueryContext(cancelReason, errorMessage);
     }
 
     private void cancelRemoteFragmentsAsync(PPlanFragmentCancelReason cancelReason) {
         scheduler.cancel();
+        // Get the actual error message to propagate to BEs
+        String errorMessage = null;
+        if (cancelReason == PPlanFragmentCancelReason.INTERNAL_ERROR && !queryStatus.ok()) {
+            errorMessage = queryStatus.getErrorMsg();
+        }
+        
         for (FragmentInstanceExecState execState : executionDAG.getExecutions()) {
             // If the execState fails to be cancelled, and it has been finished or not been deployed,
             // count down the profileDoneSignal of this execState immediately,
             // because the profile report will not arrive anymore for the finished or non-deployed execState.
-            if (!execState.cancelFragmentInstance(cancelReason) &&
+            if (!execState.cancelFragmentInstance(cancelReason, errorMessage) &&
                     (!execState.hasBeenDeployed() || execState.isFinished())) {
                 queryProfile.finishInstance(execState.getInstanceId());
             }

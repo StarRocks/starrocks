@@ -31,10 +31,13 @@ import logging
 import sys
 import threading
 import traceback
+import warnings
 
+import adbc_driver_manager
 import pymysql
 import trino
 import pyhive
+import adbc_driver_flightsql.dbapi as flight_sql
 
 import mysql.connector
 import os
@@ -62,6 +65,7 @@ from dbutils.pooled_db import PooledDB
 from lib import skip
 from lib import data_delete_lib
 from lib import data_insert_lib
+from lib.connection_base_lib import BaseConnectionLib
 from lib.github_issue import GitHubApi
 from lib.mysql_lib import MysqlLib
 from lib.mysql_prepared_stmt_lib import MysqlPreparedStmtLib
@@ -156,7 +160,9 @@ class StarrocksSQLApiLib(object):
         self.data_path = common_data_path
         self.db = list()
         self.resource = list()
-        self.mysql_lib = MysqlLib()
+        self.arrow_sql_lib = ArrowSqlLib()
+        self.starrocks_sql_lib = MysqlLib()
+        self.mysql_lib = self.starrocks_sql_lib
         self.mysql_prepared_stmt_lib = MysqlPreparedStmtLib()
         self.trino_lib = TrinoLib()
         self.spark_lib = SparkLib()
@@ -172,7 +178,6 @@ class StarrocksSQLApiLib(object):
         self.cluster_path = ""
         self.data_insert_lib = data_insert_lib.DataInsertLib()
         self.data_delete_lib = data_delete_lib.DataDeleteLib()
-        self.arrow_sql_lib = ArrowSqlLib()
         self.arrow_port = ""
 
         self.check_status = os.environ.get("check_status", "False") == "True"
@@ -540,6 +545,7 @@ class StarrocksSQLApiLib(object):
         self.host_password = _get_value(cluster_conf, "host_password")
         self.cluster_path = _get_value(cluster_conf, "cluster_path")
         self.arrow_port = _get_value(cluster_conf, "arrow_port")
+        self.arrow_port = self.arrow_port if self.arrow_port else 9408
 
         # client
         client_conf = _get_value(config_parser, "client")
@@ -574,19 +580,11 @@ class StarrocksSQLApiLib(object):
 
         StarrocksSQLApiLib._instance = True
 
-    def connect_starrocks_arrow(self):
-        args_dict = {
-            "host": self.mysql_host,
-            "arrow_port": self.arrow_port if self.arrow_port else 9408,
-            "user": self.mysql_user,
-            "password": self.mysql_password,
-        }
-        self.arrow_sql_lib.connect(args_dict)
-
     def connect_starrocks(self):
         mysql_dict = {
             "host": self.mysql_host,
             "port": self.mysql_port,
+            "arrow_port": self.arrow_port,
             "user": self.mysql_user,
             "password": self.mysql_password,
         }
@@ -594,12 +592,10 @@ class StarrocksSQLApiLib(object):
         self.mysql_prepared_stmt_lib.connect(mysql_dict)
 
     def create_starrocks_conn_pool(self):
-        self.connection_pool = PooledDB(
-            creator=pymysql,
-            mincached=3,
-            blocking=True,
+        self.connection_pool = self.mysql_lib.create_pool(
             host=self.mysql_host,
-            port=int(self.mysql_port),
+            mysql_port=int(self.mysql_port),
+            arrow_port=int(self.arrow_port),
             user=self.mysql_user,
             password=self.mysql_password,
         )
@@ -632,9 +628,6 @@ class StarrocksSQLApiLib(object):
 
     def close_hive(self):
         self.hive_lib.close()
-
-    def close_starrocks_arrow(self):
-        self.arrow_sql_lib.close()
 
     def create_database(self, database_name, tolerate_exist=False):
         """
@@ -739,53 +732,35 @@ class StarrocksSQLApiLib(object):
         """execute query"""
         try:
             if conn is None:
-                conn = self.mysql_lib.connector
+                conn: BaseConnectionLib = self.mysql_lib
+            else:
+                conn: BaseConnectionLib = self.mysql_lib.wrapper(conn)
 
-            with conn.cursor() as cursor:
-                cursor.execute(sql)
-                result = cursor.fetchall()
-                if isinstance(result, tuple):
-                    index = 0
-                    for res in result:
-                        res = list(res)
-                        # type to str
-                        col_index = 0
-                        for col_data in res:
-                            if isinstance(col_data, bytes):
-                                try:
-                                    res[col_index] = col_data.decode()
-                                except UnicodeDecodeError as e:
-                                    log.info("decode sql result by utf-8 error, try str")
-                                    res[col_index] = str(col_data)
-                            col_index += 1
+            res = conn.execute(sql)
+            if not res.status:
+                return {"status": False, "msg": res.msg}
+            if ori:
+                return {"status": True, "result": res.result, "msg": res.msg, "desc": res.desc}
 
-                        result = list(result)
-                        result[index] = tuple(res)
-                        result = tuple(result)
-                        index += 1
-
-                res_log = []
-
-                if ori:
-                    return {"status": True, "result": result, "msg": cursor._result.message, "desc": cursor.description}
-
-                if isinstance(result, tuple) or isinstance(result, list):
-                    if len(result) > 0:
-                        if isinstance(result[0], tuple):
-                            res_log.extend(["\t".join([str(y) for y in x]) for x in result])
-                        else:
-                            res_log.extend(["\t".join(str(x)) for x in result])
-                elif isinstance(result, bytes):
-                    if res_log != b"":
-                        res_log.append(str(result).strip())
-                elif result is not None and str(result).strip() != "":
-                    log.info("execute sql not bytes or tuple")
+            result = res.result
+            res_log = []
+            if isinstance(result, tuple) or isinstance(result, list):
+                if len(result) > 0:
+                    if isinstance(result[0], tuple):
+                        res_log.extend(["\t".join([str(y) for y in x]) for x in result])
+                    else:
+                        res_log.extend(["\t".join(str(x)) for x in result])
+            elif isinstance(result, bytes):
+                if res_log != b"":
                     res_log.append(str(result).strip())
-                else:
-                    log.info("execute sql empty result")
-                    raise Exception("execute sql result type unknown")
+            elif result is not None and str(result).strip() != "":
+                log.info("execute sql not bytes or tuple")
+                res_log.append(str(result).strip())
+            else:
+                log.info("execute sql empty result")
+                raise Exception("execute sql result type unknown")
 
-                return {"status": True, "result": "\n".join(res_log), "msg": cursor._result.message}
+            return {"status": True, "result": "\n".join(res_log), "msg": res.msg}
 
         except _mysql.Error as e:
             return {"status": False, "msg": e.args}
@@ -819,17 +794,17 @@ class StarrocksSQLApiLib(object):
     )
     def conn_execute_sql(self, conn, sql):
         try:
-            cursor = conn.cursor()
-            if sql.endswith(";"):
-                sql = sql[:-1]
-            cursor.execute(sql)
-            result = cursor.fetchall()
+            with conn.cursor() as cursor:
+                if sql.endswith(";"):
+                    sql = sql[:-1]
+                cursor.execute(sql)
+                result = cursor.fetchall()
 
-            for i in range(len(result)):
-                row = [str(item) for item in result[i]]
-                result[i] = "\t".join(row)
+                for i in range(len(result)):
+                    row = [str(item) for item in result[i]]
+                    result[i] = "\t".join(row)
 
-            return {"status": True, "result": "\n".join(result), "msg": "OK"}
+                return {"status": True, "result": "\n".join(result), "msg": "OK"}
 
         except trino.exceptions.TrinoQueryError as e:
             return {"status": False, "msg": e.message}
@@ -838,11 +813,6 @@ class StarrocksSQLApiLib(object):
         except Exception as e:
             print("unknown error", e)
             raise
-
-    def arrow_execute_sql(self, sql):
-        """arrow execute query"""
-        self.connect_starrocks_arrow()
-        return self.conn_execute_sql(self.arrow_sql_lib.connector, sql)
 
     def trino_execute_sql(self, sql):
         """trino execute query"""
@@ -1247,24 +1217,6 @@ class StarrocksSQLApiLib(object):
                 self.record_function_res(sql, actual_res, res_container)
 
             actual_res_log = ""
-        elif statement.startswith(ARROW_FLAG):
-            statement = statement[len(ARROW_FLAG) :]
-
-            # analyse var set
-            var, statement = self.analyse_var(statement, thread_key=var_key)
-
-            self_print("[ARROW]: %s" % statement)
-            log.info("[%s] ARROW: %s" % (sql_id, statement))
-
-            actual_res = self.arrow_execute_sql(statement)
-
-            if record_mode:
-                self.treatment_record_res(statement, actual_res, res_container)
-
-            actual_res = actual_res["result"] if actual_res["status"] else "E: %s" % str(actual_res["msg"])
-
-            # pretreatment actual res
-            actual_res, actual_res_log = self.pretreatment_res(actual_res)
         else:
             # sql
             log.info("[%s] SQL: %s" % (sql_id, statement))
@@ -1517,8 +1469,14 @@ class StarrocksSQLApiLib(object):
                     log.info("Both Error msg with url, skip detail check")
                     return
                 else:
-                    # ERROR msg, regex check
-                    tools.assert_equal(act, exp)
+                    re_match = re.match(r"E: \(\d+, ['\"](.*)['\"]\)", exp)
+                    if re_match:
+                        exp_part = re_match.group(1)
+                        tools.assert_in(exp_part, act)
+                        return
+                    else:
+                        # ERROR msg, regex check
+                        tools.assert_equal(act, exp)
 
             exp = exp.split("\n") if isinstance(exp, str) else exp
             act = act.split("\n") if isinstance(act, str) else act
