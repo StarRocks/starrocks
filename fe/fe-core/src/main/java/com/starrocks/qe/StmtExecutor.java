@@ -324,6 +324,7 @@ public class StmtExecutor {
     private List<ByteBuffer> proxyResultBuffer = null;
     private ShowResultSet proxyResultSet = null;
     private PQueryStatistics statisticsForAuditLog;
+    private boolean statisticsForAuditLogFromPlaceholder = false;
     private List<StmtExecutor> subStmtExecutors;
     private Optional<Boolean> isForwardToLeaderOpt = Optional.empty();
     private HttpResultSender httpResultSender;
@@ -1581,6 +1582,11 @@ public class StmtExecutor {
             boolean isSendFields = false;
             do {
                 batch = coord.getNext();
+                if (batch.getStatus() != null && batch.getInternalErrorCode() != null) {
+                    processQueryStatisticsFromResult(batch, execPlan, isOutfileQuery);
+                    throw new StarRocksException(batch.getInternalErrorCode(), batch.getStatus().getErrorMsg());
+                }
+
                 // for outfile query, there will be only one empty batch send back with eos flag
                 if (batch.getBatch() != null && !isOutfileQuery && needSendResult) {
                     // For some language driver, getting error packet after fields packet will be recognized as a success result
@@ -1626,6 +1632,7 @@ public class StmtExecutor {
     private void processQueryStatisticsFromResult(RowBatch batch, ExecPlan execPlan, boolean isOutfileQuery) {
         if (batch != null && parsedStmt.getOrigStmt() != null && parsedStmt.getOrigStmt().getOrigStmt() != null) {
             statisticsForAuditLog = batch.getQueryStatistics();
+            statisticsForAuditLogFromPlaceholder = false;
             if (!isOutfileQuery) {
                 context.getState().setEof();
             } else {
@@ -2505,14 +2512,25 @@ public class StmtExecutor {
 
     public void setQueryStatistics(PQueryStatistics statistics) {
         this.statisticsForAuditLog = statistics;
+        this.statisticsForAuditLogFromPlaceholder = false;
     }
 
     public PQueryStatistics getQueryStatisticsForAuditLog() {
-        if (statisticsForAuditLog == null && coord != null) {
-            statisticsForAuditLog = coord.getAuditStatistics();
-        }
         if (statisticsForAuditLog == null) {
-            statisticsForAuditLog = new PQueryStatistics();
+            statisticsForAuditLog = coord != null ? coord.getAuditStatistics() : null;
+            if (statisticsForAuditLog == null) {
+                statisticsForAuditLog = new PQueryStatistics();
+                statisticsForAuditLogFromPlaceholder = true;
+            } else {
+                statisticsForAuditLogFromPlaceholder = false;
+            }
+        } else if (statisticsForAuditLogFromPlaceholder && coord != null) {
+            // Refresh placeholder stats with coordinator audit statistics when they arrive.
+            PQueryStatistics coordinatorStats = coord.getAuditStatistics();
+            if (coordinatorStats != null) {
+                statisticsForAuditLog = coordinatorStats;
+                statisticsForAuditLogFromPlaceholder = false;
+            }
         }
         if (statisticsForAuditLog.scanBytes == null) {
             statisticsForAuditLog.scanBytes = 0L;
