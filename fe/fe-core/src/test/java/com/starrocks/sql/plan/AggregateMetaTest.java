@@ -14,6 +14,8 @@
 
 package com.starrocks.sql.plan;
 
+import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.TabletStatMgr;
 import com.starrocks.sql.optimizer.base.ColumnIdentifier;
 import com.starrocks.sql.optimizer.statistics.ColumnMinMaxMgr;
 import com.starrocks.sql.optimizer.statistics.IMinMaxStatsMgr;
@@ -22,6 +24,7 @@ import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.Test;
 
+import java.time.LocalDateTime;
 import java.util.Optional;
 
 public class AggregateMetaTest extends PlanTestBase {
@@ -64,5 +67,30 @@ public class AggregateMetaTest extends PlanTestBase {
                 "  1:AGGREGATE (update finalize)\n" +
                 "  |  output: max(2: v2)\n" +
                 "  |  group by:");
+    }
+
+    @Test
+    public void testAggregateCountMeta() throws Exception {
+        new MockUp<MaterializedIndex>() {
+            @Mock
+            public long getRowCount() {
+                return 3;
+            }
+        };
+        new MockUp<TabletStatMgr>() {
+            @Mock
+            public boolean workTimeIsMustAfter(LocalDateTime time) {
+                return true;
+            }
+        };
+        connectContext.getSessionVariable().setEnableRewriteSimpleAggToMetaScan(true);
+        String sql = "SELECT COUNT() FROM t0";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  1:Project\n" +
+                "  |  <slot 4> : 3\n" +
+                "  |  \n" +
+                "  0:UNION\n" +
+                "     constant exprs: \n" +
+                "         NULL");
     }
 }
