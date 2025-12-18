@@ -189,7 +189,7 @@ Status LakeDataSource::get_tablet(const TInternalScanRange& scan_range) {
                                                  schema_key_pb, tablet_id, _runtime_state->query_id(),
                                                  _runtime_state->fragment_ctx()->fe_addr(), _tablet.metadata()));
     } else {
-        // no table schema meta indicates FE has not been upgraded to use fast schema evolution v2,
+        // no table schema meta indicates FE has not been upgraded to support table schema service,
         // so fallback to the old way to get schema from tablet metadata
         _tablet_schema = _tablet.get_schema();
     }

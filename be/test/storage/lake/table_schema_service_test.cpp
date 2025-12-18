@@ -86,25 +86,20 @@ public:
     void install() {
         SyncPoint::GetInstance()->SetCallBack("singleflight::Group::Do:1", [&](void*) {
             std::lock_guard lk(_mu);
-            _follower_seen++;
-            _cv.notify_all();
-        });
-        SyncPoint::GetInstance()->SetCallBack("singleflight::Group::Do:2", [&](void*) {
-            std::unique_lock lk(_mu);
-            if (!_leader_blocked_once) {
-                _leader_blocked_once = true;
-                _leader_reached_exec_point = true;
+            if (_leader_reached_exec_point) {
+                _follower_seen++;
                 _cv.notify_all();
-                const bool ok = _cv.wait_for(lk, _timeout, [&] { return _follower_seen >= 1; });
-                if (!ok) {
-                    _timed_out = true;
-                    _cv.notify_all();
-                }
             }
         });
     }
 
-    // Wait until the leader thread reaches the hook point right before executing the real function.
+    void leader_wait() {
+        std::unique_lock lk(_mu);
+        _leader_reached_exec_point = true;
+        _cv.notify_all();
+        (void)_cv.wait_for(lk, _timeout, [&] { return _follower_seen >= 1; });
+    }
+
     bool wait_for_leader_reached_exec_point() {
         std::unique_lock lk(_mu);
         return _cv.wait_for(lk, _timeout, [&] { return _leader_reached_exec_point; });
@@ -626,6 +621,7 @@ TEST_F(TableSchemaServiceTest, rpc_request_deduplication) {
     barrier.install();
 
     setup_rpc_test_hook([&](const TableSchemaServiceTest::RpcHookArgs& ctx) {
+        barrier.leader_wait();
         rpc_call_count.fetch_add(1);
         *ctx.mock_thrift_rpc = true;
         *ctx.status = Status::OK();
@@ -675,6 +671,7 @@ TEST_F(TableSchemaServiceTest, load_interference) {
 
     std::atomic<bool> leader_failed_once{false};
     setup_rpc_test_hook([&](const TableSchemaServiceTest::RpcHookArgs& ctx) {
+        barrier.leader_wait();
         rpc_call_count.fetch_add(1);
         *ctx.mock_thrift_rpc = true;
         *ctx.status = Status::OK();
@@ -730,6 +727,7 @@ TEST_F(TableSchemaServiceTest, query_interference) {
 
     std::atomic<bool> leader_failed_once{false};
     setup_rpc_test_hook([&](const TableSchemaServiceTest::RpcHookArgs& ctx) {
+        barrier.leader_wait();
         rpc_call_count.fetch_add(1);
         *ctx.mock_thrift_rpc = true;
         *ctx.status = Status::OK();

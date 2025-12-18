@@ -120,8 +120,14 @@ Status update_metadata_schema(const TxnLogPB_OpWrite& op_write, int64_t txn_id,
         return Status::OK();
     }
     auto& schema_key = op_write.schema_key();
-    if (schema_key.schema_id() == tablet_meta->schema().id() ||
-        tablet_meta->historical_schemas().contains(schema_key.schema_id())) {
+    // FE assigns schema IDs monotonically, and larger schema versions correspond to larger schema IDs,
+    // so we can use schema ID to determine whether an update is needed. v4.0 uses this approach for
+    // compatibility when upgrading from v3.5, where FE may not support table schema service and schema
+    // version is unavailable. Because tables upgraded from v3.5 not enabled fast schema evolution v2,
+    // the schema ID of import is guaranteed to be smaller than the current tablet metadata schema ID.
+    // This differs from v4.1, which uses exact schema ID matching or schema version comparison. After
+    // v4.1, we can return to the recommended schema version-based approach.
+    if (schema_key.schema_id() <= tablet_meta->schema().id()) {
         return Status::OK();
     }
     ASSIGN_OR_RETURN(auto new_schema, tablet_mgr->table_schema_service()->get_schema_for_load(

@@ -186,15 +186,16 @@ private:
     static std::string _print_request_info(const TGetTableSchemaRequest& request);
 
     /**
-     * @brief LOAD-only compatibility fallback to read schema from schema file.
+     * @brief LOAD-only compatibility fallback to read schema from tablet.
      *
-     * Triggered when FE doesn't support getTableSchema (NotSupported). This is intentionally LOAD-only.
+     * Triggered when schema file not found and FE doesn't support table schema service.
+     * This is for the compatibility before introducing schema file
      *
      * @param schema_id The ID of the schema to retrieve.
      * @param tablet_id The ID of the tablet to search in.
      * @return The TabletSchema if found, otherwise an error status.
      */
-    StatusOr<TabletSchemaPtr> _fallback_load_to_schema_file(int64_t schema_id, int64_t tablet_id);
+    StatusOr<TabletSchemaPtr> _fallback_load_to_tablet_schema(int64_t schema_id, int64_t tablet_id);
 
     using SingleFlightGroup = bthreads::singleflight::Group<std::string, SingleFlightResultPtr>;
     static constexpr size_t kSingleFlightGroupShards = 128;

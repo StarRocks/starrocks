@@ -86,6 +86,17 @@ StatusOr<TabletSchemaPtr> TableSchemaService::get_schema_for_load(const TableSch
         return schema;
     }
 
+    // Most tables on v4.0 should not be downgraded from v4.1 fast schema evolution v2,
+    // and they still have schema files, so first find the schema in schema file.
+    auto result = _tablet_mgr->get_tablet_schema_by_id(tablet_id, schema_id);
+    if (result.ok() || !result.status().is_not_found()) {
+        VLOG(2) << "get schema from schema file. schema_id: " << schema_id << ", tablet_id: " << tablet_id
+                << ", status: " << result.status();
+        return result;
+    }
+
+    // If schema file does not exist, it can be a table downgraded from v4.1 fast schema evolution v2,
+    // so try to fetch the schema via FE table schema service.
     TTableSchemaKey thrift_schema_key;
     thrift_schema_key.__set_schema_id(schema_id);
     thrift_schema_key.__set_db_id(schema_key.db_id());
@@ -104,9 +115,9 @@ StatusOr<TabletSchemaPtr> TableSchemaService::get_schema_for_load(const TableSch
                                { status_or_schema = Status::NotSupported("disable remote schema for testing"); });
 
     if (status_or_schema.status().is_not_supported()) {
-        // If FE doesn't support table schema service which indicates
-        // fast schema change v2 does not work, fallback to schema file.
-        return _fallback_load_to_schema_file(schema_id, tablet_id);
+        // If both schema file and FE table schema service are not available, it can be a too old table created
+        // before introducing schema file feature, fallback to tablet schema. This should be very rare.
+        return _fallback_load_to_tablet_schema(schema_id, tablet_id);
     }
     return status_or_schema;
 }
@@ -124,6 +135,8 @@ StatusOr<TabletSchemaPtr> TableSchemaService::get_schema_for_scan(const TableSch
         return schema;
     }
 
+    // In v4.0, only tables downgraded from v4.1 fast schema evolution v2 can't find schema
+    // in local (schema cache + tablet metadata), so reaching here should be rare.
     TTableSchemaKey thrift_schema_key;
     thrift_schema_key.__set_schema_id(schema_id);
     thrift_schema_key.__set_db_id(schema_key.db_id());
@@ -375,14 +388,7 @@ std::string TableSchemaService::_print_request_info(const TGetTableSchemaRequest
     return ss.str();
 }
 
-StatusOr<TabletSchemaPtr> TableSchemaService::_fallback_load_to_schema_file(int64_t schema_id, int64_t tablet_id) {
-    auto result = _tablet_mgr->get_tablet_schema_by_id(tablet_id, schema_id);
-    if (result.ok() || !result.status().is_not_found()) {
-        VLOG(2) << "get schema from schema file. schema_id: " << schema_id << ", tablet_id: " << tablet_id
-                << ", status: " << result.status();
-        return result;
-    }
-    // This is for the compatibility before introducing schema file
+StatusOr<TabletSchemaPtr> TableSchemaService::_fallback_load_to_tablet_schema(int64_t schema_id, int64_t tablet_id) {
     auto tablet_res = _tablet_mgr->get_tablet(tablet_id);
     VLOG(2) << "get schema from tablet, schema_id: " << schema_id << ", tablet_id: " << tablet_id
             << ", status: " << tablet_res.status();
