@@ -96,6 +96,33 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：每个 `audit_log_roll_interval` 时间段内，允许保留的审计日志文件的最大数目。
 - 引入版本：-
 
+##### bdbje_log_level
+
+- 默认值: INFO
+- 类型: String
+- 单位: -
+- 是否可变: No
+- 描述: 控制 StarRocks 中 Berkeley DB Java Edition (BDB JE) 使用的日志级别。在 BDB 环境初始化期间，BDBEnvironment.initConfigs() 会将此值应用到 `com.sleepycat.je` 包的 Java logger 以及 BDB JE 环境的文件日志级别（EnvironmentConfig.FILE_LOGGING_LEVEL）。接受标准的 java.util.logging.Level 名称，如 SEVERE、WARNING、INFO、CONFIG、FINE、FINER、FINEST、ALL、OFF。设置为 ALL 将启用所有日志消息。增加冗长度会提高日志量，可能影响磁盘 I/O 和性能；该值在 BDB 环境初始化时读取，因此只有在环境（重新）初始化后才生效。
+- 引入版本: v3.2.0
+
+##### big_query_log_modules
+
+- 默认值: `{"query"}`
+- 类型: String[]
+- 単位: -
+- 是否可变: No
+- 描述: 启用按模块 big query 日志的模块名后缀列表。典型值为逻辑组件名称。例如，默认的 `query` 会产生 `big_query.query`。
+- 引入版本: v3.2.0
+
+##### big_query_log_roll_num
+
+- 默认值: 10
+- 类型: Int
+- 単位: -
+- 是否可变: No
+- 描述: 每个 `big_query_log_roll_interval` 周期内要保留的已滚动 FE big query 日志文件的最大数量。此值绑定到 `fe.big_query.log` 的 RollingFile appender 的 DefaultRolloverStrategy 的 `max` 属性；当日志按时间或按 `log_roll_size_mb` 滚动时，StarRocks 最多保留 `big_query_log_roll_num` 个带索引的文件（filePattern 使用时间后缀加索引）。超过此数量的旧文件可能会被 rollover 删除，且可以通过 `big_query_log_delete_age` 根据最后修改时间进一步删除文件。
+- 引入版本: v3.2.0
+
 ##### dump_log_delete_age
 
 - 默认值：7d
@@ -143,6 +170,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：每个 `dump_log_roll_interval` 时间内，允许保留的 Dump 日志文件的最大数目。
 - 引入版本：-
 
+##### enable_audit_sql
+
+- 默认值: true
+- 类型: Boolean
+- 单位: -
+- 是否可变: No
+- 描述: 当此项设置为 `true` 时，FE 审计子系统会将由 ConnectProcessor 处理的语句的 SQL 文本记录到 FE 审计日志（`fe.audit.log`）。存储的语句遵循其他控制：加密语句会被脱敏（`AuditEncryptionChecker`），如果设置了 `enable_sql_desensitize_in_log`，敏感凭据可能会被屏蔽或脱敏，摘要记录由 `enable_sql_digest` 控制。当设置为 `false` 时，ConnectProcessor 会在审计事件中将语句文本替换为 "?" —— 其他审计字段（user、host、duration、status、通过 `qe_slow_log_ms` 检测的慢查询以及指标）仍然会被记录。启用 SQL 审计可以提高取证和故障排查的可见性，但可能暴露敏感的 SQL 内容并增加日志量和 I/O；禁用它可提高隐私，但代价是审计日志中失去完整语句的可见性。
+- 引入版本: -
+
 ##### internal_log_dir
 
 - 默认值: `Config.STARROCKS_HOME_DIR + "/log"`
@@ -178,6 +214,51 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否可变: No
 - 描述: 内部 appender（`fe.internal.log`）保留的最大已滚动内部 FE 日志文件数。该值作为 Log4j DefaultRolloverStrategy 的 `max` 属性使用；在发生滚动时，StarRocks 会保留最多 `internal_log_roll_num` 个归档文件并删除更旧的文件（也受 `internal_log_delete_age` 控制）。较低的值可减少磁盘使用但缩短日志历史；较高的值可保留更多历史内部日志。该项与 `internal_log_dir`、`internal_log_roll_interval` 和 `internal_roll_maxsize` 配合工作。
 - 引入版本: v3.2.4
+
+##### log_cleaner_audit_log_min_retention_days
+
+- 默认值：3
+- 类型：Int
+- 单位：天
+- 是否动态：是
+- 描述：审计日志文件的最小保留天数。即使磁盘使用率很高，也不会删除比此值更新的审计日志文件。这确保了审计日志能够保留用于合规和故障排除目的。
+- 引入版本：-
+
+##### log_cleaner_check_interval_second
+
+- 默认值：300
+- 类型：Int
+- 单位：秒
+- 是否动态：是
+- 描述：检查磁盘使用率和清理日志的时间间隔（秒）。清理器会定期检查每个日志目录的磁盘使用率，并在必要时触发清理。默认值为 300 秒（5 分钟）。
+- 引入版本：-
+
+##### log_cleaner_disk_usage_target
+
+- 默认值：60
+- 类型：Int
+- 单位：百分比
+- 是否动态：是
+- 描述：日志清理后的目标磁盘使用率（百分比）。日志清理将持续进行，直到磁盘使用率降至低于此阈值。清理器会逐个删除最旧的日志文件，直到达到目标值。
+- 引入版本：-
+
+##### log_cleaner_disk_usage_threshold
+
+- 默认值：80
+- 类型：Int
+- 单位：百分比
+- 是否动态：是
+- 描述：触发日志清理的磁盘使用率阈值（百分比）。当日志目录的磁盘使用率超过此阈值时，将开始清理日志。清理器会独立检查每个配置的日志目录，并处理超过此阈值的目录。
+- 引入版本：-
+
+##### log_cleaner_disk_util_based_enable
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：启用基于磁盘使用率的自动日志清理功能。启用后，当日志目录的磁盘使用率超过阈值时，将自动清理日志文件。日志清理器作为后台守护进程在 FE 节点上运行，有助于防止日志文件积累导致的磁盘空间耗尽。
+- 引入版本：-
 
 ##### log_roll_size_mb
 
@@ -350,51 +431,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 单位：-
 - 是否动态：否
 - 描述：打印系统日志的模块。如果设置参数取值为 `org.apache.starrocks.catalog`，则表示只打印 Catalog 模块下的日志。
-- 引入版本：-
-
-##### log_cleaner_disk_util_based_enable
-
-- 默认值：false
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：启用基于磁盘使用率的自动日志清理功能。启用后，当日志目录的磁盘使用率超过阈值时，将自动清理日志文件。日志清理器作为后台守护进程在 FE 节点上运行，有助于防止日志文件积累导致的磁盘空间耗尽。
-- 引入版本：-
-
-##### log_cleaner_disk_usage_threshold
-
-- 默认值：80
-- 类型：Int
-- 单位：百分比
-- 是否动态：是
-- 描述：触发日志清理的磁盘使用率阈值（百分比）。当日志目录的磁盘使用率超过此阈值时，将开始清理日志。清理器会独立检查每个配置的日志目录，并处理超过此阈值的目录。
-- 引入版本：-
-
-##### log_cleaner_disk_usage_target
-
-- 默认值：60
-- 类型：Int
-- 单位：百分比
-- 是否动态：是
-- 描述：日志清理后的目标磁盘使用率（百分比）。日志清理将持续进行，直到磁盘使用率降至低于此阈值。清理器会逐个删除最旧的日志文件，直到达到目标值。
-- 引入版本：-
-
-##### log_cleaner_audit_log_min_retention_days
-
-- 默认值：3
-- 类型：Int
-- 单位：天
-- 是否动态：是
-- 描述：审计日志文件的最小保留天数。即使磁盘使用率很高，也不会删除比此值更新的审计日志文件。这确保了审计日志能够保留用于合规和故障排除目的。
-- 引入版本：-
-
-##### log_cleaner_check_interval_second
-
-- 默认值：300
-- 类型：Int
-- 单位：秒
-- 是否动态：是
-- 描述：检查磁盘使用率和清理日志的时间间隔（秒）。清理器会定期检查每个日志目录的磁盘使用率，并在必要时触发清理。默认值为 300 秒（5 分钟）。
 - 引入版本：-
 
 ##### sys_log_warn_modules
@@ -853,6 +889,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否动态：是
 - 描述：是否收集查询的 Profile 信息。设置为 `true` 时，系统会收集查询的 Profile。设置为 `false` 时，系统不会收集查询的 profile。
 - 引入版本：-
+
+##### enable_internal_sql
+
+- 默认值: true
+- 类型: Boolean
+- 单位: -
+- 是否可变: No
+- 描述: 当此项设置为 `true` 时，内部组件（例如 SimpleExecutor）执行的内部 SQL 语句会被保留并写入内部审计或日志消息（如果设置了 `enable_sql_desensitize_in_log`，还可以进一步脱敏）。当设置为 `false` 时，内部 SQL 文本会被压制：格式化代码（`SimpleExecutor.formatSQL`）返回 "?"，实际语句不会输出到内部审计或日志消息。此配置不会改变内部语句的执行语义——它仅控制内部 SQL 的日志记录和可见性以保护隐私或安全。
+- 引入版本: -
 
 ##### enable_legacy_compatibility_for_replication
 
@@ -1652,6 +1697,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：统计信息内存 Cache 失效时间。
 - 引入版本：-
 
+##### task_check_interval_second
+
+- 默认值: 60
+- 类型: Int
+- 单位: Seconds
+- 是否可变: Yes
+- 描述: 任务后台作业执行之间的间隔。GlobalStateMgr 使用此值来调度调用 `doTaskBackgroundJob()` 的 TaskCleaner FrontendDaemon；该值乘以 1000 用于以毫秒为单位设置 daemon 的间隔。减小该值会使后台维护（任务清理、检查）更频繁地运行并更快地响应，但会增加 CPU/IO 开销；增大该值则减少开销但会延迟清理和过期任务的检测。请根据维护响应速度和资源使用情况来调整此值。
+- 引入版本: v3.2.0
+
 ### 导入导出
 
 ##### broker_load_default_timeout_second
@@ -1846,6 +1900,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否动态：是
 - 描述：控制 BE 副本最大容忍的导入落后时长，超过这个时长就进行克隆。
 - 引入版本：-
+
+##### loads_history_retained_days
+
+- 默认值: 30
+- 类型: Int
+- 单位: Days
+- 是否可变: Yes
+- 描述: 在内部表 `_statistics_.loads_history` 中保留 load 历史的天数。此值用于创建表时设置表属性 `partition_live_number`，并传递给 `TableKeeper`（向下限制为最小值 1），以确定要保留多少个每日分区。增加或减少此值会调整已完成 load 作业在每日分区中保留的时长；它影响新表的创建和 keeper 的修剪行为，但不会自动重建过去的分区。`LoadsHistorySyncer` 在管理 loads 历史生命周期时依赖此保留策略；其同步节奏由 `loads_history_sync_interval_second` 控制。
+- 引入版本: v3.3.6, v3.4.0, v3.5.0
 
 ##### loads_history_sync_interval_second
 
@@ -2745,6 +2808,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否动态：否
 - 描述：是否使用 Compute Engine 上面绑定的 Service Account。
 - 引入版本：v3.5.1
+
+##### hdfs_file_system_expire_seconds
+
+- 默认值: 300
+- 类型: Int
+- 单位: Seconds
+- 是否可变: Yes
+- 描述: HdfsFsManager 管理的未使用缓存 HDFS/ObjectStore FileSystem 的生存时间（以秒为单位）。FileSystemExpirationChecker（每 60s 运行一次）使用此值调用每个 HdfsFs.isExpired(...)；当过期时，管理器会关闭底层 FileSystem 并将其从缓存中移除。访问器方法（例如 `HdfsFs.getDFSFileSystem`、`getUserName`、`getConfiguration`）会更新最后访问时间戳，因此过期基于不活动时间。较低的值可以减少空闲资源占用但会增加重开销；较高的值会更长时间保留句柄，可能会消耗更多资源。
+- 引入版本: v3.2.0
 
 ##### lake_autovacuum_grace_period_minutes
 
