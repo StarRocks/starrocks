@@ -41,6 +41,7 @@
 #include "common/minidump.h"
 #include "common/process_exit.h"
 #include "exec/workgroup/work_group.h"
+#include "util/system_metrics.h"
 #ifdef USE_STAROS
 #include "fslib/star_cache_handler.h"
 #endif
@@ -74,6 +75,8 @@
 
 namespace starrocks {
 DEFINE_bool(cn, false, "start as compute node");
+
+std::string dump_memory_tracker();
 
 /*
  * This thread will calculate some metrics at a fix interval(15 sec)
@@ -139,20 +142,7 @@ void calculate_metrics(void* arg_this) {
                                                                                 &lst_net_receive_bytes);
         }
 
-        auto* mem_metrics = StarRocksMetrics::instance()->system_metrics()->memory_metrics();
-
-        LOG(INFO) << fmt::format(
-                "Current memory statistics: process({}), query_pool({}), load({}), "
-                "metadata({}), compaction({}), schema_change({}), "
-                "page_cache({}), update({}), passthrough({}), clone({}), consistency({}), "
-                "datacache({}), jit({}), brpc_iobuf({})",
-                mem_metrics->process_mem_bytes.value(), mem_metrics->query_mem_bytes.value(),
-                mem_metrics->load_mem_bytes.value(), mem_metrics->metadata_mem_bytes.value(),
-                mem_metrics->compaction_mem_bytes.value(), mem_metrics->schema_change_mem_bytes.value(),
-                mem_metrics->storage_page_cache_mem_bytes.value(), mem_metrics->update_mem_bytes.value(),
-                mem_metrics->passthrough_mem_bytes.value(), mem_metrics->clone_mem_bytes.value(),
-                mem_metrics->consistency_mem_bytes.value(), mem_metrics->datacache_mem_bytes.value(),
-                mem_metrics->jit_cache_mem_bytes.value(), mem_metrics->brpc_iobuf_mem_bytes.value());
+        LOG(INFO) << dump_memory_tracker();
 
         StarRocksMetrics::instance()->table_metrics_mgr()->cleanup();
         nap_sleep(15, [daemon] { return daemon->stopped(); });
@@ -221,6 +211,37 @@ void jemalloc_tracker_daemon(void* arg_this) {
 }
 #endif
 
+#define DUMP_METRIC(name, value_expr) fmt::format_to(std::back_inserter(buffer), " " #name "({})", value_expr);
+std::string dump_memory_tracker() {
+    auto* mem_metrics = StarRocksMetrics::instance()->system_metrics()->memory_metrics();
+
+    fmt::memory_buffer buffer;
+    fmt::format_to(std::back_inserter(buffer), "Current memory statistics:");
+
+    DUMP_METRIC(process, mem_metrics->process_mem_bytes.value())
+    DUMP_METRIC(query_pool, mem_metrics->query_mem_bytes.value())
+    DUMP_METRIC(load, mem_metrics->load_mem_bytes.value())
+    DUMP_METRIC(metadata, mem_metrics->metadata_mem_bytes.value())
+    DUMP_METRIC(compaction, mem_metrics->compaction_mem_bytes.value())
+    DUMP_METRIC(schema_change, mem_metrics->schema_change_mem_bytes.value())
+    DUMP_METRIC(page_cache, mem_metrics->storage_page_cache_mem_bytes.value())
+    DUMP_METRIC(update, mem_metrics->update_mem_bytes.value())
+    DUMP_METRIC(passthrough, mem_metrics->passthrough_mem_bytes.value())
+    DUMP_METRIC(clone, mem_metrics->clone_mem_bytes.value())
+    DUMP_METRIC(consistency, mem_metrics->consistency_mem_bytes.value())
+    DUMP_METRIC(datacache, mem_metrics->datacache_mem_bytes.value())
+    DUMP_METRIC(jit, mem_metrics->jit_cache_mem_bytes.value())
+    DUMP_METRIC(brpc_iobuf, mem_metrics->brpc_iobuf_mem_bytes.value())
+    DUMP_METRIC(replication, mem_metrics->replication_mem_bytes.value())
+
+    DUMP_METRIC(jemalloc_active, mem_metrics->jemalloc_active_bytes.value())
+    DUMP_METRIC(jemalloc_allocated, mem_metrics->jemalloc_allocated_bytes.value())
+    DUMP_METRIC(jemalloc_metadata, mem_metrics->jemalloc_metadata_bytes.value())
+    DUMP_METRIC(jemalloc_rss, mem_metrics->jemalloc_resident_bytes.value())
+
+    return fmt::to_string(buffer);
+}
+
 static void init_starrocks_metrics(const std::vector<StorePath>& store_paths) {
     bool init_system_metrics = config::enable_system_metrics;
     bool init_jvm_metrics = config::enable_jvm_metrics;
@@ -247,11 +268,47 @@ static void init_starrocks_metrics(const std::vector<StorePath>& store_paths) {
                                              network_interfaces);
 }
 
+Slice get_process_comm(pid_t pid, char* buffer, int max_size) {
+    std::string path = fmt::format("/proc/{}/comm", static_cast<int>(pid));
+
+    int fd = open(path.c_str(), O_RDONLY);
+    if (fd < 0) {
+        return {};
+    }
+
+    ssize_t n = read(fd, buffer, max_size - 1);
+    close(fd);
+
+    if (n <= 0) {
+        buffer[0] = '\0';
+        return {};
+    }
+
+    buffer[n] = '\0';
+
+    // trim '\n'
+    if (n > 0 && buffer[n - 1] == '\n') {
+        buffer[--n] = '\0';
+    }
+
+    return Slice(buffer, static_cast<size_t>(n));
+}
+
+// Ideally, we should avoid calling any non-signal-safe functions within signal handler, such as malloc, open, or log.
+// This could potentially cause deadlocks or unexpected recursion.
+// Typically, the main thread receives SIGTERM, and under normal circumstances,
+// the main thread remains in a sleep state. Therefore, the current implementation is safe.
 void sigterm_handler(int signo, siginfo_t* info, void* context) {
     if (info == nullptr) {
         LOG(ERROR) << "got signal: " << strsignal(signo) << "from unknown pid, is going to exit";
     } else {
-        LOG(ERROR) << "got signal: " << strsignal(signo) << " from pid: " << info->si_pid << ", is going to exit";
+        char buffer[1024];
+        Slice process_comm = get_process_comm(info->si_pid, buffer, sizeof(buffer));
+        LOG(ERROR) << "got signal: " << strsignal(signo) << " from pid: " << info->si_pid << "(" << process_comm << ")"
+                   << ", is going to exit";
+
+        StarRocksMetrics::instance()->system_metrics()->update_memory_metrics();
+        LOG(ERROR) << dump_memory_tracker();
     }
     set_process_exit();
 }
@@ -260,6 +317,7 @@ int install_signal(int signo, void (*handler)(int sig, siginfo_t* info, void* co
     struct sigaction sa;
     memset(&sa, 0, sizeof(struct sigaction));
     sa.sa_sigaction = handler;
+    sa.sa_flags = SA_SIGINFO;
     sigemptyset(&sa.sa_mask);
     auto ret = sigaction(signo, &sa, nullptr);
     if (ret != 0) {
