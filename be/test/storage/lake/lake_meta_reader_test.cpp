@@ -100,7 +100,8 @@ protected:
             RETURN_IF_ERROR(_tablet_mgr->put_txn_log(txn_log));
 
             int64_t version = r + 2;
-            ASSIGN_OR_RETURN(auto new_metadata, TEST_publish_single_version(_tablet_mgr.get(), tablet_id, version, txn_id));
+            ASSIGN_OR_RETURN(auto new_metadata,
+                             TEST_publish_single_version(_tablet_mgr.get(), tablet_id, version, txn_id));
         }
 
         return tablet_id;
@@ -191,7 +192,7 @@ TEST_F(LakeMetaReaderTest, test_get_segments_with_multiple_rowsets) {
     int rowset_count = 0;
     for (const auto& options : options_list) {
         EXPECT_EQ(expected_seg_id, options.segment_id)
-            << "Expected segment_id " << expected_seg_id << " at position " << rowset_count;
+                << "Expected segment_id " << expected_seg_id << " at position " << rowset_count;
         expected_seg_id++;
         if (expected_seg_id >= 2) {
             expected_seg_id = 0;
@@ -221,7 +222,7 @@ TEST_F(LakeMetaReaderTest, test_get_segments_rowset_ids) {
 
     // Verify rowset ids are different for different rowsets
     EXPECT_NE(options_list[0].pk_rowsetid, options_list[1].pk_rowsetid)
-        << "Expected different rowset ids for different rowsets";
+            << "Expected different rowset ids for different rowsets";
 }
 
 } // namespace starrocks::lake

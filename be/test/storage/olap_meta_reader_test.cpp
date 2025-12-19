@@ -263,7 +263,7 @@ TEST_F(OlapMetaReaderTest, test_get_segments_with_multiple_rowsets) {
     for (const auto& options : options_list) {
         // segment_id should be 0 or 1 since each rowset has 2 segments
         EXPECT_TRUE(options.segment_id >= 0 && options.segment_id < 2)
-            << "Expected segment_id to be 0 or 1, got " << options.segment_id;
+                << "Expected segment_id to be 0 or 1, got " << options.segment_id;
     }
 }
 
