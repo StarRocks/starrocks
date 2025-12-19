@@ -737,6 +737,10 @@ void MetaFileBuilder::add_rowset(const RowsetMetadataPB& rowset_pb, const std::m
         for (int i = 0; i < rowset_pb.shared_segments_size(); i++) {
             _pending_rowset_data.rowset_pb.add_shared_segments(rowset_pb.shared_segments(i));
         }
+        // Merge segment metadatas
+        for (int i = 0; i < rowset_pb.segment_metas_size(); i++) {
+            _pending_rowset_data.rowset_pb.add_segment_metas()->CopyFrom(rowset_pb.segment_metas(i));
+        }
     }
 
     // Merge replace_segments

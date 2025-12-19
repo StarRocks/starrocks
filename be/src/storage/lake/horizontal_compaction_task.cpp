@@ -155,7 +155,8 @@ Status HorizontalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flu
         TabletWriteLogManager::instance()->add_compaction_log(
                 get_backend_id().value_or(0), _txn_id, _tablet.id(), _context->table_id, _context->partition_id,
                 total_num_rows, input_bytes, writer->num_rows(), writer->data_size(),
-                _context->stats->read_segment_count, writer->files().size(), 0, "horizontal", begin_time, finish_time);
+                _context->stats->read_segment_count, writer->segments().size(), 0, "horizontal", begin_time,
+                finish_time);
     }
 
     return Status::OK();

@@ -146,7 +146,9 @@ public:
 
     int64_t queueing_memtable_num() const;
 
-    std::vector<FileInfo> files() const;
+    const std::vector<SegmentFileInfo>& segments() const;
+
+    const std::vector<FileInfo>& dels() const;
 
     int64_t data_size() const;
 
@@ -638,22 +640,23 @@ StatusOr<TxnLogPtr> DeltaWriterImpl::finish_with_txnlog(DeltaWriterFinishMode mo
     table_schema_key->set_table_id(_table_id);
     table_schema_key->set_schema_id(_tablet_schema->id());
 
-    for (auto& f : _tablet_writer->files()) {
-        if (is_segment(f.path)) {
-            op_write->mutable_rowset()->add_segments(std::move(f.path));
-            op_write->mutable_rowset()->add_segment_size(f.size.value());
-            op_write->mutable_rowset()->add_segment_encryption_metas(f.encryption_meta);
-            if (f.bundle_file_offset.has_value() && f.bundle_file_offset.value() >= 0) {
-                op_write->mutable_rowset()->add_bundle_file_offsets(f.bundle_file_offset.value());
-            }
-        } else if (is_del(f.path)) {
-            op_write->add_dels(std::move(f.path));
-            op_write->add_del_encryption_metas(f.encryption_meta);
-        } else {
-            return Status::InternalError(fmt::format("unknown file {}", f.path));
+    for (const auto& f : _tablet_writer->segments()) {
+        op_write->mutable_rowset()->add_segments(f.path);
+        op_write->mutable_rowset()->add_segment_size(f.size.value());
+        op_write->mutable_rowset()->add_segment_encryption_metas(f.encryption_meta);
+        if (f.bundle_file_offset.has_value() && f.bundle_file_offset.value() >= 0) {
+            op_write->mutable_rowset()->add_bundle_file_offsets(f.bundle_file_offset.value());
         }
+        auto* segment_meta = op_write->mutable_rowset()->add_segment_metas();
+        f.sort_key_min.to_proto(segment_meta->mutable_sort_key_min());
+        f.sort_key_max.to_proto(segment_meta->mutable_sort_key_max());
+        segment_meta->set_num_rows(f.num_rows);
     }
-    for (auto& sst : _tablet_writer->ssts()) {
+    for (const auto& f : _tablet_writer->dels()) {
+        op_write->add_dels(f.path);
+        op_write->add_del_encryption_metas(f.encryption_meta);
+    }
+    for (const auto& sst : _tablet_writer->ssts()) {
         auto* file_meta = op_write->add_ssts();
         file_meta->set_name(sst.path);
         file_meta->set_size(sst.size.value());
@@ -868,8 +871,22 @@ void DeltaWriterImpl::close() {
     _merge_condition.clear();
 }
 
-std::vector<FileInfo> DeltaWriterImpl::files() const {
-    return (_tablet_writer != nullptr) ? _tablet_writer->files() : std::vector<FileInfo>();
+const std::vector<SegmentFileInfo>& DeltaWriterImpl::segments() const {
+    if (_tablet_writer != nullptr) {
+        return _tablet_writer->segments();
+    } else {
+        static std::vector<SegmentFileInfo> empty_segments;
+        return empty_segments;
+    }
+}
+
+const std::vector<FileInfo>& DeltaWriterImpl::dels() const {
+    if (_tablet_writer != nullptr) {
+        return _tablet_writer->dels();
+    } else {
+        static std::vector<FileInfo> empty_dels;
+        return empty_dels;
+    }
 }
 
 int64_t DeltaWriterImpl::data_size() const {
@@ -949,8 +966,12 @@ Status DeltaWriter::flush_async() {
     return _impl->flush_async();
 }
 
-std::vector<FileInfo> DeltaWriter::files() const {
-    return _impl->files();
+const std::vector<SegmentFileInfo>& DeltaWriter::segments() const {
+    return _impl->segments();
+}
+
+const std::vector<FileInfo>& DeltaWriter::dels() const {
+    return _impl->dels();
 }
 
 const int64_t DeltaWriter::queueing_memtable_num() const {
