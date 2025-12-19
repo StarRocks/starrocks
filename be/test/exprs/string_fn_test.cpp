@@ -4474,9 +4474,7 @@ PARALLEL_TEST(VecStringFunctionsTest, initcapTest) {
     invalid_str->append(std::string(1, (char)0xFF));
     invalid_columns.emplace_back(invalid_str);
 
-    EXPECT_THROW({
-        StringFunctions::initcap(ctx.get(), invalid_columns);
-    }, std::runtime_error);
+    EXPECT_THROW({ StringFunctions::initcap(ctx.get(), invalid_columns); }, std::runtime_error);
 }
 
 } // namespace starrocks
