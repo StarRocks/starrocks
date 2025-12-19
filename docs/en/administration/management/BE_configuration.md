@@ -3692,6 +3692,15 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Description: The reader's remote I/O buffer size for cloud-native table compaction in a shared-data cluster. The default value is 1MB. You can increase this value to accelerate compaction process.
 - Introduced in: v3.2.3
 
+##### table_schema_service_max_retries
+
+- Default: 3
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum number of retries for Table Schema Service requests.
+- Introduced in: v4.0
+
 <!--
 ##### experimental_lake_ignore_lost_segment
 
