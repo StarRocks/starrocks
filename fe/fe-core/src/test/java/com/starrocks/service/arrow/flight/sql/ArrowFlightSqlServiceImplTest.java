@@ -16,6 +16,7 @@ package com.starrocks.service.arrow.flight.sql;
 
 import com.google.protobuf.ByteString;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.InvalidConfException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.ArrowUtil;
@@ -486,7 +487,7 @@ public class ArrowFlightSqlServiceImplTest {
     }
 
     @Test
-    public void testParseProxyAllPaths() {
+    public void testParseProxyAllPaths() throws Exception {
         // Setup common mocks
         SessionVariable mockSv = mock(SessionVariable.class);
         ComputeNode mockWorker = mock(ComputeNode.class);
@@ -516,32 +517,32 @@ public class ArrowFlightSqlServiceImplTest {
         assertEquals("3-4|1-2|be-host|8815", result.second.toStringUtf8());
 
         when(mockSv.getArrowFlightProxy()).thenReturn("invalidproxy");
-        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class, () ->
+        InvalidConfException ex = assertThrows(InvalidConfException.class, () ->
                 service.parseEndpoint(mockSv, mockQueryId, mockWorker, mockFragmentInstanceId));
         assertEquals("Expected format 'hostname:port', got 'invalidproxy'", ex.getMessage());
 
         when(mockSv.getArrowFlightProxy()).thenReturn(":9400");
-        ex = assertThrows(IllegalArgumentException.class, () ->
+        ex = assertThrows(InvalidConfException.class, () ->
                 service.parseEndpoint(mockSv, mockQueryId, mockWorker, mockFragmentInstanceId));
         assertEquals("Hostname cannot be empty, got ':9400'", ex.getMessage());
 
         when(mockSv.getArrowFlightProxy()).thenReturn("hostname:abc");
-        ex = assertThrows(IllegalArgumentException.class, () ->
+        ex = assertThrows(InvalidConfException.class, () ->
                 service.parseEndpoint(mockSv, mockQueryId, mockWorker, mockFragmentInstanceId));
         assertEquals("Port must be a valid integer, got 'abc'", ex.getMessage());
 
         when(mockSv.getArrowFlightProxy()).thenReturn("hostname:99999");
-        ex = assertThrows(IllegalArgumentException.class, () ->
+        ex = assertThrows(InvalidConfException.class, () ->
                 service.parseEndpoint(mockSv, mockQueryId, mockWorker, mockFragmentInstanceId));
         assertEquals("Port must be between 1 and 65535, got '99999'", ex.getMessage());
 
         when(mockSv.getArrowFlightProxy()).thenReturn("hostname:0");
-        ex = assertThrows(IllegalArgumentException.class, () ->
+        ex = assertThrows(InvalidConfException.class, () ->
                 service.parseEndpoint(mockSv, mockQueryId, mockWorker, mockFragmentInstanceId));
         assertEquals("Port must be between 1 and 65535, got '0'", ex.getMessage());
 
         when(mockSv.getArrowFlightProxy()).thenReturn("host:port:extra");
-        ex = assertThrows(IllegalArgumentException.class, () ->
+        ex = assertThrows(InvalidConfException.class, () ->
                 service.parseEndpoint(mockSv, mockQueryId, mockWorker, mockFragmentInstanceId));
         assertEquals("Expected format 'hostname:port', got 'host:port:extra'", ex.getMessage());
 

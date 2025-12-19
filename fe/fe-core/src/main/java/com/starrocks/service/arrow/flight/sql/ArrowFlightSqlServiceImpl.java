@@ -24,6 +24,7 @@ import com.google.protobuf.ByteString;
 import com.google.protobuf.Message;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.InvalidConfException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.util.ArrowUtil;
@@ -666,36 +667,37 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
         return Long.toHexString(id.hi) + "-" + Long.toHexString(id.lo);
     }
 
-    private static void validateProxyFormat(String arrowFlightProxy) {
+    private static void validateProxyFormat(String arrowFlightProxy) throws InvalidConfException {
         if (arrowFlightProxy.isEmpty()) {
             return;
         }
 
         String[] split = arrowFlightProxy.split(":");
         if (split.length != 2) {
-            throw new IllegalArgumentException(
+            throw new InvalidConfException(
                     String.format("Expected format 'hostname:port', got '%s'", arrowFlightProxy));
         }
 
         if (split[0].isEmpty()) {
-            throw new IllegalArgumentException(
+            throw new InvalidConfException(
                     String.format("Hostname cannot be empty, got '%s'", arrowFlightProxy));
         }
 
         try {
             int port = Integer.parseInt(split[1]);
             if (port < 1 || port > 65535) {
-                throw new IllegalArgumentException(
+                throw new InvalidConfException(
                         String.format("Port must be between 1 and 65535, got '%d'", port));
             }
         } catch (NumberFormatException e) {
-            throw new IllegalArgumentException(
+            throw new InvalidConfException(
                     String.format("Port must be a valid integer, got '%s'", split[1]));
         }
     }
 
     protected Pair<Location, ByteString> parseEndpoint(SessionVariable sv, TUniqueId queryId,
-                                                  ComputeNode worker, TUniqueId rootFragmentInstanceId) {
+                                                  ComputeNode worker, TUniqueId rootFragmentInstanceId)
+                                                  throws InvalidConfException {
         ByteString handle;
         Location endpoint;
         if (sv.isArrowFlightProxyEnabled()) {
