@@ -360,8 +360,12 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
             hdfsScanRange.setMin_max_values(tExprMinMaxValueMap);
         }
 
-        if (task.file() != null && task.file().firstRowId() != null) {
-            hdfsScanRange.setFirst_row_id(task.file().firstRowId());
+        // For Iceberg v3, firstRowId is stored in file metadata (globally unique).
+        // For Iceberg v2, firstRowId is null, so we use 0 (file-local position).
+        // This enables Global Late Materialization for both v2 and v3.
+        if (task.file() != null) {
+            Long firstRowId = task.file().firstRowId();
+            hdfsScanRange.setFirst_row_id(firstRowId != null ? firstRowId : 0L);
         }
 
         return hdfsScanRange;
