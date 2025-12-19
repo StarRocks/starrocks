@@ -150,7 +150,6 @@ Status LakeMetaReader::_get_segments(const lake::VersionedTablet& tablet, std::v
     for (const auto& rowset : rowsets) {
         ASSIGN_OR_RETURN(auto rowset_segs, rowset->segments(true));
         for (int seg_id = 0; seg_id < rowset_segs.size(); ++seg_id) {
-            auto& segment = rowset_segs[seg_id];
             SegmentMetaCollectOptions options;
             options.is_primary_keys = tablet.get_schema()->keys_type() == KeysType::PRIMARY_KEYS;
             // In shared-data arch, only primary key table support delta column group for now.

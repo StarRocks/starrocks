@@ -140,7 +140,7 @@ Status OlapMetaReader::_get_segments(const TabletSharedPtr& tablet, const Versio
     for (auto& rowset : _rowsets) {
         RETURN_IF_ERROR(rowset->load());
         for (int32_t seg_id = 0; seg_id < rowset->num_segments(); ++seg_id) {
-            const auto& seg = rowset->get_segments()[seg_id];
+            auto seg = rowset->segments()[seg_id];
             SegmentMetaCollectOptions options;
             options.is_primary_keys = tablet->keys_type() == KeysType::PRIMARY_KEYS;
             options.tablet_id = tablet->tablet_id();
