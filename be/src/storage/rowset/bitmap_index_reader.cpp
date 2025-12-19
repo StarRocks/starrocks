@@ -314,7 +314,7 @@ StatusOr<std::vector<roaring::Roaring>> BitmapIndexIterator::read_positions(
         auto position_col = ChunkHelper::column_from_field_type(TYPE_VARBINARY, false);
         num_to_read = 1;
         num_read = num_to_read;
-        RETURN_IF_ERROR(_posting_position_iter->next_batch(&num_read, col.get()));
+        RETURN_IF_ERROR(_posting_position_iter->next_batch(&num_read, position_col.get()));
         RETURN_IF(
                 num_to_read != num_read,
                 Status::InternalError(fmt::format("read position index column failed, expect {} rows, but got {} rows.",
