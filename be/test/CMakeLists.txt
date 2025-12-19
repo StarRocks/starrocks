@@ -508,6 +508,7 @@ SET(DW_TEST_FILES
     ./storage/lake/filenames_test.cpp
     ./storage/lake/lake_data_source_test.cpp
     ./storage/lake/lake_delvec_loader_test.cpp
+    ./storage/lake/lake_meta_reader_test.cpp
     ./storage/lake/lake_persistent_index_test.cpp
     ./storage/lake/lake_primary_key_consistency_test.cpp
     ./storage/lake/lake_scan_node_test.cpp
@@ -544,6 +545,7 @@ SET(DW_TEST_FILES
     ./storage/merge_iterator_test.cpp
     ./storage/metadata_util_test.cpp
     ./storage/meta_reader_test.cpp
+    ./storage/olap_meta_reader_test.cpp
     ./storage/olap_runtime_range_pruner_test.cpp
     ./storage/options_test.cpp
     ./storage/persistent_index_consistency_test.cpp

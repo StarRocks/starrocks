@@ -171,9 +171,9 @@ TEST_F(SegmentMetaCollecterTest, test_collect_dict_json_column_success) {
     DeferOp defer_op([&] { delete_file(json_segment_name); });
     ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(json_segment_name));
     auto encryption_pair = KeyCache::instance().create_plain_random_encryption_meta_pair().value();
-    WritableFileOptions options{.mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE,
-                                .encryption_info = encryption_pair.info};
-    ASSIGN_OR_ABORT(auto wf, fs->new_writable_file(options, json_segment_name));
+    WritableFileOptions file_options{.mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE,
+                                     .encryption_info = encryption_pair.info};
+    ASSIGN_OR_ABORT(auto wf, fs->new_writable_file(file_options, json_segment_name));
 
     SegmentWriterOptions seg_opts;
     seg_opts.flat_json_config = std::make_shared<FlatJsonConfig>();
@@ -253,9 +253,9 @@ TEST_F(SegmentMetaCollecterTest, test_collect_multiple_meta_fields) {
     DeferOp defer_op([&] { delete_file(segment_name); });
     ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(segment_name));
     auto encryption_pair = KeyCache::instance().create_plain_random_encryption_meta_pair().value();
-    WritableFileOptions options{.mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE,
-                                .encryption_info = encryption_pair.info};
-    ASSIGN_OR_ABORT(auto wf, fs->new_writable_file(options, segment_name));
+    WritableFileOptions file_options{.mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE,
+                                     .encryption_info = encryption_pair.info};
+    ASSIGN_OR_ABORT(auto wf, fs->new_writable_file(file_options, segment_name));
 
     SegmentWriter writer(std::move(wf), 0, tablet_schema, SegmentWriterOptions());
     EXPECT_OK(writer.init());
