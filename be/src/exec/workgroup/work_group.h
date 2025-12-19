@@ -157,11 +157,10 @@ public:
     // mark the workgroup is deleted, but at the present, it can not be removed from WorkGroupManager, because
     // 1. there exists pending drivers
     // 2. there is a race condition that a driver is attached to the workgroup after it is marked del.
-    void mark_del() {
+    void mark_del(const milliseconds expires_after) {
         bool expect_false = false;
         if (_is_marked_del.compare_exchange_strong(expect_false, true)) {
-            static constexpr seconds expire_seconds{120};
-            _vacuum_ttl = duration_cast<milliseconds>(steady_clock::now().time_since_epoch() + expire_seconds).count();
+            _vacuum_ttl = duration_cast<milliseconds>(steady_clock::now().time_since_epoch() + expires_after).count();
         }
     }
     // no drivers shall be added to this workgroup
@@ -304,6 +303,7 @@ public:
 
     void apply(const std::vector<TWorkGroupOp>& ops);
     std::vector<TWorkGroup> list_workgroups();
+    std::vector<std::string> list_memory_pools() const;
 
     using WorkGroupConsumer = std::function<void(const WorkGroup&)>;
     void for_each_workgroup(const WorkGroupConsumer& consumer) const;
@@ -315,6 +315,7 @@ public:
     void for_each_executors(const ExecutorsManager::ExecutorsConsumer& consumer) const;
     void change_num_connector_scan_threads(uint32_t num_connector_scan_threads);
     void change_enable_resource_group_cpu_borrowing(bool val);
+    void set_workgroup_expiration_time(milliseconds value);
 
 private:
     using MutexType = std::shared_mutex;
@@ -346,6 +347,7 @@ private:
     MemTrackerManager _shared_mem_tracker_manager;
     std::once_flag init_metrics_once_flag;
     std::unordered_map<std::string, WorkGroupMetricsPtr> _wg_metrics;
+    milliseconds _workgroup_expiration_time{milliseconds(120 * MILLIS_PER_SEC)};
 };
 
 class DefaultWorkGroupInitialization {

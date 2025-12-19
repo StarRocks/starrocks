@@ -522,10 +522,12 @@ void WorkGroupManager::apply(const std::vector<TWorkGroupOp>& ops) {
     while (it != _workgroup_expired_versions.end()) {
         auto wg_it = _workgroups.find(*it);
         if (wg_it != _workgroups.end() && wg_it->second->is_removable()) {
-            auto id = wg_it->second->id();
-            auto version = wg_it->second->version();
+            const auto id = wg_it->second->id();
+            const auto version = wg_it->second->version();
+            const auto mem_pool = wg_it->second->mem_pool();
             _sum_cpu_weight -= wg_it->second->cpu_weight();
             _workgroups.erase(wg_it);
+            _shared_mem_tracker_manager.deregister_workgroup(mem_pool);
             auto version_it = _workgroup_versions.find(id);
             if (version_it != _workgroup_versions.end() && version_it->second <= version) {
                 _workgroup_versions.erase(version_it);
@@ -561,7 +563,7 @@ void WorkGroupManager::create_workgroup_unlocked(const WorkGroupPtr& wg, UniqueL
         return;
     }
 
-    auto parent_mem_tracker = _shared_mem_tracker_manager.get_parent_mem_tracker(wg);
+    auto parent_mem_tracker = _shared_mem_tracker_manager.register_workgroup(wg);
     wg->init(parent_mem_tracker);
     _workgroups[unique_id] = wg;
 
@@ -576,7 +578,7 @@ void WorkGroupManager::create_workgroup_unlocked(const WorkGroupPtr& wg, UniqueL
             auto& old_wg = _workgroups[old_unique_id];
 
             _executors_manager.reclaim_cpuids_from_worgroup(old_wg.get());
-            old_wg->mark_del();
+            old_wg->mark_del(_workgroup_expiration_time);
             _workgroup_expired_versions.push_back(old_unique_id);
             LOG(INFO) << "workgroup expired version: " << wg->name() << "(" << wg->id() << "," << stale_version << ")";
 
@@ -630,7 +632,7 @@ void WorkGroupManager::delete_workgroup_unlocked(const WorkGroupPtr& wg) {
     if (wg_it != _workgroups.end()) {
         const auto& old_wg = wg_it->second;
         _executors_manager.reclaim_cpuids_from_worgroup(old_wg.get());
-        old_wg->mark_del();
+        old_wg->mark_del(_workgroup_expiration_time);
         _executors_manager.update_shared_executors();
         _workgroup_expired_versions.push_back(unique_id);
         LOG(INFO) << "workgroup expired version: " << wg->name() << "(" << wg->id() << "," << curr_version << ")";
@@ -647,6 +649,11 @@ std::vector<TWorkGroup> WorkGroupManager::list_workgroups() {
         }
     }
     return alive_workgroups;
+}
+
+std::vector<std::string> WorkGroupManager::list_memory_pools() const {
+    std::shared_lock read_lock(_mutex);
+    return _shared_mem_tracker_manager.list_mem_trackers();
 }
 
 void WorkGroupManager::for_each_workgroup(const WorkGroupConsumer& consumer) const {
@@ -682,6 +689,10 @@ void WorkGroupManager::change_num_connector_scan_threads(uint32_t num_connector_
 void WorkGroupManager::change_enable_resource_group_cpu_borrowing(const bool val) {
     std::unique_lock write_lock(_mutex);
     _executors_manager.change_enable_resource_group_cpu_borrowing(val);
+}
+
+void WorkGroupManager::set_workgroup_expiration_time(const milliseconds value) {
+    _workgroup_expiration_time = value;
 }
 
 // ------------------------------------------------------------------------------------

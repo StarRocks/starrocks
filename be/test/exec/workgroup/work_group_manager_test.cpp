@@ -30,6 +30,13 @@ TWorkGroup create_twg(const int64_t id, const int64_t version, const std::string
     return twg;
 }
 
+TWorkGroupOp make_twg_op(const TWorkGroup &twg, const TWorkGroupOpType::type op_type)  {
+    TWorkGroupOp op;
+    op.__set_workgroup(twg);
+    op.__set_op_type(op_type);
+    return op;
+}
+
 PARALLEL_TEST(WorkGroupManagerTest, add_workgroups_different_mem_pools) {
     PipelineExecutorSetConfig config{10, 1, 1, 1, CpuUtil::CpuIds{}, false, false, nullptr};
     auto _manager = std::make_unique<WorkGroupManager>(config);
@@ -79,6 +86,44 @@ PARALLEL_TEST(WorkGroupManagerTest, add_workgroups_same_mem_pools) {
 
         EXPECT_NE(wg2->mem_tracker()->parent(), wg3->mem_tracker()->parent());
         EXPECT_EQ(wg3->mem_tracker()->parent()->type(), MemTrackerType::QUERY_POOL);
+    }
+    _manager->destroy();
+}
+
+PARALLEL_TEST(WorkGroupManagerTest, test_if_unused_memory_pools_are_cleaned_up) {
+    PipelineExecutorSetConfig config{10, 1, 1, 1, CpuUtil::CpuIds{}, false, false};
+    auto _manager = std::make_unique<WorkGroupManager>(config);
+    _manager->set_workgroup_expiration_time(milliseconds(0));
+    {
+        auto twg1 = create_twg(110, 1, "wg110", "test_pool_2", 0.5);
+        auto twg2 = create_twg(111, 1, "wg111", "test_pool_2", 0.5);
+        auto twg3 = create_twg(112, 1, "wg112", WorkGroup::DEFAULT_MEM_POOL, 0.5);
+
+        std::vector create_operations{
+            make_twg_op(twg1, TWorkGroupOpType::WORKGROUP_OP_CREATE),
+            make_twg_op(twg2, TWorkGroupOpType::WORKGROUP_OP_CREATE),
+            make_twg_op(twg3, TWorkGroupOpType::WORKGROUP_OP_CREATE),
+        };
+
+        _manager->apply(create_operations);
+
+        EXPECT_EQ(_manager->list_memory_pools().size(), 2);
+
+        // Version must be strictly larger, otherwise workgroup will not be deleted
+        twg1.version++;
+        twg2.version++;
+
+        std::vector delete_operations{
+            make_twg_op(twg1, TWorkGroupOpType::WORKGROUP_OP_DELETE),
+            make_twg_op(twg2, TWorkGroupOpType::WORKGROUP_OP_DELETE)
+        };
+
+        _manager->apply(delete_operations);
+        std::this_thread::sleep_for(seconds(2));
+        // The expired workgroups will only get erased in the next call to apply
+        _manager->apply({});
+
+        EXPECT_EQ(_manager->list_memory_pools().size(), 1);
     }
     _manager->destroy();
 }
