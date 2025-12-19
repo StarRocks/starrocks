@@ -5087,8 +5087,8 @@ static Status initcap_impl(const Slice& str, std::string* result) {
 
         if (c < 0) {
             unsigned char bad_byte = static_cast<unsigned char>(str.data[old_i]);
-            return Status::InvalidArgument(strings::Substitute(
-                "Invalid UTF-8 sequence at index $0, byte: 0x$1", old_i, strings::ToHex(&bad_byte, 1)));
+            return Status::InvalidArgument(strings::Substitute("Invalid UTF-8 sequence at index $0, byte: 0x$1", old_i,
+                                                               strings::ToHex(&bad_byte, 1)));
         }
 
         if (u_isalnum(c)) {
