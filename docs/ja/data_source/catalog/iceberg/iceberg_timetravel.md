@@ -172,18 +172,18 @@ EXECUTE cherrypick_snapshot(54321);
 
 特定の時点よりも前のスナップショットを期限切れにできます。この操作により、期限切れのスナップショットのデータファイルが削除されます。
 
-**`expire_snapshot` 構文**
+**`expire_snapshots` 構文**
 
 ```SQL
 ALTER TABLE [catalog.][database.]table_name
-EXECUTE expire_snapshot('<datetime>')
+EXECUTE expire_snapshots('<datetime>')
 ```
 
 **例**
 
 ```SQL
 ALTER TABLE iceberg.sales.order
-EXECUTE expire_snapshot('2023-12-17 00:14:38')
+EXECUTE expire_snapshots('2023-12-17 00:14:38')
 ```
 
 ### ブランチまたはタグの削除

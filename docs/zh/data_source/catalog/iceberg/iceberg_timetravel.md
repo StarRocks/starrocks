@@ -172,18 +172,18 @@ EXECUTE cherrypick_snapshot(54321);
 
 您可以使快照在特定时间点之前过期。此操作将删除过期快照的数据文件。
 
-**`expire_snapshot` 语法**
+**`expire_snapshots` 语法**
 
 ```SQL
 ALTER TABLE [catalog.][database.]table_name
-EXECUTE expire_snapshot('<datetime>')
+EXECUTE expire_snapshots('<datetime>')
 ```
 
 **示例**
 
 ```SQL
 ALTER TABLE iceberg.sales.order
-EXECUTE expire_snapshot('2023-12-17 00:14:38')
+EXECUTE expire_snapshots('2023-12-17 00:14:38')
 ```
 
 ### 删除分支或标记
