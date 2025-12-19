@@ -494,24 +494,20 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
         }
     }
 
-    private void getStreamResultFromBE(String queryId, String fragmentInstanceId, 
+    private void getStreamResultFromBE(String queryId, String fragmentInstanceId,
                                     String beHost, int bePort, ServerStreamListener listener) {
         FlightStream beStream = null;
         String beKey = beHost + ":" + bePort;
 
         try {
-            FlightClient beClient = beClientCache.get(beKey, () -> {
-                Location beLocation = Location.forGrpcInsecure(beHost, bePort);
-                return FlightClient.builder().allocator(rootAllocator).location(beLocation).build();
-            });
+            FlightClient beClient = getOrCreateBeClient(beKey, beHost, bePort);
             // Reconstruct the original BE ticket (without BE host/port)
             FlightSql.TicketStatementQuery ticketStatement = FlightSql.TicketStatementQuery.newBuilder()
                     .setStatementHandle(buildBETicket(queryId, fragmentInstanceId))
                     .build();
             Ticket ticket = new Ticket(Any.pack(ticketStatement).toByteArray());
 
-            // TODO add retry logic
-            beStream = beClient.getStream(ticket);
+            beStream = getStreamWithRetry(beClient, ticket, beKey, beHost, bePort);
             final FlightStream streamToCancel = beStream;
 
             listener.setOnCancelHandler(() -> {
@@ -552,6 +548,42 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
                 LOG.warn("[ARROW] Error closing BE stream", e);
             }
         }
+    }
+
+    private FlightClient getOrCreateBeClient(String beKey, String beHost, int bePort) throws Exception {
+        return beClientCache.get(beKey, () -> {
+            Location beLocation = Location.forGrpcInsecure(beHost, bePort);
+            return FlightClient.builder().allocator(rootAllocator).location(beLocation).build();
+        });
+    }
+
+    private FlightStream getStreamWithRetry(FlightClient beClient, Ticket ticket,
+                                            String beKey, String beHost, int bePort) throws Exception {
+        Exception lastException = null;
+        FlightClient currentClient = beClient;
+
+        for (int attempt = 0; attempt < Config.max_query_retry_time; attempt++) {
+            try {
+                return currentClient.getStream(ticket);
+            } catch (Exception e) {
+                lastException = e;
+                LOG.warn("[ARROW] Failed to get stream from BE {}:{}, attempt {}/{}",
+                        beHost, bePort, attempt, Config.max_query_retry_time, e);
+
+                if (attempt < Config.max_query_retry_time) {
+                    beClientCache.invalidate(beKey);
+                    try {
+                        Thread.sleep(100);
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                        throw e;
+                    }
+                    // Get a fresh client for retry
+                    currentClient = getOrCreateBeClient(beKey, beHost, bePort);
+                }
+            }
+        }
+        throw lastException;
     }
 
     private void getStreamResultFromFE(String token, String queryId, ServerStreamListener listener) {

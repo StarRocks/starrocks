@@ -14,6 +14,7 @@
 
 package com.starrocks.service.arrow.flight.sql;
 
+import com.google.common.cache.Cache;
 import com.google.protobuf.ByteString;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.InvalidConfException;
@@ -338,6 +339,42 @@ public class ArrowFlightSqlServiceImplTest {
 
         // client not removed from cache on error
         assertEquals(service.getClientFromCacheForTesting("127.0.0.1:9400"), mockBeClient);
+    }
+
+    @Test
+    public void testGetStreamResultFromBERetrySuccess() throws Exception {
+        FlightClient mockBeClient = mock(FlightClient.class);
+        FlightStream mockBeStream = mock(FlightStream.class);
+        VectorSchemaRoot mockRoot = mock(VectorSchemaRoot.class);
+
+        // Mock the cache to always return our mock client
+        Cache<String, FlightClient> mockCache = mock(Cache.class);
+        when(mockCache.get(anyString(), any())).thenReturn(mockBeClient);
+        setFinalField(service, "beClientCache", mockCache);
+
+        // First call throws exception, second call succeeds
+        when(mockBeClient.getStream(any(Ticket.class)))
+                .thenThrow(new RuntimeException("Connection refused"))
+                .thenReturn(mockBeStream);
+        when(mockBeStream.getRoot()).thenReturn(mockRoot);
+        when(mockBeStream.next()).thenReturn(true).thenReturn(false);
+
+        String proxyTicket = "19abc7b87307530-9965dc19f22a94a8|19abc7b87307530-9965dc19f22a94a9|127.0.0.1|9400";
+        FlightSql.TicketStatementQuery ticket = FlightSql.TicketStatementQuery.newBuilder()
+                .setStatementHandle(ByteString.copyFromUtf8(proxyTicket))
+                .build();
+        FlightProducer.ServerStreamListener listener = mock(FlightProducer.ServerStreamListener.class);
+
+        service.getStreamStatement(ticket, mockCallContext, listener);
+
+        // Verify success after retry
+        verify(listener).start(mockRoot);
+        verify(listener).putNext();
+        verify(listener).completed();
+        verify(mockBeStream).close();
+
+        // Verify getStream was called twice (initial + retry)
+        verify(mockBeClient, org.mockito.Mockito.times(2)).getStream(any(Ticket.class));
     }
 
     @Test
