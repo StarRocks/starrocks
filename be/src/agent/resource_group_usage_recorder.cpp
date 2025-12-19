@@ -43,12 +43,8 @@ std::vector<TResourceGroupUsage> ResourceGroupUsageRecorder::get_resource_group_
                     group_usage.__set_num_running_queries(wg.num_running_queries());
                     group_usage.__set_mem_limit_bytes(wg.mem_limit_bytes());
                     group_usage.__set_mem_pool(wg.mem_pool());
-                    if (wg.parent_memory_limit_bytes().has_value()) {
-                        group_usage.__set_mem_pool_mem_limit_bytes(wg.parent_memory_limit_bytes().value());
-                    }
-                    if (wg.parent_memory_usage_bytes().has_value()) {
-                        group_usage.__set_mem_pool_mem_used_bytes(wg.parent_memory_usage_bytes().value());
-                    }
+                    group_usage.__set_mem_pool_mem_limit_bytes(wg.parent_memory_limit_bytes().value_or(0));
+                    group_usage.__set_mem_pool_mem_used_bytes(wg.parent_memory_usage_bytes().value_or(0));
                     group_to_usage.emplace(wg.id(), std::move(group_usage));
                     curr_group_to_cpu_runtime_ns.emplace(wg.id(), wg.cpu_runtime_ns());
                 } else {
@@ -59,12 +55,8 @@ std::vector<TResourceGroupUsage> ResourceGroupUsageRecorder::get_resource_group_
                         group_usage.__set_group_version(wg.version());
                         group_usage.__set_mem_pool(wg.mem_pool());
                         group_usage.__set_mem_limit_bytes(wg.mem_limit_bytes());
-                        if (wg.parent_memory_limit_bytes().has_value()) {
-                            group_usage.__set_mem_pool_mem_limit_bytes(wg.parent_memory_limit_bytes().value());
-                        }
-                        if (wg.parent_memory_usage_bytes().has_value()) {
-                            group_usage.__set_mem_pool_mem_used_bytes(wg.parent_memory_usage_bytes().value());
-                        }
+                        group_usage.__set_mem_pool_mem_limit_bytes(wg.parent_memory_limit_bytes().value_or(0));
+                        group_usage.__set_mem_pool_mem_used_bytes(wg.parent_memory_usage_bytes().value_or(0));
                     }
                     curr_group_to_cpu_runtime_ns[wg.id()] += wg.cpu_runtime_ns();
                 }
