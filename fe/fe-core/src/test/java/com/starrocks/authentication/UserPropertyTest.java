@@ -100,7 +100,7 @@ public class UserPropertyTest {
             List<Pair<String, String>> properties = new ArrayList<>();
             UserProperty userProperty = new UserProperty();
             properties.add(new Pair<>(UserProperty.PROP_MAX_USER_CONNECTIONS, "200000"));
-            userProperty.update("root", properties);
+            userProperty.update(properties);
             Assertions.assertEquals(1, 2);
         } catch (Exception e) {
         }
@@ -110,7 +110,7 @@ public class UserPropertyTest {
             List<Pair<String, String>> properties = new ArrayList<>();
             UserProperty userProperty = new UserProperty();
             properties.add(new Pair<>(UserProperty.PROP_MAX_USER_CONNECTIONS, "0"));
-            userProperty.update("root", properties);
+            userProperty.update(properties);
             Assertions.assertEquals(1, 2);
         } catch (Exception e) {
         }
@@ -120,7 +120,7 @@ public class UserPropertyTest {
             List<Pair<String, String>> properties = new ArrayList<>();
             UserProperty userProperty = new UserProperty();
             properties.add(new Pair<>(UserProperty.PROP_MAX_USER_CONNECTIONS, "xx"));
-            userProperty.update("root", properties);
+            userProperty.update(properties);
             Assertions.assertEquals(1, 2);
         } catch (Exception e) {
         }
@@ -130,7 +130,7 @@ public class UserPropertyTest {
             List<Pair<String, String>> properties = new ArrayList<>();
             UserProperty userProperty = new UserProperty();
             properties.add(new Pair<>(UserProperty.PROP_MAX_USER_CONNECTIONS, "100"));
-            userProperty.update("root", properties);
+            userProperty.update(properties);
             Assertions.assertEquals(100, userProperty.getMaxConn());
         } catch (Exception e) {
             Assertions.assertEquals(1, 2);
@@ -141,7 +141,7 @@ public class UserPropertyTest {
             List<Pair<String, String>> properties = new ArrayList<>();
             UserProperty userProperty = new UserProperty();
             properties.add(new Pair<>(UserProperty.PROP_MAX_USER_CONNECTIONS, ""));
-            userProperty.update("root", properties);
+            userProperty.update(properties);
             Assertions.assertEquals(UserProperty.MAX_CONN_DEFAULT_VALUE, userProperty.getMaxConn());
         } catch (Exception e) {
             throw e;
@@ -162,7 +162,7 @@ public class UserPropertyTest {
             properties.add(new Pair<>(UserProperty.PROP_MAX_USER_CONNECTIONS, "2000"));
             properties.add(new Pair<>(UserProperty.PROP_CATALOG, catalogName));
             UserProperty userProperty = new UserProperty();
-            userProperty.update("root", properties);
+            userProperty.update(properties);
             Assertions.assertEquals(2000, userProperty.getMaxConn());
             Assertions.assertEquals(catalogName, userProperty.getCatalog());
             Assertions.assertEquals(0, userProperty.getSessionVariables().size());
@@ -172,7 +172,7 @@ public class UserPropertyTest {
             properties.add(new Pair<>(UserProperty.PROP_MAX_USER_CONNECTIONS, "3000"));
             properties.add(new Pair<>("session.catalog", catalogName));
             userProperty = new UserProperty();
-            userProperty.update("root", properties);
+            userProperty.update(properties);
             Assertions.assertEquals(3000, userProperty.getMaxConn());
             Assertions.assertEquals(catalogName, userProperty.getCatalog());
             Assertions.assertEquals(0, userProperty.getSessionVariables().size());
@@ -182,7 +182,7 @@ public class UserPropertyTest {
             properties.add(new Pair<>(UserProperty.PROP_MAX_USER_CONNECTIONS, ""));
             properties.add(new Pair<>(UserProperty.PROP_CATALOG, ""));
             userProperty = new UserProperty();
-            userProperty.update("root", properties);
+            userProperty.update(properties);
             Assertions.assertEquals(UserProperty.MAX_CONN_DEFAULT_VALUE, userProperty.getMaxConn());
             Assertions.assertEquals(
                     GlobalStateMgr.getCurrentState().getVariableMgr().getDefaultValue(SessionVariable.CATALOG),
@@ -253,7 +253,7 @@ public class UserPropertyTest {
             UserProperty userProperty = new UserProperty();
             List<Pair<String, String>> properties = new ArrayList<>();
             properties.add(new Pair<>(UserProperty.PROP_DATABASE, "xxx"));
-            userProperty.update("root", properties);
+            userProperty.update(properties);
             Assertions.assertEquals(1, 2);
         } catch (Exception e) {
         }
@@ -264,13 +264,13 @@ public class UserPropertyTest {
             UserProperty userProperty = new UserProperty();
             List<Pair<String, String>> properties = new ArrayList<>();
             properties.add(new Pair<>(UserProperty.PROP_DATABASE, databaseName));
-            userProperty.update("root", properties);
+            userProperty.update(properties);
             Assertions.assertEquals(databaseName, userProperty.getDatabase());
 
             // reset database for root user
             properties = new ArrayList<>();
             properties.add(new Pair<>(UserProperty.PROP_DATABASE, UserProperty.DATABASE_DEFAULT_VALUE));
-            userProperty.update("root", properties);
+            userProperty.update(properties);
             Assertions.assertEquals(UserProperty.DATABASE_DEFAULT_VALUE, userProperty.getDatabase());
         } catch (Exception e) {
             throw e;
@@ -284,7 +284,7 @@ public class UserPropertyTest {
             // session.aaa is not a valid session variable
             List<Pair<String, String>> properties = new ArrayList<>();
             properties.add(new Pair<>("session.aaa", "bbb"));
-            userProperty.update("root", properties);
+            userProperty.update(properties);
             Assertions.assertEquals(1, 2);
         } catch (Exception e) {
             Assertions.assertEquals(1, 1);
@@ -295,7 +295,7 @@ public class UserPropertyTest {
             // the value type of session.wait_timeout is not correct
             List<Pair<String, String>> properties = new ArrayList<>();
             properties.add(new Pair<>("session.wait_timeout", "bbb"));
-            userProperty.update("root", properties);
+            userProperty.update(properties);
             Assertions.assertEquals(1, 2);
         } catch (Exception e) {
             Assertions.assertEquals(1, 1);
@@ -307,7 +307,7 @@ public class UserPropertyTest {
             // init_connect is a global session variable, can't be set.
             List<Pair<String, String>> properties = new ArrayList<>();
             properties.add(new Pair<>("session.init_connect", "bbb"));
-            userProperty.update("root", properties);
+            userProperty.update(properties);
             Assertions.assertEquals(0, userProperty.getSessionVariables().size());
         } catch (Exception e) {
             Assertions.assertEquals(1, 1);
@@ -319,7 +319,7 @@ public class UserPropertyTest {
             // system_time_zone is a read-only session variable, can't be set.
             List<Pair<String, String>> properties = new ArrayList<>();
             properties.add(new Pair<>("session.system_time_zone", "Asia/Shanghai"));
-            userProperty.update("root", properties);
+            userProperty.update(properties);
         } catch (Exception e) {
             Assertions.assertEquals(1, 1);
             Assertions.assertEquals(0, userProperty.getSessionVariables().size());
@@ -330,13 +330,13 @@ public class UserPropertyTest {
             // session.wait_timeout is a valid session variable
             List<Pair<String, String>> properties = new ArrayList<>();
             properties.add(new Pair<>("session.wait_timeout", "1000"));
-            userProperty.update("root", properties);
+            userProperty.update(properties);
             Assertions.assertEquals("1000", userProperty.getSessionVariables().get("wait_timeout"));
 
             // reset session.wait_timeout
             properties = new ArrayList<>();
             properties.add(new Pair<>("session.wait_timeout", UserProperty.EMPTY_VALUE));
-            userProperty.update("root", properties);
+            userProperty.update(properties);
             Assertions.assertEquals(0, userProperty.getSessionVariables().size());
         } catch (Exception e) {
             Assertions.assertEquals(1, 2);

@@ -60,6 +60,20 @@ public class UserAuthenticationInfo implements Writable, GsonPostProcessable {
     protected PatternMatcher userPattern;
     protected PatternMatcher hostPattern;
 
+    public UserAuthenticationInfo(UserAuthenticationInfo info) {
+        this.password = info.password;
+        this.authPlugin = info.authPlugin;
+        this.authString = info.authString;
+        this.origHost = info.origHost;
+        this.origUser = info.origUser;
+        this.passwordExpired = info.passwordExpired;
+        this.passwordLastModifiedTimestamp = info.passwordLastModifiedTimestamp;
+        this.lock = info.lock;
+        this.lockTimestamp = info.lockTimestamp;
+        this.errorPasswordRetries = info.errorPasswordRetries;
+        loadMysqlPattern();
+    }
+
     public UserAuthenticationInfo(UserRef user, UserAuthOption userAuthOption) {
         this(user, userAuthOption, null, null);
     }

@@ -293,4 +293,16 @@ public class PrivilegeCollectionV2 implements GsonPostProcessable {
     public Map<ObjectType, List<PrivilegeEntry>> getTypeToPrivilegeEntryList() {
         return typeToPrivilegeEntryList;
     }
+
+    public Map<ObjectType, List<PrivilegeEntry>> cloneTypeToPrivilegeEntryList() {
+        Map<ObjectType, List<PrivilegeEntry>> clonedMap = new HashMap<>();
+        for (Map.Entry<ObjectType, List<PrivilegeEntry>> entry : typeToPrivilegeEntryList.entrySet()) {
+            List<PrivilegeEntry> clonedList = new ArrayList<>(entry.getValue().size());
+            for (PrivilegeEntry pEntry : entry.getValue()) {
+                clonedList.add(new PrivilegeEntry(pEntry));
+            }
+            clonedMap.put(entry.getKey(), clonedList);
+        }
+        return clonedMap;
+    }
 }
