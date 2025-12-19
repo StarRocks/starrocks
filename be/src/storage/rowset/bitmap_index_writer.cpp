@@ -62,11 +62,11 @@ class BitmapUpdateContext {
     static const size_t estimate_size_threshold = 1024;
 
 public:
-    explicit BitmapUpdateContext(rowid_t rid) : _roaring(Roaring::bitmapOf(1, rid)) {
-        _pending_adds.reserve(_ADD_BATCH_SIZE);
+    explicit BitmapUpdateContext(rowid_t rid, MemPool* pool) : _roaring(Roaring::bitmapOf(1, rid)) {
+        _init_pending_adds_buffer(pool);
     };
-    explicit BitmapUpdateContext(rowid_t rid0, rowid_t rid1) : _roaring(Roaring::bitmapOfList({rid0, rid1})) {
-        _pending_adds.reserve(_ADD_BATCH_SIZE);
+    explicit BitmapUpdateContext(rowid_t rid0, rowid_t rid1, MemPool* pool) : _roaring(Roaring::bitmapOfList({rid0, rid1})) {
+        _init_pending_adds_buffer(pool);
     };
 
     Roaring* roaring() { return &_roaring; }
@@ -84,19 +84,20 @@ public:
     }
 
     void add_and_flush_if_needed(rowid_t rid) {
-        if (!_pending_adds.empty() && _pending_adds.back() == rid) {
+        if (_pending_adds_size != 0 && _pending_adds[_pending_adds_size - 1] == rid) {
             return;
         }
-        _pending_adds.push_back(rid);
-        if (_pending_adds.size() >= _ADD_BATCH_SIZE) {
+        DCHECK_LT(_pending_adds_size, _ADD_BATCH_SIZE);
+        _pending_adds[_pending_adds_size++] = rid;
+        if (_pending_adds_size >= _ADD_BATCH_SIZE) {
             flush_pending_adds();
         }
     }
 
     void flush_pending_adds() {
-        if (!_pending_adds.empty()) {
-            _roaring.addMany(_pending_adds.size(), _pending_adds.data());
-            _pending_adds.clear();
+        if (_pending_adds_size != 0) {
+            _roaring.addMany(_pending_adds_size, _pending_adds);
+            _pending_adds_size = 0;
         }
     }
 
@@ -135,12 +136,19 @@ public:
     }
 
 private:
+    void _init_pending_adds_buffer(MemPool* pool) {
+        DCHECK(pool != nullptr);
+        _pending_adds = reinterpret_cast<uint32_t*>(pool->allocate(sizeof(uint32_t) * _ADD_BATCH_SIZE)); // NOLINT
+        DCHECK(_pending_adds != nullptr);
+    }
+
     Roaring _roaring;
     uint64_t _previous_size{0};
     uint32_t _element_count{1};
     bool _size_changed{false};
-    std::vector<uint32_t> _pending_adds;
     static const size_t _ADD_BATCH_SIZE = 64;
+    uint32_t* _pending_adds{nullptr};
+    uint32_t _pending_adds_size{0};
 };
 
 // if last bit is 0 it is std::unique_ptr<BitmapUpdateContext>
@@ -169,14 +177,14 @@ public:
     BitmapUpdateContext* context() const {
         return reinterpret_cast<BitmapUpdateContext*>(_value); // NOLINT
     }
-    void add(rowid_t rid) {
+    void add(rowid_t rid, MemPool* pool) {
         if (is_context()) {
             context()->add_and_flush_if_needed(rid);
         } else {
             if (value() == rid) {
                 return;
             }
-            auto* context = new BitmapUpdateContext(value(), rid);
+            auto* context = new BitmapUpdateContext(value(), rid, pool);
             _value = reinterpret_cast<uint64_t>(context); // NOLINT
         }
     }
@@ -264,7 +272,7 @@ public:
         const CppType& value = *(reinterpret_cast<const CppType*>(vptr));
         auto it = _mem_index.find(value);
         if (it != _mem_index.end()) {
-            it->second.add(_rid);
+            it->second.add(_rid, &_pool);
             if (it->second.update_estimate_size(&_reverted_index_size)) {
                 _late_update_context_vector.push_back(it->second.context());
             }
@@ -375,7 +383,7 @@ private:
             auto [it, inserted] =
                     ngram_index.try_emplace(cur_ngram, static_cast<uint32_t>(offset));
             if (!inserted) {
-                it->second.add(static_cast<uint32_t>(offset));
+                it->second.add(static_cast<uint32_t>(offset), &_pool);
             }
         }
         return Status::OK();
