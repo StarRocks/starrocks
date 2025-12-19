@@ -2163,15 +2163,6 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 説明: 主キーテーブルのコンパクションをチェックする時間間隔。
 - 導入バージョン: -
 
-##### update_compaction_chunk_size_for_row_store
-
-- デフォルト: 0
-- タイプ: Int
-- 単位: Rows
-- 変更可能: Yes
-- 説明: column-with-row-store 表現を使用する tablet の update compaction 中に使用されるチャンクサイズ（チャンクあたりの行数）を上書きします。デフォルト（0）の場合、StarRocks は compaction メモリ制限、vector チャンクサイズ、入力総行数、メモリフットプリントに基づき CompactionUtils::get_read_chunk_size でカラムグループごとのチャンクサイズを計算します。この設定が正の整数に設定され、かつ tablet.is_column_with_row_store() が true の場合、RowsetMerger は horizontal および vertical の両方の update compaction パスで _chunk_size をこの値に強制します（rowset_merger.cpp）。自動計算が最適でない結果を出している場合にのみ非ゼロ値を使用してください；値を増やすと writer/IO のオーバーヘッドを減らせますがピークメモリ使用量が増加し、値を減らすとメモリプレッシャーは下がるもののチャンク数が増えて性能に影響を与える可能性があります。
-- 導入バージョン: v3.2.3
-
 ##### update_compaction_delvec_file_io_amp_ratio
 
 - デフォルト: 2
