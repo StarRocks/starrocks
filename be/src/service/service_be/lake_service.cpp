@@ -1106,7 +1106,7 @@ void LakeServiceImpl::warm_up_segment(::google::protobuf::RpcController* control
         return;
     }
 
-    VLOG(2) << "Received warmup request. tablet_id=" << request->tablet_id() << " blocks=" << request->blocks_size()
+    LOG(INFO) << "Received warmup request. tablet_id=" << request->tablet_id() << " blocks=" << request->blocks_size()
             << " attachment_size=" << attachment.size();
 
     // Copy request data BEFORE releasing guard to avoid race condition
@@ -1163,7 +1163,7 @@ void LakeServiceImpl::warm_up_segment(::google::protobuf::RpcController* control
             }
         }
 
-        VLOG(2) << "Finished async warm_up_segment. tablet_id=" << tablet_id << " cached_blocks=" << cached_count << "/"
+        LOG(INFO) << "Finished async warm_up_segment. tablet_id=" << tablet_id << " cached_blocks=" << cached_count << "/"
                 << blocks.size();
     };
 
