@@ -42,6 +42,7 @@
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/schedule/pipeline_timer.h"
 #include "exec/query_cache/cache_manager.h"
+#include "exec/spill/query_spill_manager.h"
 #include "exec/workgroup/work_group_fwd.h"
 #include "runtime/base_load_path_mgr.h"
 #include "runtime/lookup_stream_mgr.h"
@@ -80,7 +81,7 @@ class SmallFileMgr;
 class RuntimeFilterWorker;
 class RuntimeFilterCache;
 class ProfileReportWorker;
-class QuerySpillManager;
+class GlobalSpillManager;
 struct RfTracePoint;
 
 class BackendServiceClient;
@@ -353,6 +354,8 @@ public:
 
     spill::DirManager* spill_dir_mgr() const { return _spill_dir_mgr.get(); }
 
+    spill::GlobalSpillManager* global_spill_manager() const { return _global_spill_manager.get(); }
+
     ThreadPool* delete_file_thread_pool();
 
     ThreadPool* put_aggregate_metadata_thread_pool() { return _put_aggregate_metadata_thread_pool.get(); }
@@ -441,6 +444,7 @@ private:
     AgentServer* _agent_server = nullptr;
     query_cache::CacheManagerRawPtr _cache_mgr;
     std::shared_ptr<spill::DirManager> _spill_dir_mgr;
+    std::shared_ptr<spill::GlobalSpillManager> _global_spill_manager;
     DiagnoseDaemon* _diagnose_daemon = nullptr;
     LookUpDispatcherMgr* _lookup_dispatcher_mgr;
 };
