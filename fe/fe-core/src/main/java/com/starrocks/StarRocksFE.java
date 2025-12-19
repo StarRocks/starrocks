@@ -136,7 +136,7 @@ public class StarRocksFE {
             java.util.logging.Logger.getLogger("com.github.benmanes.caffeine").setLevel(java.util.logging.Level.OFF);
 
             // set dns cache ttl
-            java.security.Security.setProperty("networkaddress.cache.ttl", "60");
+            java.security.Security.setProperty("networkaddress.cache.ttl", String.valueOf(Config.dns_cache_ttl_seconds));
 
             RestoreClusterSnapshotMgr.init(starRocksDir + "/conf/cluster_snapshot.yaml", cmdLineOpts.isStartFromSnapshot());
 
