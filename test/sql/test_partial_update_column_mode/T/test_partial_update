@@ -106,7 +106,7 @@ select count(1) from tab1 where 'v3' is not null;
 drop database test_partial_update_with_expr;
 
 
--- name: test_column_partial_update_with_condition_update @cloud
+-- name: test_column_partial_update_with_condition_update @native
 create database test_column_partial_update_with_condition_update;
 use test_column_partial_update_with_condition_update;
 
