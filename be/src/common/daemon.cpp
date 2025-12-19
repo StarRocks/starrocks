@@ -218,7 +218,6 @@ std::string dump_memory_tracker() {
     DUMP_METRIC(consistency, mem_metrics->consistency_mem_bytes.value())
     DUMP_METRIC(datacache, mem_metrics->datacache_mem_bytes.value())
     DUMP_METRIC(jit, mem_metrics->jit_cache_mem_bytes.value())
-    DUMP_METRIC(brpc_iobuf, mem_metrics->brpc_iobuf_mem_bytes.value())
     DUMP_METRIC(replication, mem_metrics->replication_mem_bytes.value())
 
     DUMP_METRIC(jemalloc_active, mem_metrics->jemalloc_active_bytes.value())
