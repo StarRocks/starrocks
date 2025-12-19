@@ -284,8 +284,8 @@ public abstract class StorageVolumeMgr implements Writable, GsonPostProcessable 
             Preconditions.checkState(sv != null, "Storage volume '%s' does not exist", svName);
             Preconditions.checkState(sv.getEnabled(), "Storage volume '%s' is disabled", svName);
             SetDefaultStorageVolumeLog log = new SetDefaultStorageVolumeLog(sv.getId());
-            GlobalStateMgr.getCurrentState().getEditLog().logSetDefaultStorageVolume(log);
-            this.defaultStorageVolumeId = sv.getId();
+            GlobalStateMgr.getCurrentState().getEditLog()
+                    .logSetDefaultStorageVolume(log, wal -> this.defaultStorageVolumeId = sv.getId());
         }
     }
 

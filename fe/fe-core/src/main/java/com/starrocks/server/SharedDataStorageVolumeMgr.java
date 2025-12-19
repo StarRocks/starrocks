@@ -28,6 +28,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.InvalidConfException;
+import com.starrocks.common.Pair;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.connector.share.credential.CloudConfigurationConstants;
@@ -404,6 +405,7 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
     @Override
     protected void updateTableStorageInfo(String storageVolumeId) throws DdlException {
         Map<Long, List<TableStorageInfo>> dbToTableStorageInfos = new HashMap<>();
+        List<Pair<StorageInfo, FilePathInfo>> updateList = new ArrayList<>();
         for (Map.Entry<Database, List<Table>> entry : getBindedTablesOfStorageVolume(storageVolumeId).entrySet()) {
             Database db = entry.getKey();
             List<Table> tables = entry.getValue();
@@ -416,8 +418,7 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
                 if (tableProperty != null) {
                     StorageInfo storageInfo = tableProperty.getStorageInfo();
                     if (storageInfo != null) {
-                        // Update file path info, do not need to lock
-                        storageInfo.setFilePathInfo(filePathInfo);
+                        updateList.add(Pair.create(storageInfo, filePathInfo));
                         tableStorageInfos.add(new TableStorageInfo(table.getId(), filePathInfo));
                     }
                 }
@@ -426,7 +427,14 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
         }
 
         TableStorageInfos tableStorageInfos = new TableStorageInfos(dbToTableStorageInfos);
-        GlobalStateMgr.getCurrentState().getEditLog().logUpdateTableStorageInfos(tableStorageInfos);
+        GlobalStateMgr.getCurrentState().getEditLog().logUpdateTableStorageInfos(tableStorageInfos, wal -> {
+            for (Pair<StorageInfo, FilePathInfo> pair : updateList) {
+                StorageInfo storageInfo = pair.first;
+                FilePathInfo filePathInfo = pair.second;
+                // Update file path info, do not need to lock
+                storageInfo.setFilePathInfo(filePathInfo);
+            }
+        });
     }
 
     private Map<Database, List<Table>> getBindedTablesOfStorageVolume(String storageVolumeId) {

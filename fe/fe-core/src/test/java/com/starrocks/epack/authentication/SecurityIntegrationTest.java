@@ -269,7 +269,7 @@ public class SecurityIntegrationTest {
         CreateSecurityIntegrationStatement createSecurityIntegrationStatement =
                 (CreateSecurityIntegrationStatement) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         masterManager.createSecurityIntegration(createSecurityIntegrationStatement.getName(),
-                createSecurityIntegrationStatement.getPropertyMap(), false);
+                createSecurityIntegrationStatement.getPropertyMap());
         sql = "create security integration ldap4 properties (" +
                 "\"type\" = \"ldap\"," +
                 "\"ldap_user_group_match_attr\" = \"memberUid\"," +
@@ -282,7 +282,7 @@ public class SecurityIntegrationTest {
         createSecurityIntegrationStatement =
                 (CreateSecurityIntegrationStatement) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         masterManager.createSecurityIntegration(createSecurityIntegrationStatement.getName(),
-                createSecurityIntegrationStatement.getPropertyMap(), false);
+                createSecurityIntegrationStatement.getPropertyMap());
         masterManager.dropSecurityIntegration("ldap4", false);
         sql = "alter security integration ldap3 set (" +
                 "\"ldap_bind_root_pwd\" = \"bbb\"," +
@@ -300,7 +300,7 @@ public class SecurityIntegrationTest {
         AlterSecurityIntegrationStatement alterSecurityIntegrationStatement =
                 (AlterSecurityIntegrationStatement) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         masterManager.alterSecurityIntegration(alterSecurityIntegrationStatement.getName(),
-                alterSecurityIntegrationStatement.getProperties(), false);
+                alterSecurityIntegrationStatement.getProperties());
 
         // make final snapshot
         UtFrameUtils.PseudoImage finalImage = new UtFrameUtils.PseudoImage();

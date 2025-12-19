@@ -30,10 +30,12 @@ import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.UUIDUtil;
-import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.persist.DictionaryMgrInfo;
 import com.starrocks.persist.DropDictionaryInfo;
 import com.starrocks.persist.ImageWriter;
+import com.starrocks.persist.UpdateDictionaryLog;
+import com.starrocks.persist.UpdateDictionaryMgrLog;
+import com.starrocks.persist.WALApplier;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
@@ -90,9 +92,9 @@ public class DictionaryMgr implements Writable, GsonPostProcessable {
     @SerializedName(value = "dictionariesIdMapByName")
     private Map<String, Long> dictionariesIdMapByName = new HashMap<>();
     @SerializedName(value = "nextTxnId")
-    private long nextTxnId = 1L;
+    private volatile long nextTxnId = 1L;
     @SerializedName(value = "nextDictionaryId")
-    private long nextDictionaryId = 1L;
+    private volatile long nextDictionaryId = 1L;
 
     private Set<Long> unfinishedRefreshTasks = Sets.newHashSet();
     private final Set<Long> runningRefreshTasks = Sets.newHashSet();
@@ -107,14 +109,6 @@ public class DictionaryMgr implements Writable, GsonPostProcessable {
     public DictionaryMgr() {
     }
 
-    public void syncDictionaryMeta(List<Dictionary> dictionaries) {
-        if (dictionaries.size() == 0 || !GlobalStateMgr.getCurrentState().isLeader()) {
-            return;
-        }
-
-        logModify(this.nextTxnId, this.nextDictionaryId, dictionaries);
-    }
-
     public void scheduleTasks() {
         lock.lock();
         try {
@@ -122,7 +116,8 @@ public class DictionaryMgr implements Writable, GsonPostProcessable {
                 return;
             }
 
-            List<Dictionary> syncDictionaries = Lists.newArrayList();
+            List<UpdateDictionaryLog> updateDictionaryLogList = Lists.newArrayList();
+            long ts = System.currentTimeMillis();
             for (Map.Entry<Long, Dictionary> entry : dictionariesMapById.entrySet()) {
                 long id = entry.getKey();
                 Dictionary dictionary = dictionariesMapById.get(id);
@@ -131,13 +126,23 @@ public class DictionaryMgr implements Writable, GsonPostProcessable {
                         !unfinishedRefreshTasks.contains(id)) ||
                         // follower -> leader when dictionary is refreshing.
                         (dictionary.isRefreshing() && !runningRefreshTasks.contains(id))) {
-                    unfinishedRefreshTasks.add(id);
-                    dictionary.setRefreshing();
-                    dictionary.updateNextSchedulableTime(dictionary.getRefreshInterval());
-                    syncDictionaries.add(dictionary);
+                    UpdateDictionaryLog updateDictionaryLog = new UpdateDictionaryLog(id, ts);
+                    updateDictionaryLog.setState(Dictionary.DictionaryState.REFRESHING);
+                    updateDictionaryLogList.add(updateDictionaryLog);
                 }
             }
-            syncDictionaryMeta(syncDictionaries);
+
+            if (!updateDictionaryLogList.isEmpty()) {
+                GlobalStateMgr.getCurrentState().getEditLog().logModifyDictionaryMgr(
+                        new UpdateDictionaryMgrLog(updateDictionaryLogList),
+                        wal -> {
+                            for (UpdateDictionaryLog log : updateDictionaryLogList) {
+                                Dictionary dict = dictionariesMapById.get(log.getDictionaryId());
+                                dict.setRefreshing(log.getTs());
+                                unfinishedRefreshTasks.add(dict.getDictionaryId());
+                            }
+                        });
+            }
 
             for (Long dictionaryId : unfinishedRefreshTasks) {
                 // new added task
@@ -207,8 +212,8 @@ public class DictionaryMgr implements Writable, GsonPostProcessable {
                 stmt.getQueryableObject(), catalogName, dbName, stmt.getDictionaryKeys(),
                 stmt.getDictionaryValues(), stmt.getProperties());
         dictionary.buildDictionaryProperties();
-        GlobalStateMgr.getCurrentState().getEditLog().logCreateDictionary(dictionary);
-        addDictionary(dictionary);
+        GlobalStateMgr.getCurrentState().getEditLog()
+                .logCreateDictionary(dictionary, wal -> addDictionary(dictionary));
 
         if (dictionary.needWarmUp()) {
             try {
@@ -221,12 +226,8 @@ public class DictionaryMgr implements Writable, GsonPostProcessable {
         }
     }
 
-    public void dropDictionary(String dictionaryName, boolean isCacheOnly, boolean isReplay)
+    public void dropDictionary(String dictionaryName, boolean isCacheOnly)
             throws MetaNotFoundException {
-        if (!isReplay && !isCacheOnly) {
-            DropDictionaryInfo info = new DropDictionaryInfo(dictionaryName);
-            GlobalStateMgr.getCurrentState().getEditLog().logDropDictionary(info);
-        }
         Dictionary dictionary = null;
         lock.lock();
         try {
@@ -236,9 +237,11 @@ public class DictionaryMgr implements Writable, GsonPostProcessable {
             }
 
             if (!isCacheOnly) {
-                dictionariesMapById.remove(dictionary.getDictionaryId());
-                dictionariesIdMapByName.remove(dictionary.getDictionaryName());
-                unfinishedRefreshTasks.remove(dictionary.getDictionaryId());
+                DropDictionaryInfo info = new DropDictionaryInfo(dictionaryName);
+                final Dictionary finalDictionary = dictionary;
+                GlobalStateMgr.getCurrentState().getEditLog().logDropDictionary(info, wal -> {
+                    dropDictionaryInternal(finalDictionary);
+                });
             }
         } finally {
             lock.unlock();
@@ -250,6 +253,28 @@ public class DictionaryMgr implements Writable, GsonPostProcessable {
         clearDictionaryCache(dictionary, false);
     }
 
+    private void dropDictionaryInternal(Dictionary dictionary) {
+        dictionariesMapById.remove(dictionary.getDictionaryId());
+        dictionariesIdMapByName.remove(dictionary.getDictionaryName());
+        unfinishedRefreshTasks.remove(dictionary.getDictionaryId());
+    }
+
+    public void replayDropDictionary(String dictionaryName) {
+        Dictionary dictionary;
+        lock.lock();
+        try {
+            dictionary = getDictionaryByName(dictionaryName);
+            if (dictionary != null) {
+                dropDictionaryInternal(dictionary);
+            }
+        } finally {
+            lock.unlock();
+        }
+        if (dictionary != null) {
+            clearDictionaryCache(dictionary, false);
+        }
+    }
+
     public void refreshDictionary(String dictionaryName) throws MetaNotFoundException {
         lock.lock();
         try {
@@ -257,12 +282,14 @@ public class DictionaryMgr implements Writable, GsonPostProcessable {
             if (dictionary == null) {
                 throw new MetaNotFoundException("refreshed dictionary not found");
             }
+
+            long ts = System.currentTimeMillis();
+            UpdateDictionaryLog updateDictionaryLog = new UpdateDictionaryLog(dictionary.getDictionaryId(), ts);
+            updateDictionaryLog.setState(Dictionary.DictionaryState.REFRESHING);
+            GlobalStateMgr.getCurrentState().getEditLog().logModifyDictionaryMgr(
+                    new UpdateDictionaryMgrLog(Lists.newArrayList(updateDictionaryLog)),
+                    wal -> dictionary.setRefreshing(ts));
             unfinishedRefreshTasks.add(dictionary.getDictionaryId());
-            dictionary.setRefreshing();
-            dictionary.updateNextSchedulableTime(dictionary.getRefreshInterval());
-            List<Dictionary> syncDictionary = Lists.newArrayList();
-            syncDictionary.add(dictionary);
-            syncDictionaryMeta(syncDictionary);
         } finally {
             lock.unlock();
         }
@@ -342,26 +369,19 @@ public class DictionaryMgr implements Writable, GsonPostProcessable {
 
     public long getAndIncrementTxnIdUnlocked() {
         long curTxnId = nextTxnId;
-        logModify(this.nextTxnId + 1, this.nextDictionaryId, null);
-        ++nextTxnId;
+        GlobalStateMgr.getCurrentState().getEditLog().logModifyDictionaryMgr(
+                new UpdateDictionaryMgrLog(this.nextTxnId + 1, this.nextDictionaryId),
+                wal -> ++nextTxnId);
         return curTxnId;
-    }
-
-    public void updateLastSuccessTxnId(long dictionaryId, long txnId) {
-        lock.lock();
-        try {
-            this.dictionariesMapById.get(dictionaryId).setLastSuccessVersion(txnId);
-        } finally {
-            lock.unlock();
-        }
     }
 
     private long getAndIncrementDictionaryId() {
         lock.lock();
         try {
             long curDictionaryId = nextDictionaryId;
-            logModify(this.nextTxnId, nextDictionaryId + 1, null);
-            ++nextDictionaryId;
+            GlobalStateMgr.getCurrentState().getEditLog().logModifyDictionaryMgr(
+                    new UpdateDictionaryMgrLog(this.nextTxnId, this.nextDictionaryId + 1),
+                    wal -> ++nextDictionaryId);
             return curDictionaryId;
         } finally {
             lock.unlock();
@@ -470,14 +490,6 @@ public class DictionaryMgr implements Writable, GsonPostProcessable {
         addDictionary(dictionary);
     }
 
-    public void replayDropDictionary(String dictionaryName) {
-        try {
-            dropDictionary(dictionaryName, false, true);
-        } catch (MetaNotFoundException e) {
-            /* nothing to do */
-        }
-    }
-
     public void replayModifyDictionaryMgr(DictionaryMgrInfo info) {
         long newNextTxnId = info.getNextTxnId();
         long newNextDictionaryId = info.getNextDictionaryId();
@@ -491,11 +503,7 @@ public class DictionaryMgr implements Writable, GsonPostProcessable {
             this.nextDictionaryId = newNextDictionaryId;
         }
 
-        // only replay for the follower sync
-        if (!GlobalStateMgr.isCheckpointThread() &&
-                (GlobalStateMgr.getCurrentState().getFeType() == FrontendNodeType.FOLLOWER ||
-                        GlobalStateMgr.getCurrentState().getFeType() == FrontendNodeType.OBSERVER) &&
-                dictionaries != null && !dictionaries.isEmpty()) {
+        if (dictionaries != null && !dictionaries.isEmpty()) {
             lock.lock();
             try {
                 for (Dictionary dictionary : dictionaries) {
@@ -505,6 +513,59 @@ public class DictionaryMgr implements Writable, GsonPostProcessable {
                     } else {
                         LOG.warn("dictionary {}, id {} has been deleted",
                                 dictionary.getDictionaryName(), dictionary.getDictionaryId());
+                    }
+                }
+            } finally {
+                lock.unlock();
+            }
+        }
+    }
+
+    public void replayModifyDictionaryMgr(UpdateDictionaryMgrLog log) {
+        long newNextTxnId = log.getNextTxnId();
+        long newNextDictionaryId = log.getNextDictionaryId();
+
+        if (newNextTxnId > this.nextTxnId) {
+            this.nextTxnId = newNextTxnId;
+        }
+
+        if (newNextDictionaryId > this.nextDictionaryId) {
+            this.nextDictionaryId = newNextDictionaryId;
+        }
+
+        List<UpdateDictionaryLog> dictionaryLogList = log.getDictionaryLogList();
+        if (dictionaryLogList != null && !dictionaryLogList.isEmpty()) {
+            lock.lock();
+            try {
+                for (UpdateDictionaryLog dictionaryLog : dictionaryLogList) {
+                    Dictionary dictionary = dictionariesMapById.get(dictionaryLog.getDictionaryId());
+                    if (dictionary != null) {
+                        if (dictionaryLog.getState() != null) {
+                            switch (dictionaryLog.getState()) {
+                                case COMMITTING:
+                                    dictionary.setCommitting();
+                                    break;
+                                case FINISHED:
+                                    dictionary.setFinished(dictionaryLog.getTs(), dictionaryLog.getLastSuccessVersion());
+                                    break;
+                                case CANCELLED:
+                                    dictionary.setCancelled();
+                                    break;
+                                case REFRESHING:
+                                    dictionary.setRefreshing(dictionaryLog.getTs());
+                                    break;
+                                default:
+                                    break;
+                            }
+                        }
+                        if (dictionaryLog.isResetStateBeforeRefresh()) {
+                            dictionary.resetStateBeforeRefresh();
+                        }
+                        if (dictionaryLog.getErrorMsg() != null) {
+                            dictionary.setErrorMsg(dictionaryLog.getErrorMsg());
+                        }
+                    } else {
+                        LOG.warn("dictionary id {} has been deleted", dictionaryLog.getDictionaryId());
                     }
                 }
             } finally {
@@ -544,18 +605,6 @@ public class DictionaryMgr implements Writable, GsonPostProcessable {
         }
     }
 
-    // This function is used to log the modification for some extra meta data for
-    // dictionaryMgr.
-    private void logModify(long nextTxnId, long nextDictionaryId, List<Dictionary> dictionaries) {
-        DictionaryMgrInfo info = null;
-        if (dictionaries == null) {
-            info = new DictionaryMgrInfo(nextTxnId, nextDictionaryId);
-        } else {
-            info = new DictionaryMgrInfo(nextTxnId, nextDictionaryId, dictionaries);
-        }
-        GlobalStateMgr.getCurrentState().getEditLog().logModifyDictionaryMgr(info);
-    }
-
     public class RefreshDictionaryCacheWorker implements Runnable {
         private Dictionary dictionary;
         private long txnId;
@@ -573,6 +622,11 @@ public class DictionaryMgr implements Writable, GsonPostProcessable {
 
         private void initializeBeNodesAddress() {
             fillBackendsOrComputeNodes(this.beNodes);
+        }
+
+        protected void setError(boolean isError, String errMsg) {
+            this.error = isError;
+            this.errMsg = errMsg;
         }
 
         private ConnectContext buildConnectContext() {
@@ -686,14 +740,16 @@ public class DictionaryMgr implements Writable, GsonPostProcessable {
             errMsg = ret.second;
         }
 
-        private void commit() {
+        protected void commit() {
             if (error) {
                 return;
             }
-            dictionary.setCommitting();
-            List<Dictionary> syncDictionary = Lists.newArrayList();
-            syncDictionary.add(dictionary);
-            GlobalStateMgr.getCurrentState().getDictionaryMgr().syncDictionaryMeta(syncDictionary);
+            UpdateDictionaryLog updateDictionaryLog =
+                    new UpdateDictionaryLog(dictionary.getDictionaryId(), System.currentTimeMillis());
+            updateDictionaryLog.setState(Dictionary.DictionaryState.COMMITTING);
+            GlobalStateMgr.getCurrentState().getEditLog().logModifyDictionaryMgr(
+                    new UpdateDictionaryMgrLog(Lists.newArrayList(updateDictionaryLog)),
+                    wal -> dictionary.setCommitting());
 
             PProcessDictionaryCacheRequest request = new PProcessDictionaryCacheRequest();
             request.dictId = dictionary.getDictionaryId();
@@ -705,24 +761,38 @@ public class DictionaryMgr implements Writable, GsonPostProcessable {
             errMsg = ret.second;
         }
 
-        private void finish(long dictionaryId) {
-            GlobalStateMgr.getCurrentState().getDictionaryMgr().unresigerRunningAndUnfinised(dictionaryId);
+        protected void finish() {
+            long ts = System.currentTimeMillis();
+            UpdateDictionaryLog updateDictionaryLog = new UpdateDictionaryLog(dictionary.getDictionaryId(), ts);
+            WALApplier walApplier;
             if (!error) {
-                GlobalStateMgr.getCurrentState().getDictionaryMgr().updateLastSuccessTxnId(dictionaryId, txnId);
-                dictionary.setFinished();
-                dictionary.setErrorMsg(""); // reset error msg
+                updateDictionaryLog.setState(Dictionary.DictionaryState.FINISHED);
+                updateDictionaryLog.setErrorMsg("");
+                updateDictionaryLog.setLastSuccessVersion(txnId);
+                walApplier = wal -> {
+                    dictionary.setFinished(ts, txnId);
+                    dictionary.setErrorMsg(""); // reset error msg
+                };
             } else if (dictionary.getIgnoreFailedRefresh() &&
                     dictionary.getState() == Dictionary.DictionaryState.REFRESHING) {
-                dictionary.resetStateBeforeRefresh();
-                dictionary.setErrorMsg("Cancelled and rollback to previous state, errMsg: " +
-                        errMsg);
+                updateDictionaryLog.setResetStateBeforeRefresh(true);
+                updateDictionaryLog.setErrorMsg("Cancelled and rollback to previous state, errMsg: " + errMsg);
+                walApplier = wal -> {
+                    dictionary.resetStateBeforeRefresh();
+                    dictionary.setErrorMsg(updateDictionaryLog.getErrorMsg());
+                };
             } else {
-                dictionary.setCancelled();
-                dictionary.setErrorMsg(errMsg);
+                updateDictionaryLog.setState(Dictionary.DictionaryState.CANCELLED);
+                updateDictionaryLog.setErrorMsg(errMsg);
+                walApplier = wal -> {
+                    dictionary.setCancelled();
+                    dictionary.setErrorMsg(errMsg);
+                };
             }
-            List<Dictionary> syncDictionary = Lists.newArrayList();
-            syncDictionary.add(dictionary);
-            GlobalStateMgr.getCurrentState().getDictionaryMgr().syncDictionaryMeta(syncDictionary);
+
+            GlobalStateMgr.getCurrentState().getEditLog().logModifyDictionaryMgr(
+                    new UpdateDictionaryMgrLog(Lists.newArrayList(updateDictionaryLog)), walApplier);
+            unresigerRunningAndUnfinised(dictionary.getDictionaryId());
         }
 
         @Override
@@ -743,7 +813,7 @@ public class DictionaryMgr implements Writable, GsonPostProcessable {
             commit();
 
             // finish 
-            finish(dictionary.getDictionaryId());
+            finish();
         }
     }
 }

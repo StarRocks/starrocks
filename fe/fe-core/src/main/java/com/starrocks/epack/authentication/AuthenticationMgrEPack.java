@@ -49,6 +49,6 @@ public class AuthenticationMgrEPack extends AuthenticationMgr {
                     name + "' security integration, need to drop those role mappings first"));
         }
 
-        super.dropSecurityIntegration(name, isReplay);
+        super.dropSecurityIntegration(name);
     }
 }

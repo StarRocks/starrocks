@@ -162,7 +162,7 @@ public class MysqlAuthPacketTest {
         properties.put(JWTAuthenticationProvider.JWT_PRINCIPAL_FIELD, "preferred_username");
         properties.put(SecurityIntegration.SECURITY_INTEGRATION_PROPERTY_GROUP_PROVIDER, "file_group_provider");
         properties.put(SecurityIntegration.SECURITY_INTEGRATION_GROUP_ALLOWED_LOGIN, "group1");
-        authenticationMgr.createSecurityIntegration("oidc", properties, true);
+        authenticationMgr.replayCreateSecurityIntegration("oidc", properties);
 
         Config.authentication_chain = new String[] {"native", "oidc"};
         authPacket = buildPacket("tina", buf, AuthPlugin.Client.MYSQL_NATIVE_PASSWORD);

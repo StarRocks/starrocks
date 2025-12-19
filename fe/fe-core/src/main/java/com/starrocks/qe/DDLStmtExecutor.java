@@ -659,7 +659,7 @@ public class DDLStmtExecutor {
                             "You can use AUTHENTICATION_LDAP_SIMPLE security integration and ldap group provider instead.");
                 }
 
-                authenticationMgr.createSecurityIntegration(stmt.getName(), stmt.getPropertyMap(), false);
+                authenticationMgr.createSecurityIntegration(stmt.getName(), stmt.getPropertyMap());
             });
 
             return null;
@@ -670,7 +670,7 @@ public class DDLStmtExecutor {
                                                                     ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
                 AuthenticationMgr authenticationMgr = GlobalStateMgr.getCurrentState().getAuthenticationMgr();
-                authenticationMgr.alterSecurityIntegration(stmt.getName(), stmt.getProperties(), false);
+                authenticationMgr.alterSecurityIntegration(stmt.getName(), stmt.getProperties());
             });
 
             return null;
@@ -681,7 +681,7 @@ public class DDLStmtExecutor {
                                                                    ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
                 AuthenticationMgr authenticationMgr = GlobalStateMgr.getCurrentState().getAuthenticationMgr();
-                authenticationMgr.dropSecurityIntegration(stmt.getName(), false);
+                authenticationMgr.dropSecurityIntegration(stmt.getName());
             });
 
             return null;
@@ -1252,8 +1252,8 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitDropDictionaryStatement(DropDictionaryStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().getDictionaryMgr().dropDictionary(stmt.getDictionaryName(),
-                        stmt.isCacheOnly(), false);
+                context.getGlobalStateMgr().getDictionaryMgr()
+                        .dropDictionary(stmt.getDictionaryName(), stmt.isCacheOnly());
             });
             return null;
         }
