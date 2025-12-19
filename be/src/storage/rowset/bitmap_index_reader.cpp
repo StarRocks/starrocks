@@ -322,8 +322,9 @@ StatusOr<std::vector<roaring::Roaring>> BitmapIndexIterator::read_positions(
 
         const ColumnViewer<TYPE_VARCHAR> position_viewer(std::move(position_col));
         const Slice encoded_positions = position_viewer.value(0);
-        auto positions = encoder->decode(reinterpret_cast<const uint8_t*>(encoded_positions.get_data()),
-                                         encoded_positions.get_size());
+        const std::vector<uint8_t> positions_bytes(encoded_positions.get_data(),
+                                                   encoded_positions.get_data() + encoded_positions.get_size());
+        auto positions = encoder->decode(positions_bytes);
         result.push_back(positions);
     }
     return result;

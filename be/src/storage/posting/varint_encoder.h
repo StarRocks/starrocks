@@ -29,7 +29,7 @@ public:
     ~VarIntEncoder() override;
 
     std::vector<uint8_t> encode(const roaring::Roaring& roaring) override;
-    roaring::Roaring decode(const uint8_t* encoded, size_t size) override;
+    roaring::Roaring decode(const std::vector<uint8_t>& data) override;
     EncodingType getType() const override { return EncodingType::VARINT; }
     const char* getName() const override { return "VarInt"; }
 

@@ -38,10 +38,10 @@ public:
 
     /**
      * Decode a byte array back to unsigned 32-bit integers
-     * @param encoded The encoded byte array
+     * @param data The encoded byte array
      * @return Decoded values
      */
-    virtual roaring::Roaring decode(const uint8_t* encoded, size_t size) = 0;
+    virtual roaring::Roaring decode(const std::vector<uint8_t>& data) = 0;
 
     /**
      * Get the encoding type of this encoder

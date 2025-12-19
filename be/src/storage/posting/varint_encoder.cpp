@@ -55,14 +55,12 @@ std::vector<uint8_t> VarIntEncoder::encode(const roaring::Roaring& roaring) {
     return encoded;
 }
 
-roaring::Roaring VarIntEncoder::decode(const uint8_t* encoded, size_t size) {
-    if (encoded == nullptr || size == 0) {
+roaring::Roaring VarIntEncoder::decode(const std::vector<uint8_t>& data) {
+    if (data.empty()) {
         return {};
     }
 
-    std::vector data(encoded, encoded + size);
     size_t offset = 0;
-
     uint32_t current_position = decodeValue(data, offset);
     BitmapUpdateContextRefOrSingleValue positions(current_position);
     while (offset < data.size()) {
