@@ -370,14 +370,15 @@ TEST_F(BitmapIndexTest, test_dict_ngram_index) {
         auto it = ngram.begin();
         for (rowid_t i = 0; i < viewer.size(); ++i) {
             auto value = viewer.value(i);
-            ASSERT_EQ(*it, value.to_string());
+            auto current_gram = *it;
+            ASSERT_EQ(current_gram, value.to_string());
             ++it;
 
             roaring::Roaring r1, r2;
             ASSERT_TRUE(iter->read_ngram_bitmap(i, &r1).ok());
             ASSERT_TRUE(iter->seek_dict_by_ngram(&value, &r2).ok());
             ASSERT_EQ(r1, r2);
-            if (it->starts_with("d ")) {
+            if (current_gram.starts_with("d ")) {
                 ASSERT_EQ(1, r1.cardinality());
             } else {
                 ASSERT_EQ(num_keywords, r1.cardinality());
