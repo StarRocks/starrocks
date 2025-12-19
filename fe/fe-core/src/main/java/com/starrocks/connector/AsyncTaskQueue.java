@@ -21,7 +21,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.Executor;
-import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.Condition;
@@ -174,7 +173,8 @@ public class AsyncTaskQueue<T> {
                 outputQueueSize.addAndGet(-size);
             }
         } catch (InterruptedException e) {
-            throw new RuntimeException(e);
+            Thread.currentThread().interrupt();
+            LOG.warn("Thread interrupted while waiting for outputs in AsyncTaskQueue", e);
         } finally {
             outputQueueLock.unlock();
         }
@@ -239,23 +239,29 @@ public class AsyncTaskQueue<T> {
         // 3. submit this task, and check if ok
         // 4. if not ok, dec running count.
         boolean success = false;
+        Task<T> task = null;
         try {
             int count = runningTaskCount.incrementAndGet();
             if (count > maxRunningTaskCountValue) {
                 return false;
             }
-            Task task = taskQueue.poll();
+            task = taskQueue.poll();
             if (task == null) {
                 return false;
             }
             executor.execute(new RunnableTask(task));
             success = true;
             return true;
-        } catch (RejectedExecutionException e) {
-            updateTaskException(e);
+        } catch (Throwable t) {
+            LOG.error("Throwable occurred while triggering task in AsyncTaskQueue", t);
+            Exception exception = new RuntimeException(t);
+            updateTaskException(exception);
         } finally {
             if (!success) {
                 runningTaskCount.decrementAndGet();
+                if (task != null) {
+                    taskQueueSize.decrementAndGet();
+                }
             }
         }
         return false;
@@ -298,8 +304,13 @@ public class AsyncTaskQueue<T> {
                         taskQueueSize.addAndGet(1);
                         taskQueue.addLast(task);
                     }
-                } catch (Exception e) {
-                    updateTaskException(e);
+                } catch (Throwable t) {
+                    LOG.error("Throwable occurred while executing task in AsyncTaskQueue", t);
+                    if (t instanceof InterruptedException) {
+                        Thread.currentThread().interrupt();
+                    }
+                    Exception exception = new RuntimeException(t);
+                    updateTaskException(exception);
                 }
             }
             runningTaskCount.decrementAndGet();
