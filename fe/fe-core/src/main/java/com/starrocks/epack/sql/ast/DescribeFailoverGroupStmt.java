@@ -22,14 +22,14 @@ import java.util.Map;
 
 public class DescribeFailoverGroupStmt extends ShowStmt {
     private static final ShowResultSetMetaData META_DATA = ShowResultSetMetaData.builder()
-            .addColumn(new Column("Id", TypeFactory.createVarchar(20)))
-            .addColumn(new Column("Name", TypeFactory.createVarchar(20)))
-            .addColumn(new Column("Include Tables", TypeFactory.createVarchar(256)))
-            .addColumn(new Column("Exclude Tables", TypeFactory.createVarchar(256)))
-            .addColumn(new Column("Members", TypeFactory.createVarchar(256)))
-            .addColumn(new Column("Schedule", TypeFactory.createVarchar(32)))
-            .addColumn(new Column("Comment", TypeFactory.createVarchar(256)))
-            .addColumn(new Column("Properties", TypeFactory.createVarchar(256)))
+            .addColumn(new Column("Id", TypeFactory.createVarcharType(20)))
+            .addColumn(new Column("Name", TypeFactory.createVarcharType(20)))
+            .addColumn(new Column("Include Tables", TypeFactory.createVarcharType(256)))
+            .addColumn(new Column("Exclude Tables", TypeFactory.createVarcharType(256)))
+            .addColumn(new Column("Members", TypeFactory.createVarcharType(256)))
+            .addColumn(new Column("Schedule", TypeFactory.createVarcharType(32)))
+            .addColumn(new Column("Comment", TypeFactory.createVarcharType(256)))
+            .addColumn(new Column("Properties", TypeFactory.createVarcharType(256)))
             .build();
 
     private final String failoverGroupName;

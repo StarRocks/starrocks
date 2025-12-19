@@ -23,10 +23,10 @@ import com.starrocks.type.TypeFactory;
 public class ShowPasswordPolicyStmt extends ShowStmt {
     private static final ShowResultSetMetaData META_DATA =
             ShowResultSetMetaData.builder()
-                    .addColumn(new Column("Policy", TypeFactory.createVarchar(60)))
-                    .addColumn(new Column("Comment", TypeFactory.createVarchar(60)))
-                    .addColumn(new Column("Properties", TypeFactory.createVarchar(200)))
-                    .addColumn(new Column("IS_SYSTEM_DEFAULT_POLICY", TypeFactory.createVarchar(60)))
+                    .addColumn(new Column("Policy", TypeFactory.createVarcharType(60)))
+                    .addColumn(new Column("Comment", TypeFactory.createVarcharType(60)))
+                    .addColumn(new Column("Properties", TypeFactory.createVarcharType(200)))
+                    .addColumn(new Column("IS_SYSTEM_DEFAULT_POLICY", TypeFactory.createVarcharType(60)))
                     .build();
 
     public ShowPasswordPolicyStmt(NodePosition pos) {

@@ -26,19 +26,19 @@ import java.util.stream.Collectors;
 
 public class ShowFailoverGroupsStmt extends ShowStmt {
     private static final ShowResultSetMetaData META_DATA = ShowResultSetMetaData.builder()
-            .addColumn(new Column("Id", TypeFactory.createVarchar(20)))
-            .addColumn(new Column("Name", TypeFactory.createVarchar(20)))
-            .addColumn(new Column("Role", TypeFactory.createVarchar(20)))
-            .addColumn(new Column("State", TypeFactory.createVarchar(20)))
-            .addColumn(new Column("Schedule", TypeFactory.createVarchar(32)))
-            .addColumn(new Column("IsSuspended", TypeFactory.createVarchar(20)))
-            .addColumn(new Column("ScheduledTime", TypeFactory.createVarchar(20)))
-            .addColumn(new Column("FinishedTime", TypeFactory.createVarchar(20)))
-            .addColumn(new Column("FinishedRound", TypeFactory.createVarchar(20)))
-            .addColumn(new Column("ReplicatedJournalId", TypeFactory.createVarchar(20)))
-            .addColumn(new Column("LastScheduledTime", TypeFactory.createVarchar(20)))
-            .addColumn(new Column("LastFinishedTime", TypeFactory.createVarchar(20)))
-            .addColumn(new Column("Errors", TypeFactory.createVarchar(1024)))
+            .addColumn(new Column("Id", TypeFactory.createVarcharType(20)))
+            .addColumn(new Column("Name", TypeFactory.createVarcharType(20)))
+            .addColumn(new Column("Role", TypeFactory.createVarcharType(20)))
+            .addColumn(new Column("State", TypeFactory.createVarcharType(20)))
+            .addColumn(new Column("Schedule", TypeFactory.createVarcharType(32)))
+            .addColumn(new Column("IsSuspended", TypeFactory.createVarcharType(20)))
+            .addColumn(new Column("ScheduledTime", TypeFactory.createVarcharType(20)))
+            .addColumn(new Column("FinishedTime", TypeFactory.createVarcharType(20)))
+            .addColumn(new Column("FinishedRound", TypeFactory.createVarcharType(20)))
+            .addColumn(new Column("ReplicatedJournalId", TypeFactory.createVarcharType(20)))
+            .addColumn(new Column("LastScheduledTime", TypeFactory.createVarcharType(20)))
+            .addColumn(new Column("LastFinishedTime", TypeFactory.createVarcharType(20)))
+            .addColumn(new Column("Errors", TypeFactory.createVarcharType(1024)))
             .build();
 
     private final String pattern;

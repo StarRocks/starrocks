@@ -455,8 +455,8 @@ public class ShowExecutor {
         @Override
         public ShowResultSet visitHelpStatement(HelpStmt statement, ConnectContext context) {
             ShowResultSetMetaData metaData = ShowResultSetMetaData.builder()
-                    .addColumn(new Column("name", TypeFactory.createVarchar(64)))
-                    .addColumn(new Column("is_it_category", TypeFactory.createVarchar(1)))
+                    .addColumn(new Column("name", TypeFactory.createVarcharType(64)))
+                    .addColumn(new Column("is_it_category", TypeFactory.createVarcharType(1)))
                     .build();
             return new ShowResultSet(metaData, EMPTY_SET);
         }
@@ -784,8 +784,10 @@ public class ShowExecutor {
                                         }
 
                                         ShowResultSetMetaData showResultSetMetaData = ShowResultSetMetaData.builder()
-                                                .addColumn(new Column("Materialized View", TypeFactory.createVarchar(20)))
-                                                .addColumn(new Column("Create Materialized View", TypeFactory.createVarchar(30)))
+                                                .addColumn(new Column("Materialized View",
+                                                        TypeFactory.createVarcharType(20)))
+                                                .addColumn(new Column("Create Materialized View",
+                                                        TypeFactory.createVarcharType(30)))
                                                 .build();
                                         return new ShowResultSet(showResultSetMetaData, rows);
                                     }
@@ -810,10 +812,10 @@ public class ShowExecutor {
                     rows.add(Lists.newArrayList(table.getName(), createTableStmt.get(0), "utf8", "utf8_general_ci"));
 
                     ShowResultSetMetaData showViewResultSetMeta = ShowResultSetMetaData.builder()
-                            .addColumn(new Column("View", TypeFactory.createVarchar(20)))
-                            .addColumn(new Column("Create View", TypeFactory.createVarchar(30)))
-                            .addColumn(new Column("character_set_client", TypeFactory.createVarchar(30)))
-                            .addColumn(new Column("collation_connection", TypeFactory.createVarchar(30)))
+                            .addColumn(new Column("View", TypeFactory.createVarcharType(20)))
+                            .addColumn(new Column("Create View", TypeFactory.createVarcharType(30)))
+                            .addColumn(new Column("character_set_client", TypeFactory.createVarcharType(30)))
+                            .addColumn(new Column("collation_connection", TypeFactory.createVarcharType(30)))
                             .build();
                     return new ShowResultSet(showViewResultSetMeta, rows);
                 } else if (table instanceof MaterializedView) {
@@ -825,17 +827,17 @@ public class ShowExecutor {
                         rows.add(Lists.newArrayList(table.getName(), sb, "utf8", "utf8_general_ci"));
 
                         ShowResultSetMetaData showViewResultSetMeta = ShowResultSetMetaData.builder()
-                                .addColumn(new Column("View", TypeFactory.createVarchar(20)))
-                                .addColumn(new Column("Create View", TypeFactory.createVarchar(30)))
-                                .addColumn(new Column("character_set_client", TypeFactory.createVarchar(30)))
-                                .addColumn(new Column("collation_connection", TypeFactory.createVarchar(30)))
+                                .addColumn(new Column("View", TypeFactory.createVarcharType(20)))
+                                .addColumn(new Column("Create View", TypeFactory.createVarcharType(30)))
+                                .addColumn(new Column("character_set_client", TypeFactory.createVarcharType(30)))
+                                .addColumn(new Column("collation_connection", TypeFactory.createVarcharType(30)))
                                 .build();
                         return new ShowResultSet(showViewResultSetMeta, rows);
                     } else {
                         rows.add(Lists.newArrayList(table.getName(), createTableStmt.get(0)));
                         ShowResultSetMetaData showResultSetMetaData = ShowResultSetMetaData.builder()
-                                .addColumn(new Column("Materialized View", TypeFactory.createVarchar(20)))
-                                .addColumn(new Column("Create Materialized View", TypeFactory.createVarchar(30)))
+                                .addColumn(new Column("Materialized View", TypeFactory.createVarcharType(20)))
+                                .addColumn(new Column("Create Materialized View", TypeFactory.createVarcharType(30)))
                                 .build();
                         return new ShowResultSet(showResultSetMetaData, rows);
                     }
@@ -872,8 +874,8 @@ public class ShowExecutor {
                 rows.add(Lists.newArrayList(tableName, createViewSql));
 
                 ShowResultSetMetaData showResultSetMetaData = ShowResultSetMetaData.builder()
-                        .addColumn(new Column("View", TypeFactory.createVarchar(20)))
-                        .addColumn(new Column("Create View", TypeFactory.createVarchar(30)))
+                        .addColumn(new Column("View", TypeFactory.createVarcharType(20)))
+                        .addColumn(new Column("Create View", TypeFactory.createVarcharType(30)))
                         .build();
                 return new ShowResultSet(showResultSetMetaData, rows);
             } else {
@@ -1085,7 +1087,7 @@ public class ShowExecutor {
             // Only success
             ShowResultSetMetaData showMetaData = statement.getIsVerbose() ? showResultMetaFactory.getMetadata(statement) :
                     ShowResultSetMetaData.builder()
-                            .addColumn(new Column("Function Name", TypeFactory.createVarchar(256))).build();
+                            .addColumn(new Column("Function Name", TypeFactory.createVarcharType(256))).build();
             return new ShowResultSet(showMetaData, resultRowSet);
         }
 

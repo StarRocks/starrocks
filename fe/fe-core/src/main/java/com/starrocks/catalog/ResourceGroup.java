@@ -88,47 +88,47 @@ public class ResourceGroup {
 
     private static final List<ColumnMeta> COLUMN_METAS = ImmutableList.of(
             new ColumnMeta(
-                    new Column("name", TypeFactory.createVarchar(100)),
+                    new Column("name", TypeFactory.createVarcharType(100)),
                     (rg, classifier) -> rg.getName()),
             new ColumnMeta(
-                    new Column("id", TypeFactory.createVarchar(200)),
+                    new Column("id", TypeFactory.createVarcharType(200)),
                     (rg, classifier) -> "" + rg.getId()),
             new ColumnMeta(
-                    new Column(CPU_WEIGHT, TypeFactory.createVarchar(200)),
+                    new Column(CPU_WEIGHT, TypeFactory.createVarcharType(200)),
                     (rg, classifier) -> "" + rg.geNormalizedCpuWeight()),
             new ColumnMeta(
-                    new Column(EXCLUSIVE_CPU_CORES, TypeFactory.createVarchar(200)),
+                    new Column(EXCLUSIVE_CPU_CORES, TypeFactory.createVarcharType(200)),
                     (rg, classifier) -> "" + rg.getNormalizedExclusiveCpuCores()),
             new ColumnMeta(
-                    new Column(MEM_LIMIT, TypeFactory.createVarchar(200)),
+                    new Column(MEM_LIMIT, TypeFactory.createVarcharType(200)),
                     (rg, classifier) -> (rg.getMemLimit() * 100) + "%"),
             new ColumnMeta(
-                    new Column(MAX_CPU_CORES, TypeFactory.createVarchar(200)),
+                    new Column(MAX_CPU_CORES, TypeFactory.createVarcharType(200)),
                     (rg, classifier) -> "" + rg.getMaxCpuCores(), false),
             new ColumnMeta(
-                    new Column(BIG_QUERY_CPU_SECOND_LIMIT, TypeFactory.createVarchar(200)),
+                    new Column(BIG_QUERY_CPU_SECOND_LIMIT, TypeFactory.createVarcharType(200)),
                     (rg, classifier) -> "" + Objects.requireNonNullElse(rg.getBigQueryCpuSecondLimit(), 0)),
             new ColumnMeta(
-                    new Column(BIG_QUERY_SCAN_ROWS_LIMIT, TypeFactory.createVarchar(200)),
+                    new Column(BIG_QUERY_SCAN_ROWS_LIMIT, TypeFactory.createVarcharType(200)),
                     (rg, classifier) -> "" + Objects.requireNonNullElse(rg.getBigQueryScanRowsLimit(), 0)),
             new ColumnMeta(
-                    new Column(BIG_QUERY_MEM_LIMIT, TypeFactory.createVarchar(200)),
+                    new Column(BIG_QUERY_MEM_LIMIT, TypeFactory.createVarcharType(200)),
                     (rg, classifier) -> "" + Objects.requireNonNullElse(rg.getBigQueryMemLimit(), 0)),
             new ColumnMeta(
-                    new Column(CONCURRENCY_LIMIT, TypeFactory.createVarchar(200)),
+                    new Column(CONCURRENCY_LIMIT, TypeFactory.createVarcharType(200)),
                     (rg, classifier) -> "" + rg.getConcurrencyLimit()),
             new ColumnMeta(
-                    new Column(SPILL_MEM_LIMIT_THRESHOLD, TypeFactory.createVarchar(200)),
+                    new Column(SPILL_MEM_LIMIT_THRESHOLD, TypeFactory.createVarcharType(200)),
                     (rg, classifier) -> new DecimalFormat("#.##").format(
                             Objects.requireNonNullElse(rg.getSpillMemLimitThreshold(), 1.0) * 100) + "%"),
             new ColumnMeta(
-                    new Column(GROUP_TYPE, TypeFactory.createVarchar(200)),
+                    new Column(GROUP_TYPE, TypeFactory.createVarcharType(200)),
                     (rg, classifier) -> rg.getResourceGroupType().name().substring("WG_".length()), false),
             new ColumnMeta(
-                    new Column("classifiers", TypeFactory.createVarchar(1024)),
+                    new Column("classifiers", TypeFactory.createVarcharType(1024)),
                     (rg, classifier) -> classifier.toString()),
             new ColumnMeta(
-                    new Column(MEM_POOL, TypeFactory.createVarchar(200)),
+                    new Column(MEM_POOL, TypeFactory.createVarcharType(200)),
                     (rg, classifier) -> Objects.requireNonNullElse(rg.getMemPool(), DEFAULT_MEM_POOL), false)
     );
 

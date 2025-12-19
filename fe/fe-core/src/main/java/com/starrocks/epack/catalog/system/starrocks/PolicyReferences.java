@@ -49,14 +49,14 @@ public class PolicyReferences {
     public static SystemTable createPolicyReferences() {
         return new SystemTable(SystemIdEPack.POLICY_REFERENCES_ID, "policy_references", Table.TableType.SCHEMA,
                 builder()
-                        .column("POLICY_DATABASE", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                        .column("POLICY_NAME", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                        .column("POLICY_TYPE", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("POLICY_DATABASE", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("POLICY_NAME", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("POLICY_TYPE", TypeFactory.createVarcharType(NAME_CHAR_LEN))
 
-                        .column("REF_CATALOG", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                        .column("REF_DATABASE", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                        .column("REF_OBJECT_NAME", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                        .column("REF_COLUMN", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("REF_CATALOG", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("REF_DATABASE", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("REF_OBJECT_NAME", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("REF_COLUMN", TypeFactory.createVarcharType(NAME_CHAR_LEN))
                         .build(),
                 TSchemaTableType.STARROCKS_POLICY_REFERENCES);
     }

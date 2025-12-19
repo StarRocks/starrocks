@@ -33,15 +33,15 @@ public class StreamLoadsSystemTable {
                 NAME,
                 Table.TableType.SCHEMA,
                 builder()
-                        .column("LABEL", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("LABEL", TypeFactory.createVarcharType(NAME_CHAR_LEN))
                         .column("ID", IntegerType.BIGINT)
-                        .column("LOAD_ID", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("LOAD_ID", TypeFactory.createVarcharType(NAME_CHAR_LEN))
                         .column("TXN_ID", IntegerType.BIGINT)
-                        .column("DB_NAME", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                        .column("TABLE_NAME", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                        .column("STATE", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                        .column("ERROR_MSG", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                        .column("TRACKING_URL", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("DB_NAME", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("TABLE_NAME", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("STATE", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("ERROR_MSG", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("TRACKING_URL", TypeFactory.createVarcharType(NAME_CHAR_LEN))
                         .column("CHANNEL_NUM", IntegerType.BIGINT)
                         .column("PREPARED_CHANNEL_NUM", IntegerType.BIGINT)
                         .column("NUM_ROWS_NORMAL", IntegerType.BIGINT)
@@ -55,9 +55,9 @@ public class StreamLoadsSystemTable {
                         .column("START_PREPARING_TIME_MS", DateType.DATETIME)
                         .column("FINISH_PREPARING_TIME_MS", DateType.DATETIME)
                         .column("END_TIME_MS", DateType.DATETIME)
-                        .column("CHANNEL_STATE", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                        .column("TYPE", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                        .column("TRACKING_SQL", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("CHANNEL_STATE", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("TYPE", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("TRACKING_SQL", TypeFactory.createVarcharType(NAME_CHAR_LEN))
                         .build(), TSchemaTableType.SCH_STREAM_LOADS);
     }
 }

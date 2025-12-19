@@ -40,11 +40,11 @@ public class SysUsers {
     public static SystemTable create() {
         return new SystemTable(SystemId.USERS_ID, "users", Table.TableType.SCHEMA,
                 builder()
-                        .column("HOST", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                        .column("USER", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("HOST", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("USER", TypeFactory.createVarcharType(NAME_CHAR_LEN))
                         .column("PASSWORD_EXPIRED", TypeFactory.createType(PrimitiveType.BOOLEAN))
-                        .column("PASSWORD_POLICY", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                        .column("PASSWORD_LAST_CHANGED", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("PASSWORD_POLICY", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("PASSWORD_LAST_CHANGED", TypeFactory.createVarcharType(NAME_CHAR_LEN))
                         .column("IS_LOCKED", TypeFactory.createType(PrimitiveType.BOOLEAN))
                         .build(),
                 TSchemaTableType.SYS_USERS);

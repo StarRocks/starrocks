@@ -245,7 +245,7 @@ public class SparkLoadPendingTaskTest {
         // c1 is partition column, c2 is distribution column
         List<Column> columns = Lists.newArrayList();
         columns.add(new Column("c1", IntegerType.INT, true, null, false, null, ""));
-        columns.add(new Column("c2", TypeFactory.createVarchar(10), true, null, false, null, ""));
+        columns.add(new Column("c2", TypeFactory.createVarcharType(10), true, null, false, null, ""));
         columns.add(new Column("c3", IntegerType.INT, false, AggregateType.SUM, false, null, ""));
 
         Map<ColumnId, Column> idToColumn = Maps.newTreeMap(ColumnId.CASE_INSENSITIVE_ORDER);

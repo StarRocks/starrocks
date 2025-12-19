@@ -40,68 +40,41 @@ public class TypeDeserializer {
      * @return The deserialized Type
      */
     public static Type fromThrift(TTypeDesc thrift) {
-        Preconditions.checkState(thrift.types.size() > 0);
+        Preconditions.checkState(!thrift.types.isEmpty());
         Pair<Type, Integer> t = fromThrift(thrift, 0);
         Preconditions.checkState(t.second.equals(thrift.getTypesSize()));
         return t.first;
     }
 
     public static PrimitiveType fromThrift(TPrimitiveType tPrimitiveType) {
-        switch (tPrimitiveType) {
-            case NULL_TYPE:
-                return PrimitiveType.NULL_TYPE;
-            case BOOLEAN:
-                return PrimitiveType.BOOLEAN;
-            case TINYINT:
-                return PrimitiveType.TINYINT;
-            case SMALLINT:
-                return PrimitiveType.SMALLINT;
-            case INT:
-                return PrimitiveType.INT;
-            case BIGINT:
-                return PrimitiveType.BIGINT;
-            case LARGEINT:
-                return PrimitiveType.LARGEINT;
-            case FLOAT:
-                return PrimitiveType.FLOAT;
-            case DOUBLE:
-                return PrimitiveType.DOUBLE;
-            case VARCHAR:
-                return PrimitiveType.VARCHAR;
-            case CHAR:
-                return PrimitiveType.CHAR;
-            case HLL:
-                return PrimitiveType.HLL;
-            case OBJECT:
-                return PrimitiveType.BITMAP;
-            case PERCENTILE:
-                return PrimitiveType.PERCENTILE;
-            case DECIMAL32:
-                return PrimitiveType.DECIMAL32;
-            case DECIMAL64:
-                return PrimitiveType.DECIMAL64;
-            case DECIMAL128:
-                return PrimitiveType.DECIMAL128;
-            case DECIMAL256:
-                return PrimitiveType.DECIMAL256;
-            case DATE:
-                return PrimitiveType.DATE;
-            case DATETIME:
-                return PrimitiveType.DATETIME;
-            case TIME:
-                return PrimitiveType.TIME;
-            case VARBINARY:
-                return PrimitiveType.VARBINARY;
-            case JSON:
-                return PrimitiveType.JSON;
-            case FUNCTION:
-                return PrimitiveType.FUNCTION;
-            case VARIANT:
-                return PrimitiveType.VARIANT;
-            case INVALID_TYPE:
-            default:
-                return PrimitiveType.INVALID_TYPE;
-        }
+        return switch (tPrimitiveType) {
+            case NULL_TYPE -> PrimitiveType.NULL_TYPE;
+            case BOOLEAN -> PrimitiveType.BOOLEAN;
+            case TINYINT -> PrimitiveType.TINYINT;
+            case SMALLINT -> PrimitiveType.SMALLINT;
+            case INT -> PrimitiveType.INT;
+            case BIGINT -> PrimitiveType.BIGINT;
+            case LARGEINT -> PrimitiveType.LARGEINT;
+            case FLOAT -> PrimitiveType.FLOAT;
+            case DOUBLE -> PrimitiveType.DOUBLE;
+            case VARCHAR -> PrimitiveType.VARCHAR;
+            case CHAR -> PrimitiveType.CHAR;
+            case HLL -> PrimitiveType.HLL;
+            case OBJECT -> PrimitiveType.BITMAP;
+            case PERCENTILE -> PrimitiveType.PERCENTILE;
+            case DECIMAL32 -> PrimitiveType.DECIMAL32;
+            case DECIMAL64 -> PrimitiveType.DECIMAL64;
+            case DECIMAL128 -> PrimitiveType.DECIMAL128;
+            case DECIMAL256 -> PrimitiveType.DECIMAL256;
+            case DATE -> PrimitiveType.DATE;
+            case DATETIME -> PrimitiveType.DATETIME;
+            case TIME -> PrimitiveType.TIME;
+            case VARBINARY -> PrimitiveType.VARBINARY;
+            case JSON -> PrimitiveType.JSON;
+            case FUNCTION -> PrimitiveType.FUNCTION;
+            case VARIANT -> PrimitiveType.VARIANT;
+            default -> PrimitiveType.INVALID_TYPE;
+        };
     }
 
     /**
@@ -169,7 +142,7 @@ public class TypeDeserializer {
         } else if (scalarType.getType() == TPrimitiveType.VARBINARY) {
             return TypeFactory.createVarbinary(scalarType.getLen());
         } else if (scalarType.getType() == TPrimitiveType.HLL) {
-            return TypeFactory.createHllType();
+            return HLLType.HLL;
         } else if (scalarType.getType() == TPrimitiveType.DECIMAL) {
             Preconditions.checkState(scalarType.isSetPrecision() && scalarType.isSetScale());
             return TypeFactory.createDecimalV2Type(scalarType.getPrecision(), scalarType.getScale());

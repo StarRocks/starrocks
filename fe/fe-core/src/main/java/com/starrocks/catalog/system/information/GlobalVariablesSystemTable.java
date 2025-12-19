@@ -29,8 +29,8 @@ public class GlobalVariablesSystemTable {
                 NAME,
                 Table.TableType.SCHEMA,
                 builder()
-                        .column("VARIABLE_NAME", TypeFactory.createVarchar(64))
-                        .column("VARIABLE_VALUE", TypeFactory.createVarchar(1024))
+                        .column("VARIABLE_NAME", TypeFactory.createVarcharType(64))
+                        .column("VARIABLE_VALUE", TypeFactory.createVarcharType(1024))
                         .build(), TSchemaTableType.SCH_GLOBAL_VARIABLES);
     }
 }

@@ -47,7 +47,7 @@ public class BeDataCacheMetricsTable {
         return new SystemTable(SystemId.BE_DATACACHE_METRICS, NAME, Table.TableType.SCHEMA,
                 SystemTable.builder()
                         .column("BE_ID", IntegerType.BIGINT)
-                        .column("STATUS", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("STATUS", TypeFactory.createVarcharType(NAME_CHAR_LEN))
                         .column("DISK_QUOTA_BYTES", IntegerType.BIGINT)
                         .column("DISK_USED_BYTES", IntegerType.BIGINT)
                         .column("MEM_QUOTA_BYTES", IntegerType.BIGINT)

@@ -18,8 +18,8 @@ public class ShowCreatePolicyStmt extends ShowStmt {
 
     static {
         ShowResultSetMetaData.Builder builder = ShowResultSetMetaData.builder();
-        builder.addColumn(new Column("Policy", TypeFactory.createVarchar(100)));
-        builder.addColumn(new Column("Create Policy", TypeFactory.createVarchar(100)));
+        builder.addColumn(new Column("Policy", TypeFactory.createVarcharType(100)));
+        builder.addColumn(new Column("Create Policy", TypeFactory.createVarcharType(100)));
         META_DATA = builder.build();
     }
 

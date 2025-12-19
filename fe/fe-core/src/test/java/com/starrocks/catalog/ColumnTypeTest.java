@@ -85,18 +85,18 @@ public class ColumnTypeTest {
 
     @Test
     public void testCharType() throws AnalysisException {
-        TypeDef type = new TypeDef(TypeFactory.createVarchar(10));
+        TypeDef type = new TypeDef(TypeFactory.createVarcharType(10));
         TypeDefAnalyzer.analyze(type);
         Assertions.assertEquals("VARCHAR(10)", type.toString());
         Assertions.assertEquals(PrimitiveType.VARCHAR, type.getType().getPrimitiveType());
         Assertions.assertEquals(10, ((ScalarType) type.getType()).getLength());
 
         // equal type
-        TypeDef type2 = new TypeDef(TypeFactory.createVarchar(10));
+        TypeDef type2 = new TypeDef(TypeFactory.createVarcharType(10));
         Assertions.assertEquals(type.getType(), type2.getType());
 
         // different type
-        TypeDef type3 = new TypeDef(TypeFactory.createVarchar(3));
+        TypeDef type3 = new TypeDef(TypeFactory.createVarcharType(3));
         Assertions.assertNotEquals(type.getType(), type3.getType());
 
         // different type
@@ -107,7 +107,7 @@ public class ColumnTypeTest {
     @Test
     public void testCharInvalid() {
         assertThrows(SemanticException.class, () -> {
-            TypeDef type = new TypeDef(TypeFactory.createVarchar(-1));
+            TypeDef type = new TypeDef(TypeFactory.createVarcharType(-1));
             TypeDefAnalyzer.analyze(type);
             Assertions.fail("No Exception throws");
         });

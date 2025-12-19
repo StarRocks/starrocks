@@ -15,11 +15,11 @@ public class ShowRoleMappingStatement extends ShowStmt {
     static {
         ShowResultSetMetaData.Builder builder = ShowResultSetMetaData.builder();
 
-        builder.addColumn(new Column("Name", TypeFactory.createVarchar(50)));
-        builder.addColumn(new Column("IntegrationName", TypeFactory.createVarchar(50)));
-        builder.addColumn(new Column("Role", TypeFactory.createVarchar(50)));
-        builder.addColumn(new Column("LdapGroupList", TypeFactory.createVarchar(300)));
-        builder.addColumn(new Column("LastRefreshCompleteTime", TypeFactory.createVarchar(50)));
+        builder.addColumn(new Column("Name", TypeFactory.createVarcharType(50)));
+        builder.addColumn(new Column("IntegrationName", TypeFactory.createVarcharType(50)));
+        builder.addColumn(new Column("Role", TypeFactory.createVarcharType(50)));
+        builder.addColumn(new Column("LdapGroupList", TypeFactory.createVarcharType(300)));
+        builder.addColumn(new Column("LastRefreshCompleteTime", TypeFactory.createVarcharType(50)));
 
 
         META_DATA = builder.build();

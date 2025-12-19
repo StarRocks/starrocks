@@ -17,10 +17,10 @@ public class ShowPolicyStmt extends ShowStmt {
 
     static {
         ShowResultSetMetaData.Builder builder = ShowResultSetMetaData.builder();
-        builder.addColumn(new Column("Name", TypeFactory.createVarchar(100)));
-        builder.addColumn(new Column("Type", TypeFactory.createVarchar(100)));
-        builder.addColumn(new Column("Catalog", TypeFactory.createVarchar(100)));
-        builder.addColumn(new Column("Database", TypeFactory.createVarchar(100)));
+        builder.addColumn(new Column("Name", TypeFactory.createVarcharType(100)));
+        builder.addColumn(new Column("Type", TypeFactory.createVarcharType(100)));
+        builder.addColumn(new Column("Catalog", TypeFactory.createVarcharType(100)));
+        builder.addColumn(new Column("Database", TypeFactory.createVarcharType(100)));
         META_DATA = builder.build();
     }
 
