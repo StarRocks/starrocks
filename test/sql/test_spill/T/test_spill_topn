@@ -1,0 +1,97 @@
+-- name: test_spill_topn
+
+set enable_spill=true;
+set spill_mode="auto";
+
+CREATE TABLE t1 (
+    k1 INT,
+    k2 VARCHAR(100))
+DUPLICATE KEY(k1)
+DISTRIBUTED BY HASH(k1) PROPERTIES('replication_num'='1');
+CREATE TABLE tempty (
+    k1 INT,
+    k2 VARCHAR(100))
+DUPLICATE KEY(k1)
+DISTRIBUTED BY HASH(k1) PROPERTIES('replication_num'='1');
+
+insert into t1 SELECT generate_series, 100000 - generate_series FROM TABLE(generate_series(1, 300000));
+
+select sum(k1),sum(crc32(k2)) from (select k1,k2 from t1 order by k1,k2 limit 100) t;
+select sum(k1),sum(crc32(k2)) from (select k1,k2 from t1 order by k1,k2 limit 270000, 10)t;
+select sum(k1),sum(crc32(k2)) from (select k1,k2 from t1 order by k1,k2 limit 270000)t;
+insert into blackhole() select k1,k2 from t1 order by k1,k2 limit 1;
+insert into blackhole() select k1,k2 from t1 order by k1,k2 limit 100;
+insert into blackhole() select k1,k2 from t1 order by k1,k2 limit 1000;
+insert into blackhole() select k1,k2 from t1 order by k1,k2 limit 10000;
+insert into blackhole() select k1,k2 from t1 order by k1,k2 limit 100000;
+insert into blackhole() select k1,k2 from t1 order by k1,k2 limit 10000000;
+
+select sum(k1),sum(crc32(k2)) from (select k1,k2 from tempty order by k1,k2 limit 100) t;
+select sum(k1),sum(crc32(k2)) from (select k1,k2 from tempty order by k1,k2 limit 270000, 10)t;
+select sum(k1),sum(crc32(k2)) from (select k1,k2 from tempty order by k1,k2 limit 270000)t;
+insert into blackhole() select k1,k2 from tempty order by k1,k2 limit 1;
+insert into blackhole() select k1,k2 from tempty order by k1,k2 limit 100;
+insert into blackhole() select k1,k2 from tempty order by k1,k2 limit 1000;
+insert into blackhole() select k1,k2 from tempty order by k1,k2 limit 10000;
+insert into blackhole() select k1,k2 from tempty order by k1,k2 limit 100000;
+insert into blackhole() select k1,k2 from tempty order by k1,k2 limit 10000000;
+
+create table tmp as select k1,k2 from t1 order by k1,k2 limit 1;
+select sum(k1),sum(crc32(k2)) from tmp;
+drop table tmp;
+create table tmp as select k1,k2 from t1 order by k1,k2 limit 100;
+select sum(k1),sum(crc32(k2)) from tmp;
+drop table tmp;
+create table tmp as select k1,k2 from t1 order by k1,k2 limit 1000;
+select sum(k1),sum(crc32(k2)) from tmp;
+drop table tmp;
+create table tmp as select k1,k2 from t1 order by k1,k2 limit 10000;
+select sum(k1),sum(crc32(k2)) from tmp;
+drop table tmp;
+create table tmp as select k1,k2 from t1 order by k1,k2 limit 100000;
+select sum(k1),sum(crc32(k2)) from tmp;
+drop table tmp;
+create table tmp as select k1,k2 from t1 order by k1,k2 limit 10000000;
+select sum(k1),sum(crc32(k2)) from tmp;
+drop table tmp;
+
+set spill_mode="force";
+
+select sum(k1),sum(crc32(k2)) from (select k1,k2 from t1 order by k1,k2 limit 100) t;
+select sum(k1),sum(crc32(k2)) from (select k1,k2 from t1 order by k1,k2 limit 270000, 10)t;
+select sum(k1),sum(crc32(k2)) from (select k1,k2 from t1 order by k1,k2 limit 270000)t;
+insert into blackhole() select k1,k2 from t1 order by k1,k2 limit 1;
+insert into blackhole() select k1,k2 from t1 order by k1,k2 limit 100;
+insert into blackhole() select k1,k2 from t1 order by k1,k2 limit 1000;
+insert into blackhole() select k1,k2 from t1 order by k1,k2 limit 10000;
+insert into blackhole() select k1,k2 from t1 order by k1,k2 limit 100000;
+insert into blackhole() select k1,k2 from t1 order by k1,k2 limit 10000000;
+
+select sum(k1),sum(crc32(k2)) from (select k1,k2 from tempty order by k1,k2 limit 100) t;
+select sum(k1),sum(crc32(k2)) from (select k1,k2 from tempty order by k1,k2 limit 270000, 10)t;
+select sum(k1),sum(crc32(k2)) from (select k1,k2 from tempty order by k1,k2 limit 270000)t;
+insert into blackhole() select k1,k2 from tempty order by k1,k2 limit 1;
+insert into blackhole() select k1,k2 from tempty order by k1,k2 limit 100;
+insert into blackhole() select k1,k2 from tempty order by k1,k2 limit 1000;
+insert into blackhole() select k1,k2 from tempty order by k1,k2 limit 10000;
+insert into blackhole() select k1,k2 from tempty order by k1,k2 limit 100000;
+insert into blackhole() select k1,k2 from tempty order by k1,k2 limit 10000000;
+
+create table tmp as select k1,k2 from t1 order by k1,k2 limit 1;
+select sum(k1),sum(crc32(k2)) from tmp;
+drop table tmp;
+create table tmp as select k1,k2 from t1 order by k1,k2 limit 100;
+select sum(k1),sum(crc32(k2)) from tmp;
+drop table tmp;
+create table tmp as select k1,k2 from t1 order by k1,k2 limit 1000;
+select sum(k1),sum(crc32(k2)) from tmp;
+drop table tmp;
+create table tmp as select k1,k2 from t1 order by k1,k2 limit 10000;
+select sum(k1),sum(crc32(k2)) from tmp;
+drop table tmp;
+create table tmp as select k1,k2 from t1 order by k1,k2 limit 100000;
+select sum(k1),sum(crc32(k2)) from tmp;
+drop table tmp;
+create table tmp as select k1,k2 from t1 order by k1,k2 limit 10000000;
+select sum(k1),sum(crc32(k2)) from tmp;
+drop table tmp;

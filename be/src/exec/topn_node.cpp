@@ -404,7 +404,7 @@ pipeline::OpFactories TopNNode::decompose_to_pipeline(pipeline::PipelineBuilderC
                                                                                 is_partition_skewed, need_merge,
                                                                                 enable_parallel_merge, is_per_pipeline);
     } else {
-        if (runtime_state()->enable_spill() && runtime_state()->enable_sort_spill() && _limit < 0) {
+        if (runtime_state()->enable_spill() && runtime_state()->enable_sort_spill()) {
             if (enable_parallel_merge) {
                 operators_source_with_sort =
                         _decompose_to_pipeline<SortContextFactory, SpillablePartitionSortSinkOperatorFactory,

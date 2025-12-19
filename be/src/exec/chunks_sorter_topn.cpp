@@ -204,6 +204,10 @@ std::vector<RuntimeFilter*>* ChunksSorterTopn::runtime_filters(ObjectPool* pool)
 
 Status ChunksSorterTopn::get_next(ChunkPtr* chunk, bool* eos) {
     SCOPED_TIMER(_output_timer);
+    return _do_get_next(chunk, eos);
+}
+
+Status ChunksSorterTopn::_do_get_next(ChunkPtr* chunk, bool* eos) {
     if (_merged_runs.num_chunks() == 0) {
         *chunk = nullptr;
         *eos = true;
@@ -798,6 +802,38 @@ void ChunksSorterTopn::_reset() {
     while (_merged_runs.num_chunks() != 0) {
         _merged_runs.pop_front();
     }
+}
+
+size_t ChunksSorterTopn::_reserved_bytes(const ChunkPtr& chunk) {
+    size_t reserved_bytes = 0;
+    if (chunk) {
+        reserved_bytes += chunk->memory_usage();
+    }
+    reserved_bytes += _raw_chunks.mem_usage * 2;
+    reserved_bytes += _merged_runs.mem_usage() * 2;
+    return reserved_bytes;
+}
+
+size_t ChunksSorterTopn::_get_revocable_mem_bytes() {
+    size_t revocable_mem_bytes = 0;
+    revocable_mem_bytes += _raw_chunks.mem_usage;
+    revocable_mem_bytes += _merged_runs.mem_usage();
+    return revocable_mem_bytes;
+}
+
+std::function<StatusOr<ChunkPtr>()> ChunksSorterTopn::_get_chunk_iterator() {
+    return [this]() -> StatusOr<ChunkPtr> {
+        if (_process_raw_chunks_idx < _raw_chunks.chunks.size()) {
+            return std::move(_raw_chunks.chunks[_process_raw_chunks_idx++]);
+        }
+        ChunkPtr chunk;
+        bool eos = false;
+        RETURN_IF_ERROR(_do_get_next(&chunk, &eos));
+        if (eos) {
+            return Status::EndOfFile("No more chunk to restore");
+        }
+        return chunk;
+    };
 }
 
 } // namespace starrocks

@@ -19,33 +19,34 @@
 #include "exec/spillable_chunks_sorter_sort.h"
 
 namespace starrocks {
-void SpillableChunksSorterFullSort::setup_runtime(RuntimeState* state, RuntimeProfile* profile,
-                                                  MemTracker* parent_mem_tracker) {
-    ChunksSorterFullSort::setup_runtime(state, profile, parent_mem_tracker);
+template <DerivedFromChunksSorter TChunksSorter>
+void SpillableChunksSorter<TChunksSorter>::setup_runtime(RuntimeState* state, RuntimeProfile* profile,
+                                                         MemTracker* parent_mem_tracker) {
+    TChunksSorter::setup_runtime(state, profile, parent_mem_tracker);
     _spiller->set_metrics(spill::SpillProcessMetrics(profile, state->mutable_total_spill_bytes()));
 }
 
-Status SpillableChunksSorterFullSort::update(RuntimeState* state, const ChunkPtr& chunk) {
+template <DerivedFromChunksSorter TChunksSorter>
+Status SpillableChunksSorter<TChunksSorter>::update(RuntimeState* state, const ChunkPtr& chunk) {
     if (_spill_strategy == spill::SpillStrategy::NO_SPILL) {
-        RETURN_IF_ERROR(ChunksSorterFullSort::update(state, chunk));
+        RETURN_IF_ERROR(TChunksSorter::update(state, chunk));
         _update_revocable_mem_bytes();
         return Status::OK();
     }
-
     // force spill
+    auto guard = TRACKER_WITH_SPILLER_GUARD(state, _spiller);
     bool first_time_spill = _spiller->spilled_append_rows() == 0;
     CHECK(!_spill_channel->has_task());
+    RETURN_IF_ERROR(_spiller->spill(state, chunk, guard));
 
-    RETURN_IF_ERROR(_spiller->spill(state, chunk, TRACKER_WITH_SPILLER_GUARD(state, _spiller)));
-
+    // first time spill, we need to spill the existing data in sorter
     if (first_time_spill) {
-        auto process_task = _spill_process_task();
+        auto process_task = TChunksSorter::_get_chunk_iterator();
         while (!_spiller->is_full()) {
             auto chunk_st = process_task();
             if (chunk_st.ok()) {
                 if (!chunk_st.value()->is_empty()) {
-                    RETURN_IF_ERROR(
-                            _spiller->spill(state, chunk_st.value(), TRACKER_WITH_SPILLER_GUARD(state, _spiller)));
+                    RETURN_IF_ERROR(_spiller->spill(state, chunk_st.value(), guard));
                 }
             } else if (chunk_st.status().is_end_of_file()) {
                 return Status::OK();
@@ -53,24 +54,25 @@ Status SpillableChunksSorterFullSort::update(RuntimeState* state, const ChunkPtr
                 return chunk_st.status();
             }
         }
+        // spill buffer is full.
+        // add spill task to spill channel
         _spill_channel->add_spill_task({std::move(process_task)});
     }
 
     return Status::OK();
 }
 
-Status SpillableChunksSorterFullSort::do_done(RuntimeState* state) {
+template <DerivedFromChunksSorter TChunksSorter>
+Status SpillableChunksSorter<TChunksSorter>::do_done(RuntimeState* state) {
     if (_spill_strategy == spill::SpillStrategy::NO_SPILL) {
-        return ChunksSorterFullSort::do_done(state);
+        return TChunksSorter::do_done(state);
     }
-
-    if (_sorted_chunks.empty() && _unsorted_chunk == nullptr && _staging_unsorted_chunks.empty()) {
-        // force flush
+    if (!_spill_channel->is_working()) {
         RETURN_IF_ERROR(_spiller->flush(state, TRACKER_WITH_SPILLER_GUARD(state, _spiller)));
     } else {
         // TODO: avoid sort multi times
         // spill sorted chunks
-        auto spill_process_task = _spill_process_task();
+        auto spill_process_task = TChunksSorter::_get_chunk_iterator();
         _spill_channel->add_spill_task({std::move(spill_process_task)});
         std::function<StatusOr<ChunkPtr>()> flush_task = [this, state]() -> StatusOr<ChunkPtr> {
             RETURN_IF_ERROR(_spiller->flush(state, TRACKER_WITH_SPILLER_GUARD(state, _spiller)));
@@ -81,12 +83,9 @@ Status SpillableChunksSorterFullSort::do_done(RuntimeState* state) {
 
     return Status::OK();
 }
-
-void SpillableChunksSorterFullSort::cancel() {
-    ChunksSorterFullSort::cancel();
-    if (_spill_strategy == spill::SpillStrategy::NO_SPILL) {
-        // nothing TODO
-    } else {
+template <DerivedFromChunksSorter TChunksSorter>
+void SpillableChunksSorter<TChunksSorter>::cancel() {
+    if (_spiller->spilled()) {
         if (_spill_channel->has_task()) {
             std::function<StatusOr<ChunkPtr>()> cancel_task = [this]() -> StatusOr<ChunkPtr> {
                 _spiller->cancel();
@@ -99,9 +98,10 @@ void SpillableChunksSorterFullSort::cancel() {
     }
 }
 
-Status SpillableChunksSorterFullSort::get_next(ChunkPtr* chunk, bool* eos) {
+template <DerivedFromChunksSorter TChunksSorter>
+Status SpillableChunksSorter<TChunksSorter>::get_next(ChunkPtr* chunk, bool* eos) {
     if (!_spiller->spilled()) {
-        return ChunksSorterFullSort::get_next(chunk, eos);
+        return TChunksSorter::get_next(chunk, eos);
     }
 
     RETURN_IF_ERROR(_get_result_from_spiller(chunk, eos));
@@ -109,55 +109,30 @@ Status SpillableChunksSorterFullSort::get_next(ChunkPtr* chunk, bool* eos) {
     return Status::OK();
 }
 
-size_t SpillableChunksSorterFullSort::reserved_bytes(const ChunkPtr& chunk) {
+template <DerivedFromChunksSorter TChunksSorter>
+size_t SpillableChunksSorter<TChunksSorter>::reserved_bytes(const ChunkPtr& chunk) {
+    size_t reserved = TChunksSorter::_reserved_bytes(chunk);
     if (chunk) {
-        return chunk->memory_usage() + (_unsorted_chunk != nullptr ? _unsorted_chunk->memory_usage() * 2 : 0);
+        return chunk->memory_usage() + reserved;
     }
-    return _unsorted_chunk != nullptr ? _unsorted_chunk->memory_usage() * 2 : 0;
+    return reserved;
 }
 
-size_t SpillableChunksSorterFullSort::get_output_rows() const {
+template <DerivedFromChunksSorter TChunksSorter>
+size_t SpillableChunksSorter<TChunksSorter>::get_output_rows() const {
     if (!_spiller->spilled()) {
-        return ChunksSorterFullSort::get_output_rows();
+        return this->TChunksSorter::get_output_rows();
     }
     return _spiller->spilled_append_rows();
 }
 
-void SpillableChunksSorterFullSort::_update_revocable_mem_bytes() {
-    size_t revocable_mem_bytes = 0;
-    if (auto unsorted_chunk = _unsorted_chunk) {
-        revocable_mem_bytes += unsorted_chunk->memory_usage();
-    }
-
-    for (const auto& chunk : _sorted_chunks) {
-        if (chunk) {
-            revocable_mem_bytes += chunk->memory_usage();
-        }
-    }
-
-    _revocable_mem_bytes = revocable_mem_bytes;
+template <DerivedFromChunksSorter TChunksSorter>
+void SpillableChunksSorter<TChunksSorter>::_update_revocable_mem_bytes() {
+    _revocable_mem_bytes = TChunksSorter::_get_revocable_mem_bytes();
 }
 
-std::function<StatusOr<ChunkPtr>()> SpillableChunksSorterFullSort::_spill_process_task() {
-    return [this]() -> StatusOr<ChunkPtr> {
-        if (_unsorted_chunk != nullptr) {
-            return std::move(_unsorted_chunk);
-        }
-
-        if (_process_staging_unsorted_chunk_idx != _staging_unsorted_chunks.size()) {
-            return std::move(_staging_unsorted_chunks[_process_staging_unsorted_chunk_idx++]);
-        }
-        if (_process_early_materialized_chunks_idx != _early_materialized_chunks.size()) {
-            return _late_materialize(std::move(_early_materialized_chunks[_process_early_materialized_chunks_idx++]));
-        }
-        if (_process_sorted_chunk_idx != _sorted_chunks.size()) {
-            return std::move(_sorted_chunks[_process_sorted_chunk_idx++]);
-        }
-        return Status::EndOfFile("eos");
-    };
-}
-
-Status SpillableChunksSorterFullSort::_get_result_from_spiller(ChunkPtr* chunk, bool* eos) {
+template <DerivedFromChunksSorter TChunksSorter>
+Status SpillableChunksSorter<TChunksSorter>::_get_result_from_spiller(ChunkPtr* chunk, bool* eos) {
     auto chunk_st = _spiller->restore(_state, TRACKER_WITH_SPILLER_GUARD(_state, _spiller));
     if (chunk_st.status().is_end_of_file()) {
         *eos = true;
@@ -166,5 +141,8 @@ Status SpillableChunksSorterFullSort::_get_result_from_spiller(ChunkPtr* chunk, 
     *chunk = std::move(chunk_st.value());
     return Status::OK();
 }
+
+template class SpillableChunksSorter<ChunksSorterFullSort>;
+template class SpillableChunksSorter<ChunksSorterTopn>;
 
 } // namespace starrocks
