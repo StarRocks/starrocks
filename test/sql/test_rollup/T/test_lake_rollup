@@ -16,7 +16,7 @@ VALUES
     ("2020-01-11",4,100);
 
 ALTER TABLE tbl1 ADD ROLLUP rollup1 (k1, v1) FROM tbl1;
-function: wait_alter_table_finish("ROLLUP")
+function: wait_alter_table_finish("ROLLUP", 8)
 
 INSERT INTO tbl1 VALUES("2020-01-11",6,100);
 
@@ -46,7 +46,7 @@ VALUES
     ("2020-01-11",4,100);
 
 ALTER TABLE tbl2 ADD ROLLUP rollup2 (k1, v1) FROM tbl2;
-function: wait_alter_table_finish("ROLLUP")
+function: wait_alter_table_finish("ROLLUP", 8)
 
 INSERT INTO tbl2 VALUES("2020-01-11",6,100);
 

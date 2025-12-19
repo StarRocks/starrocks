@@ -22,7 +22,7 @@ VALUES
 ALTER TABLE tbl1 ADD ROLLUP rollup1 (k1, v1) FROM tbl1;
 -- result:
 -- !result
-function: wait_alter_table_finish("ROLLUP")
+function: wait_alter_table_finish("ROLLUP", 8)
 -- result:
 None
 -- !result
@@ -75,7 +75,7 @@ VALUES
 ALTER TABLE tbl2 ADD ROLLUP rollup2 (k1, v1) FROM tbl2;
 -- result:
 -- !result
-function: wait_alter_table_finish("ROLLUP")
+function: wait_alter_table_finish("ROLLUP", 8)
 -- result:
 None
 -- !result
