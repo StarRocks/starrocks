@@ -1268,8 +1268,8 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
         Map<String, String> copiedProperties = clause.getProperties() == null ? Maps.newHashMap()
                 : Maps.newHashMap(clause.getProperties());
         try {
-            long tabletReshardSplitSize = PropertyAnalyzer.analyzeTabletReshardSplitSize(copiedProperties, true);
-            clause.setTabletReshardSplitSize(tabletReshardSplitSize);
+            long tabletReshardTargetSize = PropertyAnalyzer.analyzeTabletReshardTargetSize(copiedProperties, true);
+            clause.setTabletReshardTargetSize(tabletReshardTargetSize);
         } catch (Exception e) {
             throw new SemanticException(e.getMessage(), e);
         }

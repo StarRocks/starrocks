@@ -4050,16 +4050,16 @@ public class Config extends ConfigBase {
     public static long tablet_reshard_max_parallel_tablets = 10 * 1024;
 
     /**
-     * Tablets with size larger than this value will be considered to split.
+     * Tablet splitting and merging will make tablet size around this value.
      */
-    @ConfField(mutable = true, comment = "Tablets with size larger than this value will be considered to split.")
-    public static long tablet_reshard_split_size = 4L * 1024L * 1024L * 1024L;
+    @ConfField(mutable = true, comment = "Tablet splitting and merging will make tablet size around this value.")
+    public static long tablet_reshard_target_size = 1024L * 1024L * 1024L;
 
     /**
      * The max number of new tablets that an old tablet can be split into.
      */
     @ConfField(mutable = true, comment = "The max number of new tablets that an old tablet can be split into.")
-    public static int tablet_reshard_max_split_count = 8;
+    public static int tablet_reshard_max_split_count = 1024;
 
     /**
      * Whether to enable tracing historical nodes when cluster scale

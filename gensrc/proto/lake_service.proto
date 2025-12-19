@@ -39,12 +39,10 @@ message PublishVersionRequest {
     repeated TxnInfoPB txn_infos = 7;
     repeated int64 rebuild_pindex_tablet_ids = 8;
     optional bool enable_aggregate_publish = 9;
-    // Distribution key column physical names (column id)
-    repeated string distribution_columns = 10;
     // This field is used for 2 cases to specify the resharding tablets info (not included in tablet_ids):
     // 1. The split or merge tablet transaction, in which the txn type in txn_infos is TXN_TABLET_RESHARD.
     // 2. The nornal write transaction but need cross-publish during tablet splitting or merging.
-    optional ReshardingTabletsInfoPB resharding_tablets_info = 11;
+    repeated ReshardingTabletInfoPB resharding_tablet_infos = 10;
 }
 
 message PublishVersionResponse {
@@ -55,6 +53,8 @@ message PublishVersionResponse {
     // Mapping from tablet id to row_nums when the partition is first imported
     map<int64, int64> tablet_row_nums = 4;
     map<int64, TabletMetadataPB> tablet_metas = 5;
+    // New tablet ranges for tablet splitting
+    map<int64, TabletRangePB> tablet_ranges = 6;
 }
 
 message ComputeNodePB {
@@ -359,26 +359,6 @@ message VacuumFullResponse {
     optional int64 vacuumed_file_size = 3;
 }
 
-message FindSplitPointRequest {
-    message TabletSplitInfo {
-        optional int64 tablet_id = 1;
-        // How many new tablets should this tablet be split into
-        optional int32 split_count = 2;
-    }
-
-    repeated TabletSplitInfo tablet_split_infos = 1;
-}
-
-message FindSplitPointResponse {
-    message TabletSplitResult {
-        optional int64 tablet_id = 1;
-        repeated TabletRangePB split_ranges = 2;
-    }
-
-    optional StatusPB status = 1;
-    repeated TabletSplitResult tablet_split_results = 2;
-}
-
 message GetTabletMetadatasRequest {
     // all tablets in one physical partition
     repeated int64 tablet_ids = 1;
@@ -444,7 +424,6 @@ service LakeService {
     rpc vacuum(VacuumRequest) returns (VacuumResponse);
     rpc vacuum_full(VacuumFullRequest) returns (VacuumFullResponse);
     rpc aggregate_compact(AggregateCompactRequest) returns (CompactResponse);
-    rpc find_split_point(FindSplitPointRequest) returns (FindSplitPointResponse);
     rpc get_tablet_metadatas(GetTabletMetadatasRequest) returns (GetTabletMetadatasResponse);
     rpc repair_tablet_metadata(RepairTabletMetadataRequest) returns (RepairTabletMetadataResponse);
 }
