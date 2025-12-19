@@ -238,12 +238,9 @@ Status BuiltinInvertedIndexIterator::_phrase_query(const Slice* search_query, ro
         }
     }
 
-    std::vector<uint32_t> candidate_row_ids;
-    candidate_row_ids.reserve(filtered_rows.cardinality());
+    std::vector<uint32_t> candidate_row_ids(filtered_rows.cardinality(), 0);
+    std::vector<uint64_t> ranks(filtered_rows.cardinality(), 0);
     filtered_rows.toUint32Array(candidate_row_ids.data());
-
-    std::vector<uint64_t> ranks;
-    ranks.reserve(filtered_rows.cardinality());
 
     for (uint32_t i = 0; i < dict_ids.size(); ++i) {
         rowid_t dict_id = dict_ids[i];
@@ -256,7 +253,7 @@ Status BuiltinInvertedIndexIterator::_phrase_query(const Slice* search_query, ro
         }
     }
 
-    for (const rowid_t& row : filtered_rows) {
+    for (const rowid_t& row : candidate_row_ids) {
         LOG(INFO) << "match_phrase: final processing row: " << row;
         for (auto dict_to_position_list = positions.at(row); const rowid_t start : dict_to_position_list[dict_ids[0]]) {
             LOG(INFO) << "match_phrase: start position: " << start;
