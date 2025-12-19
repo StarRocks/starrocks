@@ -36,7 +36,8 @@ Status BuiltinInvertedReader::create(const std::shared_ptr<TabletIndex>& tablet_
                                      std::unique_ptr<InvertedReader>* res) {
     if (is_string_type(field_type)) {
         const auto gram_num = get_gram_num_from_properties(tablet_index->index_properties());
-        *res = std::make_unique<BuiltinInvertedReader>(tablet_index->index_id(), gram_num);
+        const auto with_position = !get_omit_term_freq_and_position(tablet_index->index_properties());
+        *res = std::make_unique<BuiltinInvertedReader>(tablet_index->index_id(), gram_num, with_position);
         return Status::OK();
     } else {
         return Status::InvalidArgument(fmt::format("Not supported type {}", field_type));
@@ -48,7 +49,7 @@ Status BuiltinInvertedReader::load(const IndexReadOptions& opt, void* meta) {
         return Status::InvalidArgument("Invalid argument for loading builtin inverted index");
     }
     const BitmapIndexPB bitmap_index_meta = reinterpret_cast<BuiltinInvertedIndexPB*>(meta)->bitmap_index();
-    _bitmap_index = std::make_unique<BitmapIndexReader>(_gram_num);
+    _bitmap_index = std::make_unique<BitmapIndexReader>(_gram_num, _with_position);
 
     ASSIGN_OR_RETURN(auto first_load, _bitmap_index->load(opt, bitmap_index_meta));
     if (!first_load) {
