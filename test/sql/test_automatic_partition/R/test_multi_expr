@@ -385,7 +385,7 @@ select * from multi_level_expr_par_tbl;
 
 
 
--- name: test_ctas_from_normal_table
+-- name: test_ctas_from_normal_table @native
 CREATE TABLE base_tbl_unix_ts (c1 bigint, c2 string, c3 date);
 -- result:
 -- !result
