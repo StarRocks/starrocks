@@ -112,8 +112,6 @@ public:
     // |version|: version of values
     Status insert(size_t n, const Slice* keys, const IndexValue* values, int64_t version);
 
-    Status minor_compact();
-
     Status ingest_sst(const FileMetaPB& sst_meta, const PersistentIndexSstableRangePB& sst_range, uint32_t rssid,
                       int64_t version, const DelvecPagePB& delvec_page, DelVectorPtr delvec);
 

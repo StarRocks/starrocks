@@ -193,7 +193,7 @@ Status PersistentIndexMemtable::flush(WritableFile* wf, uint64_t* filesize, Pers
     return PersistentIndexSstable::build_sstable(_map, wf, filesize, range_pb);
 }
 
-Status PersistentIndexMemtable::minor_compact() {
+Status PersistentIndexMemtable::flush() {
     if (_sstable != nullptr) {
         // already compacted
         return Status::OK();
@@ -233,7 +233,7 @@ Status PersistentIndexMemtable::minor_compact() {
     RETURN_IF_ERROR(sstable->init(std::move(rf), sstable_pb, block_cache->cache()));
     std::lock_guard<std::mutex> lg(_flush_mutex);
     _sstable = std::move(sstable);
-    TRACE_COUNTER_INCREMENT("minor_compact_times", 1);
+    TRACE_COUNTER_INCREMENT("flush_times", 1);
     return Status::OK();
 }
 
@@ -243,9 +243,9 @@ void PersistentIndexMemtable::clear() {
 }
 
 void PersistentIndexMemtable::run() {
-    auto st = minor_compact();
+    auto st = flush();
     if (!st.ok()) {
-        LOG(ERROR) << "PersistentIndexMemtable minor_compact failed for tablet " << _tablet_id << ": " << st;
+        LOG(ERROR) << "PersistentIndexMemtable flush failed for tablet " << _tablet_id << ": " << st;
         std::lock_guard<std::mutex> lg(_flush_mutex);
         _flush_status = st;
     }

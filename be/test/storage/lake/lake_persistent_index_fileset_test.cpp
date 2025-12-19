@@ -539,7 +539,7 @@ TEST_F(LakePersistentIndexFilesetTest, test_index_reload_after_minor_compaction)
         ASSERT_OK(index->init(_tablet_metadata));
         index->prepare(EditVersion(1, 0), 0);
         ASSERT_OK(index->insert(N, key_slices.data(), values.data(), 0));
-        ASSERT_OK(index->minor_compact());
+        ASSERT_OK(index->flush_memtable(true));
 
         // Commit to metadata
         Tablet tablet(_tablet_mgr.get(), tablet_id);
@@ -601,7 +601,7 @@ TEST_F(LakePersistentIndexFilesetTest, test_index_reload_after_major_compaction)
             index->prepare(EditVersion(m, 0), 0);
             std::vector<IndexValue> old_values(N);
             ASSERT_OK(index->upsert(N, all_key_slices[m].data(), all_values[m].data(), old_values.data()));
-            ASSERT_OK(index->minor_compact());
+            ASSERT_OK(index->flush_memtable(true));
         }
 
         // Commit to metadata
@@ -687,7 +687,7 @@ TEST_F(LakePersistentIndexFilesetTest, test_index_multiple_reload_cycles) {
 
             std::vector<IndexValue> old_values(N);
             ASSERT_OK(index->upsert(N, key_slices.data(), values.data(), old_values.data()));
-            ASSERT_OK(index->minor_compact());
+            ASSERT_OK(index->flush_memtable(true));
 
             Tablet tablet(_tablet_mgr.get(), tablet_id);
             auto tablet_metadata_ptr = std::make_shared<TabletMetadata>();
@@ -744,7 +744,7 @@ TEST_F(LakePersistentIndexFilesetTest, test_index_upsert_and_reload) {
         ASSERT_OK(index->init(_tablet_metadata));
         index->prepare(EditVersion(1, 0), 0);
         ASSERT_OK(index->insert(N, key_slices.data(), values.data(), 0));
-        ASSERT_OK(index->minor_compact());
+        ASSERT_OK(index->flush_memtable(true));
 
         Tablet tablet(_tablet_mgr.get(), tablet_id);
         auto tablet_metadata_ptr = std::make_shared<TabletMetadata>();
@@ -769,7 +769,7 @@ TEST_F(LakePersistentIndexFilesetTest, test_index_upsert_and_reload) {
 
         std::vector<IndexValue> old_values(N);
         ASSERT_OK(index->upsert(N, key_slices.data(), new_values.data(), old_values.data()));
-        ASSERT_OK(index->minor_compact());
+        ASSERT_OK(index->flush_memtable(true));
 
         Tablet tablet(_tablet_mgr.get(), tablet_id);
         auto tablet_metadata_ptr = std::make_shared<TabletMetadata>();
@@ -821,7 +821,7 @@ TEST_F(LakePersistentIndexFilesetTest, test_index_concurrent_read_after_reload) 
         ASSERT_OK(index->init(_tablet_metadata));
         index->prepare(EditVersion(1, 0), 0);
         ASSERT_OK(index->insert(N, key_slices.data(), values.data(), 0));
-        ASSERT_OK(index->minor_compact());
+        ASSERT_OK(index->flush_memtable(true));
 
         Tablet tablet(_tablet_mgr.get(), tablet_id);
         auto tablet_metadata_ptr = std::make_shared<TabletMetadata>();

@@ -78,7 +78,7 @@ public:
 
     size_t memory_usage() const;
 
-    Status minor_compact();
+    Status flush();
 
     void clear();
 

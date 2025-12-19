@@ -134,15 +134,6 @@ Status LakePersistentIndex::merge_sstable_into_fileset(std::unique_ptr<Persisten
     return Status::OK();
 }
 
-Status LakePersistentIndex::minor_compact() {
-    TRACE_COUNTER_SCOPE_LATENCY_US("minor_compact_latency_us");
-    RETURN_IF_ERROR(_memtable->minor_compact());
-    // try to merge to a existing fileset
-    auto sstable = _memtable->release_sstable();
-    RETURN_IF_ERROR(merge_sstable_into_fileset(sstable));
-    return Status::OK();
-}
-
 Status LakePersistentIndex::ingest_sst(const FileMetaPB& sst_meta, const PersistentIndexSstableRangePB& sst_range,
                                        uint32_t rssid, int64_t version, const DelvecPagePB& delvec_page,
                                        DelVectorPtr delvec) {
@@ -188,6 +179,7 @@ Status LakePersistentIndex::sync_flush_all_memtables(int64_t wait_timeout_us) {
         int64_t start_us = butil::gettimeofday_us();
         bool wait_success = false;
         while (butil::gettimeofday_us() - start_us < wait_timeout_us) {
+            RETURN_IF_ERROR(memtable->flush_status());
             auto sstable = memtable->release_sstable();
             if (sstable != nullptr) {
                 // try to merge to a existing fileset
@@ -205,7 +197,7 @@ Status LakePersistentIndex::sync_flush_all_memtables(int64_t wait_timeout_us) {
     _inactive_memtables.clear();
     // 2. flush current memtable
     if (_memtable && !_memtable->empty()) {
-        RETURN_IF_ERROR(_memtable->minor_compact());
+        RETURN_IF_ERROR(_memtable->flush());
         auto sstable = _memtable->release_sstable();
         DCHECK(sstable != nullptr);
         RETURN_IF_ERROR(merge_sstable_into_fileset(sstable));
@@ -256,7 +248,7 @@ Status LakePersistentIndex::flush_memtable(bool force) {
         // 3. flush current memtable
         if (_inactive_memtables.size() + 1 >= config::pk_index_memtable_max_count) {
             // If too many memtables, switch to sync flush.
-            RETURN_IF_ERROR(_memtable->minor_compact());
+            RETURN_IF_ERROR(_memtable->flush());
             auto sstable = _memtable->release_sstable();
             RETURN_IF_ERROR(merge_sstable_into_fileset(sstable));
         } else {
