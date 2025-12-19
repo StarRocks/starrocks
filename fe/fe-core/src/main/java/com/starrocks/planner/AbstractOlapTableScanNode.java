@@ -24,7 +24,7 @@ import java.util.Optional;
 import javax.annotation.Nullable;
 
 // An abstract node to scan data or meta from an OlapTable.
-public abstract class AbstractOlapTableScanNode extends ScanNode{
+public abstract class AbstractOlapTableScanNode extends ScanNode {
 
     protected final OlapTable olapTable;
     protected final SelectedMaterializedIndex index;
