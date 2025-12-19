@@ -305,6 +305,11 @@ StatusOr<ChunkPtr> CSVScanner::get_next() {
     do {
         RETURN_IF_ERROR(_init_reader());
 
+        // No more files to process
+        if (_curr_reader == nullptr) {
+            return Status::EndOfFile("");
+        }
+
         src_chunk->set_num_rows(0);
         Status status = Status::OK();
         if (!_use_v2) {
@@ -319,7 +324,7 @@ StatusOr<ChunkPtr> CSVScanner::get_next() {
             } else if (status.is_time_out()) {
                 // if timeout happens at the beginning of reading src_chunk, we return the error state
                 // else we will _materialize the lines read before timeout
-                if (src_chunk->num_rows() == 0) {
+                if (src_chunk->num_rows() == 0 && _parsed_rows_for_path_columns == 0) {
                     _reusable_empty_chunk.swap(src_chunk);
                     return status;
                 }
@@ -331,13 +336,16 @@ StatusOr<ChunkPtr> CSVScanner::get_next() {
         if (src_chunk->num_rows() > 0) {
             _materialize_src_chunk_adaptive_nullable_column(src_chunk);
         }
-    } while ((src_chunk)->num_rows() == 0);
+    } while (src_chunk->num_rows() == 0 && _parsed_rows_for_path_columns == 0);
+
+    // When chunk has no file columns, use tracked row count for path columns
+    size_t rows_for_path = src_chunk->num_columns() > 0 ? src_chunk->num_rows() : _parsed_rows_for_path_columns;
 
     const auto& range = _scan_range.ranges[_curr_file_index];
-    fill_columns_from_path(src_chunk, _num_fields_in_csv, range.columns_from_path, src_chunk->num_rows());
+    fill_columns_from_path(src_chunk, _num_fields_in_csv, range.columns_from_path, rows_for_path);
     if (range.__isset.include_file_path_column && range.include_file_path_column) {
         int path_column_slot = _num_fields_in_csv + range.columns_from_path.size();
-        fill_file_path_column(src_chunk, path_column_slot, range.path, src_chunk->num_rows());
+        fill_file_path_column(src_chunk, path_column_slot, range.path, rows_for_path);
     }
     ASSIGN_OR_RETURN(chunk, materialize(nullptr, src_chunk));
 
@@ -356,7 +364,8 @@ Status CSVScanner::_parse_csv_v2(Chunk* chunk) {
     }
 
     csv::Converter::Options options{.invalid_field_as_null = !_strict_mode};
-    for (size_t num_rows = chunk->num_rows(); num_rows < capacity; /**/) {
+    size_t num_rows = 0;
+    for (num_rows = chunk->num_rows(); num_rows < capacity; /**/) {
         status = _curr_reader->next_record(row);
         if (!status.ok() && !status.is_end_of_file()) {
             return status;
@@ -461,6 +470,13 @@ Status CSVScanner::_parse_csv_v2(Chunk* chunk) {
         }
     }
     row.columns.clear();
+    // When no file columns are materialized (only path_column or columns_from_path),
+    // chunk has no columns so num_rows() returns 0. Track row count separately.
+    if (num_columns == 0 && num_rows > 0) {
+        _parsed_rows_for_path_columns = num_rows;
+        return Status::OK();
+    }
+    _parsed_rows_for_path_columns = 0;
     return chunk->num_rows() > 0 ? Status::OK() : Status::EndOfFile("");
 }
 
@@ -478,7 +494,8 @@ Status CSVScanner::_parse_csv(Chunk* chunk) {
 
     csv::Converter::Options options{.invalid_field_as_null = !_strict_mode};
 
-    for (size_t num_rows = chunk->num_rows(); num_rows < capacity; /**/) {
+    size_t num_rows = 0;
+    for (num_rows = chunk->num_rows(); num_rows < capacity; /**/) {
         status = _curr_reader->next_record(&record);
         if (status.is_end_of_file()) {
             break;
@@ -562,6 +579,13 @@ Status CSVScanner::_parse_csv(Chunk* chunk) {
         num_rows += !has_error;
     }
     fields.clear();
+    // When no file columns are materialized (only path_column or columns_from_path),
+    // chunk has no columns so num_rows() returns 0. Track row count separately.
+    if (num_columns == 0 && num_rows > 0) {
+        _parsed_rows_for_path_columns = num_rows;
+        return Status::OK();
+    }
+    _parsed_rows_for_path_columns = 0;
     return chunk->num_rows() > 0 ? Status::OK() : Status::EndOfFile("");
 }
 

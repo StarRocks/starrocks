@@ -177,6 +177,14 @@ StatusOr<ChunkPtr> ORCScanner::_transfer_chunk(starrocks::ChunkPtr& src) {
                 cast_chunk->append_column(src->get_column_by_slot_id(slot->id()), slot->id());
             }
         }
+        // Transfer file path column if present
+        if (range.__isset.include_file_path_column && range.include_file_path_column) {
+            int path_column_idx = range.num_of_columns_from_file + range.columns_from_path.size();
+            auto slot = _src_slot_descriptors[path_column_idx];
+            if (slot != nullptr) {
+                cast_chunk->append_column(src->get_column_by_slot_id(slot->id()), slot->id());
+            }
+        }
     }
     return cast_chunk;
 }
