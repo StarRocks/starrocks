@@ -156,6 +156,8 @@ public class ListPartitionInfoTest {
                 result = partition;
                 dstTable.getPartitionInfo();
                 result = listPartitionInfo;
+                dstTable.getDefaultDistributionInfo();
+                result = distInfo;
                 dstTable.getIdToColumn();
                 result = idToColumn;
             }};

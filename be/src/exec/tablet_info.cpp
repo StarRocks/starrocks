@@ -273,6 +273,12 @@ Status OlapTablePartitionParam::init(RuntimeState* state) {
         RETURN_IF_ERROR(Expr::create_expr_trees(&_obj_pool, _t_param.partition_exprs, &_partitions_expr_ctxs, state));
     }
 
+    if (_t_param.__isset.distribution_type) {
+        _distribution_type = _t_param.distribution_type;
+    } else {
+        _distribution_type = std::nullopt;
+    }
+
     // initial partitions
     for (auto& t_part : _t_param.partitions) {
         OlapTablePartition* part = _obj_pool.add(new OlapTablePartition());
@@ -733,13 +739,12 @@ void OlapTablePartitionParam::_compute_hashes(const Chunk* chunk, std::vector<ui
     size_t num_rows = chunk->num_rows();
     hashes->assign(num_rows, 0);
 
-    for (size_t i = 0; i < _distributed_slot_descs.size(); ++i) {
-        _distributed_columns[i] = chunk->get_column_by_slot_id(_distributed_slot_descs[i]->id()).get();
-        _distributed_columns[i]->crc32_hash(&(*hashes)[0], 0, num_rows);
-    }
-
-    // if no distributed columns, use random distribution
-    if (_distributed_slot_descs.size() == 0) {
+    if (is_hash_distribution()) {
+        for (size_t i = 0; i < _distributed_slot_descs.size(); ++i) {
+            _distributed_columns[i] = chunk->get_column_by_slot_id(_distributed_slot_descs[i]->id()).get();
+            _distributed_columns[i]->crc32_hash(&(*hashes)[0], 0, num_rows);
+        }
+    } else if (is_random_distribution()) {
         uint32_t r = _rand.Next();
         for (auto i = 0; i < num_rows; ++i) {
             (*hashes)[i] = r++;

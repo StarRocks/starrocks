@@ -49,4 +49,18 @@ public class TabletRange {
         boolean upperIncluded = tabletRangePB.upperBoundIncluded != null ? tabletRangePB.upperBoundIncluded : false;
         return new TabletRange(Range.of(lowerBound, upperBound, lowerIncluded, upperIncluded));
     }
+
+    public TTabletRange toThrift() {
+        TTabletRange tRange = new TTabletRange();
+        tRange.setLower_bound_included(range.isLowerBoundIncluded());
+        tRange.setUpper_bound_included(range.isUpperBoundIncluded());
+
+        if (!range.isMinimum()) {
+            tRange.setLower_bound(range.getLowerBound().toThrift());
+        }
+        if (!range.isMaximum()) {
+            tRange.setUpper_bound(range.getUpperBound().toThrift());
+        }
+        return tRange;
+    }
 }

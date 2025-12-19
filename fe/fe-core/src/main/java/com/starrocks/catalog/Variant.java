@@ -42,11 +42,11 @@ public abstract class Variant implements Comparable<Variant> {
         return type;
     }
 
-    public abstract long getLongValue();
-
     public abstract String getStringValue();
 
-    // public abstract TVariant toThrift();
+    public abstract long getLongValue();
+
+    public abstract TVariant toThrift();
 
     // public abstract VariantPB toProto();
 
@@ -115,4 +115,5 @@ public abstract class Variant implements Comparable<Variant> {
         }
         return Integer.compare(key1Length, key2Length);
     }
+
 }
