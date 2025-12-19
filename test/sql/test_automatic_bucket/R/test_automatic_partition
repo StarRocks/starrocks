@@ -549,7 +549,7 @@ select * from t;
 
 
 
--- name: test_mutable_bucket @sequential
+-- name: test_mutable_bucket @sequential @native
 create database ggg;
 -- result:
 -- !result

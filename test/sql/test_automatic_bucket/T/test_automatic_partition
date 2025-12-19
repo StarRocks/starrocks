@@ -161,7 +161,7 @@ select * from t;
 delete from t where k = 1;
 select * from t;
 
--- name: test_mutable_bucket @sequential
+-- name: test_mutable_bucket @sequential @native
 create database ggg;
 use ggg;
 create table t(k date, v int) PARTITION BY DATE_TRUNC('DAY', `k`)

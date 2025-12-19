@@ -11,7 +11,7 @@ show create table t3;
 create table t4(k int, v int) distributed by random;
 create table t5(k int, v int) distributed by random buckets 10;
 show create table t5;
--- name: test_partition_random_distribution
+-- name: test_partition_random_distribution @native
 create table t(k int, v int) partition by range(k) (partition p1 values less than ("0"));
 create table t1(k int, v int) partition by range(k) (partition p1 values less than ("0")) distributed by random;
 create table t2(k int, v int) partition by range(k) (partition p1 values less than ("0")) distributed by random buckets 10;
