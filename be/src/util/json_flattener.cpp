@@ -582,7 +582,7 @@ void JsonPathDeriver::_clean_sparsity_path(const std::string_view& name, JsonFla
 }
 
 void JsonPathDeriver::_visit_json_paths(const vpack::Slice& value, JsonFlatPath* root, size_t mark_row) {
-    vpack::ObjectIterator it(value, false);
+    vpack::ObjectIterator it(value, true);
 
     for (; it.valid(); it.next()) {
         auto current = (*it);
@@ -845,7 +845,7 @@ void JsonFlattener::flatten(const Column* json_column) {
 template <bool REMAIN>
 bool JsonFlattener::_flatten_json(const vpack::Slice& value, const JsonFlatPath* root, vpack::Builder* builder,
                                   uint32_t* hit_count) {
-    vpack::ObjectIterator it(value, false);
+    vpack::ObjectIterator it(value, true);
     for (; it.valid(); it.next()) {
         auto current = (*it);
         // sub-object
@@ -1105,7 +1105,7 @@ void JsonMerger::_merge_impl(size_t rows) {
 template <bool IN_TREE>
 void JsonMerger::_merge_json_with_remain(const JsonFlatPath* root, const vpack::Slice* remain, vpack::Builder* builder,
                                          size_t index) {
-    vpack::ObjectIterator it(*remain, false);
+    vpack::ObjectIterator it(*remain, true);
     for (; it.valid(); it.next()) {
         auto k = it.key().stringView();
         auto v = it.value();
