@@ -198,9 +198,9 @@ TEST_F(RangeRouterTest, SingleInfiniteRangeSelectAll) {
 // NOLINTNEXTLINE
 TEST_F(RangeRouterTest, IntThreeRangesFullCoverage) {
     std::vector<TTabletRange> ranges;
-    ranges.emplace_back(make_single_long_range(std::nullopt, false, 10, false));  // (-inf, 10)
-    ranges.emplace_back(make_single_long_range(10, true, 20, false));             // [10, 20)
-    ranges.emplace_back(make_single_long_range(20, true, std::nullopt, false));   // [20, +inf)
+    ranges.emplace_back(make_single_long_range(std::nullopt, false, 10, false)); // (-inf, 10)
+    ranges.emplace_back(make_single_long_range(10, true, 20, false));            // [10, 20)
+    ranges.emplace_back(make_single_long_range(20, true, std::nullopt, false));  // [20, +inf)
 
     std::vector<int64_t> tablet_ids{100, 200, 300};
 
@@ -476,10 +476,11 @@ TEST_F(RangeRouterTest, MultiColumnNullBoundaries) {
 // NOLINTNEXTLINE
 TEST_F(RangeRouterTest, VarcharThreeRangesFullCoverage) {
     std::vector<TTabletRange> ranges;
-    ranges.emplace_back(make_single_string_range(std::nullopt, false, std::string("banana"), false)); // (-inf, "banana")
     ranges.emplace_back(
-            make_single_string_range(std::string("banana"), true, std::string("date"), false));       // ["banana","date")
-    ranges.emplace_back(make_single_string_range(std::string("date"), true, std::nullopt, false));    // ["date", +inf)
+            make_single_string_range(std::nullopt, false, std::string("banana"), false)); // (-inf, "banana")
+    ranges.emplace_back(
+            make_single_string_range(std::string("banana"), true, std::string("date"), false));    // ["banana","date")
+    ranges.emplace_back(make_single_string_range(std::string("date"), true, std::nullopt, false)); // ["date", +inf)
 
     std::vector<int64_t> tablet_ids{10, 20, 30};
 
