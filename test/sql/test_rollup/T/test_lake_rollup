@@ -1,4 +1,4 @@
--- name: test_lake_rollup @cloud
+-- name: test_lake_rollup @native
 CREATE TABLE tbl1 (
     k1 date,
     k2 int,
@@ -28,7 +28,7 @@ function: wait_alter_table_finish("COLUMN")
 SELECT v1 FROM rollup1 [_SYNC_MV_] ORDER BY v1;
 drop table tbl1;
 
--- name: test_lake_rollup_2 @cloud
+-- name: test_lake_rollup_2 @native
 CREATE TABLE tbl2 (
     k1 date,
     k2 int,

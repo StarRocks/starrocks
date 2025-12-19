@@ -1,4 +1,4 @@
--- name: test_fast_schema_evolution
+-- name: test_fast_schema_evolution @native
 create database test_fast_schema_evolution;
 use test_fast_schema_evolution;
 create table t1(k int, v int not null) ENGINE=OLAP DUPLICATE KEY(k) PROPERTIES ("replication_num" = "1", 'fast_schema_evolution' = 'true');

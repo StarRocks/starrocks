@@ -1,4 +1,4 @@
--- name: test_primary_index_cache_expire
+-- name: test_primary_index_cache_expire @native
 show backends;
 CREATE table tab1 (
       k1 INTEGER,
