@@ -430,9 +430,10 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
             hdfsScanRange.setMin_max_values(tExprMinMaxValueMap);
         }
 
-        if (firstRowId != null) {
-            hdfsScanRange.setFirst_row_id(firstRowId);
-        }
+        // v2 has no globally-unique firstRowId in file metadata; fall back to 0 so the
+        // row identifier emitted to the lookup node is the file-local Parquet row_position.
+        // The (scan_range_id, row_id) pair remains unique because scan_range_id identifies the file.
+        hdfsScanRange.setFirst_row_id(firstRowId != null ? firstRowId : 0L);
 
         return hdfsScanRange;
     }
