@@ -78,10 +78,6 @@ public abstract class Variant implements Comparable<Variant> {
     }
 
     public static Variant fromThrift(TVariant tVariant) {
-        // TVariant encodes all payloads using the `value` field. Older code used to
-        // refer to this field as `string_value` on the Java side, which no longer
-        // exists in the current Thrift IDL. Always read from `value` here to stay
-        // aligned with the Thrift definition.
         return Variant.of(TypeDeserializer.fromThrift(tVariant.type), tVariant.getValue());
     }
 
