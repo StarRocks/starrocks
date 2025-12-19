@@ -71,6 +71,9 @@ void TabletInternalParallelMergeTask::run() {
     if (st.ok()) {
         st = _writer->flush();
     }
+    if (st.ok()) {
+        st = _writer->finish();
+    }
     timer.stop();
     LOG(INFO) << fmt::format(
             "SpillMemTableSink parallel merge blocks to segment finished, txn:{} tablet:{} "
