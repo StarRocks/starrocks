@@ -574,14 +574,6 @@ Used for MySQL client compatibility. No practical usage.
 * **Default**: true
 * **Introduced in**: v3.3.0
 
-### enable_gather_fragment_locality_optimization
-
-* **Scope**: Session
-* **Description**: Test-only boolean flag that enables gather-fragment locality optimization. When enabled, the scheduler (RemoteFragmentAssignmentStrategy.assignGatherFragmentToWorker) checks whether all instances of the other ExecutionFragments in the same ExecutionDAG are located on a single backend node. If they are, the gather fragment will be placed on that same node to improve locality; otherwise the scheduler falls back to selecting a worker via `WorkerProvider.selectNextWorker()`. This setting only affects fragments for which `fragment.isGatherFragment()` is true and is evaluated from the current session's variables.
-* **Default**: `false`
-* **Data Type**: boolean
-* **Introduced in**: -
-
 ### enable_gin_filter
 
 * **Description**: Whether to utilize the [fulltext inverted index](../table_design/indexes/inverted_index.md) during queries.
