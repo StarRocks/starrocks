@@ -5087,8 +5087,10 @@ static Status initcap_impl(const Slice& str, std::string* result) {
 
         if (c < 0) {
             unsigned char bad_byte = static_cast<unsigned char>(str.data[old_i]);
-            return Status::InvalidArgument(strings::Substitute("Invalid UTF-8 sequence at index $0, byte: 0x$1", old_i,
-                                                               strings::ToHex(&bad_byte, 1)));
+            std::stringstream ss;
+            ss << "0x" << std::hex << std::uppercase << std::setw(2) << std::setfill('0') << static_cast<int>(bad_byte);
+            return Status::InvalidArgument(strings::Substitute("Invalid UTF-8 sequence at index $0, byte: $1", old_i,
+                                                               ss.str()));
         }
 
         if (u_isalnum(c)) {
@@ -5117,9 +5119,9 @@ static Status initcap_impl(const Slice& str, std::string* result) {
 
 StatusOr<ColumnPtr> StringFunctions::initcap(FunctionContext* context, const Columns& columns) {
     ColumnViewer<TYPE_VARCHAR> viewer(columns[0]);
-    ColumnBuilder<TYPE_VARCHAR> builder;
     size_t num_rows = columns[0]->size();
-    builder.reserve(num_rows);
+
+    ColumnBuilder<TYPE_VARCHAR> builder(num_rows);
 
     std::string result_buffer;
 
