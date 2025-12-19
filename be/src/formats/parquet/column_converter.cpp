@@ -599,9 +599,11 @@ Status parquet::Int32ToDateConverter::convert(const Column* src, Column* dst) {
     auto& dst_null_data = dst_nullable_column->null_column_raw_ptr()->get_data();
 
     size_t size = src_column->size();
-    memcpy(dst_null_data.data(), src_null_data.data(), size);
     for (size_t i = 0; i < size; i++) {
-        dst_data[i]._julian = src_data[i] + date::UNIX_EPOCH_JULIAN;
+        dst_null_data[i] = src_null_data[i];
+        if (!src_null_data[i]) {
+            dst_data[i]._julian = src_data[i] + date::UNIX_EPOCH_JULIAN;
+        }
     }
     dst_nullable_column->set_has_null(src_nullable_column->has_null());
     return Status::OK();
