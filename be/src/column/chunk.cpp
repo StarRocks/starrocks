@@ -328,6 +328,20 @@ DatumTuple Chunk::get(size_t n) const {
     return res;
 }
 
+VariantTuple Chunk::get(size_t n, const std::vector<uint32_t>& column_indexes) const {
+    DCHECK(_schema != nullptr);
+    VariantTuple tuple;
+    tuple.reserve(column_indexes.size());
+    for (uint32_t i : column_indexes) {
+        DCHECK_LT(i, _columns.size());
+        const TypeInfoPtr& type_info = _schema->field(i)->type();
+        TypeDescriptor type = TypeDescriptor::from_storage_type_info(type_info.get());
+        Datum value = _columns[i]->get(n);
+        tuple.append(DatumVariant(type, value));
+    }
+    return tuple;
+}
+
 size_t Chunk::memory_usage() const {
     size_t memory_usage = 0;
     for (const auto& column : _columns) {

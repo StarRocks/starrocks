@@ -94,7 +94,7 @@ public:
             ASSERT_OK(writer->write(chunk1));
             ASSERT_OK(writer->finish());
 
-            auto files = writer->files();
+            const auto& files = writer->segments();
             ASSERT_EQ(3, files.size());
 
             // add rowset metadata
@@ -103,8 +103,8 @@ public:
             rowset->set_id(1);
             rowset->set_next_compaction_offset(1);
             auto* segs = rowset->mutable_segments();
-            for (auto& file : writer->files()) {
-                segs->Add(std::move(file.path));
+            for (const auto& file : writer->segments()) {
+                segs->Add()->assign(file.path);
             }
 
             writer->close();
@@ -235,7 +235,7 @@ TEST_F(LakeRowsetTest, test_partial_compaction) {
         // generate segment y
         ASSERT_OK(writer->write(chunk0));
         ASSERT_OK(writer->finish());
-        ASSERT_EQ(2, writer->files().size());
+        ASSERT_EQ(2, writer->segments().size());
     }
 
     {
@@ -260,8 +260,8 @@ TEST_F(LakeRowsetTest, test_partial_compaction) {
         std::vector<string> files_to_delete;
         collect_files_in_log(_tablet_mgr.get(), txn_log, &files_to_delete);
         EXPECT_EQ(files_to_delete.size(), 2);
-        EXPECT_TRUE(files_to_delete[0].find(writer->files()[0].path) != std::string::npos);
-        EXPECT_TRUE(files_to_delete[1].find(writer->files()[1].path) != std::string::npos);
+        EXPECT_TRUE(files_to_delete[0].find(writer->segments()[0].path) != std::string::npos);
+        EXPECT_TRUE(files_to_delete[1].find(writer->segments()[1].path) != std::string::npos);
     }
 
     {
@@ -283,8 +283,8 @@ TEST_F(LakeRowsetTest, test_partial_compaction) {
         std::vector<string> files_to_delete;
         collect_files_in_log(_tablet_mgr.get(), txn_log, &files_to_delete);
         EXPECT_EQ(files_to_delete.size(), 2);
-        EXPECT_TRUE(files_to_delete[0].find(writer->files()[0].path) != std::string::npos);
-        EXPECT_TRUE(files_to_delete[1].find(writer->files()[1].path) != std::string::npos);
+        EXPECT_TRUE(files_to_delete[0].find(writer->segments()[0].path) != std::string::npos);
+        EXPECT_TRUE(files_to_delete[1].find(writer->segments()[1].path) != std::string::npos);
     }
 }
 
