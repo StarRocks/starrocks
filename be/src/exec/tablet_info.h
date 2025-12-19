@@ -220,9 +220,7 @@ struct PartionKeyComparator {
         return false;
     }
 
-    bool operator()(const ChunkRow& lhs, const ChunkRow& rhs) const {
-        return operator()(&lhs, &rhs);
-    }
+    bool operator()(const ChunkRow& lhs, const ChunkRow& rhs) const { return operator()(&lhs, &rhs); }
 
 private:
     /**

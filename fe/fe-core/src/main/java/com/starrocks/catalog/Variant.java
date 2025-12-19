@@ -82,7 +82,7 @@ public abstract class Variant implements Comparable<Variant> {
     }
 
     public static Variant fromProto(VariantPB variantPB) {
-        return Variant.of(TypeDeserializer.fromProtobuf(variantPB.type), variantPB.stringValue);
+        return Variant.of(TypeDeserializer.fromProtobuf(variantPB.type), variantPB.value);
     }
 
     public static int compatibleCompare(Variant key1, Variant key2) {

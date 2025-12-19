@@ -54,7 +54,7 @@ private:
     // For example, if there are 3 tablet ranges : (-inf, 100), [100, 200), [200, +inf)
     // we only save the valid upper boundaries: [100, 200]
     // lower bound must strictly less than upper bound
-    MutableColumns _upper_boundaries;    // size = range column count
+    MutableColumns _upper_boundaries; // size = range column count
     // row-wise view of the upper boundaries
     std::vector<ChunkRow> _upper_boundaries_slice; // size = range count
 };

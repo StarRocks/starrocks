@@ -33,8 +33,7 @@ Status RangeRouter::init(const std::vector<TTabletRange>& tablet_ranges, size_t 
         return Status::InternalError("no tablet ranges for RangeRouter init");
     }
     if (!_upper_boundaries.empty()) {
-        DCHECK((_upper_boundaries[0] == nullptr) ||
-               (_upper_boundaries[0]->size() + 1 == num_ranges));
+        DCHECK((_upper_boundaries[0] == nullptr) || (_upper_boundaries[0]->size() + 1 == num_ranges));
         return Status::OK();
     }
 
@@ -196,11 +195,13 @@ Status RangeRouter::_validate_range(const std::vector<TTabletRange>& tablet_rang
 
         // overlapping or has gap in the boundary
         if ((!prev_upper_inclusive && !curr_lower_inclusive) || (prev_upper_inclusive && curr_lower_inclusive)) {
-            return Status::InternalError("adjacent ranges are overlapping / not complementary for the inclusive/exclusive bound");
+            return Status::InternalError(
+                    "adjacent ranges are overlapping / not complementary for the inclusive/exclusive bound");
         }
 
         if (prev_upper_inclusive && !curr_lower_inclusive) {
-            return Status::InternalError("Invalid range: previous upper bound is inclusive but current lower bound is exclusive");
+            return Status::InternalError(
+                    "Invalid range: previous upper bound is inclusive but current lower bound is exclusive");
         }
 
         // Compare whether adjacent upper and lower bounds are type-compatible
@@ -231,8 +232,8 @@ Status RangeRouter::_validate_range(const std::vector<TTabletRange>& tablet_rang
 size_t RangeRouter::_find_tablet_index_for_row(const ChunkRow& check_row) const {
     DCHECK(!_upper_boundaries.empty());
     DCHECK(_upper_boundaries[0] != nullptr);
-    return std::upper_bound(
-           _upper_boundaries_slice.begin(), _upper_boundaries_slice.end(), check_row, PartionKeyComparator()) -
+    return std::upper_bound(_upper_boundaries_slice.begin(), _upper_boundaries_slice.end(), check_row,
+                            PartionKeyComparator()) -
            _upper_boundaries_slice.begin();
 }
 

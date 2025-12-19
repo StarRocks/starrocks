@@ -228,7 +228,7 @@ public class SplitTabletJob extends TabletReshardJob {
                                     TabletRange tabletRange = tabletRanges.get(tabletId);
                                     Preconditions.checkNotNull(tabletRange,
                                             "Range of tablet " + tabletId + " not found");
-                                    newIndex.getTablet(tabletId).setRange(tabletRange.getRange());
+                                    newIndex.getTablet(tabletId).setRange(tabletRange);
                                 }
                             }
                         }
@@ -526,7 +526,7 @@ public class SplitTabletJob extends TabletReshardJob {
                 for (ReshardingMaterializedIndex reshardingIndex : reshardingPhysicalPartition
                         .getReshardingIndexes().values()) {
                     MaterializedIndex newIndex = reshardingIndex.getMaterializedIndex();
-                    if (newIndex.getId() == olapTable.getBaseIndexId()) {
+                    if (newIndex.getId() == olapTable.getBaseIndexMetaId()) {
                         physicalPartition.setBaseIndex(newIndex);
                     } else {
                         physicalPartition.createRollupIndex(newIndex);
