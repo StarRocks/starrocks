@@ -559,31 +559,16 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
 
     private FlightStream getStreamWithRetry(FlightClient beClient, Ticket ticket,
                                             String beKey, String beHost, int bePort) throws Exception {
-        Exception lastException = null;
-        FlightClient currentClient = beClient;
+        try {
+            return beClient.getStream(ticket);
+        } catch (Exception e) {
+            LOG.warn("[ARROW] Failed to get stream from BE {}:{}, retrying with new client",
+                    beHost, bePort, e);
 
-        for (int attempt = 0; attempt < Config.max_query_retry_time; attempt++) {
-            try {
-                return currentClient.getStream(ticket);
-            } catch (Exception e) {
-                lastException = e;
-                LOG.warn("[ARROW] Failed to get stream from BE {}:{}, attempt {}/{}",
-                        beHost, bePort, attempt, Config.max_query_retry_time, e);
-
-                if (attempt < Config.max_query_retry_time) {
-                    beClientCache.invalidate(beKey);
-                    try {
-                        Thread.sleep(100);
-                    } catch (InterruptedException ie) {
-                        Thread.currentThread().interrupt();
-                        throw e;
-                    }
-                    // Get a fresh client for retry
-                    currentClient = getOrCreateBeClient(beKey, beHost, bePort);
-                }
-            }
+            beClientCache.invalidate(beKey);
+            FlightClient freshClient = getOrCreateBeClient(beKey, beHost, bePort);
+            return freshClient.getStream(ticket);
         }
-        throw lastException;
     }
 
     private void getStreamResultFromFE(String token, String queryId, ServerStreamListener listener) {
