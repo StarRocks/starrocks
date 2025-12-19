@@ -215,27 +215,29 @@ public class SkewJoinOptimizeRule extends TransformationRule {
                 break;
             } else {
                 // find the skew column in the left/right child project map
-                if (input.inputAt(0).getOp() instanceof LogicalProjectOperator) {
-                    Map<ColumnRefOperator, ScalarOperator> projectMap = ((LogicalProjectOperator) input.inputAt(0).
-                            getOp()).getColumnRefMap();
-                    ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(projectMap);
-                    ScalarOperator rewriteChild0 = rewriter.rewrite(child0);
-                    ScalarOperator rewriteChild1 = rewriter.rewrite(child1);
-                    if (skewColumn.equals(rewriteChild0)) {
-                        skewColumn = rewriteChild0;
-                        otherSideSkewColumn = child1;
-                        break;
-                    } else if (rewriteChild0.isCast() && skewColumn.equals(rewriteChild0.getChild(0))) {
-                        skewColumn = rewriteChild0.getChild(0);
-                        otherSideSkewColumn = child1;
-                    } else if (skewColumn.equals(rewriteChild1)) {
-                        skewColumn = rewriteChild1;
-                        otherSideSkewColumn = child0;
-                        break;
-                    } else if (rewriteChild1.isCast() && skewColumn.equals(rewriteChild1.getChild(0))) {
-                        skewColumn = rewriteChild1.getChild(0);
-                        otherSideSkewColumn = child0;
+                for (int i = 0; i < 2; i++) {
+                    if (input.inputAt(i).getOp() instanceof LogicalProjectOperator) {
+                        Map<ColumnRefOperator, ScalarOperator> projectMap = ((LogicalProjectOperator) input.inputAt(i).
+                                getOp()).getColumnRefMap();
+                        ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(projectMap);
+                        ScalarOperator rewriteChild0 = rewriter.rewrite(child0);
+                        ScalarOperator rewriteChild1 = rewriter.rewrite(child1);
+                        if (skewColumn.equals(rewriteChild0) ||
+                                (rewriteChild0.isCast() && skewColumn.equals(rewriteChild0.getChild(0)))) {
+                            skewColumn = child0;
+                            otherSideSkewColumn = child1;
+                            break;
+                        } else if (skewColumn.equals(rewriteChild1) ||
+                                (rewriteChild1.isCast() && skewColumn.equals(rewriteChild1.getChild(0)))) {
+                            skewColumn = child1;
+                            otherSideSkewColumn = child0;
+                            break;
+                        }
                     }
+                }
+
+                if (otherSideSkewColumn != null) {
+                    break;
                 }
             }
         }
