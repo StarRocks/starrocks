@@ -17,6 +17,7 @@ package com.starrocks.connector.iceberg;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.starrocks.connector.PlanMode;
 import com.starrocks.connector.iceberg.CachingIcebergCatalog.IcebergTableName;
+import com.starrocks.connector.iceberg.SnapshotManifests;
 import com.starrocks.qe.ConnectContext;
 import org.apache.iceberg.DataFile;
 import org.apache.iceberg.DeleteFile;
@@ -33,6 +34,7 @@ public class StarRocksIcebergTableScanContext {
     private Cache<String, Set<DataFile>> dataFileCache;
     private Cache<String, Set<DeleteFile>> deleteFileCache;
     private Map<IcebergTableName, Set<String>> metaFileCacheMap;
+    private Cache<Long, SnapshotManifests> manifestListCache;
     private boolean onlyReadCache;
     private int localParallelism;
     private long localPlanningMaxSlotSize;
@@ -94,6 +96,14 @@ public class StarRocksIcebergTableScanContext {
 
     public void setMetaFileCacheMap(Map<IcebergTableName, Set<String>> metaFileCacheMap) {
         this.metaFileCacheMap = metaFileCacheMap;
+    }
+
+    public Cache<Long, SnapshotManifests> getManifestListCache() {
+        return manifestListCache;
+    }
+
+    public void setManifestListCache(Cache<Long, SnapshotManifests> manifestListCache) {
+        this.manifestListCache = manifestListCache;
     }
 
     public boolean isOnlyReadCache() {

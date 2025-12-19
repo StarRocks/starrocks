@@ -714,14 +714,15 @@ public class IcebergMetadata implements ConnectorMetadata {
             return new IcebergMetaSpec(serializedTable, List.of(IcebergMetaSplit.placeholderSplit()), false);
         }
 
-        List<ManifestFile> dataManifests = snapshot.dataManifests(nativeTable.io());
+        SnapshotManifests manifests = getSnapshotManifestsWithCache(snapshot, nativeTable);
+        List<ManifestFile> dataManifests = manifests.getDataManifests();
 
         List<ManifestFile> matchingDataManifests = filterManifests(dataManifests, nativeTable, predicate);
         for (ManifestFile file : matchingDataManifests) {
             remoteMetaSplits.add(IcebergMetaSplit.from(file));
         }
 
-        List<ManifestFile> deleteManifests = snapshot.deleteManifests(nativeTable.io());
+        List<ManifestFile> deleteManifests = manifests.getDeleteManifests();
         List<ManifestFile> matchingDeleteManifests = filterManifests(deleteManifests, nativeTable, predicate);
         if (metadataTableType == MetadataTableType.FILES || metadataTableType == MetadataTableType.PARTITIONS) {
             for (ManifestFile file : matchingDeleteManifests) {
@@ -735,6 +736,34 @@ public class IcebergMetadata implements ConnectorMetadata {
                         catalogProperties.enableDistributedPlanLoadColumnStatsWithEqDelete());
 
         return new IcebergMetaSpec(serializedTable, remoteMetaSplits, loadColumnStats);
+    }
+
+    /**
+     * Get snapshot manifests with cache support.
+     * Uses manifestListCache from CachingIcebergCatalog if available.
+     */
+    private SnapshotManifests getSnapshotManifestsWithCache(Snapshot snapshot, org.apache.iceberg.Table nativeTable) {
+        if (icebergCatalog instanceof CachingIcebergCatalog) {
+            CachingIcebergCatalog cachingCatalog = (CachingIcebergCatalog) icebergCatalog;
+            com.github.benmanes.caffeine.cache.Cache<Long, SnapshotManifests> cache = cachingCatalog.getManifestListCache();
+            if (cache != null) {
+                long snapshotId = snapshot.snapshotId();
+                SnapshotManifests cached = cache.getIfPresent(snapshotId);
+                if (cached != null) {
+                    return cached;
+                }
+                // Cache miss - read and cache
+                List<ManifestFile> dataManifests = snapshot.dataManifests(nativeTable.io());
+                List<ManifestFile> deleteManifests = snapshot.deleteManifests(nativeTable.io());
+                SnapshotManifests manifests = new SnapshotManifests(dataManifests, deleteManifests);
+                cache.put(snapshotId, manifests);
+                return manifests;
+            }
+        }
+        // No cache available - read directly
+        return new SnapshotManifests(
+                snapshot.dataManifests(nativeTable.io()),
+                snapshot.deleteManifests(nativeTable.io()));
     }
 
     private void triggerIcebergPlanFilesIfNeeded(PredicateSearchKey key, Table table) {

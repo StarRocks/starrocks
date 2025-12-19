@@ -35,6 +35,7 @@ import org.apache.iceberg.BaseTable;
 import org.apache.iceberg.DataFile;
 import org.apache.iceberg.DeleteFile;
 import org.apache.iceberg.ManifestFile;
+import org.apache.iceberg.Snapshot;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.SortOrder;
@@ -80,6 +81,11 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     private final Map<IcebergTableName, Set<String>> metaFileCacheMap = new ConcurrentHashMap<>(); // table -> metadata file paths
     private final Map<IcebergTableName, Long> tableLatestAccessTime = new ConcurrentHashMap<>();
     private final Map<IcebergTableName, Long> tableLatestRefreshTime = new ConcurrentHashMap<>();
+
+    // Cache for manifest-list: snapshotId -> SnapshotManifests (dataManifests + deleteManifests)
+    // snapshotId is globally unique in Iceberg, so no need for table-level indexing
+    // Invalidation happens via TTL (same as tables cache) - snapshots are immutable anyway
+    private final com.github.benmanes.caffeine.cache.Cache<Long, SnapshotManifests> manifestListCache;
 
     private final com.github.benmanes.caffeine.cache.LoadingCache<IcebergTableName, Map<String, Partition>> partitionCache;
 
@@ -164,6 +170,17 @@ public class CachingIcebergCatalog implements IcebergCatalog {
                             key,
                             value != null ? value.size() : 0,
                             cause));
+                })
+                .build() : null;
+
+        // Initialize manifest-list cache (snapshotId -> SnapshotManifests)
+        // Using simple count-based eviction since ManifestFile objects are lightweight
+        this.manifestListCache = enableCache ? Caffeine.newBuilder()
+                .executor(executorService)
+                .expireAfterWrite(icebergProperties.getIcebergMetaCacheTtlSec(), SECONDS)
+                .maximumSize(DEFAULT_CACHE_NUM)
+                .removalListener((Long snapshotId, SnapshotManifests value, RemovalCause cause) -> {
+                    LOG.debug("Manifest list cache removal: snapshotId={}, cause={}", snapshotId, cause);
                 })
                 .build() : null;
 
@@ -390,8 +407,15 @@ public class CachingIcebergCatalog implements IcebergCatalog {
         partitionCache.invalidate(baseIcebergTableName);
         partitionCache.get(updatedIcebergTableName);
 
+        // Cache manifest-list for the new snapshot
+        List<ManifestFile> dataManifests = updatedTable.currentSnapshot().dataManifests(updatedTable.io());
+        List<ManifestFile> deleteManifests = updatedTable.currentSnapshot().deleteManifests(updatedTable.io());
+        if (manifestListCache != null) {
+            manifestListCache.put(updatedSnapshotId, new SnapshotManifests(dataManifests, deleteManifests));
+        }
+
         TableMetadata updatedTableMetadata = updatedTable.operations().current();
-        List<ManifestFile> manifestFiles = updatedTable.currentSnapshot().dataManifests(updatedTable.io()).stream()
+        List<ManifestFile> manifestFiles = dataManifests.stream()
                 .filter(f -> updatedTableMetadata.snapshot(f.snapshotId()) != null)
                 .filter(f -> updatedTableMetadata.snapshot(f.snapshotId()).timestampMillis() > latestRefreshTime)
                 .filter(f -> dataFileCache.getIfPresent(f.path()) == null)
@@ -451,7 +475,18 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     }
 
     private void invalidateCache(IcebergTableName key) {
-        tables.invalidate(new IcebergTableCacheKey(key, new ConnectContext()));
+        // Get snapshotId before invalidating table cache
+        IcebergTableCacheKey tableKey = new IcebergTableCacheKey(key, new ConnectContext());
+        Table cachedTable = tables.getIfPresent(tableKey);
+        Long snapshotId = null;
+        if (cachedTable != null && cachedTable instanceof BaseTable) {
+            Snapshot snapshot = ((BaseTable) cachedTable).currentSnapshot();
+            if (snapshot != null) {
+                snapshotId = snapshot.snapshotId();
+            }
+        }
+
+        tables.invalidate(tableKey);
         // will invalidate all snapshots of this table
         partitionCache.invalidate(key);
         tableLatestAccessTime.remove(key);
@@ -461,6 +496,11 @@ public class CachingIcebergCatalog implements IcebergCatalog {
         if (paths != null && !paths.isEmpty()) {
             dataFileCache.invalidateAll(paths);
             deleteFileCache.invalidateAll(paths);
+        }
+
+        // Invalidate manifest-list cache for current snapshot
+        if (manifestListCache != null && snapshotId != null) {
+            manifestListCache.invalidate(snapshotId);
         }
     }
 
@@ -472,8 +512,13 @@ public class CachingIcebergCatalog implements IcebergCatalog {
         scanContext.setDataFileCacheWithMetrics(icebergProperties.isIcebergManifestCacheWithColumnStatistics());
         scanContext.setEnableCacheDataFileIdentifierColumnMetrics(
                 icebergProperties.enableCacheDataFileIdentifierColumnStatistics());
+        scanContext.setManifestListCache(manifestListCache);
 
         return delegate.getTableScan(table, scanContext);
+    }
+
+    public com.github.benmanes.caffeine.cache.Cache<Long, SnapshotManifests> getManifestListCache() {
+        return manifestListCache;
     }
 
     private Caffeine<Object, Object> newCacheBuilder(long expiresAfterWriteSec, long refreshInterval,

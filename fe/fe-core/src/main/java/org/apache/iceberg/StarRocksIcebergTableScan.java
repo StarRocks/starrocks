@@ -24,6 +24,7 @@ import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.AsyncIterable;
 import com.starrocks.connector.iceberg.CachingIcebergCatalog.IcebergTableName;
 import com.starrocks.connector.iceberg.IcebergApiConverter;
+import com.starrocks.connector.iceberg.SnapshotManifests;
 import com.starrocks.connector.iceberg.StarRocksIcebergTableScanContext;
 import com.starrocks.connector.iceberg.cost.IcebergMetricsReporter;
 import com.starrocks.connector.metadata.MetadataCollectJob;
@@ -72,6 +73,7 @@ public class StarRocksIcebergTableScan
     private final Cache<String, Set<DataFile>> dataFileCache;
     private final Cache<String, Set<DeleteFile>> deleteFileCache;
     private final Map<IcebergTableName, Set<String>> metaFileCacheMap;
+    private final Cache<Long, SnapshotManifests> manifestListCache;
     private final Map<Integer, String> specStringCache;
     private final Map<Integer, ResidualEvaluator> residualCache;
     private final Map<Integer, Evaluator> partitionEvaluatorCache;
@@ -117,6 +119,7 @@ public class StarRocksIcebergTableScan
         this.dataFileCache = scanContext.getDataFileCache();
         this.deleteFileCache = scanContext.getDeleteFileCache();
         this.metaFileCacheMap = scanContext.getMetaFileCacheMap();
+        this.manifestListCache = scanContext.getManifestListCache();
         this.dataFileCacheWithMetrics = scanContext.isDataFileCacheWithMetrics();
         this.enableCacheDataFileIdentifierColumnMetrics = scanContext.isEnableCacheDataFileIdentifierColumnMetrics();
         this.onlyReadCache = scanContext.isOnlyReadCache();
@@ -206,7 +209,7 @@ public class StarRocksIcebergTableScan
     }
 
     private List<ManifestFile> findMatchingDataManifests(Snapshot snapshot) {
-        List<ManifestFile> dataManifests = snapshot.dataManifests(io());
+        List<ManifestFile> dataManifests = getDataManifestsWithCache(snapshot);
         scanMetrics().totalDataManifests().increment(dataManifests.size());
 
         List<ManifestFile> matchingDataManifests = IcebergApiConverter.filterManifests(dataManifests, table(), filter());
@@ -217,13 +220,61 @@ public class StarRocksIcebergTableScan
     }
 
     private List<ManifestFile> findMatchingDeleteManifests(Snapshot snapshot) {
-        List<ManifestFile> deleteManifests = snapshot.deleteManifests(io());
+        List<ManifestFile> deleteManifests = getDeleteManifestsWithCache(snapshot);
         List<ManifestFile> matchingDeleteManifests = IcebergApiConverter.filterManifests(deleteManifests, table(), filter());
 
         scanMetrics().totalDeleteManifests().increment(deleteManifests.size());
         scanMetrics().skippedDeleteManifests().increment(deleteManifests.size() - matchingDeleteManifests.size());
 
         return matchingDeleteManifests;
+    }
+
+    /**
+     * Get data manifests from cache if available, otherwise read from snapshot and cache.
+     */
+    private List<ManifestFile> getDataManifestsWithCache(Snapshot snapshot) {
+        if (manifestListCache == null) {
+            return snapshot.dataManifests(io());
+        }
+
+        long snapshotId = snapshot.snapshotId();
+        SnapshotManifests cached = manifestListCache.getIfPresent(snapshotId);
+        if (cached != null) {
+            LOG.debug("Manifest-list cache HIT for snapshot {}", snapshotId);
+            return cached.getDataManifests();
+        }
+
+        // Cache miss - read from snapshot and cache
+        LOG.debug("Manifest-list cache MISS for snapshot {}", snapshotId);
+        List<ManifestFile> dataManifests = snapshot.dataManifests(io());
+        List<ManifestFile> deleteManifests = snapshot.deleteManifests(io());
+        manifestListCache.put(snapshotId, new SnapshotManifests(dataManifests, deleteManifests));
+
+        return dataManifests;
+    }
+
+    /**
+     * Get delete manifests from cache if available, otherwise read from snapshot and cache.
+     */
+    private List<ManifestFile> getDeleteManifestsWithCache(Snapshot snapshot) {
+        if (manifestListCache == null) {
+            return snapshot.deleteManifests(io());
+        }
+
+        long snapshotId = snapshot.snapshotId();
+        SnapshotManifests cached = manifestListCache.getIfPresent(snapshotId);
+        if (cached != null) {
+            LOG.debug("Manifest-list cache HIT for snapshot {} (delete)", snapshotId);
+            return cached.getDeleteManifests();
+        }
+
+        // Cache miss - read from snapshot and cache
+        LOG.debug("Manifest-list cache MISS for snapshot {} (delete)", snapshotId);
+        List<ManifestFile> dataManifests = snapshot.dataManifests(io());
+        List<ManifestFile> deleteManifests = snapshot.deleteManifests(io());
+        manifestListCache.put(snapshotId, new SnapshotManifests(dataManifests, deleteManifests));
+
+        return deleteManifests;
     }
 
     private CloseableIterable<FileScanTask> planFileTasksLocally(
