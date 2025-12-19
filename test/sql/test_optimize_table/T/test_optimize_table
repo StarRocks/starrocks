@@ -183,8 +183,12 @@ show create table t;
 -- show partitions from t;
 select * from t;
 
+<<<<<<< HEAD
 -- name: test_online_optimize_table_pk @sequential @slow
 admin set frontend config ('enable_online_optimize_table'='true');
+=======
+-- name: test_online_optimize_table_pk @sequential @native
+>>>>>>> 34af2a58a9 ([UT] Add @native tag to SQL test cases (#67005))
 create table tpk(k int) primary key(k) distributed by hash(k) buckets 10;
 show create table tpk;
 insert into tpk values(1);
@@ -231,8 +235,12 @@ function: wait_optimize_table_finish()
 show create table tpk;
 select * from tpk;
 
+<<<<<<< HEAD
 -- name: test_online_optimize_table_stream_load @sequential @slow
 admin set frontend config ('enable_online_optimize_table'='true');
+=======
+-- name: test_online_optimize_table_stream_load @sequential @native
+>>>>>>> 34af2a58a9 ([UT] Add @native tag to SQL test cases (#67005))
 create database db_${uuid0};
 use db_${uuid0};
 create table t(k int, k1 date) PARTITION BY RANGE(`k1`)
@@ -292,7 +300,7 @@ show create table t;
 -- show partitions from t;
 select count(*) from t;
 
--- name: test_optimize_table_with_special_characters @sequential
+-- name: test_optimize_table_with_special_characters @sequential @native
 create table `t#t`(k int) distributed by hash(k) buckets 10;
 show create table `t#t`;
 alter table `t#t` distributed by hash(k) buckets 20;
@@ -304,8 +312,12 @@ function: wait_optimize_table_finish()
 show create table `t#t`;
 admin set frontend config ('enable_online_optimize_table'='true');
 
+<<<<<<< HEAD
 -- name: test_online_optimize_table_expr_partition @sequential @slow
 admin set frontend config ('enable_online_optimize_table'='true');
+=======
+-- name: test_online_optimize_table_expr_partition @sequential @native
+>>>>>>> 34af2a58a9 ([UT] Add @native tag to SQL test cases (#67005))
 create table t(k int, k1 date) PARTITION BY date_trunc('day', k1)
 distributed by hash(k) buckets 10;
 insert into t values(1, '2020-06-01'),(2, '2020-07-01'),(3, '2020-08-01');
@@ -363,8 +375,12 @@ alter table t distributed by hash(k);
 cancel alter table optimize from t;
 function: wait_optimize_table_finish(expect_status="CANCELLED")
 
+<<<<<<< HEAD
 -- name: test_online_optimize_table_batch @seqential
 admin set frontend config ('enable_online_optimize_table'='true');
+=======
+-- name: test_online_optimize_table_batch @seqential @native
+>>>>>>> 34af2a58a9 ([UT] Add @native tag to SQL test cases (#67005))
 create database db_${uuid0};
 use db_${uuid0};
 create table t(k int, k1 date) PARTITION BY RANGE(`k1`)

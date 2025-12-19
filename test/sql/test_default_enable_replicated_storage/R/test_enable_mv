@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 -- name: test_default_enable_mv @sequential
+=======
+-- name: test_default_enable_mv @native
+>>>>>>> 34af2a58a9 ([UT] Add @native tag to SQL test cases (#67005))
 create database test_default_enable_mv;
 -- result:
 -- !result
