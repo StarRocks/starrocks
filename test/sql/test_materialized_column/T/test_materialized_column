@@ -1,4 +1,4 @@
--- name: test_create_table
+-- name: test_create_table @native
 CREATE DATABASE test_create_table;
 USE test_create_table;
 
@@ -166,7 +166,7 @@ DROP TABLE t;
 
 DROP DATABASE test_materialized_column_alter_table_with_concurrent_insert;
 
--- name: test_add_multiple_column
+-- name: test_add_multiple_column @native
 CREATE DATABASE test_add_multiple_column;
 USE test_add_multiple_column;
 
@@ -379,7 +379,7 @@ SHOW CREATE TABLE t0;
 
 DROP DATABASE test_schema_change_for_after;
 
--- name: test_compaction_after_adding_generated_column
+-- name: test_compaction_after_adding_generated_column @native
 CREATE DATABASE test_compaction_after_adding_generated_column;
 USE test_compaction_after_adding_generated_column;
 
