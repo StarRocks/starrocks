@@ -8049,7 +8049,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
                 return new DecimalLiteral(val.negate(), node.getPos());
             } else if (node instanceof FloatLiteral) {
                 double val = ((FloatLiteral) node).getDoubleValue();
-                return new FloatLiteral(-val);
+                return new FloatLiteral(-val, node.getPos());
             }
         }
         return node;
