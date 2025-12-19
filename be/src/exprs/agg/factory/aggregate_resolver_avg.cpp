@@ -39,7 +39,7 @@ struct ArrayAggDispatcher {
         if constexpr (lt_is_aggregate<lt> || lt_is_json<lt>) {
             auto func = std::make_shared<ArrayAggAggregateFunction<lt, false>>();
             using AggState = ArrayAggAggregateState<lt, false>;
-            resolver->add_aggregate_mapping<lt, TYPE_ARRAY, AggState, AggregateFunctionPtr, false>("array_agg", false,
+            resolver->add_aggregate_mapping<lt, TYPE_ARRAY, AggState, AggregateFunctionPtr, false>("array_agg", true,
                                                                                                    func);
         }
     }
@@ -80,27 +80,24 @@ struct ArrayAggDistinctDispatcher {
     void operator()(AggregateFuncResolver* resolver) {
         if constexpr (lt_is_aggregate<pt>) {
             using CppType = RunTimeCppType<pt>;
-            if constexpr (lt_is_largeint<pt>) {
-                using MyHashSet = phmap::flat_hash_set<CppType, Hash128WithSeed<PhmapSeed1>>;
-                auto func = std::make_shared<ArrayAggAggregateFunction<pt, true, MyHashSet>>();
-                using AggState = ArrayAggAggregateState<pt, true, MyHashSet>;
-                resolver->add_aggregate_mapping<pt, TYPE_ARRAY, AggState, AggregateFunctionPtr, false>(
-                        "array_agg_distinct", false, func);
-            } else if constexpr (lt_is_fixedlength<pt>) {
-                using MyHashSet = phmap::flat_hash_set<CppType, StdHash<CppType>>;
-                auto func = std::make_shared<ArrayAggAggregateFunction<pt, true, MyHashSet>>();
-                using AggState = ArrayAggAggregateState<pt, true, MyHashSet>;
-                resolver->add_aggregate_mapping<pt, TYPE_ARRAY, AggState, AggregateFunctionPtr, false>(
-                        "array_agg_distinct", false, func);
-            } else if constexpr (lt_is_string<pt>) {
-                using MyHashSet = SliceHashSet;
-                auto func = std::make_shared<ArrayAggAggregateFunction<pt, true, MyHashSet>>();
-                using AggState = ArrayAggAggregateState<pt, true, MyHashSet>;
-                resolver->add_aggregate_mapping<pt, TYPE_ARRAY, AggState, AggregateFunctionPtr, false>(
-                        "array_agg_distinct", false, func);
-            } else {
+
+            using MyHashSet = std::conditional_t<
+                    lt_is_largeint<pt>, phmap::flat_hash_set<CppType, Hash128WithSeed<PhmapSeed1>>,
+                    std::conditional_t<lt_is_fixedlength<pt>, phmap::flat_hash_set<CppType, StdHash<CppType>>,
+                                       std::conditional_t<lt_is_string<pt>, SliceHashSet, void // default fallback
+                                                          >>>;
+            if constexpr (std::is_same_v<void, MyHashSet>) {
                 throw std::runtime_error("array_agg_distinct does not support " + type_to_string(pt));
             }
+            auto func = std::make_shared<ArrayAggAggregateFunction<pt, true, MyHashSet>>();
+            using AggState = ArrayAggAggregateState<pt, true, MyHashSet>;
+            resolver->add_aggregate_mapping<pt, TYPE_ARRAY, AggState, AggregateFunctionPtr, false>("array_agg_distinct",
+                                                                                                   false, func);
+
+            using WindowAggState = ArrayAggWindowState<pt, true, MyHashSet>;
+            auto window_func = std::make_shared<ArrayAggAggregateWindowFunction<pt, true, MyHashSet>>();
+            resolver->add_window_mapping<pt, TYPE_ARRAY, WindowAggState, AggregateFunctionPtr, false>(
+                    "array_agg_distinct", window_func);
         }
     }
 };

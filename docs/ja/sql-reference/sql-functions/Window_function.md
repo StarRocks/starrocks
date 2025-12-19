@@ -46,7 +46,10 @@ FROM events;
 
 ```SQL
 ROWS BETWEEN [ { m | UNBOUNDED } PRECEDING | CURRENT ROW] [ AND [CURRENT ROW | { UNBOUNDED | n } FOLLOWING] ]
+RANGE BETWEEN [ { m | UNBOUNDED } PRECEDING | CURRENT ROW] [ AND [CURRENT ROW | { UNBOUNDED | n } FOLLOWING] ]
 ```
+
+> **ARRAY_AGG() ウィンドウフレーム制限:** ARRAY_AGG() をウィンドウ関数として使用する場合、RANGE フレームのみがサポートされます。ROWS フレームはサポートされていません。
 
 ## ウィンドウ関数のサンプルテーブル
 
@@ -85,6 +88,204 @@ INSERT INTO `scores` VALUES
 ## 関数の例
 
 このセクションでは、StarRocksでサポートされているウィンドウ関数について説明します。
+
+### ARRAY_AGG()
+
+`ARRAY_AGG()` は、ウィンドウ内の値（NULL値を含む）を配列に集約します。`DISTINCT` キーワードを使用して重複値を削除したり、`ORDER BY` 句を使用して配列内の要素の順序を指定したりできます。
+
+この関数は v3.4 からサポートされています。
+
+:::warning ARRAY_AGG() ウィンドウフレーム制限
+`ARRAY_AGG()` をウィンドウ関数として使用する場合、**RANGE** ウィンドウフレームのみがサポートされます。**ROWS ウィンドウフレームはサポートされていません**。ROWS フレームを指定するとエラーが返されます。
+:::
+
+**構文:**
+
+```SQL
+ARRAY_AGG([DISTINCT] expr [ORDER BY expr [ASC | DESC]]) OVER([partition_by_clause] [order_by_clause] [window_clause])
+```
+
+**パラメータ:**
+
+- `expr`: 集約する式。
+- `DISTINCT`: オプション。指定すると、結果の配列から重複値が削除されます。
+- `ORDER BY`: オプション。結果の配列内の要素の順序を指定します。
+
+**戻り値:**
+
+ウィンドウ内のすべての値を含む ARRAY を返します。
+
+**使用上の注意:**
+
+- NULL値は結果の配列に含まれます。
+- ウィンドウフレームが指定されていない場合、デフォルトは `RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW` です。
+- ORDER BY 句で同じ値を持つ行は、同じ配列結果を取得します（RANGE フレームを使用するため）。
+- RANGE フレームのみがサポートされています。ROWS フレームはサポートされていません。
+
+**例:**
+
+この例では、[サンプルテーブル](#ウィンドウ関数のサンプルテーブル) `scores` のデータを使用します。
+
+例1: 基本的な ARRAY_AGG() ウィンドウ関数 - 各パーティションで現在の行までのスコアを累積的に収集します。
+
+```SQL
+SELECT *,
+    array_agg(score) 
+        OVER (
+            PARTITION BY subject 
+            ORDER BY score
+        ) AS score_list
+FROM scores
+WHERE subject IN ('math');
+```
+
+出力:
+
+```plaintext
++------+-------+---------+-------+-------------------+
+| id   | name  | subject | score | score_list        |
++------+-------+---------+-------+-------------------+
+|    1 | lily  | math    |  NULL | [null]            |
+|    5 | mike  | math    |    70 | [null,70]         |
+|    2 | tom   | math    |    80 | [null,70,80,80]   |
+|    4 | amy   | math    |    80 | [null,70,80,80]   |
+|    6 | amber | math    |    92 | [null,70,80,80,92]|
+|    3 | jack  | math    |    95 | [null,70,80,80,92,95]|
++------+-------+---------+-------+-------------------+
+```
+
+注意: tom と amy の両方のスコアは 80 です。RANGE フレームを使用するため、同じ配列結果を取得します。
+
+例2: DISTINCT を使用して重複値を削除します。
+
+```SQL
+SELECT *,
+    array_agg(DISTINCT score) 
+        OVER (
+            PARTITION BY subject 
+            ORDER BY score
+        ) AS unique_scores
+FROM scores
+WHERE subject IN ('math');
+```
+
+出力:
+
+```plaintext
++------+-------+---------+-------+------------------+
+| id   | name  | subject | score | unique_scores    |
++------+-------+---------+-------+------------------+
+|    1 | lily  | math    |  NULL | [null]           |
+|    5 | mike  | math    |    70 | [null,70]        |
+|    2 | tom   | math    |    80 | [null,70,80]     |
+|    4 | amy   | math    |    80 | [null,70,80]     |
+|    6 | amber | math    |    92 | [null,70,80,92]  |
+|    3 | jack  | math    |    95 | [null,70,80,92,95]|
++------+-------+---------+-------+------------------+
+```
+
+例3: ARRAY_AGG 内の ORDER BY を使用して配列要素をソートします。
+
+```SQL
+SELECT *,
+    array_agg(score ORDER BY score DESC) 
+        OVER (
+            PARTITION BY subject
+        ) AS scores_desc
+FROM scores
+WHERE subject IN ('math');
+```
+
+出力:
+
+```plaintext
++------+-------+---------+-------+------------------------+
+| id   | name  | subject | score | scores_desc            |
++------+-------+---------+-------+------------------------+
+|    1 | lily  | math    |  NULL | [95,92,80,80,70,null]  |
+|    5 | mike  | math    |    70 | [95,92,80,80,70,null]  |
+|    2 | tom   | math    |    80 | [95,92,80,80,70,null]  |
+|    4 | amy   | math    |    80 | [95,92,80,80,70,null]  |
+|    6 | amber | math    |    92 | [95,92,80,80,70,null]  |
+|    3 | jack  | math    |    95 | [95,92,80,80,70,null]  |
++------+-------+---------+-------+------------------------+
+```
+
+例4: 明示的な RANGE フレームを使用してパーティション全体を集約します。
+
+```SQL
+SELECT *,
+    array_agg(score) 
+        OVER (
+            PARTITION BY subject 
+            ORDER BY score
+            RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
+        ) AS all_scores
+FROM scores
+WHERE subject IN ('math');
+```
+
+出力:
+
+```plaintext
++------+-------+---------+-------+--------------------------+
+| id   | name  | subject | score | all_scores               |
++------+-------+---------+-------+--------------------------+
+|    1 | lily  | math    |  NULL | [null,70,80,80,92,95]    |
+|    5 | mike  | math    |    70 | [null,70,80,80,92,95]    |
+|    2 | tom   | math    |    80 | [null,70,80,80,92,95]    |
+|    4 | amy   | math    |    80 | [null,70,80,80,92,95]    |
+|    6 | amber | math    |    92 | [null,70,80,80,92,95]    |
+|    3 | jack  | math    |    95 | [null,70,80,80,92,95]    |
++------+-------+---------+-------+--------------------------+
+```
+
+例5: 実用的なユースケース - 株価履歴の収集。
+
+```SQL
+SELECT 
+    stock_symbol,
+    closing_date,
+    closing_price,
+    array_agg(closing_price) 
+        OVER (
+            PARTITION BY stock_symbol 
+            ORDER BY closing_date
+            RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+        ) AS price_history
+FROM stock_ticker;
+```
+
+出力:
+
+```plaintext
++--------------+---------------------+---------------+--------------------------------------+
+| stock_symbol | closing_date        | closing_price | price_history                        |
++--------------+---------------------+---------------+--------------------------------------+
+| JDR          | 2014-10-02 00:00:00 |         12.86 | [12.86]                              |
+| JDR          | 2014-10-03 00:00:00 |         12.89 | [12.86,12.89]                        |
+| JDR          | 2014-10-04 00:00:00 |         12.94 | [12.86,12.89,12.94]                  |
+| JDR          | 2014-10-05 00:00:00 |         12.55 | [12.86,12.89,12.94,12.55]            |
+| JDR          | 2014-10-06 00:00:00 |         14.03 | [12.86,12.89,12.94,12.55,14.03]      |
+| JDR          | 2014-10-07 00:00:00 |         14.75 | [12.86,12.89,12.94,12.55,14.03,14.75]|
+| JDR          | 2014-10-08 00:00:00 |         13.98 | [12.86,12.89,12.94,12.55,14.03,14.75,13.98]|
++--------------+---------------------+---------------+--------------------------------------+
+```
+
+例6: 無効な使用法 - ROWS フレームの使用を試みる（エラーが返されます）。
+
+```SQL
+-- このクエリは失敗します。ARRAY_AGG は ROWS フレームをサポートしていません。
+SELECT *,
+    array_agg(score) 
+        OVER (
+            PARTITION BY subject 
+            ORDER BY score
+            ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING  -- エラー！サポートされていません！
+        ) AS nearby_scores
+FROM scores;
+-- エラー: ARRAY_AGG ウィンドウ関数は ROWS フレームをサポートしていません
+```
 
 ### AVG()
 
