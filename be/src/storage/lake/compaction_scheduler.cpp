@@ -127,6 +127,8 @@ void CompactionTaskCallback::finish_task(std::unique_ptr<CompactionTaskContext>&
     compact_stat->set_in_queue_time_sec(context->stats->in_queue_time_sec);
     compact_stat->set_sub_task_count(_request->tablet_ids_size());
     compact_stat->set_total_compact_input_file_size(context->stats->input_file_size);
+    compact_stat->set_read_bytes_peer(context->stats->io_bytes_read_peer_cache);
+    compact_stat->set_read_time_peer(context->stats->io_ns_read_peer_cache);
 
     DCHECK(_request != nullptr);
     _status.update(context->status);
