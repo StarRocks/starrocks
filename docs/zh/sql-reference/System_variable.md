@@ -1221,10 +1221,10 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 
 ### resource_group 
 
-        * **描述**: 此会话指定的 resource group
-        * **默认值**: ""
-        * **数据类型**: String
-        * **引入版本**: 3.2.0
+* **描述**: 此会话指定的 resource group
+* **默认值**: ""
+* **数据类型**: String
+* **引入版本**: 3.2.0
 
 ### runtime_filter_on_exchange_node
 
