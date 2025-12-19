@@ -172,18 +172,18 @@ EXECUTE cherrypick_snapshot(54321);
 
 You can expire snapshots earlier than a specific point of time. This operation will delete the data files of the expired snapshots.
 
-**`expire_snapshot` Syntax**
+**`expire_snapshots` Syntax**
 
 ```SQL
 ALTER TABLE [catalog.][database.]table_name
-EXECUTE expire_snapshot('<datetime>')
+EXECUTE expire_snapshots('<datetime>')
 ```
 
 **Example**
 
 ```SQL
 ALTER TABLE iceberg.sales.order
-EXECUTE expire_snapshot('2023-12-17 00:14:38')
+EXECUTE expire_snapshots('2023-12-17 00:14:38')
 ```
 
 ### Drop a branch or a tag
