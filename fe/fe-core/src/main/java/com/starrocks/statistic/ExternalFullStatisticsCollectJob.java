@@ -137,7 +137,7 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
 
             String sql = Joiner.on(" UNION ALL ").join(sqlUnion);
 
-            collectStatisticSync(sql, context);
+            collectStatisticSync(sql, context, analyzeStatus);
             finishedSQLNum++;
             analyzeStatus.setProgress(finishedSQLNum * 100 / totalCollectSQL);
             GlobalStateMgr.getCurrentState().getAnalyzeMgr().replayAddAnalyzeStatus(analyzeStatus);
@@ -288,7 +288,10 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
     }
 
     @Override
-    public void collectStatisticSync(String sql, ConnectContext context) throws Exception {
+    public void collectStatisticSync(String sql, ConnectContext context, AnalyzeStatus analyzeStatus) throws Exception {
+        // Calculate and set remaining timeout for this SQL task
+        calculateAndSetRemainingTimeout(context, analyzeStatus);
+
         LOG.debug("statistics collect sql : " + sql);
         StatisticExecutor executor = new StatisticExecutor();
 
