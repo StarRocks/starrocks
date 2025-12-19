@@ -1872,7 +1872,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 
 ##### datacache_auto_adjust_enable
 
-- デフォルト: false
+- デフォルト: true
 - タイプ: Boolean
 - 単位: -
 - 可変: はい
