@@ -17,6 +17,7 @@
 #include <limits>
 
 #include "gtest/gtest.h"
+#include "testutil/assert.h"
 
 namespace starrocks {
 
@@ -31,10 +32,10 @@ protected:
 // Test encoding and decoding empty roaring
 TEST_F(VarIntEncoderTest, test_encode_decode_empty) {
     roaring::Roaring empty;
-    std::vector<uint8_t> encoded = encoder_->encode(empty);
+    ASSIGN_OR_ASSERT_FAIL(auto encoded, encoder_->encode(empty));
     EXPECT_TRUE(encoded.empty());
 
-    roaring::Roaring decoded = encoder_->decode(encoded);
+    ASSIGN_OR_ASSERT_FAIL(auto decoded, encoder_->decode(encoded));
     EXPECT_TRUE(decoded.isEmpty());
 }
 
@@ -43,10 +44,10 @@ TEST_F(VarIntEncoderTest, test_encode_decode_single_value) {
     roaring::Roaring original;
     original.add(42);
 
-    std::vector<uint8_t> encoded = encoder_->encode(original);
+    ASSIGN_OR_ASSERT_FAIL(auto encoded, encoder_->encode(original));
     EXPECT_FALSE(encoded.empty());
 
-    roaring::Roaring decoded = encoder_->decode(encoded);
+    ASSIGN_OR_ASSERT_FAIL(auto decoded, encoder_->decode(encoded));
     EXPECT_EQ(1, decoded.cardinality());
     EXPECT_TRUE(decoded.contains(42));
 }
@@ -60,10 +61,10 @@ TEST_F(VarIntEncoderTest, test_encode_decode_multiple_values) {
     original.add(1000);
     original.add(10000);
 
-    std::vector<uint8_t> encoded = encoder_->encode(original);
+    ASSIGN_OR_ASSERT_FAIL(auto encoded, encoder_->encode(original));
     EXPECT_FALSE(encoded.empty());
 
-    roaring::Roaring decoded = encoder_->decode(encoded);
+    ASSIGN_OR_ASSERT_FAIL(auto decoded, encoder_->decode(encoded));
     EXPECT_EQ(5, decoded.cardinality());
     EXPECT_TRUE(decoded.contains(1));
     EXPECT_TRUE(decoded.contains(10));
@@ -79,10 +80,10 @@ TEST_F(VarIntEncoderTest, test_encode_decode_consecutive_values) {
         original.add(i);
     }
 
-    std::vector<uint8_t> encoded = encoder_->encode(original);
+    ASSIGN_OR_ASSERT_FAIL(auto encoded, encoder_->encode(original));
     EXPECT_FALSE(encoded.empty());
 
-    roaring::Roaring decoded = encoder_->decode(encoded);
+    ASSIGN_OR_ASSERT_FAIL(auto decoded, encoder_->decode(encoded));
     EXPECT_EQ(100, decoded.cardinality());
     for (uint32_t i = 0; i < 100; i++) {
         EXPECT_TRUE(decoded.contains(i));
@@ -97,10 +98,10 @@ TEST_F(VarIntEncoderTest, test_encode_decode_sparse_values) {
     original.add(2000000);
     original.add(3000000);
 
-    std::vector<uint8_t> encoded = encoder_->encode(original);
+    ASSIGN_OR_ASSERT_FAIL(auto encoded, encoder_->encode(original));
     EXPECT_FALSE(encoded.empty());
 
-    roaring::Roaring decoded = encoder_->decode(encoded);
+    ASSIGN_OR_ASSERT_FAIL(auto decoded, encoder_->decode(encoded));
     EXPECT_EQ(4, decoded.cardinality());
     EXPECT_TRUE(decoded.contains(0));
     EXPECT_TRUE(decoded.contains(1000000));
@@ -120,8 +121,8 @@ TEST_F(VarIntEncoderTest, test_encode_decode_boundary_values) {
     original.add(2097152);   // Min 4-byte varint
     original.add(268435455); // Max 4-byte varint
 
-    std::vector<uint8_t> encoded = encoder_->encode(original);
-    roaring::Roaring decoded = encoder_->decode(encoded);
+    ASSIGN_OR_ASSERT_FAIL(auto encoded, encoder_->encode(original));
+    ASSIGN_OR_ASSERT_FAIL(auto decoded, encoder_->decode(encoded));
 
     EXPECT_EQ(original.cardinality(), decoded.cardinality());
     EXPECT_TRUE(decoded.contains(0));
@@ -139,10 +140,10 @@ TEST_F(VarIntEncoderTest, test_encode_decode_max_value) {
     roaring::Roaring original;
     original.add(std::numeric_limits<uint32_t>::max());
 
-    std::vector<uint8_t> encoded = encoder_->encode(original);
+    ASSIGN_OR_ASSERT_FAIL(auto encoded, encoder_->encode(original));
     EXPECT_FALSE(encoded.empty());
 
-    roaring::Roaring decoded = encoder_->decode(encoded);
+    ASSIGN_OR_ASSERT_FAIL(auto decoded, encoder_->decode(encoded));
     EXPECT_EQ(1, decoded.cardinality());
     EXPECT_TRUE(decoded.contains(std::numeric_limits<uint32_t>::max()));
 }
@@ -179,8 +180,8 @@ TEST_F(VarIntEncoderTest, test_encode_decode_large_dataset) {
         original.add(i);
     }
 
-    std::vector<uint8_t> encoded = encoder_->encode(original);
-    roaring::Roaring decoded = encoder_->decode(encoded);
+    ASSIGN_OR_ASSERT_FAIL(auto encoded, encoder_->encode(original));
+    ASSIGN_OR_ASSERT_FAIL(auto decoded, encoder_->decode(encoded));
 
     EXPECT_EQ(original.cardinality(), decoded.cardinality());
     EXPECT_EQ(original, decoded);

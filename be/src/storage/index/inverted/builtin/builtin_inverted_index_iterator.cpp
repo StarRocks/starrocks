@@ -242,14 +242,26 @@ Status BuiltinInvertedIndexIterator::_phrase_query(const Slice* search_query, ro
     std::vector<uint64_t> ranks(filtered_rows.cardinality(), 0);
     filtered_rows.toUint32Array(candidate_row_ids.data());
 
+    auto func = []<typename T>(const T& vec) -> std::string {
+        std::string result;
+        for (const auto& v : vec) {
+            result += " " + std::to_string(v);
+        }
+        return result.substr(1);
+    };
+    LOG(INFO) << "match_phrase: processing candidate row: " << func(candidate_row_ids);
+
     for (uint32_t i = 0; i < dict_ids.size(); ++i) {
         rowid_t dict_id = dict_ids[i];
+        LOG(INFO) << "match_phrase: candidate processing dict: " << dict_id;
         full_doc_ids[i].rank_many(candidate_row_ids.data(), candidate_row_ids.data() + candidate_row_ids.size(),
                                   ranks.data());
+        LOG(INFO) << "match_phrase: candidate processing rank: " << func(candidate_row_ids);
         ASSIGN_OR_RETURN(auto ranked_positions, _bitmap_itr->read_positions(dict_id, ranks));
         for (uint32_t j = 0; j < candidate_row_ids.size(); ++j) {
             rowid_t row_id = candidate_row_ids[j];
             positions[row_id][dict_id] = ranked_positions[j];
+            LOG(INFO) << "match_phrase: candidate processing positions: " << func(ranked_positions[j]);
         }
     }
 

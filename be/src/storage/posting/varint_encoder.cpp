@@ -40,9 +40,13 @@ uint32_t VarIntEncoder::decodeValue(const std::vector<uint8_t>& data, size_t& of
     return result;
 }
 
-std::vector<uint8_t> VarIntEncoder::encode(const roaring::Roaring& roaring) {
+StatusOr<std::vector<uint8_t>> VarIntEncoder::encode(const roaring::Roaring& roaring) {
     if (roaring.cardinality() <= 0) {
-        return {};
+        return std::vector<uint8_t>();
+    }
+
+    if (roaring.maximum() > std::numeric_limits<int32_t>::max()) {
+        return Status::InvalidArgument("too large roaring for VarIntEncoder, should not bigger that 2147483647.");
     }
 
     std::vector<uint8_t> encoded;
@@ -55,9 +59,9 @@ std::vector<uint8_t> VarIntEncoder::encode(const roaring::Roaring& roaring) {
     return encoded;
 }
 
-roaring::Roaring VarIntEncoder::decode(const std::vector<uint8_t>& data) {
+StatusOr<roaring::Roaring> VarIntEncoder::decode(const std::vector<uint8_t>& data) {
     if (data.empty()) {
-        return {};
+        return roaring::Roaring();
     }
 
     size_t offset = 0;
@@ -72,7 +76,7 @@ roaring::Roaring VarIntEncoder::decode(const std::vector<uint8_t>& data) {
     if (positions.is_context()) {
         return *positions.roaring();
     }
-    return roaring::Roaring::bitmapOf(positions.value());
+    return roaring::Roaring::bitmapOf(1, positions.value());
 }
 
 } // namespace starrocks

@@ -304,11 +304,12 @@ StatusOr<std::vector<roaring::Roaring>> BitmapIndexIterator::read_positions(
     const auto offset = viewer.value(0);
 
     std::vector<roaring::Roaring> result;
-    result.reserve(num_to_read);
+    result.reserve(doc_ranks.size());
 
     const auto encoder = EncoderFactory::createEncoder(EncodingType::VARINT);
     for (const auto& doc_rank : doc_ranks) {
         const ordinal_t ordinal = offset + doc_rank - 1;
+        LOG(INFO) << "match_phrase: seek posting position to " << ordinal;
         RETURN_IF_ERROR(_posting_position_iter->seek_to_ordinal(ordinal));
 
         auto position_col = ChunkHelper::column_from_field_type(TYPE_VARBINARY, false);
@@ -324,7 +325,7 @@ StatusOr<std::vector<roaring::Roaring>> BitmapIndexIterator::read_positions(
         const Slice encoded_positions = position_viewer.value(0);
         const std::vector<uint8_t> positions_bytes(encoded_positions.get_data(),
                                                    encoded_positions.get_data() + encoded_positions.get_size());
-        auto positions = encoder->decode(positions_bytes);
+        ASSIGN_OR_RETURN(auto positions, encoder->decode(positions_bytes));
         result.push_back(positions);
     }
     return result;

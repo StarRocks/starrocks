@@ -384,7 +384,7 @@ private:
         for (const auto* posting : posting_lists) {
             for (const auto& doc_id : posting->get_all_doc_ids()) {
                 roaring::Roaring positions = posting->get_positions(doc_id);
-                auto encoded = encoder->encode(positions);
+                ASSIGN_OR_RETURN(auto encoded, encoder->encode(positions));
                 Slice tmp(encoded.data(), encoded.size());
                 RETURN_IF_ERROR(posting_writer.add(&tmp));
             }

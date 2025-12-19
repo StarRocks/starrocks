@@ -17,6 +17,7 @@
 #include <memory>
 #include <vector>
 
+#include "common/statusor.h"
 #include "roaring/roaring.hh"
 
 namespace starrocks {
@@ -34,14 +35,20 @@ class Encoder {
 public:
     virtual ~Encoder() = default;
 
-    virtual std::vector<uint8_t> encode(const roaring::Roaring& roaring) = 0;
+    /**
+     * Encode a roaring bitmap whose range should be limited to signed integer
+     *
+     * @param roaring signed integer ranged roaring bitmap
+     * @return encoded byte array
+     */
+    virtual StatusOr<std::vector<uint8_t>> encode(const roaring::Roaring& roaring) = 0;
 
     /**
      * Decode a byte array back to unsigned 32-bit integers
      * @param data The encoded byte array
      * @return Decoded values
      */
-    virtual roaring::Roaring decode(const std::vector<uint8_t>& data) = 0;
+    virtual StatusOr<roaring::Roaring> decode(const std::vector<uint8_t>& data) = 0;
 
     /**
      * Get the encoding type of this encoder
