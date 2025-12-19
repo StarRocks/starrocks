@@ -4468,6 +4468,15 @@ PARALLEL_TEST(VecStringFunctionsTest, initcapTest) {
     ASSERT_EQ("Café Resumé", v->get_data()[12].to_string());
     ASSERT_EQ("Привет Мир", v->get_data()[13].to_string());
     ASSERT_EQ("Hello-Wörld_123", v->get_data()[14].to_string());
+
+    Columns invalid_columns;
+    auto invalid_str = BinaryColumn::create();
+    invalid_str->append(std::string(1, (char)0xFF));
+    invalid_columns.emplace_back(invalid_str);
+
+    EXPECT_THROW({
+        StringFunctions::initcap(ctx.get(), invalid_columns);
+    }, std::runtime_error);
 }
 
 } // namespace starrocks

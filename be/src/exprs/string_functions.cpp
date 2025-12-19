@@ -5087,6 +5087,10 @@ DEFINE_STRING_UNARY_FN_WITH_IMPL(initcapImpl, str) {
         UChar32 c;
         U8_NEXT(str.data, i, len, c);
 
+        if (c < 0) {
+            throw std::runtime_error("Invalid UTF-8 sequence");
+        }
+
         if (u_isalnum(c)) {
             if (word_start) {
                 c = u_toupper(c);
@@ -5102,9 +5106,11 @@ DEFINE_STRING_UNARY_FN_WITH_IMPL(initcapImpl, str) {
         int32_t offset = 0;
         UBool is_error = false;
         U8_APPEND(temp, offset, 4, c, is_error);
-        if (!is_error) {
-            result.append(temp, offset);
+
+        if (is_error) {
+            throw std::runtime_error("Invalid UTF-8 sequence during encoding");
         }
+        result.append(temp, offset);
     }
     return result;
 }
