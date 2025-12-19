@@ -57,7 +57,7 @@ roaring::Roaring PostingList::get_all_doc_ids() const {
 
     auto val = _postings->value();
     rowid_t high = static_cast<rowid_t>(val >> 32);
-    return roaring::Roaring::bitmapOf(high);
+    return roaring::Roaring({high});
 }
 
 roaring::Roaring PostingList::get_positions(rowid_t doc_id) const {
@@ -71,7 +71,7 @@ roaring::Roaring PostingList::get_positions(rowid_t doc_id) const {
     auto val = _postings->value();
     rowid_t high = static_cast<rowid_t>(val >> 32);
     if (high == doc_id) {
-        return roaring::Roaring::bitmapOf(static_cast<uint32_t>(val));
+        return roaring::Roaring({static_cast<uint32_t>(val)});
     }
     return roaring::Roaring();
 }
