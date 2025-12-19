@@ -2683,15 +2683,6 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Description: The time interval at which to check compaction for Primary Key tables.
 - Introduced in: -
 
-##### update_compaction_chunk_size_for_row_store
-
-- Default: 0
-- Type: Int
-- Unit: Rows
-- Is mutable: Yes
-- Description: Overrides the chunk size (number of rows per chunk) used during update compaction for tablets that use column-with-row-store representation. By default (0) StarRocks computes per-column-group chunk size with CompactionUtils::get_read_chunk_size based on compaction memory limit, vector chunk size, total input rows and memory footprint. When this config is set to a positive integer and tablet.is_column_with_row_store() is true, RowsetMerger forces _chunk_size to this value in both horizontal and vertical update compaction paths (rowset_merger.cpp). Use a non-zero value only when the automatic calculation is producing suboptimal results; increasing the value can reduce writer/IO overhead but raises peak memory use, while decreasing it reduces memory pressure at the cost of more chunks and potential performance impact.
-- Introduced in: v3.2.3
-
 ##### update_compaction_delvec_file_io_amp_ratio
 
 - Default: 2
