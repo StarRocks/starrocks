@@ -125,7 +125,7 @@ Status OlapMetaReader::_get_segments(const TabletSharedPtr& tablet, const Versio
     Status acquire_rowset_st;
     {
         std::shared_lock l(tablet->get_header_lock());
-        acquire_rowset_st = tablet->capture_consistent_rowsets(_params.version, &_rowsets);
+        acquire_rowset_st = tablet->capture_consistent_rowsets(version, &_rowsets);
     }
 
     if (!acquire_rowset_st.ok()) {

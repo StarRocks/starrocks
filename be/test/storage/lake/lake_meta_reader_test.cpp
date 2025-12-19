@@ -116,12 +116,12 @@ TEST_F(LakeMetaReaderTest, test_get_segments_with_primary_key_table) {
     // Get the tablet
     ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(tablet_id, 2));
 
-    // Call TEST__get_segments
+    // Call TEST_get_segments
     LakeMetaReader reader;
     std::vector<SegmentSharedPtr> segments;
     std::vector<SegmentMetaCollectOptions> options_list;
 
-    ASSERT_OK(reader.TEST__get_segments(tablet, &segments, &options_list));
+    ASSERT_OK(reader.TEST_get_segments(tablet, &segments, &options_list));
 
     // Verify we got 2 segments
     ASSERT_EQ(2, segments.size());
@@ -146,12 +146,12 @@ TEST_F(LakeMetaReaderTest, test_get_segments_with_dup_keys_table) {
     // Get the tablet
     ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(tablet_id, 2));
 
-    // Call TEST__get_segments
+    // Call TEST_get_segments
     LakeMetaReader reader;
     std::vector<SegmentSharedPtr> segments;
     std::vector<SegmentMetaCollectOptions> options_list;
 
-    ASSERT_OK(reader.TEST__get_segments(tablet, &segments, &options_list));
+    ASSERT_OK(reader.TEST_get_segments(tablet, &segments, &options_list));
 
     // Verify we got 2 segments
     ASSERT_EQ(2, segments.size());
@@ -168,12 +168,12 @@ TEST_F(LakeMetaReaderTest, test_get_segments_with_multiple_rowsets) {
     // Get the tablet
     ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(tablet_id, 4));
 
-    // Call TEST__get_segments
+    // Call TEST_get_segments
     LakeMetaReader reader;
     std::vector<SegmentSharedPtr> segments;
     std::vector<SegmentMetaCollectOptions> options_list;
 
-    ASSERT_OK(reader.TEST__get_segments(tablet, &segments, &options_list));
+    ASSERT_OK(reader.TEST_get_segments(tablet, &segments, &options_list));
 
     // Verify we got 6 segments (3 rowsets * 2 segments each)
     ASSERT_EQ(6, segments.size());
@@ -209,12 +209,12 @@ TEST_F(LakeMetaReaderTest, test_get_segments_rowset_ids) {
     // Get the tablet
     ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(tablet_id, 3));
 
-    // Call TEST__get_segments
+    // Call TEST_get_segments
     LakeMetaReader reader;
     std::vector<SegmentSharedPtr> segments;
     std::vector<SegmentMetaCollectOptions> options_list;
 
-    ASSERT_OK(reader.TEST__get_segments(tablet, &segments, &options_list));
+    ASSERT_OK(reader.TEST_get_segments(tablet, &segments, &options_list));
 
     // Verify we got 2 segments (2 rowsets * 1 segment each)
     ASSERT_EQ(2, segments.size());
