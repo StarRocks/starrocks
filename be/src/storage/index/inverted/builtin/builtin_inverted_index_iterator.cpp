@@ -216,7 +216,7 @@ Status BuiltinInvertedIndexIterator::_phrase_query(const Slice* search_query, ro
             LOG(INFO) << "match_phrase: found at ordinal: " << ordinal;
 
             roaring::Roaring doc_ids;
-            _bitmap_itr->read_bitmap(ordinal, &doc_ids);
+            RETURN_IF_ERROR(_bitmap_itr->read_bitmap(ordinal, &doc_ids));
             if (doc_ids.cardinality() <= 0) {
                 bit_map->clear();
                 return Status::OK();

@@ -35,7 +35,6 @@ public:
 
     // Helper methods for encoding/decoding single values
     static void encodeValue(uint32_t value, std::vector<uint8_t>& output);
-    static uint32_t decodeValue(const uint8_t** input);
     static uint32_t decodeValue(const std::vector<uint8_t>& data, size_t& offset);
 };
 

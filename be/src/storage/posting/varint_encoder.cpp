@@ -18,30 +18,6 @@ void VarIntEncoder::encodeValue(uint32_t value, std::vector<uint8_t>& output) {
     output.push_back(static_cast<uint8_t>(value & 0x7F));
 }
 
-uint32_t VarIntEncoder::decodeValue(const uint8_t** input) {
-    if (input == nullptr || *input == nullptr) {
-        throw std::runtime_error("Invalid offset in decodeVarInt");
-    }
-
-    uint32_t result = 0;
-    int shift = 0;
-
-    while (*input != nullptr) {
-        const uint8_t byte = **input;
-        (*input)++;
-
-        result |= static_cast<uint32_t>(byte & 0x7F) << shift;
-        if ((byte & 0x80) == 0) {
-            break;
-        }
-        shift += 7;
-        if (shift > 28) {
-            throw std::runtime_error("VarInt too large");
-        }
-    }
-    return result;
-}
-
 uint32_t VarIntEncoder::decodeValue(const std::vector<uint8_t>& data, size_t& offset) {
     if (offset >= data.size()) {
         throw std::runtime_error("Invalid offset in decodeVarInt");
@@ -84,12 +60,13 @@ roaring::Roaring VarIntEncoder::decode(const uint8_t* encoded, size_t size) {
         return {};
     }
 
-    const uint8_t* end = encoded + size;
+    std::vector data(encoded, encoded + size);
+    size_t offset = 0;
 
-    uint32_t current_position = decodeValue(&encoded);
+    uint32_t current_position = decodeValue(data, offset);
     BitmapUpdateContextRefOrSingleValue positions(current_position);
-    while (encoded < end) {
-        const uint32_t delta = decodeValue(&encoded);
+    while (offset < data.size()) {
+        const uint32_t delta = decodeValue(data, offset);
         current_position += delta;
         positions.add(current_position);
     }

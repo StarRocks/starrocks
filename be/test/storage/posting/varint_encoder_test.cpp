@@ -175,16 +175,6 @@ TEST_F(VarIntEncoderTest, test_encode_decode_value_helpers) {
     EXPECT_EQ(std::numeric_limits<uint32_t>::max(), decoded);
 }
 
-// Test encodeValue with pointer-based decodeValue
-TEST_F(VarIntEncoderTest, test_decode_value_with_pointer) {
-    std::vector<uint8_t> output;
-    VarIntEncoder::encodeValue(999, output);
-
-    const uint8_t* ptr = output.data();
-    uint32_t decoded = VarIntEncoder::decodeValue(&ptr);
-    EXPECT_EQ(999, decoded);
-}
-
 // Test large dataset encode/decode
 TEST_F(VarIntEncoderTest, test_encode_decode_large_dataset) {
     roaring::Roaring original;
