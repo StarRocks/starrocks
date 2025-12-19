@@ -5047,20 +5047,18 @@ StatusOr<ColumnPtr> StringFunctions::format_bytes(FunctionContext* context, cons
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
-DEFINE_STRING_UNARY_FN_WITH_IMPL(initcapImpl, str) {
-    if (str.size == 0) {
-        return std::string("");
+static Status initcap_impl(const Slice& str, std::string* result) {
+    if (str.empty()) {
+        return Status::OK();
     }
 
     if (validate_ascii_fast(str.data, str.size)) {
-        std::string result;
-        result.resize(str.size);
+        result->resize(str.size);
         const char* src = str.data;
-        char* dst = result.data();
-        size_t len = str.size;
+        char* dst = result->data();
         bool word_start = true;
 
-        for (size_t i = 0; i < len; ++i) {
+        for (size_t i = 0; i < str.size; ++i) {
             unsigned char c = static_cast<unsigned char>(src[i]);
             if (std::isalnum(c)) {
                 if (word_start) {
@@ -5074,21 +5072,23 @@ DEFINE_STRING_UNARY_FN_WITH_IMPL(initcapImpl, str) {
                 word_start = true;
             }
         }
-        return result;
+        return Status::OK();
     }
 
-    std::string result;
-    result.reserve(str.size);
+    result->reserve(str.size);
     int32_t len = static_cast<int32_t>(str.size);
     int32_t i = 0;
     bool word_start = true;
 
     while (i < len) {
         UChar32 c;
+        int32_t old_i = i;
         U8_NEXT(str.data, i, len, c);
 
         if (c < 0) {
-            throw std::runtime_error("Invalid UTF-8 sequence");
+            unsigned char bad_byte = static_cast<unsigned char>(str.data[old_i]);
+            return Status::InvalidArgument(strings::Substitute(
+                "Invalid UTF-8 sequence at index $0, byte: 0x$1", old_i, strings::ToHex(&bad_byte, 1)));
         }
 
         if (u_isalnum(c)) {
@@ -5108,15 +5108,40 @@ DEFINE_STRING_UNARY_FN_WITH_IMPL(initcapImpl, str) {
         U8_APPEND(temp, offset, 4, c, is_error);
 
         if (is_error) {
-            throw std::runtime_error("Invalid UTF-8 sequence during encoding");
+            return Status::InvalidArgument("Invalid UTF-8 sequence during encoding");
         }
-        result.append(temp, offset);
+        result->append(temp, offset);
     }
-    return result;
+    return Status::OK();
 }
 
 StatusOr<ColumnPtr> StringFunctions::initcap(FunctionContext* context, const Columns& columns) {
-    return VectorizedStringStrictUnaryFunction<initcapImpl>::evaluate<TYPE_VARCHAR, TYPE_VARCHAR>(columns[0]);
+    ColumnViewer<TYPE_VARCHAR> viewer(columns[0]);
+    ColumnBuilder<TYPE_VARCHAR> builder;
+    size_t num_rows = columns[0]->size();
+    builder.reserve(num_rows);
+
+    std::string result_buffer;
+
+    for (size_t i = 0; i < num_rows; ++i) {
+        if (viewer.is_null(i)) {
+            builder.append_null();
+            continue;
+        }
+
+        Slice str = viewer.value(i);
+        result_buffer.clear();
+
+        Status st = initcap_impl(str, &result_buffer);
+
+        if (!st.ok()) {
+            return st;
+        }
+
+        builder.append(Slice(result_buffer));
+    }
+
+    return builder.build(ColumnHelper::is_all_const(columns));
 }
 } // namespace starrocks
 

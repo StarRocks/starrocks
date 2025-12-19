@@ -15,7 +15,7 @@ initcap(str)
 
 ## Parameters
 
-`str:` The string expression to be formatted. This can be a VARCHAR column, a literal string, or the result of another string function.
+- `str:` The string expression to be formatted. This can be a VARCHAR column, a literal string, or the result of another string function.
 
 ## Return value
 

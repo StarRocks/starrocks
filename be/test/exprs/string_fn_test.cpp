@@ -4410,42 +4410,31 @@ PARALLEL_TEST(VecStringFunctionsTest, initcapTest) {
     auto str = BinaryColumn::create();
 
     // --- Fast Path (ASCII) Tests ---
-    // 1. Normal lowercase -> Title Case
     str->append("hello world");
-    // 2. All uppercase -> Title Case
     str->append("HELLO WORLD");
-    // 3. Mixed case -> Title Case
     str->append("hElLo wOrLd");
-    // 4. Already Title Case -> Title Case
     str->append("Starrocks Database");
-    // 5. Numbers and Punctuation (delimiters)
     str->append("1st place, in-the-world!");
-    // 6. Multiple spaces (delimiters)
     str->append("   hello   world   ");
-    // 7. Underscores and other symbols
     str->append("abc_def.ghi+jkl");
-    // 8. Single letter
     str->append("a");
-    // 9. Empty string
     str->append("");
 
     // --- Slow Path (UTF-8/ICU) Tests ---
-    // 10. UTF-8: Accent inside word (Crucial check: previously broke word boundary)
     str->append("héllo");
-    // 11. UTF-8: Accent at start of word
     str->append("école");
-    // 12. UTF-8: All caps with accents
     str->append("ÇA VA");
-    // 13. UTF-8: Mixed ASCII and UTF-8
     str->append("café resumé");
-    // 14. Cyrillic (Russian) - different unicode block
     str->append("привет мир");
-    // 15. Mixed delimiters with UTF-8
     str->append("hello-wörld_123");
 
     columns.emplace_back(str);
 
-    ColumnPtr result = StringFunctions::initcap(ctx.get(), columns).value();
+    // Check Happy Path (Valid Inputs)
+    auto result_status = StringFunctions::initcap(ctx.get(), columns);
+    ASSERT_TRUE(result_status.ok());
+
+    ColumnPtr result = result_status.value();
     ASSERT_EQ(15, result->size());
 
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
@@ -4469,12 +4458,20 @@ PARALLEL_TEST(VecStringFunctionsTest, initcapTest) {
     ASSERT_EQ("Привет Мир", v->get_data()[13].to_string());
     ASSERT_EQ("Hello-Wörld_123", v->get_data()[14].to_string());
 
+    // --- Error Path (Invalid UTF-8) ---
     Columns invalid_columns;
     auto invalid_str = BinaryColumn::create();
+    // 0xFF is an invalid byte in UTF-8
     invalid_str->append(std::string(1, (char)0xFF));
     invalid_columns.emplace_back(invalid_str);
 
-    EXPECT_THROW({ StringFunctions::initcap(ctx.get(), invalid_columns); }, std::runtime_error);
+    auto error_result = StringFunctions::initcap(ctx.get(), invalid_columns);
+
+    // Should return Status::InvalidArgument, NOT throw exception
+    ASSERT_FALSE(error_result.ok());
+    ASSERT_TRUE(error_result.status().is_invalid_argument());
+    // Verify specific error message logic (covers Substitute and ToHex lines)
+    ASSERT_NE(std::string(error_result.status().message()).find("Invalid UTF-8 sequence"), std::string::npos);
 }
 
 } // namespace starrocks
