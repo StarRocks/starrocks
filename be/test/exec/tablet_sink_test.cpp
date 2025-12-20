@@ -163,7 +163,8 @@ protected:
                                        config::vector_chunk_size));
         runtime_state->set_desc_tbl(desc_tbl);
 
-        auto sink = std::make_unique<OlapTableSink>(_object_pool.get(), std::vector<TExpr>(), nullptr, runtime_state.get());
+        auto sink =
+                std::make_unique<OlapTableSink>(_object_pool.get(), std::vector<TExpr>(), nullptr, runtime_state.get());
         CHECK_OK(sink->init(_data_sink, runtime_state.get()));
         CHECK_OK(sink->prepare(runtime_state.get()));
         return sink;
@@ -214,9 +215,9 @@ protected:
 
     // Generic test helper for error message validation
     template <typename FillColumnFunc>
-    void _test_error_log(LogicalType test_type, size_t slot_index, size_t num_rows,
-                                           size_t error_row_index, FillColumnFunc fill_column,
-                                           const std::string& error_keyword1, const std::string& error_keyword2) {
+    void _test_error_log(LogicalType test_type, size_t slot_index, size_t num_rows, size_t error_row_index,
+                         FillColumnFunc fill_column, const std::string& error_keyword1,
+                         const std::string& error_keyword2) {
         std::unique_ptr<RuntimeState> runtime_state;
         DescriptorTbl* desc_tbl = nullptr;
         auto sink = _setup_sink(runtime_state, desc_tbl);

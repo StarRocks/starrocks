@@ -900,7 +900,8 @@ Status OlapTableSink::close_wait(RuntimeState* state, Status close_status) {
     return status;
 }
 
-void OlapTableSink::_print_varchar_error_msg(RuntimeState* state, const Slice& str, SlotDescriptor* desc, Chunk* chunk, int32_t row_index) {
+void OlapTableSink::_print_varchar_error_msg(RuntimeState* state, const Slice& str, SlotDescriptor* desc, Chunk* chunk,
+                                             int32_t row_index) {
     if (state->has_reached_max_error_msg_num()) {
         return;
     }
@@ -916,7 +917,8 @@ void OlapTableSink::_print_varchar_error_msg(RuntimeState* state, const Slice& s
     state->append_error_msg_to_file(chunk->debug_row(row_index), error_msg);
 }
 
-void OlapTableSink::_print_decimal_error_msg(RuntimeState* state, const DecimalV2Value& decimal, SlotDescriptor* desc, Chunk* chunk, int32_t row_index) {
+void OlapTableSink::_print_decimal_error_msg(RuntimeState* state, const DecimalV2Value& decimal, SlotDescriptor* desc,
+                                             Chunk* chunk, int32_t row_index) {
     if (state->has_reached_max_error_msg_num()) {
         return;
     }
@@ -926,8 +928,8 @@ void OlapTableSink::_print_decimal_error_msg(RuntimeState* state, const DecimalV
 }
 
 template <LogicalType LT, typename CppType = RunTimeCppType<LT>>
-void _print_decimalv3_error_msg(RuntimeState* state, const CppType& decimal, const SlotDescriptor* desc,
-    Chunk* chunk, int32_t row_index) {
+void _print_decimalv3_error_msg(RuntimeState* state, const CppType& decimal, const SlotDescriptor* desc, Chunk* chunk,
+                                int32_t row_index) {
     if (state->has_reached_max_error_msg_num()) {
         return;
     }
