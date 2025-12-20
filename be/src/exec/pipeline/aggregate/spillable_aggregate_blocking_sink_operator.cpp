@@ -39,10 +39,13 @@ bool SpillableAggregateBlockingSinkOperator::need_input() const {
 }
 
 bool SpillableAggregateBlockingSinkOperator::is_finished() const {
-    if (!spilled()) {
-        return _is_finished || AggregateBlockingSinkOperator::is_finished();
+    if (_is_finished) {
+        return true;
     }
-    return _is_finished || _aggregator->is_finished();
+    if (!spilled()) {
+        return AggregateBlockingSinkOperator::is_finished();
+    }
+    return _aggregator->is_finished();
 }
 
 Status SpillableAggregateBlockingSinkOperator::set_finishing(RuntimeState* state) {
