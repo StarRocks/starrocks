@@ -82,6 +82,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Future;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.stream.Collectors;
@@ -98,8 +99,22 @@ public class PublishVersionDaemon extends FrontendDaemon {
     // each thread under the default configurations
     private static final int LAKE_PUBLISH_MAX_QUEUE_SIZE = 4096;
 
+    // Default number of poller threads
+    private static final int POLLER_THREADS_DEFAULT = 4;
+    // Hard limit for poller threads
+    private static final int POLLER_THREADS_HARD_LIMIT = 128;
+
     private ThreadPoolExecutor lakeTaskExecutor;
     private ThreadPoolExecutor deleteTxnLogExecutor;
+
+    // Thread pool for per-DB publish version polling
+    private ThreadPoolExecutor pollerExecutor;
+
+    // Track which DBs are currently being processed to avoid duplicate submissions
+    private final Set<Long> processingDbs = ConcurrentHashMap.newKeySet();
+
+    // Whether to use multi-thread mode, determined at initialization and cannot be changed at runtime
+    private boolean useMultiThreadMode;
 
     @VisibleForTesting
     protected Set<Long> publishingLakeTransactions;
@@ -112,47 +127,235 @@ public class PublishVersionDaemon extends FrontendDaemon {
     }
 
     @Override
+    public synchronized void start() {
+        prepare();
+        super.start();
+    }
+
+    public void prepare() {
+        this.useMultiThreadMode = Config.publish_version_poller_threads > 1;
+        if (useMultiThreadMode) {
+            LOG.info("PublishVersionDaemon initialized in multi-thread mode with {} worker threads",
+                    Config.publish_version_poller_threads);
+        } else {
+            LOG.info("PublishVersionDaemon initialized in single-thread mode");
+        }
+        if (useMultiThreadMode && pollerExecutor == null) {
+            int numThreads = Config.publish_version_poller_threads;
+            pollerExecutor = ThreadPoolManager.newDaemonFixedThreadPool(
+                    numThreads,
+                    LAKE_PUBLISH_MAX_QUEUE_SIZE,
+                    "publish-poll-worker",
+                    true);
+            pollerExecutor.allowCoreThreadTimeOut(true);
+        }
+        if (RunMode.isSharedDataMode()) {
+            /*
+             * Create a thread pool executor for LakeTable synchronizing publish.
+             * The thread pool size can be configured by `Config.lake_publish_version_max_threads` and is affected by the
+             * following constant variables
+             * - LAKE_PUBLISH_THREAD_POOL_DEFAULT_MAX_SIZE
+             * - LAKE_PUBLISH_THREAD_POOL_HARD_LIMIT_SIZE
+             * - LAKE_PUBLISH_MAX_QUEUE_SIZE
+             *
+             * The valid range for the configuration item `Config.lake_publish_version_max_threads` is
+             * (0, LAKE_PUBLISH_THREAD_POOL_HARD_LIMIT_SIZE], if the initial value is out of range,
+             * the LAKE_PUBLISH_THREAD_POOL_DEFAULT_MAX_SIZE will be used. During the runtime update, if the new value
+             * provided is out of range, the value will be just ignored silently.
+             *
+             * The thread pool is created with the corePoolSize and maxPoolSize equals to
+             * `Config.lake_publish_version_max_threads`, or set to LAKE_PUBLISH_THREAD_POOL_HARD_LIMIT_SIZE in case exceeded.
+             * core threads are also allowed to timeout when idle.
+             *
+             * Threads in the thread pool will be created in the following way:
+             * 1) new thread will be created for new added task when total number of core threads is less than `corePoolSize`,
+             * 2) new tasks will be entered the queue once the number of running core threads reaches `corePoolSize` and the
+             * queue is not full yet,
+             * 3) new task will be rejected if the total number of threads reaches `corePoolSize` and the queue is also full.
+             *
+             * core threads will be idle and timed out if no more tasks for a while (60 seconds by default).
+            */
+            if (lakeTaskExecutor == null) {
+                int numThreads = getOrFixLakeTaskExecutorThreadPoolMaxSizeConfig();
+                lakeTaskExecutor =
+                        ThreadPoolManager.newDaemonFixedThreadPool(numThreads, LAKE_PUBLISH_MAX_QUEUE_SIZE,
+                                "lake-publish-task",
+                                true);
+                // allow core thread timeout as well
+                lakeTaskExecutor.allowCoreThreadTimeOut(true);
+                // register ThreadPool config change listener
+                GlobalStateMgr.getCurrentState().getConfigRefreshDaemon()
+                        .registerListener(() -> this.adjustLakeTaskExecutor());
+            }
+
+            // Create a new thread for every task if there is no idle threads available.
+            // Idle threads will be cleaned after `KEEP_ALIVE_TIME` seconds, which is 60 seconds by default.
+            if (deleteTxnLogExecutor == null) {
+                int numThreads2 = Math.max(Config.lake_publish_delete_txnlog_max_threads, 1);
+                deleteTxnLogExecutor = ThreadPoolManager.newDaemonCacheThreadPool(numThreads2,
+                        "lake-publish-delete-txnLog", true);
+                // register ThreadPool config change listener
+                GlobalStateMgr.getCurrentState().getConfigRefreshDaemon().registerListener(() -> {
+                    int newMaxThreads = Config.lake_publish_delete_txnlog_max_threads;
+                    if (deleteTxnLogExecutor != null && newMaxThreads > 0
+                            && deleteTxnLogExecutor.getMaximumPoolSize() != newMaxThreads) {
+                        deleteTxnLogExecutor.setMaximumPoolSize(Config.lake_publish_delete_txnlog_max_threads);
+                    }
+                });
+            }
+
+            if (publishingLakeTransactionsBatchTableId == null) {
+                publishingLakeTransactionsBatchTableId = Sets.newConcurrentHashSet();
+            }
+            if (publishingLakeTransactions == null) {
+                publishingLakeTransactions = Sets.newConcurrentHashSet();
+            }
+        }
+    }
+
+    @Override
     protected void runAfterCatalogReady() {
         try {
-            GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
-            if (Config.lake_enable_batch_publish_version && RunMode.isSharedDataMode()) {
-                // batch publish
-                List<TransactionStateBatch> readyTransactionStatesBatch = globalTransactionMgr.
-                        getReadyPublishTransactionsBatch();
-                if (readyTransactionStatesBatch.size() != 0) {
-                    publishVersionForLakeTableBatch(readyTransactionStatesBatch);
-                }
-                return;
-
-            }
-
-            List<TransactionState> readyTransactionStates =
-                    globalTransactionMgr.getReadyToPublishTransactions(Config.enable_new_publish_mechanism);
-            if (readyTransactionStates == null || readyTransactionStates.isEmpty()) {
-                return;
-            }
-
-            // TODO: need to refactor after be split into cn + dn
-            List<Long> allBackends =
-                    GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds(false);
-            if (RunMode.isSharedDataMode()) {
-                allBackends.addAll(
-                        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getComputeNodeIds(false));
-            }
-
-            if (allBackends.isEmpty()) {
-                LOG.warn("some transaction state need to publish, but no backend exists");
-                return;
-            }
-
-            if (RunMode.isSharedNothingMode()) { // share_nothing mode
-                publishVersionForOlapTable(readyTransactionStates);
-            } else { // share_data mode
-                publishVersionForLakeTable(readyTransactionStates);
+            if (useMultiThreadMode) {
+                runWithMultiThreads();
+            } else {
+                runWithSingleThread();
             }
         } catch (Throwable t) {
             LOG.error("errors while publish version to all backends", t);
         }
+    }
+
+    /**
+     * Original single-thread publish version logic.
+     * This method handles all DBs in a single thread iteration.
+     */
+    private void runWithSingleThread() throws StarRocksException {
+        GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+        if (Config.lake_enable_batch_publish_version && RunMode.isSharedDataMode()) {
+            // batch publish
+            List<TransactionStateBatch> readyTransactionStatesBatch = globalTransactionMgr.
+                    getReadyPublishTransactionsBatch();
+            if (readyTransactionStatesBatch.size() != 0) {
+                publishVersionForLakeTableBatch(readyTransactionStatesBatch);
+            }
+            return;
+        }
+
+        List<TransactionState> readyTransactionStates =
+                globalTransactionMgr.getReadyToPublishTransactions(Config.enable_new_publish_mechanism);
+        if (readyTransactionStates == null || readyTransactionStates.isEmpty()) {
+            return;
+        }
+
+        // TODO: need to refactor after be split into cn + dn
+        List<Long> allBackends =
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds(false);
+        if (RunMode.isSharedDataMode()) {
+            allBackends.addAll(
+                    GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getComputeNodeIds(false));
+        }
+
+        if (allBackends.isEmpty()) {
+            LOG.warn("some transaction state need to publish, but no backend exists");
+            return;
+        }
+
+        if (RunMode.isSharedNothingMode()) { // share_nothing mode
+            publishVersionForOlapTable(readyTransactionStates);
+        } else { // share_data mode
+            publishVersionForLakeTable(readyTransactionStates);
+        }
+    }
+
+    /**
+     * Multi-threaded per-DB publish version logic.
+     * Each DB's publish task is submitted to a shared thread pool. The {@code processingDbs}
+     * set ensures that transactions from the same DB are not processed concurrently, but
+     * there is no guarantee that the same DB will always be handled by the same worker thread.
+     */
+    private void runWithMultiThreads() {
+        GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+        Map<Long, DatabaseTransactionMgr> allDbMgrs = globalTransactionMgr.getAllDatabaseTransactionMgrs();
+
+        if (allDbMgrs.isEmpty()) {
+            return;
+        }
+
+        List<Long> allBackends =
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds(false);
+        if (RunMode.isSharedDataMode()) {
+            allBackends.addAll(
+                    GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getComputeNodeIds(false));
+        }
+
+        if (allBackends.isEmpty()) {
+            LOG.debug("some transaction state need to publish, but no backend exists");
+            return;
+        }
+
+        ThreadPoolExecutor executor = getPollerExecutor();
+        for (Map.Entry<Long, DatabaseTransactionMgr> entry : allDbMgrs.entrySet()) {
+            long dbId = entry.getKey();
+            DatabaseTransactionMgr dbTxnMgr = entry.getValue();
+
+            // Skip if this DB is already being processed
+            if (!processingDbs.add(dbId)) {
+                continue;
+            }
+
+            // Submit task to executor
+            try {
+                executor.execute(() -> {
+                    try {
+                        processDbTransactions(dbId, dbTxnMgr);
+                    } catch (Throwable t) {
+                        LOG.error("Error processing transactions for db {}", dbId, t);
+                    } finally {
+                        processingDbs.remove(dbId);
+                    }
+                });
+            } catch (Exception e) {
+                // Task rejected, remove from processing set
+                processingDbs.remove(dbId);
+                LOG.warn("Failed to submit publish task for db {}: {}", dbId, e.getMessage());
+            }
+        }
+    }
+
+    /**
+     * Process transactions for a specific DB.
+     * This method is called by worker threads in per-DB mode.
+     */
+    protected void processDbTransactions(long dbId, DatabaseTransactionMgr dbTxnMgr) throws StarRocksException {
+        if (Config.lake_enable_batch_publish_version && RunMode.isSharedDataMode()) {
+            // batch publish for lake table
+            List<TransactionStateBatch> txnBatches = dbTxnMgr.getReadyToPublishTxnListBatch();
+            if (!txnBatches.isEmpty()) {
+                publishVersionForLakeTableBatch(txnBatches);
+            }
+        } else {
+            List<TransactionState> txnStates = Config.enable_new_publish_mechanism
+                    ? dbTxnMgr.getReadyToPublishTxnList()
+                    : dbTxnMgr.getCommittedTxnList();
+
+            if (txnStates.isEmpty()) {
+                return;
+            }
+
+            if (RunMode.isSharedNothingMode()) {
+                publishVersionForOlapTable(txnStates);
+            } else {
+                publishVersionForLakeTable(txnStates);
+            }
+        }
+    }
+
+    /**
+     * Get or create the thread pool for per-DB publish version workers.
+     */
+    private @NotNull ThreadPoolExecutor getPollerExecutor() {
+        return pollerExecutor;
     }
 
     private int getOrFixLakeTaskExecutorThreadPoolMaxSizeConfig() {
@@ -189,74 +392,15 @@ public class PublishVersionDaemon extends FrontendDaemon {
         ThreadPoolManager.setFixedThreadPoolSize(lakeTaskExecutor, newNumThreads);
     }
 
-    /**
-     * Create a thread pool executor for LakeTable synchronizing publish.
-     * The thread pool size can be configured by `Config.lake_publish_version_max_threads` and is affected by the
-     * following constant variables
-     * - LAKE_PUBLISH_THREAD_POOL_DEFAULT_MAX_SIZE
-     * - LAKE_PUBLISH_THREAD_POOL_HARD_LIMIT_SIZE
-     * - LAKE_PUBLISH_MAX_QUEUE_SIZE
-     * <p>
-     * The valid range for the configuration item `Config.lake_publish_version_max_threads` is
-     * (0, LAKE_PUBLISH_THREAD_POOL_HARD_LIMIT_SIZE], if the initial value is out of range,
-     * the LAKE_PUBLISH_THREAD_POOL_DEFAULT_MAX_SIZE will be used. During the runtime update, if the new value provided
-     * is out of range, the value will be just ignored silently.
-     * <p>
-     * The thread pool is created with the corePoolSize and maxPoolSize equals to
-     * `Config.lake_publish_version_max_threads`, or set to LAKE_PUBLISH_THREAD_POOL_HARD_LIMIT_SIZE in case exceeded.
-     * core threads are also allowed to timeout when idle.
-     * <p>
-     * Threads in the thread pool will be created in the following way:
-     * 1) a new thread will be created for a new added task when the total number of core threads is less than `corePoolSize`,
-     * 2) new tasks will be entered the queue once the number of running core threads reaches `corePoolSize` and the
-     * queue is not full yet,
-     * 3) the new task will be rejected once the total number of threads reaches `corePoolSize` and the queue is also full.
-     * <p>
-     * core threads will be idle and timed out if no more tasks for a while (60 seconds by default).
-     *
-     * @return the thread pool executor
-     */
     public @NotNull ThreadPoolExecutor getLakeTaskExecutor() {
-        if (lakeTaskExecutor == null) {
-            int numThreads = getOrFixLakeTaskExecutorThreadPoolMaxSizeConfig();
-            lakeTaskExecutor =
-                    ThreadPoolManager.newDaemonFixedThreadPool(numThreads, LAKE_PUBLISH_MAX_QUEUE_SIZE,
-                            "lake-publish-task",
-                            true);
-            // allow core thread timeout as well
-            lakeTaskExecutor.allowCoreThreadTimeOut(true);
-
-            // register ThreadPool config change listener
-            GlobalStateMgr.getCurrentState().getConfigRefreshDaemon()
-                    .registerListener(() -> this.adjustLakeTaskExecutor());
-        }
         return lakeTaskExecutor;
     }
 
     private @NotNull ThreadPoolExecutor getDeleteTxnLogExecutor() {
-        if (deleteTxnLogExecutor == null) {
-            // Create a new thread for every task if there is no idle threads available.
-            // Idle threads will be cleaned after `KEEP_ALIVE_TIME` seconds, which is 60 seconds by default.
-            int numThreads = Math.max(Config.lake_publish_delete_txnlog_max_threads, 1);
-            deleteTxnLogExecutor = ThreadPoolManager.newDaemonCacheThreadPool(numThreads,
-                    "lake-publish-delete-txnLog", true);
-
-            // register ThreadPool config change listener
-            GlobalStateMgr.getCurrentState().getConfigRefreshDaemon().registerListener(() -> {
-                int newMaxThreads = Config.lake_publish_delete_txnlog_max_threads;
-                if (deleteTxnLogExecutor != null && newMaxThreads > 0
-                        && deleteTxnLogExecutor.getMaximumPoolSize() != newMaxThreads) {
-                    deleteTxnLogExecutor.setMaximumPoolSize(Config.lake_publish_delete_txnlog_max_threads);
-                }
-            });
-        }
         return deleteTxnLogExecutor;
     }
 
     private @NotNull Set<Long> getPublishingLakeTransactions() {
-        if (publishingLakeTransactions == null) {
-            publishingLakeTransactions = Sets.newConcurrentHashSet();
-        }
         return publishingLakeTransactions;
     }
 
@@ -269,13 +413,10 @@ public class PublishVersionDaemon extends FrontendDaemon {
     // such as 1->2->3->4-5,
     // the transactons will be published repeatedlly.
     private @NotNull Set<Long> getPublishingLakeTransactionsBatchTableId() {
-        if (publishingLakeTransactionsBatchTableId == null) {
-            publishingLakeTransactionsBatchTableId = Sets.newConcurrentHashSet();
-        }
         return publishingLakeTransactionsBatchTableId;
     }
 
-    private void publishVersionForOlapTable(List<TransactionState> readyTransactionStates) throws StarRocksException {
+    protected void publishVersionForOlapTable(List<TransactionState> readyTransactionStates) throws StarRocksException {
         GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
 
         // every backend-transaction identified a single task
@@ -391,7 +532,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
         }
     }
 
-    void publishVersionForLakeTable(List<TransactionState> readyTransactionStates) {
+    protected void publishVersionForLakeTable(List<TransactionState> readyTransactionStates) {
         Set<Long> publishingTransactions = getPublishingLakeTransactions();
         for (TransactionState txnState : readyTransactionStates) {
             long txnId = txnState.getTransactionId();
