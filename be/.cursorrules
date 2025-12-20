@@ -1,0 +1,73 @@
+# StarRocks Backend (be/) Cursor Rules
+
+## Overview
+The backend is the C++ component of StarRocks, responsible for high-performance query execution, data storage, and resource management. It implements the columnar execution engine and the storage layer.
+
+## ⚠️ BUILD WARNING
+**DO NOT attempt to build or run unit tests (UT) unless explicitly requested.** The C++ build system is extremely resource-intensive and time-consuming.
+
+## Backend Architecture
+
+### Core Execution Engine
+- `be/src/exec/` - Query execution operators and pipeline engine
+  - `pipeline/` - Pipeline execution engine implementation
+  - `sorting/` - Sorting algorithms and operators
+  - `aggregate/` - Aggregation operators
+- `be/src/exprs/` - Expression evaluation and JIT compilation
+  - `agg/` - Aggregate functions
+  - `table_function/` - Table-valued functions
+- `be/src/column/` - Vectorized columnar data structures
+- `be/src/runtime/` - Runtime environment, memory management, and stream load
+
+### Storage Layer
+- `be/src/storage/` - Core storage engine
+  - `tablet.cpp/h` - Tablet management
+  - `rowset/` - Rowset management and versioning
+  - `lake/` - Cloud-native storage (StarRocks Lake)
+  - `primary_key_encoder.h` - Primary key encoding for PK tables
+  - `persistent_index/` - Persistent index for primary key tables
+- `be/src/formats/` - File format parsers (Parquet, ORC, CSV, etc.)
+
+### Connectors & I/O
+- `be/src/connector/` - External data source connectors (Hive, Iceberg, etc.)
+- `be/src/fs/` - File system abstraction layer (S3, HDFS, POSIX, Azure)
+- `be/src/io/` - I/O utilities and buffering
+
+### Common & Utilities
+- `be/src/common/` - Global configurations and status codes
+- `be/src/util/` - General purpose utility classes
+- `be/src/gutil/` - Google utilities (imported from Kudu/Chromium)
+- `be/src/service/` - RPC service implementations
+
+## Development Guidelines
+
+### Memory Management
+- Use `std::unique_ptr` and `std::shared_ptr` for resource management.
+- Be mindful of memory tracking via `MemTracker`.
+- Avoid raw `new`/`delete` where possible.
+
+### Performance
+- StarRocks uses a vectorized execution engine; focus on batch processing of `Column` objects.
+- Minimize branching in hot loops.
+- Use SIMD-optimized utilities in `be/src/simd/`.
+
+### Coding Style
+- Follow the existing C++ style (mostly Google C++ Style Guide with modifications).
+- Use `Status` for error handling.
+- All code and comments must be in English.
+
+### Testing
+- Backend unit tests are located in `be/test/`.
+- Use `gtest` and `gmock` for writing tests.
+- **Focus**: Test data structures (`Column`), expressions, storage primitives, and algorithms.
+- Avoid tests that require a full running cluster; use mocks for RPC and storage if possible.
+- Performance benchmarks should go in `be/src/bench/`.
+
+## Contribution Guidelines
+
+### PR Titles for Backend Changes
+Use appropriate prefixes:
+- `[BugFix] Fix memory leak in OlapScanner`
+- `[Enhancement] Optimize vectorized evaluation for LIKE predicates`
+- `[Feature] Add support for Iceberg v2 position deletes`
+- `[Refactor] Decouple execution engine from storage types`
