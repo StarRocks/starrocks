@@ -17,7 +17,6 @@ Java Extensions provide connectivity to external data sources and extend StarRoc
 - `paimon-reader/` - Apache Paimon reader
 - `kudu-reader/` - Apache Kudu connector
 - `odps-reader/` - ODPS (MaxCompute) reader
-- `paimon-reader/` - Apache Paimon reader
 
 #### Connectivity & JNI
 - `jdbc-bridge/` - JDBC connectivity bridge
