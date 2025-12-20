@@ -2,6 +2,7 @@
 
 set enable_spill=true;
 set spill_mode="auto";
+set spill_operator_min_bytes=0;
 
 CREATE TABLE t1 (
     k1 INT,
@@ -55,6 +56,8 @@ create table tmp as select k1,k2 from t1 order by k1,k2 limit 10000000;
 select sum(k1),sum(crc32(k2)) from tmp;
 drop table tmp;
 
+select count(*), sum(rn) from (select row_number() over (partition by k1, k2) as rn from t1) tb;
+
 set spill_mode="force";
 
 select sum(k1),sum(crc32(k2)) from (select k1,k2 from t1 order by k1,k2 limit 100) t;
@@ -95,3 +98,5 @@ drop table tmp;
 create table tmp as select k1,k2 from t1 order by k1,k2 limit 10000000;
 select sum(k1),sum(crc32(k2)) from tmp;
 drop table tmp;
+
+select count(*), sum(rn) from (select row_number() over (partition by k1, k2) as rn from t1) tb;

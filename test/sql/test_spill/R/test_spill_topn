@@ -5,6 +5,9 @@ set enable_spill=true;
 set spill_mode="auto";
 -- result:
 -- !result
+set spill_operator_min_bytes=0;
+-- result:
+-- !result
 CREATE TABLE t1 (
     k1 INT,
     k2 VARCHAR(100))
@@ -142,6 +145,10 @@ select sum(k1),sum(crc32(k2)) from tmp;
 drop table tmp;
 -- result:
 -- !result
+select count(*), sum(rn) from (select row_number() over (partition by k1, k2) as rn from t1) tb;
+-- result:
+300000	300000
+-- !result
 set spill_mode="force";
 -- result:
 -- !result
@@ -264,4 +271,8 @@ select sum(k1),sum(crc32(k2)) from tmp;
 -- !result
 drop table tmp;
 -- result:
+-- !result
+select count(*), sum(rn) from (select row_number() over (partition by k1, k2) as rn from t1) tb;
+-- result:
+300000	300000
 -- !result
