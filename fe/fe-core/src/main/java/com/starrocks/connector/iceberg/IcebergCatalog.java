@@ -237,7 +237,7 @@ public interface IcebergCatalog extends MemoryTrackable {
         return new StarRocksIcebergTableScan(
                 table,
                 table.schema(),
-                newTableScanContext(table),
+                newTableScanContext(table, srScanContext),
                 srScanContext);
     }
 

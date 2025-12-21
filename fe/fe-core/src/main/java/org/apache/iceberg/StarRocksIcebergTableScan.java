@@ -87,11 +87,17 @@ public class StarRocksIcebergTableScan
     private ConnectContext connectContext;
     private final IcebergTableName icebergTableName;
     private IcebergMetricsReporter metricsReporter;
+    private static final String READ_SPLIT_TARGET_SIZE = "read.split.target-size";
 
-    public static TableScanContext newTableScanContext(Table table) {
+    public static TableScanContext newTableScanContext(Table table, StarRocksIcebergTableScanContext scanContext) {
         if (table instanceof BaseTable) {
             MetricsReporter reporter = ((BaseTable) table).reporter();
-            return ImmutableTableScanContext.builder().metricsReporter(reporter).build();
+            ImmutableTableScanContext.Builder builder = ImmutableTableScanContext.builder();
+            builder = builder.metricsReporter(reporter);
+            if (scanContext.getFileSplitSize() > 0) {
+                builder.putOptions(READ_SPLIT_TARGET_SIZE, String.valueOf(scanContext.getFileSplitSize()));
+            }
+            return builder.build();
         } else {
             return TableScanContext.empty();
         }
@@ -525,12 +531,8 @@ public class StarRocksIcebergTableScan
 
     @Override
     public CloseableIterable<CombinedScanTask> planTasks() {
-        long fileSplitSize = targetSplitSize();
-        if (scanContext.getFileSplitSize() > 0) {
-            fileSplitSize = scanContext.getFileSplitSize();
-        }
         return TableScanUtil.planTasks(
-                planFiles(), fileSplitSize, splitLookback(), splitOpenFileCost());
+                planFiles(), targetSplitSize(), splitLookback(), splitOpenFileCost());
     }
 
     private int liveFilesCount(List<ManifestFile> manifests) {
