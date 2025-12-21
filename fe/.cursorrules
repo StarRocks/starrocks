@@ -8,24 +8,32 @@ The frontend is the Java-based component responsible for SQL parsing, query plan
 
 ## Frontend Architecture
 
-### Frontend Core (fe-core/)
-The main frontend module containing all core database functionality:
+### Frontend Modules
+- `fe/fe-core/` - Core frontend services (SQL parser, planner, catalog)
+- `fe/fe-spi/` - Service Provider Interface for extensibility
+- `fe/fe-grammar/` - SQL grammar definitions (ANTLR4)
+- `fe/fe-parser/` - SQL parser implementation
+- `fe/fe-server/` - Frontend server entry point
+- `fe/fe-type/` - Type system definitions
+- `fe/fe-utils/` - Common utilities and helpers
+- `fe/fe-testing/` - Common test utilities
 
+### Core Frontend Architecture (fe-core/)
 #### Core SQL Processing
 - `fe-core/src/main/java/com/starrocks/sql/` - SQL processing pipeline
   - `sql/parser/` - SQL parser (ANTLR-based)
   - `sql/analyzer/` - SQL semantic analysis and validation
   - `sql/ast/` - Abstract Syntax Tree definitions
-  - `sql/optimizer/` - Cost-based query optimizer
+  - `sql/optimizer/` - Cost-based query optimizer (Cascades-like)
   - `sql/plan/` - Physical query plan generation
-  - `sql/spm/` - SQL Plan Management
+  - `sql/spm/` - SQL Plan Management (Plan Cache/Binding)
 
-#### Metadata Management
+#### Metadata & Catalog
 - `fe-core/src/main/java/com/starrocks/catalog/` - Metadata catalog system
-  - `catalog/system/` - System tables and metadata
+  - `catalog/system/` - System tables
   - `catalog/mv/` - Materialized view metadata
-  - `catalog/constraint/` - Table constraints management
-  - `catalog/combinator/` - Catalog combinators
+  - `catalog/constraint/` - Table constraints
+- `fe-core/src/main/java/com/starrocks/server/GlobalStateMgr.java` - Main metadata manager (formerly Catalog.java)
 
 #### Query Execution
 - `fe-core/src/main/java/com/starrocks/qe/` - Query execution engine
@@ -114,9 +122,11 @@ The main frontend module containing all core database functionality:
 - External connectors implement `Connector` and `ConnectorMetadata` interfaces
 
 ### Testing
-- Unit tests are in `fe-core/src/test/`
-- Integration tests use SQL files in `/test/sql/`
-- Mock objects are in `fe-core/src/test/java/com/starrocks/utframe/`
+- Unit tests are in `fe-core/src/test/`.
+- **Plan Tests**: Located in `fe-core/src/test/java/com/starrocks/sql/plan/`. These are critical for verifying optimizer behavior without a running backend. Use `starRocksAssert` to mock tables and check plans.
+- Integration tests use SQL files in `/test/sql/`.
+- Mock objects are in `fe-core/src/test/java/com/starrocks/utframe/`.
+- Use `JUnit 5` and `JMockit` for mocking.
 
 ## Contribution Guidelines
 

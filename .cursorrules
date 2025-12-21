@@ -26,25 +26,20 @@ The build system is extremely resource-intensive and time-consuming. Building th
 ### Frontend (fe/)
 **Language**: Java
 **Purpose**: SQL parsing, query planning, and metadata management
-- `fe/fe-core/` - Core frontend services (SQL parser, planner, catalog)
-- `fe/fe-testing/` - Common test utilities
-- `fe/fe-utils/` - Common utilities and helpers
-- `fe/spark-dpp/` - Spark data preprocessing integration
-- `fe/hive-udf/` - Hive UDF compatibility layer
+- `fe/fe-core/` - Core frontend logic
+- `fe/fe-spi/` - Service Provider Interface
+- `fe/fe-parser/` & `fe/fe-grammar/` - SQL parsing
+- `fe/fe-type/` - Type system
+- `fe/spark-dpp/` - Spark data preprocessing
 
 **📋 See `fe/.cursorrules` for detailed frontend component breakdown**
 
 ### Java Extensions (java-extensions/)
 **Language**: Java
-**Purpose**: External connectors and extensions
-- `java-extensions/hive-reader/` - Hive data reader
-- `java-extensions/iceberg-metadata-reader/` - Apache Iceberg metadata reader
-- `java-extensions/hudi-reader/` - Apache Hudi integration
-- `java-extensions/paimon-reader/` - Apache Paimon reader
-- `java-extensions/jdbc-bridge/` - JDBC connectivity bridge
-- `java-extensions/hadoop-ext/` - Hadoop ecosystem integration
-- `java-extensions/udf-extensions/` - UDF extension framework
-- `java-extensions/common-runtime/` - Common runtime for Java extensions
+**Purpose**: External connectors (Hive, Iceberg, Hudi, Paimon, JDBC, etc.)
+- `java-extensions/jni-connector/` - C++ to Java bridge
+- `java-extensions/udf-extensions/` - UDF framework
+- `java-extensions/common-runtime/` - Shared runtime
 
 **📋 See `java-extensions/.cursorrules` for detailed extensions breakdown**
 
@@ -56,10 +51,48 @@ The build system is extremely resource-intensive and time-consuming. Building th
 
 ### Testing (test/)
 **Language**: Python
-**Purpose**: Integration and SQL testing framework
-- `test/sql/` - SQL test cases organized by functionality
+**Purpose**: Integration and SQL testing framework (E2E)
+- `test/sql/` - SQL test cases (T/R files)
 - `test/common/` - Common test utilities
-- `test/lib/` - Test libraries and helpers
+- `test/lib/` - Test libraries and helpers (e.g., `sr_sql_lib.py`)
+
+## Documentation Guidelines
+
+### When to update Documentation
+- **New Feature**: When adding a new feature (e.g., a new SQL function, a new connector, or a new system variable), you **MUST** create or update the corresponding documentation.
+- **Functional Change**: When modifying existing functionality that affects user behavior, the documentation **MUST** be updated to reflect the changes.
+- **Multilingual Support**: Documentation should be updated in all three supported languages:
+  - **English**: `docs/en/`
+  - **Chinese**: `docs/zh/`
+  - **Japanese**: `docs/ja/`
+
+### Documentation Rules
+- **Templates**: Follow the templates provided in `docs/en/sql-reference/` for SQL functions, commands, and configurations.
+- **Images**: Place images in the `assets` folder and use relative paths.
+- **Sidebars**: New pages must be added to `docs/docusaurus/sidebars.json`.
+- **Formatting**:
+  - Use `###` headings for setting names or parameters to improve searchability.
+  - Always include a language identifier for code blocks (e.g., ````sql`).
+
+## Testing Strategy
+
+### When to write Unit Tests (UT)
+- **Backend (C++)**: For testing specific classes, data structures (e.g., `Column`), or internal logic in isolation. Use `gtest` in `be/test/`.
+- **Frontend (Java)**: For testing SQL parsing, semantic analysis, or optimizer rules. Use `JUnit`/`JMockit` in `fe-core/src/test/`.
+- **Plan Tests**: Use `PlanTestBase` in `fe-core/src/test/java/com/starrocks/sql/plan/` to verify that the optimizer generates the expected query plans.
+
+### When to write SQL Tests (End-to-End)
+- **Location**: `test/sql/`
+- **Purpose**: For verifying end-to-end SQL correctness, feature integration, or bug fixes reproducible via SQL.
+- **Rule**: Every new feature or bug fix should ideally have a corresponding SQL test case.
+
+### SQL Test Guidelines
+- **T Files**: Statements only. Used to generate R files via `run.py -r`.
+- **R Files**: Statements + Expected Results (wrapped in `-- result:` and `-- !result`).
+- **Tags**: Use `@native` or `@cloud` to restrict tests to specific environments.
+- **Cleanup**: Use `CLEANUP { ... } END CLEANUP` blocks for resource teardown.
+- **Fuzzy Match**: Use `[REGEX]` for unstable outputs like IDs or timestamps.
+- **Order**: Use `[ORDER]` if result order must be strictly verified.
 
 ### Tools and Utilities
 - `tools/` - Diagnostic tools, benchmarks, and utilities
