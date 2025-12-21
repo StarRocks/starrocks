@@ -108,7 +108,7 @@ struct AggNonNullPred {
 //    For this case, the serialized output type is non-nullable, because only the state of input needs to be serialized.
 // If all the rows are NULL or `AggNullPred` returns true, we will return NULL.
 // The State must be NullableAggregateFunctionState
-template <typename NestedAggregateFunctionPtr, typename State, bool IsWindowFunc, bool IgnoreNull = true,
+template <typename NestedFuncPtr, typename State, bool IsWindowFunc, bool IgnoreNull = true,
           IsAggNullPred<typename State::NestedState> AggNullPred = AggNonNullPred<typename State::NestedState>>
 class NullableAggregateFunctionBase : public AggregateFunctionStateHelper<State> {
     using NestedState = typename State::NestedState;
@@ -117,8 +117,7 @@ class NullableAggregateFunctionBase : public AggregateFunctionStateHelper<State>
 public:
     bool is_exception_safe() const override { return nested_function->is_exception_safe(); }
 
-    explicit NullableAggregateFunctionBase(NestedAggregateFunctionPtr nested_function_,
-                                           AggNullPred null_pred = AggNullPred())
+    explicit NullableAggregateFunctionBase(NestedFuncPtr nested_function_, AggNullPred null_pred = AggNullPred())
             : nested_function(std::move(nested_function_)), null_pred(std::move(null_pred)) {}
     // as array_agg is not nullable, so it needn't create() here.
 
@@ -312,19 +311,17 @@ public:
     }
 
 protected:
-    NestedAggregateFunctionPtr nested_function;
+    NestedFuncPtr nested_function;
     AggNullPred null_pred;
 };
 
-template <typename NestedAggregateFunctionPtr, typename State, bool IsWindowFunc, bool IgnoreNull = true,
+template <typename NestedFuncPtr, typename State, bool IsWindowFunc, bool IgnoreNull = true,
           IsAggNullPred<typename State::NestedState> AggNullPred = AggNonNullPred<typename State::NestedState>>
 class NullableAggregateFunctionUnary final
-        : public NullableAggregateFunctionBase<NestedAggregateFunctionPtr, State, IsWindowFunc, IgnoreNull,
-                                               AggNullPred> {
+        : public NullableAggregateFunctionBase<NestedFuncPtr, State, IsWindowFunc, IgnoreNull, AggNullPred> {
 public:
-    explicit NullableAggregateFunctionUnary(const NestedAggregateFunctionPtr& nested_function,
-                                            AggNullPred null_pred = AggNullPred())
-            : NullableAggregateFunctionBase<NestedAggregateFunctionPtr, State, IsWindowFunc, IgnoreNull, AggNullPred>(
+    explicit NullableAggregateFunctionUnary(const NestedFuncPtr& nested_function, AggNullPred null_pred = AggNullPred())
+            : NullableAggregateFunctionBase<NestedFuncPtr, State, IsWindowFunc, IgnoreNull, AggNullPred>(
                       nested_function, std::move(null_pred)) {}
 
     // NOTE: In stream MV, need handle input row by row, so need support single update.
@@ -951,15 +948,14 @@ public:
     }
 };
 
-template <typename State,
-          IsAggNullPred<typename State::NestedState> AggNullPred = AggNonNullPred<typename State::NestedState>>
+template <typename NestedFuncPtr, typename State,
+          IsAggNullPred<typename State::NestedState> AggNullPredType = AggNonNullPred<typename State::NestedState>>
 class NullableAggregateFunctionVariadic final
-        : public NullableAggregateFunctionBase<AggregateFunctionPtr, State, false, true, AggNullPred> {
+        : public NullableAggregateFunctionBase<NestedFuncPtr, State, false, true, AggNullPredType> {
 public:
-    NullableAggregateFunctionVariadic(const AggregateFunctionPtr& nested_function,
-                                      AggNullPred null_pred = AggNullPred())
-            : NullableAggregateFunctionBase<AggregateFunctionPtr, State, false, true, AggNullPred>(
-                      nested_function, std::move(null_pred)) {}
+    NullableAggregateFunctionVariadic(NestedFuncPtr nested_function, AggNullPredType null_pred = AggNullPredType())
+            : NullableAggregateFunctionBase<NestedFuncPtr, State, false, true, AggNullPredType>(
+                      std::move(nested_function), std::move(null_pred)) {}
 
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
                 size_t row_num) const override {

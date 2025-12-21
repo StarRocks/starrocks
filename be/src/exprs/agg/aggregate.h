@@ -462,7 +462,7 @@ public:
     }
 };
 
-using AggregateFunctionPtr = std::shared_ptr<AggregateFunction>;
+// AggregateFunctionPtr is removed. Use const AggregateFunction* instead.
 
 struct AggregateFunctionEmptyState {};
 

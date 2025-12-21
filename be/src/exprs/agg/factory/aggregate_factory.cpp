@@ -43,77 +43,81 @@ AggregateFuncResolver::AggregateFuncResolver() {
     register_boolean();
 }
 
-AggregateFuncResolver::~AggregateFuncResolver() = default;
-
-AggregateFunctionPtr AggregateFactory::MakeBitmapUnionAggregateFunction() {
-    return std::make_shared<BitmapUnionAggregateFunction>();
+AggregateFuncResolver::~AggregateFuncResolver() {
+    for (const auto* func : _functions) {
+        delete func;
+    }
 }
 
-AggregateFunctionPtr AggregateFactory::MakeBitmapIntersectAggregateFunction() {
-    return std::make_shared<BitmapIntersectAggregateFunction>();
+const AggregateFunction* AggregateFactory::MakeBitmapUnionAggregateFunction() {
+    return new BitmapUnionAggregateFunction();
 }
 
-AggregateFunctionPtr AggregateFactory::MakeBitmapUnionCountAggregateFunction() {
-    return std::make_shared<BitmapUnionCountAggregateFunction>();
-}
-AggregateFunctionPtr AggregateFactory::MakeDictMergeAggregateFunction() {
-    return std::make_shared<DictMergeAggregateFunction>();
+const AggregateFunction* AggregateFactory::MakeBitmapIntersectAggregateFunction() {
+    return new BitmapIntersectAggregateFunction();
 }
 
-AggregateFunctionPtr AggregateFactory::MakeRetentionAggregateFunction() {
-    return std::make_shared<RetentionAggregateFunction>();
+const AggregateFunction* AggregateFactory::MakeBitmapUnionCountAggregateFunction() {
+    return new BitmapUnionCountAggregateFunction();
+}
+const AggregateFunction* AggregateFactory::MakeDictMergeAggregateFunction() {
+    return new DictMergeAggregateFunction();
 }
 
-AggregateFunctionPtr AggregateFactory::MakeHllUnionAggregateFunction() {
-    return std::make_shared<HllUnionAggregateFunction>();
+const AggregateFunction* AggregateFactory::MakeRetentionAggregateFunction() {
+    return new RetentionAggregateFunction();
 }
 
-AggregateFunctionPtr AggregateFactory::MakeHllUnionCountAggregateFunction() {
-    return std::make_shared<HllUnionCountAggregateFunction>();
+const AggregateFunction* AggregateFactory::MakeHllUnionAggregateFunction() {
+    return new HllUnionAggregateFunction();
 }
 
-AggregateFunctionPtr AggregateFactory::MakePercentileApproxAggregateFunction() {
-    return std::make_shared<PercentileApproxAggregateFunction>();
+const AggregateFunction* AggregateFactory::MakeHllUnionCountAggregateFunction() {
+    return new HllUnionCountAggregateFunction();
 }
 
-AggregateFunctionPtr AggregateFactory::MakePercentileApproxArrayAggregateFunction() {
-    return std::make_shared<PercentileApproxArrayAggregateFunction>();
+const AggregateFunction* AggregateFactory::MakePercentileApproxAggregateFunction() {
+    return new PercentileApproxAggregateFunction();
 }
 
-AggregateFunctionPtr AggregateFactory::MakePercentileApproxWeightedAggregateFunction() {
-    return std::make_shared<PercentileApproxWeightedAggregateFunction>();
+const AggregateFunction* AggregateFactory::MakePercentileApproxArrayAggregateFunction() {
+    return new PercentileApproxArrayAggregateFunction();
 }
 
-AggregateFunctionPtr AggregateFactory::MakePercentileApproxWeightedArrayAggregateFunction() {
-    return std::make_shared<PercentileApproxWeightedArrayAggregateFunction>();
+const AggregateFunction* AggregateFactory::MakePercentileApproxWeightedAggregateFunction() {
+    return new PercentileApproxWeightedAggregateFunction();
 }
 
-AggregateFunctionPtr AggregateFactory::MakePercentileUnionAggregateFunction() {
-    return std::make_shared<PercentileUnionAggregateFunction>();
+const AggregateFunction* AggregateFactory::MakePercentileApproxWeightedArrayAggregateFunction() {
+    return new PercentileApproxWeightedArrayAggregateFunction();
 }
 
-AggregateFunctionPtr AggregateFactory::MakeDenseRankWindowFunction() {
-    return std::make_shared<DenseRankWindowFunction>();
+const AggregateFunction* AggregateFactory::MakePercentileUnionAggregateFunction() {
+    return new PercentileUnionAggregateFunction();
 }
 
-AggregateFunctionPtr AggregateFactory::MakeRankWindowFunction() {
-    return std::make_shared<RankWindowFunction>();
+const AggregateFunction* AggregateFactory::MakeDenseRankWindowFunction() {
+    return new DenseRankWindowFunction();
 }
 
-AggregateFunctionPtr AggregateFactory::MakeRowNumberWindowFunction() {
-    return std::make_shared<RowNumberWindowFunction>();
+const AggregateFunction* AggregateFactory::MakeRankWindowFunction() {
+    return new RankWindowFunction();
 }
 
-AggregateFunctionPtr AggregateFactory::MakeCumeDistWindowFunction() {
-    return std::make_shared<CumeDistWindowFunction>();
+const AggregateFunction* AggregateFactory::MakeRowNumberWindowFunction() {
+    return new RowNumberWindowFunction();
 }
 
-AggregateFunctionPtr AggregateFactory::MakePercentRankWindowFunction() {
-    return std::make_shared<PercentRankWindowFunction>();
+const AggregateFunction* AggregateFactory::MakeCumeDistWindowFunction() {
+    return new CumeDistWindowFunction();
 }
 
-AggregateFunctionPtr AggregateFactory::MakeNtileWindowFunction() {
-    return std::make_shared<NtileWindowFunction>();
+const AggregateFunction* AggregateFactory::MakePercentRankWindowFunction() {
+    return new PercentRankWindowFunction();
+}
+
+const AggregateFunction* AggregateFactory::MakeNtileWindowFunction() {
+    return new NtileWindowFunction();
 }
 
 static const AggregateFunction* get_function(const std::string& name, LogicalType arg_type, LogicalType return_type,
