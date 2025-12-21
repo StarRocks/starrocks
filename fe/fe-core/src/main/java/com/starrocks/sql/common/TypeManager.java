@@ -124,13 +124,21 @@ public class TypeManager {
         }
         ArrayList<StructField> fields = Lists.newArrayList();
         for (int i = 0; i < t1.getFields().size(); ++i) {
-            Type fieldCommon = getCommonSuperType(t1.getField(i).getType(), t2.getField(i).getType());
+            StructField field1 = t1.getField(i);
+            // Match fields by name (case-insensitive) instead of by position
+            // to handle UNION ALL with STRUCT columns where field order differs
+            StructField field2 = t2.getField(field1.getName());
+            if (field2 == null) {
+                // Field name not found in t2, fall back to positional matching
+                field2 = t2.getField(i);
+            }
+            Type fieldCommon = getCommonSuperType(field1.getType(), field2.getType());
             if (!fieldCommon.isValid()) {
                 return InvalidType.INVALID;
             }
 
             // default t1's field name
-            fields.add(new StructField(t1.getField(i).getName(), fieldCommon));
+            fields.add(new StructField(field1.getName(), fieldCommon));
         }
         return new StructType(fields);
     }

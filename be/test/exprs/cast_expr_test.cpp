@@ -2549,4 +2549,104 @@ TEST_F(VectorizedCastExprTest, json_to_map) {
               cast_json_to_map(TYPE_INT, TYPE_INT, R"({"1":1, "k2":2, "3":"v3", "k4":"v4"})"));
 }
 
+// Test that struct-to-struct cast correctly reorders fields by name when field order differs
+TEST_F(VectorizedCastExprTest, struct_to_struct_field_reorder) {
+    // Create source struct type: STRUCT<price INT, product_id VARCHAR>
+    TypeDescriptor from_type = TypeDescriptor::create_struct_type(
+            {"price", "product_id"},
+            {TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_VARCHAR)});
+
+    // Create target struct type: STRUCT<product_id VARCHAR, price INT>
+    // Note: same field names but different order
+    TypeDescriptor to_type = TypeDescriptor::create_struct_type(
+            {"product_id", "price"},
+            {TypeDescriptor(TYPE_VARCHAR), TypeDescriptor(TYPE_INT)});
+
+    // Create the cast expression
+    TExprNode cast_node;
+    cast_node.node_type = TExprNodeType::CAST_EXPR;
+    cast_node.type = to_type.to_thrift();
+    cast_node.child_type = to_thrift(TYPE_STRUCT);
+    cast_node.child_type_desc = from_type.to_thrift();
+    cast_node.__isset.child_type = true;
+    cast_node.__isset.child_type_desc = true;
+
+    ObjectPool pool;
+    auto expr_result = VectorizedCastExprFactory::create_cast_expr(&pool, from_type, to_type, false);
+    ASSERT_TRUE(expr_result.ok()) << expr_result.status().message();
+    Expr* expr = expr_result.value();
+    pool.add(expr);
+
+    // Verify it's a CastStructExpr with correct field indices
+    auto* cast_struct_expr = dynamic_cast<CastStructExpr*>(expr);
+    ASSERT_NE(cast_struct_expr, nullptr);
+
+    const auto& indices = cast_struct_expr->source_field_indices();
+    ASSERT_EQ(indices.size(), 2);
+    // target field 0 (product_id) should come from source field 1
+    EXPECT_EQ(indices[0], 1);
+    // target field 1 (price) should come from source field 0
+    EXPECT_EQ(indices[1], 0);
+}
+
+// Test struct-to-struct cast with matching field order (no reordering needed)
+TEST_F(VectorizedCastExprTest, struct_to_struct_same_order) {
+    // Create source struct type: STRUCT<a INT, b VARCHAR>
+    TypeDescriptor from_type = TypeDescriptor::create_struct_type(
+            {"a", "b"},
+            {TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_VARCHAR)});
+
+    // Create target struct type: STRUCT<a BIGINT, b VARCHAR>
+    // Same field order, just different types
+    TypeDescriptor to_type = TypeDescriptor::create_struct_type(
+            {"a", "b"},
+            {TypeDescriptor(TYPE_BIGINT), TypeDescriptor(TYPE_VARCHAR)});
+
+    ObjectPool pool;
+    auto expr_result = VectorizedCastExprFactory::create_cast_expr(&pool, from_type, to_type, false);
+    ASSERT_TRUE(expr_result.ok()) << expr_result.status().message();
+    Expr* expr = expr_result.value();
+    pool.add(expr);
+
+    auto* cast_struct_expr = dynamic_cast<CastStructExpr*>(expr);
+    ASSERT_NE(cast_struct_expr, nullptr);
+
+    const auto& indices = cast_struct_expr->source_field_indices();
+    ASSERT_EQ(indices.size(), 2);
+    // Fields should map to themselves (same order)
+    EXPECT_EQ(indices[0], 0);
+    EXPECT_EQ(indices[1], 1);
+}
+
+// Test struct-to-struct cast with three fields in different order
+TEST_F(VectorizedCastExprTest, struct_to_struct_three_fields_reorder) {
+    // Create source struct type: STRUCT<x INT, y INT, z INT>
+    TypeDescriptor from_type = TypeDescriptor::create_struct_type(
+            {"x", "y", "z"},
+            {TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_INT)});
+
+    // Create target struct type: STRUCT<z INT, x INT, y INT>
+    TypeDescriptor to_type = TypeDescriptor::create_struct_type(
+            {"z", "x", "y"},
+            {TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_INT)});
+
+    ObjectPool pool;
+    auto expr_result = VectorizedCastExprFactory::create_cast_expr(&pool, from_type, to_type, false);
+    ASSERT_TRUE(expr_result.ok()) << expr_result.status().message();
+    Expr* expr = expr_result.value();
+    pool.add(expr);
+
+    auto* cast_struct_expr = dynamic_cast<CastStructExpr*>(expr);
+    ASSERT_NE(cast_struct_expr, nullptr);
+
+    const auto& indices = cast_struct_expr->source_field_indices();
+    ASSERT_EQ(indices.size(), 3);
+    // target field 0 (z) should come from source field 2
+    EXPECT_EQ(indices[0], 2);
+    // target field 1 (x) should come from source field 0
+    EXPECT_EQ(indices[1], 0);
+    // target field 2 (y) should come from source field 1
+    EXPECT_EQ(indices[2], 1);
+}
+
 } // namespace starrocks
