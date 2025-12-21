@@ -288,15 +288,6 @@ echo "Finished patching $LIBEVENT_SOURCE"
 # cd -
 # echo "Finished patching $THRIFT_SOURCE"
 
-# lz4 patch to disable shared library
-cd $TP_SOURCE_DIR/$LZ4_SOURCE
-if [ ! -f $PATCHED_MARK ] && [ $LZ4_SOURCE == "lz4-1.7.5" ]; then
-    patch -p0 < $TP_PATCH_DIR/lz4-1.7.5.patch
-    touch $PATCHED_MARK
-fi
-cd -
-echo "Finished patching $LZ4_SOURCE"
-
 cd $TP_SOURCE_DIR/$ROCKSDB_SOURCE
 if [ ! -f $PATCHED_MARK ] && [ $ROCKSDB_SOURCE == "rocksdb-6.22.1" ]; then
     patch -p1 < $TP_PATCH_DIR/rocksdb-6.22.1-metadata-header.patch
