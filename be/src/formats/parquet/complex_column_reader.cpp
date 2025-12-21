@@ -715,8 +715,8 @@ Status VariantColumnReader::read_range(const Range<uint64_t>& range, const Filte
                 // But there may be edge cases in parquet encoding, so just log a warning instead of DCHECK
                 if (def_levels[i] >= level_info.max_def_level) {
                     VLOG_FILE << "Null metadata/value at row " << i
-                                << " but variant group marked as non-null (def_level=" << def_levels[i]
-                                << " >= max_def_level=" << level_info.max_def_level << ")";
+                              << " but variant group marked as non-null (def_level=" << def_levels[i]
+                              << " >= max_def_level=" << level_info.max_def_level << ")";
                 }
                 variant_column->append(VariantValue::of_null());
             } else if (def_levels[i] >= level_info.max_def_level) {
@@ -727,11 +727,12 @@ Status VariantColumnReader::read_range(const Range<uint64_t>& range, const Filte
                 // Even if null flags are false, slices can be empty (empty strings are valid non-null values in BinaryColumn)
                 // But Variant requires non-empty value, so treat empty slices as null
                 if (metadata_slice.empty() || value_slice.empty()) {
-                    VLOG_FILE << "Empty metadata or value slice at row " << i << " (metadata_size="
-                                << metadata_slice.size << ", value_size=" << value_slice.size
-                                << "), treating as null variant";
+                    VLOG_FILE << "Empty metadata or value slice at row " << i
+                              << " (metadata_size=" << metadata_slice.size << ", value_size=" << value_slice.size
+                              << "), treating as null variant";
                     variant_column->append(VariantValue::of_null());
-                } else if (auto variant_value = VariantValue::create(metadata_slice, value_slice); !variant_value.ok()) {
+                } else if (auto variant_value = VariantValue::create(metadata_slice, value_slice);
+                           !variant_value.ok()) {
                     // Read malformed variant value as null
                     VLOG_FILE << "Failed to create variant value at row " << i << ": " << variant_value.status();
                     variant_column->append(VariantValue::of_null());
@@ -742,8 +743,8 @@ Status VariantColumnReader::read_range(const Range<uint64_t>& range, const Filte
                 // Variant group is null, metadata and value should also be null
                 if (!metadata_nulls[i] || !value_nulls[i]) {
                     VLOG_FILE << "Null variant group at row " << i
-                                << " but metadata/value not marked as null (metadata_null=" << metadata_nulls[i]
-                                << ", value_null=" << value_nulls[i] << ")";
+                              << " but metadata/value not marked as null (metadata_null=" << metadata_nulls[i]
+                              << ", value_null=" << value_nulls[i] << ")";
                 }
                 variant_column->append(VariantValue::of_null());
             }
@@ -765,11 +766,12 @@ Status VariantColumnReader::read_range(const Range<uint64_t>& range, const Filte
                 // Even if null flags are false, slices can be empty (empty strings are valid non-null values in BinaryColumn)
                 // But Variant requires non-empty value, so treat empty slices as null
                 if (metadata_slice.empty() || value_slice.empty()) {
-                    VLOG_FILE << "Empty metadata or value slice at row " << i << " (metadata_size="
-                                << metadata_slice.size << ", value_size=" << value_slice.size
-                                << "), treating as null variant";
+                    VLOG_FILE << "Empty metadata or value slice at row " << i
+                              << " (metadata_size=" << metadata_slice.size << ", value_size=" << value_slice.size
+                              << "), treating as null variant";
                     variant_column->append(VariantValue::of_null());
-                } else if (auto variant_value = VariantValue::create(metadata_slice, value_slice); !variant_value.ok()) {
+                } else if (auto variant_value = VariantValue::create(metadata_slice, value_slice);
+                           !variant_value.ok()) {
                     VLOG_FILE << "Failed to create variant value at row " << i << ": " << variant_value.status();
                     variant_column->append(VariantValue::of_null());
                 } else {
@@ -801,7 +803,7 @@ Status VariantColumnReader::read_range(const Range<uint64_t>& range, const Filte
                     // which result in null variants at the application level
                     if (metadata_nulls[i] || value_nulls[i]) {
                         VLOG_ROW << "Variant group marked as non-null at row " << i
-                                    << " but has null metadata/value fields";
+                                 << " but has null metadata/value fields";
                     }
                 } else {
                     is_nulls[i] = 1; // Variant group is null
@@ -809,8 +811,8 @@ Status VariantColumnReader::read_range(const Range<uint64_t>& range, const Filte
                     // Verify consistency: null group should usually have null metadata/value
                     if (!metadata_nulls[i] || !value_nulls[i]) {
                         VLOG_ROW << "Null variant group at row " << i
-                                    << " but metadata/value not marked as null (metadata_null=" << metadata_nulls[i]
-                                    << ", value_null=" << value_nulls[i] << ")";
+                                 << " but metadata/value not marked as null (metadata_null=" << metadata_nulls[i]
+                                 << ", value_null=" << value_nulls[i] << ")";
                     }
                 }
             }
@@ -819,8 +821,7 @@ Status VariantColumnReader::read_range(const Range<uint64_t>& range, const Filte
             nullable_column->set_has_null(has_null);
 
             // Final verification
-            DCHECK_EQ(nullable_column->size(), num_levels)
-                    << "Final nullable column size mismatch";
+            DCHECK_EQ(nullable_column->size(), num_levels) << "Final nullable column size mismatch";
         } else {
             NullColumn null_column(num_rows, 0);
             nullable_column->null_column_raw_ptr()->swap_column(null_column);
@@ -832,8 +833,7 @@ Status VariantColumnReader::read_range(const Range<uint64_t>& range, const Filte
         }
     } else {
         // Non-nullable variant column
-        DCHECK_EQ(variant_column->size(), num_rows)
-                << "Final variant column size must equal num_rows";
+        DCHECK_EQ(variant_column->size(), num_rows) << "Final variant column size must equal num_rows";
     }
 
     return Status::OK();
