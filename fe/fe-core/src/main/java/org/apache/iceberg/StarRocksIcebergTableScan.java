@@ -264,7 +264,7 @@ public class StarRocksIcebergTableScan
                     matchingCachedDeleteFiles.addAll(deleteFiles);
                 } else {
                     deleteFileCache.put(manifestFile.path(), ConcurrentHashMap.newKeySet());
-                    metaFileCacheMap.computeIfAbsent(icebergTableName, 
+                    metaFileCacheMap.computeIfAbsent(icebergTableName,
                             t -> ConcurrentHashMap.newKeySet()).add(manifestFile.path());
                     deleteManifestWithoutCache.add(manifestFile);
                 }
@@ -287,7 +287,7 @@ public class StarRocksIcebergTableScan
             } else {
                 if (!onlyReadCache) {
                     dataFileCache.put(manifestFile.path(), ConcurrentHashMap.newKeySet());
-                    metaFileCacheMap.computeIfAbsent(icebergTableName, 
+                    metaFileCacheMap.computeIfAbsent(icebergTableName,
                             t -> ConcurrentHashMap.newKeySet()).add(manifestFile.path());
                 }
                 dataManifestWithoutCache.add(manifestFile);
@@ -373,8 +373,8 @@ public class StarRocksIcebergTableScan
     public void refreshDataFileCache(List<ManifestFile> manifestFiles) {
         manifestFiles.forEach(manifestFile -> {
             dataFileCache.put(manifestFile.path(), Sets.newHashSet());
-            metaFileCacheMap.computeIfAbsent(icebergTableName, 
-                            t -> ConcurrentHashMap.newKeySet()).add(manifestFile.path());
+            metaFileCacheMap.computeIfAbsent(icebergTableName,
+                    t -> ConcurrentHashMap.newKeySet()).add(manifestFile.path());
         });
         this.deleteFileIndex = DeleteFileIndex.builderFor(new ArrayList<>()).build();
 
@@ -418,7 +418,7 @@ public class StarRocksIcebergTableScan
                     matchingCachedDeleteFiles.addAll(deleteFiles);
                 } else {
                     deleteFileCache.put(manifestFile.path(), ConcurrentHashMap.newKeySet());
-                    metaFileCacheMap.computeIfAbsent(icebergTableName, 
+                    metaFileCacheMap.computeIfAbsent(icebergTableName,
                             t -> ConcurrentHashMap.newKeySet()).add(manifestFile.path());
                     deleteManifestWithoutCache.add(manifestFile);
                 }
@@ -525,8 +525,12 @@ public class StarRocksIcebergTableScan
 
     @Override
     public CloseableIterable<CombinedScanTask> planTasks() {
+        long fileSplitSize = targetSplitSize();
+        if (scanContext.getFileSplitSize() > 0) {
+            fileSplitSize = scanContext.getFileSplitSize();
+        }
         return TableScanUtil.planTasks(
-                planFiles(), targetSplitSize(), splitLookback(), splitOpenFileCost());
+                planFiles(), fileSplitSize, splitLookback(), splitOpenFileCost());
     }
 
     private int liveFilesCount(List<ManifestFile> manifests) {
