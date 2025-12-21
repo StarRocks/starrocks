@@ -11,3 +11,5 @@ CREATE STORAGE VOLUME IF NOT EXISTS storage_volume_immutable type = s3 LOCATIONS
 ALTER STORAGE VOLUME storage_volume_immutable SET ("aws.s3.enable_partitioned_prefix" = "true");
 ALTER STORAGE VOLUME storage_volume_immutable SET ("aws.s3.num_partitioned_prefix" = "32");
 DROP STORAGE VOLUME IF EXISTS storage_volume_immutable;
+-- name: test_alter_storage_volume_if_not_exists
+ALTER STORAGE VOLUME IF EXISTS storage_volume_not_exists SET ("aws.s3.region"="us-west-1", "aws.s3.endpoint"="endpoint1", "enabled"="true");

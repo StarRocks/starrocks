@@ -38,3 +38,7 @@ E: (1064, "Storage volume property 'aws.s3.num_partitioned_prefix' is immutable!
 DROP STORAGE VOLUME IF EXISTS storage_volume_immutable;
 -- result:
 -- !result
+-- name: test_alter_storage_volume_if_not_exists
+ALTER STORAGE VOLUME IF EXISTS storage_volume_not_exists SET ("aws.s3.region"="us-west-1", "aws.s3.endpoint"="endpoint1", "enabled"="true");
+-- result:
+-- !result
