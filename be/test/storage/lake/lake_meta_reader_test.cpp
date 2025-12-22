@@ -155,9 +155,8 @@ TEST_F(LakeMetaReaderTest, test_get_segments_with_dup_keys_table) {
 
     // Verify we got 2 segments
     ASSERT_EQ(2, segments.size());
-    // For non-PK tables, options_list should be empty or have default options
-    // Based on implementation, only PK tables get options added
-    ASSERT_EQ(0, options_list.size()) << "Expected no options for non-PK table";
+    // Verify options for non-primary key table
+    ASSERT_EQ(2, options_list.size()) << "Expected 2 options for non-PK table";
 }
 
 // Test _get_segments with multiple rowsets
