@@ -784,47 +784,21 @@ Status UpdateManager::_do_update(uint32_t rowset_id, int32_t upsert_idx, const S
 
     // Prepare parallel execution infrastructure if enabled
     std::unique_ptr<ThreadPoolToken> token;
-    std::mutex mutex; // Protects shared state (deletes, status) during parallel execution
-    Status status = Status::OK();
 
     // Enable parallel execution for cloud-native index when configured
     if (config::enable_pk_index_parallel_get && is_cloud_native_index) {
         token = ExecEnv::GetInstance()->pk_index_get_thread_pool()->new_token(ThreadPool::ExecutionMode::CONCURRENT);
     }
 
-    // Setup context shared across all parallel tasks
-    ParallelPublishContext ctx{.token = token.get(),
-                               .mutex = &mutex,
-                               .deletes = new_deletes,
-                               .status = &status,
-                               .segment_pk_iterator = upsert.get()};
-
-    // Process each segment (serially or in parallel depending on token)
-    for (; !upsert->done(); upsert->next()) {
-        if (read_only && is_cloud_native_index) {
-            // Read-only path: Index sstable files already exist from data load/compaction.
-            // Only need to query index to find existing rows to delete.
-            RETURN_IF_ERROR(index.parallel_get(&ctx));
-        } else {
-            // Write path: Update index with new rows and collect rows to delete.
-            // rowset_id + upsert_idx forms the unique RSSID for this segment.
-            RETURN_IF_ERROR(index.parallel_upsert(rowset_id + upsert_idx, &ctx));
-        }
+    if (read_only) {
+        // Query existing rows to delete without modifying the index
+        RETURN_IF_ERROR(index.parallel_get(token.get(), upsert.get(), new_deletes));
+    } else {
+        // Update index and collect rows to delete
+        RETURN_IF_ERROR(index.parallel_upsert(token.get(), rowset_id + upsert_idx, upsert.get(), new_deletes));
     }
 
-    // Synchronize parallel execution if enabled
-    if (token) {
-        TRACE_COUNTER_SCOPE_LATENCY_US("parallel_execution_wait_us");
-        token->wait(); // Wait for all submitted tasks to complete
-
-        // Flush accumulated updates to sstable file (batch optimization)
-        if (!read_only && is_cloud_native_index) {
-            RETURN_IF_ERROR(index.flush_memtable());
-        }
-    }
-
-    RETURN_IF_ERROR(status); // Check for errors from parallel tasks
-    return upsert->status();
+    return Status::OK();
 }
 
 Status UpdateManager::_do_update_with_condition(const RowsetUpdateStateParams& params, uint32_t rowset_id,

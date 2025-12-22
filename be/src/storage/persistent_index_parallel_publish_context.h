@@ -63,9 +63,6 @@ struct ParallelPublishContext {
     // Protected by mutex during concurrent updates.
     Status* status = nullptr;
 
-    // Iterator over segments to process. Each task gets the next segment via current().
-    lake::SegmentPKIterator* segment_pk_iterator = nullptr;
-
     // Working slots for parallel tasks. Each task allocates one slot via extend_slots().
     // Slots are accessed sequentially (no concurrent access to the same slot).
     // Notice : We use pointer as item, so the address of each slot is stable after extend_slots().

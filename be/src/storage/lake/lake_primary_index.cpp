@@ -373,60 +373,77 @@ Status LakePrimaryIndex::flush_memtable(bool force) {
 // - Each task allocates its own slot to avoid data races during parallel execution
 // - Shared state (deletes, status) is protected by mutex when updated
 // - Errors are accumulated in context->status for later checking
-Status LakePrimaryIndex::parallel_get(ParallelPublishContext* context) {
-    auto current = context->segment_pk_iterator->current();
+Status LakePrimaryIndex::parallel_get(ThreadPoolToken* token, SegmentPKIterator* segment_pk_iterator,
+                                      DeletesMap* new_deletes) {
+    // Prepare parallel execution infrastructure if enabled
+    std::mutex mutex; // Protects shared state (deletes, status) during parallel execution
+    Status status = Status::OK();
 
-    // `extend_slots` is not thread-safe, must be called before submitting task
-    context->extend_slots(); // Allocate a slot for this task's working data
-    auto slot = context->slots.back().get();
+    // Setup context shared across all parallel tasks
+    ParallelPublishContext context{.token = token, .mutex = &mutex, .deletes = new_deletes, .status = &status};
 
-    // Define the task to execute (either async in thread pool or inline)
-    auto func = [this, context, current, slot]() {
-        // Error handling: Must not throw or early return, as we need to wait for all tasks
-        Status st = Status::OK();
+    // Process each segment in the iterator
+    for (; !segment_pk_iterator->done(); segment_pk_iterator->next()) {
+        auto current = segment_pk_iterator->current();
 
-        // Encode primary keys for this segment
-        auto pk_column_st = context->segment_pk_iterator->encoded_pk_column(current.first.get());
-        DCHECK(context->slots.size() > 0);
+        // `extend_slots` is not thread-safe, must be called before submitting task
+        context.extend_slots(); // Allocate a slot for this task's working data
+        auto slot = context.slots.back().get();
 
-        if (pk_column_st.ok()) {
-            // Query index for existing rows with these primary keys
-            slot->pk_column = std::move(pk_column_st.value());
-            slot->old_values.resize(slot->pk_column->size(), NullIndexValue);
-            st = get(*slot->pk_column, &slot->old_values);
-        } else {
-            st = pk_column_st.status();
-        }
+        // Define the task to execute (either async in thread pool or inline)
+        auto func = [this, context, current, slot]() {
+            // Error handling: Must not throw or early return, as we need to wait for all tasks
+            Status st = Status::OK();
 
-        // Update shared state under lock
-        std::lock_guard<std::mutex> l(*context->mutex);
-        context->status->update(st);
+            // Encode primary keys for this segment
+            auto pk_column_st = context.segment_pk_iterator->encoded_pk_column(current.first.get());
+            DCHECK(context.slots.size() > 0);
 
-        // Collect rows to delete: extract segment ID and row ID from old_values
-        // Format: old_value = (segment_id << 32) | row_id
-        if (context->status->ok()) {
-            for (unsigned long old : slot->old_values) {
-                if (old != NullIndexValue) {
-                    (*context->deletes)[(uint32_t)(old >> 32)].push_back((uint32_t)(old & ROWID_MASK));
+            if (pk_column_st.ok()) {
+                // Query index for existing rows with these primary keys
+                slot->pk_column = std::move(pk_column_st.value());
+                slot->old_values.resize(slot->pk_column->size(), NullIndexValue);
+                st = get(*slot->pk_column, &slot->old_values);
+            } else {
+                st = pk_column_st.status();
+            }
+
+            // Update shared state under lock
+            std::lock_guard<std::mutex> l(*context.mutex);
+            context.status->update(st);
+
+            // Collect rows to delete: extract segment ID and row ID from old_values
+            // Format: old_value = (segment_id << 32) | row_id
+            if (context.status->ok()) {
+                for (unsigned long old : slot->old_values) {
+                    if (old != NullIndexValue) {
+                        (*context->deletes)[(uint32_t)(old >> 32)].push_back((uint32_t)(old & ROWID_MASK));
+                    }
                 }
             }
+        };
+
+        if (token) {
+            // Parallel mode: Submit task to thread pool
+            auto st = token->submit_func(func);
+            TRACE_COUNTER_INCREMENT("parallel_get_cnt", 1);
+
+            // Record submit errors (actual execution errors will be recorded by the task)
+            std::lock_guard<std::mutex> l(*context.mutex);
+            context.status->update(st);
+        } else {
+            // Serial mode: Execute inline
+            func();
+            RETURN_IF_ERROR(*context.status);
         }
-    };
-
-    if (context->token) {
-        // Parallel mode: Submit task to thread pool
-        auto st = context->token->submit_func(func);
-        TRACE_COUNTER_INCREMENT("parallel_get_cnt", 1);
-
-        // Record submit errors (actual execution errors will be recorded by the task)
-        std::lock_guard<std::mutex> l(*context->mutex);
-        context->status->update(st);
-    } else {
-        // Serial mode: Execute inline
-        func();
-        RETURN_IF_ERROR(*context->status);
     }
-    return Status::OK();
+    if (token) {
+        TRACE_COUNTER_SCOPE_LATENCY_US("parallel_get_wait_us");
+        token->wait(); // Wait for all submitted tasks to complete
+    }
+
+    RETURN_IF_ERROR(status); // Check for errors from parallel tasks
+    return segment_pk_iterator->status();
 }
 
 // Update index with new primary keys from the current segment.
@@ -447,41 +464,61 @@ Status LakePrimaryIndex::parallel_get(ParallelPublishContext* context) {
 // - context: Parallel execution context with thread pool token, mutex, and slots
 //
 // Note: Unlike parallel_get which is read-only, this writes to the index memtable
-Status LakePrimaryIndex::parallel_upsert(uint32_t rssid, ParallelPublishContext* context) {
-    auto current = context->segment_pk_iterator->current();
-    if (context->token) {
-        // Parallel mode: Allocate a slot for this task to store its pk_column
-        context->extend_slots();
-        auto slot = context->slots.back().get();
+Status LakePrimaryIndex::parallel_upsert(ThreadPoolToken* token, uint32_t rssid, SegmentPKIterator* segment_pk_iterator,
+                                         DeletesMap* new_deletes) {
+    // Prepare parallel execution infrastructure if enabled
+    std::mutex mutex; // Protects shared state (deletes, status) during parallel execution
+    Status status = Status::OK();
 
-        // We can't return error directly, because we need to wait all previous tasks finish.
-        // Instead, we accumulate errors in context->status for later checking.
-        Status st = Status::OK();
-        auto pk_column_st = context->segment_pk_iterator->encoded_pk_column(current.first.get());
-        if (pk_column_st.ok()) {
-            // Store pk_column in this task's slot to avoid data races
-            slot->pk_column = std::move(pk_column_st.value());
+    // Setup context shared across all parallel tasks
+    ParallelPublishContext context{.token = token, .mutex = &mutex, .deletes = new_deletes, .status = &status};
 
-            // Submit upsert task to thread pool. Pass nullptr for deletes since we collect
-            // them in the context (not used for upsert, only for parallel_get)
-            st = upsert(rssid, current.second, *slot->pk_column, nullptr /* stat */, context);
-            TRACE_COUNTER_INCREMENT("parallel_upsert_cnt", 1);
+    // Process each segment in the iterator
+    for (; !segment_pk_iterator->done(); segment_pk_iterator->next()) {
+        auto current = segment_pk_iterator->current();
+        if (token) {
+            // Parallel mode: Allocate a slot for this task to store its pk_column
+            context.extend_slots();
+            auto slot = context.slots.back().get();
+
+            // We can't return error directly, because we need to wait all previous tasks finish.
+            // Instead, we accumulate errors in context->status for later checking.
+            Status st = Status::OK();
+            auto pk_column_st = segment_pk_iterator->encoded_pk_column(current.first.get());
+            if (pk_column_st.ok()) {
+                // Store pk_column in this task's slot to avoid data races
+                slot->pk_column = std::move(pk_column_st.value());
+
+                // Submit upsert task to thread pool. Pass nullptr for deletes since we collect
+                // them in the context (not used for upsert, only for parallel_get)
+                st = upsert(rssid, current.second, *slot->pk_column, nullptr /* stat */, &context);
+                TRACE_COUNTER_INCREMENT("parallel_upsert_cnt", 1);
+            } else {
+                st = pk_column_st.status();
+            }
+
+            // Update shared status under mutex if error occurred
+            if (!st.ok()) {
+                std::lock_guard<std::mutex> l(*context.mutex);
+                context.status->update(st);
+            }
         } else {
-            st = pk_column_st.status();
+            // Serial mode: Execute inline with direct error propagation
+            ASSIGN_OR_RETURN(MutableColumnPtr pk_column, segment_pk_iterator->encoded_pk_column(current.first.get()));
+            RETURN_IF_ERROR(upsert(rssid, current.second, *pk_column, context.deletes));
         }
-
-        // Update shared status under mutex if error occurred
-        if (!st.ok()) {
-            std::lock_guard<std::mutex> l(*context->mutex);
-            context->status->update(st);
-        }
-    } else {
-        // Serial mode: Execute inline with direct error propagation
-        ASSIGN_OR_RETURN(MutableColumnPtr pk_column,
-                         context->segment_pk_iterator->encoded_pk_column(current.first.get()));
-        RETURN_IF_ERROR(upsert(rssid, current.second, *pk_column, context->deletes));
     }
-    return Status::OK();
+    // Synchronize parallel execution if enabled
+    if (token) {
+        TRACE_COUNTER_SCOPE_LATENCY_US("parallel_upsert_wait_us");
+        token->wait(); // Wait for all submitted tasks to complete
+
+        // Flush accumulated updates to sstable file (batch optimization)
+        RETURN_IF_ERROR(flush_memtable());
+    }
+
+    RETURN_IF_ERROR(status); // Check for errors from parallel tasks
+    return segment_pk_iterator->status();
 }
 
 } // namespace starrocks::lake

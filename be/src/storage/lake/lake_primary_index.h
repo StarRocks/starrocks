@@ -32,6 +32,7 @@ class Tablet;
 class MetaFileBuilder;
 class TabletManager;
 class LakePersistentIndexParallelCompactMgr;
+class SegmentPKIterator;
 
 class LakePrimaryIndex : public PrimaryIndex {
 public:
@@ -98,14 +99,15 @@ public:
                                                   int32_t fileset_start_idx);
 
     // This function could be called in cloud native persistent index only.
-    Status parallel_get(ParallelPublishContext* context);
+    Status parallel_get(ThreadPoolToken* token, SegmentPKIterator* segment_pk_iterator, DeletesMap* new_deletes);
 
     // This function will be called when parallel upsert happens.
     // The process flow of parallel upsert is:
     // 1. upsert into memtable. (serialize)
     // 2. parallel get from inactive memtables and sstables. (parallel)
     // 3. Call `flush_memtable`, and flush memtable into sstable when memtable is full. (serialize)
-    Status parallel_upsert(uint32_t rssid, ParallelPublishContext* context);
+    Status parallel_upsert(ThreadPoolToken* token, uint32_t rssid, SegmentPKIterator* segment_pk_iterator,
+                           DeletesMap* new_deletes);
 
     // Flush memtable data into sstable.
     Status flush_memtable(bool force = false);
