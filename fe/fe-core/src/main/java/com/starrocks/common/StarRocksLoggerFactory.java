@@ -75,6 +75,21 @@ public class StarRocksLoggerFactory {
         }
 
         @Override
+        public Message newMessage(CharSequence message) {
+            return new ParameterizedMessage(format(message.toString()));
+        }
+
+        @Override
+        public Message newMessage(Object message) {
+            return new ParameterizedMessage(format(Objects.toString(message)));
+        }
+
+        @Override
+        public Message newMessage(String message) {
+            return new ParameterizedMessage(format(message));
+        }
+
+        @Override
         public Message newMessage(final String message, final Object... params) {
             return new ParameterizedMessage(format(message), params);
         }
