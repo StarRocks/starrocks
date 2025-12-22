@@ -386,7 +386,7 @@ Status GroupReader::_create_column_readers() {
             } else if (slot->col_name() == "_scan_range_id") {
                 _column_readers.emplace(slot->id(), std::make_unique<FixedValueColumnReader>(_param.scan_range_id));
             } else if (slot->col_name() == HdfsScanner::ICEBERG_ROW_POSITION) {
-                _column_readers.emplace(slot->id(), std::make_unique<ParquetPosReader>(_row_group_first_row));
+                _column_readers.emplace(slot->id(), std::make_unique<ParquetPosReader>());
             }
         }
     }

@@ -21,13 +21,10 @@ namespace starrocks::parquet {
 // ParquetPosReader reads the $row_pos virtual column for Parquet files.
 // This column represents the position of a row within a file (file-internal offset),
 // which is used for Iceberg position delete operations.
-//
-// The position is calculated as: _row_group_first_row + i, where i is the row index within the row group.
 class ParquetPosReader final : public ColumnReader {
 public:
     // row_group_first_row: The starting position of this row group within the file
-    explicit ParquetPosReader(int64_t row_group_first_row)
-            : ColumnReader(nullptr), _row_group_first_row(row_group_first_row) {}
+    explicit ParquetPosReader() : ColumnReader(nullptr) {}
     ~ParquetPosReader() override = default;
 
     Status prepare() override { return Status::OK(); }
@@ -54,9 +51,6 @@ public:
         // Position column does not support page index filtering
         return false;
     }
-
-private:
-    int64_t _row_group_first_row = 0;
 };
 
 } // namespace starrocks::parquet

@@ -23,8 +23,8 @@ Status ParquetPosReader::read_range(const Range<uint64_t>& range, const Filter* 
     if (filter == nullptr) {
         // No filter, generate positions for all rows in the range
         for (uint64_t i = range.begin(); i < range.end(); ++i) {
-            // Generate position based on the row group first row and the current row index.
-            int64_t pos = _row_group_first_row + i;
+            // Generate position based on the absolute row position in the file.
+            int64_t pos = i;
             dst->as_mutable_raw_ptr()->append_datum(Datum(pos));
         }
     } else {
@@ -33,8 +33,8 @@ Status ParquetPosReader::read_range(const Range<uint64_t>& range, const Filter* 
         for (uint64_t i = range.begin(); i < range.end(); ++i) {
             size_t filter_index = i - range.begin();
             if ((*filter)[filter_index]) {
-                // Generate position based on the row group first row and the current row index.
-                int64_t pos = _row_group_first_row + i;
+                // Generate position based on the absolute row position in the file.
+                int64_t pos = i;
                 dst->as_mutable_raw_ptr()->append_datum(Datum(pos));
             }
         }
