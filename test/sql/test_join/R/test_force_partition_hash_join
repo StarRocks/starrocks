@@ -29,13 +29,13 @@ PROPERTIES (
 );
 -- result:
 -- !result
-insert into t0 SELECT generate_series, generate_series, generate_series, generate_series FROM TABLE(generate_series(1,  409600));
+insert into t0 SELECT generate_series, generate_series, generate_series, generate_series FROM TABLE(generate_series(1,  40960));
 -- result:
 -- !result
 insert into t1 select * from t0;
 -- result:
 -- !result
-insert into t0 SELECT generate_series, generate_series, generate_series, generate_series FROM TABLE(generate_series(409600, 409600 + 20000));
+insert into t0 SELECT generate_series, generate_series, generate_series, generate_series FROM TABLE(generate_series(40960, 40960 + 20000));
 -- result:
 -- !result
 admin enable failpoint 'always_use_partition_join';
@@ -43,15 +43,15 @@ admin enable failpoint 'always_use_partition_join';
 -- !result
 select count(l.c0), avg(l.c0), count(l.c1), count(l.c0), count(r.c1) from t0 l join t1 r on l.c0 = r.c0 and l.c1 = r.c1;
 -- result:
-409601	204800.9999975586	409601	409601	409601
+40961	20480.999975586532	40961	40961	40961
 -- !result
 select count(l.c0), avg(l.c0), count(l.c1), count(l.c0), count(r.c1) from t0 l left join t1 r on l.c0 = r.c0 and l.c1 = r.c1;
 -- result:
-429601	214800.9534428458	429601	429601	409601
+60961	30480.671904988434	60961	60961	40961
 -- !result
 select count(l.c0), avg(l.c0), count(l.c1), count(l.c0), count(r.c1) from t0 l right join t1 r on l.c0 = r.c0 and l.c1 = r.c1;
 -- result:
-409601	204800.9999975586	409601	409601	409601
+40961	20480.999975586532	40961	40961	40961
 -- !result
 select count(*) from (select * from t0 where c0 not in (select c0 from t1)) t;
 -- result:

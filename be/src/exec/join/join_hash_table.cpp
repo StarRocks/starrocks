@@ -630,7 +630,7 @@ int64_t JoinHashTable::mem_usage() const {
     return usage;
 }
 
-Status JoinHashTable::build(RuntimeState* state) {
+Status JoinHashTable::build(RuntimeState* state, bool allow_build_empty_table) {
     CancelableDefer defer = CancelableDefer([&]() {
         _table_items->key_columns.clear();
         _table_items->build_chunk->columns().clear();
@@ -651,7 +651,7 @@ Status JoinHashTable::build(RuntimeState* state) {
 
     RETURN_IF_ERROR(_upgrade_key_columns_if_overflow());
 
-    if (_table_items->row_count == 0) {
+    if (_table_items->row_count == 0 && allow_build_empty_table) {
         _is_empty_map = true;
         _hash_map = std::make_unique<JoinHashMapForEmpty>(_table_items.get(), _probe_state.get());
     } else {

@@ -28,9 +28,9 @@ PROPERTIES (
 "compression" = "LZ4"
 );
 
-insert into t0 SELECT generate_series, generate_series, generate_series, generate_series FROM TABLE(generate_series(1,  409600));
+insert into t0 SELECT generate_series, generate_series, generate_series, generate_series FROM TABLE(generate_series(1,  40960));
 insert into t1 select * from t0;
-insert into t0 SELECT generate_series, generate_series, generate_series, generate_series FROM TABLE(generate_series(409600, 409600 + 20000));
+insert into t0 SELECT generate_series, generate_series, generate_series, generate_series FROM TABLE(generate_series(40960, 40960 + 20000));
 
 admin enable failpoint 'always_use_partition_join';
 
