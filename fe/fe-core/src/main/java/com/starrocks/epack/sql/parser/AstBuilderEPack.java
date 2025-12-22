@@ -73,6 +73,7 @@ import com.starrocks.sql.ast.warehouse.SuspendWarehouseStmt;
 import com.starrocks.sql.parser.AstBuilder;
 import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.sql.parser.StarRocksParser;
+import com.starrocks.sql.parser.TypeParser;
 import com.starrocks.type.BooleanType;
 import org.antlr.v4.runtime.ParserRuleContext;
 
@@ -82,6 +83,7 @@ import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 
+import static com.starrocks.sql.parser.AstBuilderUtils.createPos;
 import static com.starrocks.sql.parser.ErrorMsgProxy.PARSER_ERROR_MSG;
 import static java.util.stream.Collectors.toList;
 
@@ -333,7 +335,7 @@ public class AstBuilderEPack extends AstBuilder {
         if (context.policySignature() != null) {
             for (StarRocksParser.PolicySignatureContext arg : context.policySignature()) {
                 argNames.add(((Identifier) visit(arg.identifier())).getValue());
-                argTypes.add(new TypeDef(getType(arg.type())));
+                argTypes.add(new TypeDef(TypeParser.getType(arg.type())));
             }
         }
 
@@ -343,7 +345,8 @@ public class AstBuilderEPack extends AstBuilder {
         String comment = context.comment() == null ? "" : ((StringLiteral) visit(context.comment())).getStringValue();
 
         return new CreatePolicyStmt(context.IF() != null,
-                PolicyType.MASKING, policyName, argNames, argTypes, new TypeDef(getType(context.type())),
+                PolicyType.MASKING, policyName, argNames, argTypes,
+                new TypeDef(TypeParser.getType(context.type())),
                 (Expr) visit(context.expression()), comment, createPos(context));
     }
 
@@ -407,7 +410,7 @@ public class AstBuilderEPack extends AstBuilder {
         if (context.policySignature() != null) {
             for (StarRocksParser.PolicySignatureContext arg : context.policySignature()) {
                 argNames.add(((Identifier) visit(arg.identifier())).getValue());
-                argTypes.add(new TypeDef(getType(arg.type())));
+                argTypes.add(new TypeDef(TypeParser.getType(arg.type())));
             }
         }
 
