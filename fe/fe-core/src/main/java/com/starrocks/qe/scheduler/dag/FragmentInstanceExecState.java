@@ -374,16 +374,17 @@ public class FragmentInstanceExecState {
     }
 
     /**
-     * Cancel the fragment instance.
+     * Cancel the fragment instance with error message.
      *
      * @param cancelReason The cancel reason.
+     * @param errorMessage The detailed error message (used for INTERNAL_ERROR).
      * @return true if cancel succeeds. Otherwise, return false.
      */
-    public synchronized boolean cancelFragmentInstance(PPlanFragmentCancelReason cancelReason) {
+    public synchronized boolean cancelFragmentInstance(PPlanFragmentCancelReason cancelReason, String errorMessage) {
         if (LOG.isDebugEnabled()) {
             LOG.debug(
-                    "cancelRemoteFragments state={}  backend: {}, fragment instance id={}, reason: {}",
-                    state, worker.getId(), DebugUtil.printId(instanceId), cancelReason.name());
+                    "cancelRemoteFragments state={}  backend: {}, fragment instance id={}, reason: {}, error: {}",
+                    state, worker.getId(), DebugUtil.printId(instanceId), cancelReason.name(), errorMessage);
         }
 
         switch (state) {
@@ -402,7 +403,7 @@ public class FragmentInstanceExecState {
         try {
             BackendServiceClient.getInstance().cancelPlanFragmentAsync(brpcAddress,
                     jobSpec.getQueryId(), instanceId, cancelReason,
-                    jobSpec.isEnablePipeline());
+                    jobSpec.isEnablePipeline(), errorMessage);
         } catch (RpcException e) {
             LOG.warn("cancel plan fragment get a exception, address={}:{}", brpcAddress.getHostname(),
                     brpcAddress.getPort(), e);

@@ -787,7 +787,7 @@ public class ConnectProcessorTest extends DDLTestBase {
             }
         };
 
-        TMasterOpResult result = processor.proxyExecute(request);
+        TMasterOpResult result = processor.proxyExecute(request, null);
         Assertions.assertNotNull(result);
     }
 
@@ -817,7 +817,7 @@ public class ConnectProcessorTest extends DDLTestBase {
             }
         };
 
-        TMasterOpResult result = processor.proxyExecute(request);
+        TMasterOpResult result = processor.proxyExecute(request, null);
         Assertions.assertNotNull(result);
         Assertions.assertTrue(context.getState().isError());
     }

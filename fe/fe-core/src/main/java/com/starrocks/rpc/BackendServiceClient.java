@@ -157,7 +157,7 @@ public class BackendServiceClient {
 
     public Future<PCancelPlanFragmentResult> cancelPlanFragmentAsync(
             TNetworkAddress address, TUniqueId queryId, TUniqueId finstId, PPlanFragmentCancelReason cancelReason,
-            boolean isPipeline) throws RpcException {
+            boolean isPipeline, String errorMessage) throws RpcException {
         final PCancelPlanFragmentRequest pRequest = new PCancelPlanFragmentRequest();
         PUniqueId uid = new PUniqueId();
         uid.hi = finstId.hi;
@@ -169,6 +169,10 @@ public class BackendServiceClient {
         qid.hi = queryId.hi;
         qid.lo = queryId.lo;
         pRequest.queryId = qid;
+        // Set error message for INTERNAL_ERROR to propagate actual error to BE
+        if (errorMessage != null && !errorMessage.isEmpty()) {
+            pRequest.errorMessage = errorMessage;
+        }
         try {
             final PBackendService service = BrpcProxy.getBackendService(address);
             return service.cancelPlanFragmentAsync(pRequest);
