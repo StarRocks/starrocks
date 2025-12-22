@@ -16,10 +16,10 @@ package com.starrocks.service.arrow.flight.sql;
 
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.MapType;
+import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.Type;
-import com.starrocks.catalog.PrimitiveType;
 import org.apache.arrow.vector.types.DateUnit;
 import org.apache.arrow.vector.types.FloatingPointPrecision;
 import org.apache.arrow.vector.types.TimeUnit;
