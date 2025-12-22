@@ -368,11 +368,7 @@ public class RewriteSimpleAggToMetaScanRule extends TransformationRule {
             // all aggregations can be replaced
             Preconditions.checkState(newAggCalls.isEmpty());
             LogicalValuesOperator row = new LogicalValuesOperator(scanOperator.getOutputColumns().subList(0, 1),
-<<<<<<< HEAD
-                    List.of(List.of(ConstantOperator.createNull(Type.BIGINT))));
-=======
                     List.of(List.of(ConstantOperator.createExampleValueByType(IntegerType.BIGINT))));
->>>>>>> 307585b5a1 ([BugFix] fix nullable property mismatched error when rewriting meta scan by stats (#67051))
             return Optional.of(OptExpression.create(project, OptExpression.create(row)));
         }
 
