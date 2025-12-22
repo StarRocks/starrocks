@@ -106,7 +106,7 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_lambda_expr(ExprContext* context, Chu
     // 1. evaluate outer common expressions
     for (const auto& [slot_id, expr] : _outer_common_exprs) {
         ASSIGN_OR_RETURN(auto col, context->evaluate(expr, tmp_chunk.get()));
-        tmp_chunk->append_column(col, slot_id);
+        tmp_chunk->append_column(std::move(col), slot_id);
     }
     auto lambda_func = dynamic_cast<LambdaFunction*>(_children[0]);
     std::vector<SlotId> capture_slot_ids;

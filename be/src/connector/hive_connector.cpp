@@ -304,7 +304,7 @@ Status HiveDataSource::_init_partition_values() {
         int partition_col_idx = _partition_index_in_hdfs_partition_columns[i];
         ASSIGN_OR_RETURN(auto partition_value_col, partition_values[partition_col_idx]->evaluate(nullptr));
         DCHECK(partition_value_col->is_constant());
-        partition_chunk->append_column(partition_value_col, slot_id);
+        partition_chunk->append_column(std::move(partition_value_col), slot_id);
     }
 
     // eval conjuncts and skip if no rows.

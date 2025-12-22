@@ -53,7 +53,7 @@ TEST(DisjunctivePredicatesTest, TwoPredicateTest) {
     Chunk::SlotHashMap hash_map;
     hash_map[0] = 0;
     hash_map[1] = 1;
-    auto chunk = std::make_shared<Chunk>(columns, hash_map);
+    auto chunk = std::make_shared<Chunk>(std::move(columns), hash_map);
     chunk->_cid_to_index[0] = 0;
     chunk->_cid_to_index[1] = 1;
 
