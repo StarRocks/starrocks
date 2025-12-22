@@ -1626,13 +1626,13 @@ CREATE VIEW IF NOT EXISTS iceberg.iceberg_db.iceberg_view1 AS
 SELECT k1, k2 FROM iceberg.iceberg_db.iceberg_table;
 ```
 
-You can specify the view attributes in the `"key" = "value"` format in `PROPERTIES`. This feature is supported from v4.0.3 onwards.
+From v4.0.3 onwards, you can specify the view attributes in the `"key" = "value"` format in `PROPERTIES`.
 
 ```SQL
 CREATE VIEW IF NOT EXISTS iceberg.iceberg_db.iceberg_view1
 PROPERTIES (
-  "owner" = "user1",
-  "application-name" = "sr-application1"
+  "key1" = "value1",
+  "key2" = "value2"
 )
 AS
 SELECT k1, k2 FROM iceberg.iceberg_db.iceberg_table;
