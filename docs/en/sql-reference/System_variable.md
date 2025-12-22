@@ -861,8 +861,6 @@ If a Join (other than Broadcast Join and Replicated Join) has multiple equi-join
 * **Data Type**: boolean
 * **Introduced in**: v3.2.0
 
-(Used in: `fe-core/src/main/java/com/starrocks/qe/SessionVariable.java`, `fe-core/src/main/java/com/starrocks/qe/scheduler/TFragmentInstanceFactory.java`)
-
 ### enable_short_circuit
 
 * **Description**: Whether to enable short circuiting for queries. Default: `false`. If it is set to `true`, when the query meets the criteria (to evaluate whether the query is a point query): the conditional columns in the WHERE clause include all primary key columns, and the operators in the WHERE clause are `=` or `IN`, the query takes the short circuit.
