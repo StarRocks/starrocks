@@ -91,6 +91,7 @@ static void dump_trace_info() {
         auto query_id = CurrentThread::current().query_id();
         auto fragment_instance_id = CurrentThread::current().fragment_instance_id();
         const std::string& custom_coredump_msg = CurrentThread::current().get_custom_coredump_msg();
+        int32_t plan_node_id = CurrentThread::current().plan_node_id();
         const uint32_t MAX_BUFFER_SIZE = 512;
         char buffer[MAX_BUFFER_SIZE] = {};
 
@@ -103,6 +104,7 @@ static void dump_trace_info() {
         res = sprintf(buffer + res, ", ") + res;
         res = sprintf(buffer + res, "fragment_instance:") + res;
         res = print_unique_id(buffer + res, fragment_instance_id) + res;
+        res = sprintf(buffer + res, ", plan_node_id:%d", plan_node_id) + res;
         res = sprintf(buffer + res, "\n") + res;
 
         // print for lake filename
