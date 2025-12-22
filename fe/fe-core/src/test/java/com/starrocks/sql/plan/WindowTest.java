@@ -698,6 +698,168 @@ public class WindowTest extends PlanTestBase {
     }
 
     @Test
+    public void testLimitRankingWindowWithoutPartitionAndOrder() throws Exception {
+        {
+            String sql = "select * from (\n" +
+                    "    select *, " +
+                    "        row_number() over () as rk " +
+                    "    from t0\n" +
+                    ") sub_t0\n" +
+                    "order by rk limit 4;";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  3:TOP-N\n" +
+                    "  |  order by: <slot 4> 4: row_number() ASC\n" +
+                    "  |  offset: 0\n" +
+                    "  |  limit: 4\n" +
+                    "  |  \n" +
+                    "  2:ANALYTIC\n" +
+                    "  |  functions: [, row_number(), ]\n" +
+                    "  |  window: ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW\n" +
+                    "  |  \n" +
+                    "  1:EXCHANGE\n" +
+                    "     limit: 4", "  STREAM DATA SINK\n" +
+                    "    EXCHANGE ID: 01\n" +
+                    "    UNPARTITIONED\n" +
+                    "\n" +
+                    "  0:OlapScanNode\n" +
+                    "     TABLE: t0\n" +
+                    "     PREAGGREGATION: ON\n" +
+                    "     partitions=0/1\n" +
+                    "     rollup: t0\n" +
+                    "     tabletRatio=0/0\n" +
+                    "     tabletList=\n" +
+                    "     cardinality=1\n" +
+                    "     avgRowSize=3.0\n" +
+                    "     limit: 4");
+        }
+
+        {
+            String sql = "select * from (\n" +
+                    "    select *, " +
+                    "        rank() over () as rk " +
+                    "    from t0\n" +
+                    ") sub_t0\n" +
+                    "order by rk limit 4;";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  3:TOP-N\n" +
+                    "  |  order by: <slot 4> 4: rank() ASC\n" +
+                    "  |  offset: 0\n" +
+                    "  |  limit: 4\n" +
+                    "  |  \n" +
+                    "  2:ANALYTIC\n" +
+                    "  |  functions: [, rank(), ]\n" +
+                    "  |  \n" +
+                    "  1:EXCHANGE", "  STREAM DATA SINK\n" +
+                    "    EXCHANGE ID: 01\n" +
+                    "    UNPARTITIONED\n" +
+                    "\n" +
+                    "  0:OlapScanNode");
+        }
+
+        {
+            String sql = "select * from (\n" +
+                    "    select *, " +
+                    "        dense_rank() over () as rk " +
+                    "    from t0\n" +
+                    ") sub_t0\n" +
+                    "order by rk limit 4;";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  3:TOP-N\n" +
+                    "  |  order by: <slot 4> 4: dense_rank() ASC\n" +
+                    "  |  offset: 0\n" +
+                    "  |  limit: 4\n" +
+                    "  |  \n" +
+                    "  2:ANALYTIC\n" +
+                    "  |  functions: [, dense_rank(), ]\n" +
+                    "  |  \n" +
+                    "  1:EXCHANGE", "  STREAM DATA SINK\n" +
+                    "    EXCHANGE ID: 01\n" +
+                    "    UNPARTITIONED\n" +
+                    "\n" +
+                    "  0:OlapScanNode");
+        }
+    }
+
+    @Test
+    public void testPredicateRankingWindowWithoutPartitionAndOrder() throws Exception {
+        {
+            String sql = "select * from (\n" +
+                    "    select *, " +
+                    "        row_number() over () as rk " +
+                    "    from t0\n" +
+                    ") sub_t0\n" +
+                    "where rk <= 4;";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  3:SELECT\n" +
+                            "  |  predicates: 4: row_number() <= 4\n" +
+                            "  |  \n" +
+                            "  2:ANALYTIC\n" +
+                            "  |  functions: [, row_number(), ]\n" +
+                            "  |  window: ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW\n" +
+                            "  |  \n" +
+                            "  1:EXCHANGE\n" +
+                            "     limit: 4",
+                    "  STREAM DATA SINK\n" +
+                            "    EXCHANGE ID: 01\n" +
+                            "    UNPARTITIONED\n" +
+                            "\n" +
+                            "  0:OlapScanNode\n" +
+                            "     TABLE: t0\n" +
+                            "     PREAGGREGATION: ON\n" +
+                            "     partitions=0/1\n" +
+                            "     rollup: t0\n" +
+                            "     tabletRatio=0/0\n" +
+                            "     tabletList=\n" +
+                            "     cardinality=1\n" +
+                            "     avgRowSize=3.0\n" +
+                            "     limit: 4");
+        }
+
+        {
+            String sql = "select * from (\n" +
+                    "    select *, " +
+                    "        rank() over () as rk " +
+                    "    from t0\n" +
+                    ") sub_t0\n" +
+                    "where rk <= 4;";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  3:SELECT\n" +
+                    "  |  predicates: 4: rank() <= 4\n" +
+                    "  |  \n" +
+                    "  2:ANALYTIC\n" +
+                    "  |  functions: [, rank(), ]\n" +
+                    "  |  \n" +
+                    "  1:EXCHANGE", "  STREAM DATA SINK\n" +
+                    "    EXCHANGE ID: 01\n" +
+                    "    UNPARTITIONED\n" +
+                    "\n" +
+                    "  0:OlapScanNode");
+        }
+
+        {
+            String sql = "select * from (\n" +
+                    "    select *, " +
+                    "        dense_rank() over () as rk " +
+                    "    from t0\n" +
+                    ") sub_t0\n" +
+                    "where rk <= 4;";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  3:SELECT\n" +
+                            "  |  predicates: 4: dense_rank() <= 4\n" +
+                            "  |  \n" +
+                            "  2:ANALYTIC\n" +
+                            "  |  functions: [, dense_rank(), ]\n" +
+                            "  |  \n" +
+                            "  1:EXCHANGE",
+                    "  STREAM DATA SINK\n" +
+                            "    EXCHANGE ID: 01\n" +
+                            "    UNPARTITIONED\n" +
+                            "\n" +
+                            "  0:OlapScanNode");
+        }
+    }
+
+    @Test
     public void testRankingWindowPreAggWithPartitionPredicatePushDown() throws Exception {
         FeConstants.runningUnitTest = true;
         // row_number
