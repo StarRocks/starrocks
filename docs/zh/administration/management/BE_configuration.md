@@ -954,6 +954,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 描述：是否在日志中记录 Stream Load 的 HTTP 请求和响应信息。`true` 表示启用，`false` 表示不启用。
 - 引入版本：v2.5.17, v3.0.9, v3.1.6, v3.2.1
 
+##### enable_load_spill_parallel_merge
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：是否启用单个 Tablet 内部的并行 Spill Merge。启用后可以提高导入过程中 Spill Merge 的性能。
+- 引入版本：-
+
 ##### flush_thread_num_per_store
 
 - 默认值：2
@@ -998,6 +1007,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 单位：Bytes
 - 是否动态：否
 - 描述：单节点上所有的导入线程占据的内存上限。
+- 引入版本：-
+
+##### load_spill_memory_usage_per_merge
+
+- 默认值：1073741824
+- 类型：Int
+- 单位：Bytes
+- 是否动态：是
+- 描述：Spill Merge 期间每次 Merge 操作的最大内存使用量。默认为 1GB (1073741824 字节)。该参数用于控制导入过程中 Spill Merge 时单个 Merge 任务的内存占用，避免内存使用过高。
 - 引入版本：-
 
 ##### max_consumer_num_per_group

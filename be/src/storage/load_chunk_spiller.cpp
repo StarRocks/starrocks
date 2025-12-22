@@ -204,26 +204,66 @@ size_t LoadChunkSpiller::total_bytes() const {
     return _block_manager ? _block_manager->total_bytes() : 0;
 }
 
-Status LoadChunkSpiller::merge_write(size_t target_size, bool do_sort, bool do_agg,
+StatusOr<SpillBlockInputTasks> LoadChunkSpiller::generate_spill_block_input_tasks(size_t target_size,
+                                                                                  size_t memory_usage_per_merge,
+                                                                                  bool do_sort, bool do_agg) {
+    SpillBlockInputTasks result;
+    auto& groups = _block_manager->block_container()->block_groups();
+    RETURN_IF(groups.empty(), result);
+    result.group_count = groups.size();
+    std::vector<ChunkIteratorPtr> merge_inputs;
+    size_t current_input_bytes = 0;
+    for (auto& group : groups) {
+        merge_inputs.push_back(std::make_shared<BlockGroupIterator>(*_schema, *_spiller->serde(), group.blocks()));
+        current_input_bytes += group.data_size();
+        result.total_block_bytes += group.data_size();
+        result.total_blocks += group.blocks().size();
+        // We need to stop merging if:
+        // 1. The current input block group size exceed the target_size,
+        //    because we don't want to generate too large segment file.
+        // 2. The input chunks memory usage exceed the load_spill_memory_usage_per_merge,
+        //    because we don't want each thread cost too much memory.
+        if (merge_inputs.size() > 0 &&
+            (current_input_bytes >= target_size ||
+             merge_inputs.size() * config::load_spill_max_chunk_bytes >= memory_usage_per_merge)) {
+            auto tmp_itr = do_sort ? new_heap_merge_iterator(merge_inputs) : new_union_iterator(merge_inputs);
+            auto merge_itr = do_agg ? new_aggregate_iterator(tmp_itr) : tmp_itr;
+            RETURN_IF_ERROR(merge_itr->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS));
+            result.iterators.push_back(merge_itr);
+            merge_inputs.clear();
+            current_input_bytes = 0;
+        }
+    }
+    if (!merge_inputs.empty()) {
+        auto tmp_itr = do_sort ? new_heap_merge_iterator(merge_inputs) : new_union_iterator(merge_inputs);
+        auto merge_itr = do_agg ? new_aggregate_iterator(tmp_itr) : tmp_itr;
+        RETURN_IF_ERROR(merge_itr->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS));
+        result.iterators.push_back(merge_itr);
+    }
+    LOG(INFO) << fmt::format(
+            "LoadChunkSpiller generate_spill_block_input_tasks finished, load_id:{} fragment_instance_id:{} "
+            "blockgroups:{} "
+            "iterators:{} total_blocks:{} total_block_bytes:{}",
+            (std::ostringstream() << _block_manager->load_id()).str(),
+            (std::ostringstream() << _block_manager->fragment_instance_id()).str(), groups.size(),
+            result.iterators.size(), result.total_blocks, result.total_block_bytes);
+    return result;
+}
+
+Status LoadChunkSpiller::merge_write(size_t target_size, size_t memory_usage_per_merge, bool do_sort, bool do_agg,
                                      std::function<Status(Chunk*)> write_func, std::function<Status()> flush_func) {
     auto& groups = _block_manager->block_container()->block_groups();
     RETURN_IF(groups.empty(), Status::OK());
 
     MonotonicStopWatch timer;
     timer.start();
-    size_t total_blocks = 0;
-    size_t total_block_bytes = 0;
     size_t total_merges = 0;
     size_t total_rows = 0;
     size_t total_chunk = 0;
 
     std::vector<ChunkIteratorPtr> merge_inputs;
-    size_t current_input_bytes = 0;
-    auto merge_func = [&] {
+    auto merge_func = [&](const ChunkIteratorPtr& merge_itr) {
         total_merges++;
-        auto tmp_itr = do_sort ? new_heap_merge_iterator(merge_inputs) : new_union_iterator(merge_inputs);
-        auto merge_itr = do_agg ? new_aggregate_iterator(tmp_itr) : tmp_itr;
-        RETURN_IF_ERROR(merge_itr->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS));
         auto chunk_shared_ptr = ChunkHelper::new_chunk(*_schema, config::vector_chunk_size);
         auto chunk = chunk_shared_ptr.get();
         while (true) {
@@ -242,26 +282,10 @@ Status LoadChunkSpiller::merge_write(size_t target_size, bool do_sort, bool do_a
         merge_itr->close();
         return flush_func();
     };
-    for (size_t i = 0; i < groups.size(); ++i) {
-        auto& group = groups[i];
-        // We need to stop merging if:
-        // 1. The current input block group size exceed the target_size,
-        //    because we don't want to generate too large segment file.
-        // 2. The input chunks memory usage exceed the load_spill_max_merge_bytes,
-        //    because we don't want each thread cost too much memory.
-        if (merge_inputs.size() > 0 && (current_input_bytes + group.data_size() >= target_size ||
-                                        merge_inputs.size() * config::load_spill_max_chunk_bytes >= target_size)) {
-            RETURN_IF_ERROR(merge_func());
-            merge_inputs.clear();
-            current_input_bytes = 0;
-        }
-        merge_inputs.push_back(std::make_shared<BlockGroupIterator>(*_schema, *_spiller->serde(), group.blocks()));
-        current_input_bytes += group.data_size();
-        total_block_bytes += group.data_size();
-        total_blocks += group.blocks().size();
-    }
-    if (merge_inputs.size() > 0) {
-        RETURN_IF_ERROR(merge_func());
+    ASSIGN_OR_RETURN(auto spill_block_iterator_tasks,
+                     generate_spill_block_input_tasks(target_size, memory_usage_per_merge, do_sort, do_agg));
+    for (const auto& itr : spill_block_iterator_tasks.iterators) {
+        RETURN_IF_ERROR(merge_func(itr));
     }
     timer.stop();
     auto duration_ms = timer.elapsed_time() / 1000000;
@@ -270,10 +294,12 @@ Status LoadChunkSpiller::merge_write(size_t target_size, bool do_sort, bool do_a
             "LoadChunkSpiller merge finished, load_id:{} fragment_instance_id:{} blockgroups:{} blocks:{} "
             "input_bytes:{} merges:{} rows:{} chunks:{} duration:{}ms",
             (std::ostringstream() << _block_manager->load_id()).str(),
-            (std::ostringstream() << _block_manager->fragment_instance_id()).str(), groups.size(), total_blocks,
-            total_block_bytes, total_merges, total_rows, total_chunk, duration_ms);
-    COUNTER_UPDATE(ADD_COUNTER(_profile, "SpillMergeInputGroups", TUnit::UNIT), groups.size());
-    COUNTER_UPDATE(ADD_COUNTER(_profile, "SpillMergeInputBytes", TUnit::BYTES), total_block_bytes);
+            (std::ostringstream() << _block_manager->fragment_instance_id()).str(), groups.size(),
+            spill_block_iterator_tasks.total_blocks, spill_block_iterator_tasks.total_block_bytes, total_merges,
+            total_rows, total_chunk, duration_ms);
+    COUNTER_UPDATE(ADD_COUNTER(_profile, "SpillMergeInputGroups", TUnit::UNIT), spill_block_iterator_tasks.group_count);
+    COUNTER_UPDATE(ADD_COUNTER(_profile, "SpillMergeInputBytes", TUnit::BYTES),
+                   spill_block_iterator_tasks.total_block_bytes);
     COUNTER_UPDATE(ADD_COUNTER(_profile, "SpillMergeCount", TUnit::UNIT), total_merges);
     COUNTER_UPDATE(ADD_COUNTER(_profile, "SpillMergeDurationNs", TUnit::TIME_NS), duration_ms * 1000000);
     return Status::OK();

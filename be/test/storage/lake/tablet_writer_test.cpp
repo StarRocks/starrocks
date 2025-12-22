@@ -504,6 +504,213 @@ TEST_P(LakeTabletWriterTest, test_check_global_dict_new_columns_in_later_segment
     writer->close();
 }
 
+TEST_P(LakeTabletWriterTest, test_clone_writer) {
+    // Test cloning a writer for parallel execution
+    VersionedTablet tablet(_tablet_mgr.get(), _tablet_metadata);
+    ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kHorizontal, next_id()));
+    ASSERT_OK(writer->open());
+
+    // Clone the writer
+    ASSIGN_OR_ABORT(auto cloned_writer, writer->clone());
+    ASSERT_NE(cloned_writer, nullptr);
+
+    // Write data to the original writer
+    std::vector<int> k0{1, 2, 3, 4, 5};
+    std::vector<int> v0{2, 4, 6, 8, 10};
+    auto c0 = Int32Column::create();
+    auto c1 = Int32Column::create();
+    c0->append_numbers(k0.data(), k0.size() * sizeof(int));
+    c1->append_numbers(v0.data(), v0.size() * sizeof(int));
+    Chunk chunk0({std::move(c0), std::move(c1)}, _schema);
+    ASSERT_OK(writer->write(chunk0));
+    ASSERT_OK(writer->finish());
+
+    // Write different data to the cloned writer
+    std::vector<int> k1{10, 20, 30};
+    std::vector<int> v1{11, 22, 33};
+    auto c2 = Int32Column::create();
+    auto c3 = Int32Column::create();
+    c2->append_numbers(k1.data(), k1.size() * sizeof(int));
+    c3->append_numbers(v1.data(), v1.size() * sizeof(int));
+    Chunk chunk1({std::move(c2), std::move(c3)}, _schema);
+    ASSERT_OK(cloned_writer->write(chunk1));
+    ASSERT_OK(cloned_writer->finish());
+
+    // Verify both writers have their own files
+    ASSERT_EQ(1, writer->files().size());
+    ASSERT_EQ(1, cloned_writer->files().size());
+    ASSERT_NE(writer->files()[0].path, cloned_writer->files()[0].path);
+
+    // Verify row counts
+    ASSERT_EQ(k0.size(), writer->num_rows());
+    ASSERT_EQ(k1.size(), cloned_writer->num_rows());
+
+    writer->close();
+    cloned_writer->close();
+}
+
+TEST_P(LakeTabletWriterTest, test_merge_other_writers) {
+    // Test merging multiple writers into one
+    VersionedTablet tablet(_tablet_mgr.get(), _tablet_metadata);
+
+    // Create main writer
+    ASSIGN_OR_ABORT(auto main_writer, tablet.new_writer(kHorizontal, next_id()));
+    ASSERT_OK(main_writer->open());
+
+    // Write data to main writer
+    std::vector<int> k0{1, 2, 3};
+    std::vector<int> v0{10, 20, 30};
+    auto c0 = Int32Column::create();
+    auto c1 = Int32Column::create();
+    c0->append_numbers(k0.data(), k0.size() * sizeof(int));
+    c1->append_numbers(v0.data(), v0.size() * sizeof(int));
+    Chunk chunk0({std::move(c0), std::move(c1)}, _schema);
+    ASSERT_OK(main_writer->write(chunk0));
+    ASSERT_OK(main_writer->finish());
+
+    size_t main_initial_rows = main_writer->num_rows();
+    size_t main_initial_data_size = main_writer->data_size();
+
+    // Create and write to other writers
+    std::vector<std::unique_ptr<TabletWriter>> other_writers;
+    for (int i = 0; i < 3; i++) {
+        ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kHorizontal, next_id()));
+        ASSERT_OK(writer->open());
+
+        std::vector<int> k{100 + i, 200 + i};
+        std::vector<int> v{1000 + i, 2000 + i};
+        auto col0 = Int32Column::create();
+        auto col1 = Int32Column::create();
+        col0->append_numbers(k.data(), k.size() * sizeof(int));
+        col1->append_numbers(v.data(), v.size() * sizeof(int));
+        Chunk chunk({std::move(col0), std::move(col1)}, _schema);
+
+        ASSERT_OK(writer->write(chunk));
+        ASSERT_OK(writer->finish());
+
+        other_writers.push_back(std::move(writer));
+    }
+
+    // Calculate expected totals
+    size_t expected_rows = main_initial_rows;
+    size_t expected_data_size = main_initial_data_size;
+    for (const auto& writer : other_writers) {
+        expected_rows += writer->num_rows();
+        expected_data_size += writer->data_size();
+    }
+
+    // Merge other writers into main writer
+    ASSERT_OK(main_writer->merge_other_writers(other_writers));
+
+    // Verify merged results
+    ASSERT_EQ(expected_rows, main_writer->num_rows());
+    ASSERT_EQ(expected_data_size, main_writer->data_size());
+
+    // Verify file count (1 from main + 3 from other writers)
+    ASSERT_EQ(4, main_writer->files().size());
+
+    main_writer->close();
+    for (auto& writer : other_writers) {
+        writer->close();
+    }
+}
+
+TEST_P(LakeTabletWriterTest, test_merge_writers_with_global_dict) {
+    // Test that merge_other_writers correctly handles global dict info
+    VersionedTablet tablet(_tablet_mgr.get(), _tablet_metadata);
+
+    // Create main writer
+    ASSIGN_OR_ABORT(auto main_writer, tablet.new_writer(kHorizontal, next_id()));
+    ASSERT_OK(main_writer->open());
+
+    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(kTestDirectory));
+    SegmentWriterOptions opts;
+
+    // Set up main writer's global dict info
+    {
+        std::string segment_path = _tablet_mgr->segment_location(_tablet_metadata->id(), "main_segment");
+        ASSIGN_OR_ABORT(auto wfile, fs->new_writable_file(segment_path));
+        auto seg_writer = std::make_unique<TestSegmentWriterWrapper>(std::move(wfile), 0, _tablet_schema, opts);
+        seg_writer->set_global_dict_info("col1", true);
+        seg_writer->set_global_dict_info("col2", true);
+        main_writer->check_global_dict(seg_writer.get());
+    }
+
+    // Create other writers with different global dict info
+    std::vector<std::unique_ptr<TabletWriter>> other_writers;
+
+    // Writer 1: col1 valid, col2 valid
+    {
+        ASSIGN_OR_ABORT(auto writer1, tablet.new_writer(kHorizontal, next_id()));
+        ASSERT_OK(writer1->open());
+        std::string segment_path = _tablet_mgr->segment_location(_tablet_metadata->id(), "other_segment1");
+        ASSIGN_OR_ABORT(auto wfile, fs->new_writable_file(segment_path));
+        auto seg_writer = std::make_unique<TestSegmentWriterWrapper>(std::move(wfile), 0, _tablet_schema, opts);
+        seg_writer->set_global_dict_info("col1", true);
+        seg_writer->set_global_dict_info("col2", true);
+        writer1->check_global_dict(seg_writer.get());
+        other_writers.push_back(std::move(writer1));
+    }
+
+    // Writer 2: col1 invalid, col3 valid (new column)
+    {
+        ASSIGN_OR_ABORT(auto writer2, tablet.new_writer(kHorizontal, next_id()));
+        ASSERT_OK(writer2->open());
+        std::string segment_path = _tablet_mgr->segment_location(_tablet_metadata->id(), "other_segment2");
+        ASSIGN_OR_ABORT(auto wfile, fs->new_writable_file(segment_path));
+        auto seg_writer = std::make_unique<TestSegmentWriterWrapper>(std::move(wfile), 0, _tablet_schema, opts);
+        seg_writer->set_global_dict_info("col1", false);
+        seg_writer->set_global_dict_info("col3", true);
+        writer2->check_global_dict(seg_writer.get());
+        other_writers.push_back(std::move(writer2));
+    }
+
+    // Merge other writers
+    ASSERT_OK(main_writer->merge_other_writers(other_writers));
+
+    // Verify merged global dict info
+    const auto& dict_info = main_writer->global_dict_columns_valid_info();
+    ASSERT_EQ(3, dict_info.size());
+    ASSERT_FALSE(dict_info.at("col1")); // Should be false due to writer2
+    ASSERT_TRUE(dict_info.at("col2"));  // Still valid
+    ASSERT_TRUE(dict_info.at("col3"));  // New column from writer2
+
+    main_writer->close();
+    for (auto& writer : other_writers) {
+        writer->close();
+    }
+}
+
+TEST_P(LakeTabletWriterTest, test_merge_empty_writers) {
+    // Test merging when other_writers is empty
+    VersionedTablet tablet(_tablet_mgr.get(), _tablet_metadata);
+    ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kHorizontal, next_id()));
+    ASSERT_OK(writer->open());
+
+    std::vector<int> k0{1, 2, 3};
+    std::vector<int> v0{10, 20, 30};
+    auto c0 = Int32Column::create();
+    auto c1 = Int32Column::create();
+    c0->append_numbers(k0.data(), k0.size() * sizeof(int));
+    c1->append_numbers(v0.data(), v0.size() * sizeof(int));
+    Chunk chunk0({std::move(c0), std::move(c1)}, _schema);
+    ASSERT_OK(writer->write(chunk0));
+    ASSERT_OK(writer->finish());
+
+    size_t original_rows = writer->num_rows();
+    size_t original_data_size = writer->data_size();
+
+    // Merge with empty vector
+    std::vector<std::unique_ptr<TabletWriter>> empty_writers;
+    ASSERT_OK(writer->merge_other_writers(empty_writers));
+
+    // Verify nothing changed
+    ASSERT_EQ(original_rows, writer->num_rows());
+    ASSERT_EQ(original_data_size, writer->data_size());
+
+    writer->close();
+}
+
 INSTANTIATE_TEST_SUITE_P(LakeTabletWriterTest, LakeTabletWriterTest,
                          ::testing::Values(DUP_KEYS, AGG_KEYS, UNIQUE_KEYS, PRIMARY_KEYS));
 

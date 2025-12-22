@@ -110,6 +110,15 @@ void HorizontalGeneralTabletWriter::close() {
     _files.clear();
 }
 
+StatusOr<std::unique_ptr<TabletWriter>> HorizontalGeneralTabletWriter::clone() const {
+    auto writer =
+            std::make_unique<HorizontalGeneralTabletWriter>(_tablet_mgr, _tablet_id, _schema, _txn_id, _is_compaction,
+                                                            _flush_pool, _bundle_file_context, _global_dicts);
+    RETURN_IF_ERROR(writer->open());
+    writer->set_auto_flush(auto_flush());
+    return writer;
+}
+
 Status HorizontalGeneralTabletWriter::reset_segment_writer(bool eos) {
     DCHECK(_schema != nullptr);
     auto name = gen_segment_filename(_txn_id);

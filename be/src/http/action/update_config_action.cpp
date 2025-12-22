@@ -377,7 +377,7 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
         _config_callback.emplace("load_spill_merge_max_thread", [&]() -> Status {
             return StorageEngine::instance()->load_spill_block_merge_executor()->refresh_max_thread_num();
         });
-        _config_callback.emplace("load_spill_max_merge_bytes", [&]() -> Status {
+        _config_callback.emplace("load_spill_memory_usage_per_merge", [&]() -> Status {
             return StorageEngine::instance()->load_spill_block_merge_executor()->refresh_max_thread_num();
         });
         _config_callback.emplace("merge_commit_txn_state_cache_capacity", [&]() -> Status {

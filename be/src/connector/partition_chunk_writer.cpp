@@ -210,8 +210,8 @@ Status SpillPartitionChunkWriter::merge_blocks() {
         }
         return Status::OK();
     };
-    Status st = _load_chunk_spiller->merge_write(_max_file_size, _sort_ordering != nullptr, false /* do_agg */,
-                                                 write_func, flush_func);
+    Status st = _load_chunk_spiller->merge_write(_max_file_size, _max_file_size, _sort_ordering != nullptr,
+                                                 false /* do_agg */, write_func, flush_func);
     VLOG(2) << "finish merge blocks, query_id: " << _fragment_context->query_id() << ", status: " << st.message();
     return st;
 }
