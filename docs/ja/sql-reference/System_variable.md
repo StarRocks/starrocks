@@ -212,6 +212,13 @@ MySQL クライアント互換性のために使用されます。実際の用�
 * **タイプ**: int
 * **導入バージョン**: v3.5.3
 
+### cbo_cte_reuse
+
+* **説明**: オプティマイザが共通テーブル式（CTE）を再利用して multi-distinct 集計クエリを書き換えることを許可するかを制御します（CBO の CTE 再利用リライト）。有効にすると、プランナー（RewriteMultiDistinctRule）はマルチカラム DISTINCT、スキューした集計、または統計により CTE リライトの方が効率的であると示される場合に CTE ベースのリライトを選択することがあり、`prefer_cte_rewrite` ヒントを尊重します。無効にすると CTE ベースのリライトは許可されず、プランナーは multi-function リライトを試みます。クエリが CTE を必要とする場合（例：マルチカラム DISTINCT や multi-function リライトで扱えない関数など）は、プランナーはユーザーエラーを発生させます。注意：オプティマイザが参照する実際の設定はこのフラグとパイプラインエンジンフラグの論理 AND です — すなわち `isCboCteReuse()` はこの変数と `enablePipelineEngine` の両方を返す必要があるため、`enablePipelineEngine` がオンのときのみ CTE 再利用が有効になります。
+* **デフォルト**: `true`
+* **タイプ**: Boolean
+* **導入バージョン**: `v3.2.0`
+
 ### cbo_disabled_rules
 
 * **説明**: 現在のセッションで無効にするオプティマイザルール名のカンマ区切りリスト。各名前は `RuleType` 列挙値に一致する必要があり、無効化できるのは名前が `TF_`（変換ルール）または `GP_`（グループ結合ルール）で始まるルールのみです。セッション変数は `SessionVariable` に格納され（`getCboDisabledRules` / `setCboDisabledRules`）、オプティマイザは `OptimizerOptions.applyDisableRuleFromSessionVariable()` を通じて適用します。同関数はリストを解析し、対応するルールスイッチをクリアしてプランニング時にそれらのルールをスキップします。SET ステートメントを通じて設定された場合、値は検証され、サーバは不明な名前や `TF_`/`GP_` で始まらない名前を明確なエラーメッセージ（例: "Unknown rule name(s): ..." や "Only TF_ ... and GP_ ... can be disabled"）で拒否します。プランナ実行時には不明なルール名は警告とともに無視されます（"Ignoring unknown rule name: ... (may be from different version)" とログに残る）。名前は列挙子識別子と正確に一致する必要があります（大文字小文字を区別）。名前の前後の空白はトリムされ、空のエントリは無視されます。
@@ -242,6 +249,22 @@ MySQL クライアント互換性のために使用されます。実際の用�
 * **説明**: オプティマイザで JSON v2 のパス書き換えを有効にするかどうか。有効にすると、JSON 関数（`get_json_*` など）を Flat JSON のサブカラムへの直接アクセスに書き換え、述語プッシュダウン、カラムプルーニング、辞書最適化を有効化します。
 * **デフォルト**: true
 * **データ型**: Boolean
+
+### cbo_max_reorder_node_use_greedy
+
+* **説明**: コストベースオプティマイザが greedy join-reorder アルゴリズムを検討するマルチジョイン内の結合入力（アトム）の最大数。オプティマイザは候補となるリオーダーアルゴリズムのリストを構築する際にこの制限（`cbo_enable_greedy_join_reorder` と併せて）をチェックします：もし `multiJoinNode.getAtoms().size()` がこの値以下であれば、`JoinReorderGreedy` のインスタンスが追加され実行されます。この変数は `JoinReorderFactory.createJoinReorderAdaptive()` と `ReorderJoinRule` によって、ジョインリオーダー段階での greedy リオーダリングの適用可否を制御するために使用されます。セッションごとに適用され、統計情報が利用可能でかつ greedy が有効な場合に greedy リオーダリングが試行されるかに影響します。多数の結合されたリレーションを含むクエリに対するオプティマイザの時間/複雑度のトレードオフを制御するために調整してください。
+* **スコープ**: Session (セッションごとに変更可能)
+* **デフォルト**: `16`
+* **データタイプ**: long
+* **導入バージョン**: v3.4.0, v3.5.0
+
+### cbo_use_correlated_predicate_estimate
+
+* **説明**: セッションフラグ。オプティマイザが、複数列にまたがる結合された等価述語の選択率を推定する際に相関を考慮したヒューリスティックを適用するかを制御します。有効（デフォルト）の場合、推定器はプライマリのマルチカラム統計や最も選択的な述語を除く追加列に対して指数減衰重みを適用し、追加述語の乗算的影響を軽減します（重み：追加最大3列に対して 0.5、0.25、0.125）。無効の場合、減衰は適用されず（減衰係数 = 1）、これらの列の完全な選択率を乗算します（より強い独立仮定）。このフラグは StatisticsEstimateUtils.estimateConjunctiveEqualitySelectivity により確認され、マルチカラム統計経路とフォールバック経路の両方で減衰係数を選択するため、CBO が使用するカーディナリティ推定に影響します。
+* **スコープ**: Session
+* **デフォルト**: `true`
+* **タイプ**: boolean
+* **導入バージョン**: v3.5.0
 
 ### character_set_database (global)
 
@@ -374,6 +397,14 @@ MySQL クライアント互換性のために使用されます。実際の用�
 * **デフォルト**: `false`
 * **タイプ**: boolean
 * **導入バージョン**: v3.2.0
+
+### enable_color_explain_output
+
+* **スコープ**: Session
+* **説明**: テキスト形式の EXPLAIN / PROFILE 出力に ANSI カラーエスケープシーケンスを含めるかどうかを制御します。有効（`true`）のとき、StmtExecutor はセッション設定を explain/profile パイプライン（ExplainAnalyzer への呼び出しを通じて）に渡すため、explain、EXPLAIN ANALYZE、analyze-profile 出力に ANSI 対応端末での可読性を高めるカラー強調表示が含まれます。無効（`false`）のときは ANSI シーケンスなし（プレーンテキスト）で出力され、ログや ANSI をサポートしないクライアント、または出力をファイルにパイプする場合に適しています。これはセッション単位のトグルであり、実行のセマンティクスを変更するものではなく、explain/profile テキストの表示方法のみを変更します。
+* **デフォルト**: `true`
+* **データタイプ**: boolean
+* **導入バージョン**: v3.5.0
 
 ### enable_connector_adaptive_io_tasks
 
@@ -523,6 +554,19 @@ StarRocks は 2 種類の RF を提供します：ローカル RF とグロー�
 * この機能が無効な場合、ローカル RF のみが機能します。
 * この機能が有効な場合、マルチカラムグローバル RF が有効になり、パーティション by 句に `multi-column` を含みます。
 
+### enable_mv_planner
+
+* **スコープ**: Session
+* **説明**: 有効にすると、現在のセッションに対して Materialized View (MV) planner モードを有効にします。このモードではオプティマイザは以下のように動作します：
+  - 通常の join 実装ルール（QueryOptimizer）ではなく、`context.getRuleSet().addRealtimeMVRules()` を通じた MV 固有のルールセットを使用します。
+  - stream 実装ルールが適用されることを許可します（`StreamImplementationRule.check` は MV planner がオンのときのみ true を返します）。
+  - 論理プラン変換時の scan/operator 構築を変更します（例：RelationTransformer は MV planner が有効な場合、ネイティブテーブル/マテリアライズドビューに対して `LogicalBinlogScanOperator` を選択します）。
+  - 一部の標準変換を無効化またはバイパスします（例：`SplitMultiPhaseAggRule.check` は MV planner がオンのとき false を返します）。
+  Materialized view のプラン生成コード（MaterializedViewAnalyzer）は MV プランニング作業の前後でこのフラグを設定します（プランニング前に true にし、終了後に false に戻す）ので、主に MV プラン生成とテスト用を意図しています。このセッション変数を設定しても、影響は現在のセッションのオプティマイザ動作にのみ及びます。
+* **デフォルト**: `false`
+* **データ型**: boolean
+* **導入バージョン**: v3.2.0
+
 ### enable_parallel_merge
 
 * **説明**: ソートの Parallel Merge を有効にするかどうか。この機能を有効にすると、ソートのマージフェーズでマージ操作に複数のスレッドが使用されます。
@@ -643,6 +687,14 @@ StarRocks は 2 種類の RF を提供します：ローカル RF とグロー�
 * **タイプ**: boolean
 * **導入バージョン**: v3.2.0
 
+### enable_runtime_adaptive_dop
+
+* **スコープ**: Session
+* **説明**: セッションで有効にすると、planner と fragment builder はランタイムの adaptive DOP をサポートするパイプライン対応フラグメントに対して、実行時に adaptive degree-of-parallelism を使用するようマークします。このオプションは `enable_pipeline_engine` が true のときのみ有効になります。有効にするとフラグメントはプラン構築中に `enableAdaptiveDop()` を呼び出すようになり、ランタイム上の影響があります：join の probe はすべての build フェーズが完了するのを待つ可能性があり（これは `group_execution` の動作と衝突します）、ランタイム adaptive DOP を有効にするとパイプラインレベルの multi-partitioned runtime filters が無効になります（setter は `enablePipelineLevelMultiPartitionedRf` をクリアします）。このフラグはクエリプロファイルに記録され、セッション単位で切り替えることができます。
+* **デフォルト**: `false`
+* **データ型**: boolean
+* **導入バージョン**: v3.2.0
+
 ### enable_scan_datacache
 
 * **説明**: Data Cache 機能を有効にするかどうかを指定します。この機能が有効になると、StarRocks は外部ストレージシステムから読み取ったホットデータをブロックにキャッシュし、クエリと分析を加速します。詳細については、[Data Cache](../data_source/data_cache.md) を参照してください。バージョン 3.2 より前では、この変数は `enable_scan_block_cache` として名前が付けられていました。
@@ -690,6 +742,13 @@ StarRocks は 2 種類の RF を提供します：ローカル RF とグロー�
 * **デフォルト**: true
 * **導入バージョン**: v3.1.11, v3.2.5
 
+### enable_table_prune_on_update
+
+* **説明**: セッションレベルのブールで、オプティマイザが UPDATE 文に対して主キー固有のテーブルプルーニング規則を適用するかどうかを制御します。有効にすると、QueryOptimizer（pruneTables ステージ中）が `PrimaryKeyUpdateTableRule` を呼び出して更新プランを書き換え／プルーニングし、主キー更新パターンに対するプルーニングを改善する可能性があります。このフラグは rule-based/CBO によるテーブルプルーニングが有効な場合にのみ効果があります（`enable_rbo_table_prune` を参照）。デフォルトで無効になっているのは、この変換がデータレイアウトやプランの形状（例：OlapTableSink のバケットシャッフルレイアウト）を変える可能性があり、同時更新時に正確性や性能の後退を引き起こす恐れがあるためです。
+* **デフォルト**: `false`
+* **データタイプ**: boolean
+* **導入バージョン**: v3.2.4
+
 ### enable_tablet_internal_parallel
 
 * **説明**: タブレットの適応並列スキャンを有効にするかどうか。この機能を有効にすると、複数のスレッドを使用してタブレットをセグメントごとにスキャンし、スキャンの並行性を高めることができます。
@@ -701,6 +760,14 @@ StarRocks は 2 種類の RF を提供します：ローカル RF とグロー�
 * **説明**: TopN Runtime Filter を有効にするかどうか。この機能を有効にすると、ORDER BY LIMIT クエリに対して動的に Runtime Filter が構築され、Scan 段階にプッシュダウンされてフィルタリングに利用されます。
 * **デフォルト**: true
 * **導入バージョン**: v3.3
+
+### enable_ukfk_opt
+
+* **説明**: Unique-Key / Foreign-Key (UK/FK) に基づく変換と統計の拡張に対するオプティマイザのサポートを有効にします。有効にすると、オプティマイザは `UKFKConstraintsCollector` を実行して一番下から（bottom‑up に）ユニークキーおよび外部キー制約を収集し、それらを計画ノード（OptExpressions）に付加します。収集された制約は `PruneUKFKJoinRule`（結合の UK 側をプルーニングしたり、述語を UK から FK 列へ書き換え、外部結合の場合に IS NULL チェックを追加する）や `PruneUKFKGroupByKeysRule`（UK/FK 関係から導出される冗長な GROUP BY キーを削除する）などの変換ルールで利用されます。収集された UK/FK 情報は `StatisticsCalculator` において UK‑FK ジョインの結合基数推定をより厳密にするためにも使われ、より精密な場合はデフォルトの推定を置き換えることがあります。これらの最適化は宣言されたスキーマ制約に依存し、プランの形状や述語の配置を変更する可能性があるため、デフォルトは保守的に `false` です。
+* **デフォルト**: `false`
+* **スコープ**: セッション
+* **データタイプ**: boolean
+* **導入バージョン**: v3.2.4
 
 ### enable_view_based_mv_rewrite
 
@@ -1129,6 +1196,13 @@ JDBC 接続プール C3P0 との互換性のために使用されます。実際
 * **説明**: 範囲パーティションプルーニングに使用できる IN 述語の最大数。デフォルト値: 100。100 より大きい値は、システムがすべてのタブレットをスキャンする可能性があり、クエリパフォーマンスを損なう可能性があります。
 * **デフォルト**: 100
 * **導入バージョン**: v3.0
+
+### resource_group 
+
+* **説明**: このセッションの指定されたリソースグループ
+* **デフォルト**: ""
+* **データタイプ**: String
+* **導入バージョン**: 3.2.0
 
 ### runtime_filter_on_exchange_node
 
