@@ -1,0 +1,39 @@
+diff --git a/lib/lz4frame.c b/lib/lz4frame.c
+index 77857a5f..0aa336a3 100644
+--- a/lib/lz4frame.c
++++ b/lib/lz4frame.c
+@@ -1268,13 +1268,14 @@ LZ4F_errorCode_t LZ4F_freeDecompressionContext(LZ4F_dctx* dctx)
+ 
+ 
+ /*==---   Streaming Decompression operations   ---==*/
+-
+ void LZ4F_resetDecompressionContext(LZ4F_dctx* dctx)
+ {
++    DEBUGLOG(5, "LZ4F_resetDecompressionContext");
+     dctx->dStage = dstage_getFrameHeader;
+     dctx->dict = NULL;
+     dctx->dictSize = 0;
+     dctx->skipChecksum = 0;
++    dctx->frameRemainingSize = 0;
+ }
+ 
+ 
+@@ -1331,6 +1332,7 @@ static size_t LZ4F_decodeHeader(LZ4F_dctx* dctx, const void* src, size_t srcSize
+         if (((FLG>>1)&_1BIT) != 0) RETURN_ERROR(reservedFlag_set); /* Reserved bit */
+         if (version != 1) RETURN_ERROR(headerVersion_wrong);       /* Version Number, only supported value */
+     }
++    DEBUGLOG(6, "contentSizeFlag: %u", contentSizeFlag);
+ 
+     /* Frame Header Size */
+     frameHeaderSize = minFHSize + (contentSizeFlag?8:0) + (dictIDFlag?4:0);
+@@ -1367,8 +1369,9 @@ static size_t LZ4F_decodeHeader(LZ4F_dctx* dctx, const void* src, size_t srcSize
+     dctx->frameInfo.contentChecksumFlag = (LZ4F_contentChecksum_t)contentChecksumFlag;
+     dctx->frameInfo.blockSizeID = (LZ4F_blockSizeID_t)blockSizeID;
+     dctx->maxBlockSize = LZ4F_getBlockSize((LZ4F_blockSizeID_t)blockSizeID);
+-    if (contentSizeFlag)
++    if (contentSizeFlag) {
+         dctx->frameRemainingSize = dctx->frameInfo.contentSize = LZ4F_readLE64(srcPtr+6);
++    }
+     if (dictIDFlag)
+         dctx->frameInfo.dictID = LZ4F_readLE32(srcPtr + frameHeaderSize - 5);
+ 
