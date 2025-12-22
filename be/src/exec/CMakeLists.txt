@@ -39,6 +39,7 @@ set(EXEC_FILES
     tablet_sink_colocate_sender.cpp
     tablet_sink_index_channel.cpp
     tablet_sink_sender.cpp
+    range_tablet_sink_sender.cpp
     write_combined_txn_log.cpp
     multi_olap_table_sink.cpp
     mysql_scanner.cpp
@@ -108,6 +109,7 @@ set(EXEC_FILES
     schema_scan_node.cpp
     dictionary_cache_writer.cpp
     arrow_flight_batch_reader.cpp
+    range_router.cpp
     iceberg/iceberg_delete_builder.cpp
     iceberg/iceberg_delete_file_iterator.cpp
     paimon/paimon_delete_file_builder.cpp

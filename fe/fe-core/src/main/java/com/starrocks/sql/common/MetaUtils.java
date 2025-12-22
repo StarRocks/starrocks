@@ -52,6 +52,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 public class MetaUtils {
 
@@ -244,22 +245,30 @@ public class MetaUtils {
         return result;
     }
 
-    public static List<String> getRangeDistributionColumnNames(OlapTable olapTable) {
-        List<String> columnNames = new ArrayList<>();
+    public static List<Column> getRangeDistributionColumns(OlapTable olapTable) {
+        List<Column> columns = new ArrayList<>();
         MaterializedIndexMeta baseIndexMeta = olapTable.getIndexMetaByIndexId(olapTable.getBaseIndexMetaId());
         List<Column> baseSchema = olapTable.getBaseSchema();
         if (baseIndexMeta.getSortKeyIdxes() != null) {
             for (Integer i : baseIndexMeta.getSortKeyIdxes()) {
-                columnNames.add(baseSchema.get(i).getName());
+                columns.add(baseSchema.get(i));
             }
         } else {
             for (Column column : baseSchema) {
                 if (column.isKey()) {
-                    columnNames.add(column.getName());
+                    columns.add(column);
                 }
             }
         }
-        return columnNames;
+        return columns;
+    }
+
+    public static List<String> getRangeDistributionColumnNames(OlapTable olapTable) {
+        return getRangeDistributionColumns(olapTable).stream().map(Column::getName).collect(Collectors.toList());
+    }
+
+    public static List<String> getRangeDistributionColumnIds(OlapTable olapTable) {
+        return getRangeDistributionColumns(olapTable).stream().map(col -> col.getColumnId().getId()).collect(Collectors.toList());
     }
 
     public static List<String> getColumnNamesByColumnIds(Table table, List<ColumnId> columnIds) {

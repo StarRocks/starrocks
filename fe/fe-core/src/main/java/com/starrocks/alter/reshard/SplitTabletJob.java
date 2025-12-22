@@ -228,7 +228,7 @@ public class SplitTabletJob extends TabletReshardJob {
                                     TabletRange tabletRange = tabletRanges.get(tabletId);
                                     Preconditions.checkNotNull(tabletRange,
                                             "Range of tablet " + tabletId + " not found");
-                                    newIndex.getTablet(tabletId).setRange(tabletRange.getRange());
+                                    newIndex.getTablet(tabletId).setRange(tabletRange);
                                 }
                             }
                         }
