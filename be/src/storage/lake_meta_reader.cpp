@@ -159,8 +159,8 @@ Status LakeMetaReader::_get_segments(const lake::VersionedTablet& tablet, std::v
                 options.segment_id = seg_id;
                 options.pk_rowsetid = rowset->id();
                 options.dcg_loader = std::make_shared<lake::LakeDeltaColumnGroupLoader>(tablet.metadata());
-                options_list->emplace_back(std::move(options));
             }
+            options_list->emplace_back(std::move(options));
         }
         segments->insert(segments->end(), rowset_segs.begin(), rowset_segs.end());
     }
