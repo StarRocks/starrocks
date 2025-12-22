@@ -1612,6 +1612,7 @@ CREATE VIEW [IF NOT EXISTS]
     [, <column_name>[ COMMENT 'column comment'], ...]
 )
 [COMMENT 'view comment']
+[PROPERTIES ("key" = "value", ...)]
 AS <query_statement>
 ```
 
@@ -1621,6 +1622,18 @@ Iceberg テーブル `iceberg_table` に基づいて Iceberg ビュー `iceberg_
 
 ```SQL
 CREATE VIEW IF NOT EXISTS iceberg.iceberg_db.iceberg_view1 AS
+SELECT k1, k2 FROM iceberg.iceberg_db.iceberg_table;
+```
+
+v4.0.3以降、`PROPERTIES `内でビュー属性を `"key" = "value"` 形式で指定できます。
+
+```SQL
+CREATE VIEW IF NOT EXISTS iceberg.iceberg_db.iceberg_view1
+PROPERTIES (
+  "key1" = "value1",
+  "key2" = "value2"
+)
+AS
 SELECT k1, k2 FROM iceberg.iceberg_db.iceberg_table;
 ```
 
