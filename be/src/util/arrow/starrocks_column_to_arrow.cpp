@@ -190,7 +190,7 @@ struct ColumnToArrowConverter<LT, AT, is_nullable, ConvDateOrDatetimeGuard<LT, A
         if constexpr (is_nullable) {
             const auto* nullable_column = down_cast<const NullableColumn*>(column.get());
             const auto* data_column = down_cast<const StarRocksColumnType*>(nullable_column->data_column().get());
-            const auto data = data_column->immutable_data();
+            const auto& data = data_column->get_data();
             for (auto i = start_idx; i < end_idx; ++i) {
                 if (nullable_column->is_null(i)) {
                     ARROW_RETURN_NOT_OK(builder->AppendNull());
@@ -200,7 +200,7 @@ struct ColumnToArrowConverter<LT, AT, is_nullable, ConvDateOrDatetimeGuard<LT, A
             }
         } else {
             const auto* data_column = down_cast<const StarRocksColumnType*>(column.get());
-            const auto data = data_column->immutable_data();
+            const auto& data = data_column->get_data();
             for (auto i = start_idx; i < end_idx; ++i) {
                 ARROW_RETURN_NOT_OK(builder->Append(convert_datum(data[i], unit_scale_num, unit_scale_den)));
             }
