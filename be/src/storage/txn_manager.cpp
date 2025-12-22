@@ -149,7 +149,7 @@ Status TxnManager::commit_txn(TPartitionId partition_id, const TabletSharedPtr& 
                               const PUniqueId& load_id, const RowsetSharedPtr& rowset_ptr, bool is_recovery) {
     auto scoped =
             trace::Scope(Tracer::Instance().start_trace_txn_tablet("txn_commit", transaction_id, tablet->tablet_id()));
-    return commit_txn(tablet, partition_id, transaction_id, load_id, rowset_ptr, is_recovery, is_recovery);
+    return commit_txn(tablet, partition_id, transaction_id, load_id, rowset_ptr, is_recovery);
 }
 
 // delete the txn from manager if it is not committed(not have a valid rowset)
