@@ -22,7 +22,9 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.leader.CheckpointController;
 import com.starrocks.persist.ClusterSnapshotLog;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.task.ExternalClusterSnapshotTask;
 import com.starrocks.thrift.TClusterSnapshotJobsItem;
+import com.starrocks.thrift.TFinishTaskRequest;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -188,10 +190,6 @@ public class ClusterSnapshotJob implements Writable {
         return item;
     }
 
-    /**
-     * Default implementation for meta-only snapshot jobs (ClusterSnapshotJob and ManualClusterSnapshotJob).
-     * FullClusterSnapshotJob should override this method if it needs different initialization logic.
-     */
     protected void runInitializingJob(SnapshotJobContext context) throws StarRocksException {
         Preconditions.checkState(state == ClusterSnapshotJobState.INITIALIZING, state);
         LOG.info("begin to initialize cluster snapshot job. job: {}", getId());
@@ -209,13 +207,18 @@ public class ClusterSnapshotJob implements Writable {
         logJob();
     }
 
-    /**
-     * Default implementation for meta-only snapshot jobs (ClusterSnapshotJob and ManualClusterSnapshotJob).
-     * FullClusterSnapshotJob should override this method if it needs different snapshotting logic.
-     */
     protected void runSnapshottingJob(SnapshotJobContext context) throws StarRocksException {
-        Preconditions.checkState(state == ClusterSnapshotJobState.SNAPSHOTING, state);
         LOG.info("begin to snapshot cluster snapshot job. job: {}", getId());
+
+        ClusterSnapshotInfo clusterSnapshotInfo = createImagesAndGetSnapshotInfo(context);
+        setClusterSnapshotInfo(clusterSnapshotInfo);
+        setState(ClusterSnapshotJobState.UPLOADING);
+        logJob();
+    }
+
+    protected ClusterSnapshotInfo createImagesAndGetSnapshotInfo(SnapshotJobContext context)
+            throws StarRocksException {
+        Preconditions.checkState(state == ClusterSnapshotJobState.SNAPSHOTING, state);
 
         CheckpointController feController = context.getFeController();
         CheckpointController starMgrController = context.getStarMgrController();
@@ -244,16 +247,13 @@ public class ClusterSnapshotJob implements Writable {
         } else if (starMgrImageJournalId > starMgrCheckpointJournalId) {
             throw new StarRocksException("checkpoint journal id for starMgr is smaller than image version");
         }
-        setClusterSnapshotInfo(feController.getClusterSnapshotInfo());
-        setState(ClusterSnapshotJobState.UPLOADING);
-        logJob();
+
+        ClusterSnapshotInfo snapshotInfo = feController.getClusterSnapshotInfo();
+
         LOG.info("Finished create image for starMgr image, version: {}", starMgrCheckpointJournalId);
+        return snapshotInfo;
     }
 
-    /**
-     * Default implementation for meta-only snapshot jobs (ClusterSnapshotJob and ManualClusterSnapshotJob).
-     * FullClusterSnapshotJob should override this method if it needs different uploading logic.
-     */
     protected void runUploadingJob(SnapshotJobContext context) throws StarRocksException {
         Preconditions.checkState(state == ClusterSnapshotJobState.UPLOADING, state);
         LOG.info("begin to upload cluster snapshot job. job: {}", getId());
@@ -270,7 +270,7 @@ public class ClusterSnapshotJob implements Writable {
                 getFeJournalId(), getStarMgrJournalId());
     }
 
-    protected void runFinishedJob() throws StarRocksException{
+    protected void runFinishedJob(SnapshotJobContext context) throws StarRocksException {
         // Default implementation: do nothing
     }
 
@@ -292,7 +292,7 @@ public class ClusterSnapshotJob implements Writable {
                     case EXPIRED:
                     case DELETED:
                     case ERROR:
-                        runFinishedJob();
+                        runFinishedJob(context);
                         break;
                     default:
                         break;
@@ -308,6 +308,14 @@ public class ClusterSnapshotJob implements Writable {
             logJob();
             return;
         }
+    }
+
+    public void replay() {
+        // do nothing
+    }
+
+    public void finishSnapshotTask(ExternalClusterSnapshotTask task, TFinishTaskRequest request) {
+        // Default implementation: do nothing
     }
 
 }

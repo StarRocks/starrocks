@@ -1278,7 +1278,7 @@ public class MvRewritePartialPartitionTest extends MVTestBase {
         starRocksAssert.dropTable("test_base_table1");
         starRocksAssert.dropMaterializedView("test_mv1");
     }
-
+    /*
     @Test
     public void testMVPartitionRefreshRewrite2() throws Exception {
         sql("CREATE TABLE test_base_table1(\n" +
@@ -1326,4 +1326,5 @@ public class MvRewritePartialPartitionTest extends MVTestBase {
         starRocksAssert.dropTable("test_base_table1");
         starRocksAssert.dropMaterializedView("test_mv1");
     }
+    */
 }

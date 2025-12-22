@@ -256,8 +256,8 @@ public class ClusterSnapshotMgrEPack extends ClusterSnapshotMgr {
     public List<ClusterSnapshotInfo> getAllClusterSnapshotInfo() {
         List<ClusterSnapshotInfo> clusterSnapshotInfos = Lists.newArrayList();
         for (ManualClusterSnapshotJob manualJob : manualClusterSnapshotJobs.values()) {
-            ManualClusterSnapshot manualClusterSnapshot = (ManualClusterSnapshot) manualJob.getSnapshot();
-            ClusterSnapshotInfo clusterSnapshotInfo = manualClusterSnapshot.getClusterSnapshotInfo();
+            ClusterSnapshot clusterSnapshot = manualJob.getSnapshot();
+            ClusterSnapshotInfo clusterSnapshotInfo = clusterSnapshot.getClusterSnapshotInfo();
             clusterSnapshotInfos.add(clusterSnapshotInfo);
         }
         return clusterSnapshotInfos;
@@ -319,7 +319,7 @@ public class ClusterSnapshotMgrEPack extends ClusterSnapshotMgr {
 
     @Override
     public boolean isMaterializedIndexInClusterSnapshotInfo(
-                   long dbId, long tableId, long partId, long physicalPartId, long indexId) {
+            long dbId, long tableId, long partId, long physicalPartId, long indexId) {
         for (ClusterSnapshotInfo info : getAllClusterSnapshotInfo()) {
             if (info.containsMaterializedIndex(dbId, tableId, partId, physicalPartId, indexId)) {
                 return true;
@@ -383,5 +383,7 @@ public class ClusterSnapshotMgrEPack extends ClusterSnapshotMgr {
         automatedSnapshotJobs = data.getAutomatedSnapshotJobs();
         manualClusterSnapshotRequestQueue = data.getManualClusterSnapshotRequestQueue();
         manualClusterSnapshotJobs = data.getManualClusterSnapshotJobs();
+        properties = data.getProperties();
+        lastSuccFullSnapshotInfo = data.getLastSuccFullSnapshotInfo();
     }
 }

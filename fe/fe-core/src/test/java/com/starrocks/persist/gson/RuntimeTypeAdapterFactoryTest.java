@@ -18,6 +18,7 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.lake.snapshot.ClusterSnapshotJob;
+import com.starrocks.lake.snapshot.ExternalClusterSnapshotJob;
 import com.starrocks.lake.snapshot.ManualClusterSnapshot;
 import com.starrocks.lake.snapshot.ManualClusterSnapshotJob;
 import org.junit.jupiter.api.Assertions;
@@ -104,6 +105,15 @@ public class RuntimeTypeAdapterFactoryTest {
             String str1 = GsonUtils.GSON.toJson(wrapper);
             WrapperClass deserializedWrapper = GsonUtils.GSON.fromJson(str1, WrapperClass.class);
             Assertions.assertTrue(!(deserializedWrapper.getJob() instanceof ManualClusterSnapshotJob));
+            Assertions.assertTrue(!(deserializedWrapper.getJob().getSnapshot() instanceof ManualClusterSnapshot));
+        }
+
+        {
+            WrapperClass wrapper = new WrapperClass();
+            wrapper.setJob(new ExternalClusterSnapshotJob(2, "test3", "test4", 20));
+            String str1 = GsonUtils.GSON.toJson(wrapper);
+            WrapperClass deserializedWrapper = GsonUtils.GSON.fromJson(str1, WrapperClass.class);
+            Assertions.assertTrue(deserializedWrapper.getJob() instanceof ExternalClusterSnapshotJob);
             Assertions.assertTrue(!(deserializedWrapper.getJob().getSnapshot() instanceof ManualClusterSnapshot));
         }
     }

@@ -1062,7 +1062,7 @@ public class ClusterSnapshotTest {
         }
 
         @Override
-        protected void runFinishedJob() {
+        protected void runFinishedJob(SnapshotJobContext context) {
             finishedCnt++;
         }
     }

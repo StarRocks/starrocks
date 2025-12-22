@@ -53,6 +53,7 @@ import com.starrocks.thrift.TCreateTabletReq;
 import com.starrocks.thrift.TDownloadReq;
 import com.starrocks.thrift.TDropAutoIncrementMapReq;
 import com.starrocks.thrift.TDropTabletReq;
+import com.starrocks.thrift.TExternalClusterSnapshotRequest;
 import com.starrocks.thrift.TMoveDirReq;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TPublishVersionRequest;
@@ -127,7 +128,8 @@ public class AgentBatchTask implements Runnable {
     }
 
     // return true only if all tasks are finished.
-    // NOTICE that even if AgentTask.isFinished() return false, it does not mean that task is not finished.
+    // NOTICE that even if AgentTask.isFinished() return false, it does not mean
+    // that task is not finished.
     // this depends on caller's logic. See comments on 'isFinished' member.
     public boolean isFinished() {
         for (Map.Entry<Long, List<AgentTask>> entry : this.backendIdToTasks.entrySet()) {
@@ -173,9 +175,11 @@ public class AgentBatchTask implements Runnable {
     public void run() {
         for (Long backendId : this.backendIdToTasks.keySet()) {
             try {
-                ComputeNode computeNode = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackend(backendId);
+                ComputeNode computeNode = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
+                        .getBackend(backendId);
                 if (RunMode.isSharedDataMode() && computeNode == null) {
-                    computeNode = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getComputeNode(backendId);
+                    computeNode = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
+                            .getComputeNode(backendId);
                 }
 
                 if (computeNode == null || !computeNode.isAlive()) {
@@ -403,6 +407,12 @@ public class AgentBatchTask implements Runnable {
                 UpdateSchemaTask updateSchemaTask = (UpdateSchemaTask) task;
                 TUpdateSchemaReq req = updateSchemaTask.toThrift();
                 tAgentTaskRequest.setUpdate_schema_req(req);
+                return tAgentTaskRequest;
+            }
+            case EXTERNAL_CLUSTER_SNAPSHOT: {
+                ExternalClusterSnapshotTask snapshotTask = (ExternalClusterSnapshotTask) task;
+                TExternalClusterSnapshotRequest req = snapshotTask.toThrift();
+                tAgentTaskRequest.setExternal_cluster_snapshot_req(req);
                 return tAgentTaskRequest;
             }
             default:

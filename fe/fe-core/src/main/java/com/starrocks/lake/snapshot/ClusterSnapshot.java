@@ -22,7 +22,7 @@ import com.starrocks.thrift.TClusterSnapshotsItem;
 
 public class ClusterSnapshot {
     public enum ClusterSnapshotType {
-        AUTOMATED, MANUAL, INCREMENTAL
+        AUTOMATED, MANUAL, INCREMENTAL, AUTO_FULL
     }
 
     @SerializedName(value = "id")
@@ -41,6 +41,8 @@ public class ClusterSnapshot {
     private long feJournalId;
     @SerializedName(value = "starMgrJournal")
     private long starMgrJournalId;
+    @SerializedName(value = "clusterSnapshotInfo")
+    private ClusterSnapshotInfo clusterSnapshotInfo;
 
     public ClusterSnapshot() {
     }
@@ -95,11 +97,15 @@ public class ClusterSnapshot {
     }
 
     public boolean isAutomated() {
-        return type == ClusterSnapshotType.AUTOMATED;
+        return type == ClusterSnapshotType.AUTOMATED || type == ClusterSnapshotType.AUTO_FULL;
+    }
+
+    public ClusterSnapshotInfo getClusterSnapshotInfo() {
+        return clusterSnapshotInfo;
     }
 
     public void setClusterSnapshotInfo(ClusterSnapshotInfo clusterSnapshotInfo) {
-        return;
+        this.clusterSnapshotInfo = clusterSnapshotInfo;
     }
 
     public TClusterSnapshotsItem getInfo() {

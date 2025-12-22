@@ -108,6 +108,7 @@ import com.starrocks.task.CreateReplicaTask.RecoverySource;
 import com.starrocks.task.DirMoveTask;
 import com.starrocks.task.DownloadTask;
 import com.starrocks.task.DropAutoIncrementMapTask;
+import com.starrocks.task.ExternalClusterSnapshotTask;
 import com.starrocks.task.PublishVersionTask;
 import com.starrocks.task.PushTask;
 import com.starrocks.task.RemoteSnapshotTask;
@@ -353,6 +354,9 @@ public class LeaderImpl {
                 case UPDATE_SCHEMA:
                     finishUpdateSchemaTask(task, request);
                     break;
+                case EXTERNAL_CLUSTER_SNAPSHOT:
+                    finishExternalClusterSnapshotTask(task, request);
+                    break;
                 default:
                     break;
             }
@@ -503,6 +507,15 @@ public class LeaderImpl {
                     locker.unLockDatabase(db.getId(), LockType.READ);
                 }
             }
+        } finally {
+            AgentTaskQueue.removeTask(task.getBackendId(), task.getTaskType(), task.getSignature());
+        }
+    }
+
+    private void finishExternalClusterSnapshotTask(AgentTask task, TFinishTaskRequest request) {
+        try {
+            GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().finishSnapshotTask(
+                    (ExternalClusterSnapshotTask) task, request);
         } finally {
             AgentTaskQueue.removeTask(task.getBackendId(), task.getTaskType(), task.getSignature());
         }

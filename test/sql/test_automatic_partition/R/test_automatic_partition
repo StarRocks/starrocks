@@ -618,7 +618,7 @@ select sleep(3);
 -- result:
 1
 -- !result
-function: wait_alter_table_not_pending()
+function: wait_alter_table_finish()
 -- result:
 None
 -- !result

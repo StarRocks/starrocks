@@ -20,6 +20,7 @@ import com.starrocks.alter.AlterJobV2;
 import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.lake.snapshot.ClusterSnapshotJob.ClusterSnapshotJobState;
+import com.starrocks.lake.snapshot.ExternalClusterSnapshotJob;
 import com.starrocks.persist.ClusterSnapshotLog;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.gson.GsonPostProcessable;
@@ -34,8 +35,10 @@ import com.starrocks.sql.ast.AdminSetAutomatedSnapshotOffStmt;
 import com.starrocks.sql.ast.AdminSetAutomatedSnapshotOnStmt;
 import com.starrocks.staros.StarMgrServer;
 import com.starrocks.storagevolume.StorageVolume;
+import com.starrocks.task.ExternalClusterSnapshotTask;
 import com.starrocks.thrift.TClusterSnapshotJobsResponse;
 import com.starrocks.thrift.TClusterSnapshotsResponse;
+import com.starrocks.thrift.TFinishTaskRequest;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -46,6 +49,8 @@ import java.util.Map.Entry;
 import java.util.NavigableMap;
 import java.util.concurrent.ConcurrentSkipListMap;
 
+import static com.starrocks.common.util.PropertyAnalyzer.PROPERTIES_SNAPSHOT_SCOPE;
+
 // only used for AUTOMATED snapshot for now
 public class ClusterSnapshotMgr implements GsonPostProcessable {
     public static final Logger LOG = LogManager.getLogger(ClusterSnapshotMgr.class);
@@ -55,6 +60,10 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
     protected volatile String storageVolumeName;
     @SerializedName(value = "automatedSnapshotJobs")
     protected NavigableMap<Long, ClusterSnapshotJob> automatedSnapshotJobs = new ConcurrentSkipListMap<>();
+    @SerializedName(value = "properties")
+    protected Map<String, String> properties;
+    @SerializedName(value = "lastSuccFullSnapshotInfo")
+    protected ClusterSnapshotInfo lastSuccFullSnapshotInfo;
 
     protected ClusterSnapshotJobScheduler clusterSnapshotJobScheduler;
 
@@ -64,19 +73,29 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
     // Turn on automated snapshot, use stmt for extension in future
     public void setAutomatedSnapshotOn(AdminSetAutomatedSnapshotOnStmt stmt) {
         String storageVolumeName = stmt.getStorageVolumeName();
-        setAutomatedSnapshotOn(storageVolumeName);
+        Map<String, String> properties = stmt.getProperties();
+        setAutomatedSnapshotOn(storageVolumeName, properties);
 
         ClusterSnapshotLog log = new ClusterSnapshotLog();
-        log.setAutomatedSnapshotOn(storageVolumeName);
+        log.setAutomatedSnapshotOn(storageVolumeName, properties);
         GlobalStateMgr.getCurrentState().getEditLog().logClusterSnapshotLog(log);
     }
 
     protected void setAutomatedSnapshotOn(String storageVolumeName) {
+        setAutomatedSnapshotOn(storageVolumeName, null);
+    }
+
+    protected void setAutomatedSnapshotOn(String storageVolumeName, Map<String, String> properties) {
         this.storageVolumeName = storageVolumeName;
+        this.properties = properties != null ? new java.util.HashMap<>(properties) : null;
     }
 
     public String getAutomatedSnapshotSvName() {
         return storageVolumeName;
+    }
+
+    public Map<String, String> getProperties() {
+        return properties;
     }
 
     public boolean isAutomatedSnapshotOn() {
@@ -140,12 +159,28 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
         long createTimeMs = System.currentTimeMillis();
         long id = GlobalStateMgr.getCurrentState().getNextId();
         String snapshotName = AUTOMATED_NAME_PREFIX + String.valueOf(createTimeMs);
-        ClusterSnapshotJob job = new ClusterSnapshotJob(id, snapshotName, storageVolumeName, createTimeMs);
+
+        ClusterSnapshotJob job;
+        boolean isExternal = false;
+        if (properties != null) {
+            String snapshotScope = properties.get(PROPERTIES_SNAPSHOT_SCOPE);
+            if (snapshotScope != null && snapshotScope.equalsIgnoreCase("external")) {
+                isExternal = true;
+            }
+        }
+
+        if (isExternal) {
+            job = new ExternalClusterSnapshotJob(id, snapshotName, storageVolumeName, createTimeMs);
+        } else {
+            job = new ClusterSnapshotJob(id, snapshotName, storageVolumeName, createTimeMs);
+        }
+
         job.logJob();
 
         addSnapshotJob(job);
 
-        LOG.info("Create automated cluster snapshot job successfully, job id: {}, snapshot name: {}", id, snapshotName);
+        LOG.info("Create automated cluster snapshot job successfully, job id: {}, snapshot name: {}, scope: {}",
+                id, snapshotName, isExternal ? "external" : "local");
 
         return job;
     }
@@ -284,6 +319,19 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
     public void abortUnfinishedClusterSnapshotJob() {
         ClusterSnapshotJob lastUnfinishedJob = getUnfinishedClusterSnapshotJob();
         if (lastUnfinishedJob != null) {
+            // For generic (meta-only) snapshot jobs, we keep the original behavior:
+            // unfinished job is marked as ERROR on FE restart, so that scheduler
+            // can start a brand-new job later.
+            //
+            // For ExternalClusterSnapshotJob, we rely on its replay() implementation
+            // to reconstruct transient state and continue running after restart,
+            // so we do NOT mark it as ERROR here.
+            if (lastUnfinishedJob instanceof ExternalClusterSnapshotJob) {
+                LOG.info("Keep unfinished ExternalClusterSnapshotJob {} in state {} after FE restart",
+                        lastUnfinishedJob.getId(), lastUnfinishedJob.getState());
+                return;
+            }
+
             lastUnfinishedJob.setErrMsg("Snapshot job has been failed because of FE restart or leader change");
             lastUnfinishedJob.setState(ClusterSnapshotJobState.ERROR);
             lastUnfinishedJob.logJob();
@@ -396,7 +444,8 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
         switch (logType) {
             case AUTOMATED_SNAPSHOT_ON: {
                 String storageVolumeName = log.getStorageVolumeName();
-                setAutomatedSnapshotOn(storageVolumeName);
+                Map<String, String> properties = log.getProperties();
+                setAutomatedSnapshotOn(storageVolumeName, properties);
                 break;
             }
             case AUTOMATED_SNAPSHOT_OFF: {
@@ -409,6 +458,7 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
 
                 switch (state) {
                     case INITIALIZING: {
+                        job.replay();
                         addSnapshotJob(job);
                         break;
                     }
@@ -418,6 +468,7 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
                     case EXPIRED:
                     case DELETED:
                     case ERROR: {
+                        job.replay();
                         automatedSnapshotJobs.put(job.getId(), job);
                         break;
                     }
@@ -425,6 +476,7 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
                         LOG.warn("Invalid Cluster Snapshot Job state {}", state);
                     }
                 }
+                break;
             }
             default: {
                 LOG.warn("Invalid Cluster Snapshot Log Type {}", logType);
@@ -444,6 +496,23 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
 
         storageVolumeName = data.getAutomatedSnapshotSvName();
         automatedSnapshotJobs = data.getAutomatedSnapshotJobs();
+        properties = data.getProperties();
+        lastSuccFullSnapshotInfo = data.getLastSuccFullSnapshotInfo();
+    }
+
+    public void setLastSuccFullSnapshotInfo(ClusterSnapshotInfo lastSuccFullSnapshotInfo) {
+        this.lastSuccFullSnapshotInfo = lastSuccFullSnapshotInfo;
+    }
+
+    public ClusterSnapshotInfo getLastSuccFullSnapshotInfo() {
+        return lastSuccFullSnapshotInfo;
+    }
+
+    public void finishSnapshotTask(ExternalClusterSnapshotTask task, TFinishTaskRequest request) {
+        ClusterSnapshotJob job = automatedSnapshotJobs.get(task.getJobId());
+        if (job != null) {
+            job.finishSnapshotTask(task, request);
+        }
     }
 
     @Override

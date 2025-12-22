@@ -851,7 +851,7 @@ syncStatement
     ;
 
 adminSetAutomatedSnapshotOnStatement
-    : ADMIN SET AUTOMATED CLUSTER SNAPSHOT ON (STORAGE VOLUME svName=identifier)?
+    : ADMIN SET AUTOMATED CLUSTER SNAPSHOT ON (STORAGE VOLUME svName=identifier)? properties?
     ;
 
 adminSetAutomatedSnapshotOffStatement

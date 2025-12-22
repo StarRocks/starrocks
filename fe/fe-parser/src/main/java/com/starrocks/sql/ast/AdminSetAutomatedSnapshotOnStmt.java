@@ -16,21 +16,36 @@ package com.starrocks.sql.ast;
 
 import com.starrocks.sql.parser.NodePosition;
 
+import java.util.Map;
+
 public class AdminSetAutomatedSnapshotOnStmt extends DdlStmt {
     private final String storageVolumeName;
+    private final Map<String, String> properties;
 
     public AdminSetAutomatedSnapshotOnStmt(String storageVolumeName) {
         super(NodePosition.ZERO);
         this.storageVolumeName = storageVolumeName;
+        this.properties = null;
     }
 
     public AdminSetAutomatedSnapshotOnStmt(String storageVolumeName, NodePosition pos) {
         super(pos);
         this.storageVolumeName = storageVolumeName;
+        this.properties = null;
+    }
+
+    public AdminSetAutomatedSnapshotOnStmt(String storageVolumeName, Map<String, String> properties, NodePosition pos) {
+        super(pos);
+        this.storageVolumeName = storageVolumeName;
+        this.properties = properties;
     }
 
     public String getStorageVolumeName() {
         return storageVolumeName;
+    }
+
+    public Map<String, String> getProperties() {
+        return properties;
     }
 
     @Override

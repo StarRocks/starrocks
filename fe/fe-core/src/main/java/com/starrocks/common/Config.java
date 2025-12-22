@@ -3981,6 +3981,9 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int max_historical_automated_cluster_snapshot_jobs = 100;
 
+    @ConfField(mutable = true)
+    public static long automated_cluster_snapshot_timeout_seconds = 3600;
+
     /**
      * The URL to a JWKS service or a local file in the conf dir
      */

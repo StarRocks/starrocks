@@ -28,6 +28,10 @@ public class ClusterSnapshotInfo {
         this.dbInfos = dbInfos;
     }
 
+    public Map<Long, DatabaseSnapshotInfo> getDbInfos() {
+        return dbInfos;
+    }
+
     public boolean isEmpty() {
         return this.dbInfos.isEmpty();
     }

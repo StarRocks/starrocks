@@ -2913,7 +2913,11 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         if (context.svName != null) {
             svName = getIdentifierName(context.svName);
         }
-        return new AdminSetAutomatedSnapshotOnStmt(svName, createPos(context));
+        Map<String, String> properties = null;
+        if (context.properties() != null) {
+            properties = getCaseInsensitiveProperties(context.properties());
+        }
+        return new AdminSetAutomatedSnapshotOnStmt(svName, properties, createPos(context));
     }
 
     @Override

@@ -172,6 +172,7 @@ import com.starrocks.lake.backup.LakeTableSnapshotInfo;
 import com.starrocks.lake.compaction.CompactionTxnCommitAttachment;
 import com.starrocks.lake.snapshot.ClusterSnapshot;
 import com.starrocks.lake.snapshot.ClusterSnapshotJob;
+import com.starrocks.lake.snapshot.ExternalClusterSnapshotJob;
 import com.starrocks.lake.snapshot.ManualClusterSnapshot;
 import com.starrocks.lake.snapshot.ManualClusterSnapshotJob;
 import com.starrocks.load.loadv2.BrokerLoadJob;
@@ -497,7 +498,8 @@ public class GsonUtils {
     public static final RuntimeTypeAdapterFactory<ClusterSnapshotJob> CLUSTER_SNAPSHOT_JOB_RUNTIME_TYPE_ADAPTER_FACTORY =
             RuntimeTypeAdapterFactory.of(ClusterSnapshotJob.class, "clazz")
                     .registerSubtype(ClusterSnapshotJob.class, "ClusterSnapshotJob")
-                    .registerSubtype(ManualClusterSnapshotJob.class, "ManualClusterSnapshotJob");
+                    .registerSubtype(ManualClusterSnapshotJob.class, "ManualClusterSnapshotJob")
+                    .registerSubtype(ExternalClusterSnapshotJob.class, "ExternalClusterSnapshotJob");
 
     public static final RuntimeTypeAdapterFactory<TvrVersionRange> TVR_DELTA_RUNTIME_TYPE_ADAPTER_FACTORY =
             RuntimeTypeAdapterFactory.of(TvrVersionRange.class, "clazz")

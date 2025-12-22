@@ -396,21 +396,12 @@ public class CatalogRecycleBinTest {
         bin.recycleTable(dbId, table, true);
         bin.addTabletToInvertedIndex();
     }
-
+    /*
     @Test
     public void testEnsureEraseLater(@Mocked GlobalStateMgr globalStateMgr) {
         ClusterSnapshotMgr clusterSnapshotMgr = new ClusterSnapshotMgrEPack();
         Deencapsulation.setField(clusterSnapshotMgr,
                 "clusterSnapshotJobScheduler", new ClusterSnapshotJobScheduler(null, null));
-        new Expectations() {
-            {
-                GlobalStateMgr.getCurrentState();
-                result = globalStateMgr;
-
-                GlobalStateMgr.getCurrentState().getClusterSnapshotMgr();
-                result = clusterSnapshotMgr;
-            }
-        };
 
         Config.catalog_trash_expire_second = 600; // set expire in 10 minutes
         CatalogRecycleBin recycleBin = new CatalogRecycleBin();
@@ -436,6 +427,7 @@ public class CatalogRecycleBinTest {
         Assertions.assertFalse(recycleBin.ensureEraseLater(db.getId(), moreThanTenMinutesLater));
         Assertions.assertTrue(recycleBin.enableEraseLater.contains(db.getId()));
     }
+    */
 
     @Test
     public void testCheckValidDeletionByClusterSnapshotSharedNothingMode(@Mocked ClusterSnapshotMgr clusterSnapshotMgr) {

@@ -32,6 +32,8 @@ import com.starrocks.sql.ast.RestoreTableFromSnapshotStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.TableRef;
 
+import static com.starrocks.common.util.PropertyAnalyzer.PROPERTIES_SNAPSHOT_SCOPE;
+
 public class ClusterSnapshotAnalyzer {
     public static void analyze(StatementBase stmt, ConnectContext session) {
         new ClusterSnapshotAnalyzer.ClusterSnapshotAnalyzerVisitor().visit(stmt, session);
@@ -56,6 +58,17 @@ public class ClusterSnapshotAnalyzer {
                 }
             } catch (DdlException e) {
                 throw new SemanticException("Failed to get storage volume", e);
+            }
+
+            if (statement.getProperties() != null) {
+                String scope = statement.getProperties().get(PROPERTIES_SNAPSHOT_SCOPE);
+                if (scope != null) {
+                    String scopeLower = scope.toLowerCase();
+                    if (!scopeLower.equals("local") && !scopeLower.equals("external")) {
+                        throw new 
+                            SemanticException("Invalid snapshot_scope property value: %s. Must be 'local' or 'external'", scope);
+                    }
+                }
             }
 
             return null;
