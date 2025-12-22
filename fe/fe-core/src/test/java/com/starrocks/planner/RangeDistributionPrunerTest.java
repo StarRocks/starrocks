@@ -19,6 +19,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.Tablet;
+import com.starrocks.catalog.TabletRange;
 import com.starrocks.catalog.Tuple;
 import com.starrocks.catalog.Variant;
 import com.starrocks.common.Config;
@@ -390,7 +391,7 @@ public class RangeDistributionPrunerTest {
         List<Variant> upperValues = Lists.newArrayList(Variant.of(column.getType(), upper));
         Tuple lowerTuple = new Tuple(lowerValues);
         Tuple upperTuple = new Tuple(upperValues);
-        tablet.setRange(Range.of(lowerTuple, upperTuple, true, true));
+        tablet.setRange(new TabletRange(Range.of(lowerTuple, upperTuple, true, true)));
         return tablet;
     }
 
@@ -404,7 +405,7 @@ public class RangeDistributionPrunerTest {
         }
         Tuple lowerTuple = new Tuple(lowerValues);
         Tuple upperTuple = new Tuple(upperValues);
-        tablet.setRange(Range.of(lowerTuple, upperTuple, true, true));
+        tablet.setRange(new TabletRange(Range.of(lowerTuple, upperTuple, true, true)));
         return tablet;
     }
 }

@@ -17,6 +17,7 @@ package com.starrocks.planner;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Tablet;
+import com.starrocks.catalog.TabletRange;
 import com.starrocks.catalog.Tuple;
 import com.starrocks.catalog.Variant;
 import com.starrocks.common.Config;
@@ -137,13 +138,13 @@ public class RangeDistributionPruner implements DistributionPruner {
 
             Set<Long> result = Sets.newHashSet();
             for (Tablet tablet : tabletInOrder) {
-                Range<Tuple> tabletRange = tablet.getRange();
+                TabletRange tabletRange = tablet.getRange();
                 // If range information is missing, keep the tablet
                 if (tabletRange == null) {
                     result.add(tablet.getId());
                     continue;
                 }
-                if (tabletRange.isOverlapping(queryRange)) {
+                if (tabletRange.getRange().isOverlapping(queryRange)) {
                     result.add(tablet.getId());
                 }
             }
