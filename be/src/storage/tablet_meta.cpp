@@ -55,6 +55,18 @@ Status TabletMeta::create(const TCreateTabletReq& request, const TabletUid& tabl
                           uint32_t next_unique_id,
                           const std::unordered_map<uint32_t, uint32_t>& col_ordinal_to_unique_id,
                           TabletMetaSharedPtr* tablet_meta) {
+    LOG(ERROR) << "[CREATE_TABLE_DEBUG] TabletMeta::create() called for tablet_id=" << request.tablet_id
+               << ", num_columns=" << request.tablet_schema.columns.size()
+               << ", schema_id=" << (request.tablet_schema.__isset.id ? request.tablet_schema.id : -1);
+    
+    // Log each column's default value
+    for (size_t i = 0; i < request.tablet_schema.columns.size(); i++) {
+        const auto& col = request.tablet_schema.columns[i];
+        LOG(ERROR) << "[CREATE_TABLE_DEBUG] TColumn[" << i << "]: name=" << col.column_name
+                   << ", has_default=" << col.__isset.default_value
+                   << ", default_value='" << (col.__isset.default_value ? col.default_value : "") << "'";
+    }
+    
     *tablet_meta = std::make_shared<TabletMeta>(
             request.table_id, request.partition_id, request.tablet_id, request.tablet_schema.schema_hash, shard_id,
             request.tablet_schema, next_unique_id,
@@ -107,6 +119,9 @@ TabletMeta::TabletMeta(int64_t table_id, int64_t partition_id, int64_t tablet_id
                        TCompressionType::type compression_type, int32_t primary_index_cache_expire_sec,
                        TStorageType::type storage_type, int compression_level)
         : _tablet_uid(0, 0) {
+    LOG(ERROR) << "[CREATE_TABLE_DEBUG] TabletMeta::TabletMeta() constructor called for tablet_id=" << tablet_id
+               << ", calling convert_t_schema_to_pb_schema()";
+    
     TabletMetaPB tablet_meta_pb;
     tablet_meta_pb.set_table_id(table_id);
     tablet_meta_pb.set_partition_id(partition_id);
@@ -134,6 +149,10 @@ TabletMeta::TabletMeta(int64_t table_id, int64_t partition_id, int64_t tablet_id
         schema->set_compression_level(compression_level);
     }
     CHECK(st.ok()) << st;
+    
+    LOG(ERROR) << "[CREATE_TABLE_DEBUG] TabletMeta::TabletMeta() after convert_t_schema_to_pb_schema, "
+               << "TabletSchemaPB has " << schema->column_size() << " columns";
+    
     init_from_pb(&tablet_meta_pb);
     MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->tablet_metadata_mem_tracker(), _mem_usage());
 }
@@ -200,6 +219,18 @@ Status TabletMeta::save(const string& file_path) {
 
 Status TabletMeta::save(const string& file_path, const TabletMetaPB& tablet_meta_pb) {
     DCHECK(!file_path.empty());
+    LOG(ERROR) << "[CREATE_TABLE_DEBUG] TabletMeta::save() persisting TabletMetaPB to file: " << file_path
+               << ", tablet_id=" << tablet_meta_pb.tablet_id()
+               << ", num_columns=" << tablet_meta_pb.schema().column_size();
+    
+    // Log each column's default value
+    for (int i = 0; i < tablet_meta_pb.schema().column_size(); i++) {
+        const auto& col = tablet_meta_pb.schema().column(i);
+        LOG(ERROR) << "[CREATE_TABLE_DEBUG] Persistent ColumnPB[" << i << "]: name=" << col.name()
+                   << ", has_default=" << col.has_default_value()
+                   << ", default_value='" << (col.has_default_value() ? col.default_value() : "") << "'";
+    }
+    
     ProtobufFileWithHeader file(file_path);
     return file.save(tablet_meta_pb, true);
 }
@@ -414,11 +445,17 @@ void TabletMeta::to_meta_pb(TabletMetaPB* tablet_meta_pb, bool skip_tablet_schem
         tablet_meta_pb->set_tablet_state(PB_SHUTDOWN);
         break;
     }
+    LOG(ERROR) << "[CREATE_TABLE_DEBUG] TabletMeta::to_meta_pb() processing rowsets: "
+               << "_rs_metas.size()=" << _rs_metas.size()
+               << ", _inc_rs_metas.size()=" << _inc_rs_metas.size()
+               << ", skip_tablet_schema=" << skip_tablet_schema;
+    
     for (auto& rs : _rs_metas) {
         bool skip_schema = false;
         if (skip_tablet_schema && _schema != nullptr && rs->tablet_schema() != nullptr) {
             skip_schema = (_schema->id() != TabletSchema::invalid_id()) && (_schema->id() == rs->tablet_schema()->id());
         }
+        LOG(ERROR) << "[CREATE_TABLE_DEBUG] Calling rs->get_full_meta_pb() for rs_meta, skip_schema=" << skip_schema;
         rs->get_full_meta_pb(tablet_meta_pb->add_rs_metas(), skip_schema);
     }
     for (const auto& rs : _inc_rs_metas) {
@@ -426,9 +463,11 @@ void TabletMeta::to_meta_pb(TabletMetaPB* tablet_meta_pb, bool skip_tablet_schem
         if (skip_tablet_schema && _schema != nullptr && rs->tablet_schema() != nullptr) {
             skip_schema = (_schema->id() != TabletSchema::invalid_id()) && (_schema->id() == rs->tablet_schema()->id());
         }
+        LOG(ERROR) << "[CREATE_TABLE_DEBUG] Calling rs->get_full_meta_pb() for inc_rs_meta, skip_schema=" << skip_schema;
         rs->get_full_meta_pb(tablet_meta_pb->add_inc_rs_metas(), skip_schema);
     }
     if (_schema != nullptr) {
+        LOG(ERROR) << "[CREATE_TABLE_DEBUG] Calling _schema->to_schema_pb() for main tablet schema";
         _schema->to_schema_pb(tablet_meta_pb->mutable_schema());
     }
 

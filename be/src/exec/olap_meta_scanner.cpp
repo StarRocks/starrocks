@@ -17,6 +17,7 @@
 #include <memory>
 
 #include "exec/olap_meta_scan_node.h"
+#include "storage/metadata_util.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet.h"
 #include "storage/tablet_manager.h"
@@ -56,13 +57,28 @@ Status OlapMetaScanner::_init_meta_reader_params() {
     }
 
     if (_reader_params.tablet_schema == nullptr) {
+        LOG(ERROR) << "[OLAP_META_SCANNER_DEBUG] tablet_schema is null, checking if need to create from FE columns";
         if (_parent->_meta_scan_node.__isset.columns && !_parent->_meta_scan_node.columns.empty() &&
             (_parent->_meta_scan_node.columns[0].col_unique_id >= 0)) {
-            _reader_params.tablet_schema =
-                    TabletSchema::copy(*_tablet->tablet_schema(), _parent->_meta_scan_node.columns);
+            LOG(ERROR) << "[OLAP_META_SCANNER_DEBUG] Creating tablet_schema from FE columns, count: " 
+                      << _parent->_meta_scan_node.columns.size();
+            // ⭐ Preprocess: evaluate default_expr to default_value for complex types
+            auto columns_copy = _parent->_meta_scan_node.columns;
+            Status preprocess_status = preprocess_default_expr_for_tcolumns(columns_copy, "QUERY_META_SCAN");
+            if (!preprocess_status.ok()) {
+                LOG(WARNING) << "Failed to preprocess default_expr in OlapMetaScanner: "
+                            << preprocess_status.to_string();
+            }
+            
+            _reader_params.tablet_schema = TabletSchema::copy(*_tablet->tablet_schema(), columns_copy);
+            LOG(ERROR) << "[OLAP_META_SCANNER_DEBUG] Successfully created tablet_schema from FE columns";
         } else {
+            LOG(ERROR) << "[OLAP_META_SCANNER_DEBUG] Using tablet's original schema";
             _reader_params.tablet_schema = _tablet->tablet_schema();
         }
+    } else {
+        LOG(ERROR) << "[OLAP_META_SCANNER_DEBUG] Using schema from meta_scan_node.schema_id: " 
+                  << (_parent->_meta_scan_node.__isset.schema_id ? _parent->_meta_scan_node.schema_id : -1);
     }
 
     if (_parent->_meta_scan_node.__isset.column_access_paths && !_parent->_column_access_paths.empty()) {

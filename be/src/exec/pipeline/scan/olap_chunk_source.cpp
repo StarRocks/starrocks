@@ -41,6 +41,7 @@
 #include "runtime/exec_env.h"
 #include "storage/chunk_helper.h"
 #include "storage/column_predicate_rewriter.h"
+#include "storage/metadata_util.h"
 #include "storage/index/vector/vector_search_option.h"
 #include "storage/predicate_parser.h"
 #include "storage/projection_iterator.h"
@@ -606,9 +607,27 @@ Status OlapChunkSource::_init_olap_reader(RuntimeState* runtime_state) {
     auto scope = IOProfiler::scope(IOProfiler::TAG_QUERY, _scan_range->tablet_id);
 
     // schema_id that not greater than 0 is invalid
+    LOG(ERROR) << "[SCHEMA_SOURCE_DEBUG] FE sent schema_id=" 
+               << (_scan_node->thrift_olap_scan_node().__isset.schema_id ? 
+                   _scan_node->thrift_olap_scan_node().schema_id : -1)
+               << ", tablet local schema_id=" << _tablet->tablet_schema()->id()
+               << ", has_columns_desc=" << (_scan_node->thrift_olap_scan_node().__isset.columns_desc)
+               << ", tablet_id=" << _tablet->tablet_id();
+    
     if (_scan_node->thrift_olap_scan_node().__isset.schema_id && _scan_node->thrift_olap_scan_node().schema_id > 0 &&
         _scan_node->thrift_olap_scan_node().schema_id == _tablet->tablet_schema()->id()) {
         _tablet_schema = _tablet->tablet_schema();
+        LOG(ERROR) << "[SCHEMA_SOURCE_DEBUG] Schema ID matched! Using LOCAL tablet schema (from ColumnPB), "
+                   << "tablet_id=" << _tablet->tablet_id()
+                   << ", num_columns=" << _tablet_schema->num_columns();
+        
+        // Log default values for all columns
+        for (size_t i = 0; i < _tablet_schema->num_columns(); i++) {
+            const auto& col = _tablet_schema->column(i);
+            LOG(ERROR) << "[SCHEMA_SOURCE_DEBUG] Local column[" << i << "]: name=" << col.name()
+                       << ", has_default=" << col.has_default_value()
+                       << ", default_value='" << col.default_value() << "'";
+        }
     }
 
     if (_tablet_schema == nullptr) {
@@ -616,9 +635,30 @@ Status OlapChunkSource::_init_olap_reader(RuntimeState* runtime_state) {
         if (_scan_node->thrift_olap_scan_node().__isset.columns_desc &&
             !_scan_node->thrift_olap_scan_node().columns_desc.empty() &&
             _scan_node->thrift_olap_scan_node().columns_desc[0].col_unique_id >= 0) {
-            _tablet_schema =
-                    TabletSchema::copy(*_tablet->tablet_schema(), _scan_node->thrift_olap_scan_node().columns_desc);
+            LOG(ERROR) << "[SCHEMA_SOURCE_DEBUG] Schema ID NOT matched or not set! Using FE columns_desc, "
+                       << "tablet_id=" << _tablet->tablet_id()
+                       << ", columns_desc size=" << _scan_node->thrift_olap_scan_node().columns_desc.size();
+            
+            // ⭐ Preprocess: evaluate default_expr to default_value for complex types
+            auto columns_desc_copy = _scan_node->thrift_olap_scan_node().columns_desc;
+            Status preprocess_status = preprocess_default_expr_for_tcolumns(columns_desc_copy, "QUERY_PIPELINE_SCAN");
+            if (!preprocess_status.ok()) {
+                LOG(WARNING) << "Failed to preprocess default_expr: "
+                            << preprocess_status.to_string();
+            }
+            
+            // Log FE sent columns
+            for (size_t i = 0; i < columns_desc_copy.size(); i++) {
+                const auto& tcol = columns_desc_copy[i];
+                LOG(ERROR) << "[SCHEMA_SOURCE_DEBUG] FE column[" << i << "]: name=" << tcol.column_name
+                          << ", has_default=" << tcol.__isset.default_value
+                          << ", default_value='" << (tcol.__isset.default_value ? tcol.default_value : "") << "'";
+            }
+            
+            _tablet_schema = TabletSchema::copy(*_tablet->tablet_schema(), columns_desc_copy);
         } else {
+            LOG(ERROR) << "[SCHEMA_SOURCE_DEBUG] No columns_desc from FE, using local tablet schema, "
+                       << "tablet_id=" << _tablet->tablet_id();
             _tablet_schema = _tablet->tablet_schema();
         }
     }

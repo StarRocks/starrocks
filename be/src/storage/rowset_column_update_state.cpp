@@ -527,6 +527,9 @@ Status RowsetColumnUpdateState::_fill_default_columns(const TabletSchemaCSPtr& t
             default_value = iter->second;
         }
         if (has_default_value) {
+            LOG(ERROR) << "[DEFAULT_VALUE_PATH_5] Creating DefaultValueColumnIterator for column: " << tablet_column.name()
+                      << ", type: " << tablet_column.type() << ", default_value: " << default_value
+                      << ", row_cnt: " << row_cnt;
             const TypeInfoPtr& type_info = get_type_info(tablet_column);
             std::unique_ptr<DefaultValueColumnIterator> default_value_iter =
                     std::make_unique<DefaultValueColumnIterator>(true, default_value, tablet_column.is_nullable(),

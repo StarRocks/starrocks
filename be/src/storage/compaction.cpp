@@ -58,6 +58,11 @@ Status Compaction::do_compaction() {
 Status Compaction::do_compaction_impl() {
     OlapStopWatch watch;
 
+    // [COMPACTION_DEBUG] Log compaction start
+    LOG(ERROR) << "[COMPACTION_DEBUG] Compaction started for tablet=" << _tablet->tablet_id()
+               << ", type=" << compaction_name()
+               << ", input_rowsets=" << _input_rowsets.size();
+
     int64_t segments_num = 0;
     int64_t max_gtid = 0;
     for (auto& rowset : _input_rowsets) {
@@ -233,6 +238,12 @@ Status Compaction::_merge_rowsets_horizontally(size_t segment_iterator_num, Stat
                      << ", err=" << st;
         return st;
     }
+
+    // [COMPACTION_DEBUG] Log compaction success
+    LOG(ERROR) << "[COMPACTION_DEBUG] Compaction finished successfully for tablet=" << _tablet->tablet_id()
+               << ", output_rows=" << output_rows
+               << ", input_rowsets=" << _input_rowsets.size();
+
     return Status::OK();
 }
 

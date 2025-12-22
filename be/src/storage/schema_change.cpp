@@ -38,16 +38,20 @@
 #include <memory>
 #include <utility>
 #include <vector>
+#include <chrono>
+#include <ctime>
 
 #include "exec/sorting/sorting.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
+#include "runtime/exec_env.h"
 #include "runtime/mem_pool.h"
 #include "runtime/runtime_state.h"
 #include "storage/chunk_aggregator.h"
 #include "storage/convert_helper.h"
+#include "storage/metadata_util.h"
 #include "storage/memtable.h"
 #include "storage/memtable_rowset_writer_sink.h"
 #include "storage/rowset/rowset_factory.h"
@@ -724,7 +728,16 @@ Status SchemaChangeHandler::_do_process_alter_tablet(const TAlterTabletReqV2& re
     // Create a new tablet schema, should merge with dropped columns in light schema change
     TabletSchemaCSPtr base_tablet_schema;
     if (!request.columns.empty() && request.columns[0].col_unique_id >= 0) {
-        base_tablet_schema = TabletSchema::copy(*base_tablet->tablet_schema(), request.columns);
+        auto columns_copy = request.columns;
+        
+        // ⭐ Preprocess: evaluate default_expr for complex types
+        Status preprocess_status = preprocess_default_expr_for_tcolumns(columns_copy, "DDL_SCHEMA_CHANGE");
+        if (!preprocess_status.ok()) {
+            LOG(WARNING) << "Failed to preprocess default_expr in SchemaChange: "
+                        << preprocess_status.to_string();
+        }
+        
+        base_tablet_schema = TabletSchema::copy(*base_tablet->tablet_schema(), columns_copy);
     } else {
         base_tablet_schema = base_tablet->tablet_schema();
     }

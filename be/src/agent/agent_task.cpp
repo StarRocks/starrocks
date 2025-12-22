@@ -16,16 +16,23 @@
 
 #include <fmt/format.h>
 
+#include <chrono>
+#include <ctime>
+
 #include "agent/agent_common.h"
 #include "agent/finish_task.h"
 #include "agent/task_signatures_manager.h"
 #include "boost/lexical_cast.hpp"
+#include "common/object_pool.h"
 #include "common/status.h"
+#include "gen_cpp/Types_types.h"
 #include "gutil/strings/join.h"
 #include "io/io_profiler.h"
 #include "runtime/current_thread.h"
+#include "runtime/runtime_state.h"
 #include "runtime/snapshot_loader.h"
 #include "service/backend_options.h"
+#include "storage/metadata_util.h"
 #include "storage/lake/replication_txn_manager.h"
 #include "storage/lake/schema_change.h"
 #include "storage/lake/tablet_manager.h"
@@ -218,10 +225,20 @@ void run_drop_tablet_task(const std::shared_ptr<DropTabletAgentTaskRequest>& age
 }
 
 void run_create_tablet_task(const std::shared_ptr<CreateTabletAgentTaskRequest>& agent_task_req, ExecEnv* exec_env) {
-    const auto& create_tablet_req = agent_task_req->task_req;
+    // Make a mutable copy since we need to preprocess columns
+    TCreateTabletReq create_tablet_req = agent_task_req->task_req;
     TFinishTaskRequest finish_task_request;
     TStatusCode::type status_code = TStatusCode::OK;
     std::vector<std::string> error_msgs;
+
+    // Pre-process: evaluate complex type default expressions to JSON strings
+    // tablet_schema and columns are required fields, no need to check __isset
+    Status preprocess_status = preprocess_default_expr_for_tcolumns(
+        create_tablet_req.tablet_schema.columns, "DDL_CREATE_TABLE");
+    if (!preprocess_status.ok()) {
+        LOG(WARNING) << "Failed to preprocess default_expr in CREATE TABLE: "
+                    << preprocess_status.to_string();
+    }
 
     auto tablet_type = create_tablet_req.tablet_type;
     Status create_status;
@@ -633,6 +650,13 @@ void run_update_schema_task(const std::shared_ptr<UpdateSchemaTaskRequest>& agen
     for (auto uid : tcolumn_param.sort_key_uid) {
         pcolumn_param.add_sort_key_uid(uid);
     }
+    
+    // Preprocess default_expr for complex types before converting to ColumnPB
+    Status preprocess_status = preprocess_default_expr_for_tcolumns(tcolumn_param.columns, "DDL_FAST_SCHEMA_EVOLUTION");
+    if (!preprocess_status.ok()) {
+        LOG(WARNING) << "Failed to preprocess default_expr in UPDATE_SCHEMA task: " << preprocess_status;
+    }
+    
     Status st;
     for (auto& tcolumn : tcolumn_param.columns) {
         uint32_t col_unique_id = tcolumn.col_unique_id;

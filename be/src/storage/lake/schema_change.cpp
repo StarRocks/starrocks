@@ -17,10 +17,14 @@
 #include <thrift/protocol/TDebugProtocol.h>
 
 #include <memory>
+#include <chrono>
+#include <ctime>
 
 #include "runtime/current_thread.h"
+#include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
+#include "storage/metadata_util.h"
 #include "storage/lake/delta_writer.h"
 #include "storage/lake/join_path.h"
 #include "storage/lake/rowset.h"
@@ -336,7 +340,16 @@ Status SchemaChangeHandler::do_process_alter_tablet(const TAlterTabletReqV2& req
 
     TabletSchemaCSPtr base_schema;
     if (!request.columns.empty() && request.columns[0].col_unique_id >= 0) {
-        base_schema = TabletSchema::copy(*(base_tablet.get_schema()), request.columns);
+        auto columns_copy = request.columns;
+        
+        // ⭐ Preprocess: evaluate default_expr for complex types
+        Status preprocess_status = preprocess_default_expr_for_tcolumns(columns_copy, "DDL_LAKE_SCHEMA_CHANGE");
+        if (!preprocess_status.ok()) {
+            LOG(WARNING) << "Failed to preprocess default_expr in Lake SchemaChange: "
+                        << preprocess_status.to_string();
+        }
+        
+        base_schema = TabletSchema::copy(*(base_tablet.get_schema()), columns_copy);
     } else {
         base_schema = base_tablet.get_schema();
     }

@@ -1732,6 +1732,20 @@ public class AnalyzerUtils {
         return type;
     }
 
+    public static void replaceNullTypeInExprTree(Expr expr) {
+        for (Expr child : expr.getChildren()) {
+            replaceNullTypeInExprTree(child);
+        }
+        
+        Type currentType = expr.getType();
+        if (currentType != null) {
+            Type hackedType = replaceNullType2Boolean(currentType);
+            if (!currentType.equals(hackedType)) {
+                expr.setType(hackedType);
+            }
+        }
+    }
+
     public static void checkNondeterministicFunction(ParseNode node) {
         new AstTraverser<Void, Void>() {
             @Override

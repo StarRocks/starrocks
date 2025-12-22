@@ -251,7 +251,24 @@ Status DeltaWriter::_init() {
 
     // build tablet schema in request level
     auto tablet_schema_ptr = _tablet->tablet_schema();
+    LOG(ERROR) << "[DELTA_WRITER_SCHEMA_DEBUG] Before _build_current_tablet_schema: "
+              << "tablet_schema_version=" << tablet_schema_ptr->schema_version()
+              << ", num_columns=" << tablet_schema_ptr->num_columns()
+              << ", tablet_id=" << _opt.tablet_id;
     RETURN_IF_ERROR(_build_current_tablet_schema(_opt.index_id, _opt.ptable_schema_param, tablet_schema_ptr));
+    LOG(ERROR) << "[DELTA_WRITER_SCHEMA_DEBUG] After _build_current_tablet_schema: "
+              << "tablet_schema_version=" << _tablet_schema->schema_version()
+              << ", num_columns=" << _tablet_schema->num_columns()
+              << ", has_ptable_schema_param=" << (_opt.ptable_schema_param != nullptr)
+              << ", tablet_id=" << _opt.tablet_id;
+    if (_tablet_schema->num_columns() > 0) {
+        for (size_t i = 0; i < _tablet_schema->num_columns(); i++) {
+            const auto& col = _tablet_schema->column(i);
+            LOG(ERROR) << "[DELTA_WRITER_SCHEMA_DEBUG] Column[" << i << "]: name=" << col.name()
+                      << ", has_default=" << col.has_default_value()
+                      << ", default_value='" << col.default_value() << "'";
+        }
+    }
     size_t real_num_columns = _tablet_schema->num_columns();
     if (_tablet->is_column_with_row_store()) {
         if (_tablet_schema->columns().back().name() != Schema::FULL_ROW_COLUMN) {

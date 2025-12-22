@@ -34,25 +34,358 @@
 
 #include "storage/rowset/default_value_column_iterator.h"
 
+#include "column/array_column.h"
 #include "column/column.h"
+#include "column/column_builder.h"
+#include "column/datum.h"
+#include "column/json_column.h"
+#include "column/map_column.h"
+#include "column/struct_column.h"
+#include "runtime/decimalv3.h"
 #include "storage/range.h"
 #include "storage/types.h"
+#include "types/array_type_info.h"
+#include "types/map_type_info.h"
+#include "types/struct_type_info.h"
 #include "util/json.h"
+#include "util/json_converter.h"
 #include "util/mem_util.hpp"
+#include "velocypack/Builder.h"
+#include "velocypack/Iterator.h"
 
 namespace starrocks {
 
+// ==================== VPackToDatumCaster: VPack JSON to Datum converter ====================
+
+class VPackToDatumCaster {
+public:
+    VPackToDatumCaster(const vpack::Slice& json_slice, const TypeInfo* type_info, MemPool* mem_pool)
+            : _json_slice(json_slice), _type_info(type_info), _mem_pool(mem_pool) {}
+
+    StatusOr<Datum> cast() {
+        LogicalType target_type = _type_info->type();
+        
+        // Complex types
+        if (target_type == TYPE_ARRAY) return cast_array();
+        if (target_type == TYPE_MAP) return cast_map();
+        if (target_type == TYPE_STRUCT) return cast_struct();
+        if (target_type == TYPE_JSON) return cast_json();
+        
+        // Primitive types - dispatch by switch
+        return cast_primitive_dispatch(target_type);
+    }
+
+private:
+    StatusOr<Datum> cast_primitive_dispatch(LogicalType target_type) {
+        switch (target_type) {
+        case TYPE_BOOLEAN:
+            return cast_primitive<TYPE_BOOLEAN>();
+        case TYPE_TINYINT:
+            return cast_primitive<TYPE_TINYINT>();
+        case TYPE_SMALLINT:
+            return cast_primitive<TYPE_SMALLINT>();
+        case TYPE_INT:
+            return cast_primitive<TYPE_INT>();
+        case TYPE_BIGINT:
+            return cast_primitive<TYPE_BIGINT>();
+        case TYPE_LARGEINT:
+            return cast_primitive<TYPE_LARGEINT>();
+        case TYPE_FLOAT:
+            return cast_primitive<TYPE_FLOAT>();
+        case TYPE_DOUBLE:
+            return cast_primitive<TYPE_DOUBLE>();
+        case TYPE_DATE:
+            return cast_primitive<TYPE_DATE>();
+        case TYPE_DATETIME:
+            return cast_primitive<TYPE_DATETIME>();
+        case TYPE_VARCHAR:
+        case TYPE_CHAR:
+            return cast_string();
+        case TYPE_DECIMAL32:
+            return cast_decimal<int32_t>();
+        case TYPE_DECIMAL64:
+            return cast_decimal<int64_t>();
+        case TYPE_DECIMAL128:
+            return cast_decimal<int128_t>();
+        case TYPE_DECIMAL256:
+            return cast_decimal<int256_t>();
+        default:
+            return Status::NotSupported(fmt::format("Unsupported type for default value: {}", target_type));
+        }
+    }
+
+    // Template method: cast primitive types using ColumnBuilder
+    template <LogicalType TYPE>
+    StatusOr<Datum> cast_primitive() {
+        ColumnBuilder<TYPE> builder(1);
+        Status st = cast_vpjson_to<TYPE, false>(_json_slice, builder);
+        RETURN_IF_ERROR(st);
+        auto col = builder.build(false);
+        
+        Datum result;
+        if constexpr (TYPE == TYPE_BOOLEAN) {
+            result.set<bool>(col->get(0).get_int8() != 0);
+        } else if constexpr (TYPE == TYPE_TINYINT) {
+            result.set_int8(col->get(0).get_int8());
+        } else if constexpr (TYPE == TYPE_SMALLINT) {
+            result.set_int16(col->get(0).get_int16());
+        } else if constexpr (TYPE == TYPE_INT) {
+            result.set_int32(col->get(0).get_int32());
+        } else if constexpr (TYPE == TYPE_BIGINT) {
+            result.set_int64(col->get(0).get_int64());
+        } else if constexpr (TYPE == TYPE_LARGEINT) {
+            result.set_int128(col->get(0).get_int128());
+        } else if constexpr (TYPE == TYPE_FLOAT) {
+            result.set_float(col->get(0).get_float());
+        } else if constexpr (TYPE == TYPE_DOUBLE) {
+            result.set_double(col->get(0).get_double());
+        } else if constexpr (TYPE == TYPE_DATE) {
+            result.set_date(col->get(0).get_date());
+        } else if constexpr (TYPE == TYPE_DATETIME) {
+            result.set_timestamp(col->get(0).get_timestamp());
+        }
+        return result;
+    }
+
+    // String types: special handling for memory allocation
+    StatusOr<Datum> cast_string() {
+        ColumnBuilder<TYPE_VARCHAR> builder(1);
+        Status st = cast_vpjson_to<TYPE_VARCHAR, false>(_json_slice, builder);
+        RETURN_IF_ERROR(st);
+        auto col = builder.build(false);
+        Slice temp_slice = col->get(0).get_slice();
+        
+        // Copy string data to mem_pool for persistent storage
+        char* string_buffer = reinterpret_cast<char*>(_mem_pool->allocate(temp_slice.size));
+        if (UNLIKELY(string_buffer == nullptr)) {
+            return Status::InternalError("Mem usage has exceed the limit of BE");
+        }
+        memory_copy(string_buffer, temp_slice.data, temp_slice.size);
+        
+        Datum result;
+        result.set_slice(Slice(string_buffer, temp_slice.size));
+        return result;
+    }
+
+    // Template method: cast DECIMAL types
+    template <typename DecimalType>
+    StatusOr<Datum> cast_decimal() {
+        // DECIMAL types: parse directly from JSON string
+        std::string str_value;
+        if (_json_slice.isString()) {
+            vpack::ValueLength len;
+            const char* str = _json_slice.getStringUnchecked(len);
+            str_value.assign(str, len);
+        } else if (_json_slice.isNumber()) {
+            vpack::Options options = vpack::Options::Defaults;
+            options.singleLinePrettyPrint = true;
+            str_value = _json_slice.toJson(&options);
+        } else {
+            return Status::InvalidArgument("DECIMAL value must be string or number in JSON");
+        }
+        
+        // Parse based on specific DECIMAL type
+        int precision = _type_info->precision();
+        int scale = _type_info->scale();
+        
+        DecimalType decimal_value;
+        bool overflow = DecimalV3Cast::from_string<DecimalType>(
+            &decimal_value, precision, scale, str_value.c_str(), str_value.size());
+        
+        if (overflow) {
+            return Status::InvalidArgument(fmt::format("Failed to parse DECIMAL from: {}", str_value));
+        }
+        
+        Datum result;
+        result.set<DecimalType>(decimal_value);
+        return result;
+    }
+
+    // ARRAY type: recursive casting
+    StatusOr<Datum> cast_array() {
+        if (!_json_slice.isArray()) {
+            Datum result;
+            result.set_null();
+            return result;
+        }
+        
+        auto element_type_info = get_item_type_info(_type_info);
+        
+        DatumArray datum_array;
+        for (const auto& element : vpack::ArrayIterator(_json_slice)) {
+            VPackToDatumCaster element_caster(element, element_type_info.get(), _mem_pool);
+            ASSIGN_OR_RETURN(auto element_datum, element_caster.cast());
+            datum_array.push_back(std::move(element_datum));
+        }
+        
+        Datum result;
+        result.set_array(datum_array);
+        return result;
+    }
+
+    // MAP type: recursive casting with field order preservation
+    StatusOr<Datum> cast_map() {
+        if (!_json_slice.isObject()) {
+            Datum result;
+            result.set_null();
+            return result;
+        }
+        
+        if (_json_slice.length() == 0) {
+            DatumMap datum_map;
+            Datum result;
+            result.set<DatumMap>(datum_map);
+            return result;
+        }
+        
+        auto key_type_info = get_key_type_info(_type_info);
+        auto value_type_info = get_value_type_info(_type_info);
+        
+        DatumMap datum_map;
+        // Use sequential iteration (true) to preserve field order
+        for (const auto& pair : vpack::ObjectIterator(_json_slice, true)) {
+            std::string key_str = pair.key.copyString();
+            vpack::Builder key_builder;
+            key_builder.add(vpack::Value(key_str));
+            vpack::Slice key_slice = key_builder.slice();
+            
+            VPackToDatumCaster key_caster(key_slice, key_type_info.get(), _mem_pool);
+            ASSIGN_OR_RETURN(auto key_datum, key_caster.cast());
+            DatumKey datum_key = key_datum.convert2DatumKey();
+            
+            // Value: recursively convert
+            VPackToDatumCaster value_caster(pair.value, value_type_info.get(), _mem_pool);
+            ASSIGN_OR_RETURN(auto value_datum, value_caster.cast());
+            
+            datum_map[datum_key] = std::move(value_datum);
+        }
+        
+        Datum result;
+        result.set<DatumMap>(datum_map);
+        return result;
+    }
+
+    // STRUCT type: recursive casting with field order preservation
+    StatusOr<Datum> cast_struct() {
+        const auto& field_types = get_struct_field_types(_type_info);
+        
+        if (_json_slice.isArray()) {
+            DatumStruct datum_struct;
+            size_t field_idx = 0;
+            
+            for (const auto& element : vpack::ArrayIterator(_json_slice)) {
+                if (field_idx >= field_types.size()) {
+                    // More elements in JSON than fields in STRUCT, ignore extras
+                    break;
+                }
+                
+                VPackToDatumCaster field_caster(element, field_types[field_idx].get(), _mem_pool);
+                ASSIGN_OR_RETURN(auto field_datum, field_caster.cast());
+                datum_struct.push_back(std::move(field_datum));
+                field_idx++;
+            }
+            
+            // If JSON has fewer elements than STRUCT fields, fill remaining with NULL
+            while (field_idx < field_types.size()) {
+                Datum null_datum;
+                null_datum.set_null();
+                datum_struct.push_back(null_datum);
+                field_idx++;
+            }
+            
+            Datum result;
+            result.set<DatumStruct>(datum_struct);
+            return result;
+            
+        } else if (_json_slice.isObject()) {
+            // JSON object: field name mapping {"field1": value1, "field2": value2}
+            // Use useSequentialIteration=true to iterate in insertion order (not alphabetical)
+            // This matches the order we used when writing with unindexed=true
+            
+            // Log VPack type and iteration order
+            LOG(ERROR) << "[VPACK_TEST] VPackToDatumCaster STRUCT: VPack type=0x" 
+                       << std::hex << (int)_json_slice.head() << std::dec
+                       << " (0x0b=indexed, 0x14=unindexed)"
+                       << ", field_types.size()=" << field_types.size();
+            
+            DatumStruct datum_struct;
+            size_t field_idx = 0;
+            
+            // Use sequential iteration (true) to preserve field order
+            for (const auto& pair : vpack::ObjectIterator(_json_slice, true)) {
+                std::string_view key_name = pair.key.stringView();
+                LOG(ERROR) << "[VPACK_TEST] VPackToDatumCaster STRUCT: field_idx=" << field_idx
+                           << ", key='" << std::string(key_name) << "'";
+                
+                if (field_idx >= field_types.size()) {
+                    // More fields in JSON than in STRUCT schema, ignore extras
+                    break;
+                }
+                
+                VPackToDatumCaster field_caster(pair.value, field_types[field_idx].get(), _mem_pool);
+                ASSIGN_OR_RETURN(auto field_datum, field_caster.cast());
+                datum_struct.push_back(std::move(field_datum));
+                field_idx++;
+            }
+            
+            // If JSON has fewer fields than STRUCT, fill remaining with NULL
+            while (field_idx < field_types.size()) {
+                Datum null_datum;
+                null_datum.set_null();
+                datum_struct.push_back(null_datum);
+                field_idx++;
+            }
+            
+            Datum result;
+            result.set<DatumStruct>(datum_struct);
+            return result;
+        } else {
+            // Neither array nor object, return null
+            Datum result;
+            result.set_null();
+            return result;
+        }
+    }
+
+    // JSON type: allocate on heap
+    StatusOr<Datum> cast_json() {
+        // JSON type: need to allocate JsonValue on heap
+        JsonValue* json_value = new JsonValue(_json_slice);
+        Datum result;
+        result.set_json(json_value);
+        return result;
+    }
+
+private:
+    const vpack::Slice& _json_slice;
+    const TypeInfo* _type_info;
+    MemPool* _mem_pool;
+};
+
+
 Status DefaultValueColumnIterator::init(const ColumnIteratorOptions& opts) {
     _opts = opts;
+    
     // be consistent with segment v1
     // if _has_default_value, we should create default column iterator for this column, and
     // "NULL" is a special default value which means the default value is null.
     if (_has_default_value) {
+        LOG(INFO) << "[COMPLEX_DEFAULT] DefaultValueColumnIterator using default_value"
+                  << ", type=" << _type_info->type()
+                  << ", value='" << _default_value << "'";
+        
         if (_default_value == "NULL") {
             DCHECK(_is_nullable);
             _is_default_value_null = true;
         } else {
+            // For complex types (ARRAY, MAP, STRUCT), we store a Datum object in _mem_value
+            // For other types, we store the raw value according to _type_info->size()
+            if (_type_info->type() == TYPE_ARRAY || _type_info->type() == TYPE_MAP ||
+                _type_info->type() == TYPE_STRUCT) {
+                _type_size = sizeof(Datum);
+        } else {
             _type_size = _type_info->size();
+            }
             _mem_value = reinterpret_cast<void*>(_pool.allocate(static_cast<int64_t>(_type_size)));
             if (UNLIKELY(_mem_value == nullptr)) {
                 return Status::InternalError("Mem usage has exceed the limit of BE");
@@ -84,7 +417,7 @@ Status DefaultValueColumnIterator::init(const ColumnIteratorOptions& opts) {
                     // If JSON parse fails, treat as NULL to avoid query errors
                     // This prevents returning malformed data when FE validation is bypassed
                     LOG(ERROR) << "Failed to parse JSON default value '" << _default_value
-                               << "', treating as NULL: " << json_or.status();
+                              << "', treating as NULL: " << json_or.status();
                     _is_default_value_null = true;
                 } else {
                     Slice json_slice = json_or.value().get_slice();
@@ -99,8 +432,35 @@ Status DefaultValueColumnIterator::init(const ColumnIteratorOptions& opts) {
                 }
             } else if (_type_info->type() == TYPE_ARRAY || _type_info->type() == TYPE_MAP ||
                        _type_info->type() == TYPE_STRUCT) {
-                // @todo: need support complex type literal
-                return Status::NotSupported("Array/Map/Struct default type is unsupported");
+                auto json_or = JsonValue::parse_json_or_string(Slice(_default_value));
+                if (!json_or.ok()) {
+                    LOG(ERROR) << "Failed to parse complex type default value as JSON: '" << _default_value
+                               << "', type: " << _type_info->type() << ", error: " << json_or.status()
+                               << ", treating as NULL";
+                    _is_default_value_null = true;
+                } else {
+                    vpack::Slice json_slice = json_or.value().to_vslice();
+                    
+                    // Debug: Log VPack type to check if it's indexed or unindexed
+                    if (_type_info->type() == TYPE_STRUCT || _type_info->type() == TYPE_MAP) {
+                        LOG(ERROR) << "[RESTART_DEBUG] Loading default_value from metadata: "
+                                   << "default_value='" << _default_value << "', "
+                                   << "type=" << _type_info->type() << ", "
+                                   << "VPack head=0x" << std::hex << (int)json_slice.head() << std::dec
+                                   << " (0x0b=indexed, 0x14=unindexed)";
+                    }
+                    
+                    VPackToDatumCaster caster(json_slice, _type_info.get(), &_pool);
+                    auto datum_or = caster.cast();
+                    if (!datum_or.ok()) {
+                        LOG(ERROR) << "Failed to convert complex type default value to Datum: '" << _default_value
+                                   << "', type: " << _type_info->type() << ", error: " << datum_or.status()
+                                   << ", treating as NULL";
+                        _is_default_value_null = true;
+                    } else {
+                        new (_mem_value) Datum(std::move(datum_or.value()));
+                    }
+                }
             } else {
                 RETURN_IF_ERROR(_type_info->from_string(_mem_value, _default_value));
             }
@@ -128,10 +488,13 @@ Status DefaultValueColumnIterator::next_batch(size_t* n, Column* dst) {
                 slices.emplace_back(*reinterpret_cast<const Slice*>(_mem_value));
             }
             (void)dst->append_strings(slices);
+            _current_rowid += *n;
         } else {
+            // For all types including complex types (ARRAY, MAP, STRUCT),
+            // _mem_value stores a Datum that can be directly appended
             dst->append_value_multiple_times(_mem_value, *n);
+            _current_rowid += *n;
         }
-        _current_rowid += *n;
     }
     if (_may_contain_deleted_row) {
         dst->set_delete_state(DEL_PARTIAL_SATISFIED);
@@ -163,10 +526,13 @@ Status DefaultValueColumnIterator::next_batch(const SparseRange<>& range, Column
                 slices.emplace_back(*reinterpret_cast<const Slice*>(_mem_value));
             }
             [[maybe_unused]] auto ret = dst->append_strings(slices);
+            _current_rowid = range.end();
         } else {
+            // For all types including complex types (ARRAY, MAP, STRUCT),
+            // _mem_value stores a Datum that can be directly appended
             dst->append_value_multiple_times(_mem_value, to_read);
+            _current_rowid = range.end();
         }
-        _current_rowid = range.end();
     }
     if (_may_contain_deleted_row) {
         dst->set_delete_state(DEL_PARTIAL_SATISFIED);

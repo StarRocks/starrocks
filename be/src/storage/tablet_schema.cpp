@@ -273,6 +273,9 @@ void TabletColumn::init_from_thrift(const TColumn& tcolumn) {
 
     WARN_IF_ERROR(t_column_to_pb_column(_unique_id, *shared_tcolumn_desc, &column_pb),
                   "failed to covert TColumn to ColumnPB");
+    
+    // Note: default_expr should have been pre-processed by preprocess_default_expr_for_tcolumns()
+    // and converted to default_value before reaching here
     init_from_pb(column_pb);
 }
 
@@ -432,12 +435,24 @@ TabletSchemaSPtr TabletSchema::copy(const TabletSchema& tablet_schema) {
 }
 
 TabletSchemaCSPtr TabletSchema::copy(const TabletSchema& src_schema, const std::vector<TColumn>& cols) {
+    LOG(ERROR) << "[FE_SCHEMA_DEBUG] TabletSchema::copy() called with FE columns_desc, "
+               << "num_columns=" << cols.size();
+    
     auto dst_schema = std::make_unique<TabletSchema>(src_schema);
     dst_schema->_clear_columns();
-    for (const auto& col : cols) {
+    for (size_t i = 0; i < cols.size(); i++) {
+        const auto& col = cols[i];
+        LOG(ERROR) << "[FE_SCHEMA_DEBUG] Processing FE column[" << i << "]: name=" << col.column_name
+                   << ", has_default=" << col.__isset.default_value
+                   << ", default_value='" << (col.__isset.default_value ? col.default_value : "") << "'";
+        
         dst_schema->append_column(TabletColumn(col));
     }
     dst_schema->_generate_sort_key_idxes();
+    
+    LOG(ERROR) << "[FE_SCHEMA_DEBUG] TabletSchema::copy() completed, final num_columns=" 
+               << dst_schema->num_columns();
+    
     return dst_schema;
 }
 
@@ -618,6 +633,10 @@ Status TabletSchema::_build_current_tablet_schema(int64_t schema_id, int32_t ver
 }
 
 void TabletSchema::to_schema_pb(TabletSchemaPB* tablet_schema_pb) const {
+    LOG(ERROR) << "[CREATE_TABLE_DEBUG] ===== TabletSchema::to_schema_pb() called ====="
+               << " schema_id=" << _id 
+               << ", num_columns=" << _cols.size();
+    
     if (_id != invalid_id()) {
         tablet_schema_pb->set_id(_id);
     }

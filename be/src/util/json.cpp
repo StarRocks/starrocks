@@ -100,8 +100,39 @@ StatusOr<JsonValue> JsonValue::parse_json_or_string(const Slice& src) {
         auto end = src.get_data() + src.get_size();
         auto iter = std::find_if_not(src.get_data(), end, std::iswspace);
         if (iter != end && is_json_start_char(*iter)) {
+            // Log input JSON string before parsing
+            std::string input_json(src.get_data(), std::min(src.get_size(), (size_t)200));
+            LOG(ERROR) << "[JSON_PARSE_DEBUG] parse_json_or_string: INPUT JSON='" << input_json << "'";
+            
             // Parse it as an object or array
             auto b = vpack::Parser::fromJson(src.get_data(), src.get_size());
+            
+            // Log VPack binary type after parsing
+            auto slice = b->slice();
+            if (slice.isObject()) {
+                LOG(ERROR) << "[JSON_PARSE_DEBUG] parse_json_or_string: PARSED VPack type=0x" 
+                           << std::hex << (int)slice.head() << std::dec
+                           << " (0x0b=indexed, 0x14=unindexed)";
+                
+                // Log field iteration order with default iterator (useSequentialIteration=false)
+                LOG(ERROR) << "[JSON_PARSE_DEBUG] Iterating with useSequentialIteration=false (default):";
+                int field_idx = 0;
+                for (const auto& pair : vpack::ObjectIterator(slice, false)) {
+                    std::string key = pair.key.copyString();
+                    LOG(ERROR) << "[JSON_PARSE_DEBUG]   field[" << field_idx << "]: key='" << key << "'";
+                    field_idx++;
+                }
+                
+                // Log field iteration order with sequential iteration (useSequentialIteration=true)
+                LOG(ERROR) << "[JSON_PARSE_DEBUG] Iterating with useSequentialIteration=true:";
+                field_idx = 0;
+                for (const auto& pair : vpack::ObjectIterator(slice, true)) {
+                    std::string key = pair.key.copyString();
+                    LOG(ERROR) << "[JSON_PARSE_DEBUG]   field[" << field_idx << "]: key='" << key << "'";
+                    field_idx++;
+                }
+            }
+            
             JsonValue res;
             res.assign(*b);
             return res;

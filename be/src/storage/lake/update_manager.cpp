@@ -484,6 +484,9 @@ Status UpdateManager::_read_chunk_for_upsert(const TxnLogPB_OpWrite& op_write, c
             default_value = it->second;
         }
         if (has_default_value) {
+            LOG(ERROR) << "[DEFAULT_VALUE_PATH_7] Creating DefaultValueColumnIterator for lake column: " << tablet_column.name()
+                      << ", type: " << tablet_column.type() << ", default_value: " << default_value
+                      << ", insert_rowids: " << insert_rowids.size();
             const TypeInfoPtr& type_info = get_type_info(tablet_column);
             std::unique_ptr<DefaultValueColumnIterator> default_value_iter =
                     std::make_unique<DefaultValueColumnIterator>(true, default_value, tablet_column.is_nullable(),
@@ -952,6 +955,8 @@ Status UpdateManager::get_column_values(const RowsetUpdateStateParams& params, s
                 }
             }
             if (has_default_value) {
+                LOG(ERROR) << "[DEFAULT_VALUE_PATH_8] Creating DefaultValueColumnIterator for lake column value: " << tablet_column.name()
+                          << ", type: " << tablet_column.type() << ", default_value: " << default_value;
                 const TypeInfoPtr& type_info = get_type_info(tablet_column);
                 std::unique_ptr<DefaultValueColumnIterator> default_value_iter =
                         std::make_unique<DefaultValueColumnIterator>(true, default_value, tablet_column.is_nullable(),

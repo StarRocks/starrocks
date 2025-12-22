@@ -18,7 +18,10 @@
 #include "column/type_traits.h"
 #include "common/compiler_util.h"
 #include "common/statusor.h"
+#include "runtime/decimalv3.h"
 #include "simdjson/ondemand.h"
+#include "types/date_value.hpp"
+#include "types/timestamp_value.h"
 #include "util/json.h"
 
 namespace starrocks {
@@ -102,7 +105,8 @@ static StatusOr<RunTimeCppType<ResultType>> get_number_from_vpjson(const vpack::
 // TODO(murphy): it's duplicated with extract_number/extract_bool/extract_string in json_flattener.cpp
 template <LogicalType ResultType, bool AllowThrowException>
 static Status cast_vpjson_to(const vpack::Slice& slice, ColumnBuilder<ResultType>& result) {
-    if constexpr (!lt_is_arithmetic<ResultType> && !lt_is_string<ResultType> && ResultType != TYPE_JSON) {
+    if constexpr (!lt_is_arithmetic<ResultType> && !lt_is_string<ResultType> && !lt_is_decimal<ResultType> &&
+                  ResultType != TYPE_JSON && ResultType != TYPE_DATE && ResultType != TYPE_DATETIME) {
         if constexpr (AllowThrowException) {
             return Status::NotSupported(fmt::format("not supported type {}", type_to_string(ResultType)));
         }
@@ -182,6 +186,93 @@ static Status cast_vpjson_to(const vpack::Slice& slice, ColumnBuilder<ResultType
 
                 result.append(Slice(str));
             }
+        }
+        if constexpr (ResultType == TYPE_DATE) {
+            if (LIKELY(slice.isString())) {
+                vpack::ValueLength len;
+                const char* str = slice.getStringUnchecked(len);
+                DateValue dv;
+                if (dv.from_string(str, len)) {
+                    result.append(dv);
+                } else {
+                    if constexpr (AllowThrowException) {
+                        return Status::JsonFormatError(
+                                fmt::format("cast from JSON({}) to DATE failed", std::string(str, len)));
+                    }
+                    result.append_null();
+                }
+            } else {
+                if constexpr (AllowThrowException) {
+                    return Status::JsonFormatError("cast from JSON to DATE failed: not a string");
+                }
+                result.append_null();
+            }
+            return Status::OK();
+        }
+        if constexpr (ResultType == TYPE_DATETIME) {
+            if (LIKELY(slice.isString())) {
+                vpack::ValueLength len;
+                const char* str = slice.getStringUnchecked(len);
+                TimestampValue tv;
+                if (tv.from_string(str, len)) {
+                    result.append(tv);
+                } else {
+                    if constexpr (AllowThrowException) {
+                        return Status::JsonFormatError(
+                                fmt::format("cast from JSON({}) to DATETIME failed", std::string(str, len)));
+                    }
+                    result.append_null();
+                }
+            } else {
+                if constexpr (AllowThrowException) {
+                    return Status::JsonFormatError("cast from JSON to DATETIME failed: not a string");
+                }
+                result.append_null();
+            }
+            return Status::OK();
+        }
+        if constexpr (lt_is_decimal<ResultType>) {
+            // For DECIMAL types, we always try to parse from string representation
+            // Convert JSON value to string first
+            std::string str_value;
+            if (LIKELY(slice.isString())) {
+                vpack::ValueLength len;
+                const char* str = slice.getStringUnchecked(len);
+                str_value.assign(str, len);
+            } else if (slice.isNumber()) {
+                // Convert number to string
+                vpack::Options options = vpack::Options::Defaults;
+                options.singleLinePrettyPrint = true;
+                str_value = slice.toJson(&options);
+            } else {
+                if constexpr (AllowThrowException) {
+                    return Status::JsonFormatError("cast from JSON to DECIMAL failed: not a string or number");
+                }
+                result.append_null();
+                return Status::OK();
+            }
+            
+            // Parse string to DECIMAL
+            using DecimalType = RunTimeCppType<ResultType>;
+            DecimalType decimal_value;
+            constexpr int max_precision = decimal_precision_limit<DecimalType>;
+            // Use default scale=9 for parsing
+            // DecimalV3Cast::from_string will auto-detect scale from string format
+            int scale = 9;
+            
+            bool overflow = DecimalV3Cast::from_string<DecimalType>(
+                &decimal_value, max_precision, scale, str_value.c_str(), str_value.size());
+            
+            if (!overflow) {
+                result.append(decimal_value);
+            } else {
+                if constexpr (AllowThrowException) {
+                    return Status::JsonFormatError(
+                            fmt::format("cast from JSON({}) to DECIMAL failed or overflow", str_value));
+                }
+                result.append_null();
+            }
+            return Status::OK();
         }
     } catch (const vpack::Exception& e) {
         if constexpr (AllowThrowException) {

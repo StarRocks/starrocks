@@ -18,6 +18,7 @@
 #include "column/chunk.h"
 #include "exprs/expr.h"
 #include "runtime/mem_pool.h"
+#include "storage/metadata_util.h"
 #include "storage/tablet_schema.h"
 #include "types/constexpr.h"
 #include "util/string_parser.hpp"
@@ -169,7 +170,17 @@ Status OlapTableSchemaParam::init(const TOlapTableSchemaParam& tschema, RuntimeS
 
         if (t_index.__isset.column_param) {
             auto col_param = _obj_pool.add(new OlapTableColumnParam());
-            for (auto& tcolumn_desc : t_index.column_param.columns) {
+            
+            // ⭐ Preprocess: convert default_expr to default_value for complex types
+            std::vector<TColumn> columns_copy = t_index.column_param.columns;
+            Status preprocess_status = preprocess_default_expr_for_tcolumns(columns_copy, "UPDATE_INSERT_PATH");
+            if (!preprocess_status.ok()) {
+                LOG(WARNING) << "Failed to preprocess default_expr in OlapTableSchemaParam::init: "
+                            << preprocess_status.to_string();
+                columns_copy = t_index.column_param.columns;
+            }
+            
+            for (auto& tcolumn_desc : columns_copy) {
                 TabletColumn* tc = _obj_pool.add(new TabletColumn());
                 tc->init_from_thrift(tcolumn_desc);
                 col_param->columns.emplace_back(tc);
