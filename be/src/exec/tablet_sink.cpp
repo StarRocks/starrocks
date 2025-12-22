@@ -50,6 +50,7 @@
 #include "common/statusor.h"
 #include "common/tracer.h"
 #include "exec/pipeline/query_context.h"
+#include "exec/range_tablet_sink_sender.h"
 #include "exec/tablet_sink_colocate_sender.h"
 #include "exprs/expr.h"
 #include "gutil/strings/fastmem.h"
@@ -318,7 +319,11 @@ Status OlapTableSink::prepare(RuntimeState* state) {
                 _load_id, _txn_id, std::move(index_id_to_tablet_be_map), _vectorized_partition,
                 std::move(index_channels), std::move(node_channels), _output_expr_ctxs, _enable_replicated_storage,
                 _write_quorum_type, _num_repicas);
-
+    } else if (_vectorized_partition->is_range_distribution()) {
+        _tablet_sink_sender = std::make_unique<RangeTabletSinkSender>(
+                _load_id, _txn_id, std::move(index_id_to_tablet_be_map), _vectorized_partition,
+                std::move(index_channels), std::move(node_channels), _output_expr_ctxs, _enable_replicated_storage,
+                _write_quorum_type, _num_repicas);
     } else {
         _tablet_sink_sender = std::make_unique<TabletSinkSender>(
                 _load_id, _txn_id, std::move(index_id_to_tablet_be_map), _vectorized_partition,

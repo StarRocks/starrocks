@@ -63,4 +63,10 @@ public class Tuple implements Comparable<Tuple> {
     public static Tuple fromProto(TuplePB tuplePB) {
         return new Tuple(tuplePB.values.stream().map(v -> Variant.fromProto(v)).collect(Collectors.toList()));
     }
+
+    public TTuple toThrift() {
+        TTuple tuple = new TTuple();
+        tuple.setValues(values.stream().map(Variant::toThrift).collect(Collectors.toList()));
+        return tuple;
+    }
 }

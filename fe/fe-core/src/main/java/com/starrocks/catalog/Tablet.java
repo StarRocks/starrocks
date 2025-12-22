@@ -35,15 +35,17 @@ public abstract class Tablet extends MetaObject implements Writable {
     /*
      * Add the serialization when the feature is almost finished
      * @SerializedName(value = "range")
-     */
-    protected Range<Tuple> range;
+    */
+    protected TabletRange range = new TabletRange(Range.all());
+
+    public Tablet() {
+    }
 
     public Tablet(long id) {
         this.id = id;
-        this.range = Range.all();
     }
 
-    public Tablet(long id, Range<Tuple> range) {
+    public Tablet(long id, TabletRange range) {
         this.id = id;
         this.range = range;
     }
@@ -52,11 +54,11 @@ public abstract class Tablet extends MetaObject implements Writable {
         return id;
     }
 
-    public Range<Tuple> getRange() {
+    public TabletRange getRange() {
         return range;
     }
 
-    public void setRange(Range<Tuple> range) {
+    public void setRange(TabletRange range) {
         this.range = range;
     }
 

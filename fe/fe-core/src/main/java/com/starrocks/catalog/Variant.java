@@ -42,11 +42,11 @@ public abstract class Variant implements Comparable<Variant> {
         return type;
     }
 
-    public abstract long getLongValue();
-
     public abstract String getStringValue();
 
-    // public abstract TVariant toThrift();
+    public abstract long getLongValue();
+
+    public abstract TVariant toThrift();
 
     // public abstract VariantPB toProto();
 
@@ -78,11 +78,11 @@ public abstract class Variant implements Comparable<Variant> {
     }
 
     public static Variant fromThrift(TVariant tVariant) {
-        return Variant.of(TypeDeserializer.fromThrift(tVariant.type), tVariant.string_value);
+        return Variant.of(TypeDeserializer.fromThrift(tVariant.type), tVariant.getValue());
     }
 
     public static Variant fromProto(VariantPB variantPB) {
-        return Variant.of(TypeDeserializer.fromProtobuf(variantPB.type), variantPB.stringValue);
+        return Variant.of(TypeDeserializer.fromProtobuf(variantPB.type), variantPB.value);
     }
 
     public static int compatibleCompare(Variant key1, Variant key2) {
@@ -115,4 +115,5 @@ public abstract class Variant implements Comparable<Variant> {
         }
         return Integer.compare(key1Length, key2Length);
     }
+
 }

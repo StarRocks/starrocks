@@ -228,6 +228,14 @@ enum TIndexType {
   VECTOR,
 }
 
+// Not define UNKNOWN type for better compatibility with
+// DistributionInfo.DistributionInfoType definition
+enum TOlapTableDistributionType {
+    HASH,
+    RANDOM,
+    RANGE,
+}
+
 // Mapping from names defined by Avro to the enum.
 // We permit gzip and bzip2 in addition.
 const map<string, THdfsCompression> COMPRESSION_MAP = {
@@ -319,6 +327,8 @@ struct TOlapTablePartitionParam {
     8: optional list<Exprs.TExpr> partition_exprs
 
     9: optional bool enable_automatic_partition
+
+    10: optional TOlapTableDistributionType distribution_type
 }
 
 struct TOlapTableColumnParam {
