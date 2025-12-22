@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.google.common.collect.Lists;
@@ -26,6 +25,7 @@ import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.SortPhase;
 import com.starrocks.sql.optimizer.operator.TopNType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalLimitOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalWindowOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
@@ -137,6 +137,19 @@ public class PushDownPredicateRankingWindowRule extends TransformationRule {
                 .collect(Collectors.toList());
 
         TopNType topNType = TopNType.parse(callOperator.getFnName());
+
+        if (partitionByColumns.isEmpty() && windowOperator.getEnforceSortColumns().isEmpty()) {
+            if (topNType != TopNType.ROW_NUMBER) {
+                return Collections.emptyList();
+            }
+
+            LogicalLimitOperator limitOp = LogicalLimitOperator.init(limitValue);
+
+            // Filter -> window -> limit
+            OptExpression limitOpExpr = OptExpression.create(limitOp, childExpr.getInputs());
+            OptExpression newWindowOptExp = OptExpression.create(windowOperator, limitOpExpr);
+            return Collections.singletonList(OptExpression.create(filterOperator, newWindowOptExp));
+        }
 
         // If partition by columns is not empty, then we cannot derive sort property from the SortNode
         // OutputPropertyDeriver will generate PhysicalPropertySet.EMPTY if sortPhase is SortPhase.PARTIAL
