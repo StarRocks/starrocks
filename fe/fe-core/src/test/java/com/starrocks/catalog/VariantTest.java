@@ -518,6 +518,45 @@ public class VariantTest {
         Assertions.assertEquals(0, Variant.compatibleCompare(empty, empty));
     }
 
+    @Test
+    public void testVariantMinMaxHelpersForBooleanAndInt() {
+        Variant boolMin = Variant.minVariant(BooleanType.BOOLEAN);
+        Variant boolMax = Variant.maxVariant(BooleanType.BOOLEAN);
+        Assertions.assertTrue(boolMin instanceof BoolVariant);
+        Assertions.assertTrue(boolMax instanceof BoolVariant);
+        Assertions.assertEquals(0L, boolMin.getLongValue());
+        Assertions.assertEquals(1L, boolMax.getLongValue());
+
+        Variant intMin = Variant.minVariant(IntegerType.INT);
+        Variant intMax = Variant.maxVariant(IntegerType.INT);
+        Assertions.assertTrue(intMin instanceof IntVariant);
+        Assertions.assertTrue(intMax instanceof IntVariant);
+        Assertions.assertEquals(Integer.MIN_VALUE, intMin.getLongValue());
+        Assertions.assertEquals(Integer.MAX_VALUE, intMax.getLongValue());
+    }
+
+    @Test
+    public void testVariantMinMaxHelpersForDate() {
+        Variant minDate = Variant.minVariant(DateType.DATE);
+        Variant maxDate = Variant.maxVariant(DateType.DATE);
+        Variant middleDate = Variant.of(DateType.DATE, "2024-01-01");
+
+        Assertions.assertTrue(minDate instanceof DateVariant);
+        Assertions.assertTrue(maxDate instanceof DateVariant);
+        Assertions.assertTrue(Variant.compatibleCompare(minDate, middleDate) <= 0);
+        Assertions.assertTrue(Variant.compatibleCompare(middleDate, maxDate) <= 0);
+        Assertions.assertTrue(Variant.compatibleCompare(minDate, maxDate) < 0);
+    }
+
+    @Test
+    public void testVariantMinAndMaxStaticMethods() {
+        Variant v1 = new IntVariant(IntegerType.INT, 10);
+        Variant v2 = new IntVariant(IntegerType.INT, 20);
+
+        Assertions.assertSame(v2, Variant.max(v1, v2));
+        Assertions.assertSame(v1, Variant.min(v1, v2));
+    }
+
     // ==================== Cross-type Comparison Tests ====================
 
     @Test

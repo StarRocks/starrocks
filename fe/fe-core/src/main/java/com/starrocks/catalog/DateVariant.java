@@ -93,4 +93,46 @@ public class DateVariant extends Variant {
     public int hashCode() {
         return Objects.hash(seconds, nanos);
     }
+
+    /**
+     * Returns the minimum {@link DateVariant} value for the given temporal {@link Type}.
+     * For DATE this is {@code 0000-01-01}, and for DATETIME/TIME this is
+     * {@code 0000-01-01 00:00:00}.
+     */
+    public static DateVariant minValue(Type type) {
+        String minString;
+        switch (type.getPrimitiveType()) {
+            case DATE:
+                minString = "0000-01-01";
+                break;
+            case DATETIME:
+            case TIME:
+                minString = "0000-01-01 00:00:00";
+                break;
+            default:
+                throw new IllegalArgumentException("Unsupported temporal type for DateVariant.minValue: " + type);
+        }
+        return new DateVariant(type, minString);
+    }
+
+    /**
+     * Returns the maximum {@link DateVariant} value for the given temporal {@link Type}.
+     * For DATE this is {@code 9999-12-31}, and for DATETIME/TIME this is
+     * {@code 9999-12-31 23:59:59.999999}.
+     */
+    public static DateVariant maxValue(Type type) {
+        String maxString;
+        switch (type.getPrimitiveType()) {
+            case DATE:
+                maxString = "9999-12-31";
+                break;
+            case DATETIME:
+            case TIME:
+                maxString = "9999-12-31 23:59:59.999999";
+                break;
+            default:
+                throw new IllegalArgumentException("Unsupported temporal type for DateVariant.maxValue: " + type);
+        }
+        return new DateVariant(type, maxString);
+    }
 }

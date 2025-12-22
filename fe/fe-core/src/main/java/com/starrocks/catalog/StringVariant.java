@@ -14,11 +14,15 @@
 
 package com.starrocks.catalog;
 
+import com.google.common.base.Preconditions;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.util.StringUtils;
 import com.starrocks.thrift.TVariant;
+import com.starrocks.type.ScalarType;
 import com.starrocks.type.Type;
 import com.starrocks.type.TypeSerializer;
+
+import java.util.Arrays;
 
 /*
  * StringVariant is for type CHAR, VARCHAR, BINARY, VARBINARY and HLL
@@ -72,5 +76,34 @@ public class StringVariant extends Variant {
     @Override
     public int hashCode() {
         return value.hashCode();
+    }
+
+    /**
+     * Returns the minimum {@link StringVariant} value for the given string {@link Type}.
+     * We use the empty string as the minimal value.
+     */
+    public static StringVariant minValue(Type type) {
+        if (!type.getPrimitiveType().isStringType() && !type.getPrimitiveType().isBinaryType()) {
+            throw new IllegalArgumentException("Unsupported string type for StringVariant.minValue: " + type);
+        }
+        return new StringVariant(type, "");
+    }
+
+    /**
+     * Returns the maximum {@link StringVariant} value for the given string {@link Type}.
+     */
+    public static StringVariant maxValue(Type type) {
+        if (!type.getPrimitiveType().isStringType() && !type.getPrimitiveType().isBinaryType()) {
+            throw new IllegalArgumentException("Unsupported string type for StringVariant.maxValue: " + type);
+        }
+
+        int len = ScalarType.MAX_CHAR_LENGTH;
+        Preconditions.checkArgument(type instanceof ScalarType);
+        len = ((ScalarType) type).getLength();
+        Preconditions.checkArgument(len > 0);
+
+        char[] chars = new char[len];
+        Arrays.fill(chars, Character.MAX_VALUE);
+        return new StringVariant(type, new String(chars));
     }
 }

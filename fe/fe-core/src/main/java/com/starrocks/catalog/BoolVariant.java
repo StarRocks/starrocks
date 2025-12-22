@@ -87,4 +87,18 @@ public class BoolVariant extends Variant {
     public int hashCode() {
         return Objects.hash(value);
     }
+
+    /**
+     * Returns the minimum possible {@link BoolVariant} value (false).
+     */
+    public static BoolVariant minValue() {
+        return new BoolVariant(false);
+    }
+
+    /**
+     * Returns the maximum possible {@link BoolVariant} value (true).
+     */
+    public static BoolVariant maxValue() {
+        return new BoolVariant(true);
+    }
 }
