@@ -299,14 +299,17 @@ Release date: January 24, 2025
 
 ### Behavior Changes
 
-Because the Data Cache instance used in both shared-data architecture and data lake query scenarios is now unified, there will be the following behavior changes after the upgrade to v3.4.0:
+- Because the Data Cache instance used in both shared-data architecture and data lake query scenarios is now unified, there will be the following behavior changes after the upgrade to v3.4.0:
 
-- BE configuration item `datacache_disk_path` is now deprecated. The data will be cached under the directory `${storage_root_path}/datacache`. If you want to allocate a dedicated disk for data cache, you can manually point the directory to the directory mentioned above using a symlink.
-- Cached data in the shared-data cluster will be automatically migrated to `${storage_root_path}/datacache` and can be re-used after the upgrade.
-- The behavior changes of `datacache_disk_size`:
+  - BE configuration item `datacache_disk_path` is now deprecated. The data will be cached under the directory `${storage_root_path}/datacache`. If you want to allocate a dedicated disk for data cache, you can manually point the directory to the directory mentioned above using a symlink.
+  - Cached data in the shared-data cluster will be automatically migrated to `${storage_root_path}/datacache` and can be re-used after the upgrade.
+  - The behavior changes of `datacache_disk_size`:
 
-  - When `datacache_disk_size` is `0` (Default), the automatic adjustment of cache capacity is enabled (consistent with the behavior before the upgrade).
-  - When `datacache_disk_size` is set to a value greater than `0`, the system will pick a larger value between `datacache_disk_size` and  `starlet_star_cache_disk_size_percent` as the cache capacity.
+    - When `datacache_disk_size` is `0` (Default), the automatic adjustment of cache capacity is enabled (consistent with the behavior before the upgrade).
+    - When `datacache_disk_size` is set to a value greater than `0`, the system will pick a larger value between `datacache_disk_size` and  `starlet_star_cache_disk_size_percent` as the cache capacity.
+
+- From v3.4.0 onwards, `insert_timeout` applies to operations involved INSERT (for example, UPDATE, DELETE, CTAS, materialized view refresh, statistics collection, and PIPE), replacing `query_timeout`.
+- From v3.4.0 onwards, the default value of `mysql_server_version` is changed to `8.0.33`.
 
 ### Downgrade Notes
 
