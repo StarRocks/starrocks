@@ -357,22 +357,28 @@ Status LakePrimaryIndex::flush_memtable(bool force) {
     return Status::OK();
 }
 
-// Query index for existing rows matching primary keys in the current segment.
+// Query index for existing rows matching primary keys from all segments.
 // This is used during read-only publish when index files already exist.
 //
-// Parallel Execution:
-// - If context->token is set, submits a task to the thread pool for async execution
-// - Otherwise, executes inline (serial mode)
+// Parameters:
+// - token: Thread pool token for parallel execution. If null, executes serially.
+// - segment_pk_iterator: Iterator over all segments containing primary keys to query.
+// - new_deletes: Output map to store rows that need to be marked as deleted.
 //
-// The function performs:
-// 1. Get encoded primary keys for the current segment
+// Parallel Execution:
+// - If token is set, submits each segment as a separate task to the thread pool
+// - Otherwise, processes each segment inline (serial mode)
+// - Waits for all tasks to complete before returning
+//
+// The function performs for each segment:
+// 1. Get encoded primary keys for the segment
 // 2. Query index to find existing row IDs (old_values)
 // 3. Add found row IDs to the deletes map (rows to be marked as deleted)
 //
 // Thread Safety:
 // - Each task allocates its own slot to avoid data races during parallel execution
 // - Shared state (deletes, status) is protected by mutex when updated
-// - Errors are accumulated in context->status for later checking
+// - Errors are accumulated and checked after all tasks complete
 Status LakePrimaryIndex::parallel_get(ThreadPoolToken* token, SegmentPKIterator* segment_pk_iterator,
                                       DeletesMap* new_deletes) {
     // Prepare parallel execution infrastructure if enabled
@@ -381,6 +387,7 @@ Status LakePrimaryIndex::parallel_get(ThreadPoolToken* token, SegmentPKIterator*
 
     // Setup context shared across all parallel tasks
     ParallelPublishContext context{.token = token, .mutex = &mutex, .deletes = new_deletes, .status = &status};
+    auto* context_ptr = &context;
 
     // Process each segment in the iterator
     for (; !segment_pk_iterator->done(); segment_pk_iterator->next()) {
@@ -391,13 +398,13 @@ Status LakePrimaryIndex::parallel_get(ThreadPoolToken* token, SegmentPKIterator*
         auto slot = context.slots.back().get();
 
         // Define the task to execute (either async in thread pool or inline)
-        auto func = [this, context, current, slot]() {
+        auto func = [this, context_ptr, current, slot, segment_pk_iterator]() {
             // Error handling: Must not throw or early return, as we need to wait for all tasks
             Status st = Status::OK();
 
             // Encode primary keys for this segment
-            auto pk_column_st = context.segment_pk_iterator->encoded_pk_column(current.first.get());
-            DCHECK(context.slots.size() > 0);
+            auto pk_column_st = segment_pk_iterator->encoded_pk_column(current.first.get());
+            DCHECK(context_ptr->slots.size() > 0);
 
             if (pk_column_st.ok()) {
                 // Query index for existing rows with these primary keys
@@ -409,15 +416,15 @@ Status LakePrimaryIndex::parallel_get(ThreadPoolToken* token, SegmentPKIterator*
             }
 
             // Update shared state under lock
-            std::lock_guard<std::mutex> l(*context.mutex);
-            context.status->update(st);
+            std::lock_guard<std::mutex> l(*context_ptr->mutex);
+            context_ptr->status->update(st);
 
             // Collect rows to delete: extract segment ID and row ID from old_values
             // Format: old_value = (segment_id << 32) | row_id
-            if (context.status->ok()) {
+            if (context_ptr->status->ok()) {
                 for (unsigned long old : slot->old_values) {
                     if (old != NullIndexValue) {
-                        (*context->deletes)[(uint32_t)(old >> 32)].push_back((uint32_t)(old & ROWID_MASK));
+                        (*context_ptr->deletes)[(uint32_t)(old >> 32)].push_back((uint32_t)(old & ROWID_MASK));
                     }
                 }
             }
@@ -446,22 +453,25 @@ Status LakePrimaryIndex::parallel_get(ThreadPoolToken* token, SegmentPKIterator*
     return segment_pk_iterator->status();
 }
 
-// Update index with new primary keys from the current segment.
+// Update index with new primary keys from all segments.
 // This is used during write operations (non-read-only publish) to insert/update index entries.
 //
+// Parameters:
+// - token: Thread pool token for parallel execution. If null, executes serially.
+// - rssid: RowSet Segment ID, identifies the rowset being processed.
+// - segment_pk_iterator: Iterator over all segments containing primary keys to upsert.
+// - new_deletes: Output map to store rows that need to be marked as deleted.
+//
 // Parallel Execution:
-// - If context->token is set, submits a task to the thread pool for async execution
-// - Otherwise, executes inline (serial mode)
-// - Each task allocates its own slot to store the pk_column, avoiding data races
+// - If token is set, submits each segment as a separate task to the thread pool
+// - Otherwise, processes each segment inline (serial mode)
+// - Waits for all tasks to complete before returning
+// - After all tasks finish, flushes accumulated updates to sstable file
 //
 // Thread Safety:
 // - Each parallel task gets its own slot with independent pk_column storage
-// - Errors are accumulated in context->status under mutex protection
-// - This method always returns OK; actual errors are checked via context->status after waiting
-//
-// Parameters:
-// - rssid: RowSet Segment ID, identifies the segment being processed
-// - context: Parallel execution context with thread pool token, mutex, and slots
+// - Errors are accumulated in shared status under mutex protection
+// - Function returns error status after checking all tasks have completed
 //
 // Note: Unlike parallel_get which is read-only, this writes to the index memtable
 Status LakePrimaryIndex::parallel_upsert(ThreadPoolToken* token, uint32_t rssid, SegmentPKIterator* segment_pk_iterator,

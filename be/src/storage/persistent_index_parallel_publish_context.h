@@ -24,10 +24,6 @@
 namespace starrocks {
 class ThreadPoolToken;
 
-namespace lake {
-class SegmentPKIterator;
-}
-
 // ParallelPublishSlot represents a working slot for one parallel task.
 // Each parallel get/upsert task will have its own slot to store intermediate results,
 // avoiding data races between concurrent tasks.
