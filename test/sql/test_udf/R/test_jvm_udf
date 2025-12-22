@@ -336,3 +336,14 @@ select count(*) from (select * from t1 where any_match((x)->cast(echoint(1) as b
 -- result:
 40960
 -- !result
+select sumbigint(null);
+-- result:
+0
+-- !result
+select sumbigint(x)
+from (
+  select null as x
+)t;
+-- result:
+0
+-- !result
