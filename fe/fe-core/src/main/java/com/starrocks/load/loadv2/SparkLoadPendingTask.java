@@ -46,7 +46,6 @@ import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.DistributionInfo.DistributionInfoType;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.HiveTable;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -84,6 +83,7 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.BrokerDesc;
 import com.starrocks.sql.ast.ImportColumnDesc;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
@@ -257,7 +257,7 @@ public class SparkLoadPendingTask extends LoadTask {
 
         for (Map.Entry<Long, List<Column>> entry : table.getIndexIdToSchema().entrySet()) {
             long indexId = entry.getKey();
-            int schemaHash = table.getSchemaHashByIndexId(indexId);
+            int schemaHash = table.getSchemaHashByIndexMetaId(indexId);
 
             // columns
             List<EtlColumn> etlColumns = Lists.newArrayList();
@@ -276,7 +276,7 @@ public class SparkLoadPendingTask extends LoadTask {
 
             // index type
             String indexType = null;
-            KeysType keysType = table.getKeysTypeByIndexId(indexId);
+            KeysType keysType = table.getKeysTypeByIndexMetaId(indexId);
             switch (keysType) {
                 case DUP_KEYS:
                     indexType = "DUPLICATE";
@@ -294,7 +294,7 @@ public class SparkLoadPendingTask extends LoadTask {
             }
 
             // is base index
-            boolean isBaseIndex = indexId == table.getBaseIndexId() ? true : false;
+            boolean isBaseIndex = indexId == table.getBaseIndexMetaId() ? true : false;
 
             etlIndexes.add(new EtlIndex(indexId, etlColumns, schemaHash, indexType, isBaseIndex));
         }
@@ -618,7 +618,7 @@ public class SparkLoadPendingTask extends LoadTask {
             throw new LoadException(msg);
         }
         FunctionCallExpr fn = (FunctionCallExpr) expr;
-        String functionName = fn.getFnName().getFunction();
+        String functionName = fn.getFunctionName();
         if (!functionName.equalsIgnoreCase(FunctionSet.HLL_HASH)
                 && !functionName.equalsIgnoreCase("hll_empty")) {
             throw new LoadException(msg);
@@ -638,7 +638,7 @@ public class SparkLoadPendingTask extends LoadTask {
             throw new LoadException(msg);
         }
         FunctionCallExpr fn = (FunctionCallExpr) expr;
-        String functionName = fn.getFnName().getFunction();
+        String functionName = fn.getFunctionName();
         if (!functionName.equalsIgnoreCase(FunctionSet.TO_BITMAP)
                 && !functionName.equalsIgnoreCase(FunctionSet.BITMAP_HASH)
                 && !functionName.equalsIgnoreCase(FunctionSet.BITMAP_HASH64)

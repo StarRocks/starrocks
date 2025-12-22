@@ -46,8 +46,8 @@ public class TabletReshardJobMgr extends FrontendDaemon implements GsonPostProce
     @SerializedName(value = "tabletReshardJobs")
     protected final Map<Long, TabletReshardJob> tabletReshardJobs = Maps.newConcurrentMap();
 
-    // Original tablet id -> resharding tablet context
-    protected final Map<Long, ReshardingTabletContext> reshardingTabletContexts = Maps.newConcurrentMap();
+    // Original tablet id -> resharding tablet info
+    protected final Map<Long, ReshardingTabletInfo> reshardingTabletInfos = Maps.newConcurrentMap();
 
     public TabletReshardJobMgr() {
         super("tablet-reshard-job-mgr", Config.tablet_reshard_job_scheduler_interval_ms);
@@ -62,16 +62,16 @@ public class TabletReshardJobMgr extends FrontendDaemon implements GsonPostProce
     }
 
     public ReshardingTablet getReshardingTablet(long tabletId, long visibleVersion) {
-        ReshardingTabletContext reshardingTabletContext = reshardingTabletContexts.get(tabletId);
-        if (reshardingTabletContext == null) {
+        ReshardingTabletInfo reshardingTabletInfo = reshardingTabletInfos.get(tabletId);
+        if (reshardingTabletInfo == null) {
             return null;
         }
 
-        if (visibleVersion < reshardingTabletContext.getVisibleVersion()) {
+        if (visibleVersion < reshardingTabletInfo.getVisibleVersion()) {
             return null;
         }
 
-        return reshardingTabletContext.getReshardingTablet();
+        return reshardingTabletInfo.getReshardingTablet();
     }
 
     public void createTabletReshardJob(Database db, OlapTable table, SplitTabletClause splitTabletClause)
@@ -137,11 +137,11 @@ public class TabletReshardJobMgr extends FrontendDaemon implements GsonPostProce
     }
 
     protected void registerReshardingTablet(long tabletId, ReshardingTablet reshardingTablet, long visibleVersion) {
-        reshardingTabletContexts.put(tabletId, new ReshardingTabletContext(reshardingTablet, visibleVersion));
+        reshardingTabletInfos.put(tabletId, new ReshardingTabletInfo(reshardingTablet, visibleVersion));
     }
 
     protected void unregisterReshardingTablet(long tabletId) {
-        reshardingTabletContexts.remove(tabletId);
+        reshardingTabletInfos.remove(tabletId);
     }
 
     @Override
@@ -204,6 +204,6 @@ public class TabletReshardJobMgr extends FrontendDaemon implements GsonPostProce
     public void load(SRMetaBlockReader reader) throws SRMetaBlockEOFException, IOException, SRMetaBlockException {
         TabletReshardJobMgr tabletReshardJobMgr = reader.readJson(TabletReshardJobMgr.class);
         tabletReshardJobs.putAll(tabletReshardJobMgr.tabletReshardJobs);
-        reshardingTabletContexts.putAll(tabletReshardJobMgr.reshardingTabletContexts);
+        reshardingTabletInfos.putAll(tabletReshardJobMgr.reshardingTabletInfos);
     }
 }

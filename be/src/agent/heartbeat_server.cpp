@@ -88,7 +88,7 @@ void HeartbeatServer::heartbeat(THeartbeatResult& heartbeat_result, const TMaste
 
     StatusOr<CmpResult> res;
     // reject master's heartbeat when exit
-    if (process_exit_in_progress()) {
+    if (process_exit_in_progress() || is_process_crashing()) {
         res = Status::Shutdown("BE is shutting down");
     } else {
         res = compare_master_info(master_info);

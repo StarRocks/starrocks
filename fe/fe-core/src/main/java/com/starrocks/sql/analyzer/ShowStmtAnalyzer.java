@@ -18,7 +18,6 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MysqlTable;
 import com.starrocks.catalog.OlapTable;
@@ -32,9 +31,6 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.SchemaConstants;
 import com.starrocks.common.proc.ExternalTableProcDir;
-import com.starrocks.common.proc.PartitionsProcDir;
-import com.starrocks.common.proc.ProcNodeInterface;
-import com.starrocks.common.proc.ProcService;
 import com.starrocks.common.proc.TableProcDir;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
@@ -45,6 +41,7 @@ import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.DescribeStmt;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.OrderByElement;
 import com.starrocks.sql.ast.OrderByPair;
 import com.starrocks.sql.ast.ShowAlterStmt;
@@ -406,8 +403,9 @@ public class ShowStmtAnalyzer {
                         if (tb.getType() == Table.TableType.OLAP) {
                             OlapTable olapTable = (OlapTable) tb;
                             for (MaterializedIndexMeta mvMeta : olapTable.getVisibleIndexMetas()) {
-                                if (olapTable.getIndexNameById(mvMeta.getIndexId()).equalsIgnoreCase(node.getTableName())) {
-                                    List<Column> columns = olapTable.getIndexIdToSchema().get(mvMeta.getIndexId());
+                                if (olapTable.getIndexNameByMetaId(mvMeta.getIndexMetaId())
+                                        .equalsIgnoreCase(node.getTableName())) {
+                                    List<Column> columns = olapTable.getIndexIdToSchema().get(mvMeta.getIndexMetaId());
                                     for (Column column : columns) {
                                         // Extra string (aggregation and bloom filter)
                                         List<String> extras = Lists.newArrayList();
@@ -449,16 +447,12 @@ public class ShowStmtAnalyzer {
                     String procString = "/dbs/" + db.getId() + "/" + table.getId() + "/" + TableProcDir.INDEX_SCHEMA
                             + "/";
                     if (table.getType() == Table.TableType.OLAP) {
-                        procString += ((OlapTable) table).getBaseIndexId();
+                        procString += ((OlapTable) table).getBaseIndexMetaId();
                     } else {
                         procString += table.getId();
                     }
 
-                    try {
-                        node.setNode(ProcService.getInstance().open(procString));
-                    } catch (AnalysisException e) {
-                        throw new SemanticException(String.format("Unknown proc node path: %s", procString));
-                    }
+                    node.setProcPath(procString);
                 } else {
                     if (table.isNativeTableOrMaterializedView()) {
                         node.setOlapTable(true);
@@ -468,9 +462,9 @@ public class ShowStmtAnalyzer {
 
                         // indices order
                         List<Long> indices = Lists.newArrayList();
-                        indices.add(olapTable.getBaseIndexId());
+                        indices.add(olapTable.getBaseIndexMetaId());
                         for (Long indexId : indexIdToSchema.keySet()) {
-                            if (indexId != olapTable.getBaseIndexId()) {
+                            if (indexId != olapTable.getBaseIndexMetaId()) {
                                 indices.add(indexId);
                             }
                         }
@@ -479,7 +473,7 @@ public class ShowStmtAnalyzer {
                         for (int i = 0; i < indices.size(); ++i) {
                             long indexId = indices.get(i);
                             List<Column> columns = indexIdToSchema.get(indexId);
-                            String indexName = olapTable.getIndexNameById(indexId);
+                            String indexName = olapTable.getIndexNameByMetaId(indexId);
                             MaterializedIndexMeta indexMeta = olapTable.getIndexMetaByIndexId(indexId);
                             for (int j = 0; j < columns.size(); ++j) {
                                 Column column = columns.get(j);
@@ -542,11 +536,7 @@ public class ShowStmtAnalyzer {
             // show external table schema only
             String procString =
                     "/catalog/" + catalogName + "/" + dbName + "/" + tbl + "/" + ExternalTableProcDir.SCHEMA;
-            try {
-                node.setNode(ProcService.getInstance().open(procString));
-            } catch (AnalysisException e) {
-                throw new SemanticException(String.format("Unknown proc node path: %s. msg: %s", procString, e.getMessage()));
-            }
+            node.setProcPath(procString);
         }
 
         @Override
@@ -554,11 +544,6 @@ public class ShowStmtAnalyzer {
             String path = node.getPath();
             if (Strings.isNullOrEmpty(path)) {
                 throw new SemanticException("Path is null");
-            }
-            try {
-                node.setNode(ProcService.getInstance().open(path));
-            } catch (AnalysisException e) {
-                throw new SemanticException(String.format("Unknown proc node path: %s. msg: %s", path, e.getMessage()));
             }
             return null;
         }
@@ -640,16 +625,7 @@ public class ShowStmtAnalyzer {
 
                 LOGGER.debug("process SHOW PROC '{}';", stringBuilder);
 
-                try {
-                    statement.setNode(ProcService.getInstance().open(stringBuilder.toString()));
-                } catch (AnalysisException e) {
-                    throw new SemanticException("get the PROC Node by the path %s error: %s", stringBuilder,
-                            e.getMessage());
-                }
-
-                final List<OrderByPair> orderByPairs =
-                        analyzeOrderBy(statement.getOrderByElements(), statement.getNode());
-                statement.setOrderByPairs(orderByPairs);
+                statement.setProcPath(stringBuilder.toString());
             } finally {
                 locker.unLockDatabase(db.getId(), LockType.READ);
             }
@@ -717,25 +693,6 @@ public class ShowStmtAnalyzer {
                 throw new SemanticException("Only the columns of PartitionId/PartitionName/" +
                         "State/Buckets/ReplicationNum/LastConsistencyCheckTime are supported.");
             }
-        }
-
-        /**
-         * analyze order by clause if not null and init the orderByPairs
-         */
-        private List<OrderByPair> analyzeOrderBy(List<OrderByElement> orderByElements, ProcNodeInterface node) {
-            List<OrderByPair> orderByPairs = new ArrayList<>();
-            if (orderByElements != null && !orderByElements.isEmpty()) {
-                for (OrderByElement orderByElement : orderByElements) {
-                    if (!(orderByElement.getExpr() instanceof SlotRef)) {
-                        throw new SemanticException("Should order by column");
-                    }
-                    SlotRef slotRef = (SlotRef) orderByElement.getExpr();
-                    int index = ((PartitionsProcDir) node).analyzeColumn(slotRef.getColumnName());
-                    OrderByPair orderByPair = new OrderByPair(index, !orderByElement.getIsAsc());
-                    orderByPairs.add(orderByPair);
-                }
-            }
-            return orderByPairs;
         }
 
         public Void visitShowLoadStatement(ShowLoadStmt statement, ConnectContext context) {

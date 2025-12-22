@@ -49,7 +49,6 @@
 #include "http/http_headers.h"
 #include "http/http_request.h"
 #include "io/io_profiler.h"
-#include "util/bfd_parser.h"
 
 namespace starrocks {
 
@@ -172,43 +171,9 @@ void CmdlineAction::handle(HttpRequest* req) {
 }
 
 void SymbolAction::handle(HttpRequest* req) {
-    // TODO: Implement symbol resolution. Without this, the binary needs to be passed
+    // Symbol resolution is not available. The binary needs to be passed
     // to pprof to resolve all symbols.
-    if (req->method() == HttpMethod::GET) {
-        std::stringstream ss;
-        ss << "num_symbols: " << _parser->num_symbols();
-        std::string str = ss.str();
-
-        HttpChannel::send_reply(req, str);
-        return;
-    } else if (req->method() == HttpMethod::HEAD) {
-        HttpChannel::send_reply(req);
-        return;
-    } else if (req->method() == HttpMethod::POST) {
-        std::string request = req->get_request_body();
-        // parse address
-        std::string result;
-        const char* ptr = request.c_str();
-        const char* end = request.c_str() + request.size();
-        while (ptr < end && *ptr != '\0') {
-            std::string file_name;
-            std::string func_name;
-            unsigned int lineno = 0;
-            const char* old_ptr = ptr;
-#ifndef __APPLE__
-            if (!_parser->decode_address(ptr, &ptr, &file_name, &func_name, &lineno)) {
-                result.append(old_ptr, ptr - old_ptr);
-                result.push_back('\t');
-                result.append(func_name);
-                result.push_back('\n');
-            }
-#endif
-            if (ptr < end && *ptr == '+') {
-                ptr++;
-            }
-        }
-
-        HttpChannel::send_reply(req, result);
-    }
+    std::string str = "Symbol resolution is not available. Please use pprof with the binary file to resolve symbols.";
+    HttpChannel::send_reply(req, HttpStatus::NOT_FOUND, str);
 }
 } // namespace starrocks

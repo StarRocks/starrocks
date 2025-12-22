@@ -743,6 +743,16 @@ public class Config extends ConfigBase {
     public static boolean net_use_ipv6_when_priority_networks_empty = false;
 
     /**
+     * DNS cache TTL (Time-To-Live) in seconds for successful DNS lookups.
+     * This sets the Java security property 'networkaddress.cache.ttl' which controls
+     * how long the JVM caches successful DNS lookups.
+     * Default is 60 seconds. Set to -1 to cache forever, 0 to disable caching.
+     * Note: This is a static configuration and requires FE restart to take effect.
+     */
+    @ConfField
+    public static int dns_cache_ttl_seconds = 60;
+
+    /**
      * Fe http port
      * Currently, all FEs' http port must be same.
      */
@@ -2171,6 +2181,9 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static boolean enable_statistic_collect_on_first_load = true;
 
+    @ConfField(mutable = true, comment = "Whether trigger statistic collection on update statement")
+    public static boolean enable_statistic_collect_on_update = true;
+
     /**
      * Max await time for semi-sync statistics collection during data loading (DML operations).
      * This applies to INSERT and INSERT OVERWRITE statements where sync=true.
@@ -2246,7 +2259,9 @@ public class Config extends ConfigBase {
     public static int statistic_analyze_task_pool_size = 3;
 
     /**
-     * statistic collect query timeout
+     * statistic collect query timeout (in seconds)
+     * This is the total timeout for the entire analyze job, not for individual SQL tasks.
+     * Each SQL task within the job will use the remaining time based on the job start time.
      */
     @ConfField(mutable = true)
     public static long statistic_collect_query_timeout = 3600; // 1h
@@ -2808,8 +2823,11 @@ public class Config extends ConfigBase {
             comment = "Enable the sql digest feature, building a parameterized digest for each sql in the query detail")
     public static boolean enable_sql_digest = false;
 
-    @ConfField(mutable = true, comment = "explain level of query plan in this detail")
+    @ConfField(mutable = true, comment = "explain level of query plan in query_detail API")
     public static String query_detail_explain_level = "COSTS";
+
+    @ConfField(mutable = true, comment = "explain level of query plan")
+    public static String query_explain_level = "NORMAL";
 
     /**
      * StarRocks-manager pull queries every 1 second
@@ -3044,7 +3062,7 @@ public class Config extends ConfigBase {
 
     /**
      * If set to false, when the load is empty, success is returned.
-     * Otherwise, `No partitions have data available for loading` is returned.
+     * Otherwise, `No rows were imported from upstream` is returned.
      */
     @ConfField(mutable = true)
     public static boolean empty_load_as_error = true;
@@ -3209,6 +3227,9 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true, comment = "metadata expired time from full vacuum begin running")
     public static long lake_fullvacuum_meta_expired_seconds = 3600L * 24L * 2L;
+
+    @ConfField(mutable = true, comment = "Whether to enable full vacuum daemon")
+    public static boolean lake_enable_fullvacuum = false;
 
     @ConfField(mutable = true, comment =
             "Whether enable throttling ingestion speed when compaction score exceeds the threshold.\n" +
@@ -3575,6 +3596,13 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, comment = "Whether enable to cache mv query context or not")
     public static boolean enable_mv_query_context_cache = true;
 
+    @ConfField(mutable = true, comment = "Whether enable to cache mv global context or not which its lifecycle is " +
+            "as the same with the mv")
+    public static boolean enable_mv_global_context_cache = true;
+
+    @ConfField(mutable = true, comment = "Max materialized view global context cache size during one mv's lifecycle.")
+    public static long mv_global_context_cache_max_size = 5000;
+
     @ConfField(mutable = true, comment = "Mv refresh fails if there is filtered data, true by default")
     public static boolean mv_refresh_fail_on_filter_data = true;
 
@@ -3844,6 +3872,11 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int arrow_max_service_task_threads_num = 4096;
 
+    // Maximum time in milliseconds that a subsequent query on the same Arrow Flight SQL connection will wait
+    // for the previous query to finish before returning an error.
+    @ConfField(mutable = true)
+    public static long arrow_flight_sql_connection_query_wait_timeout_ms = 10_000;
+
     @ConfField(mutable = false)
     public static int query_deploy_threadpool_size = max(50, getRuntime().availableProcessors() * 10);
 
@@ -4017,16 +4050,16 @@ public class Config extends ConfigBase {
     public static long tablet_reshard_max_parallel_tablets = 10 * 1024;
 
     /**
-     * Tablets with size larger than this value will be considered to split.
+     * Tablet splitting and merging will make tablet size around this value.
      */
-    @ConfField(mutable = true, comment = "Tablets with size larger than this value will be considered to split.")
-    public static long tablet_reshard_split_size = 4L * 1024L * 1024L * 1024L;
+    @ConfField(mutable = true, comment = "Tablet splitting and merging will make tablet size around this value.")
+    public static long tablet_reshard_target_size = 1024L * 1024L * 1024L;
 
     /**
      * The max number of new tablets that an old tablet can be split into.
      */
     @ConfField(mutable = true, comment = "The max number of new tablets that an old tablet can be split into.")
-    public static int tablet_reshard_max_split_count = 8;
+    public static int tablet_reshard_max_split_count = 1024;
 
     /**
      * Whether to enable tracing historical nodes when cluster scale

@@ -23,6 +23,7 @@
 #include "runtime/global_dict/parser.h"
 #include "storage/chunk_helper.h"
 #include "storage/column_predicate_rewriter.h"
+#include "storage/lake/table_schema_service.h"
 #include "storage/lake/tablet.h"
 #include "storage/predicate_parser.h"
 #include "storage/predicate_tree/predicate_tree.hpp"
@@ -175,8 +176,23 @@ Status LakeDataSource::get_next(RuntimeState* state, ChunkPtr* chunk) {
 Status LakeDataSource::get_tablet(const TInternalScanRange& scan_range) {
     int64_t tablet_id = scan_range.tablet_id;
     int64_t version = strtoul(scan_range.version.c_str(), nullptr, 10);
-    ASSIGN_OR_RETURN(_tablet, ExecEnv::GetInstance()->lake_tablet_manager()->get_tablet(tablet_id, version));
-    _tablet_schema = _tablet.get_schema();
+    auto tablet_manager = ExecEnv::GetInstance()->lake_tablet_manager();
+    ASSIGN_OR_RETURN(_tablet, tablet_manager->get_tablet(tablet_id, version));
+    auto& lake_scan_node = _provider->_t_lake_scan_node;
+    if (lake_scan_node.__isset.schema_key) {
+        const auto& t_schema_key = lake_scan_node.schema_key;
+        TableSchemaKeyPB schema_key_pb;
+        schema_key_pb.set_schema_id(t_schema_key.schema_id);
+        schema_key_pb.set_db_id(t_schema_key.db_id);
+        schema_key_pb.set_table_id(t_schema_key.table_id);
+        ASSIGN_OR_RETURN(_tablet_schema, tablet_manager->table_schema_service()->get_schema_for_scan(
+                                                 schema_key_pb, tablet_id, _runtime_state->query_id(),
+                                                 _runtime_state->fragment_ctx()->fe_addr(), _tablet.metadata()));
+    } else {
+        // no table schema meta indicates FE has not been upgraded to use fast schema evolution v2,
+        // so fallback to the old way to get schema from tablet metadata
+        _tablet_schema = _tablet.get_schema();
+    }
     return Status::OK();
 }
 
@@ -290,6 +306,11 @@ Status LakeDataSource::init_reader_params(const std::vector<OlapScanRange*>& key
     _params.scan_dop = _provider->get_scan_dop();
 
     ASSIGN_OR_RETURN(auto pred_tree, _conjuncts_manager->get_predicate_tree(parser, _predicate_free_pool));
+    _params.enable_join_runtime_filter_pushdown = _runtime_state->enable_join_runtime_filter_pushdown();
+    if (_params.enable_join_runtime_filter_pushdown) {
+        ASSIGN_OR_RETURN(_params.runtime_filter_preds,
+                         _conjuncts_manager->get_runtime_filter_predicates(&_obj_pool, parser));
+    }
     decide_chunk_size(!pred_tree.empty());
     _has_any_predicate = !pred_tree.empty();
 
@@ -640,6 +661,9 @@ void LakeDataSource::init_counter(RuntimeState* state) {
     _block_seek_counter = ADD_CHILD_COUNTER(_runtime_profile, "BlockSeekCount", TUnit::UNIT, segment_read_name);
     _pred_filter_timer = ADD_CHILD_TIMER(_runtime_profile, "PredFilter", segment_read_name);
     _pred_filter_counter = ADD_CHILD_COUNTER(_runtime_profile, "PredFilterRows", TUnit::UNIT, segment_read_name);
+    _rf_pred_filter_timer = ADD_TIMER(_runtime_profile, "RuntimeFilterEvalTime");
+    _rf_pred_input_rows = ADD_COUNTER(_runtime_profile, "RuntimeFilterInputRows", TUnit::UNIT);
+    _rf_pred_output_rows = ADD_COUNTER(_runtime_profile, "RuntimeFilterOutputRows", TUnit::UNIT);
     _del_vec_filter_counter = ADD_CHILD_COUNTER(_runtime_profile, "DelVecFilterRows", TUnit::UNIT, segment_read_name);
     _chunk_copy_timer = ADD_CHILD_TIMER(_runtime_profile, "ChunkCopy", segment_read_name);
     _decompress_timer = ADD_CHILD_TIMER(_runtime_profile, "DecompressT", segment_read_name);
@@ -730,8 +754,13 @@ void LakeDataSource::update_counter(RuntimeState* state) {
     cond_evaluate_ns += _reader->stats().vec_cond_evaluate_ns;
     cond_evaluate_ns += _reader->stats().branchless_cond_evaluate_ns;
     cond_evaluate_ns += _reader->stats().expr_cond_evaluate_ns;
+
     // In order to avoid exposing too detailed metrics, we still record these infos on `_pred_filter_timer`
     // When we support metric classification, we can disassemble it again.
+    COUNTER_UPDATE(_rf_pred_filter_timer, _reader->stats().rf_cond_evaluate_ns);
+    COUNTER_UPDATE(_rf_pred_input_rows, _reader->stats().rf_cond_input_rows);
+    COUNTER_UPDATE(_rf_pred_output_rows, _reader->stats().rf_cond_output_rows);
+
     COUNTER_UPDATE(_pred_filter_timer, cond_evaluate_ns);
     COUNTER_UPDATE(_pred_filter_counter, _reader->stats().rows_vec_cond_filtered);
     COUNTER_UPDATE(_del_vec_filter_counter, _reader->stats().rows_del_vec_filtered);

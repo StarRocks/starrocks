@@ -74,30 +74,6 @@ std::string DecimalV3Column<T>::debug_item(size_t idx) const {
 }
 
 template <typename T>
-void DecimalV3Column<T>::crc32_hash(uint32_t* hash, uint32_t from, uint32_t to) const {
-    const auto data = this->immutable_data();
-    // When decimal-v2 columns are used as distribution keys and users try to upgrade
-    // decimal-v2 column to decimal-v3 by schema change, decimal128(27,9) shall be the
-    // only acceptable target type, so keeping result of crc32_hash on type decimal128(27,9)
-    // compatible with type decimal-v2 is required in order to keep data layout consistency.
-    if constexpr (std::is_same_v<T, int128_t>) {
-        if (_precision == 27 && _scale == 9) {
-            for (uint32_t i = from; i < to; ++i) {
-                auto& decimal_v2_value = (DecimalV2Value&)(data[i]);
-                int64_t int_val = decimal_v2_value.int_value();
-                int32_t frac_val = decimal_v2_value.frac_value();
-                uint32_t seed = HashUtil::zlib_crc_hash(&int_val, sizeof(int_val), hash[i]);
-                hash[i] = HashUtil::zlib_crc_hash(&frac_val, sizeof(frac_val), seed);
-            }
-            return;
-        }
-    }
-    for (uint32_t i = from; i < to; ++i) {
-        hash[i] = HashUtil::zlib_crc_hash(&data[i], sizeof(T), hash[i]);
-    }
-}
-
-template <typename T>
 int64_t DecimalV3Column<T>::xor_checksum(uint32_t from, uint32_t to) const {
     // The XOR of DecimalV3Column
     // XOR all the decimals one by one

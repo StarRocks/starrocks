@@ -84,7 +84,7 @@ StatusOr<ChunkPtr> ExceptContext::pull_chunk(RuntimeState* state) {
     ChunkPtr dst_chunk = std::make_shared<Chunk>();
     if (num_remained_keys > 0) {
         // 2. Create dest columns.
-        Columns dst_columns(_dst_nullables.size());
+        MutableColumns dst_columns(_dst_nullables.size());
         for (size_t i = 0; i < _dst_nullables.size(); ++i) {
             const auto& slot = _dst_tuple_desc->slots()[i];
             dst_columns[i] = ColumnHelper::create_column(slot->type(), _dst_nullables[i]);

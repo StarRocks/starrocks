@@ -39,7 +39,6 @@ import com.google.common.collect.Sets;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.FakeEditLog;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
 import com.starrocks.catalog.OlapTable;
@@ -51,6 +50,7 @@ import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.journal.JournalTask;
 import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.type.FloatType;
@@ -88,7 +88,7 @@ public class AccessTestUtil {
         table.setIndexMeta(baseIndex.getId(), "testTbl", baseSchema, 0, 1, (short) 1,
                 TStorageType.COLUMN, KeysType.AGG_KEYS);
         table.addPartition(partition);
-        table.setBaseIndexId(baseIndex.getId());
+        table.setBaseIndexMetaId(baseIndex.getId());
         db.registerTableUnlocked(table);
         return globalStateMgr;
     }

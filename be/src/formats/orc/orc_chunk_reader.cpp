@@ -512,7 +512,7 @@ Status OrcChunkReader::_fill_chunk(ChunkPtr* chunk, const std::vector<SlotDescri
                 }
             }
         }
-        ColumnPtr& col = (*chunk)->get_column_by_slot_id(slot_desc->id());
+        auto* col = (*chunk)->get_column_raw_ptr_by_slot_id(slot_desc->id());
         RETURN_IF_ERROR(_column_readers[src_index]->get_next(cvb, col, 0, _batch->numElements));
     }
 
@@ -570,12 +570,12 @@ StatusOr<ChunkPtr> OrcChunkReader::_cast_chunk(ChunkPtr* chunk,
         }
         // TODO(murphy) check status
         ASSIGN_OR_RETURN(ColumnPtr col, _cast_exprs[src_index]->evaluate_checked(nullptr, src.get()));
-        col = ColumnHelper::unfold_const_column(slot->type(), chunk_size, col);
+        col = ColumnHelper::unfold_const_column(slot->type(), chunk_size, std::move(col));
 
         // If we feed nullable column to cast_expr, it may return non-nullable column if it really doesn't have null values
         if (slot->is_nullable()) {
             // wrap nullable column if necessary
-            col = NullableColumn::wrap_if_necessary(col);
+            col = NullableColumn::wrap_if_necessary(std::move(col));
         }
 
         DCHECK_LE(col->size(), chunk_size);
@@ -1214,7 +1214,7 @@ Status OrcChunkReader::build_search_argument_by_predicates(const OrcPredicates* 
 StatusOr<MutableColumnPtr> OrcChunkReader::get_row_delete_filter(const SkipRowsContextPtr& skip_rows_ctx) {
     int64_t start_pos = _row_reader->getRowNumber();
     auto num_rows = _batch->numElements;
-    MutableColumnPtr filter_column = BooleanColumn::create(num_rows, 1);
+    auto filter_column = BooleanColumn::create(num_rows, 1);
     auto& filter = static_cast<BooleanColumn*>(filter_column.get())->get_data();
 
     if (skip_rows_ctx == nullptr || !skip_rows_ctx->has_skip_rows()) {
@@ -1260,7 +1260,7 @@ Status OrcChunkReader::apply_dict_filter_eval_cache(const std::unordered_map<Slo
         uint64_t column_id = _root_mapping->get_orc_type_child_mapping(pos_in_src_slot_descs).orc_type->getColumnId();
 
         const Filter& dict_filter = (*it.second);
-        MutableColumnPtr data_filter = BooleanColumn::create(size);
+        auto data_filter = BooleanColumn::create(size);
         Filter& data = static_cast<BooleanColumn*>(data_filter.get())->get_data();
         DCHECK(data.size() == size);
 

@@ -30,15 +30,15 @@ public class ApplicableRolesSystemTable {
                 NAME,
                 Table.TableType.SCHEMA,
                 builder()
-                        .column("USER", TypeFactory.createVarchar(97))
-                        .column("HOST", TypeFactory.createVarchar(256))
-                        .column("GRANTEE", TypeFactory.createVarchar(97))
-                        .column("GRANTEE_HOST", TypeFactory.createVarchar(256))
-                        .column("ROLE_NAME", TypeFactory.createVarchar(255))
-                        .column("ROLE_HOST", TypeFactory.createVarchar(256))
-                        .column("IS_GRANTABLE", TypeFactory.createVarchar(3))
-                        .column("IS_DEFAULT", TypeFactory.createVarchar(3))
-                        .column("IS_MANDATORY", TypeFactory.createVarchar(3))
+                        .column("USER", TypeFactory.createVarcharType(97))
+                        .column("HOST", TypeFactory.createVarcharType(256))
+                        .column("GRANTEE", TypeFactory.createVarcharType(97))
+                        .column("GRANTEE_HOST", TypeFactory.createVarcharType(256))
+                        .column("ROLE_NAME", TypeFactory.createVarcharType(255))
+                        .column("ROLE_HOST", TypeFactory.createVarcharType(256))
+                        .column("IS_GRANTABLE", TypeFactory.createVarcharType(3))
+                        .column("IS_DEFAULT", TypeFactory.createVarcharType(3))
+                        .column("IS_MANDATORY", TypeFactory.createVarcharType(3))
                         .build(),
                 TSchemaTableType.SCH_APPLICABLE_ROLES);
     }

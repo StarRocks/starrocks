@@ -142,11 +142,11 @@ PROPERTIES (
 -- result:
 E: (1064, 'unknown compression type: zstd(--2)')
 -- !result
--- name: test_normal
+-- name: test_normal @native
 CREATE TABLE `test_normal` (
   `k` BIGINT NOT NULL COMMENT "",
   `v` string COMMENT ""
-) ENGINE=OLAP 
+) ENGINE=OLAP
 DUPLICATE KEY(`k`)
 DISTRIBUTED BY HASH(`k`) BUCKETS 1
 PROPERTIES (

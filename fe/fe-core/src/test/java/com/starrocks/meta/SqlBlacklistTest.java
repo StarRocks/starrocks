@@ -14,6 +14,7 @@
 
 package com.starrocks.meta;
 
+import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.persist.DeleteSqlBlackLists;
 import com.starrocks.persist.SqlBlackListPersistInfo;
@@ -37,6 +38,7 @@ import java.util.List;
 import java.util.regex.Pattern;
 
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.parseSql;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class SqlBlacklistTest {
     SqlBlackList sqlBlackList;
@@ -100,6 +102,15 @@ public class SqlBlacklistTest {
     }
 
     @Test
+    public void testDeleteSqlBlacklistIdIfNotExists() throws Exception {
+        long id1 = sqlBlackList.put(Pattern.compile("qwert"));
+        StmtExecutor deleteStatementExecutor = new StmtExecutor(connectContext, new DelSqlBlackListStmt(List.of(id1, 2L)));
+        deleteStatementExecutor.execute();
+        Assertions.assertTrue(sqlBlackList
+                .getBlackLists().stream().noneMatch(x -> x.id == id1));
+    }
+
+    @Test
     public void testDeleteSqlBlacklist() throws Exception {
         long id1 = sqlBlackList.put(Pattern.compile("qwert"));
         long id2 = sqlBlackList.put(Pattern.compile("abcde"));
@@ -160,5 +171,14 @@ public class SqlBlacklistTest {
                         .noneMatch(x -> x.id == 123L || x.id == 1234L)
         );
 
+    }
+
+    @Test
+    public void testVerifyingSQLExistsInBlackList() {
+        Pattern p = Pattern.compile("qwert");
+        sqlBlackList.put(p);
+        AnalysisException exception = assertThrows(AnalysisException.class, () -> sqlBlackList.verifying("qwert"));
+        Assertions.assertEquals("Access denied; This sql is in blacklist (id: 0), please contact your admin",
+                exception.getMessage());
     }
 }

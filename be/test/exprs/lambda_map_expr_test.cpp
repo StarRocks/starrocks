@@ -46,7 +46,7 @@ ColumnPtr const_varchar_column(const std::string& value, size_t size = 1) {
 }
 
 std::unique_ptr<MapApplyExpr> create_map_apply_expr(const TypeDescriptor& type) {
-    return std::unique_ptr<MapApplyExpr>(new MapApplyExpr(type));
+    return std::make_unique<MapApplyExpr>(type);
 }
 
 class MapApplyExprTest : public ::testing::Test {
@@ -58,7 +58,7 @@ protected:
         TScalarType scalar_type;
         scalar_type.__set_type(TPrimitiveType::INT);
         node.__set_scalar_type(scalar_type);
-        int_type.types.push_back(node);
+        int_type.types.emplace_back(node);
         // init expr_node
         expr_node.opcode = TExprOpcode::ADD;
         expr_node.child_type = TPrimitiveType::INT;
@@ -120,7 +120,7 @@ protected:
         lambda_func->add_child(map_expr);
         lambda_func->add_child(col1);
         lambda_func->add_child(col2);
-        _lambda_func.push_back(lambda_func);
+        _lambda_func.emplace_back(lambda_func);
 
         /// (k,v) -> map_expr(k is null, v + a)
         lambda_func = _objpool.add(new LambdaFunction(tlambda_func));
@@ -150,7 +150,7 @@ protected:
         lambda_func->add_child(map_expr);
         lambda_func->add_child(key3);
         lambda_func->add_child(val3);
-        _lambda_func.push_back(lambda_func);
+        _lambda_func.emplace_back(lambda_func);
     }
     std::vector<Expr*> _lambda_func;
     TExprNode expr_node;
@@ -166,11 +166,11 @@ private:
 TEST_F(MapApplyExprTest, test_map_int_int) {
     TypeDescriptor type_map_int_int;
     type_map_int_int.type = LogicalType::TYPE_MAP;
-    type_map_int_int.children.emplace_back(TypeDescriptor(LogicalType::TYPE_INT));
-    type_map_int_int.children.emplace_back(TypeDescriptor(LogicalType::TYPE_INT));
+    type_map_int_int.children.emplace_back(LogicalType::TYPE_INT);
+    type_map_int_int.children.emplace_back(LogicalType::TYPE_INT);
 
     create_lambda_expr(type_map_int_int);
-    ColumnPtr column = ColumnHelper::create_column(type_map_int_int, true);
+    MutableColumnPtr column = ColumnHelper::create_column(type_map_int_int, true);
 
     DatumMap map1;
     map1[(int32_t)1] = (int32_t)44;
@@ -270,7 +270,7 @@ TEST_F(MapApplyExprTest, test_map_varchar_int) {
     type_varchar.len = 10;
     create_lambda_expr(type_map_varchar_int);
 
-    ColumnPtr column = ColumnHelper::create_column(type_map_varchar_int, false);
+    MutableColumnPtr column = ColumnHelper::create_column(type_map_varchar_int, false);
 
     DatumMap map;
     map[(Slice) "a"] = (int32_t)11;

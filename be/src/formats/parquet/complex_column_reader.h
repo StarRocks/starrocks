@@ -268,6 +268,9 @@ public:
     ~VariantColumnReader() override = default;
 
     Status prepare() override {
+        if (_metadata_reader == nullptr || _value_reader == nullptr) {
+            return Status::InternalError("Both metadata and value readers are required");
+        }
         RETURN_IF_ERROR(_metadata_reader->prepare());
         RETURN_IF_ERROR(_value_reader->prepare());
         return Status::OK();
@@ -276,24 +279,40 @@ public:
     Status read_range(const Range<uint64_t>& range, const Filter* filter, ColumnPtr& dst) override;
 
     void get_levels(level_t** def_levels, level_t** rep_levels, size_t* num_levels) override {
-        // Use value reader to get levels since it determines nullability
-        _value_reader->get_levels(def_levels, rep_levels, num_levels);
+        if (_metadata_reader != nullptr) {
+            _metadata_reader->get_levels(def_levels, rep_levels, num_levels);
+        }
+        if (_value_reader != nullptr) {
+            _value_reader->get_levels(def_levels, rep_levels, num_levels);
+        }
     }
 
     void set_need_parse_levels(bool need_parse_levels) override {
-        _metadata_reader->set_need_parse_levels(need_parse_levels);
-        _value_reader->set_need_parse_levels(need_parse_levels);
+        if (_metadata_reader != nullptr) {
+            _metadata_reader->set_need_parse_levels(need_parse_levels);
+        }
+        if (_value_reader != nullptr) {
+            _value_reader->set_need_parse_levels(need_parse_levels);
+        }
     }
 
     void collect_column_io_range(std::vector<io::SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset,
                                  ColumnIOTypeFlags types, bool active) override {
-        _metadata_reader->collect_column_io_range(ranges, end_offset, types, active);
-        _value_reader->collect_column_io_range(ranges, end_offset, types, active);
+        if (_metadata_reader != nullptr) {
+            _metadata_reader->collect_column_io_range(ranges, end_offset, types, active);
+        }
+        if (_value_reader != nullptr) {
+            _value_reader->collect_column_io_range(ranges, end_offset, types, active);
+        }
     }
 
     void select_offset_index(const SparseRange<uint64_t>& range, const uint64_t rg_first_row) override {
-        _metadata_reader->select_offset_index(range, rg_first_row);
-        _value_reader->select_offset_index(range, rg_first_row);
+        if (_metadata_reader != nullptr) {
+            _metadata_reader->select_offset_index(range, rg_first_row);
+        }
+        if (_value_reader != nullptr) {
+            _value_reader->select_offset_index(range, rg_first_row);
+        }
     }
 
 private:

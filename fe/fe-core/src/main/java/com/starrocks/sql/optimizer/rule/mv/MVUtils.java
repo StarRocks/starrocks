@@ -118,7 +118,7 @@ public class MVUtils {
                     continue;
                 } else if (definedExpr instanceof FunctionCallExpr) {
                     FunctionCallExpr functionCallExpr = (FunctionCallExpr) definedExpr;
-                    String argFuncName = functionCallExpr.getFnName().getFunction();
+                    String argFuncName = functionCallExpr.getFunctionName();
                     Expr arg0FuncExpr = functionCallExpr.getChild(0);
                     if (!(arg0FuncExpr instanceof SlotRef)) {
                         return true;

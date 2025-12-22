@@ -381,7 +381,7 @@ public class SparkLoadJobTest {
         long fileSize = 6L;
         filePathToSize.put(filePath, fileSize);
         PartitionInfo partitionInfo = new RangePartitionInfo();
-        partitionInfo.addPartition(partitionId, null, (short) 1, false);
+        partitionInfo.addPartition(partitionId, null, (short) 1, null);
 
         new Expectations() {
             {
@@ -398,7 +398,7 @@ public class SparkLoadJobTest {
                 table.getPartitionInfo();
                 result = partitionInfo;
 
-                table.getSchemaByIndexId(Long.valueOf(12));
+                table.getSchemaByIndexMetaId(Long.valueOf(12));
                 result = Lists.newArrayList(new Column("k1", VarcharType.VARCHAR));
 
                 physicalPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
@@ -480,7 +480,7 @@ public class SparkLoadJobTest {
         long fileSize = 6L;
         filePathToSize.put(filePath, fileSize);
         PartitionInfo partitionInfo = new RangePartitionInfo();
-        partitionInfo.addPartition(partitionId, null, (short) 1, false);
+        partitionInfo.addPartition(partitionId, null, (short) 1, null);
 
         List<Replica> allQueryableReplicas = Lists.newArrayList();
         allQueryableReplicas.add(replica);
@@ -501,7 +501,7 @@ public class SparkLoadJobTest {
                 table.getPartitionInfo();
                 result = partitionInfo;
 
-                table.getSchemaByIndexId(Long.valueOf(12));
+                table.getSchemaByIndexMetaId(Long.valueOf(12));
                 result = Lists.newArrayList(new Column("k1", VarcharType.VARCHAR));
 
                 physicalPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
@@ -581,7 +581,7 @@ public class SparkLoadJobTest {
         SparkLoadJob job = getEtlStateJob(originStmt);
         job.state = JobState.LOADING;
         Deencapsulation.setField(job, "tableToLoadPartitions", Maps.newHashMap());
-        ExceptionChecker.expectThrowsWithMsg(LoadException.class, "No partitions have data available for loading",
+        ExceptionChecker.expectThrowsWithMsg(LoadException.class, "No rows were imported from upstream",
                 () -> Deencapsulation.invoke(job, "submitPushTasks"));
     }
 }

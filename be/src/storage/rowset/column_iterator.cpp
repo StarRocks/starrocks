@@ -42,7 +42,7 @@ namespace starrocks {
 Status ColumnIterator::decode_dict_codes(const Column& codes, Column* words) {
     if (codes.is_nullable()) {
         const ColumnPtr& data_column = down_cast<const NullableColumn&>(codes).data_column();
-        const Buffer<int32_t>& v = Int32Column::static_pointer_cast(data_column)->get_data();
+        const auto& v = Int32Column::static_pointer_cast(data_column)->immutable_data();
         return this->decode_dict_codes(v.data(), v.size(), words);
     } else {
         const auto v = down_cast<const Int32Column&>(codes).immutable_data();

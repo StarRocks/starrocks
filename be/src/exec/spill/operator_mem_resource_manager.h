@@ -26,13 +26,29 @@ enum MEM_RESOURCE {
 
 class OperatorMemoryResourceManager {
 public:
+    class ResGuard {
+    public:
+        explicit ResGuard(OperatorMemoryResourceManager& manager) : _manager(manager) {}
+        ~ResGuard() noexcept { reset(); }
+        DISALLOW_COPY_AND_MOVE(ResGuard);
+        void reset() noexcept;
+
+        void inc_reserve_bytes(size_t bytes);
+        void inc_spillable_operators();
+
+    private:
+        size_t _reserved_bytes = 0;
+        size_t _spill_operators = 0;
+        OperatorMemoryResourceManager& _manager;
+    };
+
     using OP = pipeline::Operator;
 
     void prepare(OP* op, QuerySpillManager* query_spill_manager);
 
     void close();
 
-    bool releaseable() const { return _releaseable && _performance_level <= MEM_RESOURCE_LOW_MEMORY; }
+    bool releaseable() const { return _releaseable && _performance_level < MEM_RESOURCE_LOW_MEMORY; }
 
     bool spillable() const { return _spillable; }
 
@@ -40,10 +56,6 @@ public:
 
     // For the current operator available memory (estimated value)
     size_t operator_avaliable_memory_bytes();
-
-    void set_releasing() { _is_releasing = true; }
-
-    bool is_releasing() const { return _is_releasing; }
 
     QuerySpillManager* query_spill_manager() const { return _query_spill_manager; }
 
@@ -55,6 +67,6 @@ private:
     bool _releaseable = false;
     OP* _op = nullptr;
     QuerySpillManager* _query_spill_manager = nullptr;
-    bool _is_releasing = false;
+    ResGuard _res_guard{*this};
 };
 } // namespace starrocks::spill

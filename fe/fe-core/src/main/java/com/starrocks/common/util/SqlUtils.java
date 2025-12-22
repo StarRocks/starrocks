@@ -17,6 +17,7 @@
 
 package com.starrocks.common.util;
 
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.SetNamesVar;
@@ -79,7 +80,9 @@ public class SqlUtils {
                             return true;
                         } else if (itemExpr instanceof InformationFunction informationFunction) {
                             return informationFunction.getFuncType().equalsIgnoreCase("connection_id")
-                                    || informationFunction.getFuncType().equalsIgnoreCase("session_id");
+                                    || informationFunction.getFuncType().equalsIgnoreCase("session_id")
+                                    ||
+                                    informationFunction.getFuncType().equalsIgnoreCase(FunctionSet.CURRENT_WAREHOUSE);
                         }
                     }
                 }

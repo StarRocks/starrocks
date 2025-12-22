@@ -69,7 +69,7 @@ Status PlainTextBuilder::add_chunk(Chunk* chunk) {
         if (col == nullptr) {
             return Status::InternalError(strings::Substitute("Column not found by slot id %0", column_ref->slot_id()));
         }
-        col = ColumnHelper::unfold_const_column(column_ref->type(), num_rows, col);
+        col = ColumnHelper::unfold_const_column(column_ref->type(), num_rows, std::move(col));
         columns.emplace_back(col);
     }
 

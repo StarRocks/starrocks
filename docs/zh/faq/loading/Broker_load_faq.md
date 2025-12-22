@@ -98,3 +98,7 @@ SET
 首先检查是否所有的 Broker 所在的机器都配置了 **/etc/krb5.conf** 文件。
 
 如果配置了仍然报错，需要在 Broker 的启动脚本中 `JAVA_OPTS` 变量的最后，加上 `-Djava.security.krb5.conf:/etc/krb5.conf`。
+
+## 11. 如果源 Hive 表为空，Broker Load 会失败吗？
+
+默认情况下，空事务会返回错误 "all partitions have no load data"。您可以将FE配置 `empty_load_as_error` 设置为 `false` 以允许空事务返回成功。

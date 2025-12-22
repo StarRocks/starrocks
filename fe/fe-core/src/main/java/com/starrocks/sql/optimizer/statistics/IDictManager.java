@@ -16,6 +16,7 @@
 package com.starrocks.sql.optimizer.statistics;
 
 import com.starrocks.catalog.ColumnId;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.FeConstants;
 
 import java.util.List;
@@ -24,11 +25,11 @@ import java.util.Optional;
 public interface IDictManager {
     boolean hasGlobalDict(long tableId, ColumnId columnName, long versionTime);
 
-    void updateGlobalDict(long tableId, ColumnId columnName, long collectedVersion, long versionTime);
+    void updateGlobalDict(OlapTable table, ColumnId columnName, long collectedVersion, long versionTime);
 
     boolean hasGlobalDict(long tableId, ColumnId columnName);
 
-    void removeGlobalDict(long tableId, ColumnId columnName);
+    void removeGlobalDict(OlapTable table, ColumnId columnName);
 
     void disableGlobalDict(long tableId);
 

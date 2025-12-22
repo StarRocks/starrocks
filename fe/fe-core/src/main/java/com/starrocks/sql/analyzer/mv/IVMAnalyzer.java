@@ -293,7 +293,7 @@ public class IVMAnalyzer {
         List<IVMAggFunctionInfo> newAggFuncInfos = Lists.newArrayList();
         ExprSubstitutionMap substitutionMap = new ExprSubstitutionMap();
         for (FunctionCallExpr aggFuncExpr : aggregateExprs) {
-            String aggFuncName = aggFuncExpr.getFnName().getFunction();
+            String aggFuncName = aggFuncExpr.getFunctionName();
             // build intermediate aggregate function
             FunctionCallExpr intermediateAggFuncExpr = buildIntermediateAggregateFunc(aggFuncExpr);
             String newAggFuncName = TvrOpUtils.getTvrAggStateColumnName(aggFuncExpr);
@@ -371,7 +371,7 @@ public class IVMAnalyzer {
 
     private FunctionCallExpr buildIntermediateAggregateFunc(FunctionCallExpr aggFuncExpr) {
         // <func>_combine(<args>)
-        String aggFuncName = aggFuncExpr.getFnName().getFunction();
+        String aggFuncName = aggFuncExpr.getFunctionName();
         String aggStateFuncName = AggStateUtils.aggStateCombineFunctionName(aggFuncName);
         FunctionCallExpr aggStateFuncExpr = new FunctionCallExpr(aggStateFuncName, aggFuncExpr.getChildren());
         return aggStateFuncExpr;

@@ -217,4 +217,114 @@ TEST_F(LoadChannelMgrTest, sync_open_success) {
     ASSERT_TRUE(load_channel != nullptr);
 }
 
+TEST_F(LoadChannelMgrTest, test_aborted_load_channel) {
+    ASSERT_OK(_load_channel_mgr->init(_mem_tracker.get()));
+    PUniqueId load_id;
+    load_id.set_hi(12345);
+    load_id.set_lo(67890);
+    brpc::Controller cntl;
+    MockCountDownClosure closure;
+    PTabletWriterOpenRequest request = create_open_request(load_id, rand());
+    PTabletWriterOpenResult result;
+
+    // 1. Open successfully
+    _load_channel_mgr->open(&cntl, request, &result, &closure);
+    closure.wait();
+    ASSERT_TRUE(closure.has_run());
+    ASSERT_EQ(TStatusCode::OK, result.status().status_code());
+
+    // 2. Cancel (Abort)
+    PTabletWriterCancelRequest cancel_request;
+    cancel_request.mutable_id()->CopyFrom(load_id);
+    cancel_request.set_index_id(_index_id);
+    cancel_request.set_sender_id(0);
+    cancel_request.set_reason("test abort");
+    PTabletWriterCancelResult cancel_result;
+    MockCountDownClosure cancel_closure;
+    _load_channel_mgr->cancel(&cntl, cancel_request, &cancel_result, &cancel_closure);
+    cancel_closure.wait();
+    ASSERT_TRUE(cancel_closure.has_run());
+
+    // 3. Try to Open again - should be ABORTED
+    MockCountDownClosure closure2;
+    PTabletWriterOpenResult result2;
+    _load_channel_mgr->open(&cntl, request, &result2, &closure2);
+    // Open is async, but the check for aborted is synchronous in _open (which is called by the thread pool)
+    // Wait for task execution
+    closure2.wait();
+    ASSERT_TRUE(closure2.has_run());
+    ASSERT_EQ(TStatusCode::ABORTED, result2.status().status_code());
+    ASSERT_NE(std::string::npos, result2.status().error_msgs(0).find(" was aborted at ")) << result2.status();
+
+    // 4. Try add_chunk - should be ABORTED
+    PTabletWriterAddChunkRequest add_chunk_request;
+    add_chunk_request.mutable_id()->CopyFrom(load_id);
+    add_chunk_request.set_index_id(_index_id);
+    add_chunk_request.set_sender_id(0);
+    PTabletWriterAddBatchResult add_chunk_result;
+    _load_channel_mgr->add_chunk(add_chunk_request, &add_chunk_result);
+    ASSERT_EQ(TStatusCode::ABORTED, add_chunk_result.status().status_code());
+    ASSERT_NE(std::string::npos, add_chunk_result.status().error_msgs(0).find(" was aborted at"))
+            << add_chunk_result.status();
+
+    // 5. Test Cleanup
+    // Set delay to 1 second
+    int32_t old_delay = config::load_channel_abort_clean_up_delay_seconds;
+    config::load_channel_abort_clean_up_delay_seconds = 1;
+    DeferOp defer([&]() { config::load_channel_abort_clean_up_delay_seconds = old_delay; });
+
+    // Wait for cleanup (background thread runs every 1s in test mode)
+    // Poll for up to 5 seconds for cleanup to occur, the status will be changed to INTERNAL_ERROR
+    constexpr int max_wait_ms = 5000;
+    constexpr int poll_interval_ms = 100;
+    int waited_ms = 0;
+    bool cleaned_up = false;
+    while (waited_ms < max_wait_ms) {
+        PTabletWriterAddBatchResult res;
+        _load_channel_mgr->add_chunk(add_chunk_request, &res);
+        if (res.status().status_code() == TStatusCode::INTERNAL_ERROR &&
+            res.status().error_msgs(0).find("no associated load channel") != std::string::npos) {
+            cleaned_up = true;
+            break;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(poll_interval_ms));
+        waited_ms += poll_interval_ms;
+    }
+    ASSERT_TRUE(cleaned_up) << "Cleanup did not occur within timeout";
+}
+
+TEST_F(LoadChannelMgrTest, test_timeout_load_channel) {
+    ASSERT_OK(_load_channel_mgr->init(_mem_tracker.get()));
+    PUniqueId load_id;
+    load_id.set_hi(1234567);
+    load_id.set_lo(6789012);
+    brpc::Controller cntl;
+    MockCountDownClosure closure;
+    PTabletWriterOpenRequest request = create_open_request(load_id, rand());
+    request.set_load_channel_timeout_s(1); // set short timeout for test
+    auto old_load_timeout = config::streaming_load_rpc_max_alive_time_sec;
+    config::streaming_load_rpc_max_alive_time_sec = 1; // set short timeout for test
+    PTabletWriterOpenResult result;
+
+    // 1. Open successfully
+    _load_channel_mgr->open(&cntl, request, &result, &closure);
+    closure.wait();
+    ASSERT_EQ(TStatusCode::OK, result.status().status_code());
+
+    // 1 second for timeout, 1 second for backend thread to clean up
+    std::this_thread::sleep_for(std::chrono::milliseconds(3500));
+
+    // 2. Try add_chunk - should be ABORTED (timeout)
+    PTabletWriterAddChunkRequest add_chunk_request;
+    add_chunk_request.mutable_id()->CopyFrom(load_id);
+    add_chunk_request.set_index_id(_index_id);
+    add_chunk_request.set_sender_id(0);
+    PTabletWriterAddBatchResult add_chunk_result;
+    _load_channel_mgr->add_chunk(add_chunk_request, &add_chunk_result);
+    ASSERT_EQ(TStatusCode::ABORTED, add_chunk_result.status().status_code());
+    ASSERT_NE(std::string::npos, add_chunk_result.status().error_msgs(0).find(" timeout")) << add_chunk_result.status();
+    // restore the configuration
+    config::streaming_load_rpc_max_alive_time_sec = old_load_timeout;
+}
+
 } // namespace starrocks

@@ -20,7 +20,7 @@ from sqlalchemy.engine import Engine
 
 from starrocks.common.params import TableInfoKey
 from starrocks.common.utils import TableAttributeNormalizer, get_dialect_option
-from starrocks.datatype import DATE, DECIMAL, INTEGER, TINYINT, VARCHAR
+from starrocks.datatype import BOOLEAN, DATE, DECIMAL, INTEGER, VARCHAR
 from starrocks.engine.interfaces import ReflectedViewState
 
 
@@ -658,7 +658,7 @@ class TestReflectionViewsIntegration:
                 assert isinstance(view_table.c.c_int.type, INTEGER)
                 assert isinstance(view_table.c.c_str.type, VARCHAR)
                 assert view_table.c.c_str.type.length == 100
-                assert isinstance(view_table.c.c_bool.type, TINYINT)
+                assert isinstance(view_table.c.c_bool.type, BOOLEAN)
                 assert isinstance(view_table.c.c_decimal.type, DECIMAL)
                 assert view_table.c.c_decimal.type.precision == 10
                 assert view_table.c.c_decimal.type.scale == 2

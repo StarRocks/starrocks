@@ -325,14 +325,14 @@ Status SpillPartitionChunkWriter::_merge_chunks() {
                                       [](int sum, const ChunkPtr& chunk) { return sum + chunk->num_rows(); });
     _result_chunk = _create_schema_chunk(_chunks.front(), num_rows);
 
-    std::unordered_map<Column*, size_t> col_ptr_index_map;
+    std::unordered_map<const Column*, size_t> col_ptr_index_map;
     auto& columns = _chunks.front()->columns();
     for (size_t i = 0; i < columns.size(); ++i) {
         col_ptr_index_map[columns[i]->get_ptr()] = i;
     }
     for (auto& chunk : _chunks) {
         for (size_t i = 0; i < _result_chunk->num_columns(); ++i) {
-            auto* dst_col = _result_chunk->get_column_by_index(i).get();
+            auto* dst_col = _result_chunk->get_column_raw_ptr_by_index(i);
             ColumnPtr src_col;
             if (_column_evaluators) {
                 ASSIGN_OR_RETURN(src_col, (*_column_evaluators)[i]->evaluate(chunk.get()));
@@ -369,10 +369,9 @@ void SpillPartitionChunkWriter::_handle_err(const Status& st) {
 
 SchemaPtr SpillPartitionChunkWriter::_make_schema() {
     Fields fields;
+    fields.reserve(_tuple_desc->slots().size());
     for (auto& slot : _tuple_desc->slots()) {
-        TypeDescriptor type_desc = slot->type();
-        TypeInfoPtr type_info = get_type_info(type_desc.type, type_desc.precision, type_desc.scale);
-        auto field = std::make_shared<Field>(slot->id(), slot->col_name(), type_info, slot->is_nullable());
+        auto field = Field::convert_from_slot_desc(*slot);
         fields.push_back(field);
     }
 

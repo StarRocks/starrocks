@@ -50,20 +50,20 @@ class TracerImpl extends Tracer {
         return timing.elapsed(TimeUnit.NANOSECONDS);
     }
 
-    public Timer watchScope(String name) {
+    public synchronized Timer watchScope(String name) {
         tracerCost.start();
         Timer t = watcher.scope(timePointNanoSecond(), name);
         tracerCost.stop();
         return t;
     }
 
-    public void log(String event) {
+    public synchronized void log(String event) {
         tracerCost.start();
         logTracer.log(timePoint(), event);
         tracerCost.stop();
     }
 
-    public void log(String event, Object... args) {
+    public synchronized void log(String event, Object... args) {
         tracerCost.start();
         logTracer.log(timePoint(), event, args);
         tracerCost.stop();
@@ -71,26 +71,26 @@ class TracerImpl extends Tracer {
 
     @Override
     // lazy log, use it if you want to avoid construct log string when log is disabled
-    public void log(Function<Object[], String> func, Object... args) {
+    public synchronized void log(Function<Object[], String> func, Object... args) {
         tracerCost.start();
         logTracer.log(timePoint(), func, args);
         tracerCost.stop();
     }
 
     @Override
-    public void reason(String reason, Object... args) {
+    public synchronized void reason(String reason, Object... args) {
         tracerCost.start();
         reasonTracer.log(timePoint(), reason, args);
         tracerCost.stop();
     }
 
-    public void record(String name, String value) {
+    public synchronized void record(String name, String value) {
         tracerCost.start();
         varTracer.record(timePoint(), name, value);
         tracerCost.stop();
     }
 
-    public void count(String name, long count) {
+    public synchronized void count(String name, long count) {
         tracerCost.start();
         varTracer.count(timePoint(), name, count);
         tracerCost.stop();

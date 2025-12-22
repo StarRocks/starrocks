@@ -154,7 +154,7 @@ public class LakeTableAsyncFastSchemaChangeJob extends LakeTableAlterMetaJobBase
             MaterializedIndexMeta indexMeta = requireNonNull(table.getIndexMetaByIndexId(indexId)).shallowCopy();
             List<Column> oldColumns = indexMeta.getSchema();
             SchemaInfo oldSchemaInfo = SchemaInfo.fromMaterializedIndex(table, indexId, indexMeta);
-            historySchemaBuilder.addIndexSchema(new IndexSchemaInfo(indexId, table.getIndexNameById(indexId), oldSchemaInfo));
+            historySchemaBuilder.addIndexSchema(new IndexSchemaInfo(indexId, table.getIndexNameByMetaId(indexId), oldSchemaInfo));
 
             Preconditions.checkState(Objects.equals(indexMeta.getKeysType(), schemaInfo.getKeysType()));
             Preconditions.checkState(Objects.equals(ListUtils.emptyIfNull(indexMeta.getSortKeyUniqueIds()),
@@ -172,7 +172,7 @@ public class LakeTableAsyncFastSchemaChangeJob extends LakeTableAlterMetaJobBase
             indexMeta.setSortKeyIdxes(schemaInfo.getSortKeyIndexes());
 
             // update the indexIdToMeta
-            table.getIndexIdToMeta().put(indexId, indexMeta);
+            table.getIndexMetaIdToMeta().put(indexId, indexMeta);
             table.setIndexes(schemaInfo.getIndexes());
             table.renameColumnNamePrefix(indexId);
         }

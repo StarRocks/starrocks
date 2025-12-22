@@ -83,7 +83,7 @@ public class PartitionUpdate {
     }
 
     public boolean isS3Url() {
-        return HiveWriteUtils.isS3Url(targetPath.toString());
+        return HiveUtils.isS3Url(targetPath.toString());
     }
 
     public PartitionUpdate setUpdateMode(UpdateMode updateMode) {

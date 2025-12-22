@@ -45,7 +45,7 @@ import java.util.List;
 
 public class DeleteStmt extends DmlStmt {
     private final TableName tblName;
-    private final PartitionNames partitionNames;
+    private final PartitionRef partitionRef;
     private final List<Relation> usingRelations;
     private final Expr wherePredicate;
     private final List<CTERelation> commonTableExpressions;
@@ -60,20 +60,20 @@ public class DeleteStmt extends DmlStmt {
     // The JobID is generated here for easy correlation when cancel Delete
     private long jobId = -1;
 
-    public DeleteStmt(TableName tableName, PartitionNames partitionNames, Expr wherePredicate) {
+    public DeleteStmt(TableName tableName, PartitionRef partitionNames, Expr wherePredicate) {
         this(tableName, partitionNames, null, wherePredicate, null, NodePosition.ZERO);
     }
 
-    public DeleteStmt(TableName tableName, PartitionNames partitionNames, List<Relation> usingRelations,
+    public DeleteStmt(TableName tableName, PartitionRef partitionNames, List<Relation> usingRelations,
                       Expr wherePredicate, List<CTERelation> commonTableExpressions) {
         this(tableName, partitionNames, usingRelations, wherePredicate, commonTableExpressions, NodePosition.ZERO);
     }
 
-    public DeleteStmt(TableName tableName, PartitionNames partitionNames, List<Relation> usingRelations,
+    public DeleteStmt(TableName tableName, PartitionRef partitionNames, List<Relation> usingRelations,
                       Expr wherePredicate, List<CTERelation> commonTableExpressions, NodePosition pos) {
         super(pos);
         this.tblName = tableName;
-        this.partitionNames = partitionNames;
+        this.partitionRef = partitionNames;
         this.usingRelations = usingRelations;
         this.wherePredicate = wherePredicate;
         this.commonTableExpressions = commonTableExpressions;
@@ -101,11 +101,11 @@ public class DeleteStmt extends DmlStmt {
     }
 
     public List<String> getPartitionNamesList() {
-        return partitionNames == null ? Lists.newArrayList() : partitionNames.getPartitionNames();
+        return partitionRef == null ? Lists.newArrayList() : partitionRef.getPartitionNames();
     }
 
-    public PartitionNames getPartitionNames() {
-        return partitionNames;
+    public PartitionRef getPartitionNames() {
+        return partitionRef;
     }
 
     public List<Relation> getUsingRelations() {

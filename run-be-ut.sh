@@ -208,11 +208,17 @@ else
     echo "Skip Building Java Extensions"
 fi
 
+if [[ -z ${CCACHE} ]] && [[ -x "$(command -v ccache)" ]]; then
+    CCACHE=ccache
+    export CCACHE_SLOPPINESS="pch_defines,time_macros"
+fi
+
+
 cd ${CMAKE_BUILD_DIR}
 ${CMAKE_CMD}  -G "${CMAKE_GENERATOR}" \
             -DSTARROCKS_THIRDPARTY=${STARROCKS_THIRDPARTY}\
             -DSTARROCKS_HOME=${STARROCKS_HOME} \
-            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=$CCACHE \
             -DMAKE_TEST=ON -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} \
             -DUSE_AVX2=$USE_AVX2 -DUSE_AVX512=$USE_AVX512 -DUSE_SSE4_2=$USE_SSE4_2 -DUSE_BMI_2=$USE_BMI_2\
             -DUSE_STAROS=${USE_STAROS} \
@@ -258,7 +264,7 @@ export TERM=xterm
 export UDF_RUNTIME_DIR=${STARROCKS_HOME}/lib/udf-runtime
 export LOG_DIR=${STARROCKS_HOME}/log
 export LSAN_OPTIONS=suppressions=${STARROCKS_HOME}/conf/asan_suppressions.conf
-for i in `sed 's/ //g' $STARROCKS_HOME/conf/be_test.conf | egrep "^[[:upper:]]([[:upper:]]|_|[[:digit:]])*="`; do
+for i in `sed 's/ //g' $STARROCKS_HOME/conf/be_test.conf | grep -E "^[[:upper:]]([[:upper:]]|_|[[:digit:]])*="`; do
     eval "export $i";
 done
 

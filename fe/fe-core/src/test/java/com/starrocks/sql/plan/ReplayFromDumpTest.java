@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.plan;
 
+import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.profile.Tracers;
@@ -1026,6 +1027,7 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
 
     @Test
     public void testExpressionReuseTimeout() throws Exception {
+        Config.max_scalar_operator_flat_children = 300000;
         String dumpString = getDumpInfoFromFile("query_dump/expr_reuse_timeout");
         Tracers.register(connectContext);
         Tracers.init(Tracers.Mode.TIMER, Tracers.Module.OPTIMIZER, false, false);
@@ -1083,7 +1085,7 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
             QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(dumpString);
             Pair<QueryDumpInfo, String> replayPair = getPlanFragment(dumpString, queryDumpInfo.getSessionVariable(),
                     TExplainLevel.NORMAL);
-            Assertions.assertTrue(replayPair.second.contains("1:EMPTYSET"), replayPair.second);
+            Assertions.assertTrue(replayPair.second.contains("EMPTYSET"), replayPair.second);
         } finally {
             FeConstants.enablePruneEmptyOutputScan = false;
         }
@@ -1133,5 +1135,50 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
     public void testNestCTERewrite() throws Exception {
         String plan = getPlanFragment("query_dump/nest_cte_reuse", TExplainLevel.NORMAL);
         PlanTestBase.assertContains(plan, "MultiCastDataSinks");
+    }
+
+    @Test
+    public void testReplayBeCoreStat() throws Exception {
+        {
+            String dumpString = getDumpInfoFromFile("query_dump/test_replay_be_core_stat_v1");
+            QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(dumpString);
+            Pair<QueryDumpInfo, String> replayPair =
+                    getPlanFragment(dumpString, queryDumpInfo.getSessionVariable(), TExplainLevel.NORMAL);
+            queryDumpInfo = replayPair.first;
+            int dop = queryDumpInfo.getSessionVariable().getDegreeOfParallelism(connectContext.getCurrentWarehouseId());
+            Assertions.assertEquals(6, dop);
+        }
+
+        {
+            String dumpString = getDumpInfoFromFile("query_dump/test_replay_be_core_stat_v2_0");
+            QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(dumpString);
+            Pair<QueryDumpInfo, String> replayPair =
+                    getPlanFragment(dumpString, queryDumpInfo.getSessionVariable(), TExplainLevel.NORMAL);
+            queryDumpInfo = replayPair.first;
+            int dop = queryDumpInfo.getSessionVariable().getDegreeOfParallelism(connectContext.getCurrentWarehouseId());
+            Assertions.assertEquals(4, dop);
+        }
+
+        {
+            String dumpString = getDumpInfoFromFile("query_dump/test_replay_be_core_stat_v2_1");
+            QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(dumpString);
+            Pair<QueryDumpInfo, String> replayPair =
+                    getPlanFragment(dumpString, queryDumpInfo.getSessionVariable(), TExplainLevel.NORMAL);
+            queryDumpInfo = replayPair.first;
+            int dop = queryDumpInfo.getSessionVariable().getDegreeOfParallelism(connectContext.getCurrentWarehouseId());
+            Assertions.assertEquals(8, dop);
+        }
+    }
+
+    @Test
+    public void testJoinAggDisableLowCardinality() throws Exception {
+        FeConstants.USE_MOCK_DICT_MANAGER = true;
+        String dumpString = getDumpInfoFromFile("query_dump/join_agg_low_cardinality");
+        QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(dumpString);
+        Pair<QueryDumpInfo, String> replayPair = getPlanFragment(dumpString, queryDumpInfo.getSessionVariable(),
+                TExplainLevel.NORMAL);
+        FeConstants.USE_MOCK_DICT_MANAGER = false;
+        PlanTestBase.assertContains(replayPair.second, "  1:OlapScanNode\n"
+                + "     TABLE: rpt_crm_reach_goal_cust_all_d");
     }
 }

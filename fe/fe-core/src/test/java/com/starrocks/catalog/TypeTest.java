@@ -217,7 +217,7 @@ public class TypeTest {
                 {TypeFactory.createDecimalV3NarrowestType(9, 2), "DECIMAL(9,2)"},
                 {TypeFactory.createDecimalV3NarrowestType(18, 4), "DECIMAL(18,4)"},
                 {TypeFactory.createDecimalV3NarrowestType(38, 6), "DECIMAL(38,6)"},
-                {TypeFactory.createVarchar(16), "VARCHAR(16)"},
+                {TypeFactory.createVarcharType(16), "VARCHAR(16)"},
                 {TypeFactory.createCharType(16), "CHAR(16)"},
                 {IntegerType.INT, "INT"},
                 {FloatType.FLOAT, "FLOAT"},

@@ -1,4 +1,4 @@
--- name: test_mv_refresh_strategy_with_force
+-- name: test_mv_refresh_strategy_with_force @slow
 create database db_${uuid0};
 use db_${uuid0};
 

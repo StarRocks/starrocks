@@ -28,8 +28,8 @@ import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
 import com.starrocks.common.util.concurrent.lock.LockType;
-import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
@@ -39,7 +39,6 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -74,36 +73,33 @@ public class SplitTabletJobFactory implements TabletReshardJobFactory {
                     + " in table " + db.getFullName() + '.' + table.getName());
         }
 
-        if (table.getDefaultDistributionInfo().getType() != DistributionInfoType.HASH) {
+        if (table.getDefaultDistributionInfo().getType() != DistributionInfoType.RANGE) {
             throw new StarRocksException("Unsupported distribution type " + table.getDefaultDistributionInfo().getType()
                     + " in table " + db.getFullName() + '.' + table.getName());
         }
 
-        Map<Long, PhysicalPartitionContext> physicalPartitionContexts = createPhysicalPartitionContexts();
-        if (physicalPartitionContexts.isEmpty()) {
+        Map<Long, ReshardingPhysicalPartition> reshardingPhysicalPartitions = createReshardingPhysicalPartitions();
+        if (reshardingPhysicalPartitions.isEmpty()) {
             throw new StarRocksException("No tablets need to split in table "
                     + db.getFullName() + '.' + table.getName());
         }
 
-        createNewShards(physicalPartitionContexts);
+        createNewShards(reshardingPhysicalPartitions);
 
         long jobId = GlobalStateMgr.getCurrentState().getNextId();
-        return new TabletReshardJob(jobId, TabletReshardJob.JobType.SPLIT_TABLET,
-                db.getId(), table.getId(), physicalPartitionContexts);
+        return new SplitTabletJob(jobId, db.getId(), table.getId(), reshardingPhysicalPartitions);
     }
 
     /*
      * Create physical partition contexts for all tablets that need to split
      */
-    private Map<Long, PhysicalPartitionContext> createPhysicalPartitionContexts() throws StarRocksException {
+    private Map<Long, ReshardingPhysicalPartition> createReshardingPhysicalPartitions() throws StarRocksException {
         Preconditions.checkState(splitTabletClause.getPartitionNames() == null ||
                 splitTabletClause.getTabletList() == null);
 
-        Map<Long, PhysicalPartitionContext> physicalPartitionContexts = new HashMap<>();
+        Map<Long, ReshardingPhysicalPartition> reshardingPhysicalPartitions = new HashMap<>();
 
-        Locker locker = new Locker();
-        locker.lockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
-        try {
+        try (AutoCloseableLock lock = new AutoCloseableLock(db.getId(), table.getId(), LockType.READ)) {
             if (table.getState() != OlapTable.OlapTableState.NORMAL) {
                 throw new StarRocksException("Unexpected table state " + table.getState()
                         + " in table " + db.getFullName() + '.' + table.getName());
@@ -115,49 +111,50 @@ public class SplitTabletJobFactory implements TabletReshardJobFactory {
 
                 for (var physicalPartitionEntry : tablets.entrySet()) {
                     PhysicalPartition physicalPartition = physicalPartitionEntry.getKey();
-                    Map<Long, ReshardingTablets> reshardingTabletses = new HashMap<>();
+                    Map<Long, ReshardingMaterializedIndex> reshardingIndexes = new HashMap<>();
                     for (var indexEntry : physicalPartitionEntry.getValue().entrySet()) {
-                        MaterializedIndex index = indexEntry.getKey();
+                        MaterializedIndex oldIndex = indexEntry.getKey();
 
-                        List<SplittingTablet> splittingTablets = new ArrayList<>();
+                        Map<Long, SplittingTablet> splittingTablets = new HashMap<>();
                         for (Tablet tablet : indexEntry.getValue()) {
                             int newTabletCount = 0;
-                            if (splitTabletClause.getTabletReshardSplitSize() <= 0) {
-                                long splitCount = -splitTabletClause.getTabletReshardSplitSize();
-                                if (splitCount > Config.tablet_reshard_max_split_count
-                                        || !TabletReshardUtils.isPowerOfTwo(splitCount)) {
-                                    throw new StarRocksException("Invalid tablet_reshard_split_size: "
-                                            + splitTabletClause.getTabletReshardSplitSize());
+                            if (splitTabletClause.getTabletReshardTargetSize() <= 0) {
+                                long splitCount = -splitTabletClause.getTabletReshardTargetSize();
+                                if (splitCount > Config.tablet_reshard_max_split_count) {
+                                    throw new StarRocksException("Invalid tablet_reshard_target_size: "
+                                            + splitTabletClause.getTabletReshardTargetSize());
                                 }
 
                                 newTabletCount = (int) splitCount;
                             } else {
                                 newTabletCount = TabletReshardUtils.calcSplitCount(tablet.getDataSize(true),
-                                        splitTabletClause.getTabletReshardSplitSize());
+                                        splitTabletClause.getTabletReshardTargetSize());
                             }
 
                             if (newTabletCount <= 1) {
                                 continue;
                             }
 
-                            splittingTablets.add(createSplittingTablet(tablet.getId(), newTabletCount));
+                            splittingTablets.put(tablet.getId(), createSplittingTablet(tablet.getId(), newTabletCount));
                         }
 
                         if (splittingTablets.isEmpty()) {
                             continue;
                         }
 
-                        reshardingTabletses.put(index.getId(), createReshardingTablets(index, splittingTablets));
+                        List<ReshardingTablet> reshardingTablets = createReshardingTablets(oldIndex, splittingTablets);
+                        reshardingIndexes.put(oldIndex.getId(),
+                                new ReshardingMaterializedIndex(oldIndex.getId(),
+                                        createMaterializedIndex(oldIndex, reshardingTablets),
+                                        reshardingTablets));
                     }
 
-                    if (reshardingTabletses.isEmpty()) {
+                    if (reshardingIndexes.isEmpty()) {
                         continue;
                     }
 
-                    physicalPartitionContexts.put(physicalPartition.getId(),
-                            new PhysicalPartitionContext(
-                                    createPhysicalPartition(physicalPartition, reshardingTabletses),
-                                    reshardingTabletses));
+                    reshardingPhysicalPartitions.put(physicalPartition.getId(),
+                            new ReshardingPhysicalPartition(physicalPartition.getId(), reshardingIndexes));
                 }
             } else {
                 Collection<PhysicalPartition> physicalPartitions = null;
@@ -176,47 +173,47 @@ public class SplitTabletJobFactory implements TabletReshardJobFactory {
                 }
 
                 for (PhysicalPartition physicalPartition : physicalPartitions) {
-                    Map<Long, ReshardingTablets> reshardingTabletses = new HashMap<>();
-                    for (MaterializedIndex index : physicalPartition.getMaterializedIndices(IndexExtState.VISIBLE)) {
+                    Map<Long, ReshardingMaterializedIndex> reshardingIndexes = new HashMap<>();
+                    for (MaterializedIndex oldIndex : physicalPartition.getMaterializedIndices(IndexExtState.VISIBLE)) {
 
-                        List<SplittingTablet> splittingTablets = new ArrayList<>();
-                        for (Tablet tablet : index.getTablets()) {
-                            Preconditions.checkState(splitTabletClause.getTabletReshardSplitSize() > 0,
-                                    "Invalid tablet_reshard_split_size: "
-                                            + splitTabletClause.getTabletReshardSplitSize());
+                        Map<Long, SplittingTablet> splittingTablets = new HashMap<>();
+                        for (Tablet tablet : oldIndex.getTablets()) {
+                            Preconditions.checkState(splitTabletClause.getTabletReshardTargetSize() > 0,
+                                    "Invalid tablet_reshard_target_size: "
+                                            + splitTabletClause.getTabletReshardTargetSize());
 
                             int newTabletCount = TabletReshardUtils.calcSplitCount(tablet.getDataSize(true),
-                                    splitTabletClause.getTabletReshardSplitSize());
+                                    splitTabletClause.getTabletReshardTargetSize());
 
                             if (newTabletCount <= 1) {
                                 continue;
                             }
 
-                            splittingTablets.add(createSplittingTablet(tablet.getId(), newTabletCount));
+                            splittingTablets.put(tablet.getId(), createSplittingTablet(tablet.getId(), newTabletCount));
                         }
 
                         if (splittingTablets.isEmpty()) {
                             continue;
                         }
 
-                        reshardingTabletses.put(index.getId(), createReshardingTablets(index, splittingTablets));
+                        List<ReshardingTablet> reshardingTablets = createReshardingTablets(oldIndex, splittingTablets);
+                        reshardingIndexes.put(oldIndex.getId(),
+                                new ReshardingMaterializedIndex(oldIndex.getId(),
+                                        createMaterializedIndex(oldIndex, reshardingTablets),
+                                        reshardingTablets));
                     }
 
-                    if (reshardingTabletses.isEmpty()) {
+                    if (reshardingIndexes.isEmpty()) {
                         continue;
                     }
 
-                    physicalPartitionContexts.put(physicalPartition.getId(),
-                            new PhysicalPartitionContext(
-                                    createPhysicalPartition(physicalPartition, reshardingTabletses),
-                                    reshardingTabletses));
+                    reshardingPhysicalPartitions.put(physicalPartition.getId(),
+                            new ReshardingPhysicalPartition(physicalPartition.getId(), reshardingIndexes));
                 }
             }
-        } finally {
-            locker.unLockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
         }
 
-        return physicalPartitionContexts;
+        return reshardingPhysicalPartitions;
     }
 
     private Map<PhysicalPartition, Map<MaterializedIndex, Collection<Tablet>>> getTabletsByTabletIds(
@@ -270,90 +267,59 @@ public class SplitTabletJobFactory implements TabletReshardJobFactory {
         return tablets;
     }
 
-    private ReshardingTablets createReshardingTablets(MaterializedIndex index, List<SplittingTablet> splittingTablets) {
-        List<IdenticalTablet> identicalTablets = new ArrayList<>();
-        TABLETS_LOOP: for (Tablet tablet : index.getTablets()) {
-            for (SplittingTablet splittingTablet : splittingTablets) {
-                if (splittingTablet.getOldTabletId() == tablet.getId()) {
-                    continue TABLETS_LOOP;
-                }
+    private List<ReshardingTablet> createReshardingTablets(MaterializedIndex index,
+            Map<Long, SplittingTablet> splittingTablets) {
+        List<ReshardingTablet> reshardingTablets = new ArrayList<>();
+        for (Tablet tablet : index.getTablets()) {
+            SplittingTablet splittingTablet = splittingTablets.get(tablet.getId());
+            if (splittingTablet != null) {
+                reshardingTablets.add(splittingTablet);
+            } else {
+                reshardingTablets.add(createIdenticalTablet(tablet.getId()));
             }
-
-            IdenticalTablet identicalTablet = createIdenticalTablet(tablet.getId());
-            identicalTablets.add(identicalTablet);
         }
 
-        return new ReshardingTablets(splittingTablets, Collections.emptyList(), identicalTablets);
+        return reshardingTablets;
     }
 
-    private MaterializedIndex createMaterializedIndex(MaterializedIndex oldIndex, ReshardingTablets reshardingTablets) {
+    private MaterializedIndex createMaterializedIndex(MaterializedIndex oldIndex,
+            List<ReshardingTablet> reshardingTablets) {
+        // TODO: Use new id after multiple versions of MaterializedIndex is supported
         MaterializedIndex newIndex = new MaterializedIndex(oldIndex.getId(), IndexState.NORMAL,
                 oldIndex.getShardGroupId());
 
-        for (long tabletId : reshardingTablets.getNewTabletIds()) {
-            Tablet tablet = new LakeTablet(tabletId);
-            newIndex.addTablet(tablet, null, false);
+        for (ReshardingTablet reshardingTablet : reshardingTablets) {
+            for (long tabletId : reshardingTablet.getNewTabletIds()) {
+                Tablet tablet = new LakeTablet(tabletId);
+                newIndex.addTablet(tablet, null, false);
+            }
         }
 
-        // newIndex.setVirtualBuckets(reshardingTablets.calcNewVirtualBuckets(oldIndex.getVirtualBuckets()));
         return newIndex;
     }
 
-    private PhysicalPartition createPhysicalPartition(PhysicalPartition oldPhysicalPartition,
-            Map<Long, ReshardingTablets> reshardingTabletses) {
-        PhysicalPartition newPhysicalPartition = new PhysicalPartition(
-                GlobalStateMgr.getCurrentState().getNextId(), null, oldPhysicalPartition);
-
-        for (MaterializedIndex oldIndex : oldPhysicalPartition.getMaterializedIndices(IndexExtState.VISIBLE)) {
-            ReshardingTablets reshardingTablets = reshardingTabletses.get(oldIndex.getId());
-            if (reshardingTablets == null) {
-                reshardingTablets = createReshardingTablets(oldIndex, Collections.emptyList());
-            }
-
-            MaterializedIndex newIndex = createMaterializedIndex(oldIndex, reshardingTablets);
-            if (oldIndex == oldPhysicalPartition.getBaseIndex()) {
-                newPhysicalPartition.setBaseIndex(newIndex);
-            } else {
-                newPhysicalPartition.createRollupIndex(newIndex);
-            }
-        }
-
-        return newPhysicalPartition;
-    }
-
-    private void createNewShards(Map<Long, PhysicalPartitionContext> physicalPartitionContexts)
+    private void createNewShards(Map<Long, ReshardingPhysicalPartition> reshardingPhysicalPartitions)
             throws StarRocksException {
-        for (var physicalPartitionEntry : physicalPartitionContexts.entrySet()) {
-            long oldPhysicalPartitionId = physicalPartitionEntry.getKey();
-            PhysicalPartitionContext physicalPartitionContext = physicalPartitionEntry.getValue();
-            PhysicalPartition physicalPartition = physicalPartitionContext.getPhysicalPartition();
-
-            for (var indexEntry : physicalPartitionContext.getReshardingTabletses().entrySet()) {
-                long indexId = indexEntry.getKey();
-                MaterializedIndex index = physicalPartition.getIndex(indexId);
-                ReshardingTablets reshardingTablets = indexEntry.getValue();
-
+        for (ReshardingPhysicalPartition reshardingPhysicalPartition : reshardingPhysicalPartitions.values()) {
+            long physicalPartitionId = reshardingPhysicalPartition.getPhysicalPartitionId();
+            for (ReshardingMaterializedIndex reshardingIndex : reshardingPhysicalPartition
+                    .getReshardingIndexes().values()) {
+                MaterializedIndex newIndex = reshardingIndex.getMaterializedIndex();
                 Map<Long, List<Long>> oldToNewTabletIds = new HashMap<>();
-                for (SplittingTablet splittingTablet : reshardingTablets.getSplittingTablets()) {
-                    oldToNewTabletIds.put(splittingTablet.getOldTabletId(), splittingTablet.getNewTabletIds());
-                }
-                for (IdenticalTablet identicalTablet : reshardingTablets.getIdenticalTablets()) {
-                    oldToNewTabletIds.put(identicalTablet.getOldTabletId(),
-                            List.of(identicalTablet.getNewTabletId()));
+                for (ReshardingTablet reshardingTablet : reshardingIndex.getReshardingTablets()) {
+                    oldToNewTabletIds.put(reshardingTablet.getFirstOldTabletId(), reshardingTablet.getNewTabletIds());
                 }
 
                 Map<String, String> properties = new HashMap<>();
                 properties.put(LakeTablet.PROPERTY_KEY_TABLE_ID, Long.toString(table.getId()));
-                properties.put(LakeTablet.PROPERTY_KEY_PARTITION_ID, Long.toString(physicalPartition.getId()));
-                properties.put(LakeTablet.PROPERTY_KEY_INDEX_ID, Long.toString(indexId));
+                properties.put(LakeTablet.PROPERTY_KEY_PARTITION_ID, Long.toString(physicalPartitionId));
+                properties.put(LakeTablet.PROPERTY_KEY_INDEX_ID, Long.toString(newIndex.getId()));
 
-                // Create shards with the path id of the old physical partition.
-                // The old and new phsycal partition will share the same storage path.
                 GlobalStateMgr.getCurrentState().getStarOSAgent().createShards(
                         oldToNewTabletIds,
-                        table.getPartitionFilePathInfo(oldPhysicalPartitionId),
-                        table.getPartitionFileCacheInfo(oldPhysicalPartitionId),
-                        index.getShardGroupId(),
+                        table.getPartitionFilePathInfo(physicalPartitionId),
+                        table.getPartitionFileCacheInfo(physicalPartitionId),
+                        newIndex.getShardGroupId(),
                         properties, WarehouseManager.DEFAULT_RESOURCE);
             }
         }

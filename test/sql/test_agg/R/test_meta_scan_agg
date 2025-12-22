@@ -112,3 +112,42 @@ select min(c0), max(c0), min(c1), max(c1) from t1 TEMPORARY PARTITION(tp202403);
 -- result:
 2024-03-10	2024-03-20	50	70
 -- !result
+-- name: test_meta_scan_with_renamed_column
+create table t2 (
+    c0 INT
+) DUPLICATE key (c0) DISTRIBUTED BY HASH(c0) BUCKETS 3 PROPERTIES('replication_num' = '1');
+-- result:
+-- !result
+insert into t2 values (1), (2), (3);
+-- result:
+-- !result
+select count(*) from t2[_META_];
+-- result:
+3
+-- !result
+select count(*) from t2;
+-- result:
+3
+-- !result
+alter table t2 rename column c0 to c1;
+-- result:
+-- !result
+select count(*) from t2[_META_];
+-- result:
+3
+-- !result
+select count(*) from t2;
+-- result:
+3
+-- !result
+alter table t2 rename column c1 to c2;
+-- result:
+-- !result
+select count(*) from t2[_META_];
+-- result:
+3
+-- !result
+select count(*) from t2;
+-- result:
+3
+-- !result

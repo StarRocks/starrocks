@@ -66,7 +66,7 @@ read_var_from_conf() {
 
 export_env_from_conf() {
     while read line; do
-        envline=`echo $line | sed 's/[[:blank:]]*=[[:blank:]]*/=/g' | sed 's/^[[:blank:]]*//g' | egrep "^[[:upper:]]([[:upper:]]|_|[[:digit:]])*="`
+        envline=`echo $line | sed 's/[[:blank:]]*=[[:blank:]]*/=/g' | sed 's/^[[:blank:]]*//g' | grep -E "^[[:upper:]]([[:upper:]]|_|[[:digit:]])*="`
         envline=`eval "echo $envline"`
         if [[ $envline == *"="* ]]; then
             eval 'export "$envline"'

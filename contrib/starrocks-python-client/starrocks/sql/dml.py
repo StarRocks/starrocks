@@ -18,10 +18,10 @@ from urllib.parse import urlparse
 from sqlalchemy.schema import Table
 from sqlalchemy.sql import TableClause, ClauseElement
 from sqlalchemy.sql.dml import UpdateBase
-from sqlalchemy.sql.roles import FromClauseRole
+from sqlalchemy.sql.functions import FunctionElement
 
 
-class FilesClause(ClauseElement, FromClauseRole):
+class FilesClause(ClauseElement):
     """FILES Base Class
 
     This class represents the base class for a FILES <https://docs.starrocks.io/docs/sql-reference/sql-functions/table-functions/files/> table function in Starrocks
@@ -32,6 +32,7 @@ class FilesClause(ClauseElement, FromClauseRole):
     __visit_name__ = 'files'
 
     def __init__(self, format: "FilesFormat", options: "_FilesOptions" = None):
+        super().__init__()
         self.format = format
         self.options = options
 
@@ -190,10 +191,10 @@ class FilesTargetOptions(_FilesOptions):
             self.options["partitioned_by"] = partitioned_by
 
 
-class FilesSource(FilesClause):
+class FilesSource(FilesClause, FunctionElement):
     """Represents a FILES table function in Starrocks when used for loading data
 
-    Example Usage, used with InsertFromFiles class:
+    Example Usage, used with InsertFromFiles class::
 
         m = MetaData()
         tbl = Table(
@@ -217,8 +218,28 @@ class FilesSource(FilesClause):
             ),
         )
 
+    Example Usage, selecting with table_valued method::
+
+        m = MetaData()
+        tbl_files = FilesSource(
+            storage=GoogleCloudStorage(
+                uri='gs://starrocks/atable.parquet',
+                service_account_email='x@y.z',
+                service_account_private_key_id='mykey',
+                service_account_private_key='some_private_key',
+            ),
+            format=ParquetFormat(
+                compression=Compression.SNAPPY
+            ),
+        ).table_valued(*[literal_column(f"${i}") for i in range(10)])
+        sel_cols = sqlalchemy.select(
+            cast(tbl_files.c['$1'], String).label('Col1'),
+            func.IF(tbl_files.c['$2'] == "xyz", "NULL", t_files.c['$2']).label('Col2'),
+        )
+
     """
     __visit_name__ = 'files_source'
+    inherit_cache = False
 
     def __init__(
         self,

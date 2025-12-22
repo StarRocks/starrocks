@@ -20,8 +20,10 @@
 #include <memory>
 #include <utility>
 
+#include "agent/master_info.h"
 #include "column/chunk.h"
 #include "column/column.h"
+#include "common/config.h"
 #include "fs/bundle_file.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
@@ -33,8 +35,10 @@
 #include "storage/lake/metacache.h"
 #include "storage/lake/pk_tablet_writer.h"
 #include "storage/lake/spill_mem_table_sink.h"
+#include "storage/lake/table_schema_service.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"
+#include "storage/lake/tablet_write_log_manager.h"
 #include "storage/lake/tablet_writer.h"
 #include "storage/lake/update_manager.h"
 #include "storage/load_spill_block_manager.h"
@@ -85,15 +89,16 @@ class DeltaWriterImpl {
 public:
     explicit DeltaWriterImpl(TabletManager* tablet_manager, int64_t tablet_id, int64_t txn_id, int64_t partition_id,
                              const std::vector<SlotDescriptor*>* slots, std::string merge_condition,
-                             bool miss_auto_increment_column, int64_t table_id, int64_t immutable_tablet_size,
-                             MemTracker* mem_tracker, int64_t max_buffer_size, int64_t schema_id,
-                             const PartialUpdateMode& partial_update_mode,
+                             bool miss_auto_increment_column, int64_t db_id, int64_t table_id,
+                             int64_t immutable_tablet_size, MemTracker* mem_tracker, int64_t max_buffer_size,
+                             int64_t schema_id, const PartialUpdateMode& partial_update_mode,
                              const std::map<string, string>* column_to_expr_value, PUniqueId load_id,
                              RuntimeProfile* profile, BundleWritableFileContext* bundle_writable_file_context,
                              GlobalDictByNameMaps* global_dicts, bool is_multi_statements_txn)
             : _tablet_manager(tablet_manager),
               _tablet_id(tablet_id),
               _txn_id(txn_id),
+              _db_id(db_id),
               _table_id(table_id),
               _partition_id(partition_id),
               _schema_id(schema_id),
@@ -170,10 +175,14 @@ public:
 
     const GlobalDictByNameMaps* global_dicts() const { return _global_dicts; }
 
+    void set_already_finished(bool val) { _already_finished = val; }
+
+    bool already_finished() const { return _already_finished; }
+
 private:
     Status reset_memtable();
 
-    Status fill_auto_increment_id(const Chunk& chunk);
+    Status fill_auto_increment_id(Chunk& chunk);
 
     Status init_tablet_schema();
 
@@ -190,6 +199,7 @@ private:
     TabletManager* _tablet_manager;
     const int64_t _tablet_id;
     const int64_t _txn_id;
+    const int64_t _db_id;
     const int64_t _table_id;
     const int64_t _partition_id;
     const int64_t _schema_id;
@@ -255,6 +265,17 @@ private:
 
     GlobalDictByNameMaps* _global_dicts = nullptr;
     bool _is_multi_statements_txn = false;
+
+    // Record the time when DeltaWriter is opened
+    int64_t _begin_time_ms = 0;
+
+    // Whether finish() has been called. Used to prevent write/flush tasks after finish task.
+    // This is critical because:
+    // 1. During load spill, finish task may run in a separate thread pool, causing concurrent
+    //    memtable access with write/flush tasks that would still run in the original thread.
+    // 2. After finish completes, txnlog is generated with all data files. Any subsequent write
+    //    tasks will have their data discarded, resulting in data loss.
+    bool _already_finished = false;
 };
 
 bool DeltaWriterImpl::is_immutable() const {
@@ -401,18 +422,14 @@ inline Status DeltaWriterImpl::init_tablet_schema() {
         return Status::OK();
     }
     ASSIGN_OR_RETURN(auto tablet, _tablet_manager->get_tablet(_tablet_id));
-    auto res = tablet.get_schema_by_id(_schema_id);
-    if (res.ok()) {
-        _tablet_schema = std::move(res).value();
-        return Status::OK();
-    } else if (res.status().is_not_found()) {
-        LOG(WARNING) << "No schema file of id=" << _schema_id << " for tablet=" << _tablet_id;
-        // schema file does not exist, fetch tablet schema from tablet metadata
-        ASSIGN_OR_RETURN(_tablet_schema, tablet.get_schema());
-        return Status::OK();
-    } else {
-        return res.status();
-    }
+    TabletMetadataPtr latest_metadata = _tablet_manager->get_latest_cached_tablet_metadata(_tablet_id);
+    TableSchemaKeyPB schema_key;
+    schema_key.set_schema_id(_schema_id);
+    schema_key.set_db_id(_db_id);
+    schema_key.set_table_id(_table_id);
+    ASSIGN_OR_RETURN(_tablet_schema, _tablet_manager->table_schema_service()->get_schema_for_load(
+                                             schema_key, _tablet_id, _txn_id, latest_metadata));
+    return Status::OK();
 }
 
 inline Status DeltaWriterImpl::manual_flush() {
@@ -444,6 +461,8 @@ Status DeltaWriterImpl::open() {
     if (_bundle_writable_file_context) {
         _bundle_writable_file_context->increase_active_writers();
     }
+    // Record the time when DeltaWriter is opened for write amplification tracking
+    _begin_time_ms = UnixMillis();
     return Status::OK();
 }
 
@@ -489,6 +508,7 @@ Status DeltaWriterImpl::write(const Chunk& chunk, const uint32_t* indexes, uint3
     RETURN_IF_ERROR(check_partial_update_with_sort_key(chunk));
     ADD_COUNTER_RELAXED(_stats.write_count, 1);
     ADD_COUNTER_RELAXED(_stats.row_count, indexes_size);
+    ADD_COUNTER_RELAXED(_stats.input_bytes, chunk.bytes_usage());
     auto start_time = MonotonicNanos();
     DeferOp defer([&]() { ADD_COUNTER_RELAXED(_stats.write_time_ns, MonotonicNanos() - start_time); });
     _last_write_ts = butil::gettimeofday_s();
@@ -613,6 +633,10 @@ StatusOr<TxnLogPtr> DeltaWriterImpl::finish_with_txnlog(DeltaWriterFinishMode mo
         *txn_log->mutable_load_id() = _load_id;
     }
     auto op_write = txn_log->mutable_op_write();
+    auto table_schema_key = op_write->mutable_schema_key();
+    table_schema_key->set_db_id(_db_id);
+    table_schema_key->set_table_id(_table_id);
+    table_schema_key->set_schema_id(_tablet_schema->id());
 
     for (auto& f : _tablet_writer->files()) {
         if (is_segment(f.path)) {
@@ -737,10 +761,19 @@ StatusOr<TxnLogPtr> DeltaWriterImpl::finish_with_txnlog(DeltaWriterFinishMode mo
     StarRocksMetrics::instance()->delta_writer_pk_preload_duration_us.increment(pk_preload_duration_ns /
                                                                                 NANOSECS_PER_USEC);
     VLOG(2) << "txn_log: " << txn_log->DebugString();
+
+    if (config::enable_tablet_write_log) {
+        int64_t finish_time = UnixMillis();
+        TabletWriteLogManager::instance()->add_load_log(
+                get_backend_id().value_or(0), _txn_id, _tablet_id, _table_id, _partition_id, _stats.row_count,
+                _stats.input_bytes, _tablet_writer->num_rows(), _tablet_writer->data_size(),
+                op_write->rowset().segments_size(), UniqueId(_load_id).to_string(), _begin_time_ms, finish_time);
+    }
+
     return txn_log;
 }
 
-Status DeltaWriterImpl::fill_auto_increment_id(const Chunk& chunk) {
+Status DeltaWriterImpl::fill_auto_increment_id(Chunk& chunk) {
     ASSIGN_OR_RETURN(auto tablet, _tablet_manager->get_tablet(_tablet_id));
 
     // 1. get pk column from chunk
@@ -799,8 +832,9 @@ Status DeltaWriterImpl::fill_auto_increment_id(const Chunk& chunk) {
     for (int i = 0; i < _write_schema->num_columns(); i++) {
         const TabletColumn& tablet_column = _write_schema->column(i);
         if (tablet_column.is_auto_increment()) {
-            auto& column = chunk.get_column_by_index(i);
-            RETURN_IF_ERROR((Int64Column::dynamic_pointer_cast(column))->fill_range(ids, filter));
+            auto* column = chunk.get_column_raw_ptr_by_index(i);
+            auto* int64_column = down_cast<Int64Column*>(column);
+            RETURN_IF_ERROR(int64_column->fill_range(ids, filter));
             break;
         }
     }
@@ -964,6 +998,14 @@ const GlobalDictByNameMaps* DeltaWriter::global_dict_map() const {
     return _impl->global_dicts();
 }
 
+void DeltaWriter::set_already_finished(bool val) {
+    _impl->set_already_finished(val);
+}
+
+bool DeltaWriter::already_finished() const {
+    return _impl->already_finished();
+}
+
 ThreadPool* DeltaWriter::io_threads() {
     if (UNLIKELY(StorageEngine::instance() == nullptr)) {
         return nullptr;
@@ -996,10 +1038,11 @@ StatusOr<DeltaWriterBuilder::DeltaWriterPtr> DeltaWriterBuilder::build() {
     if (UNLIKELY(_schema_id == 0)) {
         return Status::InvalidArgument("schema_id not set");
     }
-    auto impl = new DeltaWriterImpl(_tablet_mgr, _tablet_id, _txn_id, _partition_id, _slots, _merge_condition,
-                                    _miss_auto_increment_column, _table_id, _immutable_tablet_size, _mem_tracker,
-                                    _max_buffer_size, _schema_id, _partial_update_mode, _column_to_expr_value, _load_id,
-                                    _profile, _bundle_writable_file_context, _global_dicts, _is_multi_statements_txn);
+    auto impl =
+            new DeltaWriterImpl(_tablet_mgr, _tablet_id, _txn_id, _partition_id, _slots, _merge_condition,
+                                _miss_auto_increment_column, _db_id, _table_id, _immutable_tablet_size, _mem_tracker,
+                                _max_buffer_size, _schema_id, _partial_update_mode, _column_to_expr_value, _load_id,
+                                _profile, _bundle_writable_file_context, _global_dicts, _is_multi_statements_txn);
     return std::make_unique<DeltaWriter>(impl);
 }
 

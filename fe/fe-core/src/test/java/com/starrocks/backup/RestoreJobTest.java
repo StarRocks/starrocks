@@ -49,7 +49,6 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.FakeEditLog;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionName;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.MaterializedView;
@@ -69,6 +68,7 @@ import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentTask;
@@ -354,8 +354,8 @@ public class RestoreJobTest {
                 for (MaterializedIndex index : physicalPartition.getMaterializedIndices(IndexExtState.VISIBLE)) {
                     BackupIndexInfo idxInfo = new BackupIndexInfo();
                     idxInfo.id = index.getId();
-                    idxInfo.name = expectedRestoreTbl.getIndexNameById(index.getId());
-                    idxInfo.schemaHash = expectedRestoreTbl.getSchemaHashByIndexId(index.getId());
+                    idxInfo.name = expectedRestoreTbl.getIndexNameByMetaId(index.getId());
+                    idxInfo.schemaHash = expectedRestoreTbl.getSchemaHashByIndexMetaId(index.getId());
                     physicalPartInfo.indexes.put(idxInfo.name, idxInfo);
 
                     for (Tablet tablet : index.getTablets()) {
@@ -534,8 +534,8 @@ public class RestoreJobTest {
                     .getMaterializedIndices(IndexExtState.VISIBLE)) {
                 BackupIndexInfo idxInfo = new BackupIndexInfo();
                 idxInfo.id = index.getId();
-                idxInfo.name = expectedRestoreTbl.getIndexNameById(index.getId());
-                idxInfo.schemaHash = expectedRestoreTbl.getSchemaHashByIndexId(index.getId());
+                idxInfo.name = expectedRestoreTbl.getIndexNameByMetaId(index.getId());
+                idxInfo.schemaHash = expectedRestoreTbl.getSchemaHashByIndexMetaId(index.getId());
                 partInfo.indexes.put(idxInfo.name, idxInfo);
 
                 for (Tablet tablet : index.getTablets()) {
@@ -706,8 +706,8 @@ public class RestoreJobTest {
                     .getMaterializedIndices(IndexExtState.VISIBLE)) {
                 BackupIndexInfo idxInfo = new BackupIndexInfo();
                 idxInfo.id = index.getId();
-                idxInfo.name = expectedRestoreTbl.getIndexNameById(index.getId());
-                idxInfo.schemaHash = expectedRestoreTbl.getSchemaHashByIndexId(index.getId());
+                idxInfo.name = expectedRestoreTbl.getIndexNameByMetaId(index.getId());
+                idxInfo.schemaHash = expectedRestoreTbl.getSchemaHashByIndexMetaId(index.getId());
                 partInfo.indexes.put(idxInfo.name, idxInfo);
 
                 for (Tablet tablet : index.getTablets()) {

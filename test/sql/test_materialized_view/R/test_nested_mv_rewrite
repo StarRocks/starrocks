@@ -228,7 +228,7 @@ explain logical
 -- !result
 [UC]select regexp_replace(inspect_related_mv('dim_ccc'), '"id":[0-9]+', '"id":0');
 -- result:
-[{"id":0,"name":"join_mv2","level":0,"related_mvs":[{"id":0,"name":"join_mv3","level":1,"related_mvs":[]}]},{"id":0,"name":"join_mv1","level":0,"related_mvs":[]}]
+[{"id":0,"name":"join_mv1","level":0,"related_mvs":[{"id":0,"name":"join_mv3","level":1,"related_mvs":[]}]},{"id":0,"name":"join_mv2","level":0,"related_mvs":[]}]
 -- !result
 [UC]select regexp_replace(inspect_related_mv('join_mv1'), '"id":[0-9]+', '"id":0');
 -- result:
@@ -241,4 +241,153 @@ explain logical
 [UC]select inspect_related_mv('join_mv3');
 -- result:
 []
+-- !result
+-- name: test_nested_mv_with_partial_compensation
+CREATE TABLE t1 (
+    `k1` INT,
+    `v1` INT,
+    `v2` INT)
+DUPLICATE KEY(`k1`)
+PARTITION BY RANGE(`k1`)
+(
+PARTITION `p1` VALUES LESS THAN ('2'),
+PARTITION `p2` VALUES LESS THAN ('3'),
+PARTITION `p3` VALUES LESS THAN ('4'),
+PARTITION `p4` VALUES LESS THAN ('5'),
+PARTITION `p5` VALUES LESS THAN ('6'),
+PARTITION `p6` VALUES LESS THAN ('7')
+)
+DISTRIBUTED BY HASH(k1);
+-- result:
+-- !result
+insert into t1 values (1,1,1),(1,1,2),(1,1,3),(1,2,1),(1,2,2),(1,2,3),(1,3,1),(1,3,2),(1,3,3)
+    ,(2,1,1),(2,1,2),(2,1,3),(2,2,1),(2,2,2),(2,2,3),(2,3,1),(2,3,2),(2,3,3)
+    ,(3,1,1),(3,1,2),(3,1,3),(3,2,1),(3,2,2),(3,2,3),(3,3,1),(3,3,2),(3,3,3);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv1 PARTITION BY k1 DISTRIBUTED BY HASH(k1) BUCKETS 10
+REFRESH DEFERRED MANUAL AS SELECT k1, v1 as k2, v2 as k3 from t1;
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv2 PARTITION BY k1 DISTRIBUTED BY HASH(k1) BUCKETS 10
+REFRESH DEFERRED MANUAL AS SELECT k1, count(k2) as count_k2, sum(k3) as sum_k3 from mv1 group by k1;
+-- result:
+-- !result
+[UC]REFRESH MATERIALIZED VIEW mv2 WITH SYNC MODE;
+-- result:
+019afce3-736b-7c12-8e3e-f2f9a1493315
+-- !result
+select count(1) from (
+    select k1 from mv1 where k1 = 1
+    union all
+    select k1 from t1 where k1 = 2
+    union all
+    select k1 from mv1 where k1 = 3
+    union all
+    select k1 from mv1 where k1 = 4
+) as t;
+-- result:
+9
+-- !result
+function: print_hit_materialized_views("SELECT k1, count(v1), sum(v2) from t1 group by k1;")
+-- result:
+
+-- !result
+SELECT k1, count(v1), sum(v2) from t1 group by k1 order by 1;
+-- result:
+1	9	18
+2	9	18
+3	9	18
+-- !result
+[UC]REFRESH MATERIALIZED VIEW mv1 WITH SYNC MODE;
+-- result:
+019afce3-7b76-7e25-b606-c501494dbf4e
+-- !result
+select count(1) from (
+    select k1 from mv1 where k1 = 1
+    union all
+    select k1 from t1 where k1 = 2
+    union all
+    select k1 from mv1 where k1 = 3
+    union all
+    select k1 from mv1 where k1 = 4
+) as t;
+-- result:
+27
+-- !result
+function: print_hit_materialized_views("SELECT k1, count(v1), sum(v2) from t1 group by k1;")
+-- result:
+
+-- !result
+SELECT k1, count(v1), sum(v2) from t1 group by k1 order by 1;
+-- result:
+1	9	18
+2	9	18
+3	9	18
+-- !result
+insert into t1 values (4,1,1);
+-- result:
+-- !result
+[UC]REFRESH MATERIALIZED VIEW mv2 WITH SYNC MODE;
+-- result:
+019afce3-8b1b-7a40-815d-e8ac8547bac0
+-- !result
+select count(1) from (
+    select k1 from mv1 where k1 = 1
+    union all
+    select k1 from t1 where k1 = 2
+    union all
+    select k1 from mv1 where k1 = 3
+    union all
+    select k1 from mv1 where k1 = 4
+) as t;
+-- result:
+27
+-- !result
+function: print_hit_materialized_views("SELECT k1, count(v1), sum(v2) from t1 group by k1;")
+-- result:
+
+-- !result
+SELECT k1, count(v1), sum(v2) from t1 group by k1 order by 1;
+-- result:
+1	9	18
+2	9	18
+3	9	18
+4	1	1
+-- !result
+[UC]REFRESH MATERIALIZED VIEW mv1 WITH SYNC MODE;
+-- result:
+019afce3-99b7-7f07-979a-16b37831a533
+-- !result
+select count(1) from (
+    select k1 from mv1 where k1 = 1
+    union all
+    select k1 from t1 where k1 = 2
+    union all
+    select k1 from mv1 where k1 = 3
+    union all
+    select k1 from mv1 where k1 = 4
+) as t;
+-- result:
+28
+-- !result
+function: print_hit_materialized_views("SELECT k1, count(v1), sum(v2) from t1 group by k1;")
+-- result:
+
+-- !result
+SELECT k1, count(v1), sum(v2) from t1 group by k1 order by 1;
+-- result:
+1	9	18
+2	9	18
+3	9	18
+4	1	1
+-- !result
+drop materialized view mv1;
+-- result:
+-- !result
+drop materialized view mv2;
+-- result:
+-- !result
+drop table t1;  
+-- result:
 -- !result

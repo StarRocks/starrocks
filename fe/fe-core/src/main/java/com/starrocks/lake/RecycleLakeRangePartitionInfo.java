@@ -27,8 +27,8 @@ public class RecycleLakeRangePartitionInfo extends RecycleRangePartitionInfo  {
     public RecycleLakeRangePartitionInfo(long dbId, long tableId, Partition partition,
                                          Range<PartitionKey> range,
                                          DataProperty dataProperty, short replicationNum,
-                                         boolean isInMemory, DataCacheInfo dataCacheInfo) {
-        super(dbId, tableId, partition, range, dataProperty, replicationNum, isInMemory, dataCacheInfo);
+                                         DataCacheInfo dataCacheInfo) {
+        super(dbId, tableId, partition, range, dataProperty, replicationNum, dataCacheInfo);
     }
 
     @Override

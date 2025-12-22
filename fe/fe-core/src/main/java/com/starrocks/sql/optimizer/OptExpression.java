@@ -179,6 +179,15 @@ public class OptExpression {
         getRowOutputInfo();
     }
 
+    public void clearAndInitOutputInfo() {
+        for (OptExpression optExpression : inputs) {
+            optExpression.clearAndInitOutputInfo();
+        }
+        op.clearRowOutputInfo();
+        property.setOutputColumns(new ColumnRefSet(getRowOutputInfo().getOutputColRefs()));
+    }
+
+
     public void setRequiredProperties(List<PhysicalPropertySet> requiredProperties) {
         this.requiredProperties = requiredProperties;
     }

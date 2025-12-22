@@ -214,12 +214,12 @@ public class LakeTableHelper {
      * @param table the table to restore column unique id
      */
     public static void restoreColumnUniqueIdIfNeeded(OlapTable table) {
-        for (MaterializedIndexMeta indexMeta : table.getIndexIdToMeta().values()) {
+        for (MaterializedIndexMeta indexMeta : table.getIndexMetaIdToMeta().values()) {
             List<Column> indexMetaSchema = indexMeta.getSchema();
             // check and restore column unique id for each schema
             if (restoreColumnUniqueId(indexMetaSchema)) {
                 LOG.info("Column unique ids in table {} with index {} have been restored, columns size: {}",
-                        table.getName(), indexMeta.getIndexId(), indexMetaSchema.size());
+                        table.getName(), indexMeta.getIndexMetaId(), indexMetaSchema.size());
             }
         }
     }

@@ -68,7 +68,7 @@ public class MaterializedViewRuleTest extends PlanTestBase {
                     .getTable(database.getFullName(), "lineorder_flat_for_mv");
         Assertions.assertTrue(table instanceof OlapTable);
         OlapTable baseTable = (OlapTable) table;
-        Assertions.assertEquals(baseTable.getIndexIdByName("lo_count_mv"), selectedIndexid);
+        Assertions.assertEquals(baseTable.getIndexMetaIdByName("lo_count_mv"), selectedIndexid);
     }
 
     @Test
@@ -85,7 +85,7 @@ public class MaterializedViewRuleTest extends PlanTestBase {
         ExecPlan plan = getExecPlan(sql);
         OlapScanNode olapScanNode = (OlapScanNode) plan.getScanNodes().get(0);
         Long selectedIndexid = olapScanNode.getSelectedIndexId();
-        Assertions.assertNotEquals(baseTable.getIndexIdByName("lo_count_key_mv"), selectedIndexid);
+        Assertions.assertNotEquals(baseTable.getIndexMetaIdByName("lo_count_key_mv"), selectedIndexid);
     }
 
     @Test

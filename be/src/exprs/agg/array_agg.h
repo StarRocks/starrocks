@@ -28,12 +28,12 @@
 #include "util/defer_op.h"
 
 namespace starrocks {
-
 template <LogicalType PT, bool is_distinct, typename MyHashSet = std::set<int>>
 struct ArrayAggAggregateState {
     using ColumnType = RunTimeColumnType<PT>;
     using CppType = RunTimeCppType<PT>;
     using KeyType = typename SliceHashSet::key_type;
+
     void update(MemPool* mem_pool, const ColumnType& column, size_t offset, size_t count) {
         if constexpr (is_distinct) {
             if constexpr (lt_is_string<PT>) {
@@ -69,6 +69,7 @@ struct ArrayAggAggregateState {
             null_count++;
         }
     }
+
     void append_null(size_t count) {
         if constexpr (is_distinct) {
             if (count > 0) {
@@ -110,15 +111,56 @@ struct ArrayAggAggregateState {
         return false;
     }
 
+    void reset() {
+        data_column.resize(0);
+        null_count = 0;
+        set.clear();
+    }
+
     ColumnType data_column; // Aggregated elements for array_agg
     size_t null_count = 0;
     MyHashSet set;
 };
 
-template <LogicalType LT, bool is_distinct, typename MyHashSet = std::set<int>>
-class ArrayAggAggregateFunction final
-        : public AggregateFunctionBatchHelper<ArrayAggAggregateState<LT, is_distinct, MyHashSet>,
-                                              ArrayAggAggregateFunction<LT, is_distinct, MyHashSet>> {
+template <LogicalType PT, typename = guard::Guard>
+struct WithMemPool {};
+
+template <LogicalType PT>
+struct WithMemPool<PT, StringLTGuard<PT>> {
+    MemPool mem_pool{};
+};
+
+template <LogicalType PT, bool is_distinct, typename MyHashSet = std::set<int>>
+struct ArrayAggWindowState : public ArrayAggAggregateState<PT, is_distinct, MyHashSet>, WithMemPool<PT> {
+    using Base = ArrayAggAggregateState<PT, is_distinct, MyHashSet>;
+    using Self = ArrayAggWindowState<PT, is_distinct, MyHashSet>;
+    using CppType = typename Base::CppType;
+    using ColumnType = typename Base::ColumnType;
+    using Base::update;
+    using Base::append_null;
+    using Base::reset;
+
+    void update(MemPool* mem_pool, const ColumnType& column, size_t offset, size_t count) {
+        if constexpr (lt_is_string<PT>) {
+            this->Base::update(&this->mem_pool, column, offset, count);
+        } else {
+            this->Base::update(nullptr, column, offset, count);
+        }
+    }
+
+    void reset() {
+        this->Base::reset();
+        if constexpr (lt_is_string<PT>) {
+            this->mem_pool.clear();
+        }
+    }
+};
+
+template <LogicalType LT, bool is_distinct, template <LogicalType, bool, typename> typename State,
+          typename MyHashSet = std::set<int>>
+class ArrayAggAggregateFunctionBase final
+        : public AggregateFunctionBatchHelper<State<LT, is_distinct, MyHashSet>,
+                                              ArrayAggAggregateFunctionBase<LT, is_distinct, State, MyHashSet>> {
 public:
     using InputColumnType = RunTimeColumnType<LT>;
 
@@ -168,26 +210,76 @@ public:
     }
 
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
-                                     ColumnPtr* dst) const override {
-        auto* column = down_cast<ArrayColumn*>(dst->get());
-        auto& offsets = column->offsets_column()->get_data();
-        auto& elements_column = column->elements_column();
+                                     MutableColumnPtr& dst) const override {
+        auto* column = down_cast<ArrayColumn*>(dst.get());
+        auto* offsets_col = column->offsets_column_raw_ptr();
+        auto* elements_column = column->elements_column_raw_ptr();
 
         for (size_t i = 0; i < chunk_size; i++) {
             elements_column->append_datum(src[0]->get(i));
-            offsets.emplace_back(offsets.back() + 1);
+            offsets_col->append(offsets_col->immutable_data().back() + 1);
         }
+    }
+
+    void reset(FunctionContext* ctx, const Columns& args, AggDataPtr __restrict state) const override {
+        this->data(state).reset();
+    }
+
+    void get_values(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* dst, size_t start,
+                    size_t end) const override {
+        auto& state_impl = this->data(const_cast<AggDataPtr>(state));
+        const auto& data_column = state_impl.get_data_column();
+        auto* array_column = down_cast<ArrayColumn*>(dst);
+        for (auto i = start; i < end; i++) {
+            array_column->append_array_element(*data_column, state_impl.null_count);
+            if (UNLIKELY(state_impl.check_overflow(*array_column, ctx))) {
+                return;
+            }
+        }
+    }
+
+    void update_batch_single_state_with_frame(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
+                                              int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
+                                              int64_t frame_end) const override {
+        // For distinct mode, data_column used as a result cache for get_values method, any updates to
+        // this state should invalidate the cache.
+        this->data(state).data_column.resize(0);
+        const auto* column = down_cast<const InputColumnType*>(columns[0]);
+        this->data(state).update(ctx->mem_pool(), *column, frame_start, frame_end - frame_start);
+        this->data(state).check_overflow(ctx);
+    }
+
+    void update_single_state_null(FunctionContext* ctx, AggDataPtr __restrict state, int64_t peer_group_start,
+                                  int64_t peer_group_end) const override {
+        // For distinct mode, data_column used as a result cache for get_values method, any updates to
+        // this state should invalidate the cache.
+        this->data(state).data_column.resize(0);
+        this->data(state).append_null(peer_group_end - peer_group_start);
     }
 
     std::string get_name() const override { return is_distinct ? "array_agg_distinct" : "array_agg"; }
 };
 
+template <LogicalType LT, bool is_distinct, typename MyHashSet = std::set<int>>
+using ArrayAggAggregateFunction = ArrayAggAggregateFunctionBase<LT, is_distinct, ArrayAggAggregateState, MyHashSet>;
+
+template <LogicalType LT, bool is_distinct, typename MyHashSet = std::set<int>>
+using ArrayAggAggregateWindowFunction = ArrayAggAggregateFunctionBase<LT, is_distinct, ArrayAggWindowState, MyHashSet>;
+
 // input columns result in intermediate result: struct{array[col0], array[col1], array[col2]... array[coln]}
 // return ordered array[col0']
 struct ArrayAggAggregateStateV2 {
+    void initialize(FunctionContext* ctx) const {
+        for (auto i = 0; i < ctx->get_arg_types().size(); ++i) {
+            data_columns.emplace_back(ctx->create_column(*ctx->get_arg_type(i), true));
+        }
+        DCHECK(data_columns.size() == ctx->get_is_asc_order().size() + 1);
+    }
+
     void update(const Column& column, size_t index, size_t offset, size_t count) {
         data_columns[index]->append(column, offset, count);
     }
+
     void update_nulls(size_t index, size_t count) { data_columns[index]->append_nulls(count); }
 
     bool check_overflow(FunctionContext* ctx) const {
@@ -222,30 +314,39 @@ struct ArrayAggAggregateStateV2 {
         data_columns.resize(1);
     }
 
+    void reset(FunctionContext* ctx) { data_columns.clear(); }
+
     // using pointer rather than vector to avoid variadic size
     // array_agg(a order by b, c, d), the a,b,c,d are put into data_columns in order.
-    Columns data_columns;
+    mutable MutableColumns data_columns;
 };
 
+struct ArrayAggWindowStateV2 : public ArrayAggAggregateStateV2 {
+    using Base = ArrayAggAggregateStateV2;
+    using Base::Base;
+    using Base::initialize;
+    using Base::reset;
+
+    void initialize(FunctionContext* ctx) const {
+        Base::initialize(ctx);
+        result_column = ctx->create_column(ctx->get_return_type(), true);
+    }
+    void reset(FunctionContext* ctx) {
+        Base::reset(ctx);
+        result_column.reset();
+        DCHECK(data_columns.empty() && result_column == nullptr);
+        initialize(ctx);
+    }
+    mutable MutableColumnPtr result_column;
+};
+
+template <typename AggState>
 class ArrayAggAggregateFunctionV2 final
-        : public AggregateFunctionBatchHelper<ArrayAggAggregateStateV2, ArrayAggAggregateFunctionV2> {
+        : public AggregateFunctionBatchHelper<AggState, ArrayAggAggregateFunctionV2<AggState>> {
 public:
     void create(FunctionContext* ctx, AggDataPtr __restrict ptr) const override {
-        auto num = ctx->get_num_args();
-        auto* state = new (ptr) ArrayAggAggregateStateV2;
-        for (auto i = 0; i < num; ++i) {
-            state->data_columns.emplace_back(ctx->create_column(*ctx->get_arg_type(i), true));
-        }
-        DCHECK(state->data_columns.size() == ctx->get_is_asc_order().size() + 1);
-    }
-
-    void reset(FunctionContext* ctx, const Columns& args, AggDataPtr __restrict state) const override {
-        auto& state_impl = this->data(state);
-        if (!state_impl.data_columns.empty()) {
-            for (auto& col : state_impl.data_columns) {
-                col->resize(0);
-            }
-        }
+        auto* state = new (ptr) AggState;
+        state->initialize(ctx);
     }
 
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
@@ -273,7 +374,7 @@ public:
 
     // struct and array elements aren't be null, as they consist from several columns
     void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
-        auto& input_columns = down_cast<const StructColumn*>(ColumnHelper::get_data_column(column))->fields();
+        const auto input_columns = down_cast<const StructColumn*>(ColumnHelper::get_data_column(column))->fields();
         for (auto i = 0; i < input_columns.size(); ++i) {
             auto array_column = down_cast<const ArrayColumn*>(ColumnHelper::get_data_column(input_columns[i].get()));
             const auto offsets = array_column->offsets().immutable_data();
@@ -290,25 +391,28 @@ public:
             return;
         }
 
-        auto& columns = down_cast<StructColumn*>(ColumnHelper::get_data_column(to))->fields_column();
+        auto* struct_column = down_cast<StructColumn*>(ColumnHelper::get_data_column(to));
         if (to->is_nullable()) {
             down_cast<NullableColumn*>(to)->null_column_data().emplace_back(0);
         }
-        for (auto i = 0; i < columns.size(); ++i) {
+        for (auto i = 0; i < struct_column->fields_size(); ++i) {
             auto elem_size = state_impl.data_columns[i]->size();
-            auto array_col = down_cast<ArrayColumn*>(ColumnHelper::get_data_column(columns[i].get()));
-            if (columns[i]->is_nullable()) {
-                down_cast<NullableColumn*>(columns[i].get())->null_column_data().emplace_back(0);
+
+            auto* field_column = struct_column->field_column_raw_ptr(i);
+            auto array_col = down_cast<ArrayColumn*>(ColumnHelper::get_data_column(field_column));
+            if (field_column->is_nullable()) {
+                down_cast<NullableColumn*>(field_column)->null_column_data().emplace_back(0);
             }
+            auto* elements_col = array_col->elements_column_raw_ptr();
+            auto* offsets_col = array_col->offsets_column_raw_ptr();
             if (state_impl.data_columns[i]->only_null()) {
-                array_col->elements_column()->append_nulls(elem_size);
+                elements_col->append_nulls(elem_size);
             } else {
-                array_col->elements_column()->append(
+                elements_col->append(
                         *ColumnHelper::unpack_and_duplicate_const_column(elem_size, state_impl.data_columns[i]), 0,
                         elem_size);
             }
-            auto& offsets = array_col->offsets_column()->get_data();
-            offsets.push_back(offsets.back() + elem_size);
+            offsets_col->append(offsets_col->immutable_data().back() + elem_size);
             state_impl.data_columns[i].reset();
         }
         state_impl.data_columns.clear();
@@ -353,7 +457,11 @@ public:
             Status st = sort_and_tie_columns(ctx->state()->cancelled_ref(), order_by_columns, sort_desc, &perm);
             // release order-by columns early
             order_by_columns.clear();
-            state_impl.release_order_by_columns();
+            // for window function, we can not clear State::data_columns, since its data are used to produce
+            // result,for an example: array_agg(c) over(partition by a order by b)
+            if constexpr (!std::is_same_v<AggState, ArrayAggWindowStateV2>) {
+                state_impl.release_order_by_columns();
+            }
             if (UNLIKELY(ctx->state()->cancelled_ref())) {
                 ctx->set_error("array_agg detects cancelled.", false);
                 return;
@@ -409,14 +517,19 @@ public:
             index.resize(res_num);
             elem_size = res_num;
         }
+        auto* elements_col = array_col->elements_column_raw_ptr();
         if (index.empty()) {
-            array_col->elements_column()->append(*res, 0, elem_size);
+            elements_col->append(*res, 0, elem_size);
         } else {
-            array_col->elements_column()->append_selective(*res, index);
+            elements_col->append_selective(*res, index);
         }
-        state_impl.data_columns.clear(); // early release memory
-        auto& offsets = array_col->offsets_column()->get_data();
-        offsets.push_back(offsets.back() + elem_size);
+        // for window function, we can not clear State::data_columns, since its data are used to produce
+        // result,for an example: array_agg(c) over(partition by a order by b)
+        if constexpr (!std::is_same_v<AggState, ArrayAggWindowStateV2>) {
+            state_impl.data_columns.clear(); // early release memory
+        }
+        auto* offsets_col = array_col->offsets_column_raw_ptr();
+        offsets_col->append(offsets_col->immutable_data().back() + elem_size);
         // should check overflow after append, otherwise the result column with multi row will be overflow.
         if (UNLIKELY(state_impl.check_overflow(*to, ctx))) {
             return;
@@ -425,30 +538,60 @@ public:
 
     // convert each cell of a row to a [nullable] array in a struct
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
-                                     ColumnPtr* dst) const override {
-        auto columns = down_cast<StructColumn*>(ColumnHelper::get_data_column(dst->get()))->fields_column();
-        if (dst->get()->is_nullable()) {
+                                     MutableColumnPtr& dst) const override {
+        auto* struct_column = down_cast<StructColumn*>(ColumnHelper::get_data_column(dst.get()));
+        if (dst->is_nullable()) {
             for (size_t i = 0; i < chunk_size; i++) {
-                down_cast<NullableColumn*>(dst->get())->null_column_data().emplace_back(0);
+                down_cast<NullableColumn*>(dst.get())->null_column_data().emplace_back(0);
             }
         }
-        for (auto j = 0; j < columns.size(); ++j) {
-            auto array_col = down_cast<ArrayColumn*>(ColumnHelper::get_data_column(columns[j].get()));
-            if (columns[j].get()->is_nullable()) {
+        for (auto j = 0; j < struct_column->fields_size(); ++j) {
+            auto* field_column = struct_column->field_column_raw_ptr(j);
+            auto array_col = down_cast<ArrayColumn*>(ColumnHelper::get_data_column(field_column));
+            if (field_column->is_nullable()) {
                 for (size_t i = 0; i < chunk_size; i++) {
-                    down_cast<NullableColumn*>(columns[j].get())->null_column_data().emplace_back(0);
+                    down_cast<NullableColumn*>(field_column)->null_column_data().emplace_back(0);
                 }
             }
-            auto& element_column = array_col->elements_column();
-            auto& offsets = array_col->offsets_column()->get_data();
+            auto* element_column = array_col->elements_column_raw_ptr();
+            auto* offsets_col = array_col->offsets_column_raw_ptr();
             for (size_t i = 0; i < chunk_size; i++) {
                 element_column->append_datum(src[j]->get(i));
-                offsets.emplace_back(offsets.back() + 1);
+                offsets_col->append(offsets_col->immutable_data().back() + 1);
             }
         }
     }
+
+    void reset(FunctionContext* ctx, const Columns& args, AggDataPtr __restrict state) const override {
+        this->data(state).reset(ctx);
+    }
+
+    void get_values(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* dst, size_t start,
+                    size_t end) const override {
+        if constexpr (std::is_same_v<AggState, ArrayAggWindowStateV2>) {
+            auto& state_impl = this->data(const_cast<AggDataPtr>(state));
+            auto* result_column = state_impl.result_column.get();
+            if (result_column->size() == 0) {
+                finalize_to_column(ctx, state, result_column);
+            }
+            DCHECK(result_column->size() == 1);
+            dst->append_value_multiple_times(*result_column, 0, end - start);
+        }
+    }
+
+    void update_batch_single_state_with_frame(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
+                                              int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
+                                              int64_t frame_end) const override {
+        if constexpr (std::is_same_v<AggState, ArrayAggWindowStateV2>) {
+            this->data(state).result_column->resize(0);
+        }
+
+        for (auto i = frame_start; i < frame_end; ++i) {
+            update(ctx, columns, state, i);
+        }
+    }
+
     // V2 support order by
     std::string get_name() const override { return "array_agg2"; }
 };
-
 } // namespace starrocks

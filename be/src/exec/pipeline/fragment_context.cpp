@@ -14,14 +14,21 @@
 
 #include "exec/pipeline/fragment_context.h"
 
+#include <atomic>
+#include <chrono>
+#include <future>
 #include <memory>
+#include <mutex>
+#include <thread>
 
+#include "common/logging.h"
 #include "exec/data_sink.h"
 #include "exec/pipeline/group_execution/execution_group.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/pipeline/schedule/pipeline_timer.h"
 #include "exec/pipeline/schedule/timeout_tasks.h"
 #include "exec/pipeline/stream_pipeline_driver.h"
+#include "exec/workgroup/pipeline_executor_set.h"
 #include "exec/workgroup/work_group.h"
 #include "runtime/batch_write/batch_write_mgr.h"
 #include "runtime/client_cache.h"
@@ -168,7 +175,20 @@ void FragmentContext::report_exec_state_if_necessary() {
         // Fix the report interval regardless the noise.
         normalized_report_ns = last_report_ns + interval_ns;
     }
-    if (_last_report_exec_state_ns.compare_exchange_strong(last_report_ns, normalized_report_ns)) {
+
+    // only report after prepare successfully
+    bool allPrepared = true;
+    iterate_pipeline([&allPrepared](const Pipeline* pipeline) {
+        if (!allPrepared) return;
+        for (const auto& driver : pipeline->drivers()) {
+            if (!driver->local_prepare_is_done()) {
+                allPrepared = false;
+                break;
+            }
+        }
+    });
+
+    if (allPrepared && _last_report_exec_state_ns.compare_exchange_strong(last_report_ns, normalized_report_ns)) {
         iterate_pipeline([](const Pipeline* pipeline) {
             for (const auto& driver : pipeline->drivers()) {
                 driver->runtime_report_action();
@@ -188,13 +208,18 @@ void FragmentContext::set_final_status(const Status& status) {
 
         _driver_token.reset();
 
+        auto detailed_message = _s_status.detailed_message();
+        bool is_timeout = detailed_message == "TimeOut";
+        if (is_timeout) {
+            hook_on_query_timeout(_query_id, _runtime_state->query_ctx()->get_query_expire_seconds());
+        }
+
         if (_s_status.is_cancelled()) {
-            auto detailed_message = _s_status.detailed_message();
             std::string cancel_msg =
                     fmt::format("[Driver] Canceled, query_id={}, instance_id={}, reason={}", print_id(_query_id),
                                 print_id(_fragment_instance_id), detailed_message);
             if (detailed_message == "QueryFinished" || detailed_message == "LimitReach" ||
-                detailed_message == "UserCancel" || detailed_message == "TimeOut") {
+                detailed_message == "UserCancel" || is_timeout) {
                 LOG(INFO) << cancel_msg;
             } else {
                 LOG(WARNING) << cancel_msg;
@@ -208,9 +233,11 @@ void FragmentContext::set_final_status(const Status& status) {
         }
 
         // cancel drivers in event scheduler
-        iterate_drivers([](const DriverPtr& driver) {
+        iterate_drivers([is_timeout](const DriverPtr& driver) {
             driver->set_need_check_reschedule(true);
             if (driver->is_in_blocked()) {
+                LOG_IF(WARNING, config::pipeline_timeout_diagnostic && is_timeout)
+                        << "[Driver] Timeout" << driver->to_readable_string();
                 driver->observer()->cancel_trigger();
             }
         });
@@ -427,9 +454,62 @@ Status FragmentContext::iterate_pipeline(const std::function<Status(Pipeline*)>&
 }
 
 Status FragmentContext::prepare_active_drivers() {
-    for (auto& group : _execution_groups) {
-        RETURN_IF_ERROR(group->prepare_drivers(_runtime_state.get()));
+    auto* profile = runtime_state()->runtime_profile();
+    auto* prepare_driver_timer =
+            ADD_CHILD_TIMER_THESHOLD(profile, "prepare-pipeline-driver-global", "prepare-pipeline-driver", 10_ms);
+
+    {
+        // prepare all driver's state in one thread, this phase's prepare don't need to be thread-safe
+        // But this is done in single thread so we can't put heavy task in this phase
+        SCOPED_TIMER(prepare_driver_timer);
+        for (auto& group : _execution_groups) {
+            RETURN_IF_ERROR(group->prepare_drivers(_runtime_state.get()));
+        }
     }
+
+    auto* prepare_driver_local_timer =
+            ADD_CHILD_TIMER_THESHOLD(profile, "prepare-pipeline-driver-local", "prepare-pipeline-driver", 10_ms);
+    SCOPED_TIMER(prepare_driver_local_timer);
+
+    size_t total_active_driver_size = 0;
+    for (auto& group : _execution_groups) {
+        total_active_driver_size += group->total_active_driver_size();
+    }
+
+    auto pipeline_prepare_pool = runtime_state()->exec_env()->pipeline_prepare_pool();
+    // if prepare all drivers parallelly of this fragment will make queue too full, do not prepare parallelly
+    if (!config::enable_pipeline_driver_parallel_prepare ||
+        pipeline_prepare_pool->get_queue_size() + total_active_driver_size >=
+                config::pipeline_prepare_thread_pool_queue_size / 2) {
+        for (auto& group : _execution_groups) {
+            RETURN_IF_ERROR(group->prepare_active_drivers_sequentially(_runtime_state.get()));
+        }
+        RETURN_IF_ERROR(submit_all_timer());
+        return Status::OK();
+    }
+
+    // prepare pipeline-driver parallelly
+    // only do prepare operation that is thread safe in prepare_operators_local_state
+    // Use shared_ptr to manage sync context lifecycle to avoid use-after-free
+    auto sync_ctx = std::make_shared<DriverPrepareSyncContext>();
+    sync_ctx->pending_tasks = total_active_driver_size;
+
+    for (auto& group : _execution_groups) {
+        group->prepare_active_drivers_parallel(runtime_state(), sync_ctx);
+    }
+
+    // wait for all the tasks finished
+    {
+        std::unique_lock<std::mutex> lock(sync_ctx->mutex);
+        sync_ctx->cv.wait(lock, [&sync_ctx] { return sync_ctx->pending_tasks.load() == 0; });
+    }
+
+    Status* error = sync_ctx->first_error.load();
+    if (error != nullptr) {
+        Status ret = *error;
+        return ret;
+    }
+
     RETURN_IF_ERROR(submit_all_timer());
     return Status::OK();
 }

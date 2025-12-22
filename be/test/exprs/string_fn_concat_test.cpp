@@ -222,11 +222,11 @@ TEST_F(StringFunctionConcatTest, concatWs1Test) {
     }
 }
 TEST_F(StringFunctionConcatTest, concatConstOversizeTest) {
-    BinaryColumn::Ptr col0 = BinaryColumn::create();
-    BinaryColumn::Ptr col1 = BinaryColumn::create();
-    BinaryColumn::Ptr col2 = BinaryColumn::create();
-    BinaryColumn::Ptr col3 = BinaryColumn::create();
-    NullColumn::Ptr null_col = NullColumn::create();
+    auto col0 = BinaryColumn::create();
+    auto col1 = BinaryColumn::create();
+    auto col2 = BinaryColumn::create();
+    auto col3 = BinaryColumn::create();
+    auto null_col = NullColumn::create();
     for (int i = 0; i < 10; ++i) {
         col0->append(Slice(std::string(get_olap_string_max_length() - i, 'x')));
         col0->append(Slice(std::string(i + 1, 'y')));
@@ -260,15 +260,15 @@ TEST_F(StringFunctionConcatTest, concatConstOversizeTest) {
     auto result = StringFunctions::concat(context.get(), columns).value();
 
     ASSERT_TRUE(result->is_nullable());
-    auto result_nullable = down_cast<NullableColumn*>(result.get());
+    auto result_nullable = down_cast<const NullableColumn*>(result.get());
     ASSERT_TRUE(result_nullable != nullptr);
-    auto result_binary = down_cast<BinaryColumn*>(result_nullable->data_column().get());
+    auto result_binary = down_cast<const BinaryColumn*>(result_nullable->data_column().get());
     ASSERT_TRUE(result_binary != nullptr);
     ASSERT_EQ(result_binary->size(), col0->size());
     ASSERT_EQ(result_binary->size(), row_num);
     for (auto i = 0; i < row_num; ++i) {
         if (i % 3 == 0) {
-            ASSERT_EQ(null_col->get_data()[i], 1);
+            ASSERT_EQ(null_col->immutable_data()[i], 1);
             ASSERT_TRUE(columns[0]->is_null(i));
             ASSERT_TRUE(result->is_null(i));
             continue;
@@ -294,9 +294,9 @@ static inline void concat_not_const_test(const NullColumnPtr& null_col, Columns 
     auto result = StringFunctions::concat(context.get(), columns).value();
 
     ASSERT_TRUE(result->is_nullable());
-    auto result_nullable = down_cast<NullableColumn*>(result.get());
+    auto result_nullable = down_cast<const NullableColumn*>(result.get());
     ASSERT_TRUE(result_nullable != nullptr);
-    auto result_binary = down_cast<BinaryColumn*>(result_nullable->data_column().get());
+    auto result_binary = down_cast<const BinaryColumn*>(result_nullable->data_column().get());
     ASSERT_TRUE(result_binary != nullptr);
     const auto row_num = columns[0]->size();
     ASSERT_EQ(result_binary->size(), columns[0]->size());
@@ -426,9 +426,9 @@ static inline void concat_ws_test(const NullColumnPtr& sep_null_col, const NullC
     auto union_null_col = FunctionHelper::union_null_column(sep_null_col, null_col);
 
     ASSERT_TRUE(result->is_nullable());
-    auto result_nullable = down_cast<NullableColumn*>(result.get());
+    auto result_nullable = down_cast<const NullableColumn*>(result.get());
     ASSERT_TRUE(result_nullable != nullptr);
-    auto result_binary = down_cast<BinaryColumn*>(result_nullable->data_column().get());
+    auto result_binary = down_cast<const BinaryColumn*>(result_nullable->data_column().get());
     ASSERT_TRUE(result_binary != nullptr);
     const auto row_num = columns[0]->size();
     ASSERT_EQ(result_binary->size(), columns[0]->size());

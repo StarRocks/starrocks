@@ -27,7 +27,6 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.Index;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionType;
@@ -46,6 +45,7 @@ import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.IndexDef;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.type.ArrayType;
@@ -484,7 +484,7 @@ public class TableSchemaActionTest extends StarRocksHttpTestCase {
         );
 
         olapTable.setColocateGroup("cg1");
-        olapTable.setBaseIndexId(idx1.getIndexId());
+        olapTable.setBaseIndexMetaId(idx1.getIndexId());
         olapTable.setMaxIndexId(idx1.getIndexId() + 65535L);
         olapTable.setMaxColUniqueId(65535);
 

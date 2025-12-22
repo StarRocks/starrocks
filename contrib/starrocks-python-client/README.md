@@ -14,7 +14,7 @@ pip install starrocks
 
 #### Supported Python Versions
 
-Python >= 3.10, <= 3.13
+Python >= 3.10, <= 3.14
 
 #### Using a Virtual Environment (Recommended)
 
@@ -177,7 +177,7 @@ This dialect integrates with Alembic to support automated schema migrations. Her
 If you already have tables/views/materialized views in your StarRocks database, you can generate `models.py` (or a consolidated models file) using `sqlacodegen`.
 
 ```bash
-sqlacodegen --options include-dialect-options,keep-dialect-types \
+sqlacodegen --options include_dialect_options,keep_dialect_types \
   starrocks://root@localhost:9030 > models.py
 ```
 

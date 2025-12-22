@@ -15,7 +15,6 @@ create temporary table `t0` (
 ) engine=OLAP primary key(`c1`) distributed by hash(`c1`) buckets 3 properties("replication_num" = "1");
 
 
-show create table `t0`;
 desc `t0`;
 show tables;
 show temporary tables;
@@ -40,7 +39,6 @@ insert into `t0` values (1,1),(2,2),(3,3);
 create temporary table `t1` like `t0`;
 create temporary table `t1` like `t0`;
 create temporary table if not exists `t1` like `t0`;
-show create table `t1`;
 show tables;
 show temporary tables;
 select * from `t1`;
@@ -60,7 +58,6 @@ create temporary table `t1` as select * from `t0`;
 create temporary table `t1` as select * from `t0`;
 create temporary table if not exists `t1` as select * from `t0`;
 create temporary table `t2` as select /*+ SET_VAR(query_mem_limit=1)*/ * from `t0`;
-show create table `t1`;
 show tables;
 show temporary tables;
 select * from `t1` order by `c1`,`c2`;

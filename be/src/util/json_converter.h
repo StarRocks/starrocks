@@ -12,12 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <simdjson.h>
+#include <velocypack/Slice.h>
 
 #include "column/column_builder.h"
 #include "column/type_traits.h"
 #include "common/compiler_util.h"
 #include "common/statusor.h"
+#ifdef __APPLE__
+#include "simdjson.h"
+#else
+#include "simdjson/ondemand.h"
+#endif
 #include "util/json.h"
 
 namespace starrocks {

@@ -59,6 +59,7 @@ import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.stream.Collectors;
 
 public class WarehouseManager implements Writable {
     private static final Logger LOG = LogManager.getLogger(WarehouseManager.class);
@@ -112,6 +113,15 @@ public class WarehouseManager implements Writable {
     public List<Long> getAllWarehouseIds() {
         try (LockCloseable ignored = new LockCloseable(rwLock.readLock())) {
             return new ArrayList<>(idToWh.keySet());
+        }
+    }
+
+    public Set<Long> getAliveWarehouseIds() {
+        try (LockCloseable ignored = new LockCloseable(rwLock.readLock())) {
+            return nameToWh.values().stream()
+                    .filter(Warehouse::isAvailable)
+                    .map(Warehouse::getId)
+                    .collect(Collectors.toSet());
         }
     }
 

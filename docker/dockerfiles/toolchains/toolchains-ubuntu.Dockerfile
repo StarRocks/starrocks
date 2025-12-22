@@ -36,7 +36,7 @@ LABEL com.starrocks.commit=${COMMIT_ID}
 # Install common libraries and tools that are needed for dev environment
 RUN apt-get update -y && \
     apt-get install --no-install-recommends -y \
-    automake binutils-dev bison byacc ccache flex libiberty-dev libtool maven zip python3 python-is-python3 make openjdk-17-jdk git patch lld bzip2 \
+    automake bison byacc ccache flex libiberty-dev libtool maven zip python3 python-is-python3 make openjdk-17-jdk git patch lld bzip2 \
     wget unzip curl vim tree net-tools openssh-client xz-utils gh locales && \
     DEBIAN_FRONTEND=noninteractive TZ=Etc/UTC apt-get -y install tzdata && \
     locale-gen en_US.UTF-8 && \

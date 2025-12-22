@@ -45,6 +45,8 @@ class ChunkExtraData {
 public:
     ChunkExtraData() = default;
     virtual ~ChunkExtraData() = default;
+    virtual ChunkExtraDataPtr clone_empty(size_t size) const = 0;
+    virtual ChunkExtraDataPtr clone() const = 0;
 };
 
 class Chunk {
@@ -149,6 +151,18 @@ public:
     // Must ensure the slot_id exist
     const ColumnPtr& get_column_by_slot_id(SlotId slot_id) const;
     ColumnPtr& get_column_by_slot_id(SlotId slot_id);
+
+    Column* get_column_raw_ptr_by_name(const std::string& column_name);
+    const Column* get_column_raw_ptr_by_name(const std::string& column_name) const;
+
+    Column* get_column_raw_ptr_by_index(size_t idx);
+    const Column* get_column_raw_ptr_by_index(size_t idx) const;
+
+    Column* get_column_raw_ptr_by_id(ColumnId cid);
+    const Column* get_column_raw_ptr_by_id(ColumnId cid) const;
+
+    Column* get_column_raw_ptr_by_slot_id(SlotId slot_id);
+    const Column* get_column_raw_ptr_by_slot_id(SlotId slot_id) const;
 
     bool is_column_nullable(SlotId slot_id) const;
 
@@ -295,6 +309,7 @@ public:
     void set_extra_data(ChunkExtraDataPtr data) { this->_extra_data = std::move(data); }
     bool has_extra_data() const { return this->_extra_data != nullptr; }
 
+    // Deprecated, use raw pointers instead
     MutableColumns mutable_columns() const {
         size_t num_columns = _columns.size();
         MutableColumns mutable_columns(num_columns);
@@ -369,6 +384,60 @@ inline ColumnPtr& Chunk::get_column_by_id(ColumnId cid) {
     DCHECK(!_cid_to_index.empty());
     DCHECK(_cid_to_index.contains(cid));
     return _columns[_cid_to_index[cid]];
+}
+
+inline Column* Chunk::get_column_raw_ptr_by_name(const std::string& column_name) {
+    size_t idx = _schema->get_field_index_by_name(column_name);
+    // TODO(COW): return a mutable column raw pointer to be compatible with the old codes
+    return const_cast<Column*>(_columns[idx].get());
+}
+
+inline const Column* Chunk::get_column_raw_ptr_by_name(const std::string& column_name) const {
+    size_t idx = _schema->get_field_index_by_name(column_name);
+    return _columns[idx].get();
+}
+
+inline Column* Chunk::get_column_raw_ptr_by_index(size_t idx) {
+    DCHECK_LT(idx, _columns.size());
+    // TODO(COW): return a mutable column raw pointer to be compatible with the old codes
+    return const_cast<Column*>(_columns[idx].get());
+}
+
+inline const Column* Chunk::get_column_raw_ptr_by_index(size_t idx) const {
+    DCHECK_LT(idx, _columns.size());
+    return _columns[idx].get();
+}
+
+inline Column* Chunk::get_column_raw_ptr_by_id(ColumnId cid) {
+    DCHECK(!_cid_to_index.empty());
+    DCHECK(_cid_to_index.contains(cid));
+    // TODO(COW): return a mutable column raw pointer to be compatible with the old codes
+    return const_cast<Column*>(_columns[_cid_to_index[cid]].get());
+}
+
+inline const Column* Chunk::get_column_raw_ptr_by_id(ColumnId cid) const {
+    DCHECK(!_cid_to_index.empty());
+    DCHECK(_cid_to_index.contains(cid));
+    return _columns[_cid_to_index.at(cid)].get();
+}
+
+inline Column* Chunk::get_column_raw_ptr_by_slot_id(SlotId slot_id) {
+    DCHECK(is_slot_exist(slot_id)) << slot_id;
+    if (UNLIKELY(!_slot_id_to_index.contains(slot_id))) {
+        throw std::runtime_error(fmt::format("slot_id {} not found", slot_id));
+    }
+    size_t idx = _slot_id_to_index.at(slot_id);
+    // TODO(COW): return a mutable column raw pointer to be compatible with the old codes
+    return const_cast<Column*>(_columns[idx].get());
+}
+
+inline const Column* Chunk::get_column_raw_ptr_by_slot_id(SlotId slot_id) const {
+    DCHECK(is_slot_exist(slot_id)) << slot_id;
+    if (UNLIKELY(!_slot_id_to_index.contains(slot_id))) {
+        throw std::runtime_error(fmt::format("slot_id {} not found", slot_id));
+    }
+    size_t idx = _slot_id_to_index.at(slot_id);
+    return _columns[idx].get();
 }
 
 } // namespace starrocks

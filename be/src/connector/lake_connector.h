@@ -60,6 +60,8 @@ public:
     // to the share-nothing mode.
     Status parse_runtime_filters(RuntimeState* state) override { return Status::OK(); }
 
+    TabletSchemaCSPtr TEST_tablet_schema() const { return _tablet_schema; }
+
 private:
     Status get_tablet(const TInternalScanRange& scan_range);
     Status init_global_dicts(TabletReaderParams* params);
@@ -132,6 +134,9 @@ private:
     RuntimeProfile::Counter* _pred_filter_counter = nullptr;
     RuntimeProfile::Counter* _del_vec_filter_counter = nullptr;
     RuntimeProfile::Counter* _pred_filter_timer = nullptr;
+    RuntimeProfile::Counter* _rf_pred_filter_timer = nullptr;
+    RuntimeProfile::Counter* _rf_pred_input_rows = nullptr;
+    RuntimeProfile::Counter* _rf_pred_output_rows = nullptr;
     RuntimeProfile::Counter* _chunk_copy_timer = nullptr;
     RuntimeProfile::Counter* _get_delvec_timer = nullptr;
     RuntimeProfile::Counter* _get_delta_column_group_timer = nullptr;

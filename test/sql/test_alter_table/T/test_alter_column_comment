@@ -1,4 +1,4 @@
--- name: test_alter_table_column_comment
+-- name: test_alter_table_column_comment @native
 create table t(k int, v int) primary key(k);
 show create table t;
 alter table t modify column k comment 'k';

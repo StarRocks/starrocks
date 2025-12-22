@@ -498,6 +498,7 @@
                         "administration/management/timezone",
                         "administration/management/monitor_manage_big_queries",
                         "administration/management/compaction",
+                        "administration/management/graceful_exit",
                         {
                             "type": "category",
                             "label": "Resource management",
@@ -555,6 +556,7 @@
             },
             "items": [
                 "faq/Deploy_faq",
+                "faq/shared_data_faq",
                 {
                     "type": "category",
                     "label": "Data Migration",
@@ -575,8 +577,11 @@
                 },
                 "faq/datalake",
                 "faq/Sql_faq",
+                "faq/table_design_faq",
                 "faq/Dump_query",
+                "faq/resource_isolation_faq",
                 "faq/fe_mem_faq",
+                "faq/operation_maintenance_faq",
                 "faq/Others"
             ]
         },

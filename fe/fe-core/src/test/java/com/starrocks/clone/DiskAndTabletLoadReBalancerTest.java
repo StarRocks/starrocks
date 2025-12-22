@@ -25,7 +25,6 @@ import com.starrocks.catalog.DiskInfo;
 import com.starrocks.catalog.DiskInfo.DiskState;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.HashDistributionInfo;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
@@ -42,6 +41,7 @@ import com.starrocks.clone.DiskAndTabletLoadReBalancer.BackendBalanceState;
 import com.starrocks.common.Config;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TStorageMedium;
@@ -125,7 +125,7 @@ public class DiskAndTabletLoadReBalancerTest {
 
         PartitionInfo partitionInfo = new PartitionInfo();
         DataProperty dataProperty = new DataProperty(medium);
-        partitionInfo.addPartition(partitionId, dataProperty, (short) 1, false);
+        partitionInfo.addPartition(partitionId, dataProperty, (short) 1, null);
         DistributionInfo distributionInfo = new HashDistributionInfo(6, Lists.newArrayList());
 
         Partition partition = new Partition(partitionId, physicalPartitionId, "partition", materializedIndex, distributionInfo);
@@ -268,7 +268,7 @@ public class DiskAndTabletLoadReBalancerTest {
 
         PartitionInfo partitionInfo = new PartitionInfo();
         DataProperty dataProperty = new DataProperty(medium);
-        partitionInfo.addPartition(partitionId, dataProperty, (short) 3, false);
+        partitionInfo.addPartition(partitionId, dataProperty, (short) 3, null);
         DistributionInfo distributionInfo = new HashDistributionInfo(3, Lists.newArrayList());
         Partition partition = new Partition(partitionId, physicalPartitionId, "partition", materializedIndex, distributionInfo);
         PhysicalPartition physicalPartition = new PhysicalPartition(physicalPartitionId, "partition", partitionId,
@@ -421,9 +421,9 @@ public class DiskAndTabletLoadReBalancerTest {
 
         PartitionInfo partitionInfo = new PartitionInfo();
         DataProperty dataProperty1 = new DataProperty(TStorageMedium.HDD);
-        partitionInfo.addPartition(partitionId1, dataProperty1, (short) 1, false);
+        partitionInfo.addPartition(partitionId1, dataProperty1, (short) 1, null);
         DataProperty dataProperty2 = new DataProperty(TStorageMedium.SSD);
-        partitionInfo.addPartition(partitionId2, dataProperty2, (short) 1, false);
+        partitionInfo.addPartition(partitionId2, dataProperty2, (short) 1, null);
         DistributionInfo distributionInfo = new HashDistributionInfo(6, Lists.newArrayList());
         Partition partition1 = new Partition(partitionId1, physicalPartitionId1,
                 "partition1", materializedIndex, distributionInfo);
@@ -602,7 +602,7 @@ public class DiskAndTabletLoadReBalancerTest {
 
         PartitionInfo partitionInfo = new PartitionInfo();
         DataProperty dataProperty = new DataProperty(medium);
-        partitionInfo.addPartition(partitionId, dataProperty, (short) 1, false);
+        partitionInfo.addPartition(partitionId, dataProperty, (short) 1, null);
         DistributionInfo distributionInfo = new HashDistributionInfo(6, Lists.newArrayList());
         Partition partition = new Partition(partitionId, physicalPartitionId, "partition", materializedIndex, distributionInfo);
         PhysicalPartition physicalPartition = new PhysicalPartition(physicalPartitionId, "partition", partitionId,

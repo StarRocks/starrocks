@@ -21,7 +21,6 @@ import com.google.common.collect.Sets;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.FeConstants;
@@ -30,6 +29,7 @@ import com.starrocks.common.util.DebugUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.JoinOperator;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.common.TypeManager;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.LogicalProperty;
@@ -862,6 +862,19 @@ public class Utils {
             }
         }
         return false;
+    }
+
+    /**
+     * Ensure the operator is predicate's min granularity.
+     */
+    public static boolean canPushDownPredicate(ScalarOperator operator) {
+        if (operator == null) {
+            return false;
+        }
+        if (hasNonDeterministicFunc(operator)) {
+            return false;
+        }
+        return true;
     }
 
     public static void calculateStatistics(OptExpression expr, OptimizerContext context) {

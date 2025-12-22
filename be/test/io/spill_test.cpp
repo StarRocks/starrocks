@@ -107,8 +107,8 @@ public:
     }
 
     Status do_visit(NullableColumn* column) {
-        RETURN_IF_ERROR(fill(column->null_column().get()));
-        RETURN_IF_ERROR(column->data_column()->accept_mutable(this));
+        RETURN_IF_ERROR(fill(column->null_column_raw_ptr()));
+        RETURN_IF_ERROR(column->data_column_raw_ptr()->accept_mutable(this));
         return Status::OK();
     }
 
@@ -696,9 +696,10 @@ TEST_F(SpillTest, partition_yield_with_failed) {
             ASSERT_OK(spiller->_spilled_task_status);
             holder.push_back(chunk);
         }
-
-        PredoSyncExecutor::predo = [&]() { spiller.reset(); };
-        ASSERT_OK(spiller->flush<PredoSyncExecutor>(&dummy_rt_st, EmptyMemGuard{}));
+        auto dummy = std::make_shared<int>();
+        PredoSyncExecutor::predo = [&]() { dummy.reset(); };
+        ASSERT_OK(spiller->flush<PredoSyncExecutor>(&dummy_rt_st,
+                                                    spill::ResourceMemTrackerGuard(nullptr, std::weak_ptr(dummy))));
     }
 }
 

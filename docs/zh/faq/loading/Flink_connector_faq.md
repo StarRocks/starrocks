@@ -116,3 +116,28 @@ kafka通信会用到hostname，需要在starrocks集群节点配置kafka主机�
 **解决方案:**
 
 三个阈值先达到其中的哪一个，那一个就先生效，是和checkpoint interval设置的值没关系的，checkpoint interval 对于 exactly once 才有效，at_least_once 用 interval-ms。
+
+## 为什么使用 Flink Connector 进行部分列更新时失败并显示 “NULL value in non-nullable column”？
+
+配置以下属性：
+
+```SQL
+sink.properties.partial_update=true
+sink.properties.columns=<primary_key,columns_to_update>
+```
+
+## 如何处理Flink导入JSON数据时出现的错误 “The size of this batch exceed the max size [104857600]”？
+
+减少批次频率，或将 `sink.properties.ignore_json_size` 设置为 `true`（这可能导致更高的内存使用）。
+
+## 如果Flink CDC中的bigint unsigned字段变成字符串并改变其值，该如何处理？
+
+添加以下配置：
+
+```SQL
+'debezium.bigint.unsigned.handling.mode' = 'precise'
+```
+
+## 为什么使用Flink connector导入数据时收到 “None of hosts in load_url could be connected”？
+
+`load_url` 无法访问或超时。增加属性 `sink.connect.timeout-ms` 的值（范围：[100, 60000]）。

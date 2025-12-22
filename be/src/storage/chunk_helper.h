@@ -60,19 +60,16 @@ public:
 
     static ColumnId max_column_id(const Schema& schema);
 
-    // Create an empty chunk according to the |schema| and reserve it of size |n|.
-    static ChunkUniquePtr new_chunk(const Schema& schema, size_t n);
-
-    // Create an empty chunk according to the |tuple_desc| and reserve it of size |n|.
-    static ChunkUniquePtr new_chunk(const TupleDescriptor& tuple_desc, size_t n);
+    static Chunk* new_chunk_pooled(const Schema& schema, size_t n);
+    // a wrapper of new_chunk_pooled with memory check
+    static StatusOr<Chunk*> new_chunk_pooled_checked(const Schema& schema, size_t n);
 
     // Create an empty chunk according to the |slots| and reserve it of size |n|.
     static ChunkUniquePtr new_chunk(const std::vector<SlotDescriptor*>& slots, size_t n);
-
-    static Chunk* new_chunk_pooled(const Schema& schema, size_t n);
-
-    // a wrapper of new_chunk_pooled with memory check
-    static StatusOr<Chunk*> new_chunk_pooled_checked(const Schema& schema, size_t n);
+    // Create an empty chunk according to the |schema| and reserve it of size |n|.
+    static ChunkUniquePtr new_chunk(const Schema& schema, size_t n);
+    // Create an empty chunk according to the |tuple_desc| and reserve it of size |n|.
+    static ChunkUniquePtr new_chunk(const TupleDescriptor& tuple_desc, size_t n);
     // a wrapper of new_chunk with memory check
     static StatusOr<ChunkUniquePtr> new_chunk_checked(const Schema& schema, size_t n);
     static StatusOr<ChunkUniquePtr> new_chunk_checked(const std::vector<SlotDescriptor*>& slots, size_t n);

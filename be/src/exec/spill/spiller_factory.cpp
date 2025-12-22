@@ -22,9 +22,7 @@
 
 namespace starrocks::spill {
 std::shared_ptr<Spiller> SpillerFactory::create(const SpilledOptions& options) {
-    std::lock_guard guard(_mutex);
     auto spiller = std::make_shared<Spiller>(options, shared_from_this());
-    _spillers.emplace_back(spiller);
     return spiller;
 }
 

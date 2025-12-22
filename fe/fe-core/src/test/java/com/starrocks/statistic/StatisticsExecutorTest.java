@@ -128,7 +128,8 @@ public class StatisticsExecutorTest extends PlanTestBase {
             }
         };
 
-        Assertions.assertThrows(DdlException.class, () -> collectJob.collectStatisticSync(sql, context));
+        AnalyzeStatus analyzeStatus = new NativeAnalyzeStatus();
+        Assertions.assertThrows(DdlException.class, () -> collectJob.collectStatisticSync(sql, context, analyzeStatus));
 
         new Expectations(context) {
             {
@@ -137,7 +138,7 @@ public class StatisticsExecutorTest extends PlanTestBase {
             }
         };
 
-        collectJob.collectStatisticSync(sql, context);
+        collectJob.collectStatisticSync(sql, context, analyzeStatus);
     }
 
     @Test
@@ -320,7 +321,8 @@ public class StatisticsExecutorTest extends PlanTestBase {
         AnalyzeStmt stmt = (AnalyzeStmt) analyzeSuccess(sql);
         StmtExecutor executor = new StmtExecutor(connectContext, stmt);
         AnalyzeStatus analyzeStatus = new NativeAnalyzeStatus(1, 2, 3, Lists.newArrayList(),
-                StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.SCHEDULE, Maps.newHashMap(), LocalDateTime.MIN);
+                StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.SCHEDULE, Maps.newHashMap(),
+                LocalDateTime.now());
 
         Database db = connectContext.getGlobalStateMgr().getMetadataMgr().getDb(connectContext, "default_catalog", "test");
         Table table =
@@ -331,5 +333,25 @@ public class StatisticsExecutorTest extends PlanTestBase {
         Assertions.assertTrue(analyzeStatus.getReason().contains("Warehouse xxx not exist"));
         connectContext.setCurrentWarehouse("default_warehouse");
         FeConstants.enableUnitStatistics = true;
+    }
+
+    @Test
+    public void testDropHistogramWithEmptyColumnNames() {
+        // Test that dropHistogram and dropExternalHistogram methods handle empty column lists
+        // without throwing exceptions (which would happen if SQL with "in ()" was generated)
+        StatisticExecutor statisticExecutor = new StatisticExecutor();
+        ConnectContext context = StatisticUtils.buildConnectContext();
+
+        // Should not throw any exception when columnNames is empty
+        statisticExecutor.dropHistogram(context, 1L, Lists.newArrayList());
+        statisticExecutor.dropHistogram(context, 1L, null);
+
+        // Should not throw any exception when columnNames is empty for external histogram
+        statisticExecutor.dropExternalHistogram(context, "test-uuid", Lists.newArrayList());
+        statisticExecutor.dropExternalHistogram(context, "test-uuid", null);
+
+        // Should not throw any exception for the overloaded version with catalog/db/table names
+        statisticExecutor.dropExternalHistogram(context, "catalog", "db", "table", Lists.newArrayList());
+        statisticExecutor.dropExternalHistogram(context, "catalog", "db", "table", null);
     }
 }

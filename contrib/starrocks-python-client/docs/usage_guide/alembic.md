@@ -232,15 +232,15 @@ You define your schema in your Python models file (e.g., `models.py`) using SQLA
 
 If your StarRocks database already contains tables, views, or materialized views, you can bootstrap your models by generating them with `sqlacodegen`. This is particularly useful when introducing Alembic to an existing system.
 
-- Choose one or more schemas (StarRocks “databases”) to include using `--schemas` (comma-separated). Empyt for all schemas (databases). [Optional]
-- Render StarRocks-specific dialect options and table kind (to distinguish `Table`, `View`, and `Materialized View`) with `--options include-dialect-options`. **[Required]**
-- Preserve StarRocks-specific types with `--options keep-dialect-types`, so generated code imports and uses the StarRocks types instead of generic SQLAlchemy types. **[Required]**
+- Choose one or more schemas (StarRocks “databases”) to include using `--schemas` (comma-separated). Empty for all schemas (databases). [Optional]
+- Render StarRocks-specific dialect options and table kind (to distinguish `Table`, `View`, and `Materialized View`) with `--options include_dialect_options`. **[Required]**
+- Preserve StarRocks-specific types with `--options keep_dialect_types`, so generated code imports and uses the StarRocks types instead of generic SQLAlchemy types. **[Required]**
 
 Examples:
 
 ```bash
 # Or via the generic --options mechanism
-sqlacodegen --schemas mydb1,mydb2 --options include-dialect-options,keep-dialect-types \
+sqlacodegen --schemas mydb1,mydb2 --options include_dialect_options,keep_dialect_types \
   starrocks://root@localhost:9030 > models_all.py
 ```
 
@@ -250,6 +250,25 @@ Notes:
 - You can split the generated file into multiple modules (e.g., `models.py`, `models_view.py`, `models_mv.py`) as needed.
 - Review/clean the generated code to align naming, comments, and any project conventions. Especially the `info` and StarRocks-specific parameters as `starrocks_xxx`.
   - For `info`: the `definition` of views and materialized views will be stored here, check the `definition` here whether it's what you defined.
+
+Warning:
+
+- It's recommended to add `--generator tables` flag, when running the sqlacodegen command, to generate Core style model script. Because `sqlacodegen` will **reorder columns** in ORM style (putting all NOT NULL columns ahead).
+
+    ```bash
+    sqlacodegen --schemas mydb1,mydb2 \
+        --options include-dialect-options,keep-dialect-types \
+        --generator tables \
+        starrocks://root@localhost:9030 > models_all.py
+    ```
+
+- Key columns will be recognized as `NOT NULL` columns. If you want to keep `nullable` for key columns, you need to add `nullable=True` parameter for each key column in the generated model python script **manually**.
+
+    ```python
+    Column('abm_id', BIGINT(20), primary_key=True)
+    # --> change above one to below one
+    Column('abm_id', BIGINT(20), primary_key=True, nullable=True)
+    ```
 
 See the full [`sqlacodegen`](https://github.com/agronholm/sqlacodegen) feature set and flags.
 

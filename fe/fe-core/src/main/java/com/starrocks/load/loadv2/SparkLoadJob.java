@@ -467,7 +467,7 @@ public class SparkLoadJob extends BulkLoadJob {
     private PushBrokerReaderParams getPushBrokerReaderParams(OlapTable table, long indexId) throws StarRocksException {
         if (!indexToPushBrokerReaderParams.containsKey(indexId)) {
             PushBrokerReaderParams pushBrokerReaderParams = new PushBrokerReaderParams();
-            pushBrokerReaderParams.init(table.getSchemaByIndexId(indexId),
+            pushBrokerReaderParams.init(table.getSchemaByIndexMetaId(indexId),
                     new BrokerDesc(brokerPersistInfo.getName(), brokerPersistInfo.getProperties()));
             indexToPushBrokerReaderParams.put(indexId, pushBrokerReaderParams);
         }
@@ -499,7 +499,7 @@ public class SparkLoadJob extends BulkLoadJob {
             try {
                 // check state is still loading. If state is cancelled or finished, return.
                 // if state is cancelled or finished and not return, this would throw
-                // "No partitions have data available for loading" exception,
+                // "No rows were imported from upstream" exception,
                 // because tableToLoadPartitions was already cleaned up,
                 if (state != JobState.LOADING) {
                     LOG.warn("job state is not loading. job id: {}, state: {}", id, state);
@@ -533,7 +533,7 @@ public class SparkLoadJob extends BulkLoadJob {
                             int schemaHash = indexToSchemaHash.get(indexId);
 
                             List<TColumn> columnsDesc = new ArrayList<TColumn>();
-                            for (Column column : table.getSchemaByIndexId(indexId)) {
+                            for (Column column : table.getSchemaByIndexMetaId(indexId)) {
                                 columnsDesc.add(column.toThrift());
                             }
 
@@ -606,7 +606,7 @@ public class SparkLoadJob extends BulkLoadJob {
                     String errMsg = new LogBuilder(LogKey.LOAD_JOB, id)
                             .add("database_id", dbId)
                             .add("label", label)
-                            .add("error_msg", "No partitions have data available for loading")
+                            .add("error_msg", "No rows were imported from upstream")
                             .build();
                     throw new LoadException(errMsg);
                 }

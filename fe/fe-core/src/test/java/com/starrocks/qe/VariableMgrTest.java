@@ -37,9 +37,7 @@ package com.starrocks.qe;
 import com.google.common.collect.Lists;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.StarRocksException;
-import com.starrocks.persist.EditLog;
 import com.starrocks.persist.GlobalVarPersistInfo;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.ExpressionAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.analyzer.SetStmtAnalyzer;
@@ -52,8 +50,7 @@ import com.starrocks.sql.ast.expression.VariableExpr;
 import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.UtFrameUtils;
 import com.starrocks.utframe.UtFrameUtils.PseudoImage;
-import mockit.Expectations;
-import mockit.Mocked;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -66,33 +63,17 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class VariableMgrTest {
     private static final Logger LOG = LoggerFactory.getLogger(VariableMgrTest.class);
-    @Mocked
-    private GlobalStateMgr globalStateMgr;
-    @Mocked
-    private EditLog editLog;
 
-    private VariableMgr variableMgr = new VariableMgr();
+
     @BeforeEach
     public void setUp() {
-        new Expectations() {
-            {
-                globalStateMgr.getEditLog();
-                minTimes = 0;
-                result = editLog;
-            }
-        };
+        // Initialize test environment
+        UtFrameUtils.setUpForPersistTest();
+    }
 
-        new Expectations(globalStateMgr) {
-            {
-                GlobalStateMgr.getCurrentState();
-                minTimes = 0;
-                result = globalStateMgr;
-
-                globalStateMgr.getVariableMgr();
-                minTimes = 0;
-                result = variableMgr;
-            }
-        };
+    @AfterEach
+    public void tearDown() {
+        UtFrameUtils.tearDownForPersisTest();
     }
 
     @Test

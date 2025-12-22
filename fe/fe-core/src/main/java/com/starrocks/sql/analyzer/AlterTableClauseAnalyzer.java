@@ -30,7 +30,6 @@ import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.Index;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -83,6 +82,7 @@ import com.starrocks.sql.ast.ExpressionPartitionDesc;
 import com.starrocks.sql.ast.HashDistributionDesc;
 import com.starrocks.sql.ast.IndexDef.IndexType;
 import com.starrocks.sql.ast.KeysDesc;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.ListPartitionDesc;
 import com.starrocks.sql.ast.ModifyColumnClause;
 import com.starrocks.sql.ast.ModifyColumnCommentClause;
@@ -94,7 +94,7 @@ import com.starrocks.sql.ast.OptimizeClause;
 import com.starrocks.sql.ast.OrderByElement;
 import com.starrocks.sql.ast.PartitionConvertContext;
 import com.starrocks.sql.ast.PartitionDesc;
-import com.starrocks.sql.ast.PartitionNames;
+import com.starrocks.sql.ast.PartitionRef;
 import com.starrocks.sql.ast.PartitionRenameClause;
 import com.starrocks.sql.ast.ProcedureArgument;
 import com.starrocks.sql.ast.RandomDistributionDesc;
@@ -269,7 +269,7 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
             String storageMedium = properties.remove("default." + PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM);
             properties.put(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM, storageMedium);
         } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_INMEMORY)) {
-            // do nothing
+            properties.remove(PropertyAnalyzer.PROPERTIES_INMEMORY);
         } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PRIMARY_INDEX_CACHE_EXPIRE_SEC)) {
             String valStr = properties.get(PropertyAnalyzer.PROPERTIES_PRIMARY_INDEX_CACHE_EXPIRE_SEC);
             try {
@@ -559,7 +559,7 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
             }
             ExpressionPartitionDesc expressionPartitionDesc = (ExpressionPartitionDesc) partitionDesc;
             FunctionCallExpr functionCallExpr = (FunctionCallExpr) expressionPartitionDesc.getExpr();
-            String functionName = functionCallExpr.getFnName().getFunction();
+            String functionName = functionCallExpr.getFunctionName();
             if (!FunctionSet.DATE_TRUNC.equals(functionName) && !FunctionSet.TIME_SLICE.equals(functionName)) {
                 ErrorReport.reportSemanticException("Unsupported change to %s partition function when merge partitions",
                         ErrorCode.ERR_COMMON_ERROR, functionName);
@@ -647,7 +647,7 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
         }
 
         // analyze partitions
-        PartitionNames partitionNames = clause.getPartitionNames();
+        PartitionRef partitionNames = clause.getPartitionNames();
         if (partitionNames != null) {
             if (clause.getSortKeys() != null || clause.getKeysDesc() != null) {
                 throw new SemanticException("not support change sort keys or keys type when specify partitions");
@@ -1268,8 +1268,8 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
         Map<String, String> copiedProperties = clause.getProperties() == null ? Maps.newHashMap()
                 : Maps.newHashMap(clause.getProperties());
         try {
-            long tabletReshardSplitSize = PropertyAnalyzer.analyzeTabletReshardSplitSize(copiedProperties, true);
-            clause.setTabletReshardSplitSize(tabletReshardSplitSize);
+            long tabletReshardTargetSize = PropertyAnalyzer.analyzeTabletReshardTargetSize(copiedProperties, true);
+            clause.setTabletReshardTargetSize(tabletReshardTargetSize);
         } catch (Exception e) {
             throw new SemanticException(e.getMessage(), e);
         }
@@ -1404,8 +1404,19 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
                         .collect(Collectors.toList());
                 PartitionDescAnalyzer.analyze(partitionDesc, columnDefList, cloneProperties);
                 if (!existPartitionNameSet.contains(partitionDesc.getPartitionName())) {
-                    CatalogUtils.checkPartitionValuesExistForAddListPartition(olapTable, partitionDesc,
-                            addPartitionClause.isTempPartition());
+                    boolean isDuplicate = CatalogUtils.checkPartitionValuesExistForAddListPartition(olapTable,
+                            partitionDesc, addPartitionClause.isTempPartition());
+                    if (isDuplicate) {
+                        if (partitionDesc.isSystem()) {
+                            // For system-created partitions (automatic partition), skip if values already exist.
+                            // duplicate partition will be ignored in create partition phase
+                            continue;
+                        } else {
+                            // For user-created partitions, throw error
+                            throw new DdlException("Duplicate partition values exist for partition: " +
+                                    partitionDesc.getPartitionName());
+                        }
+                    }
                 }
             } else {
                 throw new DdlException("Only support adding partition to range/list partitioned table");

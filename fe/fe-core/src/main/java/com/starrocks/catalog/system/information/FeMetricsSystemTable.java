@@ -31,9 +31,9 @@ public class FeMetricsSystemTable {
                 NAME,
                 Table.TableType.SCHEMA,
                 builder()
-                        .column("FE_ID", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                        .column("NAME", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                        .column("LABELS", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("FE_ID", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("NAME", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("LABELS", TypeFactory.createVarcharType(NAME_CHAR_LEN))
                         .column("VALUE", IntegerType.BIGINT)
                         .build(), TSchemaTableType.SCH_FE_METRICS);
     }

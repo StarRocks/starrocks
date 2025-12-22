@@ -20,7 +20,6 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Index;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.TableName;

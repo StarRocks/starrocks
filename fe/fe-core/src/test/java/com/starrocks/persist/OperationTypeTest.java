@@ -34,7 +34,6 @@ public class OperationTypeTest {
         Assertions.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_DELETE_AUTO_INCREMENT_ID));
         Assertions.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_DYNAMIC_PARTITION));
         Assertions.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_MODIFY_REPLICATION_NUM));
-        Assertions.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_MODIFY_IN_MEMORY));
         Assertions.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_SET_FORBIDDEN_GLOBAL_DICT));
         Assertions.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_SET_HAS_DELETE));
         Assertions.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_INSTALL_PLUGIN));

@@ -1,4 +1,4 @@
--- name: test_column_rename2
+-- name: test_column_rename2 @native
 CREATE TABLE `site_access` (
   `event_day` date NULL COMMENT "",
   `site_id` int(11) NULL DEFAULT "10" COMMENT "",

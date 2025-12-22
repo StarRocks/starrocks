@@ -14,11 +14,10 @@
 
 #include "column/json_column.h"
 
-#include <sstream>
-#include <type_traits>
+#include <velocypack/Slice.h>
 
-#include "column/bytes.h"
-#include "column/column_helper.h"
+#include <sstream>
+
 #include "column/column_view/column_view.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
@@ -26,7 +25,6 @@
 #include "glog/logging.h"
 #include "gutil/casts.h"
 #include "gutil/strings/substitute.h"
-#include "simd/simd.h"
 #include "types/logical_type.h"
 #include "util/hash_util.hpp"
 #include "util/mysql_row_buffer.h"
@@ -50,14 +48,6 @@ int JsonColumn::compare_at(size_t left_idx, size_t right_idx, const starrocks::C
     JsonValue* x = get_object(left_idx);
     const JsonValue* y = rhs.get(right_idx).get_json();
     return x->compare(*y);
-}
-
-void JsonColumn::fnv_hash(uint32_t* hash, uint32_t from, uint32_t to) const {
-    for (uint32_t i = from; i < to; i++) {
-        JsonValue* json = get_object(i);
-        int64_t h = json->hash();
-        hash[i] = HashUtil::fnv_hash(&h, sizeof(h), hash[i]);
-    }
 }
 
 void JsonColumn::put_mysql_row_buffer(starrocks::MysqlRowBuffer* buf, size_t idx, bool is_binary_protocol) const {
@@ -176,7 +166,7 @@ LogicalType JsonColumn::get_flat_field_type(const std::string& path) const {
 }
 
 void JsonColumn::set_flat_columns(const std::vector<std::string>& paths, const std::vector<LogicalType>& types,
-                                  const Columns& flat_columns) {
+                                  MutableColumns&& flat_columns) {
     DCHECK_EQ(paths.size(), types.size());
     DCHECK(paths.size() == flat_columns.size() || paths.size() + 1 == flat_columns.size()); // may remain column
 
@@ -197,14 +187,18 @@ void JsonColumn::set_flat_columns(const std::vector<std::string>& paths, const s
         } else {
             // change column ptr to wrapper ptr
             _flat_columns.reserve(flat_columns.size());
-            _flat_columns.assign(flat_columns.begin(), flat_columns.end());
+            for (auto& col : flat_columns) {
+                _flat_columns.emplace_back(Column::WrappedPtr(std::move(col)));
+            }
         }
     } else {
         _flat_column_paths = paths;
         _flat_column_types = types;
         // change column ptr to wrapper ptr
         _flat_columns.reserve(flat_columns.size());
-        _flat_columns.assign(flat_columns.begin(), flat_columns.end());
+        for (auto& col : flat_columns) {
+            _flat_columns.emplace_back(Column::WrappedPtr(std::move(col)));
+        }
 
         for (size_t i = 0; i < _flat_column_paths.size(); i++) {
             _path_to_index[_flat_column_paths[i]] = i;
@@ -270,12 +264,12 @@ void JsonColumn::append_selective(const Column& src, const uint32_t* indexes, ui
     if (other_json->is_flat_json() && !is_flat_json()) {
         // only hit in AggregateIterator (Aggregate mode in storage)
         DCHECK_EQ(0, this->size());
-        Columns copy;
+        MutableColumns copy;
         copy.reserve(other_json->_flat_columns.size());
         for (const auto& col : other_json->_flat_columns) {
             copy.emplace_back(col->clone_empty());
         }
-        set_flat_columns(other_json->flat_column_paths(), other_json->flat_column_types(), copy);
+        set_flat_columns(other_json->flat_column_paths(), other_json->flat_column_types(), std::move(copy));
     }
 
     if (is_flat_json()) {
@@ -352,11 +346,11 @@ void JsonColumn::append(const Column& src, size_t offset, size_t count) {
     if (other_json->is_flat_json() && !is_flat_json()) {
         // only hit in AggregateIterator (Aggregate mode in storage)
         DCHECK_EQ(0, this->size());
-        Columns copy;
+        MutableColumns copy;
         for (const auto& col : other_json->_flat_columns) {
             copy.emplace_back(col->clone_empty());
         }
-        set_flat_columns(other_json->flat_column_paths(), other_json->flat_column_types(), copy);
+        set_flat_columns(other_json->flat_column_paths(), other_json->flat_column_types(), std::move(copy));
     }
 
     if (is_flat_json()) {

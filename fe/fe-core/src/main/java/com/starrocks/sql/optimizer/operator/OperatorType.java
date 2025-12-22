@@ -120,6 +120,8 @@ public enum OperatorType {
     PHYSICAL_SPLIT_CONSUME,
     PHYSICAL_CONCATENATE,
 
+    PHYSICAL_FETCH,
+    PHYSICAL_LOOKUP,
     /**
      * Scalar operator
      */

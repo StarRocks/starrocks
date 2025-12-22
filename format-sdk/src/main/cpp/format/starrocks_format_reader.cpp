@@ -451,7 +451,7 @@ private:
     std::vector<uint32_t> _scan_column_indexes;
     std::unordered_set<uint32_t> _unused_output_column_ids;
     std::shared_ptr<Schema> _scan_schema;
-    std::shared_ptr<Chunk> _scan_chunk;
+    ChunkPtr _scan_chunk;
     // format reader output schema
     std::shared_ptr<Schema> _output_tablet_schema;
     // mapping from index of column in output chunk to index of column in input chunk.

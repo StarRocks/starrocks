@@ -28,6 +28,7 @@ import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.SortPhase;
 import com.starrocks.sql.optimizer.operator.TopNType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalLimitOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalWindowOperator;
@@ -182,6 +183,19 @@ public class PushDownPredicateRankingWindowRule extends TransformationRule {
                 .collect(Collectors.toList());
 
         TopNType topNType = TopNType.parse(callOperator.getFnName());
+
+        if (partitionByColumns.isEmpty() && rankRelatedWindowOperator.getEnforceSortColumns().isEmpty()) {
+            if (topNType != TopNType.ROW_NUMBER) {
+                return Collections.emptyList();
+            }
+
+            LogicalLimitOperator limitOp = LogicalLimitOperator.init(limitValue);
+
+            // Filter -> window -> limit
+            OptExpression limitOpExpr = OptExpression.create(limitOp, rankRelatedOptExpr.getInputs());
+            OptExpression newWindowOptExp = OptExpression.create(rankRelatedWindowOperator, limitOpExpr);
+            return Collections.singletonList(OptExpression.create(filterOperator, newWindowOptExp));
+        }
 
         // If partition by columns is not empty, then we cannot derive sort property from the SortNode
         // OutputPropertyDeriver will generate PhysicalPropertySet.EMPTY if sortPhase is SortPhase.PARTIAL

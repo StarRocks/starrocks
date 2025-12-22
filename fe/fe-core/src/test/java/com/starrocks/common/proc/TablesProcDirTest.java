@@ -59,7 +59,7 @@ public class TablesProcDirTest {
         OlapTable tb1 = new OlapTable(1000L, "tb1", col1, null, pt1, null);
         new Expectations(tb1) {
             {
-                tb1.getIndexNameToId();
+                tb1.getIndexNameToMetaId();
                 minTimes = 0;
                 result = indexNameToId;
 
@@ -79,7 +79,7 @@ public class TablesProcDirTest {
         OlapTable tb2 = new OlapTable(2000L, "tb2", col2, null, pt2, null);
         new Expectations(tb2) {
             {
-                tb2.getIndexNameToId();
+                tb2.getIndexNameToMetaId();
                 minTimes = 0;
                 result = indexNameToId;
 

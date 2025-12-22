@@ -485,7 +485,7 @@ public class SchemaChangeJobV2Test extends DDLTestBase {
         TransactionState.TxnCoordinator coordinator = new TransactionState.TxnCoordinator(
                 TransactionState.TxnSourceType.BE, "127.0.0.1");
 
-        long baseIndexId = table.getBaseIndexId();
+        long baseIndexId = table.getBaseIndexMetaId();
         MaterializedIndexMeta preAlterIndexMeta1 = table.getIndexMetaByIndexId(baseIndexId).shallowCopy();
         long runningTxn1 = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().beginTransaction(
                 db.getId(), List.of(table.getId()), UUID.randomUUID().toString(), coordinator,
@@ -544,7 +544,7 @@ public class SchemaChangeJobV2Test extends DDLTestBase {
         GlobalStateMgr.getCurrentState().getLocalMetastore().save(imageWriter);
         GlobalStateMgr.getCurrentState().getAlterJobMgr().save(imageWriter);
 
-        long baseIndexId = table.getBaseIndexId();
+        long baseIndexId = table.getBaseIndexMetaId();
         MaterializedIndexMeta preAlterIndexMeta = table.getIndexMetaByIndexId(baseIndexId).shallowCopy();
         SchemaChangeJobV2 job = (SchemaChangeJobV2) executeAlterAndWaitFinish(
                 table, "ALTER TABLE t_history_schema_replay ADD COLUMN c1 BIGINT");
@@ -637,7 +637,7 @@ public class SchemaChangeJobV2Test extends DDLTestBase {
         Locker locker = new Locker();
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
         try {
-            long baseIndexId = table.getBaseIndexId();
+            long baseIndexId = table.getBaseIndexMetaId();
             MaterializedIndexMeta indexMeta = table.getIndexMetaByIndexId(baseIndexId);
             List<Column> schema = indexMeta.getSchema();
             if (schema.size() != columNames.size()) {

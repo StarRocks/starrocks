@@ -122,10 +122,10 @@ public class SyncPartitionUtils {
                                                             RangePartitionDiffer differ) {
         PrimitiveType partitionColumnType = functionCallExpr.getType().getPrimitiveType();
         PCellSortedSet rollupRange = PCellSortedSet.of();
-        if (functionCallExpr.getFnName().getFunction().equalsIgnoreCase(FunctionSet.DATE_TRUNC)) {
+        if (functionCallExpr.getFunctionName().equalsIgnoreCase(FunctionSet.DATE_TRUNC)) {
             String granularity = ((StringLiteral) functionCallExpr.getChild(0)).getValue().toLowerCase();
             rollupRange = toMappingRanges(baseRangeMap, granularity, partitionColumnType);
-        } else if (functionCallExpr.getFnName().getFunction().equalsIgnoreCase(FunctionSet.STR2DATE)) {
+        } else if (functionCallExpr.getFunctionName().equalsIgnoreCase(FunctionSet.STR2DATE)) {
             rollupRange = mappingRangeListForDate(baseRangeMap);
         }
         return getRangePartitionDiff(mvRangeMap, rollupRange, differ);
@@ -206,11 +206,11 @@ public class SyncPartitionUtils {
             return baseRange;
         }
         FunctionCallExpr functionCallExpr = (FunctionCallExpr) partitionExpr;
-        if (functionCallExpr.getFnName().getFunction().equalsIgnoreCase(FunctionSet.STR2DATE)) {
+        if (functionCallExpr.getFunctionName().equalsIgnoreCase(FunctionSet.STR2DATE)) {
             return baseRange;
         }
-        if (!functionCallExpr.getFnName().getFunction().equalsIgnoreCase(FunctionSet.DATE_TRUNC)) {
-            throw new SemanticException("Do not support function: %s", functionCallExpr.getFnName().getFunction());
+        if (!functionCallExpr.getFunctionName().equalsIgnoreCase(FunctionSet.DATE_TRUNC)) {
+            throw new SemanticException("Do not support function: %s", functionCallExpr.getFunctionName());
         }
         Preconditions.checkState(baseRange.lowerEndpoint().getTypes().size() == 1);
 

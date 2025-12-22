@@ -111,7 +111,10 @@ void AggregateFuncResolver::register_others() {
     add_array_mapping<TYPE_DATE, TYPE_INT>("window_funnel");
 
     add_general_mapping<AnyValueSemiState>("any_value", false, AggregateFactory::MakeAnyValueSemiAggregateFunction());
-    add_general_mapping_notnull("array_agg2", false, AggregateFactory::MakeArrayAggAggregateFunctionV2());
+    add_general_mapping_notnull("array_agg2", false,
+                                AggregateFactory::MakeArrayAggAggregateFunctionV2<ArrayAggAggregateStateV2>());
+    add_general_window_mapping_notnull("array_agg2",
+                                       AggregateFactory::MakeArrayAggAggregateFunctionV2<ArrayAggWindowStateV2>());
     add_general_mapping_notnull("group_concat2", false, AggregateFactory::MakeGroupConcatAggregateFunctionV2());
 
     add_general_mapping_notnull("dict_merge", false, AggregateFactory::MakeDictMergeAggregateFunction());

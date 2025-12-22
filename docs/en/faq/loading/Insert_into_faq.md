@@ -21,3 +21,7 @@ Or you can set the INSERT timeout using the following variable:
 ## The error "execute timeout" occurs when I run the INSERT INTO SELECT command to load a large volume of data
 
 By default, the INSERT timeout duration is 14400s. You can set the variable `insert_timeout` to extend this duration. The unit is second.
+
+## Why does INSERT INTO SELECT return “Reach limit of connections”?
+
+It is because the user connection limit is reached. Increase the value of the user property `max_user_connections`.

@@ -36,7 +36,7 @@ Status add_struct_column(Column* column, const TypeDescriptor& type_desc, const 
             const auto& field_name = type_desc.field_names[i];
             const auto& field_type_desc = type_desc.children[i];
 
-            auto field_column = struct_column->field_column(field_name);
+            auto* field_column = struct_column->field_column_raw_ptr(field_name);
             simdjson::ondemand::value field_value;
             auto err = obj.find_field_unordered(field_name).get(field_value);
             simdjson::ondemand::value* field_value_ptr = nullptr;
@@ -49,7 +49,7 @@ Status add_struct_column(Column* column, const TypeDescriptor& type_desc, const 
                                                    simdjson::error_message(err));
                 LOG(WARNING) << err_msg;
             }
-            RETURN_IF_ERROR(add_nullable_column(field_column.get(), field_type_desc, name, field_value_ptr, true));
+            RETURN_IF_ERROR(add_nullable_column(field_column, field_type_desc, name, field_value_ptr, true));
         }
         return Status::OK();
     } catch (simdjson::simdjson_error& e) {

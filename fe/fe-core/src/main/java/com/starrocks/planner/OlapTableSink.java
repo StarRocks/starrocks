@@ -48,7 +48,6 @@ import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.ExpressionRangePartitionInfoV2;
 import com.starrocks.catalog.ExternalOlapTable;
 import com.starrocks.catalog.HashDistributionInfo;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
@@ -59,10 +58,12 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.catalog.RangeDistributionInfo;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.Tablet;
+import com.starrocks.catalog.TabletRange;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -87,6 +88,7 @@ import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.analyzer.SelectAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.IndexDef.IndexType;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprSubstitutionMap;
 import com.starrocks.sql.ast.expression.ExprSubstitutionVisitor;
@@ -94,6 +96,7 @@ import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TColumn;
 import com.starrocks.thrift.TDataSink;
@@ -101,6 +104,7 @@ import com.starrocks.thrift.TDataSinkType;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TOlapTableColumnParam;
+import com.starrocks.thrift.TOlapTableDistributionType;
 import com.starrocks.thrift.TOlapTableIndexSchema;
 import com.starrocks.thrift.TOlapTableIndexTablets;
 import com.starrocks.thrift.TOlapTableLocationParam;
@@ -108,6 +112,7 @@ import com.starrocks.thrift.TOlapTablePartition;
 import com.starrocks.thrift.TOlapTablePartitionParam;
 import com.starrocks.thrift.TOlapTableSchemaParam;
 import com.starrocks.thrift.TOlapTableSink;
+import com.starrocks.thrift.TOlapTableTablet;
 import com.starrocks.thrift.TPartialUpdateMode;
 import com.starrocks.thrift.TTabletLocation;
 import com.starrocks.thrift.TUniqueId;
@@ -207,7 +212,7 @@ public class OlapTableSink extends DataSink {
         tSink.setLoad_channel_timeout_s(loadChannelTimeoutS);
         tSink.setIs_lake_table(dstTable.isCloudNativeTableOrMaterializedView() ||
                 dstTable.isOlapExternalTable() && ((ExternalOlapTable) dstTable).isSourceTableCloudNativeTableOrMaterializedView());
-        tSink.setKeys_type(dstTable.getKeysType().toThrift());
+        tSink.setKeys_type(ExprToThrift.keysTypeToThrift(dstTable.getKeysType()));
         tSink.setWrite_quorum_type(writeQuorum);
         // If table has Gin index, do not allow replicated storage
         boolean hasGin = dstTable.getIndexes().stream()
@@ -389,14 +394,14 @@ public class OlapTableSink extends DataSink {
         TOlapTableSchemaParam schemaParam = new TOlapTableSchemaParam();
         schemaParam.setDb_id(dbId);
         schemaParam.setTable_id(table.getId());
-        schemaParam.setVersion(table.getIndexMetaByIndexId(table.getBaseIndexId()).getSchemaVersion());
+        schemaParam.setVersion(table.getIndexMetaByIndexId(table.getBaseIndexMetaId()).getSchemaVersion());
 
         schemaParam.tuple_desc = tupleDescriptor.toThrift();
         for (SlotDescriptor slotDesc : tupleDescriptor.getSlots()) {
             schemaParam.addToSlot_descs(slotDesc.toThrift());
         }
 
-        for (Map.Entry<Long, MaterializedIndexMeta> pair : table.getIndexIdToMeta().entrySet()) {
+        for (Map.Entry<Long, MaterializedIndexMeta> pair : table.getIndexMetaIdToMeta().entrySet()) {
             MaterializedIndexMeta indexMeta = pair.getValue();
             List<String> columns = Lists.newArrayList();
             List<TColumn> columnsDesc = Lists.newArrayList();
@@ -506,7 +511,10 @@ public class OlapTableSink extends DataSink {
                 }
                 break;
             }
-            case RANDOM: {
+            case RANDOM:
+                break;
+            case RANGE: {
+                distColumns.addAll(MetaUtils.getRangeDistributionColumnIds(table));
                 break;
             }
             default:
@@ -536,6 +544,8 @@ public class OlapTableSink extends DataSink {
         partitionParam.setTable_id(table.getId());
         partitionParam.setVersion(0);
         partitionParam.setEnable_automatic_partition(enableAutomaticPartition);
+        DistributionInfo.DistributionInfoType distType = table.getDefaultDistributionInfo().getType();
+        partitionParam.setDistribution_type(TOlapTableDistributionType.valueOf(distType.name()));
 
         PartitionType partType = table.getPartitionInfo().getType();
         List<Column> partitionColumns = table.getPartitionInfo().getPartitionColumns(table.getIdToColumn());
@@ -759,6 +769,12 @@ public class OlapTableSink extends DataSink {
     private static void setMaterializedIndexes(PhysicalPartition partition, TOlapTablePartition tPartition) {
         for (MaterializedIndex index : partition.getMaterializedIndices(IndexExtState.ALL)) {
             TOlapTableIndexTablets tIndex = new TOlapTableIndexTablets(index.getId(), index.getTabletIdsInOrder());
+            tIndex.setTablets(index.getTablets().stream().map(tablet -> {
+                TOlapTableTablet tTablet = new TOlapTableTablet();
+                tTablet.setId(tablet.getId());
+                tTablet.setRange(tablet.getRange().toThrift());
+                return tTablet;
+            }).collect(Collectors.toList()));
             tPartition.addToIndexes(tIndex);
         }
     }
@@ -955,7 +971,9 @@ public class OlapTableSink extends DataSink {
     }
 
     private static boolean canUseColocateMVIndex(OlapTable table) {
-        return Config.enable_colocate_mv_index && table.isEnableColocateMVIndex();
+        return Config.enable_colocate_mv_index && table.isEnableColocateMVIndex() &&
+               // disable colocate mv index for range distribution for now
+               table.getDefaultDistributionInfo().getType() != DistributionInfo.DistributionInfoType.RANGE;
     }
 
     public boolean canUsePipeLine() {

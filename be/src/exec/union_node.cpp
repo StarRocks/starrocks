@@ -341,8 +341,7 @@ void UnionNode::_move_column(ChunkPtr& dest_chunk, ColumnPtr& src_column, const 
             dest_chunk->append_column(std::move(new_column), dest_slot->id());
         } else {
             if (dest_slot->is_nullable()) {
-                MutableColumnPtr nullable_column = NullableColumn::create(std::move(src_column)->as_mutable_ptr(),
-                                                                          NullColumn::create(row_count, 0));
+                auto nullable_column = NullableColumn::create(std::move(src_column), NullColumn::create(row_count, 0));
                 dest_chunk->append_column(std::move(nullable_column), dest_slot->id());
             } else {
                 dest_chunk->append_column(std::move(src_column), dest_slot->id());

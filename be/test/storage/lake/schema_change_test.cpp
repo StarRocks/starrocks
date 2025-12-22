@@ -69,7 +69,7 @@ public:
     }
 
 protected:
-    static std::shared_ptr<Chunk> read(const VersionedTablet& tablet, bool sorted = false) {
+    static ChunkPtr read(const VersionedTablet& tablet, bool sorted = false) {
         auto metadata = tablet.metadata();
         auto schema = tablet.get_schema();
         auto reader = std::make_shared<TabletReader>(tablet.tablet_manager(), metadata, *(schema->schema()));
@@ -98,7 +98,7 @@ protected:
         TxnInfoPB txn_info;
         txn_info.set_txn_id(txn_id);
         txn_info.set_combined_txn_log(false);
-        txn_info.set_commit_time(time(NULL));
+        txn_info.set_commit_time(time(nullptr));
         return publish_version(_tablet_manager.get(), tablet_id, 1, new_version,
                                std::span<const TxnInfoPB>(&txn_info, 1), false)
                 .status();
@@ -981,9 +981,9 @@ TEST_P(SchemaChangeModifyColumnOrderTest, test_alter_key_order) {
     std::vector<int> k1{1, 2, 3, 1, 2, 3, 1, 2, 3, 1, 2, 3};
     std::vector<int> v0{2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24};
 
-    Int32Column::Ptr ck0 = Int32Column::create();
-    Int32Column::Ptr ck1 = Int32Column::create();
-    Int32Column::Ptr cv0 = Int32Column::create();
+    auto ck0 = Int32Column::create();
+    auto ck1 = Int32Column::create();
+    auto cv0 = Int32Column::create();
     ck0->append_numbers(k0.data(), k0.size() * sizeof(int));
     ck1->append_numbers(k1.data(), k1.size() * sizeof(int));
     cv0->append_numbers(v0.data(), v0.size() * sizeof(int));
@@ -1470,9 +1470,9 @@ TEST_P(SchemaChangeSortKeyReorderTest1, test_alter_sortkey_reorder_1) {
     std::vector<int> k1{1, 2, 3, 1, 2, 3, 1, 2, 3, 1, 2, 3};
     std::vector<int> v0{2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24};
 
-    Int32Column::Ptr ck0 = Int32Column::create();
-    Int32Column::Ptr ck1 = Int32Column::create();
-    Int32Column::Ptr cv0 = Int32Column::create();
+    auto ck0 = Int32Column::create();
+    auto ck1 = Int32Column::create();
+    auto cv0 = Int32Column::create();
     ck0->append_numbers(k0.data(), k0.size() * sizeof(int));
     ck1->append_numbers(k1.data(), k1.size() * sizeof(int));
     cv0->append_numbers(v0.data(), v0.size() * sizeof(int));
@@ -1708,9 +1708,9 @@ TEST_P(SchemaChangeSortKeyReorderTest2, test_alter_sortkey_reorder2) {
     std::vector<int> k1{1, 2, 3, 3, 2, 1, 1, 2, 3, 1, 2, 3};
     std::vector<int> v0{2, 4, 6, 12, 10, 8, 14, 16, 18, 20, 22, 24};
 
-    Int32Column::Ptr ck0 = Int32Column::create();
-    Int32Column::Ptr ck1 = Int32Column::create();
-    Int32Column::Ptr cv0 = Int32Column::create();
+    auto ck0 = Int32Column::create();
+    auto ck1 = Int32Column::create();
+    auto cv0 = Int32Column::create();
     ck0->append_numbers(k0.data(), k0.size() * sizeof(int));
     ck1->append_numbers(k1.data(), k1.size() * sizeof(int));
     cv0->append_numbers(v0.data(), v0.size() * sizeof(int));
@@ -1944,9 +1944,9 @@ TEST_P(SchemaChangeSortKeyReorderTest3, test_alter_sortkey_reorder3) {
     std::vector<int> k1{1, 2, 3, 1, 2, 3, 1, 2, 3, 1, 2, 3};
     std::vector<int> v0{2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24};
 
-    Int32Column::Ptr ck0 = Int32Column::create();
-    Int32Column::Ptr ck1 = Int32Column::create();
-    Int32Column::Ptr cv0 = Int32Column::create();
+    auto ck0 = Int32Column::create();
+    auto ck1 = Int32Column::create();
+    auto cv0 = Int32Column::create();
     ck0->append_numbers(k0.data(), k0.size() * sizeof(int));
     ck1->append_numbers(k1.data(), k1.size() * sizeof(int));
     cv0->append_numbers(v0.data(), v0.size() * sizeof(int));

@@ -29,7 +29,6 @@ import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.ExternalOlapTable;
 import com.starrocks.catalog.FlatJsonConfig;
 import com.starrocks.catalog.HashDistributionInfo;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -65,6 +64,7 @@ import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.ExpressionPartitionDesc;
 import com.starrocks.sql.ast.IndexDef.IndexType;
 import com.starrocks.sql.ast.KeysDesc;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.ListPartitionDesc;
 import com.starrocks.sql.ast.OrderByElement;
 import com.starrocks.sql.ast.PartitionDesc;
@@ -275,7 +275,7 @@ public class OlapTableFactory implements AbstractTableFactory {
 
             // set base index id
             long baseIndexId = metastore.getNextId();
-            table.setBaseIndexId(baseIndexId);
+            table.setBaseIndexMetaId(baseIndexId);
 
             // get use light schema change
             try {
@@ -359,10 +359,8 @@ public class OlapTableFactory implements AbstractTableFactory {
             // analyze location property
             PropertyAnalyzer.analyzeLocation(table, properties);
 
-            // set in memory
-            boolean isInMemory =
-                    PropertyAnalyzer.analyzeBooleanProp(properties, PropertyAnalyzer.PROPERTIES_INMEMORY, false);
-            table.setIsInMemory(isInMemory);
+            // consume deprecated in_memory property if present
+            PropertyAnalyzer.analyzeBooleanProp(properties, PropertyAnalyzer.PROPERTIES_INMEMORY, false);
 
             boolean enablePersistentIndex = PropertyAnalyzer.analyzeEnablePersistentIndex(properties);
             if (table.getKeysType() == KeysType.PRIMARY_KEYS) {
@@ -519,12 +517,12 @@ public class OlapTableFactory implements AbstractTableFactory {
                 throw new DdlException(e.getMessage());
             }
 
+            boolean enableReplicatedStorage = PropertyAnalyzer.analyzeBooleanProp(
+                    properties, PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE,
+                    Config.enable_replicated_storage_as_default_engine);
             if (table.isOlapTableOrMaterializedView()) {
                 // replicated storage
-                table.setEnableReplicatedStorage(
-                        PropertyAnalyzer.analyzeBooleanProp(
-                                properties, PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE,
-                                Config.enable_replicated_storage_as_default_engine));
+                table.setEnableReplicatedStorage(enableReplicatedStorage);
 
                 boolean hasGin = table.getIndexes().stream()
                         .anyMatch(index -> index.getIndexType() == IndexType.GIN);
@@ -624,8 +622,6 @@ public class OlapTableFactory implements AbstractTableFactory {
                 Preconditions.checkNotNull(dataProperty);
                 partitionInfo.setDataProperty(partitionId, dataProperty);
                 partitionInfo.setReplicationNum(partitionId, replicationNum);
-                partitionInfo.setIsInMemory(partitionId, isInMemory);
-                partitionInfo.setTabletType(partitionId, tabletType);
                 StorageInfo storageInfo = table.getTableProperty().getStorageInfo();
                 DataCacheInfo dataCacheInfo = storageInfo == null ? null : storageInfo.getDataCacheInfo();
                 partitionInfo.setDataCacheInfo(partitionId, dataCacheInfo);
@@ -671,7 +667,7 @@ public class OlapTableFactory implements AbstractTableFactory {
             for (AlterClause alterClause : stmt.getRollupAlterClauseList()) {
                 AddRollupClause addRollupClause = (AddRollupClause) alterClause;
 
-                Long baseRollupIndex = table.getIndexIdByName(tableName);
+                Long baseRollupIndex = table.getIndexMetaIdByName(tableName);
 
                 // get storage type for rollup index
                 TStorageType rollupIndexStorageType = null;

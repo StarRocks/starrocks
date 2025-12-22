@@ -51,41 +51,41 @@ Status SchemaBeConfigsScanner::fill_chunk(ChunkPtr* chunk) {
     for (; _cur_idx < end; _cur_idx++) {
         auto& info = _infos[_cur_idx];
         for (const auto& [slot_id, index] : slot_id_to_index_map) {
-            ColumnPtr column = (*chunk)->get_column_by_slot_id(slot_id);
+            auto* column = (*chunk)->get_column_raw_ptr_by_slot_id(slot_id);
             switch (slot_id) {
             case 1: {
                 // be id
-                fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&_be_id);
+                fill_column_with_slot<TYPE_BIGINT>(column, (void*)&_be_id);
                 break;
             }
             case 2: {
                 // name
                 Slice v(info.name);
-                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&v);
+                fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&v);
                 break;
             }
             case 3: {
                 // value
                 Slice v(info.value);
-                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&v);
+                fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&v);
                 break;
             }
             case 4: {
                 // type
                 Slice v(info.type);
-                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&v);
+                fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&v);
                 break;
             }
             case 5: {
                 // default
                 Slice v(info.defval);
-                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&v);
+                fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&v);
                 break;
             }
             case 6: {
                 // mutable
                 bool v(info.valmutable);
-                fill_column_with_slot<TYPE_BOOLEAN>(column.get(), (void*)&v);
+                fill_column_with_slot<TYPE_BOOLEAN>(column, (void*)&v);
                 break;
             }
             default:

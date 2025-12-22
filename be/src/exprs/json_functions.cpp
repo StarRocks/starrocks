@@ -359,6 +359,32 @@ StatusOr<ColumnPtr> JsonFunctions::json_string(FunctionContext* context, const C
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
+StatusOr<ColumnPtr> JsonFunctions::json_pretty(FunctionContext* context, const Columns& columns) {
+    ColumnViewer<TYPE_JSON> viewer(columns[0]);
+    ColumnBuilder<TYPE_VARCHAR> result(columns[0]->size());
+
+    arangodb::velocypack::Options options = arangodb::velocypack::Options::Defaults;
+    options.prettyPrint = true;
+
+    for (int row = 0; row < columns[0]->size(); row++) {
+        if (viewer.is_null(row)) {
+            result.append_null();
+        } else {
+            JsonValue* json = viewer.value(row);
+
+            // LCOV_EXCL_START
+            try {
+                std::string pretty_json = json->to_vslice().toJson(&options);
+                result.append(pretty_json);
+            } catch (const std::exception& e) {
+                result.append_null();
+            }
+            // LCOV_EXCL_STOP
+        }
+    }
+    return result.build(ColumnHelper::is_all_const(columns));
+}
+
 StatusOr<ColumnPtr> _string_json(FunctionContext* context, const Columns& columns) {
     ColumnViewer<TYPE_VARCHAR> viewer(columns[0]);
     ColumnBuilder<TYPE_JSON> result(columns[0]->size());
@@ -573,7 +599,7 @@ static StatusOr<ColumnPtr> _extract_with_hyper(NativeJsonState* state, const std
     transform.init_read_task(json_column->flat_column_paths(), json_column->flat_column_types(),
                              json_column->has_remain());
 
-    RETURN_IF_ERROR(transform.trans(json_column->get_flat_fields_ptrs()));
+    RETURN_IF_ERROR(transform.trans(json_column->get_flat_fields()));
     auto res = transform.mutable_result();
     DCHECK_EQ(1, res.size());
     res[0]->check_or_die();
@@ -1558,6 +1584,231 @@ private:
 static bool json_slice_contains(const arangodb::velocypack::Slice& target,
                                 const arangodb::velocypack::Slice& candidate) {
     return JsonContainmentChecker::contains(target, candidate);
+}
+
+static bool _json_set_recursive(arangodb::velocypack::Builder& builder, arangodb::velocypack::Slice slice,
+                                const std::vector<JsonPathPiece>& paths, size_t depth,
+                                arangodb::velocypack::Slice new_value) {
+    namespace vpack = arangodb::velocypack;
+
+    if (depth >= paths.size()) {
+        builder.add(new_value);
+        return true;
+    }
+
+    const auto& piece = paths[depth];
+    bool is_last_step = (depth == paths.size() - 1);
+
+    bool has_selector = (piece.array_selector && piece.array_selector->type != ArraySelectorType::NONE);
+
+    if (slice.isObject()) {
+        vpack::ObjectBuilder ob(&builder);
+        std::string target_key = piece.key;
+        bool found = false;
+
+        for (auto it : vpack::ObjectIterator(slice)) {
+            if (it.key.isEqualString(target_key)) {
+                found = true;
+                builder.add(vpack::Value(it.key.copyString()));
+
+                if (has_selector) {
+                    if (it.value.isArray()) {
+                        vpack::ArrayBuilder ab(&builder);
+                        int target_idx = -1;
+                        if (piece.array_selector->type == ArraySelectorType::SINGLE) {
+                            target_idx = down_cast<ArraySelectorSingle*>(piece.array_selector.get())->index;
+                        }
+
+                        size_t array_len = it.value.length();
+                        if (target_idx != -1) {
+                            for (size_t i = 0; i < array_len; ++i) {
+                                if (i == target_idx) {
+                                    if (is_last_step) {
+                                        builder.add(new_value);
+                                    } else {
+                                        _json_set_recursive(builder, it.value.at(i), paths, depth + 1, new_value);
+                                    }
+                                } else {
+                                    builder.add(it.value.at(i));
+                                }
+                            }
+                            if (is_last_step && static_cast<size_t>(target_idx) >= array_len) {
+                                builder.add(new_value);
+                            }
+                        } else {
+                            for (auto arr_it : vpack::ArrayIterator(it.value)) {
+                                builder.add(arr_it);
+                            }
+                        }
+                    } else {
+                        builder.add(it.value);
+                    }
+                } else {
+                    if (is_last_step) {
+                        builder.add(new_value);
+                    } else {
+                        _json_set_recursive(builder, it.value, paths, depth + 1, new_value);
+                    }
+                }
+            } else {
+                builder.add(it.key.copyString(), it.value);
+            }
+        }
+        if (!found && is_last_step && !has_selector) {
+            builder.add(target_key, new_value);
+        }
+        return true;
+
+    } else if (slice.isArray()) {
+        vpack::ArrayBuilder ab(&builder);
+        int target_idx = -1;
+
+        if (has_selector && piece.array_selector->type == ArraySelectorType::SINGLE) {
+            target_idx = down_cast<ArraySelectorSingle*>(piece.array_selector.get())->index;
+        }
+
+        size_t array_len = slice.length();
+        if (target_idx != -1) {
+            for (size_t i = 0; i < array_len; ++i) {
+                if (i == target_idx) {
+                    if (is_last_step) {
+                        builder.add(new_value);
+                    } else {
+                        _json_set_recursive(builder, slice.at(i), paths, depth + 1, new_value);
+                    }
+                } else {
+                    builder.add(slice.at(i));
+                }
+            }
+            if (is_last_step && static_cast<size_t>(target_idx) >= array_len) {
+                builder.add(new_value);
+            }
+        } else {
+            for (auto it : vpack::ArrayIterator(slice)) {
+                builder.add(it);
+            }
+        }
+        return true;
+    } else {
+        builder.add(slice);
+        return true;
+    }
+}
+
+static StatusOr<JsonValue> _json_set_one_path(JsonValue* json_val, const JsonPath& path, JsonValue* new_val_json) {
+    if (path.paths.empty()) {
+        return *json_val;
+    }
+
+    if (path.paths.size() == 1 && path.paths[0].key == "$" &&
+        (!path.paths[0].array_selector || path.paths[0].array_selector->type == ArraySelectorType::NONE)) {
+        return *new_val_json;
+    }
+
+    arangodb::velocypack::Builder builder;
+    arangodb::velocypack::Slice root = json_val->to_vslice();
+
+    bool root_has_selector =
+            (path.paths[0].array_selector && path.paths[0].array_selector->type == ArraySelectorType::SINGLE);
+
+    if (root_has_selector && !root.isArray()) {
+        return *json_val;
+    }
+
+    if (root_has_selector && root.isArray()) {
+        vpack::ArrayBuilder ab(&builder);
+        int target_idx = down_cast<ArraySelectorSingle*>(path.paths[0].array_selector.get())->index;
+
+        size_t len = root.length();
+        bool is_last_step = (path.paths.size() == 1);
+
+        for (size_t i = 0; i < len; ++i) {
+            if (i == target_idx) {
+                if (is_last_step) {
+                    builder.add(new_val_json->to_vslice());
+                } else {
+                    _json_set_recursive(builder, root.at(i), path.paths, 1, new_val_json->to_vslice());
+                }
+            } else {
+                builder.add(root.at(i));
+            }
+        }
+        if (is_last_step && static_cast<size_t>(target_idx) >= len) {
+            builder.add(new_val_json->to_vslice());
+        }
+    } else {
+        _json_set_recursive(builder, root, path.paths, 1, new_val_json->to_vslice());
+    }
+
+    return JsonValue(builder.slice());
+}
+
+StatusOr<ColumnPtr> JsonFunctions::json_set(FunctionContext* context, const Columns& columns) {
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+
+    if (columns.size() < 3 || (columns.size() - 1) % 2 != 0) {
+        return Status::InvalidArgument("json_set requires arguments as: json_doc, path, val, [path, val]...");
+    }
+
+    size_t rows = columns[0]->size();
+    ColumnBuilder<TYPE_JSON> result(rows);
+    ColumnViewer<TYPE_JSON> json_viewer(columns[0]);
+
+    std::vector<ColumnViewer<TYPE_JSON>> path_viewers;
+    std::vector<ColumnViewer<TYPE_JSON>> val_viewers;
+
+    for (size_t i = 1; i < columns.size(); i += 2) {
+        path_viewers.emplace_back(columns[i]);
+        val_viewers.emplace_back(columns[i + 1]);
+    }
+
+    for (size_t row = 0; row < rows; ++row) {
+        if (json_viewer.is_null(row)) {
+            result.append_null();
+            continue;
+        }
+
+        JsonValue current_doc = *json_viewer.value(row);
+        bool null_arg = false;
+
+        for (size_t i = 0; i < path_viewers.size(); ++i) {
+            if (path_viewers[i].is_null(row) || val_viewers[i].is_null(row)) {
+                null_arg = true;
+                break;
+            }
+
+            JsonValue* path_json = path_viewers[i].value(row);
+            arangodb::velocypack::Slice path_slice = path_json->to_vslice();
+
+            if (!path_slice.isString()) {
+                null_arg = true;
+                break;
+            }
+            std::string path_str = path_slice.copyString();
+
+            auto res = JsonPath::parse(Slice(path_str));
+            if (!res.ok()) {
+                null_arg = true;
+                break;
+            }
+            JsonPath json_path = res.value();
+
+            JsonValue* new_val = val_viewers[i].value(row);
+
+            auto status_or = _json_set_one_path(&current_doc, json_path, new_val);
+            if (status_or.ok()) {
+                current_doc = status_or.value();
+            }
+        }
+
+        if (null_arg) {
+            result.append_null();
+        } else {
+            result.append(std::move(current_doc));
+        }
+    }
+
+    return result.build(ColumnHelper::is_all_const(columns));
 }
 
 } // namespace starrocks

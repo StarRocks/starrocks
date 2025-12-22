@@ -12,9 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <bthread/condition_variable.h>
+#include <bthread/mutex.h>
+
 #include <atomic>
 
 #include "google/protobuf/stubs/callback.h"
+#include "util/countdown_latch.h"
 
 namespace starrocks {
 
@@ -29,6 +33,23 @@ public:
 
 private:
     std::atomic_bool _run = false;
+};
+
+class MockCountDownClosure : public MockClosure {
+public:
+    using BThreadCountDownLatch = GenericCountDownLatch<bthread::Mutex, bthread::ConditionVariable>;
+    MockCountDownClosure() : _latch(1) {}
+    ~MockCountDownClosure() override = default;
+
+    void wait() { _latch.wait(); }
+
+    void Run() override {
+        MockClosure::Run();
+        _latch.count_down();
+    }
+
+private:
+    BThreadCountDownLatch _latch;
 };
 
 } // namespace starrocks

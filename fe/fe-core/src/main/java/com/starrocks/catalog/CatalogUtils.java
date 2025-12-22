@@ -279,36 +279,99 @@ public class CatalogUtils {
         }
     }
 
-    public static void checkPartitionValuesExistForAddListPartition(OlapTable olapTable, PartitionDesc partitionDesc,
-                                                                    boolean isTemp)
+    /**
+     * Check if partition values already exist in the table for list partition.
+     * @return true if partition values already exist (duplicate), false otherwise
+     */
+    public static boolean checkPartitionValuesExistForAddListPartition(OlapTable olapTable, PartitionDesc partitionDesc,
+                                                                       boolean isTemp)
             throws DdlException {
         try {
             ListPartitionInfo listPartitionInfo = (ListPartitionInfo) olapTable.getPartitionInfo();
-            Set<Long> partitionIds = Sets.newHashSet(listPartitionInfo.getPartitionIds(isTemp));
+            Set<Long> partitionIds = Sets.newHashSet();
+
+            if (isTemp) {
+                // Temp partitions don't need to check against formal partitions.
+                // Temp partitions from different transactions should be isolated until commit.
+                // This fixes the issue where concurrent transactions cannot create temp partitions with same values.
+                String partitionName = partitionDesc.getPartitionName();
+                String txnPrefix = extractTxnPrefix(partitionName);
+                if (txnPrefix != null) {
+                    // This is an insert overwrite temp partition, only check temp partitions from the same txn
+                    for (Partition tempPartition : olapTable.getTempPartitions()) {
+                        if (tempPartition.getName().startsWith(txnPrefix)) {
+                            partitionIds.add(tempPartition.getId());
+                        }
+                    }
+                } else {
+                    // This is a non-insert-overwrite temp partition, check all non-txn temp partitions
+                    for (Partition tempPartition : olapTable.getTempPartitions()) {
+                        String tempTxnPrefix = extractTxnPrefix(tempPartition.getName());
+                        if (tempTxnPrefix == null) {
+                            // Add non-txn temp partitions to the check list
+                            partitionIds.add(tempPartition.getId());
+                        }
+                    }
+                }
+            } else {
+                // For formal partitions, check against all formal partitions
+                partitionIds = Sets.newHashSet(listPartitionInfo.getPartitionIds(false));
+            }
 
             if (partitionDesc instanceof SingleItemListPartitionDesc) {
                 Set<LiteralExpr> existingValues = listPartitionInfo.getValuesSet(partitionIds);
                 SingleItemListPartitionDesc singleItemListPartitionDesc = (SingleItemListPartitionDesc) partitionDesc;
                 for (LiteralExpr item : singleItemListPartitionDesc.getLiteralExprValues()) {
                     if (existingValues.contains(item)) {
-                        throw new DdlException("Duplicate partition value " + item.getStringValue());
+                        return true;
                     }
                 }
             } else if (partitionDesc instanceof MultiItemListPartitionDesc) {
                 int partitionColSize = listPartitionInfo.getPartitionColumnsSize();
                 MultiItemListPartitionDesc multiItemListPartitionDesc = (MultiItemListPartitionDesc) partitionDesc;
-                checkItemValuesValid(partitionColSize, partitionIds, listPartitionInfo.getMultiLiteralExprValues(),
+                return isItemValuesExist(partitionColSize, partitionIds, listPartitionInfo.getMultiLiteralExprValues(),
                         multiItemListPartitionDesc);
             }
         } catch (AnalysisException e) {
             throw new DdlException(e.getMessage());
         }
+        return false;
     }
 
-    private static void checkItemValuesValid(int partitionColSize, Set<Long> partitionIds,
+    /**
+     * Extract the txn prefix from partition name if it's created by insert overwrite.
+     * Insert overwrite creates temp partitions with name format: "txn<txn_id>_<original_name>"
+     * @param partitionName the partition name to check
+     * @return the txn prefix (e.g., "txn12345_") if the partition is created by insert overwrite, null otherwise
+     */
+    static String extractTxnPrefix(String partitionName) {
+        if (partitionName == null || !partitionName.startsWith("txn")) {
+            return null;
+        }
+        int underscoreIndex = partitionName.indexOf('_');
+        if (underscoreIndex <= 3) {
+            // "txn" is 3 characters, there should be at least one digit before underscore
+            return null;
+        }
+        // Verify that characters between "txn" and "_" are all digits (txn id)
+        String txnIdPart = partitionName.substring(3, underscoreIndex);
+        for (char c : txnIdPart.toCharArray()) {
+            if (!Character.isDigit(c)) {
+                return null;
+            }
+        }
+        // Return prefix including the underscore, e.g., "txn12345_"
+        return partitionName.substring(0, underscoreIndex + 1);
+    }
+
+    /**
+     * Check if multi-item partition values already exist.
+     * @return true if values already exist (duplicate), false otherwise
+     */
+    private static boolean isItemValuesExist(int partitionColSize, Set<Long> partitionIds,
                                              Map<Long, List<List<LiteralExpr>>> idToMultiLiteralExprValues,
                                              MultiItemListPartitionDesc multiItemListPartitionDesc)
-            throws AnalysisException, DdlException {
+            throws AnalysisException {
         List<Map<LiteralExpr, Set<Long>>> valueToIdIndexList = new ArrayList<>();
         for (int i = 0; i < partitionColSize; ++i) {
             valueToIdIndexList.add(new HashMap<>());
@@ -362,11 +425,11 @@ public class CatalogUtils {
                 }
             }
             if (!isValid) {
-                List<String> multiValues = values.stream().map(LiteralExpr::getStringValue)
-                        .collect(Collectors.toList());
-                throw new DdlException("Duplicate values " + "(" + String.join(",", multiValues) + ") ");
+                // Values already exist (duplicate)
+                return true;
             }
         }
+        return false;
     }
 
     public static int divisibleBucketNum(int backendNum) {

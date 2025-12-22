@@ -305,6 +305,33 @@ public class AnalyzeSingleTest {
     }
 
     @Test
+    public void testOrderAll() {
+        // Simple test
+        analyzeSuccess("select v1 from t0 order by all");
+        analyzeSuccess("select v1 from t0 order by all nulls first");
+        analyzeSuccess("select v1 from t0 order by all nulls last");
+        analyzeSuccess("select v1 from t0 order by all limit 2, 10");
+
+        // Test output scope resolve
+        analyzeSuccess("select v1+1 as v from t0 order by all");
+        analyzeSuccess("select v1+2 as v,* from t0 order by all nulls first");
+        analyzeSuccess("select v1, sum(v2) as v from t0 group by v1 order by all");
+        analyzeSuccess("select v1, sum(v2) as v from t0 group by v1 order by all");
+        analyzeSuccess("select v1+1 as v from t0 group by v1+1 order by all");
+        analyzeSuccess("select v1+1 as v from t0 group by v order by all");
+
+        // Test order by with aggregation
+        analyzeSuccess("select v1, sum(v2) from t0 group by v1 order by all");
+        analyzeSuccess("select v1,v3,sum(v2) from t0 group by v1,v3 order by all nulls first");
+
+        // Test ambiguous reference
+        analyzeFail("select v1, v1 from t0 order by v1, all");
+        analyzeSuccess("select v1 as v, v2 as v from t0 order by all");
+        analyzeSuccess("select v1, v1 from t0 order by all");
+        analyzeSuccess("select v1 as v, v1 as v from t0 order by v");
+    }
+
+    @Test
     public void testExpression() {
         // Test ArithmeticExpr
         analyzeSuccess("select v1 + 1 as k from t0");

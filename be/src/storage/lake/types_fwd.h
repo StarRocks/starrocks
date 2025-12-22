@@ -13,7 +13,10 @@
 // limitations under the License.
 
 #pragma once
+#include <cstdint>
 #include <memory>
+#include <set>
+#include <unordered_map>
 #include <vector>
 
 namespace starrocks {
@@ -46,6 +49,9 @@ using CompactionTaskPtr = std::shared_ptr<CompactionTask>;
 using segment_rowid_t = uint32_t;
 using DeletesMap = std::unordered_map<uint32_t, std::vector<segment_rowid_t>>;
 using DelVectorPtr = std::shared_ptr<DelVector>;
+
+using KeyIndex = size_t;
+using KeyIndexSet = std::set<KeyIndex>;
 
 } // namespace lake
 

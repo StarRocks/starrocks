@@ -16,8 +16,11 @@ package com.starrocks.catalog;
 
 import com.google.common.base.Preconditions;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.proto.VariantPB;
 import com.starrocks.sql.common.TypeManager;
+import com.starrocks.thrift.TVariant;
 import com.starrocks.type.Type;
+import com.starrocks.type.TypeDeserializer;
 
 import java.util.List;
 
@@ -39,11 +42,11 @@ public abstract class Variant implements Comparable<Variant> {
         return type;
     }
 
-    public abstract long getLongValue();
-
     public abstract String getStringValue();
 
-    // public abstract TVariant toThrift();
+    public abstract long getLongValue();
+
+    public abstract TVariant toThrift();
 
     // public abstract VariantPB toProto();
 
@@ -72,6 +75,14 @@ public abstract class Variant implements Comparable<Variant> {
             default:
                 throw new IllegalArgumentException("Type[" + type.toSql() + "] not supported.");
         }
+    }
+
+    public static Variant fromThrift(TVariant tVariant) {
+        return Variant.of(TypeDeserializer.fromThrift(tVariant.type), tVariant.getValue());
+    }
+
+    public static Variant fromProto(VariantPB variantPB) {
+        return Variant.of(TypeDeserializer.fromProtobuf(variantPB.type), variantPB.value);
     }
 
     public static int compatibleCompare(Variant key1, Variant key2) {
@@ -104,4 +115,5 @@ public abstract class Variant implements Comparable<Variant> {
         }
         return Integer.compare(key1Length, key2Length);
     }
+
 }

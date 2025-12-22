@@ -20,9 +20,9 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.PartitionNames;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.VectorSearchOptions;
-import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.ast.TableSampleClause;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
 import com.starrocks.sql.optimizer.operator.Operator;
@@ -69,7 +69,7 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
             long limit,
             ScalarOperator predicate) {
         this(table, colRefToColumnMetaMap, columnMetaToColRefMap, distributionSpec, limit, predicate,
-                ((OlapTable) table).getBaseIndexId(),
+                ((OlapTable) table).getBaseIndexMetaId(),
                 null,
                 null,
                 false,

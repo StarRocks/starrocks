@@ -55,7 +55,7 @@ public:
     // Allocate a MemChunk with a power-of-two length "size".
     // Return true if success and allocated chunk is saved in "chunk".
     // Otherwise return false.
-    static bool allocate(size_t size, MemChunk* chunk);
+    [[nodiscard]] static bool allocate(size_t size, MemChunk* chunk);
 
     // Free chunk allocated from this allocator
     static void free(const MemChunk& chunk);

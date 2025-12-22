@@ -21,6 +21,7 @@ ADD_BE_LIB(Common
   statusor.cpp
   logconfig.cpp
   configbase.cpp
+  config.cpp
   s3_uri.cpp
   tracer.cpp
   process_exit.cpp

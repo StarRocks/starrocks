@@ -28,6 +28,7 @@
 #include "storage/chunk_helper.h"
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/join_path.h"
+#include "storage/lake/metacache.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/txn_log.h"
 #include "storage/rowset/segment.h"
@@ -258,10 +259,14 @@ TEST_F(LakeDeltaWriterTest, test_write) {
     // Create and open DeltaWriter
     auto txn_id = next_id();
     auto tablet_id = _tablet_metadata->id();
+    const int64_t db_id = 100;
+    const int64_t table_id = 101;
     ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
                                                .set_tablet_manager(_tablet_mgr.get())
                                                .set_tablet_id(tablet_id)
                                                .set_txn_id(txn_id)
+                                               .set_db_id(db_id)
+                                               .set_table_id(table_id)
                                                .set_partition_id(_partition_id)
                                                .set_mem_tracker(_mem_tracker.get())
                                                .set_schema_id(_tablet_schema->id())
@@ -293,6 +298,10 @@ TEST_F(LakeDeltaWriterTest, test_write) {
     ASSERT_FALSE(txnlog->op_write().rowset().overlapped());
     ASSERT_EQ(2 * kChunkSize, txnlog->op_write().rowset().num_rows());
     ASSERT_GT(txnlog->op_write().rowset().data_size(), 0);
+    ASSERT_TRUE(txnlog->op_write().has_schema_key());
+    ASSERT_EQ(txnlog->op_write().schema_key().db_id(), db_id);
+    ASSERT_EQ(txnlog->op_write().schema_key().table_id(), table_id);
+    ASSERT_EQ(txnlog->op_write().schema_key().schema_id(), _tablet_schema->id());
 
     // Check segment file
     ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(kTestDirectory));
@@ -322,52 +331,6 @@ TEST_F(LakeDeltaWriterTest, test_write) {
     };
 
     check_segment(seg0);
-}
-
-TEST_F(LakeDeltaWriterTest, test_write_without_schema_file) {
-    // Prepare data for writing
-    static const int kChunkSize = 12;
-    auto chunk0 = generate_data(kChunkSize);
-    auto indexes = std::vector<uint32_t>(kChunkSize);
-    for (int i = 0; i < kChunkSize; i++) {
-        indexes[i] = i;
-    }
-    bool invoked = false;
-
-    SyncPoint::GetInstance()->EnableProcessing();
-
-    SyncPoint::GetInstance()->SetCallBack("get_tablet_schema_by_id.1",
-                                          [](void* arg) { ((std::shared_ptr<const TabletSchema>*)arg)->reset(); });
-    SyncPoint::GetInstance()->SetCallBack("get_tablet_schema_by_id.2", [&](void* arg) {
-        *((StatusOr<std::shared_ptr<const TabletSchema>>*)arg) = Status::NotFound("mocked not found error");
-        invoked = true;
-    });
-
-    // Create and open DeltaWriter
-    auto txn_id = next_id();
-    auto tablet_id = _tablet_metadata->id();
-    ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
-                                               .set_tablet_manager(_tablet_mgr.get())
-                                               .set_tablet_id(tablet_id)
-                                               .set_txn_id(txn_id)
-                                               .set_partition_id(_partition_id)
-                                               .set_mem_tracker(_mem_tracker.get())
-                                               .set_schema_id(_tablet_schema->id())
-                                               .set_profile(&_dummy_runtime_profile)
-                                               .build());
-
-    ASSERT_OK(delta_writer->open());
-
-    // Write
-    ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
-    // finish
-    ASSERT_OK(delta_writer->finish_with_txnlog());
-    // close
-    delta_writer->close();
-
-    ASSERT_TRUE(invoked) << "get_tablet_schema_by_id not invoked";
-    SyncPoint::GetInstance()->ClearAllCallBacks();
-    SyncPoint::GetInstance()->DisableProcessing();
 }
 
 TEST_F(LakeDeltaWriterTest, test_close) {
@@ -422,10 +385,14 @@ TEST_F(LakeDeltaWriterTest, test_finish_without_write_txn_log) {
     // Create and open DeltaWriter
     auto txn_id = next_id();
     auto tablet_id = _tablet_metadata->id();
+    const int64_t db_id = 101;
+    const int64_t table_id = 102;
     ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
                                                .set_tablet_manager(_tablet_mgr.get())
                                                .set_tablet_id(tablet_id)
                                                .set_txn_id(txn_id)
+                                               .set_db_id(db_id)
+                                               .set_table_id(table_id)
                                                .set_partition_id(_partition_id)
                                                .set_mem_tracker(_mem_tracker.get())
                                                .set_schema_id(_tablet_schema->id())
@@ -435,7 +402,15 @@ TEST_F(LakeDeltaWriterTest, test_finish_without_write_txn_log) {
 
     // write()
     ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
-    ASSERT_OK(delta_writer->finish_with_txnlog(DeltaWriterFinishMode::kDontWriteTxnLog));
+    auto finish_result = delta_writer->finish_with_txnlog(DeltaWriterFinishMode::kDontWriteTxnLog);
+    ASSERT_OK(finish_result.status());
+    auto txn_log = finish_result.value();
+    ASSERT_TRUE(txn_log->has_op_write());
+    ASSERT_TRUE(txn_log->op_write().has_schema_key());
+    ASSERT_EQ(txn_log->op_write().schema_key().db_id(), db_id);
+    ASSERT_EQ(txn_log->op_write().schema_key().table_id(), table_id);
+    ASSERT_EQ(txn_log->op_write().schema_key().schema_id(), _tablet_schema->id());
+
     delta_writer->close();
 
     // TxnLog should not exist

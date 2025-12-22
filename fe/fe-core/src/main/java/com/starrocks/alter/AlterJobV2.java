@@ -405,7 +405,7 @@ public abstract class AlterJobV2 implements Writable {
                 indexMeta.gsonPostProcess();
             } catch (IOException e) {
                 LOG.warn("rebuild defined stmt of index meta {}(org)/{}(new) failed :",
-                        orgIndexMeta.getIndexId(), indexMeta.getIndexId(), e);
+                        orgIndexMeta.getIndexMetaId(), indexMeta.getIndexMetaId(), e);
             }
         }
     }

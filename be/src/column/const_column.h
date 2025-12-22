@@ -114,7 +114,7 @@ public:
 
     void append_value_multiple_times(const Column& src, uint32_t index, uint32_t size) override;
 
-    StatusOr<ColumnPtr> replicate(const Buffer<uint32_t>& offsets) override;
+    StatusOr<MutableColumnPtr> replicate(const Buffer<uint32_t>& offsets) override;
 
     bool append_nulls(size_t count) override {
         DCHECK_GT(count, 0);
@@ -209,10 +209,6 @@ public:
 
     int equals(size_t left, const Column& rhs, size_t right, bool safe_eq = true) const override;
 
-    void fnv_hash(uint32_t* hash, uint32_t from, uint32_t to) const override;
-
-    void crc32_hash(uint32_t* hash, uint32_t from, uint32_t to) const override;
-
     int64_t xor_checksum(uint32_t from, uint32_t to) const override;
 
     void put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx, bool is_binary_protocol = false) const override {
@@ -221,11 +217,11 @@ public:
 
     std::string get_name() const override { return "const-" + _data->get_name(); }
 
-    Column* mutable_data_column() { return _data.get(); }
+    Column* data_column_raw_ptr() { return _data.get(); }
+    const Column* data_column_raw_ptr() const { return _data.get(); }
 
     ColumnPtr& data_column() { return _data; }
     const ColumnPtr& data_column() const { return _data; }
-    MutableColumnPtr data_column_ptr() { return _data->as_mutable_ptr(); }
 
     Datum get(size_t n __attribute__((unused))) const override { return _data->get(0); }
 
@@ -276,16 +272,16 @@ public:
 
     void check_or_die() const override;
 
-    StatusOr<ColumnPtr> upgrade_if_overflow() override;
+    StatusOr<MutableColumnPtr> upgrade_if_overflow() override;
 
-    StatusOr<ColumnPtr> downgrade() override;
+    StatusOr<MutableColumnPtr> downgrade() override;
 
     bool has_large_column() const override { return _data->has_large_column(); }
 
     void mutate_each_subcolumn() override { _data = (std::move(*_data)).mutate(); }
 
 private:
-    ColumnPtr _data;
+    Column::WrappedPtr _data;
     uint64_t _size;
 };
 

@@ -24,7 +24,6 @@ import com.starrocks.catalog.ColumnBuilder;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Index;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
 import com.starrocks.common.AnalysisException;
@@ -49,6 +48,7 @@ import com.starrocks.sql.ast.HashDistributionDesc;
 import com.starrocks.sql.ast.Identifier;
 import com.starrocks.sql.ast.IndexDef;
 import com.starrocks.sql.ast.KeysDesc;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.ListPartitionDesc;
 import com.starrocks.sql.ast.MultiItemListPartitionDesc;
 import com.starrocks.sql.ast.OrderByElement;
@@ -574,7 +574,7 @@ public class CreateTableAnalyzer {
             if (partitionExpr instanceof FunctionCallExpr) {
                 FunctionCallExpr expr = (FunctionCallExpr) (((Expr) partitionExpr).clone());
                 if (stmt.isIcebergEngine()) {
-                    String fnName = ((FunctionCallExpr) expr).getFnName().getFunction();
+                    String fnName = ((FunctionCallExpr) expr).getFunctionName();
                     fnName = FeConstants.ICEBERG_TRANSFORM_EXPRESSION_PREFIX + fnName;
                     expr.resetFnName(null, fnName);
                 }
@@ -758,10 +758,10 @@ public class CreateTableAnalyzer {
                 }
                 Expr expr = column.getGeneratedColumnExpr(columns);
                 if (expr instanceof FunctionCallExpr) {
-                    if (null != ((FunctionCallExpr) expr).getFnName().getDb()) {
+                    if (null != ((FunctionCallExpr) expr).getDbName()) {
                         throw new SemanticException("Iceberg transform expression should not have db name");
                     }
-                    String fnName = ((FunctionCallExpr) expr).getFnName().getFunction();
+                    String fnName = ((FunctionCallExpr) expr).getFunctionName();
                     if (fnName.equalsIgnoreCase("year") ||
                             fnName.equalsIgnoreCase("month") ||
                             fnName.equalsIgnoreCase("day") ||

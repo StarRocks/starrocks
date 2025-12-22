@@ -18,12 +18,15 @@
 #include "fs/encryption.h"
 #include "gen_cpp/AgentService_types.h"
 #include "gutil/macros.h"
+#include "lake_replication_txn_manager.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/txn_log.h"
 #include "storage/lake/types_fwd.h"
 #include "storage/olap_common.h"
-#include "storage/olap_define.h"
 #include "storage/rowset/rowset_meta.h"
+#include "tablet_manager.h"
+
+using starrocks::FileConverterCreatorFunc;
 
 namespace starrocks::lake {
 
@@ -31,7 +34,9 @@ class TabletManager;
 
 class ReplicationTxnManager {
 public:
-    explicit ReplicationTxnManager(lake::TabletManager* tablet_manager) : _tablet_manager(tablet_manager) {}
+    explicit ReplicationTxnManager(lake::TabletManager* tablet_manager) : _tablet_manager(tablet_manager) {
+        _lake_replication_txn_manager = std::make_unique<LakeReplicationTxnManager>(tablet_manager);
+    }
 
     Status remote_snapshot(const TRemoteSnapshotRequest& request, TSnapshotInfo* src_snapshot_info);
 
@@ -40,6 +45,11 @@ public:
     Status clear_snapshots(const TxnLogPtr& txn_slog);
 
     DISALLOW_COPY_AND_MOVE(ReplicationTxnManager);
+
+    static FileConverterCreatorFunc build_file_converters(
+            const TabletManager* tablet_manager, const TReplicateSnapshotRequest& request,
+            const std::unordered_map<std::string, std::pair<std::string, FileEncryptionPair>>& filename_map,
+            std::unordered_map<uint32_t, uint32_t>& column_unique_id_map, std::vector<std::string>& files_to_delete);
 
 private:
     Status make_remote_snapshot(const TRemoteSnapshotRequest& request, const std::vector<Version>* missed_versions,
@@ -51,12 +61,13 @@ private:
 
     static Status convert_rowset_meta(
             const RowsetMeta& rowset_meta, TTransactionId transaction_id, TxnLogPB::OpWrite* op_write,
-            std::unordered_map<std::string, std::pair<std::string, FileEncryptionInfo>>* segment_filename_map);
+            std::unordered_map<std::string, std::pair<std::string, FileEncryptionPair>>* segment_filename_map);
 
     static Status convert_delete_predicate_pb(DeletePredicatePB* delete_predicate);
 
 private:
     lake::TabletManager* _tablet_manager;
+    std::unique_ptr<LakeReplicationTxnManager> _lake_replication_txn_manager;
 };
 
 } // namespace starrocks::lake

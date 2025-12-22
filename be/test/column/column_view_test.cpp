@@ -26,8 +26,8 @@
 
 namespace starrocks {
 static ColumnPtr create_int32_array_column(const std::vector<std::vector<int32_t>>& values, bool is_nullable) {
-    UInt32Column::Ptr offsets = UInt32Column::create();
-    NullableColumn::Ptr elements = NullableColumn::create(Int32Column::create(), NullColumn::create());
+    auto offsets = UInt32Column::create();
+    auto elements = NullableColumn::create(Int32Column::create(), NullColumn::create());
     offsets->append(0);
     for (const auto& value : values) {
         for (auto v : value) {
@@ -36,18 +36,18 @@ static ColumnPtr create_int32_array_column(const std::vector<std::vector<int32_t
         offsets->append(elements->size());
     }
 
-    auto array_column = ArrayColumn::create(elements, offsets);
+    auto array_column = ArrayColumn::create(std::move(elements), std::move(offsets));
     if (is_nullable) {
         auto null_column = NullColumn::create();
         null_column->resize(values.size());
-        return NullableColumn::create(array_column, null_column);
+        return NullableColumn::create(std::move(array_column), std::move(null_column));
     } else {
         return array_column;
     }
 }
 static void test_array_column_view_helper(bool nullable, bool append_default, long concat_row_limit,
                                           long concat_bytes_limit, std::vector<uint32_t> selection,
-                                          std::string expect_result) {
+                                          const std::string& expect_result) {
     auto child_type_desc = TypeDescriptor(LogicalType::TYPE_INT);
     auto type_desc = TypeDescriptor::create_array_type(child_type_desc);
     auto opt_array_column_view =
@@ -117,12 +117,12 @@ PARALLEL_TEST(ColumnViewTest, test_nullable_without_append_default) {
 
 PARALLEL_TEST(ColumnViewTest, test_create_struct_column_view) {
     TypeDescriptor type_desc = TypeDescriptor(LogicalType::TYPE_STRUCT);
-    type_desc.field_names.push_back("field1");
-    type_desc.field_names.push_back("field2");
+    type_desc.field_names.emplace_back("field1");
+    type_desc.field_names.emplace_back("field2");
     TypeDescriptor field1_type_desc = TypeDescriptor::create_varchar_type(20);
     TypeDescriptor field2_type_desc = TypeDescriptor::create_varchar_type(20);
-    type_desc.children.push_back(field1_type_desc);
-    type_desc.children.push_back(field2_type_desc);
+    type_desc.children.emplace_back(field1_type_desc);
+    type_desc.children.emplace_back(field2_type_desc);
     for (auto nullable : {true, false}) {
         auto opt_struct_column_view = ColumnViewHelper::create_column_view(type_desc, nullable, 0, 0);
         DCHECK(opt_struct_column_view.has_value());
@@ -164,8 +164,8 @@ PARALLEL_TEST(ColumnViewTest, test_create_map_column_view) {
     TypeDescriptor type_desc = TypeDescriptor(LogicalType::TYPE_MAP);
     TypeDescriptor field1_type_desc = TypeDescriptor::create_varchar_type(20);
     TypeDescriptor field2_type_desc = TypeDescriptor::create_varchar_type(20);
-    type_desc.children.push_back(field1_type_desc);
-    type_desc.children.push_back(field2_type_desc);
+    type_desc.children.emplace_back(field1_type_desc);
+    type_desc.children.emplace_back(field2_type_desc);
     for (auto nullable : {true, false}) {
         auto opt_map_column_view = ColumnViewHelper::create_column_view(type_desc, nullable, 0, 0);
         DCHECK(opt_map_column_view.has_value());

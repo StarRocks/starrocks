@@ -389,7 +389,7 @@ public class SystemInfoService implements GsonPostProcessable {
             opMessage = String.format(formatSb.toString(), willBeModifiedHost, backend.getHeartbeatPort(), fqdn);
         }
         ShowResultSetMetaData.Builder builder = ShowResultSetMetaData.builder();
-        builder.addColumn(new Column("Message", TypeFactory.createVarchar(1024)));
+        builder.addColumn(new Column("Message", TypeFactory.createVarcharType(1024)));
         List<List<String>> messageResult = new ArrayList<>();
         messageResult.add(Collections.singletonList(opMessage));
         return new ShowResultSet(builder.build(), messageResult);
@@ -407,7 +407,7 @@ public class SystemInfoService implements GsonPostProcessable {
         }
 
         ShowResultSetMetaData.Builder builder = ShowResultSetMetaData.builder();
-        builder.addColumn(new Column("Message", TypeFactory.createVarchar(1024)));
+        builder.addColumn(new Column("Message", TypeFactory.createVarcharType(1024)));
         List<List<String>> messageResult = new ArrayList<>();
 
         // update backend based on properties
@@ -1303,7 +1303,7 @@ public class SystemInfoService implements GsonPostProcessable {
         // BackendCoreStat is a global state, checkpoint should not modify it.
         if (!GlobalStateMgr.isCheckpointThread()) {
             // remove from BackendCoreStat
-            BackendResourceStat.getInstance().removeBe(dropComputeNodeLog.getComputeNodeId());
+            BackendResourceStat.getInstance().removeBe(cn.getWarehouseId(), dropComputeNodeLog.getComputeNodeId());
         }
 
         return cn;
@@ -1344,7 +1344,7 @@ public class SystemInfoService implements GsonPostProcessable {
         // BackendCoreStat is a global state, checkpoint should not modify it.
         if (!GlobalStateMgr.isCheckpointThread()) {
             // remove from BackendCoreStat
-            BackendResourceStat.getInstance().removeBe(backend.getId());
+            BackendResourceStat.getInstance().removeBe(backend.getWarehouseId(), backend.getId());
         }
         return backend;
     }
@@ -1532,12 +1532,14 @@ public class SystemInfoService implements GsonPostProcessable {
         if (!GlobalStateMgr.isCheckpointThread()) {
             // update BackendCoreStat
             for (ComputeNode node : idToBackendRef.values()) {
-                BackendResourceStat.getInstance().setNumHardwareCoresOfBe(node.getId(), node.getCpuCores());
-                BackendResourceStat.getInstance().setMemLimitBytesOfBe(node.getId(), node.getMemLimitBytes());
+                BackendResourceStat.getInstance().setNumCoresOfBe(node.getWarehouseId(), node.getId(), node.getCpuCores());
+                BackendResourceStat.getInstance()
+                        .setMemLimitBytesOfBe(node.getWarehouseId(), node.getId(), node.getMemLimitBytes());
             }
             for (ComputeNode node : idToComputeNodeRef.values()) {
-                BackendResourceStat.getInstance().setNumHardwareCoresOfBe(node.getId(), node.getCpuCores());
-                BackendResourceStat.getInstance().setMemLimitBytesOfBe(node.getId(), node.getMemLimitBytes());
+                BackendResourceStat.getInstance().setNumCoresOfBe(node.getWarehouseId(), node.getId(), node.getCpuCores());
+                BackendResourceStat.getInstance()
+                        .setMemLimitBytesOfBe(node.getWarehouseId(), node.getId(), node.getMemLimitBytes());
             }
         }
     }

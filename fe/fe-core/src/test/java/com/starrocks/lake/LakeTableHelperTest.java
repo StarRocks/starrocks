@@ -20,7 +20,6 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.HashDistributionInfo;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
@@ -36,6 +35,7 @@ import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.transaction.TransactionState;
@@ -185,7 +185,7 @@ public class LakeTableHelperTest {
         table.addPartition(partition);
         table.setIndexMeta(index.getId(), "t0", Arrays.asList(c0, c1), 0, 0, (short) 1, TStorageType.COLUMN,
                 keysType);
-        List<Column> newIndexSchema = table.getSchemaByIndexId(indexId);
+        List<Column> newIndexSchema = table.getSchemaByIndexMetaId(indexId);
         List<Column> baseSchema = table.getBaseSchema();
 
         {

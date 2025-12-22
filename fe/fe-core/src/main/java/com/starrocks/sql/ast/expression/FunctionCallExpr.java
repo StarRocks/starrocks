@@ -39,21 +39,20 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableSet;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.Function;
-import com.starrocks.catalog.FunctionName;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
+import com.starrocks.sql.ast.FunctionRef;
+import com.starrocks.sql.ast.QualifiedName;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 
-import static com.starrocks.catalog.FunctionSet.IGNORE_NULL_WINDOW_FUNCTION;
-
 public class FunctionCallExpr extends Expr {
     protected Function fn;
-    private FunctionName fnName;
+    private FunctionRef fnRef;
     // private BuiltinAggregateFunction.Operator aggOp;
     private FunctionParams fnParams;
 
@@ -64,11 +63,6 @@ public class FunctionCallExpr extends Expr {
     // instead of the update symbol. This flag also affects the behavior of
     // resetAnalysisState() which is used during expr substitution.
     private boolean isMergeAggFn;
-
-    // Indicates merge aggregation function whether has nullable child
-    // because when create merge agg fn from update agg fn,
-    // The slot SlotDescriptor nullable info will lost or change
-    private boolean mergeAggFnHasNullableChild = true;
 
     // TODO(yan): add more known functions which are monotonic.
     private static final ImmutableSet<String> MONOTONIC_FUNCTION_SET =
@@ -90,12 +84,31 @@ public class FunctionCallExpr extends Expr {
         this.fn = fn;
     }
 
-    public FunctionName getFnName() {
-        return fnName;
+    public FunctionRef getFnRef() {
+        return fnRef;
+    }
+
+    // Compatibility method - returns the QualifiedName from FunctionRef
+    public QualifiedName getFnName() {
+        return fnRef.getFnName();
+    }
+
+    public String getFunctionName() {
+        return fnRef.getFunctionName();
+    }
+
+    public String getDbName() {
+        return fnRef.getDbName();
     }
 
     public void resetFnName(String db, String name) {
-        this.fnName = new FunctionName(db, name);
+        QualifiedName qualifiedName;
+        if (db != null) {
+            qualifiedName = QualifiedName.of(List.of(db, name));
+        } else {
+            qualifiedName = QualifiedName.of(List.of(name));
+        }
+        this.fnRef = new FunctionRef(qualifiedName, null, this.fnRef != null ? this.fnRef.getPos() : NodePosition.ZERO);
     }
 
     // only used restore from readFields.
@@ -104,41 +117,41 @@ public class FunctionCallExpr extends Expr {
     }
 
     public FunctionCallExpr(String functionName, List<Expr> params) {
-        this(new FunctionName(functionName), new FunctionParams(false, params), NodePosition.ZERO);
+        this(createFunctionRef(functionName, NodePosition.ZERO), new FunctionParams(false, params), NodePosition.ZERO);
     }
 
     public FunctionCallExpr(String functionName, List<Expr> params, NodePosition pos) {
-        this(new FunctionName(functionName), new FunctionParams(false, params), pos);
+        this(createFunctionRef(functionName, pos), new FunctionParams(false, params), pos);
     }
 
-    public FunctionCallExpr(FunctionName fnName, List<Expr> params) {
-        this(fnName, new FunctionParams(false, params), NodePosition.ZERO);
+    public FunctionCallExpr(FunctionRef fnRef, List<Expr> params) {
+        this(fnRef, new FunctionParams(false, params), NodePosition.ZERO);
     }
 
-    public FunctionCallExpr(FunctionName fnName, List<Expr> params, NodePosition pos) {
-        this(fnName, new FunctionParams(false, params), pos);
+    public FunctionCallExpr(FunctionRef fnRef, List<Expr> params, NodePosition pos) {
+        this(fnRef, new FunctionParams(false, params), pos);
     }
 
     public FunctionCallExpr(String fnName, FunctionParams params) {
-        this(new FunctionName(fnName), params, NodePosition.ZERO);
+        this(createFunctionRef(fnName, NodePosition.ZERO), params, NodePosition.ZERO);
     }
 
     public FunctionCallExpr(String fnName, FunctionParams params, NodePosition pos) {
-        this(new FunctionName(fnName), params, pos);
+        this(createFunctionRef(fnName, pos), params, pos);
     }
 
-    public FunctionCallExpr(FunctionName fnName, FunctionParams params) {
-        this(fnName, params, false, NodePosition.ZERO);
+    public FunctionCallExpr(FunctionRef fnRef, FunctionParams params) {
+        this(fnRef, params, false, NodePosition.ZERO);
     }
 
-    public FunctionCallExpr(FunctionName fnName, FunctionParams params, NodePosition pos) {
-        this(fnName, params, false, pos);
+    public FunctionCallExpr(FunctionRef fnRef, FunctionParams params, NodePosition pos) {
+        this(fnRef, params, false, pos);
     }
 
     private FunctionCallExpr(
-            FunctionName fnName, FunctionParams params, boolean isMergeAggFn, NodePosition pos) {
+            FunctionRef fnRef, FunctionParams params, boolean isMergeAggFn, NodePosition pos) {
         super(pos);
-        this.fnName = fnName;
+        this.fnRef = fnRef;
         fnParams = params;
         this.isMergeAggFn = isMergeAggFn;
         if (params.exprs() != null) {
@@ -146,11 +159,24 @@ public class FunctionCallExpr extends Expr {
         }
     }
 
+    // Helper method to create FunctionRef from function name string
+    private static FunctionRef createFunctionRef(String functionName, NodePosition pos) {
+        // Parse db.function or just function
+        String[] parts = functionName.split("\\.", 2);
+        QualifiedName qualifiedName;
+        if (parts.length == 2) {
+            qualifiedName = QualifiedName.of(List.of(parts[0], parts[1]), pos);
+        } else {
+            qualifiedName = QualifiedName.of(List.of(functionName), pos);
+        }
+        return new FunctionRef(qualifiedName, null, pos);
+    }
+
     // Constructs the same agg function with new params.
     public FunctionCallExpr(FunctionCallExpr e, FunctionParams params) {
         Preconditions.checkState(e.isAnalyzed);
         Preconditions.checkState(e.isAggregateFunction() || e.isAnalyticFnCall);
-        fnName = e.fnName;
+        fnRef = e.fnRef;
         // aggOp = e.aggOp;
         isAnalyticFnCall = e.isAnalyticFnCall;
         fnParams = params;
@@ -165,7 +191,7 @@ public class FunctionCallExpr extends Expr {
     protected FunctionCallExpr(FunctionCallExpr other) {
         super(other);
         fn = other.fn;
-        fnName = other.fnName;
+        fnRef = other.fnRef;
         isAnalyticFnCall = other.isAnalyticFnCall;
         //   aggOp = other.aggOp;
         // fnParams = other.fnParams;
@@ -178,7 +204,6 @@ public class FunctionCallExpr extends Expr {
             fnParams = new FunctionParams(other.fnParams.isDistinct(), children, other.fnParams.getOrderByElements());
         }
         this.isMergeAggFn = other.isMergeAggFn;
-        this.mergeAggFnHasNullableChild = other.mergeAggFnHasNullableChild;
     }
 
     public static final Set<String> NULLABLE_SAME_WITH_CHILDREN_FUNCTIONS =
@@ -219,7 +244,7 @@ public class FunctionCallExpr extends Expr {
 
     @Override
     public String debugString() {
-        return MoreObjects.toStringHelper(this)/*.add("op", aggOp)*/.add("name", fnName).add("isStar",
+        return MoreObjects.toStringHelper(this)/*.add("op", aggOp)*/.add("name", fnRef.getFnName().toString()).add("isStar",
                         fnParams.isStar()).add("isDistinct", fnParams.isDistinct()).
                 add(" hasOrderBy ", fnParams.getOrderByElements() != null).addValue(
                         super.debugString()).toString();
@@ -238,18 +263,8 @@ public class FunctionCallExpr extends Expr {
         return fnParams.isDistinct();
     }
 
-
-    public void setMergeAggFnHasNullableChild(boolean value) {
-        this.mergeAggFnHasNullableChild = value;
-    }
-
     public boolean hasNullableChild() {
         if (this.isMergeAggFn) {
-            return this.mergeAggFnHasNullableChild;
-        }
-
-        // For BE code simply, handle the following window functions with nullable
-        if (IGNORE_NULL_WINDOW_FUNCTION.contains(fnName)) {
             return true;
         }
 
@@ -268,14 +283,11 @@ public class FunctionCallExpr extends Expr {
             return false;
         }
         // check children nullable
-        if (NULLABLE_SAME_WITH_CHILDREN_FUNCTIONS.contains(fnName.getFunction())) {
+        if (NULLABLE_SAME_WITH_CHILDREN_FUNCTIONS.contains(fnRef.getFunctionName())) {
             return children.stream().anyMatch(e -> e.isNullable() || e.getType().isDecimalV3());
         }
         return true;
     }
-
-
-
 
     // Used for store load
     public boolean supportSerializable() {
@@ -296,7 +308,7 @@ public class FunctionCallExpr extends Expr {
             return false;
         }
 
-        final String fnName = this.fnName.getFunction();
+        final String fnName = this.fnRef.getFunctionName();
         // Non-deterministic functions are never constant.
         if (isNondeterministicBuiltinFnName()) {
             return false;
@@ -320,13 +332,13 @@ public class FunctionCallExpr extends Expr {
     }
 
     public boolean isNondeterministicBuiltinFnName() {
-        return FunctionSet.nonDeterministicFunctions.contains(fnName.getFunction().toLowerCase());
+        return FunctionSet.nonDeterministicFunctions.contains(fnRef.getFunctionName().toLowerCase());
     }
 
     @Override
     public int hashCode() {
         // @Note: fnParams is different with children Expr. use children plz.
-        return Objects.hash(super.hashCode(), type, fnName, nondeterministicId, fn);
+        return Objects.hash(super.hashCode(), type, fnRef.getFnName().toString(), nondeterministicId, fn);
     }
 
     @Override
@@ -335,7 +347,7 @@ public class FunctionCallExpr extends Expr {
             return false;
         }
         FunctionCallExpr o = (FunctionCallExpr) obj;
-        return /*opcode == o.opcode && aggOp == o.aggOp &&*/ fnName.equals(o.fnName)
+        return /*opcode == o.opcode && aggOp == o.aggOp &&*/ fnRef.getFnName().toString().equals(o.fnRef.getFnName().toString())
                 && fnParams.isDistinct() == o.fnParams.isDistinct()
                 && fnParams.isStar() == o.fnParams.isStar()
                 && nondeterministicId.equals(o.nondeterministicId)
@@ -357,8 +369,8 @@ public class FunctionCallExpr extends Expr {
 
     @Override
     public boolean isSelfMonotonic() {
-        FunctionName name = getFnName();
-        if (name.getDb() == null && MONOTONIC_FUNCTION_SET.contains(name.getFunction())) {
+        FunctionRef ref = getFnRef();
+        if (ref.getDbName() == null && MONOTONIC_FUNCTION_SET.contains(ref.getFunctionName())) {
             return true;
         }
         return false;

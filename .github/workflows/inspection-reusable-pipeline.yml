@@ -11,8 +11,12 @@ on:
         description: "COMMIT ID"
         required: true
         type: string
-      TAR_PATH:
-        description: "TAR PATH"
+      BE_OUTPUT_TAR:
+        description: "BE TAR PATH"
+        required: true
+        type: string
+      FE_OUTPUT_TAR:
+        description: "FE TAR PATH"
         required: true
         type: string
       BUILD_TYPE:
@@ -70,7 +74,8 @@ env:
   IS_INSPECTION: true
   BRANCH: ${{ inputs.BRANCH }}
   PR_NUMBER: ${{ inputs.COMMIT_ID }}
-  TAR_PATH: ${{ inputs.TAR_PATH }}
+  BE_OUTPUT_TAR: ${{ inputs.BE_OUTPUT_TAR }}
+  FE_OUTPUT_TAR: ${{ inputs.FE_OUTPUT_TAR }}
   BUILD_TYPE: ${{ inputs.BUILD_TYPE }}
   LINUX_DISTRO: ${{ inputs.LINUX_DISTRO }}
   CLUSTER_NAME: ${{ inputs.CLUSTER_NAME }}
@@ -107,9 +112,10 @@ jobs:
         if: always() && steps.apply_resource.outcome == 'success'
         run: |
           cd ci-tool && source lib/init.sh
-          echo ${TAR_PATH}
+          echo "##### Package(BE): ${BE_OUTPUT_TAR}" >> $GITHUB_STEP_SUMMARY
+          echo "##### Package(FE): ${FE_OUTPUT_TAR}" >> $GITHUB_STEP_SUMMARY
           [[ "${IS_ARM}" == "true" ]] && arm_arg="--arm"
-          ./bin/deploy-cluster.sh -c ${CLUSTER_NAME} --output ${TAR_PATH} --with-coverage ${arm_arg}
+          ./bin/deploy-cluster.sh -c ${CLUSTER_NAME} --with-coverage ${arm_arg}
 
       - name: Clean ENV
         if: always()

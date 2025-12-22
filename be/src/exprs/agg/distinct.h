@@ -517,9 +517,9 @@ public:
     }
 
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
-                                     ColumnPtr* dst) const override {
-        DCHECK((*dst)->is_binary());
-        auto* dst_column = down_cast<BinaryColumn*>((*dst).get());
+                                     MutableColumnPtr& dst) const override {
+        DCHECK(dst->is_binary());
+        auto* dst_column = down_cast<BinaryColumn*>(dst.get());
         Bytes& bytes = dst_column->get_bytes();
 
         const auto* src_column = down_cast<const ColumnType*>(src[0].get());
@@ -683,7 +683,7 @@ public:
     }
 
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
-                                     ColumnPtr* dst) const override {
+                                     MutableColumnPtr& dst) const override {
         DCHECK(false) << "this method shouldn't be called";
     }
 
@@ -784,8 +784,9 @@ struct TFusedMultiDistinctFunction final
         auto* struct_column = down_cast<StructColumn*>(dst);
         // compute count
         {
-            auto* count_column = struct_column->field_column("count").get();
-            auto* count_data_column = down_cast<Int64Column*>(ColumnHelper::get_data_column(count_column));
+            auto* count_column = struct_column->field_column_raw_ptr("count");
+            Column* count_data_col = const_cast<Column*>(ColumnHelper::get_data_column(count_column));
+            auto* count_data_column = static_cast<Int64Column*>(count_data_col);
             const auto count = state_impl.distinct_count();
             for (auto i = start; i < end; ++i) {
                 count_data_column->get_data()[i] = count;
@@ -794,8 +795,9 @@ struct TFusedMultiDistinctFunction final
 
         // compute sum
         if constexpr (lt_is_numeric<LT> && enable_bit_sum(compute_bits)) {
-            auto* sum_column = struct_column->field_column("sum").get();
-            auto* sum_data_column = down_cast<SumColumn*>(ColumnHelper::get_data_column(sum_column));
+            auto* sum_column = struct_column->field_column_raw_ptr("sum");
+            Column* sum_data_col = const_cast<Column*>(ColumnHelper::get_data_column(sum_column));
+            auto* sum_data_column = static_cast<SumColumn*>(sum_data_col);
             const auto sum = state_impl.sum;
             for (auto i = start; i < end; ++i) {
                 sum_data_column->get_data()[i] = sum;
@@ -804,14 +806,16 @@ struct TFusedMultiDistinctFunction final
 
         // compute avg
         if constexpr (lt_is_numeric<LT> && enable_bit_avg(compute_bits)) {
-            auto* avg_column = struct_column->field_column("avg").get();
-            auto* avg_data_column = down_cast<AvgColumn*>(ColumnHelper::get_data_column(avg_column));
+            auto* avg_column = struct_column->field_column_raw_ptr("avg");
+            Column* avg_data_col = const_cast<Column*>(ColumnHelper::get_data_column(avg_column));
+            auto* avg_data_column = static_cast<AvgColumn*>(avg_data_col);
             const auto sum = state_impl.sum;
             const auto count = state_impl.distinct_count();
 
             if (count == 0) {
                 DCHECK(avg_column->is_nullable());
-                auto& null_data = down_cast<NullableColumn*>(avg_column)->null_column()->get_data();
+                auto* nullable_avg = down_cast<NullableColumn*>(avg_column);
+                auto& null_data = nullable_avg->null_column_data();
                 for (auto i = start; i < end; ++i) {
                     null_data[i] = DATUM_NULL;
                 }
@@ -875,7 +879,7 @@ struct TFusedMultiDistinctFunction final
     }
 
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
-                                     ColumnPtr* dst) const override {
+                                     MutableColumnPtr& dst) const override {
         DCHECK(false) << "Shouldn't call this method for window function!";
     }
 };

@@ -540,9 +540,10 @@ public class AnalyzeMgr implements Writable {
         for (Map.Entry<StatsMetaKey, ExternalBasicStatsMeta> entry : externalBasicStatsMetaMap.entrySet()) {
             StatsMetaKey tableKey = entry.getKey();
             try {
-                Table table = GlobalStateMgr.getCurrentState().getMetadataMgr()
-                        .getTable(new ConnectContext(), tableKey.getCatalogName(), tableKey.getDbName(), tableKey.getTableName());
-                if (table == null) {
+                boolean exists = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                        .tableExists(new ConnectContext(), tableKey.getCatalogName(), tableKey.getDbName(),
+                                tableKey.getTableName());
+                if (!exists) {
                     LOG.warn("Table {}.{}.{} not exists, clear it's statistics", tableKey.getCatalogName(),
                             tableKey.getDbName(), tableKey.getTableName());
                     droppedTables.add(tableKey);

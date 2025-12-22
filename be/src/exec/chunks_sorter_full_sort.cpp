@@ -20,9 +20,12 @@
 #include "exprs/expr.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/runtime_state.h"
+#include "util/defer_op.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks {
+DEFINE_FAIL_POINT(chunks_sorter_full_sort_partial_sort_bad_alloc);
+DEFINE_FAIL_POINT(chunks_sorter_full_sort_done_bad_alloc);
 
 ChunksSorterFullSort::ChunksSorterFullSort(RuntimeState* state, const std::vector<ExprContext*>* sort_exprs,
                                            const std::vector<bool>* is_asc_order,
@@ -47,8 +50,10 @@ void ChunksSorterFullSort::setup_runtime(RuntimeState* state, RuntimeProfile* pr
 }
 
 Status ChunksSorterFullSort::update(RuntimeState* state, const ChunkPtr& chunk) {
+    CancelableDefer defer = [this]() { _reset(); };
     RETURN_IF_ERROR(_merge_unsorted(state, chunk));
     RETURN_IF_ERROR(_partial_sort(state, false));
+    defer.cancel();
 
     return Status::OK();
 }
@@ -80,8 +85,8 @@ static void concat_chunks(ChunkPtr& dst_chunk, const std::vector<ChunkPtr>& src_
     dst_chunk = src_chunks.front()->clone_empty(num_rows);
     const auto num_columns = dst_chunk->num_columns();
     for (auto i = 0; i < num_columns; ++i) {
-        auto dst_col = dst_chunk->get_column_by_index(i);
-        auto* dst_data_col = ColumnHelper::get_data_column(dst_col.get());
+        auto* dst_col = dst_chunk->get_column_raw_ptr_by_index(i);
+        auto* dst_data_col = ColumnHelper::get_data_column(dst_col);
         // Reserve memory room for bytes array in BinaryColumn here.
         if (dst_data_col->is_binary()) {
             reserve_memory<BinaryColumn>(dst_data_col, src_chunks, i);
@@ -100,6 +105,8 @@ Status ChunksSorterFullSort::_partial_sort(RuntimeState* state, bool done) {
     }
     bool reach_limit = _staging_unsorted_rows >= max_buffered_rows || _staging_unsorted_bytes >= max_buffered_bytes;
     if (done || reach_limit) {
+        FAIL_POINT_TRIGGER_EXECUTE(chunks_sorter_full_sort_partial_sort_bad_alloc, { throw std::bad_alloc(); });
+
         _max_num_rows = std::max<int>(_max_num_rows, _staging_unsorted_rows);
         COUNTER_UPDATE(_profiler->input_required_memory, _staging_unsorted_bytes);
         concat_chunks(_unsorted_chunk, _staging_unsorted_chunks, _staging_unsorted_rows);
@@ -143,6 +150,8 @@ Status ChunksSorterFullSort::_merge_sorted(RuntimeState* state) {
         _assign_ordinals();
         RETURN_IF_ERROR(merge_sorted_chunks(_sort_desc, _sort_exprs, _early_materialized_chunks, &_merged_runs));
     }
+
+    FAIL_POINT_TRIGGER_EXECUTE(chunks_sorter_full_sort_done_bad_alloc, { throw std::bad_alloc(); });
 
     return Status::OK();
 }
@@ -231,8 +240,8 @@ starrocks::ChunkPtr ChunksSorterFullSort::_late_materialize_tmpl(const starrocks
     static_assert(type_is_ordinal<T>, "T must be uint32_t or uint64_t");
     const auto num_rows = sorted_eager_chunk->num_rows();
     auto sorted_lazy_chunk = _late_materialized_chunks[0]->clone_empty(num_rows);
-    auto ordinal_column = sorted_eager_chunk->get_column_by_slot_id(Chunk::SORT_ORDINAL_COLUMN_SLOT_ID);
-    auto& ordinal_data = down_cast<OrdinalColumn<T>*>(ordinal_column.get())->get_data();
+    auto* ordinal_column = sorted_eager_chunk->get_column_raw_ptr_by_slot_id(Chunk::SORT_ORDINAL_COLUMN_SLOT_ID);
+    auto& ordinal_data = down_cast<const OrdinalColumn<T>*>(ordinal_column)->get_data();
     T _offset_in_chunk_mask = static_cast<T>((1L << _offset_in_chunk_bits) - 1);
     for (auto i = 0; i < num_rows; ++i) {
         T ordinal = ordinal_data[i];
@@ -251,10 +260,11 @@ starrocks::ChunkPtr ChunksSorterFullSort::_late_materialize_tmpl(const starrocks
     return final_chunk;
 }
 Status ChunksSorterFullSort::do_done(RuntimeState* state) {
+    CancelableDefer defer = [this]() { _reset(); };
     RETURN_IF_ERROR(_partial_sort(state, true));
     _unsorted_chunk.reset();
     RETURN_IF_ERROR(_merge_sorted(state));
-
+    defer.cancel();
     return Status::OK();
 }
 
@@ -287,6 +297,15 @@ size_t ChunksSorterFullSort::get_output_rows() const {
 
 int64_t ChunksSorterFullSort::mem_usage() const {
     return _merged_runs.mem_usage();
+}
+
+void ChunksSorterFullSort::_reset() {
+    _staging_unsorted_chunks.clear();
+    _unsorted_chunk.reset();
+    _sorted_chunks.clear();
+    _late_materialized_chunks.clear();
+    _early_materialized_chunks.clear();
+    _merged_runs.clear();
 }
 
 } // namespace starrocks

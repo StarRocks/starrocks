@@ -37,6 +37,7 @@ public class StarRocksIcebergTableScanContext {
     private int localParallelism;
     private long localPlanningMaxSlotSize;
     private boolean enableCacheDataFileIdentifierColumnMetrics;
+    private long fileSplitSize;
     private ConnectContext connectContext;
 
     public StarRocksIcebergTableScanContext(String catalogName, String dbName, String tableName, PlanMode planMode) {
@@ -50,6 +51,9 @@ public class StarRocksIcebergTableScanContext {
         this.tableName = tableName;
         this.planMode = planMode;
         this.connectContext = connectContext;
+        if (connectContext != null && connectContext.getSessionVariable() != null) {
+            this.fileSplitSize = connectContext.getSessionVariable().getConnectorHugeFileSize();
+        }
     }
 
     public String getCatalogName() {
@@ -134,5 +138,9 @@ public class StarRocksIcebergTableScanContext {
 
     public ConnectContext getConnectContext() {
         return connectContext;
+    }
+
+    public long getFileSplitSize() {
+        return fileSplitSize;
     }
 }

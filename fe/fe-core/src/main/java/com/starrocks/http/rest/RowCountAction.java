@@ -115,7 +115,7 @@ public class RowCountAction extends RestBaseAction {
                         indexRowCount += tablet.getRowCount(version);
                     } // end for tablets
                     index.setRowCount(indexRowCount);
-                    String indexName = olapTable.getIndexNameById(index.getId());
+                    String indexName = olapTable.getIndexNameByMetaId(index.getId());
                     indexRowCountMap.put(indexName, indexRowCountMap.getOrDefault(indexName, 0L) + indexRowCount);
                 } // end for indices
             } // end for partitions            

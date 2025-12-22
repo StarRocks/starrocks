@@ -20,6 +20,7 @@
 
 #include "common/statusor.h"
 #include "fmt/format.h"
+#include "formats/parquet/variant.h"
 #include "util/slice.h"
 
 namespace starrocks {
@@ -38,6 +39,17 @@ public:
      * @return The created VariantValue or an error status.
      */
     static StatusOr<VariantValue> create(const Slice& slice);
+
+    /**
+     * Static factory method to create a VariantValue from metadata and value Slices.
+     * In this method, the metadata will be validated.
+     * @param metadata The metadata Slice.
+     * @param value The value Slice.
+     * @return The created VariantValue or an error status.
+     */
+    static StatusOr<VariantValue> create(const Slice& metadata, const Slice& value);
+
+    static VariantValue of_variant(const Variant& variant);
 
     VariantValue(const VariantValue& rhs) = default;
 
@@ -69,8 +81,8 @@ public:
     StatusOr<std::string> to_json(cctz::time_zone timezone = cctz::local_time_zone()) const;
     std::string to_string() const;
 
-    std::string get_metadata() const { return _metadata; }
-    std::string get_value() const { return _value; }
+    const std::string& get_metadata() const { return _metadata; }
+    const std::string& get_value() const { return _value; }
 
     // Variant value has a maximum size limit of 16MB to prevent excessive memory usage.
     static constexpr uint32_t kMaxVariantSize = 16 * 1024 * 1024;
@@ -83,7 +95,6 @@ private:
     static constexpr uint8_t kHeaderSize = 1;
     static constexpr size_t kMinMetadataSize = 3;
 
-    // Now directly store strings instead of string_views
     std::string _metadata;
     std::string _value;
 };

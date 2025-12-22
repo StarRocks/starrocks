@@ -66,7 +66,7 @@ import com.starrocks.server.LocalMetastore;
 import com.starrocks.sql.analyzer.MaterializedViewAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.InsertStmt;
-import com.starrocks.sql.ast.PartitionNames;
+import com.starrocks.sql.ast.PartitionRef;
 import com.starrocks.sql.common.DmlException;
 import com.starrocks.sql.common.PCellSetMapping;
 import com.starrocks.sql.common.PCellSortedSet;
@@ -74,6 +74,7 @@ import com.starrocks.sql.common.PCellUtils;
 import com.starrocks.sql.common.PCellWithName;
 import com.starrocks.sql.common.PartitionNameSetMap;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ExecPlan;
 import org.apache.logging.log4j.Logger;
@@ -475,9 +476,9 @@ public abstract class BaseMVRefreshProcessor {
                 (InsertStmt) SqlParser.parse(definition, ctx.getSessionVariable()).get(0);
         // set target partitions
         if (PCellUtils.isNotEmpty(mvTargetPartitionNames)) {
-            PartitionNames partitionNames =
-                    new PartitionNames(false, Lists.newArrayList(mvTargetPartitionNames.getPartitionNames()));
-            insertStmt.setTargetPartitionNames(partitionNames);
+            PartitionRef partitionRef = new PartitionRef(Lists.newArrayList(mvTargetPartitionNames.getPartitionNames()),
+                    false, NodePosition.ZERO);
+            insertStmt.setTargetPartitionNames(partitionRef);
         }
 
         // insert overwrite mv must set system = true

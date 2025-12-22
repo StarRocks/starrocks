@@ -24,8 +24,8 @@ import com.starrocks.warehouse.cngroup.ComputeResource;
 public class RecycleLakeListPartitionInfo extends RecycleListPartitionInfo {
     public RecycleLakeListPartitionInfo(long dbId, long tableId, Partition partition,
                                         DataProperty dataProperty, short replicationNum,
-                                        boolean isInMemory, DataCacheInfo dataCacheInfo) {
-        super(dbId, tableId, partition, dataProperty, replicationNum, isInMemory, dataCacheInfo);
+                                        DataCacheInfo dataCacheInfo) {
+        super(dbId, tableId, partition, dataProperty, replicationNum, dataCacheInfo);
     }
 
     @Override

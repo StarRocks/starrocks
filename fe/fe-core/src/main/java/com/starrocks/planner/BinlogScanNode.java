@@ -153,7 +153,7 @@ public class BinlogScanNode extends ScanNode {
                 locations.setScan_range(scanRange);
 
                 // Choose replicas
-                int schemaHash = olapTable.getSchemaHashByIndexId(olapTable.getBaseIndexId());
+                int schemaHash = olapTable.getSchemaHashByIndexMetaId(olapTable.getBaseIndexMetaId());
                 long visibleVersion = partition.getVisibleVersion();
 
                 List<Replica> allQueryableReplicas = Lists.newArrayList();

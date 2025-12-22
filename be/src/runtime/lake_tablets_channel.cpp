@@ -60,8 +60,8 @@ class LakeTabletsChannel : public TabletsChannel {
     using TxnLogPtr = AsyncDeltaWriter::TxnLogPtr;
 
 public:
-    LakeTabletsChannel(LoadChannel* load_channel, lake::TabletManager* tablet_manager, const TabletsChannelKey& key,
-                       MemTracker* mem_tracker, RuntimeProfile* parent_profile);
+    LakeTabletsChannel(lake::TabletManager* tablet_manager, const TabletsChannelKey& key, MemTracker* mem_tracker,
+                       RuntimeProfile* parent_profile);
 
     ~LakeTabletsChannel() override;
 
@@ -246,7 +246,6 @@ private:
         }
     };
 
-    LoadChannel* _load_channel;
     lake::TabletManager* _tablet_manager;
 
     TabletsChannelKey _key;
@@ -315,11 +314,9 @@ private:
     std::unique_ptr<RuntimeProfile> _tablets_profile;
 };
 
-LakeTabletsChannel::LakeTabletsChannel(LoadChannel* load_channel, lake::TabletManager* tablet_manager,
-                                       const TabletsChannelKey& key, MemTracker* mem_tracker,
-                                       RuntimeProfile* parent_profile)
+LakeTabletsChannel::LakeTabletsChannel(lake::TabletManager* tablet_manager, const TabletsChannelKey& key,
+                                       MemTracker* mem_tracker, RuntimeProfile* parent_profile)
         : TabletsChannel(),
-          _load_channel(load_channel),
           _tablet_manager(tablet_manager),
           _key(key),
           _mem_tracker(mem_tracker),
@@ -646,7 +643,6 @@ void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequ
     COUNTER_UPDATE(_wait_writer_timer, wait_writer_ns);
 
     if (close_channel) {
-        _load_channel->remove_tablets_channel(_key);
         if (_finish_mode == lake::DeltaWriterFinishMode::kDontWriteTxnLog) {
             _txn_log_collector.notify();
         }
@@ -809,6 +805,7 @@ Status LakeTabletsChannel::_create_delta_writers(const PTabletWriterOpenRequest&
                                               .set_slot_descriptors(slots)
                                               .set_merge_condition(params.merge_condition())
                                               .set_miss_auto_increment_column(params.miss_auto_increment_column())
+                                              .set_db_id(_schema->db_id())
                                               .set_table_id(params.table_id())
                                               .set_immutable_tablet_size(params.immutable_tablet_size())
                                               .set_mem_tracker(_mem_tracker)
@@ -1024,7 +1021,9 @@ void LakeTabletsChannel::_update_tablet_profile(const DeltaWriter* writer, Runti
 std::shared_ptr<TabletsChannel> new_lake_tablets_channel(LoadChannel* load_channel, lake::TabletManager* tablet_manager,
                                                          const TabletsChannelKey& key, MemTracker* mem_tracker,
                                                          RuntimeProfile* parent_profile) {
-    return std::make_shared<LakeTabletsChannel>(load_channel, tablet_manager, key, mem_tracker, parent_profile);
+    // NOTE: `load_channel` is not used for now, just keep it for now so that it could be used later and
+    // be consistent with LocalTabletsChannel.
+    return std::make_shared<LakeTabletsChannel>(tablet_manager, key, mem_tracker, parent_profile);
 }
 
 } // namespace starrocks

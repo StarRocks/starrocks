@@ -25,6 +25,7 @@ import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.UtFrameUtils;
@@ -124,7 +125,6 @@ public class ReplaceLakePartitionTest {
         }
 
         partitionInfo.setReplicationNum(partitionId, (short) 1);
-        partitionInfo.setIsInMemory(partitionId, false);
         partitionInfo.setDataCacheInfo(partitionId, new DataCacheInfo(true, false));
 
         LakeTable table = new LakeTable(

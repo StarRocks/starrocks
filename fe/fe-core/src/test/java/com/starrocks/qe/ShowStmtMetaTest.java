@@ -16,9 +16,6 @@ package com.starrocks.qe;
 
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.TableName;
-import com.starrocks.common.proc.BaseProcResult;
-import com.starrocks.common.proc.ProcNodeInterface;
-import com.starrocks.common.proc.ProcResult;
 import com.starrocks.sql.ast.AdminShowConfigStmt;
 import com.starrocks.sql.ast.AdminShowReplicaDistributionStmt;
 import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
@@ -114,7 +111,6 @@ import com.starrocks.sql.parser.NodePosition;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
-import java.util.Arrays;
 import java.util.List;
 
 public class ShowStmtMetaTest {
@@ -750,54 +746,11 @@ public class ShowStmtMetaTest {
         Assertions.assertEquals("test_db", stmt.getDbName());
         Assertions.assertEquals("test_table", stmt.getTableName());
 
-        // Test getMetaData() with a mock ProcNodeInterface
-        // This simulates the behavior in ShowStmtAnalyzer.visitShowPartitionsStatement
-        ProcNodeInterface mockNode = new ProcNodeInterface() {
-            @Override
-            public ProcResult fetchResult() {
-                // Return a mock result with typical partition columns
-                BaseProcResult result = new BaseProcResult();
-                List<String> columnNames = Arrays.asList(
-                        "PartitionId", "PartitionName", "VisibleVersion", "VisibleVersionTime",
-                        "VisibleVersionHash", "State", "PartitionKey", "Range", "DistributionKey",
-                        "Buckets", "ReplicationNum", "StorageMedium", "CooldownTime",
-                        "LastConsistencyCheckTime", "DataSize", "StorageSize", "IsInMemory",
-                        "RowCount", "DataVersion", "VersionEpoch", "VersionTxnType", "TabletBalanced"
-                );
-                result.setNames(columnNames);
-                return result;
-            }
-        };
-
-        stmt.setNode(mockNode);
+        stmt.setProcPath("/nonexistent_partitions");
 
         // Now test getMetaData() method
         ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
-        Assertions.assertEquals(22, metaData.getColumnCount());
-
-        // Verify the column names match what we expect from PartitionsProcDir
-        Assertions.assertEquals("PartitionId", metaData.getColumn(0).getName());
-        Assertions.assertEquals("PartitionName", metaData.getColumn(1).getName());
-        Assertions.assertEquals("VisibleVersion", metaData.getColumn(2).getName());
-        Assertions.assertEquals("VisibleVersionTime", metaData.getColumn(3).getName());
-        Assertions.assertEquals("VisibleVersionHash", metaData.getColumn(4).getName());
-        Assertions.assertEquals("State", metaData.getColumn(5).getName());
-        Assertions.assertEquals("PartitionKey", metaData.getColumn(6).getName());
-        Assertions.assertEquals("Range", metaData.getColumn(7).getName());
-        Assertions.assertEquals("DistributionKey", metaData.getColumn(8).getName());
-        Assertions.assertEquals("Buckets", metaData.getColumn(9).getName());
-        Assertions.assertEquals("ReplicationNum", metaData.getColumn(10).getName());
-        Assertions.assertEquals("StorageMedium", metaData.getColumn(11).getName());
-        Assertions.assertEquals("CooldownTime", metaData.getColumn(12).getName());
-        Assertions.assertEquals("LastConsistencyCheckTime", metaData.getColumn(13).getName());
-        Assertions.assertEquals("DataSize", metaData.getColumn(14).getName());
-        Assertions.assertEquals("StorageSize", metaData.getColumn(15).getName());
-        Assertions.assertEquals("IsInMemory", metaData.getColumn(16).getName());
-        Assertions.assertEquals("RowCount", metaData.getColumn(17).getName());
-        Assertions.assertEquals("DataVersion", metaData.getColumn(18).getName());
-        Assertions.assertEquals("VersionEpoch", metaData.getColumn(19).getName());
-        Assertions.assertEquals("VersionTxnType", metaData.getColumn(20).getName());
-        Assertions.assertEquals("TabletBalanced", metaData.getColumn(21).getName());
+        Assertions.assertEquals(0, metaData.getColumnCount());
     }
 
     @Test
@@ -1207,7 +1160,7 @@ public class ShowStmtMetaTest {
     @Test
     public void testShowProcStmt() {
         ShowProcStmt stmt = new ShowProcStmt("/test/path");
-        // ShowProcStmt requires a ProcNodeInterface to be set before getMetaData() can work
+        // Metadata generation depends on resolving the proc path at runtime.
         // For now, we'll just test that the statement can be created without errors
         Assertions.assertNotNull(stmt);
         Assertions.assertEquals("/test/path", stmt.getPath());

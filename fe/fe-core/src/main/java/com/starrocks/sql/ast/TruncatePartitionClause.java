@@ -19,19 +19,19 @@ import com.starrocks.sql.parser.NodePosition;
 
 public class TruncatePartitionClause extends AlterTableClause {
 
-    private PartitionNames partitionNames;
+    private PartitionRef partitionNames;
 
-    public TruncatePartitionClause(PartitionNames partitionNames) {
+    public TruncatePartitionClause(PartitionRef partitionNames) {
         this(partitionNames, NodePosition.ZERO);
     }
 
 
-    public TruncatePartitionClause(PartitionNames partitionNames, NodePosition pos) {
+    public TruncatePartitionClause(PartitionRef partitionNames, NodePosition pos) {
         super(pos);
         this.partitionNames = partitionNames;
     }
 
-    public PartitionNames getPartitionNames() {
+    public PartitionRef getPartitionNames() {
         return partitionNames;
     }
 
@@ -39,6 +39,4 @@ public class TruncatePartitionClause extends AlterTableClause {
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return ((AstVisitorExtendInterface<R, C>) visitor).visitTruncatePartitionClause(this, context);
     }
-
-
 }

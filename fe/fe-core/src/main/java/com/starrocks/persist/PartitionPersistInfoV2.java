@@ -32,8 +32,6 @@ public abstract class PartitionPersistInfoV2 implements Writable {
     private DataProperty dataProperty;
     @SerializedName("replicationNum")
     private short replicationNum;
-    @SerializedName("isInMemory")
-    private boolean isInMemory;
     @SerializedName("isTempPartition")
     private boolean isTempPartition;
     @SerializedName("storageCacheInfo")
@@ -41,20 +39,19 @@ public abstract class PartitionPersistInfoV2 implements Writable {
 
     public PartitionPersistInfoV2(Long dbId, Long tableId, Partition partition,
                                   DataProperty dataProperty, short replicationNum,
-                                  boolean isInMemory, boolean isTempPartition) {
-        this(dbId, tableId, partition, dataProperty, replicationNum, isInMemory, isTempPartition, null);
+                                  boolean isTempPartition) {
+        this(dbId, tableId, partition, dataProperty, replicationNum, isTempPartition, null);
     }
 
     public PartitionPersistInfoV2(Long dbId, Long tableId, Partition partition,
                                   DataProperty dataProperty, short replicationNum,
-                                  boolean isInMemory, boolean isTempPartition,
+                                  boolean isTempPartition,
                                   DataCacheInfo dataCacheInfo) {
         this.dbId = dbId;
         this.tableId = tableId;
         this.partition = partition;
         this.dataProperty = dataProperty;
         this.replicationNum = replicationNum;
-        this.isInMemory = isInMemory;
         this.isTempPartition = isTempPartition;
         this.dataCacheInfo = dataCacheInfo;
     }
@@ -93,10 +90,6 @@ public abstract class PartitionPersistInfoV2 implements Writable {
 
     public short getReplicationNum() {
         return this.replicationNum;
-    }
-
-    public boolean isInMemory() {
-        return this.isInMemory;
     }
 
     public boolean isTempPartition() {

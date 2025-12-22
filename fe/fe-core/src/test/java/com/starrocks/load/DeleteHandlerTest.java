@@ -44,11 +44,12 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.ast.DeleteStmt;
-import com.starrocks.sql.ast.PartitionNames;
+import com.starrocks.sql.ast.PartitionRef;
 import com.starrocks.sql.ast.expression.BinaryPredicate;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
@@ -229,7 +230,7 @@ public class DeleteHandlerTest {
                     new IntLiteral(3));
 
             DeleteStmt deleteStmt = new DeleteStmt(new TableName("test_db", "test_tbl"),
-                    new PartitionNames(false, Lists.newArrayList("test_tbl")), binaryPredicate);
+                    new PartitionRef(Lists.newArrayList("test_tbl"), false, NodePosition.ZERO), binaryPredicate);
 
             new Expectations(globalTransactionMgr) {
                 {
@@ -256,7 +257,7 @@ public class DeleteHandlerTest {
                 new IntLiteral(3));
 
         DeleteStmt deleteStmt = new DeleteStmt(new TableName("test_db", "test_tbl"),
-                new PartitionNames(false, Lists.newArrayList("test_tbl")), binaryPredicate);
+                new PartitionRef(Lists.newArrayList("test_tbl"), false, NodePosition.ZERO), binaryPredicate);
 
         Set<Replica> finishedReplica = Sets.newHashSet();
         finishedReplica.add(new Replica(REPLICA_ID_1, BACKEND_ID_1, 0, Replica.ReplicaState.NORMAL));
@@ -304,7 +305,7 @@ public class DeleteHandlerTest {
                 new IntLiteral(3));
 
         DeleteStmt deleteStmt = new DeleteStmt(new TableName("test_db", "test_tbl"),
-                new PartitionNames(false, Lists.newArrayList("test_tbl")), binaryPredicate);
+                new PartitionRef(Lists.newArrayList("test_tbl"), false, NodePosition.ZERO), binaryPredicate);
 
         Set<Replica> finishedReplica = Sets.newHashSet();
         finishedReplica.add(new Replica(REPLICA_ID_1, BACKEND_ID_1, 0, Replica.ReplicaState.NORMAL));
@@ -355,7 +356,7 @@ public class DeleteHandlerTest {
                     new IntLiteral(3));
 
             DeleteStmt deleteStmt = new DeleteStmt(new TableName("test_db", "test_tbl"),
-                    new PartitionNames(false, Lists.newArrayList("test_tbl")), binaryPredicate);
+                    new PartitionRef(Lists.newArrayList("test_tbl"), false, NodePosition.ZERO), binaryPredicate);
 
             Set<Replica> finishedReplica = Sets.newHashSet();
             finishedReplica.add(new Replica(REPLICA_ID_1, BACKEND_ID_1, 0, Replica.ReplicaState.NORMAL));
@@ -421,7 +422,7 @@ public class DeleteHandlerTest {
                 new IntLiteral(3));
 
         DeleteStmt deleteStmt = new DeleteStmt(new TableName("test_db", "test_tbl"),
-                new PartitionNames(false, Lists.newArrayList("test_tbl")), binaryPredicate);
+                new PartitionRef(Lists.newArrayList("test_tbl"), false, NodePosition.ZERO), binaryPredicate);
 
         Set<Replica> finishedReplica = Sets.newHashSet();
         finishedReplica.add(new Replica(REPLICA_ID_1, BACKEND_ID_1, 0, Replica.ReplicaState.NORMAL));
@@ -478,7 +479,7 @@ public class DeleteHandlerTest {
                 new IntLiteral(3));
 
         DeleteStmt deleteStmt = new DeleteStmt(new TableName("test_db", "test_tbl"),
-                new PartitionNames(false, Lists.newArrayList("test_tbl")), binaryPredicate);
+                new PartitionRef(Lists.newArrayList("test_tbl"), false, NodePosition.ZERO), binaryPredicate);
 
         Set<Replica> finishedReplica = Sets.newHashSet();
         finishedReplica.add(new Replica(REPLICA_ID_1, BACKEND_ID_1, 0, Replica.ReplicaState.NORMAL));
@@ -525,7 +526,7 @@ public class DeleteHandlerTest {
                 new IntLiteral(3));
 
         DeleteStmt deleteStmt = new DeleteStmt(new TableName("test_db", "test_tbl"),
-                new PartitionNames(false, Lists.newArrayList("test_tbl")), binaryPredicate);
+                new PartitionRef(Lists.newArrayList("test_tbl"), false, NodePosition.ZERO), binaryPredicate);
 
         Set<Replica> finishedReplica = Sets.newHashSet();
         finishedReplica.add(new Replica(REPLICA_ID_1, BACKEND_ID_1, 0, Replica.ReplicaState.NORMAL));

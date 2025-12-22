@@ -107,6 +107,18 @@ VariantMetadata Variant::metadata() const {
     return VariantMetadata();
 }
 
+std::string_view Variant::value() const {
+    return "";
+}
+
+StatusOr<Variant> Variant::get_object_by_key(std::string_view key) const {
+    return Status::NotSupported("get_object_by_key not supported on macOS shim");
+}
+
+StatusOr<Variant> Variant::get_element_at_index(uint32_t index) const {
+    return Status::NotSupported("get_element_at_index not supported on macOS shim");
+}
+
 // VariantMetadata implementations
 std::string VariantMetadata::get_key(uint32_t id) const {
     return "key_" + std::to_string(id);

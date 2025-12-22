@@ -565,7 +565,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
                             LOG.warn("Ignore shadow index included in the transaction but not visible, " +
                                     "partitionId: {}, partitionName: {}, txnId: {}, indexId: {}, indexName: {}",
                                     partition.getId(), partition.getName(), txnState.getTransactionId(),
-                                    index.getId(), table.getIndexNameById(index.getId()));
+                                    index.getId(), table.getIndexNameByMetaId(index.getId()));
                             continue;
                         }
                         if (shadowIndexTxnBatches == null) {
@@ -883,7 +883,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
             List<MaterializedIndex> indexes = txnState.getPartitionLoadedTblIndexes(table.getId(), partition);
             for (MaterializedIndex index : indexes) {
                 if (!index.visibleForTransaction(txnId)) {
-                    LOG.info("Ignored index {} for transaction {}", table.getIndexNameById(index.getId()), txnId);
+                    LOG.info("Ignored index {} for transaction {}", table.getIndexNameByMetaId(index.getId()), txnId);
                     continue;
                 }
                 if (index.getState() == MaterializedIndex.IndexState.SHADOW) {

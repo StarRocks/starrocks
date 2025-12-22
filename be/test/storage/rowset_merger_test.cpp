@@ -47,7 +47,7 @@ public:
     }
 
     Status add_chunk(const Chunk& chunk, const std::vector<uint64_t>& rssid_rowids) override {
-        all_pks->append(*chunk.get_column_by_index(0), 0, chunk.num_rows());
+        all_pks->append(*(chunk.get_column_raw_ptr_by_index(0)), 0, chunk.num_rows());
         return Status::OK();
     }
 
@@ -85,12 +85,12 @@ public:
     Status add_columns(const Chunk& chunk, const std::vector<uint32_t>& column_indexes, bool is_key,
                        const std::vector<uint64_t>& rssid_rowids) override {
         if (is_key) {
-            all_pks->append(*chunk.get_column_by_index(0), 0, chunk.num_rows());
+            all_pks->append(*(chunk.get_column_raw_ptr_by_index(0)), 0, chunk.num_rows());
         } else {
             for (size_t i = 0; i < column_indexes.size(); ++i) {
                 auto column_index = column_indexes[i];
                 DCHECK_LT(column_index - 1, non_key_columns.size());
-                non_key_columns[column_index - 1]->append(*chunk.get_column_by_index(i), 0, chunk.num_rows());
+                non_key_columns[column_index - 1]->append(*(chunk.get_column_raw_ptr_by_index(i)), 0, chunk.num_rows());
             }
         }
         return Status::OK();
@@ -99,7 +99,7 @@ public:
     MutableColumnPtr all_pks;
     vector<uint32_t> all_rssids;
 
-    vector<MutableColumnPtr> non_key_columns;
+    MutableColumns non_key_columns;
 };
 
 class RowsetMergerTest : public testing::Test {
@@ -123,7 +123,7 @@ public:
         EXPECT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &writer).ok());
         auto schema = ChunkHelper::convert_schema(_tablet->tablet_schema());
         auto chunk = ChunkHelper::new_chunk(schema, keys.size());
-        auto& cols = chunk->columns();
+        auto cols = chunk->mutable_columns();
         for (long key : keys) {
             cols[0]->append_datum(Datum(key));
             cols[1]->append_datum(Datum((int16_t)(key % 100 + 1)));
@@ -153,19 +153,19 @@ public:
         k1.column_name = "pk";
         k1.__set_is_key(true);
         k1.column_type.type = TPrimitiveType::BIGINT;
-        request.tablet_schema.columns.push_back(k1);
+        request.tablet_schema.columns.emplace_back(k1);
 
         TColumn k2;
         k2.column_name = "v1";
         k2.__set_is_key(false);
         k2.column_type.type = TPrimitiveType::SMALLINT;
-        request.tablet_schema.columns.push_back(k2);
+        request.tablet_schema.columns.emplace_back(k2);
 
         TColumn k3;
         k3.column_name = "v2";
         k3.__set_is_key(false);
         k3.column_type.type = TPrimitiveType::INT;
-        request.tablet_schema.columns.push_back(k3);
+        request.tablet_schema.columns.emplace_back(k3);
         auto st = StorageEngine::instance()->create_tablet(request);
         ASSERT_TRUE(st.ok()) << st.to_string();
         _tablet = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id);
@@ -241,7 +241,7 @@ TEST_F(RowsetMergerTest, horizontal_merge) {
     vector<vector<int64_t>> segments(num_segment);
     for (int i = 0; i < N; i++) {
         rssids[i] = rand() % num_segment;
-        segments[rssids[i]].push_back(i);
+        segments[rssids[i]].emplace_back(i);
     }
     vector<RowsetSharedPtr> rowsets(num_segment * 2);
     for (int i = 0; i < num_segment; i++) {
@@ -289,7 +289,7 @@ TEST_F(RowsetMergerTest, vertical_merge) {
     vector<vector<int64_t>> segments(num_segment);
     for (int i = 0; i < N; i++) {
         rssids[i] = rand() % num_segment;
-        segments[rssids[i]].push_back(i);
+        segments[rssids[i]].emplace_back(i);
     }
     vector<RowsetSharedPtr> rowsets(num_segment * 2);
     for (int i = 0; i < num_segment; i++) {
@@ -350,7 +350,7 @@ TEST_F(RowsetMergerTest, horizontal_merge_seq) {
     vector<vector<int64_t>> segments(num_segment);
     for (int i = 0; i < N; i++) {
         rssids[i] = num_segment * i / N;
-        segments[rssids[i]].push_back(i);
+        segments[rssids[i]].emplace_back(i);
     }
     vector<RowsetSharedPtr> rowsets(num_segment * 2);
     for (int i = 0; i < num_segment; i++) {
@@ -397,7 +397,7 @@ TEST_F(RowsetMergerTest, vertical_merge_seq) {
     vector<vector<int64_t>> segments(num_segment);
     for (int i = 0; i < N; i++) {
         rssids[i] = num_segment * i / N;
-        segments[rssids[i]].push_back(i);
+        segments[rssids[i]].emplace_back(i);
     }
     vector<RowsetSharedPtr> rowsets(num_segment * 2);
     for (int i = 0; i < num_segment; i++) {

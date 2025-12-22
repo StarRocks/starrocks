@@ -1,4 +1,4 @@
--- name: test_sort_key_dup_tbl;
+-- name: test_sort_key_dup_tbl; @native
 
 show backends;
 
@@ -67,7 +67,7 @@ select * from dup_test;
 drop database sort_key_test_dup;
 
 
--- name: test_sort_key_dup_tbl_with_rollup
+-- name: test_sort_key_dup_tbl_with_rollup @native
 
 create database sort_key_dup_tbl_with_rollup;
 use sort_key_dup_tbl_with_rollup;

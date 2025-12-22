@@ -25,7 +25,6 @@ import com.starrocks.alter.AlterJobV2Builder;
 import com.starrocks.catalog.CatalogUtils;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DistributionInfo;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -42,6 +41,7 @@ import com.starrocks.common.io.DeepCopy;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.StorageVolumeMgr;
+import com.starrocks.sql.ast.KeysType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -199,19 +199,16 @@ public class LakeTable extends OlapTable {
             return new RecycleLakeRangePartitionInfo(dbId, id, partition, range,
                     partitionInfo.getDataProperty(partition.getId()),
                     partitionInfo.getReplicationNum(partition.getId()),
-                    partitionInfo.getIsInMemory(partition.getId()),
                     partitionInfo.getDataCacheInfo(partition.getId()));
         } else if (partitionInfo.isListPartition()) {
             return new RecycleLakeListPartitionInfo(dbId, id, partition,
                     partitionInfo.getDataProperty(partition.getId()),
                     partitionInfo.getReplicationNum(partition.getId()),
-                    partitionInfo.getIsInMemory(partition.getId()),
                     partitionInfo.getDataCacheInfo(partition.getId()));
         } else if (partitionInfo.isUnPartitioned()) {
             return new RecycleLakeUnPartitionInfo(dbId, id, partition,
                     partitionInfo.getDataProperty(partition.getId()),
                     partitionInfo.getReplicationNum(partition.getId()),
-                    partitionInfo.getIsInMemory(partition.getId()),
                     partitionInfo.getDataCacheInfo(partition.getId()));
         } else {
             throw new RuntimeException("Unknown partition type: " + partitionInfo.getType());

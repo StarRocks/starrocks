@@ -21,8 +21,11 @@ namespace starrocks {
 class MemTrackerTest : public testing::Test {
 protected:
     void SetUp() override {
-        _process_mem_tracker = std::make_unique<MemTracker>(1024, "process");
-        _query_pool_mem_tracker = std::make_unique<MemTracker>(512, "query_pool", _process_mem_tracker.get());
+        using MemTrackerType::PROCESS;
+        using MemTrackerType::QUERY_POOL;
+        _process_mem_tracker = std::make_unique<MemTracker>(PROCESS, 1024, "process");
+        auto parent = _process_mem_tracker.get();
+        _query_pool_mem_tracker = std::make_unique<MemTracker>(QUERY_POOL, 512, "query_pool", parent);
         _query_1 = std::make_unique<MemTracker>(128, "query_1", _query_pool_mem_tracker.get());
         _query_2 = std::make_unique<MemTracker>(128, "query_2", _query_pool_mem_tracker.get());
     }
@@ -169,6 +172,20 @@ TEST_F(MemTrackerTest, release_without_root) {
     ASSERT_EQ(_query_1->consumption(), 13);
     ASSERT_EQ(_query_pool_mem_tracker->consumption(), 13);
     ASSERT_EQ(_process_mem_tracker->consumption(), 10);
+}
+
+TEST_F(MemTrackerTest, try_consume_with_limited) {
+    ASSERT_EQ(_query_1->try_consume_with_limited(10, 500), nullptr);
+    ASSERT_EQ(_query_2->try_consume_with_limited(10, 500), _query_pool_mem_tracker.get());
+    ASSERT_EQ(_query_1->try_consume_with_limited(10, 1000), _query_pool_mem_tracker.get());
+}
+
+TEST_F(MemTrackerTest, has_enough_reserved_memory) {
+    _query_1->consume(100);
+    _query_2->consume(50);
+
+    ASSERT_TRUE(_query_1->has_enough_reserved_memory(200));
+    ASSERT_FALSE(_query_1->has_enough_reserved_memory(1000));
 }
 
 } // namespace starrocks

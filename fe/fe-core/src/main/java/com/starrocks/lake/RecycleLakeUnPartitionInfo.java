@@ -25,9 +25,9 @@ import com.starrocks.warehouse.cngroup.ComputeResource;
 // in CatalogRecycleBin
 public class RecycleLakeUnPartitionInfo extends RecycleUnPartitionInfo {
     public RecycleLakeUnPartitionInfo(long dbId, long tableId, Partition partition,
-                                        DataProperty dataProperty, short replicationNum,
-                                        boolean isInMemory, DataCacheInfo dataCacheInfo) {
-        super(dbId, tableId, partition, dataProperty, replicationNum, isInMemory, dataCacheInfo);
+                                      DataProperty dataProperty, short replicationNum,
+                                      DataCacheInfo dataCacheInfo) {
+        super(dbId, tableId, partition, dataProperty, replicationNum, dataCacheInfo);
     }
 
     @Override
