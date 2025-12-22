@@ -121,9 +121,8 @@ public:
     Status prepare_txn(TPartitionId partition_id, TTransactionId transaction_id, TTabletId tablet_id,
                        SchemaHash schema_hash, const TabletUid& tablet_uid, const PUniqueId& load_id);
 
-    Status commit_txn(KVStore* meta, TPartitionId partition_id, TTransactionId transaction_id, TTabletId tablet_id,
-                      SchemaHash schema_hash, const TabletUid& tablet_uid, const PUniqueId& load_id,
-                      const RowsetSharedPtr& rowset_ptr, bool is_recovery);
+    Status commit_txn(const TabletSharedPtr& tablet, TPartitionId partition_id, TTransactionId transaction_id,
+                      const PUniqueId& load_id, const RowsetSharedPtr& rowset_ptr, bool is_recovery);
 
     // delete the txn from manager if it is not committed(not have a valid rowset)
     Status rollback_txn(TPartitionId partition_id, TTransactionId transaction_id, TTabletId tablet_id,
