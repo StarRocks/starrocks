@@ -1193,6 +1193,9 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
                 String functionName = defaultDescContext.qualifiedName().getText().toLowerCase();
                 defaultValueDef = new ColumnDef.DefaultValueDef(true,
                         new FunctionCallExpr(functionName, new ArrayList<>()));
+            } else if (defaultDescContext.expression() != null) {
+                Expr defaultExpr = (Expr) visit(defaultDescContext.expression());
+                defaultValueDef = new ColumnDef.DefaultValueDef(true, defaultExpr);
             }
         }
         final com.starrocks.sql.parser.StarRocksParser.GeneratedColumnDescContext generatedColumnDescContext =

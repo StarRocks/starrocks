@@ -14,6 +14,8 @@
 
 #include "storage/schema_change_utils.h"
 
+#include <velocypack/Slice.h>
+
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
 #include "column/datum_convert.h"
@@ -638,8 +640,8 @@ Status SchemaChangeUtils::parse_request_normal(const TabletSchemaCSPtr& base_sch
             }
 
             LOG(ERROR) << "[DEFAULT_VALUE_PATH_3] Schema change parsing new column: " << new_column.name()
-                       << ", type: " << new_column.type() << ", has_default: " << (new_column.has_default_value())
-                       << ", default_value: " << new_column.default_value();
+                      << ", type: " << new_column.type() << ", has_default: " << (new_column.has_default_value())
+                      << ", default_value: " << new_column.default_value();
             if (!init_column_mapping(column_mapping, new_column, new_column.default_value()).ok()) {
                 LOG(WARNING) << "init column mapping failed. column=" << new_column.name();
                 return Status::InternalError("init column mapping failed");
@@ -821,16 +823,44 @@ Status SchemaChangeUtils::init_column_mapping(ColumnMapping* column_mapping, con
             break;
         }
         case TYPE_JSON: {
+            LOG(ERROR) << "[DEFAULT_VALUE_PATH_4] init_column_mapping TYPE_JSON called, value='" << value << "'";
             auto json_or = JsonValue::parse_json_or_string(Slice(value));
             if (!json_or.ok()) {
                 // If JSON parse fails, treat as NULL to avoid query errors
                 // This prevents returning malformed data when FE validation is bypassed
-                LOG(ERROR) << "Failed to parse JSON default value '" << value
-                           << "', treating as NULL: " << json_or.status();
+                LOG(INFO) << "Failed to parse JSON default value '" << value
+                          << "', treating as NULL: " << json_or.status();
                 column_mapping->default_value_datum.set_null();
             } else {
                 column_mapping->default_json = std::make_unique<JsonValue>(std::move(json_or.value()));
                 column_mapping->default_value_datum.set_json(column_mapping->default_json.get());
+                LOG(ERROR) << "[DEFAULT_VALUE_PATH_4] init_column_mapping TYPE_JSON success, velocypack size="
+                          << column_mapping->default_json->get_slice().size;
+            }
+            break;
+        }
+        case TYPE_ARRAY:
+        case TYPE_MAP:
+        case TYPE_STRUCT: {
+            LOG(ERROR) << "[DEFAULT_VALUE_PATH_4] init_column_mapping complex type called, type=" << field_type
+                      << ", value='" << value << "'";
+            // For complex types, value is a JSON string (e.g., "[1,2,3]", "{"k":"v"}")
+            // We need to parse JSON and convert to Datum using the same logic as DefaultValueColumnIterator
+            auto json_or = JsonValue::parse_json_or_string(Slice(value));
+            if (!json_or.ok()) {
+                LOG(WARNING) << "Failed to parse complex type default value as JSON: '" << value
+                            << "', type: " << field_type << ", error: " << json_or.status()
+                            << ", treating as NULL";
+                column_mapping->default_value_datum.set_null();
+            } else {
+                // Use the same cast_json_to_datum_recursive logic from default_value_column_iterator.cpp
+                // TODO: Extract this into a shared utility function
+                vpack::Slice json_slice = json_or.value().to_vslice();
+                // For now, return NotSupported to indicate we need the helper function
+                // This will be implemented after extracting cast_json_to_datum_recursive
+                return Status::NotSupported(
+                    fmt::format("Complex type default value in schema change not yet implemented. "
+                               "Type: {}, value: {}", field_type, value));
             }
             break;
         }

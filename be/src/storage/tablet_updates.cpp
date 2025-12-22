@@ -5317,6 +5317,8 @@ Status TabletUpdates::get_column_values(const std::vector<uint32_t>& column_ids,
                 }
             }
             if (has_default_value) {
+                LOG(ERROR) << "[DEFAULT_VALUE_PATH_6] Creating DefaultValueColumnIterator for column: " << tablet_column.name()
+                          << ", type: " << tablet_column.type() << ", default_value: " << default_value;
                 const TypeInfoPtr& type_info = get_type_info(tablet_column);
                 std::unique_ptr<DefaultValueColumnIterator> default_value_iter =
                         std::make_unique<DefaultValueColumnIterator>(true, default_value, tablet_column.is_nullable(),

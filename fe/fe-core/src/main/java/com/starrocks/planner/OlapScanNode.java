@@ -1143,6 +1143,16 @@ public class OlapScanNode extends ScanNode {
                     new TOlapScanNode(desc.getId().asInt(), keyColumnNames, keyColumnTypes, isPreAggregation);
             msg.olap_scan_node.setColumns_desc(columnsDesc);
             msg.olap_scan_node.setSchema_id(schemaId);
+            
+            // [SCHEMA_SOURCE_DEBUG] Log what FE is sending
+            LOG.error("[SCHEMA_SOURCE_DEBUG] FE sending to BE: schema_id={}, columns_desc size={}, table={}",
+                    schemaId, columnsDesc.size(), olapTable.getName());
+            for (int i = 0; i < columnsDesc.size(); i++) {
+                TColumn col = columnsDesc.get(i);
+                LOG.error("[SCHEMA_SOURCE_DEBUG] FE column[{}]: name={}, has_default={}, default_value='{}'",
+                        i, col.getColumn_name(), col.isSetDefault_value(), 
+                        col.isSetDefault_value() ? col.getDefault_value() : "");
+            }
             msg.olap_scan_node.setSort_key_column_names(keyColumnNames);
             msg.olap_scan_node.setRollup_name(olapTable.getIndexNameById(selectedIndexId));
             if (enableTopnFilterBackPressure) {

@@ -27,15 +27,20 @@ import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.ColumnDef;
+import com.starrocks.sql.ast.expression.ArrayExpr;
+import com.starrocks.sql.ast.expression.CastExpr;
 import com.starrocks.sql.ast.expression.DecimalLiteral;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprCastFunction;
 import com.starrocks.sql.ast.expression.FloatLiteral;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.FunctionParams;
 import com.starrocks.sql.ast.expression.LiteralExprFactory;
+import com.starrocks.sql.ast.expression.MapExpr;
 import com.starrocks.sql.ast.expression.NullLiteral;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.ast.expression.TypeDef;
+import com.starrocks.sql.common.TypeManager;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.type.AggStateDesc;
 import com.starrocks.type.PrimitiveType;
@@ -186,7 +191,10 @@ public class ColumnDefAnalyzer {
 
         if (defaultValueDef.isSet && defaultValueDef.expr != null) {
             try {
-                validateDefaultValue(type, defaultValueDef.expr);
+                Expr validatedExpr = validateDefaultValue(type, defaultValueDef.expr);
+                if (validatedExpr != defaultValueDef.expr) {
+                    defaultValueDef.expr = validatedExpr;
+                }
             } catch (AnalysisException e) {
                 throw new AnalysisException(String.format("Invalid default value for '%s': %s", name, e.getMessage()));
             }
@@ -227,12 +235,20 @@ public class ColumnDefAnalyzer {
         return type;
     }
 
-    public static void validateDefaultValue(Type type, Expr defaultExpr) throws AnalysisException {
+    /**
+     * Validate default value expression and return potentially transformed expression (with cast if needed)
+     * @return the validated expression, possibly wrapped in CastExpr if type conversion is needed
+     */
+    public static Expr validateDefaultValue(Type type, Expr defaultExpr) throws AnalysisException {
+        
         if (defaultExpr instanceof StringLiteral) {
             String defaultValue = ((StringLiteral) defaultExpr).getValue();
             Preconditions.checkNotNull(defaultValue);
+            // For complex types with string literals, they should be handled as expressions
             if (type.isComplexType()) {
-                throw new AnalysisException(String.format("Default value for complex type '%s' not supported", type));
+                throw new AnalysisException(
+                        String.format("Default value for complex type '%s' requires expression syntax (e.g., [], map{}, row())",
+                                type));
             }
             ScalarType scalarType = (ScalarType) type;
             // check if default value is valid. if not, some literal constructor will throw AnalysisException
@@ -271,10 +287,10 @@ public class ColumnDefAnalyzer {
                 case BITMAP:
                     break;
                 case JSON:
-                    try (JsonReader reader = new JsonReader(new StringReader(defaultValue))) {
-                        // Strict mode: reject non-standard JSON
-                        reader.setLenient(false);
-                        Streams.parse(reader);
+                        try (JsonReader reader = new JsonReader(new StringReader(defaultValue))) {
+                            // Strict mode: reject non-standard JSON
+                            reader.setLenient(false);
+                            Streams.parse(reader);
                     } catch (Exception e) {
                         throw new AnalysisException(
                                 String.format("Invalid JSON format for default value: %s. Error: %s",
@@ -287,6 +303,13 @@ public class ColumnDefAnalyzer {
         } else if (defaultExpr instanceof FunctionCallExpr) {
             FunctionCallExpr functionCallExpr = (FunctionCallExpr) defaultExpr;
             String functionName = functionCallExpr.getFunctionName();
+            
+            // Check if this is row() for struct type - handle as complex type
+            if ("row".equalsIgnoreCase(functionName)) {
+                return validateComplexTypeDefaultValue(type, defaultExpr);
+            }
+            
+            // Otherwise, validate as default value function (now, uuid, uuid_numeric)
             boolean supported = isValidDefaultFunction(functionName + "()");
 
             if (!supported) {
@@ -313,9 +336,59 @@ public class ColumnDefAnalyzer {
             }
         } else if (defaultExpr instanceof NullLiteral) {
             // nothing to check
+        } else if (defaultExpr instanceof ArrayExpr || defaultExpr instanceof MapExpr) {
+            // Handle complex type expressions: array[], map{}
+            return validateComplexTypeDefaultValue(type, defaultExpr);
         } else {
             throw new AnalysisException(String.format("Unsupported expr %s for default value", defaultExpr));
         }
+        
+        // Return the original expression if no transformation was needed
+        return defaultExpr;
+    }
+
+    /**
+     * Validate and analyze complex type (array/map/struct) default value expressions
+     * @return the validated expression, possibly with type conversion applied
+     */
+    public static Expr validateComplexTypeDefaultValue(Type columnType, Expr defaultExpr)
+            throws AnalysisException {
+        
+        // Step 1: Analyze the expression to get its type and resolve functions
+        // For default value expressions, we don't have access to table columns,
+        // so we use analyzeExpressionIgnoreSlot which doesn't require scope/relations
+        try {
+            ExpressionAnalyzer.analyzeExpressionIgnoreSlot(defaultExpr, ConnectContext.get());
+        } catch (Exception e) {
+            throw new AnalysisException(
+                    "Failed to analyze default value expression: " + e.getMessage());
+        }
+        
+        Type exprType = defaultExpr.getType();
+        if (exprType == null) {
+            throw new AnalysisException("Cannot determine type of default value expression");
+        }
+        
+        // Step 2: Check if expression type is compatible with column type
+        // TypeManager.canCastTo already handles array/map/struct compatibility
+        if (!TypeManager.canCastTo(exprType, columnType)) {
+            throw new AnalysisException(
+                    String.format("Default value type %s cannot be cast to column type %s",
+                            exprType, columnType));
+        }
+        
+        // Step 3: If types don't match exactly, use ExprCastFunction to convert
+        // ExprCastFunction will create a new expression with correct type without CastExpr wrapper
+        // For example: [1,2,3] (ARRAY<INT>) -> new ArrayExpr with BIGINT items for ARRAY<BIGINT>
+        // Note: Avoid redundant cast if expression already has exact target type
+        if (!exprType.equals(columnType)) {
+            // Only cast if types are truly different
+            // This avoids double-casting when re-validating after FE restart
+            return ExprCastFunction.uncheckedCastTo(defaultExpr, columnType);
+        }
+        
+        // Return the original expression if types already match
+        return defaultExpr;
     }
 
 }

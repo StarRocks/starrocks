@@ -16,29 +16,52 @@ package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.persist.gson.GsonPostProcessable;
+import com.starrocks.persist.gson.GsonPreProcessable;
+import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.FunctionParams;
 import com.starrocks.sql.ast.expression.IntLiteral;
+import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.Type;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.io.IOException;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-public class DefaultExpr {
+import static com.starrocks.sql.analyzer.ColumnDefAnalyzer.validateComplexTypeDefaultValue;
+
+public class DefaultExpr implements GsonPreProcessable, GsonPostProcessable {
     private static final Logger LOG = LogManager.getLogger(DefaultExpr.class);
+    
     @SerializedName("expr")
     private String expr;
+    
     private boolean hasArguments;
+    
+    @SerializedName("complexExprSql")
+    private String complexExprSql;
+    
+    private Expr complexExpr;
 
     public DefaultExpr(String expr, boolean hasArguments) {
         this.expr = expr;
         this.hasArguments = hasArguments;
+        this.complexExpr = null;
+        this.complexExprSql = null;
+    }
+    
+    public DefaultExpr(Expr complexExpr) {
+        this.expr = null;
+        this.hasArguments = false;
+        this.complexExpr = complexExpr;
     }
 
     public String getExpr() {
@@ -51,6 +74,52 @@ public class DefaultExpr {
 
     public boolean hasArgs() {
         return hasArguments;
+    }
+    
+    public boolean isComplexExpr() {
+        return complexExpr != null || complexExprSql != null;
+    }
+    
+    public Expr getComplexExpr() {
+        return complexExpr;
+    }
+    
+    public void setComplexExpr(Expr complexExpr) {
+        this.complexExpr = complexExpr;
+    }
+    
+    /**
+     * Called before serialization (write to metadata)
+     * Convert runtime Expr object to SQL string for persistence
+     * Note: We preserve CastExpr to maintain type conversion information
+     */
+    @Override
+    public void gsonPreProcess() throws IOException {
+        if (complexExpr != null) {
+            // Serialize the complete expression including CastExpr if present
+            // This preserves type conversion information in metadata
+            complexExprSql = ExprToSql.toSql(complexExpr);
+            LOG.debug("DefaultExpr.gsonPreProcess: serialized complex expr to SQL: {}", complexExprSql);
+        }
+    }
+    
+    /**
+     * Called after deserialization (read from metadata)
+     * Restore Expr object from SQL string
+     * Similar to Column.gsonPostProcess() for generatedColumnExpr
+     */
+    @Override
+    public void gsonPostProcess() throws IOException {
+        if (complexExprSql != null && !complexExprSql.isEmpty()) {
+            try {
+                // Parse SQL string back to runtime Expr object
+                complexExpr = SqlParser.parseSqlToExpr(complexExprSql, SqlModeHelper.MODE_DEFAULT);
+                LOG.debug("DefaultExpr.gsonPostProcess: restored complex expr from SQL: {}", complexExprSql);
+            } catch (Exception e) {
+                LOG.warn("Failed to restore complex default expression from SQL: {}", complexExprSql, e);
+                // Keep complexExprSql for error reporting, complexExpr will be null
+            }
+        }
     }
 
     public static boolean isValidDefaultFunction(String expr) {
@@ -82,11 +151,17 @@ public class DefaultExpr {
     }
 
     public static boolean isEmptyDefaultTimeFunction(DefaultExpr expr) {
-        return isValidDefaultTimeFunction(expr.getExpr()) && !expr.hasArgs();
+        return !expr.isComplexExpr() && isValidDefaultTimeFunction(expr.getExpr()) && !expr.hasArgs();
     }
 
     public Expr obtainExpr() {
-        if (isValidDefaultFunction(expr)) {
+        // If it's a complex expression, return it directly
+        if (complexExpr != null) {
+            return complexExpr;
+        }
+        
+        // Legacy: handle simple function expressions like now()
+        if (expr != null && isValidDefaultFunction(expr)) {
             String functionName = expr.replaceAll("\\(.*\\)", "");
 
             Pattern pattern = Pattern.compile("\\(([^)]+)\\)");
@@ -110,5 +185,18 @@ public class DefaultExpr {
             return functionCallExpr;
         }
         return null;
+    }
+    
+    /**
+     * Get the SQL representation of the default expression
+     */
+    public String toSql() {
+        if (complexExpr != null) {
+            return ExprToSql.toSql(complexExpr);
+        }
+        if (complexExprSql != null) {
+            return complexExprSql;
+        }
+        return expr;
     }
 }
