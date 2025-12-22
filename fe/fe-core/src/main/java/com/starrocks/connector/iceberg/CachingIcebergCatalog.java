@@ -31,6 +31,7 @@ import com.starrocks.connector.iceberg.rest.IcebergRESTCatalog;
 import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
+import org.apache.commons.lang.exception.ExceptionUtils;
 import org.apache.iceberg.BaseTable;
 import org.apache.iceberg.DataFile;
 import org.apache.iceberg.DeleteFile;
@@ -231,7 +232,10 @@ public class CachingIcebergCatalog implements IcebergCatalog {
         } catch (NoSuchTableException e) {
             throw e;
         } catch (Exception e) {
-            throw new StarRocksConnectorException("Load table failed: " + dbName + "." + tableName, e);
+            Throwable ce = ExceptionUtils.getRootCause(e);
+            String errMsg = ce != null ? ce.getMessage() : e.getMessage();
+            throw new StarRocksConnectorException(String.format("Failed to get iceberg table %s.%s.%s. %s",
+                    catalogName, dbName, tableName, errMsg), e);
         }
     }
 

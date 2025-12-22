@@ -469,7 +469,7 @@ public class IcebergMetadata implements ConnectorMetadata {
             return table;
         } catch (StarRocksConnectorException e) {
             LOG.error("Failed to get iceberg table {}", identifier, e);
-            return null;
+            throw e;
         } catch (NoSuchTableException e) {
             return getView(context, dbName, tblName);
         }
