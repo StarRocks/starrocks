@@ -1244,7 +1244,7 @@ DROP DICTIONARY test_dictionary_multiple_row_multi_value;
 DROP DICTIONARY test_dictionary_multiple_row_single_value;
 -- result:
 -- !result
--- name: test_dictionary_show_create_table_gen_col
+-- name: test_dictionary_show_create_table_gen_col @native
 CREATE TABLE `t_dictionary_show_create_table_gen_col_1` (
   `k` BIGINT NOT NULL COMMENT "",
   `v` BIGINT NOT NULL COMMENT ""
@@ -1319,7 +1319,7 @@ DROP TABLE t_dictionary_show_create_table_gen_col_2;
 DROP DICTIONARY test_dictionary_show_create_table_gen_col;
 -- result:
 -- !result
--- name: test_dictionary_null_if_not_exist
+-- name: test_dictionary_null_if_not_exist @native
 CREATE TABLE `t_dictionary_null_if_not_exist` (
   `k` BIGINT NOT NULL COMMENT "",
   `v` BIGINT NOT NULL COMMENT ""
@@ -1444,7 +1444,7 @@ PROPERTIES (
 "replication_num" = "1"
 );
 -- !result
--- name: test_dictionary_null_if_not_exist
+-- name: test_dictionary_null_if_not_exist @native
 CREATE TABLE `t_dictionary_null_if_not_exist` (
   `k` BIGINT NOT NULL COMMENT "",
   `v` BIGINT NOT NULL COMMENT ""
