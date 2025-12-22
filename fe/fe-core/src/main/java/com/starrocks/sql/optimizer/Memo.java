@@ -131,14 +131,6 @@ public class Memo {
         return new Group(nextGroupId++);
     }
 
-    // a-b-c-d-e-f
-    //
-    //   (ab)-c-d-e-f
-
-    // a-b-c-d-e-f
-    // a-e-f
-    // a-(e/b)-f
-
     public Pair<Boolean, GroupExpression> copyIn(Group targetGroup, OptExpression expression) {
         List<Group> inputs = Lists.newArrayList();
         for (OptExpression input : expression.getInputs()) {
