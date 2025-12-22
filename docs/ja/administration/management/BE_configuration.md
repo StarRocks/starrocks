@@ -1845,6 +1845,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 説明: 共有データモードでのプライマリキーインデックスの最大 Memtable 数。
 - 導入バージョン: -
 
+##### pk_index_memtable_max_wait_flush_timeout_ms
+
+- デフォルト: 30000
+- タイプ: Int
+- 単位: ミリ秒
+- 可変: はい
+- 説明: ストレージ・コンピューティング分離クラスタにおける、プライマリキーインデックス MemTable のフラッシュ完了を待機する最大タイムアウト時間。すべての MemTable を同期的にフラッシュする必要がある場合（例：SST インジェスト操作の前）、システムは最大でこのタイムアウト時間まで待機します。デフォルトは 30 秒です。
+- 導入バージョン: -
+
 ##### pk_index_parallel_compaction_task_split_threshold_bytes
 
 - デフォルト: 33554432

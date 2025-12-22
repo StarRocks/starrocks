@@ -2347,6 +2347,15 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Description: The maximum number of MemTables for Primary Key index in a shared-data cluster.
 - Introduced in: -
 
+##### pk_index_memtable_max_wait_flush_timeout_ms
+
+- Default: 30000
+- Type: Int
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: The maximum timeout for waiting for Primary Key index MemTable flush completion in a shared-data cluster. When synchronously flushing all MemTables (for example, before an ingest SST operation), the system waits up to this timeout. The default is 30 seconds.
+- Introduced in: -
+
 ##### pk_index_parallel_compaction_task_split_threshold_bytes
 
 - Default: 33554432

@@ -1809,6 +1809,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 描述：存算分离集群中，主键索引的最大 MemTable 数量。
 - 引入版本：-
 
+##### pk_index_memtable_max_wait_flush_timeout_ms
+
+- 默认值：30000
+- 类型：Int
+- 单位：毫秒
+- 是否动态：是
+- 描述：存算分离集群中，等待主键索引 MemTable 刷盘完成的最大超时时间。当需要同步刷盘所有 MemTable 时（例如在 ingest SST 操作之前），系统最多等待该时间。默认为 30 秒。
+- 引入版本：-
+
 ##### pk_index_parallel_compaction_task_split_threshold_bytes
 
 - 默认值：33554432
