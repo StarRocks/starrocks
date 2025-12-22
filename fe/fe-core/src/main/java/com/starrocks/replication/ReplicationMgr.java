@@ -28,6 +28,7 @@ import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.task.RemoteSnapshotTask;
 import com.starrocks.task.ReplicateSnapshotTask;
 import com.starrocks.thrift.TFinishTaskRequest;
@@ -64,8 +65,15 @@ public class ReplicationMgr extends FrontendDaemon {
     }
 
     public void addReplicationJob(TTableReplicationRequest request) throws StarRocksException {
-        ReplicationJob job = new ReplicationJob(request);
+        LOG.info("Adding replication job, request: {}", request.toString());
+        ReplicationJob job = isLakeReplicationJob(request) ?
+                new LakeReplicationJob(request) : new ReplicationJob(request);
         addReplicationJob(job);
+    }
+
+    private boolean isLakeReplicationJob(TTableReplicationRequest request) {
+        return request != null && request.src_cluster_run_mode != null
+                && request.src_cluster_run_mode == RunMode.toTRunMode(RunMode.SHARED_DATA);
     }
 
     public void addReplicationJob(ReplicationJob job) throws AlreadyExistsException {

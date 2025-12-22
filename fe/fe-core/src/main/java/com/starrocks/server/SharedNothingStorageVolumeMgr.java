@@ -18,6 +18,7 @@ import com.google.gson.annotations.SerializedName;
 import com.staros.util.LockCloseable;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.InvalidConfException;
+import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.persist.DropStorageVolumeLog;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
@@ -169,5 +170,15 @@ public class SharedNothingStorageVolumeMgr extends StorageVolumeMgr {
     @Override
     protected void updateTableStorageInfo(String storageVolumeId) throws DdlException {
 
+    }
+
+    @Override
+    public long getOrCreateVirtualTabletId(String storageVolumeName, String srcServiceId) throws MetaNotFoundException {
+        return -1;
+    }
+
+    @Override
+    public boolean hasStorageVolumeBindAsVirtualGroup(long shardGroupId) {
+        return false;
     }
 }

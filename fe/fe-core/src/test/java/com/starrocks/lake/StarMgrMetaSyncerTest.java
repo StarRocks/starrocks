@@ -63,6 +63,8 @@ import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.NodeMgr;
+import com.starrocks.server.SharedDataStorageVolumeMgr;
+import com.starrocks.server.StorageVolumeMgr;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
@@ -124,6 +126,7 @@ public class StarMgrMetaSyncerTest {
     private EditLog editLog;
 
     private ClusterSnapshotMgr clusterSnapshotMgr = new ClusterSnapshotMgrEPack();
+    private StorageVolumeMgr storageVolumeMgr = new SharedDataStorageVolumeMgr();
 
     private StarMgrMetaSyncer starMgrMetaSyncer;
 
@@ -180,6 +183,10 @@ public class StarMgrMetaSyncerTest {
                 globalStateMgr.getClusterSnapshotMgr();
                 minTimes = 0;
                 result = clusterSnapshotMgr;
+
+                globalStateMgr.getStorageVolumeMgr();
+                minTimes = 0;
+                result = storageVolumeMgr;
             }
         };
 
@@ -245,7 +252,6 @@ public class StarMgrMetaSyncerTest {
                         "p1", baseIndex, distributionInfo));
             }
         };
-
         UtFrameUtils.mockInitWarehouseEnv();
 
         // skip all the initialization in MetricRepo

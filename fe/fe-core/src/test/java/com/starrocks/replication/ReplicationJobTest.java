@@ -58,14 +58,14 @@ import java.util.List;
 import java.util.Map;
 
 public class ReplicationJobTest {
-    private static StarRocksAssert starRocksAssert;
+    protected static StarRocksAssert starRocksAssert;
 
-    private static Database db;
-    private static OlapTable table;
-    private static OlapTable srcTable;
-    private static Partition partition;
-    private static Partition srcPartition;
-    private ReplicationJob job;
+    protected static Database db;
+    protected static OlapTable table;
+    protected static OlapTable srcTable;
+    protected static Partition partition;
+    protected static Partition srcPartition;
+    protected ReplicationJob job;
 
     @BeforeAll
     public static void beforeClass() throws Exception {
