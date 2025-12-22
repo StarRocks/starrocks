@@ -1664,13 +1664,13 @@ CREATE VIEW IF NOT EXISTS iceberg.iceberg_db.iceberg_view1 AS
 SELECT k1, k2 FROM iceberg.iceberg_db.iceberg_table;
 ```
 
-您可以在 `PROPERTIES` 中以 `"key" = "value"` 格式指定视图属性。此功能从 v4.0.3 开始支持。
+自 v4.0.3 起，您可以在 `PROPERTIES` 中以 `"key" = "value"` 格式指定视图属性。
 
 ```SQL
 CREATE VIEW IF NOT EXISTS iceberg.iceberg_db.iceberg_view1
 PROPERTIES (
-  "owner" = "user1",
-  "application-name" = "sr-application1"
+  "key1" = "value1",
+  "key2" = "value2"
 )
 AS
 SELECT k1, k2 FROM iceberg.iceberg_db.iceberg_table;
