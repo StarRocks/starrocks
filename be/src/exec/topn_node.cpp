@@ -304,7 +304,7 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory>> TopNNode::_decompose_to_
     auto spill_channel_factory = std::make_shared<SpillProcessChannelFactory>(degree_of_parallelism);
 
     // spill process operator
-    if (runtime_state()->enable_spill() && runtime_state()->enable_sort_spill() && _limit < 0 && !is_partition_topn) {
+    if constexpr (std::is_same_v<SpillablePartitionSortSinkOperatorFactory, SinkFactory>) {
         context->interpolate_spill_process(id(), spill_channel_factory, degree_of_parallelism);
     }
 
