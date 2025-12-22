@@ -208,6 +208,7 @@ protected:
     size_t _reserved_bytes(const ChunkPtr& chunk);
     size_t _get_revocable_mem_bytes();
     std::function<StatusOr<ChunkPtr>()> _get_chunk_iterator();
+    bool _have_no_staging_data() const;
 
     // used in spill
     // index for _raw_chunks

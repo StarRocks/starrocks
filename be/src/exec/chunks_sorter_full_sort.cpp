@@ -348,4 +348,8 @@ std::function<StatusOr<ChunkPtr>()> ChunksSorterFullSort::_get_chunk_iterator() 
     };
 }
 
+bool ChunksSorterFullSort::_have_no_staging_data() const {
+    return _sorted_chunks.empty() && _unsorted_chunk == nullptr && _staging_unsorted_chunks.empty();
+}
+
 } // namespace starrocks

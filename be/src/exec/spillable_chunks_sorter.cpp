@@ -67,7 +67,12 @@ Status SpillableChunksSorter<TChunksSorter>::do_done(RuntimeState* state) {
     if (_spill_strategy == spill::SpillStrategy::NO_SPILL) {
         return TChunksSorter::do_done(state);
     }
-    if (!_spill_channel->is_working()) {
+
+    // When spilling is enabled, the behavior at do_done() depends on whether
+    // the underlying sorter still has staging (in-memory) data.
+    if (TChunksSorter::_have_no_staging_data()) {
+        // Case 1: no staging data remains.
+        // Trigger a final flush to ensure all buffered spill data is written out.
         RETURN_IF_ERROR(_spiller->flush(state, TRACKER_WITH_SPILLER_GUARD(state, _spiller)));
     } else {
         // TODO: avoid sort multi times

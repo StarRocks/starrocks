@@ -836,4 +836,8 @@ std::function<StatusOr<ChunkPtr>()> ChunksSorterTopn::_get_chunk_iterator() {
     };
 }
 
+bool ChunksSorterTopn::_have_no_staging_data() const {
+    return _raw_chunks.chunks.empty() && _merged_runs.num_chunks() == 0;
+}
+
 } // namespace starrocks
