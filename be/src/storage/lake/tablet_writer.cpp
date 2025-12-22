@@ -58,4 +58,24 @@ void TabletWriter::check_global_dict(SegmentWriter* segment_writer) {
     }
 }
 
+Status TabletWriter::merge_other_writers(const std::vector<std::unique_ptr<TabletWriter>>& other_writers) {
+    // merge other writers' files into current writer
+    for (const auto& writer : other_writers) {
+        _files.insert(_files.end(), writer->_files.begin(), writer->_files.end());
+        _ssts.insert(_ssts.end(), writer->_ssts.begin(), writer->_ssts.end());
+        _sst_ranges.insert(_sst_ranges.end(), writer->_sst_ranges.begin(), writer->_sst_ranges.end());
+        _num_rows += writer->_num_rows;
+        _data_size += writer->_data_size;
+        // _global_dict_columns_valid_info
+        for (const auto& [col, valid] : writer->_global_dict_columns_valid_info) {
+            if (!valid) {
+                _global_dict_columns_valid_info[col] = false;
+            } else if (_global_dict_columns_valid_info.find(col) == _global_dict_columns_valid_info.end()) {
+                _global_dict_columns_valid_info[col] = true;
+            }
+        }
+    }
+    return Status::OK();
+}
+
 } // namespace starrocks::lake

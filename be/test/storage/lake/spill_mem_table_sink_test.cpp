@@ -38,7 +38,12 @@
 
 namespace starrocks::lake {
 
-class SpillMemTableSinkTest : public TestBase {
+struct SpillMemTableSinkTestParams {
+    bool enable_load_spill_parallel_merge = false;
+    int64_t load_spill_max_merge_bytes = 1073741824;
+};
+
+class SpillMemTableSinkTest : public TestBase, testing::WithParamInterface<SpillMemTableSinkTestParams> {
 public:
     SpillMemTableSinkTest() : TestBase(kTestDir) {
         _tablet_metadata = generate_simple_tablet_metadata(PRIMARY_KEYS);
@@ -48,13 +53,21 @@ public:
     }
 
     void SetUp() override {
+        _old_enable_load_spill_parallel_merge = config::enable_load_spill_parallel_merge;
+        _old_load_spill_max_merge_bytes = config::load_spill_max_merge_bytes;
+        config::enable_load_spill_parallel_merge = GetParam().enable_load_spill_parallel_merge;
+        config::load_spill_max_merge_bytes = GetParam().load_spill_max_merge_bytes;
         (void)FileSystem::Default()->create_dir_recursive(kTestDir);
         CHECK_OK(fs::create_directories(lake::join_path(kTestDir, lake::kSegmentDirectoryName)));
         CHECK_OK(fs::create_directories(lake::join_path(kTestDir, lake::kMetadataDirectoryName)));
         CHECK_OK(fs::create_directories(lake::join_path(kTestDir, lake::kTxnLogDirectoryName)));
     }
 
-    void TearDown() override { (void)FileSystem::Default()->delete_dir_recursive(kTestDir); }
+    void TearDown() override {
+        (void)FileSystem::Default()->delete_dir_recursive(kTestDir);
+        config::enable_load_spill_parallel_merge = _old_enable_load_spill_parallel_merge;
+        config::load_spill_max_merge_bytes = _old_load_spill_max_merge_bytes;
+    }
 
     ChunkPtr gen_data(int64_t chunk_size, int shift) {
         std::vector<int> v0(chunk_size);
@@ -82,9 +95,11 @@ protected:
     std::shared_ptr<TabletSchema> _tablet_schema;
     std::shared_ptr<Schema> _schema;
     RuntimeProfile _dummy_runtime_profile{"dummy"};
+    bool _old_enable_load_spill_parallel_merge = false;
+    int64_t _old_load_spill_max_merge_bytes = 1073741824;
 };
 
-TEST_F(SpillMemTableSinkTest, test_flush_chunk) {
+TEST_P(SpillMemTableSinkTest, test_flush_chunk) {
     int64_t tablet_id = 1;
     int64_t txn_id = 1;
     std::unique_ptr<LoadSpillBlockManager> block_manager = std::make_unique<LoadSpillBlockManager>(
@@ -121,10 +136,10 @@ TEST_F(SpillMemTableSinkTest, test_flush_chunk) {
         }
     }
     ASSERT_OK(sink.merge_blocks_to_segments());
-    ASSERT_EQ(1, tablet_writer->files().size());
+    ASSERT_EQ(config::enable_load_spill_parallel_merge ? 3 : 1, tablet_writer->files().size());
 }
 
-TEST_F(SpillMemTableSinkTest, test_flush_chunk_with_deletes) {
+TEST_P(SpillMemTableSinkTest, test_flush_chunk_with_deletes) {
     int64_t tablet_id = 1;
     int64_t txn_id = 1;
     std::unique_ptr<LoadSpillBlockManager> block_manager = std::make_unique<LoadSpillBlockManager>(
@@ -162,7 +177,7 @@ TEST_F(SpillMemTableSinkTest, test_flush_chunk_with_deletes) {
     ASSERT_EQ(3, tablet_writer->files().size());
 }
 
-TEST_F(SpillMemTableSinkTest, test_flush_chunk2) {
+TEST_P(SpillMemTableSinkTest, test_flush_chunk2) {
     int64_t tablet_id = 1;
     int64_t txn_id = 1;
     std::unique_ptr<LoadSpillBlockManager> block_manager = std::make_unique<LoadSpillBlockManager>(
@@ -177,7 +192,7 @@ TEST_F(SpillMemTableSinkTest, test_flush_chunk2) {
     ASSERT_EQ(1, tablet_writer->files().size());
 }
 
-TEST_F(SpillMemTableSinkTest, test_flush_chunk_with_delete2) {
+TEST_P(SpillMemTableSinkTest, test_flush_chunk_with_delete2) {
     int64_t tablet_id = 1;
     int64_t txn_id = 1;
     std::unique_ptr<LoadSpillBlockManager> block_manager = std::make_unique<LoadSpillBlockManager>(
@@ -192,7 +207,7 @@ TEST_F(SpillMemTableSinkTest, test_flush_chunk_with_delete2) {
     ASSERT_EQ(2, tablet_writer->files().size());
 }
 
-TEST_F(SpillMemTableSinkTest, test_flush_chunk_with_limit) {
+TEST_P(SpillMemTableSinkTest, test_flush_chunk_with_limit) {
     int64_t tablet_id = 1;
     int64_t txn_id = 1;
     std::unique_ptr<LoadSpillBlockManager> block_manager = std::make_unique<LoadSpillBlockManager>(
@@ -232,10 +247,10 @@ TEST_F(SpillMemTableSinkTest, test_flush_chunk_with_limit) {
         config::load_spill_max_chunk_bytes = old_val;
     }
     ASSERT_OK(sink.merge_blocks_to_segments());
-    ASSERT_EQ(1, tablet_writer->files().size());
+    ASSERT_EQ(config::enable_load_spill_parallel_merge ? 3 : 1, tablet_writer->files().size());
 }
 
-TEST_F(SpillMemTableSinkTest, test_merge) {
+TEST_P(SpillMemTableSinkTest, test_merge) {
     int64_t tablet_id = 1;
     int64_t txn_id = 1;
     std::unique_ptr<LoadSpillBlockManager> block_manager = std::make_unique<LoadSpillBlockManager>(
@@ -250,10 +265,10 @@ TEST_F(SpillMemTableSinkTest, test_merge) {
     starrocks::SegmentPB segment1;
     ASSERT_OK(sink.flush_chunk(*chunk, &segment1, true));
     ASSERT_OK(sink.merge_blocks_to_segments());
-    ASSERT_EQ(1, tablet_writer->files().size());
+    ASSERT_EQ(config::enable_load_spill_parallel_merge ? 2 : 1, tablet_writer->files().size());
 }
 
-TEST_F(SpillMemTableSinkTest, test_out_of_disk_space) {
+TEST_P(SpillMemTableSinkTest, test_out_of_disk_space) {
     TEST_ENABLE_ERROR_POINT("PosixFileSystem::pre_allocate",
                             Status::CapacityLimitExceed("injected pre_allocate error"));
     SyncPoint::GetInstance()->EnableProcessing();
@@ -275,7 +290,11 @@ TEST_F(SpillMemTableSinkTest, test_out_of_disk_space) {
     starrocks::SegmentPB segment1;
     ASSERT_OK(sink.flush_chunk(*chunk, &segment1, true));
     ASSERT_OK(sink.merge_blocks_to_segments());
-    ASSERT_EQ(1, tablet_writer->files().size());
+    ASSERT_EQ(config::enable_load_spill_parallel_merge ? 2 : 1, tablet_writer->files().size());
 }
+
+INSTANTIATE_TEST_SUITE_P(SpillMemTableSinkTest, SpillMemTableSinkTest,
+                         ::testing::Values(SpillMemTableSinkTestParams{false, 1073741824},
+                                           SpillMemTableSinkTestParams{true, 1024}));
 
 } // namespace starrocks::lake

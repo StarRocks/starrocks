@@ -75,6 +75,8 @@ public:
 
     void close() override;
 
+    StatusOr<std::unique_ptr<TabletWriter>> clone() const override;
+
     RowsetTxnMetaPB* rowset_txn_meta() override { return nullptr; }
 
 protected:

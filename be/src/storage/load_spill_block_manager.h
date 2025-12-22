@@ -34,9 +34,21 @@ public:
 
     std::unique_ptr<ThreadPoolToken> create_token();
 
+    std::unique_ptr<ThreadPoolToken> create_tablet_internal_parallel_merge_token();
+
 private:
-    // ThreadPool for merge.
+    // The _merge_pool is used for executing merge tasks at the tablet level.
+    // For large tablets, tasks within a single tablet are further subdivided,
+    // and the _tablet_internal_parallel_merge_pool is responsible for executing
+    // these internal-tablet sub-tasks.
+    //
+    // The reason these two thread pools are not unified is that tasks in _merge_pool
+    // depend on the completion of tasks in _tablet_internal_parallel_merge_pool.
+    // Merging them into a single pool would create a circular dependency,
+    // leading to potential deadlocks.
     std::unique_ptr<ThreadPool> _merge_pool;
+    // ThreadPool for internal-tablet parallel merge
+    std::unique_ptr<ThreadPool> _tablet_internal_parallel_merge_pool;
 };
 
 class LoadSpillBlockContainer {

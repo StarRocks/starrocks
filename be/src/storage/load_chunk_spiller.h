@@ -23,6 +23,9 @@ namespace starrocks {
 
 class RuntimeState;
 class LoadSpillBlockManager;
+class ChunkIterator;
+
+using ChunkIteratorPtr = std::shared_ptr<ChunkIterator>;
 
 class LoadSpillOutputDataStream : public spill::SpillOutputDataStream {
 public:
@@ -52,6 +55,13 @@ private:
     int64_t _append_bytes = 0;
 };
 
+struct SpillBlockInputTasks {
+    std::vector<ChunkIteratorPtr> iterators;
+    size_t total_blocks = 0;
+    size_t total_block_bytes = 0;
+    size_t group_count = 0;
+};
+
 class LoadChunkSpiller {
 public:
     LoadChunkSpiller(LoadSpillBlockManager* block_manager, RuntimeProfile* profile);
@@ -59,8 +69,15 @@ public:
 
     StatusOr<size_t> spill(const Chunk& chunk);
 
-    Status merge_write(size_t target_size, bool do_sort, bool do_agg, std::function<Status(Chunk*)> write_func,
-                       std::function<Status()> flush_func);
+    // `target_size` controls the maximum amount of data merged per operation,
+    // while `memory_usage_per_merge` controls the peak memory usage of each merge.
+    Status merge_write(size_t target_size, size_t memory_usage_per_merge, bool do_sort, bool do_agg,
+                       std::function<Status(Chunk*)> write_func, std::function<Status()> flush_func);
+
+    // Traverse all load spill block files produced during ingestion, and split the input into multiple input tasks
+    // according to specific constraints.
+    StatusOr<SpillBlockInputTasks> generate_spill_block_input_tasks(size_t target_size, size_t memory_usage_per_merge,
+                                                                    bool do_sort, bool do_agg);
 
     bool empty();
 
@@ -69,6 +86,8 @@ public:
     SchemaPtr schema() { return _schema; }
 
     size_t total_bytes() const;
+
+    RuntimeProfile* profile() const { return _profile; }
 
 private:
     Status _prepare(const ChunkPtr& chunk_ptr);
