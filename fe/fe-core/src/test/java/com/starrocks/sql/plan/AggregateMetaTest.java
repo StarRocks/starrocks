@@ -48,7 +48,7 @@ public class AggregateMetaTest extends PlanTestBase {
                 + "  |  \n"
                 + "  0:UNION\n"
                 + "     constant exprs: \n"
-                + "         NULL");
+                + "         1");
         new MockUp<ColumnMinMaxMgr>() {
             @Mock
             public Optional<IMinMaxStatsMgr.ColumnMinMax> getStats(ColumnIdentifier identifier, StatsVersion version) {
@@ -91,6 +91,23 @@ public class AggregateMetaTest extends PlanTestBase {
                 "  |  \n" +
                 "  0:UNION\n" +
                 "     constant exprs: \n" +
-                "         NULL");
+                "         1");
+        sql = "SELECT cast(9 as INT), cast(226237 as BIGINT), cast(COUNT(1) as BIGINT), cast(COUNT(1)\n" +
+                "* 1024 as BIGINT), hex(hll_serialize(hll_empty())), cast(0 as BIGINT), '', '' , cast(-1 as BIGINT) FROM " +
+                "(select `v1` as column_key from `t0` partition `t0`) tt;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  1:Project\n" +
+                "  |  <slot 4> : 3\n" +
+                "  |  <slot 5> : 9\n" +
+                "  |  <slot 6> : 226237\n" +
+                "  |  <slot 7> : 3072\n" +
+                "  |  <slot 8> : hex(hll_serialize(hll_empty()))\n" +
+                "  |  <slot 9> : 0\n" +
+                "  |  <slot 11> : ''\n" +
+                "  |  <slot 12> : -1\n" +
+                "  |  \n" +
+                "  0:UNION\n" +
+                "     constant exprs: \n" +
+                "         1");
     }
 }
