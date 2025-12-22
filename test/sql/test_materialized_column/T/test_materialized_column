@@ -83,7 +83,7 @@ DROP TABLE t;
 
 DROP DATABASE test_materialized_column_schema_change;
 
--- name: test_normal_column_schema_change
+-- name: test_normal_column_schema_change @native
 CREATE DATABASE test_normal_column_schema_change;
 USE test_normal_column_schema_change;
 
@@ -352,7 +352,7 @@ DROP TABLE t;
 
 DROP DATABASE test_schema_change_for_constant_expression;
 
--- name: test_schema_change_for_after
+-- name: test_schema_change_for_after @native
 CREATE DATABASE test_schema_change_for_after;
 USE test_schema_change_for_after;
 
