@@ -93,7 +93,6 @@ void ArraySortLambdaExpr::close(RuntimeState* state, ExprContext* context, Funct
 
 // Helper class to manage comparisons during sorting
 
-template <bool lambda_depends_on_args>
 class SortComparator {
 public:
     SortComparator(ExprContext* context, LambdaFunction* lambda_func, const ColumnPtr& elements_column,
@@ -116,18 +115,17 @@ public:
             return false;
         }
 
-        if constexpr (lambda_depends_on_args) {
-            DCHECK(_argument_ids.size() == 2);
-            // Get the argument columns from eval_chunk
-            auto* arg1_col = _one_row_chunk->get_column_raw_ptr_by_slot_id(_argument_ids[0]);
-            auto* arg2_col = _one_row_chunk->get_column_raw_ptr_by_slot_id(_argument_ids[1]);
+        DCHECK(_argument_ids.size() == 2);
+        // Get the argument columns from eval_chunk
+        auto* arg1_col = _one_row_chunk->get_column_raw_ptr_by_slot_id(_argument_ids[0]);
+        auto* arg2_col = _one_row_chunk->get_column_raw_ptr_by_slot_id(_argument_ids[1]);
 
-            // Clear and rebuild the argument columns with just the two elements being compared
-            arg1_col->reset_column();
-            arg1_col->append(*_elements_column, _array_start + i, 1);
-            arg2_col->reset_column();
-            arg2_col->append(*_elements_column, _array_start + j, 1);
-        }
+        // Clear and rebuild the argument columns with just the two elements being compared
+        arg1_col->reset_column();
+        arg1_col->append(*_elements_column, _array_start + i, 1);
+        arg2_col->reset_column();
+        arg2_col->append(*_elements_column, _array_start + j, 1);
+
         for (const auto id : _lambda_func->get_common_sub_expr_ids()) {
             _one_row_chunk->remove_column_by_slot_id(id);
         }
@@ -163,7 +161,6 @@ private:
     Status _error_status{};
 };
 
-template <bool is_const, bool depends_on_args>
 StatusOr<ColumnPtr> ArraySortLambdaExpr::evaluate_lambda_expr(ExprContext* context, Chunk* chunk,
                                                               const Column* data_column) {
     const auto& element_col = down_cast<const ArrayColumn*>(data_column)->elements_column();
@@ -179,60 +176,22 @@ StatusOr<ColumnPtr> ArraySortLambdaExpr::evaluate_lambda_expr(ExprContext* conte
 
     DCHECK(data_column->size() == 1 || data_column->size() == chunk->num_rows());
 
-    auto tmp_chunk = std::make_shared<Chunk>();
-    for (const auto& slot_id : _initial_required_slots) {
-        tmp_chunk->append_column(chunk->get_column_by_slot_id(slot_id), slot_id);
-    }
-
-    for (const auto& [slot_id, expr] : _outer_common_exprs) {
-        ASSIGN_OR_RETURN(auto col, context->evaluate(expr, tmp_chunk.get()));
-        tmp_chunk->append_column(col, slot_id);
-    }
-
     const vector<SlotId>& argument_ids = lambda_func->get_lambda_arguments_ids();
     DCHECK(argument_ids.size() == 2);
 
     auto one_row_chunk = std::make_shared<Chunk>();
     auto captured_chunk = std::make_shared<Chunk>();
 
-    if constexpr (depends_on_args) {
-        for (auto arg_id : argument_ids) {
-            auto arg_col = element_col->clone_empty();
-            one_row_chunk->append_column(arg_col, arg_id);
-        }
+    for (auto arg_id : argument_ids) {
+        auto arg_col = element_col->clone_empty();
+        one_row_chunk->append_column(arg_col, arg_id);
     }
 
     // data_column may be a ArrayColumn wrapped in ConstColumn, if so, its size is 1;
     auto compute_once = data_column->size() == 1;
 
-    // Add captured columns
-    for (auto slot_id : capture_slot_ids) {
-        auto captured_column = tmp_chunk->is_slot_exist(slot_id) ? tmp_chunk->get_column_by_slot_id(slot_id)
-                                                                 : chunk->get_column_by_slot_id(slot_id);
-        captured_chunk->append_column(captured_column, slot_id);
-        compute_once &= captured_column->only_null() || captured_column->is_constant();
-        auto col = captured_column->clone_empty();
-        one_row_chunk->append_column(col, slot_id);
-    }
-
-    SortComparator<depends_on_args> comparator(context, lambda_func, element_col, one_row_chunk);
-    if constexpr (depends_on_args) {
-        comparator.set_argument_ids(argument_ids);
-    }
-    if constexpr (is_const) {
-        ASSIGN_OR_RETURN(auto const_col, lambda_func->evaluate_constant(context));
-        if (const_col->is_null(0)) {
-            return Status::InternalError("Comparator function returned NULL");
-        }
-
-        auto value = ColumnHelper::get_const_value<TYPE_BOOLEAN>(const_col);
-        comparator.set_constant_result(value);
-    } else {
-        if (one_row_chunk->columns().empty()) {
-            DCHECK(!depends_on_args && capture_slot_ids.empty() && lambda_func->_is_nondeterministic);
-            one_row_chunk = nullptr;
-        }
-    }
+    SortComparator comparator(context, lambda_func, element_col, one_row_chunk);
+    comparator.set_argument_ids(argument_ids);
 
     // if all columns that lambda depends on are constant or null, we only need to compute once
     const auto num_rows = compute_once ? 1 : chunk->num_rows();
@@ -260,9 +219,7 @@ StatusOr<ColumnPtr> ArraySortLambdaExpr::evaluate_lambda_expr(ExprContext* conte
             continue;
         }
 
-        if constexpr (depends_on_args) {
-            comparator.set_array_start(start_idx);
-        }
+        comparator.set_array_start(start_idx);
 
         for (const auto id : capture_slot_ids) {
             auto* column = captured_chunk->get_column_raw_ptr_by_slot_id(id);
@@ -276,13 +233,8 @@ StatusOr<ColumnPtr> ArraySortLambdaExpr::evaluate_lambda_expr(ExprContext* conte
         std::iota(indices.begin(), indices.end(), 0);
 
         // Sort using comparator lambda
-        if constexpr (is_const) {
-            pdqsort(indices.begin(), indices.end(),
-                    [&comparator](uint32_t i, uint32_t j) { return comparator.get_constant_result(); });
-        } else {
-            pdqsort(indices.begin(), indices.end(),
-                    [&comparator](uint32_t i, uint32_t j) { return comparator.compare(i, j); });
-        }
+        pdqsort(indices.begin(), indices.end(),
+                [&comparator](uint32_t i, uint32_t j) { return comparator.compare(i, j); });
         // Check for any errors during comparison
         RETURN_IF_ERROR(comparator.error_status());
 
@@ -300,6 +252,190 @@ StatusOr<ColumnPtr> ArraySortLambdaExpr::evaluate_lambda_expr(ExprContext* conte
         return const_result_array;
     }
     return result_array;
+}
+
+struct ElemHolder {
+    size_t index;
+    const Column* column;
+    uint32_t hash;
+};
+
+struct ElemHash {
+    uint32_t operator()(const ElemHolder& elem) const { return elem.hash; }
+};
+
+struct ElemEqual {
+    bool operator()(const ElemHolder& a, const ElemHolder& b) const {
+        return a.column->compare_at(a.index, b.index, *(b.column), true) == 0;
+    }
+};
+
+// Extract up to max_count unique elements from the array column
+// Returns a vector of indices pointing to unique elements in the elements column
+static std::vector<size_t> extract_unique_elements(const ArrayColumn* array_col, size_t max_count) {
+    std::vector<size_t> unique_indices;
+    const auto& element_col = array_col->elements_column();
+    if (array_col->size() == 0) {
+        return unique_indices;
+    }
+    phmap::flat_hash_set<ElemHolder, ElemHash, ElemEqual> unique_map;
+    auto batch_size = max_count * 2;
+    uint32_t hash_seeds[batch_size];
+    std::fill_n(hash_seeds, batch_size, HashUtil::FNV_SEED);
+    for (size_t i = 0; i < element_col->size() && unique_indices.size() < max_count; i += batch_size) {
+        auto real_batch_size = std::min<size_t>(batch_size, element_col->size() - i);
+        element_col->fnv_hash(hash_seeds, i, real_batch_size);
+        for (size_t j = 0; j < real_batch_size && unique_indices.size() < max_count; ++j) {
+            size_t idx = i + j;
+            ElemHolder holder{idx, element_col.get(), hash_seeds[j]};
+            auto result = unique_map.insert(holder);
+            if (result.second) {
+                unique_indices.push_back(idx);
+            }
+        }
+    }
+    return unique_indices;
+}
+
+Status ArraySortLambdaExpr::check_lambda_only_depends_on_args(const LambdaFunction* lambda_func) {
+    std::vector<SlotId> capture_slot_ids;
+
+    lambda_func->get_captured_slot_ids(&capture_slot_ids);
+    if (!_initial_required_slots.empty() || !_outer_common_exprs.empty() || !capture_slot_ids.empty() ||
+        lambda_func->is_lambda_expr_independent()) {
+        return Status::InvalidArgument("Comparator lambda should only depends on its arguments");
+    }
+    return Status::OK();
+}
+
+// Validate strict weak ordering properties of the lambda comparator
+Status ArraySortLambdaExpr::validate_strict_weak_ordering(ExprContext* context, Chunk* chunk,
+                                                          const ArrayColumn* array_col) {
+    // Check cache first to avoid duplicate validation
+    if (_comparator_validated) {
+        return _comparator_validation_status;
+    }
+
+    const auto& element_col = array_col->elements_column();
+    auto lambda_func = dynamic_cast<LambdaFunction*>(_children[1]);
+
+    // Extract up to 10 unique elements
+    std::vector<size_t> unique_indices = extract_unique_elements(array_col, 10);
+
+    if (unique_indices.empty()) {
+        // No elements to validate, skip
+        return Status::OK();
+    }
+
+    // Create a temporary array column with just the unique elements for validation
+    auto validation_elements = element_col->clone_empty();
+    for (size_t idx : unique_indices) {
+        validation_elements->append(*element_col, idx, 1);
+    }
+
+    const vector<SlotId>& argument_ids = lambda_func->get_lambda_arguments_ids();
+    DCHECK(argument_ids.size() == 2);
+
+    auto one_row_chunk = std::make_shared<Chunk>();
+
+    for (auto arg_id : argument_ids) {
+        auto arg_col = element_col->clone_empty();
+        one_row_chunk->append_column(arg_col, arg_id);
+    }
+
+    // Use SortComparator for validation
+    SortComparator comparator(context, lambda_func, element_col, one_row_chunk);
+    comparator.set_argument_ids(argument_ids);
+    comparator.set_array_start(0); // Elements start at index 0 in validation array
+
+    // Helper function to compare two elements by their indices in unique_indices
+    auto compare = [&](size_t i, size_t j) -> StatusOr<bool> {
+        if (!comparator.error_status().ok()) {
+            return comparator.error_status();
+        }
+        bool result = comparator.compare(static_cast<uint32_t>(i), static_cast<uint32_t>(j));
+        if (!comparator.error_status().ok()) {
+            return comparator.error_status();
+        }
+        return result;
+    };
+
+    // Check 1: Irreflexivity - cmp(a, a) must be false
+    for (size_t i = 0; i < unique_indices.size(); ++i) {
+        ASSIGN_OR_RETURN(bool result, compare(i, i));
+        if (result) {
+            Status error = Status::InvalidArgument(
+                    "Comparator violates irreflexivity: cmp(a, a) returned true for an element");
+            _comparator_validated = true;
+            _comparator_validation_status = error;
+            return error;
+        }
+    }
+
+    // Check 2: Asymmetry - for each pair (a, b), at most one of cmp(a, b) and cmp(b, a) is true
+    for (size_t i = 0; i < unique_indices.size(); ++i) {
+        for (size_t j = i + 1; j < unique_indices.size(); ++j) {
+            ASSIGN_OR_RETURN(bool cmp_ij, compare(i, j));
+            ASSIGN_OR_RETURN(bool cmp_ji, compare(j, i));
+
+            if (cmp_ij && cmp_ji) {
+                Status error = Status::InvalidArgument(
+                        "Comparator violates asymmetry: both cmp(a, b) and cmp(b, a) returned true");
+                _comparator_validated = true;
+                _comparator_validation_status = error;
+                return error;
+            }
+        }
+    }
+
+    // Check 3: Transitivity - check all permutations of (a, b, c)
+    for (size_t i = 0; i < unique_indices.size(); ++i) {
+        for (size_t j = 0; j < unique_indices.size(); ++j) {
+            if (i == j) continue;
+            for (size_t k = 0; k < unique_indices.size(); ++k) {
+                if (i == k || j == k) continue;
+
+                // Get all comparison results for the triple
+                ASSIGN_OR_RETURN(bool cmp_ij, compare(i, j));
+                ASSIGN_OR_RETURN(bool cmp_ji, compare(j, i));
+                ASSIGN_OR_RETURN(bool cmp_jk, compare(j, k));
+                ASSIGN_OR_RETURN(bool cmp_kj, compare(k, j));
+                ASSIGN_OR_RETURN(bool cmp_ik, compare(i, k));
+                ASSIGN_OR_RETURN(bool cmp_ki, compare(k, i));
+
+                // Check transitivity for all permutations:
+                // If cmp(i,j)=true and cmp(j,k)=true, then cmp(i,k) must be true
+                if ((cmp_ij && cmp_jk && !cmp_ik) || (cmp_ji && cmp_ik && !cmp_jk) || (cmp_jk && cmp_ki && !cmp_ji) ||
+                    (cmp_kj && cmp_ji && !cmp_ki) || (cmp_ik && cmp_kj && !cmp_ij) || (cmp_ki && cmp_ij && !cmp_kj)) {
+                    Status error = Status::InvalidArgument(
+                            "Comparator violates transitivity: cmp(a, b)=true and cmp(b, c)=true but "
+                            "cmp(a, c)=false");
+                    _comparator_validated = true;
+                    _comparator_validation_status = error;
+                    return error;
+                }
+
+                // Check equivalence transitivity: if all comparisons between i, j, k are false,
+                // then all comparisons must be false (they form an equivalence class)
+                if ((!cmp_ij && !cmp_ji && !cmp_jk && !cmp_kj && (cmp_ik || cmp_ki)) ||
+                    (!cmp_ij && !cmp_ji && !cmp_ik && !cmp_ki && (cmp_jk || cmp_kj)) ||
+                    (!cmp_jk && !cmp_kj && !cmp_ik && !cmp_ki && (cmp_ij || cmp_ji))) {
+                    Status error = Status::InvalidArgument(
+                            "Comparator violates incomparability transitivity: elements a, b, c are equivalent "
+                            "(cmp(a,b)=false, cmp(b,a)=false, cmp(b,c)=false, cmp(c,b)=false) but "
+                            "cmp(a,c) or cmp(c,a) returned true");
+                    _comparator_validated = true;
+                    _comparator_validation_status = error;
+                    return error;
+                }
+            }
+        }
+    }
+
+    // Cache the validation result
+    _comparator_validated = true;
+    _comparator_validation_status = Status::OK();
+    return Status::OK();
 }
 
 // The input array column maybe nullable, so first remove the wrap of nullable property.
@@ -324,19 +460,11 @@ StatusOr<ColumnPtr> ArraySortLambdaExpr::evaluate_checked(ExprContext* context, 
                                                                         offsets.immutable_data());
     }
     const auto* lambda_fun = down_cast<LambdaFunction*>(_children[1]);
-    if (lambda_fun->is_lambda_expr_independent()) {
-        if (lambda_fun->can_evaluate_constant()) {
-            return evaluate_lambda_expr<true, false>(context, chunk, data_column);
-        } else {
-            return evaluate_lambda_expr<false, false>(context, chunk, data_column);
-        }
-    } else {
-        if (lambda_fun->can_evaluate_constant()) {
-            return evaluate_lambda_expr<true, true>(context, chunk, data_column);
-        } else {
-            return evaluate_lambda_expr<false, true>(context, chunk, data_column);
-        }
-    }
+    RETURN_IF_ERROR(check_lambda_only_depends_on_args(lambda_fun));
+    // Validate strict weak ordering if lambda depends on arguments (i.e., it's a comparator)
+    RETURN_IF_ERROR(validate_strict_weak_ordering(context, chunk, down_cast<const ArrayColumn*>(data_column)));
+
+    return evaluate_lambda_expr(context, chunk, data_column);
 }
 
 std::string ArraySortLambdaExpr::debug_string() const {
