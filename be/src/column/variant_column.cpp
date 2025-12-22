@@ -99,4 +99,16 @@ std::string VariantColumn::debug_item(size_t idx) const {
     return json_result.value();
 }
 
+std::string VariantColumn::debug_string() const {
+    std::string result = "[";
+    for (size_t i = 0; i < size(); ++i) {
+        if (i > 0) {
+            result += ", ";
+        }
+        result += debug_item(i);
+    }
+    result += "]";
+    return result;
+}
+
 } // namespace starrocks

@@ -890,6 +890,17 @@ vectorized_functions = [
     # variant type function
     [110200, "variant_query", False, False, "VARIANT", ["VARIANT", "VARCHAR"], "VariantFunctions::variant_query",
      "VariantFunctions::variant_segments_prepare", "VariantFunctions::variant_segments_close"],
+    [110201, "get_variant_bool", False, False, "BOOLEAN", ["VARIANT", "VARCHAR"], "VariantFunctions::get_variant_bool",
+     "VariantFunctions::variant_segments_prepare", "VariantFunctions::variant_segments_close"],
+    [110202, "get_variant_int", False, False, "BIGINT", ["VARIANT", "VARCHAR"], "VariantFunctions::get_variant_int",
+     "VariantFunctions::variant_segments_prepare", "VariantFunctions::variant_segments_close"],
+    [110203, "get_variant_double", False, False, "DOUBLE", ["VARIANT", "VARCHAR"],
+     "VariantFunctions::get_variant_double",
+     "VariantFunctions::variant_segments_prepare", "VariantFunctions::variant_segments_close"],
+    [110204, "get_variant_string", False, True, "VARCHAR", ["VARIANT", "VARCHAR"],
+     "VariantFunctions::get_variant_string",
+     "VariantFunctions::variant_segments_prepare", "VariantFunctions::variant_segments_close"],
+    [110205, "variant_typeof", False, False, "VARCHAR", ["VARIANT"], "VariantFunctions::variant_typeof"],
 
     # aes and base64 function
     # aes_encrypt: 2-parameter version (data, key) for backward compatibility with old FE

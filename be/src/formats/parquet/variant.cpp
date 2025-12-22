@@ -86,10 +86,10 @@ static constexpr uint8_t kBinarySearchThreshold = 32;
 
 std::vector<uint32_t> VariantMetadata::get_index(std::string_view key) const {
     uint32_t dict_sz = dict_size();
-    bool is_sorted = is_sorted_and_unique();
+    bool is_sorted_unique = is_sorted_and_unique();
     std::vector<uint32_t> indexes;
 
-    if (is_sorted && dict_sz > kBinarySearchThreshold) {
+    if (is_sorted_unique && dict_sz > kBinarySearchThreshold) {
         // binary search
         uint32_t left = 0;
         uint32_t right = dict_sz - 1;
@@ -103,7 +103,9 @@ std::vector<uint32_t> VariantMetadata::get_index(std::string_view key) const {
             int cmp = field_key.compare(key);
             if (cmp == 0) {
                 indexes.push_back(mid);
+                break;
             }
+
             if (cmp < 0) {
                 left = mid + 1;
             } else {
@@ -352,6 +354,56 @@ std::string primitive_type_to_string(VariantPrimitiveType type) {
     case VariantPrimitiveType::STRING:
         return "String";
     case VariantPrimitiveType::UUID:
+        return "Uuid";
+    }
+    return "Unknown";
+}
+
+std::string variant_type_to_string(VariantType type) {
+    switch (type) {
+    case VariantType::NULL_TYPE:
+        return "Null";
+    case VariantType::BOOLEAN:
+        return "Boolean";
+    case VariantType::INT8:
+        return "Int8";
+    case VariantType::INT16:
+        return "Int16";
+    case VariantType::INT32:
+        return "Int32";
+    case VariantType::INT64:
+        return "Int64";
+    case VariantType::FLOAT:
+        return "Float";
+    case VariantType::DOUBLE:
+        return "Double";
+    case VariantType::DECIMAL4:
+        return "Decimal4";
+    case VariantType::DECIMAL8:
+        return "Decimal8";
+    case VariantType::DECIMAL16:
+        return "Decimal16";
+    case VariantType::DATE:
+        return "Date";
+    case VariantType::TIMESTAMP_TZ:
+        return "TimestampTz";
+    case VariantType::TIMESTAMP_NTZ:
+        return "TimestampNtz";
+    case VariantType::TIME_NTZ:
+        return "TimeNtz";
+    case VariantType::TIMESTAMP_TZ_NANOS:
+        return "TimestampTzNanos";
+    case VariantType::TIMESTAMP_NTZ_NANOS:
+        return "TimestampNtzNanos";
+    case VariantType::BINARY:
+        return "Binary";
+    case VariantType::STRING:
+        return "String";
+    case VariantType::OBJECT:
+        return "Object";
+    case VariantType::ARRAY:
+        return "Array";
+    case VariantType::UUID:
         return "Uuid";
     }
     return "Unknown";
