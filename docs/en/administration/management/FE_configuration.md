@@ -304,6 +304,51 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: Maximum number of rolled internal FE log files to retain for the internal appender (`fe.internal.log`). This value is used as the Log4j DefaultRolloverStrategy `max` attribute; when rollovers occur, StarRocks keeps up to `internal_log_roll_num` archived files and removes older ones (also governed by `internal_log_delete_age`). A lower value reduces disk usage but shortens log history; a higher value preserves more historical internal logs. This item works together with `internal_log_dir`, `internal_log_roll_interval`, and `internal_roll_maxsize`.
 - Introduced in: v3.2.4
 
+##### log_cleaner_audit_log_min_retention_days
+
+- Default: 3
+- Type: Int
+- Unit: Days
+- Is mutable: Yes
+- Description: Minimum retention days for audit log files. Audit log files newer than this will not be deleted even if disk usage is high. This ensures that audit logs are preserved for compliance and troubleshooting purposes.
+- Introduced in: -
+
+##### log_cleaner_check_interval_second
+
+- Default: 300
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: Interval in seconds to check disk usage and clean logs. The cleaner periodically checks each log directory's disk usage and triggers cleaning when necessary. Default is 300 seconds (5 minutes).
+- Introduced in: -
+
+##### log_cleaner_disk_usage_target
+
+- Default: 60
+- Type: Int
+- Unit: Percentage
+- Is mutable: Yes
+- Description: Target disk usage (percentage) after log cleaning. Log cleaning will continue until disk usage drops below this threshold. The cleaner deletes the oldest log files one by one until the target is reached.
+- Introduced in: -
+
+##### log_cleaner_disk_usage_threshold
+
+- Default: 80
+- Type: Int
+- Unit: Percentage
+- Is mutable: Yes
+- Description: Disk usage threshold (percentage) to trigger log cleaning. When disk usage exceeds this threshold, log cleaning will start. The cleaner checks each configured log directory independently and processes directories that exceed this threshold.
+- Introduced in: -
+
+##### log_cleaner_disk_util_based_enable
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Enable automatic log cleaning based on disk usage. When enabled, logs will be cleaned when disk usage exceeds the threshold. The log cleaner runs as a background daemon on the FE node and helps prevent disk space exhaustion from log file accumulation.
+- Introduced in: -
+
 ##### log_plan_cancelled_by_crash_be
 
 - Default: true
@@ -522,51 +567,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: A list of logger names or package prefixes that the system will configure at startup as WARN-level loggers and route to the warning appender (SysWF) — the `fe.warn.log` file. Entries are inserted into the generated Log4j configuration (alongside builtin warn modules such as org.apache.kafka, org.apache.hudi, and org.apache.hadoop.io.compress) and produce logger elements like `<Logger name="... " level="WARN"><AppenderRef ref="SysWF"/></Logger>`. Fully-qualified package and class prefixes (for example, "com.example.lib") are recommended to suppress noisy INFO/DEBUG output into the regular log and to allow warnings to be captured separately.
 - Introduced in: v3.2.13
 
-##### log_cleaner_disk_util_based_enable
-
-- Default: false
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: Enable automatic log cleaning based on disk usage. When enabled, logs will be cleaned when disk usage exceeds the threshold. The log cleaner runs as a background daemon on the FE node and helps prevent disk space exhaustion from log file accumulation.
-- Introduced in: -
-
-##### log_cleaner_disk_usage_threshold
-
-- Default: 80
-- Type: Int
-- Unit: Percentage
-- Is mutable: Yes
-- Description: Disk usage threshold (percentage) to trigger log cleaning. When disk usage exceeds this threshold, log cleaning will start. The cleaner checks each configured log directory independently and processes directories that exceed this threshold.
-- Introduced in: -
-
-##### log_cleaner_disk_usage_target
-
-- Default: 60
-- Type: Int
-- Unit: Percentage
-- Is mutable: Yes
-- Description: Target disk usage (percentage) after log cleaning. Log cleaning will continue until disk usage drops below this threshold. The cleaner deletes the oldest log files one by one until the target is reached.
-- Introduced in: -
-
-##### log_cleaner_audit_log_min_retention_days
-
-- Default: 3
-- Type: Int
-- Unit: Days
-- Is mutable: Yes
-- Description: Minimum retention days for audit log files. Audit log files newer than this will not be deleted even if disk usage is high. This ensures that audit logs are preserved for compliance and troubleshooting purposes.
-- Introduced in: -
-
-##### log_cleaner_check_interval_second
-
-- Default: 300
-- Type: Int
-- Unit: Seconds
-- Is mutable: Yes
-- Description: Interval in seconds to check disk usage and clean logs. The cleaner periodically checks each log directory's disk usage and triggers cleaning when necessary. Default is 300 seconds (5 minutes).
-- Introduced in: -
-
 ### Server
 
 ##### brpc_idle_wait_max_time
@@ -614,6 +614,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: The name of the StarRocks cluster to which the FE belongs. The cluster name is displayed for `Title` on the web page.
 - Introduced in: -
 
+##### dns_cache_ttl_seconds
+
+- Default: 60
+- Type: Int
+- Unit: Seconds
+- Is mutable: No
+- Description: DNS cache TTL (Time-To-Live) in seconds for successful DNS lookups. This sets the Java security property `networkaddress.cache.ttl` which controls how long the JVM caches successful DNS lookups. Set this item to `-1` to allow the system to always cache the infomration, or `0` to disable caching. This is particularly useful in environments where IP addresses change frequently, such as Kubernetes deployments or when dynamic DNS is used.
+- Introduced in: v3.5.11, v4.0.4
+
 ##### enable_http_async_handler
 
 - Default: true
@@ -649,15 +658,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Is mutable: No
 - Description: The IP address of the FE node.
 - Introduced in: -
-
-##### dns_cache_ttl_seconds
-
-- Default: 60
-- Type: Int
-- Unit: Seconds
-- Is mutable: No
-- Description: DNS cache TTL (Time-To-Live) in seconds for successful DNS lookups. This sets the Java security property `networkaddress.cache.ttl` which controls how long the JVM caches successful DNS lookups. Set to -1 to cache forever, or 0 to disable caching. This is particularly useful in environments where IP addresses change frequently, such as Kubernetes deployments or when using dynamic DNS. This is a static configuration and requires FE restart to take effect.
-- Introduced in: v3.5.11, v4.0.4
 
 ##### http_async_threads_num
 
