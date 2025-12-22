@@ -384,7 +384,7 @@ template <BoxedExprType E, CompoundNodeType Type>
 Status ChunkPredicateBuilder<E, Type>::_build_bitset_in_predicates(PredicateCompoundNode<Type>& tree_root,
                                                                    PredicateParser* parser,
                                                                    ColumnPredicatePtrs& col_preds_owner) {
-    if (_opts.runtime_filters == nullptr) {
+    if (!_is_root_builder || _opts.runtime_filters == nullptr) {
         return Status::OK();
     }
 
