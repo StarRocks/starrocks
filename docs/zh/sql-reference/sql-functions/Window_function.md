@@ -290,8 +290,14 @@ FROM scores;
 **语法**：
 
 ```SQL
-AVG( expr ) [OVER (*analytic_clause*)]
+AVG([DISTINCT] expr) [OVER (*analytic_clause*)]
 ```
+
+从 4.0 版本开始支持 `DISTINCT`。当指定 `DISTINCT` 时，`AVG()` 仅计算窗口内不重复值的平均值。
+
+:::note
+**窗口帧限制：** 当使用 `AVG(DISTINCT)` 作为窗口函数时，仅支持 RANGE 帧。不支持 ROWS 帧。
+:::
 
 **示例**：
 
@@ -348,6 +354,64 @@ from stock_ticker;
 
 比如，第一行的 `moving_average` 取值 `12.87500000`，是 "2014-10-02" 的值 `12.86`，加前一天 "2014-10-02" 的值 null，再加后一天 "2014-10-03" 的值 `12.89` 之后的平均值。
 
+示例二：使用 AVG(DISTINCT) 处理整体窗口
+
+计算所有行中不重复分数的平均值：
+
+```SQL
+SELECT id, subject, score,
+    AVG(DISTINCT score) OVER () AS distinct_avg
+FROM test_scores;
+```
+
+返回：
+
+```plaintext
++----+---------+-------+-------------+
+| id | subject | score | distinct_avg|
++----+---------+-------+-------------+
+|  1 | math    |    80 |       85.00 |
+|  2 | math    |    85 |       85.00 |
+|  3 | math    |    80 |       85.00 |
+|  4 | english |    90 |       85.00 |
+|  5 | english |    85 |       85.00 |
+|  6 | english |    90 |       85.00 |
++----+---------+-------+-------------+
+```
+
+不重复平均值为 85.00 ((80 + 85 + 90) / 3)。
+
+示例三：使用 AVG(DISTINCT) 处理带 RANGE 帧的窗口
+
+使用 RANGE 帧在每个科目分区内计算不重复分数的平均值：
+
+```SQL
+SELECT id, subject, score,
+    AVG(DISTINCT score) OVER (
+        PARTITION BY subject 
+        ORDER BY score 
+        RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+    ) AS distinct_avg
+FROM test_scores;
+```
+
+返回：
+
+```plaintext
++----+---------+-------+-------------+
+| id | subject | score | distinct_avg|
++----+---------+-------+-------------+
+|  1 | math    |    80 |       80.00 |
+|  3 | math    |    80 |       80.00 |
+|  2 | math    |    85 |       82.50 |
+|  5 | english |    85 |       85.00 |
+|  4 | english |    90 |       87.50 |
+|  6 | english |    90 |       87.50 |
++----+---------+-------+-------------+
+```
+
+对于每一行，函数计算从分区开始到当前行的分数值（包括当前行）的不重复分数的平均值。
+
 ## COUNT()
 
 `COUNT()` 函数用于返回特定窗口内满足要求的行的数目。
@@ -355,8 +419,22 @@ from stock_ticker;
 **语法**：
 
 ```SQL
-COUNT(expr) [OVER (analytic_clause)]
+COUNT([DISTINCT] expr) [OVER (analytic_clause)]
 ```
+
+从 4.0 版本开始支持 `DISTINCT`。当指定 `DISTINCT` 时，`COUNT()` 仅统计窗口内不重复的值。
+
+:::note
+**窗口帧限制：** 当使用 `COUNT(DISTINCT)` 作为窗口函数时，仅支持 RANGE 帧。不支持 ROWS 帧。例如：
+
+```SQL
+-- 支持：RANGE 帧
+count(distinct col) OVER (PARTITION BY x ORDER BY y RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
+
+-- 不支持：ROWS 帧（将导致错误）
+count(distinct col) OVER (PARTITION BY x ORDER BY y ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING)
+```
+:::
 
 **示例**：
 
@@ -383,6 +461,80 @@ from scores where subject in ('math') and score > 90;
 |    3 | jack  | math    |    95 |           2 |
 +------+-------+---------+-------+-------------+
 ```
+
+示例二：使用 COUNT(DISTINCT) 处理整体窗口
+
+统计所有行中不重复分数的个数：
+
+```SQL
+CREATE TABLE test_scores (
+    id INT,
+    subject VARCHAR(20),
+    score INT
+) DISTRIBUTED BY HASH(id);
+
+INSERT INTO test_scores VALUES
+    (1, 'math', 80),
+    (2, 'math', 85),
+    (3, 'math', 80),
+    (4, 'english', 90),
+    (5, 'english', 85),
+    (6, 'english', 90);
+```
+
+```SQL
+SELECT id, subject, score,
+    COUNT(DISTINCT score) OVER () AS distinct_count
+FROM test_scores;
+```
+
+返回：
+
+```plaintext
++----+---------+-------+---------------+
+| id | subject | score | distinct_count|
++----+---------+-------+---------------+
+|  1 | math    |    80 |             4 |
+|  2 | math    |    85 |             4 |
+|  3 | math    |    80 |             4 |
+|  4 | english |    90 |             4 |
+|  5 | english |    85 |             4 |
+|  6 | english |    90 |             4 |
++----+---------+-------+---------------+
+```
+
+不重复计数为 4（值：80、85、90，以及如果有 NULL 值）。
+
+示例三：使用 COUNT(DISTINCT) 处理带 RANGE 帧的窗口
+
+使用 RANGE 帧在每个科目分区内统计不重复分数：
+
+```SQL
+SELECT id, subject, score,
+    COUNT(DISTINCT score) OVER (
+        PARTITION BY subject 
+        ORDER BY score 
+        RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+    ) AS distinct_count
+FROM test_scores;
+```
+
+返回：
+
+```plaintext
++----+---------+-------+---------------+
+| id | subject | score | distinct_count|
++----+---------+-------+---------------+
+|  1 | math    |    80 |             1 |
+|  3 | math    |    80 |             1 |
+|  2 | math    |    85 |             2 |
+|  5 | english |    85 |             1 |
+|  4 | english |    90 |             2 |
+|  6 | english |    90 |             2 |
++----+---------+-------+---------------+
+```
+
+对于每一行，函数统计从分区开始到当前行的分数值（包括当前行）的不重复分数个数。
 
 ## CUME_DIST()
 
@@ -502,6 +654,8 @@ FIRST_VALUE(expr [IGNORE NULLS]) OVER(partition_by_clause order_by_clause [windo
 
 从 2.5 版本开始支持 `IGNORE NULLS`，即是否在计算结果中忽略 NULL 值。如果不指定 `IGNORE NULLS`，默认会包含 NULL 值。比如，如果第一个值为 NULL，则返回 NULL。如果指定了 `IGNORE NULLS`，会返回第一个非 NULL 值。如果所有值都为 NULL，那么即使指定了 `IGNORE NULLS`，也会返回 NULL。
 
+从 3.5 版本开始，`FIRST_VALUE()` 函数支持 ARRAY 类型。您可以使用 `FIRST_VALUE()` 处理 ARRAY 列，获取窗口中的第一个数组值。
+
 **示例**：
 
 以下示例使用 `FIRST_VALUE()` 函数和 IGNORE NULLS，根据 `subject` 列分组，按照降序返回每个分组中的最高分。该示例使用 [`scores`](#窗口函数建表示例) 表中的数据。
@@ -543,6 +697,48 @@ from scores;
 +------+-------+---------+-------+-------+
 ```
 
+示例二：使用 FIRST_VALUE() 处理 ARRAY 类型数据
+
+建表并插入数据：
+
+```SQL
+CREATE TABLE test_array_value (
+    col_1 INT,
+    arr1 ARRAY<INT>
+) DISTRIBUTED BY HASH(col_1);
+
+INSERT INTO test_array_value (col_1, arr1) VALUES
+    (1, [1, 11]),
+    (2, [2, 22]),
+    (3, [3, 33]),
+    (4, NULL),
+    (5, [5, 55]);
+```
+
+使用 FIRST_VALUE() 查询 ARRAY 类型数据：
+
+```SQL
+SELECT col_1, arr1, 
+    FIRST_VALUE(arr1) OVER (ORDER BY col_1) AS first_array
+FROM test_array_value;
+```
+
+返回：
+
+```plaintext
++-------+--------+------------+
+| col_1 | arr1   | first_array|
++-------+--------+------------+
+|     1 | [1,11] | [1,11]     |
+|     2 | [2,22] | [1,11]     |
+|     3 | [3,33] | [1,11]     |
+|     4 | NULL   | [1,11]     |
+|     5 | [5,55] | [1,11]     |
++-------+--------+------------+
+```
+
+窗口中的第一个数组值 `[1,11]` 被返回给所有行。
+
 ## LAST_VALUE()
 
 `LAST_VALUE()` 返回窗口范围内的**最后一个**值。与 `FIRST_VALUE()` 相反。
@@ -556,6 +752,8 @@ LAST_VALUE(expr [IGNORE NULLS]) OVER(partition_by_clause order_by_clause [window
 从 2.5 版本开始支持 `IGNORE NULLS`，即是否在计算结果中忽略 NULL 值。如果不指定 `IGNORE NULLS`，默认会包含 NULL 值。比如，如果最后一个值为 NULL，则返回 NULL。如果指定了 `IGNORE NULLS`，会返回最后一个非 NULL 值。如果所有值都为 NULL，那么即使指定了 `IGNORE NULLS`，也会返回 NULL。
 
 LAST_VALUE() 默认会统计 `rows between unbounded preceding and current row`，即会对比当前行与之前所有行。如果每个分区只想显示一个结果，可以在 ORDER BY 后使用 `rows between unbounded preceding and unbounded following`.
+
+从 3.5 版本开始，`LAST_VALUE()` 函数支持 ARRAY 类型。您可以使用 `LAST_VALUE()` 处理 ARRAY 列，获取窗口中的最后一个数组值。
 
 **示例**：
 
@@ -599,6 +797,35 @@ from scores;
 +------+-------+---------+-------+------+
 ```
 
+示例二：使用 LAST_VALUE() 处理 ARRAY 类型数据
+
+使用 FIRST_VALUE() 示例二中的表：
+
+```SQL
+SELECT col_1, arr1, 
+    LAST_VALUE(arr1) OVER (
+        ORDER BY col_1 
+        ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
+    ) AS last_array
+FROM test_array_value;
+```
+
+返回：
+
+```plaintext
++-------+--------+-----------+
+| col_1 | arr1   | last_array|
++-------+--------+-----------+
+|     1 | [1,11] | [5,55]    |
+|     2 | [2,22] | [5,55]    |
+|     3 | [3,33] | [5,55]    |
+|     4 | NULL   | [5,55]    |
+|     5 | [5,55] | [5,55]    |
++-------+--------+-----------+
+```
+
+窗口中的最后一个数组值 `[5,55]` 被返回给所有行。
+
 ## LAG()
 
 用来计算当前行**之前**若干行的值。该函数可用于直接比较行间差值或进行数据过滤。
@@ -609,6 +836,7 @@ from scores;
 - 字符串类型：CHAR、VARCHAR
 - 时间类型：DATE、DATETIME
 - 从 2.5 版本开始，`LAG()` 函数支持查询 BITMAP 和 HLL 类型的数据。
+- 从 3.5 版本开始，`LAG()` 函数支持查询 ARRAY 类型的数据。
 
 **语法**：
 
@@ -727,6 +955,50 @@ FROM test_tbl ORDER BY col_1;
 可以看到对于第 1-2 行，往前遍历时不存在 2 个 非 NULL 值，因此返回默认值为当前行的 `col_1` 值。
 
 其他行与示例一相同。
+
+示例四：使用 LAG() 处理 ARRAY 类型数据
+
+建表并插入数据：
+
+```SQL
+CREATE TABLE test_array_value (
+    col_1 INT,
+    arr1 ARRAY<INT>,
+    arr2 ARRAY<INT> NOT NULL
+) DISTRIBUTED BY HASH(col_1);
+
+INSERT INTO test_array_value (col_1, arr1, arr2) VALUES
+    (1, [1, 11], [101, 111]),
+    (2, [2, 22], [102, 112]),
+    (3, [3, 33], [103, 113]),
+    (4, NULL,    [104, 114]),
+    (5, [5, 55], [105, 115]),
+    (6, [6, 66], [106, 116]);
+```
+
+使用 LAG() 查询 ARRAY 类型数据：
+
+```SQL
+SELECT col_1, arr1, LAG(arr1, 2, arr2) OVER (ORDER BY col_1) AS lag_result 
+FROM test_array_value;
+```
+
+返回：
+
+```plaintext
++-------+--------+-------------+
+| col_1 | arr1   | lag_result  |
++-------+--------+-------------+
+|     1 | [1,11] | [101,111]   |
+|     2 | [2,22] | [102,112]   |
+|     3 | [3,33] | [1,11]      |
+|     4 | NULL   | [2,22]      |
+|     5 | [5,55] | [3,33]      |
+|     6 | [6,66] | NULL        |
++-------+--------+-------------+
+```
+
+对于前两行，由于不存在前两行，因此返回默认值 `arr2` 的值。
 
 ## LEAD()
 
@@ -851,6 +1123,32 @@ FROM test_tbl ORDER BY col_1;
 可以看到对于第 9-10 行，往后遍历时不存在 2 个 非 NULL 值，因此返回默认值为当前行的 `col_1` 值。
 
 其他行与示例一相同。
+
+示例四：使用 LEAD() 处理 ARRAY 类型数据
+
+使用 LAG() 示例四中的表：
+
+```SQL
+SELECT col_1, arr1, LEAD(arr1, 2, arr2) OVER (ORDER BY col_1) AS lead_result 
+FROM test_array_value;
+```
+
+返回：
+
+```plaintext
++-------+--------+-------------+
+| col_1 | arr1   | lead_result |
++-------+--------+-------------+
+|     1 | [1,11] | [3,33]      |
+|     2 | [2,22] | NULL        |
+|     3 | [3,33] | [5,55]      |
+|     4 | NULL   | [6,66]      |
+|     5 | [5,55] | [105,115]   |
+|     6 | [6,66] | [106,116]   |
++-------+--------+-------------+
+```
+
+对于最后两行，由于不存在后两行，因此返回默认值 `arr2` 的值。
 
 ## MAX()
 
@@ -1294,8 +1592,14 @@ ORDER BY city_id;
 **语法**：
 
 ```SQL
-SUM(expr) [OVER (analytic_clause)]
+SUM([DISTINCT] expr) [OVER (analytic_clause)]
 ```
+
+从 4.0 版本开始支持 `DISTINCT`。当指定 `DISTINCT` 时，`SUM()` 仅对窗口内不重复的值求和。
+
+:::note
+**窗口帧限制：** 当使用 `SUM(DISTINCT)` 作为窗口函数时，仅支持 RANGE 帧。不支持 ROWS 帧。
+:::
 
 **示例**：
 
@@ -1338,6 +1642,64 @@ from scores;
 |    6 | amber | physics |   100 |  443 |
 +------+-------+---------+-------+------+
 ```
+
+示例二：使用 SUM(DISTINCT) 处理整体窗口
+
+对所有行中不重复分数求和：
+
+```SQL
+SELECT id, subject, score,
+    SUM(DISTINCT score) OVER () AS distinct_sum
+FROM test_scores;
+```
+
+返回：
+
+```plaintext
++----+---------+-------+-------------+
+| id | subject | score | distinct_sum|
++----+---------+-------+-------------+
+|  1 | math    |    80 |          255|
+|  2 | math    |    85 |          255|
+|  3 | math    |    80 |          255|
+|  4 | english |    90 |          255|
+|  5 | english |    85 |          255|
+|  6 | english |    90 |          255|
++----+---------+-------+-------------+
+```
+
+不重复和为 255 (80 + 85 + 90)。
+
+示例三：使用 SUM(DISTINCT) 处理带 RANGE 帧的窗口
+
+使用 RANGE 帧在每个科目分区内对不重复分数求和：
+
+```SQL
+SELECT id, subject, score,
+    SUM(DISTINCT score) OVER (
+        PARTITION BY subject 
+        ORDER BY score 
+        RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+    ) AS distinct_sum
+FROM test_scores;
+```
+
+返回：
+
+```plaintext
++----+---------+-------+-------------+
+| id | subject | score | distinct_sum|
++----+---------+-------+-------------+
+|  1 | math    |    80 |           80|
+|  3 | math    |    80 |           80|
+|  2 | math    |    85 |          165|
+|  5 | english |    85 |           85|
+|  4 | english |    90 |          175|
+|  6 | english |    90 |          175|
++----+---------+-------+-------------+
+```
+
+对于每一行，函数对从分区开始到当前行的分数值（包括当前行）的不重复分数求和。
 
 ## VARIANCE, VAR_POP, VARIANCE_POP
 

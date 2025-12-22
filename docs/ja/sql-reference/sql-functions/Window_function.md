@@ -294,8 +294,14 @@ FROM scores;
 **構文:**
 
 ```SQL
-AVG(expr) [OVER (*analytic_clause*)]
+AVG([DISTINCT] expr) [OVER (*analytic_clause*)]
 ```
+
+`DISTINCT`はStarRocks v4.0からサポートされています。指定すると、`AVG()`はウィンドウ内の一意の値の平均のみを計算します。
+
+:::note
+**ウィンドウフレーム制限:** `AVG(DISTINCT)`をウィンドウ関数として使用する場合、RANGEフレームのみがサポートされます。ROWSフレームはサポートされていません。
+:::
 
 **例:**
 
@@ -352,6 +358,64 @@ from stock_ticker;
 
 例えば、最初の行の`12.87500000`は、"2014-10-02"の終値（`12.86`）、その前日"2014-10-01"（null）、およびその翌日"2014-10-03"（`12.89`）の平均値です。
 
+**例2: AVG(DISTINCT)で全体ウィンドウを使用**
+
+すべての行で一意のスコアの平均を計算します:
+
+```SQL
+SELECT id, subject, score,
+    AVG(DISTINCT score) OVER () AS distinct_avg
+FROM test_scores;
+```
+
+出力:
+
+```plaintext
++----+---------+-------+-------------+
+| id | subject | score | distinct_avg|
++----+---------+-------+-------------+
+|  1 | math    |    80 |       85.00 |
+|  2 | math    |    85 |       85.00 |
+|  3 | math    |    80 |       85.00 |
+|  4 | english |    90 |       85.00 |
+|  5 | english |    85 |       85.00 |
+|  6 | english |    90 |       85.00 |
++----+---------+-------+-------------+
+```
+
+一意の平均は85.00です（(80 + 85 + 90) / 3）。
+
+**例3: AVG(DISTINCT)でRANGEフレーム付きウィンドウを使用**
+
+RANGEフレームを使用して、各科目パーティション内で一意のスコアの平均を計算します:
+
+```SQL
+SELECT id, subject, score,
+    AVG(DISTINCT score) OVER (
+        PARTITION BY subject 
+        ORDER BY score 
+        RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+    ) AS distinct_avg
+FROM test_scores;
+```
+
+出力:
+
+```plaintext
++----+---------+-------+-------------+
+| id | subject | score | distinct_avg|
++----+---------+-------+-------------+
+|  1 | math    |    80 |       80.00 |
+|  3 | math    |    80 |       80.00 |
+|  2 | math    |    85 |       82.50 |
+|  5 | english |    85 |       85.00 |
+|  4 | english |    90 |       87.50 |
+|  6 | english |    90 |       87.50 |
++----+---------+-------+-------------+
+```
+
+各行について、関数はパーティションの開始から現在行のスコア値（現在行を含む）までの一意のスコアの平均を計算します。
+
 ### COUNT()
 
 指定されたウィンドウ内で条件を満たす行の総数を計算します。
@@ -359,8 +423,22 @@ from stock_ticker;
 **構文:**
 
 ```SQL
-COUNT(expr) [OVER (analytic_clause)]
+COUNT([DISTINCT] expr) [OVER (analytic_clause)]
 ```
+
+`DISTINCT`はStarRocks v4.0からサポートされています。指定すると、`COUNT()`はウィンドウ内の一意の値のみをカウントします。
+
+:::note
+**ウィンドウフレーム制限:** `COUNT(DISTINCT)`をウィンドウ関数として使用する場合、RANGEフレームのみがサポートされます。ROWSフレームはサポートされていません。例:
+
+```SQL
+-- サポート: RANGEフレーム
+count(distinct col) OVER (PARTITION BY x ORDER BY y RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
+
+-- サポートされていません: ROWSフレーム（エラーが発生します）
+count(distinct col) OVER (PARTITION BY x ORDER BY y ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING)
+```
+:::
 
 **例:**
 
@@ -385,6 +463,80 @@ from scores where subject in ('math') and score > 90;
 |    3 | jack  | math    |    95 |           2 |
 +------+-------+---------+-------+-------------+
 ```
+
+**例2: COUNT(DISTINCT)で全体ウィンドウを使用**
+
+すべての行で一意のスコアをカウントします:
+
+```SQL
+CREATE TABLE test_scores (
+    id INT,
+    subject VARCHAR(20),
+    score INT
+) DISTRIBUTED BY HASH(id);
+
+INSERT INTO test_scores VALUES
+    (1, 'math', 80),
+    (2, 'math', 85),
+    (3, 'math', 80),
+    (4, 'english', 90),
+    (5, 'english', 85),
+    (6, 'english', 90);
+```
+
+```SQL
+SELECT id, subject, score,
+    COUNT(DISTINCT score) OVER () AS distinct_count
+FROM test_scores;
+```
+
+出力:
+
+```plaintext
++----+---------+-------+---------------+
+| id | subject | score | distinct_count|
++----+---------+-------+---------------+
+|  1 | math    |    80 |             4 |
+|  2 | math    |    85 |             4 |
+|  3 | math    |    80 |             4 |
+|  4 | english |    90 |             4 |
+|  5 | english |    85 |             4 |
+|  6 | english |    90 |             4 |
++----+---------+-------+---------------+
+```
+
+一意のカウントは4です（値: 80、85、90、およびNULLがある場合）。
+
+**例3: COUNT(DISTINCT)でRANGEフレーム付きウィンドウを使用**
+
+RANGEフレームを使用して、各科目パーティション内で一意のスコアをカウントします:
+
+```SQL
+SELECT id, subject, score,
+    COUNT(DISTINCT score) OVER (
+        PARTITION BY subject 
+        ORDER BY score 
+        RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+    ) AS distinct_count
+FROM test_scores;
+```
+
+出力:
+
+```plaintext
++----+---------+-------+---------------+
+| id | subject | score | distinct_count|
++----+---------+-------+---------------+
+|  1 | math    |    80 |             1 |
+|  3 | math    |    80 |             1 |
+|  2 | math    |    85 |             2 |
+|  5 | english |    85 |             1 |
+|  4 | english |    90 |             2 |
+|  6 | english |    90 |             2 |
++----+---------+-------+---------------+
+```
+
+各行について、関数はパーティションの開始から現在行のスコア値（現在行を含む）までの一意のスコアをカウントします。
 
 ### CUME_DIST()
 
@@ -499,6 +651,8 @@ FIRST_VALUE(expr [IGNORE NULLS]) OVER(partition_by_clause order_by_clause [windo
 
 `IGNORE NULLS`はv2.5.0からサポートされています。これは、`expr`のNULL値を計算から除外するかどうかを決定するために使用されます。デフォルトでは、NULL値が含まれており、フィルタリングされた結果の最初の値がNULLの場合、NULLが返されます。IGNORE NULLSを指定すると、フィルタリングされた結果の最初の非NULL値が返されます。すべての値がNULLの場合、IGNORE NULLSを指定してもNULLが返されます。
 
+ARRAYタイプはStarRocks v3.5からサポートされています。FIRST_VALUE()でARRAY列を使用して、ウィンドウ内の最初の配列値を取得できます。
+
 **例:**
 
 各グループ（降順）で、`subject`でグループ化された各メンバーの最初の`score`値を返します。この例では、[サンプルテーブル](#window-function-sample-table) `scores`のデータを使用します。
@@ -538,6 +692,48 @@ from scores;
 +------+-------+---------+-------+-------+
 ```
 
+**例2: FIRST_VALUE()でARRAYタイプを使用**
+
+ARRAY列を持つテーブルを作成します:
+
+```SQL
+CREATE TABLE test_array_value (
+    col_1 INT,
+    arr1 ARRAY<INT>
+) DISTRIBUTED BY HASH(col_1);
+
+INSERT INTO test_array_value (col_1, arr1) VALUES
+    (1, [1, 11]),
+    (2, [2, 22]),
+    (3, [3, 33]),
+    (4, NULL),
+    (5, [5, 55]);
+```
+
+FIRST_VALUE()でARRAYタイプのデータをクエリします:
+
+```SQL
+SELECT col_1, arr1, 
+    FIRST_VALUE(arr1) OVER (ORDER BY col_1) AS first_array
+FROM test_array_value;
+```
+
+出力:
+
+```plaintext
++-------+--------+------------+
+| col_1 | arr1   | first_array|
++-------+--------+------------+
+|     1 | [1,11] | [1,11]     |
+|     2 | [2,22] | [1,11]     |
+|     3 | [3,33] | [1,11]     |
+|     4 | NULL   | [1,11]     |
+|     5 | [5,55] | [1,11]     |
++-------+--------+------------+
+```
+
+ウィンドウ内の最初の配列値`[1,11]`がすべての行に返されます。
+
 ### LAST_VALUE()
 
 LAST_VALUE()はウィンドウ範囲の**最後の**値を返します。これはFIRST_VALUE()の逆です。
@@ -551,6 +747,8 @@ LAST_VALUE(expr [IGNORE NULLS]) OVER(partition_by_clause order_by_clause [window
 `IGNORE NULLS`はv2.5.0からサポートされています。これは、`expr`のNULL値を計算から除外するかどうかを決定するために使用されます。デフォルトでは、NULL値が含まれており、フィルタリングされた結果の最後の値がNULLの場合、NULLが返されます。IGNORE NULLSを指定すると、フィルタリングされた結果の最後の非NULL値が返されます。すべての値がNULLの場合、IGNORE NULLSを指定してもNULLが返されます。
 
 デフォルトでは、LAST_VALUE()は`rows between unbounded preceding and current row`を計算し、現在の行とその前のすべての行を比較します。各パーティションに1つの値のみを表示する場合は、ORDER BYの後に`rows between unbounded preceding and unbounded following`を使用します。
+
+ARRAYタイプはStarRocks v3.5からサポートされています。LAST_VALUE()でARRAY列を使用して、ウィンドウ内の最後の配列値を取得できます。
 
 **例:**
 
@@ -592,6 +790,35 @@ from scores;
 +------+-------+---------+-------+------+
 ```
 
+**例2: LAST_VALUE()でARRAYタイプを使用**
+
+FIRST_VALUE()の例2と同じテーブルを使用します:
+
+```SQL
+SELECT col_1, arr1, 
+    LAST_VALUE(arr1) OVER (
+        ORDER BY col_1 
+        ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
+    ) AS last_array
+FROM test_array_value;
+```
+
+出力:
+
+```plaintext
++-------+--------+-----------+
+| col_1 | arr1   | last_array|
++-------+--------+-----------+
+|     1 | [1,11] | [5,55]    |
+|     2 | [2,22] | [5,55]    |
+|     3 | [3,33] | [5,55]    |
+|     4 | NULL   | [5,55]    |
+|     5 | [5,55] | [5,55]    |
++-------+--------+-----------+
+```
+
+ウィンドウ内の最後の配列値`[5,55]`がすべての行に返されます。
+
 ### LAG()
 
 現在の行から`offset`行遅れた行の値を返します。この関数は、行間の値を比較し、データをフィルタリングするためによく使用されます。
@@ -602,6 +829,7 @@ from scores;
 - 文字列: CHAR, VARCHAR
 - 日付: DATE, DATETIME
 - BITMAPおよびHLLはStarRocks v2.5からサポートされています。
+- ARRAYタイプはStarRocks v3.5からサポートされています。
 
 **構文:**
 
@@ -718,6 +946,50 @@ FROM test_tbl ORDER BY col_1;
 ご覧のとおり、1 行目と 2 行目では後方に 2 つの非 NULL 行が存在しないため、デフォルト値として現在行の col_1 の値が返されます。
 
 その他の行の挙動は 例 1 と同じです。
+
+**例4: LAG()でARRAYタイプを使用**
+
+ARRAY列を持つテーブルを作成します:
+
+```SQL
+CREATE TABLE test_array_value (
+    col_1 INT,
+    arr1 ARRAY<INT>,
+    arr2 ARRAY<INT> NOT NULL
+) DISTRIBUTED BY HASH(col_1);
+
+INSERT INTO test_array_value (col_1, arr1, arr2) VALUES
+    (1, [1, 11], [101, 111]),
+    (2, [2, 22], [102, 112]),
+    (3, [3, 33], [103, 113]),
+    (4, NULL,    [104, 114]),
+    (5, [5, 55], [105, 115]),
+    (6, [6, 66], [106, 116]);
+```
+
+LAG()でARRAYタイプのデータをクエリします:
+
+```SQL
+SELECT col_1, arr1, LAG(arr1, 2, arr2) OVER (ORDER BY col_1) AS lag_result 
+FROM test_array_value;
+```
+
+出力:
+
+```plaintext
++-------+--------+-------------+
+| col_1 | arr1   | lag_result  |
++-------+--------+-------------+
+|     1 | [1,11] | [101,111]   |
+|     2 | [2,22] | [102,112]   |
+|     3 | [3,33] | [1,11]      |
+|     4 | NULL   | [2,22]      |
+|     5 | [5,55] | [3,33]      |
+|     6 | [6,66] | NULL        |
++-------+--------+-------------+
+```
+
+最初の2行については、前の2行が存在しないため、デフォルト値として`arr2`の値が返されます。
 
 ### LEAD()
 
@@ -840,6 +1112,32 @@ FROM test_tbl ORDER BY col_1;
 ご覧のとおり、9 行目と 10 行目では先読みで 2 つの非 NULL 行が存在しないため、デフォルト値として現在行の col_1 の値が返されます。
 
 その他の行の挙動は 例 1 と同じです。
+
+**例4: LEAD()でARRAYタイプを使用**
+
+LAG()の例4と同じテーブルを使用します:
+
+```SQL
+SELECT col_1, arr1, LEAD(arr1, 2, arr2) OVER (ORDER BY col_1) AS lead_result 
+FROM test_array_value;
+```
+
+出力:
+
+```plaintext
++-------+--------+-------------+
+| col_1 | arr1   | lead_result |
++-------+--------+-------------+
+|     1 | [1,11] | [3,33]      |
+|     2 | [2,22] | NULL        |
+|     3 | [3,33] | [5,55]      |
+|     4 | NULL   | [6,66]      |
+|     5 | [5,55] | [105,115]   |
+|     6 | [6,66] | [106,116]   |
++-------+--------+-------------+
+```
+
+最後の2行については、後続の2行が存在しないため、デフォルト値として`arr2`の値が返されます。
 
 ### MAX()
 
@@ -1294,8 +1592,14 @@ ORDER BY city_id;
 **構文:**
 
 ```SQL
-SUM(expr) [OVER (analytic_clause)]
+SUM([DISTINCT] expr) [OVER (analytic_clause)]
 ```
+
+`DISTINCT`はStarRocks v4.0からサポートされています。指定すると、`SUM()`はウィンドウ内の一意の値のみを合計します。
+
+:::note
+**ウィンドウフレーム制限:** `SUM(DISTINCT)`をウィンドウ関数として使用する場合、RANGEフレームのみがサポートされます。ROWSフレームはサポートされていません。
+:::
 
 **例:**
 
@@ -1336,6 +1640,64 @@ from scores;
 |    6 | amber | physics |   100 |  443 |
 +------+-------+---------+-------+------+
 ```
+
+**例2: SUM(DISTINCT)で全体ウィンドウを使用**
+
+すべての行で一意のスコアを合計します:
+
+```SQL
+SELECT id, subject, score,
+    SUM(DISTINCT score) OVER () AS distinct_sum
+FROM test_scores;
+```
+
+出力:
+
+```plaintext
++----+---------+-------+-------------+
+| id | subject | score | distinct_sum|
++----+---------+-------+-------------+
+|  1 | math    |    80 |          255|
+|  2 | math    |    85 |          255|
+|  3 | math    |    80 |          255|
+|  4 | english |    90 |          255|
+|  5 | english |    85 |          255|
+|  6 | english |    90 |          255|
++----+---------+-------+-------------+
+```
+
+一意の合計は255です（80 + 85 + 90）。
+
+**例3: SUM(DISTINCT)でRANGEフレーム付きウィンドウを使用**
+
+RANGEフレームを使用して、各科目パーティション内で一意のスコアを合計します:
+
+```SQL
+SELECT id, subject, score,
+    SUM(DISTINCT score) OVER (
+        PARTITION BY subject 
+        ORDER BY score 
+        RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+    ) AS distinct_sum
+FROM test_scores;
+```
+
+出力:
+
+```plaintext
++----+---------+-------+-------------+
+| id | subject | score | distinct_sum|
++----+---------+-------+-------------+
+|  1 | math    |    80 |           80|
+|  3 | math    |    80 |           80|
+|  2 | math    |    85 |          165|
+|  5 | english |    85 |           85|
+|  4 | english |    90 |          175|
+|  6 | english |    90 |          175|
++----+---------+-------+-------------+
+```
+
+各行について、関数はパーティションの開始から現在行のスコア値（現在行を含む）までの一意のスコアを合計します。
 
 ### VARIANCE, VAR_POP, VARIANCE_POP
 
