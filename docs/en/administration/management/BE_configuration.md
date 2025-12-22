@@ -1175,7 +1175,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: Number of threads that are used for flushing MemTable in each store in shared-data mode. 
+- Description: Number of threads that are used for flushing MemTable in each store in a shared-data cluster. 
 When this value is set to `0`, the system uses twice of the CPU core count as the value.
 When this value is set to less than `0`, the system uses the product of its absolute value and the CPU core count as the value.
 - Introduced in: v3.1.12, 3.2.7
@@ -1879,6 +1879,24 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Description: Whether to allow new loading processes when the hard memory resource limit is reached. `true` indicates new loading processes will be allowed, and `false` indicates they will be rejected.
 - Introduced in: v3.3.2
 
+##### enable_pk_index_parallel_compaction
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to enable parallel Compaction for Primary Key index in a shared-data cluster.
+- Introduced in: -
+
+##### enable_pk_index_parallel_get
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to enable parallel GET for Primary Key index in a shared-data cluster.
+- Introduced in: -
+
 ##### enable_pk_parallel_execution
 
 - Default: true
@@ -2239,49 +2257,13 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Description: The maximum concurrency of compaction on a disk. This addresses the issue of uneven I/O across disks due to compaction. This issue can cause excessively high I/O for certain disks.
 - Introduced in: v3.0.9
 
-##### pk_parallel_execution_threshold_bytes
-
-- Default: 104857600
-- Type: Int
-- Unit: -
-- Is mutable: Yes
-- Description: When enable_pk_parallel_execution is set to true, the Primary Key table parallel execution strategy will be enabled if the data generated during import or compaction exceeds this threshold. Default is 100MB.
-- Introduced in: -
-
-##### pk_index_parallel_compaction_threadpool_max_threads
-
-- Default: 4
-- Type: Int
-- Unit: -
-- Is mutable: Yes
-- Description: The maximum number of threads in the thread pool for cloud native primary key index parallel compaction in shared-data mode.
-- Introduced in: -
-
-##### pk_index_parallel_compaction_task_split_threshold_bytes
-
-- Default: 104857600
-- Type: Int
-- Unit: -
-- Is mutable: Yes
-- Description: The splitting threshold for primary key index compaction tasks. When the total size of the files involved in a task is smaller than this threshold, the task will not be split. Default is 100MB.
-- Introduced in: -
-
-##### pk_index_target_file_size
-
-- Default: 67108864
-- Type: Int
-- Unit: -
-- Is mutable: Yes
-- Description: Target file size for primary key index in shared-data mode. Default is 64MB.
-- Introduced in: -
-
 ##### pk_index_compaction_score_ratio
 
 - Default: 1.5
 - Type: Double
 - Unit: -
 - Is mutable: Yes
-- Description: Compaction score ratio for primary key index in shared-data mode. For example, if there are N filesets, the compaction score will be N * pk_index_compaction_score_ratio.
+- Description: Compaction score ratio for Primary Key index in a shared-data cluster. For example, if there are N filesets, the Compaction score will be `N * pk_index_compaction_score_ratio`.
 - Introduced in: -
 
 ##### pk_index_ingest_sst_compaction_threshold
@@ -2290,43 +2272,7 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: Ingest SST compaction threshold for primary key index in shared-data mode.
-- Introduced in: -
-
-##### enable_pk_index_parallel_compaction
-
-- Default: false
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: Whether to enable parallel compaction for primary key index in shared-data mode.
-- Introduced in: -
-
-##### enable_pk_index_parallel_get
-
-- Default: false
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: Whether to enable parallel get for primary key index in shared-data mode.
-- Introduced in: -
-
-##### pk_index_parallel_get_min_rows
-
-- Default: 16384
-- Type: Int
-- Unit: -
-- Is mutable: Yes
-- Description: The minimum rows threshold to enable parallel get for primary key index in shared-data mode.
-- Introduced in: -
-
-##### pk_index_parallel_get_threadpool_max_threads
-
-- Default: 0
-- Type: Int
-- Unit: -
-- Is mutable: Yes
-- Description: The maximum number of threads in the thread pool for primary key index parallel get in shared-data mode. 0 means auto configuration.
+- Description: Ingest SST Compaction threshold for Primary Key index in a shared-data cluster.
 - Introduced in: -
 
 ##### pk_index_memtable_flush_threadpool_max_threads
@@ -2335,7 +2281,7 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: The maximum number of threads in the thread pool for primary key index memtable flush in shared-data mode.
+- Description: The maximum number of threads in the thread pool for Primary Key index MemTable flush in a shared-data cluster.
 - Introduced in: -
 
 ##### pk_index_memtable_max_count
@@ -2344,7 +2290,61 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: The maximum number of memtables for primary key index in shared-data mode.
+- Description: The maximum number of MemTables for Primary Key index in a shared-data cluster.
+- Introduced in: -
+
+##### pk_index_parallel_compaction_task_split_threshold_bytes
+
+- Default: 104857600
+- Type: Int
+- Unit: Bytes
+- Is mutable: Yes
+- Description: The splitting threshold for Primary Key index Compaction tasks. When the total size of the files involved in a task is smaller than this threshold, the task will not be split.
+- Introduced in: -
+
+##### pk_index_parallel_compaction_threadpool_max_threads
+
+- Default: 4
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum number of threads in the thread pool for cloud native Primary Key index parallel Compaction in a shared-data cluster.
+- Introduced in: -
+
+##### pk_index_parallel_get_min_rows
+
+- Default: 16384
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The minimum rows threshold to enable parallel GET for Primary Key index in a shared-data cluster.
+- Introduced in: -
+
+##### pk_index_parallel_get_threadpool_max_threads
+
+- Default: 0
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum number of threads in the thread pool for Primary Key index parallel GET in a shared-data cluster. `0` means adaptive configuration.
+- Introduced in: -
+
+##### pk_index_size_tiered_level_multiplier
+
+- Default: 10
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The level multiplier parameter for Primary Key index size-tiered Compaction strategy.
+- Introduced in: -
+
+##### pk_index_size_tiered_max_level
+
+- Default: 5
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum level for Primary Key index size-tiered Compaction strategy.
 - Introduced in: -
 
 ##### pk_index_size_tiered_min_level_size
@@ -2353,25 +2353,25 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: The minimum level size parameter for primary key index size-tiered compaction strategy.
+- Description: The minimum level for Primary Key index size-tiered Compaction strategy.
 - Introduced in: -
 
-##### pk_index_size_tiered_level_multiplier 
+##### pk_index_target_file_size
 
-- Default: 10
+- Default: 67108864
 - Type: Int
-- Unit: -
+- Unit: Bytes
 - Is mutable: Yes
-- Description: The level multiple parameter for primary key index size-tiered compaction strategy.
+- Description: The target file size for Primary Key index in a shared-data cluster.
 - Introduced in: -
 
-##### pk_index_size_tiered_max_level 
+##### pk_parallel_execution_threshold_bytes
 
-- Default: 5
+- Default: 104857600
 - Type: Int
-- Unit: -
+- Unit: Bytes
 - Is mutable: Yes
-- Description: The level number parameter for primary key index size-tiered compaction strategy.
+- Description: When `enable_pk_parallel_execution` is set to true, the Primary Key table parallel execution strategy will be enabled if the data generated during import or compaction exceeds this threshold.
 - Introduced in: -
 
 ##### primary_key_limit_size
@@ -2691,15 +2691,6 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Is mutable: Yes
 - Description: The time interval at which to check compaction for Primary Key tables.
 - Introduced in: -
-
-##### update_compaction_chunk_size_for_row_store
-
-- Default: 0
-- Type: Int
-- Unit: Rows
-- Is mutable: Yes
-- Description: Overrides the chunk size (number of rows per chunk) used during update compaction for tablets that use column-with-row-store representation. By default (0) StarRocks computes per-column-group chunk size with CompactionUtils::get_read_chunk_size based on compaction memory limit, vector chunk size, total input rows and memory footprint. When this config is set to a positive integer and tablet.is_column_with_row_store() is true, RowsetMerger forces _chunk_size to this value in both horizontal and vertical update compaction paths (rowset_merger.cpp). Use a non-zero value only when the automatic calculation is producing suboptimal results; increasing the value can reduce writer/IO overhead but raises peak memory use, while decreasing it reduces memory pressure at the cost of more chunks and potential performance impact.
-- Introduced in: v3.2.3
 
 ##### update_compaction_delvec_file_io_amp_ratio
 
