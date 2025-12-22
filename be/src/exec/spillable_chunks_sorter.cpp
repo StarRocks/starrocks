@@ -19,6 +19,8 @@
 #include "exec/spillable_chunks_sorter_sort.h"
 
 namespace starrocks {
+DEFINE_FAIL_POINT(chunk_sorter_spill_on_set_finishing);
+
 template <DerivedFromChunksSorter TChunksSorter>
 void SpillableChunksSorter<TChunksSorter>::setup_runtime(RuntimeState* state, RuntimeProfile* profile,
                                                          MemTracker* parent_mem_tracker) {
@@ -64,6 +66,9 @@ Status SpillableChunksSorter<TChunksSorter>::update(RuntimeState* state, const C
 
 template <DerivedFromChunksSorter TChunksSorter>
 Status SpillableChunksSorter<TChunksSorter>::do_done(RuntimeState* state) {
+    FAIL_POINT_TRIGGER_EXECUTE(chunk_sorter_spill_on_set_finishing,
+                               { _spill_strategy = spill::SpillStrategy::SPILL_ALL; });
+
     if (_spill_strategy == spill::SpillStrategy::NO_SPILL) {
         return TChunksSorter::do_done(state);
     }
