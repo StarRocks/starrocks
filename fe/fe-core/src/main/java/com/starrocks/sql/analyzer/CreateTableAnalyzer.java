@@ -128,6 +128,11 @@ public class CreateTableAnalyzer {
         }
 
         analyzeIndexDefs(statement);
+        
+        // Validate complex type default values with fast schema evolution
+        if (statement.isOlapEngine()) {
+            validateComplexTypeDefaultValues(statement);
+        }
     }
 
     private static void analyzeTemporaryTable(CreateTableStmt stmt, ConnectContext context,
@@ -943,5 +948,32 @@ public class CreateTableAnalyzer {
         }
 
         statement.setIndexes(indexes);
+    }
+
+    private static void validateComplexTypeDefaultValues(CreateTableStmt statement) {
+        Map<String, String> properties = statement.getProperties();
+        boolean fastSchemaEvolution = true;
+        
+        // Check if fast_schema_evolution is explicitly set to false
+        if (properties != null && properties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_FAST_SCHEMA_EVOLUTION)) {
+            String value = properties.get(PropertyAnalyzer.PROPERTIES_ENABLE_FAST_SCHEMA_EVOLUTION);
+            fastSchemaEvolution = Boolean.parseBoolean(value);
+        }
+        
+        // If fast schema evolution is disabled, check if any column has complex type default value
+        if (!fastSchemaEvolution) {
+            List<Column> columns = statement.getColumns();
+            if (columns != null) {
+                for (Column column : columns) {
+                    if (column.getDefaultExpr() != null && column.getDefaultExpr().isComplexExpr()) {
+                        throw new SemanticException(
+                            "Complex type (ARRAY/MAP/STRUCT) default values require fast schema evolution. " +
+                            "Table '" + statement.getTableName() + "' has fast_schema_evolution=false. " +
+                            "Please remove the 'fast_schema_evolution'='false' property or remove the default value " +
+                            "for column '" + column.getName() + "'");
+                    }
+                }
+            }
+        }
     }
 }

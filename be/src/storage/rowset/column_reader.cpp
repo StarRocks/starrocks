@@ -756,6 +756,9 @@ StatusOr<std::unique_ptr<ColumnIterator>> ColumnReader::_create_merge_struct_ite
                 return Status::InternalError(
                         fmt::format("invalid nonexistent column({}) without default value.", sub_column->name()));
             } else {
+                LOG(ERROR) << "[DEFAULT_VALUE_PATH_9] Creating DefaultValueColumnIterator for struct subfield: " << sub_column->name()
+                          << ", type: " << sub_column->type() << ", has_default: " << sub_column->has_default_value()
+                          << ", default_value: " << sub_column->default_value();
                 const TypeInfoPtr& type_info = get_type_info(*sub_column);
                 auto default_value_iter = std::make_unique<DefaultValueColumnIterator>(
                         sub_column->has_default_value(), sub_column->default_value(), sub_column->is_nullable(),

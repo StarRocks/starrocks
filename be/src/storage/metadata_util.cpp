@@ -20,6 +20,7 @@
 #include "gen_cpp/AgentService_types.h"
 #include "gutil/strings/substitute.h"
 #include "storage/aggregate_type.h"
+#include "storage/default_value_expr_utils.h"
 #include "storage/olap_common.h"
 #include "storage/tablet_schema.h"
 #include "util/json_util.h"
@@ -207,9 +208,24 @@ Status t_column_to_pb_column(int32_t unique_id, const TColumn& t_column, ColumnP
         column_pb->set_index_length(index_len);
     }
     // Default value
+    LOG(ERROR) << "[CREATE_TABLE_DEBUG] t_column_to_pb_column() processing column: " << t_column.column_name
+               << ", has_default_value=" << t_column.__isset.default_value
+               << ", default_value='" << (t_column.__isset.default_value ? t_column.default_value : "") << "'"
+               << ", has_default_expr=" << t_column.__isset.default_expr
+               << ", about to write to ColumnPB";
+    
+    // Note: default_expr (if present) should have been pre-evaluated to default_value in run_create_tablet_task()
+    // So here we only need to check default_value
     if (t_column.__isset.default_value) {
         column_pb->set_default_value(t_column.default_value);
+        LOG(ERROR) << "[CREATE_TABLE_DEBUG] ColumnPB write: column=" << t_column.column_name
+                   << ", successfully wrote default_value='" << t_column.default_value << "' to temporary ColumnPB"
+                   << (t_column.__isset.default_expr ? " (pre-evaluated from default_expr)" : "");
+    } else {
+        LOG(ERROR) << "[CREATE_TABLE_DEBUG] ColumnPB write: column=" << t_column.column_name
+                   << ", no default_value to write (TColumn.__isset.default_value=false)";
     }
+    
     if (t_column.__isset.is_bloom_filter_column) {
         column_pb->set_is_bf_column(t_column.is_bloom_filter_column);
     }
@@ -225,6 +241,11 @@ Status t_column_to_pb_column(int32_t unique_id, const TColumn& t_column, ColumnP
 Status convert_t_schema_to_pb_schema(const TTabletSchema& tablet_schema, uint32_t next_unique_id,
                                      const std::unordered_map<uint32_t, uint32_t>& col_ordinal_to_unique_id,
                                      TabletSchemaPB* schema, TCompressionType::type compression_type) {
+    LOG(ERROR) << "[CREATE_TABLE_DEBUG] convert_t_schema_to_pb_schema() called, "
+               << "num_columns=" << tablet_schema.columns.size()
+               << ", schema_id=" << (tablet_schema.__isset.id ? tablet_schema.id : -1)
+               << ", next_unique_id=" << next_unique_id;
+    
     if (tablet_schema.__isset.id) {
         schema->set_id(tablet_schema.id);
     }
@@ -274,6 +295,12 @@ Status convert_t_schema_to_pb_schema(const TTabletSchema& tablet_schema, uint32_
 
     uint32_t max_col_unique_id = 0;
     for (TColumn tcolumn : tablet_schema.columns) {
+        LOG(ERROR) << "[CREATE_TABLE_DEBUG] convert_t_schema_to_pb_schema processing TColumn[" << col_ordinal 
+                   << "]: name=" << tcolumn.column_name
+                   << ", has_default=" << tcolumn.__isset.default_value
+                   << ", default_value='" << (tcolumn.__isset.default_value ? tcolumn.default_value : "") << "'"
+                   << ", calling t_column_to_pb_column()";
+        
         convert_to_new_version(&tcolumn);
         uint32_t col_unique_id;
         if (tcolumn.col_unique_id >= 0) {
@@ -286,6 +313,10 @@ Status convert_t_schema_to_pb_schema(const TTabletSchema& tablet_schema, uint32_
         ColumnPB* column = schema->add_column();
 
         RETURN_IF_ERROR(t_column_to_pb_column(col_unique_id, tcolumn, column));
+        
+        LOG(ERROR) << "[CREATE_TABLE_DEBUG] After t_column_to_pb_column(), ColumnPB: name=" << column->name()
+                   << ", has_default=" << column->has_default_value()
+                   << ", default_value='" << (column->has_default_value() ? column->default_value() : "") << "'";
 
         has_bf_columns |= column->is_bf_column();
 

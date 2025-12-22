@@ -474,6 +474,12 @@ StatusOr<std::unique_ptr<ColumnIterator>> Segment::new_column_iterator_or_defaul
                                                                                   ColumnAccessPath* path) {
     auto id = column.unique_id();
     if (_column_readers.contains(id)) {
+        // [COLUMN_EXISTS_DEBUG] Column found in segment, reading from physical data
+        LOG(ERROR) << "[COLUMN_EXISTS_DEBUG] Column found in segment: " << column.name()
+                   << ", unique_id=" << id
+                   << ", type=" << column.type()
+                   << ", tablet_id=" << _tablet_schema->id();
+        
         ASSIGN_OR_RETURN(auto source_iter, _column_readers[id]->new_iterator(path, &column));
         if (_column_readers[id]->column_type() == column.type()) {
             return source_iter;
@@ -489,10 +495,21 @@ StatusOr<std::unique_ptr<ColumnIterator>> Segment::new_column_iterator_or_defaul
         return _new_extended_column_iterator(column, path);
     }
 
+    // [COLUMN_MISSING_DEBUG] Column not found in segment, need to use default value or null
+    LOG(ERROR) << "[COLUMN_MISSING_DEBUG] Column NOT found in segment: " << column.name()
+               << ", unique_id=" << id
+               << ", has_default=" << column.has_default_value()
+               << ", default_value='" << column.default_value() << "'"
+               << ", is_nullable=" << column.is_nullable()
+               << ", tablet_id=" << _tablet_schema->id();
+
     if (!column.has_default_value() && !column.is_nullable()) {
         return Status::InternalError(
                 fmt::format("invalid nonexistent column({}) without default value.", column.name()));
     } else {
+        LOG(ERROR) << "[DEFAULT_VALUE_PATH_1] Creating DefaultValueColumnIterator for column: " << column.name()
+                  << ", type: " << column.type() << ", has_default: " << column.has_default_value()
+                  << ", default_value: " << column.default_value();
         const TypeInfoPtr& type_info = get_type_info(column);
         auto default_value_iter = std::make_unique<DefaultValueColumnIterator>(
                 column.has_default_value(), column.default_value(), column.is_nullable(), type_info, column.length(),
@@ -519,6 +536,9 @@ StatusOr<ColumnIteratorUPtr> Segment::_new_extended_column_iterator(const Tablet
     if (source_index < 0 || static_cast<size_t>(source_index) >= _tablet_schema->num_columns()) {
         // The root column does not exist in this segment (e.g., added by schema change later).
         // Fall back to column default/nullability.
+        LOG(ERROR) << "[DEFAULT_VALUE_PATH_2] Creating DefaultValueColumnIterator for extended column: " << column.name()
+                  << ", type: " << column.type() << ", root_column: " << col_name
+                  << ", has_default: " << column.has_default_value() << ", default_value: " << column.default_value();
         const TypeInfoPtr& type_info = get_type_info(column);
         auto default_iter = std::make_unique<DefaultValueColumnIterator>(column.has_default_value(),
                                                                          column.default_value(), column.is_nullable(),
@@ -572,6 +592,9 @@ StatusOr<ColumnIteratorUPtr> Segment::_new_extended_column_iterator(const Tablet
     }
     if (column_reader->is_flat_json() && !may_contains) {
         // create an iterator always return NULL for fields that don't exist in this segment
+        LOG(ERROR) << "[DEFAULT_VALUE_PATH_10] Creating DefaultValueColumnIterator for missing FlatJSON field: "
+                  << full_path << ", column: " << column.name() << ", type: " << column.type() 
+                  << ", return NULL (field not in segment)";
         auto default_null_iter = std::make_unique<DefaultValueColumnIterator>(false, "", true, get_type_info(column),
                                                                               column.length(), num_rows());
         ColumnIteratorOptions iter_opts;

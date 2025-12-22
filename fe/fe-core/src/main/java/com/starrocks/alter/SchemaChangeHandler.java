@@ -1126,10 +1126,18 @@ public class SchemaChangeHandler extends AlterHandler {
         if (newColumn.isAutoIncrement() || newColumn.isGeneratedColumn()) {
             fastSchemaEvolution = false;
         }
-
-        if (newColumn.getDefaultValue() != null && newColumn.getDefaultExpr() != null) {
-            fastSchemaEvolution = false;
+        
+        // Complex type default expressions are only supported with fast schema evolution
+        // Non-fast schema evolution requires data rewriting which is not yet implemented for complex types
+        if (newColumn.getDefaultExpr() != null && newColumn.getDefaultExpr().isComplexExpr()) {
+            if (!fastSchemaEvolution) {
+                throw new DdlException(
+                    "Complex type (ARRAY/MAP/STRUCT) default values require fast schema evolution. " +
+                    "Table '" + olapTable.getName() + "' has fast_schema_evolution=false. " +
+                    "This property can only be set during table creation and cannot be modified later.");
+            }
         }
+
         if (newColumn.getDefaultExpr() != null && newColumn.getDefaultValueType() == Column.DefaultValueType.CONST) {
             long startTime = ConnectContext.get().getStartTime();
             newColumn.setDefaultValue(newColumn.calculatedDefaultValueWithTime(startTime));

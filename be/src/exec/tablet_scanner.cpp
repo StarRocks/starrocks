@@ -24,6 +24,7 @@
 #include "service/backend_options.h"
 #include "storage/chunk_helper.h"
 #include "storage/column_predicate_rewriter.h"
+#include "storage/default_value_expr_utils.h"
 #include "storage/predicate_parser.h"
 #include "storage/projection_iterator.h"
 #include "storage/storage_engine.h"
@@ -53,7 +54,15 @@ Status TabletScanner::init(RuntimeState* runtime_state, const TabletScannerParam
     // if column_desc come from fe, reset tablet schema
     if (_parent->_olap_scan_node.__isset.columns_desc && !_parent->_olap_scan_node.columns_desc.empty() &&
         _parent->_olap_scan_node.columns_desc[0].col_unique_id >= 0) {
-        _tablet_schema = TabletSchema::copy(*_tablet->tablet_schema(), _parent->_olap_scan_node.columns_desc);
+        // ⭐ Preprocess: evaluate default_expr to default_value for complex types
+        auto columns_desc_copy = _parent->_olap_scan_node.columns_desc;
+        Status preprocess_status = preprocess_default_expr_for_tcolumns(columns_desc_copy);
+        if (!preprocess_status.ok()) {
+            LOG(WARNING) << "[DEFAULT_EXPR_PREPROCESS] Failed to preprocess default_expr in TabletScanner: "
+                        << preprocess_status.to_string();
+        }
+        
+        _tablet_schema = TabletSchema::copy(*_tablet->tablet_schema(), columns_desc_copy);
     } else {
         _tablet_schema = _tablet->tablet_schema();
     }

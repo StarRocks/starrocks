@@ -84,6 +84,7 @@ set(STORAGE_FILES
     rowset/column_writer.cpp
     rowset/column_decoder.cpp
     rowset/default_value_column_iterator.cpp
+    default_value_expr_utils.cpp
     rowset/dictcode_column_iterator.cpp
     rowset/encoding_info.cpp
     rowset/fill_subfield_iterator.cpp

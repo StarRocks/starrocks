@@ -31,6 +31,7 @@
 #include "exec/pipeline/scan/olap_scan_context.h"
 #include "exec/pipeline/scan/scan_operator.h"
 #include "exec/workgroup/work_group.h"
+#include "exprs/jsonpath.h"
 #include "gen_cpp/Metrics_types.h"
 #include "gen_cpp/RuntimeProfile_types.h"
 #include "gutil/map_util.h"
@@ -40,6 +41,7 @@
 #include "runtime/exec_env.h"
 #include "storage/chunk_helper.h"
 #include "storage/column_predicate_rewriter.h"
+#include "storage/default_value_expr_utils.h"
 #include "storage/index/vector/vector_search_option.h"
 #include "storage/predicate_parser.h"
 #include "storage/projection_iterator.h"
@@ -47,6 +49,7 @@
 #include "storage/storage_engine.h"
 #include "storage/tablet_index.h"
 #include "types/logical_type.h"
+#include "util/json.h"
 #include "util/runtime_profile.h"
 #include "util/table_metrics.h"
 
@@ -521,6 +524,60 @@ Status OlapChunkSource::_extend_schema_by_access_paths() {
         int32_t root_uid = _tablet_schema->column(static_cast<size_t>(root_column_index)).unique_id();
         column.set_extended_info(std::make_unique<ExtendedColumnInfo>(path.get(), root_uid));
 
+        // Inherit default value from parent column if exists
+        const auto& root_column = _tablet_schema->column(static_cast<size_t>(root_column_index));
+        if (root_column.has_default_value() && root_column.type() == TYPE_JSON) {
+            const std::string& json_default = root_column.default_value();
+            auto json_or = JsonValue::parse_json_or_string(Slice(json_default));
+            if (json_or.ok()) {
+                // Extract the sub path from linear path, e.g. "profile.level" -> "$.level"
+                std::string linear = path->linear_path();
+                std::string parent = path->path();
+                std::string json_path_str;
+                if (linear.size() > parent.size() && linear.compare(0, parent.size(), parent) == 0) {
+                    // linear = "profile.level", parent = "profile" -> sub = ".level" -> "$level"
+                    json_path_str = "$" + linear.substr(parent.size());
+                } else {
+                    json_path_str = "$";
+                }
+
+                auto json_path_or = JsonPath::parse(Slice(json_path_str));
+                if (json_path_or.ok()) {
+                    vpack::Builder builder;
+                    vpack::Slice extracted = JsonPath::extract(&json_or.value(), json_path_or.value(), &builder);
+                    if (!extracted.isNone()) {
+                        std::string default_value_str;
+
+                        // For string types (VARCHAR/CHAR), extract the raw string value without JSON quotes
+                        // For other types (INT/DOUBLE/BOOLEAN/etc), use JSON representation
+                        if (value_type == TYPE_VARCHAR || value_type == TYPE_CHAR) {
+                            if (extracted.isString()) {
+                                default_value_str = extracted.copyString();
+                            } else {
+                                // If not a string in JSON, convert to JSON string
+                                JsonValue extracted_value(extracted);
+                                auto result_str = extracted_value.to_string();
+                                if (result_str.ok()) {
+                                    default_value_str = *result_str;
+                                }
+                            }
+                        } else {
+                            // For non-string types, use JSON representation
+                            JsonValue extracted_value(extracted);
+                            auto result_str = extracted_value.to_string();
+                            if (result_str.ok()) {
+                                default_value_str = *result_str;
+                            }
+                        }
+
+                        if (!default_value_str.empty()) {
+                            column.set_default_value(default_value_str);
+                        }
+                    }
+                }
+            }
+        }
+
         // For UNIQUE/AGG tables, extended flat JSON subcolumns act as value columns and
         // must have a valid aggregation method for pre-aggregation. Use REPLACE, which is
         // consistent with value-column semantics in these models.
@@ -550,9 +607,27 @@ Status OlapChunkSource::_init_olap_reader(RuntimeState* runtime_state) {
     auto scope = IOProfiler::scope(IOProfiler::TAG_QUERY, _scan_range->tablet_id);
 
     // schema_id that not greater than 0 is invalid
+    LOG(ERROR) << "[SCHEMA_SOURCE_DEBUG] FE sent schema_id=" 
+               << (_scan_node->thrift_olap_scan_node().__isset.schema_id ? 
+                   _scan_node->thrift_olap_scan_node().schema_id : -1)
+               << ", tablet local schema_id=" << _tablet->tablet_schema()->id()
+               << ", has_columns_desc=" << (_scan_node->thrift_olap_scan_node().__isset.columns_desc)
+               << ", tablet_id=" << _tablet->tablet_id();
+    
     if (_scan_node->thrift_olap_scan_node().__isset.schema_id && _scan_node->thrift_olap_scan_node().schema_id > 0 &&
         _scan_node->thrift_olap_scan_node().schema_id == _tablet->tablet_schema()->id()) {
         _tablet_schema = _tablet->tablet_schema();
+        LOG(ERROR) << "[SCHEMA_SOURCE_DEBUG] Schema ID matched! Using LOCAL tablet schema (from ColumnPB), "
+                   << "tablet_id=" << _tablet->tablet_id()
+                   << ", num_columns=" << _tablet_schema->num_columns();
+        
+        // Log default values for all columns
+        for (size_t i = 0; i < _tablet_schema->num_columns(); i++) {
+            const auto& col = _tablet_schema->column(i);
+            LOG(ERROR) << "[SCHEMA_SOURCE_DEBUG] Local column[" << i << "]: name=" << col.name()
+                       << ", has_default=" << col.has_default_value()
+                       << ", default_value='" << col.default_value() << "'";
+        }
     }
 
     if (_tablet_schema == nullptr) {
@@ -560,9 +635,30 @@ Status OlapChunkSource::_init_olap_reader(RuntimeState* runtime_state) {
         if (_scan_node->thrift_olap_scan_node().__isset.columns_desc &&
             !_scan_node->thrift_olap_scan_node().columns_desc.empty() &&
             _scan_node->thrift_olap_scan_node().columns_desc[0].col_unique_id >= 0) {
-            _tablet_schema =
-                    TabletSchema::copy(*_tablet->tablet_schema(), _scan_node->thrift_olap_scan_node().columns_desc);
+            LOG(ERROR) << "[SCHEMA_SOURCE_DEBUG] Schema ID NOT matched or not set! Using FE columns_desc, "
+                       << "tablet_id=" << _tablet->tablet_id()
+                       << ", columns_desc size=" << _scan_node->thrift_olap_scan_node().columns_desc.size();
+            
+            // ⭐ Preprocess: evaluate default_expr to default_value for complex types
+            auto columns_desc_copy = _scan_node->thrift_olap_scan_node().columns_desc;
+            Status preprocess_status = preprocess_default_expr_for_tcolumns(columns_desc_copy);
+            if (!preprocess_status.ok()) {
+                LOG(WARNING) << "[DEFAULT_EXPR_PREPROCESS] Failed to preprocess default_expr: "
+                            << preprocess_status.to_string();
+            }
+            
+            // Log FE sent columns
+            for (size_t i = 0; i < columns_desc_copy.size(); i++) {
+                const auto& tcol = columns_desc_copy[i];
+                LOG(ERROR) << "[SCHEMA_SOURCE_DEBUG] FE column[" << i << "]: name=" << tcol.column_name
+                          << ", has_default=" << tcol.__isset.default_value
+                          << ", default_value='" << (tcol.__isset.default_value ? tcol.default_value : "") << "'";
+            }
+            
+            _tablet_schema = TabletSchema::copy(*_tablet->tablet_schema(), columns_desc_copy);
         } else {
+            LOG(ERROR) << "[SCHEMA_SOURCE_DEBUG] No columns_desc from FE, using local tablet schema, "
+                       << "tablet_id=" << _tablet->tablet_id();
             _tablet_schema = _tablet->tablet_schema();
         }
     }

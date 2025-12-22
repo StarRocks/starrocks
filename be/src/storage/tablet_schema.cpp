@@ -250,6 +250,13 @@ void TabletColumn::init_from_pb(const ColumnPB& column) {
         ExtraFields* extra = _get_or_alloc_extra_fields();
         extra->has_default_value = true;
         extra->default_value = column.default_value();
+        LOG(ERROR) << "[CREATE_TABLE_DEBUG] TabletColumn::init_from_pb() loaded from temporary ColumnPB: "
+                   << "column=" << column.name()
+                   << ", has_default_value=true, default_value='" << column.default_value() << "'";
+    } else {
+        LOG(ERROR) << "[CREATE_TABLE_DEBUG] TabletColumn::init_from_pb() loaded from temporary ColumnPB: "
+                   << "column=" << column.name()
+                   << ", has_default_value=false (ColumnPB missing default_value!)";
     }
     for (size_t i = 0; i < column.children_columns_size(); ++i) {
         TabletColumn sub_column;
@@ -266,17 +273,48 @@ void TabletColumn::init_from_pb(const ColumnPB& column) {
 }
 
 void TabletColumn::init_from_thrift(const TColumn& tcolumn) {
+    LOG(ERROR) << "[FE_SCHEMA_DEBUG] TabletColumn::init_from_thrift() called for column: " 
+               << tcolumn.column_name
+               << ", has_default=" << tcolumn.__isset.default_value
+               << ", default_value='" << (tcolumn.__isset.default_value ? tcolumn.default_value : "")
+               << "', has_default_expr=" << tcolumn.__isset.default_expr;
+    
     _unique_id = tcolumn.col_unique_id;
     ColumnPB column_pb;
     auto shared_tcolumn_desc = std::make_shared<TColumn>(tcolumn);
     convert_to_new_version(shared_tcolumn_desc.get());
 
+    LOG(ERROR) << "[FE_SCHEMA_DEBUG] Calling t_column_to_pb_column() to convert TColumn to temporary ColumnPB...";
+
     WARN_IF_ERROR(t_column_to_pb_column(_unique_id, *shared_tcolumn_desc, &column_pb),
                   "failed to covert TColumn to ColumnPB");
+    
+    // ⭐⭐⭐ Handle complex type default_expr if present
+    // Note: We need RuntimeState to evaluate the expression, but it's not available here during table creation.
+    // For now, we store the JSON string that FE should have already converted and sent.
+    // In query scenarios (OlapScanNode), FE will convert the TExpr to JSON before sending.
+    if (tcolumn.__isset.default_expr) {
+        LOG(WARNING) << "[DEFAULT_EXPR_DEBUG] TColumn has default_expr, but RuntimeState not available in init_from_thrift(). "
+                     << "FE should convert TExpr to JSON string and send via default_value field instead.";
+        // For complex types, FE should evaluate the expression and send the JSON string via default_value
+        // This is a fallback - ideally FE handles this
+    }
+    
+    LOG(ERROR) << "[FE_SCHEMA_DEBUG] After t_column_to_pb_column(), temporary ColumnPB has_default_value=" 
+               << column_pb.has_default_value()
+               << ", default_value='" << (column_pb.has_default_value() ? column_pb.default_value() : "") << "'";
+    
+    LOG(ERROR) << "[FE_SCHEMA_DEBUG] Calling init_from_pb() to load from temporary ColumnPB...";
     init_from_pb(column_pb);
+    
+    LOG(ERROR) << "[FE_SCHEMA_DEBUG] After init_from_pb(), TabletColumn has_default=" << has_default_value()
+               << ", default_value='" << (has_default_value() ? default_value() : "") << "'";
 }
 
 void TabletColumn::to_schema_pb(ColumnPB* column) const {
+    LOG(ERROR) << "[CREATE_TABLE_DEBUG] TabletColumn::to_schema_pb() called for column: " << _col_name
+               << ", this will write to persistent ColumnPB for meta file";
+    
     column->mutable_name()->assign(_col_name.data(), _col_name.size());
     column->set_unique_id(_unique_id);
     column->set_type(logical_type_to_string(_type));
@@ -285,6 +323,10 @@ void TabletColumn::to_schema_pb(ColumnPB* column) const {
     column->set_is_auto_increment(is_auto_increment());
     if (has_default_value()) {
         column->set_default_value(default_value());
+        LOG(ERROR) << "[CREATE_TABLE_DEBUG] TabletColumn::to_schema_pb() writing default_value to PERSISTENT ColumnPB: "
+                   << "column=" << _col_name << ", default_value='" << default_value() << "'";
+    } else {
+        LOG(ERROR) << "[CREATE_TABLE_DEBUG] TabletColumn::to_schema_pb() no default_value for column: " << _col_name;
     }
     if (has_precision()) {
         column->set_precision(_precision);
@@ -432,12 +474,24 @@ TabletSchemaSPtr TabletSchema::copy(const TabletSchema& tablet_schema) {
 }
 
 TabletSchemaCSPtr TabletSchema::copy(const TabletSchema& src_schema, const std::vector<TColumn>& cols) {
+    LOG(ERROR) << "[FE_SCHEMA_DEBUG] TabletSchema::copy() called with FE columns_desc, "
+               << "num_columns=" << cols.size();
+    
     auto dst_schema = std::make_unique<TabletSchema>(src_schema);
     dst_schema->_clear_columns();
-    for (const auto& col : cols) {
+    for (size_t i = 0; i < cols.size(); i++) {
+        const auto& col = cols[i];
+        LOG(ERROR) << "[FE_SCHEMA_DEBUG] Processing FE column[" << i << "]: name=" << col.column_name
+                   << ", has_default=" << col.__isset.default_value
+                   << ", default_value='" << (col.__isset.default_value ? col.default_value : "") << "'";
+        
         dst_schema->append_column(TabletColumn(col));
     }
     dst_schema->_generate_sort_key_idxes();
+    
+    LOG(ERROR) << "[FE_SCHEMA_DEBUG] TabletSchema::copy() completed, final num_columns=" 
+               << dst_schema->num_columns();
+    
     return dst_schema;
 }
 
@@ -618,6 +672,10 @@ Status TabletSchema::_build_current_tablet_schema(int64_t schema_id, int32_t ver
 }
 
 void TabletSchema::to_schema_pb(TabletSchemaPB* tablet_schema_pb) const {
+    LOG(ERROR) << "[CREATE_TABLE_DEBUG] ===== TabletSchema::to_schema_pb() called ====="
+               << " schema_id=" << _id 
+               << ", num_columns=" << _cols.size();
+    
     if (_id != invalid_id()) {
         tablet_schema_pb->set_id(_id);
     }
