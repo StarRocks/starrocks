@@ -253,6 +253,8 @@ public:
         for (int i = 0; i < _field_casts.size(); ++i) {
             if (_field_casts[i] != nullptr) {
                 cloned->_field_casts.emplace_back(Expr::copy(pool, _field_casts[i]));
+            } else {
+                cloned->_field_casts.emplace_back(nullptr);
             }
         }
         cloned->_source_field_indices = _source_field_indices;

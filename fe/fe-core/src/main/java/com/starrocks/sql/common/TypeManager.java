@@ -382,8 +382,13 @@ public class TypeManager {
             if (fromStruct.getFields().size() != toStruct.getFields().size()) {
                 return false;
             }
-            for (int i = 0; i < fromStruct.getFields().size(); ++i) {
-                if (!canCastTo(fromStruct.getField(i).getType(), toStruct.getField(i).getType())) {
+            for (int i = 0; i < toStruct.getFields().size(); ++i) {
+                StructField toField = toStruct.getField(i);
+                StructField fromField = fromStruct.getField(toField.getName());
+                if (fromField == null) {
+                    return false;
+                }
+                if (!canCastTo(fromField.getType(), toField.getType())) {
                     return false;
                 }
             }

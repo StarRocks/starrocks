@@ -1828,15 +1828,15 @@ StatusOr<Expr*> VectorizedCastExprFactory::create_cast_expr(ObjectPool* pool, co
         std::vector<int> source_field_indices(to_type.children.size());
 
         for (int i = 0; i < to_type.children.size(); ++i) {
-            // Find the source field index by matching field names (case-insensitive)
             std::string target_name = to_type.field_names[i];
             std::transform(target_name.begin(), target_name.end(), target_name.begin(), ::tolower);
 
-            int source_idx = i;  // Default to positional matching
             auto it = from_field_name_to_index.find(target_name);
-            if (it != from_field_name_to_index.end()) {
-                source_idx = it->second;
+            if (it == from_field_name_to_index.end()) {
+                return Status::NotSupported(
+                        fmt::format("Struct field '{}' not found in source struct.", to_type.field_names[i]));
             }
+            int source_idx = it->second;
             source_field_indices[i] = source_idx;
 
             ASSIGN_OR_RETURN(field_casts[i],
