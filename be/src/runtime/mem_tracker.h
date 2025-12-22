@@ -280,11 +280,9 @@ public:
                 tracker->_consumption->add(bytes);
             } else {
                 // If this tracker is not shared, ignore shared_reserve_bytes
-                if (!tracker->is_shared()) {
-                    shared_reserve_bytes = 0;
-                }
+                size_t reserve = !tracker->is_shared() ? 0 : shared_reserve_bytes;
                 // Adjust limit to account for reserved memory
-                int64_t adjusted_limit = limit - shared_reserve_bytes;
+                int64_t adjusted_limit = limit - reserve;
                 if (adjusted_limit < 0) {
                     adjusted_limit = 0;
                 }
