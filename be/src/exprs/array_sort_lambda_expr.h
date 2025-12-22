@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <unordered_set>
+
 #include "column/nullable_column.h"
 #include "common/global_types.h"
 #include "common/object_pool.h"
@@ -45,13 +47,18 @@ public:
     int get_slot_ids(std::vector<SlotId>* slot_ids) const override;
 
 private:
-    template <bool is_const, bool independent_lambda_expr>
     StatusOr<ColumnPtr> evaluate_lambda_expr(ExprContext* context, Chunk* chunk, const Column* data_column);
 
+    Status validate_strict_weak_ordering(ExprContext* context, Chunk* chunk, const ArrayColumn* array_col);
+
+    Status check_lambda_only_depends_on_args(const LambdaFunction* lambda_function);
     // use map to make sure the order of execution
     std::map<SlotId, Expr*> _outer_common_exprs;
     // the slots initially required for lambda function evaluation, excluding lambda arguments,
     // other common expressions can be evaluated based on these slots.
     std::unordered_set<SlotId> _initial_required_slots;
+    // Cache for strict weak ordering validation result to avoid duplicate checks
+    mutable bool _comparator_validated = false;
+    mutable Status _comparator_validation_status = Status::OK();
 };
 } // namespace starrocks
