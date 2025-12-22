@@ -14,12 +14,14 @@
 
 package com.starrocks.http.rest.v2;
 
+import com.google.gson.reflect.TypeToken;
 import com.starrocks.common.util.ProfileManager;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
 import com.starrocks.http.rest.RestBaseAction;
+import com.starrocks.persist.gson.GsonUtils;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpResponseStatus;
 
@@ -69,7 +71,11 @@ public class ProfileActionV2 extends RestBaseAction {
             List<String> profileList = fetchResultFromOtherFrontendNodes(queryPath, authorization, HttpMethod.GET, false);
             for (String profile : profileList) {
                 if (profile != null) {
-                    sendSuccessResponse(response, profile, request);
+                    RestBaseResultV2<String> queryProfileResult = GsonUtils.GSON.fromJson(
+                            profile,
+                            new TypeToken<RestBaseResultV2<String>>() {
+                            }.getType());
+                    sendSuccessResponse(response, queryProfileResult.getResult(), request);
                     return;
                 }
             }
