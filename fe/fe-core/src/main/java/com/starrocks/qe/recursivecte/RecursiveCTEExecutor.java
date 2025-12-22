@@ -17,6 +17,7 @@ package com.starrocks.qe.recursivecte;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.TableName;
+import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
@@ -115,7 +116,7 @@ public class RecursiveCTEExecutor {
 
     public void prepareRecursiveCTE() throws Exception {
         UUID origUUID = connectContext.getQueryId();
-        try {
+        try (var ignore = Tracers.watchScope("prepareRecursiveCTE")) {
             prepareRecursiveCTEImpl();
         } catch (Exception e) {
             LOG.warn("Error occurred during preparing recursive CTE", e);
@@ -132,40 +133,44 @@ public class RecursiveCTEExecutor {
             RecursiveCTEGroup group = recursiveCTEGroups.get(cteName);
             TableName tempTableName = cteTempTableMap.get(cteName);
             // temp table creation
-            analyze(group.tempTableStmt, connectContext);
-            connectContext.setQueryId(UUIDUtil.genUUID());
-            connectContext.setExecutionId(UUIDUtil.toTUniqueId(connectContext.getQueryId()));
-            DDLStmtExecutor.execute(group.tempTableStmt, connectContext);
-
-            // start plan
-            InsertStmt insert = new InsertStmt(tempTableName, group.startStmt);
-            insert.setOrigStmt(new OriginStatement(AstToSQLBuilder.toSQL(insert)));
-            executor = StmtExecutor.newInternalExecutor(connectContext, insert);
-            connectContext.setQueryId(UUIDUtil.genUUID());
-            executor.execute();
-            if (!connectContext.getState().getErrType().equals(QueryState.ErrType.UNKNOWN)) {
-                LOG.warn("Error occurred during executing recursive CTE start statement: {}",
-                        connectContext.getState().getErrorMessage());
-                throw new RuntimeException("Error occurred during executing recursive CTE start statement: " +
-                        connectContext.getState().getErrorMessage());
+            try (var ignore = Tracers.watchScope("createRecursiveCTETempTable")) {
+                analyze(group.tempTableStmt, connectContext);
+                connectContext.setQueryId(UUIDUtil.genUUID());
+                connectContext.setExecutionId(UUIDUtil.toTUniqueId(connectContext.getQueryId()));
+                DDLStmtExecutor.execute(group.tempTableStmt, connectContext);
             }
-
-            // recursive plan
-            RecursiveCTEStager stager = new RecursiveCTEStager(group, tempTableName);
-            for (int i = 1; i < connectContext.getSessionVariable().getRecursiveCteMaxDepth(); i++) {
-                insert = stager.next();
+            // start plan
+            try (var ignore = Tracers.watchScope("executeRecursiveCTEStartStmt")) {
+                InsertStmt insert = new InsertStmt(tempTableName, group.startStmt);
+                insert.setOrigStmt(new OriginStatement(AstToSQLBuilder.toSQL(insert)));
                 executor = StmtExecutor.newInternalExecutor(connectContext, insert);
                 connectContext.setQueryId(UUIDUtil.genUUID());
                 executor.execute();
-                if (connectContext.getState().getAffectedRows() <= 0) {
-                    // no more rows inserted, break
-                    break;
+                if (!connectContext.getState().getErrType().equals(QueryState.ErrType.UNKNOWN)) {
+                    LOG.warn("Error occurred during executing recursive CTE start statement: {}",
+                            connectContext.getState().getErrorMessage());
+                    throw new RuntimeException("Error occurred during executing recursive CTE start statement: " +
+                            connectContext.getState().getErrorMessage());
                 }
-                if (connectContext.getState().getErrType() != QueryState.ErrType.UNKNOWN) {
-                    LOG.warn("Error occurred during executing recursive CTE recursive statement: {}",
-                            connectContext.getState().getErrorMessage());
-                    throw new RuntimeException("Error occurred during executing recursive CTE recursive statement: " +
-                            connectContext.getState().getErrorMessage());
+            }
+            try (var ignore = Tracers.watchScope("executeRecursiveCTERecursiveStmt")) {
+                // recursive plan
+                RecursiveCTEStager stager = new RecursiveCTEStager(group, tempTableName);
+                for (int i = 1; i < connectContext.getSessionVariable().getRecursiveCteMaxDepth(); i++) {
+                    InsertStmt insert = stager.next();
+                    executor = StmtExecutor.newInternalExecutor(connectContext, insert);
+                    connectContext.setQueryId(UUIDUtil.genUUID());
+                    executor.execute();
+                    if (connectContext.getState().getAffectedRows() <= 0) {
+                        // no more rows inserted, break
+                        break;
+                    }
+                    if (connectContext.getState().getErrType() != QueryState.ErrType.UNKNOWN) {
+                        LOG.warn("Error occurred during executing recursive CTE recursive statement: {}",
+                                connectContext.getState().getErrorMessage());
+                        throw new RuntimeException("Error occurred during executing recursive CTE recursive statement: " +
+                                connectContext.getState().getErrorMessage());
+                    }
                 }
             }
         }
