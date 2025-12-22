@@ -376,15 +376,18 @@ Status LakePrimaryIndex::flush_memtable(bool force) {
 Status LakePrimaryIndex::parallel_get(ParallelPublishContext* context) {
     auto current = context->segment_pk_iterator->current();
 
+    // `extend_slots` is not thread-safe, must be called before submitting task
+    context->extend_slots(); // Allocate a slot for this task's working data
+    auto slot = context->slots.back().get();
+
     // Define the task to execute (either async in thread pool or inline)
-    auto func = [this, context, current]() {
+    auto func = [this, context, current, slot]() {
         // Error handling: Must not throw or early return, as we need to wait for all tasks
         Status st = Status::OK();
 
         // Encode primary keys for this segment
         auto pk_column_st = context->segment_pk_iterator->encoded_pk_column(current.first.get());
         DCHECK(context->slots.size() > 0);
-        auto slot = context->slots.back().get();
 
         if (pk_column_st.ok()) {
             // Query index for existing rows with these primary keys
@@ -411,8 +414,6 @@ Status LakePrimaryIndex::parallel_get(ParallelPublishContext* context) {
     };
 
     if (context->token) {
-        // `extend_slots` is not thread-safe, must be called before submitting task
-        context->extend_slots(); // Allocate a slot for this task's working data
         // Parallel mode: Submit task to thread pool
         auto st = context->token->submit_func(func);
         TRACE_COUNTER_INCREMENT("parallel_get_cnt", 1);
@@ -422,7 +423,6 @@ Status LakePrimaryIndex::parallel_get(ParallelPublishContext* context) {
         context->status->update(st);
     } else {
         // Serial mode: Execute inline
-        context->extend_slots(); // Allocate a slot for this task's working data
         func();
         RETURN_IF_ERROR(*context->status);
     }
@@ -464,7 +464,7 @@ Status LakePrimaryIndex::parallel_upsert(uint32_t rssid, ParallelPublishContext*
 
             // Submit upsert task to thread pool. Pass nullptr for deletes since we collect
             // them in the context (not used for upsert, only for parallel_get)
-            auto st = upsert(rssid, current.second, *slot->pk_column, nullptr /* stat */, context);
+            st = upsert(rssid, current.second, *slot->pk_column, nullptr /* stat */, context);
             TRACE_COUNTER_INCREMENT("parallel_upsert_cnt", 1);
         } else {
             st = pk_column_st.status();
