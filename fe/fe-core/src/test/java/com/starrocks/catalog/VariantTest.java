@@ -548,15 +548,6 @@ public class VariantTest {
         Assertions.assertTrue(Variant.compatibleCompare(minDate, maxDate) < 0);
     }
 
-    @Test
-    public void testVariantMinAndMaxStaticMethods() {
-        Variant v1 = new IntVariant(IntegerType.INT, 10);
-        Variant v2 = new IntVariant(IntegerType.INT, 20);
-
-        Assertions.assertSame(v2, Variant.max(v1, v2));
-        Assertions.assertSame(v1, Variant.min(v1, v2));
-    }
-
     // ==================== Cross-type Comparison Tests ====================
 
     @Test

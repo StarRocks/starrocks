@@ -116,14 +116,6 @@ public abstract class Variant implements Comparable<Variant> {
         return Integer.compare(key1Length, key2Length);
     }
 
-    public static Variant max(Variant key1, Variant key2) {
-        return Variant.compatibleCompare(key1, key2) >= 0 ? key1 : key2;
-    }
-
-    public static Variant min(Variant key1, Variant key2) {
-        return Variant.compatibleCompare(key1, key2) <= 0 ? key1 : key2;
-    }
-
     public static Variant minVariant(Type type) {
         Preconditions.checkArgument(type.isValid(), "Invalid type for Variant.minVariant");
         switch (type.getPrimitiveType()) {
