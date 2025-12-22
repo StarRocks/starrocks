@@ -14,6 +14,7 @@
 
 #include "exec/spill/operator_mem_resource_manager.h"
 
+#include "common/config.h"
 #include "exec/pipeline/operator.h"
 
 namespace starrocks::spill {
@@ -24,7 +25,17 @@ void OperatorMemoryResourceManager::prepare(OP* op, QuerySpillManager* query_spi
     _releaseable |= _spillable;
     _query_spill_manager = query_spill_manager;
     if (_spillable) {
-        _query_spill_manager->increase_spillable_operators();
+        DCHECK(_query_spill_manager != nullptr);
+        _res_guard.inc_spillable_operators();
+    }
+    if (_query_spill_manager != nullptr) {
+        size_t reserved_bytes = 0;
+        if (_spillable) {
+            reserved_bytes = operator_avaliable_memory_bytes();
+        } else if (op->releaseable()) {
+            reserved_bytes = config::local_exchange_buffer_mem_limit_per_driver;
+        }
+        _res_guard.inc_reserve_bytes(reserved_bytes);
     }
 }
 
@@ -32,12 +43,6 @@ void OperatorMemoryResourceManager::to_low_memory_mode() {
     if (_performance_level < MEM_RESOURCE_LOW_MEMORY) {
         _performance_level = MEM_RESOURCE_LOW_MEMORY;
         _op->set_execute_mode(_performance_level);
-        if (_spillable) {
-            _query_spill_manager->increase_spilling_operators();
-        }
-        if (_op->releaseable()) {
-            set_releasing();
-        }
     }
 }
 
@@ -51,10 +56,38 @@ size_t OperatorMemoryResourceManager::operator_avaliable_memory_bytes() {
 }
 
 void OperatorMemoryResourceManager::close() {
-    if (_performance_level == MEM_RESOURCE_LOW_MEMORY && _query_spill_manager != nullptr) {
-        _query_spill_manager->decrease_spilling_operators();
-        _query_spill_manager->decrease_spillable_operators();
+    _res_guard.reset();
+}
+
+void OperatorMemoryResourceManager::ResGuard::reset() noexcept {
+    auto* query_spill_manager = _manager.query_spill_manager();
+    if (query_spill_manager == nullptr) {
+        DCHECK(_reserved_bytes == 0);
+        DCHECK(_spill_operators == 0);
+        return;
     }
+
+    query_spill_manager->dec_reserve_bytes(_reserved_bytes);
+
+    if (_spill_operators > 0) {
+        query_spill_manager->decrease_spillable_operators();
+    }
+
+    _reserved_bytes = 0;
+    _spill_operators = 0;
+}
+
+void OperatorMemoryResourceManager::ResGuard::inc_reserve_bytes(size_t bytes) {
+    auto* query_spill_manager = _manager.query_spill_manager();
+    query_spill_manager->inc_reserve_bytes(bytes);
+    _reserved_bytes += bytes;
+}
+
+void OperatorMemoryResourceManager::ResGuard::inc_spillable_operators() {
+    auto* query_spill_manager = _manager.query_spill_manager();
+    DCHECK_EQ(_spill_operators, 0);
+    query_spill_manager->increase_spillable_operators();
+    _spill_operators = 1;
 }
 
 } // namespace starrocks::spill
