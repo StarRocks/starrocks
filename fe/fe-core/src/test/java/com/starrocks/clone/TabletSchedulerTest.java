@@ -201,13 +201,13 @@ public class TabletSchedulerTest {
             allCtxs.add(tabletSchedCtx);
         }
 
+        Deencapsulation.setField(GlobalStateMgr.getCurrentState(), "recycleBin", recycleBin);
         TabletScheduler tabletScheduler = new TabletScheduler(tabletSchedulerStat);
 
         Config.catalog_trash_expire_second = 1;
         allCtxs.forEach(e -> tabletScheduler.addTablet(e, false));
         Assertions.assertEquals(tabletScheduler.getTotalNum(), 4);
-        GlobalStateMgr.getCurrentState().setRecycleBin(recycleBin);
-        Thread.sleep(1000);
+        Thread.sleep(1100);
         List<TabletSchedCtx> nextBatch = Deencapsulation.invoke(tabletScheduler, "getNextTabletCtxBatch");
         Assertions.assertEquals(nextBatch.size(), 0);
         Assertions.assertEquals(tabletScheduler.getTotalNum(), 0);

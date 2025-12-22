@@ -378,7 +378,7 @@ public class GlobalStateMgr {
     private final TabletInvertedIndex tabletInvertedIndex;
     private ColocateTableIndex colocateTableIndex;
 
-    private CatalogRecycleBin recycleBin;
+    private final CatalogRecycleBin recycleBin;
     private final FunctionSet functionSet;
 
     private final MetaReplayState metaReplayState;
@@ -587,11 +587,6 @@ public class GlobalStateMgr {
 
     public CatalogRecycleBin getRecycleBin() {
         return this.recycleBin;
-    }
-
-    @VisibleForTesting
-    public void setRecycleBin(CatalogRecycleBin catalogRecycleBin) {
-        this.recycleBin = catalogRecycleBin;
     }
 
     public MetaReplayState getMetaReplayState() {
