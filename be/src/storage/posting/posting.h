@@ -25,6 +25,7 @@ namespace starrocks {
 class Encoder;
 
 class PostingList {
+    static roaring::Roaring EMPTY;
 public:
     PostingList(const PostingList& rhs) = delete;
     PostingList& operator=(const PostingList& rhs) = delete;
@@ -38,9 +39,7 @@ public:
     void add_posting(rowid_t doc_id, rowid_t pos);
     void finalize() const;
 
-    uint32_t get_num_doc_ids() const;
-    roaring::Roaring get_all_doc_ids() const;
-    roaring::Roaring get_positions(rowid_t doc_id) const;
+    Status for_each_posting(std::function<Status(rowid_t doc_id, const roaring::Roaring&)>&& func) const;
 
 private:
     std::unique_ptr<BitmapUpdateContextRefOrSingleValue<uint64_t>> _postings = nullptr;

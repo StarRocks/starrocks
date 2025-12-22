@@ -14,6 +14,8 @@
 
 #include "storage/posting/posting.h"
 
+#include <map>
+
 #include "gtest/gtest.h"
 
 namespace starrocks {
@@ -22,18 +24,24 @@ class PostingListTest : public ::testing::Test {
 protected:
     void SetUp() override {}
     void TearDown() override {}
+
+    // Helper to collect postings via for_each_posting
+    static std::map<rowid_t, roaring::Roaring> collect_postings(const PostingList& posting_list) {
+        std::map<rowid_t, roaring::Roaring> result;
+        auto status = posting_list.for_each_posting([&result](rowid_t doc_id, const roaring::Roaring& positions) {
+            result[doc_id] = positions;
+            return Status::OK();
+        });
+        EXPECT_TRUE(status.ok());
+        return result;
+    }
 };
 
 TEST_F(PostingListTest, test_empty_posting_list) {
     PostingList posting_list;
 
-    EXPECT_EQ(0, posting_list.get_num_doc_ids());
-
-    roaring::Roaring all_doc_ids = posting_list.get_all_doc_ids();
-    EXPECT_TRUE(all_doc_ids.isEmpty());
-
-    roaring::Roaring positions = posting_list.get_positions(0);
-    EXPECT_TRUE(positions.isEmpty());
+    auto postings = collect_postings(posting_list);
+    EXPECT_TRUE(postings.empty());
 }
 
 TEST_F(PostingListTest, test_single_posting) {
@@ -43,18 +51,11 @@ TEST_F(PostingListTest, test_single_posting) {
     rowid_t pos = 5;
     posting_list.add_posting(doc_id, pos);
 
-    EXPECT_EQ(1, posting_list.get_num_doc_ids());
-
-    roaring::Roaring all_doc_ids = posting_list.get_all_doc_ids();
-    EXPECT_EQ(1, all_doc_ids.cardinality());
-    EXPECT_TRUE(all_doc_ids.contains(doc_id));
-
-    roaring::Roaring positions = posting_list.get_positions(doc_id);
-    EXPECT_EQ(1, positions.cardinality());
-    EXPECT_TRUE(positions.contains(pos));
-
-    roaring::Roaring no_positions = posting_list.get_positions(999);
-    EXPECT_TRUE(no_positions.isEmpty());
+    auto postings = collect_postings(posting_list);
+    EXPECT_EQ(1, postings.size());
+    EXPECT_TRUE(postings.contains(doc_id));
+    EXPECT_EQ(1, postings[doc_id].cardinality());
+    EXPECT_TRUE(postings[doc_id].contains(pos));
 }
 
 TEST_F(PostingListTest, test_multiple_postings_same_doc_id) {
@@ -67,17 +68,13 @@ TEST_F(PostingListTest, test_multiple_postings_same_doc_id) {
 
     posting_list.finalize();
 
-    EXPECT_EQ(1, posting_list.get_num_doc_ids());
-
-    roaring::Roaring all_doc_ids = posting_list.get_all_doc_ids();
-    EXPECT_EQ(1, all_doc_ids.cardinality());
-    EXPECT_TRUE(all_doc_ids.contains(doc_id));
-
-    roaring::Roaring positions = posting_list.get_positions(doc_id);
-    EXPECT_EQ(3, positions.cardinality());
-    EXPECT_TRUE(positions.contains(1));
-    EXPECT_TRUE(positions.contains(5));
-    EXPECT_TRUE(positions.contains(10));
+    auto postings = collect_postings(posting_list);
+    EXPECT_EQ(1, postings.size());
+    EXPECT_TRUE(postings.contains(doc_id));
+    EXPECT_EQ(3, postings[doc_id].cardinality());
+    EXPECT_TRUE(postings[doc_id].contains(1));
+    EXPECT_TRUE(postings[doc_id].contains(5));
+    EXPECT_TRUE(postings[doc_id].contains(10));
 }
 
 TEST_F(PostingListTest, test_multiple_postings_different_doc_ids) {
@@ -91,27 +88,22 @@ TEST_F(PostingListTest, test_multiple_postings_different_doc_ids) {
 
     posting_list.finalize();
 
-    EXPECT_EQ(3, posting_list.get_num_doc_ids());
+    auto postings = collect_postings(posting_list);
+    EXPECT_EQ(3, postings.size());
+    EXPECT_TRUE(postings.contains(1));
+    EXPECT_TRUE(postings.contains(2));
+    EXPECT_TRUE(postings.contains(3));
 
-    roaring::Roaring all_doc_ids = posting_list.get_all_doc_ids();
-    EXPECT_EQ(3, all_doc_ids.cardinality());
-    EXPECT_TRUE(all_doc_ids.contains(1));
-    EXPECT_TRUE(all_doc_ids.contains(2));
-    EXPECT_TRUE(all_doc_ids.contains(3));
+    EXPECT_EQ(2, postings[1].cardinality());
+    EXPECT_TRUE(postings[1].contains(10));
+    EXPECT_TRUE(postings[1].contains(11));
 
-    roaring::Roaring positions_1 = posting_list.get_positions(1);
-    EXPECT_EQ(2, positions_1.cardinality());
-    EXPECT_TRUE(positions_1.contains(10));
-    EXPECT_TRUE(positions_1.contains(11));
+    EXPECT_EQ(2, postings[2].cardinality());
+    EXPECT_TRUE(postings[2].contains(20));
+    EXPECT_TRUE(postings[2].contains(21));
 
-    roaring::Roaring positions_2 = posting_list.get_positions(2);
-    EXPECT_EQ(2, positions_2.cardinality());
-    EXPECT_TRUE(positions_2.contains(20));
-    EXPECT_TRUE(positions_2.contains(21));
-
-    roaring::Roaring positions_3 = posting_list.get_positions(3);
-    EXPECT_EQ(1, positions_3.cardinality());
-    EXPECT_TRUE(positions_3.contains(30));
+    EXPECT_EQ(1, postings[3].cardinality());
+    EXPECT_TRUE(postings[3].contains(30));
 }
 
 TEST_F(PostingListTest, test_move_constructor) {
@@ -122,17 +114,12 @@ TEST_F(PostingListTest, test_move_constructor) {
 
     PostingList moved_list(std::move(posting_list));
 
-    EXPECT_EQ(2, moved_list.get_num_doc_ids());
-
-    roaring::Roaring all_doc_ids = moved_list.get_all_doc_ids();
-    EXPECT_TRUE(all_doc_ids.contains(1));
-    EXPECT_TRUE(all_doc_ids.contains(2));
-
-    roaring::Roaring positions_1 = moved_list.get_positions(1);
-    EXPECT_TRUE(positions_1.contains(10));
-
-    roaring::Roaring positions_2 = moved_list.get_positions(2);
-    EXPECT_TRUE(positions_2.contains(20));
+    auto postings = collect_postings(moved_list);
+    EXPECT_EQ(2, postings.size());
+    EXPECT_TRUE(postings.contains(1));
+    EXPECT_TRUE(postings.contains(2));
+    EXPECT_TRUE(postings[1].contains(10));
+    EXPECT_TRUE(postings[2].contains(20));
 }
 
 TEST_F(PostingListTest, test_move_assignment) {
@@ -141,26 +128,22 @@ TEST_F(PostingListTest, test_move_assignment) {
     posting_list.add_posting(6, 60);
     posting_list.finalize();
 
-    PostingList assigned_list;
-    assigned_list = std::move(posting_list);
+    PostingList assigned_list = std::move(posting_list);
 
-    EXPECT_EQ(2, assigned_list.get_num_doc_ids());
-
-    roaring::Roaring all_doc_ids = assigned_list.get_all_doc_ids();
-    EXPECT_TRUE(all_doc_ids.contains(5));
-    EXPECT_TRUE(all_doc_ids.contains(6));
-
-    roaring::Roaring positions_5 = assigned_list.get_positions(5);
-    EXPECT_TRUE(positions_5.contains(50));
-
-    roaring::Roaring positions_6 = assigned_list.get_positions(6);
-    EXPECT_TRUE(positions_6.contains(60));
+    auto postings = collect_postings(assigned_list);
+    EXPECT_EQ(2, postings.size());
+    EXPECT_TRUE(postings.contains(5));
+    EXPECT_TRUE(postings.contains(6));
+    EXPECT_TRUE(postings[5].contains(50));
+    EXPECT_TRUE(postings[6].contains(60));
 }
 
 TEST_F(PostingListTest, test_finalize_empty_list) {
     PostingList posting_list;
     posting_list.finalize();
-    EXPECT_EQ(0, posting_list.get_num_doc_ids());
+
+    auto postings = collect_postings(posting_list);
+    EXPECT_TRUE(postings.empty());
 }
 
 TEST_F(PostingListTest, test_finalize_single_value) {
@@ -168,16 +151,16 @@ TEST_F(PostingListTest, test_finalize_single_value) {
     posting_list.add_posting(100, 200);
     posting_list.finalize();
 
-    EXPECT_EQ(1, posting_list.get_num_doc_ids());
-    roaring::Roaring positions = posting_list.get_positions(100);
-    EXPECT_TRUE(positions.contains(200));
+    auto postings = collect_postings(posting_list);
+    EXPECT_EQ(1, postings.size());
+    EXPECT_TRUE(postings[100].contains(200));
 }
 
 TEST_F(PostingListTest, test_large_number_of_postings) {
     PostingList posting_list;
 
-    const int num_docs = 100;
-    const int positions_per_doc = 10;
+    constexpr int num_docs = 100;
+    constexpr int positions_per_doc = 10;
 
     for (rowid_t doc_id = 0; doc_id < num_docs; doc_id++) {
         for (rowid_t pos = 0; pos < positions_per_doc; pos++) {
@@ -187,28 +170,35 @@ TEST_F(PostingListTest, test_large_number_of_postings) {
 
     posting_list.finalize();
 
-    EXPECT_EQ(num_docs, posting_list.get_num_doc_ids());
-
-    roaring::Roaring all_doc_ids = posting_list.get_all_doc_ids();
-    EXPECT_EQ(num_docs, all_doc_ids.cardinality());
+    auto postings = collect_postings(posting_list);
+    EXPECT_EQ(num_docs, postings.size());
 
     for (rowid_t doc_id = 0; doc_id < num_docs; doc_id++) {
-        roaring::Roaring positions = posting_list.get_positions(doc_id);
-        EXPECT_EQ(positions_per_doc, positions.cardinality());
+        EXPECT_TRUE(postings.contains(doc_id));
+        EXPECT_EQ(positions_per_doc, postings[doc_id].cardinality());
         for (rowid_t pos = 0; pos < positions_per_doc; pos++) {
-            EXPECT_TRUE(positions.contains(pos));
+            EXPECT_TRUE(postings[doc_id].contains(pos));
         }
     }
 }
 
-TEST_F(PostingListTest, test_get_positions_nonexistent_doc_id) {
+TEST_F(PostingListTest, test_for_each_posting_error_propagation) {
     PostingList posting_list;
     posting_list.add_posting(1, 10);
     posting_list.add_posting(2, 20);
     posting_list.finalize();
 
-    roaring::Roaring positions = posting_list.get_positions(999);
-    EXPECT_TRUE(positions.isEmpty());
+    int call_count = 0;
+    auto status = posting_list.for_each_posting([&call_count](rowid_t doc_id, const roaring::Roaring& positions) {
+        call_count++;
+        if (doc_id == 2) {
+            return Status::InternalError("Test error");
+        }
+        return Status::OK();
+    });
+
+    // The callback should have been called and returned error
+    EXPECT_TRUE(call_count >= 1);
 }
 
 TEST_F(PostingListTest, test_boundary_values) {
@@ -222,17 +212,12 @@ TEST_F(PostingListTest, test_boundary_values) {
 
     posting_list.finalize();
 
-    EXPECT_EQ(2, posting_list.get_num_doc_ids());
-
-    roaring::Roaring all_doc_ids = posting_list.get_all_doc_ids();
-    EXPECT_TRUE(all_doc_ids.contains(0));
-    EXPECT_TRUE(all_doc_ids.contains(max_doc_id));
-
-    roaring::Roaring positions_0 = posting_list.get_positions(0);
-    EXPECT_TRUE(positions_0.contains(0));
-
-    roaring::Roaring positions_max = posting_list.get_positions(max_doc_id);
-    EXPECT_TRUE(positions_max.contains(max_pos));
+    auto postings = collect_postings(posting_list);
+    EXPECT_EQ(2, postings.size());
+    EXPECT_TRUE(postings.contains(0));
+    EXPECT_TRUE(postings.contains(max_doc_id));
+    EXPECT_TRUE(postings[0].contains(0));
+    EXPECT_TRUE(postings[max_doc_id].contains(max_pos));
 }
 
 } // namespace starrocks

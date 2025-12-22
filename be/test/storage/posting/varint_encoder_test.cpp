@@ -32,10 +32,12 @@ protected:
 // Test encoding and decoding empty roaring
 TEST_F(VarIntEncoderTest, test_encode_decode_empty) {
     roaring::Roaring empty;
-    ASSIGN_OR_ASSERT_FAIL(auto encoded, encoder_->encode(empty));
+    std::vector<uint8_t> encoded;
+    EXPECT_OK(encoder_->encode(empty, &encoded));
     EXPECT_TRUE(encoded.empty());
 
-    ASSIGN_OR_ASSERT_FAIL(auto decoded, encoder_->decode(encoded));
+    roaring::Roaring decoded;
+    EXPECT_OK(encoder_->decode(encoded, &decoded));
     EXPECT_TRUE(decoded.isEmpty());
 }
 
@@ -44,10 +46,12 @@ TEST_F(VarIntEncoderTest, test_encode_decode_single_value) {
     roaring::Roaring original;
     original.add(42);
 
-    ASSIGN_OR_ASSERT_FAIL(auto encoded, encoder_->encode(original));
+    std::vector<uint8_t> encoded;
+    EXPECT_OK(encoder_->encode(original, &encoded));
     EXPECT_FALSE(encoded.empty());
 
-    ASSIGN_OR_ASSERT_FAIL(auto decoded, encoder_->decode(encoded));
+    roaring::Roaring decoded;
+    EXPECT_OK(encoder_->decode(encoded, &decoded));
     EXPECT_EQ(1, decoded.cardinality());
     EXPECT_TRUE(decoded.contains(42));
 }
@@ -61,10 +65,12 @@ TEST_F(VarIntEncoderTest, test_encode_decode_multiple_values) {
     original.add(1000);
     original.add(10000);
 
-    ASSIGN_OR_ASSERT_FAIL(auto encoded, encoder_->encode(original));
+    std::vector<uint8_t> encoded;
+    EXPECT_OK(encoder_->encode(original, &encoded));
     EXPECT_FALSE(encoded.empty());
 
-    ASSIGN_OR_ASSERT_FAIL(auto decoded, encoder_->decode(encoded));
+    roaring::Roaring decoded;
+    EXPECT_OK(encoder_->decode(encoded, &decoded));
     EXPECT_EQ(5, decoded.cardinality());
     EXPECT_TRUE(decoded.contains(1));
     EXPECT_TRUE(decoded.contains(10));
@@ -80,10 +86,12 @@ TEST_F(VarIntEncoderTest, test_encode_decode_consecutive_values) {
         original.add(i);
     }
 
-    ASSIGN_OR_ASSERT_FAIL(auto encoded, encoder_->encode(original));
+    std::vector<uint8_t> encoded;
+    EXPECT_OK(encoder_->encode(original, & encoded));
     EXPECT_FALSE(encoded.empty());
 
-    ASSIGN_OR_ASSERT_FAIL(auto decoded, encoder_->decode(encoded));
+    roaring::Roaring decoded;
+    EXPECT_OK(encoder_->decode(encoded, &decoded));
     EXPECT_EQ(100, decoded.cardinality());
     for (uint32_t i = 0; i < 100; i++) {
         EXPECT_TRUE(decoded.contains(i));
@@ -98,10 +106,12 @@ TEST_F(VarIntEncoderTest, test_encode_decode_sparse_values) {
     original.add(2000000);
     original.add(3000000);
 
-    ASSIGN_OR_ASSERT_FAIL(auto encoded, encoder_->encode(original));
+    std::vector<uint8_t> encoded;
+    EXPECT_OK(encoder_->encode(original, &encoded));
     EXPECT_FALSE(encoded.empty());
 
-    ASSIGN_OR_ASSERT_FAIL(auto decoded, encoder_->decode(encoded));
+    roaring::Roaring decoded;
+    EXPECT_OK(encoder_->decode(encoded, &decoded));
     EXPECT_EQ(4, decoded.cardinality());
     EXPECT_TRUE(decoded.contains(0));
     EXPECT_TRUE(decoded.contains(1000000));
@@ -121,8 +131,10 @@ TEST_F(VarIntEncoderTest, test_encode_decode_boundary_values) {
     original.add(2097152);   // Min 4-byte varint
     original.add(268435455); // Max 4-byte varint
 
-    ASSIGN_OR_ASSERT_FAIL(auto encoded, encoder_->encode(original));
-    ASSIGN_OR_ASSERT_FAIL(auto decoded, encoder_->decode(encoded));
+    std::vector<uint8_t> encoded;
+    roaring::Roaring decoded;
+    EXPECT_OK(encoder_->encode(original, &encoded));
+    EXPECT_OK(encoder_->decode(encoded, &decoded));
 
     EXPECT_EQ(original.cardinality(), decoded.cardinality());
     EXPECT_TRUE(decoded.contains(0));
@@ -140,10 +152,12 @@ TEST_F(VarIntEncoderTest, test_encode_decode_max_value) {
     roaring::Roaring original;
     original.add(std::numeric_limits<uint32_t>::max());
 
-    ASSIGN_OR_ASSERT_FAIL(auto encoded, encoder_->encode(original));
+    std::vector<uint8_t> encoded;
+    roaring::Roaring decoded;
+    EXPECT_OK(encoder_->encode(original, &encoded));
     EXPECT_FALSE(encoded.empty());
 
-    ASSIGN_OR_ASSERT_FAIL(auto decoded, encoder_->decode(encoded));
+    EXPECT_OK(encoder_->decode(encoded, &decoded));
     EXPECT_EQ(1, decoded.cardinality());
     EXPECT_TRUE(decoded.contains(std::numeric_limits<uint32_t>::max()));
 }
@@ -153,21 +167,21 @@ TEST_F(VarIntEncoderTest, test_encode_decode_value_helpers) {
     std::vector<uint8_t> output;
 
     // Test small value
-    VarIntEncoder::encodeValue(42, output);
+    VarIntEncoder::encodeValue(42, &output);
     size_t offset = 0;
     uint32_t decoded = VarIntEncoder::decodeValue(output, offset);
     EXPECT_EQ(42, decoded);
 
     // Test larger value
     output.clear();
-    VarIntEncoder::encodeValue(12345, output);
+    VarIntEncoder::encodeValue(12345, &output);
     offset = 0;
     decoded = VarIntEncoder::decodeValue(output, offset);
     EXPECT_EQ(12345, decoded);
 
     // Test max value
     output.clear();
-    VarIntEncoder::encodeValue(std::numeric_limits<uint32_t>::max(), output);
+    VarIntEncoder::encodeValue(std::numeric_limits<uint32_t>::max(), &output);
     offset = 0;
     decoded = VarIntEncoder::decodeValue(output, offset);
     EXPECT_EQ(std::numeric_limits<uint32_t>::max(), decoded);
@@ -180,8 +194,10 @@ TEST_F(VarIntEncoderTest, test_encode_decode_large_dataset) {
         original.add(i);
     }
 
-    ASSIGN_OR_ASSERT_FAIL(auto encoded, encoder_->encode(original));
-    ASSIGN_OR_ASSERT_FAIL(auto decoded, encoder_->decode(encoded));
+    std::vector<uint8_t> encoded;
+    roaring::Roaring decoded;
+    EXPECT_OK(encoder_->encode(original, &encoded));
+    EXPECT_OK(encoder_->decode(encoded, &decoded));
 
     EXPECT_EQ(original.cardinality(), decoded.cardinality());
     EXPECT_EQ(original, decoded);

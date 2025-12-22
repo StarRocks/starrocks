@@ -381,13 +381,15 @@ private:
         RETURN_IF_ERROR(posting_writer.init());
 
         const auto encoder = EncoderFactory::createEncoder(EncodingType::VARINT);
+        std::vector<uint8_t> buf;
         for (const auto* posting : posting_lists) {
-            for (const auto& doc_id : posting->get_all_doc_ids()) {
-                roaring::Roaring positions = posting->get_positions(doc_id);
-                ASSIGN_OR_RETURN(auto encoded, encoder->encode(positions));
-                Slice tmp(encoded.data(), encoded.size());
-                RETURN_IF_ERROR(posting_writer.add(&tmp));
-            }
+            RETURN_IF_ERROR(posting->for_each_posting([&](rowid_t doc_id, const roaring::Roaring& positions) -> Status {
+                VLOG(11) << "Encoding positions for doc " << doc_id << " with " << positions.cardinality()
+                         << " positions";
+                RETURN_IF_ERROR(encoder->encode(positions, &buf));
+                const Slice tmp(buf.data(), buf.size());
+                return posting_writer.add(&tmp);
+            }));
         }
         return posting_writer.finish(meta->mutable_posting_position_column());
     }

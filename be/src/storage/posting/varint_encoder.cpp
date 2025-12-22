@@ -10,12 +10,12 @@ VarIntEncoder::VarIntEncoder() = default;
 
 VarIntEncoder::~VarIntEncoder() = default;
 
-void VarIntEncoder::encodeValue(uint32_t value, std::vector<uint8_t>& output) {
+void VarIntEncoder::encodeValue(uint32_t value, std::vector<uint8_t>* output) {
     while (value >= 0x80) {
-        output.push_back(static_cast<uint8_t>((value & 0x7F) | 0x80));
+        output->push_back(static_cast<uint8_t>((value & 0x7F) | 0x80));
         value >>= 7;
     }
-    output.push_back(static_cast<uint8_t>(value & 0x7F));
+    output->push_back(static_cast<uint8_t>(value & 0x7F));
 }
 
 uint32_t VarIntEncoder::decodeValue(const std::vector<uint8_t>& data, size_t& offset) {
@@ -40,28 +40,29 @@ uint32_t VarIntEncoder::decodeValue(const std::vector<uint8_t>& data, size_t& of
     return result;
 }
 
-StatusOr<std::vector<uint8_t>> VarIntEncoder::encode(const roaring::Roaring& roaring) {
+Status VarIntEncoder::encode(const roaring::Roaring& roaring, std::vector<uint8_t>* result) {
+    result->clear();
     if (roaring.cardinality() <= 0) {
-        return std::vector<uint8_t>();
+        return Status::OK();
     }
 
     if (roaring.maximum() > std::numeric_limits<int32_t>::max()) {
         return Status::InvalidArgument("too large roaring for VarIntEncoder, should not bigger that 2147483647.");
     }
 
-    std::vector<uint8_t> encoded;
     uint32_t last = 0;
     for (const auto pos : roaring) {
         const uint32_t delta = pos - last;
-        encodeValue(delta, encoded);
+        encodeValue(delta, result);
         last = pos;
     }
-    return encoded;
+    return Status::OK();
 }
 
-StatusOr<roaring::Roaring> VarIntEncoder::decode(const std::vector<uint8_t>& data) {
+Status VarIntEncoder::decode(const std::vector<uint8_t>& data, roaring::Roaring* result) {
     if (data.empty()) {
-        return roaring::Roaring();
+        result->clear();
+        return Status::OK();
     }
 
     size_t offset = 0;
@@ -74,9 +75,11 @@ StatusOr<roaring::Roaring> VarIntEncoder::decode(const std::vector<uint8_t>& dat
     }
     positions.flush_pending_adds();
     if (positions.is_context()) {
-        return *positions.roaring();
+        result = positions.roaring();
+    } else {
+        result->add(positions.value());
     }
-    return roaring::Roaring::bitmapOf(1, positions.value());
+    return Status::OK();
 }
 
 } // namespace starrocks

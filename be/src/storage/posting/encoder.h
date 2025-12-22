@@ -41,14 +41,14 @@ public:
      * @param roaring signed integer ranged roaring bitmap
      * @return encoded byte array
      */
-    virtual StatusOr<std::vector<uint8_t>> encode(const roaring::Roaring& roaring) = 0;
+    virtual Status encode(const roaring::Roaring& roaring, std::vector<uint8_t>* result) = 0;
 
     /**
      * Decode a byte array back to unsigned 32-bit integers
      * @param data The encoded byte array
      * @return Decoded values
      */
-    virtual StatusOr<roaring::Roaring> decode(const std::vector<uint8_t>& data) = 0;
+    virtual Status decode(const std::vector<uint8_t>& data, roaring::Roaring* result) = 0;
 
     /**
      * Get the encoding type of this encoder

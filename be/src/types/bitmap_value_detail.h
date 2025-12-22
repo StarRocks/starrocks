@@ -789,6 +789,10 @@ public:
         return it->second;
     }
 
+    const std::map<uint32_t, Roaring>& getRoaringsRef() const {
+        return roarings;
+    }
+
     /**
      * return how many high bits we stored in this Roaring64Map
      *

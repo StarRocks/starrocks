@@ -35,45 +35,23 @@ void PostingList::finalize() const {
     _postings->roaring()->runOptimize();
 }
 
-uint32_t PostingList::get_num_doc_ids() const {
+Status PostingList::for_each_posting(std::function<Status(rowid_t doc_id, const roaring::Roaring&)>&& func) const {
     if (_postings == nullptr) {
-        return 0;
+        return Status::OK();
     }
 
     if (_postings->is_context()) {
-        return _postings->roaring()->getHighBitsCount();
+        const auto& ref = _postings->roaring()->getRoaringsRef();
+        for (const auto& [high, low_bitmap] : ref) {
+            RETURN_IF_ERROR(func(high, low_bitmap));
+        }
+    } else {
+        auto val = _postings->value();
+        rowid_t high = static_cast<rowid_t>(val >> 32);
+        roaring::Roaring single_pos({static_cast<uint32_t>(val)});
+        RETURN_IF_ERROR(func(high, single_pos));
     }
-    return 1;
-}
-
-roaring::Roaring PostingList::get_all_doc_ids() const {
-    if (_postings == nullptr) {
-        return roaring::Roaring();
-    }
-
-    if (_postings->is_context()) {
-        return _postings->roaring()->getAllHighBits();
-    }
-
-    auto val = _postings->value();
-    rowid_t high = static_cast<rowid_t>(val >> 32);
-    return roaring::Roaring({high});
-}
-
-roaring::Roaring PostingList::get_positions(rowid_t doc_id) const {
-    if (_postings == nullptr) {
-        return roaring::Roaring();
-    }
-
-    if (_postings->is_context()) {
-        return _postings->roaring()->getLowBitsRoaring(doc_id);
-    }
-    auto val = _postings->value();
-    rowid_t high = static_cast<rowid_t>(val >> 32);
-    if (high == doc_id) {
-        return roaring::Roaring({static_cast<uint32_t>(val)});
-    }
-    return roaring::Roaring();
+    return Status::OK();
 }
 
 } // namespace starrocks
