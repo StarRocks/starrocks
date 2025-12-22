@@ -373,12 +373,7 @@ void finalize_membership_filters(RuntimeFilterMergerStatus* rf_state, const size
         rf_state->exceeded = false;
     }
 
-<<<<<<< HEAD
-    VLOG_FILE << "RuntimeFilterMerger::merge_runtime_filter. assembled filter_id = " << filter_id
-              << ", be_number = " << be_number;
-=======
-    VLOG_FILE << "RuntimeFilterMerger::merge_runtime_filter. merged filter_id=" << filter_id;
->>>>>>> a7621dbc9a ([BugFix] Fix check can_use_bf when merging runtime filter (#67021))
+    VLOG_FILE << "RuntimeFilterMerger::merge_runtime_filter. merged filter_id = " << filter_id;
 
     if (!rf_state->exceeded) {
         VLOG_FILE << "RuntimeFilterMerger::merge_runtime_filter, clear bf in all filters";
