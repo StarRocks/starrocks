@@ -35,9 +35,10 @@ namespace starrocks::pipeline {
 struct NoBlockCountDownLatch {
     void reset(int32_t total) { _count_down = total; }
 
-    void count_down() {
-        _count_down--;
-        DCHECK_GE(_count_down, 0);
+    // return true if this is the last count down
+    bool count_down() {
+        DCHECK_GT(_count_down, 0);
+        return _count_down.fetch_sub(1) == 1;
     }
 
     bool ready() const { return _count_down == 0; }

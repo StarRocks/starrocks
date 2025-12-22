@@ -1,4 +1,4 @@
--- name: test_spill_hash_join_restore_cancelled
+-- name: test_spill_hash_join_restore_cancelled @sequential
 
 CREATE TABLE `t0` (
   `c0` int(11) NULL COMMENT "",
