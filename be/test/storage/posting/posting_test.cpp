@@ -40,6 +40,8 @@ protected:
 TEST_F(PostingListTest, test_empty_posting_list) {
     PostingList posting_list;
 
+    EXPECT_EQ(0, posting_list.get_num_doc_ids());
+
     auto postings = collect_postings(posting_list);
     EXPECT_TRUE(postings.empty());
 }
@@ -50,6 +52,8 @@ TEST_F(PostingListTest, test_single_posting) {
     rowid_t doc_id = 10;
     rowid_t pos = 5;
     posting_list.add_posting(doc_id, pos);
+
+    EXPECT_EQ(1, posting_list.get_num_doc_ids());
 
     auto postings = collect_postings(posting_list);
     EXPECT_EQ(1, postings.size());
@@ -90,6 +94,7 @@ TEST_F(PostingListTest, test_multiple_postings_different_doc_ids) {
 
     auto postings = collect_postings(posting_list);
     EXPECT_EQ(3, postings.size());
+    EXPECT_EQ(3, posting_list.get_num_doc_ids());
     EXPECT_TRUE(postings.contains(1));
     EXPECT_TRUE(postings.contains(2));
     EXPECT_TRUE(postings.contains(3));
@@ -116,6 +121,7 @@ TEST_F(PostingListTest, test_move_constructor) {
 
     auto postings = collect_postings(moved_list);
     EXPECT_EQ(2, postings.size());
+    EXPECT_EQ(2, moved_list.get_num_doc_ids());
     EXPECT_TRUE(postings.contains(1));
     EXPECT_TRUE(postings.contains(2));
     EXPECT_TRUE(postings[1].contains(10));
@@ -132,6 +138,7 @@ TEST_F(PostingListTest, test_move_assignment) {
 
     auto postings = collect_postings(assigned_list);
     EXPECT_EQ(2, postings.size());
+    EXPECT_EQ(2, assigned_list.get_num_doc_ids());
     EXPECT_TRUE(postings.contains(5));
     EXPECT_TRUE(postings.contains(6));
     EXPECT_TRUE(postings[5].contains(50));
@@ -142,6 +149,8 @@ TEST_F(PostingListTest, test_finalize_empty_list) {
     PostingList posting_list;
     posting_list.finalize();
 
+    EXPECT_EQ(0, posting_list.get_num_doc_ids());
+
     auto postings = collect_postings(posting_list);
     EXPECT_TRUE(postings.empty());
 }
@@ -150,6 +159,8 @@ TEST_F(PostingListTest, test_finalize_single_value) {
     PostingList posting_list;
     posting_list.add_posting(100, 200);
     posting_list.finalize();
+
+    EXPECT_EQ(1, posting_list.get_num_doc_ids());
 
     auto postings = collect_postings(posting_list);
     EXPECT_EQ(1, postings.size());
@@ -172,6 +183,7 @@ TEST_F(PostingListTest, test_large_number_of_postings) {
 
     auto postings = collect_postings(posting_list);
     EXPECT_EQ(num_docs, postings.size());
+    EXPECT_EQ(num_docs, posting_list.get_num_doc_ids());
 
     for (rowid_t doc_id = 0; doc_id < num_docs; doc_id++) {
         EXPECT_TRUE(postings.contains(doc_id));
@@ -214,6 +226,7 @@ TEST_F(PostingListTest, test_boundary_values) {
 
     auto postings = collect_postings(posting_list);
     EXPECT_EQ(2, postings.size());
+    EXPECT_EQ(2, posting_list.get_num_doc_ids());
     EXPECT_TRUE(postings.contains(0));
     EXPECT_TRUE(postings.contains(max_doc_id));
     EXPECT_TRUE(postings[0].contains(0));

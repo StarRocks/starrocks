@@ -35,6 +35,17 @@ void PostingList::finalize() const {
     _postings->roaring()->runOptimize();
 }
 
+uint32_t PostingList::get_num_doc_ids() const {
+    if (_postings == nullptr) {
+        return 0;
+    }
+
+    if (_postings->is_context()) {
+        return _postings->roaring()->getHighBitsCount();
+    }
+    return 1;
+}
+
 Status PostingList::for_each_posting(std::function<Status(rowid_t doc_id, const roaring::Roaring&)>&& func) const {
     if (_postings == nullptr) {
         return Status::OK();

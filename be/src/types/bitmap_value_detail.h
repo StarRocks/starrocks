@@ -773,22 +773,6 @@ public:
      */
     bool is32BitsEnough() const { return maximum() <= std::numeric_limits<uint32_t>::max(); }
 
-    /**
-     * Roaring64Map store 64-bit integers through std::map<uint32_t, Roaring>. So we can get low bits roaring for a
-     * high 32-bits.
-     *
-     * @param high get low bits roaring for this high
-     * @return low 32-bits roaring.
-     */
-    const Roaring& getLowBitsRoaring(uint32_t high) const {
-        const auto it = roarings.find(high);
-        if (it == roarings.end()) {
-            static const Roaring empty;
-            return empty;
-        }
-        return it->second;
-    }
-
     const std::map<uint32_t, Roaring>& getRoaringsRef() const {
         return roarings;
     }
@@ -800,20 +784,6 @@ public:
      */
     uint32_t getHighBitsCount() const {
         return roarings.size();
-    }
-
-    /**
-     * Roaring64Map store 64-bit integers through std::map<uint32_t, Roaring>. So we can get all high bits roaring by
-     * iterating all keys.
-     *
-     * @return high 32-bits roaring.
-     */
-    roaring::Roaring getAllHighBits() const {
-        roaring::Roaring roaring;
-        for (const auto& high : roarings | std::views::keys) {
-            roaring.add(high);
-        }
-        return roaring;
     }
 
     /**
