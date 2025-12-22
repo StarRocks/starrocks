@@ -205,38 +205,40 @@ StarRocks がサポートするさまざまなジョインは、指定された�
   LEFT JOIN t2 ON t1.id > t2.id;
   ```
 
-#### JOIN USING 句
+#### USING 句による Join
 
-`ON` を使用してジョイン条件を指定するほか、StarRocks は `USING` 句をサポートし、同じ列名を持つ等価ジョインを簡潔に記述できます。例：`SELECT * FROM t1 JOIN t2 USING (id)`。
+v4.0.2 以降、StarRocks では `ON` 句に加え、`USING` 句による Join 条件の指定をサポートしています。これにより、同名の列を用いた等値結合を簡略化できます。例：`SELECT * FROM t1 JOIN t2 USING (id)`。
 
-**バージョン間の違い：**
+**バージョン間の差異:**
 
-- **4.0.2 より前のバージョン**
+- **v4.0.2 以前のバージョン**
   
-  `USING` は構文糖として扱われ、内部で `ON` 条件に変換されていました。結果には左右両方のテーブルの USING 列が個別の列として含まれ、USING 列を参照する際にテーブルエイリアス修飾子（例：`t1.id`）の使用がサポートされていました。
-  
+  `USING` は構文上の簡略化として扱われ、内部的には `ON` 条件に変換されます。結果には左テーブルと右テーブルの両方の USING 列が個別の列として含まれ、USING 列を参照する際にはテーブルエイリアス修飾子（例: `t1.id`）の使用が許可されます。
+
+  例:
+
   ```SQL
-  -- 4.0.2 より前のバージョンでサポート
-  SELECT t1.id, t2.id FROM t1 JOIN t2 USING (id);  -- 2つの独立した id 列を返す
+  SELECT t1.id, t2.id FROM t1 JOIN t2 USING (id);  -- 2 つの独立した id 列を返す
   ```
 
-- **4.0.2 以降のバージョン**
+- **v4.0.2 以降のバージョン**
   
-  StarRocks は SQL 標準準拠の `USING` セマンティクスを実装しました。主な変更点：
+  StarRocks は SQL 標準の `USING` セマンティクスを実装しています。主な機能は以下の通りです：
   
-  - `FULL OUTER JOIN` を含むすべてのジョインタイプをサポート
-  - USING 列は結果で単一の統合列として表示されます（FULL OUTER JOIN の場合、`COALESCE(left.col, right.col)` セマンティクスを使用）
-  - USING 列の参照時にテーブルエイリアス修飾子（例：`t1.id`）はサポートされなくなり、非修飾の列名（例：`id`）を使用する必要があります
-  - `SELECT *` の場合、列の順序は：`[USING 列, 左テーブルの非 USING 列, 右テーブルの非 USING 列]`
-  
+  - `FULL OUTER JOIN` を含むすべての Join タイプがサポートされています。
+  - USING 列は結果において単一の結合列として表示されます。FULL OUTER JOIN の場合、`COALESCE(left.col, right.col)` のセマンティクスが使用されます。
+  - USING 列に対してテーブルエイリアス修飾子（例: `t1.id`）はサポートされなくなりました。修飾なしの列名（例: `id`）を使用する必要があります。
+  - `SELECT *`の結果では、列の順序は `[USING 列、左テーブルの非 USING 列、右テーブルの非 USING 列]` となります。
+
+  例:
+
   ```SQL
-  -- 4.0.2 以降のバージョン
-  SELECT id FROM t1 JOIN t2 USING (id);           -- ✅ 正しい: 単一の統合された id 列を返す
   SELECT t1.id FROM t1 JOIN t2 USING (id);        -- ❌ エラー: 列 'id' が曖昧
+  SELECT id FROM t1 JOIN t2 USING (id);           -- ✅ 正しい: 単一の統合された id 列を返す
   SELECT * FROM t1 FULL OUTER JOIN t2 USING (id); -- ✅ FULL OUTER JOIN がサポートされる
   ```
 
-この変更により、StarRocks の動作は PostgreSQL、Oracle、Trino などの SQL 標準準拠データベースと一致するようになりました。
+これらの変更により、StarRocks の動作は SQL 標準準拠データベースと一致するようになりました。
 
 ## ASOF Join
 

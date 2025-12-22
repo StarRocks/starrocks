@@ -218,37 +218,40 @@ SELECT t1.c1, t1.c2, t1.c2 FROM t1 LEFT ANTI JOIN t2 ON t1.id = t2.id;
   LEFT JOIN t2 ON t1.id > t2.id;
   ```
 
-#### JOIN USING 子句
+#### 使用 USING 子句进行 Join
 
-除了使用 `ON` 指定 Join 条件外，StarRocks 还支持使用 `USING` 子句来简化具有相同列名的等值 Join。例如：`SELECT * FROM t1 JOIN t2 USING (id)`。
+从 v4.0.2 版本开始，除 `ON` 子句外，StarRocks 还支持通过 `USING` 子句指定 Join 条件，便于简化具有相同列名的等值 Join。例如：`SELECT * FROM t1 JOIN t2 USING (id)`。
 
 **版本差异说明：**
 
-- **4.0.2 之前的版本**
+- **v4.0.2 之前的版本**
   
   `USING` 仅作为语法糖，会在内部转换为 `ON` 条件。返回结果会包含左右两侧表的 USING 列（作为独立的列），并且支持在查询时使用表别名限定符（例如 `t1.id`）来引用 USING 列。
-  
+
+  示例：
+
   ```SQL
-  -- 4.0.2 之前的版本支持
   SELECT t1.id, t2.id FROM t1 JOIN t2 USING (id);  -- 返回两个独立的 id 列
   ```
 
-- **4.0.2 及之后的版本**
+- **v4.0.2 及之后的版本**
   
-  StarRocks 实现了符合 SQL 标准的 `USING` 语义。主要变化包括：
+  StarRocks 实现了符合 SQL 标准的 `USING` 语义。主要功能包括：
   
-  - 支持所有类型的 Join，包括 `FULL OUTER JOIN`
-  - USING 列在结果中表示为单个合并列（对于 FULL OUTER JOIN，使用 `COALESCE(left.col, right.col)` 语义）
-  - 不再支持使用表别名限定符（例如 `t1.id`）引用 USING 列，必须使用非限定的列名（例如 `id`）
-  - 在 `SELECT *` 时，列顺序为：`[USING 列, 左表非 USING 列, 右表非 USING 列]`
-  
+  - 支持所有类型的 Join，包括 `FULL OUTER JOIN`。
+  - USING 列在结果中表示为单个合并列。对于 FULL OUTER JOIN，使用 `COALESCE(left.col, right.col)` 语义。
+  - 不再支持使用表别名限定符（例如 `t1.id`）引用 USING 列，必须使用非限定的列名（例如 `id`）。
+  - 对于 `SELECT *` 的结果，列顺序为：`[USING 列, 左表非 USING 列, 右表非 USING 列]`。
+
+  示例：
+
   ```SQL
-  -- 4.0.2 及之后的版本
-  SELECT id FROM t1 JOIN t2 USING (id);           -- ✅ 正确：返回单个合并的 id 列
   SELECT t1.id FROM t1 JOIN t2 USING (id);        -- ❌ 错误：列 'id' 存在歧义
+  SELECT id FROM t1 JOIN t2 USING (id);           -- ✅ 正确：返回单个合并的 id 列
   SELECT * FROM t1 FULL OUTER JOIN t2 USING (id); -- ✅ 支持 FULL OUTER JOIN
   ```
 
+这些变更使得 StarRocks 的行为与 SQL 标准数据库保持一致。
 
 ## ASOF Join
 
