@@ -18,6 +18,11 @@
 
 #include "column/column_helper.h"
 #include "storage/range.h"
+#include "storage/predicate_tree/predicate_tree_fwd.h"
+#include "formats/parquet/column_reader.h"
+#include "formats/parquet/types.h"
+#include "formats/parquet/utils.h"
+#include "common/logging.h"
 
 namespace starrocks::parquet {
 
@@ -179,6 +184,93 @@ TEST_F(ParquetPosReaderTest, TestReadRangeWithAllRowsSelected) {
     for (int i = 0; i < 4; i++) {
         ASSERT_EQ(column->get(i).get_int64(), 400 + i);
     }
+}
+
+// Test ParquetPosReader prepare method
+TEST_F(ParquetPosReaderTest, TestPrepare) {
+    // Create a ParquetPosReader
+    ParquetPosReader reader;
+    
+    // Prepare should always return OK
+    ASSERT_TRUE(reader.prepare().ok());
+}
+
+// Test ParquetPosReader get_levels method
+TEST_F(ParquetPosReaderTest, TestGetLevels) {
+    // Create a ParquetPosReader
+    ParquetPosReader reader;
+    
+    // Call get_levels (should not crash)
+    level_t* def_levels = nullptr;
+    level_t* rep_levels = nullptr;
+    size_t num_levels = 0;
+    reader.get_levels(&def_levels, &rep_levels, &num_levels);
+    
+    // Values should remain nullptr/0 as the method is a no-op
+    ASSERT_EQ(def_levels, nullptr);
+    ASSERT_EQ(rep_levels, nullptr);
+    ASSERT_EQ(num_levels, 0u);
+}
+
+// Test ParquetPosReader set_need_parse_levels method
+TEST_F(ParquetPosReaderTest, TestSetNeedParseLevels) {
+    // Create a ParquetPosReader
+    ParquetPosReader reader;
+    
+    // Call set_need_parse_levels (should not crash)
+    reader.set_need_parse_levels(true);
+    reader.set_need_parse_levels(false);
+}
+
+// Test ParquetPosReader collect_column_io_range method
+TEST_F(ParquetPosReaderTest, TestCollectColumnIoRange) {
+    // Create a ParquetPosReader
+    ParquetPosReader reader;
+    
+    // Call collect_column_io_range (should not crash)
+    std::vector<io::SharedBufferedInputStream::IORange> ranges;
+    int64_t end_offset = 0;
+    reader.collect_column_io_range(&ranges, &end_offset, ColumnIOType::PAGES, true);
+    reader.collect_column_io_range(nullptr, nullptr, ColumnIOType::PAGES, false);
+}
+
+// Test ParquetPosReader select_offset_index method
+TEST_F(ParquetPosReaderTest, TestSelectOffsetIndex) {
+    // Create a ParquetPosReader
+    ParquetPosReader reader;
+    
+    // Call select_offset_index (should not crash)
+    SparseRange<uint64_t> range;
+    reader.select_offset_index(range, 100);
+}
+
+// Test ParquetPosReader row_group_zone_map_filter method
+TEST_F(ParquetPosReaderTest, TestRowGroupZoneMapFilter) {
+    // Create a ParquetPosReader
+    ParquetPosReader reader;
+    
+    // Call row_group_zone_map_filter
+    std::vector<const ColumnPredicate*> predicates;
+    auto result = reader.row_group_zone_map_filter(predicates, CompoundNodeType::AND, 100, 50);
+    
+    // Should return false (position column does not support zone map filtering)
+    ASSERT_TRUE(result.ok());
+    ASSERT_FALSE(result.value());
+}
+
+// Test ParquetPosReader page_index_zone_map_filter method
+TEST_F(ParquetPosReaderTest, TestPageIndexZoneMapFilter) {
+    // Create a ParquetPosReader
+    ParquetPosReader reader;
+    
+    // Call page_index_zone_map_filter
+    std::vector<const ColumnPredicate*> predicates;
+    SparseRange<uint64_t> row_ranges;
+    auto result = reader.page_index_zone_map_filter(predicates, &row_ranges, CompoundNodeType::AND, 100, 50);
+    
+    // Should return false (position column does not support page index filtering)
+    ASSERT_TRUE(result.ok());
+    ASSERT_FALSE(result.value());
 }
 
 } // namespace starrocks::parquet
