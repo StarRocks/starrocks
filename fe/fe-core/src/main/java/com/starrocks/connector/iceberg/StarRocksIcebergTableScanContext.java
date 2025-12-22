@@ -51,7 +51,7 @@ public class StarRocksIcebergTableScanContext {
         this.tableName = tableName;
         this.planMode = planMode;
         this.connectContext = connectContext;
-        if (connectContext != null) {
+        if (connectContext != null && connectContext.getSessionVariable() != null) {
             this.fileSplitSize = connectContext.getSessionVariable().getConnectorHugeFileSize();
         }
     }
