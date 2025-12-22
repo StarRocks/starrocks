@@ -52,11 +52,7 @@ public class WindowTest extends PlanTestBase {
                 "\"compression\" = \"LZ4\"    \n" +
                 ");");
     }
-<<<<<<< HEAD
-    
-=======
 
->>>>>>> 10c2521629 ([BugFix] Fix ranking window optimization without partition-by and order-by (#67081))
     @Test
     public void testLagWindowFunction() throws Exception {
         String sql = "select lag(id_datetime, 1, '2020-01-01') over(partition by t1c) from test_all_type;";
