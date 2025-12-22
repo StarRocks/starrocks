@@ -41,6 +41,10 @@ public:
 
     Status merge_blocks_to_segments();
 
+    // Parallel merge spill blocks to segments when config enable_load_spill_parallel_merge is true
+    Status merge_blocks_to_segments_parallel(bool do_agg, const SchemaPtr& schema);
+    Status merge_blocks_to_segments_serial(bool do_agg, const SchemaPtr& schema);
+
     spill::Spiller* get_spiller() { return _load_chunk_spiller->spiller().get(); }
 
     int64_t txn_id() override;

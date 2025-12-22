@@ -31,12 +31,13 @@ namespace starrocks::lake {
 
 TabletInternalParallelMergeTask::TabletInternalParallelMergeTask(TabletWriter* writer, ChunkIterator* block_iterator,
                                                                  MemTracker* merge_mem_tracker, Schema* schema,
-                                                                 int32_t task_index)
+                                                                 int32_t task_index, QuitFlag* quit_flag)
         : _writer(writer),
           _block_iterator(block_iterator),
           _merge_mem_tracker(merge_mem_tracker),
           _schema(schema),
-          _task_index(task_index) {}
+          _task_index(task_index),
+          _quit_flag(quit_flag) {}
 
 TabletInternalParallelMergeTask::~TabletInternalParallelMergeTask() {
     if (_block_iterator != nullptr) {
@@ -52,7 +53,7 @@ void TabletInternalParallelMergeTask::run() {
     auto chunk_shared_ptr = ChunkHelper::new_chunk(*_schema, config::vector_chunk_size);
     auto chunk = chunk_shared_ptr.get();
     auto st = Status::OK();
-    while (true) {
+    while (!_quit_flag->quit.load()) {
         chunk->reset();
         auto itr_st = _block_iterator->get_next(chunk);
         if (itr_st.is_end_of_file()) {
@@ -79,10 +80,19 @@ void TabletInternalParallelMergeTask::run() {
             "SpillMemTableSink parallel merge blocks to segment finished, txn:{} tablet:{} "
             "task_index:{}, cost {} ms",
             _writer->txn_id(), _writer->tablet_id(), _task_index, timer.elapsed_time() / 1000000);
-    _status.update(st);
+    update_status(st);
+}
+
+void TabletInternalParallelMergeTask::cancel() {
+    update_status(Status::Cancelled("TabletInternalParallelMergeTask cancelled"));
 }
 
 void TabletInternalParallelMergeTask::update_status(const Status& st) {
     _status.update(st);
+    if (!st.ok() && _quit_flag != nullptr) {
+        // Notify other tasks to quit
+        _quit_flag->quit.store(true);
+    }
 }
+
 } // namespace starrocks::lake

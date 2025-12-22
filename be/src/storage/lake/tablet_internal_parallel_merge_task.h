@@ -27,14 +27,20 @@ namespace lake {
 
 class TabletWriter;
 
+struct QuitFlag {
+    std::atomic<bool> quit{false};
+};
+
 class TabletInternalParallelMergeTask : public Runnable {
 public:
     TabletInternalParallelMergeTask(TabletWriter* writer, ChunkIterator* block_iterator, MemTracker* merge_mem_tracker,
-                                    Schema* schema, int32_t task_index);
+                                    Schema* schema, int32_t task_index, QuitFlag* quit_flag);
 
     ~TabletInternalParallelMergeTask();
 
     void run() override;
+
+    void cancel() override;
 
     void update_status(const Status& st);
 
@@ -47,6 +53,7 @@ private:
     Schema* _schema = nullptr;
     int32_t _task_index = 0;
     Status _status;
+    QuitFlag* _quit_flag = nullptr;
 };
 
 } // namespace lake
