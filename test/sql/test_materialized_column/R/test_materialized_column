@@ -398,7 +398,7 @@ DROP TABLE t;
 DROP DATABASE test_materialized_column_schema_change;
 -- result:
 -- !result
--- name: test_normal_column_schema_change
+-- name: test_normal_column_schema_change @native
 CREATE DATABASE test_normal_column_schema_change;
 -- result:
 -- !result
@@ -888,7 +888,7 @@ DROP TABLE t;
 DROP DATABASE test_schema_change_for_constant_expression;
 -- result:
 -- !result
--- name: test_schema_change_for_after
+-- name: test_schema_change_for_after @native
 CREATE DATABASE test_schema_change_for_after;
 -- result:
 -- !result
