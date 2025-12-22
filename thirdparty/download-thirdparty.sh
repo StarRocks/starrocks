@@ -292,6 +292,10 @@ if [ ! -f $PATCHED_MARK ] && [ $LZ4_SOURCE == "lz4-1.7.5" ]; then
     patch -p0 < $TP_PATCH_DIR/lz4-1.7.5.patch
     touch $PATCHED_MARK
 fi
+if [ ! -f $PATCHED_MARK ] && [ $LZ4_SOURCE == "lz4-1.9.4" ]; then
+    patch -p1 < $TP_PATCH_DIR/lz4-1.9.4-pr1268.patch
+    touch $PATCHED_MARK
+fi
 cd -
 echo "Finished patching $LZ4_SOURCE"
 
