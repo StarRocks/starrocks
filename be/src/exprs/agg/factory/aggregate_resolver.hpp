@@ -108,6 +108,12 @@ public:
         }
     }
 
+    template <typename SpecificAggFunctionPtr = AggregateFunctionPtr>
+    void add_general_window_mapping_notnull(const std::string& name, SpecificAggFunctionPtr fun) {
+        _general_mapping.emplace(std::make_tuple(name, true, false), fun);
+        _general_mapping.emplace(std::make_tuple(name, true, true), fun);
+    }
+
     template <class StateType, typename SpecificAggFunctionPtr = AggregateFunctionPtr, bool IgnoreNull = true>
     void add_general_mapping(const std::string& name, bool is_window, SpecificAggFunctionPtr fun) {
         _general_mapping.emplace(std::make_tuple(name, false, false), fun);

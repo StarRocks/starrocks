@@ -47,11 +47,22 @@ inline constexpr bool IsUnresizableWindowFunctionState<MinAggregateData<TYPE_VAR
 template <LogicalType LT>
 inline constexpr bool IsUnresizableWindowFunctionState<ApproxTopKState<LT>> = true;
 
+template <LogicalType LT, bool is_distinct, typename MyHashSet>
+inline constexpr bool IsUnresizableWindowFunctionState<ArrayAggWindowState<LT, is_distinct, MyHashSet>> = true;
+
+template <>
+inline constexpr bool IsUnresizableWindowFunctionState<ArrayAggWindowStateV2> = true;
+
 template <typename T>
 constexpr bool IsNeverNullFunctionState = false;
 
 template <LogicalType LT>
 inline constexpr bool IsNeverNullFunctionState<ApproxTopKState<LT>> = true;
+
+template <LogicalType LT, bool is_distinct, typename MyHashSet>
+inline constexpr bool IsNeverNullFunctionState<ArrayAggWindowState<LT, is_distinct, MyHashSet>> = true;
+template <>
+inline constexpr bool IsNeverNullFunctionState<ArrayAggWindowStateV2> = true;
 
 struct NullableAggregateWindowFunctionState {
     // The following two fields are only used in "update_state_removable_cumulatively"

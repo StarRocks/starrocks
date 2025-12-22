@@ -45,9 +45,11 @@ order_by_clause ::= ORDER BY expr [ASC | DESC] [, expr [ASC | DESC] ...]
 
     ```SQL
     ROWS BETWEEN [ { m | UNBOUNDED } PRECEDING | CURRENT ROW] [ AND [CURRENT ROW | { UNBOUNDED | n } FOLLOWING] ]
+    RANGE BETWEEN [ { m | UNBOUNDED } PRECEDING | CURRENT ROW] [ AND [CURRENT ROW | { UNBOUNDED | n } FOLLOWING] ]
     ```
 
     > 注意：Window 子句必须在 Order By 子句之内。
+    > **ARRAY_AGG() 窗口帧限制**：当使用 ARRAY_AGG() 作为窗口函数时，仅支持 RANGE 帧。不支持 ROWS 帧。
 
 ## 窗口函数建表示例
 
@@ -82,6 +84,204 @@ INSERT INTO `scores` VALUES
   (6, "amber", NULL, 90),
   (6, "amber", "physics", 100);
   ```
+
+## ARRAY_AGG()
+
+`ARRAY_AGG()` 函数用于将窗口内的值（包括 NULL 值）聚合到一个数组中。可以与 `DISTINCT` 关键字结合使用来去除重复值，也可以使用 `ORDER BY` 子句来指定数组中元素的顺序。
+
+该函数从 3.4 版本开始支持。
+
+:::warning ARRAY_AGG() 窗口帧限制
+当使用 `ARRAY_AGG()` 作为窗口函数时，仅支持 **RANGE** 窗口帧。**不支持 ROWS 窗口帧**。如果指定 ROWS 帧，将返回错误。
+:::
+
+**语法**：
+
+```SQL
+ARRAY_AGG([DISTINCT] expr [ORDER BY expr [ASC | DESC]]) OVER([partition_by_clause] [order_by_clause] [window_clause])
+```
+
+**参数说明**：
+
+- `expr`：需要聚合的表达式。
+- `DISTINCT`：可选。如果指定，将从结果数组中去除重复值。
+- `ORDER BY`：可选。指定结果数组中元素的顺序。
+
+**返回值**：
+
+返回一个 ARRAY，其中包含窗口内的所有值。
+
+**使用说明**：
+
+- NULL 值会包含在结果数组中。
+- 如果没有指定窗口帧，默认使用 `RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW`。
+- ORDER BY 子句中具有相同值的行将获得相同的数组结果（因为使用 RANGE 帧）。
+- 仅支持 RANGE 帧；不支持 ROWS 帧。
+
+**示例**：
+
+以下示例使用 [`scores`](#窗口函数建表示例) 表中的数据。
+
+示例一：基本 ARRAY_AGG() 窗口函数 - 累积收集每个分区中当前行及之前行的分数。
+
+```SQL
+SELECT *,
+    array_agg(score) 
+        OVER (
+            PARTITION BY subject 
+            ORDER BY score
+        ) AS score_list
+FROM scores
+WHERE subject IN ('math');
+```
+
+返回：
+
+```plaintext
++------+-------+---------+-------+-------------------+
+| id   | name  | subject | score | score_list        |
++------+-------+---------+-------+-------------------+
+|    1 | lily  | math    |  NULL | [null]            |
+|    5 | mike  | math    |    70 | [null,70]         |
+|    2 | tom   | math    |    80 | [null,70,80,80]   |
+|    4 | amy   | math    |    80 | [null,70,80,80]   |
+|    6 | amber | math    |    92 | [null,70,80,80,92]|
+|    3 | jack  | math    |    95 | [null,70,80,80,92,95]|
++------+-------+---------+-------+-------------------+
+```
+
+注意：tom 和 amy 的分数都是 80，由于使用 RANGE 帧，他们获得相同的数组结果。
+
+示例二：使用 DISTINCT 去除重复值。
+
+```SQL
+SELECT *,
+    array_agg(DISTINCT score) 
+        OVER (
+            PARTITION BY subject 
+            ORDER BY score
+        ) AS unique_scores
+FROM scores
+WHERE subject IN ('math');
+```
+
+返回：
+
+```plaintext
++------+-------+---------+-------+------------------+
+| id   | name  | subject | score | unique_scores    |
++------+-------+---------+-------+------------------+
+|    1 | lily  | math    |  NULL | [null]           |
+|    5 | mike  | math    |    70 | [null,70]        |
+|    2 | tom   | math    |    80 | [null,70,80]     |
+|    4 | amy   | math    |    80 | [null,70,80]     |
+|    6 | amber | math    |    92 | [null,70,80,92]  |
+|    3 | jack  | math    |    95 | [null,70,80,92,95]|
++------+-------+---------+-------+------------------+
+```
+
+示例三：使用 ORDER BY 在 ARRAY_AGG 内部排序数组元素。
+
+```SQL
+SELECT *,
+    array_agg(score ORDER BY score DESC) 
+        OVER (
+            PARTITION BY subject
+        ) AS scores_desc
+FROM scores
+WHERE subject IN ('math');
+```
+
+返回：
+
+```plaintext
++------+-------+---------+-------+------------------------+
+| id   | name  | subject | score | scores_desc            |
++------+-------+---------+-------+------------------------+
+|    1 | lily  | math    |  NULL | [95,92,80,80,70,null]  |
+|    5 | mike  | math    |    70 | [95,92,80,80,70,null]  |
+|    2 | tom   | math    |    80 | [95,92,80,80,70,null]  |
+|    4 | amy   | math    |    80 | [95,92,80,80,70,null]  |
+|    6 | amber | math    |    92 | [95,92,80,80,70,null]  |
+|    3 | jack  | math    |    95 | [95,92,80,80,70,null]  |
++------+-------+---------+-------+------------------------+
+```
+
+示例四：使用显式 RANGE 帧聚合整个分区。
+
+```SQL
+SELECT *,
+    array_agg(score) 
+        OVER (
+            PARTITION BY subject 
+            ORDER BY score
+            RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
+        ) AS all_scores
+FROM scores
+WHERE subject IN ('math');
+```
+
+返回：
+
+```plaintext
++------+-------+---------+-------+--------------------------+
+| id   | name  | subject | score | all_scores               |
++------+-------+---------+-------+--------------------------+
+|    1 | lily  | math    |  NULL | [null,70,80,80,92,95]    |
+|    5 | mike  | math    |    70 | [null,70,80,80,92,95]    |
+|    2 | tom   | math    |    80 | [null,70,80,80,92,95]    |
+|    4 | amy   | math    |    80 | [null,70,80,80,92,95]    |
+|    6 | amber | math    |    92 | [null,70,80,80,92,95]    |
+|    3 | jack  | math    |    95 | [null,70,80,80,92,95]    |
++------+-------+---------+-------+--------------------------+
+```
+
+示例五：实际用例 - 收集股票价格历史。
+
+```SQL
+SELECT 
+    stock_symbol,
+    closing_date,
+    closing_price,
+    array_agg(closing_price) 
+        OVER (
+            PARTITION BY stock_symbol 
+            ORDER BY closing_date
+            RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+        ) AS price_history
+FROM stock_ticker;
+```
+
+返回：
+
+```plaintext
++--------------+---------------------+---------------+--------------------------------------+
+| stock_symbol | closing_date        | closing_price | price_history                        |
++--------------+---------------------+---------------+--------------------------------------+
+| JDR          | 2014-10-02 00:00:00 |         12.86 | [12.86]                              |
+| JDR          | 2014-10-03 00:00:00 |         12.89 | [12.86,12.89]                        |
+| JDR          | 2014-10-04 00:00:00 |         12.94 | [12.86,12.89,12.94]                  |
+| JDR          | 2014-10-05 00:00:00 |         12.55 | [12.86,12.89,12.94,12.55]            |
+| JDR          | 2014-10-06 00:00:00 |         14.03 | [12.86,12.89,12.94,12.55,14.03]      |
+| JDR          | 2014-10-07 00:00:00 |         14.75 | [12.86,12.89,12.94,12.55,14.03,14.75]|
+| JDR          | 2014-10-08 00:00:00 |         13.98 | [12.86,12.89,12.94,12.55,14.03,14.75,13.98]|
++--------------+---------------------+---------------+--------------------------------------+
+```
+
+示例六：无效用法 - 尝试使用 ROWS 帧（将返回错误）。
+
+```SQL
+-- 此查询将失败，因为 ARRAY_AGG 不支持 ROWS 帧
+SELECT *,
+    array_agg(score) 
+        OVER (
+            PARTITION BY subject 
+            ORDER BY score
+            ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING  -- 错误！不支持！
+        ) AS nearby_scores
+FROM scores;
+-- 错误: ARRAY_AGG 窗口函数不支持 ROWS 帧
+```
 
 ## AVG()
 
