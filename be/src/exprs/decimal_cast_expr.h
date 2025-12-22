@@ -19,6 +19,7 @@
 #include "column/column_builder.h"
 #include "exprs/overflow.h"
 #include "runtime/decimalv3.h"
+#include "util/variant_util.h"
 
 namespace starrocks {
 
@@ -420,6 +421,174 @@ struct DecimalNonDecimalCast<overflow_mode, DecimalType, StringType, DecimalLTGu
         }
         bytes.resize(bytes_off);
         return result;
+    }
+};
+
+// cast: variant <-> decimal
+template <typename SrcType, typename DstType>
+inline static bool convert_variant_decimal(SrcType src_value, int src_scale, DstType* dst_value, int dst_scale) {
+    constexpr bool check_overflow = true;
+
+    if (dst_scale == src_scale) {
+        return DecimalV3Cast::to_decimal_trivial<SrcType, DstType, check_overflow>(src_value, dst_value);
+    } else if (dst_scale > src_scale) {
+        const auto scale_factor = get_scale_factor<DstType>(dst_scale - src_scale);
+        return DecimalV3Cast::to_decimal<SrcType, DstType, DstType, true, check_overflow>(src_value, scale_factor,
+                                                                                          dst_value);
+    } else {
+        const auto scale_factor = get_scale_factor<SrcType>(src_scale - dst_scale);
+        return DecimalV3Cast::to_decimal<SrcType, DstType, SrcType, false, check_overflow>(src_value, scale_factor,
+                                                                                           dst_value);
+    }
+}
+
+template <typename DecimalCppType>
+inline static StatusOr<bool> cast_variant_to_decimal(DecimalCppType* dst_value, const Variant& variant, int precision,
+                                                     int scale) {
+    const VariantType type = variant.type();
+    bool overflow = false;
+
+    switch (type) {
+    case VariantType::DECIMAL4: {
+        ASSIGN_OR_RETURN(auto src_decimal, variant.get_decimal4());
+        overflow = convert_variant_decimal<int32_t, DecimalCppType>(src_decimal.value, src_decimal.scale, dst_value,
+                                                                    scale);
+        break;
+    }
+    case VariantType::DECIMAL8: {
+        ASSIGN_OR_RETURN(auto src_decimal, variant.get_decimal8());
+        overflow = convert_variant_decimal<int64_t, DecimalCppType>(src_decimal.value, src_decimal.scale, dst_value,
+                                                                    scale);
+        break;
+    }
+    case VariantType::DECIMAL16: {
+        ASSIGN_OR_RETURN(auto src_decimal, variant.get_decimal16());
+        overflow = convert_variant_decimal<int128_t, DecimalCppType>(src_decimal.value, src_decimal.scale, dst_value,
+                                                                     scale);
+        break;
+    }
+    case VariantType::INT8: {
+        auto value = variant.get_int8();
+        if (!value.ok()) return value.status();
+        const auto scale_factor = get_scale_factor<DecimalCppType>(scale);
+        overflow = DecimalV3Cast::from_integer<int8_t, DecimalCppType, true>(value.value(), scale_factor, dst_value);
+        break;
+    }
+    case VariantType::INT16: {
+        auto value = variant.get_int16();
+        if (!value.ok()) return value.status();
+        const auto scale_factor = get_scale_factor<DecimalCppType>(scale);
+        overflow = DecimalV3Cast::from_integer<int16_t, DecimalCppType, true>(value.value(), scale_factor, dst_value);
+        break;
+    }
+    case VariantType::INT32: {
+        auto value = variant.get_int32();
+        if (!value.ok()) return value.status();
+        const auto scale_factor = get_scale_factor<DecimalCppType>(scale);
+        overflow = DecimalV3Cast::from_integer<int32_t, DecimalCppType, true>(value.value(), scale_factor, dst_value);
+        break;
+    }
+    case VariantType::INT64: {
+        auto value = variant.get_int64();
+        if (!value.ok()) return value.status();
+        const auto scale_factor = get_scale_factor<DecimalCppType>(scale);
+        overflow = DecimalV3Cast::from_integer<int64_t, DecimalCppType, true>(value.value(), scale_factor, dst_value);
+        break;
+    }
+    case VariantType::FLOAT: {
+        auto value = variant.get_float();
+        if (!value.ok()) return value.status();
+        const auto scale_factor = get_scale_factor<DecimalCppType>(scale);
+        overflow = DecimalV3Cast::from_float<float, DecimalCppType>(value.value(), scale_factor, dst_value);
+        break;
+    }
+    case VariantType::DOUBLE: {
+        auto value = variant.get_double();
+        if (!value.ok()) return value.status();
+        const auto scale_factor = get_scale_factor<DecimalCppType>(scale);
+        overflow = DecimalV3Cast::from_float<double, DecimalCppType>(value.value(), scale_factor, dst_value);
+        break;
+    }
+    case VariantType::STRING: {
+        ASSIGN_OR_RETURN(auto str, variant.get_string());
+        overflow = DecimalV3Cast::from_string<DecimalCppType>(dst_value, precision, scale, str.data(), str.size());
+        break;
+    }
+
+    default:
+        LogicalType decimal_type;
+        if constexpr (std::is_same_v<DecimalCppType, int32_t>) {
+            decimal_type = TYPE_DECIMAL32;
+        } else if constexpr (std::is_same_v<DecimalCppType, int64_t>) {
+            decimal_type = TYPE_DECIMAL64;
+        } else if constexpr (std::is_same_v<DecimalCppType, int128_t>) {
+            decimal_type = TYPE_DECIMAL128;
+        } else {
+            decimal_type = TYPE_UNKNOWN;
+        }
+        return Status::NotSupported(fmt::format("The type cast from variant(type={}) to {} is not supported",
+                                                VariantUtil::type_to_string(type),
+                                                logical_type_to_string(decimal_type)));
+    }
+
+    return overflow;
+}
+template <OverflowMode overflow_mode, LogicalType DecimalType, LogicalType VariantType>
+struct DecimalNonDecimalCast<overflow_mode, DecimalType, VariantType, DecimalLTGuard<DecimalType>,
+                             VariantGuard<VariantType>> {
+    using DecimalCppType = RunTimeCppType<DecimalType>;
+    using DecimalColumnType = RunTimeColumnType<DecimalType>;
+
+    static inline ColumnPtr decimal_from(const ColumnPtr& column, int precision, int scale) {
+        const auto num_rows = column->size();
+        typename DecimalColumnType::MutablePtr result = DecimalColumnType::create(precision, scale, num_rows);
+        auto result_data = &ColumnHelper::cast_to_raw<DecimalType>(result.get())->get_data().front();
+        NullColumn::MutablePtr null_column;
+        NullColumn::ValueType* nulls = nullptr;
+        auto has_null = false;
+        if constexpr (check_overflow<overflow_mode>) {
+            null_column = NullColumn::create();
+            null_column->resize(num_rows);
+            nulls = &null_column->get_data().front();
+        }
+
+        const auto variant_column = ColumnHelper::cast_to_raw<VariantType>(column);
+        for (auto i = 0; i < num_rows; ++i) {
+            const VariantValue* variant_value = variant_column->get_object(i);
+            Variant variant(variant_value->get_metadata(), variant_value->get_value());
+
+            if constexpr (check_overflow<overflow_mode>) {
+                if (variant.type() == VariantType::NULL_TYPE) {
+                    has_null = true;
+                    nulls[i] = DATUM_NULL;
+                    continue;
+                }
+            }
+
+            auto overflow = cast_variant_to_decimal<DecimalCppType>(&result_data[i], variant, precision, scale);
+            if (!overflow.ok()) {
+                throw std::runtime_error(overflow.status().to_string());
+            }
+
+            if constexpr (check_overflow<overflow_mode>) {
+                if (overflow.ok() && overflow.value()) {
+                    if constexpr (error_if_overflow<overflow_mode>) {
+                        throw std::overflow_error("The type cast from variant to decimal overflows");
+                    } else {
+                        static_assert(null_if_overflow<overflow_mode>);
+                        has_null = true;
+                        nulls[i] = DATUM_NULL;
+                    }
+                }
+            }
+        }
+
+        if constexpr (check_overflow<overflow_mode>) {
+            ColumnBuilder<DecimalType> builder(std::move(result), std::move(null_column), has_null);
+            return builder.build(column->is_constant());
+        } else {
+            return result;
+        }
     }
 };
 

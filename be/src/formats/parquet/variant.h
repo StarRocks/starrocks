@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <cstdint>
+
 #include "common/status.h"
 #include "runtime/decimalv2_value.h"
 #include "util/decimal_types.h"
@@ -75,10 +77,42 @@ enum class VariantType {
     UUID
 };
 
+std::string variant_type_to_string(VariantType type);
+
 template <typename D>
 struct DecimalValue {
     uint8_t scale;
     DecimalType<D> value;
+
+    template <typename T>
+    T to_float() const {
+        return static_cast<T>(static_cast<double>(value) / std::pow(10, scale));
+    }
+
+    explicit operator float() const { return to_float<float>(); }
+    explicit operator double() const { return to_float<double>(); }
+
+    template <typename T>
+    T to_int() const {
+        if (scale == 0) {
+            return static_cast<T>(value);
+        }
+        D value_copy = value;
+        for (int i = 0; i < scale; i++) {
+            value_copy /= 10;
+        }
+        return static_cast<T>(value_copy);
+    }
+
+    explicit operator int8_t() const { return to_int<int8_t>(); }
+
+    explicit operator int16_t() const { return to_int<int16_t>(); }
+
+    explicit operator int32_t() const { return to_int<int32_t>(); }
+
+    explicit operator int64_t() const { return to_int<int64_t>(); }
+
+    explicit operator int128_t() const { return to_int<int128_t>(); }
 };
 
 class VariantMetadata {

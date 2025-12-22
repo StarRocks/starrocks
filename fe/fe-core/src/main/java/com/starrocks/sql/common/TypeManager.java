@@ -43,6 +43,7 @@ import com.starrocks.type.TypeCompatibilityMatrix;
 import com.starrocks.type.TypeFactory;
 import com.starrocks.type.UnknownType;
 import com.starrocks.type.VarcharType;
+import com.starrocks.type.VariantType;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -398,12 +399,29 @@ public class TypeManager {
         } else if (from.isJsonType() && to.isMapType()) {
             MapType map = (MapType) to;
             return canCastTo(VarcharType.VARCHAR, map.getKeyType()) && canCastTo(JsonType.JSON, map.getValueType());
+        } else if (from.isVariantType() && variantCanCastToComplexType(to)) {
+            return true;
         } else if (from.isBoolean() && to.isComplexType()) {
             // for mock nest type with NULL value, the cast must return NULL
             // like cast(map{1: NULL} as MAP<int, int>)
             return true;
         } else {
             return false;
+        }
+    }
+
+    private static boolean variantCanCastToComplexType(Type to) {
+        if (to.isArrayType()) {
+            ArrayType arrayType = (ArrayType) to;
+            Type itemType = arrayType.getItemType();
+            return itemType.isScalarType() || itemType.isStructType() || itemType.isVariantType();
+        } else if (to.isMapType()) {
+            MapType mapType = (MapType) to;
+            Type keyType = mapType.getKeyType();
+            Type valueType = mapType.getValueType();
+            return canCastTo(VarcharType.VARCHAR, keyType) && canCastTo(VariantType.VARIANT, valueType);
+        } else {
+            return to.isStructType();
         }
     }
 

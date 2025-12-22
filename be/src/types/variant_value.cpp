@@ -208,6 +208,11 @@ std::string VariantValue::to_string() const {
     return json_result.value();
 }
 
+Variant VariantValue::to_variant() const {
+    return Variant(VariantMetadata(std::string_view(_metadata.data(), _metadata.size())),
+                   std::string_view(_value.data(), _value.size()));
+}
+
 std::ostream& operator<<(std::ostream& os, const VariantValue& value) {
     return os << value.to_string();
 }

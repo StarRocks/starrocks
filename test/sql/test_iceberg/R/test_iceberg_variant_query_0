@@ -1,0 +1,290 @@
+-- name: test_iceberg_variant_query_0
+create external catalog iceberg_sql_test_${uuid0}
+PROPERTIES ("type"="iceberg", "iceberg.catalog.type"="hadoop", "iceberg.catalog.warehouse"="oss://${oss_bucket}/test_iceberg_variant_query_0/${uuid0}/warehouse/");
+-- result:
+-- !result
+shell: ossutil64 mkdir oss://${oss_bucket}/test_iceberg_variant_query_0/${uuid0}/warehouse/iceberg_variant > /dev/null
+-- result:
+0
+
+-- !result
+use iceberg_sql_test_${uuid0}.iceberg_variant;
+-- result:
+-- !result
+CREATE TABLE variant_test_cases (
+    case_id INT,
+    case_label STRING,
+    int_val INT,
+    string_val STRING,
+    float_val DOUBLE,
+    decimal_val DECIMAL(18, 4),
+    struct_val STRUCT<id INT, name STRING, counters MAP<STRING, INT>, status STRING>,
+    json_val STRING,
+    map_val MAP<STRING, STRING>,
+    array_val ARRAY<DOUBLE>,
+    variant_from_int VARIANT,
+    variant_from_string VARIANT,
+    variant_from_float VARIANT,
+    variant_from_decimal VARIANT,
+    variant_from_struct VARIANT,
+    variant_from_json VARIANT,
+    variant_from_map VARIANT,
+    variant_from_array VARIANT,
+    variant_mixed VARIANT,
+    deep_struct_val STRUCT<
+        profile STRUCT<
+            handle STRING,
+            contact STRUCT<
+                emails ARRAY<STRING>,
+                phones ARRAY<STRUCT<channel STRING, number STRING>>
+            >,
+            preferences MAP<STRING, STRUCT<enabled BOOLEAN, path STRING>>
+        >,
+        history ARRAY<STRUCT<ts STRING, status STRING, meta MAP<STRING, STRING>>>
+    >,
+    deep_map_val MAP<
+        STRING,
+        STRUCT<
+            limits MAP<STRING, INT>,
+            routes ARRAY<STRUCT<pattern STRING, methods ARRAY<STRING>>>,
+            metadata STRUCT<label STRING, path STRING>
+        >
+    >,
+    deep_array_val ARRAY<
+        STRUCT<
+            slot INT,
+            nodes ARRAY<
+                STRUCT<
+                    id STRING,
+                    status STRING,
+                    metrics MAP<STRING, DOUBLE>,
+                    transitions ARRAY<STRUCT<state STRING, at STRING>>
+                >
+            >
+        >
+    >,
+    deep_json_val STRING,
+    variant_deep_struct VARIANT,
+    variant_deep_map VARIANT,
+    variant_deep_array VARIANT,
+    variant_deep_json VARIANT
+) 
+properties(
+  'format-version' = '3'
+);
+-- result:
+-- !result
+shell: ossutil64 cp ./sql/test_iceberg/data/variant_query_0/data/00000-0-968ed6e2-3543-431b-ba6c-b41704fb5cd7-0-00001.parquet oss://${oss_bucket}/test_iceberg_variant_query_0/${uuid0}/variant_query_0/data/00000-0-968ed6e2-3543-431b-ba6c-b41704fb5cd7-0-00001.parquet > /dev/null
+-- result:
+0
+
+-- !result
+shell: ossutil64 cp ./sql/test_iceberg/data/variant_query_0/data/00001-1-968ed6e2-3543-431b-ba6c-b41704fb5cd7-0-00001.parquet oss://${oss_bucket}/test_iceberg_variant_query_0/${uuid0}/variant_query_0/data/00001-1-968ed6e2-3543-431b-ba6c-b41704fb5cd7-0-00001.parquet > /dev/null
+-- result:
+0
+
+-- !result
+shell: ossutil64 cp ./sql/test_iceberg/data/variant_query_0/data/00002-2-968ed6e2-3543-431b-ba6c-b41704fb5cd7-0-00001.parquet oss://${oss_bucket}/test_iceberg_variant_query_0/${uuid0}/variant_query_0/data/00002-2-968ed6e2-3543-431b-ba6c-b41704fb5cd7-0-00001.parquet > /dev/null
+-- result:
+0
+
+-- !result
+shell: ossutil64 cp ./sql/test_iceberg/data/variant_query_0/data/00003-3-968ed6e2-3543-431b-ba6c-b41704fb5cd7-0-00001.parquet oss://${oss_bucket}/test_iceberg_variant_query_0/${uuid0}/variant_query_0/data/00003-3-968ed6e2-3543-431b-ba6c-b41704fb5cd7-0-00001.parquet > /dev/null
+-- result:
+0
+
+-- !result
+alter table variant_test_cases execute add_files(location='oss://${oss_bucket}/test_iceberg_variant_query_0/${uuid0}/variant_query_0/data/00000-0-968ed6e2-3543-431b-ba6c-b41704fb5cd7-0-00001.parquet', file_format='parquet');
+-- result:
+-- !result
+alter table variant_test_cases execute add_files(location='oss://${oss_bucket}/test_iceberg_variant_query_0/${uuid0}/variant_query_0/data/00001-1-968ed6e2-3543-431b-ba6c-b41704fb5cd7-0-00001.parquet', file_format='parquet');
+-- result:
+-- !result
+alter table variant_test_cases execute add_files(location='oss://${oss_bucket}/test_iceberg_variant_query_0/${uuid0}/variant_query_0/data/00002-2-968ed6e2-3543-431b-ba6c-b41704fb5cd7-0-00001.parquet', file_format='parquet');
+-- result:
+-- !result
+alter table variant_test_cases execute add_files(location='oss://${oss_bucket}/test_iceberg_variant_query_0/${uuid0}/variant_query_0/data/00003-3-968ed6e2-3543-431b-ba6c-b41704fb5cd7-0-00001.parquet', file_format='parquet');
+-- result:
+-- !result
+SELECT 'Query 1: Validate scalar round-trip extractions via get_variant_* helpers.' AS case_description;
+-- result:
+Query 1: Validate scalar round-trip extractions via get_variant_* helpers.
+-- !result
+SELECT
+    case_id,
+    get_variant_int(variant_from_int, '$')          AS variant_int_value,
+    cast(variant_query(variant_from_int, '$') as bigint)          AS variant_int_as_bigint,
+    variant_typeof(variant_query(variant_from_float, '$'))          AS variant_float_type,
+    variant_typeof(variant_query(variant_from_decimal, '$'))          AS variant_decimal_type,
+    CAST(variant_query(variant_from_float, '$') as decimal(22, 8)) as variant_float_value,
+    CAST(variant_query(variant_from_decimal, '$') as decimal(22, 8)) as variant_decimal_value,
+    get_variant_double(variant_from_float, '$') as variant_float_value2,
+    get_variant_double(variant_from_decimal, '$') as variant_decimal_value2,
+    get_variant_string(variant_from_string, '$')    AS variant_string_value,
+    cast(variant_query(variant_from_string, '$') as string)    AS variant_string_as_string
+FROM variant_test_cases
+ORDER BY case_id;
+-- result:
+1	42	42	Decimal4	Decimal4	3.50000000	9876.54320000	3.5	9876.5432	42	42
+2	-7	-7	Decimal4	Decimal4	-0.12500000	-12.34000000	-0.125	-12.34	-7	-7
+3	None	None	Decimal4	Decimal4	0E-8	0E-8	0.0	0.0		
+4	2048	2048	Decimal4	Decimal4	99.87500000	1234.56780000	99.875	1234.5678	2048	2048
+-- !result
+SELECT 'Query 2: Exercise struct/map/array field projection via get_variant_*.' AS case_description;
+-- result:
+Query 2: Exercise struct/map/array field projection via get_variant_*.
+-- !result
+SELECT
+    case_id,
+    get_variant_string(variant_from_struct, '$.name')             AS struct_name,
+    get_variant_int(variant_from_struct, '$.counters.success')    AS struct_success,
+    get_variant_string(variant_from_map, '$.tier')                AS tier_label,
+    variant_typeof(variant_query(variant_from_array, '$[0]'))                AS array_first_type,
+    variant_typeof(variant_query(variant_from_array, '$[2]'))                AS array_third_type,
+    CAST(variant_query(variant_from_array, '$[0]') as decimal(22, 8))                AS array_first_value,
+    CAST(variant_query(variant_from_array, '$[2]') as decimal(22, 8))               AS array_third_value,
+    get_variant_double(variant_from_array, '$[0]') AS array_first_value2,
+    get_variant_double(variant_from_array, '$[2]') AS array_third_value2
+FROM variant_test_cases
+ORDER BY case_id;
+-- result:
+1	alpha	10	hot	Decimal4	Decimal4	1.50000000	3.50000000	1.5	3.5
+2	beta	0	cold	Decimal4	Decimal4	-0.50000000	0.50000000	-0.5	0.5
+3	None	None	None	None	None	None	None	None	None
+4	delta	99	warm	Decimal4	Decimal4	0E-8	2.00000000	0.0	2.0
+-- !result
+SELECT 'Query 3: Use variant_query + CAST to coerce nested payloads into primitives.' AS case_description;
+-- result:
+Query 3: Use variant_query + CAST to coerce nested payloads into primitives.
+-- !result
+SELECT
+    case_id,
+    CAST(variant_query(variant_mixed, '$.thresholds.warn') AS INT)     AS warn_threshold,
+    CAST(variant_query(variant_mixed, '$.thresholds.critical') AS INT) AS critical_threshold,
+    CAST(variant_query(variant_mixed, '$.tags[0]') AS STRING)          AS first_tag,
+    CAST(variant_query(variant_mixed, '$.tags[1]') AS STRING)          AS second_tag,
+    CAST(variant_query(variant_mixed, '$.paths.first') AS STRING)      AS first_path_expr,
+    CAST(variant_query(variant_mixed, '$.composite.ints[1]') AS INT)   AS composite_midpoint
+FROM variant_test_cases
+ORDER BY case_id;
+-- result:
+1	20	28	prod	codex	None	None
+2	None	None	staging	None	$.composite.ints[0]	0
+3	None	None	None	None	None	None
+4	None	None	None	None	None	None
+-- !result
+SELECT 'Query 4: Cover complex JSON path navigation across nested arrays and maps.' AS case_description;
+-- result:
+Query 4: Cover complex JSON path navigation across nested arrays and maps.
+-- !result
+SELECT
+    case_id,
+    CAST(variant_query(variant_mixed, '$.routing.routes[1].pattern') AS STRING)       AS nested_route_pattern,
+    CAST(variant_query(variant_mixed, '$.routing.routes[1].methods[1]') AS STRING)    AS nested_route_method,
+    CAST(variant_query(variant_mixed, '$.matrix[1][0].val') AS INT)                   AS matrix_value,
+    CAST(variant_query(variant_mixed, '$.deep.layers[1].payload.next.reasons[0]') AS STRING) AS deepest_reason,
+    CAST(variant_query(variant_mixed, '$.deep.flags["key.with.dot"].child.leaf') AS INT)    AS dotted_leaf,
+    CAST(variant_query(variant_mixed, '$.deep.flags["key-with-dash"]') AS BOOLEAN)          AS dashed_flag
+FROM variant_test_cases
+ORDER BY case_id;
+-- result:
+1	None	None	None	None	None	None
+2	None	None	None	None	None	None
+3	None	None	None	None	None	None
+4	/api/v1/{tenant}/jobs/**	DELETE	3	pending	123	0
+-- !result
+SELECT 'Query 5: Stress CAST combinations from Variant into the major primitive types.' AS case_description;
+-- result:
+Query 5: Stress CAST combinations from Variant into the major primitive types.
+-- !result
+SELECT
+    case_id,
+    CAST(variant_query(variant_mixed, '$.typed.bool_true') AS BOOLEAN)       AS cast_bool_true,
+    CAST(variant_query(variant_mixed, '$.typed.bool_false') AS BOOLEAN)      AS cast_bool_false,
+    CAST(get_variant_string(variant_mixed, '$.typed.int_as_string') as bigint)   AS cast_bigint_from_string,
+    CAST(variant_query(variant_mixed, '$.typed.decimal_text') AS DECIMAL(9, 3)) AS cast_decimal_text,    
+    CAST(variant_query(variant_mixed, '$.typed.timestamp_text') AS STRING) AS cast_timestamp,
+    CAST(variant_query(variant_mixed, '$.matrix[0][1].val') AS SMALLINT)     AS cast_smallint_nested
+FROM variant_test_cases
+ORDER BY case_id;
+-- result:
+1	None	None	None	None	None	None
+2	None	None	None	None	None	None
+3	None	None	None	None	None	None
+4	1	0	512	45.678	2024-05-01 12:34:56	2
+-- !result
+SELECT 'Query 6: Cast deeply nested Variant payloads into typed STRUCT/MAP/ARRAY/JSON constructs.' AS case_description;
+-- result:
+Query 6: Cast deeply nested Variant payloads into typed STRUCT/MAP/ARRAY/JSON constructs.
+-- !result
+WITH variant_complex AS (
+    SELECT
+        case_id,
+        CAST(variant_deep_struct AS STRUCT<
+            profile STRUCT<
+                handle STRING,
+                contact STRUCT<
+                    emails ARRAY<STRING>,
+                    phones ARRAY<STRUCT<channel STRING, number STRING>>
+                >,
+                preferences MAP<STRING, STRUCT<enabled BOOLEAN, path STRING>>
+            >,
+            history ARRAY<STRUCT<ts STRING, status STRING, meta MAP<STRING, STRING>>>
+        >) AS struct_from_variant,
+        CAST(variant_deep_map AS MAP<
+            STRING,
+            STRUCT<
+                limits MAP<STRING, INT>,
+                routes ARRAY<STRUCT<pattern STRING, methods ARRAY<STRING>>>,
+                metadata STRUCT<label STRING, path STRING>
+            >
+        >) AS map_from_variant,
+        CAST(variant_deep_array AS ARRAY<
+            STRUCT<
+                slot INT,
+                nodes ARRAY<
+                    STRUCT<
+                        id STRING,
+                        status STRING,
+                        metrics MAP<STRING, DECIMAL>,
+                        transitions ARRAY<STRUCT<state STRING, at STRING>>
+                    >
+                >
+            >
+        >) AS array_from_variant,
+        CAST(variant_deep_json AS JSON) AS json_from_variant
+    FROM variant_test_cases
+)
+SELECT
+    case_id,
+    struct_from_variant.profile.contact.phones[2].number           AS variant_struct_second_phone,
+    struct_from_variant.profile.preferences['routing.deep'].path   AS variant_struct_shadow_path,
+    struct_from_variant.history[2].meta['ticket']                  AS variant_struct_ticket,
+    map_from_variant['svc.alpha'].routes[2].pattern                AS variant_map_alpha_route,
+    map_from_variant['svc.gamma.route'].limits['crit']             AS variant_map_gamma_crit,
+    array_from_variant[2].nodes[1].transitions[2].state            AS variant_array_recover_state,
+    array_from_variant[2].nodes[2].metrics['iops']                 AS variant_array_node3_iops,
+    CAST(json_query(json_from_variant, '$.envelope.layers[1].segments[0].steps[1].id') AS STRING) AS variant_json_dispatch_step,
+    CAST(json_query(json_from_variant, '$.flags."key.with.dot".child.leaf') AS INT)             AS variant_json_dotted_leaf
+FROM variant_complex
+ORDER BY case_id;
+-- result:
+1	None	None	None	None	None	None	None	None	None
+2	None	None	None	None	None	None	None	None	None
+3	None	None	None	None	None	None	None	None	None
+4	+49-222-0002	/eu/**/shadow	CHG-901	/svc/alpha/**	95	recover	0	dispatch	456
+-- !result
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_iceberg_variant_query_0/${uuid0}/ > /dev/null
+-- result:
+0
+
+-- !result
+drop table variant_test_cases force;
+-- result:
+-- !result
+set catalog default_catalog;
+-- result:
+-- !result
+drop catalog iceberg_sql_test_${uuid0};
+-- result:
+-- !result

@@ -312,4 +312,71 @@ StatusOr<ColumnPtr> CastJsonToArray::evaluate_checked(ExprContext* context, Chun
     return res;
 }
 
+StatusOr<ColumnPtr> CastVariantToArray::evaluate_checked(ExprContext* context, Chunk* input_chunk) {
+    ASSIGN_OR_RETURN(ColumnPtr column, _children[0]->evaluate_checked(context, input_chunk));
+    if (column->only_null()) {
+        return ColumnHelper::create_const_null_column(column->size());
+    }
+
+    DCHECK(_cast_elements_expr != nullptr);
+    const LogicalType element_type = _cast_elements_expr->type().type;
+    const ColumnViewer<TYPE_VARIANT> src(column);
+    UInt32Column::MutablePtr offsets = UInt32Column::create();
+    NullColumn::MutablePtr null_column = NullColumn::create();
+
+    // 1. Cast a variant(type=ARRAY) to ARRAY<VARIANT>
+    // If the variant is not array type, set null
+    uint32_t offset = 0;
+    ColumnBuilder<TYPE_VARIANT> variant_column_builder(src.size());
+    for (size_t i = 0; i < src.size(); i++) {
+        offsets->append(offset);
+        if (src.is_null(i)) {
+            null_column->append(1);
+            continue;
+        }
+
+        const VariantValue* variant_value = src.value(i);
+        if (variant_value == nullptr) {
+            null_column->append(1);
+            continue;
+        }
+
+        Variant variant(variant_value->get_metadata(), variant_value->get_value());
+        if (variant.type() != VariantType::ARRAY) {
+            null_column->append(1);
+            continue;
+        }
+
+        ASSIGN_OR_RETURN(auto array_info, get_array_info(variant.value()));
+        for (uint32_t j = 0; j < array_info.num_elements; ++j) {
+            ASSIGN_OR_RETURN(Variant element_variant, variant.get_element_at_index(j));
+            variant_column_builder.append(VariantValue::of_variant(element_variant));
+        }
+        offset += array_info.num_elements;
+        null_column->append(0);
+    }
+    offsets->append(offset);
+
+    // 2. Cast variant to specified type
+    ColumnPtr elements = variant_column_builder.build_nullable_column();
+    if (element_type != TYPE_VARIANT) {
+        const auto chunk = std::make_shared<Chunk>();
+        const SlotId slot_id = down_cast<ColumnRef*>(_cast_elements_expr->get_child(0))->slot_id();
+        chunk->append_column(elements, slot_id);
+        ASSIGN_OR_RETURN(auto cast_res, _cast_elements_expr->evaluate_checked(context, chunk.get()));
+        elements = ColumnHelper::cast_to_nullable_column(std::move(cast_res));
+    }
+
+    // 3. Assemble elements into array column
+    MutableColumnPtr res = ArrayColumn::create(std::move(elements)->as_mutable_ptr(), std::move(offsets));
+    if (column->is_nullable()) {
+        res = NullableColumn::create(std::move(res), std::move(null_column));
+    }
+    if (column->is_constant()) {
+        res = ConstColumn::create(std::move(res), column->size());
+    }
+
+    return res;
+}
+
 } // namespace starrocks
