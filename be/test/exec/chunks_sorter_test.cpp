@@ -613,7 +613,7 @@ TEST_F(ChunksSorterTest, full_sort_incremental) {
                          pool->add(new MemTracker(1L << 62, "", nullptr)));
     size_t total_rows = _chunk_1->num_rows() + _chunk_2->num_rows() + _chunk_3->num_rows();
     ASSERT_OK(sorter.update(_runtime_state.get(), _chunk_1));
-    (void)sorter._reserved_bytes(_chunk1);
+    (void)sorter._reserved_bytes(_chunk_1);
     (void)sorter._get_revocable_mem_bytes();
     ASSERT_OK(sorter.update(_runtime_state.get(), _chunk_2));
     ASSERT_OK(sorter.update(_runtime_state.get(), _chunk_3));
@@ -737,7 +737,7 @@ TEST_F(ChunksSorterTest, topn_sort_with_limit) {
             ChunksSorterTopn sorter(_runtime_state.get(), &sort_exprs, &is_asc, &is_null_first, "", 0, limit);
             size_t total_rows = _chunk_1->num_rows() + _chunk_2->num_rows() + _chunk_3->num_rows();
             ASSERT_OK(sorter.update(_runtime_state.get(), ChunkPtr(_chunk_1->clone_unique().release())));
-            (void)sorter._reserved_bytes(_chunk1);
+            (void)sorter._reserved_bytes(_chunk_1);
             (void)sorter._get_revocable_mem_bytes();
             ASSERT_OK(sorter.update(_runtime_state.get(), ChunkPtr(_chunk_2->clone_unique().release())));
             ASSERT_OK(sorter.update(_runtime_state.get(), ChunkPtr(_chunk_3->clone_unique().release())));
