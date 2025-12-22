@@ -85,13 +85,29 @@ SELECT distinct array_sort([1, 1, 1, 1], (x, y) -> IF(x < y, -1, IF(x = y, 0, 1)
 -- result:
 [1,1,1,1]
 -- !result
-SELECT distinct array_sort([3, 2, 5, 1, 2], (x, y) -> k0%3-2) <=3 from t0;
+SELECT distinct array_min(array_sort([3, 2, 5, 1, 2], (x, y) -> k0%3-2)) <=3 from t0;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 16 to line 1, column 64. Detail message: Column type array<tinyint(4)> does not support binary predicate operation with type tinyint(4).')
+E: (1064, 'Getting analyzing error. Detail message: Lambda function in sort_array should only depend on both two arguments and contain no non-deterministic functions.')
 -- !result
-SELECT distinct array_sort(c0, (x, y) -> k0%3-2)<=array_max(c0) from t0;
+SELECT distinct array_min(array_sort(c0, (x, y) -> k0%3-2))<=array_max(c0) from t0;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 16 to line 1, column 62. Detail message: Column type array<tinyint(4)> does not support binary predicate operation with type tinyint(4).')
+E: (1064, 'Getting analyzing error. Detail message: Lambda function in sort_array should only depend on both two arguments and contain no non-deterministic functions.')
+-- !result
+SELECT array_sort([1,2,3,4,5,6,7,8], (x,y)->CASE WHEN x = 1 THEN -1 ELSE x - y END);
+-- result:
+[REGEX].*Comparator violates irreflexivity.*
+-- !result
+SELECT array_sort([1,2,3,4,5,6,7,8], (x,y)->CASE WHEN (x = 1 and y = 2) or (y = 1 and x = 2) THEN -1 ELSE x - y END);
+-- result:
+[REGEX].*Comparator violates asymmetry.*
+-- !result
+SELECT array_sort([1,2,3,4,5,6,7,8], (x,y)->CASE  WHEN x = 1 and y = 2 THEN -1 WHEN x <= 6 and y <= 6 THEN 1  ELSE x - y END);
+-- result:
+[REGEX].*Comparator violates incomparability transitivity.*
+-- !result
+SELECT array_sort([1,2,3,4,5,6,7,8], (x,y)->CASE WHEN (x = 1 and y = 2) or (x = 2 and y = 3) or (x = 3 and y = 1) THEN -1 WHEN x = 1 and y = 3 THEN 1 ELSE x - y END);
+-- result:
+[REGEX].*Comparator violates transitivity.*
 -- !result
 with cte as (
 select array_agg(k0) as arr
@@ -165,7 +181,7 @@ drop table t0;
 -- !result
 SELECT array_sort([3, 2, null, 5, null, 1, 2], (x, y) -> CASE WHEN x IS NULL THEN -1 WHEN y IS NULL THEN 1 WHEN x < y THEN 1 WHEN x = y THEN 0 ELSE -1 END);
 -- result:
-[null,null,5,3,2,2,1]
+[REGEX].*Comparator violates irreflexivity.*
 -- !result
 SELECT array_sort([3, 2, null, 5, null, 1, 2], (x, y) -> CASE WHEN x IS NULL THEN 1 WHEN y IS NULL THEN -1 WHEN x < y THEN 1 WHEN x = y THEN 0 ELSE -1 END);
 -- result:
@@ -187,7 +203,7 @@ from table(generate_series(0,10000)) t(i);
 -- !result
 SELECT distinct  array_sort([3, 2, null, 5, null, 1, 2], (x, y) -> CASE WHEN x IS NULL THEN -1 WHEN y IS NULL THEN 1 WHEN x < y THEN 1 WHEN x = y THEN 0 ELSE -1 END) from t0;
 -- result:
-[null,null,5,3,2,2,1]
+[REGEX].*Comparator violates irreflexivity.*
 -- !result
 SELECT distinct array_sort([3, 2, null, 5, null, 1, 2], (x, y) -> CASE WHEN x IS NULL THEN 1 WHEN y IS NULL THEN -1 WHEN x < y THEN 1 WHEN x = y THEN 0 ELSE -1 END) from t0;
 -- result:
@@ -195,7 +211,7 @@ SELECT distinct array_sort([3, 2, null, 5, null, 1, 2], (x, y) -> CASE WHEN x IS
 -- !result
 SELECT distinct array_sort(c0, (x, y) -> CASE WHEN x IS NULL THEN -1 WHEN y IS NULL THEN 1 WHEN x < y THEN 1 WHEN x = y THEN 0 ELSE -1 END) from t0;
 -- result:
-[null,null,5,3,2,2,1]
+[REGEX].*Comparator violates irreflexivity.*
 -- !result
 SELECT distinct array_sort(c0, (x, y) -> CASE WHEN x IS NULL THEN 1 WHEN y IS NULL THEN -1 WHEN x < y THEN 1 WHEN x = y THEN 0 ELSE -1 END) from t0;
 -- result:
