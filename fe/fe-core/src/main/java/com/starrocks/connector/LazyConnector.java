@@ -27,6 +27,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 public class LazyConnector implements Connector {
     private static final Logger LOG = LogManager.getLogger(LazyConnector.class);
@@ -111,5 +112,11 @@ public class LazyConnector implements Connector {
         } else {
             return LazyConnector.class.getSimpleName();
         }
+    }
+
+    @Override
+    public Set<OperationType> supportedOperations() {
+        initIfNeeded();
+        return delegate.supportedOperations();
     }
 }

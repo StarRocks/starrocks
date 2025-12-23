@@ -19,9 +19,11 @@ import com.starrocks.connector.config.ConnectorConfig;
 import com.starrocks.memory.MemoryTrackable;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 public interface Connector extends MemoryTrackable {
     /**
@@ -57,5 +59,18 @@ public interface Connector extends MemoryTrackable {
 
     default List<Pair<List<Object>, Long>> getSamples() {
         return new ArrayList<>();
+    }
+
+    /**
+     * Returns the set of operations supported by this connector.
+     * This allows connectors to declare which operations (DELETE, ALTER, etc.) they support.
+     * An empty set means no operations are supported.
+     * To support specific operations, connectors must override this method and return
+     * a set containing the supported OperationType values.
+     *
+     * @return a set of operation types that this connector supports
+     */
+    default Set<OperationType> supportedOperations() {
+        return Collections.emptySet();
     }
 }

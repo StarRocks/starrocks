@@ -155,6 +155,12 @@ public class MockIcebergMetadata implements ConnectorMetadata {
                 new Column("data", StringType.STRING, true),
                 new Column("date", StringType.STRING, true));
 
+        ImmutableList.Builder<Column> builder = ImmutableList.builder();
+        builder.addAll(schemas);
+        builder.add(new Column(IcebergTable.FILE_PATH, StringType.STRING, true));
+        builder.add(new Column(IcebergTable.ROW_POSITION, IntegerType.BIGINT, true));
+        schemas = builder.build();
+
         Schema schema =
                 new Schema(required(3, "id", Types.IntegerType.get()),
                         required(4, "data", Types.StringType.get()),
@@ -187,6 +193,12 @@ public class MockIcebergMetadata implements ConnectorMetadata {
 
         for (String tblName : PARTITION_TABLE_NAMES) {
             List<Column> columns = getPartitionedTableSchema(tblName);
+            ImmutableList.Builder<Column> builder = ImmutableList.builder();
+            builder.addAll(columns);
+            builder.add(new Column(IcebergTable.FILE_PATH, StringType.STRING, true));
+            builder.add(new Column(IcebergTable.ROW_POSITION, IntegerType.BIGINT, true));
+            columns = builder.build();
+
             MockIcebergTable icebergTable = getPartitionIcebergTable(tblName, columns);
             Map<String, ColumnStatistic> columnStatisticMap;
             List<String> colNames = columns.stream().map(Column::getName).collect(Collectors.toList());

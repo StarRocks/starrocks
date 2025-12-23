@@ -31,6 +31,8 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.connector.CatalogConnector;
+import com.starrocks.connector.OperationType;
 import com.starrocks.external.starrocks.TableMetaSyncer;
 import com.starrocks.persist.OriginStatementInfo;
 import com.starrocks.qe.ConnectContext;
@@ -52,6 +54,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 public class MetaUtils {
@@ -73,15 +76,15 @@ public class MetaUtils {
         }
     }
 
-    public static void checkNotSupportCatalog(String catalogName, String operation) {
+    public static void checkNotSupportCatalog(String catalogName, OperationType operationType) {
         if (catalogName == null) {
             throw new SemanticException("Catalog is null");
         }
         if (CatalogMgr.isInternalCatalog(catalogName)) {
             return;
         }
-        if (operation == null) {
-            throw new SemanticException("operation is null");
+        if (operationType == null) {
+            throw new SemanticException("operationType is null");
         }
 
         Catalog catalog = GlobalStateMgr.getCurrentState().getCatalogMgr().getCatalogByName(catalogName);
@@ -89,8 +92,17 @@ public class MetaUtils {
             throw new SemanticException("Catalog %s is not found", catalogName);
         }
 
-        if (!operation.equals("ALTER") && catalog.getType().equalsIgnoreCase("iceberg")) {
-            throw new SemanticException("Table of iceberg catalog doesn't support [%s]", operation);
+        // Get the connector for this catalog
+        CatalogConnector connector = GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalogName);
+        if (connector == null) {
+            throw new SemanticException("Connector %s is not found", catalogName);
+        }
+
+        // Check if the operation is supported by the connector
+        Set<OperationType> supportedOps = connector.supportedOperations();
+        if (!supportedOps.contains(operationType)) {
+            throw new SemanticException("Table of %s catalog doesn't support [%s]",
+                    catalog.getType(), operationType.getDisplayName());
         }
     }
 

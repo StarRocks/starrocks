@@ -18,6 +18,7 @@ import com.starrocks.connector.Connector;
 import com.starrocks.connector.ConnectorContext;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.HdfsEnvironment;
+import com.starrocks.connector.OperationType;
 import com.starrocks.connector.RemoteFileIO;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
@@ -26,6 +27,7 @@ import com.starrocks.server.GlobalStateMgr;
 
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 public class HiveConnector implements Connector {
     public static final String HIVE_METASTORE_URIS = "hive.metastore.uris";
@@ -96,5 +98,11 @@ public class HiveConnector implements Connector {
         metadataFactory.getCacheUpdateProcessor().ifPresent(HiveCacheUpdateProcessor::invalidateAll);
         GlobalStateMgr.getCurrentState().getMetastoreEventsProcessor().unRegisterCacheUpdateProcessor(catalogName);
         GlobalStateMgr.getCurrentState().getConnectorTableMetadataProcessor().unRegisterCacheUpdateProcessor(catalogNameType);
+    }
+
+    @Override
+    public Set<OperationType> supportedOperations() {
+        // Hive connector supports ALTER operations
+        return OperationType.setOf(OperationType.ALTER);
     }
 }

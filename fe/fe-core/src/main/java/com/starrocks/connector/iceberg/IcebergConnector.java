@@ -22,6 +22,7 @@ import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorProperties;
 import com.starrocks.connector.ConnectorType;
 import com.starrocks.connector.HdfsEnvironment;
+import com.starrocks.connector.OperationType;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.glue.IcebergGlueCatalog;
 import com.starrocks.connector.iceberg.hadoop.IcebergHadoopCatalog;
@@ -41,6 +42,7 @@ import org.apache.logging.log4j.Logger;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import java.util.Set;
 import java.util.concurrent.ExecutorService;
 
 import static com.starrocks.connector.iceberg.IcebergCatalogProperties.ICEBERG_CATALOG_TYPE;
@@ -172,5 +174,11 @@ public class IcebergConnector implements Connector {
     @Override
     public List<Pair<List<Object>, Long>> getSamples() {
         return icebergNativeCatalog.getSamples();
+    }
+
+    @Override
+    public Set<OperationType> supportedOperations() {
+        // Iceberg connector supports ALTER and DELETE operations
+        return OperationType.setOf(OperationType.ALTER, OperationType.DELETE);
     }
 }

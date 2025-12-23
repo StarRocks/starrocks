@@ -16,7 +16,13 @@ package com.starrocks.connector.iceberg;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
+import com.starrocks.catalog.IcebergTable;
+import com.starrocks.connector.CatalogConnector;
+import com.starrocks.credential.CloudConfiguration;
+import com.starrocks.credential.CloudConfigurationFactory;
+import com.starrocks.credential.CloudType;
 import com.starrocks.planner.SlotDescriptor;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TExprMinMaxValue;
 import com.starrocks.thrift.TExprNodeType;
 import org.apache.iceberg.Schema;
@@ -194,5 +200,34 @@ public final class IcebergUtil {
         String tableLocation = table.location();
         return table.properties().getOrDefault(TableProperties.WRITE_DATA_LOCATION,
                 String.format("%s/data", LocationUtil.stripTrailingSlash(tableLocation)));
+    }
+
+    public static CloudConfiguration getVendedCloudConfiguration(String catalogName, IcebergTable icebergTable) {
+        CatalogConnector connector = GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalogName);
+        Preconditions.checkState(connector != null,
+                String.format("connector of catalog %s should not be null", catalogName));
+
+        // Try to get vended credentials from loadTable response
+        CloudConfiguration vendedCredentialsCloudConfiguration = CloudConfigurationFactory.
+                buildCloudConfigurationForVendedCredentials(icebergTable.getNativeTable().io().properties(),
+                        icebergTable.getNativeTable().location());
+        if (vendedCredentialsCloudConfiguration.getCloudType() != CloudType.DEFAULT) {
+            return vendedCredentialsCloudConfiguration;
+        }
+        
+        // Try to get credentials from catalog config (/v1/config response).
+        // This is used as fallback when STS is unavailable (e.g., Apache Polaris without STS).
+        CloudConfiguration catalogConfigCloudConfiguration = CloudConfigurationFactory.
+                buildCloudConfigurationForVendedCredentials(connector.getMetadata().getCatalogProperties(),
+                        icebergTable.getNativeTable().location());
+        if (catalogConfigCloudConfiguration.getCloudType() != CloudType.DEFAULT) {
+            return catalogConfigCloudConfiguration;
+        }
+
+        // Fall back to user-provided catalog credentials
+        CloudConfiguration cloudConfiguration = connector.getMetadata().getCloudConfiguration();
+        Preconditions.checkState(cloudConfiguration != null,
+                String.format("cloudConfiguration of catalog %s should not be null", catalogName));
+        return cloudConfiguration;
     }
 }
