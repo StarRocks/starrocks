@@ -106,8 +106,8 @@ public:
                 LOG(ERROR) << "duplicate pk: " << chunk->columns()[0]->get(i).get_slice().to_string();
                 return false;
             }
-            tmp_chunk[chunk->columns()[0]->get(i).get_slice().to_string()] = {
-                    chunk->columns()[1]->get(i).get_int32(), chunk->columns()[2]->get(i).get_int32()};
+            tmp_chunk[chunk->columns()[0]->get(i).get_slice().to_string()] = {chunk->columns()[1]->get(i).get_int32(),
+                                                                              chunk->columns()[2]->get(i).get_int32()};
         }
         if (tmp_chunk.size() != _replayer_index.size()) {
             LOG(ERROR) << "inconsistency row number, actual : " << tmp_chunk.size()
@@ -147,8 +147,7 @@ public:
                 // Upsert
                 for (int i = 0; i < chunk->num_rows(); i++) {
                     _replayer_index[chunk->columns()[0]->get(i).get_slice().to_string()] = {
-                            chunk->columns()[1]->get(i).get_int32(),
-                            chunk->columns()[2]->get(i).get_int32()};
+                            chunk->columns()[1]->get(i).get_int32(), chunk->columns()[2]->get(i).get_int32()};
                 }
             } else if (log.op == ReplayerOP::ERASE) {
                 // Delete
