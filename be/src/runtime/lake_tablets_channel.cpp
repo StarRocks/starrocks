@@ -576,6 +576,12 @@ void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequ
     auto start_wait_writer_ts = watch.elapsed_time();
     // Block the current bthread(not pthread) until all `write()` and `finish()` tasks finished.
     count_down_latch.wait();
+    FAIL_POINT_TRIGGER_EXECUTE(tablets_channel_add_chunk_wait_write_block, {
+        int32_t timeout_ms = config::load_fp_tablets_channel_add_chunk_block_ms;
+        if (timeout_ms > 0) {
+            bthread_usleep(timeout_ms * 1000);
+        }
+    });
 
     auto finish_wait_writer_ts = watch.elapsed_time();
 
