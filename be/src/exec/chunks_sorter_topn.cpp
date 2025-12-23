@@ -805,6 +805,9 @@ void ChunksSorterTopn::_reset() {
 }
 
 size_t ChunksSorterTopn::_reserved_bytes(const ChunkPtr& chunk) {
+    // This function estimates the memory required for the next push_chunk/set_finishing operation.
+    // Since push_chunk/set_finishing may perform capacity expansion, the peak memory requirement is
+    // twice the original memory.
     size_t reserved_bytes = 0;
     if (chunk) {
         reserved_bytes += chunk->memory_usage();
