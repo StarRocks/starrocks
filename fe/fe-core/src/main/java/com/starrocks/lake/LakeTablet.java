@@ -60,6 +60,10 @@ public class LakeTablet extends Tablet {
 
     public long rebuildPindexVersion = 0L;
 
+    public LakeTablet() {
+        super();
+    }
+
     public LakeTablet(long id) {
         super(id);
     }
