@@ -16,10 +16,10 @@
 
 #include "column/column_builder.h"
 #include "column/type_traits.h"
-#include "util/variant.h"
 #include "testutil/parallel_test.h"
 #include "types/logical_type.h"
 #include "types/variant_value.h"
+#include "util/variant.h"
 
 namespace starrocks {
 

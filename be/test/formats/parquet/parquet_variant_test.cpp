@@ -12,9 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <util/variant.h>
 #include <fs/fs.h>
 #include <gtest/gtest.h>
+#include <util/variant.h>
 
 #include <boost/uuid/uuid.hpp>
 #include <boost/uuid/uuid_io.hpp>
