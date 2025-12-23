@@ -832,12 +832,15 @@ public class DDLStmtExecutor {
                     ErrorReport.reportDdlException(ErrorCode.ERR_BAD_TABLE_ERROR, tableName);
                 }
 
-                if (table.isCloudNativeTableOrMaterializedView()) {
-                    // cloud native table or mv
+                if (table.isCloudNativeTable()) {
+                    // cloud native table
                     PartitionRef partitionRef = stmt.getPartitionRef();
                     List<String> partitionNames = partitionRef != null ? partitionRef.getPartitionNames() : Lists.newArrayList();
                     ComputeResource computeResource = context.getCurrentComputeResource();
                     TabletRepairHelper.repair(stmt, db, (OlapTable) table, partitionNames, computeResource);
+                } else if (table.isCloudNativeMaterializedView()) {
+                    // cloud native mv
+                    throw new DdlException("Repair cloud native materialized view is not supported");
                 } else {
                     // olap table or mv
                     GlobalStateMgr.getCurrentState().getTabletChecker().repairTable(context, stmt);

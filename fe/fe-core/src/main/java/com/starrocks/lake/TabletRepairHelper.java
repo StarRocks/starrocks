@@ -552,8 +552,21 @@ public class TabletRepairHelper {
         return repairTabletMetadata(info, validMetadatas, isFileBundling);
     }
 
-    // TODO:
-    // 1. ignore lost data files
+    /**
+     * Repairs the tablet metadata for specified partitions of a table.
+     * This function orchestrates the repair process by first obtaining physical partition IDs,
+     * then iterating through each physical partition to find valid tablet metadata and
+     * subsequently sending repair requests to compute nodes.
+     * It handles different repair strategies based on `enforceConsistentVersion` and `allowEmptyTabletRecovery`
+     * and aggregates errors from failed partition repairs.
+     *
+     * @param stmt The AdminRepairTableStmt containing repair parameters.
+     * @param db The Database containing the table to be repaired.
+     * @param table The OlapTable whose tablets are to be repaired.
+     * @param partitionNames A list of partition names to repair. If empty, all partitions are repaired.
+     * @param computeResource The compute resource used for assigning compute nodes.
+     * @throws StarRocksException If any tablet repair fails or if there are issues during the process.
+     */
     public static void repair(AdminRepairTableStmt stmt, Database db, OlapTable table, @NotNull List<String> partitionNames,
                               ComputeResource computeResource) throws StarRocksException {
         boolean enforceConsistentVersion = stmt.isEnforceConsistentVersion();
@@ -599,9 +612,13 @@ public class TabletRepairHelper {
                     break;
                 }
             }
+
+            int partitionErrorsSize = partitionErrors.size();
+            int errorMsgsSize = errorMsgs.size();
             throw new StarRocksException(
-                    String.format("Fail to repair tablet metadata for %d partitions, the first %d partitions: [%s]",
-                            partitionErrors.size(), errorMsgs.size(), Joiner.on(", ").join(errorMsgs)));
+                    String.format("Fail to repair tablet metadata for %d partition%s, the first %d partition%s: [%s]",
+                            partitionErrorsSize, partitionErrorsSize > 1 ? "s" : "",
+                            errorMsgsSize, errorMsgsSize > 1 ? "s" : "", Joiner.on(", ").join(errorMsgs)));
         }
     }
 }

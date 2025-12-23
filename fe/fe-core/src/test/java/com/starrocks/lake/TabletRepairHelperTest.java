@@ -859,7 +859,7 @@ public class TabletRepairHelperTest {
                 NodePosition.ZERO);
 
         ExceptionChecker.expectThrowsWithMsg(StarRocksException.class,
-                "Fail to repair tablet metadata for 1 partitions, the first 1 partitions: [{partition: 4, error: rpc exception}]",
+                "Fail to repair tablet metadata for 1 partition, the first 1 partition: [{partition: 4, error: rpc exception}]",
                 () -> Deencapsulation.invoke(TabletRepairHelper.class, "repair", stmt, db, table, Lists.newArrayList("p1"),
                         WarehouseComputeResource.DEFAULT));
     }

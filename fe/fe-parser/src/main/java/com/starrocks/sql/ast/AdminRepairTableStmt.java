@@ -24,7 +24,9 @@ public class AdminRepairTableStmt extends DdlStmt {
     private final TableRef tblRef;
     private final Map<String, String> properties;
 
+    // Enforces consistent version across all tablets in a physical partition
     private boolean enforceConsistentVersion = true;
+    // Allows empty tablet recovery of tablets with no valid metadata
     private boolean allowEmptyTabletRecovery = false;
 
     public AdminRepairTableStmt(TableRef tblRef, Map<String, String> properties, NodePosition pos) {

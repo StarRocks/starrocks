@@ -61,7 +61,6 @@ public class AdminRepairStmtTest {
         analyzeFail("ADMIN REPAIR TABLE");
         analyzeFail("ADMIN REPAIR TABLE test TEMPORARY PARTITION(p1, p2, p3);");
         analyzeFail("ADMIN REPAIR TABLE test properties('xxx' = 'yyy');");
-
     }
 
     @Test
