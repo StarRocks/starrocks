@@ -138,7 +138,7 @@ public class IcebergCachingFileIOTest {
     }
 
     @Test
-    public void testWrappedIOConfigurationPropagation() {
+    void testWrappedIOConfigurationPropagation() {
         IcebergCachingFileIO cachingFileIO = new IcebergCachingFileIO();
         Map<String, String> properties = new HashMap<>();
         properties.put("iceberg.catalog.type", "hive");
@@ -161,7 +161,7 @@ public class IcebergCachingFileIOTest {
     }
 
     @Test
-    public void testWrappedIOConfigurationPropagationWithoutSetConf() {
+    void testWrappedIOConfigurationPropagationWithoutSetConf() {
         IcebergCachingFileIO cachingFileIO = new IcebergCachingFileIO();
         Map<String, String> properties = new HashMap<>();
         properties.put("iceberg.catalog.type", "rest");
