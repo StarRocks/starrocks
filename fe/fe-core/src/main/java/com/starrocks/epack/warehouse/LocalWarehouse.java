@@ -646,4 +646,9 @@ public class LocalWarehouse extends Warehouse implements GsonPostProcessable {
             }
         }
     }
+
+    @Override
+    public boolean isAvailable() {
+        return state == WarehouseState.AVAILABLE;
+    }
 }

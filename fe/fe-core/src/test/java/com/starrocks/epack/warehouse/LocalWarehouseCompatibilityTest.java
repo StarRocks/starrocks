@@ -133,6 +133,11 @@ public class LocalWarehouseCompatibilityTest {
         @Override
         public void replayInternalOpLog(String payload) {
         }
+
+        @Override
+        public boolean isAvailable() {
+            return true;
+        }
     }
 
     @Test

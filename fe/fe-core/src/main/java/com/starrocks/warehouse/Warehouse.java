@@ -79,4 +79,6 @@ public abstract class Warehouse implements Writable {
     public abstract void alterCNGroup(AlterCnGroupStmt stmt) throws DdlException;
 
     public abstract void replayInternalOpLog(String payload);
+
+    public abstract boolean isAvailable();
 }
