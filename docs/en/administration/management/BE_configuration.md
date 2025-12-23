@@ -44,6 +44,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Description: Controls the minimum time gap between successive stack-trace diagnostics performed by DiagnoseDaemon for `STACK_TRACE` requests. When a diagnose request arrives, the daemon skips collecting and logging stack traces if the last collection happened less than `diagnose_stack_trace_interval_ms` milliseconds ago. Increase this value to reduce CPU overhead and log volume from frequent stack dumps; decrease it to capture more frequent traces to debug transient issues (for example, in load fail-point simulations of long `TabletsChannel::add_chunk` blocking).
 - Introduced in: v3.5.0
 
+##### lake_replication_slow_log_ms
+
+- Default: 30000
+- Type: long
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: Threshold in milliseconds for emitting slow-log entries during lake replication. After each file copy the code measures elapsed time in microseconds and marks the operation as slow when elapsed_time &gt;= `lake_replication_slow_log_ms` * 1000. When triggered, StarRocks writes an INFO log with file size, cost and trace metrics for that replicated file. Increase the value to reduce noisy slow logs for large/slow transfers; decrease it to detect and surface smaller slow-copy events sooner.
+- Introduced in: -
+
 ##### load_rpc_slow_log_frequency_threshold_seconds
 
 - Default: 60
@@ -365,6 +374,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Description: Local directory on the BE where UDF (user-defined function) libraries are staged and where Python UDF worker processes operate. StarRocks copies UDF libraries from HDFS into this path, creates per-worker Unix domain sockets at `<local_library_dir>/pyworker_<pid>`, and chdirs Python worker processes into this directory before exec. The directory must exist, be writable by the BE process, and reside on a filesystem that supports Unix domain sockets (i.e., a local filesystem). Because this config is immutable at runtime, set it before startup and ensure adequate permissions and disk space on each BE.
 - Introduced in: v3.2.0
 
+##### max_transmit_batched_bytes
+
+- Default: 262144
+- Type: Long
+- Unit: Bytes
+- Is mutable: No
+- Description: Maximum number of serialized bytes to accumulate in a single transmit request before it is flushed to the network. Sender implementations (e.g., `ExchangeSinkOperator::Channel` and `DataStreamSender::Channel`) add serialized ChunkPB payloads into a PTransmitChunkParams request and send the request once the accumulated bytes exceed `max_transmit_batched_bytes` or when EOS is reached. Increase this value to reduce RPC frequency and improve throughput at the cost of higher per-request latency and memory use; reduce it to lower latency and memory but increase RPC rate.
+- Introduced in: v3.2.0
+
 ##### mem_limit
 
 - Default: 90%
@@ -408,6 +426,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Unit: Cores
 - Is mutable: No
 - Description: Controls the number of CPU cores the system will use for CPU-aware decisions (for example, thread-pool sizing and runtime scheduling). A value of 0 enables auto-detection: the system reads `/proc/cpuinfo` and uses all available cores. If set to a positive integer, that value overrides the detected core count and becomes the effective core count. When running inside containers, cgroup cpuset or cpu quota settings can further restrict usable cores; `CpuInfo` also respects those cgroup limits.
+- Introduced in: v3.2.0
+
+##### plugin_path
+
+- Default: ${STARROCKS_HOME}/plugin
+- Type: string
+- Unit: Path
+- Is mutable: No
+- Description: Filesystem directory where StarRocks loads external plugins (dynamic libraries, connector artifacts, UDF binaries, etc.). `plugin_path` should point to a directory accessible by the BE process (read and execute permissions) and must exist before plugins are loaded; test code (be/src/testutil/init_config.h) creates this directory at startup. Changing `plugin_path` requires restarting the process for the new path to take effect. Ensure correct ownership and that plugin files use the platform's native binary extension (for example, .so on Linux).
 - Introduced in: v3.2.0
 
 ##### priority_networks
@@ -590,6 +617,24 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Unit: Milliseconds
 - Is mutable: Yes
 - Description: Maximum allowed lifetime (in milliseconds) for Thrift RPC connections used by BE stream-load and transaction commit calls. StarRocks sets this value as the `thrift_rpc_timeout_ms` on requests sent to FE (used in stream_load planning, loadTxnBegin/loadTxnPrepare/loadTxnCommit, and getLoadTxnStatus). If a connection has been pooled longer than this value it will be closed. When a per-request timeout (`ctx->timeout_second`) is provided, the BE computes the RPC timeout as rpc_timeout_ms = max(ctx*1000/4, min(ctx*1000/2, txn_commit_rpc_timeout_ms)), so the effective RPC timeout is bounded by the context and this configuration. Keep this consistent with FE's `thrift_client_timeout_ms` to avoid mismatched timeouts.
+- Introduced in: v3.2.0
+
+##### txn_map_shard_size
+
+- Default: 128
+- Type: Int
+- Unit: -
+- Is mutable: No
+- Description: Number of lock-map shards used by the transaction manager to partition transaction locks and reduce contention. `txn_map_shard_size` should be a power of two (2^n); increasing it increases concurrency and reduces lock contention at the cost of additional memory and marginal bookkeeping overhead. StarRocks passes this value to the `TxnManager` (see `txn_shard_size` used alongside it in StorageEngine), so choose a shard count sized for expected concurrent transactions and available memory. Changing this value requires a restart.
+- Introduced in: v3.2.0
+
+##### txn_shard_size
+
+- Default: 1024
+- Type: Int
+- Unit: shards
+- Is mutable: No
+- Description: Controls the number of lock shards used by the transaction manager. This value is passed as the second argument to `TxnManager` in StorageEngine and determines the shard size for txn locks. It must be a power of two; choosing a larger power-of-two value reduces lock contention and improves concurrent commit/publish throughput at the expense of additional memory and finer-grained internal bookkeeping. Changes require process restart to take effect. Use powers of two appropriate for workload concurrency (for example 64, 256, 1024).
 - Introduced in: v3.2.0
 
 ##### update_schema_worker_count
@@ -852,6 +897,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Description: A boolean value to control whether ignore invalid delete predicates in tablet rowset metadata which may be introduced by logic deletion to a duplicate key table after the column name renamed.
 - Introduced in: v4.0
 
+##### late_materialization_ratio
+
+- Default: 10
+- Type: Int
+- Unit: -
+- Is mutable: No
+- Description: Integer ratio in range [0-1000] that controls the use of late materialization in the SegmentIterator (vector query engine). A value of `0` (or &lt;= 0) disables late materialization; `1000` (or &gt;= 1000) forces late materialization for all reads. Values &gt; 0 and &lt; 1000 enable a conditional strategy where both late and early materialization contexts are prepared and the iterator selects behavior based on predicate filter ratios (higher values favor late materialization). When a segment contains complex metric types, StarRocks uses `metric_late_materialization_ratio` instead. If `lake_io_opts.cache_file_only` is set, late materialization is disabled.
+- Introduced in: v3.2.0
+
 ##### max_hdfs_file_handle
 
 - Default: 1000
@@ -887,6 +941,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Is mutable: Yes
 - Description: The maximum number of scan keys segmented by each query.
 - Introduced in: -
+
+##### metric_late_materialization_ratio
+
+- Default: 1000
+- Type: Int
+- Unit: -
+- Is mutable: No
+- Description: Controls when the late-materialization row access strategy is used for reads that include complex metric columns. Valid range: [0-1000]. `0` disables late materialization; `1000` forces late materialization for all applicable reads. Values 1–999 enable a conditional strategy where both late and early materialization contexts are prepared and chosen at runtime based on predicate/selectivity. When complex metric types exist, `metric_late_materialization_ratio` overrides the general `late_materialization_ratio`. Note: `cache_file_only` I/O mode will cause late materialization to be disabled regardless of this setting.
+- Introduced in: v3.2.0
 
 ##### min_file_descriptor_number
 
@@ -1023,6 +1086,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Description: The maximum task queue length of SCAN thread pool for Pipeline execution engine.
 - Introduced in: -
 
+##### pk_index_parallel_get_threadpool_size
+
+- Default: 1048576
+- Type: Int
+- Unit: Tasks
+- Is mutable: Yes
+- Description: Sets the maximum queue size (number of pending tasks) for the "cloud_native_pk_index_get" thread pool used by PK index parallel get operations in shared-data (cloud-native/lake) mode. The actual thread count for that pool is controlled by `pk_index_parallel_get_threadpool_max_threads`; this setting only limits how many tasks may be queued awaiting execution. The very large default (2^20) effectively makes the queue unbounded; lowering it prevents excessive memory growth from queued tasks but may cause task submissions to block or fail when the queue is full. Tune together with `pk_index_parallel_get_threadpool_max_threads` based on workload concurrency and memory constraints.
+- Introduced in: -
+
 ##### priority_queue_remaining_tasks_increased_frequency
 
 - Default: 512
@@ -1131,6 +1203,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Description: Fraction of the BE process memory reserved for update-related memory and caches. During startup `GlobalEnv` computes the `MemTracker` for updates as process_mem_limit * clamp(update_memory_limit_percent, 0, 100) / 100. `UpdateManager` also uses this percentage to size its primary-index/index-cache capacity (index cache capacity = GlobalEnv::process_mem_limit * update_memory_limit_percent / 100). The HTTP config update logic registers a callback that calls `update_primary_index_memory_limit` on the update managers, so changes would be applied to the update subsystem if the config were changed. Increasing this value gives more memory to update/primary-index paths (reducing memory available for other pools); decreasing it reduces update memory and cache capacity. Values are clamped to the range 0–100.
 - Introduced in: v3.2.0
 
+##### vector_chunk_size
+
+- Default: 4096
+- Type: Int
+- Unit: Rows
+- Is mutable: No
+- Description: The number of rows per vectorized chunk (batch) used throughout the execution and storage code paths. This value controls Chunk and RuntimeState batch_size creation, affects operator throughput, memory footprint per operator, spill and sort buffer sizing, and I/O heuristics (for example ORC writer natural write size). Increasing it can improve CPU and I/O efficiency for wide/CPU-bound workloads but raises peak memory usage and can increase latency for small-result queries. Tune only when profiling shows batch-size is a bottleneck; otherwise keep the default for balanced memory and performance.
+- Introduced in: v3.2.0
+
 ### Loading
 
 ##### clear_transaction_task_worker_count
@@ -1151,15 +1232,6 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Description: Batch size for column mode partial update when processing inserted rows. If this item is set to `0` or negative, it will be clamped to `1` to avoid infinite loop. This item controls the number of newly inserted rows processed in each batch. Larger values can improve write performance but will consume more memory.
 - Introduced in: v3.5.10, v4.0.2
 
-##### enable_stream_load_verbose_log
-
-- Default: false
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: Specifies whether to log the HTTP requests and responses for Stream Load jobs.
-- Introduced in: v2.5.17, v3.0.9, v3.1.6, v3.2.1
-
 ##### enable_load_spill_parallel_merge
 
 - Default: true
@@ -1168,6 +1240,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Is mutable: Yes
 - Description: Specifies whether to enable parallel spill merge within a single tablet. Enabling this can improve the performance of spill merge during data loading.
 - Introduced in: -
+
+##### enable_stream_load_verbose_log
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Specifies whether to log the HTTP requests and responses for Stream Load jobs.
+- Introduced in: v2.5.17, v3.0.9, v3.1.6, v3.2.1
 
 ##### flush_thread_num_per_store
 
@@ -1389,6 +1470,24 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Description: Limits the maximum number of documents StarRocks will request from Elasticsearch in a single batch. StarRocks sets the ES request batch size to min(`es_index_max_result_window`, `chunk_size`) when building `KEY_BATCH_SIZE` for the ES reader. If an ES request exceeds the Elasticsearch index setting `index.max_result_window`, Elasticsearch returns HTTP 400 (Bad Request). Adjust this value when scanning large indexes or increase the ES `index.max_result_window` on the Elasticsearch side to permit larger single requests.
 - Introduced in: v3.2.0
 
+##### ignore_load_tablet_failure
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: No
+- Description: When `false` (default), DataDir::load will treat any tablet header load failures (non-NotFound and non-AlreadyExist errors returned by _tablet_manager-&gt;load_tablet_from_meta) as fatal: the code logs the error and calls LOG(FATAL) to stop the BE process. When `true`, the BE continues startup despite such per-tablet load errors — failed tablet IDs are recorded and skipped while successful tablets are still loaded. Note that this flag does NOT suppress fatal errors from the RocksDB meta scan itself (walk errors via TabletMetaManager::walk...), which always cause the process to quit.
+- Introduced in: v3.2.0
+
+##### load_channel_abort_clean_up_delay_seconds
+
+- Default: 600
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: Controls how long (in seconds) LoadChannelMgr keeps the load IDs of aborted load channels before removing them from `_aborted_load_channels`. When a load job is cancelled or fails, the load ID stays recorded so any late-arriving load RPCs can be rejected immediately; once the delay expires, the entry is cleaned during the periodic background sweep (minimum sweep interval is 60 seconds). Setting the delay too low risks accepting stray RPCs after an abort, while setting it too high may retain state and consume resources longer than necessary. Tune this to balance correctness of late-request rejection and resource retention for aborted loads.
+- Introduced in: v3.5.11, v4.0.4
+
 ##### load_channel_rpc_thread_pool_num
 
 - Default: -1
@@ -1406,15 +1505,6 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Is mutable: No
 - Description: Sets the maximum pending-task queue size for the Load channel RPC thread pool created by LoadChannelMgr. This thread pool executes asynchronous `open` requests when `enable_load_channel_rpc_async` is enabled; the pool size is paired with `load_channel_rpc_thread_pool_num`. The large default (1024000) aligns with brpc workers' defaults to preserve behavior after switching from synchronous to asynchronous handling. If the queue is full, ThreadPool::submit() will fail and the incoming open RPC is cancelled with an error, causing the caller to receive a rejection. Increase this value to buffer larger bursts of concurrent `open` requests; reducing it tightens backpressure but may cause more rejections under load.
 - Introduced in: v3.5.0
-
-##### load_channel_abort_clean_up_delay_seconds
-
-- Default: 600
-- Type: Int
-- Unit: Seconds
-- Is mutable: Yes
-- Description: Controls how long (in seconds) LoadChannelMgr keeps the load IDs of aborted load channels before removing them from `_aborted_load_channels`. When a load job is cancelled or fails, the load ID stays recorded so any late-arriving load RPCs can be rejected immediately; once the delay expires, the entry is cleaned during the periodic background sweep (minimum sweep interval is 60 seconds). Setting the delay too low risks accepting stray RPCs after an abort, while setting it too high may retain state and consume resources longer than necessary. Tune this to balance correctness of late-request rejection and resource retention for aborted loads.
-- Introduced in: v3.5.11, v4.0.4
 
 ##### load_diagnose_rpc_timeout_profile_threshold_ms
 
@@ -2149,6 +2239,15 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Description: The maximum memory size of the row source mask buffer. When the buffer is larger than this value, data will be persisted to a temporary file on the disk. This value should be set lower than the value of `compaction_memory_limit_per_worker`.
 - Introduced in: -
 
+##### max_tablet_write_chunk_bytes
+
+- Default: 536870912
+- Type: long
+- Unit: Bytes
+- Is mutable: Yes
+- Description: Maximum allowed memory (in bytes) for the current in-memory tablet write chunk before it is treated as full and enqueued for sending. In NodeChannel::add_chunk and add_chunks the chunk is considered "not full" when _cur_chunk-&gt;num_rows() &lt; `chunk_size` AND _cur_chunk_mem_usage &lt; config::max_tablet_write_chunk_bytes; otherwise the chunk is pushed to the request queue. Increase this value to reduce the frequency of RPCs when loading wide tables (many columns), which can improve throughput at the cost of higher memory usage and larger RPC payloads. Tune to balance fewer RPCs against memory and serialization/BRPC limits.
+- Introduced in: v3.2.12
+
 ##### max_update_compaction_num_singleton_deltas
 
 - Default: 1000
@@ -2293,6 +2392,15 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Description: Ingest SST Compaction threshold for Primary Key index in a shared-data cluster.
 - Introduced in: -
 
+##### pk_index_map_shard_size
+
+- Default: 4096
+- Type: Int
+- Unit: Count
+- Is mutable: No
+- Description: Number of shards used by the primary-key index shard map in the lake UpdateManager. UpdateManager allocates a vector of `PkIndexShard` of this size and maps a tablet id to a shard via a bitmask (tablet_id & (`pk_index_map_shard_size` - 1)). Increasing `pk_index_map_shard_size` reduces lock contention among tablets that would otherwise share the same shard, at the cost of more mutex objects and slightly higher memory usage. The value must be a power of two because the code relies on bitmask indexing. For sizing guidance see `tablet_map_shard_size` heuristic: total_num_of_tablets_in_BE / 512.
+- Introduced in: v3.2.0
+
 ##### pk_index_memtable_flush_threadpool_max_threads
 
 - Default: 4
@@ -2300,6 +2408,15 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Unit: -
 - Is mutable: Yes
 - Description: The maximum number of threads in the thread pool for Primary Key index MemTable flush in a shared-data cluster.
+- Introduced in: -
+
+##### pk_index_memtable_flush_threadpool_size
+
+- Default: 1048576
+- Type: Int
+- Unit: Count
+- Is mutable: Yes
+- Description: Controls the maximum queue size (number of pending tasks) for the PK-index memtable flush thread pool used in shared-data (cloud-native / lake) mode. The thread pool is created as "cloud_native_pk_index_flush" in ExecEnv; its max thread count is governed by `pk_index_memtable_flush_threadpool_max_threads`. Increasing this value permits more memtable-flush tasks to be buffered before execution, which can reduce immediate backpressure but increases memory consumed by queued task objects. Decreasing it limits buffered tasks and can cause earlier backpressure or task rejections depending on thread-pool behavior. Tune according to available memory and expected concurrent flush workload.
 - Introduced in: -
 
 ##### pk_index_memtable_max_count
@@ -2327,6 +2444,15 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Unit: -
 - Is mutable: Yes
 - Description: The maximum number of threads in the thread pool for cloud native Primary Key index parallel Compaction in a shared-data cluster.
+- Introduced in: -
+
+##### pk_index_parallel_compaction_threadpool_size
+
+- Default: 1048576
+- Type: Int
+- Unit: Count
+- Is mutable: Yes
+- Description: The maximum queue size (number of pending tasks) for the thread pool used by cloud-native primary-key (PK) index parallel compaction in shared-data mode. This setting controls how many compaction tasks can be enqueued before the thread pool rejects new submissions; it is used by LakePersistentIndexParallelCompactMgr via ThreadPool::set_max_queue_size. The effective parallelism is bounded by `pk_index_parallel_compaction_threadpool_max_threads`; increase this value to avoid task rejections when you expect many concurrent compaction tasks, but be aware larger queues can increase memory and latency for queued work.
 - Introduced in: -
 
 ##### pk_index_parallel_get_min_rows
@@ -3083,6 +3209,15 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Description: Whether to allow vertical compaction tasks to cache data on local disks in a shared-data cluster.
 - Introduced in: v3.1.7, v3.2.3
 
+##### lake_replication_read_buffer_size
+
+- Default: 16777216 (16 * 1024 * 1024)
+- Type: Long
+- Unit: Bytes
+- Is mutable: Yes
+- Description: The read buffer size used when downloading lake segment files during lake replication. In ReplicationUtils::download_lake_segment_file this value determines the per-read allocation for reading remote files; the implementation uses the larger of this setting and a 1 MB minimum. A larger value reduces the number of read calls and can improve throughput but increases memory used per concurrent download; a smaller value lowers memory usage at the cost of more IO calls. Tune according to network bandwidth, storage IO characteristics, and the number of parallel replication threads.
+- Introduced in: -
+
 ##### lake_service_max_concurrency
 
 - Default: 0
@@ -3302,3 +3437,4 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Is mutable: No
 - Description: Maximum number of bytes to read from the INFO logfile and show on the BE debug webserver's log page. The handler uses this value to compute a seek offset (showing the last N bytes) to avoid reading or serving very large log files. If the logfile is smaller than this value the whole file is shown. Note: in the current implementation the code that reads and serves the INFO log is commented out and the handler reports that the INFO log file couldn't be opened, so this parameter may have no effect unless the log-serving code is enabled.
 - Introduced in: v3.2.0
+
