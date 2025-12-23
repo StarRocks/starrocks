@@ -23,7 +23,7 @@
 
 namespace starrocks {
 
-uint8_t primitive_header(VariantType primitive) {
+static inline uint8_t primitive_header(VariantType primitive) {
     return static_cast<uint8_t>(primitive) << 2;
 }
 
