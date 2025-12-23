@@ -41,6 +41,12 @@ struct TWorkGroup {
 
   15: optional i32 exclusive_cpu_cores
   16: optional string mem_pool
+  17: optional i32 cpu_weight_percent
+  18: optional i32 exclusive_cpu_percent
+
+  50: optional list<string> warehouses
+  51: optional bool inactive
+
   100: optional i32 max_cpu_cores
 }
 
