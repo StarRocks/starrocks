@@ -108,4 +108,86 @@ public class ArrowFlightSqlConnectProcessor extends ConnectProcessor {
         ctx.setStartTime();
         ctx.setCommand(MysqlCommand.COM_SLEEP);
     }
+<<<<<<< HEAD
+=======
+
+    private void notifyForwardDeploymentFinished(Frontend requestFE, ArrowFlightSqlResultDescriptor backendResult)
+            throws TException {
+        TNetworkAddress address = new TNetworkAddress(requestFE.getHost(), requestFE.getRpcPort());
+        int timeoutMs = ctx.getExecTimeout() * 1000 + Config.thrift_rpc_timeout_ms;
+        if (timeoutMs < 0) {
+            timeoutMs = ctx.getExecTimeout() * 1000;
+        }
+
+        TNotifyForwardDeploymentFinishedRequest request = new TNotifyForwardDeploymentFinishedRequest();
+
+        request.setQuery_id(UUIDUtil.toTUniqueId(ctx.getQueryId()));
+        request.setArrow_flight_sql_result_backend_id(backendResult.getBackendId());
+        request.setArrow_flight_sql_result_fragment_id(backendResult.getFragmentInstanceId());
+        request.setArrow_flight_sql_result_schema(backendResult.getSchema().serializeAsMessage());
+
+        ThriftRPCRequestExecutor.call(
+                ThriftConnectionPool.frontendPool,
+                address,
+                timeoutMs,
+                client -> client.notifyForwardDeploymentFinished(request));
+    }
+
+    private void reportError(ConnectContext ctx) throws StarRocksException {
+        String errMsg = ctx.getState().getErrorMessage();
+        if (StringUtils.isEmpty(errMsg)) {
+            errMsg = "Unknown error";
+        }
+        throw new StarRocksException(String.format("failed to process query [queryID=%s] [error=%s]",
+                DebugUtil.printId(ctx.getExecutionId()), errMsg));
+    }
+
+    private StatementBase runWithParserStageRetry() throws Exception {
+        try {
+            return executeQueryAttempt();
+        } catch (LargeInPredicateException e) {
+            final boolean originalEnableLargeInPredicate = ctx.getSessionVariable().enableLargeInPredicate();
+            try {
+                ctx.getSessionVariable().setEnableLargeInPredicate(false);
+                LOG.warn("Retrying query with enable_large_in_predicate=false");
+                Tracers.record(Tracers.Module.BASE, "retry_with_large_in_predicate_exception", "true");
+                ((ArrowFlightSqlConnectContext) ctx).resetForStatement();
+                return executeQueryAttempt();
+            } finally {
+                ctx.getSessionVariable().setEnableLargeInPredicate(originalEnableLargeInPredicate);
+            }
+        }
+    }
+
+    private StatementBase executeQueryAttempt() throws Exception {
+        StatementBase parsedStmt = parse(originStmt, ctx.getSessionVariable());
+        Tracers.init(ctx, parsedStmt.getTraceMode(), parsedStmt.getTraceModule());
+
+        executor = new StmtExecutor(ctx, parsedStmt, deploymentFinished);
+        ctx.setIsLastStmt(true);
+        ctx.setSingleStmt(true);
+        ctx.setExecutor(executor);
+
+        executor.addRunningQueryDetail(parsedStmt);
+        executor.execute();
+
+        return parsedStmt;
+    }
+
+    private StatementBase parse(String sql, SessionVariable sessionVariables) throws StarRocksException {
+        List<StatementBase> stmts;
+        try (Timer ignored = Tracers.watchScope(Tracers.Module.PARSER, "Parser")) {
+            stmts = com.starrocks.sql.parser.SqlParser.parse(sql, sessionVariables);
+        }
+
+        if (stmts.size() > 1) {
+            throw new StarRocksException("arrow flight sql query does not support execute multiple query");
+        }
+
+        StatementBase parsedStmt = stmts.get(0);
+        parsedStmt.setOrigStmt(new OriginStatement(sql));
+        return parsedStmt;
+    }
+
+>>>>>>> ab4de17963 ([BugFix] fix profile's stmt when multi stmt submited (#67097))
 }
