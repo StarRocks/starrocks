@@ -4,6 +4,8 @@ sidebar_position: 120
 
 # 基于审计日志的资源组配置
 
+import AuditLoaderNote from '../_assets/commonMarkdown/audit_loader_note.mdx'
+
 在 StarRocks 中，**资源组** 提供了一种有效的资源隔离机制，通过基于用户身份和查询类型等分类器分配 CPU、内存和并发限制。这一特性对于在多租户环境中实现高效的资源利用至关重要。
 
 传统的资源组配置通常依赖于经验判断。通过分析审计日志表 `starrocks_audit_db__.starrocks_audit_tbl__` 中的历史查询数据，管理员可以采用一种**数据驱动的方法**来调整资源组。关键指标如 CPU 时间、内存消耗和查询并发性提供了关于实际工作负载特征的客观见解。
@@ -16,9 +18,7 @@ sidebar_position: 120
 
 本主题提供了基于从审计日志中观察到的工作负载模式推导出适当的资源组参数的分步教程。
 
-:::note
-本教程基于使用 AuditLoader 插件的分析，该插件允许您在集群内直接使用 SQL 语句查询审计日志。有关安装插件的详细说明，请参见 [AuditLoader](../administration/management/audit_loader.md)。
-:::
+<AuditLoaderNote />
 
 ## CPU 资源分配
 
@@ -228,6 +228,5 @@ StarRocks 默认提供了一个系统定义的资源组 (`default_mv_wg`) 用于
 
 ## 另请参阅
 
-- [AuditLoader](../administration/management/audit_loader.md)
 - [Resource Group](../administration/management/resource_management/resource_group.md)
 - [Query Queues](../administration/management/resource_management/query_queues.md)
