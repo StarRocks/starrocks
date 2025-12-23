@@ -45,6 +45,9 @@ import org.apache.logging.log4j.core.config.ConfigurationSource;
 import org.apache.logging.log4j.core.config.xml.XmlConfiguration;
 import org.apache.logging.log4j.core.lookup.Interpolator;
 import org.apache.logging.log4j.core.lookup.StrSubstitutor;
+import org.slf4j.bridge.SLF4JBridgeHandler;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
@@ -335,6 +338,21 @@ public class Log4jConfig extends XmlConfiguration {
     }
 
     private static void reconfig() throws IOException {
+        SLF4JBridgeHandler.removeHandlersForRootLogger();
+        SLF4JBridgeHandler.install();
+
+        Level targetJulLevel = Level.INFO;
+        if (sysLogLevel != null) {
+            if ("DEBUG".equalsIgnoreCase(sysLogLevel)) {
+                targetJulLevel = Level.FINE;
+            } else if ("WARN".equalsIgnoreCase(sysLogLevel)) {
+                targetJulLevel = Level.WARNING;
+            } else if ("ERROR".equalsIgnoreCase(sysLogLevel) || "FATAL".equalsIgnoreCase(sysLogLevel)) {
+                targetJulLevel = Level.SEVERE;
+            }
+        }
+        Logger.getLogger("").setLevel(targetJulLevel);
+
         String xmlConfTemplate = generateActiveLog4jXmlConfig();
         if (!FeConstants.runningUnitTest && !FeConstants.isReplayFromQueryDump) {
             System.out.println("=====");

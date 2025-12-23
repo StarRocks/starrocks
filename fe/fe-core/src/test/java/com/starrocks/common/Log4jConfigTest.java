@@ -23,6 +23,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.slf4j.bridge.SLF4JBridgeHandler;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -119,5 +120,53 @@ public class Log4jConfigTest {
         Assertions.assertEquals("Log4jConfigTest.java", jsonObject.get("file").getAsString());
         Assertions.assertEquals("WARN", jsonObject.get("level").getAsString());
         Assertions.assertEquals(logMessage, jsonObject.get("message").getAsString());
+    }
+
+    @Test
+    public void testJulToSlf4jBridge() throws IOException {
+        Config.sys_log_format = "plaintext";
+        Config.sys_log_to_console = true;
+        Config.sys_log_level = "INFO";
+
+        Log4jConfig.initLogging();
+
+        PrintStream oldErr = System.err;
+        ByteArrayOutputStream byteOs = new ByteArrayOutputStream();
+        System.setErr(new PrintStream(byteOs, true));
+
+        try {
+            String julMessage = "This is a message from java.util.logging";
+            java.util.logging.Logger julLogger = java.util.logging.Logger.getLogger("com.starrocks.test.jul");
+            julLogger.info(julMessage);
+
+            String capturedOutput = byteOs.toString(Charset.defaultCharset());
+
+            Assertions.assertTrue(capturedOutput.contains(julMessage),
+                    "The JUL log message should be captured by Log4j2. Captured: " + capturedOutput);
+            Assertions.assertTrue(capturedOutput.contains("INFO"), "Log output should contain level info");
+
+        } finally {
+            System.setErr(oldErr);
+            Config.sys_log_to_console = false;
+            SLF4JBridgeHandler.uninstall();
+        }
+    }
+
+    @Test
+    public void testJulLevelMapping() throws IOException {
+
+        Log4jConfig.updateLogging("DEBUG", null, null);
+        Assertions.assertEquals(java.util.logging.Level.FINE, java.util.logging.Logger.getLogger("").getLevel());
+
+        Log4jConfig.updateLogging("WARN", null, null);
+        Assertions.assertEquals(java.util.logging.Level.WARNING, java.util.logging.Logger.getLogger("").getLevel());
+
+        Log4jConfig.updateLogging("ERROR", null, null);
+        Assertions.assertEquals(java.util.logging.Level.SEVERE, java.util.logging.Logger.getLogger("").getLevel());
+
+        Log4jConfig.updateLogging("FATAL", null, null);
+        Assertions.assertEquals(java.util.logging.Level.SEVERE, java.util.logging.Logger.getLogger("").getLevel());
+
+        Log4jConfig.updateLogging("INFO", null, null);
     }
 }
