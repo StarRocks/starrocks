@@ -34,6 +34,8 @@
 
 namespace starrocks {
 
+DEFINE_FAIL_POINT(always_use_partition_join);
+
 class SingleHashJoinProberImpl final : public HashJoinProberImpl {
 public:
     SingleHashJoinProberImpl(HashJoiner& hash_joiner) : HashJoinProberImpl(hash_joiner) {}
@@ -358,7 +360,9 @@ bool SingleHashJoinBuilder::anti_join_key_column_has_null() const {
     auto& column = _ht.get_key_columns()[0];
     if (column->is_nullable()) {
         const auto& null_column = ColumnHelper::as_raw_column<NullableColumn>(column)->null_column();
-        DCHECK_GT(null_column->size(), 0);
+        if (null_column->empty()) {
+            return false;
+        }
         return null_column->contain_value(1, null_column->size(), 1);
     }
     return false;
@@ -378,7 +382,7 @@ Status SingleHashJoinBuilder::do_append_chunk(const ChunkPtr& chunk) {
 
 Status SingleHashJoinBuilder::build(RuntimeState* state) {
     SCOPED_TIMER(_hash_joiner.build_metrics().build_ht_timer);
-    TRY_CATCH_BAD_ALLOC(RETURN_IF_ERROR(_ht.build(state)));
+    TRY_CATCH_BAD_ALLOC(RETURN_IF_ERROR(_ht.build(state, !_is_sub_partition)));
     _ready = true;
     return Status::OK();
 }
@@ -525,6 +529,7 @@ size_t AdaptivePartitionHashJoinBuilder::_estimated_build_cost<CacheLevel::MEMOR
     return build_row_size * 2;
 }
 
+<<<<<<< HEAD
 void AdaptivePartitionHashJoinBuilder::_adjust_partition_rows(size_t build_row_size) {
     build_row_size = std::max(build_row_size, 4UL);
     _fit_L2_cache_max_rows = _L2_cache_size / build_row_size;
@@ -543,6 +548,65 @@ void AdaptivePartitionHashJoinBuilder::_adjust_partition_rows(size_t build_row_s
                _estimated_build_cost<CacheLevel::MEMORY>(build_row_size)) {
         // It is only after this that performance gains can be realized beyond the L3 cache.
         _partition_join_min_rows = _fit_L3_cache_max_rows;
+=======
+bool AdaptivePartitionHashJoinBuilder::_need_partition_join_for_build(size_t ht_num_rows) const {
+    // only use partition join when hash table is not empty
+    if (ht_num_rows == 0) return false;
+    FAIL_POINT_TRIGGER_RETURN(always_use_partition_join, true);
+    return (_partition_join_l2_min_rows < ht_num_rows && ht_num_rows <= _partition_join_l2_max_rows) ||
+           (_partition_join_l3_min_rows < ht_num_rows && ht_num_rows <= _partition_join_l3_max_rows);
+}
+
+bool AdaptivePartitionHashJoinBuilder::_need_partition_join_for_append(size_t ht_num_rows) const {
+    FAIL_POINT_TRIGGER_RETURN(always_use_partition_join, true);
+    return ht_num_rows <= _partition_join_l2_max_rows || ht_num_rows <= _partition_join_l3_max_rows;
+}
+
+void AdaptivePartitionHashJoinBuilder::_adjust_partition_rows(size_t hash_table_bytes_per_row,
+                                                              size_t hash_table_probing_bytes_per_row) {
+    FAIL_POINT_TRIGGER_RETURN(always_use_partition_join, (void)0);
+    if (hash_table_bytes_per_row == _hash_table_bytes_per_row &&
+        hash_table_probing_bytes_per_row == _hash_table_probing_bytes_per_row) {
+        return; // No need to adjust partition rows.
+    }
+
+    _hash_table_bytes_per_row = hash_table_bytes_per_row;
+    _hash_table_probing_bytes_per_row = hash_table_probing_bytes_per_row;
+
+    hash_table_bytes_per_row = std::max<size_t>(hash_table_bytes_per_row, 1);
+
+    _fit_L2_cache_max_rows = _L2_cache_size / hash_table_bytes_per_row;
+    _fit_L3_cache_max_rows = _L3_cache_size / hash_table_bytes_per_row;
+
+    _partition_join_l2_min_rows = -1;
+    _partition_join_l2_max_rows = 0;
+    _partition_join_l3_min_rows = -1;
+    _partition_join_l3_max_rows = 0;
+
+    const auto l2_benefit = _estimate_cost_by_bytes<CacheLevel::L3>(hash_table_probing_bytes_per_row) -
+                            _estimate_cost_by_bytes<CacheLevel::L2>(hash_table_probing_bytes_per_row);
+    const auto l3_benefit = _estimate_cost_by_bytes<CacheLevel::MEMORY>(hash_table_probing_bytes_per_row) -
+                            _estimate_cost_by_bytes<CacheLevel::L3>(hash_table_probing_bytes_per_row);
+
+    if (_probe_row_shuffle_cost < l3_benefit) { // Partitioned joins benefit from L3 cache.
+        // Partitioned joins benefit from L3 cache when probing a row has cache miss in non-partitioned join but not in partitioned join.
+        // 1. min_rows > (l3_cache_size/hash_table_bytes_per_row)*(l3_benefit/(l3_benefit-_probe_row_shuffle_cost)), because:
+        //   - l3_benefit * non_partition_cache_miss_rate > _probe_row_shuffle_cost
+        //   - non_partition_cache_miss_rate = 1 - l3_cache_size/(min_rows*hash_table_bytes_per_row)
+        // 2. max_rows < (l3_cache_size/hash_table_bytes_per_row)*(l3_benefit/_probe_row_shuffle_cost)*num_partitions, because:
+        //   - l3_benefit * partition_cache_hit_rate > _probe_row_shuffle_cost
+        //   - partition_cache_hit_rate = l3_cache_size/(max_rows_per_partition*hash_table_bytes_per_row)
+        _partition_join_l3_min_rows = _fit_L3_cache_max_rows * l3_benefit / (l3_benefit - _probe_row_shuffle_cost);
+        _partition_join_l3_max_rows = _fit_L3_cache_max_rows * _partition_num * l3_benefit / _probe_row_shuffle_cost;
+        _partition_join_l3_max_rows *= 2; // relax the restriction
+
+        if (_probe_row_shuffle_cost < l2_benefit) { // Partitioned joins benefit from L2 cache.
+            _partition_join_l2_min_rows = _fit_L2_cache_max_rows * l2_benefit / (l2_benefit - _probe_row_shuffle_cost);
+            _partition_join_l2_min_rows *= 2; // Make the restriction more stringent
+            _partition_join_l2_max_rows =
+                    (_fit_L2_cache_max_rows * _partition_num) * l2_benefit / _probe_row_shuffle_cost;
+        }
+>>>>>>> aa13e5cce6 ([BugFix] Nullaware left anti join correlated subquery should not apply partition join (#67038))
     } else {
         // Partitioned joins don't have performance gains. Not using partition hash join.
         _partition_num = 1;
@@ -730,6 +794,7 @@ Status AdaptivePartitionHashJoinBuilder::build(RuntimeState* state) {
     }
 
     for (auto& builder : _builders) {
+        builder->set_is_sub_partition(_partition_num > 1);
         RETURN_IF_ERROR(builder->build(state));
     }
     _ready = true;
