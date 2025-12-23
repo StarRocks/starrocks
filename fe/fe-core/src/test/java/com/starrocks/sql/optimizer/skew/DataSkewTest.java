@@ -161,11 +161,11 @@ public class DataSkewTest {
         assertTrue(nullAndMcvButMoreMcvSkewInfo.maybeMcvs().isPresent());
 
         final var expectedMcvs =
-                List.of(Pair.create("1", 50000), Pair.create("2", 20000), Pair.create("3", 10000), Pair.create("4", 5000),
-                        Pair.create("5", 500));
+                List.of(Pair.create("1", 50000L), Pair.create("2", 20000L), Pair.create("3", 10000L), Pair.create("4", 5000L),
+                        Pair.create("5", 500L));
         assertEquals(expectedMcvs.size(), nullAndMcvButMoreMcvSkewInfo.maybeMcvs().get().size());
         for (final var value : expectedMcvs) {
-            nullAndMcvButMoreMcvSkewInfo.maybeMcvs().get().contains(value);
+            assertTrue(nullAndMcvButMoreMcvSkewInfo.maybeMcvs().get().contains(value));
         }
     }
 

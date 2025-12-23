@@ -427,10 +427,6 @@ public class SkewJoinOptimizeRule extends TransformationRule {
     private OptExpression addSaltForRightChild(LogicalJoinOperator oldJoinOperator, OptExpression input,
                                                ScalarOperator rightSkewColumn, OptimizerContext context) {
         List<ScalarOperator> skewValues = oldJoinOperator.getSkewValues();
-        // If skew values is empty or contains only NULL, still proceed to create salt table.
-        if (skewValues == null || skewValues.isEmpty()) {
-            skewValues = Lists.newArrayList(ConstantOperator.createNull(NullType.NULL));
-        }
         OptExpression skewValueSaltOpt = createSkewValueSaltTable(skewValues, context);
         Map<ColumnRefOperator, ScalarOperator> skewValueSaltProjects =
                 ((LogicalProjectOperator) skewValueSaltOpt.getOp()).getColumnRefMap();
