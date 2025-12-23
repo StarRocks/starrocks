@@ -28,6 +28,7 @@
 #include "util/stack_util.h"
 
 namespace starrocks {
+<<<<<<< HEAD:be/src/exec/join_hash_map.cpp
 // if the same hash values are clustered, after the first probe, all related hash buckets are cached, without too many
 // misses. So check time locality of probe keys here.
 void HashTableProbeState::consider_probe_time_locality() {
@@ -46,6 +47,162 @@ void HashTableProbeState::consider_probe_time_locality() {
                         ++unique_size;
                         if (unique_size >= target) {
                             break;
+=======
+
+DEFINE_FAIL_POINT(hash_join_append_bad_alloc);
+DEFINE_FAIL_POINT(hash_join_build_bad_alloc);
+
+// ------------------------------------------------------------------------------------
+// JoinHashMapSelector
+// ------------------------------------------------------------------------------------
+
+class JoinHashMapSelector {
+public:
+    static std::tuple<JoinKeyConstructorUnaryType, JoinHashMapMethodUnaryType> construct_key_and_determine_hash_map(
+            RuntimeState* state, JoinHashTableItems* table_items);
+
+private:
+    static size_t _get_size_of_fixed_and_contiguous_type(LogicalType data_type);
+    static JoinKeyConstructorUnaryType _determine_key_constructor(RuntimeState* state, JoinHashTableItems* table_items);
+    static JoinHashMapMethodUnaryType _determine_hash_map_method(RuntimeState* state, JoinHashTableItems* table_items,
+                                                                 JoinKeyConstructorUnaryType key_constructor_type);
+    static size_t _get_binary_column_max_size(RuntimeState* state, const ColumnPtr& column);
+    // @return: <can_use, JoinHashMapMethodUnaryType>, where `JoinHashMapMethodUnaryType` is effective only when `can_use` is true.
+    template <LogicalType LT>
+    static std::pair<bool, JoinHashMapMethodUnaryType> _try_use_range_direct_mapping(RuntimeState* state,
+                                                                                     JoinHashTableItems* table_items);
+    // @return: <can_use, JoinHashMapMethodUnaryType>, where `JoinHashMapMethodUnaryType` is effective only when `can_use` is true.
+    template <LogicalType LT>
+    static std::pair<bool, JoinHashMapMethodUnaryType> _try_use_linear_chained(RuntimeState* state,
+                                                                               JoinHashTableItems* table_items);
+
+    // Helper method to get fallback hash map method type based on join type
+    template <LogicalType LT>
+    static std::pair<bool, JoinHashMapMethodUnaryType> _get_fallback_method(bool is_asof_join_type);
+};
+
+std::tuple<JoinKeyConstructorUnaryType, JoinHashMapMethodUnaryType>
+JoinHashMapSelector::construct_key_and_determine_hash_map(RuntimeState* state, JoinHashTableItems* table_items) {
+    const auto key_constructor_type = _determine_key_constructor(state, table_items);
+    dispatch_join_key_constructor_unary(key_constructor_type, [&]<JoinKeyConstructorUnaryType CT> {
+        using KeyConstructor = typename JoinKeyConstructorUnaryTypeTraits<CT>::BuildType;
+        KeyConstructor().prepare(state, table_items);
+        KeyConstructor().build_key(state, table_items);
+    });
+
+    const auto method_type = _determine_hash_map_method(state, table_items, key_constructor_type);
+    return {key_constructor_type, method_type};
+}
+
+size_t JoinHashMapSelector::_get_size_of_fixed_and_contiguous_type(const LogicalType data_type) {
+    switch (data_type) {
+    case LogicalType::TYPE_BOOLEAN:
+        return sizeof(RunTimeTypeTraits<LogicalType::TYPE_BOOLEAN>::CppType);
+    case LogicalType::TYPE_TINYINT:
+        return sizeof(RunTimeTypeTraits<LogicalType::TYPE_TINYINT>::CppType);
+    case LogicalType::TYPE_SMALLINT:
+        return sizeof(RunTimeTypeTraits<LogicalType::TYPE_SMALLINT>::CppType);
+    case LogicalType::TYPE_INT:
+        return sizeof(RunTimeTypeTraits<LogicalType::TYPE_INT>::CppType);
+    case LogicalType::TYPE_BIGINT:
+        return sizeof(RunTimeTypeTraits<LogicalType::TYPE_BIGINT>::CppType);
+    case LogicalType::TYPE_FLOAT:
+        // float will be convert to double, so current can't reach here
+        return sizeof(RunTimeTypeTraits<LogicalType::TYPE_FLOAT>::CppType);
+    case LogicalType::TYPE_DOUBLE:
+        return sizeof(RunTimeTypeTraits<LogicalType::TYPE_DOUBLE>::CppType);
+    case LogicalType::TYPE_DATE:
+        // date will be convert to datetime, so current can't reach here
+        return sizeof(RunTimeTypeTraits<LogicalType::TYPE_DATE>::CppType);
+    case LogicalType::TYPE_DATETIME:
+        return sizeof(RunTimeTypeTraits<LogicalType::TYPE_DATETIME>::CppType);
+    default:
+        return 0;
+    }
+}
+
+// If all builder strings have a length ≤ 16, they can be represented using fixed-length INT/BIGINT/LARGEINT types
+// instead of strings. This representation is guaranteed to use less memory than the original string form,
+// which requires both a `Slice` (16 bytes) and the string data itself.
+//
+// Representation format using fixed-length INT/BIGINT/LARGEINT:
+// - Record the maximum string length among all builders as `max_str_length`.
+//   For each string, the first `length` bytes store the actual string content,
+//   and the remaining bytes from `length + 1` to `max_str_length` are filled with `'\0'`.
+//   Therefore, if any string ends with a `'\0'`, this optimization cannot be applied.
+// - During the probe phase, a string may exceed `max_str_length` or end with `'\0'`.
+//   In such cases, represent it as `0xFF`, since `0xFF` is an invalid UTF-8 byte and our VARCHAR type must use UTF-8
+//   encoding. The maximum VARCHAR value (`0xFF`) also leverages this property.
+size_t JoinHashMapSelector::_get_binary_column_max_size(RuntimeState* state, const ColumnPtr& column) {
+    if (!state->enable_hash_join_serialize_fixed_size_string()) {
+        return 0;
+    }
+
+    if (column->is_large_binary() || column->is_view()) {
+        return 0;
+    }
+
+    const BinaryColumn* binary_column = nullptr;
+    if (column->is_nullable()) {
+        auto* null_column = ColumnHelper::as_raw_column<NullableColumn>(column);
+        const auto data_column = null_column->data_column();
+        binary_column = down_cast<const BinaryColumn*>(data_column.get());
+    } else {
+        binary_column = down_cast<const BinaryColumn*>(column.get());
+    }
+
+    const auto& offsets = binary_column->get_offset();
+    const auto& bytes = binary_column->get_bytes();
+
+    bool has_tail_zero = false;
+    for (size_t i = offsets.size() - 1; i > 0 && offsets[i] > 0; i--) {
+        has_tail_zero |= bytes[offsets[i] - 1] == 0;
+    }
+    if (has_tail_zero) {
+        return 0;
+    }
+
+    int64_t max_size = 1;
+    for (size_t i = 0; i + 1 < offsets.size(); i++) {
+        max_size = std::max<int64_t>(max_size, offsets[i + 1] - offsets[i]);
+    }
+
+    if (max_size <= 16) {
+        return max_size;
+    }
+    return 0;
+}
+
+JoinKeyConstructorUnaryType JoinHashMapSelector::_determine_key_constructor(RuntimeState* state,
+                                                                            JoinHashTableItems* table_items) {
+    const size_t num_keys = table_items->join_keys.size();
+    DCHECK_GT(num_keys, 0);
+
+    for (size_t i = 0; i < num_keys; i++) {
+        if (!table_items->key_columns[i]->has_null()) {
+            table_items->join_keys[i].is_null_safe_equal = false;
+        }
+    }
+
+    if (num_keys == 1 && !table_items->join_keys[0].is_null_safe_equal) {
+        return dispatch_join_logical_type(
+                table_items->join_keys[0].type->type, JoinKeyConstructorUnaryType::SERIALIZED_VARCHAR,
+                [&]<LogicalType LT>() {
+                    static constexpr auto MAPPING_LT = LT == TYPE_CHAR ? TYPE_VARCHAR : LT;
+                    if constexpr (MAPPING_LT == TYPE_VARCHAR) {
+                        const size_t max_size = _get_binary_column_max_size(state, table_items->key_columns[0]);
+                        if (max_size > 0) {
+                            table_items->serialized_fixed_size_key_bytes.emplace_back(max_size);
+                            if (max_size <= 4) {
+                                return JoinKeyConstructorUnaryType::SERIALIZED_FIXED_SIZE_INT;
+                            }
+                            if (max_size <= 8) {
+                                return JoinKeyConstructorUnaryType::SERIALIZED_FIXED_SIZE_BIGINT;
+                            }
+                            if (max_size <= 16) {
+                                return JoinKeyConstructorUnaryType::SERIALIZED_FIXED_SIZE_LARGEINT;
+                            }
+>>>>>>> aa13e5cce6 ([BugFix] Nullaware left anti join correlated subquery should not apply partition join (#67038)):be/src/exec/join/join_hash_table.cpp
                         }
                     }
                     occurrence[next[i]]++;
@@ -563,7 +720,17 @@ int64_t JoinHashTable::mem_usage() const {
     return usage;
 }
 
+<<<<<<< HEAD:be/src/exec/join_hash_map.cpp
 Status JoinHashTable::build(RuntimeState* state) {
+=======
+Status JoinHashTable::build(RuntimeState* state, bool allow_build_empty_table) {
+    CancelableDefer defer = CancelableDefer([&]() {
+        _table_items->key_columns.clear();
+        _table_items->build_chunk->columns().clear();
+        _hash_map = {};
+    });
+
+>>>>>>> aa13e5cce6 ([BugFix] Nullaware left anti join correlated subquery should not apply partition join (#67038)):be/src/exec/join/join_hash_table.cpp
     RETURN_IF_ERROR(_table_items->build_chunk->upgrade_if_overflow());
     _table_items->has_large_column = _table_items->build_chunk->has_large_column();
 
@@ -578,6 +745,7 @@ Status JoinHashTable::build(RuntimeState* state) {
 
     RETURN_IF_ERROR(_upgrade_key_columns_if_overflow());
 
+<<<<<<< HEAD:be/src/exec/join_hash_map.cpp
     _hash_map_type = _choose_join_hash_map();
 
     switch (_hash_map_type) {
@@ -592,6 +760,29 @@ Status JoinHashTable::build(RuntimeState* state) {
 #undef M
     default:
         assert(false);
+=======
+    if (_table_items->row_count == 0 && allow_build_empty_table) {
+        _is_empty_map = true;
+        _hash_map = std::make_unique<JoinHashMapForEmpty>(_table_items.get(), _probe_state.get());
+    } else {
+        _is_empty_map = false;
+        std::tie(_key_constructor_type, _hash_map_method_type) =
+                JoinHashMapSelector::construct_key_and_determine_hash_map(state, _table_items.get());
+        auto create_hash_map = [&]<JoinKeyConstructorUnaryType CUT, JoinHashMapMethodUnaryType MUT>() {
+            static constexpr auto LT = JoinKeyConstructorUnaryTypeTraits<CUT>::logical_type;
+            if constexpr (LT != JoinHashMapMethodUnaryTypeTraits<MUT>::logical_type) {
+                return Status::InvalidArgument(
+                        strings::Substitute("Join key logical type {} does not match hash map logical type {}",
+                                            static_cast<int>(CUT), static_cast<int>(MUT)));
+            } else {
+                static constexpr auto CT = JoinKeyConstructorUnaryTypeTraits<CUT>::key_constructor_type;
+                static constexpr auto MT = JoinHashMapMethodUnaryTypeTraits<MUT>::map_method_type;
+                _hash_map = std::make_unique<JoinHashMap<LT, CT, MT>>(_table_items.get(), _probe_state.get());
+                return Status::OK();
+            }
+        };
+        RETURN_IF_ERROR(dispatch_join_hash_map(_key_constructor_type, _hash_map_method_type, create_hash_map));
+>>>>>>> aa13e5cce6 ([BugFix] Nullaware left anti join correlated subquery should not apply partition join (#67038)):be/src/exec/join/join_hash_table.cpp
     }
 
     return Status::OK();

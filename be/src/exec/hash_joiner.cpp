@@ -95,7 +95,8 @@ HashJoiner::HashJoiner(const HashJoinerParam& param)
     }
 
     HashJoinBuildOptions build_options;
-    build_options.enable_partitioned_hash_join = param._enable_partition_hash_join;
+    build_options.enable_partitioned_hash_join =
+            param._enable_partition_hash_join && support_partitioned(_join_type, !_other_join_conjunct_ctxs.empty());
 
     _hash_join_builder = HashJoinBuilderFactory::create(_pool, build_options, *this);
     _hash_join_prober = _pool->add(new HashJoinProber(*this));
