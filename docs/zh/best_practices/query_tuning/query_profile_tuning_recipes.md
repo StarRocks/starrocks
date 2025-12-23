@@ -57,7 +57,7 @@ Scan Operator 使用一个额外的线程池来执行 IO 任务。因此，该�
 
 **Rowset/Segment 碎片化** – `RowsetsReadCount`/`SegmentsReadCount` 激增且 `SegmentInitTime` 较长，表明存在大量小 Rowset。执行手动 Compaction，并将小批量导入合并为批量写入，以便段提前合并。
 
-**软删除累积** – `DeleteFilterRows` 很大，说明软删除使用较多。运行 BE 的 Compaction 以清理墓碑并合并删除位图。
+**软删除累积** – `DeleteFilterRows` 很大，说明软删除使用较多。运行 BE 的 Compaction 以清理软删除。
 
 ### 2.2 聚合  [[metrics]](./query_profile_operator_metrics.md#aggregate-operator)
 

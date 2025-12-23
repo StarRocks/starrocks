@@ -59,7 +59,7 @@ The Scan Operator utilizes an additional thread pool for executing IO tasks. The
 
 **Rowset/segment fragmentation** – Exploding `RowsetsReadCount`/`SegmentsReadCount` plus a long `SegmentInitTime` indicate many tiny rowsets. Trigger a manual compaction and batch small loads so segments merge up‑front.
 
-**Accumulated soft deletes** – A large `DeleteFilterRows` implies heavy soft‑delete usage. Run BE compaction to purge tombstones and consolidate the delete bitmap.
+**Accumulated soft deletes** – A large `DeleteFilterRows` implies heavy soft‑delete usage. Run BE compaction to purge soft deletes.
 
 ### 2.2 Aggregate  [[metrics]](./query_profile_operator_metrics.md#aggregate-operator)
 

@@ -57,7 +57,7 @@ Scan Operator は、IO タスクを実行するための追加のスレッドプ
 
 **Rowset/segment の断片化** – `RowsetsReadCount`/`SegmentsReadCount` が急増し、長い `SegmentInitTime` がある場合、多くの小さな rowset が存在します。手動でのコンパクションをトリガーし、小さなロードをバッチ処理してセグメントを事前にマージします。
 
-**累積されたソフトデリート** – 大きな `DeleteFilterRows` は、ソフトデリートの使用が多いことを示します。BE コンパクションを実行してトゥームストーンを削除し、削除ビットマップを統合します。
+**累積されたソフトデリート** – 大きな `DeleteFilterRows` は、ソフトデリートの使用が多いことを示します。BE コンパクションを実行してソフトデリートをパージします。
 
 ### 2.2 集計  [[metrics]](./query_profile_operator_metrics.md#aggregate-operator)
 
