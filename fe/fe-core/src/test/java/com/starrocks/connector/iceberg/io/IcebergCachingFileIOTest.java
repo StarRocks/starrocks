@@ -159,4 +159,26 @@ public class IcebergCachingFileIOTest {
             });
         });
     }
+
+    @Test
+    public void testWrappedIOConfigurationPropagationWithoutSetConf() {
+        IcebergCachingFileIO cachingFileIO = new IcebergCachingFileIO();
+        Map<String, String> properties = new HashMap<>();
+        properties.put("iceberg.catalog.type", "rest");
+        cachingFileIO.initialize(properties);
+
+        FileIO wrappedIO = cachingFileIO.getWrappedIO();
+        Assertions.assertTrue(wrappedIO instanceof HadoopConfigurable);
+
+        HadoopConfigurable hadoopConfigurable = (HadoopConfigurable) wrappedIO;
+        Assertions.assertDoesNotThrow(() -> {
+            hadoopConfigurable.serializeConfWith(confToSerialize -> {
+                Assertions.assertNotNull(confToSerialize);
+                int size = confToSerialize.size();
+                Map<String, String> confAsMap = new HashMap<>(size);
+                confToSerialize.forEach(entry -> confAsMap.put(entry.getKey(), entry.getValue()));
+                return (SerializableSupplier<Configuration>) () -> confToSerialize;
+            });
+        });
+    }
 }
