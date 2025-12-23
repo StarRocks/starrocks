@@ -17,10 +17,13 @@ package com.starrocks.server;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.analysis.TupleId;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.HashDistributionInfo;
+import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.Type;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.ExceptionChecker;
@@ -32,6 +35,7 @@ import com.starrocks.planner.PlanNodeId;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
+import com.starrocks.thrift.TStorageType;
 import com.starrocks.warehouse.DefaultWarehouse;
 import com.starrocks.warehouse.Warehouse;
 import com.starrocks.warehouse.cngroup.CRAcquireContext;
@@ -403,6 +407,10 @@ public class WarehouseManagerTest {
     private OlapScanNode newOlapScanNode() {
         TupleDescriptor desc = new TupleDescriptor(new TupleId(0));
         OlapTable table = new OlapTable();
+        table.maySetDatabaseId(1L);
+        table.setBaseIndexId(1L);
+        table.setIndexMeta(1L, "base", Collections.singletonList(new Column("c0", Type.INT)),
+                0, 0, (short) 1, TStorageType.COLUMN, KeysType.DUP_KEYS);
         table.setDefaultDistributionInfo(new HashDistributionInfo(3, Collections.emptyList()));
         desc.setTable(table);
         return new OlapScanNode(new PlanNodeId(1), desc, "OlapScanNode", table.getBaseIndexId());

@@ -20,7 +20,9 @@ import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.analysis.TupleId;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.HashDistributionInfo;
+import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.StarRocksException;
@@ -45,6 +47,7 @@ import com.starrocks.thrift.TBinlogOffset;
 import com.starrocks.thrift.TDescriptorTable;
 import com.starrocks.thrift.TPartitionType;
 import com.starrocks.thrift.TScanRangeParams;
+import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
@@ -107,6 +110,10 @@ public class CoordinatorTest extends PlanTestBase {
         execFragment.addInstance(instance2);
 
         OlapTable table = new OlapTable();
+        table.maySetDatabaseId(1L);
+        table.setBaseIndexId(1L);
+        table.setIndexMeta(1L, "base", Collections.singletonList(new Column("c0", Type.INT)),
+                0, 0, (short) 1, TStorageType.COLUMN, KeysType.DUP_KEYS);
         table.setDefaultDistributionInfo(new HashDistributionInfo(6, Collections.emptyList()));
         TupleDescriptor desc = new TupleDescriptor(new TupleId(0));
         desc.setTable(table);

@@ -12,39 +12,40 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#ifndef BE_TEST
+#define BE_TEST
+#endif
+
 #include "exec/lake_meta_scanner.h"
 
 #include <gtest/gtest.h>
 
+#include "common/status.h"
 #include "exec/lake_meta_scan_node.h"
+#include "exec/pipeline/fragment_context.h"
 #include "fs/fs_util.h"
+#include "gen_cpp/FrontendService_types.h"
+#include "gen_cpp/Types_types.h"
+#include "gen_cpp/tablet_schema.pb.h"
 #include "runtime/descriptor_helper.h"
+#include "runtime/exec_env.h"
+#include "runtime/mem_tracker.h"
+#include "runtime/runtime_state.h"
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/join_path.h"
 #include "storage/lake/location_provider.h"
+#include "storage/lake/table_schema_service.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"
+#include "storage/lake/tablet_metadata.h"
 #include "storage/lake_meta_reader.h"
+#include "storage/meta_reader.h"
+#include "storage/tablet_schema.h"
 #include "testutil/id_generator.h"
 #include "testutil/sync_point.h"
+#include "util/defer_op.h"
 
 namespace starrocks {
-
-// provides an empty implementation of the reader
-struct MockLakeMetaReader : public LakeMetaReader {
-public:
-    Status init(const LakeMetaReaderParams& read_params) override { return Status::OK(); }
-};
-
-// access the protected members of LakeMetaScanner
-struct MockLakeMetaScanner : public LakeMetaScanner {
-public:
-    MockLakeMetaScanner(LakeMetaScanNode* parent) : LakeMetaScanner(parent) {}
-
-    const std::unique_ptr<LakeMetaReader>& reader() { return _reader; }
-    int64_t tablet_id() const { return _tablet_id; }
-    bool is_opened() const { return _is_open; }
-};
 
 class LakeMetaScannerTest : public ::testing::Test {
 public:
@@ -53,18 +54,25 @@ public:
         _location_provider = std::make_shared<lake::FixedLocationProvider>(kRootLocation);
         _tablet_mgr = ExecEnv::GetInstance()->lake_tablet_manager();
         _backup_location_provider = _tablet_mgr->TEST_set_location_provider(_location_provider);
-        FileSystem::Default()->create_dir_recursive(lake::join_path(kRootLocation, lake::kSegmentDirectoryName));
-        FileSystem::Default()->create_dir_recursive(lake::join_path(kRootLocation, lake::kMetadataDirectoryName));
-        FileSystem::Default()->create_dir_recursive(lake::join_path(kRootLocation, lake::kTxnLogDirectoryName));
+        CHECK(FileSystem::Default()
+                      ->create_dir_recursive(lake::join_path(kRootLocation, lake::kSegmentDirectoryName))
+                      .ok());
+        CHECK(FileSystem::Default()
+                      ->create_dir_recursive(lake::join_path(kRootLocation, lake::kMetadataDirectoryName))
+                      .ok());
+        CHECK(FileSystem::Default()
+                      ->create_dir_recursive(lake::join_path(kRootLocation, lake::kTxnLogDirectoryName))
+                      .ok());
 
         {
-            // create the tablet with its schema prepared
-            TabletMetadata metadata;
-            metadata.set_id(_tablet_id);
-            metadata.set_version(2);
+            // create the tablet with its schema prepared (no rowsets)
+            auto metadata = std::make_shared<TabletMetadata>();
+            metadata->set_id(_tablet_id);
+            metadata->set_version(2);
 
-            auto schema = metadata.mutable_schema();
+            auto schema = metadata->mutable_schema();
             schema->set_id(10);
+            schema->set_schema_version(1);
             schema->set_num_short_key_columns(1);
             schema->set_keys_type(DUP_KEYS);
             schema->set_num_rows_per_row_block(65535);
@@ -74,14 +82,28 @@ public:
             c0->set_type("INT");
             c0->set_is_key(true);
             c0->set_is_nullable(false);
-            auto st = _tablet_mgr->put_tablet_metadata(metadata);
-            EXPECT_TRUE(st.ok());
+            auto st = _tablet_mgr->put_tablet_metadata(*metadata);
+            CHECK(st.ok()) << st;
 
             auto tablet_or = _tablet_mgr->get_tablet(_tablet_id, 2);
             EXPECT_TRUE(tablet_or.ok());
         }
 
-        _state = _pool.add(new RuntimeState(TQueryGlobals()));
+        TUniqueId query_id;
+        TUniqueId fragment_id;
+        TQueryOptions query_options;
+        TQueryGlobals query_globals;
+        _state = _pool.add(
+                new RuntimeState(query_id, fragment_id, query_options, query_globals, ExecEnv::GetInstance()));
+        _state->init_mem_trackers(query_id);
+
+        // Setup FragmentContext with fe_addr for schema RPC
+        _fragment_ctx = std::make_unique<pipeline::FragmentContext>();
+        TNetworkAddress fe;
+        fe.hostname = "127.0.0.1";
+        fe.port = 9020;
+        _fragment_ctx->set_fe_addr(fe);
+        _state->set_fragment_ctx(_fragment_ctx.get());
 
         std::vector<::starrocks::TTupleId> tuple_ids{0};
         _tnode = std::make_unique<TPlanNode>();
@@ -89,6 +111,9 @@ public:
         _tnode->__set_node_type(TPlanNodeType::LAKE_SCAN_NODE);
         _tnode->__set_row_tuples(tuple_ids);
         _tnode->__set_limit(-1);
+
+        // Setup id_to_names for meta scan: slot_id -> "field:column_name"
+        _tnode->meta_scan_node.id_to_names[0] = "rows:c0";
 
         TDescriptorTableBuilder table_desc_builder;
         TSlotDescriptorBuilder slot_desc_builder;
@@ -104,10 +129,9 @@ public:
         _parent = std::make_unique<LakeMetaScanNode>(&_pool, *_tnode, *_tbl);
     }
 
-    ~LakeMetaScannerTest() {
-        auto st = fs::remove_all(kRootLocation);
-        EXPECT_TRUE(st.ok());
+    ~LakeMetaScannerTest() override {
         (void)_tablet_mgr->TEST_set_location_provider(_backup_location_provider);
+        (void)fs::remove_all(kRootLocation);
     }
 
 public:
@@ -122,39 +146,174 @@ public:
     std::unique_ptr<TPlanNode> _tnode;
     DescriptorTbl* _tbl;
     std::unique_ptr<LakeMetaScanNode> _parent;
+    std::unique_ptr<pipeline::FragmentContext> _fragment_ctx;
 };
 
 TEST_F(LakeMetaScannerTest, test_init_lazy_and_real) {
     auto range = _pool.add(new TInternalScanRange());
     range->tablet_id = _tablet_id;
-    range->version = 2;
+    range->version = "2";
     MetaScannerParams params{.scan_range = range};
 
-    MockLakeMetaScanner scanner(_parent.get());
+    LakeMetaScanner scanner(_parent.get());
+    DeferOp defer([&]() { scanner.close(_state); });
     auto st = scanner.init(_state, params);
     // after init() called, reader is not created at all
-    EXPECT_TRUE(st.ok());
-    EXPECT_TRUE(scanner.reader().get() == nullptr);
-    EXPECT_EQ(range->tablet_id, scanner.tablet_id());
+    ASSERT_TRUE(st.ok()) << st;
+    ASSERT_EQ(nullptr, scanner.TEST_reader());
 
-    std::unique_ptr<LakeMetaReader> mock_reader(new MockLakeMetaReader);
-    LakeMetaReader* raw_reader_ptr = mock_reader.get();
-    SyncPoint::GetInstance()->SetCallBack("lake_meta_scanner:open_mock_reader", [&](void* arg) {
-        auto* reader = static_cast<std::unique_ptr<LakeMetaReader>*>(arg);
-        // non-empty reader
-        EXPECT_TRUE((*reader).get() != nullptr);
-        *reader = std::move(mock_reader);
+    auto st2 = scanner.open(_state);
+    // after open() called, reader is created and initialized
+    ASSERT_TRUE(st2.ok()) << st2;
+    ASSERT_NE(nullptr, scanner.TEST_reader());
+}
+
+TEST_F(LakeMetaScannerTest, test_read_schema) {
+    auto range = _pool.add(new TInternalScanRange());
+    range->tablet_id = _tablet_id;
+    range->version = "2";
+    MetaScannerParams params{.scan_range = range};
+
+    DeferOp defer_hook([&]() {
+        SyncPoint::GetInstance()->ClearCallBack("TableSchemaService::_fetch_schema_via_rpc::test_hook");
+        SyncPoint::GetInstance()->DisableProcessing();
     });
     SyncPoint::GetInstance()->EnableProcessing();
 
-    auto st2 = scanner.open(nullptr);
-    // after open() called, reader is created
-    EXPECT_TRUE(st2.ok()) << st2;
-    EXPECT_EQ(raw_reader_ptr, scanner.reader().get());
-    EXPECT_TRUE(scanner.is_opened());
+    // Test case 1: With schema_key (fast schema evolution v2 path)
+    {
+        // Arrange: Set schema_key in TMetaScanNode
+        TTableSchemaKey t_schema_key;
+        t_schema_key.__set_schema_id(200);
+        t_schema_key.__set_db_id(1);
+        t_schema_key.__set_table_id(1);
+        _tnode->meta_scan_node.__set_schema_key(t_schema_key);
 
-    SyncPoint::GetInstance()->ClearCallBack("lake_meta_scanner:open_mock_reader");
-    SyncPoint::GetInstance()->DisableProcessing();
+        // Setup test hook to mock RPC response with schema_id=200, version=5, columns: c0(INT, key), c1(INT, non-key)
+        SyncPoint::GetInstance()->SetCallBack("TableSchemaService::_fetch_schema_via_rpc::test_hook", [](void* arg) {
+            auto* arr = static_cast<std::array<void*, 4>*>(arg);
+            auto* request = static_cast<const TGetTableSchemaRequest*>((*arr)[0]);
+            auto* response_batch = static_cast<TBatchGetTableSchemaResponse*>((*arr)[1]);
+            auto* status = static_cast<Status*>((*arr)[2]);
+            auto* mock_thrift_rpc = static_cast<bool*>((*arr)[3]);
+
+            // Verify request
+            ASSERT_EQ(request->schema_key.schema_id, 200);
+            ASSERT_EQ(request->schema_key.db_id, 1);
+            ASSERT_EQ(request->schema_key.table_id, 1);
+
+            // Mock RPC: skip actual RPC call
+            *mock_thrift_rpc = true;
+            *status = Status::OK();
+
+            // Set batch response status
+            response_batch->status.__set_status_code(TStatusCode::OK);
+            response_batch->__set_responses(std::vector<TGetTableSchemaResponse>{});
+
+            // Create response with schema_id=200, version=5
+            auto& resp = response_batch->responses.emplace_back();
+            resp.status.__set_status_code(TStatusCode::OK);
+
+            // Create TTabletSchema with schema_id=200, version=5, columns: c0(INT, key), c1(INT, non-key)
+            TTabletSchema thrift_schema;
+            thrift_schema.__set_id(200);
+            thrift_schema.__set_schema_version(5);
+            thrift_schema.__set_short_key_column_count(1);
+            thrift_schema.__set_keys_type(TKeysType::DUP_KEYS);
+
+            // Column c0: INT, key
+            TColumn c0;
+            c0.__set_column_name("c0");
+            c0.column_type.__set_type(TPrimitiveType::INT);
+            c0.__set_is_key(true);
+            c0.__set_is_allow_null(false);
+            thrift_schema.columns.push_back(c0);
+
+            // Column c1: INT, non-key
+            TColumn c1;
+            c1.__set_column_name("c1");
+            c1.column_type.__set_type(TPrimitiveType::INT);
+            c1.__set_is_key(false);
+            c1.__set_is_allow_null(false);
+            thrift_schema.columns.push_back(c1);
+
+            resp.__set_schema(thrift_schema);
+        });
+
+        // Recreate parent with updated tnode
+        _parent = std::make_unique<LakeMetaScanNode>(&_pool, *_tnode, *_tbl);
+
+        LakeMetaScanner scanner(_parent.get());
+        auto st = scanner.init(_state, params);
+        DeferOp defer([&]() { scanner.close(_state); });
+        ASSERT_TRUE(st.ok()) << st;
+
+        auto st2 = scanner.open(_state);
+        ASSERT_TRUE(st2.ok()) << st2;
+
+        // Verify the schema was fetched and used (schema_id=200, version=5, with c0 and c1 columns)
+        auto* reader = scanner.TEST_reader();
+        ASSERT_NE(reader, nullptr);
+        // Access TEST_tablet_schema - LakeMetaReader inherits from MetaReader
+        const auto& schema = reader->TEST_tablet_schema();
+        ASSERT_NE(schema, nullptr);
+
+        // Verify schema_id=200, version=5
+        ASSERT_EQ(schema->id(), 200);
+        ASSERT_EQ(schema->schema_version(), 5);
+
+        // Verify schema has 2 columns: c0 (INT, key) and c1 (INT, non-key)
+        ASSERT_EQ(schema->num_columns(), 2);
+
+        // Verify column c0: INT, key
+        const auto& col0 = schema->column(0);
+        ASSERT_EQ(col0.name(), "c0");
+        ASSERT_EQ(col0.type(), LogicalType::TYPE_INT);
+        ASSERT_TRUE(col0.is_key());
+
+        // Verify column c1: INT, non-key
+        const auto& col1 = schema->column(1);
+        ASSERT_EQ(col1.name(), "c1");
+        ASSERT_EQ(col1.type(), LogicalType::TYPE_INT);
+        ASSERT_FALSE(col1.is_key());
+    }
+
+    // Test case 2: Without schema_key (legacy path)
+    {
+        // Arrange: Do NOT set schema_key in TMetaScanNode (legacy path)
+        _tnode->meta_scan_node.__isset.schema_key = false;
+
+        // Recreate parent with updated tnode
+        _parent = std::make_unique<LakeMetaScanNode>(&_pool, *_tnode, *_tbl);
+
+        LakeMetaScanner scanner(_parent.get());
+        DeferOp defer([&]() { scanner.close(_state); });
+        auto st = scanner.init(_state, params);
+        ASSERT_TRUE(st.ok()) << st;
+
+        auto st2 = scanner.open(_state);
+        ASSERT_TRUE(st2.ok()) << st2;
+
+        // Verify the schema was from tablet metadata (schema_id=10, version=1, with c0 column)
+        auto* reader = scanner.TEST_reader();
+        ASSERT_NE(reader, nullptr);
+        // Access TEST_tablet_schema - LakeMetaReader inherits from MetaReader
+        const auto& schema = reader->TEST_tablet_schema();
+        ASSERT_NE(schema, nullptr);
+
+        // Verify schema_id=10, version=1 (from tablet metadata)
+        ASSERT_EQ(schema->id(), 10);
+        ASSERT_EQ(schema->schema_version(), 1);
+
+        // Verify schema has 1 column: c0 (INT, key)
+        ASSERT_EQ(schema->num_columns(), 1);
+
+        // Verify column c0: INT, key
+        const auto& col0 = schema->column(0);
+        ASSERT_EQ(col0.name(), "c0");
+        ASSERT_EQ(col0.type(), LogicalType::TYPE_INT);
+        ASSERT_TRUE(col0.is_key());
+    }
 }
 
 } // namespace starrocks

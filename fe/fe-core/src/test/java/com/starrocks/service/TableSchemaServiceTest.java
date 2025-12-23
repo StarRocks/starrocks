@@ -23,6 +23,7 @@ import com.starrocks.catalog.SchemaInfo;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.lake.LakeTable;
+import com.starrocks.planner.MetaScanNode;
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DefaultCoordinator;
@@ -36,6 +37,9 @@ import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.thrift.TGetTableSchemaRequest;
 import com.starrocks.thrift.TGetTableSchemaResponse;
+import com.starrocks.thrift.TLakeScanNode;
+import com.starrocks.thrift.TMetaScanNode;
+import com.starrocks.thrift.TPlan;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TTableSchemaKey;
 import com.starrocks.thrift.TTableSchemaRequestSource;
@@ -53,6 +57,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -196,33 +201,81 @@ public class TableSchemaServiceTest extends StarRocksTestBase {
     }
 
     @Test
+    public void testScanNodeCacheSchema() throws Exception {
+        LakeTable table = createTable("t_scan_node_cache_schema");
+        long indexId = table.getBaseIndexId();
+        SchemaInfo schemaInfo = SchemaInfo.fromMaterializedIndex(table, indexId, table.getIndexMetaByIndexId(indexId));
+
+        // Generate OlapScanNode
+        ExecPlan plan1 = UtFrameUtils.getPlanAndFragment(
+                connectContext, "SELECT * FROM t_scan_node_cache_schema").second;
+
+        // Verify plan has OlapScanNode with schema
+        List<OlapScanNode> olapScanNodes = plan1.getScanNodes().stream()
+                .filter(OlapScanNode.class::isInstance)
+                .map(OlapScanNode.class::cast)
+                .toList();
+        Assertions.assertEquals(1, olapScanNodes.size());
+        Assertions.assertEquals(schemaInfo, olapScanNodes.get(0).getSchema().orElse(null));
+        TPlan tPlan1 = olapScanNodes.get(0).treeToThrift();
+        Assertions.assertEquals(1, tPlan1.getNodesSize());
+        TLakeScanNode lakeScanNode = tPlan1.getNodes().get(0).getLake_scan_node();
+        TTableSchemaKey schemaKey1 = lakeScanNode == null ? null : lakeScanNode.getSchema_key();
+        Assertions.assertNotNull(schemaKey1);
+        Assertions.assertEquals(db.getId(), schemaKey1.getDb_id());
+        Assertions.assertEquals(table.getId(), schemaKey1.getTable_id());
+        Assertions.assertEquals(schemaInfo.getId(), schemaKey1.getSchema_id());
+
+        // Generate MetaScanNode
+        ExecPlan plan2 = UtFrameUtils.getPlanAndFragment(
+                connectContext, "SELECT COUNT(*) FROM t_scan_node_cache_schema [_META_]").second;
+
+        // Verify plan has OlapScanNode with schema
+        List<MetaScanNode> metaScanNodes = plan2.getScanNodes().stream()
+                .filter(MetaScanNode.class::isInstance)
+                .map(MetaScanNode.class::cast)
+                .toList();
+        Assertions.assertEquals(1, metaScanNodes.size());
+        Assertions.assertEquals(schemaInfo, metaScanNodes.get(0).getSchema().orElse(null));
+        TPlan tPlan2 = metaScanNodes.get(0).treeToThrift();
+        Assertions.assertEquals(1, tPlan2.getNodesSize());
+        TMetaScanNode metaScanNode = tPlan2.getNodes().get(0).getMeta_scan_node();
+        TTableSchemaKey schemaKey2 = metaScanNode == null ? null : metaScanNode.getSchema_key();
+        Assertions.assertNotNull(schemaKey2);
+        Assertions.assertEquals(db.getId(), schemaKey2.getDb_id());
+        Assertions.assertEquals(table.getId(), schemaKey2.getTable_id());
+        Assertions.assertEquals(schemaInfo.getId(), schemaKey2.getSchema_id());
+    }
+
+    @Test
     public void testFoundInQueryCoordinator() throws Exception {
         LakeTable table = createTable("t_scan_coordinator");
         long indexId = table.getBaseIndexId();
         SchemaInfo schemaInfo = SchemaInfo.fromMaterializedIndex(table, indexId, table.getIndexMetaByIndexId(indexId));
 
-        // Execute query to create coordinator with scan nodes
-        TUniqueId queryId = UUIDUtil.genTUniqueId();
-        Assertions.assertNull(QeProcessorImpl.INSTANCE.getCoordinator(queryId),
+        // Execute query to create coordinator with OlapScanNode
+        TUniqueId queryId1 = UUIDUtil.genTUniqueId();
+        Assertions.assertNull(QeProcessorImpl.INSTANCE.getCoordinator(queryId1),
                 "Query should not exist in QeProcessorImpl");
-        String sql = "SELECT * FROM t_scan_coordinator";
-        Coordinator coordinator = executeQueryAndRegister(sql, queryId);
+        String sql1 = "SELECT * FROM t_scan_coordinator";
+        executeQueryAndRegister(sql1, queryId1);
 
-        // Verify coordinator has scan nodes with schema
-        List<OlapScanNode> scanNodes = coordinator.getScanNodes().stream()
-                .filter(OlapScanNode.class::isInstance)
-                .map(OlapScanNode.class::cast)
-                .toList();
-        Assertions.assertEquals(1, scanNodes.size());
-        Assertions.assertEquals(schemaInfo, scanNodes.get(0).getSchema().orElse(null));
+        // Execute query to create coordinator with MetaScanNode
+        TUniqueId queryId2 = UUIDUtil.genTUniqueId();
+        Assertions.assertNull(QeProcessorImpl.INSTANCE.getCoordinator(queryId2),
+                "Query should not exist in QeProcessorImpl");
+        String sql2 = "SELECT COUNT(*) FROM t_scan_coordinator [_META_]";
+        executeQueryAndRegister(sql2, queryId2);
 
         // Request schema from coordinator
-        TGetTableSchemaRequest request = createScanRequest(schemaInfo.getId(), db.getId(), table.getId(), queryId);
-        TGetTableSchemaResponse response = TableSchemaService.getTableSchema(request);
+        for (TUniqueId queryId : Arrays.asList(queryId1, queryId2)) {
+            TGetTableSchemaRequest request = createScanRequest(schemaInfo.getId(), db.getId(), table.getId(), queryId);
+            TGetTableSchemaResponse response = TableSchemaService.getTableSchema(request);
 
-        Assertions.assertEquals(TStatusCode.OK, response.getStatus().getStatus_code());
-        Assertions.assertNotNull(response.getSchema());
-        Assertions.assertEquals(schemaInfo.toTabletSchema(), response.getSchema());
+            Assertions.assertEquals(TStatusCode.OK, response.getStatus().getStatus_code());
+            Assertions.assertNotNull(response.getSchema());
+            Assertions.assertEquals(schemaInfo.toTabletSchema(), response.getSchema());
+        }
     }
 
     @Test
