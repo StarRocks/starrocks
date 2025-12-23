@@ -12,9 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <formats/parquet/variant.h>
 #include <fs/fs.h>
 #include <gtest/gtest.h>
+#include <util/variant.h>
 
 #include <boost/uuid/uuid.hpp>
 #include <boost/uuid/uuid_io.hpp>
@@ -32,7 +32,7 @@ public:
     ~ParquetVariantTest() override = default;
 
 protected:
-    uint8_t primitiveHeader(VariantPrimitiveType primitive) { return (static_cast<uint8_t>(primitive) << 2); }
+    uint8_t primitive_header(VariantType primitive) { return (static_cast<uint8_t>(primitive) << 2); }
 
     void SetUp() override {
         std::string starrocks_home = getenv("STARROCKS_HOME");
@@ -75,7 +75,7 @@ protected:
 
 TEST_F(ParquetVariantTest, NullValue) {
     std::string_view empty_metadata(VariantMetadata::kEmptyMetadataChars, 3);
-    const uint8_t null_chars[] = {primitiveHeader(VariantPrimitiveType::NULL_TYPE)};
+    const uint8_t null_chars[] = {primitive_header(VariantType::NULL_TYPE)};
     Variant variant{empty_metadata, std::string_view{reinterpret_cast<const char*>(null_chars), 1}};
     EXPECT_EQ(VariantType::NULL_TYPE, variant.type());
 }
@@ -113,13 +113,13 @@ TEST_F(ParquetVariantTest, BooleanValue) {
     auto [t_fst, t_snd] = _boolean_file_names[0];
     auto [t_metadata, t_value] = load_variant_data(t_fst, t_snd);
     Variant variant_true{std::string_view(t_metadata), std::string_view(t_value)};
-    EXPECT_EQ(VariantType::BOOLEAN, variant_true.type());
+    EXPECT_EQ(VariantType::BOOLEAN_TRUE, variant_true.type());
     EXPECT_EQ(true, *variant_true.get_bool());
 
     auto [f_fst, f_snd] = _boolean_file_names[1];
     auto [f_metadata, f_value] = load_variant_data(f_fst, f_snd);
     Variant variant_false{std::string_view(f_metadata), std::string_view(f_value)};
-    EXPECT_EQ(VariantType::BOOLEAN, variant_false.type());
+    EXPECT_EQ(VariantType::BOOLEAN_FALSE, variant_false.type());
     EXPECT_EQ(false, *variant_false.get_bool());
 }
 
@@ -189,7 +189,7 @@ TEST_F(ParquetVariantTest, StringValue) {
     auto [short_string_metadata, short_string_value] = load_variant_data("short_string.metadata", "short_string.value");
     Variant short_string_variant{std::string_view(short_string_metadata), std::string_view(short_string_value)};
     EXPECT_EQ(VariantType::STRING, short_string_variant.type());
-    EXPECT_EQ(BasicType::SHORT_STRING, short_string_variant.basic_type());
+    EXPECT_EQ(Variant::BasicType::SHORT_STRING, short_string_variant.basic_type());
     EXPECT_EQ("Less than 64 bytes (❤️ with utf8)", *short_string_variant.get_string());
 }
 
@@ -240,7 +240,7 @@ TEST_F(ParquetVariantTest, DecimalValue) {
 
 TEST_F(ParquetVariantTest, UUIDValue) {
     std::string_view empty_metadata = VariantMetadata::kEmptyMetadata;
-    const uint8_t uuid_chars[] = {primitiveHeader(VariantPrimitiveType::UUID),
+    const uint8_t uuid_chars[] = {primitive_header(VariantType::UUID),
                                   0xf2,
                                   0x4f,
                                   0x9b,
@@ -383,11 +383,11 @@ TEST_F(ParquetVariantTest, ObjectPrimitive) {
     EXPECT_EQ("1.23456789", DecimalV3Cast::to_string<int32_t>(decimal4_result.value, 4, decimal4_result.scale));
 
     Variant boolean_true_field = *variant.get_object_by_key("boolean_true_field");
-    EXPECT_EQ(VariantType::BOOLEAN, boolean_true_field.type());
+    EXPECT_EQ(VariantType::BOOLEAN_TRUE, boolean_true_field.type());
     EXPECT_TRUE(*boolean_true_field.get_bool());
 
     Variant boolean_false_field = *variant.get_object_by_key("boolean_false_field");
-    EXPECT_EQ(VariantType::BOOLEAN, boolean_false_field.type());
+    EXPECT_EQ(VariantType::BOOLEAN_FALSE, boolean_false_field.type());
     EXPECT_FALSE(*boolean_false_field.get_bool());
 
     Variant string_field = *variant.get_object_by_key("string_field");

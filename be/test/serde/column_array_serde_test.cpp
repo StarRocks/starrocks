@@ -32,7 +32,7 @@
 #include "util/failpoint/fail_point.h"
 #include "util/hash_util.hpp"
 #include "util/json.h"
-#include "util/variant_util.h"
+#include "util/variant.h"
 
 namespace starrocks::serde {
 
@@ -95,13 +95,15 @@ PARALLEL_TEST(ColumnArraySerdeTest, variant_column) {
     auto c1 = VariantColumn::create();
     ASSERT_EQ(4, ColumnArraySerde::max_serialized_size(*c1));
 
+    auto primitive_header = [](VariantType type) { return (static_cast<uint8_t>(type) << 2); };
+
     // Prepare 5 int8 variant values
     const uint8_t int8_values[][2] = {
-            {VariantUtil::primitiveHeader(VariantPrimitiveType::INT8), 0x01}, // 1
-            {VariantUtil::primitiveHeader(VariantPrimitiveType::INT8), 0x02}, // 2
-            {VariantUtil::primitiveHeader(VariantPrimitiveType::INT8), 0x03}, // 3
-            {VariantUtil::primitiveHeader(VariantPrimitiveType::INT8), 0x04}, // 4
-            {VariantUtil::primitiveHeader(VariantPrimitiveType::INT8), 0x05}, // 5
+            {primitive_header(VariantType::INT8), 0x01}, // 1
+            {primitive_header(VariantType::INT8), 0x02}, // 2
+            {primitive_header(VariantType::INT8), 0x03}, // 3
+            {primitive_header(VariantType::INT8), 0x04}, // 4
+            {primitive_header(VariantType::INT8), 0x05}, // 5
     };
     size_t expected_max_size = sizeof(uint32_t);
     for (size_t i = 0; i < std::size(int8_values); ++i) {

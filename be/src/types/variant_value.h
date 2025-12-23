@@ -20,8 +20,8 @@
 
 #include "common/statusor.h"
 #include "fmt/format.h"
-#include "formats/parquet/variant.h"
 #include "util/slice.h"
+#include "util/variant.h"
 
 namespace starrocks {
 
