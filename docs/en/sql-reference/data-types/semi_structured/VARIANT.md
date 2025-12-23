@@ -159,4 +159,6 @@ When data is read from Parquet files with variant encoding, the following type c
 ## Limitations and Considerations
 
 - VARIANT type is currently supported only for reading data from Iceberg tables in Parquet format with variant encoding.
+- The size of a VARIANT value is limited to 16 MB.
+- Currently only support reading unshredded variant value.
 - The maximum depth of nested structures depends on the underlying Parquet file structure.

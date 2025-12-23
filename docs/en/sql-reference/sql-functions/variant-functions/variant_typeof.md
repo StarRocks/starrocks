@@ -129,4 +129,4 @@ WHERE variant_typeof(variant_query(data, '$.commit')) = 'Object';
 
 ## keyword
 
-VARIANT_TYPEOF,VARIANT,TYPEOF
+VARIANT_TYPEOF,VARIANT

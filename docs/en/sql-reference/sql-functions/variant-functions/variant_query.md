@@ -116,4 +116,4 @@ WHERE variant_query(data, '$.commit.record') IS NOT NULL;
 
 ## keyword
 
-VARIANT_QUERY,VARIANT,QUERY
+VARIANT_QUERY,VARIANT
