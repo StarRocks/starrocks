@@ -45,8 +45,6 @@ public class DataSkew {
         SKEWED_MCV
     }
 
-    ;
-
     public record SkewInfo(SkewType type, Optional<List<Pair<String, Long>>> maybeMcvs) {
         public SkewInfo(SkewType type) {
             this(type, Optional.empty());
