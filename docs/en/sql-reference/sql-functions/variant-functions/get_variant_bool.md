@@ -26,7 +26,7 @@ BOOLEAN get_variant_bool(variant_expr, path)
 
 ## Return value
 
-Returns a BOOLEAN value (TRUE or FALSE).
+Returns a BOOLEAN value (1 or 0).
 
 If the element does not exist, the path is invalid, or the value cannot be converted to a boolean, the function returns NULL.
 
