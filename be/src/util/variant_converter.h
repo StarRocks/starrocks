@@ -17,14 +17,14 @@
 #include "column/column_builder.h"
 #include "column/type_traits.h"
 #include "common/statusor.h"
-#include "formats/parquet/variant.h"
 #include "types/logical_type.h"
-#include "variant_util.h"
+#include "util/variant.h"
 
 namespace starrocks {
 
-#define VARIANT_CAST_NOT_SUPPORT(variant_type, logical_type)                                                           \
-    Status::NotSupported(fmt::format("Cannot cast variant({}) to type: {}", VariantUtil::type_to_string(variant_type), \
+#define VARIANT_CAST_NOT_SUPPORT(variant_type, logical_type)                            \
+    Status::NotSupported(fmt::format("Cannot cast variant({}) to type: {}",             \
+                                     VariantUtil::variant_type_to_string(variant_type), \
                                      logical_type_to_string(logical_type)))
 
 Status cast_variant_to_bool(const Variant& variant, ColumnBuilder<TYPE_BOOLEAN>& result);
@@ -48,7 +48,8 @@ Status cast_variant_to_arithmetic(const Variant& variant, ColumnBuilder<ResultTy
         result.append_null();
         return Status::OK();
     }
-        VARIANT_CAST_CASE(BOOLEAN, get_bool)
+        VARIANT_CAST_CASE(BOOLEAN_TRUE, get_bool)
+        VARIANT_CAST_CASE(BOOLEAN_FALSE, get_bool)
         VARIANT_CAST_CASE(INT8, get_int8)
         VARIANT_CAST_CASE(INT16, get_int16)
         VARIANT_CAST_CASE(INT32, get_int32)

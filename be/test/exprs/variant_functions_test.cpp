@@ -29,11 +29,11 @@
 #include "common/status.h"
 #include "common/statusor.h"
 #include "exprs/mock_vectorized_expr.h"
-#include "formats/parquet/variant.h"
 #include "fs/fs.h"
 #include "gutil/casts.h"
 #include "runtime/runtime_state.h"
 #include "types/logical_type.h"
+#include "util/variant.h"
 
 namespace starrocks {
 

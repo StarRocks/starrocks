@@ -12,15 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "variant_value.h"
+#include "types/variant_value.h"
 
 #include <arrow/util/endian.h>
 
 #include <boost/uuid/uuid_io.hpp>
 #include <cstring>
 
-#include "util/url_coding.h"
-#include "util/variant_util.h"
+#include "util/variant.h"
 
 namespace starrocks {
 
@@ -108,7 +107,7 @@ Status VariantValue::validate_metadata(const std::string_view metadata) {
 }
 
 VariantValue VariantValue::of_null() {
-    static constexpr uint8_t header = static_cast<uint8_t>(VariantPrimitiveType::NULL_TYPE) << 2;
+    static constexpr uint8_t header = static_cast<uint8_t>(VariantType::NULL_TYPE) << 2;
     static constexpr uint8_t null_chars[] = {header};
     return VariantValue(VariantMetadata::kEmptyMetadata,
                         std::string_view{reinterpret_cast<const char*>(null_chars), 1});

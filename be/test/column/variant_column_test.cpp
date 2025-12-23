@@ -16,14 +16,14 @@
 
 #include "column/column_builder.h"
 #include "column/type_traits.h"
-#include "formats/parquet/variant.h"
 #include "testutil/parallel_test.h"
 #include "types/logical_type.h"
 #include "types/variant_value.h"
+#include "util/variant.h"
 
 namespace starrocks {
 
-uint8_t primitiveHeader(VariantPrimitiveType primitive) {
+static inline uint8_t primitive_header(VariantType primitive) {
     return static_cast<uint8_t>(primitive) << 2;
 }
 
@@ -31,7 +31,7 @@ uint8_t primitiveHeader(VariantPrimitiveType primitive) {
 PARALLEL_TEST(VariantColumnTest, test_build_column) {
     // create from type traits
     {
-        const uint8_t int_chars[] = {primitiveHeader(VariantPrimitiveType::INT32), 0xD2, 0x02, 0x96, 0x49};
+        const uint8_t int_chars[] = {primitive_header(VariantType::INT32), 0xD2, 0x02, 0x96, 0x49};
         std::string_view int_string(reinterpret_cast<const char*>(int_chars), sizeof(int_chars));
         VariantValue variant{VariantMetadata::kEmptyMetadata, int_string};
         auto column = RunTimeColumnType<TYPE_VARIANT>::create();
@@ -48,7 +48,7 @@ PARALLEL_TEST(VariantColumnTest, test_build_column) {
     // create from builder
     {
         ColumnBuilder<TYPE_VARIANT> builder(1);
-        const uint8_t int_chars[] = {primitiveHeader(VariantPrimitiveType::INT32), 0xD2, 0x02, 0x96, 0x49};
+        const uint8_t int_chars[] = {primitive_header(VariantType::INT32), 0xD2, 0x02, 0x96, 0x49};
         std::string_view int_string(reinterpret_cast<const char*>(int_chars), sizeof(int_chars));
         VariantValue variant{VariantMetadata::kEmptyMetadata, int_string};
         builder.append(&variant);
@@ -68,7 +68,7 @@ PARALLEL_TEST(VariantColumnTest, test_build_column) {
     // clone
     {
         auto column = VariantColumn::create();
-        const uint8_t int_chars[] = {primitiveHeader(VariantPrimitiveType::INT32), 0xD2, 0x02, 0x96, 0x49};
+        const uint8_t int_chars[] = {primitive_header(VariantType::INT32), 0xD2, 0x02, 0x96, 0x49};
         std::string_view int_string(reinterpret_cast<const char*>(int_chars), sizeof(int_chars));
         VariantValue variant{VariantMetadata::kEmptyMetadata, int_string};
         column->append(&variant);
@@ -133,7 +133,7 @@ PARALLEL_TEST(VariantColumnTest, test_build_column) {
 // NOLINTNEXTLINE
 PARALLEL_TEST(VariantColumnTest, test_serialize) {
     std::string_view empty_metadata = VariantMetadata::kEmptyMetadata;
-    const uint8_t uuid_chars[] = {primitiveHeader(VariantPrimitiveType::UUID),
+    const uint8_t uuid_chars[] = {primitive_header(VariantType::UUID),
                                   0xf2,
                                   0x4f,
                                   0x9b,
@@ -175,7 +175,7 @@ PARALLEL_TEST(VariantColumnTest, test_serialize) {
 
 // NOLINTNEXTLINE
 PARALLEL_TEST(VariantColumnTest, put_mysql_row_buffer) {
-    const uint8_t int_chars[] = {primitiveHeader(VariantPrimitiveType::INT32), 0xD2, 0x02, 0x96, 0x49};
+    const uint8_t int_chars[] = {primitive_header(VariantType::INT32), 0xD2, 0x02, 0x96, 0x49};
     std::string_view int_string(reinterpret_cast<const char*>(int_chars), sizeof(int_chars));
     VariantValue variant{VariantMetadata::kEmptyMetadata, int_string};
 
@@ -209,7 +209,7 @@ PARALLEL_TEST(VariantColumnTest, test_create_variant_column) {
 // NOLINTNEXTLINE
 PARALLEL_TEST(VariantColumnTest, test_append_strings) {
     const auto variant_column = VariantColumn::create();
-    const uint8_t int1_value[] = {primitiveHeader(VariantPrimitiveType::INT8), 0x01};
+    const uint8_t int1_value[] = {primitive_header(VariantType::INT8), 0x01};
     const std::string_view int1_value_str(reinterpret_cast<const char*>(int1_value), sizeof(int1_value));
     constexpr uint32_t int1_total_size = sizeof(int1_value) + VariantMetadata::kEmptyMetadata.size();
     std::string variant_string;

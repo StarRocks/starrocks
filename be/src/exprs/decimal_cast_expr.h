@@ -19,7 +19,7 @@
 #include "column/column_builder.h"
 #include "exprs/overflow.h"
 #include "runtime/decimalv3.h"
-#include "util/variant_util.h"
+#include "util/variant.h"
 
 namespace starrocks {
 
@@ -527,7 +527,7 @@ inline static StatusOr<bool> cast_variant_to_decimal(DecimalCppType* dst_value, 
             decimal_type = TYPE_UNKNOWN;
         }
         return Status::NotSupported(fmt::format("The type cast from variant(type={}) to {} is not supported",
-                                                VariantUtil::type_to_string(type),
+                                                VariantUtil::variant_type_to_string(type),
                                                 logical_type_to_string(decimal_type)));
     }
 

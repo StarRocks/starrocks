@@ -14,19 +14,18 @@
 
 #pragma once
 
+#include <arrow/util/endian.h>
+#include <cctz/time_zone.h>
+
 #include <cstdint>
 
 #include "common/status.h"
-#include "runtime/decimalv2_value.h"
 #include "util/decimal_types.h"
 
 namespace starrocks {
 
-enum class BasicType { PRIMITIVE = 0, SHORT_STRING = 1, OBJECT = 2, ARRAY = 3 };
-
-std::string basic_type_to_string(BasicType type);
-
-enum class VariantPrimitiveType : uint8_t {
+enum class VariantType : uint8_t {
+    // Primitive types
     NULL_TYPE = 0,
     BOOLEAN_TRUE = 1,
     BOOLEAN_FALSE = 2,
@@ -48,39 +47,13 @@ enum class VariantPrimitiveType : uint8_t {
     TIMESTAMP_TZ_NANOS = 18,
     TIMESTAMP_NTZ_NANOS = 19,
     UUID = 20,
+    // Compex types
+    OBJECT = 21,
+    ARRAY = 22,
 };
-
-std::string primitive_type_to_string(VariantPrimitiveType type);
-
-enum class VariantType {
-    OBJECT,
-    ARRAY,
-    NULL_TYPE,
-    BOOLEAN,
-    INT8,
-    INT16,
-    INT32,
-    INT64,
-    FLOAT,
-    DOUBLE,
-    DECIMAL4,
-    DECIMAL8,
-    DECIMAL16,
-    DATE,
-    TIMESTAMP_TZ,
-    TIMESTAMP_NTZ,
-    TIME_NTZ,
-    TIMESTAMP_TZ_NANOS,
-    TIMESTAMP_NTZ_NANOS,
-    BINARY,
-    STRING,
-    UUID
-};
-
-std::string variant_type_to_string(VariantType type);
 
 template <typename D>
-struct DecimalValue {
+struct VariantDecimalValue {
     uint8_t scale;
     DecimalType<D> value;
 
@@ -113,6 +86,8 @@ struct DecimalValue {
     explicit operator int64_t() const { return to_int<int64_t>(); }
 
     explicit operator int128_t() const { return to_int<int128_t>(); }
+
+    std::string to_string() const;
 };
 
 class VariantMetadata {
@@ -148,7 +123,26 @@ private:
     uint32_t _dict_size{0};
 };
 
+struct VariantUtil {
+    static Status variant_to_json(std::string_view metadata, std::string_view value, std::stringstream& json_str,
+                                  cctz::time_zone timezone = cctz::local_time_zone());
+
+    static inline uint32_t read_little_endian_unsigned32(const void* from, uint8_t size) {
+        DCHECK_LE(size, 4);
+        DCHECK_GE(size, 1);
+
+        uint32_t result = 0;
+        memcpy(&result, from, size);
+        return arrow::bit_util::FromLittleEndian(result);
+    }
+
+    static std::string variant_type_to_string(VariantType type);
+};
+
 class Variant {
+public:
+    enum class BasicType { PRIMITIVE = 0, SHORT_STRING = 1, OBJECT = 2, ARRAY = 3 };
+
 public:
     explicit Variant(const VariantMetadata& metadata, std::string_view value);
     Variant(const std::string_view metadata, std::string_view value) : Variant(VariantMetadata(metadata), value) {}
@@ -182,9 +176,9 @@ public:
     // Get the primitive double value.
     StatusOr<double> get_double() const;
     // Get the decimal value
-    StatusOr<DecimalValue<int32_t>> get_decimal4() const;
-    StatusOr<DecimalValue<int64_t>> get_decimal8() const;
-    StatusOr<DecimalValue<int128_t>> get_decimal16() const;
+    StatusOr<VariantDecimalValue<int32_t>> get_decimal4() const;
+    StatusOr<VariantDecimalValue<int64_t>> get_decimal8() const;
+    StatusOr<VariantDecimalValue<int128_t>> get_decimal16() const;
     // Get the date value as days since Unix epoch.
     StatusOr<int32_t> get_date() const;
     // Get the time value without timezone as microseconds since midnight.
@@ -217,15 +211,15 @@ private:
     uint8_t value_header() const;
     Status validate_basic_type(BasicType type) const;
 
-    Status validate_primitive_type(VariantPrimitiveType type, size_t size_required) const;
+    Status validate_primitive_type(VariantType type, size_t size_required) const;
 
     template <typename PrimitiveType>
-    StatusOr<PrimitiveType> get_primitive(VariantPrimitiveType type) const;
+    StatusOr<PrimitiveType> get_primitive(VariantType type) const;
 
-    StatusOr<std::string_view> get_primitive_string_or_binary(VariantPrimitiveType type) const;
+    StatusOr<std::string_view> get_primitive_string_or_binary(VariantType type) const;
 
     template <typename DecimalType>
-    StatusOr<DecimalValue<DecimalType>> get_primitive_decimal(VariantPrimitiveType type) const;
+    StatusOr<VariantDecimalValue<DecimalType>> get_primitive_decimal(VariantType type) const;
 
     VariantMetadata _metadata;
     /**
@@ -242,6 +236,7 @@ private:
     std::string_view _value;
 };
 
+namespace variant_detail {
 // Representing the details of a Variant {@link BasicType::OBJECT}.
 struct ObjectInfo {
     // Number of elements in the array or object
@@ -292,4 +287,7 @@ StatusOr<ObjectInfo> get_object_info(std::string_view value);
  *                             +-- is_large
  */
 StatusOr<ArrayInfo> get_array_info(std::string_view value);
+
+} // namespace variant_detail
+
 } // namespace starrocks

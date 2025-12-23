@@ -16,7 +16,6 @@
 
 #include "column/column.h"
 #include "common/statusor.h"
-#include "formats/parquet/variant.h"
 #include "function_helper.h"
 #include "types/logical_type.h"
 
