@@ -458,6 +458,10 @@ message PCancelPlanFragmentRequest {
     optional PPlanFragmentCancelReason cancel_reason = 2;
     optional bool is_pipeline = 10;
     optional PUniqueId query_id = 11;
+    // Detailed error message when cancel_reason is INTERNAL_ERROR
+    // This allows propagating the actual error (e.g., "exceed big query cpu limit")
+    // instead of just "InternalError"
+    optional string error_message = 12;
 };
 
 message PCancelPlanFragmentResult {

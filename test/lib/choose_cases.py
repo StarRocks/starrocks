@@ -45,7 +45,7 @@ LOG_FILTERED_WARN = "You can use `--log_filtered` to show the details..."
 
 class ChooseCase(object):
     class CaseTR(object):
-        def __init__(self, ctx, name, file, sql, result, info):
+        def __init__(self, ctx, name, file, sql, result, info, tags=None):
             """init"""
             super().__init__()
             self.ctx = ctx
@@ -55,6 +55,8 @@ class ChooseCase(object):
             self.sql: List = sql
             self.ori_sql: List = copy.deepcopy(sql)
             self.result: List = result
+            # case tags (e.g., @arrow_flight_sql, @sequential)
+            self.tags: List = tags or []
 
             # # get db from lines
             # self.db = set()
@@ -404,7 +406,15 @@ class ChooseCase(object):
                         pass
                     else:
                         self.case_list.append(
-                            ChooseCase.CaseTR(self, name, file, copy.deepcopy(tmp_sql), copy.deepcopy(tmp_res), info)
+                            ChooseCase.CaseTR(
+                                self,
+                                name,
+                                file,
+                                copy.deepcopy(tmp_sql),
+                                copy.deepcopy(tmp_res),
+                                info,
+                                tags=copy.deepcopy(tags),
+                            )
                         )
 
                 info = line_content
@@ -564,7 +574,15 @@ class ChooseCase(object):
                 pass
             else:
                 self.case_list.append(
-                    ChooseCase.CaseTR(self, name, file, copy.deepcopy(tmp_sql), copy.deepcopy(tmp_res), info)
+                    ChooseCase.CaseTR(
+                        self,
+                        name,
+                        file,
+                        copy.deepcopy(tmp_sql),
+                        copy.deepcopy(tmp_res),
+                        info,
+                        tags=copy.deepcopy(tags),
+                    )
                 )
 
 
