@@ -276,6 +276,9 @@ public class PropertyAnalyzer {
 
     public static final String PROPERTIES_ENABLE_STATISTIC_COLLECT_ON_FIRST_LOAD = "enable_statistic_collect_on_first_load";
 
+    public static final String PROPERTIES_ENFORCE_CONSISTENT_VERSION = "enforce_consistent_version";
+    public static final String PROPERTIES_ALLOW_EMPTY_TABLET_RECOVERY = "allow_empty_tablet_recovery";
+
     /**
      * Matches location labels like : ["*", "a:*", "bcd_123:*", "123bcd_:val_123", "  a :  b  "],
      * leading and trailing space of key and value will be ignored.

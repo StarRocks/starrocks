@@ -16,14 +16,21 @@ package com.starrocks.sql.ast;
 
 import com.starrocks.sql.parser.NodePosition;
 
-//  ADMIN REPAIR TABLE table_name partitions;
+import java.util.Map;
+
+//  ADMIN REPAIR TABLE table_name partitions properties("key" = "value");
 public class AdminRepairTableStmt extends DdlStmt {
 
     private final TableRef tblRef;
+    private final Map<String, String> properties;
 
-    public AdminRepairTableStmt(TableRef tblRef, NodePosition pos) {
+    private boolean enforceConsistentVersion = true;
+    private boolean allowEmptyTabletRecovery = false;
+
+    public AdminRepairTableStmt(TableRef tblRef, Map<String, String> properties, NodePosition pos) {
         super(pos);
         this.tblRef = tblRef;
+        this.properties = properties;
     }
 
     public String getDbName() {
@@ -36,6 +43,26 @@ public class AdminRepairTableStmt extends DdlStmt {
 
     public PartitionRef getPartitionRef() {
         return tblRef.getPartitionDef();
+    }
+
+    public Map<String, String> getProperties() {
+        return properties;
+    }
+
+    public boolean isEnforceConsistentVersion() {
+        return enforceConsistentVersion;
+    }
+
+    public void setEnforceConsistentVersion(boolean enforceConsistentVersion) {
+        this.enforceConsistentVersion = enforceConsistentVersion;
+    }
+
+    public boolean isAllowEmptyTabletRecovery() {
+        return allowEmptyTabletRecovery;
+    }
+
+    public void setAllowEmptyTabletRecovery(boolean allowEmptyTabletRecovery) {
+        this.allowEmptyTabletRecovery = allowEmptyTabletRecovery;
     }
 
     @Override

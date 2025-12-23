@@ -17,6 +17,16 @@ package com.starrocks.lake;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.HashDistributionInfo;
+import com.starrocks.catalog.ListPartitionInfo;
+import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PartitionInfo;
+import com.starrocks.catalog.PartitionType;
+import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
@@ -31,24 +41,44 @@ import com.starrocks.proto.TabletMetadataRepairStatus;
 import com.starrocks.proto.TabletMetadatas;
 import com.starrocks.rpc.LakeServiceWithMetrics;
 import com.starrocks.rpc.RpcException;
+import com.starrocks.server.WarehouseManager;
+import com.starrocks.sql.ast.AdminRepairTableStmt;
+import com.starrocks.sql.ast.PartitionRef;
+import com.starrocks.sql.ast.QualifiedName;
+import com.starrocks.sql.ast.TableRef;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.system.ComputeNode;
+import com.starrocks.thrift.TStorageMedium;
+import com.starrocks.type.VarcharType;
+import com.starrocks.warehouse.cngroup.ComputeResource;
+import com.starrocks.warehouse.cngroup.WarehouseComputeResource;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Future;
 
 public class TabletRepairHelperTest {
-    private final long physicalPartitionId = 100L;
-    private final long tabletId1 = 10001L;
-    private final long tabletId2 = 10002L;
+    private final long dbId = 1L;
+    private final long tableId = 2L;
+    private final long indexId = 3L;
+    private final long physicalPartitionId1 = 4L;
+    private final long tabletId11 = 11L;
+    private final long tabletId12 = 12L;
+    private final long physicalPartitionId2 = 5L;
+    private final long tabletId21 = 21L;
+    private final long tabletId22 = 22L;
     private final long maxVersion = 8L;
     private final long minVersion = 3L;
+
+    private Database db;
+    private OlapTable table;
 
     private ComputeNode node;
     private Map<ComputeNode, Set<Long>> nodeToTablets;
@@ -59,10 +89,138 @@ public class TabletRepairHelperTest {
         nodeToTablets = Maps.newHashMap();
         node = new ComputeNode(1L, "127.0.0.1", 9050);
         node.setBrpcPort(8060);
-        nodeToTablets.put(node, Sets.newHashSet(tabletId1, tabletId2));
+        nodeToTablets.put(node, Sets.newHashSet(tabletId11, tabletId12));
 
-        info = new PhysicalPartitionInfo(physicalPartitionId, Lists.newArrayList(tabletId1, tabletId2),
-                Sets.newHashSet(tabletId1, tabletId2), nodeToTablets, maxVersion, minVersion);
+        info = new PhysicalPartitionInfo(physicalPartitionId1, Lists.newArrayList(tabletId11, tabletId12),
+                Sets.newHashSet(tabletId11, tabletId12), nodeToTablets, maxVersion, minVersion);
+
+        // create table
+        List<Column> cols = Lists.newArrayList(new Column("province", VarcharType.VARCHAR));
+        PartitionInfo listPartitionInfo = new ListPartitionInfo(PartitionType.LIST, cols);
+        table = new OlapTable(tableId, "table", cols, null, listPartitionInfo, null);
+        table.getIndexNameToMetaId().put("index", indexId);
+
+        MaterializedIndex index1 = new MaterializedIndex(indexId, MaterializedIndex.IndexState.NORMAL);
+        TabletMeta tabletMeta1 = new TabletMeta(dbId, tableId, physicalPartitionId1, indexId, TStorageMedium.HDD);
+        LakeTablet tablet11 = new LakeTablet(tabletId11);
+        tablet11.setMinVersion(minVersion);
+        index1.addTablet(tablet11, tabletMeta1);
+        LakeTablet tablet12 = new LakeTablet(tabletId12);
+        tablet12.setMinVersion(minVersion);
+        index1.addTablet(tablet12, tabletMeta1);
+
+        Partition partition1 =
+                new Partition(physicalPartitionId1, physicalPartitionId1, "p1", index1, new HashDistributionInfo(2, cols));
+        partition1.getDefaultPhysicalPartition().setVisibleVersion(maxVersion, 0L);
+        table.addPartition(partition1);
+
+        MaterializedIndex index2 = new MaterializedIndex(indexId, MaterializedIndex.IndexState.NORMAL);
+        TabletMeta tabletMeta2 = new TabletMeta(dbId, tableId, physicalPartitionId2, indexId, TStorageMedium.HDD);
+        LakeTablet tablet21 = new LakeTablet(tabletId21);
+        tablet21.setMinVersion(minVersion);
+        index2.addTablet(tablet21, tabletMeta2);
+        LakeTablet tablet22 = new LakeTablet(tabletId22);
+        tablet22.setMinVersion(minVersion + 1);
+        index2.addTablet(tablet22, tabletMeta2);
+
+        Partition partition2 =
+                new Partition(physicalPartitionId2, physicalPartitionId2, "p2", index2, new HashDistributionInfo(2, cols));
+        partition2.getDefaultPhysicalPartition().setVisibleVersion(maxVersion, 0L);
+        table.addPartition(partition2);
+
+        db = new Database(dbId, "db");
+        db.registerTableUnlocked(table);
+    }
+
+    @Test
+    public void testGetPhysicalPartitionIds() {
+        // case 1: test no partition specified
+        {
+            List<Long> ids = Deencapsulation.invoke(TabletRepairHelper.class, "getPhysicalPartitionIds",
+                    db, table, Lists.newArrayList());
+            Assertions.assertEquals(2, ids.size());
+            Assertions.assertEquals("[4, 5]", ids.toString());
+        }
+
+        // case 2: test partition specified
+        {
+            List<Long> ids = Deencapsulation.invoke(TabletRepairHelper.class, "getPhysicalPartitionIds",
+                    db, table, Lists.newArrayList("p1"));
+
+            Assertions.assertEquals(1, ids.size());
+            Assertions.assertEquals("[4]", ids.toString());
+        }
+    }
+
+    @Test
+    public void testGetPhysicalPartitionInfo() {
+        // mock warehouse manager
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public ComputeNode getComputeNodeAssignedToTablet(ComputeResource computeResource, long tabletId) {
+                return node;
+            }
+        };
+
+        // case 1: test partition 1 with enforceConsistentVersion = true
+        {
+            PhysicalPartitionInfo info = Deencapsulation.invoke(TabletRepairHelper.class, "getPhysicalPartitionInfo",
+                    db, table, physicalPartitionId1, true, WarehouseComputeResource.DEFAULT);
+
+            Assertions.assertEquals(physicalPartitionId1, info.physicalPartitionId());
+            Assertions.assertEquals(2, info.allTablets().size());
+            Assertions.assertEquals("[11, 12]", info.allTablets().toString());
+            Assertions.assertEquals(2, info.unverifiedTablets().size());
+            Assertions.assertEquals("[11, 12]", info.unverifiedTablets().toString());
+            Assertions.assertTrue(info.nodeToTablets().containsKey(node));
+            Assertions.assertEquals(maxVersion, info.maxVersion());
+            Assertions.assertEquals(minVersion, info.minVersion());
+        }
+
+        // case 2: test partition 1 with enforceConsistentVersion = false
+        {
+            PhysicalPartitionInfo info = Deencapsulation.invoke(TabletRepairHelper.class, "getPhysicalPartitionInfo",
+                    db, table, physicalPartitionId1, false, WarehouseComputeResource.DEFAULT);
+
+            Assertions.assertEquals(physicalPartitionId1, info.physicalPartitionId());
+            Assertions.assertEquals(2, info.allTablets().size());
+            Assertions.assertEquals("[11, 12]", info.allTablets().toString());
+            Assertions.assertEquals(2, info.unverifiedTablets().size());
+            Assertions.assertEquals("[11, 12]", info.unverifiedTablets().toString());
+            Assertions.assertTrue(info.nodeToTablets().containsKey(node));
+            Assertions.assertEquals(maxVersion, info.maxVersion());
+            Assertions.assertEquals(minVersion, info.minVersion());
+        }
+
+        // case 3: test partition 2 with enforceConsistentVersion = true
+        {
+            PhysicalPartitionInfo info = Deencapsulation.invoke(TabletRepairHelper.class, "getPhysicalPartitionInfo",
+                    db, table, physicalPartitionId2, true, WarehouseComputeResource.DEFAULT);
+
+            Assertions.assertEquals(physicalPartitionId2, info.physicalPartitionId());
+            Assertions.assertEquals(2, info.allTablets().size());
+            Assertions.assertEquals("[21, 22]", info.allTablets().toString());
+            Assertions.assertEquals(2, info.unverifiedTablets().size());
+            Assertions.assertEquals("[21, 22]", info.unverifiedTablets().toString());
+            Assertions.assertTrue(info.nodeToTablets().containsKey(node));
+            Assertions.assertEquals(maxVersion, info.maxVersion());
+            Assertions.assertEquals(minVersion + 1, info.minVersion());
+        }
+
+        // case 4: test partition 2 with enforceConsistentVersion = false
+        {
+            PhysicalPartitionInfo info = Deencapsulation.invoke(TabletRepairHelper.class, "getPhysicalPartitionInfo",
+                    db, table, physicalPartitionId2, false, WarehouseComputeResource.DEFAULT);
+
+            Assertions.assertEquals(physicalPartitionId2, info.physicalPartitionId());
+            Assertions.assertEquals(2, info.allTablets().size());
+            Assertions.assertEquals("[21, 22]", info.allTablets().toString());
+            Assertions.assertEquals(2, info.unverifiedTablets().size());
+            Assertions.assertEquals("[21, 22]", info.unverifiedTablets().toString());
+            Assertions.assertTrue(info.nodeToTablets().containsKey(node));
+            Assertions.assertEquals(maxVersion, info.maxVersion());
+            Assertions.assertEquals(minVersion, info.minVersion());
+        }
     }
 
     @Test
@@ -76,24 +234,24 @@ public class TabletRepairHelperTest {
 
                 // tablet1 with 2 versions metadata
                 TabletMetadatas tm1 = new TabletMetadatas();
-                tm1.tabletId = tabletId1;
+                tm1.tabletId = tabletId11;
                 tm1.status = new StatusPB();
                 tm1.status.statusCode = 0;
                 tm1.versionMetadatas = Maps.newHashMap();
 
                 TabletMetadataPB meta11 = new TabletMetadataPB();
-                meta11.id = tabletId1;
+                meta11.id = tabletId11;
                 meta11.version = maxVersion;
                 tm1.versionMetadatas.put(maxVersion, meta11);
 
                 TabletMetadataPB meta12 = new TabletMetadataPB();
-                meta12.id = tabletId1;
+                meta12.id = tabletId11;
                 meta12.version = minVersion;
                 tm1.versionMetadatas.put(minVersion, meta12);
 
                 // tablet2 metadata not found
                 TabletMetadatas tm2 = new TabletMetadatas();
-                tm2.tabletId = tabletId2;
+                tm2.tabletId = tabletId12;
                 tm2.status = new StatusPB();
                 tm2.status.statusCode = 31;
                 tm2.versionMetadatas = Maps.newHashMap();
@@ -108,11 +266,11 @@ public class TabletRepairHelperTest {
                 TabletRepairHelper.class, "getTabletMetadatas", info, maxVersion, minVersion);
 
         Assertions.assertEquals(1, tabletVersionMetadatas.size());
-        Assertions.assertTrue(tabletVersionMetadatas.containsKey(tabletId1));
-        Assertions.assertEquals(2, tabletVersionMetadatas.get(tabletId1).size());
-        Assertions.assertEquals(maxVersion, tabletVersionMetadatas.get(tabletId1).get(maxVersion).version);
-        Assertions.assertEquals(minVersion, tabletVersionMetadatas.get(tabletId1).get(minVersion).version);
-        Assertions.assertFalse(tabletVersionMetadatas.containsKey(tabletId2));
+        Assertions.assertTrue(tabletVersionMetadatas.containsKey(tabletId11));
+        Assertions.assertEquals(2, tabletVersionMetadatas.get(tabletId11).size());
+        Assertions.assertEquals(maxVersion, tabletVersionMetadatas.get(tabletId11).get(maxVersion).version);
+        Assertions.assertEquals(minVersion, tabletVersionMetadatas.get(tabletId11).get(minVersion).version);
+        Assertions.assertFalse(tabletVersionMetadatas.containsKey(tabletId12));
     }
 
     @Test
@@ -169,19 +327,19 @@ public class TabletRepairHelperTest {
 
                 // tablet1 with 1 version metadata
                 TabletMetadatas tm1 = new TabletMetadatas();
-                tm1.tabletId = tabletId1;
+                tm1.tabletId = tabletId11;
                 tm1.status = new StatusPB();
                 tm1.status.statusCode = 0;
                 tm1.versionMetadatas = Maps.newHashMap();
 
                 TabletMetadataPB meta11 = new TabletMetadataPB();
-                meta11.id = tabletId1;
+                meta11.id = tabletId11;
                 meta11.version = maxVersion;
                 tm1.versionMetadatas.put(maxVersion, meta11);
 
                 // tablet2 get metadata failed
                 TabletMetadatas tm2 = new TabletMetadatas();
-                tm2.tabletId = tabletId2;
+                tm2.tabletId = tabletId12;
                 tm2.status = new StatusPB();
                 tm2.status.statusCode = 1;
                 tm2.status.errorMsgs = Lists.newArrayList("get tablet metadata failed");
@@ -209,24 +367,24 @@ public class TabletRepairHelperTest {
         {
             Map<Long, Map<Long, TabletMetadataPB>> tabletVersionMetadatas = Maps.newHashMap();
             Map<Long, TabletMetadataPB> tablet1Versions = Maps.newHashMap();
-            tablet1Versions.put(maxVersion - 1, createTabletMetadataPB(tabletId1, maxVersion - 1));
-            tablet1Versions.put(minVersion, createTabletMetadataPB(tabletId1, minVersion));
-            tabletVersionMetadatas.put(tabletId1, tablet1Versions);
+            tablet1Versions.put(maxVersion - 1, createTabletMetadataPB(tabletId11, maxVersion - 1));
+            tablet1Versions.put(minVersion, createTabletMetadataPB(tabletId11, minVersion));
+            tabletVersionMetadatas.put(tabletId11, tablet1Versions);
 
             Map<Long, TabletMetadataPB> tablet2Versions = Maps.newHashMap();
-            tablet2Versions.put(maxVersion - 1, createTabletMetadataPB(tabletId2, maxVersion - 1));
-            tablet2Versions.put(minVersion, createTabletMetadataPB(tabletId2, minVersion));
-            tabletVersionMetadatas.put(tabletId2, tablet2Versions);
+            tablet2Versions.put(maxVersion - 1, createTabletMetadataPB(tabletId12, maxVersion - 1));
+            tablet2Versions.put(minVersion, createTabletMetadataPB(tabletId12, minVersion));
+            tabletVersionMetadatas.put(tabletId12, tablet2Versions);
 
             Map<Long, TabletMetadataPB> validMetadatas = Maps.newHashMap();
             Deencapsulation.invoke(TabletRepairHelper.class, "findValidTabletMetadata",
                     info, tabletVersionMetadatas, maxVersion, minVersion, true, validMetadatas);
 
             Assertions.assertEquals(2, validMetadatas.size());
-            Assertions.assertTrue(validMetadatas.containsKey(tabletId1));
-            Assertions.assertEquals(maxVersion - 1, validMetadatas.get(tabletId1).version);
-            Assertions.assertTrue(validMetadatas.containsKey(tabletId2));
-            Assertions.assertEquals(maxVersion - 1, validMetadatas.get(tabletId2).version);
+            Assertions.assertTrue(validMetadatas.containsKey(tabletId11));
+            Assertions.assertEquals(maxVersion - 1, validMetadatas.get(tabletId11).version);
+            Assertions.assertTrue(validMetadatas.containsKey(tabletId12));
+            Assertions.assertEquals(maxVersion - 1, validMetadatas.get(tabletId12).version);
 
             ExceptionChecker.expectThrowsNoException(
                     () -> Deencapsulation.invoke(TabletRepairHelper.class, "checkOrCreateEmptyTabletMetadata",
@@ -237,12 +395,12 @@ public class TabletRepairHelperTest {
         {
             Map<Long, Map<Long, TabletMetadataPB>> tabletVersionMetadatas = Maps.newHashMap();
             Map<Long, TabletMetadataPB> tablet1Versions = Maps.newHashMap();
-            tablet1Versions.put(maxVersion, createTabletMetadataPB(tabletId1, maxVersion));
-            tabletVersionMetadatas.put(tabletId1, tablet1Versions);
+            tablet1Versions.put(maxVersion, createTabletMetadataPB(tabletId11, maxVersion));
+            tabletVersionMetadatas.put(tabletId11, tablet1Versions);
 
             Map<Long, TabletMetadataPB> tablet2Versions = Maps.newHashMap();
-            tablet2Versions.put(maxVersion - 1, createTabletMetadataPB(tabletId2, maxVersion - 1));
-            tabletVersionMetadatas.put(tabletId2, tablet2Versions);
+            tablet2Versions.put(maxVersion - 1, createTabletMetadataPB(tabletId12, maxVersion - 1));
+            tabletVersionMetadatas.put(tabletId12, tablet2Versions);
 
             Map<Long, TabletMetadataPB> validMetadatas = Maps.newHashMap();
             Deencapsulation.invoke(TabletRepairHelper.class, "findValidTabletMetadata",
@@ -260,23 +418,23 @@ public class TabletRepairHelperTest {
         {
             Map<Long, Map<Long, TabletMetadataPB>> tabletVersionMetadatas = Maps.newHashMap();
             Map<Long, TabletMetadataPB> tablet1Versions = Maps.newHashMap();
-            tablet1Versions.put(maxVersion, createTabletMetadataPB(tabletId1, maxVersion));
-            tablet1Versions.put(minVersion, createTabletMetadataPB(tabletId1, minVersion));
-            tabletVersionMetadatas.put(tabletId1, tablet1Versions);
+            tablet1Versions.put(maxVersion, createTabletMetadataPB(tabletId11, maxVersion));
+            tablet1Versions.put(minVersion, createTabletMetadataPB(tabletId11, minVersion));
+            tabletVersionMetadatas.put(tabletId11, tablet1Versions);
 
             Map<Long, TabletMetadataPB> tablet2Versions = Maps.newHashMap();
-            tablet2Versions.put(maxVersion - 1, createTabletMetadataPB(tabletId2, maxVersion - 1));
-            tabletVersionMetadatas.put(tabletId2, tablet2Versions);
+            tablet2Versions.put(maxVersion - 1, createTabletMetadataPB(tabletId12, maxVersion - 1));
+            tabletVersionMetadatas.put(tabletId12, tablet2Versions);
 
             Map<Long, TabletMetadataPB> validMetadatas = Maps.newHashMap();
             Deencapsulation.invoke(TabletRepairHelper.class, "findValidTabletMetadata",
                     info, tabletVersionMetadatas, maxVersion, minVersion, false, validMetadatas);
 
             Assertions.assertEquals(2, validMetadatas.size());
-            Assertions.assertTrue(validMetadatas.containsKey(tabletId1));
-            Assertions.assertEquals(maxVersion, validMetadatas.get(tabletId1).version);
-            Assertions.assertTrue(validMetadatas.containsKey(tabletId2));
-            Assertions.assertEquals(maxVersion - 1, validMetadatas.get(tabletId2).version);
+            Assertions.assertTrue(validMetadatas.containsKey(tabletId11));
+            Assertions.assertEquals(maxVersion, validMetadatas.get(tabletId11).version);
+            Assertions.assertTrue(validMetadatas.containsKey(tabletId12));
+            Assertions.assertEquals(maxVersion - 1, validMetadatas.get(tabletId12).version);
 
             ExceptionChecker.expectThrowsNoException(
                     () -> Deencapsulation.invoke(TabletRepairHelper.class, "checkOrCreateEmptyTabletMetadata",
@@ -287,8 +445,8 @@ public class TabletRepairHelperTest {
         {
             Map<Long, Map<Long, TabletMetadataPB>> tabletVersionMetadatas = Maps.newHashMap();
             Map<Long, TabletMetadataPB> tablet1Versions = Maps.newHashMap();
-            tablet1Versions.put(maxVersion, createTabletMetadataPB(tabletId1, maxVersion));
-            tabletVersionMetadatas.put(tabletId1, tablet1Versions);
+            tablet1Versions.put(maxVersion, createTabletMetadataPB(tabletId11, maxVersion));
+            tabletVersionMetadatas.put(tabletId11, tablet1Versions);
 
             // tabletId2 has no metadata
 
@@ -297,12 +455,12 @@ public class TabletRepairHelperTest {
                     maxVersion, minVersion, false, validMetadatas);
 
             Assertions.assertEquals(1, validMetadatas.size());
-            Assertions.assertTrue(validMetadatas.containsKey(tabletId1));
-            Assertions.assertEquals(maxVersion, validMetadatas.get(tabletId1).version);
-            Assertions.assertFalse(validMetadatas.containsKey(tabletId2));
+            Assertions.assertTrue(validMetadatas.containsKey(tabletId11));
+            Assertions.assertEquals(maxVersion, validMetadatas.get(tabletId11).version);
+            Assertions.assertFalse(validMetadatas.containsKey(tabletId12));
 
             ExceptionChecker.expectThrowsWithMsg(StarRocksException.class,
-                    "no tablet metadatas were found for tablets [10002]",
+                    "no tablet metadatas were found for tablets [12]",
                     () -> Deencapsulation.invoke(TabletRepairHelper.class, "checkOrCreateEmptyTabletMetadata",
                             info, validMetadatas, false, false));
 
@@ -310,29 +468,29 @@ public class TabletRepairHelperTest {
             ExceptionChecker.expectThrowsNoException(
                     () -> Deencapsulation.invoke(TabletRepairHelper.class, "checkOrCreateEmptyTabletMetadata",
                             info, validMetadatas, false, true));
-            Assertions.assertTrue(validMetadatas.containsKey(tabletId2));
-            Assertions.assertEquals(0L, validMetadatas.get(tabletId2).version);
+            Assertions.assertTrue(validMetadatas.containsKey(tabletId12));
+            Assertions.assertEquals(0L, validMetadatas.get(tabletId12).version);
         }
 
         // case 5: enforceConsistentVersion = false with pre-existing valid metadata
         {
             Map<Long, Map<Long, TabletMetadataPB>> tabletVersionMetadatas = Maps.newHashMap();
             Map<Long, TabletMetadataPB> tablet2Versions = Maps.newHashMap();
-            tablet2Versions.put(minVersion, createTabletMetadataPB(tabletId2, minVersion));
-            tablet2Versions.put(minVersion + 1, createTabletMetadataPB(tabletId2, minVersion + 1));
-            tabletVersionMetadatas.put(tabletId2, tablet2Versions);
+            tablet2Versions.put(minVersion, createTabletMetadataPB(tabletId12, minVersion));
+            tablet2Versions.put(minVersion + 1, createTabletMetadataPB(tabletId12, minVersion + 1));
+            tabletVersionMetadatas.put(tabletId12, tablet2Versions);
 
             Map<Long, TabletMetadataPB> validMetadatas = Maps.newHashMap();
-            validMetadatas.put(tabletId1, createTabletMetadataPB(tabletId1, maxVersion)); // Pre-existing
+            validMetadatas.put(tabletId11, createTabletMetadataPB(tabletId11, maxVersion)); // Pre-existing
 
             Deencapsulation.invoke(TabletRepairHelper.class, "findValidTabletMetadata", info, tabletVersionMetadatas,
                     maxVersion, minVersion, false, validMetadatas);
 
             Assertions.assertEquals(2, validMetadatas.size());
-            Assertions.assertTrue(validMetadatas.containsKey(tabletId1));
-            Assertions.assertEquals(maxVersion, validMetadatas.get(tabletId1).version); // Should remain as pre-existing
-            Assertions.assertTrue(validMetadatas.containsKey(tabletId2));
-            Assertions.assertEquals(minVersion + 1, validMetadatas.get(tabletId2).version);
+            Assertions.assertTrue(validMetadatas.containsKey(tabletId11));
+            Assertions.assertEquals(maxVersion, validMetadatas.get(tabletId11).version); // Should remain as pre-existing
+            Assertions.assertTrue(validMetadatas.containsKey(tabletId12));
+            Assertions.assertEquals(minVersion + 1, validMetadatas.get(tabletId12).version);
 
             ExceptionChecker.expectThrowsNoException(
                     () -> Deencapsulation.invoke(TabletRepairHelper.class, "checkOrCreateEmptyTabletMetadata",
@@ -343,8 +501,8 @@ public class TabletRepairHelperTest {
     @Test
     public void testRepairTabletMetadata() {
         Map<Long, TabletMetadataPB> validMetadatas = Maps.newHashMap();
-        validMetadatas.put(tabletId1, createTabletMetadataPB(tabletId1, maxVersion));
-        validMetadatas.put(tabletId2, createTabletMetadataPB(tabletId2, maxVersion));
+        validMetadatas.put(tabletId11, createTabletMetadataPB(tabletId11, maxVersion));
+        validMetadatas.put(tabletId12, createTabletMetadataPB(tabletId12, maxVersion));
 
         new MockUp<LakeServiceWithMetrics>() {
             @Mock
@@ -377,8 +535,8 @@ public class TabletRepairHelperTest {
     @Test
     public void testRepairTabletMetadataWithFileBundling() {
         Map<Long, TabletMetadataPB> validMetadatas = Maps.newHashMap();
-        validMetadatas.put(tabletId1, createTabletMetadataPB(tabletId1, maxVersion));
-        validMetadatas.put(tabletId2, createTabletMetadataPB(tabletId2, maxVersion));
+        validMetadatas.put(tabletId11, createTabletMetadataPB(tabletId11, maxVersion));
+        validMetadatas.put(tabletId12, createTabletMetadataPB(tabletId12, maxVersion));
 
         new MockUp<LakeServiceWithMetrics>() {
             @Mock
@@ -411,8 +569,8 @@ public class TabletRepairHelperTest {
     @Test
     public void testRepairTabletMetadataRpcException() {
         Map<Long, TabletMetadataPB> validMetadatas = Maps.newHashMap();
-        validMetadatas.put(tabletId1, createTabletMetadataPB(tabletId1, maxVersion));
-        validMetadatas.put(tabletId2, createTabletMetadataPB(tabletId2, maxVersion));
+        validMetadatas.put(tabletId11, createTabletMetadataPB(tabletId11, maxVersion));
+        validMetadatas.put(tabletId12, createTabletMetadataPB(tabletId12, maxVersion));
 
         new MockUp<LakeServiceWithMetrics>() {
             @Mock
@@ -430,8 +588,8 @@ public class TabletRepairHelperTest {
     @Test
     public void testRepairTabletMetadataResponseNull() {
         Map<Long, TabletMetadataPB> validMetadatas = Maps.newHashMap();
-        validMetadatas.put(tabletId1, createTabletMetadataPB(tabletId1, maxVersion));
-        validMetadatas.put(tabletId2, createTabletMetadataPB(tabletId2, maxVersion));
+        validMetadatas.put(tabletId11, createTabletMetadataPB(tabletId11, maxVersion));
+        validMetadatas.put(tabletId12, createTabletMetadataPB(tabletId12, maxVersion));
 
         new MockUp<LakeServiceWithMetrics>() {
             @Mock
@@ -448,8 +606,8 @@ public class TabletRepairHelperTest {
     @Test
     public void testRepairTabletMetadataRpcLevelStatusFail() {
         Map<Long, TabletMetadataPB> validMetadatas = Maps.newHashMap();
-        validMetadatas.put(tabletId1, createTabletMetadataPB(tabletId1, maxVersion));
-        validMetadatas.put(tabletId2, createTabletMetadataPB(tabletId2, maxVersion));
+        validMetadatas.put(tabletId11, createTabletMetadataPB(tabletId11, maxVersion));
+        validMetadatas.put(tabletId12, createTabletMetadataPB(tabletId12, maxVersion));
 
         new MockUp<LakeServiceWithMetrics>() {
             @Mock
@@ -470,8 +628,8 @@ public class TabletRepairHelperTest {
     @Test
     public void testRepairTabletMetadataPartialFailure() {
         Map<Long, TabletMetadataPB> validMetadatas = Maps.newHashMap();
-        validMetadatas.put(tabletId1, createTabletMetadataPB(tabletId1, maxVersion));
-        validMetadatas.put(tabletId2, createTabletMetadataPB(tabletId2, maxVersion));
+        validMetadatas.put(tabletId11, createTabletMetadataPB(tabletId11, maxVersion));
+        validMetadatas.put(tabletId12, createTabletMetadataPB(tabletId12, maxVersion));
 
         new MockUp<LakeServiceWithMetrics>() {
             @Mock
@@ -485,7 +643,7 @@ public class TabletRepairHelperTest {
                     TabletMetadataRepairStatus status = new TabletMetadataRepairStatus();
                     status.tabletId = metadata.id;
                     status.status = new StatusPB();
-                    if (metadata.id == tabletId2) {
+                    if (metadata.id == tabletId12) {
                         status.status.statusCode = 1;
                         status.status.errorMsgs = Lists.newArrayList("repair failed");
                     } else {
@@ -502,8 +660,8 @@ public class TabletRepairHelperTest {
                 info, validMetadatas, false);
 
         Assertions.assertEquals(1, tabletErrors.size());
-        Assertions.assertTrue(tabletErrors.containsKey(tabletId2));
-        Assertions.assertEquals("repair failed", tabletErrors.get(tabletId2));
+        Assertions.assertTrue(tabletErrors.containsKey(tabletId12));
+        Assertions.assertEquals("repair failed", tabletErrors.get(tabletId12));
     }
 
     @Test
@@ -517,28 +675,28 @@ public class TabletRepairHelperTest {
 
                 // tablet1 with 2 versions metadata
                 TabletMetadatas tm1 = new TabletMetadatas();
-                tm1.tabletId = tabletId1;
+                tm1.tabletId = tabletId11;
                 tm1.status = new StatusPB();
                 tm1.status.statusCode = 0;
                 tm1.versionMetadatas = Maps.newHashMap();
 
-                TabletMetadataPB meta11 = createTabletMetadataPB(tabletId1, maxVersion);
+                TabletMetadataPB meta11 = createTabletMetadataPB(tabletId11, maxVersion);
                 tm1.versionMetadatas.put(maxVersion, meta11);
 
-                TabletMetadataPB meta12 = createTabletMetadataPB(tabletId1, minVersion);
+                TabletMetadataPB meta12 = createTabletMetadataPB(tabletId11, minVersion);
                 tm1.versionMetadatas.put(minVersion, meta12);
 
                 // tablet2 with 2 versions metadata
                 TabletMetadatas tm2 = new TabletMetadatas();
-                tm2.tabletId = tabletId2;
+                tm2.tabletId = tabletId12;
                 tm2.status = new StatusPB();
                 tm2.status.statusCode = 0;
                 tm2.versionMetadatas = Maps.newHashMap();
 
-                TabletMetadataPB meta21 = createTabletMetadataPB(tabletId2, maxVersion - 1);
+                TabletMetadataPB meta21 = createTabletMetadataPB(tabletId12, maxVersion - 1);
                 tm2.versionMetadatas.put(maxVersion - 1, meta21);
 
-                TabletMetadataPB meta22 = createTabletMetadataPB(tabletId2, minVersion);
+                TabletMetadataPB meta22 = createTabletMetadataPB(tabletId12, minVersion);
                 tm2.versionMetadatas.put(minVersion, meta22);
 
                 response.tabletMetadatas = Lists.newArrayList(tm1, tm2);
@@ -577,9 +735,132 @@ public class TabletRepairHelperTest {
         Assertions.assertTrue(tabletErrors.isEmpty());
 
         // case 2: enforceConsistentVersion = false
-        info = new PhysicalPartitionInfo(physicalPartitionId, Lists.newArrayList(tabletId1, tabletId2),
-                Sets.newHashSet(tabletId1, tabletId2), nodeToTablets, maxVersion, minVersion);
+        info = new PhysicalPartitionInfo(physicalPartitionId1, Lists.newArrayList(tabletId11, tabletId12),
+                Sets.newHashSet(tabletId11, tabletId12), nodeToTablets, maxVersion, minVersion);
         tabletErrors = Deencapsulation.invoke(TabletRepairHelper.class, "repairPhysicalPartition", info, false, false, false);
         Assertions.assertTrue(tabletErrors.isEmpty());
+    }
+
+    @Test
+    public void testRepair() {
+        // mock warehouse manager
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public ComputeNode getComputeNodeAssignedToTablet(ComputeResource computeResource, long tabletId) {
+                return node;
+            }
+        };
+
+        new MockUp<LakeServiceWithMetrics>() {
+            @Mock
+            public Future<GetTabletMetadatasResponse> getTabletMetadatas(GetTabletMetadatasRequest request) {
+                GetTabletMetadatasResponse response = new GetTabletMetadatasResponse();
+                response.status = new StatusPB();
+                response.status.statusCode = 0;
+
+                // tablet1 with 2 versions metadata
+                TabletMetadatas tm1 = new TabletMetadatas();
+                tm1.tabletId = tabletId11;
+                tm1.status = new StatusPB();
+                tm1.status.statusCode = 0;
+                tm1.versionMetadatas = Maps.newHashMap();
+
+                TabletMetadataPB meta11 = createTabletMetadataPB(tabletId11, maxVersion);
+                tm1.versionMetadatas.put(maxVersion, meta11);
+
+                TabletMetadataPB meta12 = createTabletMetadataPB(tabletId11, minVersion);
+                tm1.versionMetadatas.put(minVersion, meta12);
+
+                // tablet2 with 2 versions metadata
+                TabletMetadatas tm2 = new TabletMetadatas();
+                tm2.tabletId = tabletId12;
+                tm2.status = new StatusPB();
+                tm2.status.statusCode = 0;
+                tm2.versionMetadatas = Maps.newHashMap();
+
+                TabletMetadataPB meta21 = createTabletMetadataPB(tabletId12, maxVersion - 1);
+                tm2.versionMetadatas.put(maxVersion - 1, meta21);
+
+                TabletMetadataPB meta22 = createTabletMetadataPB(tabletId12, minVersion);
+                tm2.versionMetadatas.put(minVersion, meta22);
+
+                response.tabletMetadatas = Lists.newArrayList(tm1, tm2);
+
+                return CompletableFuture.completedFuture(response);
+            }
+
+            @Mock
+            public Future<RepairTabletMetadataResponse> repairTabletMetadata(RepairTabletMetadataRequest request) {
+                Assertions.assertFalse(request.enableFileBundling);
+                Assertions.assertFalse(request.writeBundlingFile);
+                Assertions.assertEquals(2, request.tabletMetadatas.size());
+                Assertions.assertEquals(maxVersion, request.tabletMetadatas.get(0).version);
+                Assertions.assertEquals(maxVersion, request.tabletMetadatas.get(1).version);
+
+                RepairTabletMetadataResponse response = new RepairTabletMetadataResponse();
+                response.status = new StatusPB();
+                response.status.statusCode = 0;
+                response.tabletRepairStatuses = Lists.newArrayList();
+
+                for (TabletMetadataPB metadata : request.tabletMetadatas) {
+                    TabletMetadataRepairStatus status = new TabletMetadataRepairStatus();
+                    status.tabletId = metadata.id;
+                    status.status = new StatusPB();
+                    status.status.statusCode = 0;
+                    response.tabletRepairStatuses.add(status);
+                }
+
+                return CompletableFuture.completedFuture(response);
+            }
+        };
+
+        AdminRepairTableStmt stmt = new AdminRepairTableStmt(
+                new TableRef(QualifiedName.of(Lists.newArrayList("db", "table")),
+                        new PartitionRef(Lists.newArrayList("p1"), false, NodePosition.ZERO),
+                        NodePosition.ZERO),
+                Maps.newHashMap(),
+                NodePosition.ZERO);
+
+        // case 1: enforceConsistentVersion = true
+        stmt.setEnforceConsistentVersion(true);
+        ExceptionChecker.expectThrowsNoException(
+                () -> Deencapsulation.invoke(TabletRepairHelper.class, "repair", stmt, db, table, Lists.newArrayList("p1"),
+                        WarehouseComputeResource.DEFAULT));
+
+        // case 2: enforceConsistentVersion = false
+        stmt.setEnforceConsistentVersion(false);
+        ExceptionChecker.expectThrowsNoException(
+                () -> Deencapsulation.invoke(TabletRepairHelper.class, "repair", stmt, db, table, Lists.newArrayList("p1"),
+                        WarehouseComputeResource.DEFAULT));
+    }
+
+    @Test
+    public void testRepairFail() {
+        // mock warehouse manager
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public ComputeNode getComputeNodeAssignedToTablet(ComputeResource computeResource, long tabletId) {
+                return node;
+            }
+        };
+
+        new MockUp<LakeServiceWithMetrics>() {
+            @Mock
+            public Future<GetTabletMetadatasResponse> getTabletMetadatas(GetTabletMetadatasRequest request) throws RpcException {
+                throw new RpcException("rpc exception");
+            }
+        };
+
+        AdminRepairTableStmt stmt = new AdminRepairTableStmt(
+                new TableRef(QualifiedName.of(Lists.newArrayList("db", "table")),
+                        new PartitionRef(Lists.newArrayList("p1"), false, NodePosition.ZERO),
+                        NodePosition.ZERO),
+                Maps.newHashMap(),
+                NodePosition.ZERO);
+
+        ExceptionChecker.expectThrowsWithMsg(StarRocksException.class,
+                "Fail to repair tablet metadata for 1 partitions, the first 1 partitions: [{partition: 4, error: rpc exception}]",
+                () -> Deencapsulation.invoke(TabletRepairHelper.class, "repair", stmt, db, table, Lists.newArrayList("p1"),
+                        WarehouseComputeResource.DEFAULT));
     }
 }
