@@ -376,11 +376,14 @@ public class StmtExecutor {
                 String.format("%s-%s", Version.STARROCKS_VERSION, Version.STARROCKS_COMMIT_HASH));
         summaryProfile.addInfoString(ProfileManager.USER, context.getQualifiedUser());
         summaryProfile.addInfoString(ProfileManager.DEFAULT_DB, context.getDatabase());
+        // only print the sepecific sql in multi statement
+        String sql = context.isSingleStmt() ? originStmt.originStmt :
+                AstToSQLBuilder.toSQLOrDefault(parsedStmt, originStmt.originStmt);
         if (AuditEncryptionChecker.needEncrypt(parsedStmt)) {
             summaryProfile.addInfoString(ProfileManager.SQL_STATEMENT,
                     AstToSQLBuilder.toSQLOrDefault(parsedStmt, originStmt.originStmt));
         } else {
-            summaryProfile.addInfoString(ProfileManager.SQL_STATEMENT, originStmt.originStmt);
+            summaryProfile.addInfoString(ProfileManager.SQL_STATEMENT, sql);
         }
 
         // Add some import variables in profile
