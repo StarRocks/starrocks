@@ -71,6 +71,7 @@ public class ArrowFlightSqlConnectProcessor extends ConnectProcessor {
         executor = new StmtExecutor(ctx, parsedStmt);
         ctx.setExecutor(executor);
         ctx.setIsLastStmt(true);
+        ctx.setSingleStmt(true);
 
         try {
             executor.addRunningQueryDetail(parsedStmt);
