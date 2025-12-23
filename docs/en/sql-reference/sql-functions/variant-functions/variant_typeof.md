@@ -24,7 +24,8 @@ Returns a VARCHAR value representing the type name.
 
 Possible return values include:
 - `"Null"` - for NULL values
-- `"Boolean"` - for boolean values
+- `"Boolean(true)"` - for boolean true values
+- `"Boolean(false)"` - for boolean false values
 - `"Int8"`, `"Int16"`, `"Int32"`, `"Int64"` - for integer values
 - `"Float"`, `"Double"` - for floating-point values
 - `"Decimal4"`, `"Decimal8"`, `"Decimal16"` - for decimal values with different precision

@@ -143,15 +143,15 @@ $.config["key"]        -- Map-style access
 
 When data is read from Parquet files with variant encoding, the following type conversions are supported:
 
-| Parquet Variant Type | VARIANT Type |
+| Parquet Variant Type | StarRocks VARIANT Type |
 | -------------------- | ------------ |
-| INT8, INT16, INT32, INT64 | Integer |
-| FLOAT, DOUBLE | Double |
-| BOOLEAN | Boolean |
-| STRING | String |
+| INT8, INT16, INT32, INT64 | int8, int16, int32, int64 |
+| FLOAT, DOUBLE | float, double |
+| BOOLEAN | boolean |
+| STRING | string |
 | DATE | Date |
 | TIMESTAMP, TIMESTAMP_NTZ | Timestamp |
-| DECIMAL | Decimal |
+| DECIMAL | Decimal, float, double|
 | STRUCT | Object |
 | MAP | Object |
 | ARRAY | Array |
