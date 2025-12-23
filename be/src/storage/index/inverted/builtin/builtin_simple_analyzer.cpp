@@ -19,7 +19,7 @@
 
 namespace starrocks {
 
-const phmap::flat_hash_set<std::string> builtin_stop_words = {
+const phmap::flat_hash_set<std::string> SimpleAnalyzer::builtin_stop_words = {
         "a",   "an",    "and",  "are",   "as",    "at",   "be",   "but", "by",  "for",  "if",
         "in",  "into",  "is",   "it",    "no",    "not",  "of",   "on",  "or",  "such", "that",
         "the", "their", "then", "there", "these", "they", "this", "to",  "was", "will", "with"};

@@ -50,6 +50,7 @@
 #include "storage/type_traits.h"
 #include "storage/types.h"
 #include "util/bitmap_update_context.h"
+#include "util/compression/compression_utils.h"
 #include "util/faststring.h"
 #include "util/phmap/btree.h"
 #include "util/phmap/phmap.h"
@@ -116,6 +117,9 @@ public:
 
     inline void add_value_with_current_rowid(const void* vptr) override {
         const CppType& value = *static_cast<const CppType*>(vptr);
+
+        CppType* new_value_ptr = nullptr;
+
         auto it = _mem_index.find(value);
         if (it != _mem_index.end()) {
             it->second.add(_rid);
@@ -127,6 +131,8 @@ public:
             CppType new_value;
             _typeinfo->deep_copy(&new_value, &value, &_pool);
             _mem_index.emplace(new_value, _rid);
+
+            new_value_ptr = &new_value;
             BitmapUpdateContext<rowid_t>::init_estimate_size(&_reverted_index_size);
         }
 
@@ -138,10 +144,13 @@ public:
                 } else {
                     auto posting = PostingList();
                     posting.add_posting(_rid, _pos);
-
-                    CppType new_value;
-                    _typeinfo->deep_copy(&new_value, &value, &_pool);
-                    _posting_index->emplace(new_value, std::move(posting));
+                    if (LIKELY(new_value_ptr != nullptr)) {
+                        _posting_index->emplace(*new_value_ptr, std::move(posting));
+                    } else {
+                        CppType new_value;
+                        _typeinfo->deep_copy(&new_value, &value, &_pool);
+                        _posting_index->emplace(new_value, std::move(posting));
+                    }
                 }
             }
         }
@@ -357,13 +366,12 @@ private:
         for (uint32_t dict_id = 0; dict_id < sorted_dicts.size(); ++dict_id) {
             const auto& dict = sorted_dicts[dict_id];
             auto it = _posting_index->find(dict);
-            if (it == _posting_index->end()) {
+            if (UNLIKELY(it == _posting_index->end())) {
                 // should never happen
                 return Status::InternalError("No posting found for dict");
             }
 
             auto& posting_list = it->second;
-            posting_list.finalize();
 
             posting_lists.emplace_back(&posting_list);
             offset += posting_list.get_num_doc_ids();
@@ -376,13 +384,14 @@ private:
         value_options.write_ordinal_index = true;
         value_options.write_value_index = false;
         value_options.encoding = EncodingInfo::get_default_encoding(varbinary_typeinfo->type(), false);
-        value_options.compression = LZ4;
+        value_options.compression = CompressionUtils::to_compression_pb(config::inverted_index_posting_compression);
+        value_options.index_page_size = config::inverted_index_posting_page_size;
         IndexedColumnWriter posting_writer(value_options, varbinary_typeinfo, wfile);
         RETURN_IF_ERROR(posting_writer.init());
 
         const auto encoder = EncoderFactory::createEncoder(EncodingType::VARINT);
         std::vector<uint8_t> buf;
-        for (const auto* posting : posting_lists) {
+        for (auto* posting : posting_lists) {
             RETURN_IF_ERROR(posting->for_each_posting([&](rowid_t doc_id, const roaring::Roaring& positions) -> Status {
                 VLOG(11) << "Encoding positions for doc " << doc_id << " with " << positions.cardinality()
                          << " positions";

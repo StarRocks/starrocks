@@ -14,8 +14,6 @@
 
 #pragma once
 
-#include <vector>
-
 #include "storage/rowset/common.h"
 #include "types/bitmap_value_detail.h"
 #include "util/bitmap_update_context.h"
@@ -26,7 +24,6 @@ namespace starrocks {
 class Encoder;
 
 class PostingList {
-    static roaring::Roaring EMPTY;
 public:
     PostingList(const PostingList& rhs) = delete;
     PostingList& operator=(const PostingList& rhs) = delete;
@@ -38,13 +35,12 @@ public:
     ~PostingList();
 
     void add_posting(rowid_t doc_id, rowid_t pos);
-    void finalize() const;
 
     uint32_t get_num_doc_ids() const;
-    Status for_each_posting(std::function<Status(rowid_t doc_id, const roaring::Roaring&)>&& func) const;
+    Status for_each_posting(std::function<Status(rowid_t doc_id, const roaring::Roaring&)>&& func);
 
 private:
-    std::unique_ptr<BitmapUpdateContextRefOrSingleValue<uint64_t>> _postings = nullptr;
+    phmap::flat_hash_map<uint32_t, BitmapUpdateContextRefOrSingleValue<uint32_t>> _postings;
 };
 
 } // namespace starrocks

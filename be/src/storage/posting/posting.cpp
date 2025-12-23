@@ -18,49 +18,38 @@ PostingList::PostingList() = default;
 PostingList::~PostingList() = default;
 
 void PostingList::add_posting(rowid_t doc_id, rowid_t pos) {
-    const uint64_t val = static_cast<uint64_t>(doc_id) << 32 | static_cast<uint64_t>(pos);
-    if (_postings == nullptr) {
-        _postings = std::make_unique<BitmapUpdateContextRefOrSingleValue<uint64_t>>(val);
+    if (const auto it = _postings.find(doc_id); it == _postings.end()) {
+        _postings.emplace(doc_id, pos);
     } else {
-        _postings->add(val);
+        it->second.add(pos);
     }
-}
-
-void PostingList::finalize() const {
-    if (_postings == nullptr || !_postings->is_context()) {
-        return;
-    }
-
-    _postings->flush_pending_adds();
-    _postings->roaring()->runOptimize();
 }
 
 uint32_t PostingList::get_num_doc_ids() const {
-    if (_postings == nullptr) {
-        return 0;
-    }
-
-    if (_postings->is_context()) {
-        return _postings->roaring()->getHighBitsCount();
-    }
-    return 1;
+    return _postings.size();
 }
 
-Status PostingList::for_each_posting(std::function<Status(rowid_t doc_id, const roaring::Roaring&)>&& func) const {
-    if (_postings == nullptr) {
-        return Status::OK();
+Status PostingList::for_each_posting(std::function<Status(rowid_t doc_id, const roaring::Roaring&)>&& func) {
+    std::vector<rowid_t> doc_ids;
+    doc_ids.reserve(_postings.size());
+    for (auto& [doc_id, positions] : _postings) {
+        doc_ids.push_back(doc_id);
+        positions.flush_pending_adds();
     }
 
-    if (_postings->is_context()) {
-        const auto& ref = _postings->roaring()->getRoaringsRef();
-        for (const auto& [high, low_bitmap] : ref) {
-            RETURN_IF_ERROR(func(high, low_bitmap));
+    std::ranges::sort(doc_ids);
+
+    roaring::Roaring single_pos;
+    for (const rowid_t doc_id : doc_ids) {
+        auto& context = _postings.at(doc_id);
+        if (context.is_context()) {
+            context.roaring()->runOptimize();
+            RETURN_IF_ERROR(func(doc_id, *context.roaring()));
+        } else {
+            single_pos.clear();
+            single_pos.add(context.value());
+            RETURN_IF_ERROR(func(doc_id, single_pos));
         }
-    } else {
-        auto val = _postings->value();
-        rowid_t high = static_cast<rowid_t>(val >> 32);
-        roaring::Roaring single_pos({static_cast<uint32_t>(val)});
-        RETURN_IF_ERROR(func(high, single_pos));
     }
     return Status::OK();
 }
