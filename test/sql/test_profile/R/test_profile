@@ -72,3 +72,22 @@ shell: env mysql_cmd="${mysql_cmd} -D${db[0]}" bash ${root_path}/sql/test_profil
 NonDefaultSessionVariables contains 'pipeline_dop'
 NonDefaultSessionVariables contains 'pipeline_dop'
 -- !result
+create view profile_filter_stmt as
+select trim(unnest) 
+from table(unnest(split(get_query_profile(last_query_id()), '\n')))
+where unnest like '%Sql Statement%'
+order by unnest;\
+set enable_async_profile=false;
+-- result:
+-- !result
+select count(*) from t0;select sum(1) from t0;
+-- result:
+12
+-- !result
+select * from profile_filter_stmt;
+-- result:
+- Sql Statement: SELECT sum(1) AS `sum(1)`
+-- !result
+set enable_async_profile=true;
+-- result:
+-- !result

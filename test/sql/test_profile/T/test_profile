@@ -50,3 +50,12 @@ INSERT INTO `temp1` (v1, v2, v3) values
 
 shell: env mysql_cmd="${mysql_cmd} -D${db[0]}" bash ${root_path}/sql/test_profile/T/test_profile_analysis.sh
 shell: env mysql_cmd="${mysql_cmd} -D${db[0]}" bash ${root_path}/sql/test_profile/T/test_profile_non_default_variables.sh
+create view profile_filter_stmt as
+select trim(unnest) 
+from table(unnest(split(get_query_profile(last_query_id()), '\n')))
+where unnest like '%Sql Statement%'
+order by unnest;\
+set enable_async_profile=false;
+select count(*) from t0;select sum(1) from t0;
+select * from profile_filter_stmt;
+set enable_async_profile=true;
