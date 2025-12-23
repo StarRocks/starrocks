@@ -94,16 +94,12 @@ From v3.5 onward, StarRocks provides a modular, composable model to support vari
 
 Comparison of supported authentication modes:
 
-<<<<<<< HEAD
-<AuthCompare />
-=======
 | Method                 | CREATE USER (Native user)                              | CREATE SECURITY INTEGRATION (Session-based dummy user)       |
 | ---------------------- | ------------------------------------------------------ | ------------------------------------------------------------ |
 | Description            | Manually creates users in the cluster. You can associate them with external authentication systems. The user exists explicitly in the cluster. | Defines an external authentication integration. The cluster does not store any user information. You can optionally combine it with a Group Provider to define allowed users. |
 | Login Process          | Users must be pre-created in the cluster. During login, the user is authenticated via StarRocks or via the configured external authentication system (for example, LDAP). Only pre-created users can log in. | Upon login, StarRocks authenticates the user using external identity systems. If succeeds, it creates a temporary, session-scoped "dummy user" internally. This user is discarded after the session ends. |
 | Authorization Process  | Since users exist in the cluster, permissions can be assigned in advance using either the native authorization system or Apache Ranger. | Although users do not persist, you can predefine role-to-group mappings. When a user logs in, the system assigns roles based on their group, enabling RBAC. Apache Ranger can also be used in parallel. |
 | Pros & Cons, Use Cases | <ul><li>**Pros**: Full flexibility—supports both native and external authorization systems.</li><li>**Cons**: Requires manual effort for creating users, which can be cumbersome.</li><li>**Recommended for**: Small user bases or cases where the cluster handles access control.</li></ul> | <ul><li>**Pros**: Easy to set up; only requires external authentication configuration and allowed group definitions.</li><li>**Recommended for**: Ideal for large user bases with role-group mappings.</li></ul> |
->>>>>>> 02355b9da9 ([Doc] 3.5 Auth Snippet Management (#67155))
 
 These authentication modes can coexist. When a user attempts to log in:
 
