@@ -192,7 +192,7 @@ public class TabletSchedulerTest {
                     TabletSchedCtx.Type.REPAIR,
                     triple.getLeft().getId(),
                     triple.getMiddle().getId(),
-                    triple.getRight().getId(),
+                    triple.getRight().getDefaultPhysicalPartition().getId(),
                     1,
                     tabletId++,
                     System.currentTimeMillis(),
@@ -204,16 +204,22 @@ public class TabletSchedulerTest {
         Deencapsulation.setField(GlobalStateMgr.getCurrentState(), "recycleBin", recycleBin);
         TabletScheduler tabletScheduler = new TabletScheduler(tabletSchedulerStat);
 
-        Config.catalog_trash_expire_second = 1;
-        allCtxs.forEach(e -> tabletScheduler.addTablet(e, false));
-        Assertions.assertEquals(tabletScheduler.getTotalNum(), 4);
-        Thread.sleep(1100);
-        List<TabletSchedCtx> nextBatch = Deencapsulation.invoke(tabletScheduler, "getNextTabletCtxBatch");
-        Assertions.assertEquals(nextBatch.size(), 0);
-        Assertions.assertEquals(tabletScheduler.getTotalNum(), 0);
-        Assertions.assertEquals(tabletScheduler.getHistoryNum(), 4);
-        for (TabletSchedCtx ctx : allCtxs) {
-            Assertions.assertEquals(ctx.getState(), TabletSchedCtx.State.EXPIRED);
+        long originalCatalogTrashExpireSecond = Config.catalog_trash_expire_second;
+
+        try {
+            Config.catalog_trash_expire_second = 1;
+            allCtxs.forEach(e -> tabletScheduler.addTablet(e, false));
+            Assertions.assertEquals(tabletScheduler.getTotalNum(), 4);
+            Thread.sleep(1100);
+            List<TabletSchedCtx> nextBatch = Deencapsulation.invoke(tabletScheduler, "getNextTabletCtxBatch");
+            Assertions.assertEquals(nextBatch.size(), 0);
+            Assertions.assertEquals(tabletScheduler.getTotalNum(), 0);
+            Assertions.assertEquals(tabletScheduler.getHistoryNum(), 4);
+            for (TabletSchedCtx ctx : allCtxs) {
+                Assertions.assertEquals(ctx.getState(), TabletSchedCtx.State.EXPIRED);
+            }
+        } finally {
+            Config.catalog_trash_expire_second = originalCatalogTrashExpireSecond;
         }
     }
 
