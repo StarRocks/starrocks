@@ -180,11 +180,4 @@ void PartitionHashMapVariant::set_passthrough() {
     });
 }
 
-void PartitionHashMapVariant::set_enable_pre_agg() {
-    visit([](auto& hash_map_with_key) {
-        DCHECK(hash_map_with_key != nullptr);
-        hash_map_with_key->enable_pre_agg = true;
-    });
-}
-
 } // namespace starrocks

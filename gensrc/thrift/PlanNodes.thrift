@@ -932,7 +932,8 @@ struct TSortInfo {
 enum TTopNType {
   ROW_NUMBER,
   RANK,
-  DENSE_RANK
+  DENSE_RANK,
+  PARTITION_HASH_TOPN
 }
 
 enum TLateMaterializeMode {

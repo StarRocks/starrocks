@@ -60,9 +60,10 @@ public:
     //      called when coming a new key not in the hash map.
     // @partition_chunk_consumer: void(size_t partition_idx, const ChunkPtr& chunk)
     //      called for each partition with enough num rows after adding chunk to the hash map.
-    template <bool EnablePassthrough, typename NewPartitionCallback, typename PartitionChunkConsumer>
+    template <bool EnablePassthrough, typename NewPartitionCallback, typename PartitionChunkConsumer,
+              typename PartitionValidator>
     Status offer(const ChunkPtr& chunk, NewPartitionCallback&& new_partition_cb,
-                 PartitionChunkConsumer&& partition_chunk_consumer) {
+                 PartitionChunkConsumer&& partition_chunk_consumer, PartitionValidator&& partition_validator) {
         DCHECK(!_partition_it.has_value());
 
         if (!_is_passthrough) {
@@ -75,9 +76,17 @@ public:
         }
 
         TRY_CATCH_BAD_ALLOC(_hash_map_variant.visit([&](auto& hash_map_with_key) {
-            _split_chunk_by_partition<EnablePassthrough>(
-                    *hash_map_with_key, chunk, std::forward<NewPartitionCallback>(new_partition_cb),
-                    std::forward<PartitionChunkConsumer>(partition_chunk_consumer));
+            if (_enable_pre_agg) {
+                _split_chunk_by_partition<EnablePassthrough, true>(
+                        *hash_map_with_key, chunk, std::forward<NewPartitionCallback>(new_partition_cb),
+                        std::forward<PartitionChunkConsumer>(partition_chunk_consumer),
+                        std::forward<PartitionValidator>(partition_validator));
+            } else {
+                _split_chunk_by_partition<EnablePassthrough, false>(
+                        *hash_map_with_key, chunk, std::forward<NewPartitionCallback>(new_partition_cb),
+                        std::forward<PartitionChunkConsumer>(partition_chunk_consumer),
+                        std::forward<PartitionValidator>(partition_validator));
+            }
         }));
 
         return Status::OK();
@@ -140,16 +149,18 @@ private:
                                           bool* has_null);
     void _init_hash_map_variant();
 
-    template <bool EnablePassthrough, typename HashMapWithKey, typename NewPartitionCallback,
-              typename PartitionChunkConsumer>
+    template <bool EnablePassthrough, bool EnablePreAgg, typename HashMapWithKey, typename NewPartitionCallback,
+              typename PartitionChunkConsumer, typename PartitionValidator>
     void _split_chunk_by_partition(HashMapWithKey& hash_map_with_key, const ChunkPtr& chunk,
                                    NewPartitionCallback&& new_partition_cb,
-                                   PartitionChunkConsumer&& partition_chunk_consumer) {
+                                   PartitionChunkConsumer&& partition_chunk_consumer,
+                                   PartitionValidator&& partition_validator) {
         if (!_is_passthrough) {
-            _is_passthrough = hash_map_with_key.template append_chunk<EnablePassthrough>(
+            _is_passthrough = hash_map_with_key.template append_chunk<EnablePassthrough, EnablePreAgg>(
                     chunk, _partition_columns, _mem_pool, _obj_pool.get(),
                     std::forward<NewPartitionCallback>(new_partition_cb),
-                    std::forward<PartitionChunkConsumer>(partition_chunk_consumer));
+                    std::forward<PartitionChunkConsumer>(partition_chunk_consumer),
+                    std::forward<PartitionValidator>(partition_validator));
         }
         if (_is_passthrough) {
             _limited_buffer->push(chunk);
@@ -251,6 +262,8 @@ private:
     RuntimeState* _state = nullptr;
     MemPool* _mem_pool = nullptr;
     std::unique_ptr<ObjectPool> _obj_pool = nullptr;
+
+    bool _enable_pre_agg = false;
 
     Columns _partition_columns;
     // Hash map which holds chunks of different partitions

@@ -19,6 +19,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.base.OrderSpec;
+import com.starrocks.sql.optimizer.operator.OpRuleBit;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
@@ -51,6 +52,10 @@ public class TopNImplementationRule extends ImplementationRule {
                         logicalTopN.getPredicate(),
                         logicalTopN.getProjection(),
                         logicalTopN.getPartitionPreAggCall());
+        // we always prefer to push down topn below agg.
+        if (logicalTopN.isOpRuleBitSet(OpRuleBit.OP_PUSH_DOWN_TOPN_AGG)) {
+            physicalTopN.setOpRuleBit(OpRuleBit.OP_PUSH_DOWN_TOPN_AGG);
+        }
 
         return Lists.newArrayList(OptExpression.create(physicalTopN, input.getInputs()));
     }

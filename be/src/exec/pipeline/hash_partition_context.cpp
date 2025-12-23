@@ -45,7 +45,7 @@ Status HashPartitionContext::prepare(RuntimeState* state, RuntimeProfile* profil
 }
 
 Status HashPartitionContext::push_one_chunk_to_partitioner(RuntimeState* state, const ChunkPtr& chunk) {
-    return _chunks_partitioner->offer<false>(chunk, nullptr, nullptr);
+    return _chunks_partitioner->offer<false>(chunk, nullptr, nullptr, nullptr);
 }
 
 void HashPartitionContext::sink_complete() {

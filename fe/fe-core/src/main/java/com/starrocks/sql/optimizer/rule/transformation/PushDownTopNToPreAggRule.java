@@ -19,8 +19,10 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.base.Ordering;
 import com.starrocks.sql.optimizer.operator.AggType;
+import com.starrocks.sql.optimizer.operator.OpRuleBit;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.SortPhase;
+import com.starrocks.sql.optimizer.operator.TopNType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
@@ -75,11 +77,15 @@ public class PushDownTopNToPreAggRule extends TransformationRule {
 
     @Override
     public boolean check(final OptExpression input, OptimizerContext context) {
-        if (!context.getSessionVariable().isEnablePreAggTopNPushDown()) {
+        int topNPushDownAggMode = context.getSessionVariable().getTopNPushDownAggMode();
+        if (topNPushDownAggMode < 0) {
             return false;
         }
 
         LogicalTopNOperator topn = (LogicalTopNOperator) input.getOp();
+        if (topn.isTopNPushDownAgg()) {
+            return false;
+        }
 
         if (!topn.hasLimit() || topn.getLimit() > context.getSessionVariable().getCboPushDownTopNLimit()) {
             return false;
@@ -109,9 +115,30 @@ public class PushDownTopNToPreAggRule extends TransformationRule {
         }
 
         // verify aggregation result columns are not used in the order by columns of topN.
-        List<Ordering> orderByElements = topn.getOrderByElements();
-        List<ColumnRefOperator> groupingKeys = aggGlobal.getGroupingKeys();
-        return orderByElements.stream().allMatch(orderByElement -> groupingKeys.contains(orderByElement.getColumnRef()));
+        if (topNPushDownAggMode >= 1) {
+            List<Ordering> orderByElements = topn.getOrderByElements();
+            List<ColumnRefOperator> groupingKeys = aggGlobal.getGroupingKeys();
+            if (!orderByElements.stream()
+                    .allMatch(orderByElement -> groupingKeys.contains(orderByElement.getColumnRef()))) {
+                return false;
+            }
+
+            if (orderByElements.size() != groupingKeys.size()) {
+                return false;
+            }
+
+            for (int i = 0; i < orderByElements.size(); i++) {
+                if (!orderByElements.get(i).getColumnRef().equals(groupingKeys.get(i))) {
+                    return false;
+                }
+            }
+        } else {
+            List<Ordering> orderByElements = topn.getOrderByElements();
+            List<ColumnRefOperator> groupingKeys = aggGlobal.getGroupingKeys();
+            return orderByElements.stream().allMatch(
+                    orderByElement -> groupingKeys.contains(orderByElement.getColumnRef()));
+        }
+        return true;
     }
 
     @Override
@@ -124,21 +151,45 @@ public class PushDownTopNToPreAggRule extends TransformationRule {
         OptExpression localAgg = agg.inputAt(0);
         LogicalAggregationOperator localAggOp = (LogicalAggregationOperator) localAgg.getOp();
 
-        OptExpression newLocalAgg = OptExpression.create(new LogicalAggregationOperator.Builder()
-                        .withOperator(localAggOp)
-                        .setTopNLocalAgg(true)
-                        .build(), localAgg.getInputs());
+        OptExpression localChild = localAgg.inputAt(0);
+        int topNPushDownAggMode = context.getSessionVariable().getTopNPushDownAggMode();
+        if (topNPushDownAggMode == 0) {
+            OptExpression newLocalAgg = OptExpression.create(new LogicalAggregationOperator.Builder()
+                    .withOperator(localAggOp)
+                    .setTopNLocalAgg(true)
+                    .build(), localAgg.getInputs());
 
-        OptExpression newLocalTopN = OptExpression.create(new LogicalTopNOperator.Builder()
-                .setOrderByElements(topn.getOrderByElements())
-                .setLimit(topn.getLimit())
-                .setTopNType(topn.getTopNType())
-                .setSortPhase(topn.getSortPhase())
-                .setIsSplit(false)
-                .setPerPipeline(true)
-                .build(), newLocalAgg);
-
-        OptExpression newAgg = OptExpression.create(aggOp, newLocalTopN);
-        return Lists.newArrayList(OptExpression.create(topn, newAgg));
+            OptExpression newLocalTopN = OptExpression.create(new LogicalTopNOperator.Builder()
+                    .setOrderByElements(topn.getOrderByElements())
+                    .setLimit(topn.getLimit())
+                    .setTopNType(topn.getTopNType())
+                    .setSortPhase(topn.getSortPhase())
+                    .setIsSplit(false)
+                    .setPerPipeline(true)
+                    .build(), newLocalAgg);
+            OptExpression newAgg = OptExpression.create(aggOp, newLocalTopN);
+            return Lists.newArrayList(OptExpression.create(topn, newAgg));
+        } else {
+            // use order by columns as partition columns
+            List<ColumnRefOperator> groupingKeys = aggOp.getGroupingKeys();
+            boolean enableSortAgg = context.getSessionVariable().isEnableSortAggregate();
+            OptExpression newLocalTopN = OptExpression.create(new LogicalTopNOperator.Builder()
+                    .setOrderByElements(topn.getOrderByElements())
+                    .setLimit(topn.getLimit())
+                    .setPartitionByColumns(groupingKeys)
+                    .setPartitionLimit(topn.getLimit())
+                    .setTopNType(TopNType.PARTITION_HASH_TOPN)
+                    .setSortPhase(topn.getSortPhase())
+                    .setPerPipeline(!enableSortAgg)
+                    .setIsSplit(false)
+                    .build(), localChild);
+            newLocalTopN.getOp().setOpRuleBit(OpRuleBit.OP_PUSH_DOWN_TOPN_AGG);
+            OptExpression newLocalAgg = OptExpression.create(new LogicalAggregationOperator.Builder()
+                    .withOperator(localAggOp)
+                    .setUseSortAgg(enableSortAgg)
+                    .build(), newLocalTopN);
+            OptExpression newAgg = OptExpression.create(aggOp, newLocalAgg);
+            return Lists.newArrayList(OptExpression.create(topn, newAgg));
+        }
     }
 }

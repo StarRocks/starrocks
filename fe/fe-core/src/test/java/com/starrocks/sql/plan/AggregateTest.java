@@ -3488,4 +3488,157 @@ public class AggregateTest extends PlanTestBase {
                 "  |  output: count(*)\n" +
                 "  |  group by: ");
     }
+
+    @Test
+    public void testTopNAggregatePreFilteringRule1() throws Exception {
+        FeConstants.runningUnitTest = true;
+        connectContext.getSessionVariable().setEnableSplitTopNAgg(false);
+        try {
+            // Test basic case - should apply the rule
+            String plan = getFragmentPlan(
+                    "SELECT L_ORDERKEY, L_PARTKEY, COUNT(*) AS c, SUM(L_EXTENDEDPRICE), AVG(L_QUANTITY) "
+                            + "FROM lineitem_partition "
+                            + "WHERE L_LINENUMBER <> 123 "
+                            + "GROUP BY L_ORDERKEY, L_PARTKEY "
+                            + "ORDER BY L_ORDERKEY, L_PARTKEY DESC LIMIT 10;");
+            assertContains(plan, "HASH JOIN\n"
+                    + "  |  join op: INNER JOIN (BROADCAST)\n"
+                    + "  |  colocate: false, reason: \n"
+                    + "  |  equal join conjunct: 1: L_ORDERKEY = 21: L_ORDERKEY\n"
+                    + "  |  equal join conjunct: 2: L_PARTKEY = 22: L_PARTKEY");
+
+            // Test case 1: duplicatedColumns.size() > 3 - should not apply the rule
+            // This query has 4 columns in first scan: L_ORDERKEY, L_PARTKEY, L_SUPPKEY, L_LINENUMBER
+            plan = getFragmentPlan(
+                    "SELECT L_ORDERKEY, L_PARTKEY, L_SUPPKEY, COUNT(*) AS c, SUM(L_EXTENDEDPRICE), AVG(L_QUANTITY) "
+                            + "FROM lineitem_partition "
+                            + "WHERE L_LINENUMBER <> 123 "
+                            + "GROUP BY L_ORDERKEY, L_PARTKEY, L_SUPPKEY "
+                            + "ORDER BY L_ORDERKEY, L_PARTKEY, L_SUPPKEY DESC LIMIT 10;");
+            // Should not contain HASH JOIN, meaning the rule was not applied
+            assertNotContains(plan, "equal join conjunct: 1: L_ORDERKEY = 21: L_ORDERKEY");
+
+            // Test case 2: conjuncts.size() > 2 - should not apply the rule
+            plan = getFragmentPlan("SELECT L_ORDERKEY, L_PARTKEY, COUNT(*) AS c, SUM(L_EXTENDEDPRICE), AVG(L_QUANTITY) "
+                    + "FROM lineitem_partition "
+                    + "WHERE L_LINENUMBER <> 123 AND L_QUANTITY > 0 AND L_DISCOUNT < 1 "
+                    + "GROUP BY L_ORDERKEY, L_PARTKEY "
+                    + "ORDER BY L_ORDERKEY, L_PARTKEY DESC LIMIT 10;");
+            // Should not contain HASH JOIN, meaning the rule was not applied
+            assertNotContains(plan, "equal join conjunct: 1: L_ORDERKEY = 21: L_ORDERKEY");
+
+            // Test case 3: disconjuncts.size() > 2 - should not apply the rule
+            plan = getFragmentPlan("SELECT L_ORDERKEY, L_PARTKEY, COUNT(*) AS c, SUM(L_EXTENDEDPRICE), AVG(L_QUANTITY) "
+                    + "FROM lineitem_partition "
+                    + "WHERE L_LINENUMBER = 1 OR L_LINENUMBER = 2 OR L_DISCOUNT = 3 "
+                    + "GROUP BY L_ORDERKEY, L_PARTKEY "
+                    + "ORDER BY L_ORDERKEY, L_PARTKEY DESC LIMIT 10;");
+            // Should not contain HASH JOIN, meaning the rule was not applied
+            assertNotContains(plan, "equal join conjunct: 1: L_ORDERKEY = 21: L_ORDERKEY");
+
+            // Test case 4: conjuncts.size() = 2 - should apply the rule
+            plan = getFragmentPlan("SELECT L_PARTKEY, COUNT(*) AS c, SUM(L_EXTENDEDPRICE), AVG(L_QUANTITY) "
+                    + "FROM lineitem_partition "
+                    + "WHERE L_LINENUMBER <> 123 AND L_QUANTITY > 0 "
+                    + "GROUP BY L_PARTKEY "
+                    + "ORDER BY L_PARTKEY DESC LIMIT 10;");
+            // Should contain HASH JOIN, meaning the rule was applied
+            assertContains(plan, "HASH JOIN\n"
+                    + "  |  join op: INNER JOIN (BROADCAST)");
+
+            // Test case 5: disconjuncts.size() = 2 - should apply the rule
+            plan = getFragmentPlan("SELECT L_ORDERKEY, L_PARTKEY, COUNT(*) AS c, SUM(L_EXTENDEDPRICE), AVG(L_QUANTITY) "
+                    + "FROM lineitem_partition "
+                    + "WHERE L_LINENUMBER = 1 OR L_LINENUMBER = 2 "
+                    + "GROUP BY L_ORDERKEY, L_PARTKEY "
+                    + "ORDER BY L_ORDERKEY, L_PARTKEY DESC LIMIT 10;");
+            // Should contain HASH JOIN, meaning the rule was applied
+            assertContains(plan, "HASH JOIN\n"
+                    + "  |  join op: INNER JOIN (BROADCAST)");
+
+            // Test case 6: duplicatedColumns.size() = 3 - should apply the rule (boundary case)
+            plan = getFragmentPlan("SELECT L_ORDERKEY, L_PARTKEY, COUNT(*) AS c, SUM(L_EXTENDEDPRICE), AVG(L_QUANTITY) "
+                    + "FROM lineitem_partition "
+                    + "WHERE L_LINENUMBER <> 123 "
+                    + "GROUP BY L_ORDERKEY, L_PARTKEY "
+                    + "ORDER BY L_ORDERKEY, L_PARTKEY DESC LIMIT 10;");
+            // Should contain HASH JOIN, meaning the rule was applied
+            assertContains(plan, "HASH JOIN\n"
+                    + "  |  join op: INNER JOIN (BROADCAST)");
+
+            // Test case 7: long string column (averageRowSize > 5) - should not apply the rule
+            plan = getFragmentPlan("SELECT L_ORDERKEY, L_PARTKEY, COUNT(*) AS c, SUM(L_EXTENDEDPRICE), AVG(L_QUANTITY) "
+                    + "FROM lineitem_partition "
+                    + "WHERE L_COMMENT <> '' "
+                    + "GROUP BY L_ORDERKEY, L_PARTKEY "
+                    + "ORDER BY L_ORDERKEY, L_PARTKEY DESC LIMIT 10;");
+            // Should not contain HASH JOIN, meaning the rule was not applied due to long string
+            assertNotContains(plan, "equal join conjunct: 1: L_ORDERKEY = 21: L_ORDERKEY");
+
+            plan = getFragmentPlan("SELECT L_ORDERKEY, L_PARTKEY, COUNT(*) AS c, SUM(L_EXTENDEDPRICE), AVG(L_QUANTITY) "
+                    + "FROM lineitem_partition "
+                    + "WHERE L_RETURNFLAG <> '' "
+                    + "GROUP BY L_ORDERKEY, L_PARTKEY "
+                    + "ORDER BY L_ORDERKEY, L_PARTKEY DESC LIMIT 10;");
+            // Should contain HASH JOIN, meaning the rule was applied for short string
+            assertContains(plan, "HASH JOIN\n"
+                    + "  |  join op: INNER JOIN (BROADCAST)");
+        } finally {
+            FeConstants.runningUnitTest = false;
+            connectContext.getSessionVariable().setEnableSplitTopNAgg(true);
+        }
+    }
+
+    @Test
+    public void testTopNAggregatePreFilteringRule2() throws Exception {
+        FeConstants.runningUnitTest = true;
+        connectContext.getSessionVariable().setEnableSplitTopNAgg(false);
+        try {
+            // Test basic case - should apply the rule
+            String plan = getFragmentPlan(
+                    "SELECT L_ORDERKEY, L_PARTKEY, L_SUPPKEY, COUNT(*) AS c, SUM(L_EXTENDEDPRICE), AVG(L_QUANTITY) " +
+                            "FROM (select L_ORDERKEY, L_PARTKEY, L_SUPPKEY, L_EXTENDEDPRICE, L_QUANTITY, " +
+                            "test_all_type.t1d " +
+                            "from lineitem_partition p left outer join test_all_type " +
+                            "on p.L_ORDERKEY = test_all_type.t1d and p.L_COMMITDATE >= test_all_type.id_date) t " +
+                            "GROUP BY L_ORDERKEY, L_PARTKEY, L_SUPPKEY " +
+                            "ORDER BY L_ORDERKEY, L_PARTKEY, L_SUPPKEY DESC LIMIT 10;");
+            assertContains(plan, "MultiCastDataSinks");
+
+            plan = getFragmentPlan(
+                    "SELECT L_ORDERKEY, L_PARTKEY, L_SUPPKEY, COUNT(*) AS c, SUM(L_EXTENDEDPRICE), AVG(L_QUANTITY) "
+                            + "FROM (select L_ORDERKEY, L_PARTKEY, L_SUPPKEY, L_EXTENDEDPRICE, L_QUANTITY, "
+                            + "test_all_type.t1d "
+                            + "from lineitem_partition p left outer join test_all_type "
+                            + "on p.L_ORDERKEY = test_all_type.t1d and p.L_COMMITDATE >= test_all_type.id_date) t "
+                            + "GROUP BY L_ORDERKEY, L_PARTKEY, L_SUPPKEY "
+                            + "ORDER BY L_ORDERKEY, L_PARTKEY, L_SUPPKEY DESC LIMIT 10;");
+            // Should not contain HASH JOIN, meaning the rule was not applied
+            assertContains(plan, "MultiCastDataSinks");
+
+            plan = getFragmentPlan("SELECT L_ORDERKEY, L_PARTKEY, COUNT(*) AS c, SUM(L_EXTENDEDPRICE), AVG(L_QUANTITY) "
+                    + "FROM (select L_ORDERKEY, L_PARTKEY, L_SUPPKEY, L_EXTENDEDPRICE, L_QUANTITY, "
+                    + "test_all_type.t1d "
+                    + "from lineitem_partition p left outer join test_all_type "
+                    + "on p.L_ORDERKEY = test_all_type.t1d and p.L_COMMITDATE >= test_all_type.id_date " +
+                    "  WHERE p.L_LINENUMBER <> 123 AND p.L_QUANTITY > 0 AND p.L_DISCOUNT < 1) t "
+                    + "GROUP BY L_ORDERKEY, L_PARTKEY "
+                    + "ORDER BY L_ORDERKEY, L_PARTKEY DESC LIMIT 10;");
+            assertContains(plan, "MultiCastDataSinks");
+
+            plan = getFragmentPlan("SELECT L_ORDERKEY, L_PARTKEY, COUNT(*) AS c, SUM(L_EXTENDEDPRICE), AVG(L_QUANTITY) "
+                    + "FROM (select L_ORDERKEY, L_PARTKEY, L_SUPPKEY, L_EXTENDEDPRICE, L_QUANTITY, "
+                    + "test_all_type.t1d "
+                    + "from lineitem_partition p left outer join test_all_type "
+                    + "on p.L_ORDERKEY = test_all_type.t1d and p.L_COMMITDATE >= test_all_type.id_date " +
+                    "  WHERE p.L_LINENUMBER <> 123 or p.L_QUANTITY > 0 or p.L_DISCOUNT < 1) t "
+                    + "GROUP BY L_ORDERKEY, L_PARTKEY "
+                    + "ORDER BY L_ORDERKEY, L_PARTKEY DESC LIMIT 10;");
+            // Should not contain HASH JOIN, meaning the rule was not applied
+            assertContains(plan, "MultiCastDataSinks");
+        } finally {
+            FeConstants.runningUnitTest = false;
+            connectContext.getSessionVariable().setEnableSplitTopNAgg(true);
+        }
+    }
 }

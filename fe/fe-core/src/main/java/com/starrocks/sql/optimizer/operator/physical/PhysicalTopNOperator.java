@@ -23,6 +23,7 @@ import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.OrderSpec;
 import com.starrocks.sql.optimizer.base.Ordering;
 import com.starrocks.sql.optimizer.operator.ColumnOutputInfo;
+import com.starrocks.sql.optimizer.operator.OpRuleBit;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.Projection;
@@ -116,6 +117,10 @@ public class PhysicalTopNOperator extends PhysicalOperator {
 
     public boolean isPerPipeline() {
         return perPipeline;
+    }
+
+    public boolean isTopNPushDownAgg() {
+        return isOpRuleBitSet(OpRuleBit.OP_PUSH_DOWN_TOPN_AGG);
     }
 
     @Override

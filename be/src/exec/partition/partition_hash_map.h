@@ -94,8 +94,6 @@ struct PartitionHashMapBase {
     bool init_null_key_partition = false;
     static constexpr size_t kNullKeyPartitionIdx = 0;
 
-    bool enable_pre_agg = false;
-
     PartitionHashMapBase(int32_t chunk_size) : chunk_size(chunk_size) {}
 
 protected:
@@ -141,7 +139,7 @@ protected:
         }
     }
 
-    template <bool EnablePassthrough, typename HashMap>
+    template <bool EnablePassthrough, bool EnablePreAgg, typename HashMap>
     void check_passthrough(HashMap& hash_map) {
         if constexpr (!EnablePassthrough) {
             return;
@@ -150,7 +148,7 @@ protected:
             return;
         }
         auto partition_num = hash_map.size();
-        size_t partition_num_hwm = enable_pre_agg ? 32768 : 512;
+        constexpr size_t partition_num_hwm = EnablePreAgg ? 32768 : 512;
 
         if (partition_num > partition_num_hwm && total_num_rows < 10000 * partition_num) {
             is_passthrough = true;
@@ -168,12 +166,13 @@ protected:
     //      called when coming a new key not in the hash map.
     // @partition_chunk_consumer: void(size_t partition_idx, const ChunkPtr& chunk)
     //      called for each partition with enough num rows after adding chunk to the hash map.
-    template <bool EnablePassthrough, typename HashMap, typename KeyLoader, typename KeyAllocator,
-              typename NewPartitionCallback, typename PartitionChunkConsumer>
+    template <bool EnablePassthrough, bool EnablePreAgg, typename HashMap, typename KeyLoader, typename KeyAllocator,
+              typename NewPartitionCallback, typename PartitionChunkConsumer, typename PartitionValidator>
     void append_chunk_for_one_key(HashMap& hash_map, ChunkPtr chunk, KeyLoader&& key_loader,
                                   KeyAllocator&& key_allocator, ObjectPool* obj_pool,
                                   NewPartitionCallback&& new_partition_cb,
-                                  PartitionChunkConsumer&& partition_chunk_consumer) {
+                                  PartitionChunkConsumer&& partition_chunk_consumer,
+                                  PartitionValidator&& partition_validator) {
         if (is_passthrough) {
             return;
         }
@@ -187,7 +186,6 @@ protected:
 
         for (; !is_passthrough && i < size; i++) {
             const auto& key = key_loader(i);
-            visited_keys.insert(key);
 
             bool is_new_partition = false;
             auto iter = hash_map.lazy_emplace(key, [&](const auto& ctor) {
@@ -196,13 +194,21 @@ protected:
                 return ctor(key_allocator(key), part_chunks);
             });
             if (is_new_partition) {
-                check_passthrough<EnablePassthrough>(hash_map);
+                check_passthrough<EnablePassthrough, EnablePreAgg>(hash_map);
                 if constexpr (!std::is_same_v<std::nullptr_t, std::decay_t<decltype(new_partition_cb)>>) {
                     new_partition_cb(next_partition_idx);
                 }
                 next_partition_idx++;
+            } else {
+                // filter out the partition which are not needed in the hash map
+                if constexpr (!std::is_same_v<std::nullptr_t, std::decay_t<decltype(partition_validator)>>) {
+                    if (!partition_validator(iter->second->partition_idx)) {
+                        continue;
+                    }
+                }
             }
 
+            visited_keys.insert(key);
             auto& value = *(iter->second);
             if (value.chunks.empty() || value.remain_size <= 0) {
                 if (!value.chunks.empty() && !value.select_indexes.empty()) {
@@ -248,13 +254,14 @@ protected:
     //      called when coming a new key not in the hash map.
     // @partition_chunk_consumer: void(size_t partition_idx, const ChunkPtr& chunk)
     //      called for each partition with enough num rows after adding chunk to the hash map.
-    template <bool EnablePassthrough, typename HashMap, typename KeyLoader, typename KeyAllocator,
-              typename NewPartitionCallback, typename PartitionChunkConsumer>
+    template <bool EnablePassthrough, bool EnablePreAgg, typename HashMap, typename KeyLoader, typename KeyAllocator,
+              typename NewPartitionCallback, typename PartitionChunkConsumer, typename PartitionValidator>
     void append_chunk_for_one_nullable_key(HashMap& hash_map, PartitionChunks& null_key_value, ChunkPtr chunk,
                                            const NullableColumn* nullable_key_column, KeyLoader&& key_loader,
                                            KeyAllocator&& key_allocator, ObjectPool* obj_pool,
                                            NewPartitionCallback&& new_partition_cb,
-                                           PartitionChunkConsumer&& partition_chunk_consumer) {
+                                           PartitionChunkConsumer&& partition_chunk_consumer,
+                                           PartitionValidator&& partition_validator) {
         if (is_passthrough) {
             return;
         }
@@ -309,19 +316,26 @@ protected:
                     value_ptr = &null_key_value;
                 } else {
                     const auto& key = key_loader(i);
-                    visited_keys.insert(key);
                     bool is_new_partition = false;
                     auto iter = hash_map.lazy_emplace(key, [&](const auto& ctor) {
                         is_new_partition = true;
                         return ctor(key_allocator(key), obj_pool->add(new PartitionChunks(next_partition_idx)));
                     });
                     if (is_new_partition) {
-                        check_passthrough<EnablePassthrough>(hash_map);
+                        check_passthrough<EnablePassthrough, EnablePreAgg>(hash_map);
                         if constexpr (!std::is_same_v<std::nullptr_t, std::decay_t<decltype(new_partition_cb)>>) {
                             new_partition_cb(next_partition_idx);
                         }
                         next_partition_idx++;
+                    } else {
+                        // filter out the partition which are not needed in the hash map
+                        if constexpr (!std::is_same_v<std::nullptr_t, std::decay_t<decltype(partition_validator)>>) {
+                            if (!partition_validator(iter->second->partition_idx)) {
+                                continue;
+                            }
+                        }
                     }
+                    visited_keys.insert(key);
                     value_ptr = iter->second;
                 }
 
@@ -372,17 +386,20 @@ struct PartitionHashMapWithOneNumberKey : public PartitionHashMapBase<false, fal
 
     PartitionHashMapWithOneNumberKey(int32_t chunk_size) : PartitionHashMapBase(chunk_size) {}
 
-    template <bool EnablePassthrough, typename NewPartitionCallback, typename PartitionChunkConsumer>
+    template <bool EnablePassthrough, bool EnablePreAgg, typename NewPartitionCallback, typename PartitionChunkConsumer,
+              typename PartitionValidator>
     bool append_chunk(ChunkPtr chunk, const Columns& key_columns, MemPool* mem_pool, ObjectPool* obj_pool,
-                      NewPartitionCallback&& new_partition_cb, PartitionChunkConsumer&& partition_chunk_consumer) {
+                      NewPartitionCallback&& new_partition_cb, PartitionChunkConsumer&& partition_chunk_consumer,
+                      PartitionValidator&& partition_validator) {
         DCHECK(!key_columns[0]->is_nullable());
         const auto* key_column = down_cast<const ColumnType*>(key_columns[0].get());
         const auto key_column_data = key_column->immutable_data();
-        append_chunk_for_one_key<EnablePassthrough>(
+        append_chunk_for_one_key<EnablePassthrough, EnablePreAgg>(
                 hash_map, chunk, [&](uint32_t offset) { return key_column_data[offset]; },
                 [](const FieldType& key) { return key; }, obj_pool,
                 std::forward<NewPartitionCallback>(new_partition_cb),
-                std::forward<PartitionChunkConsumer>(partition_chunk_consumer));
+                std::forward<PartitionChunkConsumer>(partition_chunk_consumer),
+                std::forward<PartitionValidator>(partition_validator));
         return is_passthrough;
     }
 };
@@ -397,18 +414,21 @@ struct PartitionHashMapWithOneNullableNumberKey : public PartitionHashMapBase<tr
 
     PartitionHashMapWithOneNullableNumberKey(int32_t chunk_size) : PartitionHashMapBase(chunk_size) {}
 
-    template <bool EnablePassthrough, typename NewPartitionCallback, typename PartitionChunkConsumer>
+    template <bool EnablePassthrough, bool EnablePreAgg, typename NewPartitionCallback, typename PartitionChunkConsumer,
+              typename PartitionValidator>
     bool append_chunk(ChunkPtr chunk, const Columns& key_columns, MemPool* mem_pool, ObjectPool* obj_pool,
-                      NewPartitionCallback&& new_partition_cb, PartitionChunkConsumer&& partition_chunk_consumer) {
+                      NewPartitionCallback&& new_partition_cb, PartitionChunkConsumer&& partition_chunk_consumer,
+                      PartitionValidator&& partition_validator) {
         DCHECK(key_columns[0]->is_nullable());
         const auto* nullable_key_column = ColumnHelper::as_raw_column<const NullableColumn>(key_columns[0].get());
         const auto key_column_data =
                 down_cast<const ColumnType*>(nullable_key_column->data_column().get())->immutable_data();
-        append_chunk_for_one_nullable_key<EnablePassthrough>(
+        append_chunk_for_one_nullable_key<EnablePassthrough, EnablePreAgg>(
                 hash_map, null_key_value, chunk, nullable_key_column,
                 [&](uint32_t offset) { return key_column_data[offset]; }, [](const FieldType& key) { return key; },
                 obj_pool, std::forward<NewPartitionCallback>(new_partition_cb),
-                std::forward<PartitionChunkConsumer>(partition_chunk_consumer));
+                std::forward<PartitionChunkConsumer>(partition_chunk_consumer),
+                std::forward<PartitionValidator>(partition_validator));
         return is_passthrough;
     }
 };
@@ -420,12 +440,14 @@ struct PartitionHashMapWithOneStringKey : public PartitionHashMapBase<false, fal
 
     PartitionHashMapWithOneStringKey(int32_t chunk_size) : PartitionHashMapBase(chunk_size) {}
 
-    template <bool EnablePassthrough, typename NewPartitionCallback, typename PartitionChunkConsumer>
+    template <bool EnablePassthrough, bool EnablePreAgg, typename NewPartitionCallback, typename PartitionChunkConsumer,
+              typename PartitionValidator>
     bool append_chunk(ChunkPtr chunk, const Columns& key_columns, MemPool* mem_pool, ObjectPool* obj_pool,
-                      NewPartitionCallback&& new_partition_cb, PartitionChunkConsumer&& partition_chunk_consumer) {
+                      NewPartitionCallback&& new_partition_cb, PartitionChunkConsumer&& partition_chunk_consumer,
+                      PartitionValidator&& partition_validator) {
         DCHECK(!key_columns[0]->is_nullable());
         const auto* key_column = down_cast<const BinaryColumn*>(key_columns[0].get());
-        append_chunk_for_one_key<EnablePassthrough>(
+        append_chunk_for_one_key<EnablePassthrough, EnablePreAgg>(
                 hash_map, chunk, [&](uint32_t offset) { return key_column->get_slice(offset); },
                 [&](const Slice& key) {
                     uint8_t* pos = mem_pool->allocate(key.size);
@@ -433,7 +455,8 @@ struct PartitionHashMapWithOneStringKey : public PartitionHashMapBase<false, fal
                     return Slice{pos, key.size};
                 },
                 obj_pool, std::forward<NewPartitionCallback>(new_partition_cb),
-                std::forward<PartitionChunkConsumer>(partition_chunk_consumer));
+                std::forward<PartitionChunkConsumer>(partition_chunk_consumer),
+                std::forward<PartitionValidator>(partition_validator));
         return is_passthrough;
     }
 };
@@ -446,13 +469,15 @@ struct PartitionHashMapWithOneNullableStringKey : public PartitionHashMapBase<tr
 
     PartitionHashMapWithOneNullableStringKey(int32_t chunk_size) : PartitionHashMapBase(chunk_size) {}
 
-    template <bool EnablePassthrough, typename NewPartitionCallback, typename PartitionChunkConsumer>
+    template <bool EnablePassthrough, bool EnablePreAgg, typename NewPartitionCallback, typename PartitionChunkConsumer,
+              typename PartitionValidator>
     bool append_chunk(ChunkPtr chunk, const Columns& key_columns, MemPool* mem_pool, ObjectPool* obj_pool,
-                      NewPartitionCallback&& new_partition_cb, PartitionChunkConsumer&& partition_chunk_consumer) {
+                      NewPartitionCallback&& new_partition_cb, PartitionChunkConsumer&& partition_chunk_consumer,
+                      PartitionValidator&& partition_validator) {
         DCHECK(key_columns[0]->is_nullable());
         const auto* nullable_key_column = ColumnHelper::as_raw_column<NullableColumn>(key_columns[0].get());
         const auto* key_column = down_cast<const BinaryColumn*>(nullable_key_column->data_column().get());
-        append_chunk_for_one_nullable_key<EnablePassthrough>(
+        append_chunk_for_one_nullable_key<EnablePassthrough, EnablePreAgg>(
                 hash_map, null_key_value, chunk, nullable_key_column,
                 [&](uint32_t offset) { return key_column->get_slice(offset); },
                 [&](const Slice& key) {
@@ -461,7 +486,8 @@ struct PartitionHashMapWithOneNullableStringKey : public PartitionHashMapBase<tr
                     return Slice{pos, key.size};
                 },
                 obj_pool, std::forward<NewPartitionCallback>(new_partition_cb),
-                std::forward<PartitionChunkConsumer>(partition_chunk_consumer));
+                std::forward<PartitionChunkConsumer>(partition_chunk_consumer),
+                std::forward<PartitionValidator>(partition_validator));
         return is_passthrough;
     }
 };
@@ -484,9 +510,11 @@ struct PartitionHashMapWithSerializedKey : public PartitionHashMapBase<false, fa
               inner_mem_pool(std::make_unique<MemPool>()),
               buffer(inner_mem_pool->allocate(max_one_row_size * chunk_size)) {}
 
-    template <bool EnablePassthrough, typename NewPartitionCallback, typename PartitionChunkConsumer>
+    template <bool EnablePassthrough, bool EnablePreAgg, typename NewPartitionCallback, typename PartitionChunkConsumer,
+              typename PartitionValidator>
     bool append_chunk(ChunkPtr chunk, const Columns& key_columns, MemPool* mem_pool, ObjectPool* obj_pool,
-                      NewPartitionCallback&& new_partition_cb, PartitionChunkConsumer&& partition_chunk_consumer) {
+                      NewPartitionCallback&& new_partition_cb, PartitionChunkConsumer&& partition_chunk_consumer,
+                      PartitionValidator&& partition_validator) {
         if (is_passthrough) {
             return is_passthrough;
         }
@@ -507,7 +535,7 @@ struct PartitionHashMapWithSerializedKey : public PartitionHashMapBase<false, fa
             key_column->serialize_batch(buffer, slice_sizes, num_rows, max_one_row_size);
         }
 
-        append_chunk_for_one_key<EnablePassthrough>(
+        append_chunk_for_one_key<EnablePassthrough, EnablePreAgg>(
                 hash_map, chunk,
                 [&](uint32_t offset) {
                     return Slice{buffer + offset * max_one_row_size, slice_sizes[offset]};
@@ -518,7 +546,8 @@ struct PartitionHashMapWithSerializedKey : public PartitionHashMapBase<false, fa
                     return Slice{pos, key.size};
                 },
                 obj_pool, std::forward<NewPartitionCallback>(new_partition_cb),
-                std::forward<PartitionChunkConsumer>(partition_chunk_consumer));
+                std::forward<PartitionChunkConsumer>(partition_chunk_consumer),
+                std::forward<PartitionValidator>(partition_validator));
 
         return is_passthrough;
     }
@@ -552,9 +581,11 @@ struct PartitionHashMapWithSerializedKeyFixedSize : public PartitionHashMapBase<
         memset(buf, 0x0, max_fixed_size * chunk_size);
     }
 
-    template <bool EnablePassthrough, typename NewPartitionCallback, typename PartitionChunkConsumer>
+    template <bool EnablePassthrough, bool EnablePreAgg, typename NewPartitionCallback, typename PartitionChunkConsumer,
+              typename PartitionValidator>
     bool append_chunk(ChunkPtr chunk, const Columns& key_columns, MemPool* mem_pool, ObjectPool* obj_pool,
-                      NewPartitionCallback&& new_partition_cb, PartitionChunkConsumer&& partition_chunk_consumer) {
+                      NewPartitionCallback&& new_partition_cb, PartitionChunkConsumer&& partition_chunk_consumer,
+                      PartitionValidator&& partition_validator) {
         DCHECK(fixed_byte_size != -1);
 
         if (is_passthrough) {
@@ -579,11 +610,12 @@ struct PartitionHashMapWithSerializedKeyFixedSize : public PartitionHashMapBase<
             }
         }
 
-        append_chunk_for_one_key<EnablePassthrough>(
+        append_chunk_for_one_key<EnablePassthrough, EnablePreAgg>(
                 hash_map, chunk, [&](uint32_t offset) { return keys[offset]; },
                 [&](const FixedSizeSliceKey& key) { return key; }, obj_pool,
                 std::forward<NewPartitionCallback>(new_partition_cb),
-                std::forward<PartitionChunkConsumer>(partition_chunk_consumer));
+                std::forward<PartitionChunkConsumer>(partition_chunk_consumer),
+                std::forward<PartitionValidator>(partition_validator));
 
         return is_passthrough;
     }

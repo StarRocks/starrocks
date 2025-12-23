@@ -40,6 +40,17 @@ LocalPartitionTopnContext::LocalPartitionTopnContext(const std::vector<TExpr>& t
           _partition_limit(partition_limit),
           _topn_type(topn_type) {
     _pre_agg = std::make_unique<PreAggState>(t_pre_agg_exprs, t_pre_agg_output_slot_id);
+    if (_enable_pre_agg) {
+        _push_chunk_fn = &LocalPartitionTopnContext::_push_one_chunk_to_partitioner_impl<true>;
+        _transfer_fn = &LocalPartitionTopnContext::_transfer_all_chunks_from_partitioner_to_sorters_impl<true>;
+        _pull_fn = &LocalPartitionTopnContext::_pull_one_chunk_impl<true>;
+        _pull_from_sorter_fn = &LocalPartitionTopnContext::_pull_one_chunk_from_sorters_impl<true>;
+    } else {
+        _push_chunk_fn = &LocalPartitionTopnContext::_push_one_chunk_to_partitioner_impl<false>;
+        _transfer_fn = &LocalPartitionTopnContext::_transfer_all_chunks_from_partitioner_to_sorters_impl<false>;
+        _pull_fn = &LocalPartitionTopnContext::_pull_one_chunk_impl<false>;
+        _pull_from_sorter_fn = &LocalPartitionTopnContext::_pull_one_chunk_from_sorters_impl<false>;
+    }
 }
 
 Status LocalPartitionTopnContext::prepare(RuntimeState* state, RuntimeProfile* runtime_profile) {
@@ -176,7 +187,8 @@ Status LocalPartitionTopnContext::compute_agg_state(Chunk* chunk, size_t partiti
     return Status::OK();
 }
 
-Status LocalPartitionTopnContext::push_one_chunk_to_partitioner(RuntimeState* state, const ChunkPtr& chunk) {
+template <bool EnablePreAgg>
+Status LocalPartitionTopnContext::_push_one_chunk_to_partitioner_impl(RuntimeState* state, const ChunkPtr& chunk) {
     RETURN_IF_ERROR(_chunks_partitioner->offer<true>(
             chunk,
             [this, state](size_t partition_idx) {
@@ -185,7 +197,7 @@ Status LocalPartitionTopnContext::push_one_chunk_to_partitioner(RuntimeState* st
                         _topn_type, ChunksSorterTopn::kDefaultMaxBufferRows, ChunksSorterTopn::kDefaultMaxBufferBytes,
                         ChunksSorterTopn::max_buffered_chunks(_partition_limit)));
                 // create agg state for new partition
-                if (_enable_pre_agg) {
+                if constexpr (EnablePreAgg) {
                     AggDataPtr agg_states = _mem_pool->allocate_aligned(_pre_agg->_agg_states_total_size,
                                                                         _pre_agg->_max_agg_state_align_size);
                     _pre_agg->_managed_fn_states.emplace_back(std::make_unique<ManagedFunctionStates<PreAggState>>(
@@ -194,14 +206,20 @@ Status LocalPartitionTopnContext::push_one_chunk_to_partitioner(RuntimeState* st
             },
             [this, state](size_t partition_idx, const ChunkPtr& chunk) {
                 (void)_chunks_sorters[partition_idx]->update(state, chunk);
-                if (_enable_pre_agg) {
+                if constexpr (EnablePreAgg) {
                     (void)compute_agg_state(chunk.get(), partition_idx);
                 }
-            }));
+            },
+            nullptr));
     if (_chunks_partitioner->is_passthrough()) {
-        RETURN_IF_ERROR(transfer_all_chunks_from_partitioner_to_sorters(state));
+        RETURN_IF_ERROR(_transfer_all_chunks_from_partitioner_to_sorters_impl<EnablePreAgg>(state));
     }
     return Status::OK();
+}
+
+Status LocalPartitionTopnContext::push_one_chunk_to_partitioner(RuntimeState* state, const ChunkPtr& chunk) {
+    DCHECK(_push_chunk_fn != nullptr);
+    return (this->*_push_chunk_fn)(state, chunk);
 }
 
 void LocalPartitionTopnContext::sink_complete() {
@@ -212,7 +230,8 @@ void LocalPartitionTopnContext::sink_complete() {
     _is_sink_complete = true;
 }
 
-Status LocalPartitionTopnContext::transfer_all_chunks_from_partitioner_to_sorters(RuntimeState* state) {
+template <bool EnablePreAgg>
+Status LocalPartitionTopnContext::_transfer_all_chunks_from_partitioner_to_sorters_impl(RuntimeState* state) {
     if (_is_transfered) {
         return Status::OK();
     }
@@ -221,7 +240,7 @@ Status LocalPartitionTopnContext::transfer_all_chunks_from_partitioner_to_sorter
     RETURN_IF_ERROR(
             _chunks_partitioner->consume_from_hash_map([this, state](int32_t partition_idx, const ChunkPtr& chunk) {
                 (void)_chunks_sorters[partition_idx]->update(state, chunk);
-                if (_enable_pre_agg) {
+                if constexpr (EnablePreAgg) {
                     (void)compute_agg_state(chunk.get(), partition_idx);
                 }
                 return true;
@@ -233,6 +252,11 @@ Status LocalPartitionTopnContext::transfer_all_chunks_from_partitioner_to_sorter
 
     _is_transfered = true;
     return Status::OK();
+}
+
+Status LocalPartitionTopnContext::transfer_all_chunks_from_partitioner_to_sorters(RuntimeState* state) {
+    DCHECK(_transfer_fn != nullptr);
+    return (this->*_transfer_fn)(state);
 }
 
 bool LocalPartitionTopnContext::has_output() {
@@ -249,38 +273,54 @@ bool LocalPartitionTopnContext::is_finished() {
     return !has_output();
 }
 
-StatusOr<ChunkPtr> LocalPartitionTopnContext::pull_one_chunk() {
+template <bool EnablePreAgg>
+StatusOr<ChunkPtr> LocalPartitionTopnContext::_pull_one_chunk_impl() {
     ChunkPtr chunk = nullptr;
     if (_sorter_index < _chunks_sorters.size()) {
-        ASSIGN_OR_RETURN(chunk, pull_one_chunk_from_sorters());
+        ASSIGN_OR_RETURN(chunk, _pull_one_chunk_from_sorters_impl<EnablePreAgg>());
         if (chunk != nullptr) {
             return chunk;
         }
     }
     chunk = _chunks_partitioner->consume_from_passthrough_buffer();
-    if (_enable_pre_agg && chunk != nullptr) {
-        RETURN_IF_ERROR(output_agg_streaming(chunk.get()));
+    if constexpr (EnablePreAgg) {
+        if (chunk != nullptr) {
+            RETURN_IF_ERROR(output_agg_streaming(chunk.get()));
+        }
     }
     return chunk;
 }
 
-StatusOr<ChunkPtr> LocalPartitionTopnContext::pull_one_chunk_from_sorters() {
+StatusOr<ChunkPtr> LocalPartitionTopnContext::pull_one_chunk() {
+    DCHECK(_pull_fn != nullptr);
+    return (this->*_pull_fn)();
+}
+
+template <bool EnablePreAgg>
+StatusOr<ChunkPtr> LocalPartitionTopnContext::_pull_one_chunk_from_sorters_impl() {
     auto& chunks_sorter = _chunks_sorters[_sorter_index];
     ChunkPtr chunk = nullptr;
     bool eos = false;
     RETURN_IF_ERROR(chunks_sorter->get_next(&chunk, &eos));
 
-    if (_enable_pre_agg) {
+    if constexpr (EnablePreAgg) {
         output_agg_result(chunk.get(), eos, _pre_agg->_is_first_chunk_of_current_sorter);
+        _pre_agg->_is_first_chunk_of_current_sorter = false;
     }
-    _pre_agg->_is_first_chunk_of_current_sorter = false;
 
     if (eos) {
-        _pre_agg->_is_first_chunk_of_current_sorter = true;
+        if constexpr (EnablePreAgg) {
+            _pre_agg->_is_first_chunk_of_current_sorter = true;
+        }
         // Current sorter has no output, try to get chunk from next sorter
         _sorter_index++;
     }
     return chunk;
+}
+
+StatusOr<ChunkPtr> LocalPartitionTopnContext::pull_one_chunk_from_sorters() {
+    DCHECK(_pull_from_sorter_fn != nullptr);
+    return (this->*_pull_from_sorter_fn)();
 }
 
 MutableColumns LocalPartitionTopnContext::_create_agg_result_columns(size_t num_rows) {

@@ -19,13 +19,16 @@ import com.starrocks.thrift.TTopNType;
 public enum TopNType {
     ROW_NUMBER,
     RANK,
-    DENSE_RANK;
+    DENSE_RANK,
+    PARTITION_HASH_TOPN;
 
     public TTopNType toThrift() {
         if (ROW_NUMBER.equals(this)) {
             return TTopNType.ROW_NUMBER;
         } else if (RANK.equals(this)) {
             return TTopNType.RANK;
+        } else if (PARTITION_HASH_TOPN.equals(this)) {
+            return TTopNType.PARTITION_HASH_TOPN;
         } else {
             return TTopNType.DENSE_RANK;
         }

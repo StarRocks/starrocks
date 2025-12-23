@@ -38,6 +38,7 @@ Status ChunksPartitioner::prepare(RuntimeState* state, RuntimeProfile* runtime_p
     _state = state;
     _obj_pool = std::make_unique<ObjectPool>();
     _init_hash_map_variant();
+    _enable_pre_agg = enable_pre_agg;
 
     _statistics.chunk_buffer_peak_memory = ADD_PEAK_COUNTER(runtime_profile, "ChunkBufferPeakMem", TUnit::BYTES);
     _statistics.chunk_buffer_peak_size = ADD_PEAK_COUNTER(runtime_profile, "ChunkBufferPeakSize", TUnit::BYTES);
@@ -45,9 +46,6 @@ Status ChunksPartitioner::prepare(RuntimeState* state, RuntimeProfile* runtime_p
     _limited_buffer = std::make_unique<LimitedPipelineChunkBuffer<ChunksPartitionStatistics>>(
             &_statistics, 1, config::local_exchange_buffer_mem_limit_per_driver,
             state->chunk_size() * config::streaming_agg_chunk_buffer_size);
-    if (enable_pre_agg) {
-        _hash_map_variant.set_enable_pre_agg();
-    }
     return Status::OK();
 }
 

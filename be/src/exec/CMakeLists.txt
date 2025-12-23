@@ -62,6 +62,7 @@ set(EXEC_FILES
     aggregate/distinct_streaming_node.cpp
     partition/bucket_aware_partition.cpp
     partition/chunks_partitioner.cpp
+    partition/partition_hash_topn.cpp
     partition/partition_hash_variant.cpp
     analytic_node.cpp
     analytor.cpp
@@ -255,6 +256,9 @@ set(EXEC_FILES
     pipeline/nljoin/spillable_nljoin_build_operator.cpp
     pipeline/nljoin/spillable_nljoin_probe_operator.cpp
     pipeline/sort/partition_sort_sink_operator.cpp
+    pipeline/sort/local_partition_hash_topn_sink.cpp
+    pipeline/sort/local_partition_hash_topn_source.cpp
+    pipeline/sort/local_partition_hash_topn_context.cpp
     pipeline/sort/local_partition_topn_sink.cpp
     pipeline/sort/local_partition_topn_source.cpp
     pipeline/sort/local_partition_topn_context.cpp

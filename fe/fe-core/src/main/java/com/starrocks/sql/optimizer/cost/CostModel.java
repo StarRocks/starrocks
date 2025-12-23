@@ -34,6 +34,7 @@ import com.starrocks.sql.optimizer.base.DistributionSpec;
 import com.starrocks.sql.optimizer.base.HashDistributionDesc;
 import com.starrocks.sql.optimizer.base.HashDistributionSpec;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
+import com.starrocks.sql.optimizer.operator.OpRuleBit;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
@@ -204,6 +205,11 @@ public class CostModel {
 
         @Override
         public CostEstimate visitPhysicalTopN(PhysicalTopNOperator node, ExpressionContext context) {
+            // we always prefer topn push down agg.
+            if (node.isTopNPushDownAgg()) {
+                return CostEstimate.zero();
+            }
+
             // Disable one phased sort, Currently, we always use two phase sort
             if (!node.isEnforced() && !node.isSplit()
                     && node.getSortPhase().isFinal()

@@ -68,6 +68,9 @@ public class LogicalAggregationOperator extends LogicalOperator {
     // forced to pre-aggregate because the data has to be fully reduced before evaluating the topN.
     private boolean topNLocalAgg = false;
 
+    // Hint to use sort-based aggregate when the input is already ordered by the grouping keys.
+    private boolean useSortAgg = false;
+
     // only used in streaming aggregate
     // eg: select distinct a from table limit 100;
     // In this query, we can push the LIMIT down to the streaming distinct operator.
@@ -156,6 +159,14 @@ public class LogicalAggregationOperator extends LogicalOperator {
 
     public void setTopNLocalAgg(boolean topNLocalAgg) {
         this.topNLocalAgg = topNLocalAgg;
+    }
+
+    public boolean isUseSortAgg() {
+        return useSortAgg;
+    }
+
+    public void setUseSortAgg(boolean useSortAgg) {
+        this.useSortAgg = useSortAgg;
     }
 
     public long getLocalLimit() {
@@ -290,12 +301,14 @@ public class LogicalAggregationOperator extends LogicalOperator {
                 type == that.type && Objects.equals(aggregations, that.aggregations) &&
                 Objects.equals(groupingKeys, that.groupingKeys) &&
                 Objects.equals(partitionByColumns, that.partitionByColumns) &&
-                topNLocalAgg == that.topNLocalAgg;
+                topNLocalAgg == that.topNLocalAgg &&
+                useSortAgg == that.useSortAgg;
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(super.hashCode(), type, isSplit, aggregations, groupingKeys, partitionByColumns, topNLocalAgg);
+        return Objects.hash(super.hashCode(), type, isSplit, aggregations, groupingKeys, partitionByColumns, topNLocalAgg,
+                useSortAgg);
     }
 
     public static Builder builder() {
@@ -329,6 +342,7 @@ public class LogicalAggregationOperator extends LogicalOperator {
             builder.isSplit = aggregationOperator.isSplit;
             builder.distinctColumnDataSkew = aggregationOperator.distinctColumnDataSkew;
             builder.topNLocalAgg = aggregationOperator.topNLocalAgg;
+            builder.useSortAgg = aggregationOperator.useSortAgg;
             builder.localLimit = aggregationOperator.localLimit;
             return this;
         }
@@ -380,6 +394,11 @@ public class LogicalAggregationOperator extends LogicalOperator {
 
         public Builder setTopNLocalAgg(boolean topNLocalAgg) {
             builder.topNLocalAgg = topNLocalAgg;
+            return this;
+        }
+
+        public Builder setUseSortAgg(boolean useSortAgg) {
+            builder.useSortAgg = useSortAgg;
             return this;
         }
     }
