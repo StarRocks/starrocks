@@ -29,6 +29,8 @@ import org.apache.iceberg.Table;
 import static com.starrocks.sql.ast.OutFileClause.PARQUET_COMPRESSION_TYPE_MAP;
 import static org.apache.iceberg.TableProperties.DEFAULT_FILE_FORMAT;
 import static org.apache.iceberg.TableProperties.DEFAULT_FILE_FORMAT_DEFAULT;
+import static org.apache.iceberg.TableProperties.PARQUET_COMPRESSION;
+import static org.apache.iceberg.TableProperties.PARQUET_COMPRESSION_DEFAULT;
 
 public class IcebergTableSink extends DataSink {
     public final static int ICEBERG_SINK_MAX_DOP = 32;
@@ -55,7 +57,8 @@ public class IcebergTableSink extends DataSink {
         this.isStaticPartitionSink = isStaticPartitionSink;
         this.fileFormat = nativeTable.properties().getOrDefault(DEFAULT_FILE_FORMAT, DEFAULT_FILE_FORMAT_DEFAULT)
                 .toLowerCase();
-        this.compressionType = sessionVariable.getConnectorSinkCompressionCodec();
+        this.compressionType = nativeTable.properties().getOrDefault(PARQUET_COMPRESSION,
+                sessionVariable.getConnectorSinkCompressionCodec());
         this.targetMaxFileSize = sessionVariable.getConnectorSinkTargetMaxFileSize() > 0 ?
             sessionVariable.getConnectorSinkTargetMaxFileSize() : 1024L * 1024 * 1024;
         this.targetBranch = targetBranch;
