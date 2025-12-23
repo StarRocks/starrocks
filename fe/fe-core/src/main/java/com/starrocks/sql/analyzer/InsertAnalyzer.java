@@ -250,7 +250,8 @@ public class InsertAnalyzer {
                 IcebergTable icebergTable = (IcebergTable) table;
                 targetColumns = new ArrayList<>();
                 icebergTable.getFullSchema().forEach(column -> {
-                    if (!column.getName().startsWith(FeConstants.GENERATED_PARTITION_COLUMN_PREFIX)) {
+                    if (!column.getName().startsWith(FeConstants.GENERATED_PARTITION_COLUMN_PREFIX) &&
+                            !IcebergTable.ICEBERG_META_COLUMNS.contains(column.getName())) {
                         targetColumns.add(column);
                     }
                 });

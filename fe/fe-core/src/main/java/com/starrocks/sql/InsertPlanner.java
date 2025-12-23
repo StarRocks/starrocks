@@ -292,6 +292,13 @@ public class InsertPlanner {
             outputFullSchema = targetTable.getFullSchema();
         }
 
+        if (targetTable.isIcebergTable()) {
+            outputBaseSchema = outputBaseSchema.stream().filter(col ->
+                    !IcebergTable.ICEBERG_META_COLUMNS.contains(col.getName())).toList();
+            outputFullSchema = outputFullSchema.stream().filter(col ->
+                    !IcebergTable.ICEBERG_META_COLUMNS.contains(col.getName())).toList();
+        }
+
         refreshExternalTable(insertStmt.getQueryStatement(), session);
 
         //1. Process the literal value of the insert values type and cast it into the type of the target table
