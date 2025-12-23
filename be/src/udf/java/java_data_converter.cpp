@@ -328,7 +328,8 @@ Status JavaDataTypeConverter::convert_to_boxed_array(FunctionContext* ctx, std::
     for (int i = 0; i < num_cols; ++i) {
         types[i] = ctx->get_arg_type(i)->type;
         jobject arg = nullptr;
-        if (columns[i]->only_null()) {
+        if (columns[i]->only_null() ||
+            (columns[i]->is_nullable() && down_cast<const NullableColumn*>(columns[i])->null_count() == num_rows)) {
             arg = helper.create_array(num_rows);
         } else if (columns[i]->is_constant()) {
             auto& data_column = down_cast<const ConstColumn*>(columns[i])->data_column();

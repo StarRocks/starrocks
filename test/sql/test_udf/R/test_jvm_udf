@@ -180,3 +180,14 @@ file = "${udf_url}/starrocks-jdbc%2FSumbigint.jar";
 -- result:
 [REGEX].*not found in object_file.*
 -- !result
+select sumbigint(null);
+-- result:
+0
+-- !result
+select sumbigint(x)
+from (
+  select null as x
+)t;
+-- result:
+0
+-- !result
