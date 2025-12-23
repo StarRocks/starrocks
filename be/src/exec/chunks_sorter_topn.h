@@ -89,6 +89,8 @@ public:
     std::vector<RuntimeFilter*>* runtime_filters(ObjectPool* pool) override;
 
 private:
+    Status _do_get_next(ChunkPtr* chunk, bool* eos);
+
     size_t _get_number_of_rows_to_sort() const { return _offset + _limit; }
 
     Status _sort_chunks(RuntimeState* state);
@@ -201,6 +203,16 @@ private:
 
     RuntimeProfile::Counter* _sort_filter_rows = nullptr;
     RuntimeProfile::Counter* _sort_filter_timer = nullptr;
+
+protected:
+    size_t _reserved_bytes(const ChunkPtr& chunk);
+    size_t _get_revocable_mem_bytes();
+    std::function<StatusOr<ChunkPtr>()> _get_chunk_iterator();
+    bool _have_no_staging_data() const;
+
+    // used in spill
+    // index for _raw_chunks
+    size_t _process_raw_chunks_idx = 0;
 };
 
 } // namespace starrocks
