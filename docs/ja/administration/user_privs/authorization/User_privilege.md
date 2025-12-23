@@ -6,7 +6,6 @@ sidebar_position: 30
 # ユーザー権限の管理
 
 import UserPrivilegeCase from '../../../_assets/commonMarkdown/userPrivilegeCase.mdx'
-import GrantToGroup from '../../../_assets/commonMarkdown/grant_to_group.mdx'
 
 このトピックでは、StarRocks におけるユーザー、ロール、および権限の管理方法について説明します。
 
@@ -90,7 +89,13 @@ CREATE ROLE example_role;
   GRANT example_role TO ROLE test_role;
   ```
 
-<GrantToGroup />
+- ユーザーグループにロールを付与する。[Group Provider](../group_provider.md) を介して、外部認証システムからユーザーグループを識別できます。
+
+  次の例は、ユーザーグループ `analysts` にロール `example_role` を付与します：
+
+  ```SQL
+  GRANT example_role TO EXTERNAL GROUP analysts;
+  ```
 
 ### ユーザーのデフォルトロールを変更する
 
@@ -186,6 +191,14 @@ SET GLOBAL activate_all_roles_on_login = TRUE;
 
   ```SQL
   GRANT SELECT ON TABLE sr_member TO ROLE example_role;
+  ```
+
+- ユーザーグループに特権を付与します。[Group Provider](../group_provider.md) を介して、外部認証システムからユーザーグループを識別できます。
+
+  次の例は、テーブル `sr_member` に対する SELECT 権限をユーザーグループ `analysts` に付与します：
+
+  ```SQL
+  GRANT SELECT ON TABLE sr_member TO EXTERNAL GROUP analysts;
   ```
 
 ### 権限の取り消し

@@ -75,7 +75,7 @@ CREATE USER tom IDENTIFIED WITH authentication_oauth2 AS
 FE 構成ファイルで OAuth 2.0 プロパティを設定した場合、以下のステートメントを直接実行できる：
 
 ```SQL
-CREATE USER tom IDENTIFIED WITH authentication_jwt;
+CREATE USER tom IDENTIFIED WITH authentication_oauth2;
 ```
 
 ## JDBC クライアントからの OAuth 2.0 接続
