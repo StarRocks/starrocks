@@ -90,6 +90,8 @@ public:
 
     void run() override;
 
+    void cancel() override;
+
     Status flush_status() const;
 
 private:

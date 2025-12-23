@@ -85,6 +85,12 @@ void LakePersistentIndexParallelCompactTask::run() {
     }
 }
 
+void LakePersistentIndexParallelCompactTask::cancel() {
+    // When canceling, just update the status to cancelled.
+    DCHECK(_cb != nullptr);
+    _cb->update_status(Status::Cancelled("LakePersistentIndexParallelCompactTask cancelled"));
+}
+
 Status LakePersistentIndexParallelCompactTask::do_run() {
     Trace* trace = _cb->trace();
     scoped_refptr<Trace> child_trace(new Trace);
@@ -436,8 +442,8 @@ void LakePersistentIndexParallelCompactMgr::generate_compaction_tasks(
     std::sort(all_sstables.begin(), all_sstables.end());
 
     // Calculate segment number based on total size, threshold and parallelism config
-    size_t segment_num =
-            std::max<size_t>(1, total_size / config::pk_index_parallel_compaction_task_split_threshold_bytes);
+    size_t segment_num = std::max<size_t>(
+            1, total_size / std::max(1, config::pk_index_parallel_compaction_task_split_threshold_bytes));
     segment_num =
             std::min<size_t>(segment_num, std::max(1, config::pk_index_parallel_compaction_threadpool_max_threads) * 2);
 

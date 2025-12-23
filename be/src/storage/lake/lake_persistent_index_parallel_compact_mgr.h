@@ -92,6 +92,8 @@ public:
 
     void run() override;
 
+    void cancel() override;
+
     const std::vector<PersistentIndexSstablePB>& output_sstables() const { return _output_sstables; }
 
 private:

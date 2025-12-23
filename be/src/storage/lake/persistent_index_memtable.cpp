@@ -251,6 +251,11 @@ void PersistentIndexMemtable::run() {
     }
 }
 
+void PersistentIndexMemtable::cancel() {
+    std::lock_guard<std::mutex> lg(_flush_mutex);
+    _flush_status = Status::Cancelled("PersistentIndexMemtable flush cancelled");
+}
+
 std::unique_ptr<PersistentIndexSstable> PersistentIndexMemtable::release_sstable() {
     std::lock_guard<std::mutex> lg(_flush_mutex);
     return std::move(_sstable);
