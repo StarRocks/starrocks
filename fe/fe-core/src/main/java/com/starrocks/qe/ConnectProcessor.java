@@ -485,6 +485,7 @@ public class ConnectProcessor {
             ctx.setExecutor(executor);
 
             ctx.setIsLastStmt(i == stmts.size() - 1);
+            ctx.setSingleStmt(stmts.size() == 1);
 
             //Build View SQL without Policy Rewrite
             new AstTraverser<Void, Void>() {
