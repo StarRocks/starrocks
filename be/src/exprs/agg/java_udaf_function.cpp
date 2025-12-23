@@ -24,7 +24,6 @@
 #include "runtime/user_function_cache.h"
 
 namespace starrocks {
-
 const int DEFAULT_UDAF_BUFFER_SIZE = 1024;
 
 const AggregateFunction* getJavaUDAFFunction(bool input_nullable) {
@@ -38,7 +37,8 @@ Status init_udaf_context(int64_t id, const std::string& url, const std::string& 
     std::string libpath;
     std::string state = symbol + "$State";
     auto func_cache = UserFunctionCache::instance();
-    RETURN_IF_ERROR(func_cache->get_libpath(id, url, checksum, TFunctionBinaryType::SRJAR, &libpath, cloud_configuration));
+    RETURN_IF_ERROR(
+            func_cache->get_libpath(id, url, checksum, TFunctionBinaryType::SRJAR, &libpath, cloud_configuration));
     auto* udaf_ctx = context->udaf_ctxs();
     auto udf_classloader = std::make_unique<ClassLoader>(std::move(libpath));
     auto analyzer = std::make_unique<ClassAnalyzer>();
@@ -74,7 +74,7 @@ Status init_udaf_context(int64_t id, const std::string& url, const std::string& 
     jclass udaf_clazz = udaf_ctx->udaf_class.clazz();
     jobject update_method = udaf_ctx->update->method.handle();
     ASSIGN_OR_RETURN(auto update_stub_clazz, udf_classloader->genCallStub(stub_clazz_name, udaf_clazz, update_method,
-                                                                          ClassLoader::BATCH_SINGLE_UPDATE));
+                         ClassLoader::BATCH_SINGLE_UPDATE));
     ASSIGN_OR_RETURN(auto method, analyzer->get_method_object(update_stub_clazz.clazz(), stub_method_name));
     udaf_ctx->update_batch_call_stub = std::make_unique<AggBatchCallStub>(
             context, udaf_ctx->handle.handle(), std::move(update_stub_clazz), JavaGlobalRef(method));
@@ -97,5 +97,4 @@ Status init_udaf_context(int64_t id, const std::string& url, const std::string& 
 
     return Status::OK();
 }
-
 } // namespace starrocks

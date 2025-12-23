@@ -85,16 +85,33 @@ Status DownloadUtil::download(const std::string& url, const std::string& target_
     return Status::OK();
 }
 
-Status DownloadUtil::get_real_url(const std::string& url, std::string* real_url, const FSOptions& options) {
-    bool is_http = url.starts_with("http://");
-    bool is_local = url.starts_with("file://");
-    bool is_dfs = (!is_http) && (!is_local);
-    if (is_dfs) {
+
+static std::string get_scheme(const std::string& url) {
+    auto pos = url.find("://");
+    if (pos == std::string::npos) {
+        return "";
+    }
+    return url.substr(0, pos);
+}
+
+Status DownloadUtil::get_real_url(const std::string& url,
+                                  std::string* real_url,
+                                  const FSOptions& options) {
+    std::string scheme = get_scheme(url);
+
+    if (scheme.empty() || scheme == "http" || scheme == "https" || scheme == "file") {
+        *real_url = url;
+        return Status::OK();
+    }
+
+    if (scheme == "s3" || scheme == "s3a") {
         return get_java_udf_url(url, real_url, options);
     }
-    *real_url = url;
-    return Status::OK();
+
+    return Status::NotSupported(
+            strings::Substitute("Unsupported UDF URL scheme: $0", scheme));
 }
+
 
 Status DownloadUtil::get_java_udf_url(const std::string& url, std::string* real_url, const FSOptions& options) {
     std::string file_name;
