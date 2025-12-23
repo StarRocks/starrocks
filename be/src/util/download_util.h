@@ -19,16 +19,17 @@
 
 #include "common/status.h"
 
-namespace starrocks {
+namespace starrocks
+{
+    class DownloadUtil
+    {
+    public:
+        static Status download(const std::string& url, const std::string& target_file,
+                               const std::string& expected_checksum, const TCloudConfiguration& cloud_configuration);
 
-class DownloadUtil {
-public:
-    static Status download(const std::string& url, const std::string& target_file,
-                           const std::string& expected_checksum, const TCloudConfiguration& cloud_configuration);
+    private:
+        static Status get_real_url(const std::string& url, std::string* real_url, const FSOptions& options);
 
-private:
-    static Status get_real_url(const std::string& url, std::string* real_url, const FSOptions& options);
-
-    static Status get_java_udf_url(const std::string& url, std::string* real_url, const FSOptions& options);
-};
+        static Status get_java_udf_url(const std::string& url, std::string* real_url, const FSOptions& options);
+    };
 } // namespace starrocks

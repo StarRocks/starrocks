@@ -38,6 +38,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.gson.Gson;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.sql.ast.CreateFunctionStmt;
 import com.starrocks.sql.ast.HdfsURI;
 import com.starrocks.thrift.TAggregateFunction;
@@ -240,6 +241,7 @@ public class AggregateFunction extends Function {
         Type intermediateType;
         String objectFile;
         String symbolName;
+        CloudConfiguration cloudConfiguration;
 
         private AggregateFunctionBuilder(TFunctionBinaryType binaryType) {
             this.binaryType = binaryType;
@@ -286,6 +288,11 @@ public class AggregateFunction extends Function {
 
         public AggregateFunctionBuilder symbolName(String symbolName) {
             this.symbolName = symbolName;
+            return this;
+        }
+
+        public AggregateFunctionBuilder cloudConfiguration(CloudConfiguration cloudConfiguration) {
+            this.cloudConfiguration = cloudConfiguration;
             return this;
         }
 

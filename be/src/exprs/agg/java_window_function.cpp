@@ -19,19 +19,20 @@
 #include "runtime/user_function_cache.h"
 
 namespace starrocks {
-
 const AggregateFunction* getJavaWindowFunction() {
     static JavaWindowFunction java_window_func;
     return &java_window_func;
 }
 
 Status window_init_jvm_context(int64_t fid, const std::string& url, const std::string& checksum,
-                               const std::string& symbol, FunctionContext* context, const TCloudConfiguration& cloud_configuration) {
+                               const std::string& symbol, FunctionContext* context,
+                               const TCloudConfiguration& cloud_configuration) {
     RETURN_IF_ERROR(detect_java_runtime());
     std::string libpath;
     std::string state = symbol + "$State";
     auto func_cache = UserFunctionCache::instance();
-    RETURN_IF_ERROR(func_cache->get_libpath(fid, url, checksum, TFunctionBinaryType::SRJAR, &libpath, cloud_configuration));
+    RETURN_IF_ERROR(
+            func_cache->get_libpath(fid, url, checksum, TFunctionBinaryType::SRJAR, &libpath, cloud_configuration));
     auto* udaf_ctx = context->udaf_ctxs();
     auto udf_classloader = std::make_unique<ClassLoader>(std::move(libpath));
     auto analyzer = std::make_unique<ClassAnalyzer>();

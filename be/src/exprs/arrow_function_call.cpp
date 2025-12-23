@@ -29,7 +29,6 @@
 #include "util/phmap/phmap.h"
 
 namespace starrocks {
-
 using InnerStateMap = phmap::parallel_flat_hash_map<int32_t, std::unique_ptr<UDFCallStub>, phmap::Hash<int32_t>,
                                                     phmap::EqualTo<int32_t>, phmap::Allocator<int32_t>,
                                                     NUM_LOCK_SHARD_LOG, std::mutex>;
@@ -39,7 +38,8 @@ struct ArrowCallStubCtx {
     std::mutex inner_states_lock;
 };
 
-ArrowFunctionCallExpr::ArrowFunctionCallExpr(const TExprNode& node) : Expr(node) {}
+ArrowFunctionCallExpr::ArrowFunctionCallExpr(const TExprNode& node) : Expr(node) {
+}
 
 StatusOr<ColumnPtr> ArrowFunctionCallExpr::evaluate_checked(ExprContext* context, Chunk* chunk) {
     Columns columns(children().size());
@@ -98,7 +98,8 @@ Status ArrowFunctionCallExpr::open(RuntimeState* state, ExprContext* context,
     }
     if (scope == FunctionContext::FRAGMENT_LOCAL) {
         auto function_cache = UserFunctionCache::instance();
-        UserFunctionCache::FunctionCacheDesc desc(_fn.fid, _fn.hdfs_location, _fn.checksum, _fn.binary_type, _fn.cloud_configuration);
+        UserFunctionCache::FunctionCacheDesc desc(_fn.fid, _fn.hdfs_location, _fn.checksum, _fn.binary_type,
+                                                  _fn.cloud_configuration);
         if (_fn.hdfs_location != "inline") {
             RETURN_IF_ERROR(function_cache->get_libpath(desc, &_lib_path));
         } else {
@@ -137,5 +138,4 @@ std::unique_ptr<UDFCallStub> ArrowFunctionCallExpr::_build_stub(int32_t driver_i
     return nullptr;
 #endif
 }
-
 } // namespace starrocks

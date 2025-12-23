@@ -53,6 +53,7 @@ import java.io.InputStream;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.lang.reflect.Parameter;
+import java.net.URI;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.net.URLConnection;
@@ -128,10 +129,24 @@ public class CreateFunctionAnalyzer {
     }
 
     private String getRealUrl(String url) throws IOException {
-        if (!url.startsWith("http://") && !url.startsWith("file://")) {
-            return getJUdfUrl(url);
+        URI uri = URI.create(url);
+        String scheme = uri.getScheme();
+
+        if (scheme == null) {
+            return url;
         }
-        return url;
+
+        switch (scheme.toLowerCase()) {
+            case "http":
+            case "https":
+            case "file":
+                return url;
+            case "s3":
+            case "s3a":
+                return getJUdfUrl(url);
+            default:
+                throw new IOException("Unsupported UDF URL scheme: " + scheme);
+        }
     }
 
     private String getJUdfUrl(String url) throws IOException {
@@ -384,6 +399,11 @@ public class CreateFunctionAnalyzer {
         Map<String, String> properties = stmt.getProperties();
         boolean isAnalyticFn = "true".equalsIgnoreCase(properties.get(CreateFunctionStmt.IS_ANALYTIC_NAME));
 
+        StorageVolume storageVolume = GlobalStateMgr.getCurrentState()
+                .getStorageVolumeMgr()
+                .getStorageVolumeByName(storageVolumeName);
+        CloudConfiguration cloudConfiguration = storageVolume == null ? null : storageVolume.getCloudConfiguration();
+
         checkStarrocksJarUdafStateClass(stmt, mainClass, udafStateClass);
         checkStarrocksJarUdafClass(stmt, mainClass, udafStateClass);
         AggregateFunction.AggregateFunctionBuilder builder =
@@ -391,7 +411,8 @@ public class CreateFunctionAnalyzer {
         builder.name(functionName).argsType(argsDef.getArgTypes()).retType(returnType.getType()).
                 hasVarArgs(argsDef.isVariadic()).intermediateType(intermediateType).objectFile(objectFile)
                 .isAnalyticFn(isAnalyticFn)
-                .symbolName(mainClass.getCanonicalName());
+                .symbolName(mainClass.getCanonicalName())
+                .cloudConfiguration(cloudConfiguration);
         Function function = builder.build();
         function.setChecksum(checksum);
         return function;
