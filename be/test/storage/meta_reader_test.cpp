@@ -112,8 +112,6 @@ TEST_F(SegmentMetaCollecterTest, test_open_and_collect) {
     EXPECT_EQ(0, col->get(0).get_int64());
 }
 
-<<<<<<< HEAD
-=======
 TEST_F(SegmentMetaCollecterTest, test_init_with_dcg_options) {
     SegmentMetaCollecter collecter(_segment);
     SegmentMetaCollecterParams params;
@@ -143,164 +141,6 @@ TEST_F(SegmentMetaCollecterTest, test_init_with_dcg_options) {
     rowset_id.init(1, 2, 0, 0);
     non_pk_options.rowsetid = rowset_id;
     EXPECT_OK(collecter2.init(&params, non_pk_options));
-}
-
-TEST_F(SegmentMetaCollecterTest, test_collect_dict_json_column_success) {
-    // Create a proper JSON segment with actual data
-    TabletSchemaPB json_schema_pb;
-    auto json_col = json_schema_pb.add_column();
-    json_col->set_name("json_col");
-    json_col->set_type("JSON");
-    json_col->set_is_key(false);
-    json_col->set_is_nullable(true);
-    auto json_tablet_schema = TabletSchema::create(json_schema_pb);
-
-    // Create JSON segment with dictionary-encoded string data
-    std::string json_segment_name = "json_meta_collector_test.dat";
-    DeferOp defer_op([&] { delete_file(json_segment_name); });
-    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(json_segment_name));
-    auto encryption_pair = KeyCache::instance().create_plain_random_encryption_meta_pair().value();
-    WritableFileOptions file_options{.mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE,
-                                     .encryption_info = encryption_pair.info};
-    ASSIGN_OR_ABORT(auto wf, fs->new_writable_file(file_options, json_segment_name));
-
-    SegmentWriterOptions seg_opts;
-    seg_opts.flat_json_config = std::make_shared<FlatJsonConfig>();
-    seg_opts.flat_json_config->set_flat_json_enabled(true);
-    SegmentWriter json_writer(std::move(wf), 0, json_tablet_schema, seg_opts);
-    EXPECT_OK(json_writer.init());
-
-    // Create JSON data with repeated string values for dictionary encoding
-    auto json_column = JsonColumn::create();
-    std::vector<std::string> json_strings = {R"({"name": "Alice", "city": "Beijing"})",
-                                             R"({"name": "Bob", "city": "Beijing"})",
-                                             R"({"name": "Alice", "city": "Shanghai"})"};
-
-    for (const auto& json_str : json_strings) {
-        JsonValue json_value;
-        ASSERT_OK(JsonValue::parse(json_str, &json_value));
-        json_column->append(&json_value);
-    }
-
-    SchemaPtr chunk_schema = std::make_shared<Schema>(json_tablet_schema->schema());
-    auto chunk = std::make_shared<Chunk>(Columns{json_column}, chunk_schema);
-    for (int i = 0; i < 100; i++) {
-        ASSERT_OK(json_writer.append_chunk(*chunk));
-    }
-
-    uint64_t file_size, index_size, footer_pos;
-    EXPECT_OK(json_writer.finalize(&file_size, &index_size, &footer_pos));
-
-    // Open the JSON segment
-    FileInfo json_file_info{.path = json_segment_name, .encryption_meta = encryption_pair.encryption_meta};
-    ASSIGN_OR_ABORT(auto json_segment, Segment::open(fs, json_file_info, 0, json_tablet_schema));
-
-    // Test dictionary collection from JSON column
-    SegmentMetaCollecter json_collecter(json_segment);
-    SegmentMetaCollecterParams params;
-    params.fields.emplace_back("dict_merge");
-    params.field_type.emplace_back(LogicalType::TYPE_ARRAY);
-    params.cids.emplace_back(0);
-    params.read_page.emplace_back(true); // Need to read page for JSON
-    params.tablet_schema = json_tablet_schema;
-    params.low_cardinality_threshold = 1000;
-    SegmentMetaCollectOptions options;
-    EXPECT_OK(json_collecter.init(&params, options));
-    EXPECT_OK(json_collecter.open());
-
-    auto array_col = create_array_column();
-
-    // Test successful dictionary collection for JSON column
-    Status status = json_collecter._collect_dict(0, array_col.get(), LogicalType::TYPE_ARRAY);
-
-    ASSERT_OK(status);
-    EXPECT_GT(array_col->size(), 0);
-    EXPECT_EQ("[['Beijing','Shanghai'], ['Alice','Bob']]", array_col->debug_string());
-}
-
-TEST_F(SegmentMetaCollecterTest, test_collect_multiple_meta_fields) {
-    // Create a segment with data
-    TabletSchemaPB schema_pb;
-    auto col0 = schema_pb.add_column();
-    col0->set_name("c0");
-    col0->set_type("INT");
-    col0->set_is_key(true);
-    col0->set_is_nullable(false);
-    col0->set_unique_id(0);
-
-    auto col1 = schema_pb.add_column();
-    col1->set_name("c1");
-    col1->set_type("VARCHAR");
-    col1->set_length(100);
-    col1->set_is_key(false);
-    col1->set_is_nullable(true);
-    col1->set_unique_id(1);
-
-    auto tablet_schema = TabletSchema::create(schema_pb);
-
-    std::string segment_name = "test_multiple_meta_fields.dat";
-    DeferOp defer_op([&] { delete_file(segment_name); });
-    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(segment_name));
-    auto encryption_pair = KeyCache::instance().create_plain_random_encryption_meta_pair().value();
-    WritableFileOptions file_options{.mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE,
-                                     .encryption_info = encryption_pair.info};
-    ASSIGN_OR_ABORT(auto wf, fs->new_writable_file(file_options, segment_name));
-
-    SegmentWriter writer(std::move(wf), 0, tablet_schema, SegmentWriterOptions());
-    EXPECT_OK(writer.init());
-
-    // Write some test data
-    auto int_col = Int32Column::create();
-    auto varchar_col = BinaryColumn::create();
-    auto null_col = NullColumn::create();
-
-    for (int i = 0; i < 100; i++) {
-        int_col->append(i);
-        varchar_col->append(fmt::format("value_{}", i));
-        null_col->append(i % 10 == 0); // 10% null values
-    }
-
-    auto nullable_varchar = NullableColumn::create(varchar_col, null_col);
-    auto chunk = std::make_shared<Chunk>(Columns{int_col, nullable_varchar},
-                                         std::make_shared<Schema>(tablet_schema->schema()));
-    ASSERT_OK(writer.append_chunk(*chunk));
-
-    uint64_t file_size, index_size, footer_pos;
-    EXPECT_OK(writer.finalize(&file_size, &index_size, &footer_pos));
-
-    FileInfo file_info{.path = segment_name, .encryption_meta = encryption_pair.encryption_meta};
-    ASSIGN_OR_ABORT(auto segment, Segment::open(fs, file_info, 0, tablet_schema));
-
-    // Test collecting multiple meta fields
-    SegmentMetaCollecter collecter(segment);
-    SegmentMetaCollecterParams params;
-
-    // Collect rows
-    params.fields.emplace_back("rows");
-    params.field_type.emplace_back(LogicalType::TYPE_BIGINT);
-    params.cids.emplace_back(0);
-    params.read_page.emplace_back(false);
-
-    // Collect column size
-    params.fields.emplace_back("column_size");
-    params.field_type.emplace_back(LogicalType::TYPE_BIGINT);
-    params.cids.emplace_back(1);
-    params.read_page.emplace_back(false);
-
-    params.tablet_schema = tablet_schema;
-    SegmentMetaCollectOptions collect_options;
-    EXPECT_OK(collecter.init(&params, collect_options));
-    EXPECT_OK(collecter.open());
-
-    auto rows_col = Int64Column::create();
-    auto size_col = Int64Column::create();
-    std::vector<Column*> columns = {rows_col.get(), size_col.get()};
-
-    EXPECT_OK(collecter.collect(&columns));
-    EXPECT_EQ(1, rows_col->size());
-    EXPECT_EQ(100, rows_col->get(0).get_int64()); // 100 rows written
-    EXPECT_EQ(1, size_col->size());
-    EXPECT_GT(size_col->get(0).get_int64(), 0); // Column size should be > 0
 }
 
 TEST_F(SegmentMetaCollecterTest, test_get_dcg_segment_without_dcg) {
@@ -436,5 +276,4 @@ TEST_F(SegmentMetaCollecterTest, test_collect_with_dcg_loader_non_pk) {
 // For now, the mock loader tests above verify that the DCG code path is correctly integrated
 // into SegmentMetaCollecter's initialization and collection logic.
 
->>>>>>> d4ea4fffa6 ([BugFix] meta reader support reading from delta column group files (#66995))
 } // namespace starrocks

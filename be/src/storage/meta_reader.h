@@ -146,18 +146,11 @@ private:
     Status _collect_flat_json(ColumnId cid, Column* column);
     template <bool is_max>
     Status __collect_max_or_min(ColumnId cid, Column* column, LogicalType type);
-<<<<<<< HEAD
-=======
     StatusOr<SegmentSharedPtr> _get_dcg_segment(uint32_t ucid);
     StatusOr<std::unique_ptr<ColumnIterator>> _new_dcg_column_iterator(const TabletColumn& column,
                                                                        std::string* filename,
                                                                        FileEncryptionInfo* encryption_info,
                                                                        ColumnAccessPath* path);
-
-    // Recursive helper methods for collecting column sizes
-    size_t _collect_column_size_recursive(ColumnReader* col_reader);
-    int64_t _collect_column_compressed_size_recursive(ColumnReader* col_reader);
->>>>>>> d4ea4fffa6 ([BugFix] meta reader support reading from delta column group files (#66995))
     SegmentSharedPtr _segment;
     std::vector<std::unique_ptr<ColumnIterator>> _column_iterators;
     const SegmentMetaCollecterParams* _params = nullptr;
