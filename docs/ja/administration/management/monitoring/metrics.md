@@ -1849,3 +1849,97 @@ StarRocks クラスタのモニタリングサービスの構築方法につい�
 - 単位: ms
 - タイプ: Summary
 - 説明: 最終的な確認遅延。`publish` タスクが完了してから、トランザクションが `VISIBLE` としてマークされる最終的な `finish` 時点までの時間。このメトリックには、必要な最終的なステップや確認が含まれます。
+
+### Merge Commit メトリクス
+
+これらのメトリクスは、等型バッチ書き込み経路での merge commit 処理を追跡します。
+
+#### merge_commit_request_total
+
+- 単位: Count
+- タイプ: Cumulative
+- 説明: BE が受信した merge commit リクエストの総数。
+
+#### merge_commit_request_bytes
+
+- 単位: Bytes
+- タイプ: Cumulative
+- 説明: merge commit リクエストで受信したデータ総量。
+
+#### merge_commit_success_total
+
+- 単位: Count
+- タイプ: Cumulative
+- 説明: 正常に完了した merge commit リクエスト数。
+
+#### merge_commit_fail_total
+
+- 単位: Count
+- タイプ: Cumulative
+- 説明: 失敗した merge commit リクエスト数。
+
+#### merge_commit_pending_total
+
+- 単位: Count
+- タイプ: Instantaneous
+- 説明: 実行キューで待機している merge commit タスク数。
+
+#### merge_commit_pending_bytes
+
+- 単位: Bytes
+- タイプ: Instantaneous
+- 説明: 待機中の merge commit タスクが保持するデータ総量。
+
+#### merge_commit_send_rpc_total
+
+- 単位: Count
+- タイプ: Cumulative
+- 説明: merge commit を開始するために送信した RPC リクエスト数。
+
+#### merge_commit_register_pipe_total
+
+- 単位: Count
+- タイプ: Cumulative
+- 説明: merge commit 用に登録された stream load pipe の数。
+
+#### merge_commit_unregister_pipe_total
+
+- 単位: Count
+- タイプ: Cumulative
+- 説明: merge commit 用に登録解除された stream load pipe の数。
+
+レイテンシメトリクスは、`merge_commit_request_latency_99` や `merge_commit_request_latency_90` などのパーセンタイル系列をマイクロ秒単位で出力します。エンドツーエンドのレイテンシは以下の式に従います：
+
+`merge_commit_request = merge_commit_pending + merge_commit_wait_plan + merge_commit_append_pipe + merge_commit_wait_finish`
+
+> **注意**: v3.4.11、v3.5.12、および v4.0.4 より前のバージョンでは、これらのレイテンシメトリクスはナノ秒単位で報告されていました。
+
+#### merge_commit_request
+
+- 単位: us
+- タイプ: Summary
+- 説明: merge commit リクエストのエンドツーエンド処理レイテンシ。
+
+#### merge_commit_pending
+
+- 単位: us
+- タイプ: Summary
+- 説明: 実行前に pending キューで待機する時間。
+
+#### merge_commit_wait_plan
+
+- 単位: us
+- タイプ: Summary
+- 説明: RPC リクエストと stream load pipe が利用可能になるまでの待機を合わせた時間。
+
+#### merge_commit_append_pipe
+
+- 単位: us
+- タイプ: Summary
+- 説明: merge commit 中に stream load pipe へデータを追加する時間。
+
+#### merge_commit_wait_finish
+
+- 単位: us
+- タイプ: Summary
+- 説明: merge commit のロード操作が完了するまで待機する時間。
