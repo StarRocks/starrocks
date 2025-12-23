@@ -8,7 +8,7 @@ namespace starrocks {
 
 class BitmapUpdateContext {
     static constexpr size_t estimate_size_threshold = 1024;
-    static constexpr size_t _ADD_BATCH_SIZE = 512;
+    static constexpr size_t _ADD_BATCH_SIZE = 256;
 
 public:
     explicit BitmapUpdateContext(uint32_t rid) : _roaring(roaring::Roaring::bitmapOf(1, rid)) {
