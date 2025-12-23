@@ -22,6 +22,7 @@
 #include "column/column_visitor_mutable.h"
 #include "column/container_resource.h"
 #include "column/vectorized_fwd.h"
+#include "common/config.h"
 #include "common/cow.h"
 #include "common/statusor.h"
 #include "gutil/casts.h"
@@ -469,9 +470,13 @@ public:
 
     // mutate the column to mutable column, but doesn't reset the column
     MutablePtr mutate() const&& {
-        MutablePtr res = try_mutate();
-        res->mutate_each_subcolumn();
-        return res;
+        if (config::enable_cow_optimization) {
+            MutablePtr res = try_mutate();
+            res->mutate_each_subcolumn();
+            return res;
+        } else {
+            return clone();
+        }
     }
 
     // mutate the column to mutable column, and reset the column to nullptr
@@ -487,12 +492,12 @@ protected:
     // if downgrade failed, return the error status.
     // if upgrade success, always return nullptr.
     // if downgrade's result is not nullptr, it will replace the input col with the new column.
-    static StatusOr<MutablePtr> downgrade_helper_func(MutablePtr* col);
+    static StatusOr<MutablePtr> downgrade_helper_func(Column* col);
     // Helper functions for upgrade and downgrade,
     // if upgrade failed, return the error status.
     // if upgrade success, always return nullptr.
     // if upgrade's result is not nullptr, it will replace the input col with the new column.
-    static StatusOr<MutablePtr> upgrade_helper_func(MutablePtr* col);
+    static StatusOr<MutablePtr> upgrade_helper_func(Column* col);
 
     DelCondSatisfied _delete_state = DEL_NOT_SATISFIED;
 };

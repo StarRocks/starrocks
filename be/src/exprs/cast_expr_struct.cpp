@@ -110,9 +110,9 @@ StatusOr<ColumnPtr> CastJsonToStruct::evaluate_checked(ExprContext* context, Chu
             field_chunk.append_column(elements, 0);
             ASSIGN_OR_RETURN(auto casted_field, _field_casts[i]->evaluate_checked(context, &field_chunk));
             casted_field = NullableColumn::wrap_if_necessary(std::move(casted_field));
-            casted_fields.emplace_back(std::move(casted_field)->as_mutable_ptr());
+            casted_fields.emplace_back(std::move(*casted_field).mutate());
         } else {
-            casted_fields.emplace_back(NullableColumn::wrap_if_necessary(elements->clone()));
+            casted_fields.emplace_back(NullableColumn::wrap_if_necessary(std::move(*elements).mutate()));
         }
         DCHECK(casted_fields[i]->is_nullable());
     }

@@ -84,8 +84,7 @@ private:
 
 class CompressedSeekableInputStream final : public SeekableInputStream {
 public:
-    CompressedSeekableInputStream(std::shared_ptr<CompressedInputStream> source)
-            : _source(std::move(std::move(source))) {}
+    CompressedSeekableInputStream(std::shared_ptr<CompressedInputStream> source) : _source(std::move(source)) {}
 
     StatusOr<int64_t> read(void* data, int64_t size) override { return _source->read(data, size); }
 

@@ -117,7 +117,7 @@ struct JsonPathPiece {
     std::shared_ptr<ArraySelector> array_selector;
 
     JsonPathPiece(std::string key, std::shared_ptr<ArraySelector> selector)
-            : key(std::move(key)), array_selector(std::move(std::move(selector))) {}
+            : key(std::move(key)), array_selector(std::move(selector)) {}
 
     JsonPathPiece(std::string key, ArraySelector* selector) : key(std::move(key)), array_selector(selector) {}
 

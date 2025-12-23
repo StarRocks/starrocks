@@ -80,7 +80,7 @@ Status ColumnExprPredicate::evaluate(const Column* column, uint8_t* selection, u
     Chunk chunk;
     // `column` is owned by storage layer
     // we don't have ownership
-    ColumnPtr bits = const_cast<Column*>(column)->as_mutable_ptr();
+    ColumnPtr bits = column->get_ptr();
     chunk.append_column(bits, _slot_desc->id());
 
     // theoretically there will be a chain of expr contexts.

@@ -103,11 +103,11 @@ public:
         for (int i = 0; i < chunk->num_rows(); i++) {
             if (tmp_chunk.count(chunk->columns()[0]->get(i).get_slice().to_string()) > 0) {
                 // duplicate pk
-                LOG(ERROR) << "duplicate pk: " << chunk->mutable_columns()[0]->get(i).get_slice().to_string();
+                LOG(ERROR) << "duplicate pk: " << chunk->columns()[0]->get(i).get_slice().to_string();
                 return false;
             }
-            tmp_chunk[chunk->mutable_columns()[0]->get(i).get_slice().to_string()] = {
-                    chunk->mutable_columns()[1]->get(i).get_int32(), chunk->mutable_columns()[2]->get(i).get_int32()};
+            tmp_chunk[chunk->columns()[0]->get(i).get_slice().to_string()] = {
+                    chunk->columns()[1]->get(i).get_int32(), chunk->columns()[2]->get(i).get_int32()};
         }
         if (tmp_chunk.size() != _replayer_index.size()) {
             LOG(ERROR) << "inconsistency row number, actual : " << tmp_chunk.size()
@@ -146,26 +146,26 @@ public:
             if (log.op == ReplayerOP::UPSERT) {
                 // Upsert
                 for (int i = 0; i < chunk->num_rows(); i++) {
-                    _replayer_index[chunk->mutable_columns()[0]->get(i).get_slice().to_string()] = {
-                            chunk->mutable_columns()[1]->get(i).get_int32(),
-                            chunk->mutable_columns()[2]->get(i).get_int32()};
+                    _replayer_index[chunk->columns()[0]->get(i).get_slice().to_string()] = {
+                            chunk->columns()[1]->get(i).get_int32(),
+                            chunk->columns()[2]->get(i).get_int32()};
                 }
             } else if (log.op == ReplayerOP::ERASE) {
                 // Delete
                 for (int i = 0; i < chunk->num_rows(); i++) {
-                    _replayer_index.erase(chunk->mutable_columns()[0]->get(i).get_slice().to_string());
+                    _replayer_index.erase(chunk->columns()[0]->get(i).get_slice().to_string());
                 }
             } else if (log.op == ReplayerOP::PARTIAL_UPSERT || log.op == ReplayerOP::PARTIAL_UPDATE) {
                 // Partial update
                 for (int i = 0; i < chunk->num_rows(); i++) {
-                    auto iter = _replayer_index.find(chunk->mutable_columns()[0]->get(i).get_slice().to_string());
+                    auto iter = _replayer_index.find(chunk->columns()[0]->get(i).get_slice().to_string());
                     if (iter != _replayer_index.end()) {
-                        _replayer_index[chunk->mutable_columns()[0]->get(i).get_slice().to_string()] = {
-                                chunk->mutable_columns()[1]->get(i).get_int32(), iter->second.second};
+                        _replayer_index[chunk->columns()[0]->get(i).get_slice().to_string()] = {
+                                chunk->columns()[1]->get(i).get_int32(), iter->second.second};
                     } else if (log.op == ReplayerOP::PARTIAL_UPSERT) {
                         // insert new record with default val
-                        _replayer_index[chunk->mutable_columns()[0]->get(i).get_slice().to_string()] = {
-                                chunk->mutable_columns()[1]->get(i).get_int32(), 0};
+                        _replayer_index[chunk->columns()[0]->get(i).get_slice().to_string()] = {
+                                chunk->columns()[1]->get(i).get_int32(), 0};
                     } else {
                         // do nothing
                     }
@@ -174,11 +174,11 @@ public:
                 // condition update
                 auto is_condition_meet_fn = [&](const std::pair<int, int>& current, int index) {
                     if (log.condition_col == "c1") {
-                        if (chunk->mutable_columns()[1]->get(index).get_int32() >= current.first) {
+                        if (chunk->columns()[1]->get(index).get_int32() >= current.first) {
                             return true;
                         }
                     } else if (log.condition_col == "c2") {
-                        if (chunk->mutable_columns()[2]->get(index).get_int32() >= current.second) {
+                        if (chunk->columns()[2]->get(index).get_int32() >= current.second) {
                             return true;
                         }
                     } else {
@@ -187,11 +187,11 @@ public:
                     return false;
                 };
                 for (int i = 0; i < chunk->num_rows(); i++) {
-                    auto iter = _replayer_index.find(chunk->mutable_columns()[0]->get(i).get_slice().to_string());
+                    auto iter = _replayer_index.find(chunk->columns()[0]->get(i).get_slice().to_string());
                     if (iter == _replayer_index.end() || is_condition_meet_fn(iter->second, i)) {
                         // update if condition meet or not found
                         // insert new record
-                        _replayer_index[chunk->mutable_columns()[0]->get(i).get_slice().to_string()] = {
+                        _replayer_index[chunk->columns()[0]->get(i).get_slice().to_string()] = {
                                 chunk->columns()[1]->get(i).get_int32(), chunk->columns()[2]->get(i).get_int32()};
                     }
                 }

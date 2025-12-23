@@ -421,7 +421,7 @@ ColumnPtr cast_int_from_string_fn(ColumnPtr& column) {
     if (column->is_nullable()) {
         const auto* input_column = down_cast<const NullableColumn*>(column.get());
         auto null_column_ptr = input_column->null_column()->clone();
-        auto* null_column = down_cast<NullColumn*>(null_column_ptr->as_mutable_raw_ptr());
+        auto* null_column = down_cast<NullColumn*>(null_column_ptr.get());
         const auto* data_column = down_cast<const BinaryColumn*>(input_column->data_column_raw_ptr());
         auto& null_data = null_column->get_data();
         for (int i = 0; i < sz; ++i) {
@@ -889,7 +889,7 @@ static ColumnPtr cast_from_string_to_datetime_fn(ColumnPtr& column) {
         const auto* data_column = down_cast<const BinaryColumn*>(input_column->data_column_raw_ptr());
 
         auto null_column_ptr = input_column->null_column()->clone();
-        auto* null_column = down_cast<NullColumn*>(null_column_ptr->as_mutable_raw_ptr());
+        auto* null_column = down_cast<NullColumn*>(null_column_ptr.get());
         auto& null_data = null_column->get_data();
 
         for (int i = 0; i < num_rows; ++i) {
@@ -1075,7 +1075,7 @@ public:
         }
         const TypeDescriptor& to_type = this->type();
 
-        MutableColumnPtr result_column;
+        ColumnPtr result_column;
         // NOTE
         // For json type, it could not be converted from decimal directly, as a workaround we convert decimal
         // to double at first, then convert double to JSON
@@ -1089,11 +1089,9 @@ public:
                     double_column = VectorizedUnaryFunction<DecimalTo<OverflowMode::OUTPUT_NULL>>::evaluate<
                             FromType, TYPE_DOUBLE>(column);
                 }
-                result_column = CastFn<TYPE_DOUBLE, TYPE_JSON, AllowThrowException>::cast_fn(std::move(double_column))
-                                        ->as_mutable_ptr();
+                result_column = CastFn<TYPE_DOUBLE, TYPE_JSON, AllowThrowException>::cast_fn(std::move(double_column));
             } else {
-                result_column =
-                        CastFn<FromType, ToType, AllowThrowException>::cast_fn(std::move(column))->as_mutable_ptr();
+                result_column = CastFn<FromType, ToType, AllowThrowException>::cast_fn(std::move(column));
             }
         } else if constexpr (lt_is_decimal<FromType> && lt_is_decimal<ToType>) {
             if (context != nullptr && context->error_if_overflow()) {
@@ -1123,11 +1121,11 @@ public:
         } else if constexpr (lt_is_string<FromType> && lt_is_binary<ToType>) {
             result_column = Column::mutate(std::move(column));
         } else {
-            result_column = CastFn<FromType, ToType, AllowThrowException>::cast_fn(std::move(column))->as_mutable_ptr();
+            result_column = CastFn<FromType, ToType, AllowThrowException>::cast_fn(std::move(column));
         }
         DCHECK(result_column.get() != nullptr);
         if (result_column->is_constant()) {
-            result_column->resize(col_size);
+            result_column->as_mutable_raw_ptr()->resize(col_size);
         }
         return result_column;
     };

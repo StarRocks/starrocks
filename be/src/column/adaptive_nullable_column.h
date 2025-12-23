@@ -271,21 +271,18 @@ public:
     StatusOr<MutableColumnPtr> upgrade_if_overflow() override {
         materialized_nullable();
         RETURN_IF_ERROR(_null_column->capacity_limit_reached());
-
-        auto mutable_data_col = _data_column->as_mutable_ptr();
-        auto ret = upgrade_helper_func(&mutable_data_col);
-        if (ret.ok()) {
-            _data_column = std::move(mutable_data_col);
+        auto ret = upgrade_helper_func(_data_column->as_mutable_raw_ptr());
+        if (ret.ok() && ret.value() != nullptr) {
+            _data_column = std::move(ret.value());
         }
         return ret;
     }
 
     StatusOr<MutableColumnPtr> downgrade() override {
         materialized_nullable();
-        auto mutable_data_col = _data_column->as_mutable_ptr();
-        auto ret = downgrade_helper_func(&mutable_data_col);
-        if (ret.ok()) {
-            _data_column = std::move(mutable_data_col);
+        auto ret = downgrade_helper_func(_data_column->as_mutable_raw_ptr());
+        if (ret.ok() && ret.value() != nullptr) {
+            _data_column = std::move(ret.value());
         }
         return ret;
     }
@@ -380,7 +377,7 @@ public:
 
     void put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx, bool is_binary_protocol = false) const override;
 
-    MutableColumnPtr begin_append_not_default_value() {
+    Column* begin_append_not_default_value() {
         switch (_state) {
         case State::kUninitialized: {
             _state = State::kNotConstant;
@@ -395,43 +392,7 @@ public:
             break;
         }
         }
-        return _data_column->as_mutable_ptr();
-    }
-
-    MutableColumnPtr begin_append_not_default_value() const {
-        switch (_state) {
-        case State::kUninitialized: {
-            _state = State::kNotConstant;
-            break;
-        }
-        case State::kNotConstant:
-        case State::kMaterialized: {
-            break;
-        }
-        default: {
-            materialized_nullable();
-            break;
-        }
-        }
-        return _data_column->as_mutable_ptr();
-    }
-
-    Column* mutable_begin_append_not_default_value() {
-        switch (_state) {
-        case State::kUninitialized: {
-            _state = State::kNotConstant;
-            break;
-        }
-        case State::kNotConstant:
-        case State::kMaterialized: {
-            break;
-        }
-        default: {
-            materialized_nullable();
-            break;
-        }
-        }
-        return _data_column->as_mutable_raw_ptr();
+        return _data_column.get();
     }
 
     void finish_append_one_not_default_value() const {
