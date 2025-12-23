@@ -66,13 +66,13 @@ struct BitmapIndexSliceHash {
 
 template <typename CppType>
 struct BitmapIndexTraits {
-    using UnorderedMemoryIndexType = phmap::flat_hash_map<CppType, BitmapUpdateContextRefOrSingleValue<rowid_t>>;
+    using UnorderedMemoryIndexType = phmap::flat_hash_map<CppType, BitmapUpdateContextRefOrSingleValue>;
     using PositionType = phmap::flat_hash_map<CppType, PostingList>;
 };
 
 template <>
 struct BitmapIndexTraits<Slice> {
-    using UnorderedMemoryIndexType = phmap::flat_hash_map<Slice, BitmapUpdateContextRefOrSingleValue<rowid_t>,
+    using UnorderedMemoryIndexType = phmap::flat_hash_map<Slice, BitmapUpdateContextRefOrSingleValue,
                                                           BitmapIndexSliceHash, std::equal_to<Slice>>;
     using PositionType = phmap::flat_hash_map<Slice, PostingList, BitmapIndexSliceHash, std::equal_to<Slice>>;
 };
@@ -118,7 +118,7 @@ public:
     inline void add_value_with_current_rowid(const void* vptr) override {
         const CppType& value = *static_cast<const CppType*>(vptr);
 
-        CppType* new_value_ptr = nullptr;
+        const CppType* new_value_ptr = nullptr;
 
         auto it = _mem_index.find(value);
         if (it != _mem_index.end()) {
@@ -130,10 +130,10 @@ public:
             // new value, copy value and insert new key->bitmap pair
             CppType new_value;
             _typeinfo->deep_copy(&new_value, &value, &_pool);
-            _mem_index.emplace(new_value, _rid);
+            auto [inserted, _] = _mem_index.emplace(new_value, _rid);
+            new_value_ptr = static_cast<const CppType*>(&inserted->first);
 
-            new_value_ptr = &new_value;
-            BitmapUpdateContext<rowid_t>::init_estimate_size(&_reverted_index_size);
+            BitmapUpdateContext::init_estimate_size(&_reverted_index_size);
         }
 
         if constexpr (field_type == TYPE_VARCHAR || field_type == TYPE_CHAR) {
@@ -222,7 +222,7 @@ public:
     uint64_t size() const override {
         uint64_t size = 0;
         size += _null_bitmap.getSizeInBytes(false);
-        for (BitmapUpdateContext<rowid_t>* update_context : _late_update_context_vector) {
+        for (BitmapUpdateContext* update_context : _late_update_context_vector) {
             update_context->flush_pending_adds();
             update_context->late_update_size(&_reverted_index_size);
         }
@@ -284,7 +284,7 @@ private:
 
     Status _write_bitmap(UnorderedMemoryIndexType& ordered_mem_index, const std::vector<CppType>& sorted_dicts,
                          WritableFile* wfile, IndexedColumnMetaPB* meta) {
-        std::vector<BitmapUpdateContextRefOrSingleValue<rowid_t>*> bitmaps;
+        std::vector<BitmapUpdateContextRefOrSingleValue*> bitmaps;
         bitmaps.reserve(sorted_dicts.size());
         for (const auto& dict : sorted_dicts) {
             auto it = ordered_mem_index.find(dict);
@@ -389,13 +389,21 @@ private:
         IndexedColumnWriter posting_writer(value_options, varbinary_typeinfo, wfile);
         RETURN_IF_ERROR(posting_writer.init());
 
-        const auto encoder = EncoderFactory::createEncoder(EncodingType::VARINT);
         std::vector<uint8_t> buf;
+        buf.reserve(4096);
         for (auto* posting : posting_lists) {
-            RETURN_IF_ERROR(posting->for_each_posting([&](rowid_t doc_id, const roaring::Roaring& positions) -> Status {
-                VLOG(11) << "Encoding positions for doc " << doc_id << " with " << positions.cardinality()
-                         << " positions";
-                RETURN_IF_ERROR(encoder->encode(positions, &buf));
+            RETURN_IF_ERROR(posting->for_each_posting([this, &buf, &posting_writer](
+                                                              rowid_t doc_id,
+                                                              BitmapUpdateContextRefOrSingleValue* context) -> Status {
+                if (context->is_context()) {
+                    if (context->roaring()->cardinality() >= config::inverted_index_roaring_optimize_threshold) {
+                        context->roaring()->runOptimize();
+                    }
+                    RETURN_IF_ERROR(_encoder->encode(*context->roaring(), &buf));
+                } else {
+                    RETURN_IF_ERROR(_encoder->encode(context->value(), &buf));
+                }
+                VLOG(11) << "Encoding posting for doc " << doc_id << ": " << buf.size() << " bytes in total.";
                 const Slice tmp(buf.data(), buf.size());
                 return posting_writer.add(&tmp);
             }));
@@ -418,10 +426,11 @@ private:
 
     rowid_t _pos = 0;
     std::optional<PositionType> _posting_index = std::nullopt;
+    std::shared_ptr<Encoder> _encoder = EncoderFactory::createEncoder(EncodingType::VARINT);
 
     // roaring bitmap size
     mutable uint64_t _reverted_index_size = 0;
-    mutable std::vector<BitmapUpdateContext<rowid_t>*> _late_update_context_vector;
+    mutable std::vector<BitmapUpdateContext*> _late_update_context_vector;
 };
 
 struct BitmapIndexWriterBuilder {

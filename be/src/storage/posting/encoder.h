@@ -43,6 +43,8 @@ public:
      */
     virtual Status encode(const roaring::Roaring& roaring, std::vector<uint8_t>* result) = 0;
 
+    virtual Status encode(uint32_t value, std::vector<uint8_t>* result) = 0;
+
     /**
      * Decode a byte array back to unsigned 32-bit integers
      * @param data The encoded byte array

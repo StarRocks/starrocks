@@ -28,6 +28,7 @@ public:
     VarIntEncoder();
     ~VarIntEncoder() override;
 
+    Status encode(uint32_t value, std::vector<uint8_t>* result) override;
     Status encode(const roaring::Roaring& roaring, std::vector<uint8_t>* result) override;
     Status decode(const std::vector<uint8_t>& data, roaring::Roaring* result) override;
     EncodingType getType() const override { return EncodingType::VARINT; }

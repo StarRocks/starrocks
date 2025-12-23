@@ -40,6 +40,12 @@ uint32_t VarIntEncoder::decodeValue(const std::vector<uint8_t>& data, size_t& of
     return result;
 }
 
+Status VarIntEncoder::encode(uint32_t value, std::vector<uint8_t>* result) {
+    result->clear();
+    encodeValue(value, result);
+    return Status::OK();
+}
+
 Status VarIntEncoder::encode(const roaring::Roaring& roaring, std::vector<uint8_t>* result) {
     result->clear();
     if (roaring.cardinality() <= 0) {

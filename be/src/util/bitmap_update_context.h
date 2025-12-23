@@ -6,49 +6,34 @@
 
 namespace starrocks {
 
-template <typename ValueType>
-struct BitmapValueTraits;
-
-template <>
-struct BitmapValueTraits<rowid_t> {
-    using type = roaring::Roaring;
-};
-
-template <>
-struct BitmapValueTraits<uint64_t> {
-    using type = detail::Roaring64Map;
-};
-
-template <typename ValueType>
 class BitmapUpdateContext {
     static constexpr size_t estimate_size_threshold = 1024;
-    static constexpr size_t _ADD_BATCH_SIZE = 64;
-
-    using RoaringType = BitmapValueTraits<ValueType>::type;
+    static constexpr size_t _ADD_BATCH_SIZE = 512;
 
 public:
-    explicit BitmapUpdateContext(ValueType rid) : _roaring(RoaringType::bitmapOf(1, rid)) {
+    explicit BitmapUpdateContext(uint32_t rid) : _roaring(roaring::Roaring::bitmapOf(1, rid)) {
         _pending_adds.reserve(_ADD_BATCH_SIZE);
     };
-    explicit BitmapUpdateContext(ValueType rid0, ValueType rid1) : _roaring(RoaringType::bitmapOfList({rid0, rid1})) {
+    explicit BitmapUpdateContext(uint32_t rid0, uint32_t rid1)
+            : _roaring(roaring::Roaring::bitmapOfList({rid0, rid1})) {
         _pending_adds.reserve(_ADD_BATCH_SIZE);
     };
 
-    RoaringType* roaring() { return &_roaring; }
+    roaring::Roaring* roaring() { return &_roaring; }
 
     static uint64_t estimate_size(int element_count) {
         // When _element_count is less than estimate_size_threshold, we use
         // (1 + _element_count + 1) * (sizeof(uint32_t)) to approximately estimate true size of roaring bitmap:
         // one bit pre    4 bytes         4 bytes *  _element_count
         // [ 1            cardinality      data ]
-        return (1 + sizeof(ValueType) * (element_count + 1));
+        return (1 + sizeof(uint32_t) * (element_count + 1));
     }
 
     static void init_estimate_size(uint64_t* reverted_index_size) {
         *reverted_index_size += BitmapUpdateContext::estimate_size(1);
     }
 
-    void add_and_flush_if_needed(ValueType rid) {
+    void add_and_flush_if_needed(uint32_t rid) {
         _pending_adds.push_back(rid);
         if (_pending_adds.size() >= _ADD_BATCH_SIZE) {
             flush_pending_adds();
@@ -73,7 +58,7 @@ public:
         bool need_add = false;
         _element_count++;
         if (_element_count < estimate_size_threshold) {
-            *reverted_index_size += sizeof(ValueType);
+            *reverted_index_size += sizeof(uint32_t);
         } else if (_element_count == estimate_size_threshold) {
             *reverted_index_size -= BitmapUpdateContext::estimate_size(_element_count);
             _size_changed = true;
@@ -97,19 +82,16 @@ public:
     }
 
 private:
-    RoaringType _roaring;
+    roaring::Roaring _roaring;
     uint64_t _previous_size{0};
     uint32_t _element_count{1};
     bool _size_changed{false};
-    std::vector<ValueType> _pending_adds;
+    std::vector<uint32_t> _pending_adds;
 };
 
 // if last bit is 0 it is std::unique_ptr<BitmapUpdateContext>
 // else it is a single value
-template <typename ValueType>
 class BitmapUpdateContextRefOrSingleValue {
-    using RoaringType = BitmapValueTraits<ValueType>::type;
-
 public:
     BitmapUpdateContextRefOrSingleValue(const BitmapUpdateContextRefOrSingleValue& rhs) = delete;
     BitmapUpdateContextRefOrSingleValue& operator=(const BitmapUpdateContextRefOrSingleValue& rhs) = delete;
@@ -122,18 +104,18 @@ public:
         rhs._value = 1; // make sure not delete when rhs is destroyed
         return *this;
     }
-    BitmapUpdateContextRefOrSingleValue(ValueType value) { _value = (value << 1) | 1; }
+    BitmapUpdateContextRefOrSingleValue(uint32_t value) { _value = (value << 1) | 1; }
     ~BitmapUpdateContextRefOrSingleValue() {
         if (is_context()) {
             delete context();
         }
     }
     bool is_context() const { return (_value & 1) == 0; }
-    ValueType value() const { return _value >> 1; }
-    BitmapUpdateContext<ValueType>* context() const {
-        return reinterpret_cast<BitmapUpdateContext<ValueType>*>(_value); // NOLINT
+    uint32_t value() const { return _value >> 1; }
+    BitmapUpdateContext* context() const {
+        return reinterpret_cast<BitmapUpdateContext*>(_value); // NOLINT
     }
-    void add(ValueType rid) {
+    void add(uint32_t rid) {
         if (is_context()) {
             context()->add_and_flush_if_needed(rid);
         } else {
@@ -141,18 +123,16 @@ public:
             _value = reinterpret_cast<uint64_t>(context); // NOLINT
         }
     }
-    RoaringType* roaring() { return context()->roaring(); }
+    roaring::Roaring* roaring() { return context()->roaring(); }
 
-    static uint64_t estimate_size(int element_count) {
-        return BitmapUpdateContext<ValueType>::estimate_size(element_count);
-    }
+    static uint64_t estimate_size(int element_count) { return BitmapUpdateContext::estimate_size(element_count); }
 
     static void init_estimate_size(uint64_t* reverted_index_size) {
-        return BitmapUpdateContext<ValueType>::init_estimate_size(reverted_index_size);
+        return BitmapUpdateContext::init_estimate_size(reverted_index_size);
     }
 
     bool update_estimate_size(uint64_t* reverted_index_size) {
-        if (context()) {
+        if (is_context()) {
             return context()->update_estimate_size(reverted_index_size);
         } else {
             return false;

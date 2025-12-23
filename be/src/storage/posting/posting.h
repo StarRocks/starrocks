@@ -14,10 +14,9 @@
 
 #pragma once
 
+#include "exec/pipeline/adaptive/collect_stats_context.h"
 #include "storage/rowset/common.h"
-#include "types/bitmap_value_detail.h"
 #include "util/bitmap_update_context.h"
-#include "util/phmap/phmap.h"
 
 namespace starrocks {
 
@@ -37,10 +36,19 @@ public:
     void add_posting(rowid_t doc_id, rowid_t pos);
 
     uint32_t get_num_doc_ids() const;
-    Status for_each_posting(std::function<Status(rowid_t doc_id, const roaring::Roaring&)>&& func);
+
+    template <typename Func>
+    inline Status for_each_posting(Func&& func) {
+        for (size_t i = 0; i < _doc_ids.size(); ++i) {
+            _positions[i].flush_pending_adds();
+            RETURN_IF_ERROR(func(_doc_ids[i], &_positions[i]));
+        }
+        return Status::OK();
+    }
 
 private:
-    phmap::flat_hash_map<uint32_t, BitmapUpdateContextRefOrSingleValue<uint32_t>> _postings;
+    std::vector<uint32_t> _doc_ids;
+    std::vector<BitmapUpdateContextRefOrSingleValue> _positions;
 };
 
 } // namespace starrocks
