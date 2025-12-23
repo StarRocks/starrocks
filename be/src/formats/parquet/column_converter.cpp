@@ -577,7 +577,7 @@ Status parquet::Int32ToDateConverter::convert(const ColumnPtr& src, Column* dst)
     auto& src_null_data = src_nullable_column->null_column()->get_data();
     auto& dst_null_data = dst_nullable_column->null_column()->get_data();
 
-    size_t size = src_column->size();
+    size_t size = dst_null_data.size();
     memcpy(dst_null_data.data(), src_null_data.data(), size);
     for (size_t i = 0; i < size; i++) {
         dst_data[i]._julian = src_data[i] + date::UNIX_EPOCH_JULIAN;
@@ -599,9 +599,40 @@ Status parquet::Int32ToDateTimeConverter::convert(const ColumnPtr& src, Column* 
     auto& src_data = src_column->get_data();
     auto& dst_data = dst_column->get_data();
     auto& src_null_data = src_nullable_column->null_column()->get_data();
+<<<<<<< HEAD
     auto& dst_null_data = dst_nullable_column->null_column()->get_data();
+=======
+    auto& dst_null_data = dst_nullable_column->null_column_raw_ptr()->get_data();
 
-    size_t size = src_column->size();
+    size_t size = dst_null_data.size();
+
+    for (size_t i = 0; i < size; i++) {
+        dst_null_data[i] = src_null_data[i];
+        if (!src_null_data[i]) {
+            dst_data.data()[i] = src_data.data()[i] / 1000;
+        }
+    }
+    dst_nullable_column->set_has_null(src_nullable_column->has_null());
+    return Status::OK();
+}
+
+Status parquet::Int32ToDateTimeConverter::convert(const Column* src, Column* dst) {
+    auto* src_nullable_column = ColumnHelper::as_raw_column<NullableColumn>(src);
+    // hive only support null column
+    // TODO: support not null
+    auto* dst_nullable_column = down_cast<NullableColumn*>(dst);
+    dst_nullable_column->resize_uninitialized(src_nullable_column->size());
+
+    auto* src_column = ColumnHelper::as_raw_column<FixedLengthColumn<int32_t>>(src_nullable_column->data_column());
+    auto* dst_column = ColumnHelper::as_raw_column<TimestampColumn>(dst_nullable_column->data_column_raw_ptr());
+
+    auto& src_data = src_column->get_data();
+    auto& dst_data = dst_column->get_data();
+    auto& src_null_data = src_nullable_column->null_column()->get_data();
+    auto& dst_null_data = dst_nullable_column->null_column_raw_ptr()->get_data();
+>>>>>>> 51213777bb ([BugFix] Fix CN crash when querying non-partitioned Iceberg tables with DATE predicates (#66864))
+
+    size_t size = dst_null_data.size();
     for (size_t i = 0; i < size; i++) {
         dst_null_data[i] = src_null_data[i];
         if (!src_null_data[i]) {
@@ -643,12 +674,29 @@ Status Int96ToDateTimeConverter::convert(const ColumnPtr& src, Column* dst) {
     auto& src_null_data = src_nullable_column->null_column()->get_data();
     auto& dst_null_data = dst_nullable_column->null_column()->get_data();
 
+<<<<<<< HEAD
     size_t size = src_column->size();
     for (size_t i = 0; i < size; i++) {
         dst_null_data[i] = src_null_data[i];
         if (!src_null_data[i]) {
             Timestamp timestamp = (static_cast<uint64_t>(src_data[i].hi) << TIMESTAMP_BITS) | (src_data[i].lo / 1000);
             dst_data[i].set_timestamp(_utc_to_local(timestamp));
+=======
+    size_t size = dst_null_data.size();
+
+    auto fill_dst_fn = [&]<bool FAST_TZ>() {
+        for (size_t i = 0; i < size; i++) {
+            dst_null_data[i] = src_null_data[i];
+            if (!src_null_data[i]) {
+                Timestamp timestamp =
+                        (static_cast<uint64_t>(src_data[i].hi) << TIMESTAMP_BITS) | (src_data[i].lo / 1000);
+                int offset = _offset;
+                if constexpr (!FAST_TZ) {
+                    offset = timestamp::get_timezone_offset_by_timestamp(timestamp, _ctz);
+                }
+                dst_data[i].set_timestamp(timestamp::add<TimeUnit::SECOND>(timestamp, offset));
+            }
+>>>>>>> 51213777bb ([BugFix] Fix CN crash when querying non-partitioned Iceberg tables with DATE predicates (#66864))
         }
     }
     dst_nullable_column->set_has_null(src_nullable_column->has_null());
@@ -726,6 +774,7 @@ Status Int64ToDateTimeConverter::convert(const ColumnPtr& src, Column* dst) {
     auto& src_null_data = src_nullable_column->null_column()->get_data();
     auto& dst_null_data = dst_nullable_column->null_column()->get_data();
 
+<<<<<<< HEAD
     size_t size = src_column->size();
     for (size_t i = 0; i < size; i++) {
         dst_null_data[i] = src_null_data[i];
@@ -735,6 +784,26 @@ Status Int64ToDateTimeConverter::convert(const ColumnPtr& src, Column* dst) {
             TimestampValue ep;
             ep.from_unixtime(seconds, nanoseconds / 1000, _ctz);
             dst_data[i].set_timestamp(ep.timestamp());
+=======
+    size_t size = dst_null_data.size();
+    auto fill_dst_fn = [&]<bool UTC_TO_TZ, bool FAST_TZ>() {
+        for (size_t i = 0; i < size; i++) {
+            dst_null_data[i] = src_null_data[i];
+            if (!src_null_data[i]) {
+                int64_t seconds = src_data[i] / _second_mask;
+                int64_t nanoseconds = (src_data[i] % _second_mask) * _scale_to_nano_factor;
+
+                if constexpr (UTC_TO_TZ) {
+                    int offset = _offset;
+                    if constexpr (!FAST_TZ) {
+                        offset = timestamp::get_timezone_offset_by_epoch_seconds(seconds, _ctz);
+                    }
+                    seconds += offset;
+                }
+
+                dst_data[i].set_timestamp(timestamp::of_epoch_second(seconds, nanoseconds));
+            }
+>>>>>>> 51213777bb ([BugFix] Fix CN crash when querying non-partitioned Iceberg tables with DATE predicates (#66864))
         }
     }
     dst_nullable_column->set_has_null(src_nullable_column->has_null());
@@ -756,7 +825,7 @@ Status Int64ToTimeConverter::convert(const ColumnPtr& src, Column* dst) {
     auto& src_null_data = src_nullable_column->null_column()->get_data();
     auto& dst_null_data = dst_nullable_column->null_column()->get_data();
 
-    size_t size = src_column->size();
+    size_t size = dst_null_data.size();
 
     for (size_t i = 0; i < size; i++) {
         dst_null_data[i] = src_null_data[i];
