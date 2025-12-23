@@ -29,6 +29,7 @@
 #include "storage/rowset/column_iterator.h"
 #include "storage/rowset/column_reader.h"
 #include "storage/rowset/rowset.h"
+#include "storage/utils.h"
 #include "types/logical_type.h"
 #include "util/slice.h"
 
@@ -152,7 +153,7 @@ SegmentMetaCollecter::SegmentMetaCollecter(SegmentSharedPtr segment) : _segment(
 
 SegmentMetaCollecter::~SegmentMetaCollecter() = default;
 
-Status SegmentMetaCollecter::init(const SegmentMetaCollecterParams* params) {
+Status SegmentMetaCollecter::init(const SegmentMetaCollecterParams* params, const SegmentMetaCollectOptions& options) {
     if (UNLIKELY(params == nullptr)) {
         return Status::InvalidArgument("params is nullptr");
     }
@@ -172,6 +173,18 @@ Status SegmentMetaCollecter::init(const SegmentMetaCollecterParams* params) {
         return Status::InvalidArgument("tablet schema is nullptr");
     }
     _params = params;
+    if (options.dcg_loader != nullptr) {
+        if (options.is_primary_keys) {
+            TabletSegmentId tsid;
+            tsid.tablet_id = options.tablet_id;
+            tsid.segment_id = options.pk_rowsetid + options.segment_id;
+            RETURN_IF_ERROR(options.dcg_loader->load(tsid, options.version, &_dcgs));
+        } else {
+            int64_t tablet_id = options.tablet_id;
+            RowsetId rowsetid = options.rowsetid;
+            RETURN_IF_ERROR(options.dcg_loader->load(tablet_id, rowsetid, options.segment_id, INT64_MAX, &_dcgs));
+        }
+    }
     return Status::OK();
 }
 
@@ -181,6 +194,41 @@ Status SegmentMetaCollecter::open() {
     }
     RETURN_IF_ERROR(_init_return_column_iterators());
     return Status::OK();
+}
+
+StatusOr<std::shared_ptr<Segment>> SegmentMetaCollecter::_get_dcg_segment(uint32_t ucid) {
+    // iterate dcg from new ver to old ver
+    for (const auto& dcg : _dcgs) {
+        // cols file index -> column index in corresponding file
+        std::pair<int32_t, int32_t> idx = dcg->get_column_idx(ucid);
+        if (idx.first >= 0) {
+            ASSIGN_OR_RETURN(auto column_file, dcg->column_file_by_idx(parent_name(_segment->file_name()), idx.first));
+            if (_dcg_segments.count(column_file) == 0) {
+                ASSIGN_OR_RETURN(auto dcg_segment, _segment->new_dcg_segment(*dcg, idx.first, _params->tablet_schema));
+                _dcg_segments[column_file] = dcg_segment;
+            }
+            return _dcg_segments[column_file];
+        }
+    }
+    // the column not exist in delta column group
+    return nullptr;
+}
+
+StatusOr<std::unique_ptr<ColumnIterator>> SegmentMetaCollecter::_new_dcg_column_iterator(
+        const TabletColumn& column, std::string* filename, FileEncryptionInfo* encryption_info,
+        ColumnAccessPath* path) {
+    // build column iter from delta column group
+    ASSIGN_OR_RETURN(auto dcg_segment, _get_dcg_segment(column.unique_id()));
+    if (dcg_segment != nullptr) {
+        if (filename != nullptr) {
+            *filename = dcg_segment->file_name();
+        }
+        if (encryption_info != nullptr && dcg_segment->encryption_info()) {
+            *encryption_info = *dcg_segment->encryption_info();
+        }
+        return dcg_segment->new_column_iterator(column, path);
+    }
+    return nullptr;
 }
 
 Status SegmentMetaCollecter::_init_return_column_iterators() {
@@ -197,12 +245,26 @@ Status SegmentMetaCollecter::_init_return_column_iterators() {
         if (_params->read_page[i]) {
             auto cid = _params->cids[i];
             if (_column_iterators[cid] == nullptr) {
-                const TabletColumn& col = _params->tablet_schema->column(cid);
-                ASSIGN_OR_RETURN(_column_iterators[cid], _segment->new_column_iterator_or_default(col, nullptr));
-
                 ColumnIteratorOptions iter_opts;
+                const TabletColumn& col = _params->tablet_schema->column(cid);
+                std::string dcg_filename;
+                FileEncryptionInfo dcg_encryption_info;
+                ASSIGN_OR_RETURN(auto col_iter,
+                                 _new_dcg_column_iterator(col, &dcg_filename, &dcg_encryption_info, nullptr));
+                if (col_iter != nullptr) {
+                    // Find the column in delta column group
+                    _column_iterators[cid] = std::move(col_iter);
+                    RandomAccessFileOptions opts;
+                    opts.encryption_info = dcg_encryption_info;
+                    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(dcg_filename));
+                    ASSIGN_OR_RETURN(auto dcg_file, fs->new_random_access_file(opts, dcg_filename));
+                    iter_opts.read_file = dcg_file.get();
+                    _column_files[cid] = std::move(dcg_file);
+                } else {
+                    ASSIGN_OR_RETURN(_column_iterators[cid], _segment->new_column_iterator_or_default(col, nullptr));
+                    iter_opts.read_file = _read_file.get();
+                }
                 iter_opts.check_dict_encoding = true;
-                iter_opts.read_file = _read_file.get();
                 iter_opts.stats = &_stats;
                 RETURN_IF_ERROR(_column_iterators[cid]->init(iter_opts));
             }

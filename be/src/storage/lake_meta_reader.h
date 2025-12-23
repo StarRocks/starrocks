@@ -55,12 +55,20 @@ public:
 
     Status do_get_next(ChunkPtr* chunk) override;
 
+#ifdef BE_TEST
+    Status TEST_get_segments(const lake::VersionedTablet& tablet, std::vector<SegmentSharedPtr>* segments,
+                             std::vector<SegmentMetaCollectOptions>* options_list) {
+        return _get_segments(tablet, segments, options_list);
+    }
+#endif
+
 private:
     Status _build_collect_context(const lake::VersionedTablet& tablet, const LakeMetaReaderParams& read_params);
 
     Status _init_seg_meta_collecters(const lake::VersionedTablet& tablet, const LakeMetaReaderParams& read_params);
 
-    Status _get_segments(const lake::VersionedTablet& tablet, std::vector<SegmentSharedPtr>* segments);
+    Status _get_segments(const lake::VersionedTablet& tablet, std::vector<SegmentSharedPtr>* segments,
+                         std::vector<SegmentMetaCollectOptions>* options_list);
 };
 
 } // namespace starrocks
