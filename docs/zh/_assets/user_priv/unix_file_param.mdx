@@ -1,0 +1,16 @@
+#### `type`
+
+要创建的 Group Provider 的类型。有效值：
+- `ldap`：创建一个 LDAP Group Provider。当设置此值时，您需要指定 `ldap_info`、`ldap_search_group_arg`、`ldap_search_user_arg`，并可选指定 `ldap_cache_arg`。
+- `unix`：创建一个 Unix Group Provider。
+- `file`：创建一个 File Group Provider。当设置此值时，您需要指定 `group_file_url`。
+
+#### `group_file_url`
+
+定义用户组的文件的 URL 或相对路径（在 `fe/conf` 下）。
+
+:::note
+
+组文件包含组及其成员的列表。您可以在每行中定义一个组，其中组名称和成员用冒号分隔。多个用户用逗号分隔。示例：`group_name:user_1,user_2,user_3`。
+
+:::
