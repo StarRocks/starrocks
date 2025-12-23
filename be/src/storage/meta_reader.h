@@ -84,6 +84,8 @@ public:
         std::vector<int32_t> result_slot_ids;
     };
 
+    const TabletSchemaCSPtr& TEST_tablet_schema() { return _collect_context.seg_collecter_params.tablet_schema; }
+
 protected:
     CollectContext _collect_context;
     bool _is_init;

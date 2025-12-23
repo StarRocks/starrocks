@@ -15,6 +15,7 @@
 #include "exec/lake_meta_scanner.h"
 
 #include "exec/lake_meta_scan_node.h"
+#include "gen_cpp/tablet_schema.pb.h"
 #include "runtime/global_dict/config.h"
 #include "testutil/sync_point.h"
 
@@ -44,6 +45,15 @@ Status LakeMetaScanner::_real_init() {
     reader_params.low_card_threshold = _parent->_meta_scan_node.__isset.low_cardinality_threshold
                                                ? _parent->_meta_scan_node.low_cardinality_threshold
                                                : DICT_DECODE_MAX_SIZE;
+
+    if (_parent->_meta_scan_node.__isset.schema_key) {
+        const auto& t_schema_key = _parent->_meta_scan_node.schema_key;
+        reader_params.schema_key.emplace();
+        reader_params.schema_key->set_schema_id(t_schema_key.schema_id);
+        reader_params.schema_key->set_db_id(t_schema_key.db_id);
+        reader_params.schema_key->set_table_id(t_schema_key.table_id);
+    }
+
     // Pass column access paths and extend schema similar to OLAP path
     if (_parent->_meta_scan_node.__isset.column_access_paths && !_parent->_column_access_paths.empty()) {
         reader_params.column_access_paths = &_parent->_column_access_paths;

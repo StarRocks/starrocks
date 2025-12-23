@@ -15,6 +15,7 @@
 package com.starrocks.server;
 
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
@@ -29,9 +30,12 @@ import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.PlanNodeId;
 import com.starrocks.planner.TupleDescriptor;
 import com.starrocks.planner.TupleId;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
+import com.starrocks.thrift.TStorageType;
+import com.starrocks.type.IntegerType;
 import com.starrocks.warehouse.DefaultWarehouse;
 import com.starrocks.warehouse.Warehouse;
 import com.starrocks.warehouse.cngroup.CRAcquireContext;
@@ -404,6 +408,10 @@ public class WarehouseManagerTest {
     private OlapScanNode newOlapScanNode() {
         TupleDescriptor desc = new TupleDescriptor(new TupleId(0));
         OlapTable table = new OlapTable();
+        table.maySetDatabaseId(1L);
+        table.setBaseIndexMetaId(1L);
+        table.setIndexMeta(1L, "base", Collections.singletonList(new Column("c0", IntegerType.INT)),
+                0, 0, (short) 1, TStorageType.COLUMN, KeysType.DUP_KEYS);
         table.setDefaultDistributionInfo(new HashDistributionInfo(3, Collections.emptyList()));
         desc.setTable(table);
         return new OlapScanNode(new PlanNodeId(1), desc, "OlapScanNode", table.getBaseIndexMetaId());

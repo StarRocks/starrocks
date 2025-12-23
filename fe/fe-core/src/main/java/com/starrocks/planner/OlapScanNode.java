@@ -61,7 +61,6 @@ import com.starrocks.catalog.PartitionNames;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Replica;
-import com.starrocks.catalog.SchemaInfo;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
@@ -109,7 +108,6 @@ import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TTableSampleOptions;
-import com.starrocks.thrift.TTableSchemaKey;
 import com.starrocks.type.Type;
 import com.starrocks.type.TypeSerializer;
 import com.starrocks.warehouse.Warehouse;
@@ -132,7 +130,7 @@ import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
-public class OlapScanNode extends ScanNode {
+public class OlapScanNode extends AbstractOlapTableScanNode {
     private static final Logger LOG = LogManager.getLogger(OlapScanNode.class);
 
     // Cached value of estimated scan range memory footprint
@@ -165,8 +163,6 @@ public class OlapScanNode extends ScanNode {
      */
     private boolean isPreAggregation = false;
     private String reasonOfPreAggregation = null;
-    private final OlapTable olapTable;
-    private final SelectedIndex index;
     private long selectedTabletsNum = 0;
     private long totalTabletsNum = 0;
     private int selectedPartitionNum = 0;
@@ -214,24 +210,8 @@ public class OlapScanNode extends ScanNode {
     long backPressureThrottleTime = -1;
     long backPressureNumRows = -1;
 
-    /**
-     * Constructs a node to scan data from an OlapTable.
-     * <p>
-     * This constructor may access the schema information of the {@link OlapTable}.
-     * To ensure thread-safe access, the caller must guarantee that the table's metadata
-     * is protected, either by holding an external lock or by operating on a query-specific
-     * copy of the table (e.g., created via {@link OlapTable#copyOnlyForQuery()}).
-     *
-     * @param id The unique identifier for this plan node.
-     * @param desc The tuple descriptor for the data produced by this scan node.
-     * @param planNodeName The name of the plan node.
-     * @param selectedIndexId The ID of the materialized index to be scanned. If this value is -1,
-     *                        the base index of the OlapTable will be used.
-     */
     public OlapScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName, long selectedIndexId) {
-        super(id, desc, planNodeName);
-        olapTable = (OlapTable) desc.getTable();
-        index = SelectedIndex.build(olapTable, selectedIndexId);
+        super(id, desc, planNodeName, (OlapTable) desc.getTable(), selectedIndexId);
     }
 
     public OlapScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName, long selectedIndexId, ComputeResource computeResource) {
@@ -366,17 +346,6 @@ public class OlapScanNode extends ScanNode {
                 unUsedOutputStringColumns.add(slot.getColumn().getColumnId().getId());
             }
         }
-    }
-
-    public OlapTable getOlapTable() {
-        return olapTable;
-    }
-
-    /**
-     * Returns the cached schema information for the selected materialized index.
-     */
-    public Optional<SchemaInfo> getSchema() {
-        return index.schema;
     }
 
     @Override
@@ -1129,14 +1098,7 @@ public class OlapScanNode extends ScanNode {
             }
 
             msg.lake_scan_node.setOutput_asc_hint(sortKeyAscHint);
-            TTableSchemaKey schemaKey = new TTableSchemaKey();
-            schemaKey.setDb_id(MetaUtils.lookupDbIdByTable(olapTable));
-            schemaKey.setTable_id(olapTable.getId());
-            Preconditions.checkState(index.schema.isPresent(), String.format(
-                    "schema not cached, table name: %s, table id: %s, index id: %s",
-                    olapTable.getName(), olapTable.getId(), index.indexId));
-            schemaKey.setSchema_id(index.schema.get().getId());
-            msg.lake_scan_node.setSchema_key(schemaKey);
+            msg.lake_scan_node.setSchema_key(getSchemaKey());
         } else { // If you find yourself changing this code block, see also the above code block
             msg.node_type = TPlanNodeType.OLAP_SCAN_NODE;
             msg.olap_scan_node =
@@ -1697,42 +1659,5 @@ public class OlapScanNode extends ScanNode {
             }
         }
         return accept;
-    }
-
-    private static class SelectedIndex {
-
-        final long indexId;
-
-        /**
-         * Cached schema information used for query plan.
-         * <p>
-         * This field stores the schema information that was used when generating the plan, enabling
-         * backend nodes to retrieve the exact schema from the frontend during query execution. This is
-         * particularly important for Fast Schema Evolution scenarios where schema changes are not
-         * immediately propagated schema metadata to backend nodes. Currently, this mechanism is only
-         * used in shared-data mode.
-         * </p>
-         */
-        final Optional<SchemaInfo> schema;
-
-        SelectedIndex(long indexId, SchemaInfo schema) {
-            this.indexId = indexId;
-            this.schema = Optional.ofNullable(schema);
-        }
-
-        static SelectedIndex build(OlapTable olapTable, long selectedIndexId) {
-            long indexId = selectedIndexId == -1 ? olapTable.getBaseIndexMetaId() : selectedIndexId;
-            SchemaInfo schema = null;
-            if (olapTable.isCloudNativeTableOrMaterializedView()) {
-                MaterializedIndexMeta indexMeta = olapTable.getIndexMetaByIndexId(indexId);
-                if (indexMeta == null) {
-                    throw new RuntimeException(String.format(
-                            "can't find index, table name: %s, table id: %s, index id: %s",
-                            olapTable.getName(), olapTable.getId(), indexId));
-                }
-                schema = SchemaInfo.fromMaterializedIndex(olapTable, indexId, indexMeta);
-            }
-            return new SelectedIndex(indexId, schema);
-        }
     }
 }

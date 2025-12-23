@@ -20,7 +20,6 @@ import com.starrocks.catalog.Column;
 import com.starrocks.common.Pair;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
-import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
@@ -42,6 +41,7 @@ import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
+import com.starrocks.thrift.TTableSchemaKey;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
@@ -55,24 +55,20 @@ import java.util.stream.Collectors;
 
 import static com.starrocks.sql.common.ErrorType.INTERNAL_ERROR;
 
-public class MetaScanNode extends ScanNode {
+public class MetaScanNode extends AbstractOlapTableScanNode {
     private static final Logger LOG = LogManager.getLogger(MetaScanNode.class);
     private final Map<Integer, Pair<String, Column>> columnIdToColumns;
-    private final OlapTable olapTable;
     private final List<Column> tableSchema;
     private final List<String> selectPartitionNames;
     private final List<TScanRangeLocations> result = Lists.newArrayList();
-    private long selectedIndexId = -1;
 
     public MetaScanNode(PlanNodeId id, TupleDescriptor desc, OlapTable olapTable,
                         Map<Integer, Pair<String, Column>> aggColumnIdToColumns, List<String> selectPartitionNames,
                         long selectedIndexId, ComputeResource computeResource) {
-        super(id, desc, "MetaScan");
-        this.olapTable = olapTable;
+        super(id, desc, "MetaScan", olapTable, selectedIndexId);
         this.tableSchema = olapTable.getBaseSchema();
         this.columnIdToColumns = aggColumnIdToColumns;
         this.selectPartitionNames = selectPartitionNames;
-        this.selectedIndexId = selectedIndexId;
         this.computeResource = computeResource;
     }
 
@@ -189,13 +185,10 @@ public class MetaScanNode extends ScanNode {
             columnsDesc.add(tColumn);
         }
         msg.meta_scan_node.setColumns(columnsDesc);
-        if (selectedIndexId != -1) {
-            MaterializedIndexMeta indexMeta = olapTable.getIndexMetaByIndexId(selectedIndexId);
-            if (indexMeta != null) {
-                long schemaId = indexMeta.getSchemaId();
-                msg.meta_scan_node.setSchema_id(schemaId);
-            }
-        }
+        TTableSchemaKey schemaKey = getSchemaKey();
+        msg.meta_scan_node.setSchema_key(schemaKey);
+        // also set schema id for legacy compatibility
+        msg.meta_scan_node.setSchema_id(schemaKey.getSchema_id());
 
         if (CollectionUtils.isNotEmpty(columnAccessPaths)) {
             msg.meta_scan_node.setColumn_access_paths(columnAccessPathToThrift());
