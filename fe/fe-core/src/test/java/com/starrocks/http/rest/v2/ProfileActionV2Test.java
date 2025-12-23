@@ -14,11 +14,14 @@
 
 package com.starrocks.http.rest.v2;
 
+import com.google.common.reflect.TypeToken;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.ProfileManager;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.http.StarRocksHttpTestCase;
+import com.starrocks.http.rest.ActionStatus;
 import com.starrocks.http.rest.RestBaseAction;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Frontend;
 import mockit.Expectations;
@@ -164,7 +167,12 @@ public class ProfileActionV2Test extends StarRocksHttpTestCase {
                 .build();
         Response response = networkClient.newCall(request).execute();
         String respStr = response.body().string();
-        Assertions.assertEquals(response.code(), 200);
-        Assertions.assertTrue(respStr.contains("Query ID: eaff21d2-3734-11ee-909f-8e20563011de"));
+        RestBaseResultV2<String> queryProfileResult = GsonUtils.GSON.fromJson(
+                respStr,
+                new TypeToken<RestBaseResultV2<String>>() {
+                }.getType());
+        Assertions.assertEquals(queryProfileResult.getStatus(), ActionStatus.OK);
+        Assertions.assertTrue(queryProfileResult.getResult().contains("Query ID: eaff21d2-3734-11ee-909f-8e20563011de"));
+        Assertions.assertFalse(queryProfileResult.getResult().contains("\"result\":"));
     }
 }

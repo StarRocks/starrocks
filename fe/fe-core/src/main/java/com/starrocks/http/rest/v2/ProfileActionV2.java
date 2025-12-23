@@ -75,6 +75,9 @@ public class ProfileActionV2 extends RestBaseAction {
                             profile,
                             new TypeToken<RestBaseResultV2<String>>() {
                             }.getType());
+                    if (queryProfileResult.getResult() == null) {
+                        continue;
+                    }
                     sendSuccessResponse(response, queryProfileResult.getResult(), request);
                     return;
                 }
