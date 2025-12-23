@@ -48,6 +48,14 @@ public:
 
     Status do_get_next(ChunkPtr* chunk) override;
 
+#ifdef BE_TEST
+    Status TEST_get_segments(const TabletSharedPtr& tablet, const Version& version,
+                             std::vector<SegmentSharedPtr>* segments,
+                             std::vector<SegmentMetaCollectOptions>* options_list) {
+        return _get_segments(tablet, version, segments, options_list);
+    }
+#endif
+
 private:
     TabletSharedPtr _tablet;
     TabletSchemaSPtr _tablet_schema;
@@ -59,8 +67,8 @@ private:
 
     Status _init_seg_meta_collecters(const OlapMetaReaderParams& read_params);
 
-    Status _get_segments(const TabletSharedPtr& tablet, const Version& version,
-                         std::vector<SegmentSharedPtr>* segments);
+    Status _get_segments(const TabletSharedPtr& tablet, const Version& version, std::vector<SegmentSharedPtr>* segments,
+                         std::vector<SegmentMetaCollectOptions>* options_list);
 };
 
 } // namespace starrocks

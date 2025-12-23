@@ -17,9 +17,6 @@ PROPERTIES (
 set partial_update_mode = "column";
 -- result:
 -- !result
-set cbo_enable_low_cardinality_optimize=false;
--- result:
--- !result
 insert into tab1 values (1, 'aaa', 'aaa', 'aaa'), 
 (2, 'aaa', 'aaa', 'aaa'), 
 (3, 'aaa', 'aaa', 'aaa'), 
