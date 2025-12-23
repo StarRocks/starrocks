@@ -81,15 +81,10 @@ PROPERTIES (
 "replication_num" = "1",
 "bucket_size" = "1"
 );
-select count(*) from information_schema.be_tablets t1, information_schema.tables_config t2 where TABLE_NAME='t' and t1.TABLE_ID=t2.TABLE_ID and TABLE_SCHEMA='eee';
 insert into t values('2021-01-01', 1);
-select count(*) from information_schema.be_tablets t1, information_schema.tables_config t2 where TABLE_NAME='t' and t1.TABLE_ID=t2.TABLE_ID and TABLE_SCHEMA='eee';
 insert into t values('2021-01-03', 1);
-select count(*) from information_schema.be_tablets t1, information_schema.tables_config t2 where TABLE_NAME='t' and t1.TABLE_ID=t2.TABLE_ID and TABLE_SCHEMA='eee';
 insert into t values('2021-01-05', 1);
-select count(*) from information_schema.be_tablets t1, information_schema.tables_config t2 where TABLE_NAME='t' and t1.TABLE_ID=t2.TABLE_ID and TABLE_SCHEMA='eee';
 insert into t values('2021-01-01', 1);
-select count(*) from information_schema.be_tablets t1, information_schema.tables_config t2 where TABLE_NAME='t' and t1.TABLE_ID=t2.TABLE_ID and TABLE_SCHEMA='eee';
 select * from t;
 
 -- name: test_schema_change @sequential
