@@ -66,8 +66,6 @@ private:
 
 std::tuple<JoinKeyConstructorUnaryType, JoinHashMapMethodUnaryType>
 JoinHashMapSelector::construct_key_and_determine_hash_map(RuntimeState* state, JoinHashTableItems* table_items) {
-    DCHECK_GT(table_items->row_count, 0);
-
     const auto key_constructor_type = _determine_key_constructor(state, table_items);
     dispatch_join_key_constructor_unary(key_constructor_type, [&]<JoinKeyConstructorUnaryType CT> {
         using KeyConstructor = typename JoinKeyConstructorUnaryTypeTraits<CT>::BuildType;
