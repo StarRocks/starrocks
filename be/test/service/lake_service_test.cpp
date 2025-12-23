@@ -2416,8 +2416,6 @@ TEST_F(LakeServiceTest, test_task_cleared_in_thread_pool_queue) {
     }
 }
 
-<<<<<<< HEAD
-=======
 TEST_F(LakeServiceTest, test_get_tablet_metadatas) {
     // 0. setup: create tablet with version 1, 2, 3, 4
     auto publish_version = [&](int64_t base_version, int64_t new_version) {
@@ -3081,6 +3079,4 @@ TEST_F(LakeServiceTest, test_get_txn_ids_string_priority) {
         EXPECT_EQ("99999", result);
     }
 }
-
->>>>>>> 120fde3585 ([BugFix] Fix publish_version log showing empty txn_ids with new FE (#66732))
 } // namespace starrocks
