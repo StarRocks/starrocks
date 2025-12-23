@@ -338,22 +338,31 @@ public class Log4jConfig extends XmlConfiguration {
     }
 
     private static void reconfig() throws IOException {
+
+        String xmlConfTemplate = generateActiveLog4jXmlConfig();
+
         SLF4JBridgeHandler.removeHandlersForRootLogger();
         SLF4JBridgeHandler.install();
 
         Level targetJulLevel = Level.INFO;
         if (sysLogLevel != null) {
-            if ("DEBUG".equalsIgnoreCase(sysLogLevel)) {
-                targetJulLevel = Level.FINE;
-            } else if ("WARN".equalsIgnoreCase(sysLogLevel)) {
-                targetJulLevel = Level.WARNING;
-            } else if ("ERROR".equalsIgnoreCase(sysLogLevel) || "FATAL".equalsIgnoreCase(sysLogLevel)) {
-                targetJulLevel = Level.SEVERE;
+            String normalizedLevel = sysLogLevel.toUpperCase();
+            if (DEBUG_LEVELS.contains(normalizedLevel)) {
+                if ("DEBUG".equals(normalizedLevel)) {
+                    targetJulLevel = Level.FINE;
+                } else if ("INFO".equals(normalizedLevel)) {
+                    targetJulLevel = Level.INFO;
+                } else if ("WARN".equals(normalizedLevel)) {
+                    targetJulLevel = Level.WARNING;
+                } else if ("ERROR".equals(normalizedLevel) || "FATAL".equals(normalizedLevel)) {
+                    targetJulLevel = Level.SEVERE;
+                }
+            } else {
+                targetJulLevel = Level.INFO;
             }
         }
         Logger.getLogger("").setLevel(targetJulLevel);
 
-        String xmlConfTemplate = generateActiveLog4jXmlConfig();
         if (!FeConstants.runningUnitTest && !FeConstants.isReplayFromQueryDump) {
             System.out.println("=====");
             System.out.println(xmlConfTemplate);

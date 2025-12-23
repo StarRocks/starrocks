@@ -155,18 +155,34 @@ public class Log4jConfigTest {
     @Test
     public void testJulLevelMapping() throws IOException {
 
-        Log4jConfig.updateLogging("DEBUG", null, null);
-        Assertions.assertEquals(java.util.logging.Level.FINE, java.util.logging.Logger.getLogger("").getLevel());
+        java.util.logging.Logger rootLogger = java.util.logging.Logger.getLogger("");
 
-        Log4jConfig.updateLogging("WARN", null, null);
-        Assertions.assertEquals(java.util.logging.Level.WARNING, java.util.logging.Logger.getLogger("").getLevel());
+        try {
+            Log4jConfig.updateLogging("DEBUG", null, null);
+            Assertions.assertEquals(java.util.logging.Level.FINE, rootLogger.getLevel());
 
-        Log4jConfig.updateLogging("ERROR", null, null);
-        Assertions.assertEquals(java.util.logging.Level.SEVERE, java.util.logging.Logger.getLogger("").getLevel());
+            Log4jConfig.updateLogging("WARN", null, null);
+            Assertions.assertEquals(java.util.logging.Level.WARNING, rootLogger.getLevel());
 
-        Log4jConfig.updateLogging("FATAL", null, null);
-        Assertions.assertEquals(java.util.logging.Level.SEVERE, java.util.logging.Logger.getLogger("").getLevel());
+            Log4jConfig.updateLogging("ERROR", null, null);
+            Assertions.assertEquals(java.util.logging.Level.SEVERE, rootLogger.getLevel());
 
-        Log4jConfig.updateLogging("INFO", null, null);
+            Log4jConfig.updateLogging("FATAL", null, null);
+            Assertions.assertEquals(java.util.logging.Level.SEVERE, rootLogger.getLevel());
+
+            Log4jConfig.updateLogging("INFO", null, null);
+            Assertions.assertEquals(java.util.logging.Level.INFO, rootLogger.getLevel());
+
+            try {
+                Log4jConfig.updateLogging("TRACE", null, null);
+                Assertions.fail("Expected IOException was not thrown for unsupported TRACE level");
+            } catch (IOException e) {
+                Assertions.assertTrue(e.getMessage().contains("sys_log_level config error"));
+            }
+            Assertions.assertEquals(java.util.logging.Level.INFO, rootLogger.getLevel());
+
+        } finally {
+            Log4jConfig.updateLogging("INFO", null, null);
+        }
     }
 }
