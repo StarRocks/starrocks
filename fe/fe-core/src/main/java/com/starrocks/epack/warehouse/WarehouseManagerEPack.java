@@ -40,6 +40,7 @@ import com.starrocks.sql.ast.warehouse.cngroup.AlterCnGroupStmt;
 import com.starrocks.sql.ast.warehouse.cngroup.CreateCnGroupStmt;
 import com.starrocks.sql.ast.warehouse.cngroup.DropCnGroupStmt;
 import com.starrocks.sql.ast.warehouse.cngroup.EnableDisableCnGroupStmt;
+import com.starrocks.system.BackendResourceStat;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.warehouse.Warehouse;
 import com.starrocks.warehouse.cngroup.CRAcquireContext;
@@ -346,8 +347,9 @@ public class WarehouseManagerEPack extends WarehouseManager {
         }
 
         String warehouseName = stmt.getWarehouseName();
+        LocalWarehouse warehouse;
         try (LockCloseable ignored = new LockCloseable(rwLock.writeLock())) {
-            LocalWarehouse warehouse = (LocalWarehouse) nameToWh.get(warehouseName);
+            warehouse = (LocalWarehouse) nameToWh.get(warehouseName);
             if (warehouse == null) {
                 if (stmt.isSetIfExists()) {
                     return;
@@ -370,6 +372,10 @@ public class WarehouseManagerEPack extends WarehouseManager {
 
             EditLog editLog = GlobalStateMgr.getCurrentState().getEditLog();
             editLog.logJsonObject(OperationType.OP_DROP_WAREHOUSE, new DropWarehouseLog(warehouseName));
+        }
+
+        if (!GlobalStateMgr.isCheckpointThread()) {
+            BackendResourceStat.getInstance().removeWarehouse(warehouse.getId());
         }
     }
 

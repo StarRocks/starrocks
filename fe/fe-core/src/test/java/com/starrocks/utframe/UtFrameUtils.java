@@ -151,6 +151,7 @@ import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TResultSinkType;
 import com.starrocks.thrift.TUniqueId;
+import com.starrocks.warehouse.DefaultWarehouse;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
@@ -185,6 +186,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
+import static com.starrocks.server.WarehouseManager.DEFAULT_WAREHOUSE_ID;
 import static com.starrocks.sql.plan.PlanTestBase.setPartitionStatistics;
 import static com.starrocks.utframe.StarRocksTestBase.isOutputTraceLog;
 
@@ -865,10 +867,26 @@ public class UtFrameUtils {
         }
 
         // mock be core stat
-        for (Map.Entry<Long, Integer> entry : replayDumpInfo.getNumOfHardwareCoresPerBe().entrySet()) {
-            BackendResourceStat.getInstance().setNumHardwareCoresOfBe(entry.getKey(), entry.getValue());
+        BackendResourceStat backendResourceStat = BackendResourceStat.getInstance();
+        if (!replayDumpInfo.getNumCoresPerWarehouse().isEmpty()) {
+            WarehouseManager warehouseManager = connectContext.getGlobalStateMgr().getWarehouseMgr();
+            long warehouseId = replayDumpInfo.getCurrentWarehouseId();
+            if (warehouseId != DEFAULT_WAREHOUSE_ID) {
+                warehouseManager.addWarehouse(
+                        new DefaultWarehouse(warehouseId, connectContext.getSessionVariable().getWarehouseName()));
+            }
+
+            replayDumpInfo.getNumCoresPerWarehouse().forEach((whId, numCoresPerBe)
+                    -> numCoresPerBe.forEach((beId, numCores) -> backendResourceStat.setNumCoresOfBe(whId, beId, numCores)));
+            replayDumpInfo.getCachedAvgNumCoresPerWarehouse().forEach(backendResourceStat::setCachedAvgNumCores);
+
+            backendResourceStat.setCachedAvgNumCores(replayDumpInfo.getCachedAvgNumCores());
+        } else {
+            replayDumpInfo.getNumCoresPerBe().forEach((beId, numCores) ->
+                    backendResourceStat.setNumCoresOfBe(DEFAULT_WAREHOUSE_ID, beId, numCores));
+            backendResourceStat.setCachedAvgNumCores(replayDumpInfo.getCachedAvgNumCores());
+            backendResourceStat.setCachedAvgNumCores(DEFAULT_WAREHOUSE_ID, replayDumpInfo.getCachedAvgNumCores());
         }
-        BackendResourceStat.getInstance().setCachedAvgNumHardwareCores(replayDumpInfo.getCachedAvgNumOfHardwareCores());
 
         // mock table row count
         for (Map.Entry<String, Map<String, Long>> entry : replayDumpInfo.getPartitionRowCountMap().entrySet()) {

@@ -18,11 +18,9 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
-import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.epack.warehouse.LocalWarehouse;
 import com.starrocks.epack.warehouse.WarehouseProperty;
-import com.starrocks.lake.StarOSAgent;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.qe.scheduler.SchedulerTestBase;
 import com.starrocks.qe.scheduler.SchedulerTestNoneDBBase;
@@ -33,9 +31,7 @@ import com.starrocks.qe.scheduler.slot.SlotSelectionStrategyV2;
 import com.starrocks.qe.scheduler.slot.SlotTracker;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
-import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.BackendResourceStat;
-import com.starrocks.system.ComputeNode;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
@@ -48,19 +44,18 @@ import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
+import static com.starrocks.server.WarehouseManager.DEFAULT_WAREHOUSE_ID;
+
 public class WarehouseSlotSelectionStrategyV2Test extends SchedulerTestBase {
 
-    private static int MAX_QUEUE_PENDING_LENGTH = 100;
-    private static int DEFAULT_QUEUE_WAITING_TIMEOUT_SECOND = 300;
-    private static int CPU_CORE_PER_BACKEND = 32;
+    private static final int MAX_QUEUE_PENDING_LENGTH = 100;
+    private static final int DEFAULT_QUEUE_WAITING_TIMEOUT_SECOND = 300;
+    private static final int CPU_CORE_PER_BACKEND = 32;
 
     private static LocalWarehouse warehouse;
     private static BaseSlotManager baseSlotManager;
@@ -87,39 +82,26 @@ public class WarehouseSlotSelectionStrategyV2Test extends SchedulerTestBase {
         backend2.setAlive(true);
         backend2.setCpuCores(16);
         backend2.setMemLimitBytes(16 * 1024 * 1024 * 1024L);
-        backend2.setWarehouseId(WarehouseManager.DEFAULT_WAREHOUSE_ID);
+        backend2.setWarehouseId(DEFAULT_WAREHOUSE_ID);
 
         backend3 = UtFrameUtils.addMockBackend(10003, "127.0.0.3", 9060);
         backend3.setAlive(true);
         backend3.setCpuCores(16);
         backend3.setMemLimitBytes(16 * 1024 * 1024 * 1024L);
 
-        backend2.setWarehouseId(WarehouseManager.DEFAULT_WAREHOUSE_ID);
+        backend2.setWarehouseId(DEFAULT_WAREHOUSE_ID);
 
         GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addBackend(backend2);
         GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addBackend(backend3);
 
-        new MockUp<StarOSAgent>() {
-            @Mock
-            public List<Long> getWorkersByWorkerGroup(long workerGroupId) throws StarRocksException {
-                return Lists.newArrayList(backend2.getId(), backend3.getId());
-            }
-        };
-        new MockUp<WarehouseManager>() {
-            @Mock
-            public List<ComputeNode> getAliveComputeNodes(long warehouseId) {
-                return new ArrayList<>(Arrays.asList(backend2, backend3));
-            }
-        };
-        new MockUp<BackendResourceStat>() {
-            @Mock
-            public static int getAvgNumHardwareCoresOfBe(Map<Long, Integer> numHardwareCoresPerBe) {
-                return CPU_CORE_PER_BACKEND;
-            }
-        };
+        BackendResourceStat.getInstance().setNumCoresOfBe(DEFAULT_WAREHOUSE_ID, backend2.getId(), CPU_CORE_PER_BACKEND);
+        BackendResourceStat.getInstance().setNumCoresOfBe(DEFAULT_WAREHOUSE_ID, backend3.getId(), CPU_CORE_PER_BACKEND);
+        BackendResourceStat.getInstance().setCachedAvgNumCores(CPU_CORE_PER_BACKEND);
+        BackendResourceStat.getInstance().setCachedAvgNumCores(DEFAULT_WAREHOUSE_ID, CPU_CORE_PER_BACKEND);
+
         SchedulerTestBase.prepareTables(connectContext);
         warehouse = (LocalWarehouse) GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(
-                WarehouseManager.DEFAULT_WAREHOUSE_ID);
+                DEFAULT_WAREHOUSE_ID);
         WarehouseProperty property = warehouse.getProperty();
         property.setEnableQueryQueue(true);
         property.setQueryQueueMaxQueuedQueries(MAX_QUEUE_PENDING_LENGTH);
@@ -147,14 +129,14 @@ public class WarehouseSlotSelectionStrategyV2Test extends SchedulerTestBase {
     }
 
     private static LogicalSlot generateSlot(int numSlots) {
-        return new LogicalSlot(UUIDUtil.genTUniqueId(), "fe", WarehouseManager.DEFAULT_WAREHOUSE_ID,
+        return new LogicalSlot(UUIDUtil.genTUniqueId(), "fe", DEFAULT_WAREHOUSE_ID,
                 LogicalSlot.ABSENT_GROUP_ID, numSlots, 0, 0, 0, 0, 0);
     }
 
     @Test
     public void testHeadLineBlocking1() {
-        QueryQueueOptions opts = QueryQueueOptions.createFromEnv(WarehouseManager.DEFAULT_WAREHOUSE_ID);
-        SlotSelectionStrategyV2 strategy = new SlotSelectionStrategyV2(baseSlotManager, WarehouseManager.DEFAULT_WAREHOUSE_ID);
+        QueryQueueOptions opts = QueryQueueOptions.createFromEnv(DEFAULT_WAREHOUSE_ID);
+        SlotSelectionStrategyV2 strategy = new SlotSelectionStrategyV2(baseSlotManager, DEFAULT_WAREHOUSE_ID);
         SlotTracker slotTracker = new SlotTracker(baseSlotManager, ImmutableList.of(strategy));
 
         LogicalSlot slot1 = generateSlot(opts.v2().getTotalSlots() / 2 + 1);
@@ -200,8 +182,8 @@ public class WarehouseSlotSelectionStrategyV2Test extends SchedulerTestBase {
 
     @Test
     public void testHeadLineBlocking2() {
-        QueryQueueOptions opts = QueryQueueOptions.createFromEnv(WarehouseManager.DEFAULT_WAREHOUSE_ID);
-        SlotSelectionStrategyV2 strategy = new SlotSelectionStrategyV2(baseSlotManager, WarehouseManager.DEFAULT_WAREHOUSE_ID);
+        QueryQueueOptions opts = QueryQueueOptions.createFromEnv(DEFAULT_WAREHOUSE_ID);
+        SlotSelectionStrategyV2 strategy = new SlotSelectionStrategyV2(baseSlotManager, DEFAULT_WAREHOUSE_ID);
         SlotTracker slotTracker = new SlotTracker(baseSlotManager, ImmutableList.of(strategy));
 
         LogicalSlot slot1 = generateSlot(opts.v2().getTotalSlots() / 2 + 1);
@@ -251,8 +233,8 @@ public class WarehouseSlotSelectionStrategyV2Test extends SchedulerTestBase {
 
     @Test
     public void testConcurrencyLimit1() {
-        QueryQueueOptions opts = QueryQueueOptions.createFromEnv(WarehouseManager.DEFAULT_WAREHOUSE_ID);
-        SlotSelectionStrategyV2 strategy = new SlotSelectionStrategyV2(baseSlotManager, WarehouseManager.DEFAULT_WAREHOUSE_ID);
+        QueryQueueOptions opts = QueryQueueOptions.createFromEnv(DEFAULT_WAREHOUSE_ID);
+        SlotSelectionStrategyV2 strategy = new SlotSelectionStrategyV2(baseSlotManager, DEFAULT_WAREHOUSE_ID);
         SlotTracker slotTracker = new SlotTracker(baseSlotManager, ImmutableList.of(strategy));
 
         WarehouseProperty warehouseProperty = warehouse.getProperty();
@@ -280,7 +262,7 @@ public class WarehouseSlotSelectionStrategyV2Test extends SchedulerTestBase {
                     .collect(Collectors.toList());
             smallSlots.forEach(slotTracker::requireSlot);
 
-            for (int numPeakedSmallSlots = 0; numPeakedSmallSlots < 10;) {
+            for (int numPeakedSmallSlots = 0; numPeakedSmallSlots < 10; ) {
                 List<LogicalSlot> peakSlots = strategy.peakSlotsToAllocate(slotTracker);
                 numPeakedSmallSlots += peakSlots.size();
                 peakSlots.forEach(slotTracker::allocateSlot);
@@ -312,8 +294,8 @@ public class WarehouseSlotSelectionStrategyV2Test extends SchedulerTestBase {
 
     @Test
     public void testConcurrencyLimit2() {
-        QueryQueueOptions opts = QueryQueueOptions.createFromEnv(WarehouseManager.DEFAULT_WAREHOUSE_ID);
-        SlotSelectionStrategyV2 strategy = new SlotSelectionStrategyV2(baseSlotManager, WarehouseManager.DEFAULT_WAREHOUSE_ID);
+        QueryQueueOptions opts = QueryQueueOptions.createFromEnv(DEFAULT_WAREHOUSE_ID);
+        SlotSelectionStrategyV2 strategy = new SlotSelectionStrategyV2(baseSlotManager, DEFAULT_WAREHOUSE_ID);
         SlotTracker slotTracker = new SlotTracker(baseSlotManager, ImmutableList.of(strategy));
 
         WarehouseProperty warehouseProperty = warehouse.getProperty();

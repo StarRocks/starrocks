@@ -143,11 +143,10 @@ public class LoadLoadingTask extends LoadTask {
     public void prepare() throws StarRocksException {
         loadPlanner = new LoadPlanner(callback.getCallbackId(), loadId, txnId, db.getId(), table, strictMode,
                 timezone, timeoutS, createTimestamp, partialUpdate, context, sessionVariables, execMemLimit, execMemLimit,
-                brokerDesc, fileGroups, fileStatusList, fileNum);
+                brokerDesc, fileGroups, fileStatusList, fileNum, computeResource);
         loadPlanner.setPartialUpdateMode(partialUpdateMode);
         loadPlanner.setMergeConditionStr(mergeConditionStr);
         loadPlanner.setJsonOptions(jsonOptions);
-        loadPlanner.setComputeResource(computeResource);
         loadPlanner.plan();
     }
 

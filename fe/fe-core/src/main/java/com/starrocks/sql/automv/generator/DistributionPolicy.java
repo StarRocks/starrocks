@@ -43,7 +43,7 @@ public class DistributionPolicy {
         int harmonyMean = (int) (tablePieces.size() / harmonyDivider);
 
         int beNum = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getTotalBackendNumber();
-        int coreNumPerBe = BackendResourceStat.getInstance().getAvgNumHardwareCoresOfBe();
+        int coreNumPerBe = BackendResourceStat.getInstance().getAvgNumCoresOfBe();
         int tabletNum = beNum * coreNumPerBe * 4;
 
         int bucketNum = Math.max(harmonyMean, 64);

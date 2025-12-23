@@ -63,6 +63,8 @@ import java.util.Set;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collectors;
 
+import static com.starrocks.server.WarehouseManager.DEFAULT_WAREHOUSE_ID;
+
 // WorkGroupMgr is employed by GlobalStateMgr to manage WorkGroup in FE.
 public class ResourceGroupMgr implements Writable {
     private static final Logger LOG = LogManager.getLogger(ResourceGroupMgr.class);
@@ -723,7 +725,7 @@ public class ResourceGroupMgr implements Writable {
 
             // Create default resource groups only when there are BEs.
             // Otherwise, we cannot get the number of cores of BE as `cpu_weight`.
-            if (BackendResourceStat.getInstance().getNumBes() <= 0) {
+            if (BackendResourceStat.getInstance().getNumBes(DEFAULT_WAREHOUSE_ID) <= 0) {
                 return;
             }
 
@@ -732,7 +734,7 @@ public class ResourceGroupMgr implements Writable {
                 return;
             }
 
-            final int avgCpuCores = BackendResourceStat.getInstance().getAvgNumHardwareCoresOfBe();
+            final int avgCpuCores = BackendResourceStat.getInstance().getAvgNumCoresOfBe(DEFAULT_WAREHOUSE_ID);
 
             Map<String, String> defaultWgProperties = ImmutableMap.of(
                     ResourceGroup.CPU_WEIGHT, Integer.toString(avgCpuCores),

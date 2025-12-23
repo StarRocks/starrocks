@@ -14,6 +14,7 @@
 
 package com.starrocks.sql;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
@@ -50,6 +51,7 @@ import com.starrocks.planner.SlotDescriptor;
 import com.starrocks.planner.StreamLoadScanNode;
 import com.starrocks.planner.TupleDescriptor;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AggregateType;
@@ -134,7 +136,7 @@ public class LoadPlanner {
     TRoutineLoadTask routineLoadTask;
     private TPartialUpdateMode partialUpdateMode = TPartialUpdateMode.ROW_MODE;
 
-    private ComputeResource computeResource = WarehouseManager.DEFAULT_RESOURCE;
+    private final ComputeResource computeResource;
 
     private LoadJob.JSONOptions jsonOptions = new LoadJob.JSONOptions();
 
@@ -148,12 +150,24 @@ public class LoadPlanner {
     private ImmutableMap<String, String> batchWriteParameters;
     private Set<Long> batchWriteBackendIds;
 
+    @VisibleForTesting
     public LoadPlanner(long loadJobId, TUniqueId loadId, long txnId, long dbId, OlapTable destTable,
                        boolean strictMode, String timezone, long timeoutS,
                        long startTime, boolean partialUpdate, ConnectContext context,
                        Map<String, String> sessionVariables, long loadMemLimit, long execMemLimit,
                        BrokerDesc brokerDesc, List<BrokerFileGroup> brokerFileGroups,
                        List<List<TBrokerFileStatus>> fileStatusesList, int filesAdded) {
+        this(loadJobId, loadId, txnId, dbId, destTable, strictMode, timezone, timeoutS,
+                startTime, partialUpdate, context, sessionVariables, loadMemLimit, execMemLimit,
+                brokerDesc, brokerFileGroups, fileStatusesList, filesAdded, WarehouseManager.DEFAULT_RESOURCE);
+    }
+
+    public LoadPlanner(long loadJobId, TUniqueId loadId, long txnId, long dbId, OlapTable destTable,
+                       boolean strictMode, String timezone, long timeoutS,
+                       long startTime, boolean partialUpdate, ConnectContext context,
+                       Map<String, String> sessionVariables, long loadMemLimit, long execMemLimit,
+                       BrokerDesc brokerDesc, List<BrokerFileGroup> brokerFileGroups,
+                       List<List<TBrokerFileStatus>> fileStatusesList, int filesAdded, ComputeResource computeResource) {
         this.loadJobId = loadJobId;
         this.loadId = loadId;
         this.txnId = txnId;
@@ -168,8 +182,10 @@ public class LoadPlanner {
         } else {
             this.context = new ConnectContext();
         }
-        if (this.context.getSessionVariable().getEnableAdaptiveSinkDop()) {
-            this.parallelInstanceNum = this.context.getSessionVariable().getSinkDegreeOfParallelism();
+        this.computeResource = computeResource;
+        SessionVariable sv = this.context.getSessionVariable();
+        if (sv.getEnableAdaptiveSinkDop()) {
+            this.parallelInstanceNum = sv.getSinkDegreeOfParallelism(this.computeResource.getWarehouseId());
         } else {
             this.parallelInstanceNum = Config.load_parallel_instance_num;
         }
@@ -234,15 +250,10 @@ public class LoadPlanner {
         this.timeoutS = timeoutS;
         this.etlJobType = EtlJobType.STREAM_LOAD;
         this.context.getSessionVariable().setEnablePipelineEngine(true);
-        this.computeResource = streamLoadInfo.getComputeResource();
     }
 
     public long getWarehouseId() {
         return computeResource.getWarehouseId();
-    }
-
-    public void setComputeResource(ComputeResource computeResource) {
-        this.computeResource = computeResource;
     }
 
     public ComputeResource getComputeResource() {

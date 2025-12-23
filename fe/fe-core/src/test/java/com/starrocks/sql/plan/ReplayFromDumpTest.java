@@ -1161,4 +1161,37 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
                 "  |  group by: 977: io_id, 984: org_id\n" +
                 "  |  having: (995: row_hit IS NOT NULL) OR (998: row_hit IS NOT NULL)");
     }
+
+    @Test
+    public void testReplayBeCoreStat() throws Exception {
+        {
+            String dumpString = getDumpInfoFromFile("query_dump/test_replay_be_core_stat_v1");
+            QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(dumpString);
+            Pair<QueryDumpInfo, String> replayPair =
+                    getPlanFragment(dumpString, queryDumpInfo.getSessionVariable(), TExplainLevel.NORMAL);
+            queryDumpInfo = replayPair.first;
+            int dop = queryDumpInfo.getSessionVariable().getDegreeOfParallelism(connectContext.getCurrentWarehouseId());
+            Assertions.assertEquals(6, dop);
+        }
+
+        {
+            String dumpString = getDumpInfoFromFile("query_dump/test_replay_be_core_stat_v2_0");
+            QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(dumpString);
+            Pair<QueryDumpInfo, String> replayPair =
+                    getPlanFragment(dumpString, queryDumpInfo.getSessionVariable(), TExplainLevel.NORMAL);
+            queryDumpInfo = replayPair.first;
+            int dop = queryDumpInfo.getSessionVariable().getDegreeOfParallelism(connectContext.getCurrentWarehouseId());
+            Assertions.assertEquals(4, dop);
+        }
+
+        {
+            String dumpString = getDumpInfoFromFile("query_dump/test_replay_be_core_stat_v2_1");
+            QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(dumpString);
+            Pair<QueryDumpInfo, String> replayPair =
+                    getPlanFragment(dumpString, queryDumpInfo.getSessionVariable(), TExplainLevel.NORMAL);
+            queryDumpInfo = replayPair.first;
+            int dop = queryDumpInfo.getSessionVariable().getDegreeOfParallelism(connectContext.getCurrentWarehouseId());
+            Assertions.assertEquals(8, dop);
+        }
+    }
 }

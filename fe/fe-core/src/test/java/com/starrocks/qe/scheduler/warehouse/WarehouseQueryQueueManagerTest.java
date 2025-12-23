@@ -23,7 +23,6 @@ import com.starrocks.epack.warehouse.LocalWarehouse;
 import com.starrocks.epack.warehouse.WarehouseProperty;
 import com.starrocks.epack.warehouse.WarehouseSlotManager;
 import com.starrocks.epack.warehouse.WarehouseSlotTracker;
-import com.starrocks.lake.StarOSAgent;
 import com.starrocks.metric.Metric;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.metric.MetricVisitor;
@@ -41,7 +40,6 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.BackendResourceStat;
-import com.starrocks.system.ComputeNode;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
@@ -54,8 +52,6 @@ import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -64,14 +60,15 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import static com.starrocks.server.WarehouseManager.DEFAULT_WAREHOUSE_ID;
 import static org.assertj.core.api.AssertionsForClassTypes.assertThat;
 import static org.junit.Assert.assertEquals;
 
 public class WarehouseQueryQueueManagerTest extends SchedulerTestBase {
 
-    private static int MAX_QUEUE_PENDING_LENGTH = 4;
-    private static int DEFAULT_QUEUE_WAITING_TIMEOUT_SECOND = 30;
-    private static int CPU_CORE_PER_BACKEND = 32;
+    private static final int MAX_QUEUE_PENDING_LENGTH = 4;
+    private static final int DEFAULT_QUEUE_WAITING_TIMEOUT_SECOND = 30;
+    private static final int CPU_CORE_PER_BACKEND = 32;
 
     @BeforeClass
     public static void beforeClass() throws Exception {
@@ -107,24 +104,11 @@ public class WarehouseQueryQueueManagerTest extends SchedulerTestBase {
         GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addBackend(backend2);
         GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addBackend(backend3);
 
-        new MockUp<StarOSAgent>() {
-            @Mock
-            public List<Long> getWorkersByWorkerGroup(long workerGroupId) throws StarRocksException {
-                return Lists.newArrayList(backend2.getId(), backend3.getId());
-            }
-        };
-        new MockUp<WarehouseManager>() {
-            @Mock
-            public List<ComputeNode> getAliveComputeNodes(long warehouseId) {
-                return new ArrayList<>(Arrays.asList(backend2, backend3));
-            }
-        };
-        new MockUp<BackendResourceStat>() {
-            @Mock
-            public static int getAvgNumHardwareCoresOfBe(Map<Long, Integer> numHardwareCoresPerBe) {
-                return CPU_CORE_PER_BACKEND;
-            }
-        };
+        BackendResourceStat.getInstance().setNumCoresOfBe(DEFAULT_WAREHOUSE_ID, backend2.getId(), CPU_CORE_PER_BACKEND);
+        BackendResourceStat.getInstance().setNumCoresOfBe(DEFAULT_WAREHOUSE_ID, backend3.getId(), CPU_CORE_PER_BACKEND);
+        BackendResourceStat.getInstance().setCachedAvgNumCores(CPU_CORE_PER_BACKEND);
+        BackendResourceStat.getInstance().setCachedAvgNumCores(DEFAULT_WAREHOUSE_ID, CPU_CORE_PER_BACKEND);
+
         SchedulerTestBase.prepareTables(connectContext);
         LocalWarehouse warehouse = (LocalWarehouse) GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(
                 WarehouseManager.DEFAULT_WAREHOUSE_ID);
@@ -220,7 +204,12 @@ public class WarehouseQueryQueueManagerTest extends SchedulerTestBase {
 
         new MockUp<BackendResourceStat>() {
             @Mock
-            public static int getAvgNumHardwareCoresOfBe(Map<Long, Integer> numHardwareCoresPerBe) {
+            public int getAvgNumCoresOfBe(long warehouseId) {
+                return 1;
+            }
+
+            @Mock
+            public int getAvgNumCoresOfBe() {
                 return 1;
             }
         };
