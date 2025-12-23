@@ -308,4 +308,48 @@ void ChunksSorterFullSort::_reset() {
     _merged_runs.clear();
 }
 
+size_t ChunksSorterFullSort::_reserved_bytes(const ChunkPtr& chunk) {
+    if (chunk) {
+        return chunk->memory_usage() + (_unsorted_chunk != nullptr ? _unsorted_chunk->memory_usage() * 2 : 0);
+    }
+    return _unsorted_chunk != nullptr ? _unsorted_chunk->memory_usage() * 2 : 0;
+}
+
+size_t ChunksSorterFullSort::_get_revocable_mem_bytes() {
+    size_t revocable_mem_bytes = 0;
+    if (auto unsorted_chunk = _unsorted_chunk) {
+        revocable_mem_bytes += unsorted_chunk->memory_usage();
+    }
+
+    for (const auto& chunk : _sorted_chunks) {
+        if (chunk) {
+            revocable_mem_bytes += chunk->memory_usage();
+        }
+    }
+
+    return revocable_mem_bytes;
+}
+std::function<StatusOr<ChunkPtr>()> ChunksSorterFullSort::_get_chunk_iterator() {
+    return [this]() -> StatusOr<ChunkPtr> {
+        if (_unsorted_chunk != nullptr) {
+            return std::move(_unsorted_chunk);
+        }
+
+        if (_process_staging_unsorted_chunk_idx != _staging_unsorted_chunks.size()) {
+            return std::move(_staging_unsorted_chunks[_process_staging_unsorted_chunk_idx++]);
+        }
+        if (_process_early_materialized_chunks_idx != _early_materialized_chunks.size()) {
+            return _late_materialize(std::move(_early_materialized_chunks[_process_early_materialized_chunks_idx++]));
+        }
+        if (_process_sorted_chunk_idx != _sorted_chunks.size()) {
+            return std::move(_sorted_chunks[_process_sorted_chunk_idx++]);
+        }
+        return Status::EndOfFile("No more chunk to restore");
+    };
+}
+
+bool ChunksSorterFullSort::_have_no_staging_data() const {
+    return _sorted_chunks.empty() && _unsorted_chunk == nullptr && _staging_unsorted_chunks.empty();
+}
+
 } // namespace starrocks

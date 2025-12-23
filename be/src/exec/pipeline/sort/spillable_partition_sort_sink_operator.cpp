@@ -111,9 +111,15 @@ Status SpillablePartitionSortSinkOperator::set_finished(RuntimeState* state) {
 OperatorPtr SpillablePartitionSortSinkOperatorFactory::create(int32_t degree_of_parallelism, int32_t driver_sequence) {
     std::shared_ptr<ChunksSorter> chunks_sorter;
 
-    chunks_sorter = std::make_unique<SpillableChunksSorterFullSort>(
-            runtime_state(), &(_sort_exec_exprs.lhs_ordering_expr_ctxs()), &_is_asc_order, &_is_null_first, _sort_keys,
-            _max_buffered_rows, _max_buffered_bytes, _early_materialized_slots);
+    if (_limit > 0) {
+        chunks_sorter = std::make_unique<SpillableChunksSorterTopN>(
+                runtime_state(), &(_sort_exec_exprs.lhs_ordering_expr_ctxs()), &_is_asc_order, &_is_null_first,
+                _sort_keys, 0, _limit + _offset);
+    } else {
+        chunks_sorter = std::make_unique<SpillableChunksSorterFullSort>(
+                runtime_state(), &(_sort_exec_exprs.lhs_ordering_expr_ctxs()), &_is_asc_order, &_is_null_first,
+                _sort_keys, _max_buffered_rows, _max_buffered_bytes, _early_materialized_slots);
+    }
 
     auto spiller = _spill_factory->create(*_spill_options);
     auto spill_channel = _spill_channel_factory->get_or_create(driver_sequence);
