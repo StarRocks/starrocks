@@ -7,6 +7,10 @@ import Solution3 from '../_assets/best_practices/_auth_solution_3.mdx'
 
 # 认证与授权
 
+import AuthConcept from '../_assets/best_practices/auth_concept.mdx'
+import AuthFeature from '../_assets/best_practices/auth_feature.mdx'
+import AuthSeeAlso from '../_assets/best_practices/auth_see_also.mdx'
+
 本文旨在为开发您自己的身份验证和授权工作流提供一个连贯的最佳实践指南。
 
 有关以下涉及的各个操作的详细说明，请参阅[另请参阅](#另请参阅)中的链接。
@@ -68,28 +72,7 @@ LDAP 可以用作：
 - **身份验证**来源（验证用户名和密码）。
 - 用于访问控制的**组信息**提供者。
 
-### UNIX Groups
-
-出于安全或隔离的原因，有时用户会在本地（主机操作系统上）镜像 LDAP 组，以避免与外部 LDAP 服务器直接通信。这些本地 UNIX 组可用于身份验证或访问控制执行。
-
-### OAuth、OIDC 和 JWT
-
-:::tip
-
-**术语解释**
-
-- **ID Token**: 身份证明（我是我。）
-- **Access Token**: 访问某些资源的权限证明（我可以做某些事情。）
-- **OAuth 2.0**: 提供访问令牌的授权框架。
-- **OIDC**: OAuth 之上的身份验证层。提供 ID 和访问令牌。
-- **JWT**: 令牌格式。同时被 OAuth 和 OIDC 使用。
-
-:::
-
-**实际应用：**
-
-- **基于 OAuth 的登录**：重定向到外部登录页面（例如，Google），然后返回集群。需要提前设置浏览器访问和重定向 URL。
-- **基于 JWT 的登录**：用户直接将令牌传递给集群，这需要提前设置公钥或端点。
+<AuthConcept />
 
 ## 功能
 
@@ -105,17 +88,22 @@ LDAP 可以用作：
 
 ![Authentication and Authorization](../_assets/best_practices/auth_feature.png)
 
-从功能的角度来看：
-
-1. **身份验证提供者** – 支持的协议：本地用户、LDAP、OIDC 和 OAuth 2.0。
-2. **Group Provider** – 支持的来源：LDAP、操作系统和基于文件的配置。
-3. **授权系统** – 支持的系统：内置 RBAC & IBAC 和 Apache Ranger。
+<AuthFeature />
 
 ### 身份验证
 
 支持的身份验证模式比较：
 
+<<<<<<< HEAD
 <AuthCompare />
+=======
+| 方法       | CREATE USER（本地用户）                                                                                                        | CREATE SECURITY INTEGRATION（基于会话的虚拟用户）                                                               |
+| -------- | ------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------- |
+| 描述       | 在集群中手动创建用户，可与外部认证系统关联。该用户在集群中以显式方式存在。                                                                                    | 定义一个外部认证集成。集群本身不保存任何用户信息。可选地结合 Group Provider 使用，用于定义允许访问的用户组。                                |
+| 登录过程     | 用户必须事先在集群中创建。在登录时，StarRocks 会通过自身或配置的外部认证系统（如 LDAP）对用户进行认证。只有预先创建的用户才能登录。                                            | 用户登录时，StarRocks 通过外部身份认证系统验证用户身份。若验证成功，系统会在内部创建一个临时的、会话级别的“虚拟用户”，该用户在会话结束后即被销毁。                      |
+| 授权过程     | 因为用户在集群中是持久存在的，所以可以提前通过本地授权系统或 Apache Ranger 为其分配权限。                                                                     | 虽然用户不会在集群中持久化，但可以预先定义角色与用户组之间的映射关系。用户登录后，系统会根据其所属用户组自动分配角色，从而实现基于角色的访问控制（RBAC）。Apache Ranger 也可同时使用。 |
+| 优缺点及适用场景 | <ul><li>**优点**：灵活性高——同时支持本地和外部授权系统。</li><li>**缺点**：需要手动创建用户，维护成本较高。</li><li>**适用场景**：适用于用户规模较小或由集群自身管理访问控制的场景。</li></ul> | <ul><li>**优点**：配置简便，仅需设置外部认证和允许访问的用户组。</li><li>**适用场景**：适用于用户规模较大、采用角色-组映射管理权限的场景。</li></ul>         |
+>>>>>>> 02355b9da9 ([Doc] 3.5 Auth Snippet Management (#67155))
 
 这些身份验证模式可以共存。当用户尝试登录时：
 
@@ -126,21 +114,10 @@ LDAP 可以用作：
 
 #### 选项一：使用外部身份验证系统创建本地用户
 
-例如，您可以使用以下语法创建一个使用 OAuth2.0 认证的本地用户：
+例如，您可以使用以下语法创建一个使用 LDAP 认证的本地用户：
 
 ```SQL
-CREATE USER <username> IDENTIFIED WITH authentication_oauth2 AS 
-'{
-  "auth_server_url": "<auth_server_url>",
-  "token_server_url": "<token_server_url>",
-  "client_id": "<client_id>",
-  "client_secret": "<client_secret>",
-  "redirect_url": "<redirect_url>",
-  "jwks_url": "<jwks_url>",
-  "principal_field": "<principal_field>",
-  "required_issuer": "<required_issuer>",
-  "required_audience": "<required_audience>"
-}';
+CREATE USER <username> IDENTIFIED WITH authentication_ldap_simple AS 'uid=tom,ou=company,dc=example,dc=com';
 ```
 
 然后，您可以使用 `GRANT` 语句授予权限或角色给用户，或将授权委托给外部系统，如 Apache Ranger。
@@ -152,16 +129,16 @@ CREATE USER <username> IDENTIFIED WITH authentication_oauth2 AS
 ```SQL
 CREATE SECURITY INTEGRATION <security_integration_name> 
 PROPERTIES (
-    "type" = "oauth2",
-    "auth_server_url" = "",
-    "token_server_url" = "",
-    "client_id" = "",
-    "client_secret" = "",
-    "redirect_url" = "",
-    "jwks_url" = "",
-    "principal_field" = "",
-    "required_issuer" = "",
-    "required_audience" = ""
+    "type" = "authentication_ldap_simple",
+    "authentication_ldap_simple_server_host" = "",
+    "authentication_ldap_simple_server_port" = "",
+    "authentication_ldap_simple_bind_base_dn" = "",
+    "authentication_ldap_simple_user_search_attr" = ""
+    "authentication_ldap_simple_bind_root_dn" = "",
+    "authentication_ldap_simple_bind_root_pwd" = "",
+    "authentication_ldap_simple_ssl_conn_allow_insecure" = "{true | false}",
+    "authentication_ldap_simple_ssl_conn_trust_store_path" = "",
+    "authentication_ldap_simple_ssl_conn_trust_store_pwd" = "",
     "comment" = ""
 );
 ```
@@ -312,15 +289,4 @@ Apache Ranger 可以作为一个完整的解决方案本身使用，也可以与
 
 <Solution3 />
 
-## 另请参阅
-
-- **认证**
-  - [Native Authentication](../administration/user_privs/authentication/native_authentication.md)
-  - [Security Integration](../administration/user_privs/authentication/security_integration.md)
-  - [LDAP Authentication](../administration/user_privs/authentication/ldap_authentication.md)
-  - [OAuth 2.0 Authentication](../administration/user_privs/authentication/oauth2_authentication.md)
-  - [JSON Web Token Authentication](../administration/user_privs/authentication/jwt_authentication.md)
-- [**Group Provider**](../administration/user_privs/group_provider.md)
-- **授权**
-  - [Native Authorization](../administration/user_privs/authorization/User_privilege.md)
-  - [Apache Ranger Plugin](../administration/user_privs/authorization/ranger_plugin.md)
+<AuthSeeAlso />

@@ -7,6 +7,10 @@ import Solution3 from '../_assets/best_practices/_auth_solution_3.mdx'
 
 # 認証と授権
 
+import AuthConcept from '../_assets/best_practices/auth_concept.mdx'
+import AuthFeature from '../_assets/best_practices/auth_feature.mdx'
+import AuthSeeAlso from '../_assets/best_practices/auth_see_also.mdx'
+
 このトピックは、一貫的の認証と授権のワークフローを開発するためのベストプラクティスを提供することを目的としています。
 
 以下に関わる各操作の詳細な手順については、[関連項目](#関連項目) のリンクを参照してください。
@@ -68,28 +72,7 @@ LDAP は以下のように使用できます。
 - **認証**ソースとして（ユーザー名とパスワードを検証するため）。
 - アクセス制御のための**グループ情報**プロバイダーとして。
 
-### UNIX グループ
-
-時には、ユーザーがセキュリティや分離の理由で LDAP グループをローカル（ホスト OS 上）でミラーリングし、外部 LDAP サーバーとの直接通信を避けることがあります。これらのローカル UNIX グループは、認証やアクセス制御の強制に使用できます。
-
-### OAuth, OIDC, and JWT
-
-:::tip
-
-**用語の簡単な説明**
-
-- **ID トークン**: アイデンティティの証明（私は私です。）
-- **アクセス トークン**: 特定のリソースにアクセスする権限の証明（私は特定のことができます。）
-- **OAuth 2.0**: アクセストークンを提供する授権フレームワーク。
-- **OIDC**: OAuth 上の認証レイヤー。ID とアクセス トークンを提供します。
-- **JWT**: トークン形式。OAuth と OIDC の両方で使用されます。
-
-:::
-
-**実際の使用法:**
-
-- **OAuth ベースのログイン**: 外部のログインページ（例: Google）にリダイレクトし、その後クラスターに戻ります。事前にブラウザアクセスとリダイレクト URL の設定が必要です。
-- **JWT ベースのログイン**: ユーザーはトークンを直接クラスターに渡し、事前に公開鍵またはエンドポイントの設定が必要です。
+<AuthConcept />
 
 ## 機能
 
@@ -105,17 +88,22 @@ LDAP は以下のように使用できます。
 
 ![Authentication and Authorization](../_assets/best_practices/auth_feature.png)
 
-機能の観点から:
-
-1. **認証プロバイダー** – サポートされているプロトコル: ネイティブユーザー、LDAP、OIDC、OAuth 2.0
-2. **グループプロバイダー** – サポートされているソース: LDAP、オペレーティングシステム、ファイルベースの設定
-3. **授権システム** – サポートされているシステム: ネイティブ RBAC と IBAC、そして Apache Ranger
+<AuthFeature />
 
 ### 認証
 
 サポートされている認証モードの比較:
 
+<<<<<<< HEAD
 <AuthCompare />
+=======
+| 方式                    | CREATE USER (ネイティブユーザー)                          | CREATE SECURITY INTEGRATION (セッションベースのダミーユーザー)    |
+| ---------------------- | ------------------------------------------------------ | ------------------------------------------------------------ |
+| 説明                    | クラスター内で手動でユーザーを作成します。外部認証システムと関連付けることができます。ユーザーはクラスター内に明示的に存在します。 | 外部認証統合を定義します。クラスターはユーザー情報を保存しません。オプションで Group Provider と組み合わせて許可されたユーザーを定義できます。 |
+| ログインプロセス          | ユーザーはクラスター内で事前に作成されている必要があります。ログイン時に、ユーザーは StarRocks または設定された外部認証システム（例: LDAP）を介して認証されます。事前に作成されたユーザーのみがログインできます。 | ログイン時に、StarRocks は外部のアイデンティティシステムを使用してユーザーを認証します。成功すると、一時的なセッションスコープの「ダミーユーザー」が内部で作成されます。このユーザーはセッション終了後に破棄されます。 |
+| 認証プロセス              | ユーザーがクラスター内に存在するため、ネイティブの授権システムまたは Apache Ranger を使用して事前に権限を割り当てることができます。 | ユーザーは永続しませんが、ロールとグループのマッピングを事前に定義できます。ユーザーがログインすると、システムはグループに基づいてロールを割り当て、RBAC を可能にします。Apache Ranger も並行して使用できます。 |
+| メリットとデメリット、使用例 | <ul><li>**メリット**: 完全な柔軟性—ネイティブおよび外部の授権システムの両方をサポートします。</li><li>**デメリット**: ユーザーの作成には手動の手間がかかり、面倒な場合があります。</li><li>**推奨されるケース**: 小規模なユーザーベースやクラスターがアクセス制御を処理するケースに推奨されます。</li></ul> | <ul><li>**メリット**: 設定が簡単で、外部認証の設定と許可されたグループの定義のみが必要です。</li><li>**推奨されるケース**: ロールとグループのマッピングを持つ大規模なユーザーベースに理想的です。</li></ul> |
+>>>>>>> 02355b9da9 ([Doc] 3.5 Auth Snippet Management (#67155))
 
 これらの認証モードは共存できます。ユーザーがログインを試みるとき:
 
@@ -126,21 +114,10 @@ LDAP は以下のように使用できます。
 
 #### オプション 1: 外部認証システムを使用したネイティブユーザーの作成
 
-たとえば、OAuth2.0 を使用してネイティブユーザーを作成するには、次の構文を使用できます。
+たとえば、LDAP を使用してネイティブユーザーを作成するには、次の構文を使用できます。
 
 ```SQL
-CREATE USER <username> IDENTIFIED WITH authentication_oauth2 AS 
-'{
-  "auth_server_url": "<auth_server_url>",
-  "token_server_url": "<token_server_url>",
-  "client_id": "<client_id>",
-  "client_secret": "<client_secret>",
-  "redirect_url": "<redirect_url>",
-  "jwks_url": "<jwks_url>",
-  "principal_field": "<principal_field>",
-  "required_issuer": "<required_issuer>",
-  "required_audience": "<required_audience>"
-}';
+CREATE USER <username> IDENTIFIED WITH authentication_ldap_simple AS 'uid=tom,ou=company,dc=example,dc=com';
 ```
 
 その後、ユーザーに特権や役割を `GRANT` したり、Apache Ranger などの外部システムに授権を委任したりできます。
@@ -152,16 +129,16 @@ CREATE USER <username> IDENTIFIED WITH authentication_oauth2 AS
 ```SQL
 CREATE SECURITY INTEGRATION <security_integration_name> 
 PROPERTIES (
-    "type" = "oauth2",
-    "auth_server_url" = "",
-    "token_server_url" = "",
-    "client_id" = "",
-    "client_secret" = "",
-    "redirect_url" = "",
-    "jwks_url" = "",
-    "principal_field" = "",
-    "required_issuer" = "",
-    "required_audience" = ""
+    "type" = "authentication_ldap_simple",
+    "authentication_ldap_simple_server_host" = "",
+    "authentication_ldap_simple_server_port" = "",
+    "authentication_ldap_simple_bind_base_dn" = "",
+    "authentication_ldap_simple_user_search_attr" = ""
+    "authentication_ldap_simple_bind_root_dn" = "",
+    "authentication_ldap_simple_bind_root_pwd" = "",
+    "authentication_ldap_simple_ssl_conn_allow_insecure" = "{true | false}",
+    "authentication_ldap_simple_ssl_conn_trust_store_path" = "",
+    "authentication_ldap_simple_ssl_conn_trust_store_pwd" = "",
     "comment" = ""
 );
 ```
@@ -174,7 +151,7 @@ ADMIN SET FRONTEND CONFIG (
 );
 ```
 
-### グループプロバイダー（オプションだが推奨）
+### Group Provider（オプションだが推奨）
 
 クラスター内のグループ情報は、認証および授権システムの両方から**分離**されています。これは、ログイン制御とアクセス制御の両方で使用できる共有レイヤーとして機能し、独立して構成できます。
 
@@ -190,19 +167,19 @@ ADMIN SET FRONTEND CONFIG (
 
 #### 設定に関する注意事項
 
-- グループプロバイダーを構成する際には、次のことを指定する必要があります。
+- Group Providerを構成する際には、次のことを指定する必要があります。
   - **ログインできる**（ログイン範囲）を定義するために使用されるグループ
   - **特定のリソースにアクセスできる**（授権）を定義するために使用されるグループ
-- **重要**: グループプロバイダーによって返されるユーザーアイデンティティ（例: ユーザー名または ID）は、認証および授権中に使用されるアイデンティティと**一致する必要があります**。一貫性のない識別子は、権限またはログインの失敗を引き起こします。
+- **重要**: Group Providerによって返されるユーザーアイデンティティ（例: ユーザー名または ID）は、認証および授権中に使用されるアイデンティティと**一致する必要があります**。一貫性のない識別子は、権限またはログインの失敗を引き起こします。
 
 #### 例
 
 次の例は LDAP に基づいています。
 
-1. グループプロバイダーを作成します。
+1. Group Providerを作成します。
 
    ```SQL
-   -- LDAP グループプロバイダー
+   -- LDAP Group Provider
    CREATE GROUP PROVIDER <group_provider_name> 
    PROPERTIES (
        "type" = "ldap",
@@ -233,7 +210,7 @@ ADMIN SET FRONTEND CONFIG (
        "ldap_cache_refresh_interval" = ""
    ```
 
-2. グループプロバイダーをセキュリティインテグレーションと統合します。
+2. Group Providerをセキュリティインテグレーションと統合します。
 
    ```SQL
    ALTER SECURITY INTEGRATION <security_integration_name> SET
@@ -243,7 +220,11 @@ ADMIN SET FRONTEND CONFIG (
    )
    ```
 
+<<<<<<< HEAD
 3. グループプロバイダーを授権システムと統合します。
+=======
+3. Group Providerを授権システムと統合します。ネイティブ認証または Apache Ranger のいずれかを使用できます。
+>>>>>>> 02355b9da9 ([Doc] 3.5 Auth Snippet Management (#67155))
 
    <GroupProviderExample />
 
@@ -282,10 +263,10 @@ Apache Ranger は、StarRocks のネイティブ授権システムと一緒に�
 外部認証および授権システムを完全に活用して、クラスターのログインおよびアクセス権限を制御できます。全体的なプロセスは次のとおりです。
 
 1. **セキュリティインテグレーション**を使用して、外部認証システムとの接続を確立します。
-2. **グループプロバイダー**内で認証および授権のために必要なグループ情報を設定します。
+2. **Group Provider**内で認証および授権のために必要なグループ情報を設定します。
 3. **セキュリティインテグレーション**でクラスターにログインを許可されるグループを定義します。これらのグループに属するユーザーはログインアクセスが許可されます。
 4. **Apache Ranger**で **StarRocks サービス**を作成し、内部テーブルと外部テーブルの両方のアクセス制御を管理します。外部テーブルの場合、授権のために既存のサービスを再利用することもできます。
-5. ユーザーがクエリを送信すると、システムはユーザーのアイデンティティとグループメンバーシップ（グループプロバイダーで設定されたもの）を Ranger に送信して授権を行います。
+5. ユーザーがクエリを送信すると、システムはユーザーのアイデンティティとグループメンバーシップ（Group Providerで設定されたもの）を Ranger に送信して授権を行います。
 6. 授権チェックが通過すると、システムはクエリの実行を続行します。
 
 :::note
@@ -306,21 +287,26 @@ Apache Ranger は、StarRocks のネイティブ授権システムと一緒に�
 
 :::tip
 
-手動で作成されたユーザーは、**グループプロバイダー**および **Ranger** と統合することもできますが、このアプローチは **セキュリティインテグレーション** を使用するよりも複雑で自動化されていません。したがって、これは**推奨されるベストプラクティスではありません**。
+手動で作成されたユーザーは、**Group Provider** および **Ranger** と統合することもできますが、このアプローチは **セキュリティインテグレーション** を使用するよりも複雑で自動化されていません。したがって、これは**推奨されるベストプラクティスではありません**。
 
 :::
 
+<<<<<<< HEAD
 <Solution3 />
+=======
+### ソリューション 3: 外部認証 (外部アイデンティティ) + 内部授権
 
-## 関連項目
+**StarRocks の組み込み授権システム**を使用しながら、**外部認証**に依存する場合は、次のアプローチを取ることができます。
 
-- **認証**
-  - [Native Authentication](../administration/user_privs/authentication/native_authentication.md)
-  - [Security Integration](../administration/user_privs/authentication/security_integration.md)
-  - [LDAP Authentication](../administration/user_privs/authentication/ldap_authentication.md)
-  - [OAuth 2.0 Authentication](../administration/user_privs/authentication/oauth2_authentication.md)
-  - [JSON Web Token Authentication](../administration/user_privs/authentication/jwt_authentication.md)
-- [**グループプロバイダー**](../administration/user_privs/group_provider.md)
-- **授権**
-  - [Native Authorization](../administration/user_privs/authorization/User_privilege.md)
-  - [Apache Ranger Plugin](../administration/user_privs/authorization/ranger_plugin.md)
+1. **セキュリティインテグレーション**を使用して、外部認証システムとの接続を確立します。
+2. **Group Provider**内で認証と授権に必要なグループ情報を設定します。
+3. **セキュリティインテグレーション**で StarRocks クラスターにログインを許可するグループを定義します。これらのグループに属するユーザーは、ログインアクセスが許可されます。
+4. StarRocks 内で必要なロールを**作成し**、それらを外部グループに**付与します**。
+5. ユーザーがログインを試みる際には、認証に合格し、授権されたグループに属している必要があります。ログインが成功すると、StarRocks はグループメンバーシップに基づいて適切なロールを自動的に割り当てます。
+6. クエリ実行中、StarRocks は通常通り**内部 RBAC ベースの授権**を実施します。
+7. さらに、このソリューションと **Ranger** を組み合わせることも可能です。例えば、内部テーブルの授権には **StarRocks のネイティブ RBAC** を使用し、外部テーブルの授権には **Ranger** を使用します。Ranger を介して授権を行う際、StarRocks は**ユーザー ID と対応するグループ情報**を Ranger に渡してアクセス制御を行います。
+
+![Authentication and Authorization - Solution-3](../_assets/best_practices/auth_solution_3.png)
+>>>>>>> 02355b9da9 ([Doc] 3.5 Auth Snippet Management (#67155))
+
+<AuthSeeAlso />
