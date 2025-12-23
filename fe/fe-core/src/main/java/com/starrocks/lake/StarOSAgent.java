@@ -254,6 +254,25 @@ public class StarOSAgent {
         }
     }
 
+    /**
+     * Currently this method is used for cluster migration, where we need to build source cluster's file path with
+     * their service id
+     * @param otherServiceId the source cluster's service id
+     * @throws DdlException
+     */
+    public FilePathInfo allocateFilePathFromOtherService(String storageVolumeId, long dbId,
+                                                         long tableId, String otherServiceId) throws DdlException {
+        prepare();
+        try {
+            String suffix = constructTablePath(dbId, tableId);
+            FilePathInfo pathInfo = client.allocateFilePath(serviceId, storageVolumeId, suffix, otherServiceId);
+            LOG.debug("Allocate file path from starmgr: {}", pathInfo);
+            return pathInfo;
+        } catch (StarClientException e) {
+            throw new DdlException("Failed to allocate file path from StarMgr, error: " + e.getMessage());
+        }
+    }
+
     public FilePathInfo allocateFilePath(String storageVolumeId, long dbId, long tableId) throws DdlException {
         prepare();
         try {

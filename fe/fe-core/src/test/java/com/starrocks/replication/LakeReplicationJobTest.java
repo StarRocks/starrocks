@@ -14,6 +14,8 @@
 
 package com.starrocks.replication;
 
+import com.staros.proto.FilePathInfo;
+import com.staros.proto.FileStoreType;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -29,6 +31,7 @@ import com.starrocks.task.AgentTask;
 import com.starrocks.task.AgentTaskExecutor;
 import com.starrocks.task.ReplicateSnapshotTask;
 import com.starrocks.thrift.TFinishTaskRequest;
+import com.starrocks.thrift.TReplicateSnapshotRequest;
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.utframe.StarRocksAssert;
@@ -187,5 +190,165 @@ public class LakeReplicationJobTest {
 
         job.run();
         Assertions.assertEquals(ReplicationJobState.ABORTED, job.getState());
+    }
+
+    @Test
+    public void testPartitionFullPathWithoutFilePathInfo() throws Exception {
+        // Test with no FilePathInfo (fallback - no full path)
+        long virtualTabletId = 1000;
+        long srcDatabaseId = 100;
+        long srcTableId = 100;
+        LakeReplicationJob jobWithoutPathInfo = new LakeReplicationJob(null, virtualTabletId, srcDatabaseId, srcTableId,
+                db.getId(), table, srcTable,
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo());
+
+        Assertions.assertEquals(ReplicationJobState.INITIALIZING, jobWithoutPathInfo.getState());
+
+        jobWithoutPathInfo.run();
+        Assertions.assertEquals(ReplicationJobState.REPLICATING, jobWithoutPathInfo.getState());
+
+        // Verify that tasks are created without full path (BE will use RemoteStarletLocationProvider)
+        Map<AgentTask, AgentTask> runningTasks = Deencapsulation.getField(jobWithoutPathInfo, "runningTasks");
+        for (AgentTask task : runningTasks.values()) {
+            ReplicateSnapshotTask snapshotTask = (ReplicateSnapshotTask) task;
+            TReplicateSnapshotRequest thriftRequest = snapshotTask.toThrift();
+            
+            // Full path should NOT be set when partitioned prefix is not enabled
+            Assertions.assertFalse(thriftRequest.isSetSrc_partition_full_path());
+            
+            // Verify toString includes full path info
+            String taskStr = snapshotTask.toString();
+            Assertions.assertTrue(taskStr.contains("src partition full path:"));
+        }
+    }
+
+    @Test
+    public void testPartitionFullPathWithPartitionedPrefixEnabled() throws Exception {
+        // Test with FilePathInfo that has partitioned prefix enabled
+        long virtualTabletId = 1000;
+        long srcDatabaseId = 111;
+        long srcTableId = 222;
+        
+        // Create a FilePathInfo with partitioned prefix enabled
+        FilePathInfo.Builder pathInfoBuilder = FilePathInfo.newBuilder();
+        pathInfoBuilder.getFsInfoBuilder().getS3FsInfoBuilder()
+                .setBucket("test-bucket")
+                .setPartitionedPrefixEnabled(true)
+                .setNumPartitionedPrefix(1024);
+        pathInfoBuilder.getFsInfoBuilder()
+                .setFsName("test-sv")
+                .setFsKey("test-fskey")
+                .setFsType(FileStoreType.S3);
+        pathInfoBuilder.setFullPath("s3://test-bucket/service_id/db111/table222");
+        
+        LakeReplicationJob jobWithPathInfo = new LakeReplicationJob(null, virtualTabletId, srcDatabaseId, srcTableId,
+                db.getId(), table, srcTable,
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),
+                pathInfoBuilder.build());
+
+        Assertions.assertEquals(ReplicationJobState.INITIALIZING, jobWithPathInfo.getState());
+
+        jobWithPathInfo.run();
+        Assertions.assertEquals(ReplicationJobState.REPLICATING, jobWithPathInfo.getState());
+
+        // Verify that tasks are created with full path
+        Map<AgentTask, AgentTask> runningTasks = Deencapsulation.getField(jobWithPathInfo, "runningTasks");
+        for (AgentTask task : runningTasks.values()) {
+            ReplicateSnapshotTask snapshotTask = (ReplicateSnapshotTask) task;
+            TReplicateSnapshotRequest thriftRequest = snapshotTask.toThrift();
+            
+            // Full path should be set when partitioned prefix is enabled
+            Assertions.assertTrue(thriftRequest.isSetSrc_partition_full_path());
+            String fullPath = thriftRequest.getSrc_partition_full_path();
+            // Full path should start with s3:// and contain partitioned prefix
+            Assertions.assertNotNull(fullPath);
+            Assertions.assertTrue(fullPath.startsWith("s3://"));
+        }
+    }
+
+    @Test
+    public void testPartitionFullPathWithPartitionedPrefixDisabled() throws Exception {
+        // Test with FilePathInfo that has partitioned prefix disabled (S3)
+        // Full path should still be provided for S3, just without the prefix calculation
+        long virtualTabletId = 1000;
+        long srcDatabaseId = 111;
+        long srcTableId = 222;
+        
+        // Create a FilePathInfo with partitioned prefix DISABLED
+        FilePathInfo.Builder pathInfoBuilder = FilePathInfo.newBuilder();
+        pathInfoBuilder.getFsInfoBuilder().getS3FsInfoBuilder()
+                .setBucket("test-bucket")
+                .setPartitionedPrefixEnabled(false);
+        pathInfoBuilder.getFsInfoBuilder()
+                .setFsName("test-sv")
+                .setFsKey("test-fskey")
+                .setFsType(FileStoreType.S3);
+        pathInfoBuilder.setFullPath("s3://test-bucket/service_id/db111/table222");
+        
+        LakeReplicationJob jobWithPathInfo = new LakeReplicationJob(null, virtualTabletId, srcDatabaseId, srcTableId,
+                db.getId(), table, srcTable,
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),
+                pathInfoBuilder.build());
+
+        Assertions.assertEquals(ReplicationJobState.INITIALIZING, jobWithPathInfo.getState());
+
+        jobWithPathInfo.run();
+        Assertions.assertEquals(ReplicationJobState.REPLICATING, jobWithPathInfo.getState());
+
+        // Verify that tasks are created WITH full path (S3 always provides full path)
+        // The full path is simple concatenation without partitioned prefix calculation
+        Map<AgentTask, AgentTask> runningTasks = Deencapsulation.getField(jobWithPathInfo, "runningTasks");
+        for (AgentTask task : runningTasks.values()) {
+            ReplicateSnapshotTask snapshotTask = (ReplicateSnapshotTask) task;
+            TReplicateSnapshotRequest thriftRequest = snapshotTask.toThrift();
+            
+            // Full path should be set for S3 storage type (even with partitioned prefix disabled)
+            Assertions.assertTrue(thriftRequest.isSetSrc_partition_full_path());
+            String fullPath = thriftRequest.getSrc_partition_full_path();
+            // Path should be simple concatenation: tableFullPath + "/" + partitionId
+            Assertions.assertTrue(fullPath.startsWith("s3://test-bucket/service_id/db111/table222/"));
+        }
+    }
+
+    @Test
+    public void testPartitionFullPathWithOSSStorageType() throws Exception {
+        // Test with FilePathInfo for OSS storage type (non-S3)
+        // For non-S3 storage types, FE should NOT provide full path
+        // BE will use RemoteStarletLocationProvider to construct the path
+        long virtualTabletId = 1000;
+        long srcDatabaseId = 111;
+        long srcTableId = 222;
+        
+        // Create a FilePathInfo with OSS storage type
+        FilePathInfo.Builder pathInfoBuilder = FilePathInfo.newBuilder();
+        pathInfoBuilder.getFsInfoBuilder().getOssFsInfoBuilder()
+                .setBucket("oss-test-bucket");
+        pathInfoBuilder.getFsInfoBuilder()
+                .setFsName("test-sv")
+                .setFsKey("test-fskey")
+                .setFsType(FileStoreType.OSS);
+        pathInfoBuilder.setFullPath("oss://oss-test-bucket/service_id/db111/table222");
+        
+        LakeReplicationJob jobWithPathInfo = new LakeReplicationJob(null, virtualTabletId, srcDatabaseId, srcTableId,
+                db.getId(), table, srcTable,
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),
+                pathInfoBuilder.build());
+
+        Assertions.assertEquals(ReplicationJobState.INITIALIZING, jobWithPathInfo.getState());
+
+        jobWithPathInfo.run();
+        Assertions.assertEquals(ReplicationJobState.REPLICATING, jobWithPathInfo.getState());
+
+        // Verify that tasks are created WITHOUT full path for OSS (non-S3) storage
+        // BE will use RemoteStarletLocationProvider to construct the path
+        Map<AgentTask, AgentTask> runningTasks = Deencapsulation.getField(jobWithPathInfo, "runningTasks");
+        for (AgentTask task : runningTasks.values()) {
+            ReplicateSnapshotTask snapshotTask = (ReplicateSnapshotTask) task;
+            TReplicateSnapshotRequest thriftRequest = snapshotTask.toThrift();
+            
+            // Full path should NOT be set for non-S3 storage types
+            Assertions.assertFalse(thriftRequest.isSetSrc_partition_full_path(),
+                    "Non-S3 storage types should not have full path set");
+        }
     }
 }

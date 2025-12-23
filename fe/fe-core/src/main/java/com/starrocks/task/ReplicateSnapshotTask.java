@@ -42,6 +42,8 @@ public class ReplicateSnapshotTask extends AgentTask {
     private final long srcDbId;
     private final long srcTableId;
     private final long srcPartitionId;
+    // Full path of source partition (only set when partitioned prefix is enabled)
+    private final String srcPartitionFullPath;
 
     public ReplicateSnapshotTask(long backendId, long dbId, long tableId, long partitionId, long indexId, long tabletId,
             TTabletType tabletType, long transactionId, int schemaHash, long visibleVersion, long dataVersion,
@@ -66,6 +68,7 @@ public class ReplicateSnapshotTask extends AgentTask {
         this.srcDbId = -1;
         this.srcTableId = -1;
         this.srcPartitionId = -1;
+        this.srcPartitionFullPath = null;
     }
 
     // for lake
@@ -75,7 +78,8 @@ public class ReplicateSnapshotTask extends AgentTask {
                                           long srcTabletId, TTabletType srcTabletType,
                                           int srcSchemaHash, long srcVisibleVersion,
                                           byte[] encryptionMeta, long virtualTabletId,
-                                          long srcDbId, long srcTableId, long srcPartitionId) {
+                                          long srcDbId, long srcTableId, long srcPartitionId,
+                                          String srcPartitionFullPath) {
         super(null, backendId, TTaskType.REPLICATE_SNAPSHOT, dbId, tableId, partitionId, indexId, tabletId, tabletId,
                 System.currentTimeMillis());
         this.transactionId = transactionId;
@@ -92,6 +96,7 @@ public class ReplicateSnapshotTask extends AgentTask {
         this.srcDbId = srcDbId;
         this.srcTableId = srcTableId;
         this.srcPartitionId = srcPartitionId;
+        this.srcPartitionFullPath = srcPartitionFullPath;
 
         this.srcToken = null;
         this.srcSnapshotInfos = null;
@@ -122,6 +127,11 @@ public class ReplicateSnapshotTask extends AgentTask {
         request.setSrc_table_id(srcTableId);
         request.setSrc_partition_id(srcPartitionId);
 
+        // Full path of source partition (only set when partitioned prefix is enabled)
+        if (srcPartitionFullPath != null) {
+            request.setSrc_partition_full_path(srcPartitionFullPath);
+        }
+
         return request;
     }
 
@@ -141,6 +151,7 @@ public class ReplicateSnapshotTask extends AgentTask {
         sb.append(", src db id: ").append(srcDbId);
         sb.append(", src table id: ").append(srcTableId);
         sb.append(", src partition id: ").append(srcPartitionId);
+        sb.append(", src partition full path: ").append(srcPartitionFullPath);
         return sb.toString();
     }
 }
