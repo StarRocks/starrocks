@@ -22,6 +22,7 @@
 #include "column/datum_convert.h"
 #include "common/status.h"
 #include "runtime/global_dict/config.h"
+#include "storage/lake/column_mode_partial_update_handler.h"
 #include "storage/lake/rowset.h"
 #include "storage/rowset/column_iterator.h"
 #include "storage/rowset/column_reader.h"
@@ -97,21 +98,38 @@ Status LakeMetaReader::_build_collect_context(const lake::VersionedTablet& table
 Status LakeMetaReader::_init_seg_meta_collecters(const lake::VersionedTablet& tablet,
                                                  const LakeMetaReaderParams& params) {
     std::vector<SegmentSharedPtr> segments;
-    RETURN_IF_ERROR(_get_segments(tablet, &segments));
-    for (auto& segment : segments) {
+    std::vector<SegmentMetaCollectOptions> options_list;
+    RETURN_IF_ERROR(_get_segments(tablet, &segments, &options_list));
+    for (int i = 0; i < segments.size(); ++i) {
+        auto& segment = segments[i];
+        auto& options = options_list[i];
         auto seg_collecter = std::make_unique<SegmentMetaCollecter>(segment);
 
-        RETURN_IF_ERROR(seg_collecter->init(&_collect_context.seg_collecter_params));
+        RETURN_IF_ERROR(seg_collecter->init(&_collect_context.seg_collecter_params, options));
         _collect_context.seg_collecters.emplace_back(std::move(seg_collecter));
     }
 
     return Status::OK();
 }
 
-Status LakeMetaReader::_get_segments(const lake::VersionedTablet& tablet, std::vector<SegmentSharedPtr>* segments) {
+Status LakeMetaReader::_get_segments(const lake::VersionedTablet& tablet, std::vector<SegmentSharedPtr>* segments,
+                                     std::vector<SegmentMetaCollectOptions>* options_list) {
     auto rowsets = tablet.get_rowsets();
     for (const auto& rowset : rowsets) {
         ASSIGN_OR_RETURN(auto rowset_segs, rowset->segments(true));
+        for (int seg_id = 0; seg_id < rowset_segs.size(); ++seg_id) {
+            SegmentMetaCollectOptions options;
+            options.is_primary_keys = tablet.get_schema()->keys_type() == KeysType::PRIMARY_KEYS;
+            // In shared-data arch, only primary key table support delta column group for now.
+            if (options.is_primary_keys) {
+                options.tablet_id = tablet.metadata()->id();
+                options.version = tablet.version();
+                options.segment_id = seg_id;
+                options.pk_rowsetid = rowset->id();
+                options.dcg_loader = std::make_shared<lake::LakeDeltaColumnGroupLoader>(tablet.metadata());
+            }
+            options_list->emplace_back(std::move(options));
+        }
         segments->insert(segments->end(), rowset_segs.begin(), rowset_segs.end());
     }
     return Status::OK();

@@ -302,6 +302,7 @@ set(EXEC_FILES
         ./storage/lake/lake_primary_key_consistency_test.cpp
         ./storage/lake/load_spill_block_manager_test.cpp
         ./storage/lake/spill_mem_table_sink_test.cpp
+        ./storage/lake/lake_meta_reader_test.cpp
         ./storage/rowset_update_state_test.cpp
         ./storage/rowset_column_update_state_test.cpp
         ./storage/rowset_column_partial_update_test.cpp
@@ -392,6 +393,7 @@ set(EXEC_FILES
         ./storage/get_use_pk_index_test.cpp
         ./storage/persistent_index_consistency_test.cpp
         ./storage/meta_reader_test.cpp
+        ./storage/olap_meta_reader_test.cpp
         ./storage/dictionary_cache_manager_test.cpp
         ./storage/column_or_predicate_test.cpp
         ./storage/column_and_predicate_test.cpp
