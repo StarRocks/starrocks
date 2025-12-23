@@ -23,16 +23,20 @@ VARCHAR variant_typeof(variant_expr)
 Returns a VARCHAR value representing the type name.
 
 Possible return values include:
+- `"Null"` - for NULL values
 - `"Boolean"` - for boolean values
 - `"Int8"`, `"Int16"`, `"Int32"`, `"Int64"` - for integer values
 - `"Float"`, `"Double"` - for floating-point values
-- `"Decimal"` - for decimal values
+- `"Decimal4"`, `"Decimal8"`, `"Decimal16"` - for decimal values with different precision
 - `"String"` - for string values
+- `"Binary"` - for binary data
 - `"Date"` - for date values
-- `"Timestamp"`, `"TimestampNtz"` - for timestamp values
+- `"TimestampTz"`, `"TimestampNtz"` - for timestamp values with or without timezone
+- `"TimestampTzNanos"`, `"TimestampNtzNanos"` - for nanosecond-precision timestamp values
+- `"TimeNtz"` - for time values without timezone
+- `"Uuid"` - for UUID values
 - `"Object"` - for struct or map values
 - `"Array"` - for array values
-- `NULL` - if the VARIANT value is NULL
 
 ## Examples
 
