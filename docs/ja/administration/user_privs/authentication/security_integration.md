@@ -5,6 +5,7 @@ sidebar_position: 20
 
 # セキュリティインテグレーションで認証
 
+import SecurityIntegrationRangerLink from '../../../_assets/user_priv/security_integration_ranger_link.mdx'
 import SecurityIntegrationIntro from '../../../_assets/user_priv/security_integration_intro.mdx'
 import SecurityIntegrationJWT from '../../../_assets/user_priv/security_integration_jwt.mdx'
 import SecurityIntegrationOAuth from '../../../_assets/user_priv/security_integration_oauth.mdx'
@@ -14,7 +15,7 @@ StarRocks をセキュリティインテグレーションを使用して外部�
 
 StarRocks クラスター内でセキュリティインテグレーションを作成することで、外部認証サービスへのアクセスを StarRocks に許可できます。セキュリティインテグレーションを使用すると、StarRocks 内でユーザーを手動で作成する必要がありません。ユーザーが外部 ID を使用してログインしようとすると、StarRocks は `authentication_chain` の設定に従って対応するセキュリティインテグレーションを使用してユーザーを認証します。認証が成功し、ユーザーがログインを許可された後、StarRocks はセッション内に仮想ユーザーを作成し、そのユーザーが後続の操作を実行できるようにします。
 
-セキュリティインテグレーションを使用して外部認証方法を構成する場合は、外部認可を有効にするために [StarRocks を Apache Ranger と統合](../authorization/ranger_plugin.md) する必要があることに注意してください。現在、セキュリティインテグレーションを StarRocks ネイティブ認可と統合することはサポートされていません。
+<SecurityIntegrationRangerLink />
 
 また、StarRocks に [Group Provider](../group_provider.md) を有効にして、外部認証システムのグループ情報にアクセスし、StarRocks でユーザーグループを作成、認証、および認可することができます。
 

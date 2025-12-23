@@ -5,6 +5,7 @@ sidebar_position: 20
 
 # 通过安全集成认证用户
 
+import SecurityIntegrationRangerLink from '../../../_assets/user_priv/security_integration_ranger_link.mdx'
 import SecurityIntegrationIntro from '../../../_assets/user_priv/security_integration_intro.mdx'
 import SecurityIntegrationJWT from '../../../_assets/user_priv/security_integration_jwt.mdx'
 import SecurityIntegrationOAuth from '../../../_assets/user_priv/security_integration_oauth.mdx'
@@ -14,7 +15,7 @@ import SecurityIntegrationConnectSeeAlso from '../../../_assets/user_priv/securi
 
 通过在 StarRocks 集群中创建安全集成，您可以允许外部身份验证服务访问 StarRocks。借助安全集成，您无需在 StarRocks 中手动创建用户。当用户尝试使用外部身份登录时，StarRocks 将根据 `authentication_chain` 中的配置使用相应的安全集成来验证用户身份。身份验证成功后，用户被允许登录，StarRocks 会在会话中为用户创建一个虚拟用户以执行后续操作。
 
-请注意，如果您使用安全集成配置外部身份验证方法，您还必须 [将 StarRocks 与 Apache Ranger 集成](../authorization/ranger_plugin.md) 以启用外部授权。目前，不支持将安全集成与 StarRocks 本地授权集成。
+<SecurityIntegrationRangerLink />
 
 您还可以为 StarRocks 启用 [Group Provider](../group_provider.md)，以访问外部身份验证系统中的组信息，从而允许在 StarRocks 中创建、验证和授权用户组。
 

@@ -5,6 +5,7 @@ sidebar_position: 20
 
 # Authenticate with Security Integration
 
+import SecurityIntegrationRangerLink from '../../../_assets/user_priv/security_integration_ranger_link.mdx'
 import SecurityIntegrationIntro from '../../../_assets/user_priv/security_integration_intro.mdx'
 import SecurityIntegrationJWT from '../../../_assets/user_priv/security_integration_jwt.mdx'
 import SecurityIntegrationOAuth from '../../../_assets/user_priv/security_integration_oauth.mdx'
@@ -14,7 +15,7 @@ Integrate StarRocks with external authentication systems using security integrat
 
 By creating a security integration within your StarRocks cluster, you can allow access of your external authentication service to StarRocks. With the security integration, you do not need to manually create users within StarRocks. When a user tries to log in using an external identity, StarRocks will use the corresponding security integration according to the configuration in `authentication_chain` to authenticate the user. After the authentication is successful and the user is allowed to log in, StarRocks creates a virtual user in the session for the user to perform subsequent operations.
 
-Please note that if you use the security integration to configure an external authentication method, you must also [integrate StarRocks with Apache Ranger](../authorization/ranger_plugin.md) to enable external authorization. Currently, integrating Security Integration with the StarRocks native authorization is not supported.
+<SecurityIntegrationRangerLink />
 
 You can also enable [Group Provider](../group_provider.md) for StarRocks to access the group information in you external authentication systems, thus allowing creating, authenticating, and authorizing user groups in StarRocks.
 
