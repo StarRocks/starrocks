@@ -69,11 +69,21 @@ public class SimpleExecutor {
     }
 
     public void executeDML(String sql) {
+        executeDMLOrControl(sql, SqlType.DML);
+    }
+
+    public void executeControl(String sql) {
+        executeDMLOrControl(sql, SqlType.CONTROL);
+    }
+
+    private void executeDMLOrControl(String sql, SqlType type) {
         ConnectContext prev = ConnectContext.get();
         try {
             ConnectContext context = createConnectContext();
             StatementBase parsedStmt = SqlParser.parseOneWithStarRocksDialect(sql, context.getSessionVariable());
-            Preconditions.checkState(parsedStmt instanceof DmlStmt, "the statement should be dml");
+            if (type == SqlType.DML) {
+                Preconditions.checkState(parsedStmt instanceof DmlStmt, "the statement should be DML statement");
+            }
             StmtExecutor executor = StmtExecutor.newInternalExecutor(context, parsedStmt);
             context.setExecutor(executor);
             context.setQueryId(UUIDUtil.genUUID());
@@ -144,5 +154,10 @@ public class SimpleExecutor {
         context.setThreadLocalInfo();
         context.setNeedQueued(false);
         return context;
+    }
+
+    private enum SqlType {
+        DML,
+        CONTROL
     }
 }
