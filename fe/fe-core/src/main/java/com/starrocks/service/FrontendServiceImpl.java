@@ -903,6 +903,9 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             tableKeysType = olapTable.getKeysType().name().substring(0, 3).toUpperCase();
         }
         for (Column column : table.getBaseSchema()) {
+            if (column.isHidden()) {
+                continue;
+            }
             final TColumnDesc desc =
                     new TColumnDesc(column.getName(), TypeSerializer.toThrift(column.getPrimitiveType()));
             final Integer precision = column.getType().getPrecision();
