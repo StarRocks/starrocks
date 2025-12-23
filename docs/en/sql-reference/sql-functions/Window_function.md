@@ -157,8 +157,6 @@ Output:
 
 For example, `12.87500000` in the first row is the average value of closing prices on "2014-10-02" (`12.86`), its previous day "2014-10-01" (null), and its following day "2014-10-03" (`12.89`).
 
-<<<<<<< HEAD
-=======
 **Example 2: Using AVG(DISTINCT) over overall window**
 
 Calculate the average of distinct scores across all rows:
@@ -431,7 +429,6 @@ Error message:
 ERROR: array_agg as window function does not support ROWS frame type. Please use RANGE frame instead.
 ```
 
->>>>>>> ea20d34efa ([Doc] Window analysis support lead/lag/first_value/last_value(array_type) and count/sum/avg(distinct)functions (#67058))
 ### COUNT()
 
 Calculates the total number of rows that meet the specified conditions in a give window.
@@ -936,8 +933,6 @@ For rows 1 to 4, the system cannot find two non-NULL values for each of them in 
 
 For value 6 in row 7, the value two rows backward is NULL and NULL is ignored because IGNORE NULLS is specified. The system continues to search for non-null values and 2 in row 4 is returned.
 
-<<<<<<< HEAD
-=======
 **Example 3: Setting the default value in LAG() to a column name**
 
 Use the preceding table and parameter settings.
@@ -1009,7 +1004,6 @@ Output:
 
 For the first two rows, no previous two rows exist, so the default value from `arr2` is returned.
 
->>>>>>> ea20d34efa ([Doc] Window analysis support lead/lag/first_value/last_value(array_type) and count/sum/avg(distinct)functions (#67058))
 ### LEAD()
 
 Returns the value of the row that leads the current row by `offset` rows. This function is often used to compare values between rows and filter data.
@@ -1105,8 +1099,6 @@ For rows 7 to 10, the system cannot find two non-null values in the subsequent r
 
 For the first row, the value two rows forward is NULL and NULL is ignored because IGNORE NULLS is specified. The system continues to search for the second non-null value and 2 in row 4 is returned.
 
-<<<<<<< HEAD
-=======
 **Example 3: Setting the default value in LEAD() to a column name**
 
 Use the preceding table and parameter settings.
@@ -1160,7 +1152,6 @@ Output:
 
 For the last two rows, no subsequent two rows exist, so the default value from `arr2` is returned.
 
->>>>>>> ea20d34efa ([Doc] Window analysis support lead/lag/first_value/last_value(array_type) and count/sum/avg(distinct)functions (#67058))
 ### MAX()
 
 Returns the maximum value of the specified rows in the current window.

@@ -729,8 +729,6 @@ FROM test_tbl ORDER BY col_1;
 
 对于第 7 行数据 6，往前遍历两行对应的值是 NULL，因为指定了 IGNORE NULLS，会忽略这一行，继续往前遍历，因此返回第 4 行的 2。
 
-<<<<<<< HEAD
-=======
 示例三： LAG() 中默认值设置为列名
 
 依然使用上面的数据表。
@@ -802,7 +800,6 @@ FROM test_array_value;
 
 对于前两行，由于不存在前两行，因此返回默认值 `arr2` 的值。
 
->>>>>>> ea20d34efa ([Doc] Window analysis support lead/lag/first_value/last_value(array_type) and count/sum/avg(distinct)functions (#67058))
 ## LEAD()
 
 用来计算当前行**之后**若干行的值。该函数可用于直接比较行间差值或进行数据过滤。
@@ -900,8 +897,6 @@ FROM test_tbl ORDER BY col_1;
 
 对于第 1 行数据 NULL，往后遍历两行对应的值是 NULL，因为指定了 IGNORE NULLS，会忽略这一行，继续往前遍历，因此返回第 4 行的 2。
 
-<<<<<<< HEAD
-=======
 示例三： LEAD() 中默认值设置为列名
 
 依然使用上面的数据表。
@@ -955,7 +950,6 @@ FROM test_array_value;
 
 对于最后两行，由于不存在后两行，因此返回默认值 `arr2` 的值。
 
->>>>>>> ea20d34efa ([Doc] Window analysis support lead/lag/first_value/last_value(array_type) and count/sum/avg(distinct)functions (#67058))
 ## MAX()
 
 `MAX()` 函数返回当前窗口指定行数内数据的最大值。

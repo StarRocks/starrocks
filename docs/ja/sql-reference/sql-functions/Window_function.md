@@ -719,8 +719,6 @@ FROM test_tbl ORDER BY col_1;
 
 7行目の値6については、2行前の値がNULLであり、IGNORE NULLSが指定されているため、NULLが無視されます。システムは非NULL値を探し続け、4行目の2が返されます。
 
-<<<<<<< HEAD
-=======
 **例3: LAG() のデフォルト値を列名に設定する**
 
 前述のテーブルとパラメータ設定を使用します。
@@ -792,7 +790,6 @@ FROM test_array_value;
 
 最初の2行については、前の2行が存在しないため、デフォルト値として`arr2`の値が返されます。
 
->>>>>>> ea20d34efa ([Doc] Window analysis support lead/lag/first_value/last_value(array_type) and count/sum/avg(distinct)functions (#67058))
 ### LEAD()
 
 現在の行から`offset`行進んだ行の値を返します。この関数は、行間の値を比較し、データをフィルタリングするためによく使用されます。
@@ -888,8 +885,6 @@ FROM test_tbl ORDER BY col_1;
 
 最初の行については、2行先の値がNULLであり、IGNORE NULLSが指定されているため、NULLが無視されます。システムは2番目の非NULL値を探し続け、4行目の2が返されます。
 
-<<<<<<< HEAD
-=======
 **例3: LEAD() のデフォルト値を列名に設定する**
 
 前述のテーブルとパラメータ設定を使用します。
@@ -943,7 +938,6 @@ FROM test_array_value;
 
 最後の2行については、後続の2行が存在しないため、デフォルト値として`arr2`の値が返されます。
 
->>>>>>> ea20d34efa ([Doc] Window analysis support lead/lag/first_value/last_value(array_type) and count/sum/avg(distinct)functions (#67058))
 ### MAX()
 
 現在のウィンドウ内の指定された行の最大値を返します。
