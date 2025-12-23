@@ -443,7 +443,7 @@ void LakePersistentIndexParallelCompactMgr::generate_compaction_tasks(
 
     // Calculate segment number based on total size, threshold and parallelism config
     size_t segment_num = std::max<size_t>(
-            1, total_size / std::max(1, config::pk_index_parallel_compaction_task_split_threshold_bytes));
+            1, total_size / std::max<size_t>(1, config::pk_index_parallel_compaction_task_split_threshold_bytes));
     segment_num =
             std::min<size_t>(segment_num, std::max(1, config::pk_index_parallel_compaction_threadpool_max_threads) * 2);
 
