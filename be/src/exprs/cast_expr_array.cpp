@@ -347,7 +347,7 @@ StatusOr<ColumnPtr> CastVariantToArray::evaluate_checked(ExprContext* context, C
             continue;
         }
 
-        ASSIGN_OR_RETURN(auto array_info, get_array_info(variant.value()));
+        ASSIGN_OR_RETURN(auto array_info, variant_detail::get_array_info(variant.value()));
         for (uint32_t j = 0; j < array_info.num_elements; ++j) {
             ASSIGN_OR_RETURN(Variant element_variant, variant.get_element_at_index(j));
             variant_column_builder.append(VariantValue::of_variant(element_variant));

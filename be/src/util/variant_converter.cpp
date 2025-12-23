@@ -12,9 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "variant_converter.h"
+#include "util/variant_converter.h"
 
-#include "variant_util.h"
+#include "util/variant.h"
 
 namespace starrocks {
 
@@ -25,7 +25,7 @@ Status cast_variant_to_bool(const Variant& variant, ColumnBuilder<TYPE_BOOLEAN>&
         return Status::OK();
     }
 
-    if (type == VariantType::BOOLEAN) {
+    if (type == VariantType::BOOLEAN_TRUE || type == VariantType::BOOLEAN_FALSE) {
         auto value = variant.get_bool();
         if (!value.ok()) {
             return value.status();

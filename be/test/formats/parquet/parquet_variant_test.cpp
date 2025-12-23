@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <formats/parquet/variant.h>
+#include <util/variant.h>
 #include <fs/fs.h>
 #include <gtest/gtest.h>
 
@@ -32,7 +32,7 @@ public:
     ~ParquetVariantTest() override = default;
 
 protected:
-    uint8_t primitiveHeader(VariantPrimitiveType primitive) { return (static_cast<uint8_t>(primitive) << 2); }
+    uint8_t primitive_header(VariantType primitive) { return (static_cast<uint8_t>(primitive) << 2); }
 
     void SetUp() override {
         std::string starrocks_home = getenv("STARROCKS_HOME");
@@ -75,7 +75,7 @@ protected:
 
 TEST_F(ParquetVariantTest, NullValue) {
     std::string_view empty_metadata(VariantMetadata::kEmptyMetadataChars, 3);
-    const uint8_t null_chars[] = {primitiveHeader(VariantPrimitiveType::NULL_TYPE)};
+    const uint8_t null_chars[] = {primitive_header(VariantType::NULL_TYPE)};
     Variant variant{empty_metadata, std::string_view{reinterpret_cast<const char*>(null_chars), 1}};
     EXPECT_EQ(VariantType::NULL_TYPE, variant.type());
 }
@@ -240,7 +240,7 @@ TEST_F(ParquetVariantTest, DecimalValue) {
 
 TEST_F(ParquetVariantTest, UUIDValue) {
     std::string_view empty_metadata = VariantMetadata::kEmptyMetadata;
-    const uint8_t uuid_chars[] = {primitiveHeader(VariantPrimitiveType::UUID),
+    const uint8_t uuid_chars[] = {primitive_header(VariantType::UUID),
                                   0xf2,
                                   0x4f,
                                   0x9b,

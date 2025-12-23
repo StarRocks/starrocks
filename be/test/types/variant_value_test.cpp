@@ -20,13 +20,16 @@
 #include <boost/uuid/uuid_io.hpp>
 
 #include "cctz/time_zone.h"
-#include "formats/parquet/variant.h"
 #include "runtime/decimalv3.h"
 #include "types/timestamp_value.h"
 #include "util/timezone_utils.h"
-#include "util/variant_util.h"
+#include "util/variant.h"
 
 namespace starrocks {
+
+uint8_t primitive_header(VariantType primitive) {
+    return (static_cast<uint8_t>(primitive) << 2);
+}
 
 class VariantValueTest : public testing::Test {
 public:
@@ -74,7 +77,7 @@ protected:
 };
 
 TEST_F(VariantValueTest, NullToJson) {
-    uint8_t null_chars[] = {static_cast<uint8_t>(VariantPrimitiveType::NULL_TYPE) << 2};
+    uint8_t null_chars[] = {static_cast<uint8_t>(VariantType::NULL_TYPE) << 2};
     std::string_view null_value(reinterpret_cast<const char*>(null_chars), 1);
     VariantValue v(VariantMetadata::kEmptyMetadata, null_value);
     auto json = v.to_json();
@@ -223,7 +226,7 @@ TEST_F(VariantValueTest, DecimalToJson) {
 
 TEST_F(VariantValueTest, UUIDToJson) {
     std::string_view empty_metadata = VariantMetadata::kEmptyMetadata;
-    const uint8_t uuid_chars[] = {VariantUtil::primitiveHeader(VariantPrimitiveType::UUID),
+    const uint8_t uuid_chars[] = {primitive_header(VariantType::UUID),
                                   0xf2,
                                   0x4f,
                                   0x9b,

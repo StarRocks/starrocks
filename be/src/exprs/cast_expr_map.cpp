@@ -16,7 +16,7 @@
 #include "column/column_viewer.h"
 #include "column/map_column.h"
 #include "exprs/cast_expr.h"
-#include "util/variant_util.h"
+#include "util/variant.h"
 
 namespace starrocks {
 
@@ -106,7 +106,7 @@ StatusOr<ColumnPtr> CastVariantToMap::evaluate_checked(ExprContext* context, Chu
         Variant variant(variant_value->get_metadata(), variant_value->get_value());
         // Only OBJECT type can be cast to MAP, other types are set to null
         if (variant.type() == VariantType::OBJECT) {
-            ASSIGN_OR_RETURN(const auto object_info, get_object_info(variant.value()));
+            ASSIGN_OR_RETURN(const auto object_info, variant_detail::get_object_info(variant.value()));
             const uint32_t map_size = object_info.num_elements;
             VariantMetadata variant_metadata = variant.metadata();
             for (uint32_t idx = 0; idx < map_size; idx++) {

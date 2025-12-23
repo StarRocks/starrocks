@@ -171,7 +171,7 @@ StatusOr<ColumnPtr> VariantFunctions::variant_typeof(FunctionContext* context, c
             result.append_null();
             continue;
         }
-        result.append(variant_type_to_string(variant_value->to_variant().type()));
+        result.append(VariantUtil::variant_type_to_string(variant_value->to_variant().type()));
     }
     return result.build(ColumnHelper::is_all_const(columns));
 }
