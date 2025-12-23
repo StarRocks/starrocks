@@ -208,6 +208,7 @@ public class ConnectContext {
     //    or current processing stmt is the last stmt for multi stmts
     // used to set mysql result package
     protected boolean isLastStmt = true;
+    protected boolean isSingleStmt = false;
     // set true when user dump query through HTTP
     protected boolean isHTTPQueryDump = false;
 
@@ -1355,5 +1356,13 @@ public class ConnectContext {
 
     public void setCurrentThreadId(long currentThreadId) {
         this.currentThreadId = new AtomicLong(currentThreadId);
+    }
+
+    public boolean isSingleStmt() {
+        return isSingleStmt;
+    }
+
+    public void setSingleStmt(boolean singleStmt) {
+        isSingleStmt = singleStmt;
     }
 }
