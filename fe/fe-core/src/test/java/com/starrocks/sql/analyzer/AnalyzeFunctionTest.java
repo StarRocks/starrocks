@@ -347,7 +347,7 @@ public class AnalyzeFunctionTest {
         SelectRelation selectRelation = (SelectRelation) relation;
         Assertions.assertTrue(selectRelation.getOutputExpression().get(0) instanceof FunctionCallExpr);
         FunctionCallExpr functionCallExpr = (FunctionCallExpr) selectRelation.getOutputExpression().get(0);
-        Assertions.assertEquals(FunctionSet.GROUP_CONCAT, functionCallExpr.getFnName().getFunction());
+        Assertions.assertEquals(FunctionSet.GROUP_CONCAT, functionCallExpr.getFunctionName());
         Assertions.assertEquals(2, functionCallExpr.getChildren().size());
 
         // Test STRING_AGG with ORDER BY
@@ -355,7 +355,7 @@ public class AnalyzeFunctionTest {
         relation = stmt.getQueryRelation();
         selectRelation = (SelectRelation) relation;
         functionCallExpr = (FunctionCallExpr) selectRelation.getOutputExpression().get(0);
-        Assertions.assertEquals(FunctionSet.GROUP_CONCAT, functionCallExpr.getFnName().getFunction());
+        Assertions.assertEquals(FunctionSet.GROUP_CONCAT, functionCallExpr.getFunctionName());
         Assertions.assertNotNull(functionCallExpr.getParams().getOrderByElements());
         Assertions.assertEquals(1, functionCallExpr.getParams().getOrderByElements().size());
 
@@ -364,7 +364,7 @@ public class AnalyzeFunctionTest {
         relation = stmt.getQueryRelation();
         selectRelation = (SelectRelation) relation;
         functionCallExpr = (FunctionCallExpr) selectRelation.getOutputExpression().get(0);
-        Assertions.assertEquals(FunctionSet.GROUP_CONCAT, functionCallExpr.getFnName().getFunction());
+        Assertions.assertEquals(FunctionSet.GROUP_CONCAT, functionCallExpr.getFunctionName());
         Assertions.assertEquals(2, functionCallExpr.getParams().getOrderByElements().size());
 
         // Test STRING_AGG with DISTINCT
@@ -372,7 +372,7 @@ public class AnalyzeFunctionTest {
         relation = stmt.getQueryRelation();
         selectRelation = (SelectRelation) relation;
         functionCallExpr = (FunctionCallExpr) selectRelation.getOutputExpression().get(0);
-        Assertions.assertEquals(FunctionSet.GROUP_CONCAT, functionCallExpr.getFnName().getFunction());
+        Assertions.assertEquals(FunctionSet.GROUP_CONCAT, functionCallExpr.getFunctionName());
         Assertions.assertTrue(functionCallExpr.getParams().isDistinct());
 
         // Test STRING_AGG with DISTINCT and ORDER BY
@@ -380,7 +380,7 @@ public class AnalyzeFunctionTest {
         relation = stmt.getQueryRelation();
         selectRelation = (SelectRelation) relation;
         functionCallExpr = (FunctionCallExpr) selectRelation.getOutputExpression().get(0);
-        Assertions.assertEquals(FunctionSet.GROUP_CONCAT, functionCallExpr.getFnName().getFunction());
+        Assertions.assertEquals(FunctionSet.GROUP_CONCAT, functionCallExpr.getFunctionName());
         Assertions.assertTrue(functionCallExpr.getParams().isDistinct());
         Assertions.assertEquals(1, functionCallExpr.getParams().getOrderByElements().size());
 
@@ -411,7 +411,7 @@ public class AnalyzeFunctionTest {
         SelectRelation selectRelation2 = (SelectRelation) relation2;
         functionCallExpr = (FunctionCallExpr) selectRelation.getOutputExpression().get(0);
         FunctionCallExpr functionCallExpr2 = (FunctionCallExpr) selectRelation2.getOutputExpression().get(0);
-        Assertions.assertEquals(functionCallExpr.getFnName().getFunction(), functionCallExpr2.getFnName().getFunction());
+        Assertions.assertEquals(functionCallExpr.getFunctionName(), functionCallExpr2.getFunctionName());
         Assertions.assertEquals(functionCallExpr.getChildren().size(), functionCallExpr2.getChildren().size());
     }
 
