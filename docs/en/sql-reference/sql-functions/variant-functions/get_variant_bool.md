@@ -44,9 +44,9 @@ LIMIT 3;
 +-----------+
 | is_active |
 +-----------+
-| TRUE      |
-| FALSE     |
-| TRUE      |
+| 1         |
+| 0         |
+| 1         |
 +-----------+
 ```
 
@@ -64,9 +64,9 @@ LIMIT 3;
 +---------+------------+
 | enabled | debug_mode |
 +---------+------------+
-| TRUE    | FALSE      |
-| TRUE    | TRUE       |
-| FALSE   | FALSE      |
+| 1       | 0          |
+| 1       | 1          |
+| 0       | 0          |
 +---------+------------+
 ```
 
@@ -101,11 +101,11 @@ LIMIT 5;
 +------------------+----------+
 | name             | verified |
 +------------------+----------+
-| user123          | TRUE     |
-| alice            | TRUE     |
-| bob_verified     | TRUE     |
-| charlie          | TRUE     |
-| trusted_account  | TRUE     |
+| user123          | 1        |
+| alice            | 1        |
+| bob_verified     | 1        |
+| charlie          | 1        |
+| trusted_account  | 1        |
 +------------------+----------+
 ```
 
