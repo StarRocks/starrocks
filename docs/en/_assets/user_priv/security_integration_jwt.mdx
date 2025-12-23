@@ -1,0 +1,52 @@
+### Create a security integration with JWT
+
+#### Syntax
+
+```SQL
+CREATE SECURITY INTEGRATION <security_integration_name> 
+PROPERTIES (
+    "type" = "authentication_jwt",
+    "jwks_url" = "",
+    "principal_field" = "",
+    "required_issuer" = "",
+    "required_audience" = ""
+    "comment" = ""
+);
+```
+
+#### Parameters
+
+##### security_integration_name
+
+- Required: Yes
+- Description: The name of the security integration.<br />**NOTE**<br />The security integration name is globally unique. You cannot specify this parameter as `native`.
+
+##### type
+
+- Required: Yes
+- Description: The type of the security integration. Specify it as `jwt`.
+
+##### jwks_url
+
+- Required: Yes
+- Description: The URL to the JSON Web Key Set (JWKS) service or the path to the local file under the `fe/conf` directory.
+
+##### principal_field
+
+- Required: Yes
+- Description: The string used to identify the field that indicates the subject (`sub`) in the JWT. The default value is `sub`. The value of this field must be identical with the username for logging in to StarRocks.
+
+##### required_issuer
+
+- Required: No
+- Description: The list of strings used to identify the issuers (`iss`) in the JWT. The JWT is considered valid only if one of the values in the list match the JWT issuer.
+
+##### required_audience
+
+- Required: No
+- Description: The list of strings used to identify the audience (`aud`) in the JWT. The JWT is considered valid only if one of the values in the list match the JWT audience.
+
+##### comment
+
+- Required: No
+- Description: The description of the security integration.

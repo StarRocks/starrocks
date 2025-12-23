@@ -5,6 +5,11 @@ sidebar_position: 20
 
 # 通过安全集成认证用户
 
+import SecurityIntegrationIntro from '../../../_assets/user_priv/security_integration_intro.mdx'
+import SecurityIntegrationJWT from '../../../_assets/user_priv/security_integration_jwt.mdx'
+import SecurityIntegrationOAuth from '../../../_assets/user_priv/security_integration_oauth.mdx'
+import SecurityIntegrationConnectSeeAlso from '../../../_assets/user_priv/security_integration_connect_see_also.mdx'
+
 使用安全集成将 StarRocks 与外部身份验证系统集成。
 
 通过在 StarRocks 集群中创建安全集成，您可以允许外部身份验证服务访问 StarRocks。借助安全集成，您无需在 StarRocks 中手动创建用户。当用户尝试使用外部身份登录时，StarRocks 将根据 `authentication_chain` 中的配置使用相应的安全集成来验证用户身份。身份验证成功后，用户被允许登录，StarRocks 会在会话中为用户创建一个虚拟用户以执行后续操作。
@@ -17,10 +22,7 @@ sidebar_position: 20
 
 ## 创建安全集成
 
-目前，StarRocks 的安全集成支持以下身份验证系统：
-- LDAP
-- JSON Web Token（JWT）
-- OAuth 2.0
+<SecurityIntegrationIntro />
 
 :::note
 创建安全集成时，StarRocks 不提供连接性检查。
@@ -132,141 +134,9 @@ PROPERTIES (
 - 必需：否
 - 描述：安全集成的描述。
 
-### 使用 JWT 认证创建安全集成
+<SecurityIntegrationJWT />
 
-#### 语法
-
-```SQL
-CREATE SECURITY INTEGRATION <security_integration_name> 
-PROPERTIES (
-    "type" = "authentication_jwt",
-    "jwks_url" = "",
-    "principal_field" = "",
-    "required_issuer" = "",
-    "required_audience" = ""
-    "comment" = ""
-)
-```
-
-#### 参数
-
-##### security_integration_name
-
-- 必需：是
-- 描述：安全集成的名称。<br />**注意**<br />安全集成名称是全局唯一的。您不能将此参数指定为 `native`。
-
-##### type
-
-- 必需：是
-- 描述：安全集成的类型。指定为 `jwt`。
-
-##### jwks_url
-
-- 必需：是
-- 描述：JSON Web Key Set (JWKS) 服务的 URL 或 `fe/conf` 目录下本地文件的路径。
-
-##### principal_field
-
-- 必需：是
-- 描述：用于标识 JWT 中主题 (`sub`) 的字段的字符串。默认值为 `sub`。此字段的值必须与登录 StarRocks 的用户名相同。
-
-##### required_issuer
-
-- 必需：否
-- 描述：用于标识 JWT 中发行者 (`iss`) 的字符串列表。仅当列表中的某个值与 JWT 发行者匹配时，JWT 才被视为有效。
-
-##### required_audience
-
-- 必需：否
-- 描述：用于标识 JWT 中受众 (`aud`) 的字符串列表。仅当列表中的某个值与 JWT 受众匹配时，JWT 才被视为有效。
-
-##### comment
-
-- 必需：否
-- 描述：安全集成的描述。
-
-### 使用 OAuth 2.0 创建安全集成
-
-#### 语法
-
-```SQL
-CREATE SECURITY INTEGRATION <security_integration_name> 
-PROPERTIES (
-    "type" = "authentication_oauth2",
-    "auth_server_url" = "",
-    "token_server_url" = "",
-    "client_id" = "",
-    "client_secret" = "",
-    "redirect_url" = "",
-    "jwks_url" = "",
-    "principal_field" = "",
-    "required_issuer" = "",
-    "required_audience" = ""
-    "comment" = ""
-)
-```
-
-#### 参数
-
-##### security_integration_name
-
-- 必需：是
-- 描述：安全集成的名称。<br />**注意**<br />安全集成名称是全局唯一的。您不能将此参数指定为 `native`。
-
-##### auth_server_url
-
-- 必需：是
-- 描述：授权 URL。用户浏览器将被重定向到此 URL 以开始 OAuth 2.0 授权过程。
-
-##### token_server_url
-
-- 必需：是
-- 描述：StarRocks 从中获取访问令牌的授权服务器端点的 URL。
-
-##### client_id
-
-- 必需：是
-- 描述：StarRocks 客户端的公共标识符。
-
-##### client_secret
-
-- 必需：是
-- 描述：用于授权 StarRocks 客户端与授权服务器通信的密钥。
-
-##### redirect_url
-
-- 必需：是
-- 描述：OAuth 2.0 身份验证成功后，用户浏览器将被重定向到的 URL。授权代码将发送到此 URL。在大多数情况下，需要将其配置为 `http://<starrocks_fe_url>:<fe_http_port>/api/oauth2`。
-
-##### type
-
-- 必需：是
-- 描述：安全集成的类型。指定为 `authentication_oauth2`。
-
-##### jwks_url
-
-- 必需：是
-- 描述：JSON Web Key Set (JWKS) 服务的 URL 或 `fe/conf` 目录下本地文件的路径。
-
-##### principal_field
-
-- 必需：是
-- 描述：用于标识 JWT 中主题 (`sub`) 的字段的字符串。默认值为 `sub`。此字段的值必须与登录 StarRocks 的用户名相同。
-
-##### required_issuer
-
-- 必需：否
-- 描述：用于标识 JWT 中发行者 (`iss`) 的字符串列表。仅当列表中的某个值与 JWT 发行者匹配时，JWT 才被视为有效。
-
-##### required_audience
-
-- 必需：否
-- 描述：用于标识 JWT 中受众 (`aud`) 的字符串列表。仅当列表中的某个值与 JWT 受众匹配时，JWT 才被视为有效。
-
-##### comment
-
-- 必需：否
-- 描述：安全集成的描述。
+<SecurityIntegrationOAuth />
 
 ## 配置身份验证链
 
@@ -374,15 +244,4 @@ SHOW CREATE SECURITY INTEGRATION LDAP1；
 执行 SHOW CREATE SECURITY INTEGRATION 时，`ldap_bind_root_pwd` 会被隐藏。
 :::
 
-## 通过安全集成连接到 StarRocks
-
-- 有关如何通过 LDAP 连接到 StarRocks 的说明，请参阅 [LDAP 认证 - 连接到 StarRocks](./ldap_authentication.md#从-mysql-客户端连接-ldap)。
-- 有关通过 JWT 连接 StarRocks 的说明，请参阅 [JSON Web Token 认证 - 连接 StarRocks](./jwt_authentication.md#使用-jwt-从-mysql-客户端连接)。
-- 有关通过 OAuth 2.0 连接 StarRocks 的说明，请参阅 [OAuth 2.0 认证 - 连接 StarRocks](./oauth2_authentication.md#使用-oauth-20-从-jdbc-客户端连接)。
-
-## 另见
-
-- 有关如何在 StarRocks 中通过 LDAP 手动验证用户的说明，请参阅 [LDAP 认证](./ldap_authentication.md)。
-- 有关如何在 StarRocks 中通过 SON Web Token 认证手动验证用户的说明，请参阅 [JSON Web Token 认证](./jwt_authentication.md)。
-- 有关如何在 StarRocks 中通过 OAuth 2.0 手动验证用户的说明，请参阅 [OAuth 2.0 认证](./oauth2_authentication.md)。
-- 有关如何验证用户组的说明，请参阅 [认证用户组](../group_provider.md)。
+<SecurityIntegrationConnectSeeAlso />

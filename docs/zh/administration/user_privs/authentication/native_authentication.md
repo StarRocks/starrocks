@@ -7,7 +7,7 @@ sidebar_position: 10
 
 通过 SQL 命令在 StarRocks 中使用本地身份验证创建和管理用户。
 
-StarRocks 本地身份验证是一种基于密码的身份验证方法。此外，StarRocks 还支持与外部身份验证系统集成，如 LDAP、OpenID Connect 和 OAuth 2.0。更多说明，请参见[Authenticate with Security Integration](./security_integration.md)。
+StarRocks 本地身份验证是一种基于密码的身份验证方法。此外，StarRocks 还支持与外部身份验证系统集成，如 LDAP。更多说明，请参见[通过安全集成认证用户](./security_integration.md)。
 
 :::note
 
