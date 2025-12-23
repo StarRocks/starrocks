@@ -47,11 +47,19 @@ Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicate
     auto txn_id = request.transaction_id;
     auto virtual_tablet_id = request.virtual_tablet_id;
 
+    // Get partitioned prefix configuration from request
+    bool src_enable_partitioned_prefix =
+            request.__isset.src_enable_partitioned_prefix && request.src_enable_partitioned_prefix;
+    int32_t src_num_partitioned_prefix =
+            request.__isset.src_num_partitioned_prefix ? request.src_num_partitioned_prefix : 0;
+
     LOG(INFO) << "Start to replicate lake remote storage, txn_id: " << txn_id << ", tablet_id: " << target_tablet_id
               << ", src_tablet_id: " << src_tablet_id << ", src_db_id: " << src_db_id
               << ", src_table_id: " << src_table_id << ", src_partition_id: " << src_partition_id
               << ", visible_version: " << target_visible_version << ", data_version: " << data_version
-              << ", virtual_tablet_id: " << virtual_tablet_id << ", src_visible_version: " << src_visible_version;
+              << ", virtual_tablet_id: " << virtual_tablet_id << ", src_visible_version: " << src_visible_version
+              << ", src_enable_partitioned_prefix: " << src_enable_partitioned_prefix
+              << ", src_num_partitioned_prefix: " << src_num_partitioned_prefix;
 
     std::vector<Version> missed_versions;
     for (auto v = data_version + 1; v <= src_visible_version; ++v) {
@@ -66,10 +74,15 @@ Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicate
     }
 
 #if !defined(BE_TEST) && defined(USE_STAROS)
-    auto src_meta_dir =
-            _remote_location_provider->metadata_root_location(src_tablet_id, src_db_id, src_table_id, src_partition_id);
-    auto src_data_dir =
-            _remote_location_provider->segment_root_location(src_tablet_id, src_db_id, src_table_id, src_partition_id);
+    // Build partitioned prefix config for source cluster
+    PartitionedPrefixConfig prefix_config;
+    prefix_config.enable_partitioned_prefix = src_enable_partitioned_prefix;
+    prefix_config.num_partitioned_prefix = src_num_partitioned_prefix;
+
+    auto src_meta_dir = _remote_location_provider->metadata_root_location(src_tablet_id, src_db_id, src_table_id,
+                                                                          src_partition_id, prefix_config);
+    auto src_data_dir = _remote_location_provider->segment_root_location(src_tablet_id, src_db_id, src_table_id,
+                                                                         src_partition_id, prefix_config);
     // `shared_src_fs` is used to access storage of src cluster
     auto shared_src_fs = new_fs_starlet(virtual_tablet_id);
     if (shared_src_fs == nullptr) {

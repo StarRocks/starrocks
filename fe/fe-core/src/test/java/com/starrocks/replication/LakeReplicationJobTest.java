@@ -29,6 +29,7 @@ import com.starrocks.task.AgentTask;
 import com.starrocks.task.AgentTaskExecutor;
 import com.starrocks.task.ReplicateSnapshotTask;
 import com.starrocks.thrift.TFinishTaskRequest;
+import com.starrocks.thrift.TReplicateSnapshotRequest;
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.utframe.StarRocksAssert;
@@ -187,5 +188,94 @@ public class LakeReplicationJobTest {
 
         job.run();
         Assertions.assertEquals(ReplicationJobState.ABORTED, job.getState());
+    }
+
+    @Test
+    public void testPartitionedPrefixConfigDisabled() throws Exception {
+        // Test with partitioned prefix disabled (default)
+        long virtualTabletId = 1000;
+        long srcDatabaseId = 100;
+        long srcTableId = 100;
+        LakeReplicationJob jobWithoutPrefix = new LakeReplicationJob(null, virtualTabletId, srcDatabaseId, srcTableId,
+                db.getId(), table, srcTable,
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo());
+
+        Assertions.assertEquals(ReplicationJobState.INITIALIZING, jobWithoutPrefix.getState());
+
+        jobWithoutPrefix.run();
+        Assertions.assertEquals(ReplicationJobState.REPLICATING, jobWithoutPrefix.getState());
+
+        // Verify that tasks are created with partitioned prefix disabled
+        Map<AgentTask, AgentTask> runningTasks = Deencapsulation.getField(jobWithoutPrefix, "runningTasks");
+        for (AgentTask task : runningTasks.values()) {
+            ReplicateSnapshotTask snapshotTask = (ReplicateSnapshotTask) task;
+            TReplicateSnapshotRequest thriftRequest = snapshotTask.toThrift();
+            
+            // Default should be false for partitioned prefix
+            Assertions.assertFalse(thriftRequest.isSrc_enable_partitioned_prefix());
+            Assertions.assertEquals(0, thriftRequest.getSrc_num_partitioned_prefix());
+        }
+    }
+
+    @Test
+    public void testPartitionedPrefixConfigEnabled() throws Exception {
+        // Test with partitioned prefix enabled
+        long virtualTabletId = 1000;
+        long srcDatabaseId = 100;
+        long srcTableId = 100;
+        boolean enablePartitionedPrefix = true;
+        int numPartitionedPrefix = 1024;
+        
+        LakeReplicationJob jobWithPrefix = new LakeReplicationJob(null, virtualTabletId, srcDatabaseId, srcTableId,
+                db.getId(), table, srcTable,
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),
+                enablePartitionedPrefix, numPartitionedPrefix);
+
+        Assertions.assertEquals(ReplicationJobState.INITIALIZING, jobWithPrefix.getState());
+
+        jobWithPrefix.run();
+        Assertions.assertEquals(ReplicationJobState.REPLICATING, jobWithPrefix.getState());
+
+        // Verify that tasks are created with partitioned prefix enabled
+        Map<AgentTask, AgentTask> runningTasks = Deencapsulation.getField(jobWithPrefix, "runningTasks");
+        for (AgentTask task : runningTasks.values()) {
+            ReplicateSnapshotTask snapshotTask = (ReplicateSnapshotTask) task;
+            TReplicateSnapshotRequest thriftRequest = snapshotTask.toThrift();
+            
+            // Should have partitioned prefix enabled
+            Assertions.assertTrue(thriftRequest.isSrc_enable_partitioned_prefix());
+            Assertions.assertEquals(1024, thriftRequest.getSrc_num_partitioned_prefix());
+            
+            // Verify toString includes partitioned prefix info
+            String taskStr = snapshotTask.toString();
+            Assertions.assertTrue(taskStr.contains("src enable partitioned prefix: true"));
+            Assertions.assertTrue(taskStr.contains("src num partitioned prefix: 1024"));
+        }
+    }
+
+    @Test
+    public void testPartitionedPrefixWith256Partitions() throws Exception {
+        // Test with 256 partitions (common configuration)
+        long virtualTabletId = 1000;
+        long srcDatabaseId = 100;
+        long srcTableId = 100;
+        boolean enablePartitionedPrefix = true;
+        int numPartitionedPrefix = 256;
+        
+        LakeReplicationJob jobWithPrefix = new LakeReplicationJob(null, virtualTabletId, srcDatabaseId, srcTableId,
+                db.getId(), table, srcTable,
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),
+                enablePartitionedPrefix, numPartitionedPrefix);
+
+        jobWithPrefix.run();
+
+        Map<AgentTask, AgentTask> runningTasks = Deencapsulation.getField(jobWithPrefix, "runningTasks");
+        for (AgentTask task : runningTasks.values()) {
+            ReplicateSnapshotTask snapshotTask = (ReplicateSnapshotTask) task;
+            TReplicateSnapshotRequest thriftRequest = snapshotTask.toThrift();
+            
+            Assertions.assertTrue(thriftRequest.isSrc_enable_partitioned_prefix());
+            Assertions.assertEquals(256, thriftRequest.getSrc_num_partitioned_prefix());
+        }
     }
 }

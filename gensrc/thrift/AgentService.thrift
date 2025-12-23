@@ -413,27 +413,30 @@ struct TRemoteSnapshotRequest {
      15: optional Types.TVersion data_version
  }
 
- struct TReplicateSnapshotRequest {
-     1: optional Types.TTransactionId transaction_id
-     2: optional Types.TTableId table_id
-     3: optional Types.TPartitionId partition_id
-     4: optional Types.TTabletId tablet_id
-     5: optional TTabletType tablet_type
-     6: optional Types.TSchemaHash schema_hash
-     7: optional Types.TVersion visible_version
-     8: optional string src_token
-     9: optional Types.TTabletId src_tablet_id
-     10: optional TTabletType src_tablet_type
-     11: optional Types.TSchemaHash src_schema_hash
-     12: optional Types.TVersion src_visible_version
-     13: optional list<Types.TSnapshotInfo> src_snapshot_infos
-     14: optional binary encryption_meta
-     15: optional Types.TVersion data_version
-     16: optional Types.TTabletId virtual_tablet_id
-     17: optional Types.TDatabaseId src_db_id
-     18: optional Types.TTableId src_table_id
-     19: optional Types.TPartitionId src_partition_id
- }
+struct TReplicateSnapshotRequest {
+    1: optional Types.TTransactionId transaction_id
+    2: optional Types.TTableId table_id
+    3: optional Types.TPartitionId partition_id
+    4: optional Types.TTabletId tablet_id
+    5: optional TTabletType tablet_type
+    6: optional Types.TSchemaHash schema_hash
+    7: optional Types.TVersion visible_version
+    8: optional string src_token
+    9: optional Types.TTabletId src_tablet_id
+    10: optional TTabletType src_tablet_type
+    11: optional Types.TSchemaHash src_schema_hash
+    12: optional Types.TVersion src_visible_version
+    13: optional list<Types.TSnapshotInfo> src_snapshot_infos
+    14: optional binary encryption_meta
+    15: optional Types.TVersion data_version
+    16: optional Types.TTabletId virtual_tablet_id
+    17: optional Types.TDatabaseId src_db_id
+    18: optional Types.TTableId src_table_id
+    19: optional Types.TPartitionId src_partition_id
+    // Partitioned prefix configuration for source cluster storage volume
+    20: optional bool src_enable_partitioned_prefix
+    21: optional i32 src_num_partitioned_prefix
+}
 
 struct TExternalClusterSnapshotRequest {
     1: optional i64 job_id // ExternalClusterSnapshot job id
