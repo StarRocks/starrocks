@@ -1613,6 +1613,7 @@ CREATE VIEW [IF NOT EXISTS]
     [, <column_name>[ COMMENT 'column comment'], ...]
 )
 [COMMENT 'view comment']
+[PROPERTIES ("key" = "value", ...)]
 AS <query_statement>
 ```
 
@@ -1622,6 +1623,18 @@ Create an Iceberg view `iceberg_view1` based on an Iceberg table `iceberg_table`
 
 ```SQL
 CREATE VIEW IF NOT EXISTS iceberg.iceberg_db.iceberg_view1 AS
+SELECT k1, k2 FROM iceberg.iceberg_db.iceberg_table;
+```
+
+From v4.0.3 onwards, you can specify the view attributes in the `"key" = "value"` format in `PROPERTIES`.
+
+```SQL
+CREATE VIEW IF NOT EXISTS iceberg.iceberg_db.iceberg_view1
+PROPERTIES (
+  "key1" = "value1",
+  "key2" = "value2"
+)
+AS
 SELECT k1, k2 FROM iceberg.iceberg_db.iceberg_table;
 ```
 
