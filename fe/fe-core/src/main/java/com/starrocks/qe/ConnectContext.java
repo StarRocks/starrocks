@@ -211,6 +211,7 @@ public class ConnectContext {
     //    or current processing stmt is the last stmt for multi stmts
     // used to set mysql result package
     protected boolean isLastStmt = true;
+    protected boolean isSingleStmt = false;
     // set true when user dump query through HTTP
     protected boolean isHTTPQueryDump = false;
 
@@ -1412,4 +1413,56 @@ public class ConnectContext {
     public void setCurrentThreadId(long currentThreadId) {
         this.currentThreadId = new AtomicLong(currentThreadId);
     }
+<<<<<<< HEAD
+=======
+
+    public void setFinishSinkHandler(FinishSinkHandler handler) {
+        this.skipFinishSink = true;
+        this.handler = handler;
+    }
+
+    public boolean getSkipFinishSink() {
+        return skipFinishSink;
+    }
+
+    public FinishSinkHandler getFinishSinkHandler() {
+        return handler;
+    }
+
+    public interface Listener {
+        /**
+         * Trigger when query is finished
+         */
+        void onQueryFinished(ConnectContext state);
+    }
+
+    public void registerListener(Listener listener) {
+        this.listeners.add(listener);
+    }
+
+    public void onQueryFinished() {
+        for (Listener listener : listeners) {
+            try {
+                listener.onQueryFinished(this);
+            } catch (Exception e) {
+                // ignore
+                LOG.warn("onQueryFinished error", e);
+            }
+        }
+
+        try {
+            auditEventBuilder.setCNGroup(getCurrentComputeResourceName());
+        } catch (Exception e) {
+            LOG.warn("set cn group name failed", e);
+        }
+    }
+
+    public boolean isSingleStmt() {
+        return isSingleStmt;
+    }
+
+    public void setSingleStmt(boolean singleStmt) {
+        isSingleStmt = singleStmt;
+    }
+>>>>>>> ab4de17963 ([BugFix] fix profile's stmt when multi stmt submited (#67097))
 }
