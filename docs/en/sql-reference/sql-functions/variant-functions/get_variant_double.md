@@ -32,73 +32,102 @@ If the element does not exist, the path is invalid, or the value cannot be conve
 
 ## Examples
 
-Example 1: Extract a double value from the root of a VARIANT.
+Example 1: Extract double values from a VARIANT column.
 
 ```SQL
-SELECT get_variant_double(variant_col, '$')
-FROM iceberg_catalog.db.table_with_variants;
+SELECT get_variant_double(variant_col, '$.temperature') AS temperature
+FROM iceberg_catalog.db.measurements
+LIMIT 3;
 ```
 
-Example 2: Extract a double from a nested field.
-
-```SQL
-SELECT get_variant_double(variant_col, '$.measurements.temperature')
-FROM iceberg_catalog.db.table_with_variants;
+```plaintext
++-------------+
+| temperature |
++-------------+
+| 23.5        |
+| 24.2        |
+| 22.8        |
++-------------+
 ```
 
-Example 3: Extract a double from an array element.
-
-```SQL
-SELECT get_variant_double(variant_col, '$.values[0]')
-FROM iceberg_catalog.db.table_with_variants;
-```
-
-Example 4: Extract multiple numeric values from nested structures.
+Example 2: Extract multiple numeric values from nested structures.
 
 ```SQL
 SELECT
     get_variant_double(variant_col, '$.price') AS price,
     get_variant_double(variant_col, '$.discount') AS discount,
     get_variant_double(variant_col, '$.tax_rate') AS tax_rate
-FROM iceberg_catalog.db.table_with_variants;
+FROM iceberg_catalog.db.products
+LIMIT 3;
 ```
 
-Example 5: Perform calculations with extracted values.
+```plaintext
++--------+----------+----------+
+| price  | discount | tax_rate |
++--------+----------+----------+
+| 99.99  | 0.15     | 0.08     |
+| 149.50 | 0.20     | 0.08     |
+| 79.95  | 0.10     | 0.08     |
++--------+----------+----------+
+```
+
+Example 3: Perform calculations with extracted values.
 
 ```SQL
 SELECT
+    get_variant_double(variant_col, '$.price') AS original_price,
     get_variant_double(variant_col, '$.price') *
     (1 - get_variant_double(variant_col, '$.discount')) AS final_price
-FROM iceberg_catalog.db.table_with_variants;
+FROM iceberg_catalog.db.products
+LIMIT 3;
 ```
 
-Example 6: Extract from map-like structures.
+```plaintext
++----------------+-------------+
+| original_price | final_price |
++----------------+-------------+
+| 99.99          | 84.99       |
+| 149.50         | 119.60      |
+| 79.95          | 71.96       |
++----------------+-------------+
+```
+
+Example 4: Use in aggregation queries.
 
 ```SQL
-SELECT get_variant_double(variant_col, '$.metrics.avg_score')
-FROM iceberg_catalog.db.table_with_variants;
+SELECT
+    AVG(get_variant_double(variant_col, '$.temperature')) AS avg_temp,
+    MAX(get_variant_double(variant_col, '$.temperature')) AS max_temp,
+    MIN(get_variant_double(variant_col, '$.temperature')) AS min_temp
+FROM iceberg_catalog.db.measurements;
 ```
 
-Example 7: Returns NULL when the path does not exist.
+```plaintext
++----------+----------+----------+
+| avg_temp | max_temp | min_temp |
++----------+----------+----------+
+| 23.4     | 28.9     | 18.2     |
++----------+----------+----------+
+```
+
+Example 5: Returns NULL when the path does not exist or value is not numeric.
 
 ```SQL
-SELECT get_variant_double(variant_col, '$.nonexistent.field')
-FROM iceberg_catalog.db.table_with_variants;
--- Returns NULL
+SELECT
+    get_variant_double(variant_col, '$.nonexistent.field') AS missing,
+    get_variant_double(variant_col, '$.name') AS not_a_number
+FROM iceberg_catalog.db.table_with_variants
+LIMIT 1;
 ```
 
-Example 8: Returns NULL when the value is not numeric.
-
-```SQL
-SELECT get_variant_double(variant_col, '$.name')
-FROM iceberg_catalog.db.table_with_variants;
--- Returns NULL if $.name is a string
+```plaintext
++---------+---------------+
+| missing | not_a_number  |
++---------+---------------+
+| NULL    | NULL          |
++---------+---------------+
 ```
 
-## See also
+## keyword
 
-- [variant_query](variant_query.md): Query and return VARIANT values
-- [get_variant_int](get_variant_int.md): Extract integer values from VARIANT
-- [get_variant_string](get_variant_string.md): Extract string values from VARIANT
-- [get_variant_bool](get_variant_bool.md): Extract boolean values from VARIANT
-- [VARIANT data type](../../../data-types/semi_structured/VARIANT.md)
+GET_VARIANT_DOUBLE,GET,VARIANT,DOUBLE

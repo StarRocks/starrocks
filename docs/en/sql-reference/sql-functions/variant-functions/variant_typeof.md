@@ -23,15 +23,15 @@ VARCHAR variant_typeof(variant_expr)
 Returns a VARCHAR value representing the type name.
 
 Possible return values include:
-- `"boolean"` - for boolean values
-- `"int8"`, `"int16"`, `"int32"`, `"int64"` - for integer values
-- `"float"`, `"double"` - for floating-point values
-- `"decimal"` - for decimal values
-- `"string"` - for string values
-- `"date"` - for date values
-- `"timestamp"`, `"timestamp_ntz"` - for timestamp values
-- `"object"` - for struct or map values
-- `"array"` - for array values
+- `"Boolean"` - for boolean values
+- `"Int8"`, `"Int16"`, `"Int32"`, `"Int64"` - for integer values
+- `"Float"`, `"Double"` - for floating-point values
+- `"Decimal"` - for decimal values
+- `"String"` - for string values
+- `"Date"` - for date values
+- `"Timestamp"`, `"TimestampNtz"` - for timestamp values
+- `"Object"` - for struct or map values
+- `"Array"` - for array values
 - `NULL` - if the VARIANT value is NULL
 
 ## Examples
@@ -39,78 +39,94 @@ Possible return values include:
 Example 1: Get the type of a VARIANT value at the root level.
 
 ```SQL
-SELECT variant_typeof(variant_col)
-FROM iceberg_catalog.db.table_with_variants;
+SELECT variant_typeof(data) AS type
+FROM bluesky
+LIMIT 1;
+```
+
+```plaintext
++--------+
+| type   |
++--------+
+| Object |
++--------+
 ```
 
 Example 2: Get the type of nested fields.
 
 ```SQL
 SELECT
-    variant_typeof(variant_query(variant_col, '$.user')) AS user_type,
-    variant_typeof(variant_query(variant_col, '$.age')) AS age_type,
-    variant_typeof(variant_query(variant_col, '$.scores')) AS scores_type
-FROM iceberg_catalog.db.table_with_variants;
+    variant_typeof(variant_query(data, '$.kind')) AS kind_type,
+    variant_typeof(variant_query(data, '$.did')) AS did_type,
+    variant_typeof(variant_query(data, '$.commit')) AS commit_type
+FROM bluesky
+LIMIT 1;
 ```
 
-Example 3: Use in conditional logic to handle different types.
+```plaintext
++-----------+----------+-------------+
+| kind_type | did_type | commit_type |
++-----------+----------+-------------+
+| String    | String   | Object      |
++-----------+----------+-------------+
+```
+
+Example 3: Check types of multiple fields.
 
 ```SQL
 SELECT
-    CASE variant_typeof(variant_col)
-        WHEN 'int64' THEN get_variant_int(variant_col, '$')
-        WHEN 'string' THEN CAST(get_variant_string(variant_col, '$') AS BIGINT)
+    variant_typeof(variant_query(data, '$.commit')) AS commit_type,
+    variant_typeof(variant_query(data, '$.time_us')) AS time_type
+FROM bluesky
+LIMIT 1;
+```
+
+```plaintext
++-------------+-----------+
+| commit_type | time_type |
++-------------+-----------+
+| Object      | Int64     |
++-------------+-----------+
+```
+
+Example 4: Use in conditional logic to handle different types.
+
+```SQL
+SELECT
+    CASE variant_typeof(variant_query(data, '$.time_us'))
+        WHEN 'Int64' THEN get_variant_int(data, '$.time_us')
         ELSE NULL
-    END AS value
-FROM iceberg_catalog.db.table_with_variants;
+    END AS timestamp_value
+FROM bluesky
+LIMIT 3;
 ```
 
-Example 4: Filter rows based on type.
+```plaintext
++------------------+
+| timestamp_value  |
++------------------+
+| 1733267476040329 |
+| 1733267476040803 |
+| 1733267476041472 |
++------------------+
+```
+
+Example 5: Filter rows based on type.
 
 ```SQL
-SELECT *
-FROM iceberg_catalog.db.table_with_variants
-WHERE variant_typeof(variant_query(variant_col, '$.data')) = 'object';
+SELECT COUNT(*) AS object_count
+FROM bluesky
+WHERE variant_typeof(variant_query(data, '$.commit')) = 'Object';
 ```
 
-Example 5: Identify array fields.
-
-```SQL
-SELECT
-    id,
-    path
-FROM iceberg_catalog.db.table_with_variants
-WHERE variant_typeof(variant_query(variant_col, '$.items')) = 'array';
+```plaintext
++--------------+
+| object_count |
++--------------+
+| 9960624      |
++--------------+
 ```
 
-Example 6: Check types of array elements.
+## keyword
 
-```SQL
-SELECT
-    variant_typeof(variant_query(variant_col, '$[0]')) AS first_elem_type,
-    variant_typeof(variant_query(variant_col, '$[1]')) AS second_elem_type
-FROM iceberg_catalog.db.table_with_variants;
-```
-
-Example 7: Combine with other functions for type-aware extraction.
-
-```SQL
-SELECT
-    CASE variant_typeof(variant_query(variant_col, '$.value'))
-        WHEN 'int64' THEN CAST(get_variant_int(variant_col, '$.value') AS STRING)
-        WHEN 'double' THEN CAST(get_variant_double(variant_col, '$.value') AS STRING)
-        WHEN 'string' THEN get_variant_string(variant_col, '$.value')
-        WHEN 'boolean' THEN CAST(get_variant_bool(variant_col, '$.value') AS STRING)
-        ELSE 'unknown'
-    END AS value_as_string
-FROM iceberg_catalog.db.table_with_variants;
-```
-
-## See also
-
-- [variant_query](variant_query.md): Query and return VARIANT values
-- [get_variant_int](get_variant_int.md): Extract integer values from VARIANT
-- [get_variant_string](get_variant_string.md): Extract string values from VARIANT
-- [get_variant_double](get_variant_double.md): Extract double values from VARIANT
-- [get_variant_bool](get_variant_bool.md): Extract boolean values from VARIANT
-- [VARIANT data type](../../../data-types/semi_structured/VARIANT.md)
+VARIANT_TYPEOF,VARIANT,TYPEOF

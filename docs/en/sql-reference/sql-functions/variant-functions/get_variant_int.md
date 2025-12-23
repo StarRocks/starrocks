@@ -32,63 +32,98 @@ If the element does not exist, the path is invalid, or the value cannot be conve
 
 ## Examples
 
-Example 1: Extract an integer value from the root of a VARIANT.
+Example 1: Extract integer values from a VARIANT column.
 
 ```SQL
-SELECT get_variant_int(variant_col, '$')
-FROM iceberg_catalog.db.table_with_variants;
+SELECT get_variant_int(data, '$.time_us') AS timestamp_us
+FROM bluesky
+LIMIT 3;
 ```
 
-Example 2: Extract an integer from a nested field.
-
-```SQL
-SELECT get_variant_int(variant_col, '$.user.age')
-FROM iceberg_catalog.db.table_with_variants;
+```plaintext
++------------------+
+| timestamp_us     |
++------------------+
+| 1733267476040329 |
+| 1733267476040803 |
+| 1733267476041472 |
++------------------+
 ```
 
-Example 3: Extract an integer from an array element.
-
-```SQL
-SELECT get_variant_int(variant_col, '$.scores[0]')
-FROM iceberg_catalog.db.table_with_variants;
-```
-
-Example 4: Extract integers from nested structures.
+Example 2: Use in calculations.
 
 ```SQL
 SELECT
-    get_variant_int(variant_col, '$.metrics.count') AS count,
-    get_variant_int(variant_col, '$.metrics.total') AS total
-FROM iceberg_catalog.db.table_with_variants;
+    get_variant_int(data, '$.time_us') / 1000000 AS timestamp_seconds
+FROM bluesky
+LIMIT 3;
 ```
 
-Example 5: Extract from a map-like structure.
+```plaintext
++-------------------+
+| timestamp_seconds |
++-------------------+
+| 1733267476        |
+| 1733267476        |
+| 1733267476        |
++-------------------+
+```
+
+Example 3: Count records by operation type using GROUP BY.
 
 ```SQL
-SELECT get_variant_int(variant_col, '$.counters.success')
-FROM iceberg_catalog.db.table_with_variants;
+SELECT
+    get_variant_string(data, '$.commit.operation') AS operation,
+    COUNT(*) AS count
+FROM bluesky
+GROUP BY operation;
 ```
 
-Example 6: Returns NULL when the path does not exist.
+```plaintext
++-----------+---------+
+| operation | count   |
++-----------+---------+
+| delete    | 420223  |
+| update    | 40283   |
+| NULL      | 39361   |
+| create    | 9500118 |
++-----------+---------+
+```
+
+Example 4: Use in WHERE clause for filtering.
 
 ```SQL
-SELECT get_variant_int(variant_col, '$.nonexistent.field')
-FROM iceberg_catalog.db.table_with_variants;
--- Returns NULL
+SELECT COUNT(*) AS recent_count
+FROM bluesky
+WHERE get_variant_int(data, '$.time_us') > 1733267476000000;
 ```
 
-Example 7: Returns NULL when the value is not an integer.
+```plaintext
++--------------+
+| recent_count |
++--------------+
+| 8234567      |
++--------------+
+```
+
+Example 5: Returns NULL when the path does not exist or value is not an integer.
 
 ```SQL
-SELECT get_variant_int(variant_col, '$.name')
-FROM iceberg_catalog.db.table_with_variants;
--- Returns NULL if $.name is a string
+SELECT
+    get_variant_int(data, '$.nonexistent.field') AS missing,
+    get_variant_int(data, '$.kind') AS not_an_int
+FROM bluesky
+LIMIT 1;
 ```
 
-## See also
+```plaintext
++---------+-------------+
+| missing | not_an_int  |
++---------+-------------+
+| NULL    | NULL        |
++---------+-------------+
+```
 
-- [variant_query](variant_query.md): Query and return VARIANT values
-- [get_variant_string](get_variant_string.md): Extract string values from VARIANT
-- [get_variant_double](get_variant_double.md): Extract double values from VARIANT
-- [get_variant_bool](get_variant_bool.md): Extract boolean values from VARIANT
-- [VARIANT data type](../../../data-types/semi_structured/VARIANT.md)
+## keyword
+
+GET_VARIANT_INT,GET,VARIANT,INT

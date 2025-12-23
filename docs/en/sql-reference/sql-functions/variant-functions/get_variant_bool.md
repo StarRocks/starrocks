@@ -32,64 +32,101 @@ If the element does not exist, the path is invalid, or the value cannot be conve
 
 ## Examples
 
-Example 1: Extract a boolean value from the root of a VARIANT.
+Example 1: Extract a boolean value from a nested field.
 
 ```SQL
-SELECT get_variant_bool(variant_col, '$')
-FROM iceberg_catalog.db.table_with_variants;
+SELECT get_variant_bool(variant_col, '$.is_active') AS is_active
+FROM iceberg_catalog.db.table_with_variants
+LIMIT 3;
 ```
 
-Example 2: Extract a boolean from a nested field.
-
-```SQL
-SELECT get_variant_bool(variant_col, '$.user.is_active')
-FROM iceberg_catalog.db.table_with_variants;
+```plaintext
++-----------+
+| is_active |
++-----------+
+| TRUE      |
+| FALSE     |
+| TRUE      |
++-----------+
 ```
 
-Example 3: Extract a boolean from an array element.
-
-```SQL
-SELECT get_variant_bool(variant_col, '$.flags[0]')
-FROM iceberg_catalog.db.table_with_variants;
-```
-
-Example 4: Extract booleans from nested structures.
+Example 2: Extract booleans from nested structures.
 
 ```SQL
 SELECT
     get_variant_bool(variant_col, '$.settings.enabled') AS enabled,
     get_variant_bool(variant_col, '$.settings.debug') AS debug_mode
-FROM iceberg_catalog.db.table_with_variants;
+FROM iceberg_catalog.db.table_with_variants
+LIMIT 3;
 ```
 
-Example 5: Use in WHERE clause for filtering.
+```plaintext
++---------+------------+
+| enabled | debug_mode |
++---------+------------+
+| TRUE    | FALSE      |
+| TRUE    | TRUE       |
+| FALSE   | FALSE      |
++---------+------------+
+```
+
+Example 3: Use in WHERE clause for filtering.
 
 ```SQL
-SELECT *
+SELECT COUNT(*) AS active_count
 FROM iceberg_catalog.db.table_with_variants
 WHERE get_variant_bool(variant_col, '$.is_active') = TRUE;
 ```
 
-Example 6: Returns NULL when the path does not exist.
-
-```SQL
-SELECT get_variant_bool(variant_col, '$.nonexistent.field')
-FROM iceberg_catalog.db.table_with_variants;
--- Returns NULL
+```plaintext
++--------------+
+| active_count |
++--------------+
+| 1234567      |
++--------------+
 ```
 
-Example 7: Returns NULL when the value is not a boolean.
+Example 4: Combine with other variant functions.
 
 ```SQL
-SELECT get_variant_bool(variant_col, '$.name')
-FROM iceberg_catalog.db.table_with_variants;
--- Returns NULL if $.name is a string
+SELECT
+    get_variant_string(variant_col, '$.name') AS name,
+    get_variant_bool(variant_col, '$.verified') AS verified
+FROM iceberg_catalog.db.table_with_variants
+WHERE get_variant_bool(variant_col, '$.verified') = TRUE
+LIMIT 5;
 ```
 
-## See also
+```plaintext
++------------------+----------+
+| name             | verified |
++------------------+----------+
+| user123          | TRUE     |
+| alice            | TRUE     |
+| bob_verified     | TRUE     |
+| charlie          | TRUE     |
+| trusted_account  | TRUE     |
++------------------+----------+
+```
 
-- [variant_query](variant_query.md): Query and return VARIANT values
-- [get_variant_int](get_variant_int.md): Extract integer values from VARIANT
-- [get_variant_string](get_variant_string.md): Extract string values from VARIANT
-- [get_variant_double](get_variant_double.md): Extract double values from VARIANT
-- [VARIANT data type](../../../data-types/semi_structured/VARIANT.md)
+Example 5: Returns NULL when the path does not exist or value is not a boolean.
+
+```SQL
+SELECT
+    get_variant_bool(variant_col, '$.nonexistent.field') AS missing,
+    get_variant_bool(variant_col, '$.name') AS not_a_bool
+FROM iceberg_catalog.db.table_with_variants
+LIMIT 1;
+```
+
+```plaintext
++---------+--------------+
+| missing | not_a_bool   |
++---------+--------------+
+| NULL    | NULL         |
++---------+--------------+
+```
+
+## keyword
+
+GET_VARIANT_BOOL,GET,VARIANT,BOOL

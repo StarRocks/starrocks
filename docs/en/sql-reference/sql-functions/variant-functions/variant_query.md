@@ -35,56 +35,85 @@ If the element does not exist or the path is invalid, the function returns NULL.
 Example 1: Query the root element of a VARIANT value.
 
 ```SQL
-SELECT variant_query(variant_col, '$')
-FROM iceberg_catalog.db.table_with_variants;
+SELECT variant_query(data, '$') AS root_data
+FROM bluesky
+LIMIT 1;
+```
+
+```plaintext
++-------------------------------------------------------------------------------------------+
+| root_data                                                                                 |
++-------------------------------------------------------------------------------------------+
+| {"commit":{"collection":"app.bsky.graph.follow","operation":"delete","rev":"3lcgs4mw...}  |
++-------------------------------------------------------------------------------------------+
 ```
 
 Example 2: Query a nested field in a VARIANT object.
 
 ```SQL
-SELECT variant_query(variant_col, '$.user.profile.name')
-FROM iceberg_catalog.db.table_with_variants;
+SELECT variant_query(data, '$.commit') AS commit_info
+FROM bluesky
+LIMIT 1;
 ```
 
-Example 3: Query an array element from a VARIANT value.
+```plaintext
++--------------------------------------------------------------------------------+
+| commit_info                                                                    |
++--------------------------------------------------------------------------------+
+| {"collection":"app.bsky.graph.follow","operation":"delete","rev":"3lcgs4mw...} |
++--------------------------------------------------------------------------------+
+```
+
+Example 3: Check the type of nested fields using variant_typeof.
 
 ```SQL
-SELECT variant_query(variant_col, '$.scores[0]')
-FROM iceberg_catalog.db.table_with_variants;
+SELECT
+    variant_typeof(variant_query(data, '$.commit')) AS commit_type,
+    variant_typeof(variant_query(data, '$.time_us')) AS time_type
+FROM bluesky
+LIMIT 1;
 ```
 
-Example 4: Query a field with special characters using quoted field names.
+```plaintext
++-------------+-----------+
+| commit_type | time_type |
++-------------+-----------+
+| Object      | Int64     |
++-------------+-----------+
+```
+
+Example 4: Cast the result to a SQL type.
 
 ```SQL
-SELECT variant_query(variant_col, '$."field.with.dots"')
-FROM iceberg_catalog.db.table_with_variants;
+SELECT CAST(variant_query(data, '$.commit') AS STRING) AS commit_info
+FROM bluesky
+LIMIT 1;
 ```
 
-Example 5: Query nested array elements.
+```plaintext
++-----------------------------------------------------------------------------------+
+| commit_info                                                                       |
++-----------------------------------------------------------------------------------+
+| {"cid":"bafyreia3k...","collection":"app.bsky.feed.repost","operation":"create"...} |
++-----------------------------------------------------------------------------------+
+```
+
+Example 5: Filter using variant_query results.
 
 ```SQL
-SELECT variant_query(variant_col, '$.users[0].addresses[1].city')
-FROM iceberg_catalog.db.table_with_variants;
+SELECT COUNT(*) AS total
+FROM bluesky
+WHERE variant_query(data, '$.commit.record') IS NOT NULL;
 ```
 
-Example 6: Cast the result to a specific SQL type.
-
-```SQL
-SELECT CAST(variant_query(variant_col, '$.count') AS INT) AS count
-FROM iceberg_catalog.db.table_with_variants;
+```plaintext
++---------+
+| total   |
++---------+
+| 9500118 |
++---------+
 ```
 
-Example 7: Query returns NULL when path does not exist.
+## keyword
 
-```SQL
-SELECT variant_query(variant_col, '$.nonexistent.field')
-FROM iceberg_catalog.db.table_with_variants;
--- Returns NULL
-```
-
-## See also
-
-- [get_variant_int](get_variant_int.md): Extract integer values from VARIANT
-- [get_variant_string](get_variant_string.md): Extract string values from VARIANT
-- [variant_typeof](variant_typeof.md): Get the type of a VARIANT value
-- [VARIANT data type](../../../data-types/semi_structured/VARIANT.md)
+VARIANT_QUERY,VARIANT,QUERY

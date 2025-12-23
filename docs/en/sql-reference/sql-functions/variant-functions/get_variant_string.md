@@ -32,85 +32,116 @@ If the element does not exist, the path is invalid, or the value cannot be conve
 
 ## Examples
 
-Example 1: Extract a string value from the root of a VARIANT.
-
-```SQL
-SELECT get_variant_string(variant_col, '$')
-FROM iceberg_catalog.db.table_with_variants;
-```
-
-Example 2: Extract a string from a nested field.
-
-```SQL
-SELECT get_variant_string(variant_col, '$.user.name')
-FROM iceberg_catalog.db.table_with_variants;
-```
-
-Example 3: Extract a string from an array element.
-
-```SQL
-SELECT get_variant_string(variant_col, '$.tags[0]')
-FROM iceberg_catalog.db.table_with_variants;
-```
-
-Example 4: Extract multiple string fields from nested structures.
+Example 1: Extract string fields from the root level.
 
 ```SQL
 SELECT
-    get_variant_string(variant_col, '$.user.first_name') AS first_name,
-    get_variant_string(variant_col, '$.user.last_name') AS last_name,
-    get_variant_string(variant_col, '$.user.email') AS email
-FROM iceberg_catalog.db.table_with_variants;
+    get_variant_string(data, '$.kind') AS kind,
+    get_variant_string(data, '$.did') AS did
+FROM bluesky
+LIMIT 3;
 ```
 
-Example 5: Extract strings from deeply nested paths.
+```plaintext
++--------+--------------------------------------+
+| kind   | did                                  |
++--------+--------------------------------------+
+| commit | did:plc:gw3yid42zz6qx6gxukvkgxgq     |
+| commit | did:plc:jbaujn4dd466ebt6pdf5vxod     |
+| commit | did:plc:ytgql26s6zoifhlnvf7qheea     |
++--------+--------------------------------------+
+```
+
+Example 2: Extract strings from nested fields.
 
 ```SQL
-SELECT get_variant_string(variant_col, '$.address.city.name')
-FROM iceberg_catalog.db.table_with_variants;
+SELECT
+    get_variant_string(data, '$.commit.collection') AS collection,
+    get_variant_string(data, '$.commit.operation') AS operation
+FROM bluesky
+WHERE get_variant_string(data, '$.commit.operation') = 'create'
+LIMIT 5;
 ```
 
-Example 6: Use in WHERE clause for filtering.
+```plaintext
++------------------------+-----------+
+| collection             | operation |
++------------------------+-----------+
+| app.bsky.feed.post     | create    |
+| app.bsky.graph.follow  | create    |
+| app.bsky.feed.repost   | create    |
+| app.bsky.feed.repost   | create    |
+| app.bsky.feed.like     | create    |
++------------------------+-----------+
+```
+
+Example 3: Extract deeply nested string values.
 
 ```SQL
-SELECT *
-FROM iceberg_catalog.db.table_with_variants
-WHERE get_variant_string(variant_col, '$.status') = 'active';
+SELECT get_variant_string(data, '$.commit.record.text') AS post_text
+FROM bluesky
+WHERE get_variant_string(data, '$.commit.collection') = 'app.bsky.feed.post'
+  AND get_variant_string(data, '$.commit.record.text') IS NOT NULL
+LIMIT 3;
 ```
 
-Example 7: Extract from map-like structures.
+```plaintext
++---------------------------------------------------------------------------------+
+| post_text                                                                       |
++---------------------------------------------------------------------------------+
+| I went on a walk today                                                          |
+| Are you interested in developing your own graph sequence model based on a sp... |
+| Tam im tiež celkom slušne práši...                                              |
++---------------------------------------------------------------------------------+
+```
+
+Example 4: Use in aggregation queries.
 
 ```SQL
-SELECT get_variant_string(variant_col, '$.properties.tier')
-FROM iceberg_catalog.db.table_with_variants;
+SELECT
+    get_variant_string(data, '$.commit.collection') AS collection,
+    COUNT(*) AS count
+FROM bluesky
+GROUP BY collection
+ORDER BY count DESC
+LIMIT 5;
 ```
 
-Example 8: Extract field with special characters using quoted names.
+```plaintext
++------------------------+---------+
+| collection             | count   |
++------------------------+---------+
+| app.bsky.feed.like     | 5067917 |
+| app.bsky.graph.follow  | 2931757 |
+| app.bsky.feed.post     | 960723  |
+| app.bsky.feed.repost   | 666364  |
+| app.bsky.graph.block   | 196053  |
++------------------------+---------+
+```
+
+Example 5: Use in WHERE clause for filtering.
 
 ```SQL
-SELECT get_variant_string(variant_col, '$."field.with.dots"')
-FROM iceberg_catalog.db.table_with_variants;
+SELECT
+    get_variant_string(data, '$.commit.record.subject') AS follow_subject
+FROM bluesky
+WHERE get_variant_string(data, '$.commit.collection') = 'app.bsky.graph.follow'
+  AND get_variant_string(data, '$.commit.operation') = 'create'
+LIMIT 5;
 ```
 
-Example 9: Returns NULL when the path does not exist.
-
-```SQL
-SELECT get_variant_string(variant_col, '$.nonexistent.field')
-FROM iceberg_catalog.db.table_with_variants;
--- Returns NULL
+```plaintext
++--------------------------------------+
+| follow_subject                       |
++--------------------------------------+
+| did:plc:rhqpfbdmabrwrd3o552tlsy7     |
+| did:plc:vlq5rxxanqrzrqdcjfoirgfz     |
+| did:plc:iefkhz4tg3vldzmtgyqkj3xb     |
+| did:plc:2phsrz5r5kynlq6pnrrzvrno     |
+| did:plc:hxz45fftjaa62vnwiiwh6fhj     |
++--------------------------------------+
 ```
 
-Example 10: Cast numeric value to string.
+## keyword
 
-```SQL
-SELECT CAST(get_variant_string(variant_col, '$.id') AS BIGINT)
-FROM iceberg_catalog.db.table_with_variants;
-```
-
-## See also
-
-- [variant_query](variant_query.md): Query and return VARIANT values
-- [get_variant_int](get_variant_int.md): Extract integer values from VARIANT
-- [get_variant_double](get_variant_double.md): Extract double values from VARIANT
-- [get_variant_bool](get_variant_bool.md): Extract boolean values from VARIANT
-- [VARIANT data type](../../../data-types/semi_structured/VARIANT.md)
+GET_VARIANT_STRING,GET,VARIANT,STRING
