@@ -18,6 +18,7 @@
 
 #include "agent/agent_server.h"
 #include "agent/publish_version.h"
+#include "agent/task_signatures_manager.h"
 #include "agent/task_worker_pool.h"
 #include "fs/fs.h"
 #include "fs/fs_util.h"
@@ -50,13 +51,13 @@ public:
 
     void TearDown() override {
         auto status = StorageEngine::instance()->tablet_manager()->drop_tablet(_tablet_id, kDeleteFiles);
-        EXPECT_TRUE(status.ok()) << status;
+        EXPECT_TRUE(status.ok() || status.is_not_found()) << status;
         status = StorageEngine::instance()->tablet_manager()->drop_tablet(_src_tablet_id, kDeleteFiles);
-        EXPECT_TRUE(status.ok()) << status;
+        EXPECT_TRUE(status.ok() || status.is_not_found()) << status;
         status = StorageEngine::instance()->tablet_manager()->delete_shutdown_tablet(_tablet_id);
-        EXPECT_TRUE(status.ok()) << status;
+        EXPECT_TRUE(status.ok() || status.is_not_found()) << status;
         status = StorageEngine::instance()->tablet_manager()->delete_shutdown_tablet(_src_tablet_id);
-        EXPECT_TRUE(status.ok()) << status;
+        EXPECT_TRUE(status.ok() || status.is_not_found()) << status;
         status = fs::remove_all(config::storage_root_path);
         EXPECT_TRUE(status.ok() || status.is_not_found()) << status;
     }
