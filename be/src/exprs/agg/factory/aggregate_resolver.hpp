@@ -212,17 +212,17 @@ public:
     const AggregateFunction* create_array_function(std::string& name) {
         if constexpr (IsNull) {
             if (name == "dict_merge") {
-                auto dict_merge = AggregateFactory::MakeDictMergeAggregateFunction();
+                auto dict_merge = track_function(AggregateFactory::MakeDictMergeAggregateFunction());
                 return track_function(
                         AggregateFactory::MakeNullableAggregateFunctionUnary<DictMergeState, false>(dict_merge));
             } else if (name == "retention") {
-                auto retentoin = AggregateFactory::MakeRetentionAggregateFunction();
+                auto retentoin = track_function(AggregateFactory::MakeRetentionAggregateFunction());
                 return track_function(
                         AggregateFactory::MakeNullableAggregateFunctionUnary<RetentionState, false>(retentoin));
             } else if (name == "window_funnel") {
                 if constexpr (ArgLT == TYPE_INT || ArgLT == TYPE_BIGINT || ArgLT == TYPE_DATE ||
                               ArgLT == TYPE_DATETIME) {
-                    auto windowfunnel = AggregateFactory::MakeWindowfunnelAggregateFunction<ArgLT>();
+                    auto windowfunnel = track_function(AggregateFactory::MakeWindowfunnelAggregateFunction<ArgLT>());
                     return track_function(
                             AggregateFactory::MakeNullableAggregateFunctionVariadic<WindowFunnelState<ArgLT>>(
                                     windowfunnel));
@@ -250,17 +250,17 @@ public:
         if constexpr (IsNull) {
             using ResultType = RunTimeCppType<ResultLT>;
             if (name == "decimal_avg") {
-                auto avg = AggregateFactory::MakeDecimalAvgAggregateFunction<ArgLT>();
+                auto avg = track_function(AggregateFactory::MakeDecimalAvgAggregateFunction<ArgLT>());
                 return track_function(
                         AggregateFactory::MakeNullableAggregateFunctionUnary<AvgAggregateState<ResultType>,
                                                                              IsWindowFunc>(avg));
             } else if (name == "decimal_sum") {
-                auto sum = AggregateFactory::MakeDecimalSumAggregateFunction<ArgLT>();
+                auto sum = track_function(AggregateFactory::MakeDecimalSumAggregateFunction<ArgLT>());
                 return track_function(
                         AggregateFactory::MakeNullableAggregateFunctionUnary<AvgAggregateState<ResultType>,
                                                                              IsWindowFunc>(sum));
             } else if (name == "decimal_multi_distinct_sum") {
-                auto distinct_sum = AggregateFactory::MakeDecimalSumDistinctAggregateFunction<ArgLT>();
+                auto distinct_sum = track_function(AggregateFactory::MakeDecimalSumDistinctAggregateFunction<ArgLT>());
                 return track_function(
                         AggregateFactory::MakeNullableAggregateFunctionUnary<DistinctAggregateState<ArgLT, ResultLT>,
                                                                              IsWindowFunc>(distinct_sum));
