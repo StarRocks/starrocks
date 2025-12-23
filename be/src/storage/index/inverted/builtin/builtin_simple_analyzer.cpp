@@ -19,7 +19,13 @@
 
 namespace starrocks {
 
-SimpleAnalyzer::SimpleAnalyzer(bool normalize_case) :  _normalize_case(normalize_case) {
+const phmap::flat_hash_set<std::string> builtin_stop_words = {
+        "a",   "an",    "and",  "are",   "as",    "at",   "be",   "but", "by",  "for",  "if",
+        "in",  "into",  "is",   "it",    "no",    "not",  "of",   "on",  "or",  "such", "that",
+        "the", "their", "then", "there", "these", "they", "this", "to",  "was", "will", "with"};
+
+SimpleAnalyzer::SimpleAnalyzer(bool normalize_case, bool enable_stop_words)
+        : _normalize_case(normalize_case), _enable_stop_words(enable_stop_words) {
     // Initialize lookup tables based on ASCII character classification
     for (size_t i = 0; i < LOOKUP_SIZE; ++i) {
         char c = static_cast<char>(i);
@@ -69,9 +75,20 @@ void SimpleAnalyzer::tokenize(char* mutable_text, size_t text_size, std::vector<
                     mutable_text[token_start + i] = _normalize(mutable_text[token_start + i]);
                 }
             }
-            tokens.emplace_back(mutable_text + token_start, token_length, position++);
+
+            Slice token(mutable_text + token_start, token_length);
+            if (!_filter_by_stop_words(token)) {
+                tokens.emplace_back(mutable_text + token_start, token_length, position++);
+            }
         }
     }
+}
+
+bool SimpleAnalyzer::_filter_by_stop_words(const Slice& token) const {
+    if (!_enable_stop_words) {
+        return false;
+    }
+    return builtin_stop_words.contains(token);
 }
 
 } // namespace starrocks

@@ -19,6 +19,7 @@
 #include "storage/rowset/common.h"
 #include "types/bitmap_value_detail.h"
 #include "util/bitmap_update_context.h"
+#include "util/phmap/phmap.h"
 
 namespace starrocks {
 
