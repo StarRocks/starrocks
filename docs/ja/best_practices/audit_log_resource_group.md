@@ -228,6 +228,5 @@ StarRocks はデフォルトでマテリアライズドビューリフレッシ�
 
 ## 参照
 
-- [AuditLoader](../administration/management/audit_loader.md)
 - [Resource Group](../administration/management/resource_management/resource_group.md)
 - [Query Queues](../administration/management/resource_management/query_queues.md)
