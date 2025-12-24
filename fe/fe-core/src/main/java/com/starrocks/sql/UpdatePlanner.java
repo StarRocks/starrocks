@@ -153,9 +153,6 @@ public class UpdatePlanner {
                 execPlan.getFragments().get(0).setSink(dataSink);
                 execPlan.getFragments().get(0).setLoadGlobalDicts(globalDicts);
 
-                // if sink is OlapTableSink Assigned to Be execute this sql [cn execute OlapTableSink will crash]
-                session.getSessionVariable().setPreferComputeNode(false);
-                session.getSessionVariable().setUseComputeNodes(0);
                 OlapTableSink olapTableSink = (OlapTableSink) dataSink;
                 TableName catalogDbTable = updateStmt.getTableName();
                 Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(session, catalogDbTable.getCatalog(),

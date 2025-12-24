@@ -509,9 +509,6 @@ public class LoadPlanner {
                 ((OlapTableSink) dataSink).setPartialUpdateMode(partialUpdateMode);
                 ((OlapTableSink) dataSink).complete(mergeConditionStr);
             }
-            // if sink is OlapTableSink Assigned to Be execute this sql [cn execute OlapTableSink will crash]
-            context.getSessionVariable().setPreferComputeNode(false);
-            context.getSessionVariable().setUseComputeNodes(0);
         } else {
             throw new SemanticException("Unknown table type " + destTable.getType());
         }
