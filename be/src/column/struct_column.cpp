@@ -121,24 +121,26 @@ void StructColumn::resize(size_t n) {
 
 StatusOr<MutableColumnPtr> StructColumn::upgrade_if_overflow() {
     for (auto& column : _fields) {
-        auto mutable_column = column->as_mutable_ptr();
-        auto status = upgrade_helper_func(&mutable_column);
-        if (!status.ok()) {
-            return status;
+        auto ret = upgrade_helper_func(column->as_mutable_raw_ptr());
+        if (!ret.ok()) {
+            return ret;
         }
-        column = std::move(mutable_column);
+        if (ret.value() != nullptr) {
+            column = std::move(ret.value());
+        }
     }
     return nullptr;
 }
 
 StatusOr<MutableColumnPtr> StructColumn::downgrade() {
     for (auto& column : _fields) {
-        auto mutable_column = column->as_mutable_ptr();
-        StatusOr<MutableColumnPtr> status = downgrade_helper_func(&mutable_column);
+        StatusOr<MutableColumnPtr> status = downgrade_helper_func(column->as_mutable_raw_ptr());
         if (!status.ok()) {
             return status;
         }
-        column = std::move(mutable_column);
+        if (status.value() != nullptr) {
+            column = std::move(status.value());
+        }
     }
     return nullptr;
 }
@@ -535,7 +537,7 @@ Status StructColumn::unfold_const_children(const starrocks::TypeDescriptor& type
     auto num_fields = type.children.size();
     auto num_rows = _fields[0]->size();
     for (int i = 0; i < num_fields; ++i) {
-        _fields[i] = ColumnHelper::unfold_const_column(type.children[i], num_rows, std::move(_fields[i]));
+        _fields[i] = ColumnHelper::unfold_const_column(type.children[i], num_rows, _fields[i]);
     }
     return Status::OK();
 }

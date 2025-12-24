@@ -385,19 +385,17 @@ void NullableColumn::check_or_die() const {
 
 StatusOr<MutableColumnPtr> NullableColumn::upgrade_if_overflow() {
     RETURN_IF_ERROR(_null_column->capacity_limit_reached());
-    MutableColumnPtr data_col = _data_column->as_mutable_ptr();
-    auto ret = upgrade_helper_func(&data_col);
-    if (ret.ok()) {
-        _data_column = std::move(data_col);
+    auto ret = upgrade_helper_func(_data_column->as_mutable_raw_ptr());
+    if (ret.ok() && ret.value() != nullptr) {
+        _data_column = std::move(ret.value());
     }
     return ret;
 }
 
 StatusOr<MutableColumnPtr> NullableColumn::downgrade() {
-    MutableColumnPtr data_col = _data_column->as_mutable_ptr();
-    auto ret = downgrade_helper_func(&data_col);
-    if (ret.ok()) {
-        _data_column = std::move(data_col);
+    auto ret = downgrade_helper_func(_data_column->as_mutable_raw_ptr());
+    if (ret.ok() && ret.value() != nullptr) {
+        _data_column = std::move(ret.value());
     }
     return ret;
 }
