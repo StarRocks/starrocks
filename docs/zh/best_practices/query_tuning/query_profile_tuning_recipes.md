@@ -17,11 +17,11 @@ keywords: ['profile', 'query']
    如果 `QueryPeakMemoryUsagePerNode > 80 %` 或 `QuerySpillBytes > 1 GB`，直接跳到内存和溢出方案。
 
 2. **找到最慢的 Pipeline / Operator**  
-   ⟶ 在 *Query Profile UI* 中点击 **Sort by OperatorTotalTime %**。  
+   ⟶ 在 _Query Profile UI_ 中点击 **Sort by OperatorTotalTime %**。  
    最热的 operator 告诉你接下来要阅读哪个方案块（Scan, Join, Aggregate, …）。
 
 3. **确认瓶颈子类型**  
-   每个方案以其*特征*指标模式开始。在尝试解决方案之前匹配这些模式。
+   每个方案以其_特征_指标模式开始。在尝试解决方案之前匹配这些模式。
 
 ---
 

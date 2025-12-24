@@ -17,11 +17,11 @@ sidebar_position: 40
    If `QueryPeakMemoryUsagePerNode > 80 %` or `QuerySpillBytes > 1 GB`, jump straight to the memory & spill recipes.
 
 2. **Find the slowest Pipeline / Operator**  
-   ⟶ In *Query Profile UI* click **Sort by OperatorTotalTime %**.  
+   ⟶ In _Query Profile UI_ click **Sort by OperatorTotalTime %**.  
    The hottest operator tells you which recipe block to read next (Scan, Join, Aggregate, …).
 
 3. **Confirm the bottleneck subtype**  
-   Each recipe begins with its *signature* metric pattern. Match those before trying the fixes.
+   Each recipe begins with its _signature_ metric pattern. Match those before trying the fixes.
 
 ---
 

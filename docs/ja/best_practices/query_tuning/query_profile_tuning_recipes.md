@@ -17,11 +17,11 @@ keywords: ['profile', 'query']
    `QueryPeakMemoryUsagePerNode > 80 %` または `QuerySpillBytes > 1 GB` の場合、メモリとスピルのレシピに直接進みます。
 
 2. **最も遅いパイプライン / オペレーターを見つける**  
-   ⟶ *Query Profile UI* で **Sort by OperatorTotalTime %** をクリックします。  
+   ⟶ _Query Profile UI_ で **Sort by OperatorTotalTime %** をクリックします。  
    最も負荷の高いオペレーターが次に読むべきレシピブロックを教えてくれます（Scan, Join, Aggregate など）。
 
 3. **ボトルネックのサブタイプを確認する**  
-   各レシピはその*シグネチャ*メトリックパターンから始まります。修正を試みる前にそれらを一致させます。
+   各レシピはその_シグネチャ_メトリックパターンから始まります。修正を試みる前にそれらを一致させます。
 
 ---
 
