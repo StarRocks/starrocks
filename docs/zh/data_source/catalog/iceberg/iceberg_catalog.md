@@ -6,6 +6,7 @@ keywords: ['iceberg']
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
 import QSTip from '../../../_assets/commonMarkdown/quickstart-iceberg-tip.mdx'
+import IcebergCatalogIcebergRestSecurityLink from '../../../_assets/commonMarkdown/iceberg_catalog_iceberg_rest_security_link.mdx'
 
 # Iceberg catalog
 
@@ -137,7 +138,7 @@ Iceberg catalog 的描述。此参数是可选的。
 
 关于 StarRocks 如何管理 Catalog 数据访问的参数。
 
-有关管理 Iceberg REST Catalog 数据访问的详细说明，请参阅[Iceberg REST Catalog 的安全设置](./iceberg_rest_security.md)。
+<IcebergCatalogIcebergRestSecurityLink />
 
 ##### catalog.access.control
 

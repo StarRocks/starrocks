@@ -8,6 +8,7 @@ sidebar_position: 30
 import UnixFileIntro from '../../_assets/user_priv/unix_file_intro.mdx'
 import UnixFileSyntax from '../../_assets/user_priv/unix_file_syntax.mdx'
 import UnixFileParam from '../../_assets/user_priv/unix_file_param.mdx'
+import GroupProviderRangerLink from '../../_assets/user_priv/group_provider_ranger_link.mdx'
 
 Enable Group Provider in StarRocks to authenticate, and authorize user groups from external authentication systems.
 
@@ -310,4 +311,4 @@ You can grant roles or privileges to a user group via [GRANT](../../sql-referenc
 
 Once you configure the associated group provider in the security integration, StarRocks will record the user's group information upon login. This group information will then be automatically included in the authorization process with Ranger, eliminating the need for additional configuration.
 
-For more instructions on integrating StarRocks with Ranger, see [Manage permissions with Apache Ranger](./authorization/ranger_plugin.md).
+<GroupProviderRangerLink />
