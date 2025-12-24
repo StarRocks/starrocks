@@ -138,7 +138,7 @@ The type of your data source. Set the value to `iceberg`.
 
 Parameter(s) about how StarRocks manages data access to the catalog.
 
-<IcebergRestSecurityLink />
+<IcebergCatalogIcebergRestSecurityLink />
 
 ##### catalog.access.control
 

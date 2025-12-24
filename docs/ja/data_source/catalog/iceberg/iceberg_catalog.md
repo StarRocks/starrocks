@@ -138,7 +138,7 @@ Iceberg catalog の説明です。このパラメーターはオプションで�
 
 StarRock sがカタログへのデータアクセスを管理する方法に関するパラメータ。
 
-<IcebergRestSecurityLink />
+<IcebergCatalogIcebergRestSecurityLink />
 
 ##### catalog.access.control
 

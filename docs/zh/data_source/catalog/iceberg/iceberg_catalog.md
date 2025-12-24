@@ -138,7 +138,7 @@ Iceberg catalog 的描述。此参数是可选的。
 
 关于 StarRocks 如何管理 Catalog 数据访问的参数。
 
-<IcebergRestSecurityLink />
+<IcebergCatalogIcebergRestSecurityLink />
 
 ##### catalog.access.control
 
