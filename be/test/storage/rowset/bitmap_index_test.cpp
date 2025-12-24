@@ -464,7 +464,7 @@ TEST_F(BitmapIndexTest, test_reader_load_twice) {
     std::string file_name = kTestDir + "/load_twice";
     ColumnIndexMetaPB meta;
     write_index_file<TYPE_INT>(file_name, val, num_rows, 0, &meta);
-    
+
     ASSIGN_OR_ABORT(auto rfile, _fs->new_random_access_file(file_name));
     _opts.read_file = rfile.get();
     BitmapIndexReader reader;

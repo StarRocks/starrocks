@@ -14,8 +14,8 @@
 
 #include <gtest/gtest.h>
 
-#include "storage/index/inverted/inverted_plugin_factory.h"
 #include "storage/index/inverted/inverted_index_option.h"
+#include "storage/index/inverted/inverted_plugin_factory.h"
 #include "storage/tablet_index.h"
 #include "testutil/assert.h"
 
@@ -36,7 +36,7 @@ TEST(InvertedIndexPluginTest, factory_test) {
 
 TEST(InvertedIndexPluginTest, option_test) {
     TabletIndex tablet_index;
-    
+
     // Test get_inverted_imp_type
     {
         auto res = get_inverted_imp_type(tablet_index);
@@ -59,16 +59,25 @@ TEST(InvertedIndexPluginTest, option_test) {
 
     // Test parser string and type conversions
     {
-        ASSERT_EQ(INVERTED_INDEX_PARSER_NONE, inverted_index_parser_type_to_string(InvertedIndexParserType::PARSER_NONE));
-        ASSERT_EQ(INVERTED_INDEX_PARSER_STANDARD, inverted_index_parser_type_to_string(InvertedIndexParserType::PARSER_STANDARD));
-        ASSERT_EQ(INVERTED_INDEX_PARSER_ENGLISH, inverted_index_parser_type_to_string(InvertedIndexParserType::PARSER_ENGLISH));
-        ASSERT_EQ(INVERTED_INDEX_PARSER_CHINESE, inverted_index_parser_type_to_string(InvertedIndexParserType::PARSER_CHINESE));
-        ASSERT_EQ(INVERTED_INDEX_PARSER_UNKNOWN, inverted_index_parser_type_to_string(static_cast<InvertedIndexParserType>(-1)));
+        ASSERT_EQ(INVERTED_INDEX_PARSER_NONE,
+                  inverted_index_parser_type_to_string(InvertedIndexParserType::PARSER_NONE));
+        ASSERT_EQ(INVERTED_INDEX_PARSER_STANDARD,
+                  inverted_index_parser_type_to_string(InvertedIndexParserType::PARSER_STANDARD));
+        ASSERT_EQ(INVERTED_INDEX_PARSER_ENGLISH,
+                  inverted_index_parser_type_to_string(InvertedIndexParserType::PARSER_ENGLISH));
+        ASSERT_EQ(INVERTED_INDEX_PARSER_CHINESE,
+                  inverted_index_parser_type_to_string(InvertedIndexParserType::PARSER_CHINESE));
+        ASSERT_EQ(INVERTED_INDEX_PARSER_UNKNOWN,
+                  inverted_index_parser_type_to_string(static_cast<InvertedIndexParserType>(-1)));
 
-        ASSERT_EQ(InvertedIndexParserType::PARSER_NONE, get_inverted_index_parser_type_from_string(INVERTED_INDEX_PARSER_NONE));
-        ASSERT_EQ(InvertedIndexParserType::PARSER_STANDARD, get_inverted_index_parser_type_from_string(INVERTED_INDEX_PARSER_STANDARD));
-        ASSERT_EQ(InvertedIndexParserType::PARSER_ENGLISH, get_inverted_index_parser_type_from_string(INVERTED_INDEX_PARSER_ENGLISH));
-        ASSERT_EQ(InvertedIndexParserType::PARSER_CHINESE, get_inverted_index_parser_type_from_string(INVERTED_INDEX_PARSER_CHINESE));
+        ASSERT_EQ(InvertedIndexParserType::PARSER_NONE,
+                  get_inverted_index_parser_type_from_string(INVERTED_INDEX_PARSER_NONE));
+        ASSERT_EQ(InvertedIndexParserType::PARSER_STANDARD,
+                  get_inverted_index_parser_type_from_string(INVERTED_INDEX_PARSER_STANDARD));
+        ASSERT_EQ(InvertedIndexParserType::PARSER_ENGLISH,
+                  get_inverted_index_parser_type_from_string(INVERTED_INDEX_PARSER_ENGLISH));
+        ASSERT_EQ(InvertedIndexParserType::PARSER_CHINESE,
+                  get_inverted_index_parser_type_from_string(INVERTED_INDEX_PARSER_CHINESE));
         ASSERT_EQ(InvertedIndexParserType::PARSER_UNKNOWN, get_inverted_index_parser_type_from_string("unknown"));
     }
 
@@ -111,4 +120,3 @@ TEST(InvertedIndexPluginTest, builtin_plugin_test) {
 }
 
 } // namespace starrocks
-

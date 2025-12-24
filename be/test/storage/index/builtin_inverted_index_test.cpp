@@ -561,7 +561,7 @@ TEST_F(BuiltinInvertedIndexTest, test_reader_unsupported_query) {
     auto tablet_index = std::make_shared<TabletIndex>();
     std::unique_ptr<InvertedReader> reader;
     ASSERT_OK(BuiltinInvertedReader::create(tablet_index, TYPE_VARCHAR, &reader));
-    
+
     roaring::Roaring bitmap;
     Slice query("test");
     ASSERT_TRUE(reader->query(nullptr, "c0", &query, InvertedIndexQueryType::EQUAL_QUERY, &bitmap).is_internal_error());
@@ -599,9 +599,10 @@ TEST_F(BuiltinInvertedIndexTest, test_iterator_unsupported_ops) {
 
     roaring::Roaring bitmap;
     ASSERT_TRUE(iter->read_null("c0", &bitmap).is_internal_error());
-    
+
     Slice query("test");
-    ASSERT_TRUE(iter->read_from_inverted_index("c0", &query, static_cast<InvertedIndexQueryType>(-1), &bitmap).is_invalid_argument());
+    ASSERT_TRUE(iter->read_from_inverted_index("c0", &query, static_cast<InvertedIndexQueryType>(-1), &bitmap)
+                        .is_invalid_argument());
 
     delete iter;
 }
@@ -616,16 +617,14 @@ TEST_F(BuiltinInvertedIndexTest, test_writer_create_unsupported_type) {
 
 // Test BuiltinInvertedWriter with TYPE_CHAR and different parsers
 TEST_F(BuiltinInvertedIndexTest, test_writer_char_and_parsers) {
-    std::vector<InvertedIndexParserType> parsers = {
-        InvertedIndexParserType::PARSER_STANDARD,
-        InvertedIndexParserType::PARSER_CHINESE
-    };
+    std::vector<InvertedIndexParserType> parsers = {InvertedIndexParserType::PARSER_STANDARD,
+                                                    InvertedIndexParserType::PARSER_CHINESE};
 
     for (auto parser_type : parsers) {
         TabletIndex tablet_index;
         tablet_index.add_index_properties(INVERTED_INDEX_PARSER_KEY, inverted_index_parser_type_to_string(parser_type));
         TypeInfoPtr type_info = get_type_info(TYPE_CHAR);
-        
+
         std::string file_name = kTestDir + "/writer_test_" + std::to_string(static_cast<int>(parser_type));
         ColumnMetaPB meta;
         {
@@ -633,11 +632,11 @@ TEST_F(BuiltinInvertedIndexTest, test_writer_char_and_parsers) {
             std::unique_ptr<InvertedWriter> writer;
             ASSERT_OK(BuiltinInvertedWriter::create(type_info, &tablet_index, &writer));
             ASSERT_OK(writer->init());
-            
+
             std::vector<std::string> values = {"Hello World", "你好世界"};
             std::vector<Slice> slices;
             for (auto& v : values) slices.emplace_back(v);
-            
+
             writer->add_values(slices.data(), slices.size());
             ASSERT_OK(writer->finish(wfile.get(), &meta));
         }
@@ -725,7 +724,8 @@ TEST_F(BuiltinInvertedIndexTest, test_invalid_wildcard) {
 
     roaring::Roaring bitmap;
     Slice query("test"); // No %
-    ASSERT_TRUE(iter->read_from_inverted_index("c0", &query, InvertedIndexQueryType::MATCH_WILDCARD_QUERY, &bitmap).is_internal_error());
+    ASSERT_TRUE(iter->read_from_inverted_index("c0", &query, InvertedIndexQueryType::MATCH_WILDCARD_QUERY, &bitmap)
+                        .is_internal_error());
 
     delete iter;
 }
@@ -747,10 +747,10 @@ TEST_F(BuiltinInvertedIndexTest, test_complex_wildcard_query) {
         ASSERT_OK(BuiltinInvertedWriter::create(type_info, &tablet_index, &writer));
         ASSERT_OK(writer->init());
         writer->add_values(slices.data(), slices.size());
-        
+
         // Exercise size()
         ASSERT_GT(writer->size(), 0);
-        
+
         ASSERT_OK(writer->finish(wfile.get(), &meta));
     }
 
@@ -797,7 +797,7 @@ TEST_F(BuiltinInvertedIndexTest, test_simple_analyzer) {
     char text[] = "Hello World 123";
     std::vector<SliceToken> tokens;
     analyzer.tokenize(text, strlen(text), tokens);
-    
+
     ASSERT_EQ(3, tokens.size());
     ASSERT_EQ("hello", tokens[0].text.to_string());
     ASSERT_EQ("world", tokens[1].text.to_string());
@@ -810,7 +810,7 @@ TEST_F(BuiltinInvertedIndexTest, test_simple_analyzer) {
     ASSERT_EQ(2, tokens.size());
     ASSERT_EQ("Hello", tokens[0].text.to_string());
     ASSERT_EQ("World", tokens[1].text.to_string());
-    
+
     analyzer2.tokenize(nullptr, 0, tokens);
     ASSERT_TRUE(tokens.empty());
 }
