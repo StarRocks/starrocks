@@ -141,7 +141,7 @@ Status BuiltinInvertedIndexIterator::_init_like_context(const Slice& s) {
     (void)ptr->get_data();
     Columns cols;
     cols.push_back(nullptr);
-    cols.push_back(std::move(ConstColumn::create(std::move(ptr), 1)));
+    cols.push_back(ConstColumn::create(std::move(ptr), 1));
     _like_context->set_constant_columns(cols);
     return LikePredicate::like_prepare(_like_context.get(), FunctionContext::FunctionStateScope::THREAD_LOCAL);
 }
