@@ -24,9 +24,9 @@ import org.junit.jupiter.api.Test;
 public class ExplainTest extends PlanTestBase {
 
     @Test
-    public void testExplainUsesConfiguredDefaultLevel() throws Exception {
-        String originalLevel = Config.query_detail_explain_level;
-        Config.query_detail_explain_level = "LOGICAL";
+    public void testExplainUsesConfiguredExplainLevel() throws Exception {
+        String originalLevel = Config.query_explain_level;
+        Config.query_explain_level = "LOGICAL";
         try {
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(
                     "EXPLAIN SELECT * FROM t0", connectContext);
@@ -35,8 +35,8 @@ public class ExplainTest extends PlanTestBase {
             Assertions.assertTrue(queryStatement.isExplain());
             Assertions.assertEquals(StatementBase.ExplainLevel.LOGICAL, queryStatement.getExplainLevel());
         } finally {
-            Config.query_detail_explain_level = originalLevel;
+            Config.query_explain_level = originalLevel;
         }
-
     }
+
 }
