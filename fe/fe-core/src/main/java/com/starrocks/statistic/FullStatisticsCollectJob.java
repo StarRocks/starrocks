@@ -143,7 +143,7 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
             String sql = Joiner.on(" UNION ALL ").join(sqlUnion);
 
             try {
-                collectStatisticSync(sql, context);
+                collectStatisticSync(sql, context, analyzeStatus);
             } catch (Exception e) {
                 failedNum++;
                 LOG.warn("collect statistics task failed in job: {}, {}", this, sql, e);
@@ -184,7 +184,10 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
     // ($tableId, $partitionId, '$columnName', $dbId, '$dbName.$tableName', '$partitionName',
     //  $count, $dataSize, hll_deserialize('$hll'), $countNull, $maxFunction, $minFunction, NOW(), $collectionSizeFunction);
     @Override
-    public void collectStatisticSync(String sql, ConnectContext context) throws Exception {
+    public void collectStatisticSync(String sql, ConnectContext context, AnalyzeStatus analyzeStatus) throws Exception {
+        // Calculate and set remaining timeout for this SQL task
+        calculateAndSetRemainingTimeout(context, analyzeStatus);
+
         LOG.debug("statistics collect sql : " + sql);
         StatisticExecutor executor = new StatisticExecutor();
 
