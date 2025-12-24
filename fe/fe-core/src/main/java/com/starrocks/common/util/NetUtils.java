@@ -45,11 +45,13 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
+import java.net.BindException;
 import java.net.Inet4Address;
 import java.net.Inet6Address;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.NetworkInterface;
+import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.SocketException;
 import java.net.UnknownHostException;
@@ -97,13 +99,40 @@ public class NetUtils {
     }
 
     public static boolean isPortUsing(String host, int port) throws UnknownHostException {
-        boolean flag = false;
-        try (Socket socket = new Socket(host, port)) {
-            flag = true;
-        } catch (IOException e) {
-            // do nothing
+        InetAddress address = InetAddress.getByName(host);
+        if (isLocalAddress(address)) {
+            // Prefer binding check to avoid false positives when connect() is redirected or black-holed by VPN/firewall.
+            try (ServerSocket serverSocket = new ServerSocket()) {
+                serverSocket.setReuseAddress(false);
+                serverSocket.bind(new InetSocketAddress(address, port));
+                return false;
+            } catch (BindException e) {
+                return true;
+            } catch (IOException e) {
+                LOG.warn("failed to bind to {}:{} to check port availability", host, port, e);
+                return true;
+            }
         }
-        return flag;
+
+        // For non-local addresses, bind() is meaningless. Fall back to a connect probe.
+        try (Socket socket = new Socket()) {
+            socket.connect(new InetSocketAddress(host, port), 1000);
+            return true;
+        } catch (IOException ignored) {
+            return false;
+        }
+    }
+
+    private static boolean isLocalAddress(InetAddress address) {
+        if (address.isAnyLocalAddress() || address.isLoopbackAddress()) {
+            return true;
+        }
+        try {
+            return NetworkInterface.getByInetAddress(address) != null;
+        } catch (SocketException e) {
+            LOG.warn("failed to check if {} is a local address", address, e);
+            return false;
+        }
     }
 
     public static Pair<String, String> getIpAndFqdnByHost(String host) throws UnknownHostException {
