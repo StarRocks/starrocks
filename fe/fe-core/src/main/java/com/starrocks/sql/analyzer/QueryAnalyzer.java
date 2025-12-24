@@ -894,7 +894,7 @@ public class QueryAnalyzer {
             }
 
             if (!join.getJoinHint().isEmpty()) {
-                analyzeJoinHints(join);
+                analyzeJoinHints(join, leftScope, rightScope);
             }
 
             if (joinEqual != null) {
@@ -1147,7 +1147,7 @@ public class QueryAnalyzer {
             return resultType;
         }
 
-        private void analyzeJoinHints(JoinRelation join) {
+        private void analyzeJoinHints(JoinRelation join, Scope leftScope, Scope rightScope) {
             if (HintNode.HINT_JOIN_BROADCAST.equals(join.getJoinHint())) {
                 if (join.getJoinOp() == JoinOperator.RIGHT_OUTER_JOIN
                         || join.getJoinOp() == JoinOperator.FULL_OUTER_JOIN
@@ -1177,7 +1177,9 @@ public class QueryAnalyzer {
                     if (!(join.getSkewColumn() instanceof SlotRef)) {
                         throw new SemanticException("Skew join column must be a column reference");
                     }
-                    analyzeExpression(join.getSkewColumn(), new AnalyzeState(), join.getLeft().getScope());
+                    Scope joinScope = new Scope(RelationId.of(join),
+                            leftScope.getRelationFields().joinWith(rightScope.getRelationFields()));
+                    analyzeExpression(join.getSkewColumn(), new AnalyzeState(), joinScope);
                 } else {
                     throw new SemanticException("Skew join column must be specified");
                 }
