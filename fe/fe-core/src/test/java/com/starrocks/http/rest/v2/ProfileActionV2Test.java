@@ -15,6 +15,8 @@
 package com.starrocks.http.rest.v2;
 
 import com.google.common.reflect.TypeToken;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonSyntaxException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.ProfileManager;
 import com.starrocks.ha.FrontendNodeType;
@@ -173,9 +175,9 @@ public class ProfileActionV2Test extends StarRocksHttpTestCase {
                 }.getType());
         Assertions.assertEquals(queryProfileResult.getStatus(), ActionStatus.OK);
         Assertions.assertTrue(queryProfileResult.getResult().contains("Query ID: eaff21d2-3734-11ee-909f-8e20563011de"));
-        Assertions.assertFalse(
-                queryProfileResult.getResult().contains("\"result\":"),
-                "Query profile should be raw text, not wrapped in a JSON 'result' field"
-        );
+        Assertions.assertThrows(
+                JsonSyntaxException.class,
+                () -> GsonUtils.GSON.fromJson(queryProfileResult.getResult(), JsonElement.class),
+                "Query profile should be plain text, not a JSON object");
     }
 }
