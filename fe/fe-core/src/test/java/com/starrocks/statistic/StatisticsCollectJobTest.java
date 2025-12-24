@@ -26,6 +26,7 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.exception.StarRocksConnectorException;
@@ -1764,4 +1765,37 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         StatisticsCollectJob.Priority priority8 = new StatisticsCollectJob.Priority(now, now.minusSeconds(10), 0.5);
         Assert.assertTrue(priority7.compareTo(priority8) < 0);
     }
+
+    @Test
+    public void testJobTimeout() throws DdlException {
+        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        List<StatisticsCollectJob> jobs = StatisticsCollectJobFactory.buildStatisticsCollectJob(
+                new NativeAnalyzeJob(testDb.getId(), t0StatsTableId, null, null,
+                        StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.SCHEDULE,
+                        Maps.newHashMap(),
+                        StatsConstants.ScheduleStatus.PENDING,
+                        LocalDateTime.now()));
+        StatisticsCollectJob job = jobs.get(0);
+        AnalyzeStatus analyzeStatus = new NativeAnalyzeStatus();
+
+        // no startTime
+        analyzeStatus.setStartTime(null);
+        job.calculateAndSetRemainingTimeout(connectContext, analyzeStatus);
+        Assertions.assertEquals(Config.statistic_collect_query_timeout,
+                connectContext.getSessionVariable().getQueryTimeoutS());
+        Assertions.assertEquals(Config.statistic_collect_query_timeout,
+                connectContext.getSessionVariable().getInsertTimeoutS());
+
+        // timeout
+        analyzeStatus.setStartTime(LocalDateTime.now().minusSeconds(3700));
+        Assertions.assertThrows(DdlException.class,
+                () -> job.calculateAndSetRemainingTimeout(connectContext, analyzeStatus));
+
+        // normal
+        LocalDateTime startTime = LocalDateTime.now().minusSeconds(10);
+        analyzeStatus.setStartTime(startTime);
+        Assertions.assertEquals(Config.statistic_collect_query_timeout - 10,
+                job.calculateAndSetRemainingTimeout(connectContext, analyzeStatus));
+    }
+
 }
