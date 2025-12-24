@@ -67,8 +67,8 @@ public:
     virtual void open_sink_operator() = 0;
     virtual void close_sink_operator() = 0;
 
-    // Short-Cicuit indicates if the SourceOperator finished, the SinkOperator can also finish immediately
-    virtual bool is_short_circuit() const { return false; }
+    // indicates if all SourceOperator finished
+    virtual bool is_all_sources_finished() const { return false; }
 
     virtual bool releaseable() const { return false; }
     virtual void enter_release_memory_mode() {}
@@ -94,7 +94,7 @@ public:
     void close_source_operator(int32_t mcast_consumer_index) override;
     void open_sink_operator() override;
     void close_sink_operator() override;
-    bool is_short_circuit() const override { return _opened_source_number == 0; }
+    bool is_all_sources_finished() const override;
 
 #ifndef BE_TEST
 private:
@@ -145,6 +145,7 @@ public:
     void close_source_operator(int32_t mcast_consumer_index) override;
     void open_sink_operator() override;
     void close_sink_operator() override;
+    bool is_all_sources_finished() const override;
     bool releaseable() const override { return true; }
     void enter_release_memory_mode() override;
 
