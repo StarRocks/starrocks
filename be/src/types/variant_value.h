@@ -55,15 +55,39 @@ public:
 
     static VariantValue of_variant(const VariantMetadata& metadata, const Variant& variant);
 
-    VariantValue(const VariantValue& rhs) = default;
+    VariantValue(const VariantValue& rhs)
+            : _metadata_raw(rhs._metadata_raw),
+              _value_raw(rhs._value_raw),
+              _metadata(_metadata_raw),
+              _value(_value_raw) {}
 
-    VariantValue(VariantValue&& rhs) noexcept = default;
+    VariantValue(VariantValue&& rhs) noexcept
+            : _metadata_raw(std::move(rhs._metadata_raw)),
+              _value_raw(std::move(rhs._value_raw)),
+              _metadata(_metadata_raw),
+              _value(_value_raw) {}
 
     static Status validate_metadata(const std::string_view metadata);
 
-    VariantValue& operator=(const VariantValue& rhs) = default;
+    VariantValue& operator=(const VariantValue& rhs) {
+        if (this != &rhs) {
+            _metadata_raw = rhs._metadata_raw;
+            _value_raw = rhs._value_raw;
+            _metadata = VariantMetadata(_metadata_raw);
+            _value = Variant(_value_raw);
+        }
+        return *this;
+    }
 
-    VariantValue& operator=(VariantValue&& rhs) noexcept = default;
+    VariantValue& operator=(VariantValue&& rhs) noexcept {
+        if (this != &rhs) {
+            _metadata_raw = std::move(rhs._metadata_raw);
+            _value_raw = std::move(rhs._value_raw);
+            _metadata = VariantMetadata(_metadata_raw);
+            _value = Variant(_value_raw);
+        }
+        return *this;
+    }
 
     static VariantValue of_null();
 
