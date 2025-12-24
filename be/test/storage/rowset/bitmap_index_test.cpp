@@ -293,4 +293,82 @@ TEST_F(BitmapIndexTest, test_concurrent_load) {
     delete[] val;
 }
 
+// Exercise add_value_with_current_rowid / incre_rowid path directly, including
+// duplicate values within the same row and across different rows.
+TEST_F(BitmapIndexTest, test_add_value_with_current_rowid) {
+    std::string file_name = kTestDir + "/add_value_with_rowid";
+    ColumnIndexMetaPB meta;
+
+    TypeInfoPtr type_info = get_type_info(TYPE_INT);
+    {
+        ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(file_name));
+
+        std::unique_ptr<BitmapIndexWriter> writer;
+        ASSERT_OK(BitmapIndexWriter::create(type_info, &writer));
+
+        int v1 = 1;
+        int v2 = 2;
+        int v3 = 3;
+
+        // Row 0: value=1 once.
+        writer->add_value_with_current_rowid(&v1);
+        writer->incre_rowid();
+
+        // Row 1: value=1 twice, but rowid is the same, so second add should be ignored.
+        writer->add_value_with_current_rowid(&v1);
+        writer->add_value_with_current_rowid(&v1);
+        writer->incre_rowid();
+
+        // Row 2 and 3: value=2, ensure a context is created and duplicate within row 3
+        // is filtered by pending-add de-duplication.
+        writer->add_value_with_current_rowid(&v2); // row 2
+        writer->incre_rowid();
+        writer->add_value_with_current_rowid(&v2); // row 3, first occurrence
+        writer->add_value_with_current_rowid(&v2); // row 3, duplicate
+        writer->incre_rowid();
+
+        // Row 4: a distinct value=3.
+        writer->add_value_with_current_rowid(&v3);
+        writer->incre_rowid();
+
+        ASSERT_OK(writer->finish(wfile.get(), &meta));
+        ASSERT_EQ(BITMAP_INDEX, meta.type());
+        ASSERT_TRUE(wfile->close().ok());
+    }
+
+    BitmapIndexReader* reader = nullptr;
+    BitmapIndexIterator* iter = nullptr;
+    ASSIGN_OR_ABORT(auto rfile, _fs->new_random_access_file(file_name));
+    get_bitmap_reader_iter(rfile.get(), meta, &reader, &iter);
+
+    // Verify postings for value=1: should contain rowids 0 and 1.
+    {
+        int search = 1;
+        bool exact_match = false;
+        ASSERT_OK(iter->seek_dictionary(&search, &exact_match));
+        ASSERT_TRUE(exact_match);
+        Roaring bitmap;
+        ASSERT_OK(iter->read_bitmap(iter->current_ordinal(), &bitmap));
+        ASSERT_EQ(2, bitmap.cardinality());
+        ASSERT_TRUE(bitmap.contains(0));
+        ASSERT_TRUE(bitmap.contains(1));
+    }
+
+    // Verify postings for value=2: should contain rowids 2 and 3 (duplicate in row 3 ignored).
+    {
+        int search = 2;
+        bool exact_match = false;
+        ASSERT_OK(iter->seek_dictionary(&search, &exact_match));
+        ASSERT_TRUE(exact_match);
+        Roaring bitmap;
+        ASSERT_OK(iter->read_bitmap(iter->current_ordinal(), &bitmap));
+        ASSERT_EQ(2, bitmap.cardinality());
+        ASSERT_TRUE(bitmap.contains(2));
+        ASSERT_TRUE(bitmap.contains(3));
+    }
+
+    delete reader;
+    delete iter;
+}
+
 } // namespace starrocks

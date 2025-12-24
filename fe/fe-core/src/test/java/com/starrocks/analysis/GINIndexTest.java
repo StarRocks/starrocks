@@ -73,12 +73,12 @@ public class GINIndexTest extends PlanTestBase {
 
         Assertions.assertThrows(
                 SemanticException.class,
-                () -> IndexAnalyzer.checkInvertedIndexValid(c1, null, KeysType.UNIQUE_KEYS),
+                () -> IndexAnalyzer.checkInvertedIndexValid(c1, new HashMap<>(), KeysType.UNIQUE_KEYS),
                 "The inverted index can only be build on DUPLICATE/PRIMARY_KEYS table.");
 
         Assertions.assertThrows(
                 SemanticException.class,
-                () -> IndexAnalyzer.checkInvertedIndexValid(c1, null, KeysType.DUP_KEYS),
+                () -> IndexAnalyzer.checkInvertedIndexValid(c1, new HashMap<>(), KeysType.DUP_KEYS),
                 "The inverted index can only be build on column with type of CHAR/STRING/VARCHAR type.");
 
         Column c2 = new Column("f2", StringType.STRING, true);
@@ -87,7 +87,7 @@ public class GINIndexTest extends PlanTestBase {
                 () -> IndexAnalyzer.checkInvertedIndexValid(c2, new HashMap<String, String>() {{
                     put(IMP_LIB.name().toLowerCase(Locale.ROOT), "???");
                 }}, KeysType.DUP_KEYS),
-                "Only support clucene implement for now");
+                "Only support clucene or builtin implement for now. ");
 
         Assertions.assertThrows(
                 SemanticException.class,
@@ -127,10 +127,24 @@ public class GINIndexTest extends PlanTestBase {
                 return true;
             }
         };
+        // Without imp_lib or with clucene in shared-data mode should be rejected.
         Assertions.assertThrows(
                 SemanticException.class,
-                () -> IndexAnalyzer.checkInvertedIndexValid(c2, null, KeysType.DUP_KEYS),
-                "The inverted index does not support shared data mode");
+                () -> IndexAnalyzer.checkInvertedIndexValid(c2, new HashMap<>(), KeysType.DUP_KEYS),
+                "Clucene inverted index does not support shared data mode");
+
+        Assertions.assertThrows(
+                SemanticException.class,
+                () -> IndexAnalyzer.checkInvertedIndexValid(c2, new HashMap<String, String>() {{
+                    put(IMP_LIB.name().toLowerCase(Locale.ROOT), InvertedIndexImpType.CLUCENE.name());
+                }}, KeysType.DUP_KEYS),
+                "Clucene inverted index does not support shared data mode");
+
+        // Builtin implementation is allowed in shared-data mode.
+        Assertions.assertDoesNotThrow(
+                () -> IndexAnalyzer.checkInvertedIndexValid(c2, new HashMap<String, String>() {{
+                    put(IMP_LIB.name().toLowerCase(Locale.ROOT), InvertedIndexImpType.BUILTIN.name());
+                }}, KeysType.DUP_KEYS));
     }
 
     @Test
