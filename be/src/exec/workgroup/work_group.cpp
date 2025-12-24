@@ -14,6 +14,7 @@
 
 #include "exec/workgroup/work_group.h"
 
+#include <algorithm>
 #include <utility>
 
 #include "common/config.h"
@@ -118,12 +119,27 @@ WorkGroup::WorkGroup(const TWorkGroup& twg)
           _driver_sched_entity(this),
           _scan_sched_entity(this),
           _connector_scan_sched_entity(this) {
-    if (twg.__isset.cpu_core_limit && twg.cpu_core_limit > 0) {
+    const int num_cores = CpuInfo::num_cores();
+    if (twg.__isset.cpu_weight_percent && twg.cpu_weight_percent > 0) {
+        _cpu_weight = std::max<size_t>(1, num_cores * twg.cpu_weight_percent / 100);
+    } else if (twg.__isset.cpu_core_limit && twg.cpu_core_limit > 0) {
         _cpu_weight = twg.cpu_core_limit;
     }
 
-    if (twg.__isset.exclusive_cpu_cores) {
+    if (twg.__isset.exclusive_cpu_percent && twg.exclusive_cpu_percent > 0) {
+        const size_t exclusive_cpu_cores = num_cores * twg.exclusive_cpu_percent / 100;
+        if (exclusive_cpu_cores > 0) {
+            _exclusive_cpu_cores = exclusive_cpu_cores;
+        } else {
+            _cpu_weight = 1;
+        }
+    } else if (twg.__isset.exclusive_cpu_cores) {
         _exclusive_cpu_cores = twg.exclusive_cpu_cores;
+    }
+
+    if (twg.__isset.inactive && twg.inactive) {
+        _exclusive_cpu_cores = 0;
+        _cpu_weight = 1;
     }
 
     if (twg.__isset.mem_limit) {
@@ -168,25 +184,6 @@ TWorkGroup WorkGroup::to_thrift() const {
     TWorkGroup twg;
     twg.__set_id(_id);
     twg.__set_version(_version);
-    return twg;
-}
-
-TWorkGroup WorkGroup::to_thrift_verbose() const {
-    TWorkGroup twg;
-    twg.__set_id(_id);
-    twg.__set_name(_name);
-    twg.__set_version(_version);
-    twg.__set_workgroup_type(_type);
-    std::string state = is_marked_del() ? "dead" : "alive";
-    twg.__set_state(state);
-    twg.__set_cpu_core_limit(_cpu_weight);
-    twg.__set_mem_limit(_memory_limit);
-    twg.__set_concurrency_limit(_concurrency_limit);
-    twg.__set_num_drivers(_acc_num_drivers);
-    twg.__set_big_query_mem_limit(_big_query_mem_limit);
-    twg.__set_big_query_scan_rows_limit(_big_query_scan_rows_limit);
-    twg.__set_big_query_cpu_second_limit(big_query_cpu_second_limit());
-    twg.__set_spill_mem_limit_threshold(_spill_mem_limit_threshold);
     return twg;
 }
 
