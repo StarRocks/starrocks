@@ -60,9 +60,11 @@ In StarRocks Process Profile, flame graphs are used to visually display the data
 
 ## Configuration
 
+The profiling feature performs function-level sampling to generate flame graphs for visualization.
+
 ### Frontend (FE) Configuration
 
-FE profiling is managed by an internal daemon and uses `AsyncProfiler`. You can configure these in `fe.conf`.
+FE profiling is managed by an internal daemon and uses **AsyncProfiler** for data collection. You can configure these in `fe.conf`.
 
 | Parameter | Default | Description |
 | :--- | :--- | :--- |
@@ -75,13 +77,13 @@ FE profiling is managed by an internal daemon and uses `AsyncProfiler`. You can 
 
 ### Backend (BE) Configuration
 
-BE profiles are typically collected via a background script or manual triggers. Configure these in `be.conf`.
+BE profiles are collected using the built-in **gperftools** and are typically collected via a background script or manual triggers. The collected data is then converted into flame graphs using **pprof**. You can configure these in `be.conf`.
 
 | Parameter | Default | Description |
 | :--- | :--- | :--- |
 | `brpc_port` | `8060` | Port used by collection scripts to fetch data from BE. |
 | `sys_log_dir` | `${STARROCKS_HOME}/log` | Base directory for storing collected profiles (stored in the `proc_profile` subdirectory). |
-| `flamegraph_tool_dir` | `${STARROCKS_HOME}/bin/flamegraph` | Path to conversion tools (`pprof`, `flamegraph.pl`). |
+| `flamegraph_tool_dir` | `${STARROCKS_HOME}/bin/flamegraph` | Path to conversion tools (**pprof**, `flamegraph.pl`). |
 
 ### Manual BE Collection
 

@@ -60,9 +60,11 @@
 
 ## 相关参数配置
 
+该功能基于函数粒度的采样，通过火焰图进行可视化展示。
+
 ### 前端 (FE) 配置
 
-FE 分析由内部守护进程管理，并使用 `AsyncProfiler`。您可以在 `fe.conf` 中配置这些参数。
+FE 分析由内部守护进程管理，并使用 **AsyncProfiler** 采集数据。您可以在 `fe.conf` 中配置这些参数。
 
 | 参数 | 默认值 | 说明 |
 | :--- | :--- | :--- |
@@ -75,13 +77,13 @@ FE 分析由内部守护进程管理，并使用 `AsyncProfiler`。您可以在 
 
 ### 后端 (BE) 配置
 
-BE 分析通常通过后台脚本或手动触发收集。在 `be.conf` 中配置这些参数。
+BE 分析使用内置的 **gperftools** 采集数据，通常通过后台脚本或手动触发收集。随后使用 **pprof** 工具将采样数据转换为火焰图。您可以在 `be.conf` 中配置这些参数。
 
 | 参数 | 默认值 | 说明 |
 | :--- | :--- | :--- |
 | `brpc_port` | `8060` | 收集脚本从 BE 获取数据所使用的端口。 |
 | `sys_log_dir` | `${STARROCKS_HOME}/log` | 存储已收集分析的基础目录（存储在 `proc_profile` 子目录中）。 |
-| `flamegraph_tool_dir` | `${STARROCKS_HOME}/bin/flamegraph` | 转换工具（`pprof`、`flamegraph.pl`）的路径。 |
+| `flamegraph_tool_dir` | `${STARROCKS_HOME}/bin/flamegraph` | 转换工具（**pprof**、`flamegraph.pl`）的路径。 |
 
 ### 手动 BE 收集
 
