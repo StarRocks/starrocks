@@ -63,6 +63,7 @@ import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.thrift.THiveFileInfo;
 import com.starrocks.thrift.TSinkCommitInfo;
+import org.apache.commons.lang.exception.ExceptionUtils;
 import org.apache.hadoop.fs.Path;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -205,12 +206,12 @@ public class HiveMetadata implements ConnectorMetadata {
         Table table;
         try {
             table = hmsOps.getTable(dbName, tblName);
-        } catch (StarRocksConnectorException e) {
-            LOG.error("Failed to get hive table [{}.{}.{}]", catalogName, dbName, tblName, e);
-            throw e;
         } catch (Exception e) {
             LOG.error("Failed to get hive table [{}.{}.{}]", catalogName, dbName, tblName, e);
-            return null;
+            Throwable ce = ExceptionUtils.getRootCause(e);
+            String errMsg = ce != null ? ce.getMessage() : e.getMessage();
+            throw new StarRocksConnectorException(String.format("Failed to get hive table %s.%s.%s. %s",
+                    catalogName, dbName, tblName, errMsg), e);
         }
 
         return table;

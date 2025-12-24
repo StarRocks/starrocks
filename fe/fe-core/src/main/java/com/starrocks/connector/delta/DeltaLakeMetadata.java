@@ -37,6 +37,7 @@ import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.statistics.StatisticsUtils;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -54,6 +55,7 @@ import io.delta.kernel.internal.actions.DeletionVectorDescriptor;
 import io.delta.kernel.internal.actions.Metadata;
 import io.delta.kernel.types.StructType;
 import io.delta.kernel.utils.CloseableIterator;
+import org.apache.commons.lang.exception.ExceptionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -351,8 +353,16 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
         try {
             return deltaOps.getTable(dbName, tblName);
         } catch (Exception e) {
-            LOG.error("Failed to get table {}.{}", dbName, tblName, e);
-            return null;
+            LOG.error("Failed to get deltalake table {}.{}.{}", catalogName, dbName, tblName, e);
+            String errMsg = e.getMessage();
+            Throwable ce = ExceptionUtils.getRootCause(e);
+            if (ce instanceof SemanticException se) {
+                errMsg = se.getDetailMsg();
+            } else if (ce != null) {
+                errMsg = String.format("Failed to get deltalake table %s.%s.%s. %s", catalogName, dbName, tblName,
+                        ce.getMessage());
+            }
+            throw new StarRocksConnectorException(errMsg, e);
         }
     }
 
