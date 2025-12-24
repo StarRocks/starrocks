@@ -61,6 +61,7 @@ import org.assertj.core.util.Lists;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
 
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
@@ -161,7 +162,7 @@ public class TabletSchedulerTest {
         recycleBin.recycleDatabase(db, new HashSet<>(), true);
         recycleBin.recycleTable(db.getId(), table, true);
         RecyclePartitionInfo recyclePartitionInfo = new RecycleRangePartitionInfo(db.getId(), table.getId(),
-                partition, null, new DataProperty(null), (short) 2, null);
+                partition, null, new DataProperty(null), (short) 2, false, null);
         recycleBin.recyclePartition(recyclePartitionInfo);
 
         List<TabletSchedCtx> allCtxs = new ArrayList<>();
