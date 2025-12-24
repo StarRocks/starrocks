@@ -947,18 +947,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_INSERT_SELECT_EXTERNAL_AUTO_REFRESH = "enable_insert_select_external_auto_refresh";
 
-<<<<<<< HEAD
-=======
-    public static final String PUSH_DOWN_HEAVY_EXPRS = "push_down_heavy_exprs";
-
     public static final String ARROW_FLIGHT_PROXY = "arrow_flight_proxy";
     public static final String ARROW_FLIGHT_PROXY_ENABLED = "arrow_flight_proxy_enabled";
 
-    public static final String ENABLE_PRE_AGG_TOP_N_PUSH_DOWN = "enable_pre_agg_top_n_push_down";
 
-    public static final String ENABLE_LABELED_COLUMN_STATISTIC_OUTPUT = "enable_labeled_column_statistic_output";
-
->>>>>>> 069af48a2c ([Feature] Support Arrow Flight Data Retrieval from Inaccessible Nodes (#66348))
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
             .add(MAX_EXECUTION_TIME)
@@ -1946,23 +1938,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_INSERT_SELECT_EXTERNAL_AUTO_REFRESH)
     private boolean enableInsertSelectExternalAutoRefresh = true;
 
-<<<<<<< HEAD
-=======
-    @VarAttr(name = PUSH_DOWN_HEAVY_EXPRS)
-    private boolean pushDownHeavyExprs = true;
-
     @VarAttr(name = ARROW_FLIGHT_PROXY)
     private String arrowFlightProxy = "";
     @VarAttr(name = ARROW_FLIGHT_PROXY_ENABLED)
     private boolean arrowFlightProxyEnabled = true;
 
-    @VarAttr(name = ENABLE_PRE_AGG_TOP_N_PUSH_DOWN, flag = VariableMgr.INVISIBLE)
-    private boolean enablePreAggTopNPushDown = true;
 
-    @VarAttr(name = ENABLE_LABELED_COLUMN_STATISTIC_OUTPUT)
-    private boolean enableLabeledColumnStatisticOutput = false;
-
->>>>>>> 069af48a2c ([Feature] Support Arrow Flight Data Retrieval from Inaccessible Nodes (#66348))
     public int getCboPruneJsonSubfieldDepth() {
         return cboPruneJsonSubfieldDepth;
     }
@@ -5254,16 +5235,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.enableInsertSelectExternalAutoRefresh = enableInsertSelectExternalAutoRefresh;
     }
 
-<<<<<<< HEAD
-=======
-    public void setPushDownHeavyExprs(boolean flag) {
-        this.pushDownHeavyExprs = flag;
-    }
-
-    public boolean isPushDownHeavyExprs() {
-        return this.pushDownHeavyExprs;
-    }
-
     public void setArrowFlightProxy(String proxy) {
         this.arrowFlightProxy = proxy;
     }
@@ -5280,23 +5251,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return this.arrowFlightProxyEnabled;
     }
 
-    public void setEnablePreAggTopNPushDown(boolean enablePreAggTopNPushDown) {
-        this.enablePreAggTopNPushDown = enablePreAggTopNPushDown;
-    }
 
-    public boolean isEnablePreAggTopNPushDown() {
-        return enablePreAggTopNPushDown;
-    }
-
-    public void setEnableLabeledColumnStatisticOutput(boolean flag) {
-        this.enableLabeledColumnStatisticOutput = flag;
-    }
-
-    public boolean isEnableLabeledColumnStatisticOutput() {
-        return this.enableLabeledColumnStatisticOutput;
-    }
-
->>>>>>> 069af48a2c ([Feature] Support Arrow Flight Data Retrieval from Inaccessible Nodes (#66348))
     // Serialize to thrift object
     // used for rest api
     public TQueryOptions toThrift() {
