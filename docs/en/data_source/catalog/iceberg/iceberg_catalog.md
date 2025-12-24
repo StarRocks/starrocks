@@ -6,6 +6,7 @@ keywords: ['iceberg']
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
 import QSTip from '../../../_assets/commonMarkdown/quickstart-iceberg-tip.mdx'
+import IcebergCatalogIcebergRestSecurityLink from '../../../_assets/commonMarkdown/iceberg_catalog_iceberg_rest_security_link.mdx'
 
 # Iceberg catalog
 
@@ -137,7 +138,7 @@ The type of your data source. Set the value to `iceberg`.
 
 Parameter(s) about how StarRocks manages data access to the catalog.
 
-For detailed instructions on managing data access for Iceberg Catalogs, see [Security Setup for Iceberg REST Catalog](./iceberg_rest_security.md).
+<IcebergRestSecurityLink />
 
 ##### catalog.access.control
 

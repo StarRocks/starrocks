@@ -5,6 +5,8 @@ sidebar_position: 30
 
 # LDAP 认证
 
+import LDAPSSLLink from '../../../_assets/commonMarkdown/ldap_ssl_link.mdx'
+
 除了原生的基于密码的认证，StarRocks 还支持 LDAP 认证。
 
 本主题描述了如何在 StarRocks 中使用 LDAP 手动创建和认证用户。有关如何使用安全集成将 StarRocks 与您的 LDAP 服务集成的说明，请参见[Authenticate with Security Integration](./security_integration.md)。有关如何在 LDAP 服务中认证用户组的更多信息，请参见[Authenticate User Groups](../group_provider.md)。
@@ -100,7 +102,7 @@ mysql -utom -P9030 -h127.0.0.1 -p --default-auth mysql_clear_password --enable-c
 
 - **JDBC**
 
-注意：使用JDBC链接时，Server 端必须要启用 SSL。SSL 配置请参考 [SSL 认证](../ssl_authentication.md)。
+<SSLLink />
 
 JDBC 5：
 
