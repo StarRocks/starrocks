@@ -1096,7 +1096,9 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
         if (node.getSkewColumn() != null) {
             skewColumn = SqlToScalarOperatorTranslator.translate(node.getSkewColumn(),
                     expressionMapping, columnRefFactory,
-                    session, cteContext, leftOpt, null, false);
+                    session, cteContext,
+                    new OptExprBuilder(null, Lists.newArrayList(leftOpt, rightOpt), expressionMapping),
+                    null, false);
         }
 
         List<ScalarOperator> skewValues = Lists.newArrayList();
