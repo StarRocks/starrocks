@@ -1,9 +1,6 @@
 ---
 sidebar_position: 100
 ---
-import AuthCompare from '../_assets/best_practices/_auth_comparison.mdx'
-import GroupProviderExample from '../_assets/best_practices/_auth_group_provider_example.mdx'
-import Solution3 from '../_assets/best_practices/_auth_solution_3.mdx'
 
 # 认证与授权
 
@@ -216,9 +213,19 @@ ADMIN SET FRONTEND CONFIG (
    )
    ```
 
-3. 将 Group Provider 与授权系统结合。
+3. 将 Group Provider 与授权系统结合。您可以使用内置授权系统或 Apache Ranger。
 
-   <GroupProviderExample />
+   - 内置授权：
+
+     角色可分配给用户组。登录时，系统会根据组成员身份自动为用户分配角色。
+
+     ```sql
+     GRANT role TO EXTERNAL GROUP <group_name>
+     ```
+
+   - Apache Ranger：
+
+     用户登录后，StarRocks 将组信息传递至 Ranger 进行策略评估。
 
 ### 授权
 
@@ -283,6 +290,18 @@ Apache Ranger 可以作为一个完整的解决方案本身使用，也可以与
 
 :::
 
-<Solution3 />
+### 方案三：外部认证（外部身份）+ 内部授权
+
+若您希望在使用 **StarRocks 内置授权系统**的同时仍依赖**外部认证**，可采用以下方法：
+
+1. 使用**安全集成**与外部身份验证系统建立连接。
+2. 在 **Group Provider** 中配置身份验证和授权所需的组信息。
+3. 在**安全集成**中定义允许登录集群的组。属于这些组的用户将被授予登录权限。
+4. 在 StarRocks 中**创建必要角色**并**授予外部组**。
+5. 用户登录时需同时通过身份验证且属于授权组。登录成功后，StarRocks 将根据组成员身份自动分配相应角色。
+6. 查询执行期间，StarRocks 将如常执行**基于内部 RBAC 的授权**。
+7. 此外可将 **Ranger** 与本方案结合使用，例如，采用 **StarRocks 原生 RBAC** 进行内部表授权，同时使用 **Ranger** 管理外部表授权。通过 Ranger 执行授权时，StarRocks 仍会将**用户 ID 及对应组信息**传递至 Ranger 进行访问控制。
+
+![Authentication and Authorization - Solution-3](../_assets/best_practices/auth_solution_3.png)
 
 <AuthSeeAlso />
