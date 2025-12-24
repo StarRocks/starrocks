@@ -73,6 +73,18 @@ public class DeltaLakeCacheUpdateProcessorTest {
             }
         };
 
+<<<<<<< HEAD
+=======
+        new MockUp<DeltaLakeMetastore>() {
+            @mockit.Mock
+            public DeltaLakeSnapshot getLatestSnapshot(String dbName, String tableName) {
+                return new DeltaLakeSnapshot("db1", "table1", null, null,
+                        new MetastoreTable("db1", "table1", "s3://bucket/path/to/table",
+                                123));
+            }
+        };
+
+>>>>>>> 192ef9d5fa ([BugFix] Fix refresh delta lake table not effective (#67156))
         new MockUp<DeltaUtils>() {
             @mockit.Mock
             public DeltaLakeTable convertDeltaToSRTable(String catalog, String dbName, String tblName, String path,
@@ -107,6 +119,18 @@ public class DeltaLakeCacheUpdateProcessorTest {
             }
         };
 
+<<<<<<< HEAD
+=======
+        new MockUp<DeltaLakeMetastore>() {
+            @mockit.Mock
+            public DeltaLakeSnapshot getLatestSnapshot(String dbName, String tableName) {
+                return new DeltaLakeSnapshot("db1", "table1", null, null,
+                        new MetastoreTable("db1", "table1", "s3://bucket/path/to/table",
+                                123));
+            }
+        };
+
+>>>>>>> 192ef9d5fa ([BugFix] Fix refresh delta lake table not effective (#67156))
         new MockUp<DeltaUtils>() {
             @mockit.Mock
             public DeltaLakeTable convertDeltaToSRTable(String catalog, String dbName, String tblName, String path,
