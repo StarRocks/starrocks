@@ -123,7 +123,7 @@ StatusOr<ColumnPtr> LambdaFunction::evaluate_constant(ExprContext* context) {
     ChunkPtr chunk = std::make_shared<Chunk>();
     for (auto i = 0; i < _common_sub_expr.size(); ++i) {
         ASSIGN_OR_RETURN(auto sub_col, context->evaluate(_common_sub_expr[i], nullptr));
-        chunk->append_column(sub_col, _common_sub_expr_ids[i]);
+        chunk->append_column(std::move(sub_col), _common_sub_expr_ids[i]);
     }
     // try to evaluate lambda expr to constant column
     return this->get_child(0)->evaluate_checked(context, nullptr);
@@ -236,7 +236,7 @@ Status LambdaFunction::prepare(starrocks::RuntimeState* state, starrocks::ExprCo
 StatusOr<ColumnPtr> LambdaFunction::evaluate_checked(ExprContext* context, Chunk* chunk) {
     for (auto i = 0; i < _common_sub_expr.size(); ++i) {
         ASSIGN_OR_RETURN(auto sub_col, context->evaluate(_common_sub_expr[i], chunk));
-        chunk->append_column(sub_col, _common_sub_expr_ids[i]);
+        chunk->append_column(std::move(sub_col), _common_sub_expr_ids[i]);
     }
     return get_child(0)->evaluate_checked(context, chunk);
 }

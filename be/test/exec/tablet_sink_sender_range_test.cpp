@@ -304,7 +304,7 @@ protected:
         fields.emplace_back(std::make_shared<Field>(0, "c1", get_type_info(TYPE_BIGINT), false));
         auto schema = std::make_shared<Schema>(fields);
 
-        auto chunk = std::make_shared<Chunk>(cols, schema);
+        auto chunk = std::make_shared<Chunk>(std::move(cols), std::move(schema));
         // Set slot_id to column index mapping
         chunk->set_slot_id_to_index(0, 0); // slot_id 0 -> column index 0
         return chunk;
@@ -328,7 +328,7 @@ protected:
         fields.emplace_back(std::make_shared<Field>(1, "c2", get_type_info(TYPE_BIGINT), false));
         auto schema = std::make_shared<Schema>(fields);
 
-        auto chunk = std::make_shared<Chunk>(cols, schema);
+        auto chunk = std::make_shared<Chunk>(std::move(cols), std::move(schema));
         // Set slot_id to column index mapping
         chunk->set_slot_id_to_index(0, 0); // slot_id 0 -> column index 0
         chunk->set_slot_id_to_index(1, 1); // slot_id 1 -> column index 1
@@ -1212,7 +1212,7 @@ TEST_F(TabletSinkSenderRangeTest, SparseDataRouting) {
     Fields fields;
     fields.emplace_back(std::make_shared<Field>(0, "c1", get_type_info(TYPE_BIGINT), false));
     auto schema = std::make_shared<Schema>(fields);
-    auto chunk = std::make_shared<Chunk>(cols, schema);
+    auto chunk = std::make_shared<Chunk>(std::move(cols), std::move(schema));
     // Set slot_id to column index mapping
     chunk->set_slot_id_to_index(0, 0); // slot_id 0 -> column index 0
 

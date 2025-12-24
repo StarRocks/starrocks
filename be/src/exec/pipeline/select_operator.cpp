@@ -90,7 +90,7 @@ Status SelectOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
         SCOPED_TIMER(_conjuncts_timer);
         for (const auto& [slot_id, expr] : _common_exprs) {
             ASSIGN_OR_RETURN(auto col, expr->evaluate(_curr_chunk.get()));
-            _curr_chunk->append_column(col, slot_id);
+            _curr_chunk->append_column(std::move(col), slot_id);
         }
     }
     RETURN_IF_ERROR(eval_conjuncts_and_in_filters(_conjunct_ctxs, _curr_chunk.get()));

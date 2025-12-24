@@ -100,9 +100,9 @@ public:
             map[i] = i;
         }
 
-        _chunk_1 = std::make_shared<Chunk>(columns_1, map);
-        _chunk_2 = std::make_shared<Chunk>(columns_2, map);
-        _chunk_3 = std::make_shared<Chunk>(columns_3, map);
+        _chunk_1 = std::make_shared<Chunk>(std::move(columns_1), map);
+        _chunk_2 = std::make_shared<Chunk>(std::move(columns_2), map);
+        _chunk_3 = std::make_shared<Chunk>(std::move(columns_3), map);
 
         auto* expr1 = new ColumnRef(TypeDescriptor(TYPE_VARCHAR), 2); // refer to region
         auto* expr2 = new ColumnRef(TypeDescriptor(TYPE_VARCHAR), 1); // refer to nation

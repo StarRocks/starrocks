@@ -86,7 +86,7 @@ protected:
         Fields fields;
         fields.emplace_back(std::make_shared<Field>(0, name, get_type_info(TYPE_INT), false));
         auto schema = std::make_shared<Schema>(fields);
-        return Chunk(cols, schema);
+        return Chunk(std::move(cols), std::move(schema));
     }
 
     Chunk make_varchar_chunk(const std::string& name, const std::vector<std::string>& values) {
@@ -100,7 +100,7 @@ protected:
         Fields fields;
         fields.emplace_back(std::make_shared<Field>(0, name, get_type_info(TYPE_VARCHAR), false));
         auto schema = std::make_shared<Schema>(fields);
-        return Chunk(cols, schema);
+        return Chunk(std::move(cols), std::move(schema));
     }
 
     // ---- Single-column TTabletRange helpers ----

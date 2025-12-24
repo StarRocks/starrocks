@@ -638,7 +638,7 @@ ChunkPtr detail::LeafNode::_generate_ordinal(const size_t chunk_id, const size_t
 
     Columns columns;
     columns.push_back(std::move(ordinal_column));
-    return std::make_shared<Chunk>(columns, s_slot_map);
+    return std::make_shared<Chunk>(std::move(columns), s_slot_map);
 }
 
 MergePathCascadeMerger::MergePathCascadeMerger(const size_t chunk_size, const int32_t degree_of_parallelism,

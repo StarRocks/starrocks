@@ -64,12 +64,12 @@ public:
     using ColumnIdHashMap = phmap::flat_hash_map<ColumnId, size_t, StdHash<SlotId>>;
 
     Chunk();
-    Chunk(Columns columns, SchemaPtr schema);
-    Chunk(Columns columns, SlotHashMap slot_map);
+    Chunk(Columns&& columns, SchemaPtr schema);
+    Chunk(Columns&& columns, SlotHashMap slot_map);
 
     // Chunk with extra data implements.
-    Chunk(Columns columns, SchemaPtr schema, ChunkExtraDataPtr extra_data);
-    Chunk(Columns columns, SlotHashMap slot_map, ChunkExtraDataPtr extra_data);
+    Chunk(Columns&& columns, SchemaPtr schema, ChunkExtraDataPtr extra_data);
+    Chunk(Columns&& columns, SlotHashMap slot_map, ChunkExtraDataPtr extra_data);
 
     Chunk(Chunk&& other) = default;
     Chunk& operator=(Chunk&& other) = default;
@@ -112,18 +112,23 @@ public:
     // schema must exists.
     std::string_view get_column_name(size_t idx) const;
 
-    // schema must exist and will be updated.
-    void append_column(ColumnPtr column, const FieldPtr& field);
+    // NOTE: schema must exist and will be updated.
+    // NOTE: all those methods should take care the ownership of the column, otherwise it will cause undefined behavior.
 
-    void append_vector_column(ColumnPtr column, const FieldPtr& field, SlotId slot_id);
+    // - When those method are called, the column will be moved into the chunk, and the original column will be reset.
+    // - If the column is shared with others, it will be cloned and moved into the chunk.
+    void append_column(ColumnPtr&& column, const FieldPtr& field);
+    void append_column(ColumnPtr&& column, SlotId slot_id);
+    void update_column(ColumnPtr&& column, SlotId slot_id);
+    // - When those method are called, ensure the column is not shared with other columns in the chunk;
+    // otherwise chunk's internal methods may cause undefined behavior.
+    void append_column(const ColumnPtr& column, const FieldPtr& field);
+    void append_column(const ColumnPtr& column, SlotId slot_id);
+    void update_column(ColumnPtr& column, SlotId slot_id);
 
-    void append_column(ColumnPtr column, SlotId slot_id);
-    void insert_column(size_t idx, ColumnPtr column, const FieldPtr& field);
-
-    void update_column(ColumnPtr column, SlotId slot_id);
-    void update_column_by_index(ColumnPtr column, size_t idx);
-
-    void append_or_update_column(ColumnPtr column, SlotId slot_id);
+    void append_vector_column(ColumnPtr&& column, const FieldPtr& field, SlotId slot_id);
+    void update_column_by_index(ColumnPtr&& column, size_t idx);
+    void append_or_update_column(ColumnPtr&& column, SlotId slot_id);
 
     void update_rows(const Chunk& src, const uint32_t* indexes);
 
@@ -322,6 +327,12 @@ public:
 private:
     void rebuild_cid_index();
 
+    bool _is_column_ptr_shared(const Column* col) const { return _column_ptr_set.contains(col); }
+    void _update_column_checked(size_t idx, const ColumnPtr& ptr);
+    void _update_column_checked(size_t idx, ColumnPtr&& ptr);
+    void _append_column_checked(size_t idx, const ColumnPtr& ptr);
+    void _append_column_checked(size_t idx, ColumnPtr&& ptr);
+
     Columns _columns;
     std::shared_ptr<Schema> _schema;
     ColumnIdHashMap _cid_to_index;
@@ -330,6 +341,10 @@ private:
     DelCondSatisfied _delete_state = DEL_NOT_SATISFIED;
     query_cache::owner_info _owner_info;
     ChunkExtraDataPtr _extra_data;
+    // Chunk's columns should be unique, so we need to track the column ptrs to avoid duplicates.
+    // key      : column address
+    // value    : index in _columns
+    std::unordered_map<const Column*, size_t> _column_ptr_set;
 };
 
 inline const ColumnPtr& Chunk::get_column_by_name(const std::string& column_name) const {

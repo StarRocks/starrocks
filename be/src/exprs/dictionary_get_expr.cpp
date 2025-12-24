@@ -55,7 +55,7 @@ StatusOr<ColumnPtr> DictionaryGetExpr::evaluate_checked(ExprContext* context, Ch
     // assign the key chunk
     for (int i = 0; i < _dictionary_get_expr.key_size; ++i) {
         ColumnPtr key_column = columns[1 + i];
-        key_chunk->update_column_by_index(key_column, i);
+        key_chunk->update_column_by_index(std::move(key_column), i);
     }
     value_chunk->reserve(size);
 

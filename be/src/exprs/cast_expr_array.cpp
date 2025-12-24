@@ -214,7 +214,7 @@ StatusOr<ColumnPtr> CastStringToArray::evaluate_checked(ExprContext* context, Ch
     if (element_type != TYPE_VARCHAR && element_type != TYPE_CHAR) {
         ChunkPtr chunk = std::make_shared<Chunk>();
         SlotId slot_id = down_cast<ColumnRef*>(_cast_elements_expr->get_child(0))->slot_id();
-        chunk->append_column(elements, slot_id);
+        chunk->append_column(std::move(elements), slot_id);
         ASSIGN_OR_RETURN(auto cast_res, _cast_elements_expr->evaluate_checked(context, chunk.get()));
         elements = ColumnHelper::cast_to_nullable_column(std::move(cast_res));
     }
@@ -294,7 +294,7 @@ StatusOr<ColumnPtr> CastJsonToArray::evaluate_checked(ExprContext* context, Chun
     if (element_type != TYPE_JSON) {
         ChunkPtr chunk = std::make_shared<Chunk>();
         SlotId slot_id = down_cast<ColumnRef*>(_cast_elements_expr->get_child(0))->slot_id();
-        chunk->append_column(elements, slot_id);
+        chunk->append_column(std::move(elements), slot_id);
         ASSIGN_OR_RETURN(auto cast_res, _cast_elements_expr->evaluate_checked(context, chunk.get()));
         elements = ColumnHelper::cast_to_nullable_column(std::move(cast_res));
     }
