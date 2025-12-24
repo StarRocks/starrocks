@@ -1,9 +1,6 @@
 ---
 sidebar_position: 100
 ---
-import AuthCompare from '../_assets/best_practices/_auth_comparison.mdx'
-import GroupProviderExample from '../_assets/best_practices/_auth_group_provider_example.mdx'
-import Solution3 from '../_assets/best_practices/_auth_solution_3.mdx'
 
 # 認証と授権
 
@@ -216,9 +213,19 @@ ADMIN SET FRONTEND CONFIG (
    )
    ```
 
-3. グループプロバイダーを授権システムと統合します。
+3. Group Providerを授権システムと統合します。ネイティブ認証または Apache Ranger のいずれかを使用できます。
 
-   <GroupProviderExample />
+   - ネイティブ認証:
+
+     グループにロールを割り当てることができます。ログイン時に、ユーザーはグループメンバーシップに基づいて自動的にロールが割り当てられます。
+
+     ```sql
+     GRANT role TO EXTERNAL GROUP <group_name>
+     ```
+
+   - Apache Ranger:
+
+     ユーザーがログインすると、StarRocks はグループ情報を Ranger に渡してポリシー評価を行います。
 
 ### 授権
 
@@ -283,6 +290,18 @@ Apache Ranger は、StarRocks のネイティブ授権システムと一緒に�
 
 :::
 
-<Solution3 />
+### ソリューション 3: 外部認証 (外部アイデンティティ) + 内部授権
+
+**StarRocks の組み込み授権システム**を使用しながら、**外部認証**に依存する場合は、次のアプローチを取ることができます。
+
+1. **セキュリティインテグレーション**を使用して、外部認証システムとの接続を確立します。
+2. **Group Provider**内で認証と授権に必要なグループ情報を設定します。
+3. **セキュリティインテグレーション**で StarRocks クラスターにログインを許可するグループを定義します。これらのグループに属するユーザーは、ログインアクセスが許可されます。
+4. StarRocks 内で必要なロールを**作成し**、それらを外部グループに**付与します**。
+5. ユーザーがログインを試みる際には、認証に合格し、授権されたグループに属している必要があります。ログインが成功すると、StarRocks はグループメンバーシップに基づいて適切なロールを自動的に割り当てます。
+6. クエリ実行中、StarRocks は通常通り**内部 RBAC ベースの授権**を実施します。
+7. さらに、このソリューションと **Ranger** を組み合わせることも可能です。例えば、内部テーブルの授権には **StarRocks のネイティブ RBAC** を使用し、外部テーブルの授権には **Ranger** を使用します。Ranger を介して授権を行う際、StarRocks は**ユーザー ID と対応するグループ情報**を Ranger に渡してアクセス制御を行います。
+
+![Authentication and Authorization - Solution-3](../_assets/best_practices/auth_solution_3.png)
 
 <AuthSeeAlso />
