@@ -112,6 +112,7 @@ WITH (
     'mem_limit' = '50%',
     'mem_pool' = 'shared_pool'
 );
+```
 
 ##### `spill_mem_limit_threshold`
 
