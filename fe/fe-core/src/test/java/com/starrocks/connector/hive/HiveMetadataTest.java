@@ -730,7 +730,7 @@ public class HiveMetadataTest {
         Map<String, String> map = new HashMap<>();
         map.put(STARROCKS_QUERY_ID, "abcd");
         Partition remotePartition = new Partition(map, null, null, null, false);
-        HivePartition hivePartition = new HivePartition(null, null, null, null, null, null, map);
+        HivePartition hivePartition = new HivePartition(null, null, null, null, null, null, map, new HashMap<>());
         Assertions.assertTrue(HiveCommitter.checkIsSamePartition(remotePartition, hivePartition));
     }
 
