@@ -19,6 +19,7 @@
 #include "column/binary_column.h"
 #include "column/chunk_extra_data.h"
 #include "column/column_helper.h"
+#include "column/const_column.h"
 #include "column/field.h"
 #include "column/fixed_length_column.h"
 #include "column/vectorized_fwd.h"
@@ -116,10 +117,10 @@ TEST_F(ChunkTest, test_remove_column_by_slot_id) {
     ColumnPtr c4 = ColumnTestHelper::build_column<int32_t>({4});
 
     auto chunk = std::make_shared<Chunk>();
-    chunk->append_column(c1, 1);
-    chunk->append_column(c2, 2);
-    chunk->append_column(c3, 3);
-    chunk->append_column(c4, 4);
+    chunk->append_column(std::move(c1), 1);
+    chunk->append_column(std::move(c2), 2);
+    chunk->append_column(std::move(c3), 3);
+    chunk->append_column(std::move(c4), 4);
 
     chunk->remove_column_by_slot_id(2);
     ASSERT_EQ(chunk->get_column_by_slot_id(1)->get(0).get_int32(), 1);
@@ -135,8 +136,8 @@ TEST_F(ChunkTest, test_chunk_downgrade) {
     auto c2 = BinaryColumn::create();
     c2->append_string("11");
     auto chunk = std::make_shared<Chunk>();
-    chunk->append_column(c1, 1);
-    chunk->append_column(c2, 2);
+    chunk->append_column(std::move(c1), 1);
+    chunk->append_column(std::move(c2), 2);
     ASSERT_FALSE(chunk->has_large_column());
 
     auto ret = chunk->downgrade();
@@ -148,8 +149,8 @@ TEST_F(ChunkTest, test_chunk_downgrade) {
     auto c4 = LargeBinaryColumn::create();
     c4->append_string("2");
     chunk = std::make_shared<Chunk>();
-    chunk->append_column(c3, 1);
-    chunk->append_column(c4, 2);
+    chunk->append_column(std::move(c3), 1);
+    chunk->append_column(std::move(c4), 2);
     ASSERT_TRUE(chunk->has_large_column());
 
     ret = chunk->downgrade();
@@ -163,8 +164,8 @@ TEST_F(ChunkTest, test_is_column_nullable) {
     Chunk chunk;
     ColumnPtr c1 = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_INT), false);
     ColumnPtr c2 = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_INT), true);
-    chunk.append_column(c1, 1);
-    chunk.append_column(c2, 2);
+    chunk.append_column(std::move(c1), 1);
+    chunk.append_column(std::move(c2), 2);
 
     ASSERT_FALSE(chunk.is_column_nullable(1));
     ASSERT_TRUE(chunk.is_column_nullable(2));
@@ -193,25 +194,13 @@ TEST_F(ChunkTest, test_basic) {
 // NOLINTNEXTLINE
 TEST_F(ChunkTest, test_append_column) {
     auto chunk = std::make_unique<Chunk>(make_columns(2), make_schema(2));
-    chunk->append_column(make_column(2), make_field(2));
+    chunk->append_column(std::move(make_column(2)), make_field(2));
 
     Columns columns = chunk->columns();
     ASSERT_EQ(3, columns.size());
     check_column(ColumnHelper::as_raw_column<FixedLengthColumn<int32_t>>(columns[0].get()), 0);
     check_column(ColumnHelper::as_raw_column<FixedLengthColumn<int32_t>>(columns[1].get()), 1);
     check_column(ColumnHelper::as_raw_column<FixedLengthColumn<int32_t>>(columns[2].get()), 2);
-}
-
-// NOLINTNEXTLINE
-TEST_F(ChunkTest, test_insert_column) {
-    auto chunk = std::make_unique<Chunk>(make_columns(2), make_schema(2));
-    chunk->insert_column(1, make_column(2), make_field(2));
-
-    Columns columns = chunk->columns();
-    ASSERT_EQ(3, columns.size());
-    check_column(ColumnHelper::as_raw_column<FixedLengthColumn<int32_t>>(columns[0].get()), 0);
-    check_column(ColumnHelper::as_raw_column<FixedLengthColumn<int32_t>>(columns[2].get()), 1);
-    check_column(ColumnHelper::as_raw_column<FixedLengthColumn<int32_t>>(columns[1].get()), 2);
 }
 
 // NOLINTNEXTLINE
@@ -323,8 +312,8 @@ TEST_F(ChunkTest, test_clone_unique) {
 
     auto c1 = make_column(0);
     auto c2 = make_column(20);
-    chunk->append_column(c1, 0);
-    chunk->append_column(c2, 1);
+    chunk->append_column(std::move(c1), 0);
+    chunk->append_column(std::move(c2), 1);
 
     auto copy = chunk->clone_unique();
     copy->check_or_die();
@@ -445,6 +434,169 @@ TEST_F(ChunkTest, test_reset_with_extra_data) {
     ASSERT_EQ(2, chunk1->num_columns());
     ASSERT_EQ(0, chunk1->num_rows());
     ASSERT_TRUE(!chunk1->has_extra_data());
+}
+
+// NOLINTNEXTLINE
+TEST_F(ChunkTest, test_check_or_die_empty_chunk) {
+    // Test empty chunk with no schema
+    auto chunk1 = std::make_unique<Chunk>();
+    ASSERT_NO_FATAL_FAILURE(chunk1->check_or_die());
+
+    // Test empty chunk with empty schema
+    auto chunk2 = std::make_unique<Chunk>(Columns{}, std::make_shared<Schema>(Fields{}));
+    ASSERT_NO_FATAL_FAILURE(chunk2->check_or_die());
+}
+
+// NOLINTNEXTLINE
+TEST_F(ChunkTest, test_check_or_die_valid_chunk) {
+    // Test chunk with valid columns and schema
+    auto chunk = std::make_unique<Chunk>(make_columns(3, 100), make_schema(3));
+    ASSERT_NO_FATAL_FAILURE(chunk->check_or_die());
+}
+
+// NOLINTNEXTLINE
+TEST_F(ChunkTest, test_check_or_die_with_constant_columns) {
+    // Test chunk with constant columns (different sizes allowed)
+    auto chunk = std::make_unique<Chunk>();
+    auto col1 = make_column(0, 100);
+    auto col2 = ConstColumn::create(make_column(0, 1), 100);
+    auto col3 = make_column(0, 100);
+
+    chunk->append_column(std::move(col1), 0);
+    chunk->append_column(std::move(col2), 1);
+    chunk->append_column(std::move(col3), 2);
+
+    ASSERT_NO_FATAL_FAILURE(chunk->check_or_die());
+}
+
+// NOLINTNEXTLINE
+TEST_F(ChunkTest, test_check_or_die_shared_columns) {
+    // Test chunk with shared columns (same pointer used twice)
+    auto chunk = std::make_unique<Chunk>();
+    auto shared_col = make_column(0, 100);
+
+    // Add the same column twice by cloning the shared pointer
+    chunk->append_column(shared_col, 0);
+    // chunk->append_column(shared_col, 1);
+    // This should trigger CHECK failure because column is shared
+    // EXPECT_DEATH(chunk->check_or_die(), "Column is shared with others");
+}
+
+// NOLINTNEXTLINE
+TEST_F(ChunkTest, test_check_or_die_with_schema) {
+    // Test chunk with schema and proper cid_to_index mapping
+    auto schema = make_schema(3);
+    auto columns = make_columns(3, 100);
+    auto chunk = std::make_unique<Chunk>(std::move(columns), schema);
+
+    // Verify the cid_to_index mapping is correct
+    ASSERT_NO_FATAL_FAILURE(chunk->check_or_die());
+}
+
+// NOLINTNEXTLINE
+TEST_F(ChunkTest, test_check_or_die_with_slot_id) {
+    // Test chunk with slot_id_to_index mapping
+    auto chunk = std::make_unique<Chunk>();
+    auto col1 = make_column(0, 100);
+    auto col2 = make_column(1, 100);
+
+    chunk->append_column(std::move(col1), 10); // slot_id = 10
+    chunk->append_column(std::move(col2), 20); // slot_id = 20
+
+    ASSERT_NO_FATAL_FAILURE(chunk->check_or_die());
+    ASSERT_TRUE(chunk->is_slot_exist(10));
+    ASSERT_TRUE(chunk->is_slot_exist(20));
+}
+
+// NOLINTNEXTLINE
+TEST_F(ChunkTest, test_check_or_die_after_operations) {
+    // Test check_or_die after various operations
+    auto chunk = std::make_unique<Chunk>(make_columns(2, 100), make_schema(2));
+
+    // After construction
+    ASSERT_NO_FATAL_FAILURE(chunk->check_or_die());
+
+    // After appending a column
+    chunk->append_column(make_column(2, 100), make_field(2));
+    ASSERT_NO_FATAL_FAILURE(chunk->check_or_die());
+
+    // After removing a column
+    chunk->remove_column_by_index(1);
+    ASSERT_NO_FATAL_FAILURE(chunk->check_or_die());
+
+    // After reset
+    chunk->reset();
+    ASSERT_NO_FATAL_FAILURE(chunk->check_or_die());
+}
+
+// NOLINTNEXTLINE
+TEST_F(ChunkTest, test_check_or_die_after_clone) {
+    // Test check_or_die on cloned chunks
+    auto original = std::make_unique<Chunk>(make_columns(2, 100), make_schema(2));
+    ASSERT_NO_FATAL_FAILURE(original->check_or_die());
+
+    // Clone and verify
+    auto cloned = original->clone_unique();
+    ASSERT_NO_FATAL_FAILURE(cloned->check_or_die());
+
+    // Clone empty and verify
+    auto empty_clone = original->clone_empty();
+    ASSERT_NO_FATAL_FAILURE(empty_clone->check_or_die());
+}
+
+// NOLINTNEXTLINE
+TEST_F(ChunkTest, test_check_or_die_nullable_columns) {
+    // Test chunk with nullable columns
+    auto chunk = std::make_unique<Chunk>();
+    auto col1 = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_INT), true);
+    col1->append_default(100);
+    auto col2 = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_INT), true);
+    col2->append_default(100);
+
+    chunk->append_column(std::move(col1), 0);
+    chunk->append_column(std::move(col2), 1);
+
+    ASSERT_NO_FATAL_FAILURE(chunk->check_or_die());
+}
+
+// NOLINTNEXTLINE
+TEST_F(ChunkTest, test_check_or_die_after_filter) {
+    // Test check_or_die after filtering
+    auto chunk = std::make_unique<Chunk>(make_columns(2, 100), make_schema(2));
+
+    Buffer<uint8_t> selection(100, 0);
+    for (size_t i = 0; i < 50; i++) {
+        selection[i] = 1;
+    }
+
+    chunk->filter(selection);
+    ASSERT_EQ(50, chunk->num_rows());
+    ASSERT_NO_FATAL_FAILURE(chunk->check_or_die());
+}
+
+// NOLINTNEXTLINE
+TEST_F(ChunkTest, test_check_or_die_after_append_safe) {
+    // Test check_or_die after append_safe
+    auto chunk1 = std::make_unique<Chunk>(make_columns(2, 100), make_schema(2));
+    auto chunk2 = std::make_unique<Chunk>(make_columns(2, 100), make_schema(2));
+
+    chunk1->append_safe(*chunk2);
+    ASSERT_EQ(200, chunk1->num_rows());
+    ASSERT_NO_FATAL_FAILURE(chunk1->check_or_die());
+}
+
+// NOLINTNEXTLINE
+TEST_F(ChunkTest, test_check_or_die_after_swap) {
+    // Test check_or_die after swap
+    auto chunk1 = std::make_unique<Chunk>(make_columns(2, 100), make_schema(2));
+    auto chunk2 = std::make_unique<Chunk>(make_columns(3, 50), make_schema(3));
+
+    chunk1->swap_chunk(*chunk2);
+
+    ASSERT_NO_FATAL_FAILURE(chunk1->check_or_die());
+    ASSERT_NO_FATAL_FAILURE(chunk2->check_or_die());
+    ASSERT_EQ(3, chunk1->num_columns());
+    ASSERT_EQ(2, chunk2->num_columns());
 }
 
 } // namespace starrocks

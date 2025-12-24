@@ -125,7 +125,7 @@ StatusOr<ColumnPtr> MapApplyExpr::evaluate_checked(ExprContext* context, Chunk* 
             }
 
             ASSIGN_OR_RETURN(auto replicated_col, captured->replicate(input_map->offsets_column_raw_ptr()->get_data()));
-            cur_chunk->append_column(replicated_col, id);
+            cur_chunk->append_column(std::move(replicated_col), id);
         }
         // evaluate the lambda expression
         if (cur_chunk->num_rows() <= chunk->num_rows() * 8) {
