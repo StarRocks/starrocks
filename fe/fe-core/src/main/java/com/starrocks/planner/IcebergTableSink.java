@@ -14,15 +14,10 @@
 
 package com.starrocks.planner;
 
-import com.google.common.base.Preconditions;
 import com.starrocks.catalog.IcebergTable;
-import com.starrocks.connector.CatalogConnector;
 import com.starrocks.connector.iceberg.IcebergUtil;
 import com.starrocks.credential.CloudConfiguration;
-import com.starrocks.credential.CloudConfigurationFactory;
-import com.starrocks.credential.CloudType;
 import com.starrocks.qe.SessionVariable;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TCloudConfiguration;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TDataSink;
@@ -66,32 +61,7 @@ public class IcebergTableSink extends DataSink {
         this.targetBranch = targetBranch;
 
         String catalogName = icebergTable.getCatalogName();
-        CatalogConnector connector = GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalogName);
-        Preconditions.checkState(connector != null,
-                String.format("connector of catalog %s should not be null", catalogName));
-
-        // Try to get vended credentials from loadTable response
-        CloudConfiguration vendedCredentialsCloudConfiguration = CloudConfigurationFactory.
-                buildCloudConfigurationForVendedCredentials(icebergTable.getNativeTable().io().properties(),
-                        this.tableLocation);
-        if (vendedCredentialsCloudConfiguration.getCloudType() != CloudType.DEFAULT) {
-            this.cloudConfiguration = vendedCredentialsCloudConfiguration;
-        } else {
-            // Try to get credentials from catalog config (/v1/config response).
-            // This is used as fallback when STS is unavailable (e.g., Apache Polaris without STS).
-            CloudConfiguration catalogConfigCloudConfiguration = CloudConfigurationFactory.
-                    buildCloudConfigurationForVendedCredentials(connector.getMetadata().getCatalogProperties(),
-                            this.tableLocation);
-            if (catalogConfigCloudConfiguration.getCloudType() != CloudType.DEFAULT) {
-                this.cloudConfiguration = catalogConfigCloudConfiguration;
-            } else {
-                // Fall back to user-provided catalog credentials
-                this.cloudConfiguration = connector.getMetadata().getCloudConfiguration();
-            }
-        }
-
-        Preconditions.checkState(cloudConfiguration != null,
-                String.format("cloudConfiguration of catalog %s should not be null", catalogName));
+        this.cloudConfiguration = IcebergUtil.getVendedCloudConfiguration(catalogName, icebergTable);
     }
 
     public String getTargetBranch() {
