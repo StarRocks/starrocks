@@ -194,6 +194,115 @@ TEST_F(BuiltinInvertedIndexTest, test_english_parser_queries) {
     delete iter;
 }
 
+// Test MATCH_ANY and MATCH_ALL semantics for english parser, with and without wildcard tokens.
+TEST_F(BuiltinInvertedIndexTest, test_english_parser_match_any_all_queries) {
+    // Values:
+    //  row0: "hello world"
+    //  row1: "hello"
+    //  row2: "world"
+    //  row3: "other"
+    std::vector<std::string> values = {"hello world", "hello", "world", "other"};
+    std::vector<Slice> slices;
+    slices.reserve(values.size());
+    for (auto& v : values) {
+        slices.emplace_back(v.data(), v.size());
+    }
+
+    TabletIndex tablet_index;
+    tablet_index.add_index_properties(INVERTED_INDEX_PARSER_KEY, INVERTED_INDEX_PARSER_ENGLISH);
+
+    TypeInfoPtr type_info = get_type_info(TYPE_VARCHAR);
+
+    std::string file_name = kTestDir + "/english_match_any_all";
+    ColumnMetaPB meta;
+    {
+        ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(file_name));
+
+        std::unique_ptr<InvertedWriter> writer;
+        ASSERT_OK(BuiltinInvertedWriter::create(type_info, &tablet_index, &writer));
+        ASSERT_OK(writer->init());
+
+        writer->add_values(slices.data(), slices.size());
+        writer->add_nulls(0);
+        ASSERT_OK(writer->finish(wfile.get(), &meta));
+        ASSERT_TRUE(wfile->close().ok());
+    }
+
+    ASSERT_EQ(1, meta.indexes_size());
+    const auto& index_meta = meta.indexes(0);
+    ASSERT_EQ(BUILTIN_INVERTED_INDEX, index_meta.type());
+    const auto& builtin_meta = index_meta.builtin_inverted_index();
+
+    ASSIGN_OR_ABORT(auto rfile, _fs->new_random_access_file(file_name));
+    _opts.read_file = rfile.get();
+
+    auto tablet_index_sp = std::make_shared<TabletIndex>(tablet_index);
+    std::unique_ptr<InvertedReader> reader;
+    ASSERT_OK(BuiltinInvertedReader::create(tablet_index_sp, TYPE_VARCHAR, &reader));
+
+    BuiltinInvertedIndexPB builtin_meta_copy = builtin_meta;
+    ASSERT_OK(reader->load(_opts, &builtin_meta_copy));
+
+    InvertedIndexIterator* iter = nullptr;
+    ASSERT_OK(reader->new_iterator(tablet_index_sp, &iter, _opts));
+
+    // MATCH_ANY with exact tokens "hello world" should hit rows 0, 1, and 2.
+    {
+        roaring::Roaring bitmap;
+        Slice query("hello world");
+        ASSERT_OK(iter->read_from_inverted_index("c0", &query,
+                                                 InvertedIndexQueryType::MATCH_ANY_QUERY, &bitmap));
+        ASSERT_EQ(3, bitmap.cardinality());
+        ASSERT_TRUE(bitmap.contains(0));
+        ASSERT_TRUE(bitmap.contains(1));
+        ASSERT_TRUE(bitmap.contains(2));
+        ASSERT_FALSE(bitmap.contains(3));
+    }
+
+    // MATCH_ALL with exact tokens "hello world" should hit only row 0.
+    {
+        roaring::Roaring bitmap;
+        Slice query("hello world");
+        ASSERT_OK(iter->read_from_inverted_index("c0", &query,
+                                                 InvertedIndexQueryType::MATCH_ALL_QUERY, &bitmap));
+        ASSERT_EQ(1, bitmap.cardinality());
+        ASSERT_TRUE(bitmap.contains(0));
+        ASSERT_FALSE(bitmap.contains(1));
+        ASSERT_FALSE(bitmap.contains(2));
+        ASSERT_FALSE(bitmap.contains(3));
+    }
+
+    // MATCH_ANY with wildcard tokens "he% wor%" should behave the same as above.
+    {
+        roaring::Roaring bitmap;
+        std::string pattern = std::string("he% wor%");
+        Slice query(pattern);
+        ASSERT_OK(iter->read_from_inverted_index("c0", &query,
+                                                 InvertedIndexQueryType::MATCH_ANY_QUERY, &bitmap));
+        ASSERT_EQ(3, bitmap.cardinality());
+        ASSERT_TRUE(bitmap.contains(0));
+        ASSERT_TRUE(bitmap.contains(1));
+        ASSERT_TRUE(bitmap.contains(2));
+        ASSERT_FALSE(bitmap.contains(3));
+    }
+
+    // MATCH_ALL with wildcard tokens "he% wor%" should also hit only row 0.
+    {
+        roaring::Roaring bitmap;
+        std::string pattern = std::string("he% wor%");
+        Slice query(pattern);
+        ASSERT_OK(iter->read_from_inverted_index("c0", &query,
+                                                 InvertedIndexQueryType::MATCH_ALL_QUERY, &bitmap));
+        ASSERT_EQ(1, bitmap.cardinality());
+        ASSERT_TRUE(bitmap.contains(0));
+        ASSERT_FALSE(bitmap.contains(1));
+        ASSERT_FALSE(bitmap.contains(2));
+        ASSERT_FALSE(bitmap.contains(3));
+    }
+
+    delete iter;
+}
+
 TEST_F(BuiltinInvertedIndexTest, test_get_next_prefix) {
     // Normal case
     ASSERT_EQ("abd", get_next_prefix(Slice("abc")));
