@@ -308,7 +308,6 @@ struct CastToString {
 
 StatusOr<ColumnPtr> cast_nested_to_json(const ColumnPtr& column, bool allow_throw_exception);
 
-// cast column[idx] to coresponding json type.
-StatusOr<std::string> cast_type_to_json_str(const ColumnPtr& column, int idx);
+StatusOr<std::string> cast_type_to_json_str(const ColumnPtr& column, int idx, bool unindexed_struct = false);
 
 } // namespace starrocks

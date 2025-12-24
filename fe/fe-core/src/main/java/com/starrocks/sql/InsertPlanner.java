@@ -69,6 +69,7 @@ import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectListItem;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.ValuesRelation;
+import com.starrocks.sql.ast.expression.CastExpr;
 import com.starrocks.sql.ast.expression.DefaultValueExpr;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.LiteralExpr;
@@ -673,7 +674,15 @@ public class InsertPlanner {
                     if (defaultValueType == Column.DefaultValueType.NULL || targetColumn.isAutoIncrement()) {
                         scalarOperator = ConstantOperator.createNull(targetColumn.getType());
                     } else if (defaultValueType == Column.DefaultValueType.CONST) {
-                        scalarOperator = ConstantOperator.createVarchar(targetColumn.calculatedDefaultValue());
+                        if (targetColumn.getDefaultExpr() != null && targetColumn.getDefaultExpr().hasExprObject()) {
+                            Expr expr = targetColumn.getDefaultExpr().obtainExpr();
+                            if (!expr.getType().equals(targetColumn.getType())) {
+                                expr = new CastExpr(targetColumn.getType(), expr);
+                            }
+                            scalarOperator = SqlToScalarOperatorTranslator.translate(expr);
+                        } else {
+                            scalarOperator = ConstantOperator.createVarchar(targetColumn.calculatedDefaultValue());
+                        }
                     } else if (defaultValueType == Column.DefaultValueType.VARY) {
                         if (isValidDefaultFunction(targetColumn.getDefaultExpr().getExpr())) {
                             scalarOperator = SqlToScalarOperatorTranslator.
