@@ -56,14 +56,49 @@ public class DeletePlanner {
             // so just return empty plan here
             return null;
         }
+        return planDelete(deleteStatement, session);
+    }
+
+    /**
+     * Main method to plan delete operations for different table types
+     */
+    private ExecPlan planDelete(DeleteStmt deleteStatement, ConnectContext session) {
+        com.starrocks.catalog.Table table = deleteStatement.getTable();
+        // Transform logical plan
         QueryRelation query = deleteStatement.getQueryStatement().getQueryRelation();
         List<String> colNames = query.getColumnOutputNames();
         ColumnRefFactory columnRefFactory = new ColumnRefFactory();
         LogicalPlan logicalPlan = new RelationTransformer(columnRefFactory, session).transform(query);
 
+        PhysicalPropertySet requiredProperty = new PhysicalPropertySet();
+
+        // Optimize logical plan, create physical plan, setup sink and configure pipeline
+        return createDeletePlan(
+                deleteStatement,
+                logicalPlan,
+                columnRefFactory,
+                session,
+                requiredProperty,
+                colNames,
+                table
+        );
+    }
+
+    /**
+     * Creates complete delete plan including optimization, sink setup and pipeline configuration
+     */
+    private ExecPlan createDeletePlan(
+            DeleteStmt deleteStatement,
+            LogicalPlan logicalPlan,
+            ColumnRefFactory columnRefFactory,
+            ConnectContext session,
+            PhysicalPropertySet requiredProperty,
+            List<String> colNames,
+            com.starrocks.catalog.Table table) {
+
         // TODO: remove forceDisablePipeline when all the operators support pipeline engine.
         boolean isEnablePipeline = session.getSessionVariable().isEnablePipelineEngine();
-        boolean canUsePipeline = isEnablePipeline && DataSink.canTableSinkUsePipeline(deleteStatement.getTable());
+        boolean canUsePipeline = isEnablePipeline && DataSink.canTableSinkUsePipeline(table);
         boolean forceDisablePipeline = isEnablePipeline && !canUsePipeline;
         boolean prevIsEnableLocalShuffleAgg = session.getSessionVariable().isEnableLocalShuffleAgg();
         try {
@@ -76,80 +111,98 @@ public class DeletePlanner {
             Optimizer optimizer = OptimizerFactory.create(OptimizerFactory.initContext(session, columnRefFactory));
             OptExpression optimizedPlan = optimizer.optimize(
                     logicalPlan.getRoot(),
-                    new PhysicalPropertySet(),
+                    requiredProperty,
                     new ColumnRefSet(logicalPlan.getOutputColumn()));
             ExecPlan execPlan = PlanFragmentBuilder.createPhysicalPlan(optimizedPlan, session,
                     logicalPlan.getOutputColumn(), columnRefFactory,
                     colNames, TResultSinkType.MYSQL_PROTOCAL, false);
-            DescriptorTable descriptorTable = execPlan.getDescTbl();
-            TupleDescriptor olapTuple = descriptorTable.createTupleDescriptor();
 
-            OlapTable table = (OlapTable) deleteStatement.getTable();
-            for (Column column : table.getBaseSchema()) {
-                if (column.isKey() || column.isNameWithPrefix(FeConstants.GENERATED_PARTITION_COLUMN_PREFIX)) {
-                    SlotDescriptor slotDescriptor = descriptorTable.addSlotDescriptor(olapTuple);
-                    slotDescriptor.setIsMaterialized(true);
-                    slotDescriptor.setType(column.getType());
-                    slotDescriptor.setColumn(column);
-                    slotDescriptor.setIsNullable(column.isAllowNull());
-                } else {
-                    continue;
-                }
-            }
-            SlotDescriptor slotDescriptor = descriptorTable.addSlotDescriptor(olapTuple);
-            slotDescriptor.setIsMaterialized(true);
-            slotDescriptor.setType(IntegerType.TINYINT);
-            slotDescriptor.setColumn(new Column(Load.LOAD_OP_COLUMN, IntegerType.TINYINT));
-            slotDescriptor.setIsNullable(false);
-            olapTuple.computeMemLayout();
+            // Setup OLAP table sink for delete operations
+            setupOlapTableSink(execPlan, deleteStatement, session);
+            // Configure pipeline for the sink
+            configurePipelineSink(execPlan, session, table, canUsePipeline);
 
-            List<Long> partitionIds = Lists.newArrayList();
-            for (Partition partition : table.getPartitions()) {
-                partitionIds.add(partition.getId());
-            }
-            DataSink dataSink = new OlapTableSink(table, olapTuple, partitionIds, table.writeQuorum(),
-                    table.enableReplicatedStorage(), false, false,
-                    session.getCurrentComputeResource());
-            execPlan.getFragments().get(0).setSink(dataSink);
-            if (session.getTxnId() != 0) {
-                ((OlapTableSink) dataSink).setIsMultiStatementsTxn(true);
-            }
-
-            // if sink is OlapTableSink Assigned to Be execute this sql [cn execute OlapTableSink will crash]
-            session.getSessionVariable().setPreferComputeNode(false);
-            session.getSessionVariable().setUseComputeNodes(0);
-            OlapTableSink olapTableSink = (OlapTableSink) dataSink;
-            TableName catalogDbTable = deleteStatement.getTableName();
-            Database db = GlobalStateMgr.getCurrentState().getMetadataMgr()
-                    .getDb(session, catalogDbTable.getCatalog(), catalogDbTable.getDb());
-            try {
-                olapTableSink.init(session.getExecutionId(), deleteStatement.getTxnId(), db.getId(), session.getExecTimeout());
-                olapTableSink.complete();
-            } catch (StarRocksException e) {
-                throw new SemanticException(e.getMessage());
-            }
-
-            if (canUsePipeline) {
-                PlanFragment sinkFragment = execPlan.getFragments().get(0);
-                if (session.getSessionVariable().getEnableAdaptiveSinkDop()) {
-                    long warehouseId = session.getCurrentComputeResource().getWarehouseId();
-                    sinkFragment.setPipelineDop(session.getSessionVariable().getSinkDegreeOfParallelism(warehouseId));
-                } else {
-                    sinkFragment.setPipelineDop(session.getSessionVariable().getParallelExecInstanceNum());
-                }
-                sinkFragment.setHasOlapTableSink();
-                sinkFragment.setForceSetTableSinkDop();
-                sinkFragment.setForceAssignScanRangesPerDriverSeq();
-                sinkFragment.disableRuntimeAdaptiveDop();
-            } else {
-                execPlan.getFragments().get(0).setPipelineDop(1);
-            }
             return execPlan;
         } finally {
             session.getSessionVariable().setEnableLocalShuffleAgg(prevIsEnableLocalShuffleAgg);
             if (forceDisablePipeline) {
                 session.getSessionVariable().setEnablePipelineEngine(true);
             }
+        }
+    }
+
+    /**
+     * Sets up OLAP table sink for delete operations
+     */
+    private void setupOlapTableSink(ExecPlan execPlan, DeleteStmt deleteStatement, ConnectContext session) {
+        DescriptorTable descriptorTable = execPlan.getDescTbl();
+        TupleDescriptor olapTuple = descriptorTable.createTupleDescriptor();
+
+        OlapTable table = (OlapTable) deleteStatement.getTable();
+        for (Column column : table.getBaseSchema()) {
+            if (column.isKey() || column.isNameWithPrefix(FeConstants.GENERATED_PARTITION_COLUMN_PREFIX)) {
+                SlotDescriptor slotDescriptor = descriptorTable.addSlotDescriptor(olapTuple);
+                slotDescriptor.setIsMaterialized(true);
+                slotDescriptor.setType(column.getType());
+                slotDescriptor.setColumn(column);
+                slotDescriptor.setIsNullable(column.isAllowNull());
+            } else {
+                continue;
+            }
+        }
+        SlotDescriptor slotDescriptor = descriptorTable.addSlotDescriptor(olapTuple);
+        slotDescriptor.setIsMaterialized(true);
+        slotDescriptor.setType(IntegerType.TINYINT);
+        slotDescriptor.setColumn(new Column(Load.LOAD_OP_COLUMN, IntegerType.TINYINT));
+        slotDescriptor.setIsNullable(false);
+        olapTuple.computeMemLayout();
+
+        List<Long> partitionIds = Lists.newArrayList();
+        for (Partition partition : table.getPartitions()) {
+            partitionIds.add(partition.getId());
+        }
+        DataSink dataSink = new OlapTableSink(table, olapTuple, partitionIds, table.writeQuorum(),
+                table.enableReplicatedStorage(), false, false,
+                session.getCurrentComputeResource());
+        execPlan.getFragments().get(0).setSink(dataSink);
+        if (session.getTxnId() != 0) {
+            ((OlapTableSink) dataSink).setIsMultiStatementsTxn(true);
+        }
+
+        // if sink is OlapTableSink Assigned to Be execute this sql [cn execute OlapTableSink will crash]
+        session.getSessionVariable().setPreferComputeNode(false);
+        session.getSessionVariable().setUseComputeNodes(0);
+        OlapTableSink olapTableSink = (OlapTableSink) dataSink;
+        TableName catalogDbTable = deleteStatement.getTableName();
+        Database db = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                .getDb(session, catalogDbTable.getCatalog(), catalogDbTable.getDb());
+        try {
+            olapTableSink.init(session.getExecutionId(), deleteStatement.getTxnId(), db.getId(), session.getExecTimeout());
+            olapTableSink.complete();
+        } catch (StarRocksException e) {
+            throw new SemanticException(e.getMessage());
+        }
+    }
+
+    /**
+     * Configures pipeline for sink fragment
+     */
+    private void configurePipelineSink(ExecPlan execPlan, ConnectContext session,
+                                       com.starrocks.catalog.Table table, boolean canUsePipeline) {
+        if (canUsePipeline) {
+            PlanFragment sinkFragment = execPlan.getFragments().get(0);
+            if (session.getSessionVariable().getEnableAdaptiveSinkDop()) {
+                long warehouseId = session.getCurrentComputeResource().getWarehouseId();
+                sinkFragment.setPipelineDop(session.getSessionVariable().getSinkDegreeOfParallelism(warehouseId));
+            } else {
+                sinkFragment.setPipelineDop(session.getSessionVariable().getParallelExecInstanceNum());
+            }
+            sinkFragment.setHasOlapTableSink();
+            sinkFragment.setForceSetTableSinkDop();
+            sinkFragment.setForceAssignScanRangesPerDriverSeq();
+            sinkFragment.disableRuntimeAdaptiveDop();
+        } else {
+            execPlan.getFragments().get(0).setPipelineDop(1);
         }
     }
 }
