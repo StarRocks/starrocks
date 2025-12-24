@@ -15,7 +15,6 @@
 package com.starrocks.scheduler;
 
 import com.starrocks.catalog.MaterializedView;
-import com.starrocks.scheduler.mv.pct.MVPCTBasedRefreshProcessor;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
