@@ -434,7 +434,8 @@ public class IcebergMetadataTest extends TableTestBase {
 
         IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
                 Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(), null);
-        Assertions.assertNull(metadata.getTable(connectContext, "db", "tbl2"));
+        Assertions.assertThrows(StarRocksConnectorException.class,
+                () -> metadata.getTable(connectContext, "db", "tbl2"));
     }
 
     @Test
