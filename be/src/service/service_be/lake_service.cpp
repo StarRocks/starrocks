@@ -1154,7 +1154,8 @@ void LakeServiceImpl::warm_up_segment(::google::protobuf::RpcController* control
             }
 
             // Write to cache
-            Status st = block_cache->write(block.cache_key(), block.offset(), block.size(), buffer.data());
+            WriteCacheOptions options;
+            Status st = block_cache->write(block.cache_key(), block.offset(), block.size(), buffer.data(), &options);
             if (st.ok()) {
                 cached_count++;
             } else {
