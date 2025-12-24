@@ -46,6 +46,9 @@ public class UDFToBitmap extends GenericUDF {
             return null;
         try {
             long val = this.inspector.get(args[0].get());
+            if (val < 0) {
+                throw new IllegalArgumentException("to_bitmap only support bigint value from 0 to 18446744073709551615, but got negative value: " + val);
+            }
             return BitmapValue.bitmapToBytes(new BitmapValue(val));
         } catch (IOException e) {
             throw new HiveException(e);
