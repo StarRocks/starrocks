@@ -294,7 +294,7 @@ public class ColocatedBackendSelectorTest {
         table.setDefaultDistributionInfo(new HashDistributionInfo(numBuckets, Collections.emptyList()));
         desc.setTable(table);
 
-        return new OlapScanNode(new PlanNodeId(id), desc, "OlapScanNode", table.getBaseIndexId());
+        return new OlapScanNode(new PlanNodeId(id), desc, "OlapScanNode", table.getBaseIndexMetaId());
     }
 
     private ArrayListMultimap<Integer, TScanRangeLocations> genBucketSeq2Locations(Map<Integer, List<Long>> bucketSeqToBackends,

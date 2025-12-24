@@ -979,8 +979,8 @@ public class AlterTest {
         Assertions.assertEquals(3,
                     replace2.getPartition("replace2").getDefaultPhysicalPartition()
                             .getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE).size());
-        Assertions.assertEquals("replace1", replace1.getIndexNameById(replace1.getBaseIndexId()));
-        Assertions.assertEquals("replace2", replace2.getIndexNameById(replace2.getBaseIndexId()));
+        Assertions.assertEquals("replace1", replace1.getIndexNameByMetaId(replace1.getBaseIndexMetaId()));
+        Assertions.assertEquals("replace2", replace2.getIndexNameByMetaId(replace2.getBaseIndexMetaId()));
     }
 
     @Test

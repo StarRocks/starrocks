@@ -357,8 +357,8 @@ public class RestoreJobTest {
                 for (MaterializedIndex index : physicalPartition.getMaterializedIndices(IndexExtState.VISIBLE)) {
                     BackupIndexInfo idxInfo = new BackupIndexInfo();
                     idxInfo.id = index.getId();
-                    idxInfo.name = expectedRestoreTbl.getIndexNameById(index.getId());
-                    idxInfo.schemaHash = expectedRestoreTbl.getSchemaHashByIndexId(index.getId());
+                    idxInfo.name = expectedRestoreTbl.getIndexNameByMetaId(index.getId());
+                    idxInfo.schemaHash = expectedRestoreTbl.getSchemaHashByIndexMetaId(index.getId());
                     physicalPartInfo.indexes.put(idxInfo.name, idxInfo);
 
                     for (Tablet tablet : index.getTablets()) {
@@ -537,8 +537,8 @@ public class RestoreJobTest {
                     .getMaterializedIndices(IndexExtState.VISIBLE)) {
                 BackupIndexInfo idxInfo = new BackupIndexInfo();
                 idxInfo.id = index.getId();
-                idxInfo.name = expectedRestoreTbl.getIndexNameById(index.getId());
-                idxInfo.schemaHash = expectedRestoreTbl.getSchemaHashByIndexId(index.getId());
+                idxInfo.name = expectedRestoreTbl.getIndexNameByMetaId(index.getId());
+                idxInfo.schemaHash = expectedRestoreTbl.getSchemaHashByIndexMetaId(index.getId());
                 partInfo.indexes.put(idxInfo.name, idxInfo);
 
                 for (Tablet tablet : index.getTablets()) {
@@ -709,8 +709,8 @@ public class RestoreJobTest {
                     .getMaterializedIndices(IndexExtState.VISIBLE)) {
                 BackupIndexInfo idxInfo = new BackupIndexInfo();
                 idxInfo.id = index.getId();
-                idxInfo.name = expectedRestoreTbl.getIndexNameById(index.getId());
-                idxInfo.schemaHash = expectedRestoreTbl.getSchemaHashByIndexId(index.getId());
+                idxInfo.name = expectedRestoreTbl.getIndexNameByMetaId(index.getId());
+                idxInfo.schemaHash = expectedRestoreTbl.getSchemaHashByIndexMetaId(index.getId());
                 partInfo.indexes.put(idxInfo.name, idxInfo);
 
                 for (Tablet tablet : index.getTablets()) {

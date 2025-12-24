@@ -321,7 +321,7 @@ public class ExternalOlapTable extends OlapTable {
         long start = System.currentTimeMillis();
 
         state = OlapTableState.valueOf(meta.getState());
-        baseIndexId = meta.getBase_index_id();
+        baseIndexMetaId = meta.getBase_index_id();
         colocateGroup = meta.getColocate_group();
         bfFpp = meta.getBloomfilter_fpp();
 
@@ -414,8 +414,8 @@ public class ExternalOlapTable extends OlapTable {
         }
         long endOfPartitionBuild = System.currentTimeMillis();
 
-        indexIdToMeta.clear();
-        indexNameToId.clear();
+        indexMetaIdToMeta.clear();
+        indexNameToMetaId.clear();
 
         for (TIndexMeta indexMeta : meta.getIndexes()) {
             List<Column> columns = new ArrayList<>();
@@ -444,7 +444,7 @@ public class ExternalOlapTable extends OlapTable {
                     KeysType.valueOf(indexMeta.getSchema_meta()
                             .getKeys_type()),
                     null);
-            indexIdToMeta.put(index.getIndexId(), index);
+            indexMetaIdToMeta.put(index.getIndexMetaId(), index);
             // TODO(wulei)
             // indexNameToId.put(indexMeta.getIndex_name(), index.getIndexId());
         }
@@ -507,7 +507,7 @@ public class ExternalOlapTable extends OlapTable {
                     index.addTablet(tablet, tabletMeta, false);
                 }
                 if (indexMeta.getPartition_id() == physicalPartition.getId()) {
-                    if (index.getId() != baseIndexId) {
+                    if (index.getId() != baseIndexMetaId) {
                         physicalPartition.createRollupIndex(index);
                     } else {
                         physicalPartition.setBaseIndex(index);

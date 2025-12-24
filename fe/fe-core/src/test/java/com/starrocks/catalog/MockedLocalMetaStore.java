@@ -124,7 +124,7 @@ public class MockedLocalMetaStore extends LocalMetastore {
                 (short) 0,
                 TStorageType.COLUMN,
                 KeysType.DUP_KEYS);
-        olapTable.setBaseIndexId(indexId);
+        olapTable.setBaseIndexMetaId(indexId);
         olapTable.setReplicationNum(DEFAULT_REPLICATION_NUM);
 
         Partition partition = createPartition(

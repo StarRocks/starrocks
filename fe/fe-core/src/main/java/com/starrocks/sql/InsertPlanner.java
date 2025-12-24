@@ -791,8 +791,8 @@ public class InsertPlanner {
                     // Only olap table can have the synchronized materialized view.
                     OlapTable targetOlapTable = (OlapTable) targetTable;
                     MaterializedIndexMeta targetIndexMeta = null;
-                    for (MaterializedIndexMeta indexMeta : targetOlapTable.getIndexIdToMeta().values()) {
-                        if (indexMeta.getIndexId() == targetOlapTable.getBaseIndexId()) {
+                    for (MaterializedIndexMeta indexMeta : targetOlapTable.getIndexMetaIdToMeta().values()) {
+                        if (indexMeta.getIndexMetaId() == targetOlapTable.getBaseIndexMetaId()) {
                             continue;
                         }
                         for (Column column : indexMeta.getSchema()) {
@@ -803,7 +803,7 @@ public class InsertPlanner {
                         }
                     }
                     String targetIndexMetaName = targetIndexMeta == null ? "" :
-                            targetOlapTable.getIndexNameById(targetIndexMeta.getIndexId());
+                            targetOlapTable.getIndexNameByMetaId(targetIndexMeta.getIndexMetaId());
                     throw new SemanticException(
                             "The define expr of shadow column " + targetColumn.getName() + " is null, " +
                                     "please check the associated materialized view " + targetIndexMetaName
@@ -958,7 +958,7 @@ public class InsertPlanner {
         Preconditions.checkState(columns.size() == outputColumns.size(),
                 "outputColumn's size must equal with table's column size");
 
-        List<Column> keyColumns = table.getKeyColumnsByIndexId(table.getBaseIndexId());
+        List<Column> keyColumns = table.getKeyColumnsByIndexId(table.getBaseIndexMetaId());
         List<Integer> keyColumnIds = Lists.newArrayList();
         keyColumns.forEach(column -> {
             int index = columns.indexOf(column);

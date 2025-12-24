@@ -88,7 +88,7 @@ public class AccessTestUtil {
         table.setIndexMeta(baseIndex.getId(), "testTbl", baseSchema, 0, 1, (short) 1,
                 TStorageType.COLUMN, KeysType.AGG_KEYS);
         table.addPartition(partition);
-        table.setBaseIndexId(baseIndex.getId());
+        table.setBaseIndexMetaId(baseIndex.getId());
         db.registerTableUnlocked(table);
         return globalStateMgr;
     }

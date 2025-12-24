@@ -164,7 +164,7 @@ public class BalanceStatProcNodeTest {
             index.addTablet(new LocalTablet(tablet1Id), tabletMeta);
             long tablet2Id = 1011L;
             index.addTablet(new LocalTablet(tablet2Id), tabletMeta);
-            Map<String, Long> indexNameToId = olapTable.getIndexNameToId();
+            Map<String, Long> indexNameToId = olapTable.getIndexNameToMetaId();
             indexNameToId.put("index1", index.getId());
 
             // balance stat
@@ -199,7 +199,7 @@ public class BalanceStatProcNodeTest {
             index.addTablet(new LocalTablet(tablet1Id), tabletMeta);
             long tablet2Id = 1111L;
             index.addTablet(new LocalTablet(tablet2Id), tabletMeta);
-            Map<String, Long> indexNameToId = olapTable.getIndexNameToId();
+            Map<String, Long> indexNameToId = olapTable.getIndexNameToMetaId();
             indexNameToId.put("index1", index.getId());
 
             // balance stat
@@ -242,7 +242,7 @@ public class BalanceStatProcNodeTest {
             index.addTablet(new LocalTablet(tablet1Id), tabletMeta);
             long tablet2Id = 1211L;
             index.addTablet(new LocalTablet(tablet2Id), tabletMeta);
-            Map<String, Long> indexNameToId = olapTable.getIndexNameToId();
+            Map<String, Long> indexNameToId = olapTable.getIndexNameToMetaId();
             indexNameToId.put("index1", index.getId());
 
             // balance stat

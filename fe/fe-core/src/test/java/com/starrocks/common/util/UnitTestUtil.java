@@ -156,7 +156,7 @@ public class UnitTestUtil {
             MaterializedView.MvRefreshScheme mvRefreshScheme = new MaterializedView.MvRefreshScheme();
             MaterializedView mv = new MaterializedView(tableId, dbId, MATERIALIZED_VIEW_NAME, columns,
                     type, partitionInfo, distributionInfo, mvRefreshScheme);
-            Deencapsulation.setField(mv, "baseIndexId", indexId);
+            Deencapsulation.setField(mv, "baseIndexMetaId", indexId);
             mv.addPartition(partition);
             mv.setIndexMeta(indexId, tableName, columns, 0, SCHEMA_HASH, (short) 1, TStorageType.COLUMN,
                     type);
@@ -164,7 +164,7 @@ public class UnitTestUtil {
         } else {
             OlapTable table = new OlapTable(tableId, tableName, columns,
                     type, partitionInfo, distributionInfo);
-            Deencapsulation.setField(table, "baseIndexId", indexId);
+            Deencapsulation.setField(table, "baseIndexMetaId", indexId);
             table.addPartition(partition);
             table.setIndexMeta(indexId, tableName, columns, 0, SCHEMA_HASH, (short) 1, TStorageType.COLUMN,
                     type);
@@ -232,7 +232,7 @@ public class UnitTestUtil {
             MaterializedView.MvRefreshScheme mvRefreshScheme = new MaterializedView.MvRefreshScheme();
             MaterializedView mv = new MaterializedView(tableId, dbId, tableName, columns,
                     type, partitionInfo, distributionInfo, mvRefreshScheme);
-            Deencapsulation.setField(mv, "baseIndexId", indexId);
+            Deencapsulation.setField(mv, "baseIndexMetaId", indexId);
             mv.addPartition(partition);
             mv.setIndexMeta(indexId, tableName, columns, 0, SCHEMA_HASH, (short) 1, TStorageType.COLUMN,
                     type);
@@ -240,7 +240,7 @@ public class UnitTestUtil {
         } else {
             OlapTable table = new OlapTable(tableId, tableName, columns,
                     type, partitionInfo, distributionInfo);
-            Deencapsulation.setField(table, "baseIndexId", indexId);
+            Deencapsulation.setField(table, "baseIndexMetaId", indexId);
             table.addPartition(partition);
             table.setIndexMeta(indexId, tableName, columns, 0, SCHEMA_HASH, (short) 1, TStorageType.COLUMN,
                     type);

@@ -44,7 +44,7 @@ public class OlapTableRollupJobBuilder extends AlterJobV2Builder {
 
     @Override
     public AlterJobV2 build() throws StarRocksException {
-        int baseSchemaHash = olapTable.getSchemaHashByIndexId(baseIndexId);
+        int baseSchemaHash = olapTable.getSchemaHashByIndexMetaId(baseIndexId);
         // mvSchemaVersion will keep same with the src MaterializedIndex
         int mvSchemaVersion = olapTable.getIndexMetaByIndexId(baseIndexId).getSchemaVersion();
         int mvSchemaHash = Util.schemaHash(0 /* init schema version */, rollupColumns, olapTable.getBfColumnNames(),

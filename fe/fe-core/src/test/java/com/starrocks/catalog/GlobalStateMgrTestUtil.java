@@ -233,7 +233,7 @@ public class GlobalStateMgrTestUtil {
         table.addPartition(partition);
         table.setIndexMeta(indexId, testIndex1, columns, 0, testSchemaHash1, (short) 1, TStorageType.COLUMN,
                 KeysType.AGG_KEYS);
-        table.setBaseIndexId(indexId);
+        table.setBaseIndexMetaId(indexId);
         table.setReplicationNum((short) 3);
         // db
         Database db = new Database(dbId, testDb1);

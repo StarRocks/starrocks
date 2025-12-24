@@ -145,7 +145,7 @@ public class MetadataViewer {
                     long visibleVersion = physicalPartition.getVisibleVersion();
 
                     for (MaterializedIndex index : physicalPartition.getMaterializedIndices(IndexExtState.VISIBLE)) {
-                        int schemaHash = olapTable.getSchemaHashByIndexId(index.getId());
+                        int schemaHash = olapTable.getSchemaHashByIndexMetaId(index.getId());
                         for (Tablet tablet : index.getTablets()) {
                             long tabletId = tablet.getId();
                             int count = replicationNum;
@@ -387,7 +387,7 @@ public class MetadataViewer {
                             List<String> row = Lists.newArrayList();
                             row.add(partition.getName());
                             row.add(String.valueOf(physicalPartition.getId()));
-                            row.add(olapTable.getIndexNameById(index.getId()));
+                            row.add(olapTable.getIndexNameByMetaId(index.getId()));
                             row.add(String.valueOf(rowCountStatistics.get(i)));
                             row.add(totalRowCount == 0L ? "0.00 %"
                                     : df.format((double) rowCountStatistics.get(i) / totalRowCount));

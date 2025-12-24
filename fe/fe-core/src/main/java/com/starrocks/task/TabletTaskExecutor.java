@@ -457,7 +457,7 @@ public class TabletTaskExecutor {
                         .getMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
                 for (MaterializedIndex materializedIndex : allIndices) {
                     long indexId = materializedIndex.getId();
-                    int schemaHash = olapTable.getSchemaHashByIndexId(indexId);
+                    int schemaHash = olapTable.getSchemaHashByIndexMetaId(indexId);
                     for (Tablet tablet : materializedIndex.getTablets()) {
                         long tabletId = tablet.getId();
                         List<Replica> replicas = ((LocalTablet) tablet).getImmutableReplicas();

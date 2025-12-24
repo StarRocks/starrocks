@@ -102,7 +102,7 @@ public class ExportMgrEditLogTest {
         testTable = new OlapTable(TEST_TABLE_ID, TEST_TABLE_NAME, columns, KeysType.DUP_KEYS,
                 partitionInfo, distributionInfo);
         testTable.setIndexMeta(indexId, TEST_TABLE_NAME, columns, 0, 0, (short) 1, TStorageType.COLUMN, KeysType.DUP_KEYS);
-        testTable.setBaseIndexId(indexId);
+        testTable.setBaseIndexMetaId(indexId);
         testTable.addPartition(partition);
         
         testDatabase.registerTableUnlocked(testTable);

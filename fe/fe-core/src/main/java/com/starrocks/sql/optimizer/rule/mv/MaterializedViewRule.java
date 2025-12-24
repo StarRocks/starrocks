@@ -277,7 +277,7 @@ public class MaterializedViewRule extends Rule {
         // Q2: select * from tbl1 where b = 'a', should choose tbl1_mv
         while (iterator.hasNext()) {
             MaterializedIndexMeta mvMeta = iterator.next();
-            long mvIdx = mvMeta.getIndexId();
+            long mvIdx = mvMeta.getIndexMetaId();
 
             // Ignore indexes which cannot be remapping with query by column names.
             List<Column> mvNonAggregatedColumns = mvMeta.getNonAggregatedColumns();
@@ -345,7 +345,7 @@ public class MaterializedViewRule extends Rule {
             iterator = candidateIndexIdToMeta.iterator();
             while (iterator.hasNext()) {
                 MaterializedIndexMeta mvMeta = iterator.next();
-                Long mvIdx = mvMeta.getIndexId();
+                Long mvIdx = mvMeta.getIndexMetaId();
 
                 if (!checkOutputColumns(queryRelIdToColumnNameIds.get(relationId),
                         queryRelIdToScanNodeOutputColumnIds.get(relationId), mvIdx, mvMeta)) {
@@ -356,7 +356,7 @@ public class MaterializedViewRule extends Rule {
 
         Map<Long, List<Column>> result = Maps.newHashMap();
         for (MaterializedIndexMeta indexMeta : candidateIndexIdToMeta) {
-            result.put(indexMeta.getIndexId(), indexMeta.getSchema());
+            result.put(indexMeta.getIndexMetaId(), indexMeta.getSchema());
         }
         return result;
     }
@@ -574,7 +574,7 @@ public class MaterializedViewRule extends Rule {
     private long selectBestRowCountIndex(Set<Long> indexesMatchingBestPrefixIndex, OlapTable olapTable) {
         long minRowCount = Long.MAX_VALUE;
         long selectedIndexId = 0;
-        long baseIndexId = olapTable.getBaseIndexId();
+        long baseIndexId = olapTable.getBaseIndexMetaId();
         for (Long indexId : indexesMatchingBestPrefixIndex) {
             long rowCount = 0;
             for (Partition partition : olapTable.getPartitions()) {
@@ -585,8 +585,8 @@ public class MaterializedViewRule extends Rule {
                 selectedIndexId = indexId;
             } else if (rowCount == minRowCount) {
                 // check column number, select one minimum column number
-                int selectedColumnSize = olapTable.getSchemaByIndexId(selectedIndexId).size();
-                int currColumnSize = olapTable.getSchemaByIndexId(indexId).size();
+                int selectedColumnSize = olapTable.getSchemaByIndexMetaId(selectedIndexId).size();
+                int currColumnSize = olapTable.getSchemaByIndexMetaId(indexId).size();
                 // If indexId and old selectedIndexId both have the same rowCount and columnSize,
                 // prefer non baseIndexId first.
                 if (currColumnSize == selectedColumnSize) {
@@ -781,9 +781,9 @@ public class MaterializedViewRule extends Rule {
     private void compensateCandidateIndex(List<MaterializedIndexMeta> candidateIndexIdToMetas,
                                           List<MaterializedIndexMeta> allVisibleIndexes,
                                           OlapTable table) {
-        int keySizeOfBaseIndex = table.getKeyColumnsByIndexId(table.getBaseIndexId()).size();
+        int keySizeOfBaseIndex = table.getKeyColumnsByIndexId(table.getBaseIndexMetaId()).size();
         for (MaterializedIndexMeta index : allVisibleIndexes) {
-            long mvIndexId = index.getIndexId();
+            long mvIndexId = index.getIndexMetaId();
             if (table.getKeyColumnsByIndexId(mvIndexId).size() == keySizeOfBaseIndex) {
                 candidateIndexIdToMetas.add(index);
             }

@@ -76,7 +76,7 @@ public class BestIndexRewriter extends OptExpressionVisitor<OptExpression, Long>
                                                                                     Long bestIndex) {
         OlapTable olapTable = (OlapTable) scanOperator.getTable();
         long oldSelectedIndexId = scanOperator.getSelectedIndexId();
-        if (oldSelectedIndexId != olapTable.getBaseIndexId() || bestIndex == oldSelectedIndexId) {
+        if (oldSelectedIndexId != olapTable.getBaseIndexMetaId() || bestIndex == oldSelectedIndexId) {
             return null;
         }
         MaterializedIndexMeta indexMeta = olapTable.getIndexMetaByIndexId(bestIndex);

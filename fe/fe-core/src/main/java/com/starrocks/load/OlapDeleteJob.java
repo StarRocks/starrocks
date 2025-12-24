@@ -146,10 +146,10 @@ public class OlapDeleteJob extends DeleteJob {
                     for (MaterializedIndex index : physicalPartition
                                 .getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)) {
                         long indexId = index.getId();
-                        int schemaHash = olapTable.getSchemaHashByIndexId(indexId);
+                        int schemaHash = olapTable.getSchemaHashByIndexMetaId(indexId);
 
                         List<TColumn> columnsDesc = new ArrayList<>();
-                        for (Column column : olapTable.getSchemaByIndexId(indexId)) {
+                        for (Column column : olapTable.getSchemaByIndexMetaId(indexId)) {
                             columnsDesc.add(column.toThrift());
                         }
 

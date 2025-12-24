@@ -156,7 +156,7 @@ public class PhysicalDistributionAggOptRule implements TreeRewriteRule {
                     agg.getGroupBys().stream().map(s -> scan.getColRefToColumnMetaMap().get(s)).collect(
                             Collectors.toList());
 
-            for (Column column : ((OlapTable) scan.getTable()).getSchemaByIndexId(scan.getSelectedIndexId())) {
+            for (Column column : ((OlapTable) scan.getTable()).getSchemaByIndexMetaId(scan.getSelectedIndexId())) {
                 if (!nonKeyGroupBys.contains(column)) {
                     break;
                 }

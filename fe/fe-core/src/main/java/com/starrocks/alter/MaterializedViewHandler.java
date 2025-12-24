@@ -419,7 +419,7 @@ public class MaterializedViewHandler extends AlterHandler {
             for (Table tbl : GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId())) {
                 if (tbl.isOlapOrCloudNativeTable()) {
                     OlapTable otherOlapTable = (OlapTable) tbl;
-                    if (otherOlapTable.getIndexNameToId().size() > 1 && otherOlapTable.hasMaterializedIndex(mvName)) {
+                    if (otherOlapTable.getIndexNameToMetaId().size() > 1 && otherOlapTable.hasMaterializedIndex(mvName)) {
                         throw new DdlException("Materialized view[" + mvName + "] already exists in table "
                                 + tbl.getName());
                     }
@@ -517,7 +517,7 @@ public class MaterializedViewHandler extends AlterHandler {
         boolean meetReplaceValue = false;
         KeysType keysType = olapTable.getKeysType();
         Map<String, Column> baseColumnNameToColumn = Maps.newHashMap();
-        for (Column column : olapTable.getSchemaByIndexId(baseIndexId)) {
+        for (Column column : olapTable.getSchemaByIndexMetaId(baseIndexId)) {
             baseColumnNameToColumn.put(column.getName(), column);
         }
         if (keysType.isAggregationFamily()) {
@@ -672,7 +672,7 @@ public class MaterializedViewHandler extends AlterHandler {
         // up to here, table's state can only be NORMAL
         Preconditions.checkState(olapTable.getState() == OlapTableState.NORMAL, olapTable.getState().name());
 
-        Long baseIndexId = olapTable.getIndexIdByName(baseIndexName);
+        Long baseIndexId = olapTable.getIndexMetaIdByName(baseIndexName);
         if (baseIndexId == null) {
             throw new DdlException("Base index[" + baseIndexName + "] does not exist");
         }
@@ -755,8 +755,8 @@ public class MaterializedViewHandler extends AlterHandler {
                     "Materialized view [" + mvName + "] does not exist in table [" + olapTable.getName() + "]");
         }
 
-        long mvIndexId = olapTable.getIndexIdByName(mvName);
-        int mvSchemaHash = olapTable.getSchemaHashByIndexId(mvIndexId);
+        long mvIndexId = olapTable.getIndexMetaIdByName(mvName);
+        int mvSchemaHash = olapTable.getSchemaHashByIndexMetaId(mvIndexId);
         Preconditions.checkState(mvSchemaHash != -1);
 
         for (PhysicalPartition partition : olapTable.getPhysicalPartitions()) {
@@ -773,7 +773,7 @@ public class MaterializedViewHandler extends AlterHandler {
      * @return
      */
     private long dropMaterializedView(String mvName, OlapTable olapTable) {
-        long mvIndexId = olapTable.getIndexIdByName(mvName);
+        long mvIndexId = olapTable.getIndexMetaIdByName(mvName);
         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
         for (PhysicalPartition partition : olapTable.getPhysicalPartitions()) {
             MaterializedIndex rollupIndex = partition.getIndex(mvIndexId);
@@ -809,7 +809,7 @@ public class MaterializedViewHandler extends AlterHandler {
                 }
             }
 
-            String rollupIndexName = olapTable.getIndexNameById(rollupIndexId);
+            String rollupIndexName = olapTable.getIndexNameByMetaId(rollupIndexId);
             olapTable.deleteIndexInfo(rollupIndexName);
         }
         LOG.info("replay drop rollup {}", dropInfo.getIndexId());

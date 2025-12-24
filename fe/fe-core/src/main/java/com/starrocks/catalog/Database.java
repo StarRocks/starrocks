@@ -424,7 +424,7 @@ public class Database extends MetaObject implements Writable {
             if (table instanceof OlapTable) {
                 OlapTable olapTable = (OlapTable) table;
                 for (MaterializedIndexMeta mvMeta : olapTable.getVisibleIndexMetas()) {
-                    String indexName = olapTable.getIndexNameById(mvMeta.getIndexId());
+                    String indexName = olapTable.getIndexNameByMetaId(mvMeta.getIndexMetaId());
                     if (indexName == null) {
                         continue;
                     }

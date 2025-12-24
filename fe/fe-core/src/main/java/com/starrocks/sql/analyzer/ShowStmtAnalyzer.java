@@ -403,8 +403,9 @@ public class ShowStmtAnalyzer {
                         if (tb.getType() == Table.TableType.OLAP) {
                             OlapTable olapTable = (OlapTable) tb;
                             for (MaterializedIndexMeta mvMeta : olapTable.getVisibleIndexMetas()) {
-                                if (olapTable.getIndexNameById(mvMeta.getIndexId()).equalsIgnoreCase(node.getTableName())) {
-                                    List<Column> columns = olapTable.getIndexIdToSchema().get(mvMeta.getIndexId());
+                                if (olapTable.getIndexNameByMetaId(mvMeta.getIndexMetaId())
+                                        .equalsIgnoreCase(node.getTableName())) {
+                                    List<Column> columns = olapTable.getIndexIdToSchema().get(mvMeta.getIndexMetaId());
                                     for (Column column : columns) {
                                         // Extra string (aggregation and bloom filter)
                                         List<String> extras = Lists.newArrayList();
@@ -446,7 +447,7 @@ public class ShowStmtAnalyzer {
                     String procString = "/dbs/" + db.getId() + "/" + table.getId() + "/" + TableProcDir.INDEX_SCHEMA
                             + "/";
                     if (table.getType() == Table.TableType.OLAP) {
-                        procString += ((OlapTable) table).getBaseIndexId();
+                        procString += ((OlapTable) table).getBaseIndexMetaId();
                     } else {
                         procString += table.getId();
                     }
@@ -461,9 +462,9 @@ public class ShowStmtAnalyzer {
 
                         // indices order
                         List<Long> indices = Lists.newArrayList();
-                        indices.add(olapTable.getBaseIndexId());
+                        indices.add(olapTable.getBaseIndexMetaId());
                         for (Long indexId : indexIdToSchema.keySet()) {
-                            if (indexId != olapTable.getBaseIndexId()) {
+                            if (indexId != olapTable.getBaseIndexMetaId()) {
                                 indices.add(indexId);
                             }
                         }
@@ -472,7 +473,7 @@ public class ShowStmtAnalyzer {
                         for (int i = 0; i < indices.size(); ++i) {
                             long indexId = indices.get(i);
                             List<Column> columns = indexIdToSchema.get(indexId);
-                            String indexName = olapTable.getIndexNameById(indexId);
+                            String indexName = olapTable.getIndexNameByMetaId(indexId);
                             MaterializedIndexMeta indexMeta = olapTable.getIndexMetaByIndexId(indexId);
                             for (int j = 0; j < columns.size(); ++j) {
                                 Column column = columns.get(j);

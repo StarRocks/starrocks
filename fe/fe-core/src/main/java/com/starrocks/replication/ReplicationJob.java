@@ -761,7 +761,7 @@ public class ReplicationJob implements GsonPostProcessable {
             TabletInfo tabletInfo = initTabletInfo(tTabletInfo, tablet);
             tabletInfos.put(tabletInfo.getTabletId(), tabletInfo);
         }
-        int schemaHash = olapTable.getSchemaHashByIndexId(tIndexInfo.index_id);
+        int schemaHash = olapTable.getSchemaHashByIndexMetaId(tIndexInfo.index_id);
         return new IndexInfo(tIndexInfo.index_id, schemaHash, tIndexInfo.src_schema_hash, tabletInfos);
     }
 
@@ -820,9 +820,9 @@ public class ReplicationJob implements GsonPostProcessable {
     private static PartitionInfo initPartitionInfo(OlapTable table, OlapTable srcTable, PhysicalPartition partition,
             PhysicalPartition srcPartition, SystemInfoService srcSystemInfoService) {
         Map<Long, IndexInfo> indexInfos = Maps.newHashMap();
-        for (Map.Entry<String, Long> indexNameToId : table.getIndexNameToId().entrySet()) {
+        for (Map.Entry<String, Long> indexNameToId : table.getIndexNameToMetaId().entrySet()) {
             long indexId = indexNameToId.getValue();
-            long srcIndexId = srcTable.getIndexIdByName(indexNameToId.getKey());
+            long srcIndexId = srcTable.getIndexMetaIdByName(indexNameToId.getKey());
             MaterializedIndex index = partition.getIndex(indexId);
             MaterializedIndex srcIndex = srcPartition.getIndex(srcIndexId);
             IndexInfo indexInfo = initIndexInfo(table, srcTable, index, srcIndex, srcSystemInfoService);
@@ -835,8 +835,8 @@ public class ReplicationJob implements GsonPostProcessable {
     private static IndexInfo initIndexInfo(OlapTable table, OlapTable srcTable, MaterializedIndex index,
             MaterializedIndex srcIndex,
             SystemInfoService srcSystemInfoService) {
-        int schemaHash = table.getSchemaHashByIndexId(index.getId());
-        int srcSchemaHash = srcTable.getSchemaHashByIndexId(srcIndex.getId());
+        int schemaHash = table.getSchemaHashByIndexMetaId(index.getId());
+        int srcSchemaHash = srcTable.getSchemaHashByIndexMetaId(srcIndex.getId());
 
         Map<Long, TabletInfo> tabletInfos = Maps.newHashMap();
         List<Tablet> tablets = index.getTablets();

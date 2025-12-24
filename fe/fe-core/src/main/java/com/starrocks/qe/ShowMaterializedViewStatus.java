@@ -358,8 +358,8 @@ public class ShowMaterializedViewStatus {
     }
 
     public static ShowMaterializedViewStatus of(String dbName, OlapTable olapTable, MaterializedIndexMeta indexMeta) {
-        ShowMaterializedViewStatus status = new ShowMaterializedViewStatus(indexMeta.getIndexId(), dbName,
-                olapTable.getIndexNameById(indexMeta.getIndexId()));
+        ShowMaterializedViewStatus status = new ShowMaterializedViewStatus(indexMeta.getIndexMetaId(), dbName,
+                olapTable.getIndexNameByMetaId(indexMeta.getIndexMetaId()));
         // refresh_type
         status.setRefreshType("ROLLUP");
         // is_active
@@ -370,7 +370,7 @@ public class ShowMaterializedViewStatus {
         }
         // text
         if (indexMeta.getOriginStmt() == null) {
-            final String mvName = olapTable.getIndexNameById(indexMeta.getIndexId());
+            final String mvName = olapTable.getIndexNameByMetaId(indexMeta.getIndexMetaId());
             status.setText(buildCreateMVSql(olapTable, mvName, indexMeta));
         } else {
             status.setText(indexMeta.getOriginStmt().replace("\n", "").replace("\t", "")
@@ -379,7 +379,7 @@ public class ShowMaterializedViewStatus {
         // rows
         if (olapTable.getPartitionInfo().getType() == PartitionType.UNPARTITIONED) {
             final Partition partition = olapTable.getPartitions().iterator().next();
-            final MaterializedIndex index = partition.getDefaultPhysicalPartition().getIndex(indexMeta.getIndexId());
+            final MaterializedIndex index = partition.getDefaultPhysicalPartition().getIndex(indexMeta.getIndexMetaId());
             status.setRows(index.getRowCount());
         } else {
             status.setRows(0L);
@@ -814,10 +814,10 @@ public class ShowMaterializedViewStatus {
         try {
             return ShowMaterializedViewStatus.of(dbName, olapTable, mvMeta);
         } catch (Exception e) {
-            final long mvId = mvMeta.getIndexId();
+            final long mvId = mvMeta.getIndexMetaId();
             LOG.warn("get sync mv status failed, mvId: {}, dbName: {}, mvName: {}, error: {}",
-                    mvId, dbName, olapTable.getIndexNameById(mvId), e.getMessage());
-            return new ShowMaterializedViewStatus(mvId, dbName, olapTable.getIndexNameById(mvId));
+                    mvId, dbName, olapTable.getIndexNameByMetaId(mvId), e.getMessage());
+            return new ShowMaterializedViewStatus(mvId, dbName, olapTable.getIndexNameByMetaId(mvId));
         }
     }
 

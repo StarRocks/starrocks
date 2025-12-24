@@ -52,7 +52,7 @@ public class IndicesProcDirTest {
         OlapTable olapTable = new OlapTable(1024L, "olap_table", col, null, listPartition, null);
         MaterializedIndex index = new MaterializedIndex(1000L, IndexState.NORMAL);
         index.setBalanceStat(BalanceStat.createClusterTabletBalanceStat(1L, 2L, 9L, 1L));
-        Map<String, Long> indexNameToId = olapTable.getIndexNameToId();
+        Map<String, Long> indexNameToId = olapTable.getIndexNameToMetaId();
         indexNameToId.put("index1", index.getId());
         TabletMeta tabletMeta = new TabletMeta(db.getId(), olapTable.getId(), partitionId, index.getId(), TStorageMedium.HDD);
         index.addTablet(new LocalTablet(1010L), tabletMeta);

@@ -96,7 +96,7 @@ public class LakeRestoreJob extends RestoreJob {
                                   BackupJobInfo.BackupPartitionInfo backupPartInfo, boolean overwrite) {
         for (MaterializedIndex localIdx : localPartition.getDefaultPhysicalPartition()
                 .getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)) {
-            BackupIndexInfo backupIdxInfo = backupPartInfo.getIdx(localTbl.getIndexNameById(localIdx.getId()));
+            BackupIndexInfo backupIdxInfo = backupPartInfo.getIdx(localTbl.getIndexNameByMetaId(localIdx.getId()));
             Preconditions.checkState(backupIdxInfo.tablets.size() == localIdx.getTablets().size());
             for (int i = 0; i < localIdx.getTablets().size(); i++) {
                 BackupTabletInfo backupTabletInfo = backupIdxInfo.tablets.get(i);
@@ -131,7 +131,7 @@ public class LakeRestoreJob extends RestoreJob {
                         "No alive backend or compute node in %s warehouse", WarehouseManager.DEFAULT_RESOURCE);
                 LakeTableSnapshotInfo info = new LakeTableSnapshotInfo(db.getId(), idChain.getTblId(),
                         idChain.getPartId(), idChain.getIdxId(), idChain.getTabletId(),
-                        computeNodeId, tbl.getSchemaHashByIndexId(index.getId()), -1);
+                        computeNodeId, tbl.getSchemaHashByIndexMetaId(index.getId()), -1);
                 snapshotInfos.put(idChain.getTabletId(), computeNodeId, info);
             } catch (Exception e) {
                 LOG.error(e.getMessage(), e);

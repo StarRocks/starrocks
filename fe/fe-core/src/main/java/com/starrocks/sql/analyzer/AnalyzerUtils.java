@@ -1026,7 +1026,7 @@ public class AnalyzerUtils {
                 return null;
             }
             OlapTable table = (OlapTable) originalTable;
-            TableIndexId tableIndexId = new TableIndexId(table.getId(), table.getBaseIndexId());
+            TableIndexId tableIndexId = new TableIndexId(table.getId(), table.getBaseIndexMetaId());
             OlapTable existed = idMap.get(tableIndexId);
             if (existed != null) {
                 return existed;

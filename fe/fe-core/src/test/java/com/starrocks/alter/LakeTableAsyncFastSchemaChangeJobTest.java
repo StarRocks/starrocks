@@ -132,7 +132,7 @@ public class LakeTableAsyncFastSchemaChangeJobTest extends StarRocksTestBase {
     public void test() throws Exception {
         LakeTable table = createTable(connectContext, "CREATE TABLE t0(c0 INT) DUPLICATE KEY(c0) DISTRIBUTED BY HASH(c0) " +
                     "BUCKETS 2 PROPERTIES('fast_schema_evolution'='true')");
-        long oldSchemaId = table.getIndexIdToMeta().get(table.getBaseIndexId()).getSchemaId();
+        long oldSchemaId = table.getIndexMetaIdToMeta().get(table.getBaseIndexMetaId()).getSchemaId();
 
         {
             executeAlterAndWaitFinish(table, "ALTER TABLE t0 ADD COLUMN c1 BIGINT", true);
@@ -142,18 +142,18 @@ public class LakeTableAsyncFastSchemaChangeJobTest extends StarRocksTestBase {
             Assertions.assertEquals(0, columns.get(0).getUniqueId());
             Assertions.assertEquals("c1", columns.get(1).getName());
             Assertions.assertEquals(1, columns.get(1).getUniqueId());
-            Assertions.assertTrue(table.getIndexIdToMeta().get(table.getBaseIndexId()).getSchemaId() > oldSchemaId);
+            Assertions.assertTrue(table.getIndexMetaIdToMeta().get(table.getBaseIndexMetaId()).getSchemaId() > oldSchemaId);
         }
-        oldSchemaId = table.getIndexIdToMeta().get(table.getBaseIndexId()).getSchemaId();
+        oldSchemaId = table.getIndexMetaIdToMeta().get(table.getBaseIndexMetaId()).getSchemaId();
         {
             executeAlterAndWaitFinish(table, "ALTER TABLE t0 DROP COLUMN c1", true);
             List<Column> columns = table.getBaseSchema();
             Assertions.assertEquals(1, columns.size());
             Assertions.assertEquals("c0", columns.get(0).getName());
             Assertions.assertEquals(0, columns.get(0).getUniqueId());
-            Assertions.assertTrue(table.getIndexIdToMeta().get(table.getBaseIndexId()).getSchemaId() > oldSchemaId);
+            Assertions.assertTrue(table.getIndexMetaIdToMeta().get(table.getBaseIndexMetaId()).getSchemaId() > oldSchemaId);
         }
-        oldSchemaId = table.getIndexIdToMeta().get(table.getBaseIndexId()).getSchemaId();
+        oldSchemaId = table.getIndexMetaIdToMeta().get(table.getBaseIndexMetaId()).getSchemaId();
         {
             executeAlterAndWaitFinish(table, "ALTER TABLE t0 ADD COLUMN c1 BIGINT", true);
             List<Column> columns = table.getBaseSchema();
@@ -162,7 +162,7 @@ public class LakeTableAsyncFastSchemaChangeJobTest extends StarRocksTestBase {
             Assertions.assertEquals(0, columns.get(0).getUniqueId());
             Assertions.assertEquals("c1", columns.get(1).getName());
             Assertions.assertEquals(2, columns.get(1).getUniqueId());
-            Assertions.assertTrue(table.getIndexIdToMeta().get(table.getBaseIndexId()).getSchemaId() > oldSchemaId);
+            Assertions.assertTrue(table.getIndexMetaIdToMeta().get(table.getBaseIndexMetaId()).getSchemaId() > oldSchemaId);
         }
     }
 
@@ -180,11 +180,12 @@ public class LakeTableAsyncFastSchemaChangeJobTest extends StarRocksTestBase {
         Assertions.assertEquals(table.getName(), info.get(1));
         Assertions.assertEquals(TimeUtils.longToTimeString(job.createTimeMs), info.get(2));
         Assertions.assertEquals(TimeUtils.longToTimeString(job.finishedTimeMs), info.get(3));
-        Assertions.assertEquals(table.getIndexNameById(table.getBaseIndexId()), info.get(4));
-        Assertions.assertEquals(table.getBaseIndexId(), info.get(5));
-        Assertions.assertEquals(table.getBaseIndexId(), info.get(6));
-        Assertions.assertEquals(String.format("%d:0", table.getIndexIdToMeta().get(table.getBaseIndexId()).getSchemaVersion()),
-                    info.get(7));
+        Assertions.assertEquals(table.getIndexNameByMetaId(table.getBaseIndexMetaId()), info.get(4));
+        Assertions.assertEquals(table.getBaseIndexMetaId(), info.get(5));
+        Assertions.assertEquals(table.getBaseIndexMetaId(), info.get(6));
+        Assertions.assertEquals(
+                String.format("%d:0", table.getIndexMetaIdToMeta().get(table.getBaseIndexMetaId()).getSchemaVersion()),
+                info.get(7));
         Assertions.assertEquals(job.getTransactionId().get(), info.get(8));
         Assertions.assertEquals(job.getJobState().name(), info.get(9));
         Assertions.assertEquals(job.errMsg, info.get(10));
@@ -206,7 +207,7 @@ public class LakeTableAsyncFastSchemaChangeJobTest extends StarRocksTestBase {
         Assertions.assertEquals(AlterJobV2.JobState.PENDING, job.getJobState());
         Assertions.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
         Partition partition = table.getPartition("t3");
-        long baseIndexId = table.getBaseIndexId();
+        long baseIndexId = table.getBaseIndexMetaId();
         long initVisibleVersion = partition.getDefaultPhysicalPartition().getVisibleVersion();
         long initNextVersion = partition.getDefaultPhysicalPartition().getNextVersion();
         Assertions.assertEquals(initVisibleVersion + 1, initNextVersion);
@@ -245,7 +246,7 @@ public class LakeTableAsyncFastSchemaChangeJobTest extends StarRocksTestBase {
     public void testSortKey() throws Exception {
         LakeTable table = createTable(connectContext, "CREATE TABLE t_test_sort_key(c0 INT, c1 BIGINT) PRIMARY KEY(c0) " +
                     "DISTRIBUTED BY HASH(c0) BUCKETS 2 ORDER BY(c1)");
-        long oldSchemaId = table.getIndexIdToMeta().get(table.getBaseIndexId()).getSchemaId();
+        long oldSchemaId = table.getIndexMetaIdToMeta().get(table.getBaseIndexMetaId()).getSchemaId();
 
         {
             executeAlterAndWaitFinish(table, "ALTER TABLE t_test_sort_key ADD COLUMN c2 BIGINT", true);
@@ -257,9 +258,9 @@ public class LakeTableAsyncFastSchemaChangeJobTest extends StarRocksTestBase {
             Assertions.assertEquals(1, columns.get(1).getUniqueId());
             Assertions.assertEquals("c2", columns.get(2).getName());
             Assertions.assertEquals(2, columns.get(2).getUniqueId());
-            Assertions.assertTrue(table.getIndexIdToMeta().get(table.getBaseIndexId()).getSchemaId() > oldSchemaId);
+            Assertions.assertTrue(table.getIndexMetaIdToMeta().get(table.getBaseIndexMetaId()).getSchemaId() > oldSchemaId);
         }
-        oldSchemaId = table.getIndexIdToMeta().get(table.getBaseIndexId()).getSchemaId();
+        oldSchemaId = table.getIndexMetaIdToMeta().get(table.getBaseIndexMetaId()).getSchemaId();
         {
             executeAlterAndWaitFinish(table, "ALTER TABLE t_test_sort_key DROP COLUMN c2", true);
             List<Column> columns = table.getBaseSchema();
@@ -268,7 +269,7 @@ public class LakeTableAsyncFastSchemaChangeJobTest extends StarRocksTestBase {
             Assertions.assertEquals(0, columns.get(0).getUniqueId());
             Assertions.assertEquals("c1", columns.get(1).getName());
             Assertions.assertEquals(1, columns.get(1).getUniqueId());
-            Assertions.assertTrue(table.getIndexIdToMeta().get(table.getBaseIndexId()).getSchemaId() > oldSchemaId);
+            Assertions.assertTrue(table.getIndexMetaIdToMeta().get(table.getBaseIndexMetaId()).getSchemaId() > oldSchemaId);
         }
     }
 
@@ -276,7 +277,7 @@ public class LakeTableAsyncFastSchemaChangeJobTest extends StarRocksTestBase {
     public void testSortKeyIndexesChanged() throws Exception {
         LakeTable table = createTable(connectContext, "CREATE TABLE t_test_sort_key_index_changed" +
                     "(c0 INT, c1 BIGINT, c2 BIGINT) PRIMARY KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 2 ORDER BY(c2)");
-        long oldSchemaId = table.getIndexIdToMeta().get(table.getBaseIndexId()).getSchemaId();
+        long oldSchemaId = table.getIndexMetaIdToMeta().get(table.getBaseIndexMetaId()).getSchemaId();
 
         {
             executeAlterAndWaitFinish(table, "ALTER TABLE t_test_sort_key_index_changed DROP COLUMN c1", true);
@@ -286,7 +287,7 @@ public class LakeTableAsyncFastSchemaChangeJobTest extends StarRocksTestBase {
             Assertions.assertEquals(0, columns.get(0).getUniqueId());
             Assertions.assertEquals("c2", columns.get(1).getName());
             Assertions.assertEquals(2, columns.get(1).getUniqueId());
-            MaterializedIndexMeta indexMeta = table.getIndexMetaByIndexId(table.getBaseIndexId());
+            MaterializedIndexMeta indexMeta = table.getIndexMetaByIndexId(table.getBaseIndexMetaId());
             Assertions.assertTrue(indexMeta.getSchemaId() > oldSchemaId);
             Assertions.assertEquals(Arrays.asList(1), indexMeta.getSortKeyIdxes());
             Assertions.assertEquals(Arrays.asList(2), indexMeta.getSortKeyUniqueIds());
@@ -299,7 +300,7 @@ public class LakeTableAsyncFastSchemaChangeJobTest extends StarRocksTestBase {
                 "(c0 INT, c1 INT, c2 FLOAT, c3 DATE, c4 VARCHAR(10))" +
                 "DUPLICATE KEY(c0) DISTRIBUTED BY HASH(c0) " +
                 "BUCKETS 1 PROPERTIES('fast_schema_evolution'='true')");
-        long oldSchemaId = table.getIndexIdToMeta().get(table.getBaseIndexId()).getSchemaId();
+        long oldSchemaId = table.getIndexMetaIdToMeta().get(table.getBaseIndexMetaId()).getSchemaId();
 
         // zonemap index can be reused
         {
@@ -335,7 +336,7 @@ public class LakeTableAsyncFastSchemaChangeJobTest extends StarRocksTestBase {
             Assertions.assertEquals(PrimitiveType.VARCHAR, columns.get(4).getType().getPrimitiveType());
             Assertions.assertEquals(20, ((ScalarType) columns.get(4).getType()).getLength());
 
-            Assertions.assertTrue(table.getIndexIdToMeta().get(table.getBaseIndexId()).getSchemaId() > oldSchemaId);
+            Assertions.assertTrue(table.getIndexMetaIdToMeta().get(table.getBaseIndexMetaId()).getSchemaId() > oldSchemaId);
         }
 
         // zonemap index can not be reused
@@ -352,7 +353,7 @@ public class LakeTableAsyncFastSchemaChangeJobTest extends StarRocksTestBase {
         Locker locker = new Locker();
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
         try {
-            long baseIndexId = table.getBaseIndexId();
+            long baseIndexId = table.getBaseIndexMetaId();
             MaterializedIndexMeta indexMeta = table.getIndexMetaByIndexId(baseIndexId);
             List<Column> schema = indexMeta.getSchema();
             List<Column> shortKeyCols = new ArrayList<>();
@@ -390,7 +391,7 @@ public class LakeTableAsyncFastSchemaChangeJobTest extends StarRocksTestBase {
         Locker locker = new Locker();
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
         try {
-            long baseIndexId = table.getBaseIndexId();
+            long baseIndexId = table.getBaseIndexMetaId();
             MaterializedIndexMeta indexMeta = table.getIndexMetaByIndexId(baseIndexId);
             List<Column> schema = indexMeta.getSchema();
             if (schema.size() != columNames.size()) {
@@ -611,7 +612,7 @@ public class LakeTableAsyncFastSchemaChangeJobTest extends StarRocksTestBase {
             Set<Long> tableTabletIds = new HashSet<>();
             for (Partition partition : table.getPartitions()) {
                 for (com.starrocks.catalog.PhysicalPartition physicalPartition : partition.getSubPartitions()) {
-                    com.starrocks.catalog.MaterializedIndex index = physicalPartition.getIndex(table.getBaseIndexId());
+                    com.starrocks.catalog.MaterializedIndex index = physicalPartition.getIndex(table.getBaseIndexMetaId());
                     if (index != null) {
                         for (com.starrocks.catalog.Tablet tablet : index.getTablets()) {
                             tableTabletIds.add(tablet.getId());
@@ -665,7 +666,7 @@ public class LakeTableAsyncFastSchemaChangeJobTest extends StarRocksTestBase {
         TransactionState.TxnCoordinator coordinator = new TransactionState.TxnCoordinator(
                 TransactionState.TxnSourceType.BE, "127.0.0.1");
 
-        long baseIndexId = table.getBaseIndexId();
+        long baseIndexId = table.getBaseIndexMetaId();
         MaterializedIndexMeta preAlterIndexMeta1 = table.getIndexMetaByIndexId(baseIndexId).shallowCopy();
         long runningTxn1 = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().beginTransaction(
                 db.getId(), List.of(table.getId()), UUID.randomUUID().toString(), coordinator,
@@ -724,7 +725,7 @@ public class LakeTableAsyncFastSchemaChangeJobTest extends StarRocksTestBase {
         GlobalStateMgr.getCurrentState().getLocalMetastore().save(imageWriter);
         GlobalStateMgr.getCurrentState().getAlterJobMgr().save(imageWriter);
 
-        long baseIndexId = table.getBaseIndexId();
+        long baseIndexId = table.getBaseIndexMetaId();
         MaterializedIndexMeta preAlterIndexMeta = table.getIndexMetaByIndexId(baseIndexId).shallowCopy();
         LakeTableAsyncFastSchemaChangeJob job = (LakeTableAsyncFastSchemaChangeJob) executeAlterAndWaitFinish(
                 table, "ALTER TABLE t_history_schema_replay ADD COLUMN c1 BIGINT", true);

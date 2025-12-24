@@ -272,13 +272,13 @@ public class CloudNativeFastSchemaEvolutionV2Test extends StarRocksTestBase {
 
     private static Map<Long, SchemaInfo> snapshotTableSchema(LakeTable table) {
         Map<Long, SchemaInfo> snapshot = Maps.newHashMap();
-        table.getIndexIdToMeta().forEach((indexId, meta) -> snapshot.put(indexId, toSchemaInfo(meta)));
+        table.getIndexMetaIdToMeta().forEach((indexId, meta) -> snapshot.put(indexId, toSchemaInfo(meta)));
         return snapshot;
     }
 
     private static void assertTableSchemaMatchesSnapshot(LakeTable table, Map<Long, SchemaInfo> snapshot) {
         snapshot.forEach((indexId, signature) -> {
-            MaterializedIndexMeta meta = table.getIndexIdToMeta().get(indexId);
+            MaterializedIndexMeta meta = table.getIndexMetaIdToMeta().get(indexId);
             Assertions.assertNotNull(meta, () -> "Table missing indexId " + indexId);
             assertSchemaInfoEquals(signature, toSchemaInfo(meta));
         });

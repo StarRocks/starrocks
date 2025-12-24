@@ -663,7 +663,7 @@ public class DesensitizedSQLBuilder {
             sb.append(desensitizeDistributionInfo(olapTable.getIdToColumn(), distributionInfo));
 
             // order by
-            MaterializedIndexMeta index = olapTable.getIndexMetaByIndexId(olapTable.getBaseIndexId());
+            MaterializedIndexMeta index = olapTable.getIndexMetaByIndexId(olapTable.getBaseIndexMetaId());
             if (index.getSortKeyIdxes() != null) {
                 sb.append("\nORDER BY(");
                 List<String> sortKeysColumnNames = Lists.newArrayList();

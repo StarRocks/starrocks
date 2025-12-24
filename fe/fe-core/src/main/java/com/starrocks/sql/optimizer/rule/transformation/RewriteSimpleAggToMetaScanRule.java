@@ -228,7 +228,7 @@ public class RewriteSimpleAggToMetaScanRule extends TransformationRule {
         if (aggregationOperator.getPredicate() != null) {
             return false;
         }
-        MaterializedIndexMeta currentIndexMeta = table.getIndexMetaByIndexId(table.getBaseIndexId());
+        MaterializedIndexMeta currentIndexMeta = table.getIndexMetaByIndexId(table.getBaseIndexMetaId());
         boolean hasSchemaChange = currentIndexMeta.getSchemaVersion() > 0;
 
         boolean allValid = aggregationOperator.getAggregations().values().stream().allMatch(
