@@ -38,6 +38,8 @@ private:
 
     Status _wildcard_query(const Slice* search_query, roaring::Roaring* bit_map);
 
+    Status _phrase_query(const Slice* search_query, roaring::Roaring* bit_map) const;
+
     std::unique_ptr<BitmapIndexIterator> _bitmap_itr;
 };
 

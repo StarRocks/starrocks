@@ -192,6 +192,90 @@ Status BuiltinInvertedIndexIterator::_wildcard_query(const Slice* search_query, 
     return _bitmap_itr->read_union_bitmap(hit_rowids, bit_map);
 }
 
+Status BuiltinInvertedIndexIterator::_phrase_query(const Slice* search_query, roaring::Roaring* bit_map) const {
+    std::istringstream iss(search_query->to_string());
+
+    // row_id -> dict_id -> positions
+    phmap::flat_hash_map<rowid_t, phmap::flat_hash_map<rowid_t, roaring::Roaring>> positions;
+
+    roaring::Roaring filtered_rows;
+    std::vector<rowid_t> dict_ids;
+    std::vector<roaring::Roaring> full_doc_ids;
+
+    bool first = true;
+    std::string cur_predicate;
+    while (iss >> cur_predicate) {
+        Slice s(cur_predicate);
+
+        bool exact_match = true;
+        Status st = _bitmap_itr->seek_dictionary(&s, &exact_match);
+        if (!st.ok() && !st.is_not_found()) {
+            return st;
+        }
+        if (st.is_not_found() || !exact_match) {
+            bit_map->clear();
+            return Status::OK();
+        }
+
+        rowid_t ordinal = _bitmap_itr->current_ordinal();
+
+        roaring::Roaring doc_ids;
+        RETURN_IF_ERROR(_bitmap_itr->read_bitmap(ordinal, &doc_ids));
+        if (doc_ids.cardinality() <= 0) {
+            bit_map->clear();
+            return Status::OK();
+        }
+
+        if (first) {
+            first = false;
+            filtered_rows = doc_ids;
+        } else {
+            filtered_rows &= doc_ids;
+        }
+
+        if (filtered_rows.cardinality() <= 0) {
+            bit_map->clear();
+            return Status::OK();
+        }
+
+        full_doc_ids.emplace_back(doc_ids);
+        dict_ids.emplace_back(ordinal);
+    }
+
+    std::vector<uint32_t> candidate_row_ids(filtered_rows.cardinality(), 0);
+    std::vector<uint64_t> ranks(filtered_rows.cardinality(), 0);
+    filtered_rows.toUint32Array(candidate_row_ids.data());
+
+    for (uint32_t i = 0; i < dict_ids.size(); ++i) {
+        rowid_t dict_id = dict_ids[i];
+        full_doc_ids[i].rank_many(candidate_row_ids.data(), candidate_row_ids.data() + candidate_row_ids.size(),
+                                  ranks.data());
+        ASSIGN_OR_RETURN(auto ranked_positions, _bitmap_itr->read_positions(dict_id, ranks));
+        for (uint32_t j = 0; j < candidate_row_ids.size(); ++j) {
+            rowid_t row_id = candidate_row_ids[j];
+            positions[row_id][dict_id] = ranked_positions[j];
+        }
+    }
+
+    for (const rowid_t& row : candidate_row_ids) {
+        for (auto dict_to_position_list = positions.at(row); const rowid_t start : dict_to_position_list[dict_ids[0]]) {
+            bool found = true;
+            for (size_t offset = 1; offset < dict_ids.size(); ++offset) {
+                if (const auto& position_list = dict_to_position_list.at(dict_ids[offset]);
+                    !position_list.contains(start + offset)) {
+                    found = false;
+                    break;
+                }
+            }
+            if (found) {
+                bit_map->add(row);
+                break;
+            }
+        }
+    }
+    return Status::OK();
+}
+
 Status BuiltinInvertedIndexIterator::read_from_inverted_index(const std::string& column_name, const void* query_value,
                                                               InvertedIndexQueryType query_type,
                                                               roaring::Roaring* bit_map) {
@@ -203,6 +287,10 @@ Status BuiltinInvertedIndexIterator::read_from_inverted_index(const std::string&
     }
     case InvertedIndexQueryType::MATCH_WILDCARD_QUERY: {
         RETURN_IF_ERROR(_wildcard_query(search_query, bit_map));
+        break;
+    }
+    case InvertedIndexQueryType::MATCH_PHRASE_QUERY: {
+        RETURN_IF_ERROR(_phrase_query(search_query, bit_map));
         break;
     }
     case InvertedIndexQueryType::MATCH_ALL_QUERY:

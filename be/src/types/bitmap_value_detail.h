@@ -38,12 +38,12 @@
 // the detail class such as Roaring64Map.
 // So other files should not include this file except bitmap_value.cpp.
 #include <cstdint>
+#include <numeric>
 #include <optional>
+#include <ranges>
 
-#include "roaring/array_util.h"
-#include "roaring/bitset_util.h"
-#include "roaring/containers/containers.h"
 #include "roaring/roaring.h"
+#include "roaring/roaring.hh"
 #include "roaring/roaring_array.h"
 #include "util/coding.h"
 
@@ -104,6 +104,7 @@ class Roaring64MapSetBitForwardIterator;
 // What we change includes
 // - added clear() and is32BitsEnough()
 // - a custom serialization format is used inside read()/write()/getSizeInBytes()
+// - added getLowBitsRoaring()/getHighBitsCount()/getAllHighBits()
 class Roaring64Map {
 public:
     /**
@@ -154,6 +155,16 @@ public:
             ans.add(va_arg(vl, uint64_t));
         }
         va_end(vl);
+        return ans;
+    }
+
+    /**
+     * Construct a bitmap from a list of uint64_t values.
+     * E.g., bitmapOfList({1,2,3}).
+     */
+    static Roaring64Map bitmapOfList(std::initializer_list<uint64_t> l) {
+        Roaring64Map ans;
+        ans.addMany(l.size(), l.begin());
         return ans;
     }
 
@@ -761,6 +772,19 @@ public:
      * Return whether all elements can be represented in 32 bits
      */
     bool is32BitsEnough() const { return maximum() <= std::numeric_limits<uint32_t>::max(); }
+
+    const std::map<uint32_t, Roaring>& getRoaringsRef() const {
+        return roarings;
+    }
+
+    /**
+     * return how many high bits we stored in this Roaring64Map
+     *
+     * @return High bits count
+     */
+    uint32_t getHighBitsCount() const {
+        return roarings.size();
+    }
 
     /**
      * Computes the intersection between two bitmaps and returns new bitmap.

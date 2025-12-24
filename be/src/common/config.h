@@ -322,6 +322,10 @@ CONF_Int32(min_file_descriptor_number, "60000");
 // data and index page size, default is 64k
 CONF_Int32(data_page_size, "65536");
 
+CONF_mString(inverted_index_posting_compression, "lz4");
+CONF_mInt32(inverted_index_posting_page_size, "1048576");
+CONF_mInt32(inverted_index_roaring_optimize_threshold, "256");
+
 CONF_mBool(enable_zero_copy_from_page_cache, "true");
 
 // Page cache is the cache for the decompressed or decoded page of data file.

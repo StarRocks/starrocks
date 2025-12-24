@@ -3009,6 +3009,7 @@ matchOperator
     : MATCH
     | MATCH_ANY
     | MATCH_ALL
+    | MATCH_PHRASE
     ;
 
 booleanValue

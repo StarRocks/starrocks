@@ -46,6 +46,9 @@ const std::string LIKE_FN_NAME = "like";
 
 const std::string INVERTED_INDEX_DICT_GRAM_NUM_KEY = "dict_gram_num";
 
+const std::string INVERTED_INDEX_OMIT_TERM_FREQ_AND_POSITION_KEY = "omit_term_freq_and_position";
+const std::string INVERTED_INDEX_OMIT_TERM_FREQ_AND_POSITION_DEFAULT = "false";
+
 const std::string INVERTED_INDEX_TOKENIZED_KEY = "tokenized";
 
 enum class InvertedIndexReaderType {

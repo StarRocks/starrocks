@@ -604,6 +604,9 @@ SET(DW_TEST_FILES
     ./storage/update_manager_test.cpp
     ./storage/utils_test.cpp
     ./storage/version_graph_test.cpp
+    ./storage/posting/encoder_test.cpp
+    ./storage/posting/posting_test.cpp
+    ./storage/posting/varint_encoder_test.cpp
 )
 
 if ("${WITH_STARCACHE}" STREQUAL "ON")

@@ -13,11 +13,11 @@
 // limitations under the License.
 #pragma once
 
-#include <vector>
-#include <memory>
 #include <string>
 #include <string_view>
+#include <vector>
 
+#include "util/phmap/phmap.h"
 #include "util/slice.h"
 
 namespace starrocks {
@@ -57,8 +57,9 @@ public:
     /**
      * @brief Constructor
      * @param normalize_case Whether to normalize case (default: false for maximum performance)
+     * @param enable_stop_words Whether to filter out stop words (default: true)
      */
-    SimpleAnalyzer(bool normalize_case = true);
+    SimpleAnalyzer(bool normalize_case = true, bool enable_stop_words = true);
     ~SimpleAnalyzer() = default;
 
     /**
@@ -71,6 +72,10 @@ public:
 
 private:
     static const size_t LOOKUP_SIZE = 256;
+
+    static const phmap::flat_hash_set<std::string> builtin_stop_words;
+
+    bool _filter_by_stop_words(const Slice& token) const;
 
     /**
      * @brief Check if character should be included in token
@@ -99,6 +104,7 @@ private:
     }
 
     bool _normalize_case;
+    bool _enable_stop_words;
     bool _token_char_table[LOOKUP_SIZE];
     char _normalize_table[LOOKUP_SIZE];
 };

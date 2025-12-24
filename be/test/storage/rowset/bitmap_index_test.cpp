@@ -69,9 +69,9 @@ protected:
     void TearDown() override {}
 
     void get_bitmap_reader_iter(RandomAccessFile* rfile, const ColumnIndexMetaPB& meta, BitmapIndexReader** reader,
-                                BitmapIndexIterator** iter, int32_t gram_num = -1) {
+                                BitmapIndexIterator** iter, int32_t gram_num = -1, bool with_position = false) {
         _opts.read_file = rfile;
-        *reader = new BitmapIndexReader(gram_num);
+        *reader = new BitmapIndexReader(gram_num, with_position);
         ASSIGN_OR_ABORT(auto r, (*reader)->load(_opts, meta.bitmap_index()));
         ASSERT_TRUE(r);
         ASSERT_OK((*reader)->new_iterator(_opts, iter));
@@ -94,14 +94,19 @@ protected:
         }
     }
 
-    void write_index_file_use_by_gin(const int32_t gram_num, const std::string& filename,
-                                     const std::vector<std::string>& values, ColumnIndexMetaPB* meta) const {
+    static std::unique_ptr<BitmapIndexWriter> create_bitmap_index_writer(const int32_t gram_num = -1,
+                                                                         const bool with_position = false) {
         const TypeInfoPtr type_info = get_type_info(TYPE_VARCHAR);
+        std::unique_ptr<BitmapIndexWriter> writer;
+        BitmapIndexWriter::create(type_info, &writer, gram_num, with_position);
+        return writer;
+    }
+
+    void write_index_file_use_by_gin(const int32_t gram_num, const bool with_position, const std::string& filename,
+                                     const std::vector<std::string>& values, ColumnIndexMetaPB* meta) const {
         ASSIGN_OR_ABORT(const auto wfile, _fs->new_writable_file(filename));
 
-        std::unique_ptr<BitmapIndexWriter> writer;
-        BitmapIndexWriter::create(type_info, &writer, gram_num);
-
+        auto writer = create_bitmap_index_writer(gram_num, with_position);
         for (size_t i = 0; i < values.size(); ++i) {
             Slice tmp(values[i]);
             writer->add_value_with_current_rowid(&tmp);
@@ -340,7 +345,7 @@ TEST_F(BitmapIndexTest, test_dict_ngram_index) {
 
     std::string file_name = kTestDir + "/dict_ngram_index";
     ColumnIndexMetaPB meta;
-    write_index_file_use_by_gin(3, file_name, keywords, &meta);
+    write_index_file_use_by_gin(3, false, file_name, keywords, &meta);
 
     {
         BitmapIndexReader* reader = nullptr;
@@ -365,19 +370,99 @@ TEST_F(BitmapIndexTest, test_dict_ngram_index) {
         auto it = ngram.begin();
         for (rowid_t i = 0; i < viewer.size(); ++i) {
             auto value = viewer.value(i);
-            ASSERT_EQ(*it, value.to_string());
+            auto current_gram = *it;
+            ASSERT_EQ(current_gram, value.to_string());
             ++it;
 
             roaring::Roaring r1, r2;
             ASSERT_TRUE(iter->read_ngram_bitmap(i, &r1).ok());
             ASSERT_TRUE(iter->seek_dict_by_ngram(&value, &r2).ok());
             ASSERT_EQ(r1, r2);
-            if (it->starts_with("d ")) {
+            if (current_gram.starts_with("d ")) {
                 ASSERT_EQ(1, r1.cardinality());
             } else {
                 ASSERT_EQ(num_keywords, r1.cardinality());
             }
         }
+
+        delete reader;
+        delete iter;
+    }
+}
+
+TEST_F(BitmapIndexTest, test_write_with_position) {
+    std::vector<std::vector<std::string>> rows = {{"hello", "world", "test"},
+                                                  {"test", "write", "position"},
+                                                  {"position", "write", "with"},
+                                                  {"hello", "test", "world", "write", "position", "with"}};
+
+    std::unordered_map<std::string, uint32_t> dict_to_ids;
+
+    std::string file_name = kTestDir + "/write_with_position";
+    ColumnIndexMetaPB meta;
+    {
+        auto writer = create_bitmap_index_writer(-1, true);
+        ASSIGN_OR_ABORT(const auto wfile, _fs->new_writable_file(file_name));
+
+        std::set<std::string> dicts;
+        for (const auto& sentence : rows) {
+            for (const auto& keyword : sentence) {
+                dicts.insert(keyword);
+                Slice tmp(keyword);
+                writer->add_value_with_current_rowid(&tmp);
+            }
+            writer->incre_rowid();
+        }
+        EXPECT_OK(writer->finish(wfile.get(), &meta));
+        EXPECT_OK(wfile->close());
+        ASSERT_EQ(BITMAP_INDEX, meta.type());
+
+        uint32_t dict_id = 0;
+        for (const std::string& dict : dicts) {
+            dict_to_ids[dict] = dict_id++;
+        }
+    }
+
+    {
+        BitmapIndexReader* reader = nullptr;
+        BitmapIndexIterator* iter = nullptr;
+        ASSIGN_OR_ABORT(auto rfile, _fs->new_random_access_file(file_name));
+        get_bitmap_reader_iter(rfile.get(), meta, &reader, &iter, -1, true);
+
+        // Verify the dictionary contains unique values
+        ASSERT_EQ(dict_to_ids.size(), reader->bitmap_nums());
+
+        for (int row_id = 0; row_id < rows.size(); ++row_id) {
+            for (int pos_idx = 0; pos_idx < rows[row_id].size(); ++pos_idx) {
+                uint32_t dict_id = dict_to_ids[rows[row_id][pos_idx]];
+                Slice slice(rows[row_id][pos_idx]);
+
+                bool exact_match;
+                EXPECT_OK(iter->seek_dictionary(&slice, &exact_match));
+                ASSERT_TRUE(exact_match);
+
+                roaring::Roaring bitmap;
+                EXPECT_OK(iter->read_bitmap(iter->current_ordinal(), &bitmap));
+
+                std::vector<uint64_t> doc_ranks;
+                doc_ranks.reserve(bitmap.cardinality());
+
+                std::vector<uint32_t> doc_ids;
+                doc_ids.reserve(bitmap.cardinality());
+                bitmap.toUint32Array(doc_ids.data());
+
+                bitmap.rank_many(doc_ids.data(), doc_ids.data() + doc_ids.size(), doc_ranks.data());
+                ASSIGN_OR_ABORT(auto positions, iter->read_positions(dict_id, doc_ranks));
+
+                for (int rank = 0; rank < positions.size(); ++rank) {
+                    if (doc_ids[rank] != row_id) continue;
+                    ASSERT_TRUE(positions[rank].contains(pos_idx));
+                }
+            }
+        }
+
+        delete reader;
+        delete iter;
     }
 }
 
