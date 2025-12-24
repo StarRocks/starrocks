@@ -66,6 +66,7 @@ public class ResourceGroupBuilder {
         // Validate CPU parameters
         ResourceGroup.validateCpuParameters(resourceGroup.getRawCpuWeight(), resourceGroup.getCpuWeightPercent(),
                 resourceGroup.getExclusiveCpuCores(), resourceGroup.getExclusiveCpuPercent(),
+                resourceGroup.getMaxCpuCores(),
                 resourceGroup.getResourceGroupType(), resourceGroup.getWarehouses());
 
         // Validate required properties

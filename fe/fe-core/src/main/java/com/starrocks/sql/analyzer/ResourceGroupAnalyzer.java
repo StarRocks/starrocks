@@ -358,6 +358,7 @@ public class ResourceGroupAnalyzer {
         // Validate CPU parameters
         ResourceGroup.validateCpuParameters(tempResourceGroup.getRawCpuWeight(), tempResourceGroup.getCpuWeightPercent(),
                 tempResourceGroup.getExclusiveCpuCores(), tempResourceGroup.getExclusiveCpuPercent(),
+                tempResourceGroup.getMaxCpuCores(),
                 tempResourceGroup.getResourceGroupType(), tempResourceGroup.getWarehouses());
     }
 

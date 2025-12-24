@@ -2336,6 +2336,162 @@ public class ResourceGroupStmtTest {
     }
 
     @Test
+    public void testWarehousesCannotMixWithCpuConfigs() throws Exception {
+        BackendResourceStat.getInstance().setNumCoresOfBe(DEFAULT_WAREHOUSE_ID, 101, 8);
+
+        // Create
+        {
+            String sql = "CREATE RESOURCE GROUP rg1\n" +
+                    "TO (user='warehouses_user')\n" +
+                    "WITH (\n" +
+                    "   'mem_limit' = '20%',\n" +
+                    "   'warehouses' = 'default_warehouse',\n" +
+                    "   'cpu_weight' = '16'\n" +
+                    ");";
+            assertThatThrownBy(() -> starRocksAssert.executeResourceGroupDdlSql(sql))
+                    .isInstanceOf(SemanticException.class)
+                    .hasMessageContaining("'cpu_weight' cannot be set when 'warehouses' is specified");
+        }
+
+        {
+            String sql = "CREATE RESOURCE GROUP rg1\n" +
+                    "TO (user='warehouses_user')\n" +
+                    "WITH (\n" +
+                    "   'mem_limit' = '20%',\n" +
+                    "   'warehouses' = 'default_warehouse',\n" +
+                    "   'exclusive_cpu_cores' = '4'\n" +
+                    ");";
+            assertThatThrownBy(() -> starRocksAssert.executeResourceGroupDdlSql(sql))
+                    .isInstanceOf(SemanticException.class)
+                    .hasMessageContaining(
+                            "'exclusive_cpu_cores' cannot be set when 'warehouses' is specified");
+        }
+
+        {
+            String sql = "CREATE RESOURCE GROUP rg1\n" +
+                    "TO (user='warehouses_user')\n" +
+                    "WITH (\n" +
+                    "   'mem_limit' = '20%',\n" +
+                    "   'warehouses' = 'default_warehouse',\n" +
+                    "   'max_cpu_cores' = '4'\n" +
+                    ");";
+            assertThatThrownBy(() -> starRocksAssert.executeResourceGroupDdlSql(sql))
+                    .isInstanceOf(SemanticException.class)
+                    .hasMessageContaining(
+                            "'max_cpu_cores' cannot be set when 'warehouses' is specified");
+        }
+
+        // Alter
+        {
+            String sql = "CREATE RESOURCE GROUP rg1\n" +
+                    "TO (user='warehouses_user')\n" +
+                    "WITH (\n" +
+                    "   'mem_limit' = '20%',\n" +
+                    "   'cpu_weight' = '10'\n" +
+                    ");";
+            starRocksAssert.executeResourceGroupDdlSql(sql);
+            List<List<String>> rows = starRocksAssert.executeResourceGroupShowSql("show verbose resource groups all");
+            String result = rowsToString(rows);
+            assertThat(result).isEqualTo(
+                    "default_mv_wg|0|1|0|null|80.0%|null|0|0|0|null|80%|NORMAL|(weight=0.0)|default_mem_pool|\n" +
+                            "default_wg|0|100|0|null|100.0%|null|0|0|0|null|100%|NORMAL|(weight=0.0)|default_mem_pool|\n" +
+                            "rg1|10|null|0|null|20.0%|null|0|0|0|null|100%|NORMAL|(weight=1.0, user=warehouses_user)|default_mem_pool|");
+        }
+
+        {
+            String sql = "ALTER resource group rg1 \n" +
+                    "WITH (\n" +
+                    "   'warehouses' = 'default_warehouse'\n" +
+                    ")";
+            assertThatThrownBy(() -> starRocksAssert.executeResourceGroupDdlSql(sql))
+                    .isInstanceOf(SemanticException.class)
+                    .hasMessageContaining("'cpu_weight' cannot be set when 'warehouses' is specified");
+        }
+
+        {
+            String sql = "ALTER resource group rg1 \n" +
+                    "WITH (\n" +
+                    "   'cpu_weight' = '0',\n" +
+                    "   'exclusive_cpu_cores' = '4'\n" +
+                    ")";
+            starRocksAssert.executeResourceGroupDdlSql(sql);
+            List<List<String>> rows = starRocksAssert.executeResourceGroupShowSql("show verbose resource groups all");
+            String result = rowsToString(rows);
+            assertThat(result).isEqualTo(
+                    "default_mv_wg|0|1|0|null|80.0%|null|0|0|0|null|80%|NORMAL|(weight=0.0)|default_mem_pool|\n" +
+                            "default_wg|0|100|0|null|100.0%|null|0|0|0|null|100%|NORMAL|(weight=0.0)|default_mem_pool|\n" +
+                            "rg1|0|null|4|null|20.0%|null|0|0|0|null|100%|NORMAL|(weight=1.0, user=warehouses_user)|default_mem_pool|");
+
+            String sql2 = "ALTER resource group rg1 \n" +
+                    "WITH (\n" +
+                    "   'warehouses' = 'default_warehouse'\n" +
+                    ")";
+            assertThatThrownBy(() -> starRocksAssert.executeResourceGroupDdlSql(sql2))
+                    .isInstanceOf(SemanticException.class)
+                    .hasMessageContaining(
+                            "'exclusive_cpu_cores' cannot be set when 'warehouses' is specified");
+        }
+
+        {
+            String sql = "ALTER resource group rg1 \n" +
+                    "WITH (\n" +
+                    "   'cpu_weight_percent' = '10',\n" +
+                    "   'exclusive_cpu_cores' = '0',\n" +
+                    "   'max_cpu_cores' = '4'\n" +
+                    ")";
+            starRocksAssert.executeResourceGroupDdlSql(sql);
+            List<List<String>> rows = starRocksAssert.executeResourceGroupShowSql("show verbose resource groups all");
+            String result = rowsToString(rows);
+            assertThat(result).isEqualTo(
+                    "default_mv_wg|0|1|0|null|80.0%|null|0|0|0|null|80%|NORMAL|(weight=0.0)|default_mem_pool|\n" +
+                            "default_wg|0|100|0|null|100.0%|null|0|0|0|null|100%|NORMAL|(weight=0.0)|default_mem_pool|\n" +
+                            "rg1|0|10|0|null|20.0%|4|0|0|0|null|100%|NORMAL|(weight=1.0, user=warehouses_user)|default_mem_pool|");
+
+            String sql2 = "ALTER resource group rg1 \n" +
+                    "WITH (\n" +
+                    "   'warehouses' = 'default_warehouse'\n" +
+                    ")";
+            assertThatThrownBy(() -> starRocksAssert.executeResourceGroupDdlSql(sql2))
+                    .isInstanceOf(SemanticException.class)
+                    .hasMessageContaining("'max_cpu_cores' cannot be set when 'warehouses' is specified");
+        }
+
+        {
+            String sql = "ALTER resource group rg1 \n" +
+                    "WITH (\n" +
+                    "   'cpu_weight_percent' = '4',\n" +
+                    "   'max_cpu_cores' = '0',\n" +
+                    "   'warehouses' = 'default_warehouse'\n" +
+                    ")";
+            starRocksAssert.executeResourceGroupDdlSql(sql);
+            List<List<String>> rows = starRocksAssert.executeResourceGroupShowSql("show verbose resource groups all");
+            String result = rowsToString(rows);
+            assertThat(result).isEqualTo(
+                    "default_mv_wg|0|1|0|null|80.0%|null|0|0|0|null|80%|NORMAL|(weight=0.0)|default_mem_pool|\n" +
+                            "default_wg|0|100|0|null|100.0%|null|0|0|0|null|100%|NORMAL|(weight=0.0)|default_mem_pool|\n" +
+                            "rg1|0|4|0|null|20.0%|0|0|0|0|null|100%|NORMAL|(weight=1.0, user=warehouses_user)|default_mem_pool|default_warehouse");
+        }
+
+        {
+            String sql = "ALTER resource group rg1 \n" +
+                    "WITH (\n" +
+                    "   'cpu_weight_percent' = '0',\n" +
+                    "   'exclusive_cpu_percent' = '40',\n" +
+                    "   'warehouses' = 'default_warehouse'\n" +
+                    ")";
+            starRocksAssert.executeResourceGroupDdlSql(sql);
+            List<List<String>> rows = starRocksAssert.executeResourceGroupShowSql("show verbose resource groups all");
+            String result = rowsToString(rows);
+            assertThat(result).isEqualTo(
+                    "default_mv_wg|0|1|0|null|80.0%|null|0|0|0|null|80%|NORMAL|(weight=0.0)|default_mem_pool|\n" +
+                            "default_wg|0|100|0|null|100.0%|null|0|0|0|null|100%|NORMAL|(weight=0.0)|default_mem_pool|\n" +
+                            "rg1|0|0|0|40|20.0%|0|0|0|0|null|100%|NORMAL|(weight=1.0, user=warehouses_user)|default_mem_pool|default_warehouse");
+        }
+
+        starRocksAssert.executeResourceGroupDdlSql("DROP RESOURCE GROUP rg1");
+    }
+
+    @Test
     public void testWarehouses() throws Exception {
         WarehouseManager warehouseManager = new WarehouseManager() {
             @Override
@@ -2355,7 +2511,7 @@ public class ResourceGroupStmtTest {
                 return warehouseManager;
             }
         };
-        
+
         warehouseManager.addWarehouse(new DefaultWarehouse(2, "wh2"));
         warehouseManager.addWarehouse(new DefaultWarehouse(3, "wh3"));
 

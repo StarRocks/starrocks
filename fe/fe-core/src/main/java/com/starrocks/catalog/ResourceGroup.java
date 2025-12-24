@@ -498,6 +498,7 @@ public class ResourceGroup {
 
     public static void validateCpuParameters(Integer cpuWeight, Integer cpuWeightPercent,
                                              Integer exclusiveCpuCores, Integer exclusiveCpuPercent,
+                                             Integer maxCpuCores,
                                              TWorkGroupType type, List<String> warehouses) {
         final int minCoreNum = getMinNumHardwareCoresOfBe(warehouses);
 
@@ -532,6 +533,22 @@ public class ResourceGroup {
         if (hasExclusiveCpuPercent && type == TWorkGroupType.WG_SHORT_QUERY) {
             throw new SemanticException(
                     String.format("short query resource group should not set '%s'", ResourceGroup.EXCLUSIVE_CPU_PERCENT));
+        }
+
+        if (hasCpuWeight && warehouses != null && !warehouses.isEmpty()) {
+            if (cpuWeight > minCoreNum) {
+                throw new SemanticException("'cpu_weight' cannot be set when 'warehouses' is specified, " +
+                        "please use 'cpu_weight_percent' instead");
+            }
+        }
+
+        if (hasExclusiveCpuCores && warehouses != null && !warehouses.isEmpty()) {
+            throw new SemanticException("'exclusive_cpu_cores' cannot be set when 'warehouses' is specified, " +
+                    "please use 'exclusive_cpu_percent' instead");
+        }
+
+        if (maxCpuCores != null && maxCpuCores > 0 && warehouses != null && !warehouses.isEmpty()) {
+            throw new SemanticException("'max_cpu_cores' cannot be set when 'warehouses' is specified");
         }
 
         if (hasExclusiveCpuPercent) {

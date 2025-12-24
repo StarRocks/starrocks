@@ -493,9 +493,12 @@ public class ResourceGroupMgr implements Writable {
                 if (warehouses == null) {
                     warehouses = wg.getWarehouses();
                 }
+                Integer maxCpuCores = changedProperties.getMaxCpuCores();
+                if (maxCpuCores == null) {
+                    maxCpuCores = wg.getMaxCpuCores();
+                }
                 ResourceGroup.validateCpuParameters(cpuWeight, cpuWeightPercent,
-                        exclusiveCpuCores, exclusiveCpuPercent, wg.getResourceGroupType(), warehouses);
-
+                        exclusiveCpuCores, exclusiveCpuPercent, maxCpuCores, wg.getResourceGroupType(), warehouses);
                 if ((exclusiveCpuCores != null && exclusiveCpuCores > 0) ||
                         (exclusiveCpuPercent != null && exclusiveCpuPercent > 0)) {
                     validateExclusiveCpuCoresInlock(exclusiveCpuCores, exclusiveCpuPercent, warehouses, wg);
@@ -521,20 +524,24 @@ public class ResourceGroupMgr implements Writable {
 
                 // NOTE that validate parameters should be called before setting properties.
 
+                cpuWeightPercent = changedProperties.getCpuWeightPercent();
                 if (cpuWeightPercent != null) {
                     alterResourceGroupLog.setCpuWeightPercent(cpuWeightPercent);
                 }
+                cpuWeight = changedProperties.getRawCpuWeight();
                 if (cpuWeight != null) {
                     alterResourceGroupLog.setCpuWeight(cpuWeight);
                 }
+                exclusiveCpuCores = changedProperties.getExclusiveCpuCores();
                 if (exclusiveCpuCores != null) {
                     alterResourceGroupLog.setExclusiveCpuCores(exclusiveCpuCores);
                 }
+                exclusiveCpuPercent = changedProperties.getExclusiveCpuPercent();
                 if (exclusiveCpuPercent != null) {
                     alterResourceGroupLog.setExclusiveCpuPercent(exclusiveCpuPercent);
                 }
 
-                Integer maxCpuCores = changedProperties.getMaxCpuCores();
+                maxCpuCores = changedProperties.getMaxCpuCores();
                 if (maxCpuCores != null) {
                     alterResourceGroupLog.setMaxCpuCores(maxCpuCores);
                 }
@@ -569,9 +576,9 @@ public class ResourceGroupMgr implements Writable {
                     alterResourceGroupLog.setSpillMemLimitThreshold(spillMemLimitThreshold);
                 }
 
-                List<String> alteredWarehouses = changedProperties.getWarehouses();
-                if (alteredWarehouses != null) {
-                    alterResourceGroupLog.setWarehouses(alteredWarehouses);
+                warehouses = changedProperties.getWarehouses();
+                if (warehouses != null) {
+                    alterResourceGroupLog.setWarehouses(warehouses);
                 }
 
                 // Type is guaranteed to be immutable during the analyzer phase.
