@@ -219,6 +219,8 @@ message TabletMetadataPB {
     optional CompactionStrategyPB compaction_strategy = 20;
     // flat json
     optional FlatJsonConfigPB flat_json_config = 21;
+    // Indicates sort key range for range distribution table only
+    optional TabletRangePB range = 22;
 }
 
 message MetadataUpdateInfoPB {
