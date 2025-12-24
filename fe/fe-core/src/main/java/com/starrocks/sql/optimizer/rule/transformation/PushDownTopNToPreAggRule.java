@@ -19,7 +19,6 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.base.Ordering;
 import com.starrocks.sql.optimizer.operator.AggType;
-import com.starrocks.sql.optimizer.operator.OpRuleBit;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.SortPhase;
 import com.starrocks.sql.optimizer.operator.TopNType;
@@ -173,7 +172,7 @@ public class PushDownTopNToPreAggRule extends TransformationRule {
             // use order by columns as partition columns
             List<ColumnRefOperator> groupingKeys = aggOp.getGroupingKeys();
             boolean enableSortAgg = context.getSessionVariable().isEnableSortAggregate();
-            OptExpression newLocalTopN = OptExpression.create(new LogicalTopNOperator.Builder()
+            LogicalTopNOperator newTopNOp = new LogicalTopNOperator.Builder()
                     .setOrderByElements(topn.getOrderByElements())
                     .setLimit(topn.getLimit())
                     .setPartitionByColumns(groupingKeys)
@@ -182,8 +181,13 @@ public class PushDownTopNToPreAggRule extends TransformationRule {
                     .setSortPhase(topn.getSortPhase())
                     .setPerPipeline(!enableSortAgg)
                     .setIsSplit(false)
-                    .build(), localChild);
-            newLocalTopN.getOp().setOpRuleBit(OpRuleBit.OP_PUSH_DOWN_TOPN_AGG);
+                    .build();
+            OptExpression newLocalTopN = OptExpression.create(newTopNOp, localChild);
+
+            // mark topN push down agg
+            newTopNOp.setTopNPushDownAgg();
+            topn.setTopNPushDownAgg();
+
             OptExpression newLocalAgg = OptExpression.create(new LogicalAggregationOperator.Builder()
                     .withOperator(localAggOp)
                     .setUseSortAgg(enableSortAgg)

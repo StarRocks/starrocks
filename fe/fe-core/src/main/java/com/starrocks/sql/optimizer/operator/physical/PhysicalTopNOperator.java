@@ -123,6 +123,10 @@ public class PhysicalTopNOperator extends PhysicalOperator {
         return isOpRuleBitSet(OpRuleBit.OP_PUSH_DOWN_TOPN_AGG);
     }
 
+    public void setTopNPushDownAgg() {
+        setOpRuleBit(OpRuleBit.OP_PUSH_DOWN_TOPN_AGG);
+    }
+
     @Override
     public RowOutputInfo deriveRowOutputInfo(List<OptExpression> inputs) {
         List<ColumnOutputInfo> entryList = Lists.newArrayList();

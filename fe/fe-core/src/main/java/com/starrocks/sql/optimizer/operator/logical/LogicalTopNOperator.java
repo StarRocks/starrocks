@@ -154,6 +154,10 @@ public class LogicalTopNOperator extends LogicalOperator {
         return isOpRuleBitSet(OpRuleBit.OP_PUSH_DOWN_TOPN_AGG);
     }
 
+    public void setTopNPushDownAgg() {
+        setOpRuleBit(OpRuleBit.OP_PUSH_DOWN_TOPN_AGG);
+    }
+
     @Override
     public ColumnRefSet getOutputColumns(ExpressionContext expressionContext) {
         if (projection != null) {
