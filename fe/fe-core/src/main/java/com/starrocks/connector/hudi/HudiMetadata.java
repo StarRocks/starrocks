@@ -47,6 +47,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
+import org.apache.commons.lang.exception.ExceptionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -131,7 +132,10 @@ public class HudiMetadata implements ConnectorMetadata {
             table = hmsOps.getTable(dbName, tblName);
         } catch (Exception e) {
             LOG.error("Failed to get hudi table [{}.{}.{}]", catalogName, dbName, tblName, e);
-            return null;
+            Throwable ce = ExceptionUtils.getRootCause(e);
+            String errMsg = ce != null ? ce.getMessage() : e.getMessage();
+            throw new StarRocksConnectorException(String.format("Failed to get hudi table %s.%s.%s. %s",
+                    catalogName, dbName, tblName, errMsg), e);
         }
 
         return table;

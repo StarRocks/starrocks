@@ -163,6 +163,24 @@ public class CachingIcebergCatalogTest {
     }
 
     @Test
+    public void testGetTableIOError(@Mocked IcebergCatalog icebergCatalog, @Mocked Table nativeTable) {
+        new Expectations() {
+            {
+                icebergCatalog.getTable(connectContext, "test", "table");
+                result = new RuntimeException(new java.io.IOException("io failure"));
+            }
+        };
+
+        CachingIcebergCatalog cachingIcebergCatalog = new CachingIcebergCatalog(CATALOG_NAME, icebergCatalog,
+                DEFAULT_CATALOG_PROPERTIES, Executors.newSingleThreadExecutor());
+        StarRocksConnectorException ex = Assertions.assertThrows(StarRocksConnectorException.class,
+                () -> cachingIcebergCatalog.getTable(connectContext, "test", "table"));
+        String expectedPrefix = "Failed to get iceberg table iceberg_catalog.test.table";
+        Assertions.assertTrue(ex.getMessage().contains(expectedPrefix));
+        Assertions.assertTrue(ex.getMessage().contains("io failure"));
+    }
+
+    @Test
     public void testInvalidateCache(@Mocked IcebergCatalog icebergCatalog, @Mocked Table nativeTable) {
         new Expectations() {
             {

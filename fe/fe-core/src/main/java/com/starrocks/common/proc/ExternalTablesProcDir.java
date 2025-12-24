@@ -57,7 +57,12 @@ public class ExternalTablesProcDir implements ProcDirInterface {
         if (db == null) {
             throw new AnalysisException("db: " + dbName + " not exists");
         }
-        Table tbl = metadataMgr.getTable(new ConnectContext(), catalogName, dbName, name);
+        Table tbl = null;
+        try {
+            tbl = metadataMgr.getTable(new ConnectContext(), catalogName, dbName, name);
+        } catch (Exception e) {
+            throw new AnalysisException(e.getMessage());
+        }
         if (tbl == null) {
             throw new AnalysisException("table : " + name + " not exists");
         }
