@@ -1919,30 +1919,30 @@ Latency metrics expose percentile series such as `merge_commit_request_latency_9
 
 #### merge_commit_request
 
-- Unit: us
+- Unit: microsecond
 - Type: Summary
 - Description: End-to-end processing latency for merge commit requests.
 
 #### merge_commit_pending
 
-- Unit: us
+- Unit: microsecond
 - Type: Summary
 - Description: Time merge commit tasks spend waiting in the pending queue before execution.
 
 #### merge_commit_wait_plan
 
-- Unit: us
+- Unit: microsecond
 - Type: Summary
 - Description: Combined latency for the RPC request and waiting for the stream load pipe to become available.
 
 #### merge_commit_append_pipe
 
-- Unit: us
+- Unit: microsecond
 - Type: Summary
 - Description: Time spent appending data to the stream load pipe during merge commit.
 
 #### merge_commit_wait_finish
 
-- Unit: us
+- Unit: microsecond
 - Type: Summary
 - Description: Time spent waiting for merge commit load operations to finish.

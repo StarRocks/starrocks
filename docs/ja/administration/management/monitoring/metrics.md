@@ -1916,30 +1916,30 @@ StarRocks クラスタのモニタリングサービスの構築方法につい�
 
 #### merge_commit_request
 
-- 単位: us
+- 単位: microsecond
 - タイプ: Summary
 - 説明: merge commit リクエストのエンドツーエンド処理レイテンシ。
 
 #### merge_commit_pending
 
-- 単位: us
+- 単位: microsecond
 - タイプ: Summary
 - 説明: 実行前に pending キューで待機する時間。
 
 #### merge_commit_wait_plan
 
-- 単位: us
+- 単位: microsecond
 - タイプ: Summary
 - 説明: RPC リクエストと stream load pipe が利用可能になるまでの待機を合わせた時間。
 
 #### merge_commit_append_pipe
 
-- 単位: us
+- 単位: microsecond
 - タイプ: Summary
 - 説明: merge commit 中に stream load pipe へデータを追加する時間。
 
 #### merge_commit_wait_finish
 
-- 単位: us
+- 単位: microsecond
 - タイプ: Summary
 - 説明: merge commit のロード操作が完了するまで待機する時間。
