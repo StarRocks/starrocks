@@ -156,10 +156,10 @@ public class TabletSchedulerTest {
     public void testRemoveAllTabletIdsIfExpired() throws InterruptedException {
         Database db = new Database(1, "db");
         Table table = new Table(3, "table", Table.TableType.OLAP, new ArrayList<>());
-        Partition partition = new Partition(5, 6, "partition", null, null);
+        Partition partition = new Partition(5, "partition", null, null);
 
         CatalogRecycleBin recycleBin = new CatalogRecycleBin();
-        recycleBin.recycleDatabase(db, new HashSet<>(), true);
+        recycleBin.recycleDatabase(db, new HashSet<>());
         recycleBin.recycleTable(db.getId(), table, true);
         RecyclePartitionInfo recyclePartitionInfo = new RecycleRangePartitionInfo(db.getId(), table.getId(),
                 partition, null, new DataProperty(null), (short) 2, false, null);
@@ -178,7 +178,7 @@ public class TabletSchedulerTest {
                     TabletSchedCtx.Type.REPAIR,
                     triple.getLeft().getId(),
                     triple.getMiddle().getId(),
-                    triple.getRight().getDefaultPhysicalPartition().getId(),
+                    triple.getRight().getDefaultPhysicalPartitionId(),
                     1,
                     tabletId++,
                     System.currentTimeMillis(),
