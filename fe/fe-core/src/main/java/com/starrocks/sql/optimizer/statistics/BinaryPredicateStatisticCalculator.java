@@ -23,6 +23,13 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.statistic.StatisticUtils;
+<<<<<<< HEAD
+=======
+import com.starrocks.type.BooleanType;
+import com.starrocks.type.Type;
+import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.collections4.MapUtils;
+>>>>>>> 8eef323d73 ([Enhancement] Also consider NULL fractions in `SkewJoinOptimizeRule` (#67100))
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -451,7 +458,7 @@ public class BinaryPredicateStatisticCalculator {
                 estimateBucketToBucket(leftHistogram, leftColumnDistinctCount, leftColumnType, rightHistogram,
                         rightColumnDistinctCount, rightColumnType);
 
-        if (estimatedMcv.isEmpty() && estimatedBuckets.isEmpty()) {
+        if (MapUtils.isEmpty(estimatedMcv) && CollectionUtils.isEmpty(estimatedBuckets)) {
             return Optional.empty();
         }
 
