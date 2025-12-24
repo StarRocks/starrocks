@@ -66,11 +66,46 @@ pidfile=$PID_DIR/fe.pid
 
 if [ -f $pidfile ]; then
     pid=`cat $pidfile`
-    pidcomm=`ps -p $pid -o comm=`
-    if [ "java"x != "$pidcomm"x ]; then
-        echo "ERROR: pid process may not be FE. "
+
+    # ============================================================
+    # Validation phase: Verify process before any kill operation
+    # All checks must pass before proceeding to kill
+    # ============================================================
+
+    # Step 1: Check if process exists (kill -0 only checks, doesn't kill)
+    if ! kill -0 $pid > /dev/null 2>&1; then
+        echo "Process $pid does not exist, removing stale pid file"
+        rm $pidfile
+        exit 0
+    fi
+
+    # Step 2: Get process information
+    pidcomm=`ps -p $pid -o comm= 2>/dev/null`
+    pidcmd=`ps -p $pid -o command= 2>/dev/null | head -1`
+
+    # Step 3: Verify we can get process information
+    if [ -z "$pidcomm" ] || [ -z "$pidcmd" ]; then
+        echo "ERROR: Cannot get process information for pid $pid"
         exit 1
     fi
+
+    # Step 4: Verify it's a Java process
+    # Extract basename from command path (works for both "java" and full paths like "/path/to/java")
+    comm_basename=$(basename "$pidcomm")
+    if [ "$comm_basename" != "java" ]; then
+        echo "ERROR: Process $pid is not a Java process (comm: $pidcomm)"
+        exit 1
+    fi
+
+    # Step 5: Verify it's StarRocksFE process
+    if ! echo "$pidcmd" | grep -q "StarRocksFE"; then
+        echo "ERROR: Process $pid may not be FE (command does not contain StarRocksFE)"
+        exit 1
+    fi
+
+    # ============================================================
+    # All validations passed, now safe to kill the process
+    # ============================================================
 
     kill -${SIG} $pid > /dev/null 2>&1
     if [ $? -ne 0 ]; then
