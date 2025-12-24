@@ -75,6 +75,7 @@ import com.starrocks.monitor.jvm.JvmStats;
 import com.starrocks.proto.PKafkaOffsetProxyRequest;
 import com.starrocks.proto.PKafkaOffsetProxyResult;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.QeProcessorImpl;
 import com.starrocks.qe.scheduler.slot.BaseSlotManager;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
@@ -517,6 +518,15 @@ public final class MetricRepo {
             }
         };
         STARROCKS_METRIC_REGISTER.addMetric(totalTabletCount);
+
+        GaugeMetric<Long> runningSlowQueriesCount = new GaugeMetric<Long>(
+                "running_slow_query", MetricUnit.NOUNIT, "counter running slow query") {
+            @Override
+            public Long getValue() {
+                return QeProcessorImpl.INSTANCE.runningSlowQueries();
+            }
+        };
+        STARROCKS_METRIC_REGISTER.addMetric(runningSlowQueriesCount);
 
         // 2. counter
         COUNTER_REQUEST_ALL = new LongCounterMetric("request_total", MetricUnit.REQUESTS, "total request");
