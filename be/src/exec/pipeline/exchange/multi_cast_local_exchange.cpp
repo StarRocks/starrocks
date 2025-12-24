@@ -170,6 +170,11 @@ void InMemoryMultiCastLocalExchanger::close_sink_operator() {
     _opened_sink_number--;
 }
 
+bool InMemoryMultiCastLocalExchanger::is_all_sources_finished() const {
+    std::unique_lock l(_mutex);
+    return _opened_source_number == 0;
+}
+
 void InMemoryMultiCastLocalExchanger::_closer_consumer(int32_t mcast_consumer_index) {
     Cell* now = _progress[mcast_consumer_index];
     now = now->next;
