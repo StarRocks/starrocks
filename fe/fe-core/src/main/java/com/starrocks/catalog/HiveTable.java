@@ -67,6 +67,7 @@ import com.starrocks.thrift.TTableType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -281,21 +282,29 @@ public class HiveTable extends Table {
         Locker locker = new Locker();
         locker.lockDatabase(db.getId(), LockType.WRITE);
         try {
-            this.fullSchema.clear();
-            this.nameToColumn.clear();
-            this.dataColumnNames.clear();
-
-            this.fullSchema.addAll(fullSchemaTemp.build());
-            updateSchemaIndex();
-            this.dataColumnNames.addAll(dataColumnNamesTemp.build());
-
             if (GlobalStateMgr.getCurrentState().isLeader()) {
-                ModifyTableColumnOperationLog log = new ModifyTableColumnOperationLog(dbName, tableName, fullSchema);
-                GlobalStateMgr.getCurrentState().getEditLog().logModifyTableColumn(log);
+                ModifyTableColumnOperationLog log =
+                        new ModifyTableColumnOperationLog(dbName, tableName, new ArrayList<>(fullSchemaTemp.build()));
+                GlobalStateMgr.getCurrentState().getEditLog().logModifyTableColumn(log, wal -> {
+                    modifyTableSchemaInternal(fullSchemaTemp.build(), dataColumnNamesTemp.build());
+                });
+            } else {
+                modifyTableSchemaInternal(fullSchemaTemp.build(), dataColumnNamesTemp.build());
             }
         } finally {
             locker.unLockDatabase(db.getId(), LockType.WRITE);
         }
+    }
+
+    protected void modifyTableSchemaInternal(ImmutableList<Column> newFullSchema,
+                                           ImmutableList<String> newDataColumnNames) {
+        this.fullSchema.clear();
+        this.nameToColumn.clear();
+        this.dataColumnNames.clear();
+
+        this.fullSchema.addAll(newFullSchema);
+        updateSchemaIndex();
+        this.dataColumnNames.addAll(newDataColumnNames);
     }
 
     @Override

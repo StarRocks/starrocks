@@ -116,6 +116,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.util.Collections;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
@@ -761,6 +762,11 @@ public class DeleteMgr implements Writable, MemoryTrackable {
 
     public long getDeleteInfoCount() {
         return dbToDeleteInfos.values().stream().mapToLong(List::size).sum();
+    }
+
+    protected List<MultiDeleteInfo> getDeleteInfosForDb(long dbId) {
+        List<MultiDeleteInfo> multiDeleteInfos = dbToDeleteInfos.get(dbId);
+        return Objects.requireNonNullElse(multiDeleteInfos, Collections.emptyList());
     }
 
     public void save(ImageWriter imageWriter) throws IOException, SRMetaBlockException {

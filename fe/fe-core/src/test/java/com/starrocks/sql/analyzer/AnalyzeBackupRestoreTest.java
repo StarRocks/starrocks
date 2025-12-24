@@ -54,7 +54,7 @@ public class AnalyzeBackupRestoreTest {
         BlobStorage storage = new BlobStorage(brokerName, Maps.newHashMap());
         Repository repo = new Repository(10000, "repo", false, location, storage);
         repo.initRepository();
-        GlobalStateMgr.getCurrentState().getBackupHandler().getRepoMgr().addAndInitRepoIfNotExist(repo, false);
+        GlobalStateMgr.getCurrentState().getBackupHandler().getRepoMgr().addAndInitRepoIfNotExist(repo);
 
         AnalyzeTestUtil.getStarRocksAssert().withFunction("CREATE FUNCTION Echostring(string) RETURNS string properties" +
                         "(\"symbol\" = \"Echostring\", \"type\" = \"StarrocksJar\", \"file\" = \"xxx\");");
