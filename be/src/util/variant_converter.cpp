@@ -18,7 +18,8 @@
 
 namespace starrocks {
 
-Status cast_variant_to_bool(const Variant& variant, ColumnBuilder<TYPE_BOOLEAN>& result) {
+Status cast_variant_to_bool(const VariantValue& value, ColumnBuilder<TYPE_BOOLEAN>& result) {
+    const Variant& variant = value.get_variant();
     const VariantType type = variant.type();
     if (type == VariantType::NULL_TYPE) {
         result.append_null();
@@ -60,8 +61,9 @@ Status cast_variant_to_bool(const Variant& variant, ColumnBuilder<TYPE_BOOLEAN>&
     return VARIANT_CAST_NOT_SUPPORT(type, TYPE_BOOLEAN);
 }
 
-Status cast_variant_to_string(const Variant& variant, const cctz::time_zone& zone,
+Status cast_variant_to_string(const VariantValue& value, const cctz::time_zone& zone,
                               ColumnBuilder<TYPE_VARCHAR>& result) {
+    const Variant& variant = value.get_variant();
     switch (variant.type()) {
     case VariantType::NULL_TYPE: {
         result.append(Slice("null"));
@@ -77,9 +79,8 @@ Status cast_variant_to_string(const Variant& variant, const cctz::time_zone& zon
         return Status::OK();
     }
     default: {
-        const VariantValue value = VariantValue::of_variant(variant);
         std::stringstream ss;
-        Status status = VariantUtil::variant_to_json(value.get_metadata(), value.get_value(), ss, zone);
+        Status status = VariantUtil::variant_to_json(value.get_metadata(), variant, ss, zone);
         if (!status.ok()) {
             return status;
         }

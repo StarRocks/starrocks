@@ -18,6 +18,8 @@
 
 #include <boost/uuid/uuid_io.hpp>
 #include <cstring>
+#include <string>
+#include <string_view>
 
 #include "util/variant.h"
 
@@ -68,28 +70,24 @@ StatusOr<VariantValue> VariantValue::create(const Slice& slice) {
     return VariantValue(std::move(metadata), std::move(value));
 }
 
-StatusOr<VariantValue> VariantValue::create(const Slice& metadata, const Slice& value) {
+StatusOr<VariantValue> VariantValue::create(const std::string_view metadata, const std::string_view value) {
     if (metadata.empty()) {
         return of_null();
     }
 
-    RETURN_IF_ERROR(validate_metadata(std::string_view(metadata.get_data(), metadata.get_size())));
+    RETURN_IF_ERROR(validate_metadata(metadata));
     // validate value size limit (16MB)
-    if (metadata.get_size() + value.get_size() > kMaxVariantSize) {
-        return Status::InvalidArgument("Variant value size exceeds maximum limit: " + std::to_string(value.get_size()) +
+    if (metadata.size() + value.size() > kMaxVariantSize) {
+        return Status::InvalidArgument("Variant value size exceeds maximum limit: " + std::to_string(value.size()) +
                                        " > " + std::to_string(kMaxVariantSize));
     }
 
-    return VariantValue(std::string(metadata.get_data(), metadata.get_size()),
-                        std::string(value.get_data(), value.get_size()));
+    return VariantValue(metadata, value);
 }
 
 // Create a VariantValue from a Parquet Variant.
-VariantValue VariantValue::of_variant(const Variant& variant) {
-    const std::string_view metadata = variant.metadata().get_raw();
-    const std::string_view value = variant.value();
-
-    return VariantValue(metadata, value);
+VariantValue VariantValue::of_variant(const VariantMetadata& metadata, const Variant& variant) {
+    return VariantValue(metadata.get_raw(), variant.get_raw());
 }
 
 Status VariantValue::validate_metadata(const std::string_view metadata) {
@@ -107,10 +105,7 @@ Status VariantValue::validate_metadata(const std::string_view metadata) {
 }
 
 VariantValue VariantValue::of_null() {
-    static constexpr uint8_t header = static_cast<uint8_t>(VariantType::NULL_TYPE) << 2;
-    static constexpr uint8_t null_chars[] = {header};
-    return VariantValue(VariantMetadata::kEmptyMetadata,
-                        std::string_view{reinterpret_cast<const char*>(null_chars), 1});
+    return VariantValue();
 }
 
 StatusOr<std::string_view> VariantValue::load_metadata(const std::string_view variant) {
@@ -169,23 +164,23 @@ size_t VariantValue::serialize(uint8_t* dst) const {
     size_t offset = 0;
 
     // The first 4 bytes are the total size of the variant
-    uint32_t total_size = static_cast<uint32_t>(_metadata.size() + _value.size());
+    uint32_t total_size = static_cast<uint32_t>(_metadata_raw.size() + _value_raw.size());
     memcpy(dst + offset, &total_size, sizeof(uint32_t));
     offset += sizeof(uint32_t);
 
     // metadata
-    memcpy(dst + offset, _metadata.data(), _metadata.size());
-    offset += _metadata.size();
+    memcpy(dst + offset, _metadata_raw.data(), _metadata_raw.size());
+    offset += _metadata_raw.size();
 
     // value
-    memcpy(dst + offset, _value.data(), _value.size());
-    offset += _value.size();
+    memcpy(dst + offset, _value_raw.data(), _value_raw.size());
+    offset += _value_raw.size();
 
     return offset;
 }
 
 uint32_t VariantValue::serialize_size() const {
-    return sizeof(uint32_t) + _metadata.size() + _value.size();
+    return sizeof(uint32_t) + _metadata_raw.size() + _value_raw.size();
 }
 
 StatusOr<std::string> VariantValue::to_json(cctz::time_zone timezone) const {
@@ -205,11 +200,6 @@ std::string VariantValue::to_string() const {
     }
 
     return json_result.value();
-}
-
-Variant VariantValue::to_variant() const {
-    return Variant(VariantMetadata(std::string_view(_metadata.data(), _metadata.size())),
-                   std::string_view(_value.data(), _value.size()));
 }
 
 std::ostream& operator<<(std::ostream& os, const VariantValue& value) {

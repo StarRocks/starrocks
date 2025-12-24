@@ -17,7 +17,9 @@
 #include <arrow/util/endian.h>
 #include <cctz/time_zone.h>
 
+#include <cstddef>
 #include <cstdint>
+#include <string_view>
 
 #include "common/status.h"
 #include "util/decimal_types.h"
@@ -92,6 +94,8 @@ struct VariantDecimalValue {
 
 class VariantMetadata {
 public:
+    // We probably will optimize internal state like to build indexes for dictionary lookups.
+    // so the cost of creating VariantMetadata is not trivial
     explicit VariantMetadata(std::string_view metadata);
 
     uint8_t header() const;
@@ -123,8 +127,9 @@ private:
     uint32_t _dict_size{0};
 };
 
+class Variant;
 struct VariantUtil {
-    static Status variant_to_json(std::string_view metadata, std::string_view value, std::stringstream& json_str,
+    static Status variant_to_json(const VariantMetadata& metadata, const Variant& value, std::stringstream& json_str,
                                   cctz::time_zone timezone = cctz::local_time_zone());
 
     static inline uint32_t read_little_endian_unsigned32(const void* from, uint8_t size) {
@@ -192,10 +197,11 @@ struct VariantArrayInfo {
 class Variant {
 public:
     enum class BasicType { PRIMITIVE = 0, SHORT_STRING = 1, OBJECT = 2, ARRAY = 3 };
+    static constexpr char null_chars[1] = {static_cast<uint8_t>(VariantType::NULL_TYPE) << 2};
+    static constexpr std::string_view kEmptyVariant{null_chars, sizeof(null_chars)};
 
 public:
-    explicit Variant(const VariantMetadata& metadata, std::string_view value);
-    Variant(const std::string_view metadata, std::string_view value) : Variant(VariantMetadata(metadata), value) {}
+    explicit Variant(std::string_view value);
 
     static constexpr uint8_t kHeaderSizeBytes = 1;
     static constexpr size_t kDecimalScaleSizeBytes = 1;
@@ -203,8 +209,7 @@ public:
     static constexpr uint8_t kValueHeaderBitShift = 2;
 
     BasicType basic_type() const;
-    const VariantMetadata& metadata() const;
-    std::string_view value() const;
+    std::string_view get_raw() const { return _value; }
     VariantType type() const;
 
     // Get the primitive boolean value.
@@ -251,11 +256,11 @@ public:
 
     // Get the value of the object field by key.
     // returns the value of the field with the given key
-    StatusOr<Variant> get_object_by_key(std::string_view key) const;
+    StatusOr<Variant> get_object_by_key(const VariantMetadata& metadata, std::string_view key) const;
 
     // Get the variant value of the object field
     // returns the value of the field with the given field id
-    StatusOr<Variant> get_element_at_index(uint32_t index) const;
+    StatusOr<Variant> get_element_at_index(const VariantMetadata& metadata, uint32_t index) const;
 
     StatusOr<VariantObjectInfo> get_object_info() const;
 
@@ -275,7 +280,6 @@ private:
     template <typename DecimalType>
     StatusOr<VariantDecimalValue<DecimalType>> get_primitive_decimal(VariantType type) const;
 
-    VariantMetadata _metadata;
     /**
      * Value layout:
      *  7                                  2 1          0

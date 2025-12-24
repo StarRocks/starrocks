@@ -245,22 +245,13 @@ void VariantPath::reset(VariantPath&& rhs) {
     segments = std::move(rhs.segments);
 }
 
-StatusOr<VariantValue> VariantPath::seek(const VariantValue* value, const VariantPath* variant_path) {
-    if (value == nullptr || variant_path == nullptr) {
+StatusOr<VariantValue> VariantPath::seek(const VariantValue* variant, const VariantPath* variant_path) {
+    if (variant == nullptr || variant_path == nullptr) {
         return Status::InvalidArgument("Variant value and path must not be null");
     }
 
-    const std::string& metadata = value->get_metadata();
-    if (metadata.empty()) {
-        return Status::InvalidArgument("Can not find variant value with empty metadata");
-    }
-
-    const std::string& val = value->get_value();
-    if (val.empty()) {
-        return Status::InvalidArgument("Variant value is empty");
-    }
-
-    Variant current{metadata, val};
+    const VariantMetadata& metadata = variant->get_metadata();
+    Variant current{variant->get_variant().get_raw()};
     for (size_t seg_idx = 0; seg_idx < variant_path->segments.size(); ++seg_idx) {
         const auto& segment = variant_path->segments[seg_idx];
 
@@ -268,9 +259,9 @@ StatusOr<VariantValue> VariantPath::seek(const VariantValue* value, const Varian
         std::visit(
                 [&]<typename T0>(const T0& seg) {
                     if constexpr (std::is_same_v<std::decay_t<T0>, ObjectExtraction>) {
-                        sub = current.get_object_by_key(seg.get_key());
+                        sub = current.get_object_by_key(metadata, seg.get_key());
                     } else if constexpr (std::is_same_v<std::decay_t<T0>, ArrayExtraction>) {
-                        sub = current.get_element_at_index(seg.get_index());
+                        sub = current.get_element_at_index(metadata, seg.get_index());
                     }
                 },
                 segment);
@@ -279,10 +270,10 @@ StatusOr<VariantValue> VariantPath::seek(const VariantValue* value, const Varian
             return sub.status();
         }
 
-        current = Variant{sub->metadata(), sub->value()};
+        current = sub.value();
     }
 
-    return VariantValue::of_variant(current);
+    return VariantValue::of_variant(metadata, current);
 }
 
 } // namespace starrocks

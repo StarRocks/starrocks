@@ -20,6 +20,7 @@
 #include <boost/uuid/uuid_io.hpp>
 #include <charconv>
 #include <iomanip>
+#include <string_view>
 
 #include "common/statusor.h"
 #include "runtime/decimalv3.h"
@@ -205,7 +206,7 @@ std::vector<uint32_t> VariantMetadata::get_index(std::string_view key) const {
 }
 
 // Variant value class
-Variant::Variant(const VariantMetadata& metadata, std::string_view value) : _metadata(metadata), _value(value) {
+Variant::Variant(std::string_view value) : _value(value) {
     DCHECK(!value.empty()) << "Variant value cannot be empty";
 }
 
@@ -226,14 +227,6 @@ VariantType Variant::type() const {
     default:
         return VariantType::NULL_TYPE; // Should not happen, but return NULL_TYPE as a fallback.
     }
-}
-
-const VariantMetadata& Variant::metadata() const {
-    return _metadata;
-}
-
-std::string_view Variant::value() const {
-    return _value;
 }
 
 StatusOr<VariantObjectInfo> Variant::get_object_info() const {
@@ -549,7 +542,7 @@ StatusOr<uint32_t> Variant::num_elements() const {
     }
 }
 
-StatusOr<Variant> Variant::get_object_by_key(std::string_view key) const {
+StatusOr<Variant> Variant::get_object_by_key(const VariantMetadata& metadata, std::string_view key) const {
     RETURN_IF_ERROR(validate_basic_type(Variant::BasicType::OBJECT));
 
     auto obj_status = get_object_info();
@@ -559,7 +552,7 @@ StatusOr<Variant> Variant::get_object_by_key(std::string_view key) const {
 
     const auto [num_elements, id_start_offset, id_size, offset_start_offset, offset_size, data_start_offset] =
             obj_status.value();
-    const std::vector<uint32_t> dict_indexes = _metadata.get_index(key);
+    const std::vector<uint32_t> dict_indexes = metadata.get_index(key);
     if (dict_indexes.empty()) {
         return Status::NotFound("Field key not exists: " + std::string(key));
     }
@@ -588,13 +581,13 @@ StatusOr<Variant> Variant::get_object_by_key(std::string_view key) const {
                                         ", value_size: " + std::to_string(_value.size()));
         }
 
-        return Variant(_metadata, _value.substr(data_start_offset + offset));
+        return Variant(_value.substr(data_start_offset + offset));
     }
 
     return Status::NotFound("Field key not found: " + std::string(key));
 }
 
-StatusOr<Variant> Variant::get_element_at_index(uint32_t index) const {
+StatusOr<Variant> Variant::get_element_at_index(const VariantMetadata& metadata, uint32_t index) const {
     RETURN_IF_ERROR(validate_basic_type(Variant::BasicType::ARRAY));
 
     auto array_info_status = get_array_info();
@@ -617,7 +610,7 @@ StatusOr<Variant> Variant::get_element_at_index(uint32_t index) const {
     }
 
     const std::string_view element_value = _value.substr(info.data_start_offset + offset);
-    return Variant{_metadata, element_value};
+    return Variant{element_value};
 }
 
 static std::string epoch_day_to_date(int32_t epoch_days) {
@@ -712,9 +705,8 @@ static std::string float_to_json_string_impl(FloatType value) {
     return result;
 }
 
-Status VariantUtil::variant_to_json(std::string_view metadata, std::string_view value, std::stringstream& json_str,
-                                    cctz::time_zone timezone) {
-    Variant variant{metadata, value};
+Status VariantUtil::variant_to_json(const VariantMetadata& metadata, const Variant& variant,
+                                    std::stringstream& json_str, cctz::time_zone timezone) {
     switch (variant.type()) {
     case VariantType::NULL_TYPE:
         json_str << "null";
@@ -812,6 +804,7 @@ Status VariantUtil::variant_to_json(std::string_view metadata, std::string_view 
         if (!info.ok()) {
             return info.status();
         }
+        const std::string_view& value = variant.get_raw();
         const auto& [num_elements, id_start_offset, id_size, offset_start_offset, offset_size, data_start_offset] =
                 info.value();
         json_str << "{";
@@ -824,7 +817,7 @@ Status VariantUtil::variant_to_json(std::string_view metadata, std::string_view 
                     VariantUtil::read_little_endian_unsigned32(value.data() + id_start_offset + i * id_size, id_size);
             uint32_t offset = VariantUtil::read_little_endian_unsigned32(
                     value.data() + offset_start_offset + i * offset_size, offset_size);
-            auto key = variant.metadata().get_key(id);
+            auto key = metadata.get_key(id);
             if (!key.ok()) {
                 return key.status();
             }
@@ -834,7 +827,7 @@ Status VariantUtil::variant_to_json(std::string_view metadata, std::string_view 
             if (uint32_t next_pos = data_start_offset + offset; next_pos < value.size()) {
                 std::string_view next_value = value.substr(next_pos, value.size() - next_pos);
                 // Recursively convert the next value to JSON
-                auto status = variant_to_json(metadata, next_value, json_str, timezone);
+                auto status = variant_to_json(metadata, Variant{next_value}, json_str, timezone);
                 if (!status.ok()) {
                     return status;
                 }
@@ -850,7 +843,7 @@ Status VariantUtil::variant_to_json(std::string_view metadata, std::string_view 
         if (!info.ok()) {
             return info.status();
         }
-
+        const std::string_view& value = variant.get_raw();
         const auto& [num_elements, offset_size, offset_start_offset, data_start_offset] = info.value();
         json_str << "[";
         for (size_t i = 0; i < num_elements; ++i) {
@@ -863,7 +856,7 @@ Status VariantUtil::variant_to_json(std::string_view metadata, std::string_view 
             if (uint32_t next_pos = data_start_offset + offset; next_pos < value.size()) {
                 std::string_view next_value = value.substr(next_pos, value.size() - next_pos);
                 // Recursively convert the next value to JSON
-                auto status = variant_to_json(metadata, next_value, json_str, timezone);
+                auto status = variant_to_json(metadata, Variant{next_value}, json_str, timezone);
                 if (!status.ok()) {
                     return status;
                 }

@@ -555,7 +555,7 @@ struct DecimalNonDecimalCast<overflow_mode, DecimalType, VariantType, DecimalLTG
         const auto variant_column = ColumnHelper::cast_to_raw<VariantType>(column);
         for (auto i = 0; i < num_rows; ++i) {
             const VariantValue* variant_value = variant_column->get_object(i);
-            Variant variant(variant_value->get_metadata(), variant_value->get_value());
+            const Variant& variant = variant_value->get_variant();
 
             if constexpr (check_overflow<overflow_mode>) {
                 if (variant.type() == VariantType::NULL_TYPE) {

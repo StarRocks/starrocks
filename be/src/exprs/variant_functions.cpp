@@ -143,8 +143,7 @@ StatusOr<ColumnPtr> VariantFunctions::_do_variant_query(FunctionContext* context
             } else {
                 zone = context->state()->timezone_obj();
             }
-            Variant field_view(field.value().get_metadata(), field.value().get_value());
-            Status casted = cast_variant_value_to<ResultType, true>(field_view, zone, result);
+            Status casted = cast_variant_value_to<ResultType, true>(field.value(), zone, result);
             // Append null if casting fails
             if (!casted.ok()) {
                 result.append_null();
@@ -171,7 +170,7 @@ StatusOr<ColumnPtr> VariantFunctions::variant_typeof(FunctionContext* context, c
             result.append_null();
             continue;
         }
-        result.append(VariantUtil::variant_type_to_string(variant_value->to_variant().type()));
+        result.append(VariantUtil::variant_type_to_string(variant_value->get_variant().type()));
     }
     return result.build(ColumnHelper::is_all_const(columns));
 }

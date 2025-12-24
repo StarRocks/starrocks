@@ -155,7 +155,7 @@ StatusOr<ColumnPtr> CastVariantToStruct::evaluate_checked(ExprContext* context, 
         }
 
         const VariantValue* variant_value = viewer.value(row);
-        Variant variant(variant_value->get_metadata(), variant_value->get_value());
+        const Variant& variant = variant_value->get_variant();
         if (variant.type() != VariantType::OBJECT) {
             APPEND_NULL(variant_columns, null_column);
             continue;

@@ -27,10 +27,14 @@ namespace starrocks {
 
 class VariantValue {
 public:
-    VariantValue(const std::string_view metadata, const std::string_view value) : _metadata(metadata), _value(value) {}
-    VariantValue(std::string metadata, std::string value) : _metadata(std::move(metadata)), _value(std::move(value)) {}
-    VariantValue() = default;
-
+    VariantValue(const std::string_view metadata, const std::string_view value)
+            : _metadata_raw(metadata), _value_raw(value), _metadata(_metadata_raw), _value(_value_raw) {}
+    VariantValue(std::string metadata, std::string value)
+            : _metadata_raw(std::move(metadata)),
+              _value_raw(std::move(value)),
+              _metadata(_metadata_raw),
+              _value(_value_raw) {}
+    VariantValue() : VariantValue(VariantMetadata::kEmptyMetadata, Variant::kEmptyVariant) {}
     /**
      * Static factory method to create a VariantValue from a Slice.
      * @param slice The Slice must contain the full variant binary including size header.
@@ -47,9 +51,9 @@ public:
      * @param value The value Slice.
      * @return The created VariantValue or an error status.
      */
-    static StatusOr<VariantValue> create(const Slice& metadata, const Slice& value);
+    static StatusOr<VariantValue> create(const std::string_view metadata, const std::string_view value);
 
-    static VariantValue of_variant(const Variant& variant);
+    static VariantValue of_variant(const VariantMetadata& metadata, const Variant& variant);
 
     VariantValue(const VariantValue& rhs) = default;
 
@@ -62,10 +66,6 @@ public:
     VariantValue& operator=(VariantValue&& rhs) noexcept = default;
 
     static VariantValue of_null();
-
-    // Load metadata from the variant binary.
-    // will slice the variant binary to extract metadata
-    static StatusOr<std::string_view> load_metadata(std::string_view variant);
 
     // Serialize the VariantValue to a byte array.
     // return the number of bytes written
@@ -81,9 +81,8 @@ public:
     StatusOr<std::string> to_json(cctz::time_zone timezone = cctz::local_time_zone()) const;
     std::string to_string() const;
 
-    const std::string& get_metadata() const { return _metadata; }
-    const std::string& get_value() const { return _value; }
-    Variant to_variant() const;
+    const VariantMetadata& get_metadata() const { return _metadata; }
+    const Variant& get_variant() const { return _value; }
 
     // Variant value has a maximum size limit of 16MB to prevent excessive memory usage.
     static constexpr uint32_t kMaxVariantSize = 16 * 1024 * 1024;
@@ -96,8 +95,14 @@ private:
     static constexpr uint8_t kHeaderSize = 1;
     static constexpr size_t kMinMetadataSize = 3;
 
-    std::string _metadata;
-    std::string _value;
+    // Load metadata from the variant binary.
+    // will slice the variant binary to extract metadata
+    static StatusOr<std::string_view> load_metadata(std::string_view variant);
+
+    std::string _metadata_raw;
+    std::string _value_raw;
+    VariantMetadata _metadata;
+    Variant _value;
 };
 
 // append json string to the stream
