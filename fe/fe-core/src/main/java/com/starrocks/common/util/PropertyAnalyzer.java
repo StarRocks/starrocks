@@ -276,7 +276,10 @@ public class PropertyAnalyzer {
 
     public static final String PROPERTIES_ENABLE_STATISTIC_COLLECT_ON_FIRST_LOAD = "enable_statistic_collect_on_first_load";
 
+    // For admin repair cloud native table
+    // Enforces consistent version across all tablets in a physical partition
     public static final String PROPERTIES_ENFORCE_CONSISTENT_VERSION = "enforce_consistent_version";
+    // Allows empty tablet recovery of tablets with no valid metadata
     public static final String PROPERTIES_ALLOW_EMPTY_TABLET_RECOVERY = "allow_empty_tablet_recovery";
 
     /**

@@ -608,7 +608,7 @@ public class TabletRepairHelper {
             for (Map.Entry<Long, Map<Long, String>> entry : partitionErrors.entrySet()) {
                 errorMsgs.add(
                         String.format("{partition: %d, error: %s}", entry.getKey(), entry.getValue().values().iterator().next()));
-                if (errorMsgs.size() > 3) {
+                if (errorMsgs.size() >= 3) {
                     break;
                 }
             }
