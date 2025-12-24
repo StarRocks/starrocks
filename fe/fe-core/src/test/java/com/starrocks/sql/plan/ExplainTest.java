@@ -14,8 +14,8 @@
 
 package com.starrocks.sql.plan;
 
-<<<<<<< HEAD
 import com.starrocks.common.Config;
+import com.starrocks.sql.Explain;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.utframe.UtFrameUtils;
@@ -25,9 +25,9 @@ import org.junit.jupiter.api.Test;
 public class ExplainTest extends PlanTestBase {
 
     @Test
-    public void testExplainUsesConfiguredDefaultLevel() throws Exception {
-        String originalLevel = Config.query_detail_explain_level;
-        Config.query_detail_explain_level = "LOGICAL";
+    public void testExplainUsesConfiguredExplainLevel() throws Exception {
+        String originalLevel = Config.query_explain_level;
+        Config.query_explain_level = "LOGICAL";
         try {
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(
                     "EXPLAIN SELECT * FROM t0", connectContext);
@@ -36,13 +36,10 @@ public class ExplainTest extends PlanTestBase {
             Assertions.assertTrue(queryStatement.isExplain());
             Assertions.assertEquals(StatementBase.ExplainLevel.LOGICAL, queryStatement.getExplainLevel());
         } finally {
-            Config.query_detail_explain_level = originalLevel;
+            Config.query_explain_level = originalLevel;
         }
-=======
-import com.starrocks.sql.Explain;
-import org.junit.jupiter.api.Test;
+    }
 
-public class ExplainTest extends PlanTestBase {
     @Test
     public void testExplain() throws Exception {
         String sql = "SELECT DISTINCT t0.v1 FROM t0 LEFT JOIN t1 ON t0.v1 = t1.v4";
@@ -85,7 +82,6 @@ public class ExplainTest extends PlanTestBase {
         sql = "SELECT MIN(pow(t0.v1, 2)) FROM t0";
         plan = getFragmentPlan(sql);
         assertContains(plan, "min(pow(CAST(1: v1 AS DOUBLE), ?))");
->>>>>>> a95604dfd8 ([BugFix] Revert 63265 and add another config (#66542))
 
     }
 }
