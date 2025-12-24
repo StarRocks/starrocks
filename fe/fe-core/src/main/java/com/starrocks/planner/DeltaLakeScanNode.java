@@ -150,6 +150,9 @@ public class DeltaLakeScanNode extends ScanNode {
             output.append(prefix).append("MIN/MAX PREDICATES: ").append(
                     getExplainString(scanNodePredicates.getMinMaxConjuncts())).append("\n");
         }
+        output.append(prefix).append(String.format("TABLE VERSION: %s",
+                deltaLakeTable.getDeltaSnapshot().getVersion(deltaLakeTable.getDeltaEngine())));
+        output.append("\n");
 
         output.append(prefix).append(String.format("cardinality=%s", cardinality));
         output.append("\n");
