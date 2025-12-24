@@ -125,13 +125,16 @@ public class TypeManager {
         }
         ArrayList<StructField> fields = Lists.newArrayList();
         for (int i = 0; i < t1.getFields().size(); ++i) {
-            Type fieldCommon = getCommonSuperType(t1.getField(i).getType(), t2.getField(i).getType());
+            StructField field1 = t1.getField(i);
+            StructField field2 = t2.getField(field1.getName());
+            if (field2 == null) {
+                return InvalidType.INVALID;
+            }
+            Type fieldCommon = getCommonSuperType(field1.getType(), field2.getType());
             if (!fieldCommon.isValid()) {
                 return InvalidType.INVALID;
             }
-
-            // default t1's field name
-            fields.add(new StructField(t1.getField(i).getName(), fieldCommon));
+            fields.add(new StructField(field1.getName(), fieldCommon));
         }
         return new StructType(fields);
     }
@@ -380,8 +383,13 @@ public class TypeManager {
             if (fromStruct.getFields().size() != toStruct.getFields().size()) {
                 return false;
             }
-            for (int i = 0; i < fromStruct.getFields().size(); ++i) {
-                if (!canCastTo(fromStruct.getField(i).getType(), toStruct.getField(i).getType())) {
+            for (int i = 0; i < toStruct.getFields().size(); ++i) {
+                StructField toField = toStruct.getField(i);
+                StructField fromField = fromStruct.getField(toField.getName());
+                if (fromField == null) {
+                    return false;
+                }
+                if (!canCastTo(fromField.getType(), toField.getType())) {
                     return false;
                 }
             }
