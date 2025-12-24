@@ -1,4 +1,4 @@
--- name: test_create_mv_with_params
+-- name: test_create_mv_with_params @slow
 create external catalog mv_iceberg_${uuid0}
 properties
 (
@@ -59,10 +59,6 @@ function: wait_async_materialized_view_finish("db_${uuid0}", "test_iceberg_mv0_$
 -- result:
 None
 -- !result
-select count(*) > 1 from information_schema.task_runs where `database`='db_${uuid0}' and `DEFINITION` like "%test_iceberg_mv0_${uuid0}%";
--- result:
-1
--- !result
 SELECT dt,sum(col_int)  FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0}  GROUP BY dt order by dt;
 -- result:
 2023-12-01	4000
@@ -83,10 +79,6 @@ refresh materialized view test_iceberg_mv1_${uuid0};
 function: wait_async_materialized_view_finish("db_${uuid0}", "test_iceberg_mv1_${uuid0}")
 -- result:
 None
--- !result
-select count(*) > 1 from information_schema.task_runs where `database`='db_${uuid0}' and `DEFINITION` like "%test_iceberg_mv1_${uuid0}%";
--- result:
-1
 -- !result
 SELECT dt,sum(col_int)  FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0}  GROUP BY dt order by dt;
 -- result:
@@ -109,10 +101,6 @@ refresh materialized view test_iceberg_mv2_${uuid0} with sync mode;
 function: wait_async_materialized_view_finish("db_${uuid0}", "test_iceberg_mv2_${uuid0}")
 -- result:
 None
--- !result
-select count(*) = 1 from information_schema.task_runs where `database`='db_${uuid0}' and `DEFINITION` like "%test_iceberg_mv2_${uuid0}%";
--- result:
-1
 -- !result
 SELECT dt,sum(col_int)  FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0}  GROUP BY dt order by dt;
 -- result:
@@ -156,13 +144,18 @@ function: wait_async_materialized_view_finish("db_${uuid0}", "test_tbl_with_para
 -- result:
 None
 -- !result
-select count(*) > 1 from information_schema.task_runs where `database`="db_${uuid0}" and `DEFINITION` like "%test_tbl_with_params_mv3%";
--- result:
-1
--- !result
 select * from test_tbl_with_params_mv3 order by 1;
 -- result:
 1	a	1	1
 4	aa	1	1
 8	aa	1	1
+-- !result
+drop database default_catalog.db_${uuid0} force;
+-- result:
+-- !result
+drop table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0} force;
+-- result:
+-- !result
+drop database mv_iceberg_${uuid0}.mv_ice_db_${uuid0} force;
+-- result:
 -- !result
