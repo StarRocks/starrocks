@@ -40,7 +40,9 @@ public:
     template <typename Func>
     inline Status for_each_posting(Func&& func) {
         for (size_t i = 0; i < _doc_ids.size(); ++i) {
-            _positions[i].flush_pending_adds();
+            if (LIKELY(_positions[i].is_context())) {
+                _positions[i].flush_pending_adds();
+            }
             RETURN_IF_ERROR(func(_doc_ids[i], &_positions[i]));
         }
         return Status::OK();
