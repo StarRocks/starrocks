@@ -36,7 +36,7 @@ public class SkewJoinV2Test extends PlanTestBase {
     public void testSkewJoinV2WithRightSideHint() throws Exception {
         String sql = "select v2, v5 from t0 join[skew|t1.v4(1,2)] t1 on v1 = v4 ";
         String sqlPlan = getVerboseExplain(sql);
-        assertCContains(sqlPlan, "Split expr: [4: v4, BIGINT, true] IN (1, 2)");
+        assertCContains(sqlPlan, "Split expr: 4: v4 IN (1, 2)");
     }
 
     @Test
