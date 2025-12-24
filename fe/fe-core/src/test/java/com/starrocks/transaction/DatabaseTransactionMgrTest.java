@@ -57,6 +57,7 @@ import com.starrocks.common.util.StringUtils;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.lake.compaction.CompactionMgr;
 import com.starrocks.load.routineload.RLTaskTxnCommitAttachment;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.replication.ReplicationTxnCommitAttachment;
@@ -332,7 +333,52 @@ public class DatabaseTransactionMgrTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testNormal() throws UserException {
+=======
+    public void testLakeCompactionTxnRemovesStartupMapOnVisible() throws StarRocksException {
+        // Use the real GlobalStateMgr in tests so that GlobalStateMgr.getCurrentState() works as expected.
+        FakeGlobalStateMgr.setGlobalStateMgr(masterGlobalStateMgr);
+        CompactionMgr compactionMgr = masterGlobalStateMgr.getCompactionMgr();
+        @SuppressWarnings("unchecked")
+        Map<Long, Long> startupActiveMap =
+                Deencapsulation.getField(compactionMgr, "remainedActiveCompactionTxnWhenStart");
+        DatabaseTransactionMgr masterDbTransMgr =
+                masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
+
+        TransactionState.TxnCoordinator feTransactionSource =
+                new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE, "fe1");
+        long tableId = GlobalStateMgrTestUtil.testTableId1;
+        long txnId = 123456L;
+        TransactionState txnState = new TransactionState(
+                GlobalStateMgrTestUtil.testDbId1,
+                Lists.newArrayList(tableId),
+                txnId,
+                "test_lake_compaction_txn_single",
+                null,
+                TransactionState.LoadJobSourceType.LAKE_COMPACTION,
+                feTransactionSource,
+                -1L,
+                Config.lake_compaction_default_timeout_second * 1000L);
+
+        // Register txn as running in db transaction manager.
+        Deencapsulation.invoke(masterDbTransMgr, "unprotectUpsertTransactionState", txnState);
+
+        // Simulate that this txn was active when FE restarted.
+        startupActiveMap.put(txnId, tableId);
+        Assertions.assertTrue(startupActiveMap.containsKey(txnId));
+
+        // Simulate the txn becoming VISIBLE and being replayed/applied.
+        txnState.setTransactionStatus(TransactionStatus.VISIBLE);
+        Deencapsulation.invoke(masterDbTransMgr, "unprotectUpsertTransactionState", txnState);
+
+        // The startup active compaction map should be cleaned for this lake compaction txn.
+        Assertions.assertFalse(startupActiveMap.containsKey(txnId));
+    }
+
+    @Test
+    public void testNormal() throws StarRocksException {
+>>>>>>> 1c54bd967f ([BugFix] Clear startup lake compaction txn map on txn finalization (#66533))
         DatabaseTransactionMgr masterDbTransMgr =
                 masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
         assertEquals(8, masterDbTransMgr.getTransactionNum());
