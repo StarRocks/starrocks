@@ -99,7 +99,8 @@ public:
         return pair->second;
     }
 
-    void add_general_mapping_notnull(const std::string& name, bool is_window, const AggregateFunction* fun) {
+    template <typename SpecificAggFunctionPtr = AggregateFunctionPtr>
+    void add_general_mapping_notnull(const std::string& name, bool is_window, SpecificAggFunctionPtr fun) {
         track_function(fun);
         _general_mapping.emplace(std::make_tuple(name, false, false), fun);
         _general_mapping.emplace(std::make_tuple(name, false, true), fun);
@@ -109,14 +110,15 @@ public:
         }
     }
 
-    void add_general_window_mapping_notnull(const std::string& name, const AggregateFunction* fun) {
+    template <typename SpecificAggFunctionPtr = AggregateFunctionPtr>
+    void add_general_window_mapping_notnull(const std::string& name, SpecificAggFunctionPtr fun) {
         track_function(fun);
         _general_mapping.emplace(std::make_tuple(name, true, false), fun);
         _general_mapping.emplace(std::make_tuple(name, true, true), fun);
     }
 
-    template <class StateType, bool IgnoreNull = true>
-    void add_general_mapping(const std::string& name, bool is_window, const AggregateFunction* fun) {
+    template <class StateType, typename SpecificAggFunctionPtr = AggregateFunctionPtr, bool IgnoreNull = true>
+    void add_general_mapping(const std::string& name, bool is_window, SpecificAggFunctionPtr fun) {
         track_function(fun);
         _general_mapping.emplace(std::make_tuple(name, false, false), fun);
         auto nullable_agg = AggregateFactory::MakeNullableAggregateFunctionUnary<StateType, false, IgnoreNull>(fun);
@@ -129,8 +131,8 @@ public:
         }
     }
 
-    template <LogicalType ArgType, LogicalType RetType>
-    void add_aggregate_mapping_notnull(const std::string& name, bool is_window, const AggregateFunction* fun) {
+    template <LogicalType ArgType, LogicalType RetType, typename SpecificAggFunctionPtr = AggregateFunctionPtr>
+    void add_aggregate_mapping_notnull(const std::string& name, bool is_window, SpecificAggFunctionPtr fun) {
         track_function(fun);
         _infos_mapping.emplace(std::make_tuple(name, ArgType, RetType, false, false), fun);
         _infos_mapping.emplace(std::make_tuple(name, ArgType, RetType, false, true), fun);
@@ -140,9 +142,10 @@ public:
         }
     }
 
-    template <LogicalType ArgType, LogicalType RetType, class StateType, bool IgnoreNull = true,
+    template <LogicalType ArgType, LogicalType RetType, class StateType,
+              typename SpecificAggFunctionPtr = AggregateFunctionPtr, bool IgnoreNull = true,
               IsAggNullPred<StateType> AggNullPred = AggNonNullPred<StateType>>
-    void add_aggregate_mapping(const std::string& name, bool is_window, const AggregateFunction* fun,
+    void add_aggregate_mapping(const std::string& name, bool is_window, SpecificAggFunctionPtr fun,
                                AggNullPred null_pred = AggNullPred()) {
         track_function(fun);
         _infos_mapping.emplace(std::make_tuple(name, ArgType, RetType, false, false), fun);
@@ -158,9 +161,10 @@ public:
         }
     }
 
-    template <LogicalType ArgType, LogicalType RetType, class StateType, bool IgnoreNull = true,
+    template <LogicalType ArgType, LogicalType RetType, class StateType,
+              typename SpecificAggFunctionPtr = AggregateFunctionPtr, bool IgnoreNull = true,
               IsAggNullPred<StateType> AggNullPred = AggNonNullPred<StateType>>
-    void add_window_mapping(const std::string& name, const AggregateFunction* fun,
+    void add_window_mapping(const std::string& name, SpecificAggFunctionPtr fun,
                             AggNullPred null_pred = AggNullPred()) {
         track_function(fun);
         _infos_mapping.emplace(std::make_tuple(name, ArgType, RetType, true, false), fun);
@@ -170,8 +174,9 @@ public:
     }
 
     template <LogicalType ArgType, LogicalType RetType, class StateType,
+              typename SpecificAggFunctionPtr = AggregateFunctionPtr,
               IsAggNullPred<StateType> AggNullPred = AggNonNullPred<StateType>>
-    void add_aggregate_mapping_variadic(const std::string& name, bool is_window, const AggregateFunction* fun,
+    void add_aggregate_mapping_variadic(const std::string& name, bool is_window, SpecificAggFunctionPtr fun,
                                         AggNullPred null_pred = AggNullPred()) {
         track_function(fun);
         _infos_mapping.emplace(std::make_tuple(name, ArgType, RetType, false, false), fun);
@@ -289,9 +294,9 @@ public:
     }
 
 private:
-    std::unordered_map<AggregateFuncKey, const AggregateFunction*, AggregateFuncMapHash> _infos_mapping;
-    std::unordered_map<GeneralFuncKey, const AggregateFunction*, GeneralFuncMapHash> _general_mapping;
-    std::unordered_set<const AggregateFunction*> _functions;
+    std::unordered_map<AggregateFuncKey, AggregateFunctionPtr, AggregateFuncMapHash> _infos_mapping;
+    std::unordered_map<GeneralFuncKey, AggregateFunctionPtr, GeneralFuncMapHash> _general_mapping;
+    std::unordered_set<AggregateFunctionPtr> _functions;
 };
 
 } // namespace starrocks

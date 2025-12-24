@@ -462,7 +462,7 @@ public:
     }
 };
 
-// AggregateFunctionPtr is removed. Use const AggregateFunction* instead.
+using AggregateFunctionPtr = const AggregateFunction*;
 
 struct AggregateFunctionEmptyState {};
 

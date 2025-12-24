@@ -63,13 +63,13 @@ void AggregateFuncResolver::register_sumcount() {
     }
 
     _infos_mapping.emplace(std::make_tuple("count", TYPE_BIGINT, TYPE_BIGINT, false, false),
-                           track_function(AggregateFactory::MakeCountAggregateFunction<false>()));
+                           AggregateFactory::MakeCountAggregateFunction<false>());
     _infos_mapping.emplace(std::make_tuple("count", TYPE_BIGINT, TYPE_BIGINT, true, false),
-                           track_function(AggregateFactory::MakeCountAggregateFunction<true>()));
+                           AggregateFactory::MakeCountAggregateFunction<true>());
     _infos_mapping.emplace(std::make_tuple("count", TYPE_BIGINT, TYPE_BIGINT, false, true),
-                           track_function(AggregateFactory::MakeCountNullableAggregateFunction<false>()));
+                           AggregateFactory::MakeCountNullableAggregateFunction<false>());
     _infos_mapping.emplace(std::make_tuple("count", TYPE_BIGINT, TYPE_BIGINT, true, true),
-                           track_function(AggregateFactory::MakeCountNullableAggregateFunction<true>()));
+                           AggregateFactory::MakeCountNullableAggregateFunction<true>());
 }
 
 } // namespace starrocks
