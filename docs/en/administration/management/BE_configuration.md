@@ -1296,6 +1296,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Description: The time interval at which ColumnPool GC is triggered. StarRocks executes GC periodically and returns the released memory to the operating system.
 - Introduced in: -
 
+##### load_channel_abort_clean_up_delay_seconds
+
+- Default: 600
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: Controls how long (in seconds) LoadChannelMgr keeps the load IDs of aborted load channels before removing them from `_aborted_load_channels`. When a load job is cancelled or fails, the load ID stays recorded so any late-arriving load RPCs can be rejected immediately; once the delay expires, the entry is cleaned during the periodic background sweep (minimum sweep interval is 60 seconds). Setting the delay too low risks accepting stray RPCs after an abort, while setting it too high may retain state and consume resources longer than necessary. Tune this to balance correctness of late-request rejection and resource retention for aborted loads.
+- Introduced in: v3.5.11, v4.0.4
+
 ##### load_process_max_memory_limit_bytes
 
 - Default: 107374182400
@@ -3682,6 +3691,15 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Is mutable: Yes
 - Description: The reader's remote I/O buffer size for cloud-native table compaction in a shared-data cluster. The default value is 1MB. You can increase this value to accelerate compaction process.
 - Introduced in: v3.2.3
+
+##### table_schema_service_max_retries
+
+- Default: 3
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum number of retries for Table Schema Service requests.
+- Introduced in: v4.0
 
 <!--
 ##### experimental_lake_ignore_lost_segment

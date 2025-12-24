@@ -38,6 +38,7 @@
 #include "storage/lake/meta_file.h"
 #include "storage/lake/metacache.h"
 #include "storage/lake/options.h"
+#include "storage/lake/table_schema_service.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/txn_log.h"
@@ -76,12 +77,15 @@ TabletManager::TabletManager(std::shared_ptr<LocationProvider> location_provider
         : _location_provider(std::move(location_provider)),
           _metacache(std::make_unique<Metacache>(cache_capacity)),
           _compaction_scheduler(std::make_unique<CompactionScheduler>(this)),
-          _update_mgr(update_mgr) {
+          _update_mgr(update_mgr),
+          _table_schema_service(std::make_unique<TableSchemaService>(this)) {
     _update_mgr->set_tablet_mgr(this);
 }
 
 TabletManager::TabletManager(std::shared_ptr<LocationProvider> location_provider, int64_t cache_capacity)
-        : _location_provider(std::move(location_provider)), _metacache(std::make_unique<Metacache>(cache_capacity)) {}
+        : _location_provider(std::move(location_provider)),
+          _metacache(std::make_unique<Metacache>(cache_capacity)),
+          _table_schema_service(std::make_unique<TableSchemaService>(this)) {}
 
 TabletManager::~TabletManager() = default;
 
@@ -164,18 +168,8 @@ Status TabletManager::drop_local_cache(const std::string& path) {
 }
 
 // current lru cache does not support updating value size, so use refill to update.
-void TabletManager::update_segment_cache_size(std::string_view key, intptr_t segment_addr_hint) {
-    // use write lock to protect parallel segment size update
-    std::unique_lock wrlock(_meta_lock);
-    auto segment = _metacache->lookup_segment(key);
-    if (segment == nullptr) {
-        return;
-    }
-    if (segment_addr_hint != 0 && segment_addr_hint != reinterpret_cast<intptr_t>(segment.get())) {
-        // the segment in cache is not the one as expected, skip the cache update
-        return;
-    }
-    _metacache->cache_segment(key, std::move(segment));
+void TabletManager::update_segment_cache_size(std::string_view key, size_t mem_cost, intptr_t segment_addr_hint) {
+    _metacache->cache_segment_if_present(key, mem_cost, segment_addr_hint);
 }
 
 void TabletManager::prune_metacache() {
@@ -1241,7 +1235,7 @@ StatusOr<SegmentPtr> TabletManager::load_segment(const FileInfo& segment_info, i
         if (fill_meta_cache) {
             // NOTE: the returned segment may be not the same as the parameter passed in
             // Use the one in cache if the same key already exists
-            if (auto cached_segment = metacache()->cache_segment_if_absent(segment_info.path, segment);
+            if (auto cached_segment = _metacache->cache_segment_if_absent(segment_info.path, segment);
                 cached_segment != nullptr) {
                 segment = cached_segment;
             }
@@ -1419,4 +1413,20 @@ StatusOr<TabletAndRowsets> TabletManager::capture_tablet_and_rowsets(int64_t tab
 
     return std::make_tuple(std::move(tablet_ptr), std::move(rowsets));
 }
+
+void TabletManager::cache_schema(const TabletSchemaPtr& schema) {
+    // GlobalTabletSchemaMap and metadata cache overlap in functionality, but because many places
+    // previously relied on GlobalTabletSchemaMap, caching is still performed in GlobalTabletSchemaMap
+    // here. In the future, it may be possible to refactor and remove GlobalTabletSchemaMap.
+    auto [cached_schema, inserted] = GlobalTabletSchemaMap::Instance()->emplace(schema);
+    auto cache_key = global_schema_cache_key(cached_schema->id());
+    auto cache_size = inserted ? cached_schema->mem_usage() : 0;
+    _metacache->cache_tablet_schema(cache_key, cached_schema, cache_size);
+}
+
+TabletSchemaPtr TabletManager::get_cached_schema(int64_t schema_id) {
+    auto cache_key = global_schema_cache_key(schema_id);
+    return _metacache->lookup_tablet_schema(cache_key);
+}
+
 } // namespace starrocks::lake

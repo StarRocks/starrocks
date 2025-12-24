@@ -683,6 +683,8 @@ struct TLakeScanNode {
   40: optional i64 back_pressure_throttle_time
   41: optional i64 back_pressure_throttle_time_upper_bound
   42: optional i64 back_pressure_num_rows
+
+  43: optional Descriptors.TTableSchemaKey schema_key
 }
 
 struct TEqJoinCondition {
@@ -1284,7 +1286,9 @@ struct TMetaScanNode {
     2: optional list<Descriptors.TColumn> columns
     3: optional i32 low_cardinality_threshold
     4: optional list<TColumnAccessPath> column_access_paths
+    // deprecated. use schema key instead
     5: optional i64 schema_id
+    6: optional Descriptors.TTableSchemaKey schema_key
 }
 
 struct TDecodeNode {

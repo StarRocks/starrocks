@@ -6,6 +6,7 @@ keywords: ['iceberg']
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
 import QSTip from '../../../_assets/commonMarkdown/quickstart-iceberg-tip.mdx'
+import IcebergCatalogIcebergRestSecurityLink from '../../../_assets/commonMarkdown/iceberg_catalog_iceberg_rest_security_link.mdx'
 
 # Iceberg catalog
 
@@ -137,7 +138,7 @@ The type of your data source. Set the value to `iceberg`.
 
 Parameter(s) about how StarRocks manages data access to the catalog.
 
-For detailed instructions on managing data access for Iceberg Catalogs, see [Security Setup for Iceberg REST Catalog](./iceberg_rest_security.md).
+<IcebergCatalogIcebergRestSecurityLink />
 
 ##### catalog.access.control
 
@@ -1613,6 +1614,7 @@ CREATE VIEW [IF NOT EXISTS]
     [, <column_name>[ COMMENT 'column comment'], ...]
 )
 [COMMENT 'view comment']
+[PROPERTIES ("key" = "value", ...)]
 AS <query_statement>
 ```
 
@@ -1622,6 +1624,18 @@ Create an Iceberg view `iceberg_view1` based on an Iceberg table `iceberg_table`
 
 ```SQL
 CREATE VIEW IF NOT EXISTS iceberg.iceberg_db.iceberg_view1 AS
+SELECT k1, k2 FROM iceberg.iceberg_db.iceberg_table;
+```
+
+From v4.0.3 onwards, you can specify the view attributes in the `"key" = "value"` format in `PROPERTIES`.
+
+```SQL
+CREATE VIEW IF NOT EXISTS iceberg.iceberg_db.iceberg_view1
+PROPERTIES (
+  "key1" = "value1",
+  "key2" = "value2"
+)
+AS
 SELECT k1, k2 FROM iceberg.iceberg_db.iceberg_table;
 ```
 

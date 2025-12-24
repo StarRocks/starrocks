@@ -24,16 +24,21 @@ namespace starrocks::pipeline {
 
 Status AggregateDistinctStreamingSinkOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Operator::prepare(state));
-    RETURN_IF_ERROR(_aggregator->prepare(state, state->obj_pool(), _unique_metrics.get()));
+    _aggregator->attach_sink_observer(state, this->_observer);
+    return Status::OK();
+}
+
+Status AggregateDistinctStreamingSinkOperator::prepare_local_state(RuntimeState* state) {
+    RETURN_IF_ERROR(Operator::prepare_local_state(state));
+    RETURN_IF_ERROR(_aggregator->prepare(state, _unique_metrics.get()));
     if (_aggregator->streaming_preaggregation_mode() == TStreamingPreaggregationMode::LIMITED_MEM) {
         _limited_mem_state.limited_memory_size = config::streaming_agg_limited_memory_size;
     }
-    // If limit is small, streaming distinct forces pre-aggregation. After the limit is reached the operator will quickly finish.
-    // The limit in streaming agg is controlled by session variable: cbo_push_down_distinct_limit
+    // If limit is small, streaming distinct forces pre-aggregation. After the limit is reached the operator will
+    // quickly finish. The limit in streaming agg is controlled by session variable: cbo_push_down_distinct_limit
     if (_aggregator->limit() != -1) {
         _aggregator->streaming_preaggregation_mode() = TStreamingPreaggregationMode::FORCE_PREAGGREGATION;
     }
-    _aggregator->attach_sink_observer(state, this->_observer);
     return _aggregator->open(state);
 }
 

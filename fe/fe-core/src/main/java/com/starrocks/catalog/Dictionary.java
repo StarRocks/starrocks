@@ -326,6 +326,14 @@ public class Dictionary implements Writable {
         this.setErrorMsg("");
     }
 
+    public synchronized void setRefreshing(long ts) {
+        this.stateBeforeRefresh = this.state;
+        this.state = DictionaryState.REFRESHING;
+        this.lastSuccessRefreshTime = ts;
+        this.nextSchedulableTime.set(ts + refreshInterval);
+        this.setErrorMsg("");
+    }
+
     public synchronized void setCommitting() {
         this.state = DictionaryState.COMMITTING;
         this.stateBeforeRefresh = null;
@@ -335,6 +343,13 @@ public class Dictionary implements Writable {
         this.state = DictionaryState.FINISHED;
         this.lastSuccessFinishedTime = System.currentTimeMillis();
         this.stateBeforeRefresh = null;
+    }
+
+    public synchronized void setFinished(long ts, long version) {
+        this.state = DictionaryState.FINISHED;
+        this.lastSuccessFinishedTime = ts;
+        this.stateBeforeRefresh = null;
+        this.lastSuccessVersion = version;
     }
 
     public synchronized void setCancelled() {

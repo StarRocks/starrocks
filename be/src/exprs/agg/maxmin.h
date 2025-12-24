@@ -49,7 +49,7 @@ struct MaxAggregateData<LT, StringLTGuard<LT>> {
 
     bool has_value() const { return _size > -1; }
 
-    Slice slice() const { return {_buffer.data(), (size_t)_size}; }
+    Slice slice() const { return {_buffer.data(), _size > -1 ? (size_t)_size : 0}; }
 
     void reset() {
         _buffer.clear();
@@ -83,7 +83,7 @@ struct MinAggregateData<LT, StringLTGuard<LT>> {
 
     bool has_value() const { return _size > -1; }
 
-    Slice slice() const { return {_buffer.data(), (size_t)_size}; }
+    Slice slice() const { return {_buffer.data(), _size > -1 ? (size_t)_size : 0}; }
 
     void reset() {
         _buffer.clear();

@@ -55,4 +55,41 @@ public class PRangeCellPlusTest {
         Assertions.assertEquals(1, cell4.compareTo(cell6));
         Assertions.assertEquals(1, cell5.compareTo(cell6));
     }
+
+    @Test
+    public void testPCellCacheKeyEqualsAndHashCode() throws Exception {
+        final String partitionName = "p1";
+        final PartitionKey key1 = PartitionKey.ofDateTime(LocalDateTime.of(2025, 5, 27, 10, 0, 0));
+        final PartitionKey key2 = PartitionKey.ofDateTime(LocalDateTime.of(2025, 5, 27, 11, 0, 0));
+
+        Range<PartitionKey> r1 = Range.closed(key1, key2);
+        PRangeCellPlus pcell = new PRangeCellPlus(partitionName, new PRangeCell(r1));
+        PRangeCellPlus samePCell = new PRangeCellPlus(partitionName, new PRangeCell(r1));
+        PRangeCellPlus differentPCell = new PRangeCellPlus("p2", new PRangeCell(r1));
+
+        PRangeCellPlus.PCellCacheKey keyA = new PRangeCellPlus.PCellCacheKey(null, pcell);
+        PRangeCellPlus.PCellCacheKey keyB = new PRangeCellPlus.PCellCacheKey(null, samePCell);
+        PRangeCellPlus.PCellCacheKey keyC = new PRangeCellPlus.PCellCacheKey(null, differentPCell);
+
+        Assertions.assertEquals(keyA, keyA);
+        Assertions.assertEquals(keyA, keyB);
+        Assertions.assertEquals(keyA.hashCode(), keyB.hashCode());
+        Assertions.assertNotEquals(keyA, keyC);
+    }
+
+    @Test
+    public void testPCellCacheKeyNotEqual() throws Exception {
+        final String partitionName = "p1";
+        final PartitionKey key1 = PartitionKey.ofDateTime(LocalDateTime.of(2025, 5, 27, 10, 0, 0));
+        final PartitionKey key2 = PartitionKey.ofDateTime(LocalDateTime.of(2025, 5, 27, 11, 0, 0));
+
+        Range<PartitionKey> r1 = Range.closed(key1, key2);
+        PRangeCellPlus pcell1 = new PRangeCellPlus(partitionName, new PRangeCell(r1));
+        PRangeCellPlus pcell2 = new PRangeCellPlus("p2", new PRangeCell(r1));
+
+        PRangeCellPlus.PCellCacheKey keyNull = new PRangeCellPlus.PCellCacheKey(null, pcell1);
+        PRangeCellPlus.PCellCacheKey keyOtherPCell = new PRangeCellPlus.PCellCacheKey(null, pcell2);
+
+        Assertions.assertNotEquals(keyNull, keyOtherPCell);
+    }
 }

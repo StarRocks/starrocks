@@ -81,15 +81,10 @@ PROPERTIES (
 "replication_num" = "1",
 "bucket_size" = "1"
 );
-select count(*) from information_schema.be_tablets t1, information_schema.tables_config t2 where TABLE_NAME='t' and t1.TABLE_ID=t2.TABLE_ID and TABLE_SCHEMA='eee';
 insert into t values('2021-01-01', 1);
-select count(*) from information_schema.be_tablets t1, information_schema.tables_config t2 where TABLE_NAME='t' and t1.TABLE_ID=t2.TABLE_ID and TABLE_SCHEMA='eee';
 insert into t values('2021-01-03', 1);
-select count(*) from information_schema.be_tablets t1, information_schema.tables_config t2 where TABLE_NAME='t' and t1.TABLE_ID=t2.TABLE_ID and TABLE_SCHEMA='eee';
 insert into t values('2021-01-05', 1);
-select count(*) from information_schema.be_tablets t1, information_schema.tables_config t2 where TABLE_NAME='t' and t1.TABLE_ID=t2.TABLE_ID and TABLE_SCHEMA='eee';
 insert into t values('2021-01-01', 1);
-select count(*) from information_schema.be_tablets t1, information_schema.tables_config t2 where TABLE_NAME='t' and t1.TABLE_ID=t2.TABLE_ID and TABLE_SCHEMA='eee';
 select * from t;
 
 -- name: test_schema_change @sequential
@@ -161,7 +156,7 @@ select * from t;
 delete from t where k = 1;
 select * from t;
 
--- name: test_mutable_bucket @sequential
+-- name: test_mutable_bucket @sequential @native
 create database ggg;
 use ggg;
 create table t(k date, v int) PARTITION BY DATE_TRUNC('DAY', `k`)

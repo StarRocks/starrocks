@@ -135,4 +135,9 @@ public class DefaultWarehouse extends Warehouse {
     public long getResumeTime() {
         return -1L;
     }
+
+    @Override
+    public boolean isAvailable() {
+        return true;
+    }
 }

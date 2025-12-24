@@ -47,6 +47,7 @@ public class MVPCTRefreshRangePartitionerTest {
         when(mv.getPartitionInfo()).thenReturn(mock(PartitionInfo.class));
 
         OlapTable refTable1 = Mockito.mock(OlapTable.class);
+        Mockito.when(refTable1.isNativeTableOrMaterializedView()).thenReturn(true);
         Set<String> refTablePartition1 = Set.of("partition1", "partition2");
         Map<Table, Set<String>> ref1 = new HashMap<>();
         ref1.put(refTable1, refTablePartition1);

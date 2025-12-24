@@ -1254,6 +1254,11 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         analyzePartitionInfo();
         // analyze mv partition exprs
         analyzePartitionExprs();
+
+        if (tableProperty != null) {
+            tableProperty.buildConstraint();
+        }
+        
         // register constraints from global state manager
         GlobalConstraintManager globalConstraintManager = GlobalStateMgr.getCurrentState().getGlobalConstraintManager();
         globalConstraintManager.registerConstraint(this);

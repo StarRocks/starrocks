@@ -23,6 +23,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.mv.MVTimelinessArbiter;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
@@ -41,8 +42,8 @@ import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVPrepare;
 public final class ListPartitionDiffer extends PartitionDiffer {
     private static final Logger LOG = LogManager.getLogger(ListPartitionDiffer.class);
 
-    public ListPartitionDiffer(MaterializedView mv, boolean isQueryRewrite) {
-        super(mv, isQueryRewrite);
+    public ListPartitionDiffer(MaterializedView mv, MVTimelinessArbiter.QueryRewriteParams queryRewriteParams) {
+        super(mv, queryRewriteParams);
     }
 
     /**
@@ -173,8 +174,8 @@ public final class ListPartitionDiffer extends PartitionDiffer {
         return result;
     }
 
-    public static Map<String, Set<String>> generateBaseRefMapImpl(Map<PListAtom, Set<PListCellPlus>> mvPartitionMap,
-                                                                  Map<String, PCell> baseTablePartitionMap) {
+    public Map<String, Set<String>> generateBaseRefMapImpl(Map<PListAtom, Set<PListCellPlus>> mvPartitionMap,
+                                                           Map<String, PCell> baseTablePartitionMap) {
         if (mvPartitionMap.isEmpty()) {
             return Maps.newHashMap();
         }
@@ -182,6 +183,9 @@ public final class ListPartitionDiffer extends PartitionDiffer {
         Map<PListAtom, Set<PListCellPlus>> baseAtoms = toAtoms(baseTablePartitionMap);
         Map<String, Set<String>> result = Maps.newHashMap();
         for (Map.Entry<PListAtom, Set<PListCellPlus>> e : baseAtoms.entrySet()) {
+            // check query rewrite exhausted
+            queryRewriteParams.checkQueryRewriteExhausted();
+
             // once base table's singleton is found in mv, add the partition name of mv into result
             PListAtom baseAtom = e.getKey();
             if (mvPartitionMap.containsKey(baseAtom)) {
@@ -272,7 +276,7 @@ public final class ListPartitionDiffer extends PartitionDiffer {
 
         // collect external partition column mapping
         Map<Table, Map<String, Set<String>>> externalPartitionMaps = Maps.newHashMap();
-        if (!isQueryRewrite) {
+        if (!queryRewriteParams.isQueryRewrite()) {
             try {
                 collectExternalPartitionNameMapping(mv.getRefBaseTablePartitionColumns(), externalPartitionMaps);
             } catch (Exception e) {
@@ -320,6 +324,9 @@ public final class ListPartitionDiffer extends PartitionDiffer {
             Map<String, PCell> basePartitionMap = entry.getValue();
             Map<PListAtom, Set<PListCellPlus>> baseAtoms = toAtoms(basePartitionMap);
             for (Map.Entry<PListAtom, Set<PListCellPlus>> e : baseAtoms.entrySet()) {
+                // check query rewrite exhausted
+                queryRewriteParams.checkQueryRewriteExhausted();
+
                 PListAtom singleton = e.getKey();
                 Set<PListCellPlus> baseCellPluses = e.getValue();
                 if (mvAtoms.containsKey(singleton)) {

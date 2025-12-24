@@ -588,6 +588,9 @@ public class OperationType {
     public static final short OP_CREATE_DICTIONARY = 13400;
 
     @IgnorableOnReplayFailed
+    public static final short OP_MODIFY_DICTIONARY_MGR_V2 = 13403;
+
+    @IgnorableOnReplayFailed
     public static final short OP_DROP_DICTIONARY = 13401;
 
     @IgnorableOnReplayFailed

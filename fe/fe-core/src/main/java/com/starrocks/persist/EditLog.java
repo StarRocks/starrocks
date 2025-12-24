@@ -1147,6 +1147,11 @@ public class EditLog {
                     globalStateMgr.getDictionaryMgr().replayModifyDictionaryMgr(modifyInfo);
                     break;
                 }
+                case OperationType.OP_MODIFY_DICTIONARY_MGR_V2: {
+                    UpdateDictionaryMgrLog updateDictionaryMgrLog = (UpdateDictionaryMgrLog) journal.data();
+                    globalStateMgr.getDictionaryMgr().replayModifyDictionaryMgr(updateDictionaryMgrLog);
+                    break;
+                }
                 case OperationType.OP_DECOMMISSION_DISK: {
                     DecommissionDiskInfo info = (DecommissionDiskInfo) journal.data();
                     globalStateMgr.getNodeMgr().getClusterInfo().replayDecommissionDisks(info);

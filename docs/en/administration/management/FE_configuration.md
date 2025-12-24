@@ -459,6 +459,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: The IP address of the FE node.
 - Introduced in: -
 
+##### dns_cache_ttl_seconds
+
+- Default: 60
+- Type: Int
+- Unit: Seconds
+- Is mutable: No
+- Description: DNS cache TTL (Time-To-Live) in seconds for successful DNS lookups. This sets the Java security property `networkaddress.cache.ttl` which controls how long the JVM caches successful DNS lookups. Set to -1 to cache forever, or 0 to disable caching. This is particularly useful in environments where IP addresses change frequently, such as Kubernetes deployments or when using dynamic DNS. This is a static configuration and requires FE restart to take effect.
+- Introduced in: v3.5.11, v4.0.4
+
 ##### priority_networks
 
 - Default: Empty string
@@ -1669,6 +1678,15 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
   :::
 
 - Introduced in: v3.1
+
+##### enable_statistic_collect_on_update
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Controls whether UPDATE statements can trigger automatic statistics collection. When enabled, UPDATE operations that modify table data may schedule statistics collection through the same ingestion-based statistics framework controlled by `enable_statistic_collect_on_first_load`. Disabling this configuration skips statistics collection for UPDATE statements while keeping load-triggered statistics collection behavior unchanged.
+- Introduced in: v3.5.11, v4.0.4
 
 ##### semi_sync_collect_statistic_await_seconds
 

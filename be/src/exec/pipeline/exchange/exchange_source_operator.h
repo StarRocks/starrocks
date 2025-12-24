@@ -31,6 +31,8 @@ public:
 
     Status prepare(RuntimeState* state) override;
 
+    Status prepare_local_state(RuntimeState* state) override;
+
     bool has_output() const override;
 
     bool is_finished() const override;

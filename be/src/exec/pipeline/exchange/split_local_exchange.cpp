@@ -167,4 +167,9 @@ void SplitLocalExchanger::close_sink_operator() {
     _opened_sink_number--;
 }
 
+bool SplitLocalExchanger::is_all_sources_finished() const {
+    std::unique_lock l(_mutex);
+    return _opened_source_number == 0;
+}
+
 } // namespace starrocks::pipeline

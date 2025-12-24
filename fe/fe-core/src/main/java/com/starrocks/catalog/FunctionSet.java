@@ -369,6 +369,7 @@ public class FunctionSet {
     public static final String ARRAY_MIN = "array_min";
     public static final String ARRAY_POSITION = "array_position";
     public static final String ARRAY_SORT = "array_sort";
+    public static final String ARRAY_SORT_LAMBDA = "array_sort_lambda";
     public static final String ARRAY_SUM = "array_sum";
     public static final String ARRAY_REMOVE = "array_remove";
     public static final String ARRAY_FILTER = "array_filter";
@@ -1107,7 +1108,7 @@ public class FunctionSet {
 
         addBuiltin(AggregateFunction.createBuiltin(ARRAY_AGG,
                 Lists.newArrayList(Type.ANY_ELEMENT), Type.ANY_ARRAY, Type.ANY_STRUCT, true,
-                true, false, false));
+                true, true, false));
 
         addBuiltin(AggregateFunction.createBuiltin(GROUP_CONCAT,
                 Lists.newArrayList(Type.ANY_ELEMENT), Type.VARCHAR, Type.ANY_STRUCT, true,
@@ -1548,24 +1549,24 @@ public class FunctionSet {
             Type arrayType = new ArrayType(type);
             addBuiltin(AggregateFunction.createBuiltin(FunctionSet.ARRAY_AGG_DISTINCT,
                     Lists.newArrayList(type), arrayType, arrayType,
-                    false, false, false));
+                    false, true, false));
         }
         for (ScalarType type : Type.STRING_TYPES) {
             Type arrayType = new ArrayType(type);
             addBuiltin(AggregateFunction.createBuiltin(FunctionSet.ARRAY_AGG_DISTINCT,
                     Lists.newArrayList(type), arrayType, arrayType,
-                    false, false, false));
+                    false, true, false));
         }
 
         for (ScalarType type : Type.DATE_TYPES) {
             Type arrayType = new ArrayType(type);
             addBuiltin(AggregateFunction.createBuiltin(FunctionSet.ARRAY_AGG_DISTINCT,
                     Lists.newArrayList(type), arrayType, arrayType,
-                    false, false, false));
+                    false, true, false));
         }
         addBuiltin(AggregateFunction.createBuiltin(FunctionSet.ARRAY_AGG_DISTINCT,
                 Lists.newArrayList(Type.TIME), Type.ARRAY_DATETIME, Type.ARRAY_DATETIME,
-                false, false, false));
+                false, true, false));
     }
 
     private void registerBuiltinMapAggFunction() {

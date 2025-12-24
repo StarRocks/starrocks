@@ -207,9 +207,12 @@ public class DateLiteral extends LiteralExpr {
     public boolean isMinValue() {
         switch (type.getPrimitiveType()) {
             case DATE:
-                return this.getStringValue().compareTo(MIN_DATE.getStringValue()) == 0;
+                return this.year == MIN_DATE.year && this.month == MIN_DATE.month && this.day == MIN_DATE.day;
             case DATETIME:
-                return this.getStringValue().compareTo(MIN_DATETIME.getStringValue()) == 0;
+                return this.year == MIN_DATETIME.year && this.month == MIN_DATETIME.month
+                        && this.day == MIN_DATETIME.day && this.hour == MIN_DATETIME.hour
+                        && this.minute == MIN_DATETIME.minute && this.second == MIN_DATETIME.second
+                        && this.microsecond == MIN_DATETIME.microsecond;
             default:
                 return false;
         }

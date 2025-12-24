@@ -827,6 +827,8 @@ public:
 
     void test_force_dump();
 
+    bool need_rebuild() const { return _need_rebuild; }
+
 protected:
     Status _delete_expired_index_file(const EditVersion& l0_version, const EditVersion& l1_version,
                                       const EditVersionWithMerge& min_l2_version);
@@ -905,6 +907,8 @@ private:
 
     size_t _get_encoded_fixed_size(const Schema& schema);
 
+    void _set_need_rebuild(bool need_rebuild) { _need_rebuild = need_rebuild; }
+
 protected:
     // index storage directory
     std::string _path;
@@ -951,6 +955,8 @@ private:
     int64_t _latest_compaction_time = 0;
     // Re-calculated when commit end
     std::atomic<size_t> _memory_usage{0};
+
+    std::atomic<bool> _need_rebuild{false};
 };
 
 } // namespace starrocks

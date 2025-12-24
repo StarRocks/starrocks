@@ -41,7 +41,6 @@ import com.starrocks.planner.ResultSink;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
-import com.starrocks.service.arrow.flight.sql.ArrowFlightSqlConnectContext;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.Authorizer;
@@ -102,7 +101,7 @@ public class StatementPlanner {
     public static ExecPlan plan(StatementBase stmt, ConnectContext session) {
         if (session instanceof HttpConnectContext) {
             return plan(stmt, session, TResultSinkType.HTTP_PROTOCAL);
-        } else if (session instanceof ArrowFlightSqlConnectContext) {
+        } else if (session.isArrowFlightSql()) {
             return plan(stmt, session, TResultSinkType.ARROW_FLIGHT_PROTOCAL);
         }
 
@@ -372,53 +371,60 @@ public class StatementPlanner {
                 isSchemaValid = true;
             }
 
-            LogicalPlan logicalPlan;
-            MVTransformerContext mvTransformerContext = MVTransformerContext.of(session, true);
-            try (Timer ignored = Tracers.watchScope("Transformer")) {
-                // get a logicalPlan without inlining views
-                TransformerContext transformerContext = new TransformerContext(columnRefFactory, session, mvTransformerContext);
-                logicalPlan = new RelationTransformer(transformerContext).transformWithSelectLimit(query);
-            }
-
-            boolean isShortCircuit = ShortCircuitPlanner.checkSupportShortCircuitRead(logicalPlan.getRoot(), session);
-            OptExpression optimizedPlan;
-            try (Timer ignored = Tracers.watchScope("Optimizer")) {
-                OptimizerContext optimizerContext = OptimizerFactory.initContext(session, columnRefFactory);
-                // 2. Optimize logical plan and build physical plan
-                // FIXME: refactor this into Optimizer.optimize() method.
-                // set query tables into OptimizeContext so can be added for mv rewrite
-                if (Config.skip_whole_phase_lock_mv_limit >= 0) {
-                    optimizerContext.setQueryTables(olapTables);
+            try {
+                LogicalPlan logicalPlan;
+                MVTransformerContext mvTransformerContext = MVTransformerContext.of(session, true);
+                try (Timer ignored = Tracers.watchScope("Transformer")) {
+                    // get a logicalPlan without inlining views
+                    TransformerContext transformerContext =
+                            new TransformerContext(columnRefFactory, session, mvTransformerContext);
+                    logicalPlan = new RelationTransformer(transformerContext).transformWithSelectLimit(query);
                 }
 
-                if (isShortCircuit) {
-                    optimizerContext.setOptimizerOptions(OptimizerOptions.newShortCircuitOpt());
+                boolean isShortCircuit =
+                        ShortCircuitPlanner.checkSupportShortCircuitRead(logicalPlan.getRoot(), session);
+                OptExpression optimizedPlan;
+                try (Timer ignored = Tracers.watchScope("Optimizer")) {
+                    OptimizerContext optimizerContext = OptimizerFactory.initContext(session, columnRefFactory);
+                    // 2. Optimize logical plan and build physical plan
+                    // FIXME: refactor this into Optimizer.optimize() method.
+                    // set query tables into OptimizeContext so can be added for mv rewrite
+                    if (Config.skip_whole_phase_lock_mv_limit >= 0) {
+                        optimizerContext.setQueryTables(olapTables);
+                    }
+
+                    if (isShortCircuit) {
+                        optimizerContext.setOptimizerOptions(OptimizerOptions.newShortCircuitOpt());
+                    }
+                    optimizerContext.setMvTransformerContext(mvTransformerContext);
+                    optimizerContext.setStatement(queryStmt);
+                    optimizerContext.setSourceTablesCount(sourceTablesCount);
+
+                    Optimizer optimizer = OptimizerFactory.create(optimizerContext);
+                    optimizedPlan = optimizer.optimize(logicalPlan.getRoot(), new PhysicalPropertySet(),
+                            new ColumnRefSet(logicalPlan.getOutputColumn()));
                 }
-                optimizerContext.setMvTransformerContext(mvTransformerContext);
-                optimizerContext.setStatement(queryStmt);
-                optimizerContext.setSourceTablesCount(sourceTablesCount);
 
-                Optimizer optimizer = OptimizerFactory.create(optimizerContext);
-                optimizedPlan = optimizer.optimize(logicalPlan.getRoot(), new PhysicalPropertySet(),
-                        new ColumnRefSet(logicalPlan.getOutputColumn()));
-            }
-
-            try (Timer ignored = Tracers.watchScope("ExecPlanBuild")) {
-                // 3. Build fragment exec plan
-                // SingleNodeExecPlan is set in TableQueryPlanAction to generate a single-node Plan,
-                // currently only used in Spark/Flink Connector
-                // Because the connector sends only simple queries, it only needs to remove the output fragment
-                ExecPlan plan = PlanFragmentBuilder.createPhysicalPlan(
-                        optimizedPlan, session, logicalPlan.getOutputColumn(), columnRefFactory, colNames,
-                        resultSinkType,
-                        !session.getSessionVariable().isSingleNodeExecPlan(), isShortCircuit);
-                final long finalPlanStartTime = planStartTime;
-                isSchemaValid = olapTables.stream().allMatch(t -> OptimisticVersion.validateTableUpdate(t,
-                        finalPlanStartTime));
+                try (Timer ignored = Tracers.watchScope("ExecPlanBuild")) {
+                    // 3. Build fragment exec plan
+                    // SingleNodeExecPlan is set in TableQueryPlanAction to generate a single-node Plan,
+                    // currently only used in Spark/Flink Connector
+                    // Because the connector sends only simple queries, it only needs to remove the output fragment
+                    ExecPlan plan = PlanFragmentBuilder.createPhysicalPlan(
+                            optimizedPlan, session, logicalPlan.getOutputColumn(), columnRefFactory, colNames,
+                            resultSinkType,
+                            !session.getSessionVariable().isSingleNodeExecPlan(), isShortCircuit);
+                    isSchemaValid = checkOlapTableSchemaValid(olapTables, planStartTime);
+                    if (isSchemaValid) {
+                        plan.setLogicalPlan(logicalPlan);
+                        plan.setColumnRefFactory(columnRefFactory);
+                        return plan;
+                    }
+                }
+            } catch (RuntimeException exception) {
+                isSchemaValid = checkOlapTableSchemaValid(olapTables, planStartTime);
                 if (isSchemaValid) {
-                    plan.setLogicalPlan(logicalPlan);
-                    plan.setColumnRefFactory(columnRefFactory);
-                    return plan;
+                    throw exception;
                 }
             }
         }
@@ -431,6 +437,10 @@ public class StatementPlanner {
 
         throw new StarRocksPlannerException(ErrorType.INTERNAL_ERROR,
                 "schema of %s had been updated frequently during the plan generation", updatedTables);
+    }
+
+    private static boolean checkOlapTableSchemaValid(Set<OlapTable> olapTables, long planStartTime) {
+        return olapTables.stream().allMatch(t -> OptimisticVersion.validateTableUpdate(t, planStartTime));
     }
 
     public static Set<OlapTable> collectOriginalOlapTables(ConnectContext session, StatementBase queryStmt) {

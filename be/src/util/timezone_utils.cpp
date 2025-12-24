@@ -67,7 +67,7 @@ void TimezoneUtils::init_time_zones() {
         if (cctz::load_time_zone(timezone, &ctz)) {
             _s_cached_timezone.emplace(timezone, ctz);
         } else {
-            LOG(WARNING) << "not found timezone:" << timezone;
+            VLOG(1) << "not found timezone:" << timezone;
         }
     }
     auto civil = cctz::civil_second(2021, 12, 1, 8, 30, 1);
@@ -90,7 +90,7 @@ void TimezoneUtils::init_time_zones() {
         if (cctz::load_time_zone(timezone, &ctz)) {
             _s_cached_timezone.emplace(timezone, ctz);
         } else {
-            LOG(WARNING) << "not found timezone:" << timezone;
+            VLOG(1) << "not found timezone:" << timezone;
         }
     }
 }

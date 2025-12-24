@@ -124,7 +124,6 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
-import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
@@ -353,12 +352,12 @@ public class PlanFragmentBuilder {
         // We shouldn't set result sink directly to top fragment, because we will hash multi result sink.
         // Note: If enable compute node and the top fragment not GATHER node, the parallelism of top fragment can't
         // be 1, it's error
-        if ((!enableComputeNode(execPlan)
-                && !inputFragment.hashLocalBucketShuffleRightOrFullJoin(inputFragment.getPlanRoot())
+        if ((!inputFragment.hashLocalBucketShuffleRightOrFullJoin(inputFragment.getPlanRoot())
                 && execPlan.getScanNodes().stream().allMatch(d -> d instanceof OlapScanNode)
                 && (execPlan.getScanNodes().stream().map(d -> ((OlapScanNode) d).getScanTabletIds().size())
                 .reduce(Integer::sum).orElse(2) <= 1)) || execPlan.isShortCircuit()) {
             inputFragment.setOutputExprs(outputExprs);
+            inputFragment.setSingleTabletGatherOutputFragment(true);
             return;
         }
 
@@ -371,14 +370,6 @@ public class PlanFragmentBuilder {
 
         exchangeFragment.setOutputExprs(outputExprs);
         execPlan.getFragments().add(exchangeFragment);
-    }
-
-    private static boolean enableComputeNode(ExecPlan execPlan) {
-        boolean preferComputeNode = execPlan.getConnectContext().getSessionVariable().isPreferComputeNode();
-        if (preferComputeNode || RunMode.isSharedDataMode()) {
-            return true;
-        }
-        return false;
     }
 
     private static boolean useQueryCache(ExecPlan execPlan) {
@@ -934,7 +925,7 @@ public class PlanFragmentBuilder {
             tupleDescriptor.setTable(referenceTable);
 
             OlapScanNode scanNode = new OlapScanNode(context.getNextNodeId(), tupleDescriptor, "OlapScanNode",
-                    context.getConnectContext().getCurrentComputeResource());
+                    node.getSelectedIndexId(), context.getConnectContext().getCurrentComputeResource());
             scanNode.setLimit(node.getLimit());
             scanNode.computeStatistics(optExpr.getStatistics());
             scanNode.setScanOptimizeOption(node.getScanOptimizeOption());
@@ -949,8 +940,7 @@ public class PlanFragmentBuilder {
             try {
                 scanNode.updateScanInfo(node.getSelectedPartitionId(),
                         node.getSelectedTabletId(),
-                        node.getHintsReplicaId(),
-                        node.getSelectedIndexId());
+                        node.getHintsReplicaId());
                 long selectedIndexId = node.getSelectedIndexId();
                 long totalTabletsNum = 0;
                 // Compatible with old tablet selected, copy from "OlapScanNode::computeTabletInfo"
@@ -1098,7 +1088,7 @@ public class PlanFragmentBuilder {
                     ConnectContext.get().getCurrentComputeResource() : WarehouseManager.DEFAULT_RESOURCE;
 
             MetaScanNode scanNode = new MetaScanNode(context.getNextNodeId(),
-                    tupleDescriptor, (OlapTable) scan.getTable(), scan.getAggColumnIdToNames(),
+                    tupleDescriptor, (OlapTable) scan.getTable(), scan.getAggColumnIdToColumns(),
                     scan.getSelectPartitionNames(), scan.getSelectedIndexId(),
                     context.getConnectContext().getCurrentComputeResource());
 
@@ -2496,9 +2486,14 @@ public class PlanFragmentBuilder {
                     replaceExpr.setType(functionCallExpr.getType());
                 } else if (functionName.equals(FunctionSet.ARRAY_AGG)) {
                     replaceExpr = new FunctionCallExpr(FunctionSet.ARRAY_AGG_DISTINCT, functionCallExpr.getParams());
-                    replaceExpr.setFn(Expr.getBuiltinFunction(FunctionSet.ARRAY_AGG_DISTINCT,
-                            functionCallExpr.getFn().getArgs(),
-                            IS_NONSTRICT_SUPERTYPE_OF));
+                    AggregateFunction fn =
+                            (AggregateFunction) Expr.getBuiltinFunction(FunctionSet.ARRAY_AGG_DISTINCT,
+                                    functionCallExpr.getFn().getArgs(),
+                                    IS_NONSTRICT_SUPERTYPE_OF);
+                    fn = DecimalV3FunctionAnalyzer.rectifyAggregationFunction(
+                            fn, functionCallExpr.getFn().getArgs()[0], functionCallExpr.getFn().getReturnType());
+
+                    replaceExpr.setFn(fn);
                     replaceExpr.getParams().setIsDistinct(false);
                     replaceExpr.setType(functionCallExpr.getType());
                 }
@@ -2544,16 +2539,26 @@ public class PlanFragmentBuilder {
             return fragment;
         }
 
+        private int calcParallelMergeInputRowsThreshold() {
+            ConnectContext connectContext = ConnectContext.get();
+            if (connectContext == null) {
+                return -1;
+            }
+
+            SessionVariable sv = connectContext.getSessionVariable();
+            if (!sv.isEnableParallelMerge()) {
+                return -1;
+            }
+
+            return sv.getDegreeOfParallelism(connectContext.getCurrentWarehouseId()) * sv.getChunkSize();
+        }
+
         private boolean isUseParallelMerge(OptExpression optExpr, long limit, long offset) {
             long inputRowCount = Optional.ofNullable(optExpr.inputAt(0).getStatistics())
                     .map(stat -> (long) stat.getOutputRowCount()).orElse(-1L);
 
             long topN = limit == Operator.DEFAULT_LIMIT ? Operator.DEFAULT_LIMIT : limit + offset;
-            int parallelMergeInputRowsThreshold = Optional.ofNullable(ConnectContext.get())
-                    .map(ConnectContext::getSessionVariable)
-                    .map(sv ->
-                            sv.isEnableParallelMerge() ? sv.getDegreeOfParallelism() * sv.getChunkSize() : -1
-                    ).orElse(-1);
+            int parallelMergeInputRowsThreshold = calcParallelMergeInputRowsThreshold();
             // this threshold == -1 indidcates that enable_parallel_merge is off
             if (parallelMergeInputRowsThreshold == -1) {
                 return false;
@@ -3165,9 +3170,28 @@ public class PlanFragmentBuilder {
                         new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr()));
                 // if local partition topn can preAgg, then it's output is binary format
                 // which means analytic node should call function's merge method instead of update
+                FunctionCallExpr call = (FunctionCallExpr) analyticFunction;
                 if (node.isInputIsBinary()) {
-                    ((FunctionCallExpr) analyticFunction).setMergeAggFn();
+                    call.setMergeAggFn();
                 }
+
+                // Only boolean/numeric/string type can be optimized via array_agg_distinct
+                if (call.isDistinct() && call.getFnName().getFunction().equals(FunctionSet.ARRAY_AGG) &&
+                        call.getParams().exprs().size() == 1 && (
+                        call.getFn().getArgs()[0].isNumericType() || call.getFn().getArgs()[0].isStringType() ||
+                                call.getFn().getArgs()[0].isBoolean())) {
+                    FunctionCallExpr newCall = new FunctionCallExpr(FunctionSet.ARRAY_AGG_DISTINCT, call.getParams());
+                    AggregateFunction fn =
+                            (AggregateFunction) Expr.getBuiltinFunction(FunctionSet.ARRAY_AGG_DISTINCT,
+                                    call.getFn().getArgs(), IS_NONSTRICT_SUPERTYPE_OF);
+                    fn = DecimalV3FunctionAnalyzer.rectifyAggregationFunction(
+                            fn, call.getFn().getArgs()[0], call.getFn().getReturnType());
+                    newCall.setFn(fn);
+                    newCall.getParams().setIsDistinct(false);
+                    newCall.setType(call.getType());
+                    analyticFunction = newCall;
+                }
+
                 analyticFnCalls.add(analyticFunction);
 
                 SlotDescriptor slotDesc = context.getDescTbl()
@@ -4133,7 +4157,8 @@ public class PlanFragmentBuilder {
                         INTERNAL_ERROR);
             }
 
-            int dop = ConnectContext.get().getSessionVariable().getSinkDegreeOfParallelism();
+            ConnectContext connectContext = ConnectContext.get();
+            int dop = connectContext.getSessionVariable().getSinkDegreeOfParallelism(connectContext.getCurrentWarehouseId());
             scanNode.setLoadInfo(-1, -1, table, new BrokerDesc(table.getProperties()), fileGroups, table.isStrictMode(), dop);
             scanNode.setUseVectorizedLoad(true);
             scanNode.setFlexibleColumnMapping(table.isFlexibleColumnMapping());

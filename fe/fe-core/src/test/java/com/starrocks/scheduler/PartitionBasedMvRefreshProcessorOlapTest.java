@@ -29,6 +29,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.io.DeepCopy;
 import com.starrocks.common.util.DebugUtil;
+import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
@@ -1066,6 +1067,8 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
         TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
         initAndExecuteTaskRun(taskRun);
 
+        materializedView.getTableProperty().getProperties()
+                .put(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER, "1");
         materializedView.getTableProperty().setPartitionRefreshNumber(1);
 
         PartitionBasedMvRefreshProcessor processor = createProcessor(taskRun, materializedView);

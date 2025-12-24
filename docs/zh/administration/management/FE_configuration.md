@@ -1662,6 +1662,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 - 引入版本：v3.1
 
+##### enable_statistic_collect_on_update
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：控制 UPDATE 语句是否可以触发自动统计信息采集。启用时，修改表数据的 UPDATE 操作可以通过由 `enable_statistic_collect_on_first_load` 控制的基于导入的统计信息框架来调度统计信息采集。禁用此配置将跳过 UPDATE 语句的统计信息采集，同时保持由导入触发的统计信息采集行为不变。
+- 引入版本：v3.5.11, v4.0.4
+
 ##### semi_sync_collect_statistic_await_seconds
 
 - 默认值：30
@@ -3652,6 +3661,15 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - 是否动态：是
 - 描述：是否允许直接删除存算分离集群元数据，不清理远程存储上对应的数据。建议只在存算分离集群中待清理 Shard 数量过多，导致 FE 节点 JVM 内存压力过大的情况下将此项设为 `true`。注意，开启此功能会导致元数据被清理的 Shard 对应在远程存储上的数据文件无法被自动清理。
 - 引入版本：v3.2.10, v3.3.3
+
+##### lake_enable_batch_publish_version
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：当启用时，PublishVersionDaemon 会在存算分离模式（RunMode 为 shared_data）下，将同一Lake表/分区的待发布事务批量收集并一次性发布版本，而不是逐事务发布。它通过调用 `getReadyPublishTransactionsBatch()` 并使用 `publishVersionForLakeTableBatch(...)` 执行分组发布，以减少 RPC 次数并提升吞吐。如果关闭，则退回到 `publishVersionForLakeTable(...)` 的逐事务发布。实现内部使用集合协调在途任务以避免开关切换时的重复发布，线程池规模受 `lake_publish_version_max_threads` 影响。
+- 引入版本：v3.2.0
 
 ### 其他
 

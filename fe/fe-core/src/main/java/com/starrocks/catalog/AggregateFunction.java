@@ -221,6 +221,7 @@ public class AggregateFunction extends Function {
         newFn.setId(this.getId());
         newFn.setUserVisible(this.isUserVisible());
         newFn.setAggStateDesc(this.getAggStateDesc());
+        newFn.setisAnalyticFn(this.isAnalyticFn());
         return newFn;
     }
 

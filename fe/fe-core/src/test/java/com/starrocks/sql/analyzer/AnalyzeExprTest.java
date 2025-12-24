@@ -505,6 +505,87 @@ public class AnalyzeExprTest {
         analyzeFail("select array_sortby([map{'a':1, 'b':2, 'c':3}], " +
                 "[map{'a':1, 'b':2, 'c':3}], [map{'c':4, 'd':5, 'e':6}])");
     }
+    @Test
+    public void testArraySort() {
+        // Basic array_sort with lambda comparator
+        analyzeSuccess("select array_sort([1, 2, 3], (x, y) -> IF(x < y, 1, IF(x = y, 0, -1)))");
+        analyzeSuccess("select array_sort([3, 2, 5, 1, 2], (x, y) -> IF(x < y, 1, IF(x = y, 0, -1)))");
+        analyzeSuccess("select array_sort(['bc', 'ab', 'dc'], (x, y) -> IF(x < y, 1, IF(x = y, 0, -1)))");
+
+        // Empty arrays
+        analyzeSuccess("select array_sort([], (x, y) -> IF(x < y, -1, IF(x = y, 0, 1)))");
+        analyzeSuccess("select array_sort([], (x, y) -> 0)");
+
+        // Null arrays
+        analyzeSuccess("select array_sort(null, (x, y) -> 0)");
+        analyzeSuccess("select array_sort(null, (x, y) -> IF(x < y, -1, IF(x = y, 0, 1)))");
+
+        // Null handling in comparator
+        analyzeSuccess("select array_sort([3, 2, null, 5, null, 1, 2]," +
+                "  (x, y) -> CASE WHEN x IS NULL THEN -1" +
+                "               WHEN y IS NULL THEN 1" +
+                "               WHEN x < y THEN 1" +
+                "               WHEN x = y THEN 0" +
+                "               ELSE -1 END)");
+
+        // Sort with complex expressions
+        analyzeSuccess("select array_sort(['a', 'abcd', 'abc']," +
+                "  (x, y) -> IF(length(x) < length(y), -1," +
+                "               IF(length(x) = length(y), 0, 1)))");
+
+        // Sort nested arrays by cardinality
+        analyzeSuccess("select array_sort([[2, 3, 1], [4, 2, 1, 4], [1, 2]]," +
+                "  (x, y) -> IF(cardinality(x) < cardinality(y), -1," +
+                "               IF(cardinality(x) = cardinality(y), 0, 1)))");
+
+        // Ascending order
+        analyzeSuccess("select array_sort([3, 2, 5, 1, 2], (x, y) -> IF(x < y, -1, IF(x = y, 0, 1)))");
+
+        // Multiple parameter combinations
+        analyzeSuccess("select array_sort([1], (x, y) -> x - y)");
+        analyzeSuccess("select array_sort([null], (x, y) -> IF(x IS NULL, 0, 1))");
+
+        // With column reference
+        analyzeSuccess("select array_sort(v3, (x, y) -> IF(x < y, -1, IF(x = y, 0, 1))) from tarray");
+
+        // With array_agg
+        analyzeSuccess("select array_sort(array_agg(v1), (x, y) -> IF(x < y, -1, IF(x = y, 0, 1))) from tarray");
+
+        // Nested in other functions
+        analyzeSuccess("select array_length(array_sort([1, 2, 3], (x, y) -> 0))");
+        analyzeSuccess("select array_concat(array_sort([1, 2], (x, y) -> 0), [3, 4])");
+
+        // Multiple comparisons with captured variables
+        analyzeSuccess("select array_sort([1, 2, 3], (x, y) -> IF(x + v1 < y + v1, -1, 0)) from t0");
+
+        // Invalid comparator - not a lambda
+        analyzeFail("select array_sort([1, 2, 3], 1)");
+
+        // Wrong number of lambda parameters
+        analyzeFail("select array_sort([1, 2, 3], (x) -> x)");
+        analyzeFail("select array_sort([1, 2, 3], (x, y, z) -> x)");
+
+        // Undefined variable in comparator
+        analyzeFail("select array_sort([1, 2, 3], (x, y) -> z)");
+
+        // Wrong array type
+        analyzeFail("select array_sort('not_an_array', (x, y) -> 0)");
+        analyzeFail("select array_sort(123, (x, y) -> 0)");
+
+        // Duplicate parameter names
+        analyzeFail("select array_sort([1, 2, 3], (x, x) -> 0)");
+
+        // No parameters in lambda
+        analyzeFail("select array_sort([1, 2, 3], () -> 0)");
+    }
+
+    @Test
+    public void testArraySortLambdaDispatch() {
+        // Verify that array_sort with lambda is correctly dispatched to array_sort_lambda function
+        QueryStatement stmt = (QueryStatement) analyzeSuccess(
+                "select array_sort([3, 2, 5, 1, 2], (x, y) -> IF(x < y, 1, IF(x = y, 0, -1)))");
+
+    }
 
     @Test
     public void testAnalyseNullToBoolean() {

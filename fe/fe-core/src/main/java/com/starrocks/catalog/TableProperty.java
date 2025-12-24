@@ -969,12 +969,26 @@ public class TableProperty implements Writable, GsonPostProcessable {
         this.autoRefreshPartitionsLimit = autoRefreshPartitionsLimit;
     }
 
+    public boolean isSetPartitionRefreshNumber() {
+        return properties != null && properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER);
+    }
+
     public int getPartitionRefreshNumber() {
-        return partitionRefreshNumber;
+        if (isSetPartitionRefreshNumber()) {
+            return partitionRefreshNumber;
+        } else {
+            return Config.default_mv_partition_refresh_number;
+        }
+    }
+
+    public boolean isSetPartitionRefreshStrategy() {
+        return properties != null && properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_STRATEGY)
+                && !Strings.isNullOrEmpty(partitionRefreshStrategy);
     }
 
     public String getPartitionRefreshStrategy() {
-        return partitionRefreshStrategy;
+        return !isSetPartitionRefreshStrategy() ? Config.default_mv_partition_refresh_strategy
+                : partitionRefreshStrategy;
     }
 
     public void setPartitionRefreshNumber(int partitionRefreshNumber) {

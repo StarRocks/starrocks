@@ -317,6 +317,7 @@ set(EXEC_FILES
         ./storage/lake/lake_primary_key_consistency_test.cpp
         ./storage/lake/spill_mem_table_sink_test.cpp
         ./storage/lake/transactions_test.cpp
+        ./storage/lake/lake_meta_reader_test.cpp
         ./storage/load_spill_block_manager_test.cpp
         ./storage/rowset_update_state_test.cpp
         ./storage/rowset_column_update_state_test.cpp
@@ -411,6 +412,7 @@ set(EXEC_FILES
         ./storage/get_use_pk_index_test.cpp
         ./storage/persistent_index_consistency_test.cpp
         ./storage/meta_reader_test.cpp
+        ./storage/olap_meta_reader_test.cpp
         ./storage/dictionary_cache_manager_test.cpp
         ./storage/column_or_predicate_test.cpp
         ./storage/column_and_predicate_test.cpp
@@ -584,6 +586,8 @@ set(EXEC_FILES
         ./udf/java/java_udf_test.cpp
         ./util/table_metrics_mgr_test.cpp
         ./util/jvm_metrics_test.cpp
+        ./storage/lake/table_schema_service_test.cpp
+        ./storage/lake/fast_schema_evolution_v2_test.cpp    
         )
 
 if (${USE_AVX512})

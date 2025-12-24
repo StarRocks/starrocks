@@ -133,7 +133,7 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
                 List<TStatisticData> buckets = statisticExecutor.executeStatisticDQL(context, sql);
                 sql = buildCollectHistogramWithHllNdv(db, table, mostCommonValues, buckets.get(0).histogram, columnName);
             }
-            collectStatisticSync(sql, context);
+            collectStatisticSync(sql, context, analyzeStatus);
 
             finishedSQLNum++;
             analyzeStatus.setProgress(finishedSQLNum * 100 / totalCollectSQL);

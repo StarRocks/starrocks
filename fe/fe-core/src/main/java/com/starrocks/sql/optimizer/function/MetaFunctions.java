@@ -626,7 +626,7 @@ public class MetaFunctions {
         String column = columnName.getVarchar();
 
         CacheDictManager instance = CacheDictManager.getInstance();
-        Optional<ColumnDict> dict = instance.getGlobalDictSync(table.getId(), ColumnId.create(column));
+        Optional<ColumnDict> dict = instance.getGlobalDictSync(table, ColumnId.create(column));
         if (dict.isEmpty()) {
             return ConstantOperator.createNull(Type.VARCHAR);
         } else {

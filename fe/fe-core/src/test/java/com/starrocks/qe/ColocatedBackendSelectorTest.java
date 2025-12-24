@@ -19,8 +19,11 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.analysis.TupleId;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.HashDistributionInfo;
+import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Type;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.lake.qe.scheduler.DefaultSharedDataWorkerProvider;
 import com.starrocks.planner.OlapScanNode;
@@ -34,6 +37,7 @@ import com.starrocks.thrift.TInternalScanRange;
 import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
+import com.starrocks.thrift.TStorageType;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -291,10 +295,14 @@ public class ColocatedBackendSelectorTest {
     private OlapScanNode genOlapScanNode(int id, int numBuckets) {
         TupleDescriptor desc = new TupleDescriptor(new TupleId(0));
         OlapTable table = new OlapTable();
+        table.maySetDatabaseId(1L);
+        table.setBaseIndexId(1L);
+        table.setIndexMeta(1L, "base", Collections.singletonList(new Column("c0", Type.INT)),
+                0, 0, (short) 1, TStorageType.COLUMN, KeysType.DUP_KEYS);
         table.setDefaultDistributionInfo(new HashDistributionInfo(numBuckets, Collections.emptyList()));
         desc.setTable(table);
 
-        return new OlapScanNode(new PlanNodeId(id), desc, "OlapScanNode");
+        return new OlapScanNode(new PlanNodeId(id), desc, "OlapScanNode", table.getBaseIndexId());
     }
 
     private ArrayListMultimap<Integer, TScanRangeLocations> genBucketSeq2Locations(Map<Integer, List<Long>> bucketSeqToBackends,

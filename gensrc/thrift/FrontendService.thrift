@@ -840,7 +840,20 @@ struct TMasterOpRequest {
     37: optional i64 txn_id;
     38: optional bool isInternalStmt;
 
+    39: optional bool is_arrow_flight_sql;
+
     101: optional i64 warehouse_id    // begin from 101, in case of conflict with other's change
+}
+
+struct TNotifyForwardDeploymentFinishedRequest {
+    1: optional Types.TUniqueId query_id
+    2: optional Types.TUniqueId arrow_flight_sql_result_fragment_id;
+    3: optional i64 arrow_flight_sql_result_backend_id;
+    4: optional binary arrow_flight_sql_result_schema;
+}
+
+struct TNotifyForwardDeploymentFinishedRespone {
+    1: optional Status.TStatus status
 }
 
 struct TColumnDefinition {
@@ -2195,6 +2208,35 @@ struct TTabletReshardJobsResponse {
     2: optional list<TTabletReshardJobsItem> items;
 }
 
+enum TTableSchemaRequestSource {
+    SCAN = 0,
+    LOAD = 1
+}
+
+struct TGetTableSchemaRequest {
+    1: optional Descriptors.TTableSchemaKey schema_key;
+    2: optional TTableSchemaRequestSource source;
+    3: optional i64 tablet_id;
+    // Valid if request_source is SCAN
+    4: optional Types.TUniqueId query_id;
+    // Valid if request_source is LOAD
+    5: optional i64 txn_id;
+}
+
+struct TGetTableSchemaResponse {
+    1: optional Status.TStatus status;
+    2: optional AgentService.TTabletSchema schema;
+}
+
+struct TBatchGetTableSchemaRequest {
+    1: optional list<TGetTableSchemaRequest> requests;
+}
+
+struct TBatchGetTableSchemaResponse {
+    1: optional Status.TStatus status;
+    2: optional list<TGetTableSchemaResponse> responses;
+}
+
 service FrontendService {
     TGetDbsResult getDbNames(1:TGetDbsParams params)
     TGetTablesResult getTableNames(1:TGetTablesParams params)
@@ -2233,6 +2275,7 @@ service FrontendService {
 
     //NOTE: Do not add numbers to the parameters, otherwise it will cause compatibility problems
     TMasterOpResult forward(TMasterOpRequest params)
+    TNotifyForwardDeploymentFinishedRespone notifyForwardDeploymentFinished(TNotifyForwardDeploymentFinishedRequest request)
 
     TListTableStatusResult listTableStatus(1:TGetTablesParams params)
     TListMaterializedViewStatusResult listMaterializedViewStatus(1:TGetTablesParams params)
@@ -2339,5 +2382,7 @@ service FrontendService {
     TUpdateFailPointResponse updateFailPointStatus(1: TUpdateFailPointRequest request)
 
     TTabletReshardJobsResponse getTabletReshardJobsInfo(1: TTabletReshardJobsRequest request)
+
+    TBatchGetTableSchemaResponse getTableSchema(1: TBatchGetTableSchemaRequest request)
 }
 

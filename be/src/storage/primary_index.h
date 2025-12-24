@@ -53,6 +53,7 @@ public:
     //
     // [thread-safe]
     void unload();
+    void unload_without_lock();
 
     // Whether index is normally loaded
     bool is_loaded();
@@ -164,6 +165,8 @@ public:
         _loaded = loaded;
         _status = st;
     }
+
+    bool need_rebuild() const;
 
 protected:
     void _set_schema(const Schema& pk_schema);

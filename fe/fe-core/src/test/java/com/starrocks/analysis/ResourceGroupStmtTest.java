@@ -33,6 +33,7 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 import static com.starrocks.common.ErrorCode.ERROR_NO_RG_ERROR;
+import static com.starrocks.server.WarehouseManager.DEFAULT_WAREHOUSE_ID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -170,7 +171,7 @@ public class ResourceGroupStmtTest {
 
     @BeforeAll
     public static void setUp() throws Exception {
-        BackendResourceStat.getInstance().setNumHardwareCoresOfBe(1, 32);
+        BackendResourceStat.getInstance().setNumCoresOfBe(DEFAULT_WAREHOUSE_ID, 1, 32);
 
         UtFrameUtils.createMinStarRocksCluster();
         ConnectContext ctx = UtFrameUtils.createDefaultCtx();

@@ -6,6 +6,7 @@ keywords: ['iceberg']
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
 import QSTip from '../../../_assets/commonMarkdown/quickstart-iceberg-tip.mdx'
+import IcebergCatalogIcebergRestSecurityLink from '../../../_assets/commonMarkdown/iceberg_catalog_iceberg_rest_security_link.mdx'
 
 # Iceberg catalog
 
@@ -137,7 +138,7 @@ Iceberg catalog 的描述。此参数是可选的。
 
 关于 StarRocks 如何管理 Catalog 数据访问的参数。
 
-有关管理 Iceberg REST Catalog 数据访问的详细说明，请参阅[Iceberg REST Catalog 的安全设置](./iceberg_rest_security.md)。
+<IcebergCatalogIcebergRestSecurityLink />
 
 ##### catalog.access.control
 
@@ -1651,6 +1652,7 @@ CREATE VIEW [IF NOT EXISTS]
     [, <column_name>[ COMMENT 'column comment'], ...]
 )
 [COMMENT 'view comment']
+[PROPERTIES ("key" = "value", ...)]
 AS <query_statement>
 ```
 
@@ -1660,6 +1662,18 @@ AS <query_statement>
 
 ```SQL
 CREATE VIEW IF NOT EXISTS iceberg.iceberg_db.iceberg_view1 AS
+SELECT k1, k2 FROM iceberg.iceberg_db.iceberg_table;
+```
+
+自 v4.0.3 起，您可以在 `PROPERTIES` 中以 `"key" = "value"` 格式指定视图属性。
+
+```SQL
+CREATE VIEW IF NOT EXISTS iceberg.iceberg_db.iceberg_view1
+PROPERTIES (
+  "key1" = "value1",
+  "key2" = "value2"
+)
+AS
 SELECT k1, k2 FROM iceberg.iceberg_db.iceberg_table;
 ```
 
