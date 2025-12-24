@@ -139,6 +139,56 @@ struct VariantUtil {
     static std::string variant_type_to_string(VariantType type);
 };
 
+// Representing the details of a Variant of Object
+
+/**
+ *                5   4  3     2 1     0
+ *              +---+---+-------+-------+
+ * value_header |   |   |       |       |
+ *              +---+---+-------+-------+
+ *                    ^     ^       ^
+ *                    |     |       +-- field_offset_size_minus_one
+ *                    |     +-- field_id_size_minus_one
+ *                    +-- is_large
+ */
+
+struct VariantObjectInfo {
+    // Number of elements in the array or object
+    uint32_t num_elements;
+    // The byte offset of the field id
+    uint32_t id_start_offset;
+    // The number of bytes used to encode the field ids
+    uint8_t id_size;
+    // The number of bytes used to encode the field offsets
+    uint32_t offset_start_offset;
+    // The size of the field offset list
+    uint8_t offset_size;
+    // The byte offset of the field data
+    uint32_t data_start_offset;
+};
+
+// Representing the details of a Variant of Array
+
+/**
+ *                5         3  2  1     0
+ *               +-----------+---+-------+
+ * value_header  |           |   |       |
+ *               +-----------+---+-------+
+ *                             ^     ^
+ *                             |     +-- field_offset_size_minus_one
+ *                             +-- is_large
+ */
+struct VariantArrayInfo {
+    // Number of elements in the array
+    uint32_t num_elements;
+    // The size of the field offset list
+    uint8_t offset_size;
+    // The byte offset of the field offset list
+    uint32_t offset_start_offset;
+    // The byte offset of the field data
+    uint32_t data_start_offset;
+};
+
 class Variant {
 public:
     enum class BasicType { PRIMITIVE = 0, SHORT_STRING = 1, OBJECT = 2, ARRAY = 3 };
@@ -207,6 +257,10 @@ public:
     // returns the value of the field with the given field id
     StatusOr<Variant> get_element_at_index(uint32_t index) const;
 
+    StatusOr<VariantObjectInfo> get_object_info() const;
+
+    StatusOr<VariantArrayInfo> get_array_info() const;
+
 private:
     uint8_t value_header() const;
     Status validate_basic_type(BasicType type) const;
@@ -235,59 +289,5 @@ private:
      */
     std::string_view _value;
 };
-
-namespace variant_detail {
-// Representing the details of a Variant {@link BasicType::OBJECT}.
-struct ObjectInfo {
-    // Number of elements in the array or object
-    uint32_t num_elements;
-    // The byte offset of the field id
-    uint32_t id_start_offset;
-    // The number of bytes used to encode the field ids
-    uint8_t id_size;
-    // The number of bytes used to encode the field offsets
-    uint32_t offset_start_offset;
-    // The size of the field offset list
-    uint8_t offset_size;
-    // The byte offset of the field data
-    uint32_t data_start_offset;
-};
-
-// Representing the details of a Variant {@link BasicType::ARRAY}.
-struct ArrayInfo {
-    // Number of elements in the array
-    uint32_t num_elements;
-    // The size of the field offset list
-    uint8_t offset_size;
-    // The byte offset of the field offset list
-    uint32_t offset_start_offset;
-    // The byte offset of the field data
-    uint32_t data_start_offset;
-};
-
-/**
- *                5   4  3     2 1     0
- *              +---+---+-------+-------+
- * value_header |   |   |       |       |
- *              +---+---+-------+-------+
- *                    ^     ^       ^
- *                    |     |       +-- field_offset_size_minus_one
- *                    |     +-- field_id_size_minus_one
- *                    +-- is_large
- */
-StatusOr<ObjectInfo> get_object_info(std::string_view value);
-
-/**
- *                5         3  2  1     0
- *               +-----------+---+-------+
- * value_header  |           |   |       |
- *               +-----------+---+-------+
- *                             ^     ^
- *                             |     +-- field_offset_size_minus_one
- *                             +-- is_large
- */
-StatusOr<ArrayInfo> get_array_info(std::string_view value);
-
-} // namespace variant_detail
 
 } // namespace starrocks

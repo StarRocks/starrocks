@@ -69,6 +69,7 @@ std::string VariantUtil::variant_type_to_string(VariantType type) {
         return "Decimal8";
     case VariantType::DECIMAL16:
         return "Decimal16";
+
     case VariantType::DATE:
         return "Date";
     case VariantType::TIMESTAMP_TZ:
@@ -235,7 +236,8 @@ std::string_view Variant::value() const {
     return _value;
 }
 
-StatusOr<variant_detail::ObjectInfo> variant_detail::get_object_info(std::string_view value) {
+StatusOr<VariantObjectInfo> Variant::get_object_info() const {
+    const std::string_view& value = _value;
     Variant::BasicType basic_type =
             static_cast<Variant::BasicType>(static_cast<uint8_t>(value[0]) & Variant::kBasicTypeMask);
     if (basic_type != Variant::BasicType::OBJECT) {
@@ -257,7 +259,7 @@ StatusOr<variant_detail::ObjectInfo> variant_detail::get_object_info(std::string
     uint32_t num_elements =
             VariantUtil::read_little_endian_unsigned32(value.data() + Variant::kHeaderSizeBytes, num_elements_size);
 
-    variant_detail::ObjectInfo object_info{};
+    VariantObjectInfo object_info{};
     object_info.num_elements = num_elements;
     object_info.id_size = field_id_size;
     object_info.offset_size = field_offset_size;
@@ -282,10 +284,11 @@ StatusOr<variant_detail::ObjectInfo> variant_detail::get_object_info(std::string
         }
     }
 
-    return StatusOr<variant_detail::ObjectInfo>(object_info);
+    return StatusOr<VariantObjectInfo>(object_info);
 }
 
-StatusOr<variant_detail::ArrayInfo> variant_detail::get_array_info(std::string_view value) {
+StatusOr<VariantArrayInfo> Variant::get_array_info() const {
+    const std::string_view& value = _value;
     Variant::BasicType basic_type =
             static_cast<Variant::BasicType>(static_cast<uint8_t>(value[0]) & Variant::kBasicTypeMask);
     if (basic_type != Variant::BasicType::ARRAY) {
@@ -306,7 +309,7 @@ StatusOr<variant_detail::ArrayInfo> variant_detail::get_array_info(std::string_v
     uint32_t num_elements =
             VariantUtil::read_little_endian_unsigned32(value.data() + Variant::kHeaderSizeBytes, num_elements_size);
 
-    variant_detail::ArrayInfo array_info{};
+    VariantArrayInfo array_info{};
     array_info.num_elements = num_elements;
     array_info.offset_size = field_offset_size;
     array_info.offset_start_offset = Variant::kHeaderSizeBytes + num_elements_size;
@@ -318,7 +321,7 @@ StatusOr<variant_detail::ArrayInfo> variant_detail::get_array_info(std::string_v
                 ", value_size=" + std::to_string(value.size()));
     }
 
-    return StatusOr<variant_detail::ArrayInfo>(array_info);
+    return StatusOr<VariantArrayInfo>(array_info);
 }
 
 uint8_t Variant::value_header() const {
@@ -528,14 +531,14 @@ StatusOr<std::array<uint8_t, 16>> Variant::get_uuid() const {
 StatusOr<uint32_t> Variant::num_elements() const {
     switch (Variant::BasicType btype = basic_type()) {
     case Variant::BasicType::OBJECT: {
-        auto status = variant_detail::get_object_info(_value);
+        auto status = get_object_info();
         if (!status.ok()) {
             return status.status();
         }
         return status.value().num_elements;
     }
     case Variant::BasicType::ARRAY: {
-        auto status = variant_detail::get_array_info(_value);
+        auto status = get_array_info();
         if (!status.ok()) {
             return status.status();
         }
@@ -549,7 +552,7 @@ StatusOr<uint32_t> Variant::num_elements() const {
 StatusOr<Variant> Variant::get_object_by_key(std::string_view key) const {
     RETURN_IF_ERROR(validate_basic_type(Variant::BasicType::OBJECT));
 
-    auto obj_status = variant_detail::get_object_info(_value);
+    auto obj_status = get_object_info();
     if (!obj_status.ok()) {
         return obj_status.status();
     }
@@ -594,7 +597,7 @@ StatusOr<Variant> Variant::get_object_by_key(std::string_view key) const {
 StatusOr<Variant> Variant::get_element_at_index(uint32_t index) const {
     RETURN_IF_ERROR(validate_basic_type(Variant::BasicType::ARRAY));
 
-    auto array_info_status = variant_detail::get_array_info(_value);
+    auto array_info_status = get_array_info();
     if (!array_info_status.ok()) {
         return array_info_status.status();
     }
@@ -805,7 +808,7 @@ Status VariantUtil::variant_to_json(std::string_view metadata, std::string_view 
         break;
     }
     case VariantType::OBJECT: {
-        auto info = variant_detail::get_object_info(value);
+        auto info = variant.get_object_info();
         if (!info.ok()) {
             return info.status();
         }
@@ -843,7 +846,7 @@ Status VariantUtil::variant_to_json(std::string_view metadata, std::string_view 
         break;
     }
     case VariantType::ARRAY: {
-        auto info = variant_detail::get_array_info(value);
+        auto info = variant.get_array_info();
         if (!info.ok()) {
             return info.status();
         }
