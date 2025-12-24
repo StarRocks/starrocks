@@ -23,6 +23,7 @@ import com.starrocks.catalog.TableName;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.connector.OperationType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterClause;
@@ -41,7 +42,7 @@ public class AlterTableStatementAnalyzer {
     public static void analyze(AlterTableStmt statement, ConnectContext context) {
         TableName tbl = statement.getTbl();
         tbl.normalization(context);
-        MetaUtils.checkNotSupportCatalog(tbl.getCatalog(), "ALTER");
+        MetaUtils.checkNotSupportCatalog(tbl.getCatalog(), OperationType.ALTER);
 
         List<AlterClause> alterClauseList = statement.getAlterClauseList();
         if (alterClauseList == null || alterClauseList.isEmpty()) {

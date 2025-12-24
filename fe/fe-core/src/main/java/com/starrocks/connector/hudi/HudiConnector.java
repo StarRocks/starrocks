@@ -19,6 +19,7 @@ import com.starrocks.connector.Connector;
 import com.starrocks.connector.ConnectorContext;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.HdfsEnvironment;
+import com.starrocks.connector.OperationType;
 import com.starrocks.connector.RemoteFileIO;
 import com.starrocks.connector.hive.CatalogNameType;
 import com.starrocks.connector.hive.IHiveMetastore;
@@ -28,6 +29,7 @@ import com.starrocks.server.GlobalStateMgr;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 public class HudiConnector implements Connector {
     public static final String HIVE_METASTORE_URIS = "hive.metastore.uris";
@@ -78,5 +80,11 @@ public class HudiConnector implements Connector {
     public void shutdown() {
         internalMgr.shutdown();
         GlobalStateMgr.getCurrentState().getConnectorTableMetadataProcessor().unRegisterCacheUpdateProcessor(catalogNameType);
+    }
+
+    @Override
+    public Set<OperationType> supportedOperations() {
+        // Hudi connector supports ALTER operations
+        return OperationType.setOf(OperationType.ALTER);
     }
 }

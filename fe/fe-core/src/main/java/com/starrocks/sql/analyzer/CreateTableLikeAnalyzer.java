@@ -20,6 +20,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.connector.OperationType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateTableLikeStmt;
@@ -40,7 +41,7 @@ public class CreateTableLikeAnalyzer {
         String tableName = stmt.getTableName();
         FeNameFormat.checkTableName(tableName);
 
-        MetaUtils.checkNotSupportCatalog(existedDbTbl.getCatalog(), "CREATE TABLE LIKE");
+        MetaUtils.checkNotSupportCatalog(existedDbTbl.getCatalog(), OperationType.CREATE_TABLE_LIKE);
         Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(context, existedDbTbl.getCatalog(),
                 existedDbTbl.getDb(), existedDbTbl.getTbl());
         if (table == null) {

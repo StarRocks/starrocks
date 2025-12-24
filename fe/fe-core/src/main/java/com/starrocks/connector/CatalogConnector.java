@@ -20,6 +20,7 @@ import com.starrocks.connector.metadata.TableMetaConnector;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static java.util.Objects.requireNonNull;
@@ -73,5 +74,10 @@ public class CatalogConnector implements Connector {
         } else {
             return normalConnector.getClass().getSimpleName();
         }
+    }
+
+    @Override
+    public Set<OperationType> supportedOperations() {
+        return normalConnector.supportedOperations();
     }
 }

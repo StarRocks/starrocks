@@ -18,12 +18,14 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
+import com.starrocks.connector.OperationType;
 import com.starrocks.load.Load;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -194,11 +196,72 @@ public class DeleteAnalyzer {
         properties.put(LoadStmt.TIMEOUT_PROPERTY, String.valueOf(session.getSessionVariable().getInsertTimeoutS()));
     }
 
+    /**
+     * Analyze Iceberg table delete statement.
+     * For Iceberg delete, we convert:
+     *   DELETE FROM table WHERE condition
+     * to:
+     *   INSERT INTO iceberg_delete_sink
+     *   SELECT _file, _pos FROM table WHERE condition
+     */
+    private static void analyzeIcebergTable(DeleteStmt deleteStatement, Table table, ConnectContext session) {
+        deleteStatement.setTable(table);
+
+        if (deleteStatement.getWherePredicate() == null) {
+            throw new SemanticException("Delete must specify where clause to prevent full table delete");
+        }
+        if (deleteStatement.getPartitionNames() != null) {
+            throw new SemanticException("Delete for Iceberg table do not support specifying partitions",
+                    deleteStatement.getPartitionNames().getPos());
+        }
+        if (deleteStatement.getUsingRelations() != null) {
+            throw new SemanticException("Delete for Iceberg table do not support `using` clause");
+        }
+        if (deleteStatement.getCommonTableExpressions() != null) {
+            throw new SemanticException("Delete for Iceberg table do not support `with` clause");
+        }
+
+        // Create select list: SELECT _file, _pos, partition_col1, partition_col2, ...
+        SelectList selectList = new SelectList();
+        // Add _file column
+        SlotRef filePathColumn = new SlotRef(deleteStatement.getTableName(), IcebergTable.FILE_PATH);
+        selectList.addItem(new SelectListItem(filePathColumn, IcebergTable.FILE_PATH));
+
+        // Add _pos column
+        SlotRef posColumn = new SlotRef(deleteStatement.getTableName(), IcebergTable.ROW_POSITION);
+        selectList.addItem(new SelectListItem(posColumn, IcebergTable.ROW_POSITION));
+
+        // Add partition columns for shuffle
+        List<Column> partitionColumns = table.getPartitionColumns();
+        for (Column partitionCol : partitionColumns) {
+            SlotRef partitionColumnRef = new SlotRef(deleteStatement.getTableName(), partitionCol.getName());
+            selectList.addItem(new SelectListItem(partitionColumnRef, partitionCol.getName()));
+        }
+
+        // Create table relation with WHERE predicate
+        TableRelation tableRelation = new TableRelation(deleteStatement.getTableName());
+        SelectRelation selectRelation = new SelectRelation(
+                selectList,
+                tableRelation,
+                deleteStatement.getWherePredicate(),
+                null,
+                null
+        );
+
+        // Create query statement
+        QueryStatement queryStatement = new QueryStatement(selectRelation);
+        queryStatement.setIsExplain(deleteStatement.isExplain(), deleteStatement.getExplainLevel());
+
+        // Analyze the query statement
+        new QueryAnalyzer(session).analyze(queryStatement);
+        deleteStatement.setQueryStatement(queryStatement);
+    }
+
     public static void analyze(DeleteStmt deleteStatement, ConnectContext session) {
         analyzeProperties(deleteStatement, session);
 
         TableName tableName = deleteStatement.getTableName();
-        MetaUtils.checkNotSupportCatalog(tableName.getCatalog(), "DELETE");
+        MetaUtils.checkNotSupportCatalog(tableName.getCatalog(), OperationType.DELETE);
         Database db = GlobalStateMgr.getCurrentState().getMetadataMgr()
                 .getDb(session, tableName.getCatalog(), tableName.getDb());
         if (db == null) {
@@ -210,6 +273,12 @@ public class DeleteAnalyzer {
             String msg = String.format("The data of '%s' cannot be deleted because it is a materialized view," +
                     "and the data of materialized view must be consistent with the base table.", tableName.getTbl());
             throw new SemanticException(msg, tableName.getPos());
+        }
+
+        // Handle Iceberg table delete
+        if (table instanceof IcebergTable) {
+            analyzeIcebergTable(deleteStatement, table, session);
+            return;
         }
 
         if (!(table instanceof OlapTable && ((OlapTable) table).getKeysType() == KeysType.PRIMARY_KEYS)) {
