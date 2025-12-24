@@ -16,8 +16,8 @@ PostingList& PostingList::operator=(PostingList&& rhs) noexcept {
 }
 
 PostingList::PostingList() {
-    _doc_ids.reserve(256);
-    _positions.reserve(256);
+    _doc_ids.reserve(16);
+    _positions.reserve(16);
 }
 
 PostingList::~PostingList() = default;
