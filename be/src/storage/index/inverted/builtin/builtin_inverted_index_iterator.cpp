@@ -130,14 +130,15 @@ Status BuiltinInvertedIndexIterator::_wildcard_query(const Slice* search_query, 
 
 Status BuiltinInvertedIndexIterator::_init_like_context(const Slice& s) {
     if (_like_context) {
-        RETURN_IF_ERROR(LikePredicate::like_close(_like_context.get(), FunctionContext::FunctionStateScope::THREAD_LOCAL));
+        RETURN_IF_ERROR(
+                LikePredicate::like_close(_like_context.get(), FunctionContext::FunctionStateScope::THREAD_LOCAL));
         _like_context.reset(nullptr);
     }
 
     _like_context = std::make_unique<FunctionContext>();
     auto ptr = BinaryColumn::create();
     ptr->append_datum(Datum(s));
-    (void) ptr->get_data();
+    (void)ptr->get_data();
     Columns cols;
     cols.push_back(nullptr);
     cols.push_back(std::move(ConstColumn::create(std::move(ptr), 1)));
@@ -146,7 +147,8 @@ Status BuiltinInvertedIndexIterator::_init_like_context(const Slice& s) {
 }
 
 Status BuiltinInvertedIndexIterator::read_from_inverted_index(const std::string& column_name, const void* query_value,
-                                                              InvertedIndexQueryType query_type, roaring::Roaring* bit_map) {
+                                                              InvertedIndexQueryType query_type,
+                                                              roaring::Roaring* bit_map) {
     const auto* search_query = reinterpret_cast<const Slice*>(query_value);
     switch (query_type) {
     case InvertedIndexQueryType::EQUAL_QUERY: {
@@ -197,4 +199,3 @@ Status BuiltinInvertedIndexIterator::read_null(const std::string& column_name, r
 }
 
 } // namespace starrocks
-

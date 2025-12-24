@@ -23,8 +23,7 @@
 namespace starrocks {
 
 Status BuiltinInvertedReader::new_iterator(const std::shared_ptr<TabletIndex> index_meta,
-                                           InvertedIndexIterator** iterator,
-                                           const IndexReadOptions& index_opt) {
+                                           InvertedIndexIterator** iterator, const IndexReadOptions& index_opt) {
     BitmapIndexIterator* iter;
     RETURN_IF_ERROR(_bitmap_index->new_iterator(index_opt, &iter));
     std::unique_ptr<BitmapIndexIterator> bitmap_itr;
@@ -33,8 +32,8 @@ Status BuiltinInvertedReader::new_iterator(const std::shared_ptr<TabletIndex> in
     return Status::OK();
 }
 
-Status BuiltinInvertedReader::create(const std::shared_ptr<TabletIndex>& tablet_index,
-                                     LogicalType field_type, std::unique_ptr<InvertedReader>* res) {
+Status BuiltinInvertedReader::create(const std::shared_ptr<TabletIndex>& tablet_index, LogicalType field_type,
+                                     std::unique_ptr<InvertedReader>* res) {
     if (is_string_type(field_type)) {
         *res = std::make_unique<BuiltinInvertedReader>(tablet_index->index_id());
         return Status::OK();

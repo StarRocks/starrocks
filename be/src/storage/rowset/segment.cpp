@@ -347,8 +347,8 @@ StatusOr<ChunkIteratorPtr> Segment::new_iterator(const Schema& schema, const Seg
     return _new_iterator(schema, read_options);
 }
 
-Status Segment::new_inverted_index_iterator(uint32_t ucid, InvertedIndexIterator** iter,
-                                            const SegmentReadOptions& opts, const IndexReadOptions& index_opt) {
+Status Segment::new_inverted_index_iterator(uint32_t ucid, InvertedIndexIterator** iter, const SegmentReadOptions& opts,
+                                            const IndexReadOptions& index_opt) {
     auto column_reader_iter = _column_readers.find(ucid);
 
     if (column_reader_iter != _column_readers.end()) {

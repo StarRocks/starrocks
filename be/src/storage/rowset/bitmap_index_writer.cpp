@@ -231,7 +231,8 @@ struct BitmapIndexTraits {
 
 template <>
 struct BitmapIndexTraits<Slice> {
-    using UnorderedMemoryIndexType = phmap::flat_hash_map<Slice, BitmapUpdateContextRefOrSingleValue, BitmapIndexSliceHash, std::equal_to<Slice>>;
+    using UnorderedMemoryIndexType = phmap::flat_hash_map<Slice, BitmapUpdateContextRefOrSingleValue,
+                                                          BitmapIndexSliceHash, std::equal_to<Slice>>;
     using OrderedMemoryIndexType = std::map<Slice, BitmapUpdateContextRefOrSingleValue, Slice::Comparator>;
 };
 

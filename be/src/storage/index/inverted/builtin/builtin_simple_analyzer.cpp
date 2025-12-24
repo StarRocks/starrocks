@@ -19,7 +19,7 @@
 
 namespace starrocks {
 
-SimpleAnalyzer::SimpleAnalyzer(bool normalize_case) :  _normalize_case(normalize_case) {
+SimpleAnalyzer::SimpleAnalyzer(bool normalize_case) : _normalize_case(normalize_case) {
     // Initialize lookup tables based on ASCII character classification
     for (size_t i = 0; i < LOOKUP_SIZE; ++i) {
         char c = static_cast<char>(i);

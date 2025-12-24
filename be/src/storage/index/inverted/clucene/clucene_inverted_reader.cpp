@@ -29,8 +29,7 @@
 namespace starrocks {
 
 Status CLuceneInvertedReader::new_iterator(const std::shared_ptr<TabletIndex> index_meta,
-                                           InvertedIndexIterator** iterator,
-                                           const IndexReadOptions& index_opt) {
+                                           InvertedIndexIterator** iterator, const IndexReadOptions& index_opt) {
     *iterator = new InvertedIndexIterator(index_meta, this);
     return Status::OK();
 }

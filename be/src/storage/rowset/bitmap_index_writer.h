@@ -74,7 +74,6 @@ protected:
     CompressionTypePB _dictionary_compression = LZ4;
 
 private:
-
     BitmapIndexWriter(const BitmapIndexWriter&) = delete;
     const BitmapIndexWriter& operator=(const BitmapIndexWriter&) = delete;
 };

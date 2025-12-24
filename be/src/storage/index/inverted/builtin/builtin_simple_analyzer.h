@@ -13,10 +13,10 @@
 // limitations under the License.
 #pragma once
 
-#include <vector>
 #include <memory>
 #include <string>
 #include <string_view>
+#include <vector>
 
 #include "util/slice.h"
 
@@ -26,26 +26,21 @@ namespace starrocks {
  * @brief Represents a token extracted from text with its position information.
  */
 struct SliceToken {
-    Slice text;           // Token text data
-    size_t position;      // Position of this token in the sequence
+    Slice text;      // Token text data
+    size_t position; // Position of this token in the sequence
 
     SliceToken() : text(), position(0) {}
 
     // Constructor for raw char buffer
-    SliceToken(const char* data, size_t len, size_t pos)
-        : text(data, len), position(pos) {}
+    SliceToken(const char* data, size_t len, size_t pos) : text(data, len), position(pos) {}
 
     bool empty() const { return text.empty(); }
 
     // Get string_view for efficient access
-    std::string_view view() const {
-        return std::string_view(text.data, text.size);
-    }
+    std::string_view view() const { return std::string_view(text.data, text.size); }
 
     // Comparison operators
-    bool operator==(const SliceToken& other) const {
-        return text == other.text;
-    }
+    bool operator==(const SliceToken& other) const { return text == other.text; }
 };
 
 /**
@@ -84,7 +79,7 @@ private:
         }
         return _token_char_table[index];
     }
-    
+
     /**
      * @brief Normalize character (e.g., convert to lowercase)
      * @param c Character to normalize

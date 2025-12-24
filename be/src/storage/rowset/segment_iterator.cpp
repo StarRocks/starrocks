@@ -207,7 +207,9 @@ private:
         std::shared_ptr<VectorIndexReader> ann_reader;
 
         // Helper method to check if rowid should always be built
-        bool always_build_rowid() const { return use_vector_index && !use_ivfpq; }
+        bool always_build_rowid() const {
+            return use_vector_index && !use_ivfpq;
+        }
     };
 
     // Inverted index related context, only created when needed
@@ -247,8 +249,12 @@ private:
     Status _get_row_ranges_by_rowid_range();
     Status _get_row_ranges_by_row_ids(std::vector<int64_t>* result_ids, SparseRange<>* r);
 
-    uint32_t segment_id() const { return _segment->id(); }
-    uint32_t num_rows() const { return _segment->num_rows(); }
+    uint32_t segment_id() const {
+        return _segment->id();
+    }
+    uint32_t num_rows() const {
+        return _segment->num_rows();
+    }
 
     Status _lookup_ordinal(const SeekTuple& key, bool lower, rowid_t end, rowid_t* rowid);
     Status _lookup_ordinal(const Slice& index_key, const Schema& short_key_schema, bool lower, rowid_t end,
@@ -2460,8 +2466,8 @@ Status SegmentIterator::_init_inverted_index_iterators() {
         ColumnUID ucid = cid_2_ucid[cid];
 
         IndexReadOptions index_opts;
-        index_opts.use_page_cache = !_opts.temporary_data && _opts.use_page_cache &&
-                                    !config::disable_storage_page_cache;
+        index_opts.use_page_cache =
+                !_opts.temporary_data && _opts.use_page_cache && !config::disable_storage_page_cache;
         index_opts.lake_io_opts = _opts.lake_io_opts;
         index_opts.read_file = _column_files[cid].get();
         index_opts.stats = _opts.stats;
