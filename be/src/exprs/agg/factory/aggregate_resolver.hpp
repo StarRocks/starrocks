@@ -214,16 +214,16 @@ public:
     }
 
     template <LogicalType ArgLT, LogicalType ResultLT, bool IsNull>
-    const AggregateFunction* create_array_function(std::string& name) {
+    AggregateFunctionPtr create_array_function(std::string& name) {
         if constexpr (IsNull) {
             if (name == "dict_merge") {
                 auto dict_merge = track_function(AggregateFactory::MakeDictMergeAggregateFunction());
                 return track_function(
                         AggregateFactory::MakeNullableAggregateFunctionUnary<DictMergeState, false>(dict_merge));
             } else if (name == "retention") {
-                auto retentoin = track_function(AggregateFactory::MakeRetentionAggregateFunction());
+                auto retention = track_function(AggregateFactory::MakeRetentionAggregateFunction());
                 return track_function(
-                        AggregateFactory::MakeNullableAggregateFunctionUnary<RetentionState, false>(retentoin));
+                        AggregateFactory::MakeNullableAggregateFunctionUnary<RetentionState, false>(retention));
             } else if (name == "window_funnel") {
                 if constexpr (ArgLT == TYPE_INT || ArgLT == TYPE_BIGINT || ArgLT == TYPE_DATE ||
                               ArgLT == TYPE_DATETIME) {
@@ -250,7 +250,7 @@ public:
     }
 
     template <LogicalType ArgLT, LogicalType ResultLT, bool IsWindowFunc, bool IsNull>
-    std::enable_if_t<isArithmeticLT<ArgLT>, const AggregateFunction*> create_decimal_function(std::string& name) {
+    std::enable_if_t<isArithmeticLT<ArgLT>, AggregateFunctionPtr> create_decimal_function(std::string& name) {
         static_assert(lt_is_decimal128<ResultLT> || lt_is_decimal256<ResultLT>);
         if constexpr (IsNull) {
             using ResultType = RunTimeCppType<ResultLT>;

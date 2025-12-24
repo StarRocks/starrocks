@@ -353,8 +353,8 @@ template <typename NestedState, IsAggNullPred<NestedState> AggNullPredType>
 AggregateFunctionPtr AggregateFactory::MakeNullableAggregateFunctionVariadic(AggregateFunctionPtr nested_function,
                                                                              AggNullPredType null_pred) {
     using AggregateDataType = NullableAggregateFunctionState<NestedState, false>;
-    return new NullableAggregateFunctionVariadic<AggregateFunctionPtr, AggregateDataType, AggNullPredType>(
-            nested_function, std::move(null_pred));
+    return new NullableAggregateFunctionVariadic<AggregateDataType, AggNullPredType>(nested_function,
+                                                                                     std::move(null_pred));
 }
 
 template <LogicalType LT>
