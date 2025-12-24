@@ -15,18 +15,16 @@
 #include "formats/csv/output_stream_file.h"
 
 #include <gtest/gtest.h>
-#include <zlib.h>
 
 #include <memory>
 #include <string>
 
 #include "common/object_pool.h"
+#include "compression_test_utils.h"
 #include "exec/pipeline/fragment_context.h"
 #include "fs/fs_memory.h"
 #include "io/async_flush_output_stream.h"
 #include "testutil/assert.h"
-#include "util/compression/block_compression.h"
-#include "util/slice.h"
 
 namespace starrocks::csv {
 
@@ -41,56 +39,6 @@ public:
     void TearDown() override {}
 
 protected:
-    // Helper function to decompress gzip data using zlib directly
-    std::string decompress_gzip(const std::string& compressed_data) {
-        z_stream z_strm = {nullptr};
-        z_strm.zalloc = Z_NULL;
-        z_strm.zfree = Z_NULL;
-        z_strm.opaque = Z_NULL;
-
-        // MAX_WBITS + 16 for gzip format
-        int ret = inflateInit2(&z_strm, MAX_WBITS + 16);
-        EXPECT_EQ(ret, Z_OK);
-
-        z_strm.next_in = reinterpret_cast<Bytef*>(const_cast<char*>(compressed_data.data()));
-        z_strm.avail_in = compressed_data.size();
-
-        size_t max_uncompressed_size = compressed_data.size() * 100; // Conservative estimate
-        std::string uncompressed_data;
-        uncompressed_data.resize(max_uncompressed_size);
-
-        z_strm.next_out = reinterpret_cast<Bytef*>(uncompressed_data.data());
-        z_strm.avail_out = max_uncompressed_size;
-
-        ret = inflate(&z_strm, Z_FINISH);
-        EXPECT_TRUE(ret == Z_OK || ret == Z_STREAM_END);
-
-        size_t actual_size = z_strm.total_out;
-        inflateEnd(&z_strm);
-
-        uncompressed_data.resize(actual_size);
-        return uncompressed_data;
-    }
-
-    // Helper function to decompress data with specified compression type (non-GZIP)
-    std::string decompress_data(const std::string& compressed_data, CompressionTypePB compression_type) {
-        const BlockCompressionCodec* codec;
-        Status st = get_block_compression_codec(compression_type, &codec);
-        EXPECT_TRUE(st.ok());
-
-        Slice input(compressed_data.data(), compressed_data.size());
-        size_t max_uncompressed_size = compressed_data.size() * 100; // Conservative estimate
-        std::string uncompressed_data;
-        uncompressed_data.resize(max_uncompressed_size);
-        Slice output(uncompressed_data.data(), max_uncompressed_size);
-
-        st = codec->decompress(input, &output);
-        EXPECT_TRUE(st.ok());
-
-        uncompressed_data.resize(output.size);
-        return uncompressed_data;
-    }
-
     std::shared_ptr<pipeline::FragmentContext> _fragment_context;
     RuntimeState* _runtime_state;
     MemoryFileSystem _fs;
@@ -104,8 +52,10 @@ TEST_F(OutputStreamFileTest, TestBasicCompression) {
     auto file = std::move(maybe_file.value());
 
     auto async_stream = std::make_unique<io::AsyncFlushOutputStream>(std::move(file), nullptr, _runtime_state);
-    auto compressed_stream =
-            std::make_unique<CompressedAsyncOutputStreamFile>(async_stream.get(), CompressionTypePB::GZIP, 1024);
+    auto compressed_stream_result =
+            CompressedAsyncOutputStreamFile::create(async_stream.get(), CompressionTypePB::GZIP, 1024);
+    ASSERT_OK(compressed_stream_result.status());
+    auto compressed_stream = std::move(compressed_stream_result.value());
 
     // Write some test data
     std::string test_data = "Hello, World!\nThis is a test.\n";
@@ -121,7 +71,7 @@ TEST_F(OutputStreamFileTest, TestBasicCompression) {
     EXPECT_NE(compressed_content, test_data);
 
     // Decompress and verify
-    std::string decompressed = decompress_gzip(compressed_content);
+    std::string decompressed = test::decompress_gzip(compressed_content);
     EXPECT_EQ(decompressed, test_data);
 }
 
@@ -133,8 +83,10 @@ TEST_F(OutputStreamFileTest, TestEmptyDataCompression) {
     auto file = std::move(maybe_file.value());
 
     auto async_stream = std::make_unique<io::AsyncFlushOutputStream>(std::move(file), nullptr, _runtime_state);
-    auto compressed_stream =
-            std::make_unique<CompressedAsyncOutputStreamFile>(async_stream.get(), CompressionTypePB::GZIP, 1024);
+    auto compressed_stream_result =
+            CompressedAsyncOutputStreamFile::create(async_stream.get(), CompressionTypePB::GZIP, 1024);
+    ASSERT_OK(compressed_stream_result.status());
+    auto compressed_stream = std::move(compressed_stream_result.value());
 
     // Finalize without writing any data
     ASSERT_OK(compressed_stream->finalize());
@@ -157,8 +109,10 @@ TEST_F(OutputStreamFileTest, TestLargeDataCompression) {
     auto file = std::move(maybe_file.value());
 
     auto async_stream = std::make_unique<io::AsyncFlushOutputStream>(std::move(file), nullptr, _runtime_state);
-    auto compressed_stream =
-            std::make_unique<CompressedAsyncOutputStreamFile>(async_stream.get(), CompressionTypePB::GZIP, 1024);
+    auto compressed_stream_result =
+            CompressedAsyncOutputStreamFile::create(async_stream.get(), CompressionTypePB::GZIP, 1024);
+    ASSERT_OK(compressed_stream_result.status());
+    auto compressed_stream = std::move(compressed_stream_result.value());
 
     // Generate large test data (10KB of repetitive data - highly compressible)
     std::string test_data;
@@ -178,7 +132,7 @@ TEST_F(OutputStreamFileTest, TestLargeDataCompression) {
     EXPECT_LT(compressed_content.size(), test_data.size());
 
     // Decompress and verify
-    std::string decompressed = decompress_gzip(compressed_content);
+    std::string decompressed = test::decompress_gzip(compressed_content);
     EXPECT_EQ(decompressed, test_data);
 }
 
@@ -190,8 +144,10 @@ TEST_F(OutputStreamFileTest, TestMultipleWrites) {
     auto file = std::move(maybe_file.value());
 
     auto async_stream = std::make_unique<io::AsyncFlushOutputStream>(std::move(file), nullptr, _runtime_state);
-    auto compressed_stream =
-            std::make_unique<CompressedAsyncOutputStreamFile>(async_stream.get(), CompressionTypePB::GZIP, 1024);
+    auto compressed_stream_result =
+            CompressedAsyncOutputStreamFile::create(async_stream.get(), CompressionTypePB::GZIP, 1024);
+    ASSERT_OK(compressed_stream_result.status());
+    auto compressed_stream = std::move(compressed_stream_result.value());
 
     // Write data in multiple chunks
     std::string chunk1 = "First chunk\n";
@@ -208,7 +164,7 @@ TEST_F(OutputStreamFileTest, TestMultipleWrites) {
     std::string compressed_content;
     ASSERT_OK(_fs.read_file(file_path, &compressed_content));
 
-    std::string decompressed = decompress_gzip(compressed_content);
+    std::string decompressed = test::decompress_gzip(compressed_content);
     std::string expected = chunk1 + chunk2 + chunk3;
     EXPECT_EQ(decompressed, expected);
 }
@@ -222,8 +178,10 @@ TEST_F(OutputStreamFileTest, TestDataLargerThanBuffer) {
 
     auto async_stream = std::make_unique<io::AsyncFlushOutputStream>(std::move(file), nullptr, _runtime_state);
     // Use a small buffer size to test buffer overflow handling
-    auto compressed_stream =
-            std::make_unique<CompressedAsyncOutputStreamFile>(async_stream.get(), CompressionTypePB::GZIP, 64);
+    auto compressed_stream_result =
+            CompressedAsyncOutputStreamFile::create(async_stream.get(), CompressionTypePB::GZIP, 64);
+    ASSERT_OK(compressed_stream_result.status());
+    auto compressed_stream = std::move(compressed_stream_result.value());
 
     // Write data larger than buffer
     std::string test_data;
@@ -239,7 +197,7 @@ TEST_F(OutputStreamFileTest, TestDataLargerThanBuffer) {
     std::string compressed_content;
     ASSERT_OK(_fs.read_file(file_path, &compressed_content));
 
-    std::string decompressed = decompress_gzip(compressed_content);
+    std::string decompressed = test::decompress_gzip(compressed_content);
     EXPECT_EQ(decompressed, test_data);
 }
 
@@ -251,8 +209,10 @@ TEST_F(OutputStreamFileTest, TestSizeMethod) {
     auto file = std::move(maybe_file.value());
 
     auto async_stream = std::make_unique<io::AsyncFlushOutputStream>(std::move(file), nullptr, _runtime_state);
-    auto compressed_stream =
-            std::make_unique<CompressedAsyncOutputStreamFile>(async_stream.get(), CompressionTypePB::GZIP, 1024);
+    auto compressed_stream_result =
+            CompressedAsyncOutputStreamFile::create(async_stream.get(), CompressionTypePB::GZIP, 1024);
+    ASSERT_OK(compressed_stream_result.status());
+    auto compressed_stream = std::move(compressed_stream_result.value());
 
     std::string test_data = "Test data\n";
     ASSERT_OK(compressed_stream->write(Slice(test_data)));
@@ -273,8 +233,10 @@ TEST_F(OutputStreamFileTest, TestSpecialCharacters) {
     auto file = std::move(maybe_file.value());
 
     auto async_stream = std::make_unique<io::AsyncFlushOutputStream>(std::move(file), nullptr, _runtime_state);
-    auto compressed_stream =
-            std::make_unique<CompressedAsyncOutputStreamFile>(async_stream.get(), CompressionTypePB::GZIP, 1024);
+    auto compressed_stream_result =
+            CompressedAsyncOutputStreamFile::create(async_stream.get(), CompressionTypePB::GZIP, 1024);
+    ASSERT_OK(compressed_stream_result.status());
+    auto compressed_stream = std::move(compressed_stream_result.value());
 
     // Test data with special characters
     std::string test_data = "Hello,世界\n\"quoted,value\"\n\ttab\tseparated\n\\N\n";
@@ -287,7 +249,7 @@ TEST_F(OutputStreamFileTest, TestSpecialCharacters) {
     std::string compressed_content;
     ASSERT_OK(_fs.read_file(file_path, &compressed_content));
 
-    std::string decompressed = decompress_gzip(compressed_content);
+    std::string decompressed = test::decompress_gzip(compressed_content);
     EXPECT_EQ(decompressed, test_data);
 }
 
@@ -299,8 +261,10 @@ TEST_F(OutputStreamFileTest, TestBinaryData) {
     auto file = std::move(maybe_file.value());
 
     auto async_stream = std::make_unique<io::AsyncFlushOutputStream>(std::move(file), nullptr, _runtime_state);
-    auto compressed_stream =
-            std::make_unique<CompressedAsyncOutputStreamFile>(async_stream.get(), CompressionTypePB::GZIP, 1024);
+    auto compressed_stream_result =
+            CompressedAsyncOutputStreamFile::create(async_stream.get(), CompressionTypePB::GZIP, 1024);
+    ASSERT_OK(compressed_stream_result.status());
+    auto compressed_stream = std::move(compressed_stream_result.value());
 
     // Test data with binary content (all byte values)
     std::string test_data;
@@ -316,7 +280,7 @@ TEST_F(OutputStreamFileTest, TestBinaryData) {
     std::string compressed_content;
     ASSERT_OK(_fs.read_file(file_path, &compressed_content));
 
-    std::string decompressed = decompress_gzip(compressed_content);
+    std::string decompressed = test::decompress_gzip(compressed_content);
     EXPECT_EQ(decompressed, test_data);
 }
 
@@ -353,8 +317,10 @@ TEST_F(OutputStreamFileTest, TestVerySmallWrites) {
     auto file = std::move(maybe_file.value());
 
     auto async_stream = std::make_unique<io::AsyncFlushOutputStream>(std::move(file), nullptr, _runtime_state);
-    auto compressed_stream =
-            std::make_unique<CompressedAsyncOutputStreamFile>(async_stream.get(), CompressionTypePB::GZIP, 1024);
+    auto compressed_stream_result =
+            CompressedAsyncOutputStreamFile::create(async_stream.get(), CompressionTypePB::GZIP, 1024);
+    ASSERT_OK(compressed_stream_result.status());
+    auto compressed_stream = std::move(compressed_stream_result.value());
 
     // Write one byte at a time
     std::string test_data = "ABCDEFGH";
@@ -369,7 +335,7 @@ TEST_F(OutputStreamFileTest, TestVerySmallWrites) {
     std::string compressed_content;
     ASSERT_OK(_fs.read_file(file_path, &compressed_content));
 
-    std::string decompressed = decompress_gzip(compressed_content);
+    std::string decompressed = test::decompress_gzip(compressed_content);
     EXPECT_EQ(decompressed, test_data);
 }
 
@@ -381,8 +347,10 @@ TEST_F(OutputStreamFileTest, TestSnappyCompression) {
     auto file = std::move(maybe_file.value());
 
     auto async_stream = std::make_unique<io::AsyncFlushOutputStream>(std::move(file), nullptr, _runtime_state);
-    auto compressed_stream =
-            std::make_unique<CompressedAsyncOutputStreamFile>(async_stream.get(), CompressionTypePB::SNAPPY, 1024);
+    auto compressed_stream_result =
+            CompressedAsyncOutputStreamFile::create(async_stream.get(), CompressionTypePB::SNAPPY, 1024);
+    ASSERT_OK(compressed_stream_result.status());
+    auto compressed_stream = std::move(compressed_stream_result.value());
 
     // Generate test data
     std::string test_data;
@@ -402,7 +370,7 @@ TEST_F(OutputStreamFileTest, TestSnappyCompression) {
     EXPECT_LT(compressed_content.size(), test_data.size());
 
     // Decompress and verify
-    std::string decompressed = decompress_data(compressed_content, CompressionTypePB::SNAPPY);
+    std::string decompressed = test::decompress_data(compressed_content, CompressionTypePB::SNAPPY);
     EXPECT_EQ(decompressed, test_data);
 }
 
@@ -414,8 +382,10 @@ TEST_F(OutputStreamFileTest, TestZstdCompression) {
     auto file = std::move(maybe_file.value());
 
     auto async_stream = std::make_unique<io::AsyncFlushOutputStream>(std::move(file), nullptr, _runtime_state);
-    auto compressed_stream =
-            std::make_unique<CompressedAsyncOutputStreamFile>(async_stream.get(), CompressionTypePB::ZSTD, 1024);
+    auto compressed_stream_result =
+            CompressedAsyncOutputStreamFile::create(async_stream.get(), CompressionTypePB::ZSTD, 1024);
+    ASSERT_OK(compressed_stream_result.status());
+    auto compressed_stream = std::move(compressed_stream_result.value());
 
     // Generate test data
     std::string test_data;
@@ -435,7 +405,7 @@ TEST_F(OutputStreamFileTest, TestZstdCompression) {
     EXPECT_LT(compressed_content.size(), test_data.size());
 
     // Decompress and verify
-    std::string decompressed = decompress_data(compressed_content, CompressionTypePB::ZSTD);
+    std::string decompressed = test::decompress_data(compressed_content, CompressionTypePB::ZSTD);
     EXPECT_EQ(decompressed, test_data);
 }
 
@@ -447,8 +417,10 @@ TEST_F(OutputStreamFileTest, TestLz4Compression) {
     auto file = std::move(maybe_file.value());
 
     auto async_stream = std::make_unique<io::AsyncFlushOutputStream>(std::move(file), nullptr, _runtime_state);
-    auto compressed_stream =
-            std::make_unique<CompressedAsyncOutputStreamFile>(async_stream.get(), CompressionTypePB::LZ4, 1024);
+    auto compressed_stream_result =
+            CompressedAsyncOutputStreamFile::create(async_stream.get(), CompressionTypePB::LZ4, 1024);
+    ASSERT_OK(compressed_stream_result.status());
+    auto compressed_stream = std::move(compressed_stream_result.value());
 
     // Generate test data
     std::string test_data;
@@ -468,7 +440,7 @@ TEST_F(OutputStreamFileTest, TestLz4Compression) {
     EXPECT_LT(compressed_content.size(), test_data.size());
 
     // Decompress and verify
-    std::string decompressed = decompress_data(compressed_content, CompressionTypePB::LZ4);
+    std::string decompressed = test::decompress_data(compressed_content, CompressionTypePB::LZ4);
     EXPECT_EQ(decompressed, test_data);
 }
 
@@ -480,8 +452,10 @@ TEST_F(OutputStreamFileTest, TestLz4FrameCompression) {
     auto file = std::move(maybe_file.value());
 
     auto async_stream = std::make_unique<io::AsyncFlushOutputStream>(std::move(file), nullptr, _runtime_state);
-    auto compressed_stream =
-            std::make_unique<CompressedAsyncOutputStreamFile>(async_stream.get(), CompressionTypePB::LZ4_FRAME, 1024);
+    auto compressed_stream_result =
+            CompressedAsyncOutputStreamFile::create(async_stream.get(), CompressionTypePB::LZ4_FRAME, 1024);
+    ASSERT_OK(compressed_stream_result.status());
+    auto compressed_stream = std::move(compressed_stream_result.value());
 
     // Generate test data
     std::string test_data;
@@ -501,7 +475,7 @@ TEST_F(OutputStreamFileTest, TestLz4FrameCompression) {
     EXPECT_LT(compressed_content.size(), test_data.size());
 
     // Decompress and verify
-    std::string decompressed = decompress_data(compressed_content, CompressionTypePB::LZ4_FRAME);
+    std::string decompressed = test::decompress_data(compressed_content, CompressionTypePB::LZ4_FRAME);
     EXPECT_EQ(decompressed, test_data);
 }
 
@@ -526,8 +500,10 @@ TEST_F(OutputStreamFileTest, TestAllCompressionTypesLargeData) {
         auto file = std::move(maybe_file.value());
 
         auto async_stream = std::make_unique<io::AsyncFlushOutputStream>(std::move(file), nullptr, _runtime_state);
-        auto compressed_stream =
-                std::make_unique<CompressedAsyncOutputStreamFile>(async_stream.get(), compression_type, 1024);
+        auto compressed_stream_result =
+                CompressedAsyncOutputStreamFile::create(async_stream.get(), compression_type, 1024);
+        ASSERT_OK(compressed_stream_result.status());
+        auto compressed_stream = std::move(compressed_stream_result.value());
 
         ASSERT_OK(compressed_stream->write(Slice(test_data)));
         ASSERT_OK(compressed_stream->finalize());
@@ -545,9 +521,9 @@ TEST_F(OutputStreamFileTest, TestAllCompressionTypesLargeData) {
         // doesn't properly handle GZIP decompression output size
         std::string decompressed;
         if (compression_type == CompressionTypePB::GZIP) {
-            decompressed = decompress_gzip(compressed_content);
+            decompressed = test::decompress_gzip(compressed_content);
         } else {
-            decompressed = decompress_data(compressed_content, compression_type);
+            decompressed = test::decompress_data(compressed_content, compression_type);
         }
         EXPECT_EQ(decompressed, test_data)
                 << "Compression type " << static_cast<int>(compression_type) << " should decompress correctly";

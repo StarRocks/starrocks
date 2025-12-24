@@ -68,8 +68,16 @@ private:
 
 class CompressedAsyncOutputStreamFile final : public OutputStream {
 public:
-    CompressedAsyncOutputStreamFile(io::AsyncFlushOutputStream* stream, CompressionTypePB compression_type,
-                                    size_t buff_size);
+    // Default chunk size for incremental compression (64MB).
+    // For GZIP, data is compressed and written when buffer reaches this size.
+    static constexpr size_t kDefaultChunkSize = 64 * 1024 * 1024;
+
+    // Factory method to create CompressedAsyncOutputStreamFile with proper error handling.
+    // Returns error status if compression codec initialization fails.
+    static StatusOr<std::shared_ptr<CompressedAsyncOutputStreamFile>> create(io::AsyncFlushOutputStream* stream,
+                                                                              CompressionTypePB compression_type,
+                                                                              size_t buff_size);
+
     ~CompressedAsyncOutputStreamFile() override = default;
 
     Status finalize() override;
@@ -79,13 +87,23 @@ protected:
     Status _sync(const char* data, size_t size) override;
 
 private:
+    // Private constructor - use create() factory method instead
+    CompressedAsyncOutputStreamFile(io::AsyncFlushOutputStream* stream, const BlockCompressionCodec* codec,
+                                    CompressionTypePB compression_type, size_t buff_size);
+
+    // Compress and write the current buffer to underlying stream
+    Status _flush_compressed_chunk();
+
+    // Check if the compression type supports incremental compression.
+    // GZIP supports this because multiple GZIP streams can be concatenated.
+    bool _supports_incremental_compression() const;
+
     io::AsyncFlushOutputStream* _stream;
     const BlockCompressionCodec* _codec;
-    // Buffer to accumulate all uncompressed data before compression
+    CompressionTypePB _compression_type;
+    // Buffer to accumulate uncompressed data before compression
     raw::RawVector<uint8_t> _uncompressed_buffer;
     raw::RawVector<uint8_t> _compress_buffer;
-    size_t _uncompressed_bytes = 0;
-    size_t _compressed_bytes = 0;
 };
 
 } // namespace starrocks::csv

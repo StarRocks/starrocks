@@ -50,7 +50,10 @@ StatusOr<std::unique_ptr<ConnectorChunkSink>> FileChunkSinkProvider::create_chun
     std::shared_ptr<FileSystem> fs = FileSystem::CreateUniqueFromString(ctx->path, FSOptions(&ctx->cloud_conf)).value();
     auto column_evaluators = ColumnEvaluator::clone(ctx->column_evaluators);
 
-    // Add compression extension for compressed CSV files
+    // Add compression extension for compressed CSV files.
+    // Note: Parquet and ORC are self-contained formats with compression info in metadata,
+    // so they don't need compression extensions. CSV is plain text and needs extensions
+    // (e.g., .csv.gz) to indicate the content is compressed.
     std::string file_suffix = boost::to_lower_copy(ctx->format);
     if (boost::iequals(ctx->format, formats::CSV)) {
         switch (ctx->compression_type) {

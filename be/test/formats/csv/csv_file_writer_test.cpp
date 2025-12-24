@@ -15,7 +15,6 @@
 #include "formats/csv/csv_file_writer.h"
 
 #include <gtest/gtest.h>
-#include <zlib.h>
 
 #include <filesystem>
 #include <iostream>
@@ -23,6 +22,7 @@
 #include <vector>
 
 #include "column/array_column.h"
+#include "compression_test_utils.h"
 #include "column/column_helper.h"
 #include "column/map_column.h"
 #include "column/struct_column.h"
@@ -460,13 +460,10 @@ TEST_F(CSVFileWriterTest, TestUnknownCompression) {
     auto async_stream = std::make_unique<io::AsyncFlushOutputStream>(std::move(output_file), nullptr, nullptr);
 
     // UNKNOWN_COMPRESSION should fail when creating CompressedAsyncOutputStreamFile
-    // We expect this to fail during codec initialization
-    ASSERT_DEATH(
-            {
-                auto compressed_stream = std::make_shared<csv::CompressedAsyncOutputStreamFile>(
-                        async_stream.get(), CompressionTypePB::UNKNOWN_COMPRESSION, 1024);
-            },
-            ".*");
+    // We expect this to return an error status
+    auto result = csv::CompressedAsyncOutputStreamFile::create(async_stream.get(),
+                                                                CompressionTypePB::UNKNOWN_COMPRESSION, 1024);
+    ASSERT_FALSE(result.ok());
 }
 
 TEST_F(CSVFileWriterTest, TestFactory) {
@@ -485,37 +482,6 @@ TEST_F(CSVFileWriterTest, TestFactory) {
 
 // ==================== Compression Tests ====================
 
-// Helper function to decompress gzip data using zlib directly
-std::string decompress_gzip(const std::string& compressed_data) {
-    z_stream z_strm = {nullptr};
-    z_strm.zalloc = Z_NULL;
-    z_strm.zfree = Z_NULL;
-    z_strm.opaque = Z_NULL;
-
-    // MAX_WBITS + 16 for gzip format
-    int ret = inflateInit2(&z_strm, MAX_WBITS + 16);
-    EXPECT_EQ(ret, Z_OK);
-
-    z_strm.next_in = reinterpret_cast<Bytef*>(const_cast<char*>(compressed_data.data()));
-    z_strm.avail_in = compressed_data.size();
-
-    size_t max_uncompressed_size = compressed_data.size() * 100; // Conservative estimate
-    std::string uncompressed_data;
-    uncompressed_data.resize(max_uncompressed_size);
-
-    z_strm.next_out = reinterpret_cast<Bytef*>(uncompressed_data.data());
-    z_strm.avail_out = max_uncompressed_size;
-
-    ret = inflate(&z_strm, Z_FINISH);
-    EXPECT_TRUE(ret == Z_OK || ret == Z_STREAM_END);
-
-    size_t actual_size = z_strm.total_out;
-    inflateEnd(&z_strm);
-
-    uncompressed_data.resize(actual_size);
-    return uncompressed_data;
-}
-
 TEST_F(CSVFileWriterTest, TestWriteIntegersWithGzipCompression) {
     std::vector<TypeDescriptor> type_descs{
             TypeDescriptor::from_logical_type(TYPE_TINYINT),
@@ -528,8 +494,10 @@ TEST_F(CSVFileWriterTest, TestWriteIntegersWithGzipCompression) {
     EXPECT_OK(maybe_output_file.status());
     auto output_file = std::move(maybe_output_file.value());
     auto async_stream = std::make_unique<io::AsyncFlushOutputStream>(std::move(output_file), nullptr, _runtime_state);
-    auto csv_output_stream = std::make_shared<csv::CompressedAsyncOutputStreamFile>(
+    auto csv_output_stream_result = csv::CompressedAsyncOutputStreamFile::create(
             async_stream.get(), CompressionTypePB::GZIP, 1024 * 1024);
+    ASSERT_OK(csv_output_stream_result.status());
+    auto csv_output_stream = std::move(csv_output_stream_result.value());
     auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
     auto writer_options = std::make_shared<formats::CSVWriterOptions>();
     auto writer =
@@ -577,7 +545,7 @@ TEST_F(CSVFileWriterTest, TestWriteIntegersWithGzipCompression) {
     std::string compressed_content;
     ASSERT_OK(_fs.read_file(_file_path, &compressed_content));
 
-    std::string content = decompress_gzip(compressed_content);
+    std::string content = test::decompress_gzip(compressed_content);
     std::string expect =
             "-128,-32768,-2147483648,-9223372036854775808\n127,32767,2147483647,9223372036854775807\n0,0,0,0\n1,1,1,"
             "1\n";
@@ -591,8 +559,10 @@ TEST_F(CSVFileWriterTest, TestWriteVarcharWithGzipCompression) {
     EXPECT_OK(maybe_output_file.status());
     auto output_file = std::move(maybe_output_file.value());
     auto async_stream = std::make_unique<io::AsyncFlushOutputStream>(std::move(output_file), nullptr, _runtime_state);
-    auto csv_output_stream = std::make_shared<csv::CompressedAsyncOutputStreamFile>(
+    auto csv_output_stream_result = csv::CompressedAsyncOutputStreamFile::create(
             async_stream.get(), CompressionTypePB::GZIP, 1024 * 1024);
+    ASSERT_OK(csv_output_stream_result.status());
+    auto csv_output_stream = std::move(csv_output_stream_result.value());
     auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
     auto writer_options = std::make_shared<formats::CSVWriterOptions>();
     auto writer =
@@ -627,7 +597,7 @@ TEST_F(CSVFileWriterTest, TestWriteVarcharWithGzipCompression) {
     std::string compressed_content;
     ASSERT_OK(_fs.read_file(_file_path, &compressed_content));
 
-    std::string content = decompress_gzip(compressed_content);
+    std::string content = test::decompress_gzip(compressed_content);
     std::string expect = "hello\nworld\nstarrocks\nlakehouse\n";
     ASSERT_EQ(content, expect);
 }
@@ -640,8 +610,10 @@ TEST_F(CSVFileWriterTest, TestWriteLargeDataWithGzipCompression) {
     EXPECT_OK(maybe_output_file.status());
     auto output_file = std::move(maybe_output_file.value());
     auto async_stream = std::make_unique<io::AsyncFlushOutputStream>(std::move(output_file), nullptr, _runtime_state);
-    auto csv_output_stream = std::make_shared<csv::CompressedAsyncOutputStreamFile>(
+    auto csv_output_stream_result = csv::CompressedAsyncOutputStreamFile::create(
             async_stream.get(), CompressionTypePB::GZIP, 1024 * 1024);
+    ASSERT_OK(csv_output_stream_result.status());
+    auto csv_output_stream = std::move(csv_output_stream_result.value());
     auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
     auto writer_options = std::make_shared<formats::CSVWriterOptions>();
     auto writer =
@@ -683,7 +655,7 @@ TEST_F(CSVFileWriterTest, TestWriteLargeDataWithGzipCompression) {
     ASSERT_OK(_fs.read_file(_file_path, &compressed_content));
 
     // Decompress and verify first and last few lines
-    std::string content = decompress_gzip(compressed_content);
+    std::string content = test::decompress_gzip(compressed_content);
     EXPECT_TRUE(content.find("0,row_0\n") != std::string::npos);
     EXPECT_TRUE(content.find(std::to_string(total_rows - 1) + ",row_" + std::to_string(total_rows - 1) + "\n") !=
                 std::string::npos);
@@ -714,8 +686,10 @@ TEST_F(CSVFileWriterTest, TestCompressionRatio) {
         auto output_file = std::move(maybe_output_file.value());
         auto async_stream =
                 std::make_unique<io::AsyncFlushOutputStream>(std::move(output_file), nullptr, _runtime_state);
-        auto csv_output_stream = std::make_shared<csv::CompressedAsyncOutputStreamFile>(
+        auto csv_output_stream_result = csv::CompressedAsyncOutputStreamFile::create(
                 async_stream.get(), CompressionTypePB::GZIP, 1024 * 1024);
+        ASSERT_OK(csv_output_stream_result.status());
+        auto csv_output_stream = std::move(csv_output_stream_result.value());
         auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
         auto writer_options = std::make_shared<formats::CSVWriterOptions>();
         auto writer = std::make_unique<formats::CSVFileWriter>(compressed_path, std::move(csv_output_stream),
@@ -744,7 +718,7 @@ TEST_F(CSVFileWriterTest, TestCompressionRatio) {
     EXPECT_LT(compressed_content.size(), expected_uncompressed_size / 2);
 
     // Verify decompressed content matches expected
-    std::string decompressed = decompress_gzip(compressed_content);
+    std::string decompressed = test::decompress_gzip(compressed_content);
     EXPECT_EQ(decompressed.size(), expected_uncompressed_size);
     EXPECT_EQ(decompressed, expected_content);
 }
@@ -791,7 +765,7 @@ TEST_F(CSVFileWriterTest, TestFactoryWithGzipCompression) {
     std::string compressed_content;
     ASSERT_OK(fs->read_file("/test_compressed.csv.gz", &compressed_content));
 
-    std::string content = decompress_gzip(compressed_content);
+    std::string content = test::decompress_gzip(compressed_content);
     EXPECT_TRUE(content.find("1,test1\n") != std::string::npos);
     EXPECT_TRUE(content.find("2,test2\n") != std::string::npos);
 }
@@ -804,8 +778,10 @@ TEST_F(CSVFileWriterTest, TestCompressionWithCustomDelimiters) {
     EXPECT_OK(maybe_output_file.status());
     auto output_file = std::move(maybe_output_file.value());
     auto async_stream = std::make_unique<io::AsyncFlushOutputStream>(std::move(output_file), nullptr, _runtime_state);
-    auto csv_output_stream = std::make_shared<csv::CompressedAsyncOutputStreamFile>(
+    auto csv_output_stream_result = csv::CompressedAsyncOutputStreamFile::create(
             async_stream.get(), CompressionTypePB::GZIP, 1024 * 1024);
+    ASSERT_OK(csv_output_stream_result.status());
+    auto csv_output_stream = std::move(csv_output_stream_result.value());
     auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
     auto writer_options = std::make_shared<formats::CSVWriterOptions>();
     writer_options->column_terminated_by = "|";
@@ -838,7 +814,7 @@ TEST_F(CSVFileWriterTest, TestCompressionWithCustomDelimiters) {
     std::string compressed_content;
     ASSERT_OK(_fs.read_file(_file_path, &compressed_content));
 
-    std::string content = decompress_gzip(compressed_content);
+    std::string content = test::decompress_gzip(compressed_content);
     EXPECT_EQ(content, "100|value1;\n200|value2;\n");
 }
 

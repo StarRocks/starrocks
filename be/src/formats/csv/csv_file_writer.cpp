@@ -19,6 +19,7 @@
 #include "formats/utils.h"
 #include "output_stream_file.h"
 #include "runtime/current_thread.h"
+#include "util/compression/compression_utils.h"
 
 namespace starrocks::formats {
 
@@ -148,10 +149,14 @@ StatusOr<WriterAndStream> CSVFileWriterFactory::create(const std::string& path) 
 
     // Use compressed stream if compression is enabled
     std::shared_ptr<csv::OutputStream> csv_output_stream;
-    if (_compression_type != TCompressionType::NO_COMPRESSION) {
-        CompressionTypePB compression_pb = static_cast<CompressionTypePB>(_compression_type);
-        csv_output_stream = std::make_shared<csv::CompressedAsyncOutputStreamFile>(async_output_stream.get(),
-                                                                                   compression_pb, 1024 * 1024);
+    CompressionTypePB compression_pb = CompressionUtils::to_compression_pb(_compression_type);
+    // Only use compression if it's a valid, recognized compression type
+    // (not UNKNOWN_COMPRESSION which is returned for AUTO, DEFAULT_COMPRESSION, etc.)
+    if (compression_pb != CompressionTypePB::NO_COMPRESSION &&
+        compression_pb != CompressionTypePB::UNKNOWN_COMPRESSION) {
+        ASSIGN_OR_RETURN(csv_output_stream,
+                         csv::CompressedAsyncOutputStreamFile::create(async_output_stream.get(), compression_pb,
+                                                                      1024 * 1024));
     } else {
         csv_output_stream = std::make_shared<csv::AsyncOutputStreamFile>(async_output_stream.get(), 1024 * 1024);
     }
