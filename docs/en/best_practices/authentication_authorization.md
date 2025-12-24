@@ -1,9 +1,6 @@
 ---
 sidebar_position: 100
 ---
-import AuthCompare from '../_assets/best_practices/_auth_comparison.mdx'
-import GroupProviderExample from '../_assets/best_practices/_auth_group_provider_example.mdx'
-import Solution3 from '../_assets/best_practices/_auth_solution_3.mdx'
 
 # Authentication and Authorization
 
@@ -216,9 +213,19 @@ The following example is based on LDAP.
    )
    ```
 
-3. Integrate the group provider with the authorization system.
+3. Integrate the group provider with the authorization system. You can use either the native authorization or Apache Ranger.
 
-   <GroupProviderExample />
+   - Native authorization:
+
+     Roles can be assigned to groups. On login, users are automatically assigned roles based on group membership.
+
+     ```sql
+     GRANT role TO EXTERNAL GROUP <group_name>
+     ```
+
+   - Apache Ranger:
+
+     Once a user logs in, StarRocks passes group information to Ranger for policy evaluation.
 
 ### Authorization
 
@@ -283,6 +290,18 @@ While manually created users can still be integrated with a **group provider** a
 
 :::
 
-<Solution3 />
+### Solution 3: External Authentication (External Identity) + Internal Authorization
+
+If you prefer to use **StarRocks' built-in authorization system** while still relying on **external authentication**, you can follow this approach:
+
+1. Use a **security integration** to establish a connection with the external authentication system.
+2. Configure the necessary group information for authentication and authorization within the **group provider**.
+3. Define the group(s) allowed to log in to the StarRocks cluster in the **security integration**. Users who belong to these groups will be granted login access.
+4. **Create the necessary roles** within StarRocks and **grant them to external groups**.
+5. When a user attempts to log in, they must both pass authentication and belong to an authorized group. Upon successful login, StarRocks will automatically assign the appropriate roles based on group membership.
+6. During query execution, StarRocks will enforce **internal RBAC-based authorization** as usual.
+7. Additionally, you can combine **Ranger** with this solution. For example, use **StarRocks' native RBAC** for internal table authorization, and use **Ranger** for external table authorization. When performing authorization via Ranger, StarRocks will still pass the **user ID and corresponding group information** to Ranger for access control.
+
+![Authentication and Authorization - Solution-3](../_assets/best_practices/auth_solution_3.png)
 
 <AuthSeeAlso />
