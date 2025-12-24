@@ -72,9 +72,9 @@ public class DeltaLakeCacheUpdateProcessorTest {
             }
         };
 
-        new MockUp<CachingDeltaLakeMetastore>() {
+        new MockUp<DeltaLakeMetastore>() {
             @mockit.Mock
-            public DeltaLakeSnapshot getCachedSnapshot(DatabaseTableName databaseTableName) {
+            public DeltaLakeSnapshot getLatestSnapshot(String dbName, String tableName) {
                 return new DeltaLakeSnapshot("db1", "table1", null, null,
                         123, "s3://bucket/path/to/table");
             }
@@ -110,14 +110,6 @@ public class DeltaLakeCacheUpdateProcessorTest {
                 connectContext.getCommand();
                 result = MysqlCommand.COM_QUERY;
                 minTimes = 0;
-            }
-        };
-
-        new MockUp<CachingDeltaLakeMetastore>() {
-            @mockit.Mock
-            public DeltaLakeSnapshot getCachedSnapshot(DatabaseTableName databaseTableName) {
-                return new DeltaLakeSnapshot("db1", "table1", null, null,
-                        123, "s3://bucket/path/to/table");
             }
         };
 

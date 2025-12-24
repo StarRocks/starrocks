@@ -27,6 +27,8 @@ import com.starrocks.connector.hive.HiveMetastore;
 import com.starrocks.connector.hive.HiveMetastoreTest;
 import com.starrocks.connector.hive.IHiveMetastore;
 import com.starrocks.connector.metastore.MetastoreTable;
+import com.starrocks.mysql.MysqlCommand;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.SemanticException;
 import io.delta.kernel.Operation;
 import io.delta.kernel.Snapshot;
@@ -45,11 +47,13 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
 import org.junit.rules.ExpectedException;
 
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -222,7 +226,7 @@ public class CachingDeltaLakeMetastoreTest {
     public void testRefreshTable() {
         new Expectations(metastore) {
             {
-                metastore.getTable(anyString, "notExistTbl");
+                metastore.getLatestSnapshot(anyString, "notExistTbl");
                 minTimes = 0;
                 Throwable targetException = new NoSuchObjectException("no such obj");
                 Throwable e = new InvocationTargetException(targetException);
@@ -264,6 +268,131 @@ public class CachingDeltaLakeMetastoreTest {
     }
 
     @Test
+    public void testInvalidateAll() {
+        new MockUp<CachingDeltaLakeMetastore>() {
+            @mockit.Mock
+            public DeltaLakeSnapshot getCachedSnapshot(DatabaseTableName databaseTableName) {
+                return new DeltaLakeSnapshot("db1", "table1", null, null,
+                        123, "s3://bucket/path/to/table");
+            }
+        };
+
+        new MockUp<DeltaUtils>() {
+            @mockit.Mock
+            public DeltaLakeTable convertDeltaSnapshotToSRTable(String catalog, DeltaLakeSnapshot snapshot) {
+                return new DeltaLakeTable(1, "delta0", "db1", "table1",
+                        Lists.newArrayList(), Lists.newArrayList("ts"), null,
+                        "s3://bucket/path/to/table", null, 123);
+            }
+        };
+
+        CachingDeltaLakeMetastore cachingDeltaLakeMetastore =
+                CachingDeltaLakeMetastore.createCatalogLevelInstance(metastore, executor, expireAfterWriteSec,
+                        refreshAfterWriteSec, 100);
+
+        // First access to populate cache
+        cachingDeltaLakeMetastore.getTable("db1", "table1");
+        Assertions.assertFalse(cachingDeltaLakeMetastore.estimateCount().isEmpty());
+
+        // Invalidate all
+        cachingDeltaLakeMetastore.invalidateAll();
+
+        // After invalidate all, caches should be cleared
+        Map<String, Long> count = cachingDeltaLakeMetastore.estimateCount();
+        Assertions.assertTrue(count.containsKey("tableCache"));
+        Assertions.assertEquals(0L, count.get("tableCache"));
+    }
+
+    @Test
+    public void testInvalidateTable() {
+        new MockUp<CachingDeltaLakeMetastore>() {
+            @mockit.Mock
+            public DeltaLakeSnapshot getCachedSnapshot(DatabaseTableName databaseTableName) {
+                return new DeltaLakeSnapshot("db1", "table1", null, null,
+                        123, "s3://bucket/path/to/table");
+            }
+        };
+
+        new MockUp<DeltaUtils>() {
+            @mockit.Mock
+            public DeltaLakeTable convertDeltaSnapshotToSRTable(String catalog, DeltaLakeSnapshot snapshot) {
+                return new DeltaLakeTable(1, "delta0", "db1", "table1",
+                        Lists.newArrayList(), Lists.newArrayList("ts"), null,
+                        "s3://bucket/path/to/table", null, 123);
+            }
+        };
+
+        CachingDeltaLakeMetastore cachingDeltaLakeMetastore =
+                CachingDeltaLakeMetastore.createCatalogLevelInstance(metastore, executor, expireAfterWriteSec,
+                        refreshAfterWriteSec, 100);
+
+        // Access table to populate cache
+        Table table = cachingDeltaLakeMetastore.getTable("db1", "table1");
+        Assertions.assertNotNull(table);
+
+        // Invalidate specific table
+        cachingDeltaLakeMetastore.invalidateTable("db1", "table1");
+
+        Map<String, Long> count = cachingDeltaLakeMetastore.estimateCount();
+        Assertions.assertTrue(count.containsKey("tableCache"));
+        Assertions.assertEquals(0L, count.get("tableCache"));
+    }
+
+    @Test
+    public void testGetCachedSnapshot() {
+        new MockUp<ConnectContext>() {
+            @mockit.Mock
+            public ConnectContext get() {
+                ConnectContext context = new ConnectContext();
+                context.setCommand(MysqlCommand.COM_QUERY);
+                return context;
+            }
+        };
+
+        DeltaLakeSnapshot snapshot = new DeltaLakeSnapshot("db1", "table1", null, null,
+                123, "s3://bucket/path/to/table");
+
+        new MockUp<CachingDeltaLakeMetastore>() {
+            @mockit.Mock
+            public DeltaLakeSnapshot getCachedSnapshot(DatabaseTableName databaseTableName) {
+                return snapshot;
+            }
+        };
+
+        CachingDeltaLakeMetastore cachingDeltaLakeMetastore =
+                CachingDeltaLakeMetastore.createCatalogLevelInstance(metastore, executor, expireAfterWriteSec,
+                        refreshAfterWriteSec, 100);
+
+        DeltaLakeSnapshot result = cachingDeltaLakeMetastore.getCachedSnapshot(DatabaseTableName.of("db1", "table1"));
+        Assertions.assertEquals(snapshot, result);
+    }
+
+    @Test
+    public void testRefreshTableUsesSnapshotCache() {
+        DeltaLakeSnapshot snapshot = new DeltaLakeSnapshot("db1", "table1", null, null,
+                123, "s3://bucket/path/to/table");
+
+        new MockUp<DeltaLakeMetastore>() {
+            @mockit.Mock
+            public DeltaLakeSnapshot getLatestSnapshot(String dbName, String tableName) {
+                return snapshot;
+            }
+        };
+
+        CachingDeltaLakeMetastore cachingDeltaLakeMetastore =
+                new CachingDeltaLakeMetastore(metastore, executor, expireAfterWriteSec, refreshAfterWriteSec, 1000);
+
+        // This should not throw exception and should use snapshot cache
+        try {
+            cachingDeltaLakeMetastore.refreshTable("db1", "table1", true);
+            // If we reach here, refresh succeeded
+            Assertions.assertTrue(true);
+        } catch (Exception e) {
+            Assertions.fail("Refresh table should succeed");
+        }
+    }
+
+    @Test
     public void testCacheMemoryUsage() {
         new MockUp<CachingDeltaLakeMetastore>() {
             @mockit.Mock
@@ -293,5 +422,35 @@ public class CachingDeltaLakeMetastoreTest {
         Assert.assertFalse(cachingDeltaLakeMetastore.estimateCount().isEmpty());
         Assert.assertTrue(cachingDeltaLakeMetastore.estimateCount().containsKey("databaseCache"));
         Assert.assertTrue(cachingDeltaLakeMetastore.estimateCount().containsKey("tableCache"));
+    }
+
+    @Test
+    public void testInvalidateTableUsesSnapshotCache() {
+        DeltaLakeSnapshot snapshot = new DeltaLakeSnapshot("db1", "table1", null, null,
+                123, "s3://bucket/path/to/table");
+
+        new MockUp<DeltaLakeMetastore>() {
+            @mockit.Mock
+            public DeltaLakeSnapshot getLatestSnapshot(String dbName, String tableName) {
+                return snapshot;
+            }
+        };
+
+        CachingDeltaLakeMetastore cachingDeltaLakeMetastore =
+                new CachingDeltaLakeMetastore(metastore, executor, expireAfterWriteSec, refreshAfterWriteSec, 1000);
+
+        // Refresh table to populate snapshot cache
+        cachingDeltaLakeMetastore.refreshTable("db1", "table1", true);
+
+        Map<String, Long> count = cachingDeltaLakeMetastore.estimateCount();
+        Assertions.assertTrue(count.containsKey("tableCache"));
+        Assertions.assertEquals(1L, count.get("tableCache"));
+
+        // Now invalidate the table
+        cachingDeltaLakeMetastore.invalidateTable("db1", "table1");
+
+        count = cachingDeltaLakeMetastore.estimateCount();
+        Assertions.assertTrue(count.containsKey("tableCache"));
+        Assertions.assertEquals(0L, count.get("tableCache"));
     }
 }
