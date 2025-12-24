@@ -140,7 +140,8 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
         FINISHED, // task is finished
         CANCELLED, // task is failed
         TIMEOUT, // task is timeout
-        UNEXPECTED // other unexpected errors
+        UNEXPECTED, // other unexpected errors
+        EXPIRED // tablet will be erased soon
     }
 
     private Type type;
