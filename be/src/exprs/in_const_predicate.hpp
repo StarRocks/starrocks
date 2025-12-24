@@ -236,9 +236,9 @@ public:
         ColumnBuilder<TYPE_BOOLEAN> builder(size);
         builder.resize_uninitialized(size);
 
-        uint8_t* null_data = builder.null_column()->get_data().data();
+        uint8_t* null_data = builder.null_column_raw_ptr()->get_data().data();
         memset(null_data, 0x0, size);
-        uint8_t* output = ColumnHelper::cast_to_raw<TYPE_BOOLEAN>(builder.data_column().get())->get_data().data();
+        uint8_t* output = ColumnHelper::cast_to_raw<TYPE_BOOLEAN>(builder.data_column_raw_ptr())->get_data().data();
 
         auto update_row = [&](int row) {
             if (viewer.is_null(row)) {

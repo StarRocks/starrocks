@@ -34,7 +34,7 @@ public:
     FileSinkOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
                      std::shared_ptr<FileSinkIOBuffer> file_sink_buffer)
             : Operator(factory, id, "file_sink", plan_node_id, false, driver_sequence),
-              _file_sink_buffer(std::move(std::move(file_sink_buffer))) {}
+              _file_sink_buffer(std::move(file_sink_buffer)) {}
 
     ~FileSinkOperator() override = default;
 

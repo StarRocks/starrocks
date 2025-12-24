@@ -147,8 +147,7 @@ public:
             return col;
         } else if (column->is_constant()) {
             // use clone is not safe, because the new cloned data may be freed after the function returns.
-            auto mut_column = column->as_mutable_ptr();
-            auto* const_column = down_cast<ConstColumn*>(mut_column.get());
+            auto* const_column = down_cast<ConstColumn*>(column->as_mutable_raw_ptr());
             const_column->assign(size, 0);
             return const_column->data_column()->as_mutable_ptr();
         } else {

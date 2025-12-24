@@ -2567,7 +2567,7 @@ ColumnPtr date_format_func(const Columns& cols, size_t patten_size) {
 
     size_t num_rows = viewer.size();
     ColumnBuilder<TYPE_VARCHAR> builder(num_rows);
-    builder.data_column()->reserve(num_rows, num_rows * patten_size);
+    builder.data_column_raw_ptr()->reserve(num_rows, num_rows * patten_size);
 
     for (int i = 0; i < num_rows; ++i) {
         if (viewer.is_null(i)) {

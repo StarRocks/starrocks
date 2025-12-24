@@ -175,7 +175,8 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_lambda_expr(ExprContext* context, Chu
         }
     }
     DCHECK(aligned_offsets != nullptr);
-    auto& aligned_offsets_data = UInt32Column::static_pointer_cast(aligned_offsets->as_mutable_ptr())->get_data();
+    auto& aligned_offsets_data =
+            ColumnHelper::as_raw_column<UInt32Column>(aligned_offsets->as_mutable_raw_ptr())->get_data();
 
     // 4. prepare capture columns
     for (auto slot_id : capture_slot_ids) {
@@ -247,7 +248,7 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_lambda_expr(ExprContext* context, Chu
                 tmp_col = ColumnHelper::align_return_type(std::move(tmp_col), type().children[0], tmp_chunk->num_rows(),
                                                           true);
                 if (column == nullptr) {
-                    column = tmp_col->as_mutable_ptr();
+                    column = std::move(*tmp_col).mutate();
                 } else {
                     column->append(*tmp_col);
                 }
@@ -267,7 +268,7 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_lambda_expr(ExprContext* context, Chu
         new_aligned_offsets->append(0);
         new_aligned_offsets->append(data_column->size());
         aligned_offsets = std::move(new_aligned_offsets);
-        auto array_column = ArrayColumn::create(data_column->as_mutable_ptr(), aligned_offsets);
+        auto array_column = ArrayColumn::create(std::move(*data_column).mutate(), aligned_offsets);
         array_column->check_or_die();
         ColumnPtr result_column = array_column;
         if (result_null_column != nullptr) {
@@ -381,7 +382,7 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_checked(ExprContext* context, Chunk* 
         auto array_col = ArrayColumn::create(std::move(column), std::move(aligned_offsets));
         array_col->check_or_die();
         if (result_null_column) {
-            auto result_null_mut = NullColumn::static_pointer_cast(std::move(result_null_column)->as_mutable_ptr());
+            auto result_null_mut = NullColumn::static_pointer_cast(std::move(*result_null_column).mutate());
             result_null_mut->resize(1);
             auto result = ConstColumn::create(NullableColumn::create(std::move(array_col), std::move(result_null_mut)),
                                               chunk->num_rows());

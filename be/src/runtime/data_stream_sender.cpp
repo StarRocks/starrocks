@@ -318,7 +318,7 @@ Status DataStreamSender::Channel::_send_current_chunk(bool eos) {
 
     // we only clear column data, because we need to reuse column schema
     for (ColumnPtr& column : _chunk->columns()) {
-        column->as_mutable_ptr()->resize(0);
+        column->as_mutable_raw_ptr()->resize(0);
     }
     return Status::OK();
 }

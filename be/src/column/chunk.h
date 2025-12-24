@@ -314,7 +314,7 @@ public:
         size_t num_columns = _columns.size();
         MutableColumns mutable_columns(num_columns);
         for (size_t i = 0; i < num_columns; ++i) {
-            mutable_columns[i] = _columns[i]->as_mutable_ptr();
+            mutable_columns[i] = std::move(*(_columns[i])).mutate();
         }
         return mutable_columns;
     }
