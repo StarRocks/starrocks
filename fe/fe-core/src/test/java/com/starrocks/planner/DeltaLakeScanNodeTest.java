@@ -18,16 +18,21 @@ import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.analysis.TupleId;
 import com.starrocks.catalog.DeltaLakeTable;
 import com.starrocks.connector.CatalogConnector;
+import com.starrocks.connector.delta.DeltaLakeEngine;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TExplainLevel;
+import io.delta.kernel.Snapshot;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import java.util.HashMap;
+
+import static org.hamcrest.CoreMatchers.containsString;
+import static org.hamcrest.MatcherAssert.assertThat;
 
 public class DeltaLakeScanNodeTest {
     @Test
@@ -82,5 +87,49 @@ public class DeltaLakeScanNodeTest {
         DeltaLakeScanNode scanNode = new DeltaLakeScanNode(new PlanNodeId(0), desc, "Delta Scan Node");
         Assertions.assertFalse(scanNode.getNodeExplainString("", TExplainLevel.NORMAL).contains("partitions"));
         Assertions.assertTrue(scanNode.getNodeExplainString("", TExplainLevel.VERBOSE).contains("partitions"));
+    }
+
+    @Test
+    public void testNodeExplainContainsVersion(@Mocked GlobalStateMgr globalStateMgr, @Mocked CatalogConnector connector,
+                                               @Mocked DeltaLakeTable table, @Mocked Snapshot snapshot,
+                                               @Mocked DeltaLakeEngine engine) {
+        String catalogName = "delta0";
+        CloudConfiguration cloudConfiguration = CloudConfigurationFactory.
+                buildCloudConfigurationForStorage(new HashMap<>());
+
+        new Expectations() {{
+                GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalogName);
+                result = connector;
+                minTimes = 0;
+
+                connector.getMetadata().getCloudConfiguration();
+                result = cloudConfiguration;
+                minTimes = 0;
+
+                table.getCatalogName();
+                result = catalogName;
+                minTimes = 0;
+
+                table.getName();
+                result = "table0";
+                minTimes = 0;
+
+                table.getDeltaSnapshot();
+                result = snapshot;
+                minTimes = 0;
+
+                table.getDeltaEngine();
+                result = engine;
+                minTimes = 0;
+
+                snapshot.getVersion(engine);
+                result = 123L;
+                minTimes = 0;
+            }};
+        TupleDescriptor desc = new TupleDescriptor(new TupleId(0));
+        desc.setTable(table);
+        DeltaLakeScanNode scanNode = new DeltaLakeScanNode(new PlanNodeId(0), desc, "Delta Scan Node");
+        String explainString = scanNode.getNodeExplainString("", TExplainLevel.NORMAL);
+        assertThat(explainString, containsString("TABLE VERSION: 123"));
     }
 }
