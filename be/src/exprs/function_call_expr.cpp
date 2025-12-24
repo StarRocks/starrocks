@@ -246,8 +246,9 @@ bool VectorizedFunctionCallExpr::ngram_bloom_filter(ExprContext* context, const 
 
         // for case_insensitive, we need to convert needle to lower case
         if (!reader_options.index_case_sensitive) {
-            std::transform(needle.begin(), needle.end(), needle.begin(),
-                           [](unsigned char c) { return std::tolower(c); });
+            std::string lower_needle;
+            utf8_tolower(needle, lower_needle);
+            needle = std::move(lower_needle);
         }
 
         if (!simdjson::validate_utf8(needle.data(), needle.size())) {

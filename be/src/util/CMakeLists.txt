@@ -87,6 +87,7 @@ set(UTIL_FILES
   sm3.cpp
   frame_of_reference_coding.cpp
   utf8_check.cpp
+  utf8.cpp
   path_util.cpp
   monotime.cpp
   thread.cpp

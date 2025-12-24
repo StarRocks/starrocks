@@ -1,0 +1,48 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+#include "util/utf8.h"
+
+#include <unicode/ucasemap.h>
+
+#include <algorithm>
+#include <cctype>
+
+#include "common/logging.h"
+
+namespace starrocks {
+
+void utf8_tolower(const char* src, size_t src_len, std::string& dst) {
+    UErrorCode err_code = U_ZERO_ERROR;
+    UCaseMap* case_map = ucasemap_open("", U_FOLD_CASE_DEFAULT, &err_code);
+    DCHECK(U_SUCCESS(err_code)) << "Failed to open UCaseMap: " << u_errorName(err_code);
+
+    // Initial buffer size - UTF-8 lowercase can be larger than original (e.g., German ß -> ss)
+    dst.resize(src_len * 2);
+
+    int32_t result_len = ucasemap_utf8ToLower(case_map, dst.data(), dst.size(), src, src_len, &err_code);
+
+    if (err_code == U_BUFFER_OVERFLOW_ERROR) {
+        err_code = U_ZERO_ERROR;
+        dst.resize(result_len + 1);
+        result_len = ucasemap_utf8ToLower(case_map, dst.data(), dst.size(), src, src_len, &err_code);
+    }
+
+    ucasemap_close(case_map);
+
+    DCHECK(U_SUCCESS(err_code)) << "Failed to convert to lowercase: " << u_errorName(err_code);
+    dst.resize(result_len);
+}
+
+} // namespace starrocks

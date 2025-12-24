@@ -1008,6 +1008,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String BACK_PRESSURE_THROTTLE_TIME_UPPER_BOUND = "back_pressure_throttle_time_upper_bound";
 
     public static final String LOWER_UPPER_SUPPORT_UTF8 = "lower_upper_support_utf8";
+    public static final String NGRAM_SEARCH_SUPPORT_UTF8 = "ngram_search_support_utf8";
 
     public static final String SEMI_JOIN_DEDUPLICATE_MODE = "semi_join_deduplicat_mode";
     public static final String ENABLE_INNER_JOIN_TO_SEMI = "enable_inner_join_to_semi";
@@ -2047,6 +2048,13 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // In order to be compatible with the previous behavior, the default value is false.
     @VarAttr(name = LOWER_UPPER_SUPPORT_UTF8)
     private boolean lowerUpperSupportUTF8 = false;
+
+    // Enable UTF-8 support for ngram_search and ngram_search_case_insensitive functions.
+    // When enabled, n-grams are computed based on UTF-8 characters instead of bytes.
+    // This allows proper similarity computation for non-ASCII text (e.g., Cyrillic, Chinese).
+    // Default is false for backward compatibility.
+    @VarAttr(name = NGRAM_SEARCH_SUPPORT_UTF8)
+    private boolean ngramSearchSupportUTF8 = false;
 
     // this sv controls whether to create distinct agg below semi join
     // -1 means disable this optimization
@@ -5887,6 +5895,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         tResult.setEnable_join_runtime_filter_pushdown(enableJoinRuntimeFilterPushDown);
         tResult.setEnable_join_runtime_bitset_filter(enableJoinRuntimeBitsetFilter);
         tResult.setLower_upper_support_utf8(lowerUpperSupportUTF8);
+        tResult.setNgram_search_support_utf8(ngramSearchSupportUTF8);
         tResult.setEnable_global_late_materialization(enableGlobalLateMaterialization);
         tResult.setPipeline_dop(pipelineDop);
         if (pipelineProfileLevel == 2) {
