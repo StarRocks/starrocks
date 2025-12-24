@@ -1468,16 +1468,16 @@ public class EditLog {
         logJsonObject(OperationType.OP_DROP_DB, dropDbInfo);
     }
 
-    public void logEraseDb(long dbId) {
-        logJsonObject(OperationType.OP_ERASE_DB_V2, new EraseDbLog(dbId));
+    public void logEraseDb(long dbId, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_ERASE_DB_V2, new EraseDbLog(dbId), walApplier);
     }
 
     public void logRecoverDb(RecoverInfo info) {
         logJsonObject(OperationType.OP_RECOVER_DB_V2, info);
     }
 
-    public void logAlterDb(DatabaseInfo dbInfo) {
-        logJsonObject(OperationType.OP_ALTER_DB_V2, dbInfo);
+    public void logAlterDb(DatabaseInfo dbInfo, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_ALTER_DB_V2, dbInfo, walApplier);
     }
 
     public void logCreateTable(CreateTableInfo info) {
@@ -1528,24 +1528,20 @@ public class EditLog {
         logJsonObject(OperationType.OP_ADD_SUB_PARTITIONS_V2, info);
     }
 
-    public void logDropPartition(DropPartitionInfo info) {
-        logJsonObject(OperationType.OP_DROP_PARTITION, info);
+    public void logDropPartitions(DropPartitionsInfo info, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_DROP_PARTITIONS, info, walApplier);
     }
 
-    public void logDropPartitions(DropPartitionsInfo info) {
-        logJsonObject(OperationType.OP_DROP_PARTITIONS, info);
+    public void logErasePartition(long partitionId, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_ERASE_PARTITION_V2, new ErasePartitionLog(partitionId), walApplier);
     }
 
-    public void logErasePartition(long partitionId) {
-        logJsonObject(OperationType.OP_ERASE_PARTITION_V2, new ErasePartitionLog(partitionId));
+    public void logRecoverPartition(RecoverInfo info, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_RECOVER_PARTITION_V2, info, walApplier);
     }
 
-    public void logRecoverPartition(RecoverInfo info) {
-        logJsonObject(OperationType.OP_RECOVER_PARTITION_V2, info);
-    }
-
-    public void logModifyPartition(ModifyPartitionInfo info) {
-        logJsonObject(OperationType.OP_MODIFY_PARTITION_V2, info);
+    public void logModifyPartition(ModifyPartitionInfo info, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_MODIFY_PARTITION_V2, info, walApplier);
     }
 
     public void logBatchModifyPartition(BatchModifyPartitionsInfo info) {
@@ -1568,8 +1564,8 @@ public class EditLog {
         logJsonObject(OperationType.OP_ERASE_MULTI_TABLES, new MultiEraseTableInfo(tableIds));
     }
 
-    public void logRecoverTable(RecoverInfo info) {
-        logJsonObject(OperationType.OP_RECOVER_TABLE_V2, info);
+    public void logRecoverTable(RecoverInfo info, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_RECOVER_TABLE_V2, info, walApplier);
     }
 
     public void logDropRollup(DropInfo info) {
@@ -1633,12 +1629,12 @@ public class EditLog {
         logJsonObject(OperationType.OP_UPDATE_REPLICA_V2, info);
     }
 
-    public void logDeleteReplica(ReplicaPersistInfo info) {
-        logJsonObject(OperationType.OP_DELETE_REPLICA_V2, info);
+    public void logDeleteReplica(ReplicaPersistInfo info, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_DELETE_REPLICA_V2, info, walApplier);
     }
 
-    public void logBatchDeleteReplica(BatchDeleteReplicaInfo info) {
-        logJsonObject(OperationType.OP_BATCH_DELETE_REPLICA, info);
+    public void logBatchDeleteReplica(BatchDeleteReplicaInfo info, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_BATCH_DELETE_REPLICA, info, walApplier);
     }
 
     public void logAddKey(EncryptionKeyPB key, WALApplier walApplier) {
@@ -1661,12 +1657,12 @@ public class EditLog {
         logJsonObject(OperationType.OP_BACKEND_STATE_CHANGE_V2, info, applier);
     }
 
-    public void logDatabaseRename(DatabaseInfo databaseInfo) {
-        logJsonObject(OperationType.OP_RENAME_DB_V2, databaseInfo);
+    public void logDatabaseRename(DatabaseInfo databaseInfo, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_RENAME_DB_V2, databaseInfo, walApplier);
     }
 
-    public void logTableRename(TableInfo tableInfo) {
-        logJsonObject(OperationType.OP_RENAME_TABLE_V2, tableInfo);
+    public void logTableRename(TableInfo tableInfo, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_RENAME_TABLE_V2, tableInfo, walApplier);
     }
 
     public void logModifyViewDef(AlterViewInfo alterViewInfo) {
@@ -1677,8 +1673,8 @@ public class EditLog {
         logJsonObject(OperationType.OP_RENAME_ROLLUP_V2, tableInfo);
     }
 
-    public void logPartitionRename(TableInfo tableInfo) {
-        logJsonObject(OperationType.OP_RENAME_PARTITION_V2, tableInfo);
+    public void logPartitionRename(TableInfo tableInfo, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_RENAME_PARTITION_V2, tableInfo, walApplier);
     }
 
     public void logAddBroker(ModifyBrokerInfo info, WALApplier applier) {
@@ -1726,8 +1722,8 @@ public class EditLog {
         logJsonObject(OperationType.OP_RESTORE_JOB_V2, job);
     }
 
-    public void logTruncateTable(TruncateTableInfo info) {
-        logJsonObject(OperationType.OP_TRUNCATE_TABLE, info);
+    public void logTruncateTable(TruncateTableInfo info, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_TRUNCATE_TABLE, info, walApplier);
     }
 
     public void logColocateAddTable(ColocatePersistInfo info) {
@@ -1770,8 +1766,8 @@ public class EditLog {
         logJsonObject(OperationType.OP_SET_HAS_DELETE, info, walApplier);
     }
 
-    public void logBackendTabletsInfo(BackendTabletsInfo backendTabletsInfo) {
-        logJsonObject(OperationType.OP_BACKEND_TABLETS_INFO_V2, backendTabletsInfo);
+    public void logBackendTabletsInfo(BackendTabletsInfo backendTabletsInfo, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_BACKEND_TABLETS_INFO_V2, backendTabletsInfo, walApplier);
     }
 
     public void logCreateRoutineLoadJob(RoutineLoadJob routineLoadJob, WALApplier walApplier) {
@@ -1903,8 +1899,8 @@ public class EditLog {
         logJsonObject(OperationType.OP_UNINSTALL_PLUGIN, log, walApplier);
     }
 
-    public void logSetReplicaStatus(SetReplicaStatusOperationLog log) {
-        logJsonObject(OperationType.OP_SET_REPLICA_STATUS, log);
+    public void logSetReplicaStatus(SetReplicaStatusOperationLog log, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_SET_REPLICA_STATUS, log, walApplier);
     }
 
     public void logRemoveExpiredAlterJobV2(RemoveAlterJobV2OperationLog log) {
@@ -2003,8 +1999,8 @@ public class EditLog {
         logJsonObject(OperationType.OP_MODIFY_HIVE_TABLE_COLUMN, log);
     }
 
-    public void logModifyColumnComment(ModifyColumnCommentLog log) {
-        logJsonObject(OperationType.OP_MODIFY_COLUMN_COMMENT, log);
+    public void logModifyColumnComment(ModifyColumnCommentLog log, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_MODIFY_COLUMN_COMMENT, log, walApplier);
     }
 
     public void logCreateCatalog(Catalog log, WALApplier walApplier) {
@@ -2181,8 +2177,8 @@ public class EditLog {
         logJsonObject(OperationType.OP_DELETE_REPLICATION_JOB, replicationJobLog);
     }
 
-    public void logColumnRename(ColumnRenameInfo columnRenameInfo) {
-        logJsonObject(OperationType.OP_RENAME_COLUMN_V2, columnRenameInfo);
+    public void logColumnRename(ColumnRenameInfo columnRenameInfo, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_RENAME_COLUMN_V2, columnRenameInfo, walApplier);
     }
 
     public void logCreateDictionary(Dictionary info, WALApplier walApplier) {
@@ -2209,8 +2205,8 @@ public class EditLog {
         logJsonObject(OperationType.OP_DISABLE_DISK, info, applier);
     }
 
-    public void logRecoverPartitionVersion(PartitionVersionRecoveryInfo info) {
-        logJsonObject(OperationType.OP_RECOVER_PARTITION_VERSION, info);
+    public void logRecoverPartitionVersion(PartitionVersionRecoveryInfo info, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_RECOVER_PARTITION_VERSION, info, walApplier);
     }
 
     public void logClusterSnapshotLog(ClusterSnapshotLog info) {

@@ -820,7 +820,6 @@ public class OlapTable extends Table {
 
     public void renameColumn(String oldName, String newName) {
         Column column = this.nameToColumn.remove(oldName);
-        Preconditions.checkState(column != null, "column of name: " + oldName + " does not exist");
         column.setName(newName);
         this.nameToColumn.put(newName, column);
     }
@@ -1866,8 +1865,7 @@ public class OlapTable extends Table {
                 listPartitionInfo.addPartition(idToColumn, newPartition.getId(), dataProperty, replicationNum,
                         dataCacheInfo, values, multiValues);
             } catch (AnalysisException ex) {
-                LOG.warn("failed to add list partition", ex);
-                throw new SemanticException(ex.getMessage());
+                LOG.warn("failed to add list partition, should not happen", ex);
             }
         } else {
             partitionInfo.dropPartition(oldPartition.getId());
