@@ -1801,22 +1801,9 @@ public class TabletScheduler extends FrontendDaemon {
                 // no more tablets
                 break;
             }
-<<<<<<< HEAD
             // ignore tablets that will expire and erase soon
             if (checkIfTabletExpired(tablet)) {
-=======
-            try {
-                // ignore tablets that will expire and erase soon
-                if (checkIfTabletExpired(tablet)) {
-                    finalizeTabletCtx(tablet, TabletSchedCtx.State.EXPIRED, "will erase soon");
-                    continue;
-                }
-                list.add(tablet);
-            } catch (Exception e) {
-                LOG.warn("got unexpected exception, discard this schedule. tablet: {}",
-                        tablet.getTabletId(), e);
-                finalizeTabletCtx(tablet, TabletSchedCtx.State.UNEXPECTED, e.getMessage());
->>>>>>> 37fa05e8cc ([BugFix] FinalizeTabletCtx if tablet expired (#66718))
+                finalizeTabletCtx(tablet, TabletSchedCtx.State.EXPIRED, "will erase soon");
                 continue;
             }
             list.add(tablet);
