@@ -102,7 +102,7 @@ mysql -utom -P9030 -h127.0.0.1 -p --default-auth mysql_clear_password --enable-c
 
 - **JDBC**
 
-<SSLLink />
+<LDAPSSLLink />
 
 JDBC 5:
 
