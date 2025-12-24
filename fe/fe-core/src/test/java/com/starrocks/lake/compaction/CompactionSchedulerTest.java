@@ -31,7 +31,6 @@ import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.transaction.DatabaseTransactionMgr;
 import com.starrocks.transaction.GlobalTransactionMgr;
-import com.starrocks.transaction.TabletCommitInfo;
 import com.starrocks.utframe.MockedWarehouseManager;
 import mockit.Expectations;
 import mockit.Mock;
@@ -46,7 +45,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.TimeUnit;
 
 public class CompactionSchedulerTest {
     @Mocked
@@ -247,6 +245,7 @@ public class CompactionSchedulerTest {
         compactionScheduler.runOneCycle();
         Assertions.assertEquals(0, compactionScheduler.getRunningCompactions().size());
     }
+<<<<<<< HEAD
 
     /**
      * Test that removeFromStartupActiveCompactionTransactionMap is called when compaction completes normally
@@ -605,4 +604,6 @@ public class CompactionSchedulerTest {
         Assertions.assertEquals(0, compactionManager.getRemainedActiveCompactionTxnWhenStart().size(),
                 "Active transaction map should be empty after cleanup");
     }
+=======
+>>>>>>> 1c54bd967f ([BugFix] Clear startup lake compaction txn map on txn finalization (#66533))
 }
