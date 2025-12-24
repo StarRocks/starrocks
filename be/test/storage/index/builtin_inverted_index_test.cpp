@@ -556,4 +556,263 @@ TEST_F(BuiltinInvertedIndexTest, test_prefix_overflow_query_with_nulls) {
     delete iter;
 }
 
+// Test BuiltinInvertedReader's query and query_null which should return InternalError
+TEST_F(BuiltinInvertedIndexTest, test_reader_unsupported_query) {
+    auto tablet_index = std::make_shared<TabletIndex>();
+    std::unique_ptr<InvertedReader> reader;
+    ASSERT_OK(BuiltinInvertedReader::create(tablet_index, TYPE_VARCHAR, &reader));
+    
+    roaring::Roaring bitmap;
+    Slice query("test");
+    ASSERT_TRUE(reader->query(nullptr, "c0", &query, InvertedIndexQueryType::EQUAL_QUERY, &bitmap).is_internal_error());
+    ASSERT_TRUE(reader->query_null(nullptr, "c0", &bitmap).is_internal_error());
+    ASSERT_EQ(InvertedIndexReaderType::TEXT, reader->get_inverted_index_reader_type());
+}
+
+// Test BuiltinInvertedIndexIterator's read_null and unsupported query types
+TEST_F(BuiltinInvertedIndexTest, test_iterator_unsupported_ops) {
+    TabletIndex tablet_index;
+    tablet_index.add_index_properties(INVERTED_INDEX_PARSER_KEY, INVERTED_INDEX_PARSER_NONE);
+    TypeInfoPtr type_info = get_type_info(TYPE_VARCHAR);
+    std::string file_name = kTestDir + "/unsupported_ops";
+    ColumnMetaPB meta;
+    {
+        ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(file_name));
+        std::unique_ptr<InvertedWriter> writer;
+        ASSERT_OK(BuiltinInvertedWriter::create(type_info, &tablet_index, &writer));
+        ASSERT_OK(writer->init());
+        Slice val("test");
+        writer->add_values(&val, 1);
+        ASSERT_OK(writer->finish(wfile.get(), &meta));
+    }
+
+    ASSIGN_OR_ABORT(auto rfile, _fs->new_random_access_file(file_name));
+    _opts.read_file = rfile.get();
+    auto tablet_index_sp = std::make_shared<TabletIndex>(tablet_index);
+    std::unique_ptr<InvertedReader> reader;
+    ASSERT_OK(BuiltinInvertedReader::create(tablet_index_sp, TYPE_VARCHAR, &reader));
+    BuiltinInvertedIndexPB builtin_meta_copy = meta.indexes(0).builtin_inverted_index();
+    ASSERT_OK(reader->load(_opts, &builtin_meta_copy));
+
+    InvertedIndexIterator* iter = nullptr;
+    ASSERT_OK(reader->new_iterator(tablet_index_sp, &iter, _opts));
+
+    roaring::Roaring bitmap;
+    ASSERT_TRUE(iter->read_null("c0", &bitmap).is_internal_error());
+    
+    Slice query("test");
+    ASSERT_TRUE(iter->read_from_inverted_index("c0", &query, static_cast<InvertedIndexQueryType>(-1), &bitmap).is_invalid_argument());
+
+    delete iter;
+}
+
+// Test BuiltinInvertedWriter::create with unsupported types
+TEST_F(BuiltinInvertedIndexTest, test_writer_create_unsupported_type) {
+    TabletIndex tablet_index;
+    TypeInfoPtr type_info = get_type_info(TYPE_INT);
+    std::unique_ptr<InvertedWriter> writer;
+    ASSERT_FALSE(BuiltinInvertedWriter::create(type_info, &tablet_index, &writer).ok());
+}
+
+// Test BuiltinInvertedWriter with TYPE_CHAR and different parsers
+TEST_F(BuiltinInvertedIndexTest, test_writer_char_and_parsers) {
+    std::vector<InvertedIndexParserType> parsers = {
+        InvertedIndexParserType::PARSER_STANDARD,
+        InvertedIndexParserType::PARSER_CHINESE
+    };
+
+    for (auto parser_type : parsers) {
+        TabletIndex tablet_index;
+        tablet_index.add_index_properties(INVERTED_INDEX_PARSER_KEY, inverted_index_parser_type_to_string(parser_type));
+        TypeInfoPtr type_info = get_type_info(TYPE_CHAR);
+        
+        std::string file_name = kTestDir + "/writer_test_" + std::to_string(static_cast<int>(parser_type));
+        ColumnMetaPB meta;
+        {
+            ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(file_name));
+            std::unique_ptr<InvertedWriter> writer;
+            ASSERT_OK(BuiltinInvertedWriter::create(type_info, &tablet_index, &writer));
+            ASSERT_OK(writer->init());
+            
+            std::vector<std::string> values = {"Hello World", "你好世界"};
+            std::vector<Slice> slices;
+            for (auto& v : values) slices.emplace_back(v);
+            
+            writer->add_values(slices.data(), slices.size());
+            ASSERT_OK(writer->finish(wfile.get(), &meta));
+        }
+    }
+}
+
+// Test BuiltinInvertedIndexIterator with MATCH_ALL and MATCH_ANY mixed tokens
+TEST_F(BuiltinInvertedIndexTest, test_mixed_token_queries) {
+    std::vector<std::string> values = {"apple banana cherry", "apple fruit", "banana split"};
+    std::vector<Slice> slices;
+    for (auto& v : values) slices.emplace_back(v);
+
+    TabletIndex tablet_index;
+    tablet_index.add_index_properties(INVERTED_INDEX_PARSER_KEY, INVERTED_INDEX_PARSER_ENGLISH);
+    TypeInfoPtr type_info = get_type_info(TYPE_VARCHAR);
+    std::string file_name = kTestDir + "/mixed_tokens";
+    ColumnMetaPB meta;
+    {
+        ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(file_name));
+        std::unique_ptr<InvertedWriter> writer;
+        ASSERT_OK(BuiltinInvertedWriter::create(type_info, &tablet_index, &writer));
+        ASSERT_OK(writer->init());
+        writer->add_values(slices.data(), slices.size());
+        ASSERT_OK(writer->finish(wfile.get(), &meta));
+    }
+
+    ASSIGN_OR_ABORT(auto rfile, _fs->new_random_access_file(file_name));
+    _opts.read_file = rfile.get();
+    auto tablet_index_sp = std::make_shared<TabletIndex>(tablet_index);
+    std::unique_ptr<InvertedReader> reader;
+    ASSERT_OK(BuiltinInvertedReader::create(tablet_index_sp, TYPE_VARCHAR, &reader));
+    BuiltinInvertedIndexPB builtin_meta_copy = meta.indexes(0).builtin_inverted_index();
+    ASSERT_OK(reader->load(_opts, &builtin_meta_copy));
+
+    InvertedIndexIterator* iter = nullptr;
+    ASSERT_OK(reader->new_iterator(tablet_index_sp, &iter, _opts));
+
+    // MATCH_ANY: "apple banan%" should hit all 3 rows
+    {
+        roaring::Roaring bitmap;
+        Slice query("apple banan%");
+        ASSERT_OK(iter->read_from_inverted_index("c0", &query, InvertedIndexQueryType::MATCH_ANY_QUERY, &bitmap));
+        ASSERT_EQ(3, bitmap.cardinality());
+    }
+
+    // MATCH_ALL: "apple fru%" should hit only row 1
+    {
+        roaring::Roaring bitmap;
+        Slice query("apple fru%");
+        ASSERT_OK(iter->read_from_inverted_index("c0", &query, InvertedIndexQueryType::MATCH_ALL_QUERY, &bitmap));
+        ASSERT_EQ(1, bitmap.cardinality());
+        ASSERT_TRUE(bitmap.contains(1));
+    }
+
+    delete iter;
+}
+
+// Test BuiltinInvertedIndexIterator with invalid wildcard query (no %)
+TEST_F(BuiltinInvertedIndexTest, test_invalid_wildcard) {
+    TabletIndex tablet_index;
+    tablet_index.add_index_properties(INVERTED_INDEX_PARSER_KEY, INVERTED_INDEX_PARSER_NONE);
+    TypeInfoPtr type_info = get_type_info(TYPE_VARCHAR);
+    std::string file_name = kTestDir + "/invalid_wildcard";
+    ColumnMetaPB meta;
+    {
+        ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(file_name));
+        std::unique_ptr<InvertedWriter> writer;
+        ASSERT_OK(BuiltinInvertedWriter::create(type_info, &tablet_index, &writer));
+        ASSERT_OK(writer->init());
+        Slice val("test");
+        writer->add_values(&val, 1);
+        ASSERT_OK(writer->finish(wfile.get(), &meta));
+    }
+
+    ASSIGN_OR_ABORT(auto rfile, _fs->new_random_access_file(file_name));
+    _opts.read_file = rfile.get();
+    auto tablet_index_sp = std::make_shared<TabletIndex>(tablet_index);
+    std::unique_ptr<InvertedReader> reader;
+    ASSERT_OK(BuiltinInvertedReader::create(tablet_index_sp, TYPE_VARCHAR, &reader));
+    BuiltinInvertedIndexPB builtin_meta_copy = meta.indexes(0).builtin_inverted_index();
+    ASSERT_OK(reader->load(_opts, &builtin_meta_copy));
+
+    InvertedIndexIterator* iter = nullptr;
+    ASSERT_OK(reader->new_iterator(tablet_index_sp, &iter, _opts));
+
+    roaring::Roaring bitmap;
+    Slice query("test"); // No %
+    ASSERT_TRUE(iter->read_from_inverted_index("c0", &query, InvertedIndexQueryType::MATCH_WILDCARD_QUERY, &bitmap).is_internal_error());
+
+    delete iter;
+}
+
+// Test complex wildcard query like "a%c" to trigger predicate seek
+TEST_F(BuiltinInvertedIndexTest, test_complex_wildcard_query) {
+    std::vector<std::string> values = {"abc", "acc", "aec", "afc", "bbc"};
+    std::vector<Slice> slices;
+    for (auto& v : values) slices.emplace_back(v);
+
+    TabletIndex tablet_index;
+    tablet_index.add_index_properties(INVERTED_INDEX_PARSER_KEY, INVERTED_INDEX_PARSER_NONE);
+    TypeInfoPtr type_info = get_type_info(TYPE_VARCHAR);
+    std::string file_name = kTestDir + "/complex_wildcard";
+    ColumnMetaPB meta;
+    {
+        ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(file_name));
+        std::unique_ptr<InvertedWriter> writer;
+        ASSERT_OK(BuiltinInvertedWriter::create(type_info, &tablet_index, &writer));
+        ASSERT_OK(writer->init());
+        writer->add_values(slices.data(), slices.size());
+        
+        // Exercise size()
+        ASSERT_GT(writer->size(), 0);
+        
+        ASSERT_OK(writer->finish(wfile.get(), &meta));
+    }
+
+    ASSIGN_OR_ABORT(auto rfile, _fs->new_random_access_file(file_name));
+    _opts.read_file = rfile.get();
+    auto tablet_index_sp = std::make_shared<TabletIndex>(tablet_index);
+    std::unique_ptr<InvertedReader> reader;
+    ASSERT_OK(BuiltinInvertedReader::create(tablet_index_sp, TYPE_VARCHAR, &reader));
+    BuiltinInvertedIndexPB builtin_meta_copy = meta.indexes(0).builtin_inverted_index();
+    ASSERT_OK(reader->load(_opts, &builtin_meta_copy));
+
+    InvertedIndexIterator* iter = nullptr;
+    ASSERT_OK(reader->new_iterator(tablet_index_sp, &iter, _opts));
+
+    // "a%c" should hit abc, acc, aec, afc (rowids 0, 1, 2, 3)
+    {
+        roaring::Roaring bitmap;
+        Slice query("a%c");
+        ASSERT_OK(iter->read_from_inverted_index("c0", &query, InvertedIndexQueryType::MATCH_WILDCARD_QUERY, &bitmap));
+        ASSERT_EQ(4, bitmap.cardinality());
+        ASSERT_TRUE(bitmap.contains(0));
+        ASSERT_TRUE(bitmap.contains(1));
+        ASSERT_TRUE(bitmap.contains(2));
+        ASSERT_TRUE(bitmap.contains(3));
+        ASSERT_FALSE(bitmap.contains(4));
+    }
+
+    // Prefix not found case: "z%"
+    {
+        roaring::Roaring bitmap;
+        Slice query("z%");
+        ASSERT_OK(iter->read_from_inverted_index("c0", &query, InvertedIndexQueryType::MATCH_WILDCARD_QUERY, &bitmap));
+        ASSERT_EQ(0, bitmap.cardinality());
+    }
+
+    // Explicitly call close
+    ASSERT_OK(iter->close());
+
+    delete iter;
+}
+
+TEST_F(BuiltinInvertedIndexTest, test_simple_analyzer) {
+    SimpleAnalyzer analyzer(true);
+    char text[] = "Hello World 123";
+    std::vector<SliceToken> tokens;
+    analyzer.tokenize(text, strlen(text), tokens);
+    
+    ASSERT_EQ(3, tokens.size());
+    ASSERT_EQ("hello", tokens[0].text.to_string());
+    ASSERT_EQ("world", tokens[1].text.to_string());
+    ASSERT_EQ("123", tokens[2].text.to_string());
+
+    SimpleAnalyzer analyzer2(false);
+    char text2[] = "Hello World";
+    tokens.clear();
+    analyzer2.tokenize(text2, strlen(text2), tokens);
+    ASSERT_EQ(2, tokens.size());
+    ASSERT_EQ("Hello", tokens[0].text.to_string());
+    ASSERT_EQ("World", tokens[1].text.to_string());
+    
+    analyzer2.tokenize(nullptr, 0, tokens);
+    ASSERT_TRUE(tokens.empty());
+}
+
 } // namespace starrocks

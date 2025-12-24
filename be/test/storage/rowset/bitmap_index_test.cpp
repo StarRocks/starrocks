@@ -371,4 +371,112 @@ TEST_F(BitmapIndexTest, test_add_value_with_current_rowid) {
     delete iter;
 }
 
+TEST_F(BitmapIndexTest, test_read_union_variants) {
+    size_t num_rows = 100;
+    int* val = new int[num_rows];
+    for (int i = 0; i < num_rows; ++i) {
+        val[i] = i;
+    }
+
+    std::string file_name = kTestDir + "/union_variants";
+    ColumnIndexMetaPB meta;
+    write_index_file<TYPE_INT>(file_name, val, num_rows, 0, &meta);
+    {
+        BitmapIndexReader* reader = nullptr;
+        BitmapIndexIterator* iter = nullptr;
+        ASSIGN_OR_ABORT(auto rfile, _fs->new_random_access_file(file_name));
+        get_bitmap_reader_iter(rfile.get(), meta, &reader, &iter);
+
+        // Test read_union_bitmap(Buffer<rowid_t>)
+        {
+            Roaring result;
+            Buffer<rowid_t> rowids = {1, 3, 5};
+            ASSERT_OK(iter->read_union_bitmap(rowids, &result));
+            ASSERT_EQ(3, result.cardinality());
+            ASSERT_TRUE(result.contains(1));
+            ASSERT_TRUE(result.contains(3));
+            ASSERT_TRUE(result.contains(5));
+        }
+
+        // Test read_union_bitmap(SparseRange)
+        {
+            Roaring result;
+            SparseRange<> range;
+            range.add(Range<>(1, 3)); // rowids 1, 2
+            range.add(Range<>(5, 6)); // rowid 5
+            ASSERT_OK(iter->read_union_bitmap(range, &result));
+            ASSERT_EQ(3, result.cardinality());
+            ASSERT_TRUE(result.contains(1));
+            ASSERT_TRUE(result.contains(2));
+            ASSERT_TRUE(result.contains(5));
+        }
+
+        delete reader;
+        delete iter;
+    }
+    delete[] val;
+}
+
+TEST_F(BitmapIndexTest, test_seek_dictionary_by_predicate) {
+    std::vector<std::string> values = {"apple", "banana", "cherry", "date"};
+    std::vector<Slice> slices;
+    for (auto& v : values) slices.emplace_back(v);
+
+    std::string file_name = kTestDir + "/seek_predicate";
+    ColumnIndexMetaPB meta;
+    write_index_file<TYPE_VARCHAR>(file_name, slices.data(), values.size(), 0, &meta);
+    {
+        BitmapIndexReader* reader = nullptr;
+        BitmapIndexIterator* iter = nullptr;
+        ASSIGN_OR_ABORT(auto rfile, _fs->new_random_access_file(file_name));
+        get_bitmap_reader_iter(rfile.get(), meta, &reader, &iter);
+
+        auto predicate = [](const Column& value_column) -> StatusOr<ColumnPtr> {
+            auto res = BooleanColumn::create();
+            const auto& binary_col = down_cast<const BinaryColumn&>(value_column);
+            for (size_t i = 0; i < binary_col.size(); ++i) {
+                Slice s = binary_col.get_data()[i];
+                res->append(s.to_string().find('a') != std::string::npos);
+            }
+            return res;
+        };
+
+        Slice from("");
+        auto res = iter->seek_dictionary_by_predicate(predicate, from, values.size());
+        ASSERT_TRUE(res.ok());
+        auto hit_rowids = res.value();
+        // "apple", "banana", "date" contain 'a'. Indices 0, 1, 3.
+        ASSERT_EQ(3, hit_rowids.size());
+        ASSERT_EQ(0, hit_rowids[0]);
+        ASSERT_EQ(1, hit_rowids[1]);
+        ASSERT_EQ(3, hit_rowids[2]);
+
+        delete reader;
+        delete iter;
+    }
+}
+
+TEST_F(BitmapIndexTest, test_reader_load_twice) {
+    size_t num_rows = 10;
+    int* val = new int[num_rows];
+    for (int i = 0; i < num_rows; ++i) val[i] = i;
+
+    std::string file_name = kTestDir + "/load_twice";
+    ColumnIndexMetaPB meta;
+    write_index_file<TYPE_INT>(file_name, val, num_rows, 0, &meta);
+    
+    ASSIGN_OR_ABORT(auto rfile, _fs->new_random_access_file(file_name));
+    _opts.read_file = rfile.get();
+    BitmapIndexReader reader;
+    auto res1 = reader.load(_opts, meta.bitmap_index());
+    ASSERT_TRUE(res1.ok());
+    ASSERT_TRUE(res1.value()); // First load returns true
+
+    auto res2 = reader.load(_opts, meta.bitmap_index());
+    ASSERT_TRUE(res2.ok());
+    ASSERT_FALSE(res2.value()); // Second load returns false
+
+    delete[] val;
+}
+
 } // namespace starrocks
