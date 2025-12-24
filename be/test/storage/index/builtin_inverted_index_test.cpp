@@ -250,8 +250,7 @@ TEST_F(BuiltinInvertedIndexTest, test_english_parser_match_any_all_queries) {
     {
         roaring::Roaring bitmap;
         Slice query("hello world");
-        ASSERT_OK(iter->read_from_inverted_index("c0", &query,
-                                                 InvertedIndexQueryType::MATCH_ANY_QUERY, &bitmap));
+        ASSERT_OK(iter->read_from_inverted_index("c0", &query, InvertedIndexQueryType::MATCH_ANY_QUERY, &bitmap));
         ASSERT_EQ(3, bitmap.cardinality());
         ASSERT_TRUE(bitmap.contains(0));
         ASSERT_TRUE(bitmap.contains(1));
@@ -263,8 +262,7 @@ TEST_F(BuiltinInvertedIndexTest, test_english_parser_match_any_all_queries) {
     {
         roaring::Roaring bitmap;
         Slice query("hello world");
-        ASSERT_OK(iter->read_from_inverted_index("c0", &query,
-                                                 InvertedIndexQueryType::MATCH_ALL_QUERY, &bitmap));
+        ASSERT_OK(iter->read_from_inverted_index("c0", &query, InvertedIndexQueryType::MATCH_ALL_QUERY, &bitmap));
         ASSERT_EQ(1, bitmap.cardinality());
         ASSERT_TRUE(bitmap.contains(0));
         ASSERT_FALSE(bitmap.contains(1));
@@ -277,8 +275,7 @@ TEST_F(BuiltinInvertedIndexTest, test_english_parser_match_any_all_queries) {
         roaring::Roaring bitmap;
         std::string pattern = std::string("he% wor%");
         Slice query(pattern);
-        ASSERT_OK(iter->read_from_inverted_index("c0", &query,
-                                                 InvertedIndexQueryType::MATCH_ANY_QUERY, &bitmap));
+        ASSERT_OK(iter->read_from_inverted_index("c0", &query, InvertedIndexQueryType::MATCH_ANY_QUERY, &bitmap));
         ASSERT_EQ(3, bitmap.cardinality());
         ASSERT_TRUE(bitmap.contains(0));
         ASSERT_TRUE(bitmap.contains(1));
@@ -291,8 +288,7 @@ TEST_F(BuiltinInvertedIndexTest, test_english_parser_match_any_all_queries) {
         roaring::Roaring bitmap;
         std::string pattern = std::string("he% wor%");
         Slice query(pattern);
-        ASSERT_OK(iter->read_from_inverted_index("c0", &query,
-                                                 InvertedIndexQueryType::MATCH_ALL_QUERY, &bitmap));
+        ASSERT_OK(iter->read_from_inverted_index("c0", &query, InvertedIndexQueryType::MATCH_ALL_QUERY, &bitmap));
         ASSERT_EQ(1, bitmap.cardinality());
         ASSERT_TRUE(bitmap.contains(0));
         ASSERT_FALSE(bitmap.contains(1));
@@ -306,16 +302,16 @@ TEST_F(BuiltinInvertedIndexTest, test_english_parser_match_any_all_queries) {
 TEST_F(BuiltinInvertedIndexTest, test_get_next_prefix) {
     // Normal case
     ASSERT_EQ("abd", get_next_prefix(Slice("abc")));
-    
+
     // Trailing 0xFF case: should increment and truncate
     ASSERT_EQ("b", get_next_prefix(Slice("a\xFF")));
     ASSERT_EQ("ac", get_next_prefix(Slice("ab\xFF")));
     ASSERT_EQ("b", get_next_prefix(Slice("a\xFF\xFF")));
-    
+
     // All 0xFF case: should return empty string (overflow)
     ASSERT_EQ("", get_next_prefix(Slice("\xFF")));
     ASSERT_EQ("", get_next_prefix(Slice("\xFF\xFF")));
-    
+
     // Empty prefix
     ASSERT_EQ("", get_next_prefix(Slice("")));
 }
@@ -323,10 +319,10 @@ TEST_F(BuiltinInvertedIndexTest, test_get_next_prefix) {
 // Test wildcard query with various prefixes to verify range calculation and truncation
 TEST_F(BuiltinInvertedIndexTest, test_prefix_overflow_query) {
     std::vector<std::string> values = {
-            "abc", "abca", "abd",           // Case 1: abc% -> range [abc, abd)
-            "a\xFF", "a\xFF\x01", "b",      // Case 2: a\xFF% -> range [a\xFF, b)
-            "ab\xFF", "ab\xFF\x01", "ac",   // Case 3: ab\xFF% -> range [ab\xFF, ac)
-            "\xFE", "\xFF", "\xFF\x01", "\xFF\xFF" // Case 4 & 5: \xFF% -> [ \xFF, end]
+            "abc",    "abca",       "abd",                 // Case 1: abc% -> range [abc, abd)
+            "a\xFF",  "a\xFF\x01",  "b",                   // Case 2: a\xFF% -> range [a\xFF, b)
+            "ab\xFF", "ab\xFF\x01", "ac",                  // Case 3: ab\xFF% -> range [ab\xFF, ac)
+            "\xFE",   "\xFF",       "\xFF\x01", "\xFF\xFF" // Case 4 & 5: \xFF% -> [ \xFF, end]
     };
     std::vector<Slice> slices;
     for (auto& v : values) {
@@ -469,8 +465,7 @@ TEST_F(BuiltinInvertedIndexTest, test_wildcard_query_with_nulls) {
     {
         roaring::Roaring bitmap;
         Slice query("a%");
-        ASSERT_OK(iter->read_from_inverted_index("c0", &query,
-                                                 InvertedIndexQueryType::MATCH_WILDCARD_QUERY, &bitmap));
+        ASSERT_OK(iter->read_from_inverted_index("c0", &query, InvertedIndexQueryType::MATCH_WILDCARD_QUERY, &bitmap));
         ASSERT_EQ(2, bitmap.cardinality());
         ASSERT_TRUE(bitmap.contains(0));
         ASSERT_TRUE(bitmap.contains(2));
@@ -483,8 +478,7 @@ TEST_F(BuiltinInvertedIndexTest, test_wildcard_query_with_nulls) {
     {
         roaring::Roaring bitmap;
         Slice query("z%");
-        ASSERT_OK(iter->read_from_inverted_index("c0", &query,
-                                                 InvertedIndexQueryType::MATCH_WILDCARD_QUERY, &bitmap));
+        ASSERT_OK(iter->read_from_inverted_index("c0", &query, InvertedIndexQueryType::MATCH_WILDCARD_QUERY, &bitmap));
         ASSERT_EQ(1, bitmap.cardinality());
         ASSERT_TRUE(bitmap.contains(3));
         ASSERT_FALSE(bitmap.contains(0));
@@ -549,8 +543,7 @@ TEST_F(BuiltinInvertedIndexTest, test_prefix_overflow_query_with_nulls) {
         roaring::Roaring bitmap;
         std::string pattern = std::string("\xFF") + "%";
         Slice query(pattern);
-        ASSERT_OK(iter->read_from_inverted_index("c0", &query,
-                                                 InvertedIndexQueryType::MATCH_WILDCARD_QUERY, &bitmap));
+        ASSERT_OK(iter->read_from_inverted_index("c0", &query, InvertedIndexQueryType::MATCH_WILDCARD_QUERY, &bitmap));
         ASSERT_EQ(3, bitmap.cardinality());
         ASSERT_TRUE(bitmap.contains(1));
         ASSERT_TRUE(bitmap.contains(3));
@@ -564,5 +557,3 @@ TEST_F(BuiltinInvertedIndexTest, test_prefix_overflow_query_with_nulls) {
 }
 
 } // namespace starrocks
-
-
