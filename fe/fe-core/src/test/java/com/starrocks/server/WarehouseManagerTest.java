@@ -46,11 +46,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
-<<<<<<< HEAD
-=======
 import java.util.Set;
-import java.util.concurrent.atomic.AtomicInteger;
->>>>>>> afc0438d2b ([Enhancement] Eliminate heartbeat error logs for backends in suspended warehouses (#66733))
 
 public class WarehouseManagerTest {
     @Mocked
