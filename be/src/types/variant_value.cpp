@@ -72,7 +72,7 @@ StatusOr<VariantValue> VariantValue::create(const Slice& slice) {
 
 StatusOr<VariantValue> VariantValue::create(const std::string_view metadata, const std::string_view value) {
     if (metadata.empty()) {
-        return of_null();
+        return from_null();
     }
 
     RETURN_IF_ERROR(validate_metadata(metadata));
@@ -86,8 +86,8 @@ StatusOr<VariantValue> VariantValue::create(const std::string_view metadata, con
 }
 
 // Create a VariantValue from a Parquet Variant.
-VariantValue VariantValue::of_variant(const VariantMetadata& metadata, const Variant& variant) {
-    return VariantValue(metadata.get_raw(), variant.get_raw());
+VariantValue VariantValue::from_variant(const VariantMetadata& metadata, const Variant& variant) {
+    return VariantValue(metadata.raw(), variant.raw());
 }
 
 Status VariantValue::validate_metadata(const std::string_view metadata) {
@@ -104,22 +104,22 @@ Status VariantValue::validate_metadata(const std::string_view metadata) {
     return Status::OK();
 }
 
-VariantValue VariantValue::of_null() {
+VariantValue VariantValue::from_null() {
     return VariantValue();
 }
 
-StatusOr<std::string_view> VariantValue::load_metadata(const std::string_view variant) {
-    if (variant.empty()) {
+StatusOr<std::string_view> VariantValue::load_metadata(const std::string_view variant_binary) {
+    if (variant_binary.empty()) {
         return Status::InvalidArgument("Variant is empty");
     }
 
     // Check variant size limit (16MB)
-    if (variant.size() > kMaxVariantSize) {
-        return Status::InvalidArgument("Variant size exceeds maximum limit: " + std::to_string(variant.size()) + " > " +
-                                       std::to_string(kMaxVariantSize));
+    if (variant_binary.size() > kMaxVariantSize) {
+        return Status::InvalidArgument("Variant size exceeds maximum limit: " + std::to_string(variant_binary.size()) +
+                                       " > " + std::to_string(kMaxVariantSize));
     }
 
-    const uint8_t header = static_cast<uint8_t>(variant[0]);
+    const uint8_t header = static_cast<uint8_t>(variant_binary[0]);
     if (const uint8_t version = header & kVersionMask; version != 1) {
         return Status::NotSupported("Unsupported variant version: " + std::to_string(version));
     }
@@ -130,11 +130,11 @@ StatusOr<std::string_view> VariantValue::load_metadata(const std::string_view va
                                        ", expected 1, 2, 3 or 4 bytes");
     }
 
-    if (variant.size() < kHeaderSize + offset_size) {
+    if (variant_binary.size() < kHeaderSize + offset_size) {
         return Status::InvalidArgument("Variant too short to contain dict_size");
     }
 
-    uint32_t dict_size = VariantUtil::read_little_endian_unsigned32(variant.data() + 1, offset_size);
+    uint32_t dict_size = VariantUtil::read_little_endian_unsigned32(variant_binary.data() + 1, offset_size);
     uint32_t offset_list_offset = kHeaderSize + offset_size;
 
     // Check for potential overflow in offset list size calculation
@@ -145,19 +145,20 @@ StatusOr<std::string_view> VariantValue::load_metadata(const std::string_view va
     uint32_t required_offset_list_size = (1 + dict_size) * offset_size;
     uint32_t data_offset = offset_list_offset + required_offset_list_size;
     uint32_t last_offset_pos = offset_list_offset + dict_size * offset_size;
-    if (last_offset_pos + offset_size > variant.size()) {
+    if (last_offset_pos + offset_size > variant_binary.size()) {
         return Status::InvalidArgument("Variant too short to contain all offsets");
     }
 
-    uint32_t last_data_size = VariantUtil::read_little_endian_unsigned32(variant.data() + last_offset_pos, offset_size);
+    uint32_t last_data_size =
+            VariantUtil::read_little_endian_unsigned32(variant_binary.data() + last_offset_pos, offset_size);
     uint32_t end_offset = data_offset + last_data_size;
 
-    if (end_offset > variant.size()) {
+    if (end_offset > variant_binary.size()) {
         return Status::CapacityLimitExceed("Variant metadata end offset exceeds variant size: " +
-                                           std::to_string(end_offset) + " > " + std::to_string(variant.size()));
+                                           std::to_string(end_offset) + " > " + std::to_string(variant_binary.size()));
     }
 
-    return std::string_view(variant.data(), end_offset);
+    return std::string_view(variant_binary.data(), end_offset);
 }
 
 size_t VariantValue::serialize(uint8_t* dst) const {

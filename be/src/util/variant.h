@@ -109,7 +109,7 @@ public:
     StatusOr<std::string> get_key(uint32_t index) const;
 
     // return the metadata raw string view
-    std::string_view get_raw() const { return _metadata; }
+    std::string_view raw() const { return _metadata; }
 
     static constexpr char kEmptyMetadataChars[] = {0x1, 0x0, 0x0};
     static constexpr std::string_view kEmptyMetadata{kEmptyMetadataChars, sizeof(kEmptyMetadataChars)};
@@ -197,6 +197,12 @@ struct VariantArrayInfo {
 class Variant {
 public:
     enum class BasicType { PRIMITIVE = 0, SHORT_STRING = 1, OBJECT = 2, ARRAY = 3 };
+
+    /**
+     * kEmptyVariant represents a NULL variant value.
+     * The byte value is: (VariantType::NULL_TYPE << 2) | BasicType::PRIMITIVE (0)
+     * This is used as the default value for empty VariantValue objects.
+     */
     static constexpr char null_chars[1] = {static_cast<uint8_t>(VariantType::NULL_TYPE) << 2};
     static constexpr std::string_view kEmptyVariant{null_chars, sizeof(null_chars)};
 
@@ -209,7 +215,7 @@ public:
     static constexpr uint8_t kValueHeaderBitShift = 2;
 
     BasicType basic_type() const;
-    std::string_view get_raw() const { return _value; }
+    std::string_view raw() const { return _value; }
     VariantType type() const;
 
     // Get the primitive boolean value.

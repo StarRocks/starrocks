@@ -251,7 +251,7 @@ StatusOr<VariantValue> VariantPath::seek(const VariantValue* variant, const Vari
     }
 
     const VariantMetadata& metadata = variant->get_metadata();
-    Variant current{variant->get_variant().get_raw()};
+    Variant current{variant->get_variant().raw()};
     for (size_t seg_idx = 0; seg_idx < variant_path->segments.size(); ++seg_idx) {
         const auto& segment = variant_path->segments[seg_idx];
 
@@ -273,7 +273,7 @@ StatusOr<VariantValue> VariantPath::seek(const VariantValue* variant, const Vari
         current = sub.value();
     }
 
-    return VariantValue::of_variant(metadata, current);
+    return VariantValue::from_variant(metadata, current);
 }
 
 } // namespace starrocks

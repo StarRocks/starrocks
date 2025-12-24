@@ -91,7 +91,7 @@ static Status cast_variant_value_to(const VariantValue& value, const cctz::time_
     }
 
     if constexpr (ResultType == TYPE_VARIANT) {
-        result.append(VariantValue::of_variant(value.get_metadata(), value.get_variant()));
+        result.append(VariantValue::from_variant(value.get_metadata(), value.get_variant()));
         return Status::OK();
     }
 

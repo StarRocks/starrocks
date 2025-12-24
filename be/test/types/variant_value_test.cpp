@@ -442,4 +442,214 @@ TEST_F(VariantValueTest, InvalidVariant) {
     }
 }
 
+// Tests for move/copy semantics and the new VariantValue architecture
+TEST_F(VariantValueTest, CopyConstructor) {
+    // Create a variant with some data
+    auto [metadata, value] = load_variant_data("primitive_int32.metadata", "primitive_int32.value");
+    VariantValue original{std::string_view(metadata), std::string_view(value)};
+
+    // Copy construct
+    VariantValue copy(original);
+
+    // Both should produce the same JSON
+    auto original_json = original.to_json();
+    auto copy_json = copy.to_json();
+    ASSERT_TRUE(original_json.ok());
+    ASSERT_TRUE(copy_json.ok());
+    EXPECT_EQ(*original_json, *copy_json);
+    EXPECT_EQ("123456", *copy_json);
+
+    // Verify that they are independent (different underlying storage)
+    EXPECT_NE(&original.get_metadata().raw()[0], &copy.get_metadata().raw()[0]);
+}
+
+TEST_F(VariantValueTest, MoveConstructor) {
+    // Create a variant with some data
+    auto [metadata, value] = load_variant_data("primitive_string.metadata", "primitive_string.value");
+    VariantValue original{std::string_view(metadata), std::string_view(value)};
+
+    auto expected_json = original.to_json();
+    ASSERT_TRUE(expected_json.ok());
+
+    // Move construct
+    VariantValue moved(std::move(original));
+
+    // Moved-to object should have the data
+    auto moved_json = moved.to_json();
+    ASSERT_TRUE(moved_json.ok());
+    EXPECT_EQ(*expected_json, *moved_json);
+
+    // Moved-from object should be in a valid empty state
+    auto original_json = original.to_json();
+    ASSERT_TRUE(original_json.ok());
+    EXPECT_EQ("null", *original_json); // Should be empty variant (null)
+}
+
+TEST_F(VariantValueTest, CopyAssignment) {
+    // Create source variant
+    auto [metadata1, value1] = load_variant_data("primitive_int64.metadata", "primitive_int64.value");
+    VariantValue source{std::string_view(metadata1), std::string_view(value1)};
+
+    // Create destination variant with different data
+    auto [metadata2, value2] = load_variant_data("primitive_int32.metadata", "primitive_int32.value");
+    VariantValue dest{std::string_view(metadata2), std::string_view(value2)};
+
+    // Verify dest has different data initially
+    auto dest_json_before = dest.to_json();
+    ASSERT_TRUE(dest_json_before.ok());
+    EXPECT_EQ("123456", *dest_json_before);
+
+    // Copy assign
+    dest = source;
+
+    // Both should now have the same data
+    auto source_json = source.to_json();
+    auto dest_json = dest.to_json();
+    ASSERT_TRUE(source_json.ok());
+    ASSERT_TRUE(dest_json.ok());
+    EXPECT_EQ(*source_json, *dest_json);
+    EXPECT_EQ("1234567890123456789", *dest_json);
+
+    // Verify they are independent
+    EXPECT_NE(&source.get_metadata().raw()[0], &dest.get_metadata().raw()[0]);
+}
+
+TEST_F(VariantValueTest, MoveAssignment) {
+    // Create source variant
+    auto [metadata1, value1] = load_variant_data("object_primitive.metadata", "object_primitive.value");
+    VariantValue source{std::string_view(metadata1), std::string_view(value1)};
+
+    auto expected_json = source.to_json();
+    ASSERT_TRUE(expected_json.ok());
+
+    // Create destination variant with different data
+    auto [metadata2, value2] = load_variant_data("primitive_int32.metadata", "primitive_int32.value");
+    VariantValue dest{std::string_view(metadata2), std::string_view(value2)};
+
+    // Move assign
+    dest = std::move(source);
+
+    // Destination should have the moved data
+    auto dest_json = dest.to_json();
+    ASSERT_TRUE(dest_json.ok());
+    EXPECT_EQ(*expected_json, *dest_json);
+
+    // Source should be in a valid empty state
+    auto source_json = source.to_json();
+    ASSERT_TRUE(source_json.ok());
+    EXPECT_EQ("null", *source_json);
+}
+
+TEST_F(VariantValueTest, SelfAssignment) {
+    // Create a variant
+    auto [metadata, value] = load_variant_data("primitive_int32.metadata", "primitive_int32.value");
+    VariantValue variant{std::string_view(metadata), std::string_view(value)};
+
+    // Self-assign (copy)
+    variant = variant;
+
+    // Should still work correctly
+    auto json = variant.to_json();
+    ASSERT_TRUE(json.ok());
+    EXPECT_EQ("123456", *json);
+}
+
+TEST_F(VariantValueTest, ChainedMoves) {
+    // Create original variant
+    auto [metadata, value] = load_variant_data("array_primitive.metadata", "array_primitive.value");
+    VariantValue v1{std::string_view(metadata), std::string_view(value)};
+
+    auto expected_json = v1.to_json();
+    ASSERT_TRUE(expected_json.ok());
+
+    // Chain of moves: v1 -> v2 -> v3
+    VariantValue v2(std::move(v1));
+    VariantValue v3(std::move(v2));
+
+    // v3 should have the data
+    auto v3_json = v3.to_json();
+    ASSERT_TRUE(v3_json.ok());
+    EXPECT_EQ(*expected_json, *v3_json);
+
+    // v1 and v2 should be in valid empty state
+    auto v1_json = v1.to_json();
+    auto v2_json = v2.to_json();
+    ASSERT_TRUE(v1_json.ok());
+    ASSERT_TRUE(v2_json.ok());
+    EXPECT_EQ("null", *v1_json);
+    EXPECT_EQ("null", *v2_json);
+}
+
+TEST_F(VariantValueTest, EmptyVariantHandling) {
+    // Test default constructor creates valid empty variant
+    VariantValue empty_variant;
+
+    auto json = empty_variant.to_json();
+    ASSERT_TRUE(json.ok());
+    EXPECT_EQ("null", *json);
+
+    // Test that empty variant can be copied
+    VariantValue copy(empty_variant);
+    auto copy_json = copy.to_json();
+    ASSERT_TRUE(copy_json.ok());
+    EXPECT_EQ("null", *copy_json);
+
+    // Test that empty variant can be moved
+    VariantValue moved(std::move(copy));
+    auto moved_json = moved.to_json();
+    ASSERT_TRUE(moved_json.ok());
+    EXPECT_EQ("null", *moved_json);
+}
+
+TEST_F(VariantValueTest, ComplexObjectCopyMove) {
+    // Test copy/move with complex nested structures
+    auto [metadata, value] = load_variant_data("object_nested.metadata", "object_nested.value");
+    VariantValue original{std::string_view(metadata), std::string_view(value)};
+
+    auto expected_json = original.to_json();
+    ASSERT_TRUE(expected_json.ok());
+
+    // Copy
+    VariantValue copy = original;
+    auto copy_json = copy.to_json();
+    ASSERT_TRUE(copy_json.ok());
+    EXPECT_EQ(*expected_json, *copy_json);
+
+    // Move from copy
+    VariantValue moved = std::move(copy);
+    auto moved_json = moved.to_json();
+    ASSERT_TRUE(moved_json.ok());
+    EXPECT_EQ(*expected_json, *moved_json);
+
+    // Verify the metadata and value are correctly bound
+    const VariantMetadata& meta = moved.get_metadata();
+    const Variant& var = moved.get_variant();
+    EXPECT_EQ(VariantType::OBJECT, var.type());
+}
+
+TEST_F(VariantValueTest, MetadataValueRebinding) {
+    // This test verifies that _rebind_views() correctly updates the views
+    // after copy/move operations
+    auto [metadata, value] = load_variant_data("primitive_int32.metadata", "primitive_int32.value");
+    VariantValue v1{std::string_view(metadata), std::string_view(value)};
+
+    // Get pointers to the original storage
+    const char* original_meta_data = v1.get_metadata().raw().data();
+    const char* original_value_data = v1.get_variant().raw().data();
+
+    // Copy construct - this should create new storage and rebind views
+    VariantValue v2(v1);
+
+    // The views should point to different storage
+    const char* copy_meta_data = v2.get_metadata().raw().data();
+    const char* copy_value_data = v2.get_variant().raw().data();
+
+    EXPECT_NE(original_meta_data, copy_meta_data);
+    EXPECT_NE(original_value_data, copy_value_data);
+
+    // But the data should be the same
+    EXPECT_EQ(v1.get_metadata().raw(), v2.get_metadata().raw());
+    EXPECT_EQ(v1.get_variant().raw(), v2.get_variant().raw());
+}
+
 } // namespace starrocks

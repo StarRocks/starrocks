@@ -112,21 +112,21 @@ StatusOr<ColumnPtr> CastVariantToMap::evaluate_checked(ExprContext* context, Chu
             for (uint32_t idx = 0; idx < map_size; idx++) {
                 // read field id from the value
                 uint32_t filed_id = VariantUtil::read_little_endian_unsigned32(
-                        variant.get_raw().data() + object_info.id_start_offset + idx * object_info.id_size,
+                        variant.raw().data() + object_info.id_start_offset + idx * object_info.id_size,
                         object_info.id_size);
                 uint32_t offset_pos = VariantUtil::read_little_endian_unsigned32(
-                        variant.get_raw().data() + object_info.offset_start_offset + idx * object_info.offset_size,
+                        variant.raw().data() + object_info.offset_start_offset + idx * object_info.offset_size,
                         object_info.offset_size);
                 ASSIGN_OR_RETURN(std::string key, metadata.get_key(filed_id));
                 uint32_t next_pos = object_info.data_start_offset + offset_pos;
-                if (next_pos >= variant.get_raw().size()) {
+                if (next_pos >= variant.raw().size()) {
                     return Status::InternalError("Cannot get variant object field value by key: " + key +
                                                  ", offset out of bounds");
                 }
 
                 keys_builder.append(Slice(std::string(key)));
-                auto value = variant.get_raw().substr(next_pos, variant.get_raw().size() - next_pos);
-                ASSIGN_OR_RETURN(VariantValue result, VariantValue::create(metadata.get_raw(), value));
+                auto value = variant.raw().substr(next_pos, variant.raw().size() - next_pos);
+                ASSIGN_OR_RETURN(VariantValue result, VariantValue::create(metadata.raw(), value));
                 values_builder.append(std::move(result));
             }
 

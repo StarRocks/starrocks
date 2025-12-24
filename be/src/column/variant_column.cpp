@@ -85,7 +85,7 @@ void VariantColumn::append(VariantValue&& object) {
 
 bool VariantColumn::append_nulls(size_t count) {
     for (size_t i = 0; i < count; ++i) {
-        append(VariantValue::of_null());
+        append(VariantValue::from_null());
     }
     return true;
 }

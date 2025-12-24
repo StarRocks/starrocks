@@ -234,7 +234,8 @@ StatusOr<VariantObjectInfo> Variant::get_object_info() const {
     Variant::BasicType basic_type =
             static_cast<Variant::BasicType>(static_cast<uint8_t>(value[0]) & Variant::kBasicTypeMask);
     if (basic_type != Variant::BasicType::OBJECT) {
-        return Status::VariantError("Cannot read object value as " + basic_type_to_string(basic_type));
+        return Status::VariantError("Cannot parse object info: basic_type is not OBJECT, basic_type=" +
+                                    basic_type_to_string(basic_type));
     }
 
     uint8_t value_header = (static_cast<uint8_t>(value[0]) >> Variant::kValueHeaderBitShift) & 0x3F;
@@ -257,8 +258,29 @@ StatusOr<VariantObjectInfo> Variant::get_object_info() const {
     object_info.id_size = field_id_size;
     object_info.offset_size = field_offset_size;
     object_info.id_start_offset = 1 + num_elements_size;
-    object_info.offset_start_offset = object_info.id_start_offset + num_elements * field_id_size;
-    object_info.data_start_offset = object_info.offset_start_offset + (num_elements + 1) * field_offset_size;
+
+    // Check for potential overflow in offset calculation
+    if (num_elements > 0 && field_id_size > 0) {
+        uint64_t id_list_size = static_cast<uint64_t>(num_elements) * static_cast<uint64_t>(field_id_size);
+        if (id_list_size > UINT32_MAX ||
+            object_info.id_start_offset > UINT32_MAX - id_list_size) {
+            return Status::VariantError("Object metadata overflow: num_elements=" + std::to_string(num_elements) +
+                                      ", field_id_size=" + std::to_string(field_id_size));
+        }
+        object_info.offset_start_offset = object_info.id_start_offset + static_cast<uint32_t>(id_list_size);
+    } else {
+        object_info.offset_start_offset = object_info.id_start_offset;
+    }
+
+    // Check for overflow in data offset calculation
+    uint64_t offset_list_size = static_cast<uint64_t>(num_elements + 1) * static_cast<uint64_t>(field_offset_size);
+    if (offset_list_size > UINT32_MAX ||
+        object_info.offset_start_offset > UINT32_MAX - offset_list_size) {
+        return Status::VariantError("Object offset list overflow: num_elements=" + std::to_string(num_elements) +
+                                  ", field_offset_size=" + std::to_string(field_offset_size));
+    }
+    object_info.data_start_offset = object_info.offset_start_offset + static_cast<uint32_t>(offset_list_size);
+
     // Check the boundary with the final offset
     if (object_info.data_start_offset > value.size()) {
         return Status::VariantError(
@@ -270,7 +292,8 @@ StatusOr<VariantObjectInfo> Variant::get_object_info() const {
         const uint32_t final_offset = VariantUtil::read_little_endian_unsigned32(
                 value.data() + object_info.offset_start_offset + num_elements * field_offset_size, field_offset_size);
         // It could be less than value size since it could be a sub-object.
-        if (final_offset + object_info.data_start_offset > value.size()) {
+        if (final_offset > UINT32_MAX - object_info.data_start_offset ||
+            final_offset + object_info.data_start_offset > value.size()) {
             return Status::VariantError("Invalid object value: final_offset=" + std::to_string(final_offset) +
                                         ", data_start_offset=" + std::to_string(object_info.data_start_offset) +
                                         ", value_size=" + std::to_string(value.size()));
@@ -285,7 +308,8 @@ StatusOr<VariantArrayInfo> Variant::get_array_info() const {
     Variant::BasicType basic_type =
             static_cast<Variant::BasicType>(static_cast<uint8_t>(value[0]) & Variant::kBasicTypeMask);
     if (basic_type != Variant::BasicType::ARRAY) {
-        return Status::VariantError("Cannot read array value as " + basic_type_to_string(basic_type));
+        return Status::VariantError("Cannot parse array info: basic_type is not ARRAY, basic_type=" +
+                                    basic_type_to_string(basic_type));
     }
 
     uint8_t value_header = (static_cast<uint8_t>(value[0]) >> Variant::kValueHeaderBitShift) & 0x3F;
@@ -306,7 +330,15 @@ StatusOr<VariantArrayInfo> Variant::get_array_info() const {
     array_info.num_elements = num_elements;
     array_info.offset_size = field_offset_size;
     array_info.offset_start_offset = Variant::kHeaderSizeBytes + num_elements_size;
-    array_info.data_start_offset = array_info.offset_start_offset + field_offset_size * (num_elements + 1);
+
+    // Check for potential overflow in offset calculation
+    uint64_t offset_list_size = static_cast<uint64_t>(num_elements + 1) * static_cast<uint64_t>(field_offset_size);
+    if (offset_list_size > UINT32_MAX ||
+        array_info.offset_start_offset > UINT32_MAX - offset_list_size) {
+        return Status::VariantError("Array offset list overflow: num_elements=" + std::to_string(num_elements) +
+                                  ", field_offset_size=" + std::to_string(field_offset_size));
+    }
+    array_info.data_start_offset = array_info.offset_start_offset + static_cast<uint32_t>(offset_list_size);
 
     if (array_info.data_start_offset > value.size()) {
         return Status::VariantError(
@@ -804,7 +836,7 @@ Status VariantUtil::variant_to_json(const VariantMetadata& metadata, const Varia
         if (!info.ok()) {
             return info.status();
         }
-        const std::string_view& value = variant.get_raw();
+        const std::string_view& value = variant.raw();
         const auto& [num_elements, id_start_offset, id_size, offset_start_offset, offset_size, data_start_offset] =
                 info.value();
         json_str << "{";
@@ -843,7 +875,7 @@ Status VariantUtil::variant_to_json(const VariantMetadata& metadata, const Varia
         if (!info.ok()) {
             return info.status();
         }
-        const std::string_view& value = variant.get_raw();
+        const std::string_view& value = variant.raw();
         const auto& [num_elements, offset_size, offset_start_offset, data_start_offset] = info.value();
         json_str << "[";
         for (size_t i = 0; i < num_elements; ++i) {
