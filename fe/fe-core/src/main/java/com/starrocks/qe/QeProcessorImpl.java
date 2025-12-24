@@ -45,6 +45,7 @@ import com.starrocks.common.StarRocksException;
 import com.starrocks.common.Status;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.memory.MemoryTrackable;
+import com.starrocks.metric.MetricRepo;
 import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.qe.scheduler.slot.LogicalSlot;
 import com.starrocks.thrift.TBatchReportExecStatusParams;
@@ -81,11 +82,14 @@ public final class QeProcessorImpl implements QeProcessor, MemoryTrackable {
 
     public static final QeProcessorImpl INSTANCE;
     private static final ScheduledExecutorService MONITOR_EXECUTOR;
+    private static final ScheduledExecutorService RUNNING_SLOW_QUERY_EXECUTOR;
 
     static {
         INSTANCE = new QeProcessorImpl();
         MONITOR_EXECUTOR = Executors.newSingleThreadScheduledExecutor();
         MONITOR_EXECUTOR.scheduleAtFixedRate(INSTANCE::scanMonitorQueries, 0, 1, TimeUnit.SECONDS);
+        RUNNING_SLOW_QUERY_EXECUTOR = Executors.newSingleThreadScheduledExecutor();
+        RUNNING_SLOW_QUERY_EXECUTOR.scheduleAtFixedRate(INSTANCE::runningSlowQueries,5, 5, TimeUnit.SECONDS);
     }
 
     private QeProcessorImpl() {
@@ -135,6 +139,17 @@ public final class QeProcessorImpl implements QeProcessor, MemoryTrackable {
                 monitorQueryMap.remove(entry.getKey());
             }
         }
+    }
+
+    private void runningSlowQueries() {
+        long slowCount = 0;
+        long now = System.currentTimeMillis();
+        for (Map.Entry<TUniqueId, QueryInfo> entry : coordinatorMap.entrySet()) {
+            if (now - entry.getValue().getStartExecTime() > Config.qe_slow_log_ms) {
+                slowCount ++ ;
+            }
+        }
+        MetricRepo.GAUGE_RUNNING_SLOW_QUERY.setValue(slowCount);
     }
 
     @Override
@@ -365,7 +380,7 @@ public final class QeProcessorImpl implements QeProcessor, MemoryTrackable {
 
         private boolean isMVJob = false;
 
-        // from Export, Pull load, Insert 
+        // from Export, Pull load, Insert
         public QueryInfo(Coordinator coord) {
             this(null, null, coord);
         }

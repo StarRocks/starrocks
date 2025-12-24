@@ -229,6 +229,7 @@ public final class MetricRepo {
     public static GaugeMetricImpl<Double> GAUGE_QUERY_LATENCY_P999;
     public static LeaderAwareGaugeMetric<Long> GAUGE_MAX_TABLET_COMPACTION_SCORE;
     public static GaugeMetricImpl<Long> GAUGE_STACKED_JOURNAL_NUM;
+    public static GaugeMetricImpl<Long> GAUGE_RUNNING_SLOW_QUERY;
 
     public static GaugeMetricImpl<Long> GAUGE_ENCRYPTION_KEY_NUM;
 
@@ -421,6 +422,11 @@ public final class MetricRepo {
                 "editlog_stacked_num", MetricUnit.OPERATIONS, "counter of edit log that are stacked");
         GAUGE_STACKED_JOURNAL_NUM.setValue(0L);
         STARROCKS_METRIC_REGISTER.addMetric(GAUGE_STACKED_JOURNAL_NUM);
+
+        GAUGE_RUNNING_SLOW_QUERY  = new GaugeMetricImpl<>
+                ("running_slow_query", MetricUnit.OPERATIONS, "counter of running slow query");
+        GAUGE_RUNNING_SLOW_QUERY.setValue(0L);
+        STARROCKS_METRIC_REGISTER.addMetric(GAUGE_RUNNING_SLOW_QUERY);
 
         GAUGE_ENCRYPTION_KEY_NUM = new GaugeMetricImpl<>(
                 "encryption_key_num", MetricUnit.NOUNIT, "number of encryption keys in key manager");
