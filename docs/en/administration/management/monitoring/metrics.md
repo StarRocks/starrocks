@@ -1893,6 +1893,24 @@ All transaction metrics share the following labels:
 - Type: Instantaneous
 - Description: Total bytes of data held by pending merge commit tasks.
 
+#### merge_commit_send_rpc_total
+
+- Unit: Count
+- Type: Cumulative
+- Description: RPC requests sent to FE for starting merge commit operations.
+
+#### merge_commit_register_pipe_total
+
+- Unit: Count
+- Type: Cumulative
+- Description: Stream load pipes registered for merge commit operations.
+
+#### merge_commit_unregister_pipe_total
+
+- Unit: Count
+- Type: Cumulative
+- Description: Stream load pipes unregistered from merge commit operations.
+
 Latency metrics expose percentile series such as `merge_commit_request_latency_99` and `merge_commit_request_latency_90`, reported in microseconds. The end-to-end latency obeys:
 
 `merge_commit_request = merge_commit_pending + merge_commit_wait_plan + merge_commit_append_pipe + merge_commit_wait_finish`
