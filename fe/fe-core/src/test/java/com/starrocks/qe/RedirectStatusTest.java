@@ -15,6 +15,7 @@
 package com.starrocks.qe;
 
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.starrocks.catalog.TableName;
 import com.starrocks.sql.ast.AddBackendBlackListStmt;
 import com.starrocks.sql.ast.AddComputeNodeBlackListStmt;
@@ -1420,7 +1421,7 @@ public class RedirectStatusTest {
     public void testAdminRepairTableStmt() {
         QualifiedName qualifiedName = QualifiedName.of(Lists.newArrayList("test_table"));
         TableRef tableRef = new TableRef(qualifiedName, null, NodePosition.ZERO);
-        AdminRepairTableStmt stmt = new AdminRepairTableStmt(tableRef, NodePosition.ZERO);
+        AdminRepairTableStmt stmt = new AdminRepairTableStmt(tableRef, Maps.newHashMap(), NodePosition.ZERO);
         Assertions.assertEquals(RedirectStatus.FORWARD_WITH_SYNC, RedirectStatus.getRedirectStatus(stmt));
     }
 
