@@ -72,9 +72,9 @@ public class DeltaLakeCacheUpdateProcessorTest {
             }
         };
 
-        new MockUp<CachingDeltaLakeMetastore>() {
+        new MockUp<DeltaLakeMetastore>() {
             @mockit.Mock
-            public DeltaLakeSnapshot getCachedSnapshot(DatabaseTableName databaseTableName) {
+            public DeltaLakeSnapshot getLatestSnapshot(String dbName, String tableName) {
                 return new DeltaLakeSnapshot("db1", "table1", null, null,
                         123, "s3://bucket/path/to/table");
             }
@@ -113,6 +113,7 @@ public class DeltaLakeCacheUpdateProcessorTest {
             }
         };
 
+<<<<<<< HEAD
         new MockUp<CachingDeltaLakeMetastore>() {
             @mockit.Mock
             public DeltaLakeSnapshot getCachedSnapshot(DatabaseTableName databaseTableName) {
@@ -121,6 +122,8 @@ public class DeltaLakeCacheUpdateProcessorTest {
             }
         };
 
+=======
+>>>>>>> 192ef9d5fa ([BugFix] Fix refresh delta lake table not effective (#67156))
         new MockUp<DeltaLakeMetastore>() {
             @mockit.Mock
             public DeltaLakeSnapshot getLatestSnapshot(String dbName, String tableName) {
