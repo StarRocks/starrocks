@@ -62,11 +62,11 @@ class BitmapUpdateContext {
 
 public:
     explicit BitmapUpdateContext(rowid_t rid, MemPool* pool) : _roaring(Roaring::bitmapOf(1, rid)) {
-        _pending_adds = static_cast<uint32_t*>(pool->allocate(sizeof(uint32_t) * _ADD_BATCH_SIZE));
+        _pending_adds = reinterpret_cast<uint32_t*>(pool->allocate(sizeof(uint32_t) * _ADD_BATCH_SIZE));
     }
     explicit BitmapUpdateContext(rowid_t rid0, rowid_t rid1, MemPool* pool)
             : _roaring(Roaring::bitmapOfList({rid0, rid1})) {
-        _pending_adds = static_cast<uint32_t*>(pool->allocate(sizeof(uint32_t) * _ADD_BATCH_SIZE));
+        _pending_adds = reinterpret_cast<uint32_t*>(pool->allocate(sizeof(uint32_t) * _ADD_BATCH_SIZE));
     }
 
     Roaring* roaring() { return &_roaring; }

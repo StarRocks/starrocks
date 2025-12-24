@@ -46,7 +46,7 @@ protected:
         _opts.stats = &_stats;
     }
 
-    void TearDown() override = default;
+    void TearDown() override {}
 
 protected:
     std::shared_ptr<MemoryFileSystem> _fs;
