@@ -118,6 +118,9 @@ public class CachingDeltaLakeMetastore extends CachingMetastore implements IDelt
     }
 
     public DeltaLakeSnapshot getCachedSnapshot(DatabaseTableName databaseTableName) {
+        if (ConnectContext.get() != null && ConnectContext.get().getCommand() == MysqlCommand.COM_QUERY) {
+            lastAccessTimeMap.put(databaseTableName, System.currentTimeMillis());
+        }
         return get(tableSnapshotCache, databaseTableName);
     }
 
@@ -137,10 +140,6 @@ public class CachingDeltaLakeMetastore extends CachingMetastore implements IDelt
 
     @Override
     public Table getTable(String dbName, String tableName) {
-        if (ConnectContext.get() != null && ConnectContext.get().getCommand() == MysqlCommand.COM_QUERY) {
-            DatabaseTableName databaseTableName = DatabaseTableName.of(dbName, tableName);
-            lastAccessTimeMap.put(databaseTableName, System.currentTimeMillis());
-        }
         DeltaLakeSnapshot snapshot = getCachedSnapshot(DatabaseTableName.of(dbName, tableName));
         return DeltaUtils.convertDeltaSnapshotToSRTable(getCatalogName(), snapshot);
     }
@@ -160,21 +159,23 @@ public class CachingDeltaLakeMetastore extends CachingMetastore implements IDelt
         DatabaseTableName databaseTableName = DatabaseTableName.of(dbName, tblName);
         tableNameLockMap.putIfAbsent(databaseTableName, dbName + "_" + tblName + "_lock");
         synchronized (tableNameLockMap.get(databaseTableName)) {
-            Table newDeltaLakeTable;
+            DeltaLakeSnapshot newSnapshot;
             try {
-                newDeltaLakeTable = loadTable(databaseTableName);
+                newSnapshot = getLatestSnapshot(dbName, tblName);
             } catch (StarRocksConnectorException e) {
                 Throwable cause = e.getCause();
                 if (cause instanceof InvocationTargetException &&
                         ((InvocationTargetException) cause).getTargetException() instanceof NoSuchObjectException) {
+                    LOG.error("Failed to refresh table {}.{}: table does not exist", dbName, tblName, e);
                     invalidateTable(dbName, tblName);
                     throw new StarRocksConnectorException(e.getMessage() + ", invalidated cache.");
                 } else {
+                    LOG.error("Failed to refresh table {}.{}", dbName, tblName, e);
                     throw e;
                 }
             }
 
-            tableCache.put(databaseTableName, newDeltaLakeTable);
+            tableSnapshotCache.put(databaseTableName, newSnapshot);
         }
     }
 
@@ -197,16 +198,32 @@ public class CachingDeltaLakeMetastore extends CachingMetastore implements IDelt
             }
         }
         refreshTable(dbName, tblName, true);
-        Set<DatabaseTableName> cachedTableName = tableCache.asMap().keySet();
+        Set<DatabaseTableName> cachedTableName = tableSnapshotCache.asMap().keySet();
         lastAccessTimeMap.keySet().retainAll(cachedTableName);
         LOG.info("Refresh table {}.{} in background", dbName, tblName);
     }
 
+    @Override
+    public boolean isTablePresent(DatabaseTableName tableName) {
+        return tableSnapshotCache.getIfPresent(tableName) != null;
+    }
+
+    @Override
     public void invalidateAll() {
         super.invalidateAll();
+        tableSnapshotCache.invalidateAll();
         if (delegate instanceof DeltaLakeMetastore) {
             ((DeltaLakeMetastore) delegate).invalidateAll();
         }
+        lastAccessTimeMap.clear();
+    }
+
+    @Override
+    public synchronized void invalidateTable(String dbName, String tableName) {
+        super.invalidateTable(dbName, tableName);
+        DatabaseTableName databaseTableName = DatabaseTableName.of(dbName, tableName);
+        tableSnapshotCache.invalidate(databaseTableName);
+        lastAccessTimeMap.remove(databaseTableName);
     }
 
     @Override
@@ -215,14 +232,14 @@ public class CachingDeltaLakeMetastore extends CachingMetastore implements IDelt
                 .stream()
                 .limit(MEMORY_META_SAMPLES)
                 .collect(Collectors.toList());
-        List<Object> tableSamples = tableCache.asMap().values()
+        List<Object> tableSamples = tableSnapshotCache.asMap().values()
                 .stream()
                 .limit(MEMORY_META_SAMPLES)
                 .collect(Collectors.toList());
 
         List<Pair<List<Object>, Long>> samples = delegate.getSamples();
         samples.add(Pair.create(dbSamples, databaseCache.size()));
-        samples.add(Pair.create(tableSamples, tableCache.size()));
+        samples.add(Pair.create(tableSamples, tableSnapshotCache.size()));
         return samples;
     }
 
@@ -230,7 +247,7 @@ public class CachingDeltaLakeMetastore extends CachingMetastore implements IDelt
     public Map<String, Long> estimateCount() {
         Map<String, Long> delegateCount = Maps.newHashMap(delegate.estimateCount());
         delegateCount.put("databaseCache", databaseCache.size());
-        delegateCount.put("tableCache", tableCache.size());
+        delegateCount.put("tableCache", tableSnapshotCache.size());
         return delegateCount;
     }
 }
