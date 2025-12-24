@@ -15,11 +15,7 @@
 package com.starrocks.scheduler;
 
 import com.starrocks.catalog.MaterializedView;
-<<<<<<< HEAD
-import com.starrocks.common.Config;
-=======
 import com.starrocks.scheduler.mv.pct.MVPCTBasedRefreshProcessor;
->>>>>>> a95604dfd8 ([BugFix] Revert 63265 and add another config (#66542))
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
