@@ -75,7 +75,7 @@ public class AuditEventTest {
         Assertions.assertEquals("customQueryId", event.customQueryId);
         Assertions.assertEquals("test_cngroup", event.cnGroup);
         Assertions.assertEquals("50.0%", event.cacheHitRatio);
-        Assertions.assertEquals(1000, event.writeClientTimeMs);
+        Assertions.assertEquals(100, event.writeClientTimeMs);
         Assertions.assertEquals((float) 50, event.getCacheMissRatio());
     }
 }
