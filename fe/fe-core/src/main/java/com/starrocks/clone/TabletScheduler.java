@@ -1803,6 +1803,7 @@ public class TabletScheduler extends FrontendDaemon {
             try {
                 // ignore tablets that will expire and erase soon
                 if (checkIfTabletExpired(tablet)) {
+                    finalizeTabletCtx(tablet, TabletSchedCtx.State.EXPIRED, "will erase soon");
                     continue;
                 }
                 list.add(tablet);
