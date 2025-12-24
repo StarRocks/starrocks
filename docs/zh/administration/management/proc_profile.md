@@ -1,4 +1,4 @@
-# 进程分析 Proc Profile)
+# 进程分析 (Proc Profile)
 
 **进程分析** (Proc Profile) 功能提供了一种内置机制，用于收集和可视化 StarRocks 前端 (FE) 和后端 (BE) 进程的性能分析数据。通过生成 CPU、内存分配的火焰图，它帮助开发人员和管理员直接通过 Web UI 诊断性能瓶颈、高资源利用率和复杂的运行时问题。
 
@@ -77,16 +77,31 @@ FE 分析由内部守护进程管理，并使用 **AsyncProfiler** 采集数据�
 
 ### 后端 (BE) 配置
 
-BE 分析使用内置的 **gperftools** 采集数据，通常通过后台脚本或手动触发收集。随后使用 **pprof** 工具将采样数据转换为火焰图。您可以在 `be.conf` 中配置这些参数。
+BE 分析使用内置的 **gperftools** 采集数据，通常通过后台脚本或手动触发收集。随后使用 **pprof** 工具将采样数据转换为火焰图。
+
+#### `be.conf` 配置参数
 
 | 参数 | 默认值 | 说明 |
 | :--- | :--- | :--- |
 | `brpc_port` | `8060` | 收集脚本从 BE 获取数据所使用的端口。 |
 | `sys_log_dir` | `${STARROCKS_HOME}/log` | 存储已收集分析的基础目录（存储在 `proc_profile` 子目录中）。 |
 | `flamegraph_tool_dir` | `${STARROCKS_HOME}/bin/flamegraph` | 转换工具（**pprof**、`flamegraph.pl`）的路径。 |
+| `COLLECT_BE_PROFILE_INTERVAL` | `60` | 以守护进程模式运行 `collect_be_profile.sh` 脚本时的收集间隔（秒）。 |
 
-### 手动 BE 收集
+#### BE 采集脚本选项
 
+`collect_be_profile.sh` 脚本支持以下命令行选项：
+
+| 选项 | 默认值 | 说明 |
+| :--- | :--- | :--- |
+| `--profiling-type` | `cpu` | 采集类型：`cpu`、`contention` 或 `both`。 |
+| `--duration` | `10` | 每次分析采集的持续时间（秒）。 |
+| `--interval` | `60` | 守护进程模式下两次采集之间的间隔（秒）。 |
+| `--cleanup-days` | `1` | 分析文件的保留天数。 |
+| `--cleanup-size` | `2147483648` (2GB) | 保留分析文件的最大总大小。 |
+| `--daemon` | - | 在后台以守护进程模式运行采集脚本。 |
+
+### 手动 BE 收集示例
 您可以使用提供的脚本触发或计划 BE 收集：
 
 ```bash

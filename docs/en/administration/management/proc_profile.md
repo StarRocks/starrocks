@@ -77,15 +77,31 @@ FE profiling is managed by an internal daemon and uses **AsyncProfiler** for dat
 
 ### Backend (BE) Configuration
 
-BE profiles are collected using the built-in **gperftools** and are typically collected via a background script or manual triggers. The collected data is then converted into flame graphs using **pprof**. You can configure these in `be.conf`.
+BE profiles are collected using the built-in **gperftools** and are typically collected via a background script or manual triggers. The collected data is then converted into flame graphs using **pprof**. 
+
+#### Configuration in `be.conf`
 
 | Parameter | Default | Description |
 | :--- | :--- | :--- |
 | `brpc_port` | `8060` | Port used by collection scripts to fetch data from BE. |
 | `sys_log_dir` | `${STARROCKS_HOME}/log` | Base directory for storing collected profiles (stored in the `proc_profile` subdirectory). |
 | `flamegraph_tool_dir` | `${STARROCKS_HOME}/bin/flamegraph` | Path to conversion tools (**pprof**, `flamegraph.pl`). |
+| `COLLECT_BE_PROFILE_INTERVAL` | `60` | Collection interval in seconds when running the `collect_be_profile.sh` script in daemon mode. |
 
-### Manual BE Collection
+#### Manual BE Collection Options
+
+The `collect_be_profile.sh` script supports the following command-line options:
+
+| Option | Default | Description |
+| :--- | :--- | :--- |
+| `--profiling-type` | `cpu` | Type of profile to collect: `cpu`, `contention`, or `both`. |
+| `--duration` | `10` | Duration (seconds) for each profile collection. |
+| `--interval` | `60` | Interval (seconds) between collections in daemon mode. |
+| `--cleanup-days` | `1` | Number of days to retain profile files. |
+| `--cleanup-size` | `2147483648` (2GB) | Maximum total size of retained profile files. |
+| `--daemon` | - | Run the collection script in daemon mode in the background. |
+
+### Manual BE Collection Example
 
 You can use the provided script to trigger or schedule BE collection:
 
