@@ -47,6 +47,7 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
 import org.junit.rules.ExpectedException;
 
 import java.io.IOException;
@@ -272,8 +273,7 @@ public class CachingDeltaLakeMetastoreTest {
             @mockit.Mock
             public DeltaLakeSnapshot getCachedSnapshot(DatabaseTableName databaseTableName) {
                 return new DeltaLakeSnapshot("db1", "table1", null, null,
-                        new MetastoreTable("db1", "table1", "s3://bucket/path/to/table",
-                                123));
+                        123, "s3://bucket/path/to/table");
             }
         };
 
@@ -281,9 +281,8 @@ public class CachingDeltaLakeMetastoreTest {
             @mockit.Mock
             public DeltaLakeTable convertDeltaSnapshotToSRTable(String catalog, DeltaLakeSnapshot snapshot) {
                 return new DeltaLakeTable(1, "delta0", "db1", "table1",
-                        Lists.newArrayList(), Lists.newArrayList("ts"), null, null,
-                        new MetastoreTable("db1", "table1", "s3://bucket/path/to/table",
-                                123));
+                        Lists.newArrayList(), Lists.newArrayList("ts"), null,
+                        "s3://bucket/path/to/table", null, 123);
             }
         };
 
@@ -310,8 +309,7 @@ public class CachingDeltaLakeMetastoreTest {
             @mockit.Mock
             public DeltaLakeSnapshot getCachedSnapshot(DatabaseTableName databaseTableName) {
                 return new DeltaLakeSnapshot("db1", "table1", null, null,
-                        new MetastoreTable("db1", "table1", "s3://bucket/path/to/table",
-                                123));
+                        123, "s3://bucket/path/to/table");
             }
         };
 
@@ -319,9 +317,8 @@ public class CachingDeltaLakeMetastoreTest {
             @mockit.Mock
             public DeltaLakeTable convertDeltaSnapshotToSRTable(String catalog, DeltaLakeSnapshot snapshot) {
                 return new DeltaLakeTable(1, "delta0", "db1", "table1",
-                        Lists.newArrayList(), Lists.newArrayList("ts"), null, null,
-                        new MetastoreTable("db1", "table1", "s3://bucket/path/to/table",
-                                123));
+                        Lists.newArrayList(), Lists.newArrayList("ts"), null,
+                        "s3://bucket/path/to/table", null, 123);
             }
         };
 
@@ -345,7 +342,7 @@ public class CachingDeltaLakeMetastoreTest {
     public void testGetCachedSnapshot() {
         new MockUp<ConnectContext>() {
             @mockit.Mock
-            public static ConnectContext get() {
+            public ConnectContext get() {
                 ConnectContext context = new ConnectContext();
                 context.setCommand(MysqlCommand.COM_QUERY);
                 return context;
@@ -353,7 +350,7 @@ public class CachingDeltaLakeMetastoreTest {
         };
 
         DeltaLakeSnapshot snapshot = new DeltaLakeSnapshot("db1", "table1", null, null,
-                new MetastoreTable("db1", "table1", "s3://bucket/path/to/table", 123));
+                123, "s3://bucket/path/to/table");
 
         new MockUp<CachingDeltaLakeMetastore>() {
             @mockit.Mock
@@ -373,7 +370,7 @@ public class CachingDeltaLakeMetastoreTest {
     @Test
     public void testRefreshTableUsesSnapshotCache() {
         DeltaLakeSnapshot snapshot = new DeltaLakeSnapshot("db1", "table1", null, null,
-                new MetastoreTable("db1", "table1", "s3://bucket/path/to/table", 123));
+                123, "s3://bucket/path/to/table");
 
         new MockUp<DeltaLakeMetastore>() {
             @mockit.Mock
@@ -430,7 +427,7 @@ public class CachingDeltaLakeMetastoreTest {
     @Test
     public void testInvalidateTableUsesSnapshotCache() {
         DeltaLakeSnapshot snapshot = new DeltaLakeSnapshot("db1", "table1", null, null,
-                new MetastoreTable("db1", "table1", "s3://bucket/path/to/table", 123));
+                123, "s3://bucket/path/to/table");
 
         new MockUp<DeltaLakeMetastore>() {
             @mockit.Mock
