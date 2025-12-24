@@ -235,11 +235,7 @@ public class SkewJoinOptimizeRule extends TransformationRule {
             }
         }
         // when use hint, we should check the skew column, and throw exception if not found
-<<<<<<< HEAD
-        if (rightSkewColumn == null && oldJoinOperator.getJoinHint().equals(JoinOperator.HINT_SKEW)) {
-=======
-        if (otherSideSkewColumn == null && oldJoinOperator.getJoinHint().equals(HintNode.HINT_JOIN_SKEW)) {
->>>>>>> bdb57949f8 ([BugFix] fix the column not found issue in skew join hint (#66929))
+        if (otherSideSkewColumn == null && oldJoinOperator.getJoinHint().equals(JoinOperator.HINT_SKEW)) {
             throw new StarRocksConnectorException("Can't find skew column");
         } else if (otherSideSkewColumn == null) {
             return Lists.newArrayList();
