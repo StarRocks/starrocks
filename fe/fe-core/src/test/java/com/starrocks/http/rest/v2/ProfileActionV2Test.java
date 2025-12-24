@@ -173,6 +173,9 @@ public class ProfileActionV2Test extends StarRocksHttpTestCase {
                 }.getType());
         Assertions.assertEquals(queryProfileResult.getStatus(), ActionStatus.OK);
         Assertions.assertTrue(queryProfileResult.getResult().contains("Query ID: eaff21d2-3734-11ee-909f-8e20563011de"));
-        Assertions.assertFalse(queryProfileResult.getResult().contains("\"result\":"));
+        Assertions.assertFalse(
+                queryProfileResult.getResult().contains("\"result\":"),
+                "Query profile should be raw text, not wrapped in a JSON 'result' field"
+        );
     }
 }
