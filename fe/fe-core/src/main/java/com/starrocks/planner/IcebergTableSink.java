@@ -14,6 +14,7 @@
 
 package com.starrocks.planner;
 
+import com.google.common.base.Preconditions;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.connector.iceberg.IcebergUtil;
 import com.starrocks.credential.CloudConfiguration;
@@ -30,7 +31,6 @@ import static com.starrocks.sql.ast.OutFileClause.PARQUET_COMPRESSION_TYPE_MAP;
 import static org.apache.iceberg.TableProperties.DEFAULT_FILE_FORMAT;
 import static org.apache.iceberg.TableProperties.DEFAULT_FILE_FORMAT_DEFAULT;
 import static org.apache.iceberg.TableProperties.PARQUET_COMPRESSION;
-import static org.apache.iceberg.TableProperties.PARQUET_COMPRESSION_DEFAULT;
 
 public class IcebergTableSink extends DataSink {
     public final static int ICEBERG_SINK_MAX_DOP = 32;
@@ -92,6 +92,7 @@ public class IcebergTableSink extends DataSink {
         tIcebergTableSink.setFile_format(fileFormat);
         tIcebergTableSink.setIs_static_partition_sink(isStaticPartitionSink);
         TCompressionType compression = PARQUET_COMPRESSION_TYPE_MAP.get(compressionType);
+        Preconditions.checkState(compression != null, "compression type not supported");
         tIcebergTableSink.setCompression_type(compression);
         tIcebergTableSink.setTarget_max_file_size(targetMaxFileSize);
         TCloudConfiguration tCloudConfiguration = new TCloudConfiguration();

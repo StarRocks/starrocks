@@ -1471,7 +1471,7 @@ ORDER BY (column_name [sort_direction] [nulls_order], ...)
 
 ###### compression_codec
 
-描述：Iceberg 表使用的压缩算法。支持的压缩算法有 SNAPPY、GZIP、ZSTD 和 LZ4。默认值：`gzip`。此属性在 v3.2.3 中已弃用，从该版本开始，导入数据到 Iceberg 表时使用的压缩算法由会话变量 [connector_sink_compression_codec](../../../sql-reference/System_variable.md#connector_sink_compression_codec) 统一控制。
+描述：Iceberg 表使用的压缩算法。支持的压缩算法有 SNAPPY、GZIP、ZSTD 和 LZ4。默认值：`zstd`。
 
 ---
 
