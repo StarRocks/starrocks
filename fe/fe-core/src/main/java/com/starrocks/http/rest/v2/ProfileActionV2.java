@@ -72,7 +72,6 @@ public class ProfileActionV2 extends RestBaseAction {
             List<String> profileList = fetchResultFromOtherFrontendNodes(queryPath, authorization, HttpMethod.GET, false);
             for (String profile : profileList) {
                 if (profile != null) {
-                    try {
                         RestBaseResultV2<String> queryProfileResult = GsonUtils.GSON.fromJson(
                                 profile,
                                 new TypeToken<RestBaseResultV2<String>>() {
@@ -82,9 +81,6 @@ public class ProfileActionV2 extends RestBaseAction {
                         }
                         sendSuccessResponse(response, queryProfileResult.getResult(), request);
                         return;
-                    } catch (JSONException exception) {
-                        // skip invalid json
-                    }
                 }
             }
         }
