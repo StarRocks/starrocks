@@ -32,6 +32,7 @@ If yes, please specify the type of change:
 - [ ] I have added test cases for my bug fix or my new feature
 - [ ] This pr needs user documentation (for new or modified features or behaviors)
   - [ ] I have added documentation for my new feature or new function
+  - [ ] This pr needs auto generate documentation
 - [ ] This is a backport pr
 
 ## Bugfix cherry-pick branch check:
