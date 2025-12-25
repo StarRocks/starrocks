@@ -204,10 +204,9 @@ public class CompactionJob {
             if (subStats == null) {
                 continue;
             }
-            int subTaskCount = 0;
             for (CompactStat subStat : subStats) {
                 if (subStat.subTaskCount != null) {
-                    subTaskCount = subStat.subTaskCount;
+                    stat.subTaskCount += subStat.subTaskCount;
                 }
                 if (subStat.readTimeRemote != null) {
                     stat.readTimeRemote += subStat.readTimeRemote;
@@ -237,7 +236,6 @@ public class CompactionJob {
                     stat.writeTimeRemote += subStat.writeTimeRemote;
                 }
             }
-            stat.subTaskCount += subTaskCount;
         }
         return new CompactionProfile(stat).toString();
     }
