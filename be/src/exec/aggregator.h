@@ -515,7 +515,7 @@ protected:
     int64_t _agg_state_mem_usage = 0;
 
     // aggregate combinator functions since they are not persisted in agg hash map
-    std::vector<AggregateFunctionPtr> _combinator_function;
+    std::vector<const AggregateFunction*> _combinator_function;
 
     pipeline::PipeObservable _pip_observable;
 

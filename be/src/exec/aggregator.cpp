@@ -589,10 +589,10 @@ Status Aggregator::_create_aggregate_function(starrocks::RuntimeState* state, co
         if (!AggStateUtils::is_agg_state_if(func_name)) {
             agg_state_desc.set_is_result_nullable(is_result_nullable);
         }
-        ASSIGN_OR_RETURN(auto agg_state_func,
+        ASSIGN_OR_RETURN(const AggregateFunction* agg_state_func,
                          AggStateUtils::get_agg_state_function(agg_state_desc, func_name, arg_types));
-        *ret = agg_state_func.get();
-        _combinator_function.emplace_back(std::move(agg_state_func));
+        *ret = agg_state_func;
+        _combinator_function.emplace_back(agg_state_func);
     } else {
         // get function
         if (func_name == FUNCTION_COUNT) {
@@ -762,6 +762,12 @@ void Aggregator::close(RuntimeState* state) {
             Expr::close(i, state);
         }
         Expr::close(_conjunct_ctxs, state);
+
+        for (auto* func : _combinator_function) {
+            delete func;
+        }
+        _combinator_function.clear();
+
         return Status::OK();
     };
 #ifdef __APPLE__

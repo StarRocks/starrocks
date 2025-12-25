@@ -15,6 +15,7 @@
 #pragma once
 
 #include "column/column.h"
+#include "exprs/agg/aggregate.h"
 #ifdef __x86_64__
 #include <immintrin.h>
 #elif defined(__ARM_NEON) && defined(__aarch64__)
@@ -952,13 +953,13 @@ public:
 };
 
 template <typename State,
-          IsAggNullPred<typename State::NestedState> AggNullPred = AggNonNullPred<typename State::NestedState>>
+          IsAggNullPred<typename State::NestedState> AggNullPredType = AggNonNullPred<typename State::NestedState>>
 class NullableAggregateFunctionVariadic final
-        : public NullableAggregateFunctionBase<AggregateFunctionPtr, State, false, true, AggNullPred> {
+        : public NullableAggregateFunctionBase<AggregateFunctionPtr, State, false, true, AggNullPredType> {
 public:
-    NullableAggregateFunctionVariadic(const AggregateFunctionPtr& nested_function,
-                                      AggNullPred null_pred = AggNullPred())
-            : NullableAggregateFunctionBase<AggregateFunctionPtr, State, false, true, AggNullPred>(
+    NullableAggregateFunctionVariadic(AggregateFunctionPtr nested_function,
+                                      AggNullPredType null_pred = AggNullPredType())
+            : NullableAggregateFunctionBase<AggregateFunctionPtr, State, false, true, AggNullPredType>(
                       nested_function, std::move(null_pred)) {}
 
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,

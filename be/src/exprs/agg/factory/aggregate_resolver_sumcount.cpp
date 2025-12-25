@@ -45,8 +45,7 @@ struct StorageSumDispatcher {
         if constexpr (lt_is_sum_in_storage<lt>) {
             using SumState = SumAggregateState<RunTimeCppType<lt>>;
             resolver->add_aggregate_mapping<lt, lt, SumState>(
-                    "sum", true,
-                    std::make_shared<SumAggregateFunction<lt, RunTimeCppType<lt>, lt, RunTimeCppType<lt>>>());
+                    "sum", true, new SumAggregateFunction<lt, RunTimeCppType<lt>, lt, RunTimeCppType<lt>>());
         }
     }
 };
