@@ -156,6 +156,7 @@ Status TabletManager::drop_local_cache(const std::string& path) {
 
 // current lru cache does not support updating value size, so use refill to update.
 void TabletManager::update_segment_cache_size(std::string_view key, size_t mem_cost, intptr_t segment_addr_hint) {
+    TEST_SYNC_POINT_CALLBACK("lake::TabletManager::update_segment_cache_size", nullptr);
     _metacache->cache_segment_if_present(key, mem_cost, segment_addr_hint);
 }
 
