@@ -114,9 +114,7 @@ public:
     static constexpr char kEmptyMetadataChars[] = {0x1, 0x0, 0x0};
     static constexpr std::string_view kEmptyMetadata{kEmptyMetadataChars, sizeof(kEmptyMetadataChars)};
 
-    bool operator==(const VariantMetadata& other) const {
-        return _metadata == other._metadata;
-    }
+    bool operator==(const VariantMetadata& other) const { return _metadata == other._metadata; }
 
 private:
     static constexpr uint8_t kVersionMask = 0b1111;
@@ -133,8 +131,8 @@ private:
 
 class VariantValue;
 struct VariantUtil {
-    static Status variant_to_json(const VariantMetadata& metadata, const VariantValue& value, std::stringstream& json_str,
-                                  cctz::time_zone timezone = cctz::local_time_zone());
+    static Status variant_to_json(const VariantMetadata& metadata, const VariantValue& value,
+                                  std::stringstream& json_str, cctz::time_zone timezone = cctz::local_time_zone());
 
     static inline uint32_t read_little_endian_unsigned32(const void* from, uint8_t size) {
         DCHECK_LE(size, 4);
@@ -276,9 +274,7 @@ public:
 
     StatusOr<VariantArrayInfo> get_array_info() const;
 
-    bool operator==(const VariantValue& other) const {
-        return _value == other._value;
-    }
+    bool operator==(const VariantValue& other) const { return _value == other._value; }
 
 private:
     uint8_t value_header() const;

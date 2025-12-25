@@ -198,10 +198,10 @@ public:
     [[nodiscard]] bool operator!=(const Datum& other) const { return !(*this == other); }
 
 private:
-    using Variant =
-            std::variant<std::monostate, int8_t, uint8_t, int16_t, uint16_t, uint24_t, int32_t, uint32_t, int64_t,
-                         uint64_t, int96_t, int128_t, int256_t, Slice, decimal12_t, DecimalV2Value, float, double,
-                         DatumArray, DatumMap, HyperLogLog*, BitmapValue*, PercentileValue*, JsonValue*, VariantRowValue*>;
+    using Variant = std::variant<std::monostate, int8_t, uint8_t, int16_t, uint16_t, uint24_t, int32_t, uint32_t,
+                                 int64_t, uint64_t, int96_t, int128_t, int256_t, Slice, decimal12_t, DecimalV2Value,
+                                 float, double, DatumArray, DatumMap, HyperLogLog*, BitmapValue*, PercentileValue*,
+                                 JsonValue*, VariantRowValue*>;
     Variant _value;
 };
 

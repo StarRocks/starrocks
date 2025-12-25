@@ -443,8 +443,8 @@ inline static bool convert_variant_decimal(SrcType src_value, int src_scale, Dst
 }
 
 template <typename DecimalCppType>
-inline static StatusOr<bool> cast_variant_to_decimal(DecimalCppType* dst_value, const VariantValue& variant, int precision,
-                                                     int scale) {
+inline static StatusOr<bool> cast_variant_to_decimal(DecimalCppType* dst_value, const VariantValue& variant,
+                                                     int precision, int scale) {
     const VariantType type = variant.type();
     bool overflow = false;
 

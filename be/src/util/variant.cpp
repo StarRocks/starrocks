@@ -250,8 +250,8 @@ StatusOr<VariantObjectInfo> VariantValue::get_object_info() const {
                                     std::to_string(1 + num_elements_size));
     }
 
-    uint32_t num_elements =
-            VariantUtil::read_little_endian_unsigned32(value.data() + VariantValue::kHeaderSizeBytes, num_elements_size);
+    uint32_t num_elements = VariantUtil::read_little_endian_unsigned32(value.data() + VariantValue::kHeaderSizeBytes,
+                                                                       num_elements_size);
 
     VariantObjectInfo object_info{};
     object_info.num_elements = num_elements;
@@ -321,8 +321,8 @@ StatusOr<VariantArrayInfo> VariantValue::get_array_info() const {
                                     std::to_string(1 + num_elements_size));
     }
 
-    uint32_t num_elements =
-            VariantUtil::read_little_endian_unsigned32(value.data() + VariantValue::kHeaderSizeBytes, num_elements_size);
+    uint32_t num_elements = VariantUtil::read_little_endian_unsigned32(value.data() + VariantValue::kHeaderSizeBytes,
+                                                                       num_elements_size);
 
     VariantArrayInfo array_info{};
     array_info.num_elements = num_elements;

@@ -268,8 +268,7 @@ static ColumnPtr cast_from_variant_fn(ColumnPtr& column) {
             continue;
         }
 
-        auto status =
-                cast_variant_value_to<ToType, AllowThrowException>(*variant, cctz::local_time_zone(), builder);
+        auto status = cast_variant_value_to<ToType, AllowThrowException>(*variant, cctz::local_time_zone(), builder);
         if (!status.ok()) {
             if constexpr (AllowThrowException) {
                 THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(FromType, ToType, variant->to_string());
