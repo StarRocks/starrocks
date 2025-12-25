@@ -93,6 +93,7 @@ struct TFinishTaskRequest {
     17: optional list<TTabletVersionPair> tablet_versions;
     18: optional list<TTabletVersionPair> tablet_publish_versions;
     19: optional Types.TSnapshotInfo snapshot_info
+    20: optional Types.TClusterSnapshotPartitionSpec cluster_snapshot_partition_spec
 }
 
 struct TTablet {

@@ -76,4 +76,13 @@ void LakeService_RecoverableStub::compact(::google::protobuf::RpcController* con
     stub()->compact(controller, request, response, closure);
 }
 
+void LakeService_RecoverableStub::upload_snapshot_files(::google::protobuf::RpcController* controller,
+                                                        const ::starrocks::UploadSnapshotFilesRequestPB* request,
+                                                        ::starrocks::UploadSnapshotFilesResponsePB* response,
+                                                        ::google::protobuf::Closure* done) {
+    using RecoverableClosureType = RecoverableClosure<LakeService_RecoverableStub>;
+    auto closure = new RecoverableClosureType(shared_from_this(), controller, done);
+    stub()->upload_snapshot_files(controller, request, response, closure);
+}
+
 } // namespace starrocks

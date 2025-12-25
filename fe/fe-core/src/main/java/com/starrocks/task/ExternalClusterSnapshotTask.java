@@ -15,7 +15,7 @@
 package com.starrocks.task;
 
 import com.starrocks.task.AgentTask;
-import com.starrocks.thrift.TBackend;
+import com.starrocks.thrift.TComputeNodeTablets;
 import com.starrocks.thrift.TExternalClusterSnapshotRequest;
 import com.starrocks.thrift.TTaskType;
 
@@ -28,17 +28,20 @@ public class ExternalClusterSnapshotTask extends AgentTask {
     private final long newVersion;
     private final long physicalPartitionId;
     private final long destTablet;
-    private List<Long> tablets;
-    private List<TBackend> computeNodes;
+    private final boolean isFilebundling;
+    private List<TComputeNodeTablets> computeNodeTablets;
+
 
     public ExternalClusterSnapshotTask(long backendId, long dbId, long tableId, long partitionId,
-            long physicalPartitionId, long jobId, long preVersion, long newVersion, long destTablet) {
+            long physicalPartitionId, long jobId, long preVersion, long newVersion, 
+            boolean isFileBundling, long destTablet) {
         super(null, backendId, TTaskType.EXTERNAL_CLUSTER_SNAPSHOT, dbId, tableId, partitionId, -1L, -1L,
                 physicalPartitionId);
         this.jobId = jobId;
         this.preVersion = preVersion;
         this.newVersion = newVersion;
         this.physicalPartitionId = physicalPartitionId;
+        this.isFilebundling = isFileBundling;
         this.destTablet = destTablet;
     }
 
@@ -46,12 +49,8 @@ public class ExternalClusterSnapshotTask extends AgentTask {
         return jobId;
     }
 
-    public void setTablets(List<Long> tablets) {
-        this.tablets = tablets;
-    }
-
-    public void setComputeNodes(List<TBackend> computeNodes) {
-        this.computeNodes = computeNodes;
+    public void setComputeNodeTablets(List<TComputeNodeTablets> computeNodeTablets) {
+        this.computeNodeTablets = computeNodeTablets;
     }
 
     public TExternalClusterSnapshotRequest toThrift() {
@@ -64,8 +63,8 @@ public class ExternalClusterSnapshotTask extends AgentTask {
         request.setPre_version(preVersion);
         request.setNew_version(newVersion);
         request.setDest_tablet_id(destTablet);
-        request.setSrc_tablets(tablets);
-        request.setCompute_nodes(computeNodes);
+        request.setIs_filebundling(isFilebundling);
+        request.setCompute_node_tablets(computeNodeTablets);
         return request;
     }
 }

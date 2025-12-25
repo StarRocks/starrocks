@@ -30,6 +30,7 @@ import com.starrocks.task.AgentTaskExecutor;
 import com.starrocks.task.AgentTaskQueue;
 import com.starrocks.task.ExternalClusterSnapshotTask;
 import com.starrocks.thrift.TBackend;
+import com.starrocks.thrift.TComputeNodeTablets;
 import com.starrocks.thrift.TFinishTaskRequest;
 import com.starrocks.thrift.TStatusCode;
 import org.apache.logging.log4j.LogManager;
@@ -221,42 +222,40 @@ public class ExternalClusterSnapshotJob extends ClusterSnapshotJob {
         long vTabletId = getVirtualTabletId();
         lakeSnapshotBatchTask = new AgentBatchTask();
         for (PartitionVersionInfo partition : snapshotDiff.getAddedPartitions()) {
-            Map<TBackend, List<Long>> nodeToTablets = Maps.newHashMap();
             // try to reuse the aggregator node id if possible
             long aggregatorNodeId = chooseAggregatorNodeId(partition.getAggregatorNodeId());
             if (aggregatorNodeId == 0) {
                 throw new StarRocksException("failed to choose aggregator node for cluster snapshot task");
             }
             partition.setAggregatorNodeId(aggregatorNodeId);
-            List<TBackend> computeNodes = collectNodes();
+            List<TComputeNodeTablets> computeNodeTablets = collectComputeNodeTablets(partition.getTabletIds());
 
             LOG.info("collect node to tablets for added partition, aggregatorNodeId: {}", aggregatorNodeId);
             PartitionKey partitionKey = partition.getPartitionKey();
             ExternalClusterSnapshotTask task = new ExternalClusterSnapshotTask(aggregatorNodeId, partitionKey.getDbId(),
                     partitionKey.getTableId(), partitionKey.getPartId(), partitionKey.getPhysicalPartId(), getId(), -1,
-                    partition.getVersion(), vTabletId);
-            task.setTablets(partition.getTabletIds());
-            task.setComputeNodes(computeNodes);
+                    partition.getVersion(), partition.isFileBundling(), vTabletId);
+            task.setComputeNodeTablets(computeNodeTablets);
             lakeSnapshotBatchTask.addTask(task);
         }
 
         for (PartitionVersionChangeInfo partition : snapshotDiff.getChangedPartitions()) {
-            Map<TBackend, List<Long>> nodeToTablets = Maps.newHashMap();
             // try to reuse the aggregator node id if possible
             long aggregatorNodeId = chooseAggregatorNodeId(partition.getCurrentPartitionInfo().getAggregatorNodeId());
             if (aggregatorNodeId == 0) {
                 throw new StarRocksException("failed to choose aggregator node for cluster snapshot task");
             }
             partition.getCurrentPartitionInfo().setAggregatorNodeId(aggregatorNodeId);
-            List<TBackend> computeNodes = collectNodes();
-            
+            List<TComputeNodeTablets> computeNodeTablets = 
+                            collectComputeNodeTablets(partition.getCurrentPartitionInfo().getTabletIds());
+
             LOG.info("collect node to tablets for changed partition, aggregatorNodeId: {}", aggregatorNodeId);
             PartitionKey partitionKey = partition.getCurrentPartitionInfo().getPartitionKey();
             ExternalClusterSnapshotTask task = new ExternalClusterSnapshotTask(aggregatorNodeId, partitionKey.getDbId(),
                     partitionKey.getTableId(), partitionKey.getPartId(), partitionKey.getPhysicalPartId(), getId(),
-                    partition.getPrevVersion(), partition.getCurrentPartitionInfo().getVersion(), vTabletId);
-            task.setTablets(partition.getCurrentPartitionInfo().getTabletIds());
-            task.setComputeNodes(computeNodes);
+                    partition.getPrevVersion(), partition.getCurrentPartitionInfo().getVersion(),
+                    partition.getCurrentPartitionInfo().isFileBundling(), vTabletId);
+            task.setComputeNodeTablets(computeNodeTablets);
             lakeSnapshotBatchTask.addTask(task);
         }
 
@@ -281,20 +280,35 @@ public class ExternalClusterSnapshotJob extends ClusterSnapshotJob {
         return computeNode.getId();
     }
 
-    private List<TBackend> collectNodes() throws StarRocksException {
-        List<ComputeNode> computeNodes = 
-                GlobalStateMgr.getCurrentState().getWarehouseMgr().getAliveComputeNodes(WarehouseManager.DEFAULT_RESOURCE);
-        if (computeNodes == null || computeNodes.isEmpty()) {
-            throw new StarRocksException("no alive compute nodes in warehouse for external cluster snapshot job");
+    private List<TComputeNodeTablets> collectComputeNodeTablets(List<Long> tabletIds) throws StarRocksException {
+        Map<ComputeNode, List<Long>> nodeToTablets = Maps.newHashMap();
+
+        for (Long tabletId : tabletIds) {
+            ComputeNode computeNode = GlobalStateMgr.getCurrentState().getWarehouseMgr()
+                    .getComputeNodeAssignedToTablet(WarehouseManager.DEFAULT_RESOURCE, tabletId);
+            if (computeNode == null) {
+                throw new StarRocksException("failed to get compute node for tablet " + tabletId);
+            }
+
+            List<Long> tabletsOnNode = nodeToTablets.get(computeNode);
+            if (tabletsOnNode == null) {
+                tabletsOnNode = Lists.newArrayList();
+                nodeToTablets.put(computeNode, tabletsOnNode);
+            }
+            tabletsOnNode.add(tabletId);
         }
-        List<TBackend> resultNodes = Lists.newArrayList();
-        for (ComputeNode computeNode : computeNodes) {
-            // use brpc_port as be_port when building backend info for snapshot tasks
-            TBackend resultNode = new TBackend(computeNode.getHost(), computeNode.getBrpcPort(),
+
+        List<TComputeNodeTablets> computeNodeTablets = Lists.newArrayList();
+        for (Map.Entry<ComputeNode, List<Long>> entry : nodeToTablets.entrySet()) {
+            ComputeNode computeNode = entry.getKey();
+            TBackend backend = new TBackend(computeNode.getHost(), computeNode.getBrpcPort(),
                     computeNode.getHttpPort());
-            resultNodes.add(resultNode);
+            TComputeNodeTablets singleCNTablets = new TComputeNodeTablets();
+            singleCNTablets.setCompute_node(backend);
+            singleCNTablets.setTablets(entry.getValue());
+            computeNodeTablets.add(singleCNTablets);
         }
-        return resultNodes;
+        return computeNodeTablets;
     }
 
     /**
@@ -379,6 +393,7 @@ public class ExternalClusterSnapshotJob extends ClusterSnapshotJob {
                     if (tableInfo == null || tableInfo.partInfos == null) {
                         continue;
                     }
+                    boolean isFileBundling = tableInfo.isFileBundling;
                     for (Map.Entry<Long, PartitionSnapshotInfo> partEntry : tableInfo.partInfos.entrySet()) {
                         long partId = partEntry.getKey();
                         PartitionSnapshotInfo partInfo = partEntry.getValue();
@@ -392,6 +407,7 @@ public class ExternalClusterSnapshotJob extends ClusterSnapshotJob {
                             if (physicalPartInfo == null || physicalPartInfo.indexInfos == null) {
                                 continue;
                             }
+                            long metadataSwitchVersion = physicalPartInfo.metadataSwitchVersion;
                             List<Long> tabletIds = Lists.newArrayList();
                             for (Map.Entry<Long, MaterializedIndexSnapshotInfo> indexEntry : physicalPartInfo.indexInfos
                                     .entrySet()) {
@@ -402,10 +418,16 @@ public class ExternalClusterSnapshotJob extends ClusterSnapshotJob {
                                 }
                                 tabletIds.addAll(indexInfo.tabletIds);
                             }
+                            long version = physicalPartInfo.visibleVersion;
+                            boolean isFileBundlingVersion = isFileBundling;
+                            if (metadataSwitchVersion != 0 && version < metadataSwitchVersion) {
+                                isFileBundlingVersion = !isFileBundlingVersion;
+                            }
 
                             PartitionKey key = new PartitionKey(dbId, tableId, partId, physicalPartId);
                             partitionInfos.put(key,
-                                    new PartitionVersionInfo(key, physicalPartInfo.visibleVersion, tabletIds));
+                                new PartitionVersionInfo(key, physicalPartInfo.visibleVersion, isFileBundlingVersion, 
+                                    tabletIds));
                         }
                     }
                 }
@@ -501,14 +523,18 @@ public class ExternalClusterSnapshotJob extends ClusterSnapshotJob {
         private final PartitionKey partitionKey;
         @SerializedName(value = "version")
         private final long version;
+        @SerializedName(value = "isFileBundling")
+        private final boolean isFileBundling;
         @SerializedName(value = "tabletIds")
         private final List<Long> tabletIds;
         @SerializedName(value = "aggregatorNodeId")
         private long aggregatorNodeId = 0;
 
-        public PartitionVersionInfo(PartitionKey partitionKey, long version, List<Long> tabletIds) {
+        public PartitionVersionInfo(PartitionKey partitionKey, long version, 
+                boolean isFileBundling, List<Long> tabletIds) {
             this.partitionKey = partitionKey;
             this.version = version;
+            this.isFileBundling = isFileBundling;
             this.tabletIds = tabletIds;
             this.aggregatorNodeId = 0;
         }
@@ -519,6 +545,10 @@ public class ExternalClusterSnapshotJob extends ClusterSnapshotJob {
 
         public long getVersion() {
             return version;
+        }
+
+        public boolean isFileBundling() {
+            return isFileBundling;
         }
 
         public List<Long> getTabletIds() {

@@ -25,14 +25,17 @@ public class PhysicalPartitionSnapshotInfo {
     public final long visibleVersion;
     @SerializedName(value = "committedVersion")
     public final long committedVersion;
+    @SerializedName(value = "metadataSwitchVersion")
+    public final long metadataSwitchVersion;
     @SerializedName(value = "indexInfos")
     public final Map<Long, MaterializedIndexSnapshotInfo> indexInfos;
 
     public PhysicalPartitionSnapshotInfo(long physicalPartId, long visibleVersion, long committedVersion,
-                                         Map<Long, MaterializedIndexSnapshotInfo> indexInfos) {
+            long metadataSwitchVersion, Map<Long, MaterializedIndexSnapshotInfo> indexInfos) {
         this.physicalPartitionId = physicalPartId;
         this.visibleVersion = visibleVersion;
         this.committedVersion = committedVersion;
+        this.metadataSwitchVersion = metadataSwitchVersion;
         this.indexInfos = indexInfos;
     }
 }

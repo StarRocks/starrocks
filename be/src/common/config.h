@@ -195,6 +195,8 @@ CONF_Int32(compact_thread_pool_queue_size, "100");
 
 // The count of thread to replication
 CONF_mInt32(replication_threads, "0");
+// The count of thread to cluster snapshot
+CONF_mInt32(cluster_snapshot_threads, "0");
 // The replication max speed limit(KB/s).
 CONF_mInt32(replication_max_speed_limit_kbps, "50000");
 // The replication min speed limit(KB/s).

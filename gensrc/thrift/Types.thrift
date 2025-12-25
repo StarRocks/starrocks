@@ -612,6 +612,13 @@ struct TSnapshotInfo {
     3: optional bool incremental_snapshot
 }
 
+struct TClusterSnapshotPartitionSpec {
+    1: optional i64 db_id
+    2: optional i64 table_id
+    3: optional i64 partition_id
+    4: optional i64 physical_partition_id
+}
+
 enum TTxnType {
     TXN_NORMAL = 0,
     TXN_REPLICATION = 1

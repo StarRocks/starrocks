@@ -142,6 +142,7 @@ private:
     std::unique_ptr<ThreadPool> _thread_pool_drop_auto_increment_map;
     std::unique_ptr<ThreadPool> _thread_pool_remote_snapshot;
     std::unique_ptr<ThreadPool> _thread_pool_replicate_snapshot;
+    std::unique_ptr<ThreadPool> _thread_pool_cluster_snapshot;
 
     std::unique_ptr<PushTaskWorkerPool> _push_workers;
     std::unique_ptr<PublishVersionTaskWorkerPool> _publish_version_workers;
@@ -281,6 +282,11 @@ Status AgentServer::Impl::init() {
                 calc_real_num_threads(config::replication_threads, REPLICATION_CPU_CORES_MULTIPLIER),
                 std::numeric_limits<int>::max(), _thread_pool_replicate_snapshot);
 
+        BUILD_DYNAMIC_TASK_THREAD_POOL(cluster_snapshot, 0,
+                                       std::max(1, std::min(calc_real_num_threads(config::cluster_snapshot_threads, 1),
+                                                            CpuInfo::num_cores() / 4)),
+                                       std::numeric_limits<int>::max(), _thread_pool_cluster_snapshot);
+
         // It is the same code to create workers of each type, so we use a macro
         // to make code to be more readable.
 #ifndef BE_TEST
@@ -335,6 +341,7 @@ void AgentServer::Impl::stop() {
         _thread_pool_clone->shutdown();
         _thread_pool_remote_snapshot->shutdown();
         _thread_pool_replicate_snapshot->shutdown();
+        _thread_pool_cluster_snapshot->shutdown();
 #define STOP_POOL(type, pool_name) pool_name->stop();
 #else
 #define STOP_POOL(type, pool_name)
@@ -405,6 +412,7 @@ void AgentServer::Impl::submit_tasks(TAgentResult& agent_result, const std::vect
             HANDLE_TYPE(TTaskType::DROP_AUTO_INCREMENT_MAP, drop_auto_increment_map_req);
             HANDLE_TYPE(TTaskType::REMOTE_SNAPSHOT, remote_snapshot_req);
             HANDLE_TYPE(TTaskType::REPLICATE_SNAPSHOT, replicate_snapshot_req);
+            HANDLE_TYPE(TTaskType::EXTERNAL_CLUSTER_SNAPSHOT, external_cluster_snapshot_req);
 
         case TTaskType::REALTIME_PUSH:
             if (!task.__isset.push_req) {
@@ -562,6 +570,10 @@ void AgentServer::Impl::submit_tasks(TAgentResult& agent_result, const std::vect
         case TTaskType::REPLICATE_SNAPSHOT:
             HANDLE_TASK(TTaskType::REPLICATE_SNAPSHOT, all_tasks, run_replicate_snapshot_task,
                         ReplicateSnapshotAgentTaskRequest, replicate_snapshot_req, _exec_env);
+            break;
+        case TTaskType::EXTERNAL_CLUSTER_SNAPSHOT:
+            HANDLE_TASK(TTaskType::EXTERNAL_CLUSTER_SNAPSHOT, all_tasks, run_external_cluster_snapshot_task,
+                        ExternalClusterSnapshotTaskRequest, external_cluster_snapshot_req, _exec_env);
             break;
         case TTaskType::REALTIME_PUSH:
         case TTaskType::PUSH: {
@@ -767,6 +779,9 @@ ThreadPool* AgentServer::Impl::get_thread_pool(int type) const {
         break;
     case TTaskType::REPLICATE_SNAPSHOT:
         ret = _thread_pool_replicate_snapshot.get();
+        break;
+    case TTaskType::EXTERNAL_CLUSTER_SNAPSHOT:
+        ret = _thread_pool_cluster_snapshot.get();
         break;
     case TTaskType::PUSH:
     case TTaskType::REALTIME_PUSH:

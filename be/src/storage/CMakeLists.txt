@@ -219,6 +219,10 @@ set(STORAGE_FILES
     lake/spill_mem_table_sink.cpp
     lake/tablet_retain_info.cpp
     lake/tablet_writer.cpp
+    lake/snapshot_file_syncer.cpp
+    lake/external_cluster_snapshot_task_helper.cpp
+    lake/external_cluster_snapshot_task_rpc.cpp
+    lake/external_cluster_snapshot_task.cpp
     load_spill_block_manager.cpp
     load_chunk_spiller.cpp
     sstable/block_builder.cpp

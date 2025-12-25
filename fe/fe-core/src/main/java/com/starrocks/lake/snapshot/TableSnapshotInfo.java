@@ -21,11 +21,14 @@ import java.util.Map;
 public class TableSnapshotInfo {
     @SerializedName(value = "tableId")
     public final long tableId;
+    @SerializedName(value = "isFileBundling")
+    public final boolean isFileBundling;
     @SerializedName(value = "partInfos")
     public final Map<Long, PartitionSnapshotInfo> partInfos;
 
-    public TableSnapshotInfo(long tableId, Map<Long, PartitionSnapshotInfo> partInfos) {
+    public TableSnapshotInfo(long tableId, boolean isFileBundling, Map<Long, PartitionSnapshotInfo> partInfos) {
         this.tableId = tableId;
+        this.isFileBundling = isFileBundling;
         this.partInfos = partInfos;
     }
 }

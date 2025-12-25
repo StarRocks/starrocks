@@ -49,7 +49,7 @@ public class SnapshotInfoHelper {
         for (Partition partition : table.getPartitions()) {
             partInfos.put(partition.getId(), SnapshotInfoHelper.buildPartitionSnapshotInfo(partition));
         }
-        return new TableSnapshotInfo(table.getId(), partInfos);
+        return new TableSnapshotInfo(table.getId(), table.isFileBundling(), partInfos);
     }
 
     public static PartitionSnapshotInfo buildPartitionSnapshotInfo(Partition partition) {
@@ -67,7 +67,8 @@ public class SnapshotInfoHelper {
             indexInfos.put(index.getId(), SnapshotInfoHelper.buildMaterializedIndexSnapshotInfo(index));
         }
         return new PhysicalPartitionSnapshotInfo(
-                physicalPart.getId(), physicalPart.getVisibleVersion(), physicalPart.getCommittedVersion(), indexInfos);
+                physicalPart.getId(), physicalPart.getVisibleVersion(), physicalPart.getCommittedVersion(), 
+                physicalPart.getMetadataSwitchVersion(), indexInfos);
     }
 
     public static MaterializedIndexSnapshotInfo buildMaterializedIndexSnapshotInfo(MaterializedIndex index) {

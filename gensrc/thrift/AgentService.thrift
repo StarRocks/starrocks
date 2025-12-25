@@ -435,7 +435,12 @@ struct TRemoteSnapshotRequest {
      19: optional Types.TPartitionId src_partition_id
  }
 
- struct TExternalClusterSnapshotRequest {
+struct TComputeNodeTablets {
+    1: optional Types.TBackend compute_node
+    2: optional list<Types.TTabletId> tablets
+}
+
+struct TExternalClusterSnapshotRequest {
     1: optional i64 job_id
     2: optional i64 db_id
     3: optional Types.TTableId table_id
@@ -444,9 +449,9 @@ struct TRemoteSnapshotRequest {
     6: optional Types.TVersion pre_version
     7: optional Types.TVersion new_version
     8: optional Types.TTabletId dest_tablet_id
-    9: optional list<Types.TTabletId> src_tablets
-    10: optional list<Types.TBackend> compute_nodes
- }
+    9: optional bool is_filebundling
+    10: optional list<TComputeNodeTablets> compute_node_tablets
+}
 
 enum TTabletMetaType {
     PARTITIONID,

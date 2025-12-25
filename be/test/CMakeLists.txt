@@ -500,6 +500,7 @@ SET(DW_TEST_FILES
     ./storage/lake/compaction_policy_test.cpp
     ./storage/lake/compaction_scheduler_test.cpp
     ./storage/lake/compaction_task_context_test.cpp
+    ./storage/lake/external_cluster_snapshot_task_test.cpp
     ./storage/lake/condition_update_test.cpp
     ./storage/lake/delta_writer_test.cpp
     ./storage/lake/lake_data_source_test.cpp

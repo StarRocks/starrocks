@@ -40,7 +40,6 @@ import com.starrocks.task.AgentTask;
 import com.starrocks.task.AgentTaskExecutor;
 import com.starrocks.task.AgentTaskQueue;
 import com.starrocks.task.ExternalClusterSnapshotTask;
-import com.starrocks.thrift.TBackend;
 import com.starrocks.thrift.TClusterSnapshotJobsItem;
 import com.starrocks.thrift.TFinishTaskRequest;
 import com.starrocks.thrift.TStatus;
@@ -320,7 +319,7 @@ public class ExternalClusterSnapshotJobTest {
             }
         };
 
-        mockWarehouseAliveNodes();
+        mockWarehouseAliveNodesWithTablets();
         mockAggregatorSuccess();
 
         job.runSnapshottingJob(context);
@@ -367,7 +366,7 @@ public class ExternalClusterSnapshotJobTest {
         SnapshotJobContext context = createSnapshotJobContext(feController, starMgrController);
 
         AgentBatchTask batchTask = job.getLakeSnapshotBatchTask();
-        ExternalClusterSnapshotTask task = new ExternalClusterSnapshotTask(1L, 1L, 2L, 3L, 4L, 1L, -1L, 10L, 100L);
+        ExternalClusterSnapshotTask task = new ExternalClusterSnapshotTask(1L, 1L, 2L, 3L, 4L, 1L, -1L, 10L, true, 100L);
         batchTask.addTask(task);
 
         new MockUp<AgentBatchTask>() {
@@ -410,7 +409,7 @@ public class ExternalClusterSnapshotJobTest {
         SnapshotJobContext context = createSnapshotJobContext(feController, starMgrController);
 
         AgentBatchTask batchTask = job.getLakeSnapshotBatchTask();
-        ExternalClusterSnapshotTask task = new ExternalClusterSnapshotTask(1L, 1L, 2L, 3L, 4L, 1L, -1L, 10L, 100L);
+        ExternalClusterSnapshotTask task = new ExternalClusterSnapshotTask(1L, 1L, 2L, 3L, 4L, 1L, -1L, 10L, true, 100L);
         task.setErrorMsg("Test error");
         batchTask.addTask(task);
 
@@ -680,7 +679,7 @@ public class ExternalClusterSnapshotJobTest {
         snapshotDiffField.setAccessible(true);
         snapshotDiffField.set(job, snapshotDiff);
 
-        mockWarehouseAliveNodes();
+        mockWarehouseAliveNodesWithTablets();
         mockAggregatorSuccess();
 
         // Call createExternalClusterSnapshotTasks
@@ -740,7 +739,7 @@ public class ExternalClusterSnapshotJobTest {
     public void testFinishSnapshotTaskStatusHandling() {
         ExternalClusterSnapshotJob job = new ExternalClusterSnapshotJob(1L, "test_snapshot",
                 storageVolumeName, System.currentTimeMillis());
-        ExternalClusterSnapshotTask task = new ExternalClusterSnapshotTask(1L, 1L, 2L, 3L, 4L, 1L, -1L, 10L, 100L);
+        ExternalClusterSnapshotTask task = new ExternalClusterSnapshotTask(1L, 1L, 2L, 3L, 4L, 1L, -1L, 10L, true, 100L);
 
         TFinishTaskRequest okReq = new TFinishTaskRequest();
         okReq.setTask_status(new TStatus(TStatusCode.OK));
@@ -788,7 +787,7 @@ public class ExternalClusterSnapshotJobTest {
 
         // Create a ClusterSnapshotInfo with some data
         ClusterSnapshotInfo clusterSnapshotInfo = createCompleteClusterSnapshotInfo(1L, 1L, 1L, 1L, 10L);
-        
+
         // Set the clusterSnapshotInfo to the job's snapshot
         ClusterSnapshot snapshot = job.getSnapshot();
         snapshot.setClusterSnapshotInfo(clusterSnapshotInfo);
@@ -955,7 +954,7 @@ public class ExternalClusterSnapshotJobTest {
         setSnapshotDiff(job, diff);
 
         mockAggregatorSuccess();
-        mockWarehouseAliveNodes();
+        mockWarehouseAliveNodesWithTablets();
 
         java.lang.reflect.Method createTasksMethod = ExternalClusterSnapshotJob.class.getDeclaredMethod(
                 "createExternalClusterSnapshotTasks");
@@ -978,20 +977,19 @@ public class ExternalClusterSnapshotJobTest {
     }
 
     @Test
-    public void testCollectNodes() throws Exception {
+    public void testCollectComputeNodeTablets() throws Exception {
         ExternalClusterSnapshotJob job = new ExternalClusterSnapshotJob(1L, "test_snapshot",
                 storageVolumeName, System.currentTimeMillis());
 
         List<Long> tabletIds = Lists.newArrayList(1001L, 1002L, 1003L);
-        long aggregatorNodeId = 0L;
-
-        mockWarehouseAliveNodes();
+        mockWarehouseAliveNodesWithTablets();
 
         // Use reflection to call private method
         java.lang.reflect.Method method = ExternalClusterSnapshotJob.class.getDeclaredMethod(
-                "collectNodes");
+                "collectComputeNodeTablets", List.class);
         method.setAccessible(true);
-        List<TBackend> resultNodes = (List<TBackend>) method.invoke(job);
+        @SuppressWarnings("unchecked")
+        List<?> resultNodes = (List<?>) method.invoke(job, tabletIds);
         Assertions.assertTrue(resultNodes.size() > 0);
     }
 
@@ -1102,7 +1100,7 @@ public class ExternalClusterSnapshotJobTest {
 
         // Create PhysicalPartitionSnapshotInfo
         PhysicalPartitionSnapshotInfo physicalPartInfo = new PhysicalPartitionSnapshotInfo(
-                physicalPartId, version, version, indexInfos);
+                physicalPartId, version, version, 0, indexInfos);
 
         Map<Long, PhysicalPartitionSnapshotInfo> physicalPartInfos = new HashMap<>();
         physicalPartInfos.put(physicalPartId, physicalPartInfo);
@@ -1114,7 +1112,7 @@ public class ExternalClusterSnapshotJobTest {
         partInfos.put(partId, partInfo);
 
         // Create TableSnapshotInfo
-        TableSnapshotInfo tableInfo = new TableSnapshotInfo(tableId, partInfos);
+        TableSnapshotInfo tableInfo = new TableSnapshotInfo(tableId, true, partInfos);
 
         Map<Long, TableSnapshotInfo> tableInfos = new HashMap<>();
         tableInfos.put(tableId, tableInfo);
@@ -1150,9 +1148,9 @@ public class ExternalClusterSnapshotJobTest {
                 .forName("com.starrocks.lake.snapshot.ExternalClusterSnapshotJob$PartitionVersionInfo");
         java.lang.reflect.Constructor<?> ctor = pviClass.getDeclaredConstructor(
                 Class.forName("com.starrocks.lake.snapshot.ExternalClusterSnapshotJob$PartitionKey"), long.class,
-                List.class);
+                boolean.class, List.class);
         ctor.setAccessible(true);
-        return ctor.newInstance(key, version, tabletIds);
+        return ctor.newInstance(key, version, true, tabletIds);
     }
 
     private Object newPartitionVersionChangeInfo(long prevVersion, Object currentPartitionInfo) throws Exception {
@@ -1236,6 +1234,16 @@ public class ExternalClusterSnapshotJobTest {
             @Mock
             public List<ComputeNode> getAliveComputeNodes(ComputeResource computeResource) {
                 return Lists.newArrayList(new ComputeNode(1L, "127.0.0.1", 9050));
+            }
+        };
+    }
+
+    private void mockWarehouseAliveNodesWithTablets() {
+        new MockUp<WarehouseManagerEPack>() {
+            @Mock
+            public ComputeNode getComputeNodeAssignedToTablet(ComputeResource computeResource, long tabletId) {
+                // Always return a valid compute node so collectComputeNodeTablets() succeeds
+                return new ComputeNode(1L, "127.0.0.1", 9050);
             }
         };
     }
