@@ -1562,6 +1562,61 @@ TEST_P(LakePrimaryKeyCompactionTest, test_concurrent_compaction_and_publish) {
     ASSERT_EQ(kChunkSize, read(version));
 }
 
+TEST_P(LakePrimaryKeyCompactionTest, test_publish_compaction_with_invalid_rowset_id) {
+    auto chunk0 = generate_data(kChunkSize, 0);
+    auto indexes = std::vector<uint32_t>(kChunkSize);
+    for (int i = 0; i < kChunkSize; i++) {
+        indexes[i] = i;
+    }
+
+    auto version = 1;
+    auto tablet_id = _tablet_metadata->id();
+
+    for (int i = 0; i < 3; i++) {
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_profile(&_dummy_runtime_profile)
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+
+    ASSERT_EQ(kChunkSize, read(version));
+    ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
+    EXPECT_EQ(metadata->rowsets_size(), 3);
+
+    auto txn_id = next_id();
+    TxnLogPB txn_log;
+    txn_log.set_tablet_id(tablet_id);
+    txn_log.set_txn_id(txn_id);
+    auto* op_compaction = txn_log.mutable_op_compaction();
+
+    op_compaction->add_input_rowsets(0);
+    op_compaction->add_input_rowsets(1);
+    op_compaction->add_input_rowsets(999);
+
+    auto* output_rowset = op_compaction->mutable_output_rowset();
+    output_rowset->set_num_rows(kChunkSize);
+    output_rowset->set_data_size(1024);
+    output_rowset->add_segments("fake_segment.dat");
+    output_rowset->add_segment_size(1024);
+
+    ASSERT_OK(_tablet_mgr->put_txn_log(txn_log));
+
+    auto res = publish_single_version(tablet_id, version + 1, txn_id);
+    EXPECT_TRUE(res.status().is_internal_error());
+}
+
 INSTANTIATE_TEST_SUITE_P(
         LakePrimaryKeyCompactionTest, LakePrimaryKeyCompactionTest,
         ::testing::Values(CompactionParam{HORIZONTAL_COMPACTION, 5, false},
