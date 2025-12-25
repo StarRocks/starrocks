@@ -108,7 +108,7 @@ PARALLEL_TEST(ColumnArraySerdeTest, variant_column) {
     size_t expected_max_size = sizeof(uint32_t);
     for (size_t i = 0; i < std::size(int8_values); ++i) {
         std::string_view value(reinterpret_cast<const char*>(int8_values[i]), sizeof(int8_values[i]));
-        VariantValue variant(VariantMetadata::kEmptyMetadata, value);
+        VariantRowValue variant(VariantMetadata::kEmptyMetadata, value);
         c1->append(&variant);
         expected_max_size += sizeof(uint64_t) + variant.serialize_size();
     }
@@ -124,8 +124,8 @@ PARALLEL_TEST(ColumnArraySerdeTest, variant_column) {
 
     ASSERT_EQ(5, c2->size());
     for (size_t i = 0; i < c1->size(); i++) {
-        const VariantValue* datum1 = c1->get(i).get_variant();
-        const VariantValue* datum2 = c2->get(i).get_variant();
+        const VariantRowValue* datum1 = c1->get(i).get_variant();
+        const VariantRowValue* datum2 = c2->get(i).get_variant();
         ASSERT_EQ(datum1->serialize_size(), datum2->serialize_size());
         ASSERT_EQ(datum1->get_metadata(), datum2->get_metadata());
         ASSERT_EQ(datum1->get_value(), datum2->get_value());
@@ -142,8 +142,8 @@ PARALLEL_TEST(ColumnArraySerdeTest, variant_column) {
 
         ASSERT_EQ(5, c2->size());
         for (size_t i = 0; i < c1->size(); i++) {
-            const VariantValue* datum1 = c1->get(i).get_variant();
-            const VariantValue* datum2 = c2->get(i).get_variant();
+            const VariantRowValue* datum1 = c1->get(i).get_variant();
+            const VariantRowValue* datum2 = c2->get(i).get_variant();
             ASSERT_EQ(datum1->serialize_size(), datum2->serialize_size());
             ASSERT_EQ(datum1->get_metadata(), datum2->get_metadata());
             ASSERT_EQ(datum1->get_value(), datum2->get_value());
@@ -160,7 +160,7 @@ PARALLEL_TEST(ColumnArraySerdeTest, variant_column_failed_deserialize) {
     // Prepare a variant value with an unsupported version
     constexpr uint8_t v2_metadata_charts[] = {0x02, 0x00, 0x00};
     const std::string_view v2_metadata(reinterpret_cast<const char*>(v2_metadata_charts), sizeof(v2_metadata_charts));
-    const VariantValue variant(v2_metadata, "");
+    const VariantRowValue variant(v2_metadata, "");
     c1->append(&variant);
     ASSERT_EQ(1, c1->size());
 
