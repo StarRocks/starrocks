@@ -63,11 +63,11 @@ StatusOr<VariantRowValue> VariantRowValue::create(const Slice& slice) {
         return Status::InvalidArgument("Metadata size exceeds variant size");
     }
 
-    std::string metadata(metadata_view);
-    RETURN_IF_ERROR(validate_metadata(metadata));
-    std::string value(variant_raw + sizeof(uint32_t) + metadata_view.size(), variant_size - metadata_view.size());
+    RETURN_IF_ERROR(validate_metadata(metadata_view));
+    std::string_view value_view(variant_raw + sizeof(uint32_t) + metadata_view.size(),
+                                variant_size - metadata_view.size());
 
-    return VariantRowValue(std::move(metadata), std::move(value));
+    return VariantRowValue(metadata_view, value_view);
 }
 
 StatusOr<VariantRowValue> VariantRowValue::create(const std::string_view metadata, const std::string_view value) {
@@ -165,23 +165,19 @@ size_t VariantRowValue::serialize(uint8_t* dst) const {
     size_t offset = 0;
 
     // The first 4 bytes are the total size of the variant
-    uint32_t total_size = static_cast<uint32_t>(_metadata_raw.size() + _value_raw.size());
+    uint32_t total_size = static_cast<uint32_t>(_raw.size());
     memcpy(dst + offset, &total_size, sizeof(uint32_t));
     offset += sizeof(uint32_t);
 
-    // metadata
-    memcpy(dst + offset, _metadata_raw.data(), _metadata_raw.size());
-    offset += _metadata_raw.size();
-
-    // value
-    memcpy(dst + offset, _value_raw.data(), _value_raw.size());
-    offset += _value_raw.size();
+    // Copy the entire contiguous buffer [metadata][value]
+    memcpy(dst + offset, _raw.data(), _raw.size());
+    offset += _raw.size();
 
     return offset;
 }
 
 uint32_t VariantRowValue::serialize_size() const {
-    return sizeof(uint32_t) + _metadata_raw.size() + _value_raw.size();
+    return sizeof(uint32_t) + _raw.size();
 }
 
 StatusOr<std::string> VariantRowValue::to_json(cctz::time_zone timezone) const {

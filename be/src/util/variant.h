@@ -97,6 +97,7 @@ public:
     // We probably will optimize internal state like to build indexes for dictionary lookups.
     // so the cost of creating VariantMetadata is not trivial
     explicit VariantMetadata(std::string_view metadata);
+    VariantMetadata() : _metadata(kEmptyMetadata) {}
 
     uint8_t header() const;
     bool is_sorted_and_unique() const;
@@ -210,6 +211,7 @@ public:
 
 public:
     explicit VariantValue(std::string_view value);
+    VariantValue() : _value(kEmptyValue) {}
 
     static constexpr uint8_t kHeaderSizeBytes = 1;
     static constexpr size_t kDecimalScaleSizeBytes = 1;
