@@ -263,7 +263,7 @@ inline StatusOr<TabletMetadataPtr> TestBase::batch_publish(int64_t tablet_id, in
     return TEST_batch_publish(_tablet_mgr.get(), tablet_id, base_version, new_version, txn_ids);
 }
 
-inline std::shared_ptr<TabletMetadataPB> generate_simple_tablet_metadata(KeysType keys_type) {
+inline std::shared_ptr<TabletMetadataPB> generate_simple_tablet_metadata(KeysType keys_type, size_t num_of_columns) {
     auto metadata = std::make_shared<TabletMetadata>();
     metadata->set_id(next_id());
     metadata->set_version(1);
@@ -274,29 +274,29 @@ inline std::shared_ptr<TabletMetadataPB> generate_simple_tablet_metadata(KeysTyp
     //  +--------+------+-----+------+
     //  |   c0   |  INT | YES |  NO  |
     //  |   c1   |  INT | NO  |  NO  |
+    //  |   ..   |  INT | ... |  ... |
+    //  |   ci   |  INT | Y,N |  NO  |
     auto schema = metadata->mutable_schema();
     schema->set_keys_type(keys_type);
     schema->set_id(next_id());
     schema->set_num_short_key_columns(1);
     schema->set_num_rows_per_row_block(65535);
-    auto c0 = schema->add_column();
-    {
-        c0->set_unique_id(next_id());
-        c0->set_name("c0");
-        c0->set_type("INT");
-        c0->set_is_key(true);
-        c0->set_is_nullable(false);
-    }
-    auto c1 = schema->add_column();
-    {
-        c1->set_unique_id(next_id());
-        c1->set_name("c1");
-        c1->set_type("INT");
-        c1->set_is_key(false);
-        c1->set_is_nullable(false);
-        c1->set_aggregation(keys_type == DUP_KEYS ? "NONE" : "REPLACE");
+    for (size_t i = 0; i < num_of_columns; ++i) {
+        auto c = schema->add_column();
+        c->set_unique_id(next_id());
+        c->set_name("c" + std::to_string(i));
+        c->set_type("INT");
+        c->set_is_nullable(false);
+        c->set_is_key(i % 2 == 0);
+        if (i % 2 == 1) {
+            c->set_aggregation(keys_type == DUP_KEYS ? "NONE" : "REPLACE");
+        }
     }
     return metadata;
+}
+
+inline std::shared_ptr<TabletMetadataPB> generate_simple_tablet_metadata(KeysType keys_type) {
+    return generate_simple_tablet_metadata(keys_type, 2);
 }
 
 inline std::shared_ptr<RuntimeState> create_runtime_state() {
