@@ -92,6 +92,9 @@ public class MetaUtils {
         }
 
         String catalogName = table.getCatalogName();
+        if (catalogName == null) {
+            throw new SemanticException("Catalog is null");
+        }
         // Internal catalog tables support all operations
         if (CatalogMgr.isInternalCatalog(catalogName)) {
             return;

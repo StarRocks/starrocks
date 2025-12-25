@@ -76,6 +76,7 @@ import org.junit.jupiter.api.Test;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
@@ -241,10 +242,17 @@ public class DeleteTest {
 
         try {
             Analyzer analyzer = new Analyzer(Analyzer.AnalyzerVisitor.getInstance());
+
             new Expectations() {
                 {
                     globalStateMgr.getAnalyzer();
                     result = analyzer;
+
+                    globalStateMgr.getMetadataMgr().getTemporaryTable((UUID) any, anyString, anyLong, anyString);
+                    result = null;
+
+                    globalStateMgr.getMetadataMgr().getTable((ConnectContext) any, anyString, anyString, anyString);
+                    result = db.getTable(tableId);
                 }
             };
             com.starrocks.sql.analyzer.Analyzer.analyze(deleteStmt, connectContext);
@@ -319,6 +327,12 @@ public class DeleteTest {
                     {
                         globalStateMgr.getAnalyzer();
                         result = analyzer;
+
+                        globalStateMgr.getMetadataMgr().getTemporaryTable((UUID) any, anyString, anyLong, anyString);
+                        result = null;
+
+                        globalStateMgr.getMetadataMgr().getTable((ConnectContext) any, anyString, anyString, anyString);
+                        result = db.getTable(tableId);
                     }
                 };
                 com.starrocks.sql.analyzer.Analyzer.analyze(deleteStmt, connectContext);
@@ -370,6 +384,12 @@ public class DeleteTest {
             {
                 globalStateMgr.getAnalyzer();
                 result = analyzer;
+
+                globalStateMgr.getMetadataMgr().getTemporaryTable((UUID) any, anyString, anyLong, anyString);
+                result = null;
+
+                globalStateMgr.getMetadataMgr().getTable((ConnectContext) any, anyString, anyString, anyString);
+                result = db.getTable(tableId);
             }
         };
         com.starrocks.sql.analyzer.Analyzer.analyze(deleteStmt, connectContext);
