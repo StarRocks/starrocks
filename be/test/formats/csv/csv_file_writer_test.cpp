@@ -383,8 +383,8 @@ TEST_F(CSVFileWriterTest, TestWriteVarchar) {
     ASSERT_EQ(content, expect);
 }
 
-TEST_F(CSVFileWriterTest, TestWriteArray) {
-    // type_descs
+TEST_F(CSVFileWriterTest, TestWriteArrayInt) {
+    // type_descs: ARRAY<INT>
     std::vector<TypeDescriptor> type_descs;
     auto type_int = TypeDescriptor::from_logical_type(TYPE_INT);
     auto type_int_array = TypeDescriptor::from_logical_type(TYPE_ARRAY);
@@ -401,7 +401,171 @@ TEST_F(CSVFileWriterTest, TestWriteArray) {
     auto writer = std::make_unique<formats::CSVFileWriter>(_file_path, std::move(output_stream), column_names,
                                                            type_descs, std::move(column_evaluators),
                                                            TCompressionType::NO_COMPRESSION, writer_options, []() {});
-    ASSERT_ERROR(writer->init());
+    ASSERT_OK(writer->init());
+
+    auto chunk = std::make_shared<Chunk>();
+    {
+        // Create ARRAY<INT> column with data: [1,2,3], [4,5], [], [6]
+        auto elements_data = Int32Column::create();
+        auto offsets = UInt32Column::create();
+        auto null_column = UInt8Column::create();
+
+        // row 0: [1,2,3]
+        elements_data->append(1);
+        elements_data->append(2);
+        elements_data->append(3);
+        offsets->append(0);
+
+        // row 1: [4,5]
+        elements_data->append(4);
+        elements_data->append(5);
+        offsets->append(3);
+
+        // row 2: [] (empty array)
+        offsets->append(5);
+
+        // row 3: [6]
+        elements_data->append(6);
+        offsets->append(5);
+        offsets->append(6);
+
+        auto array_column =
+                ArrayColumn::create(NullableColumn::create(elements_data, UInt8Column::create(6, 0)), offsets);
+        null_column->append_numbers(std::vector<uint8_t>{0, 0, 0, 0}.data(), 4);
+        auto nullable_column = NullableColumn::create(std::move(array_column), std::move(null_column));
+        chunk->append_column(std::move(nullable_column), chunk->num_columns());
+    }
+
+    // write chunk
+    ASSERT_OK(writer->write(chunk.get()));
+    auto result = writer->commit();
+    ASSERT_OK(result.io_status);
+    ASSERT_EQ(result.file_statistics.record_count, 4);
+
+    // verify correctness
+    std::string content;
+    ASSERT_OK(_fs.read_file(_file_path, &content));
+    std::string expect = "[1,2,3]\n[4,5]\n[]\n[6]\n";
+    ASSERT_EQ(content, expect);
+}
+
+TEST_F(CSVFileWriterTest, TestWriteArrayBigInt) {
+    // type_descs: ARRAY<BIGINT>
+    std::vector<TypeDescriptor> type_descs;
+    auto type_bigint = TypeDescriptor::from_logical_type(TYPE_BIGINT);
+    auto type_bigint_array = TypeDescriptor::from_logical_type(TYPE_ARRAY);
+    type_bigint_array.children.push_back(type_bigint);
+    type_descs.push_back(type_bigint_array);
+
+    auto column_names = _make_type_names(type_descs);
+    auto maybe_output_file = _fs.new_writable_file(_file_path);
+    EXPECT_OK(maybe_output_file.status());
+    auto output_file = std::move(maybe_output_file.value());
+    auto output_stream = std::make_unique<csv::OutputStreamFile>(std::move(output_file), 1024);
+    auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
+    auto writer_options = std::make_shared<formats::CSVWriterOptions>();
+    auto writer = std::make_unique<formats::CSVFileWriter>(_file_path, std::move(output_stream), column_names,
+                                                           type_descs, std::move(column_evaluators),
+                                                           TCompressionType::NO_COMPRESSION, writer_options, []() {});
+    ASSERT_OK(writer->init());
+
+    auto chunk = std::make_shared<Chunk>();
+    {
+        // Create ARRAY<BIGINT> column with data: [100,200], [9223372036854775807]
+        auto elements_data = Int64Column::create();
+        auto offsets = UInt32Column::create();
+        auto null_column = UInt8Column::create();
+
+        // row 0: [100,200]
+        elements_data->append(100);
+        elements_data->append(200);
+        offsets->append(0);
+
+        // row 1: [9223372036854775807] (INT64_MAX)
+        elements_data->append(INT64_MAX);
+        offsets->append(2);
+        offsets->append(3);
+
+        auto array_column =
+                ArrayColumn::create(NullableColumn::create(elements_data, UInt8Column::create(3, 0)), offsets);
+        null_column->append_numbers(std::vector<uint8_t>{0, 0}.data(), 2);
+        auto nullable_column = NullableColumn::create(std::move(array_column), std::move(null_column));
+        chunk->append_column(std::move(nullable_column), chunk->num_columns());
+    }
+
+    // write chunk
+    ASSERT_OK(writer->write(chunk.get()));
+    auto result = writer->commit();
+    ASSERT_OK(result.io_status);
+    ASSERT_EQ(result.file_statistics.record_count, 2);
+
+    // verify correctness
+    std::string content;
+    ASSERT_OK(_fs.read_file(_file_path, &content));
+    std::string expect = "[100,200]\n[9223372036854775807]\n";
+    ASSERT_EQ(content, expect);
+}
+
+TEST_F(CSVFileWriterTest, TestWriteArrayWithNull) {
+    // type_descs: ARRAY<INT> with NULL array and NULL elements
+    std::vector<TypeDescriptor> type_descs;
+    auto type_int = TypeDescriptor::from_logical_type(TYPE_INT);
+    auto type_int_array = TypeDescriptor::from_logical_type(TYPE_ARRAY);
+    type_int_array.children.push_back(type_int);
+    type_descs.push_back(type_int_array);
+
+    auto column_names = _make_type_names(type_descs);
+    auto maybe_output_file = _fs.new_writable_file(_file_path);
+    EXPECT_OK(maybe_output_file.status());
+    auto output_file = std::move(maybe_output_file.value());
+    auto output_stream = std::make_unique<csv::OutputStreamFile>(std::move(output_file), 1024);
+    auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
+    auto writer_options = std::make_shared<formats::CSVWriterOptions>();
+    auto writer = std::make_unique<formats::CSVFileWriter>(_file_path, std::move(output_stream), column_names,
+                                                           type_descs, std::move(column_evaluators),
+                                                           TCompressionType::NO_COMPRESSION, writer_options, []() {});
+    ASSERT_OK(writer->init());
+
+    auto chunk = std::make_shared<Chunk>();
+    {
+        // Create ARRAY<INT> column with data: [1,null,3], NULL
+        auto elements_data = Int32Column::create();
+        auto elements_null = UInt8Column::create();
+        auto offsets = UInt32Column::create();
+        auto array_null_column = UInt8Column::create();
+
+        // row 0: [1,null,3]
+        elements_data->append(1);
+        elements_null->append(0);
+        elements_data->append(0); // placeholder for null
+        elements_null->append(1); // null
+        elements_data->append(3);
+        elements_null->append(0);
+        offsets->append(0);
+
+        // row 1: NULL array
+        offsets->append(3);
+        offsets->append(3);
+
+        auto nullable_elements = NullableColumn::create(elements_data, elements_null);
+        auto array_column = ArrayColumn::create(std::move(nullable_elements), offsets);
+        array_null_column->append(0); // row 0 is not null
+        array_null_column->append(1); // row 1 is null
+        auto nullable_column = NullableColumn::create(std::move(array_column), std::move(array_null_column));
+        chunk->append_column(std::move(nullable_column), chunk->num_columns());
+    }
+
+    // write chunk
+    ASSERT_OK(writer->write(chunk.get()));
+    auto result = writer->commit();
+    ASSERT_OK(result.io_status);
+    ASSERT_EQ(result.file_statistics.record_count, 2);
+
+    // verify correctness
+    std::string content;
+    ASSERT_OK(_fs.read_file(_file_path, &content));
+    std::string expect = "[1,null,3]\n\\N\n";
+    ASSERT_EQ(content, expect);
 }
 
 TEST_F(CSVFileWriterTest, TestWriteMap) {
@@ -428,7 +592,7 @@ TEST_F(CSVFileWriterTest, TestWriteMap) {
 }
 
 TEST_F(CSVFileWriterTest, TestWriteNestedArray) {
-    // type_descs
+    // type_descs: ARRAY<ARRAY<INT>>
     std::vector<TypeDescriptor> type_descs;
     auto type_int = TypeDescriptor::from_logical_type(TYPE_INT);
     auto type_int_array = TypeDescriptor::from_logical_type(TYPE_ARRAY);
@@ -447,7 +611,55 @@ TEST_F(CSVFileWriterTest, TestWriteNestedArray) {
     auto writer = std::make_unique<formats::CSVFileWriter>(_file_path, std::move(output_stream), column_names,
                                                            type_descs, std::move(column_evaluators),
                                                            TCompressionType::NO_COMPRESSION, writer_options, []() {});
-    ASSERT_ERROR(writer->init());
+    ASSERT_OK(writer->init());
+
+    auto chunk = std::make_shared<Chunk>();
+    {
+        // Create ARRAY<ARRAY<INT>> column with data: [[1,2],[3]], [[4]]
+        // Inner elements: 1,2,3,4
+        auto inner_elements = Int32Column::create();
+        inner_elements->append(1);
+        inner_elements->append(2);
+        inner_elements->append(3);
+        inner_elements->append(4);
+
+        // Inner offsets: [0,2,3,4] for inner arrays [1,2], [3], [4]
+        auto inner_offsets = UInt32Column::create();
+        inner_offsets->append(0);
+        inner_offsets->append(2);
+        inner_offsets->append(3);
+        inner_offsets->append(4);
+
+        auto inner_array =
+                ArrayColumn::create(NullableColumn::create(inner_elements, UInt8Column::create(4, 0)), inner_offsets);
+
+        // Outer offsets: [0,2,3] for outer arrays [[1,2],[3]], [[4]]
+        auto outer_offsets = UInt32Column::create();
+        outer_offsets->append(0);
+        outer_offsets->append(2);
+        outer_offsets->append(3);
+
+        auto outer_array =
+                ArrayColumn::create(NullableColumn::create(inner_array, UInt8Column::create(3, 0)), outer_offsets);
+
+        auto null_column = UInt8Column::create();
+        null_column->append(0);
+        null_column->append(0);
+        auto nullable_column = NullableColumn::create(std::move(outer_array), std::move(null_column));
+        chunk->append_column(std::move(nullable_column), chunk->num_columns());
+    }
+
+    // write chunk
+    ASSERT_OK(writer->write(chunk.get()));
+    auto result = writer->commit();
+    ASSERT_OK(result.io_status);
+    ASSERT_EQ(result.file_statistics.record_count, 2);
+
+    // verify correctness
+    std::string content;
+    ASSERT_OK(_fs.read_file(_file_path, &content));
+    std::string expect = "[[1,2],[3]]\n[[4]]\n";
+    ASSERT_EQ(content, expect);
 }
 
 TEST_F(CSVFileWriterTest, TestUnknownCompression) {
