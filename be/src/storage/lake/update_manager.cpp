@@ -1316,6 +1316,11 @@ Status UpdateManager::publish_primary_compaction(const TxnLogPB_OpCompaction& op
     // then get the max src rssid, to solve conflict between write and compaction
     auto input_rowset = std::find_if(metadata.rowsets().begin(), metadata.rowsets().end(),
                                      [&](const RowsetMetadata& r) { return r.id() == max_rowset_id; });
+    if (input_rowset == metadata.rowsets().end()) {
+        LOG(ERROR) << "cannot find input rowset in tablet metadata, rowset_id: " << max_rowset_id
+                   << ", meta : " << metadata.ShortDebugString();
+        return Status::InternalError("cannot find input rowset in tablet metadata");
+    }
     uint32_t max_src_rssid = max_rowset_id + input_rowset->segments_size() - 1;
     std::map<uint32_t, size_t> segment_id_to_add_dels;
 
