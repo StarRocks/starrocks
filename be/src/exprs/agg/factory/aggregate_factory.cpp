@@ -43,82 +43,86 @@ AggregateFuncResolver::AggregateFuncResolver() {
     register_boolean();
 }
 
-AggregateFuncResolver::~AggregateFuncResolver() = default;
+AggregateFuncResolver::~AggregateFuncResolver() {
+    for (const auto* func : _functions) {
+        delete func;
+    }
+}
 
 AggregateFunctionPtr AggregateFactory::MakeBitmapUnionAggregateFunction() {
-    return std::make_shared<BitmapUnionAggregateFunction>();
+    return new BitmapUnionAggregateFunction();
 }
 
 AggregateFunctionPtr AggregateFactory::MakeBitmapIntersectAggregateFunction() {
-    return std::make_shared<BitmapIntersectAggregateFunction>();
+    return new BitmapIntersectAggregateFunction();
 }
 
 AggregateFunctionPtr AggregateFactory::MakeBitmapUnionCountAggregateFunction() {
-    return std::make_shared<BitmapUnionCountAggregateFunction>();
+    return new BitmapUnionCountAggregateFunction();
 }
 AggregateFunctionPtr AggregateFactory::MakeDictMergeAggregateFunction() {
-    return std::make_shared<DictMergeAggregateFunction>();
+    return new DictMergeAggregateFunction();
 }
 
 AggregateFunctionPtr AggregateFactory::MakeRetentionAggregateFunction() {
-    return std::make_shared<RetentionAggregateFunction>();
+    return new RetentionAggregateFunction();
 }
 
 AggregateFunctionPtr AggregateFactory::MakeHllUnionAggregateFunction() {
-    return std::make_shared<HllUnionAggregateFunction>();
+    return new HllUnionAggregateFunction();
 }
 
 AggregateFunctionPtr AggregateFactory::MakeHllUnionCountAggregateFunction() {
-    return std::make_shared<HllUnionCountAggregateFunction>();
+    return new HllUnionCountAggregateFunction();
 }
 
 AggregateFunctionPtr AggregateFactory::MakePercentileApproxAggregateFunction() {
-    return std::make_shared<PercentileApproxAggregateFunction>();
+    return new PercentileApproxAggregateFunction();
 }
 
 AggregateFunctionPtr AggregateFactory::MakePercentileApproxArrayAggregateFunction() {
-    return std::make_shared<PercentileApproxArrayAggregateFunction>();
+    return new PercentileApproxArrayAggregateFunction();
 }
 
 AggregateFunctionPtr AggregateFactory::MakePercentileApproxWeightedAggregateFunction() {
-    return std::make_shared<PercentileApproxWeightedAggregateFunction>();
+    return new PercentileApproxWeightedAggregateFunction();
 }
 
 AggregateFunctionPtr AggregateFactory::MakePercentileApproxWeightedArrayAggregateFunction() {
-    return std::make_shared<PercentileApproxWeightedArrayAggregateFunction>();
+    return new PercentileApproxWeightedArrayAggregateFunction();
 }
 
 AggregateFunctionPtr AggregateFactory::MakePercentileUnionAggregateFunction() {
-    return std::make_shared<PercentileUnionAggregateFunction>();
+    return new PercentileUnionAggregateFunction();
 }
 
 AggregateFunctionPtr AggregateFactory::MakeDenseRankWindowFunction() {
-    return std::make_shared<DenseRankWindowFunction>();
+    return new DenseRankWindowFunction();
 }
 
 AggregateFunctionPtr AggregateFactory::MakeRankWindowFunction() {
-    return std::make_shared<RankWindowFunction>();
+    return new RankWindowFunction();
 }
 
 AggregateFunctionPtr AggregateFactory::MakeRowNumberWindowFunction() {
-    return std::make_shared<RowNumberWindowFunction>();
+    return new RowNumberWindowFunction();
 }
 
 AggregateFunctionPtr AggregateFactory::MakeCumeDistWindowFunction() {
-    return std::make_shared<CumeDistWindowFunction>();
+    return new CumeDistWindowFunction();
 }
 
 AggregateFunctionPtr AggregateFactory::MakePercentRankWindowFunction() {
-    return std::make_shared<PercentRankWindowFunction>();
+    return new PercentRankWindowFunction();
 }
 
 AggregateFunctionPtr AggregateFactory::MakeNtileWindowFunction() {
-    return std::make_shared<NtileWindowFunction>();
+    return new NtileWindowFunction();
 }
 
-static const AggregateFunction* get_function(const std::string& name, LogicalType arg_type, LogicalType return_type,
-                                             bool is_window_function, bool is_null,
-                                             TFunctionBinaryType::type binary_type, int func_version) {
+static AggregateFunctionPtr get_function(const std::string& name, LogicalType arg_type, LogicalType return_type,
+                                         bool is_window_function, bool is_null, TFunctionBinaryType::type binary_type,
+                                         int func_version) {
     std::string func_name = name;
     if (func_version > 1) {
         if (name == "multi_distinct_sum") {
@@ -166,14 +170,14 @@ static const AggregateFunction* get_function(const std::string& name, LogicalTyp
     return nullptr;
 }
 
-const AggregateFunction* get_aggregate_function(const std::string& name, LogicalType arg_type, LogicalType return_type,
-                                                bool is_null, TFunctionBinaryType::type binary_type, int func_version) {
+AggregateFunctionPtr get_aggregate_function(const std::string& name, LogicalType arg_type, LogicalType return_type,
+                                            bool is_null, TFunctionBinaryType::type binary_type, int func_version) {
     FAIL_POINT_TRIGGER_RETURN(not_exist_agg_function, nullptr);
     return get_function(name, arg_type, return_type, false, is_null, binary_type, func_version);
 }
 
-const AggregateFunction* get_window_function(const std::string& name, LogicalType arg_type, LogicalType return_type,
-                                             bool is_null, TFunctionBinaryType::type binary_type, int func_version) {
+AggregateFunctionPtr get_window_function(const std::string& name, LogicalType arg_type, LogicalType return_type,
+                                         bool is_null, TFunctionBinaryType::type binary_type, int func_version) {
     if (binary_type == TFunctionBinaryType::BUILTIN) {
         return get_function(name, arg_type, return_type, true, is_null, binary_type, func_version);
     } else if (binary_type == TFunctionBinaryType::SRJAR) {
@@ -182,9 +186,9 @@ const AggregateFunction* get_window_function(const std::string& name, LogicalTyp
     return nullptr;
 }
 
-const AggregateFunction* get_aggregate_function(const std::string& agg_func_name, const TypeDescriptor& return_type,
-                                                const std::vector<TypeDescriptor>& arg_types, bool is_result_nullable,
-                                                TFunctionBinaryType::type binary_type, int func_version) {
+AggregateFunctionPtr get_aggregate_function(const std::string& agg_func_name, const TypeDescriptor& return_type,
+                                            const std::vector<TypeDescriptor>& arg_types, bool is_result_nullable,
+                                            TFunctionBinaryType::type binary_type, int func_version) {
     // get function
     if (agg_func_name == "count") {
         return get_aggregate_function("count", TYPE_BIGINT, TYPE_BIGINT, is_result_nullable);
