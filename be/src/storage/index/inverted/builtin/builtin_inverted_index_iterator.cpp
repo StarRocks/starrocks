@@ -40,7 +40,9 @@ Status BuiltinInvertedIndexIterator::close() {
     if (!_like_context) {
         return Status::OK();
     }
-    return LikePredicate::like_close(_like_context.get(), FunctionContext::FunctionStateScope::THREAD_LOCAL);
+    Status st = LikePredicate::like_close(_like_context.get(), FunctionContext::FunctionStateScope::THREAD_LOCAL);
+    _like_context.reset(nullptr);
+    return st;
 }
 
 Status BuiltinInvertedIndexIterator::_equal_query(const Slice* search_query, roaring::Roaring* bit_map) {
@@ -143,7 +145,12 @@ Status BuiltinInvertedIndexIterator::_init_like_context(const Slice& s) {
     cols.push_back(nullptr);
     cols.push_back(ConstColumn::create(std::move(ptr), 1));
     _like_context->set_constant_columns(cols);
-    return LikePredicate::like_prepare(_like_context.get(), FunctionContext::FunctionStateScope::THREAD_LOCAL);
+    Status st = LikePredicate::like_prepare(_like_context.get(), FunctionContext::FunctionStateScope::THREAD_LOCAL);
+    if (!st.ok()) {
+        (void)LikePredicate::like_close(_like_context.get(), FunctionContext::FunctionStateScope::THREAD_LOCAL);
+        _like_context.reset(nullptr);
+    }
+    return st;
 }
 
 Status BuiltinInvertedIndexIterator::read_from_inverted_index(const std::string& column_name, const void* query_value,
