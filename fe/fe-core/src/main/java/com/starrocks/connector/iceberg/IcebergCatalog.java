@@ -364,12 +364,14 @@ public interface IcebergCatalog extends MemoryTrackable {
                                              long snapshotId) {
         Table nativeTable = icebergTable.getNativeTable();
         Logger logger = getLogger();
-        // last_updated_at can be null if the referenced snapshot has been expired.
-        // Use Long wrapper to avoid NPE during auto-unboxing.
+        // last_updated_at can be null; use Long wrapper to avoid NPE during auto-unboxing.
         long lastUpdated = -1;
         if (row != null) {
             try {
-                lastUpdated = row.get(columnIndex, Long.class);
+                Long lastUpdatedValue = row.get(columnIndex, Long.class);
+                if (lastUpdatedValue != null) {
+                    lastUpdated = lastUpdatedValue;
+                }
             } catch (Exception e) {
                 logger.error("Failed to get last_updated_at for partition [{}] of table [{}] " +
                                 "under snapshot [{}]", partitionName, nativeTable.name(), snapshotId, e);
