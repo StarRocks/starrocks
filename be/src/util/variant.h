@@ -114,6 +114,10 @@ public:
     static constexpr char kEmptyMetadataChars[] = {0x1, 0x0, 0x0};
     static constexpr std::string_view kEmptyMetadata{kEmptyMetadataChars, sizeof(kEmptyMetadataChars)};
 
+    bool operator==(const VariantMetadata& other) const {
+        return _metadata == other._metadata;
+    }
+
 private:
     static constexpr uint8_t kVersionMask = 0b1111;
     static constexpr uint8_t kSupportedVersion = 1;
@@ -271,6 +275,10 @@ public:
     StatusOr<VariantObjectInfo> get_object_info() const;
 
     StatusOr<VariantArrayInfo> get_array_info() const;
+
+    bool operator==(const Variant& other) const {
+        return _value == other._value;
+    }
 
 private:
     uint8_t value_header() const;

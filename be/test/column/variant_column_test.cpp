@@ -41,7 +41,7 @@ PARALLEL_TEST(VariantColumnTest, test_build_column) {
         auto res = column->get_object(0);
         ASSERT_EQ(res->serialize_size(), variant.serialize_size());
         ASSERT_EQ(res->get_metadata(), variant.get_metadata());
-        ASSERT_EQ(res->get_value(), variant.get_value());
+        ASSERT_EQ(res->get_variant(), variant.get_variant());
         EXPECT_EQ(res->to_string(), variant.to_string());
         EXPECT_EQ("1234567890", res->to_string());
     }
@@ -61,7 +61,7 @@ PARALLEL_TEST(VariantColumnTest, test_build_column) {
         auto res = column_ptr->get_object(0);
         ASSERT_EQ(res->serialize_size(), variant.serialize_size());
         ASSERT_EQ(res->get_metadata(), variant.get_metadata());
-        ASSERT_EQ(res->get_value(), variant.get_value());
+        ASSERT_EQ(res->get_variant(), variant.get_variant());
         EXPECT_EQ(res->to_string(), variant.to_string());
         EXPECT_EQ("1234567890", res->to_string());
     }
@@ -79,7 +79,7 @@ PARALLEL_TEST(VariantColumnTest, test_build_column) {
             auto res = copy->get(0).get_variant();
             ASSERT_EQ(res->serialize_size(), variant.serialize_size());
             ASSERT_EQ(res->get_metadata(), variant.get_metadata());
-            ASSERT_EQ(res->get_value(), variant.get_value());
+            ASSERT_EQ(res->get_variant(), variant.get_variant());
             EXPECT_EQ(res->to_string(), variant.to_string());
             EXPECT_EQ("1234567890", res->to_string());
         }
@@ -98,7 +98,7 @@ PARALLEL_TEST(VariantColumnTest, test_build_column) {
             auto res = variant_column_ptr->get(0).get_variant();
             ASSERT_EQ(res->serialize_size(), variant.serialize_size());
             ASSERT_EQ(res->get_metadata(), variant.get_metadata());
-            ASSERT_EQ(res->get_value(), variant.get_value());
+            ASSERT_EQ(res->get_variant(), variant.get_variant());
             EXPECT_EQ(res->to_string(), variant.to_string());
             EXPECT_EQ("1234567890", res->to_string());
         }
@@ -114,7 +114,7 @@ PARALLEL_TEST(VariantColumnTest, test_build_column) {
             auto res = variant_column_ptr->get(0).get_variant();
             ASSERT_EQ(res->serialize_size(), variant.serialize_size());
             ASSERT_EQ(res->get_metadata(), variant.get_metadata());
-            ASSERT_EQ(res->get_value(), variant.get_value());
+            ASSERT_EQ(res->get_variant(), variant.get_variant());
             EXPECT_EQ(res->to_string(), variant.to_string());
             EXPECT_EQ("1234567890", res->to_string());
 
@@ -123,7 +123,7 @@ PARALLEL_TEST(VariantColumnTest, test_build_column) {
             auto raw_res = variant_column->get(0).get_variant();
             ASSERT_EQ(res->serialize_size(), variant.serialize_size());
             ASSERT_EQ(raw_res->get_metadata(), variant.get_metadata());
-            ASSERT_EQ(raw_res->get_value(), variant.get_value());
+            ASSERT_EQ(raw_res->get_variant(), variant.get_variant());
             EXPECT_EQ(raw_res->to_string(), variant.to_string());
             EXPECT_EQ("1234567890", raw_res->to_string());
         }
@@ -228,7 +228,7 @@ PARALLEL_TEST(VariantColumnTest, test_append_strings) {
     const VariantValue* actual = variant_column->get_object(0);
     ASSERT_EQ(expected->serialize_size(), actual->serialize_size());
     ASSERT_EQ(expected->get_metadata(), actual->get_metadata());
-    ASSERT_EQ(expected->get_value(), actual->get_value());
+    ASSERT_EQ(expected->get_variant(), actual->get_variant());
     EXPECT_EQ(expected->to_string(), actual->to_string());
     EXPECT_EQ("1", actual->to_string());
 
