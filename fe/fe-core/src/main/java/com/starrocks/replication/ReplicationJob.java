@@ -712,9 +712,6 @@ public class ReplicationJob implements GsonPostProcessable {
             try {
                 if (olapTable.hasDelete()) {
                     needSetHasDelete = false;
-                } else {
-                    // Set has delete for tables replicated by starrocks data migration tool
-                    olapTable.setHasDelete();
                 }
             } finally {
                 locker.unLockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.WRITE);
@@ -722,7 +719,10 @@ public class ReplicationJob implements GsonPostProcessable {
 
             if (needSetHasDelete) {
                 ModifyTablePropertyOperationLog log = new ModifyTablePropertyOperationLog(db.getId(), table.getId());
-                GlobalStateMgr.getCurrentState().getEditLog().logSetHasDelete(log);
+                GlobalStateMgr.getCurrentState().getEditLog().logSetHasDelete(log, wal -> {
+                    // Set has delete for tables replicated by starrocks data migration tool
+                    olapTable.setHasDelete();
+                });
             }
         }
 

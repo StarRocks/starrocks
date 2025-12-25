@@ -102,8 +102,8 @@ public class LakeTableAlterDataCachePartitionDurationTest {
 
         new MockUp<EditLog>() {
             @Mock
-            public void logAlterTableProperties(ModifyTablePropertyOperationLog info) {
-
+            public void logAlterTableProperties(ModifyTablePropertyOperationLog info, WALApplier walApplier) {
+                walApplier.apply(info);
             }
 
             @Mock

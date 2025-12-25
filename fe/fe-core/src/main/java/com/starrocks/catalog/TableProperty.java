@@ -390,9 +390,6 @@ public class TableProperty implements Writable, GsonPostProcessable {
             case OperationType.OP_MODIFY_WRITE_QUORUM:
                 buildWriteQuorum();
                 break;
-            case OperationType.OP_ALTER_MATERIALIZED_VIEW_PROPERTIES:
-                buildMvProperties();
-                break;
             case OperationType.OP_MODIFY_REPLICATED_STORAGE:
                 buildReplicatedStorage();
                 break;
@@ -415,6 +412,9 @@ public class TableProperty implements Writable, GsonPostProcessable {
                 break;
             case OperationType.OP_MODIFY_BINLOG_AVAILABLE_VERSION:
                 buildBinlogAvailableVersion();
+                break;
+            case OperationType.OP_MODIFY_FLAT_JSON_CONFIG:
+                buildFlatJsonConfig();
                 break;
             case OperationType.OP_ALTER_TABLE_PROPERTIES:
                 buildPartitionTTL();
@@ -448,6 +448,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
         buildPartitionTTL();
         buildPartitionRefreshNumber();
         buildMVPartitionRefreshStrategy();
+        buildPartitionRetentionCondition();
         buildAutoRefreshPartitionsLimit();
         buildMVRefreshMode();
         buildExcludedTriggerTables();
@@ -458,6 +459,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
         buildQueryRewrite();
         buildMVQueryRewriteSwitch();
         buildMVTransparentRewriteMode();
+        buildLocation();
         return this;
     }
 
@@ -529,6 +531,10 @@ public class TableProperty implements Writable, GsonPostProcessable {
             }
         }
         return this;
+    }
+
+    public void setReplicationNum(short replicationNum) {
+        this.replicationNum = replicationNum;
     }
 
     public TableProperty buildReplicationNum() {
@@ -847,6 +853,10 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return this;
     }
 
+    public void setDataCachePartitionDuration(PeriodDuration dataCachePartitionDuration) {
+        this.dataCachePartitionDuration = dataCachePartitionDuration;
+    }
+
     public TableProperty buildDataCachePartitionDuration() {
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_DATACACHE_PARTITION_DURATION)) {
             dataCachePartitionDuration = TimeUtils.parseHumanReadablePeriodOrDuration(
@@ -861,6 +871,10 @@ public class TableProperty implements Writable, GsonPostProcessable {
                     properties.getOrDefault(PropertyAnalyzer.PROPERTIES_FILE_BUNDLING, "false"));
         }
         return this;
+    }
+
+    public void setStorageCoolDownTTL(PeriodDuration storageCoolDownTTL) {
+        this.storageCoolDownTTL = storageCoolDownTTL;
     }
 
     public TableProperty buildStorageCoolDownTTL() {

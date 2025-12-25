@@ -179,7 +179,6 @@ public class LocalMetaStoreTest {
         try {
             Map<String, String> properties = Maps.newHashMap();
             LocalMetastore localMetastore = connectContext.getGlobalStateMgr().getLocalMetastore();
-            table.setTableProperty(null);
             localMetastore.modifyTableAutomaticBucketSize(db, table, properties);
             localMetastore.modifyTableAutomaticBucketSize(db, table, properties);
         } finally {
@@ -234,7 +233,7 @@ public class LocalMetaStoreTest {
         LocalMetastore localMetastore = connectContext.getGlobalStateMgr().getLocalMetastore();
         try {
             localMetastore.alterTableProperties(db, table, properties);
-        } catch (RuntimeException e) {
+        } catch (DdlException e) {
             Assertions.assertEquals("Cannot parse text to Duration", e.getMessage());
         }
     }
