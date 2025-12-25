@@ -947,6 +947,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_INSERT_SELECT_EXTERNAL_AUTO_REFRESH = "enable_insert_select_external_auto_refresh";
 
+    public static final String ARROW_FLIGHT_PROXY = "arrow_flight_proxy";
+    public static final String ARROW_FLIGHT_PROXY_ENABLED = "arrow_flight_proxy_enabled";
+
+
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
             .add(MAX_EXECUTION_TIME)
@@ -1933,6 +1937,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_INSERT_SELECT_EXTERNAL_AUTO_REFRESH)
     private boolean enableInsertSelectExternalAutoRefresh = true;
+
+    @VarAttr(name = ARROW_FLIGHT_PROXY)
+    private String arrowFlightProxy = "";
+    @VarAttr(name = ARROW_FLIGHT_PROXY_ENABLED)
+    private boolean arrowFlightProxyEnabled = true;
+
 
     public int getCboPruneJsonSubfieldDepth() {
         return cboPruneJsonSubfieldDepth;
@@ -5224,6 +5234,23 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public void setEnableInsertSelectExternalAutoRefresh(boolean enableInsertSelectExternalAutoRefresh) {
         this.enableInsertSelectExternalAutoRefresh = enableInsertSelectExternalAutoRefresh;
     }
+
+    public void setArrowFlightProxy(String proxy) {
+        this.arrowFlightProxy = proxy;
+    }
+
+    public String getArrowFlightProxy() {
+        return this.arrowFlightProxy;
+    }
+
+    public void setArrowFlightProxyEnabled(boolean flag) {
+        this.arrowFlightProxyEnabled = flag;
+    }
+
+    public boolean isArrowFlightProxyEnabled() {
+        return this.arrowFlightProxyEnabled;
+    }
+
 
     // Serialize to thrift object
     // used for rest api
