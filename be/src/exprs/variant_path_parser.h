@@ -63,7 +63,7 @@ struct VariantPath {
     void reset(VariantPath&& rhs);
 
     // Seek into a variant using the parsed segments
-    static StatusOr<VariantValue> seek(const VariantValue* value, const VariantPath* variant_path);
+    static StatusOr<VariantRowValue> seek(const VariantRowValue* value, const VariantPath* variant_path);
 };
 
 struct VariantState {

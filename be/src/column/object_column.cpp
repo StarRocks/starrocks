@@ -128,10 +128,10 @@ bool ObjectColumn<T>::append_strings(const Slice* data, size_t size) {
     _pool.reserve(_pool.size() + size);
     for (size_t i = 0; i < size; i++) {
         const auto& s = data[i];
-        if constexpr (std::is_same_v<T, VariantValue>) {
+        if constexpr (std::is_same_v<T, VariantRowValue>) {
             auto variant_result = T::create(s);
             if (!variant_result.ok()) {
-                LOG(WARNING) << "Failed to create VariantValue from Slice: " << variant_result.status().to_string();
+                LOG(WARNING) << "Failed to create VariantRowValue from Slice: " << variant_result.status().to_string();
                 return false;
             }
             _pool.emplace_back(std::move(*variant_result));
@@ -349,6 +349,6 @@ template class ObjectColumn<HyperLogLog>;
 template class ObjectColumn<BitmapValue>;
 template class ObjectColumn<PercentileValue>;
 template class ObjectColumn<JsonValue>;
-template class ObjectColumn<VariantValue>;
+template class ObjectColumn<VariantRowValue>;
 
 } // namespace starrocks

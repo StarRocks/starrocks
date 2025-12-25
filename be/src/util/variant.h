@@ -17,7 +17,9 @@
 #include <arrow/util/endian.h>
 #include <cctz/time_zone.h>
 
+#include <cstddef>
 #include <cstdint>
+#include <string_view>
 
 #include "common/status.h"
 #include "util/decimal_types.h"
@@ -92,6 +94,8 @@ struct VariantDecimalValue {
 
 class VariantMetadata {
 public:
+    // We probably will optimize internal state like to build indexes for dictionary lookups.
+    // so the cost of creating VariantMetadata is not trivial
     explicit VariantMetadata(std::string_view metadata);
 
     uint8_t header() const;
@@ -105,10 +109,12 @@ public:
     StatusOr<std::string> get_key(uint32_t index) const;
 
     // return the metadata raw string view
-    std::string_view get_raw() const { return _metadata; }
+    std::string_view raw() const { return _metadata; }
 
     static constexpr char kEmptyMetadataChars[] = {0x1, 0x0, 0x0};
     static constexpr std::string_view kEmptyMetadata{kEmptyMetadataChars, sizeof(kEmptyMetadataChars)};
+
+    bool operator==(const VariantMetadata& other) const { return _metadata == other._metadata; }
 
 private:
     static constexpr uint8_t kVersionMask = 0b1111;
@@ -123,9 +129,10 @@ private:
     uint32_t _dict_size{0};
 };
 
+class VariantValue;
 struct VariantUtil {
-    static Status variant_to_json(std::string_view metadata, std::string_view value, std::stringstream& json_str,
-                                  cctz::time_zone timezone = cctz::local_time_zone());
+    static Status variant_to_json(const VariantMetadata& metadata, const VariantValue& value,
+                                  std::stringstream& json_str, cctz::time_zone timezone = cctz::local_time_zone());
 
     static inline uint32_t read_little_endian_unsigned32(const void* from, uint8_t size) {
         DCHECK_LE(size, 4);
@@ -139,13 +146,70 @@ struct VariantUtil {
     static std::string variant_type_to_string(VariantType type);
 };
 
-class Variant {
+// Representing the details of a Variant of Object
+
+/**
+ *                5   4  3     2 1     0
+ *              +---+---+-------+-------+
+ * value_header |   |   |       |       |
+ *              +---+---+-------+-------+
+ *                    ^     ^       ^
+ *                    |     |       +-- field_offset_size_minus_one
+ *                    |     +-- field_id_size_minus_one
+ *                    +-- is_large
+ */
+
+struct VariantObjectInfo {
+    // Number of elements in the array or object
+    uint32_t num_elements;
+    // The byte offset of the field id
+    uint32_t id_start_offset;
+    // The number of bytes used to encode the field ids
+    uint8_t id_size;
+    // The number of bytes used to encode the field offsets
+    uint32_t offset_start_offset;
+    // The size of the field offset list
+    uint8_t offset_size;
+    // The byte offset of the field data
+    uint32_t data_start_offset;
+};
+
+// Representing the details of a Variant of Array
+
+/**
+ *                5         3  2  1     0
+ *               +-----------+---+-------+
+ * value_header  |           |   |       |
+ *               +-----------+---+-------+
+ *                             ^     ^
+ *                             |     +-- field_offset_size_minus_one
+ *                             +-- is_large
+ */
+struct VariantArrayInfo {
+    // Number of elements in the array
+    uint32_t num_elements;
+    // The size of the field offset list
+    uint8_t offset_size;
+    // The byte offset of the field offset list
+    uint32_t offset_start_offset;
+    // The byte offset of the field data
+    uint32_t data_start_offset;
+};
+
+class VariantValue {
 public:
     enum class BasicType { PRIMITIVE = 0, SHORT_STRING = 1, OBJECT = 2, ARRAY = 3 };
 
+    /**
+     * kEmptyVariant represents a NULL variant value.
+     * The byte value is: (VariantType::NULL_TYPE << 2) | BasicType::PRIMITIVE (0)
+     * This is used as the default value for empty VariantRowValue objects.
+     */
+    static constexpr char null_chars[1] = {static_cast<uint8_t>(VariantType::NULL_TYPE) << 2};
+    static constexpr std::string_view kEmptyValue{null_chars, sizeof(null_chars)};
+
 public:
-    explicit Variant(const VariantMetadata& metadata, std::string_view value);
-    Variant(const std::string_view metadata, std::string_view value) : Variant(VariantMetadata(metadata), value) {}
+    explicit VariantValue(std::string_view value);
 
     static constexpr uint8_t kHeaderSizeBytes = 1;
     static constexpr size_t kDecimalScaleSizeBytes = 1;
@@ -153,8 +217,7 @@ public:
     static constexpr uint8_t kValueHeaderBitShift = 2;
 
     BasicType basic_type() const;
-    const VariantMetadata& metadata() const;
-    std::string_view value() const;
+    std::string_view raw() const { return _value; }
     VariantType type() const;
 
     // Get the primitive boolean value.
@@ -201,11 +264,17 @@ public:
 
     // Get the value of the object field by key.
     // returns the value of the field with the given key
-    StatusOr<Variant> get_object_by_key(std::string_view key) const;
+    StatusOr<VariantValue> get_object_by_key(const VariantMetadata& metadata, std::string_view key) const;
 
     // Get the variant value of the object field
     // returns the value of the field with the given field id
-    StatusOr<Variant> get_element_at_index(uint32_t index) const;
+    StatusOr<VariantValue> get_element_at_index(const VariantMetadata& metadata, uint32_t index) const;
+
+    StatusOr<VariantObjectInfo> get_object_info() const;
+
+    StatusOr<VariantArrayInfo> get_array_info() const;
+
+    bool operator==(const VariantValue& other) const { return _value == other._value; }
 
 private:
     uint8_t value_header() const;
@@ -221,7 +290,6 @@ private:
     template <typename DecimalType>
     StatusOr<VariantDecimalValue<DecimalType>> get_primitive_decimal(VariantType type) const;
 
-    VariantMetadata _metadata;
     /**
      * Value layout:
      *  7                                  2 1          0
@@ -235,59 +303,5 @@ private:
      */
     std::string_view _value;
 };
-
-namespace variant_detail {
-// Representing the details of a Variant {@link BasicType::OBJECT}.
-struct ObjectInfo {
-    // Number of elements in the array or object
-    uint32_t num_elements;
-    // The byte offset of the field id
-    uint32_t id_start_offset;
-    // The number of bytes used to encode the field ids
-    uint8_t id_size;
-    // The number of bytes used to encode the field offsets
-    uint32_t offset_start_offset;
-    // The size of the field offset list
-    uint8_t offset_size;
-    // The byte offset of the field data
-    uint32_t data_start_offset;
-};
-
-// Representing the details of a Variant {@link BasicType::ARRAY}.
-struct ArrayInfo {
-    // Number of elements in the array
-    uint32_t num_elements;
-    // The size of the field offset list
-    uint8_t offset_size;
-    // The byte offset of the field offset list
-    uint32_t offset_start_offset;
-    // The byte offset of the field data
-    uint32_t data_start_offset;
-};
-
-/**
- *                5   4  3     2 1     0
- *              +---+---+-------+-------+
- * value_header |   |   |       |       |
- *              +---+---+-------+-------+
- *                    ^     ^       ^
- *                    |     |       +-- field_offset_size_minus_one
- *                    |     +-- field_id_size_minus_one
- *                    +-- is_large
- */
-StatusOr<ObjectInfo> get_object_info(std::string_view value);
-
-/**
- *                5         3  2  1     0
- *               +-----------+---+-------+
- * value_header  |           |   |       |
- *               +-----------+---+-------+
- *                             ^     ^
- *                             |     +-- field_offset_size_minus_one
- *                             +-- is_large
- */
-StatusOr<ArrayInfo> get_array_info(std::string_view value);
-
-} // namespace variant_detail
 
 } // namespace starrocks

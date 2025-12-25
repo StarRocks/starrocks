@@ -421,9 +421,9 @@ public:
         for (int i = 0; i < num_objects; ++i) {
             uint64_t serialized_size = 0;
             buff = read_little_endian_64(buff, &serialized_size);
-            auto variant = VariantValue::create(Slice(buff, serialized_size));
+            auto variant = VariantRowValue::create(Slice(buff, serialized_size));
             if (!variant.ok()) {
-                return Status::Corruption(fmt::format("Failed to deserialize VariantValue at index {}: {}", i,
+                return Status::Corruption(fmt::format("Failed to deserialize VariantRowValue at index {}: {}", i,
                                                       variant.status().to_string()));
             }
 

@@ -193,7 +193,7 @@ static ColumnPtr cast_to_json_fn(ColumnPtr& column) {
             std::string str = CastToString::apply<RunTimeCppType<FromType>, std::string>(v);
             value = JsonValue::from_string(str);
         } else if constexpr (lt_is_variant<FromType>) {
-            auto json_str = static_cast<VariantValue*>(viewer.value(row))->to_json(cctz::local_time_zone());
+            auto json_str = static_cast<VariantRowValue*>(viewer.value(row))->to_json(cctz::local_time_zone());
             if (!json_str.ok()) {
                 overflow = true;
             } else {
@@ -262,17 +262,16 @@ static ColumnPtr cast_from_variant_fn(ColumnPtr& column) {
             continue;
         }
 
-        const VariantValue* variant_value = viewer.value(row);
-        if (variant_value == nullptr) {
+        const VariantRowValue* variant = viewer.value(row);
+        if (variant == nullptr) {
             builder.append_null();
             continue;
         }
 
-        Variant variant(variant_value->get_metadata(), variant_value->get_value());
-        auto status = cast_variant_value_to<ToType, AllowThrowException>(variant, cctz::local_time_zone(), builder);
+        auto status = cast_variant_value_to<ToType, AllowThrowException>(*variant, cctz::local_time_zone(), builder);
         if (!status.ok()) {
             if constexpr (AllowThrowException) {
-                THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(FromType, ToType, variant_value->to_string());
+                THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(FromType, ToType, variant->to_string());
             }
             builder.append_null();
         }
@@ -1228,7 +1227,6 @@ public:
                                                                                lt_is_float<ToType>)) {
                 typedef RunTimeCppType<FromType> FromCppType;
                 typedef RunTimeCppType<ToType> ToCppType;
-
                 if constexpr ((std::is_floating_point_v<ToCppType> || std::is_floating_point_v<FromCppType>)
                                       ? (static_cast<long double>(std::numeric_limits<ToCppType>::max()) <
                                          static_cast<long double>(std::numeric_limits<FromCppType>::max()))

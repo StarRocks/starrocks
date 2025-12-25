@@ -27,9 +27,10 @@ namespace starrocks {
                                      VariantUtil::variant_type_to_string(variant_type), \
                                      logical_type_to_string(logical_type)))
 
-Status cast_variant_to_bool(const Variant& variant, ColumnBuilder<TYPE_BOOLEAN>& result);
+Status cast_variant_to_bool(const VariantRowValue& row, ColumnBuilder<TYPE_BOOLEAN>& result);
 
-Status cast_variant_to_string(const Variant& variant, const cctz::time_zone& zone, ColumnBuilder<TYPE_VARCHAR>& result);
+Status cast_variant_to_string(const VariantRowValue& row, const cctz::time_zone& zone,
+                              ColumnBuilder<TYPE_VARCHAR>& result);
 
 #define VARIANT_CAST_CASE(VARIANT_TYPE_ENUM, GETTER_METHOD)                    \
     case VariantType::VARIANT_TYPE_ENUM: {                                     \
@@ -42,7 +43,8 @@ Status cast_variant_to_string(const Variant& variant, const cctz::time_zone& zon
     }
 
 template <LogicalType ResultType>
-Status cast_variant_to_arithmetic(const Variant& variant, ColumnBuilder<ResultType>& result) {
+Status cast_variant_to_arithmetic(const VariantRowValue& row, ColumnBuilder<ResultType>& result) {
+    const VariantValue& variant = row.get_value();
     switch (const VariantType type = variant.type()) {
     case VariantType::NULL_TYPE: {
         result.append_null();
@@ -65,9 +67,9 @@ Status cast_variant_to_arithmetic(const Variant& variant, ColumnBuilder<ResultTy
 }
 
 template <LogicalType ResultType, bool AllowThrowException>
-static Status cast_variant_value_to(const Variant& variant, const cctz::time_zone& zone,
+static Status cast_variant_value_to(const VariantRowValue& row, const cctz::time_zone& zone,
                                     ColumnBuilder<ResultType>& result) {
-    const VariantType variant_type = variant.type();
+    const VariantType variant_type = row.get_value().type();
     // Supported types: arithmetic, string, variant
     // Some casting require more information like target type within ARRAY/MAP/STRUCT which is not available here:
     // VARIANT -> ARRAY<ANY>: CastVariantToArray
@@ -89,17 +91,17 @@ static Status cast_variant_value_to(const Variant& variant, const cctz::time_zon
     }
 
     if constexpr (ResultType == TYPE_VARIANT) {
-        result.append(VariantValue::of_variant(variant));
+        result.append(VariantRowValue::from_variant(row.get_metadata(), row.get_value()));
         return Status::OK();
     }
 
     Status status;
     if constexpr (ResultType == TYPE_BOOLEAN) {
-        status = cast_variant_to_bool(variant, result);
+        status = cast_variant_to_bool(row, result);
     } else if constexpr (lt_is_arithmetic<ResultType>) {
-        status = cast_variant_to_arithmetic<ResultType>(variant, result);
+        status = cast_variant_to_arithmetic<ResultType>(row, result);
     } else if constexpr (lt_is_string<ResultType>) {
-        status = cast_variant_to_string(variant, zone, result);
+        status = cast_variant_to_string(row, zone, result);
     }
 
     if (!status.ok()) {

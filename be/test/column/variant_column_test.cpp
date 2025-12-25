@@ -33,7 +33,7 @@ PARALLEL_TEST(VariantColumnTest, test_build_column) {
     {
         const uint8_t int_chars[] = {primitive_header(VariantType::INT32), 0xD2, 0x02, 0x96, 0x49};
         std::string_view int_string(reinterpret_cast<const char*>(int_chars), sizeof(int_chars));
-        VariantValue variant{VariantMetadata::kEmptyMetadata, int_string};
+        VariantRowValue variant{VariantMetadata::kEmptyMetadata, int_string};
         auto column = RunTimeColumnType<TYPE_VARIANT>::create();
         EXPECT_EQ("variant", column->get_name());
         EXPECT_TRUE(column->is_variant());
@@ -50,7 +50,7 @@ PARALLEL_TEST(VariantColumnTest, test_build_column) {
         ColumnBuilder<TYPE_VARIANT> builder(1);
         const uint8_t int_chars[] = {primitive_header(VariantType::INT32), 0xD2, 0x02, 0x96, 0x49};
         std::string_view int_string(reinterpret_cast<const char*>(int_chars), sizeof(int_chars));
-        VariantValue variant{VariantMetadata::kEmptyMetadata, int_string};
+        VariantRowValue variant{VariantMetadata::kEmptyMetadata, int_string};
         builder.append(&variant);
         auto column = builder.build(false);
         EXPECT_EQ("variant", column->get_name());
@@ -70,7 +70,7 @@ PARALLEL_TEST(VariantColumnTest, test_build_column) {
         auto column = VariantColumn::create();
         const uint8_t int_chars[] = {primitive_header(VariantType::INT32), 0xD2, 0x02, 0x96, 0x49};
         std::string_view int_string(reinterpret_cast<const char*>(int_chars), sizeof(int_chars));
-        VariantValue variant{VariantMetadata::kEmptyMetadata, int_string};
+        VariantRowValue variant{VariantMetadata::kEmptyMetadata, int_string};
         column->append(&variant);
 
         {
@@ -152,7 +152,7 @@ PARALLEL_TEST(VariantColumnTest, test_serialize) {
                                   0x56};
 
     std::string_view uuid_string(reinterpret_cast<const char*>(uuid_chars), sizeof(uuid_chars));
-    VariantValue variant{empty_metadata, uuid_string};
+    VariantRowValue variant{empty_metadata, uuid_string};
 
     auto column = RunTimeColumnType<TYPE_VARIANT>::create();
     EXPECT_EQ("variant", column->get_name());
@@ -166,7 +166,7 @@ PARALLEL_TEST(VariantColumnTest, test_serialize) {
     column->serialize(0, buffer.data());
     auto new_column = column->clone_empty();
     new_column->deserialize_and_append(buffer.data());
-    const VariantValue* deserialized_variant = new_column->get(0).get_variant();
+    const VariantRowValue* deserialized_variant = new_column->get(0).get_variant();
     ASSERT_TRUE(deserialized_variant != nullptr);
     EXPECT_EQ(variant.serialize_size(), deserialized_variant->serialize_size());
     EXPECT_EQ(variant.to_string(), deserialized_variant->to_string());
@@ -177,7 +177,7 @@ PARALLEL_TEST(VariantColumnTest, test_serialize) {
 PARALLEL_TEST(VariantColumnTest, put_mysql_row_buffer) {
     const uint8_t int_chars[] = {primitive_header(VariantType::INT32), 0xD2, 0x02, 0x96, 0x49};
     std::string_view int_string(reinterpret_cast<const char*>(int_chars), sizeof(int_chars));
-    VariantValue variant{VariantMetadata::kEmptyMetadata, int_string};
+    VariantRowValue variant{VariantMetadata::kEmptyMetadata, int_string};
 
     auto column = VariantColumn::create();
     column->append(&variant);
@@ -223,9 +223,9 @@ PARALLEL_TEST(VariantColumnTest, test_append_strings) {
     variant_column->append_strings(&slice, 1);
 
     ASSERT_EQ(1, variant_column->size());
-    auto expected = VariantValue::create(slice);
+    auto expected = VariantRowValue::create(slice);
     ASSERT_TRUE(expected.ok());
-    const VariantValue* actual = variant_column->get_object(0);
+    const VariantRowValue* actual = variant_column->get_object(0);
     ASSERT_EQ(expected->serialize_size(), actual->serialize_size());
     ASSERT_EQ(expected->get_metadata(), actual->get_metadata());
     ASSERT_EQ(expected->get_value(), actual->get_value());
