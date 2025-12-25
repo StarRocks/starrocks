@@ -3611,12 +3611,14 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             throw new DdlException("Rollup name[" + newRollupName + "] is already used");
         }
 
-        long indexId = indexNameToIdMap.remove(rollupName);
-        indexNameToIdMap.put(newRollupName, indexId);
 
+        long indexId = indexNameToIdMap.get(rollupName);
         // log
         TableInfo tableInfo = TableInfo.createForRollupRename(db.getId(), table.getId(), indexId, newRollupName);
-        GlobalStateMgr.getCurrentState().getEditLog().logRollupRename(tableInfo);
+        GlobalStateMgr.getCurrentState().getEditLog().logRollupRename(tableInfo, wal -> {
+            indexNameToIdMap.remove(rollupName);
+            indexNameToIdMap.put(newRollupName, indexId);
+        });
         LOG.info("rename rollup[{}] to {}", rollupName, newRollupName);
     }
 
@@ -4436,21 +4438,19 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             List<Column> columns = stmt.getColumns();
             long tableId = getNextId();
             View view = new View(tableId, tableName, columns);
+            try {
+                view.checkInlineViewDef(stmt.getInlineViewDef(), ConnectContext.get().getSessionVariable().getSqlMode());
+            } catch (StarRocksException e) {
+                throw new DdlException("failed to check inline view def", e);
+            }
+
             view.setComment(stmt.getComment());
             view.setInlineViewDefWithSqlMode(stmt.getInlineViewDef(),
                     ConnectContext.get().getSessionVariable().getSqlMode());
-            // init here in case the stmt string from view.toSql() has some syntax error.
 
             if (stmt.isSecurity()) {
                 view.setSecurity(stmt.isSecurity());
             }
-
-            try {
-                view.init();
-            } catch (StarRocksException e) {
-                throw new DdlException("failed to init view stmt", e);
-            }
-
             onCreate(db, view, "", stmt.isSetIfNotExists());
             LOG.info("successfully create view[" + tableName + "-" + view.getId() + "]");
         }

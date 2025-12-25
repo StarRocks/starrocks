@@ -356,7 +356,7 @@ public class EditLog {
                 }
                 case OperationType.OP_MODIFY_VIEW_DEF: {
                     AlterViewInfo info = (AlterViewInfo) journal.data();
-                    globalStateMgr.getAlterJobMgr().alterView(info, true);
+                    globalStateMgr.getAlterJobMgr().replayAlterView(info);
                     break;
                 }
                 case OperationType.OP_SET_VIEW_SECURITY_LOG: {
@@ -1617,8 +1617,8 @@ public class EditLog {
         logJsonObject(OperationType.OP_UPDATE_FRONTEND_V2, info, applier);
     }
 
-    public void logFinishMultiDelete(MultiDeleteInfo info) {
-        logJsonObject(OperationType.OP_FINISH_MULTI_DELETE, info);
+    public void logFinishMultiDelete(MultiDeleteInfo info, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_FINISH_MULTI_DELETE, info, walApplier);
     }
 
     public void logAddReplica(ReplicaPersistInfo info) {
@@ -1665,12 +1665,12 @@ public class EditLog {
         logJsonObject(OperationType.OP_RENAME_TABLE_V2, tableInfo, walApplier);
     }
 
-    public void logModifyViewDef(AlterViewInfo alterViewInfo) {
-        logJsonObject(OperationType.OP_MODIFY_VIEW_DEF, alterViewInfo);
+    public void logModifyViewDef(AlterViewInfo alterViewInfo, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_MODIFY_VIEW_DEF, alterViewInfo, walApplier);
     }
 
-    public void logRollupRename(TableInfo tableInfo) {
-        logJsonObject(OperationType.OP_RENAME_ROLLUP_V2, tableInfo);
+    public void logRollupRename(TableInfo tableInfo, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_RENAME_ROLLUP_V2, tableInfo, walApplier);
     }
 
     public void logPartitionRename(TableInfo tableInfo, WALApplier walApplier) {
@@ -1995,8 +1995,8 @@ public class EditLog {
         logJsonObject(OperationType.OP_REMOVE_EXTERNAL_HISTOGRAM_STATS_META, meta, walApplier);
     }
 
-    public void logModifyTableColumn(ModifyTableColumnOperationLog log) {
-        logJsonObject(OperationType.OP_MODIFY_HIVE_TABLE_COLUMN, log);
+    public void logModifyTableColumn(ModifyTableColumnOperationLog log, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_MODIFY_HIVE_TABLE_COLUMN, log, walApplier);
     }
 
     public void logModifyColumnComment(ModifyColumnCommentLog log, WALApplier walApplier) {
@@ -2031,8 +2031,8 @@ public class EditLog {
         logJsonObject(OperationType.OP_ALTER_MATERIALIZED_VIEW_BASE_TABLE_INFOS, log);
     }
 
-    public void logMvRename(RenameMaterializedViewLog log) {
-        logJsonObject(OperationType.OP_RENAME_MATERIALIZED_VIEW, log);
+    public void logMvRename(RenameMaterializedViewLog log, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_RENAME_MATERIALIZED_VIEW, log, walApplier);
     }
 
     public void logMvChangeRefreshScheme(ChangeMaterializedViewRefreshSchemeLog log) {
@@ -2119,8 +2119,8 @@ public class EditLog {
         logJsonObject(OperationType.OP_MODIFY_BINLOG_AVAILABLE_VERSION, log, walApplier);
     }
 
-    public void logMVJobState(MVMaintenanceJob job) {
-        logJsonObject(OperationType.OP_MV_JOB_STATE, job);
+    public void logMVJobState(MVMaintenanceJob job, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_MV_JOB_STATE, job, walApplier);
     }
 
     public void logMVEpochChange(MVEpoch epoch) {

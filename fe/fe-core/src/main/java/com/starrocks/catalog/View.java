@@ -153,12 +153,12 @@ public class View extends Table {
     }
 
     /**
-     * Initializes the originalViewDef, inlineViewDef, and queryStmt members
+     * Check the inlineViewDef, and queryStmt members
      * by parsing the expanded view definition SQL-string.
-     * Throws a TableLoadingException if there was any error parsing the
+     * Throws a StarRocksException if there was any error parsing the
      * SQL or if the view definition did not parse into a QueryStmt.
      */
-    public synchronized QueryStatement init() throws StarRocksException {
+    public void checkInlineViewDef(String inlineViewDef, long sqlMode) throws StarRocksException {
         Preconditions.checkNotNull(inlineViewDef);
         // Parse the expanded view definition SQL-string into a QueryStmt and
         // populate a view definition.
@@ -177,7 +177,6 @@ public class View extends Table {
             throw new StarRocksException(String.format("View %s without query statement. Its definition is:%n%s",
                     name, inlineViewDef));
         }
-        return (QueryStatement) node;
     }
 
     public synchronized List<TableName> getTableRefs() {
