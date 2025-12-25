@@ -73,7 +73,7 @@ public:
             _offsets.emplace_back(0);
         }
         if (!config::enable_zero_copy_from_page_cache) {
-            _materialize_view_if_needed();
+            _ensure_materialized();
         }
     }
 
@@ -349,7 +349,7 @@ public:
     const BinaryDataProxyContainer& get_proxy_data() const { return _immuable_container; }
 
     Bytes& get_bytes() {
-        _materialize_view_if_needed();
+        _ensure_materialized();
         return _bytes;
     }
 
@@ -423,7 +423,7 @@ public:
 private:
     void _build_slices() const;
     void _build_german_strings() const;
-    void _materialize_view_if_needed();
+    void _ensure_materialized();
     ALWAYS_INLINE const uint8_t* _data_base() const {
         return _resource.empty() ? _bytes.data() : reinterpret_cast<const uint8_t*>(_resource.data());
     }

@@ -466,7 +466,7 @@ void BinaryColumnBase<T>::_build_german_strings() const {
 }
 
 template <typename T>
-void BinaryColumnBase<T>::_materialize_view_if_needed() {
+void BinaryColumnBase<T>::_ensure_materialized() {
     if (_resource.empty()) {
         return;
     }

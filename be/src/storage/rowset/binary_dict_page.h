@@ -157,7 +157,7 @@ public:
 
     void reserve_col(size_t n, Column* column) override;
 
-    bool support_push_down_predicate() const override { return Type != TYPE_CHAR; }
+    bool support_push_down_predicate() const override { return Type == TYPE_VARCHAR; }
 
     bool supports_read_by_rowids() const override { return true; }
 

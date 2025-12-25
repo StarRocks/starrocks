@@ -235,7 +235,7 @@ public:
         return count;
     }
 
-    Status read_by_rowds(Column* column, const rowid_t* rowids, size_t* count) override {
+    Status read_by_rowids(Column* column, const rowid_t* rowids, size_t* count) override {
         return Status::NotSupported("V1 version don't support read_by_rowds");
     }
 
@@ -370,7 +370,7 @@ public:
         return Status::OK();
     }
 
-    Status read_by_rowds(Column* column, const rowid_t* rowids, size_t* count) override {
+    Status read_by_rowids(Column* column, const rowid_t* rowids, size_t* count) override {
         if (_null_flags.size() == 0) {
             RETURN_IF_ERROR(_data_decoder->read_by_rowids(_first_ordinal, rowids, count, column));
         } else {

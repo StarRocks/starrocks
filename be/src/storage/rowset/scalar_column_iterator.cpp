@@ -693,7 +693,7 @@ Status ScalarColumnIterator::_fetch_by_rowid_helper(const rowid_t* rowids, size_
 
 Status ScalarColumnIterator::fetch_values_by_rowid(const rowid_t* rowids, size_t size, Column* values) {
     auto rowid_reader = [&](ParsedPage* page, Column* column, const rowid_t* rowid_batch, size_t* count) {
-        return page->read_by_rowds(column, rowid_batch, count);
+        return page->read_by_rowids(column, rowid_batch, count);
     };
     auto range_reader = [&](ParsedPage* page, Column* column, size_t* count) { return page->read(column, count); };
     return _fetch_by_rowid_helper(rowids, size, values, rowid_reader, range_reader);
