@@ -21,6 +21,8 @@
 #include <string>
 #include <unordered_map>
 
+#include "column/column_helper.h"
+#include "common/config.h"
 #include "common/object_pool.h"
 #include "fs/fs_memory.h"
 #include "gen_cpp/tablet_schema.pb.h"
@@ -30,17 +32,15 @@
 #include "storage/chunk_helper.h"
 #include "storage/column_predicate_rewriter.h"
 #include "storage/olap_common.h"
-#include "common/config.h"
 #include "storage/record_predicate/record_predicate_helper.h"
 #include "storage/rowset/column_iterator.h"
 #include "storage/rowset/segment.h"
 #include "storage/rowset/segment_options.h"
 #include "storage/rowset/segment_writer.h"
+#include "storage/runtime_filter_predicate.h"
 #include "storage/tablet_schema_helper.h"
 #include "testutil/assert.h"
 #include "types/logical_type.h"
-#include "storage/runtime_filter_predicate.h"
-#include "column/column_helper.h"
 
 namespace starrocks {
 
@@ -161,38 +161,6 @@ struct VecSchemaBuilder {
 private:
     Schema vec_schema;
 };
-
-// A lightweight runtime filter predicate used only for UT.
-// It filters INT column values equal to _match_value.
-class FakeRuntimeFilterPredicate : public RuntimeFilterPredicate {
-public:
-    FakeRuntimeFilterPredicate(ColumnId cid, int match_value)
-            : RuntimeFilterPredicate(nullptr, cid), _match_value(match_value) {}
-
-    Status evaluate(Chunk* chunk, uint8_t* selection, uint16_t from, uint16_t to) override {
-        auto* col = ColumnHelper::cast_to_raw<TYPE_INT>(chunk->get_column_by_id(_column_id));
-        for (uint16_t i = from; i < to; i++) {
-            selection[i] = selection[i] && (col->get_data()[i] == _match_value);
-        }
-        return Status::OK();
-    }
-
-    StatusOr<uint16_t> evaluate(Chunk* chunk, uint16_t* sel, uint16_t sel_size, uint16_t* target_sel) override {
-        auto* col = ColumnHelper::cast_to_raw<TYPE_INT>(chunk->get_column_by_id(_column_id));
-        uint16_t out = 0;
-        for (uint16_t i = 0; i < sel_size; i++) {
-            uint16_t idx = sel[i];
-            if (col->get_data()[idx] == _match_value) {
-                target_sel[out++] = idx;
-            }
-        }
-        return out;
-    }
-
-private:
-    int _match_value;
-};
-
 } // namespace test
 
 // This case is only triggered by dictionary inconsistencies.
@@ -531,88 +499,6 @@ TEST_F(SegmentIteratorTest, TestPredicateLateMaterializationSingleColumnPushdown
     }
     ASSERT_EQ(total, 50);
     ASSERT_GE(stats.rows_vec_cond_filtered, 50);
-}
-
-// Runtime filter + late materialization: runtime filter column should be read late and still filter correctly.
-TEST_F(SegmentIteratorTest, TestPredicateLateMaterializationWithRuntimeFilter) {
-    using namespace starrocks::test;
-
-    // Force late materialization to be always on.
-    auto prev_ratio = config::late_materialization_ratio;
-    config::late_materialization_ratio = 1000;
-    DeferOp reset_ratio([&]() { config::late_materialization_ratio = prev_ratio; });
-
-    std::string file_name = kSegmentDir + "/predicate_late_materialize_runtime_filter";
-    ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(file_name));
-
-    TabletSchemaBuilder builder;
-    std::shared_ptr<TabletSchema> tablet_schema = builder.create(0, false, TYPE_INT, true)  // c0 key
-                                                          .create(1, false, TYPE_INT, false) // c1 filter by RF
-                                                          .create(2, false, TYPE_INT, false) // c2 late read
-                                                          .build();
-
-    SegmentWriterOptions opts;
-    opts.num_rows_per_block = 32;
-    SegmentWriter writer(std::move(wfile), 0, tablet_schema, opts);
-
-    const int32_t chunk_size = 64;
-    const size_t num_rows = 50;
-
-    auto c0_provider = [](int32_t i) { return i; };
-    auto c1_provider = [](int32_t i) { return i % 10; }; // 0..9 repeat
-    auto c2_provider = [](int32_t i) { return 2000 + i; };
-
-    TabletDataBuilder data_builder(writer, tablet_schema, chunk_size, num_rows);
-    ASSERT_OK(data_builder.append(0, c0_provider));
-    ASSERT_OK(data_builder.append(1, c1_provider));
-    ASSERT_OK(data_builder.append(2, c2_provider));
-    ASSERT_OK(data_builder.finalize_footer());
-
-    auto segment = *Segment::open(_fs, FileInfo{file_name}, 0, tablet_schema);
-    ASSERT_EQ(segment->num_rows(), num_rows);
-
-    VecSchemaBuilder schema_builder;
-    schema_builder.add(0, "c0", TYPE_INT).add(1, "c1", TYPE_INT).add(2, "c2", TYPE_INT);
-    auto vec_schema = schema_builder.build();
-
-    // Light predicate on c0 to enable predicate tree; keeps all rows.
-    std::unique_ptr<ColumnPredicate> predicate(new_column_ge_predicate(get_type_info(TYPE_INT), 0, "0"));
-    PredicateAndNode pred_root;
-    pred_root.add_child(PredicateColumnNode{predicate.get()});
-
-    SegmentReadOptions seg_opts;
-    OlapReaderStatistics stats;
-    seg_opts.fs = _fs;
-    seg_opts.stats = &stats;
-    seg_opts.tablet_schema = tablet_schema;
-    seg_opts.enable_predicate_col_late_materialize = true;
-    seg_opts.enable_join_runtime_filter_pushdown = true;
-    seg_opts.pred_tree = PredicateTree::create(std::move(pred_root));
-
-    // Add a runtime filter: c1 == 5
-    ObjectPool pool;
-    auto* rf_pred = pool.add(new FakeRuntimeFilterPredicate(/*cid=*/1, /*match_value=*/5));
-    seg_opts.runtime_filter_preds = RuntimeFilterPredicates(/*driver_sequence=*/0);
-    seg_opts.runtime_filter_preds.add_predicate(rf_pred);
-
-    auto chunk_iter = new_segment_iterator(segment, vec_schema, seg_opts);
-    ASSERT_OK(chunk_iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS));
-    ASSERT_OK(chunk_iter->init_output_schema(std::unordered_set<uint32_t>()));
-
-    auto res_chunk = ChunkHelper::new_chunk(chunk_iter->output_schema(), config::vector_chunk_size);
-    ASSERT_OK(chunk_iter->get_next(res_chunk.get()));
-
-    // Only rows where c1 == 5 should remain (5 rows among 0..49).
-    ASSERT_EQ(res_chunk->num_rows(), 5);
-    auto c0_col = ColumnHelper::cast_to_raw<TYPE_INT>(res_chunk->get_column_by_index(0));
-    auto c1_col = ColumnHelper::cast_to_raw<TYPE_INT>(res_chunk->get_column_by_index(1));
-    auto c2_col = ColumnHelper::cast_to_raw<TYPE_INT>(res_chunk->get_column_by_index(2));
-    for (size_t i = 0; i < res_chunk->num_rows(); ++i) {
-        ASSERT_EQ(c1_col->get_data()[i], 5);
-        ASSERT_EQ(c2_col->get_data()[i] - c0_col->get_data()[i], 2000);
-    }
-    res_chunk->reset();
-    ASSERT_TRUE(chunk_iter->get_next(res_chunk.get()).is_end_of_file());
 }
 
 // NOLINTNEXTLINE

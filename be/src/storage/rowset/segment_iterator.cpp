@@ -435,6 +435,11 @@ private:
 
     StatusOr<size_t> _predicate_evaluate_late_materialize(vector<rowid_t>* rowid);
 
+    StatusOr<size_t> _predicate_evaluate_late_materialize_read_first_column(vector<rowid_t>* rowid,
+                                                                            std::vector<Column*>& current_columns);
+    Status _evaluate_late_materialize_read_other_columns(vector<rowid_t>* rowid, std::vector<Column*>& current_columns,
+                                                         size_t& chunk_size);
+
     void _build_context_for_predicate(ScanContext* ctx);
 
     // Build column-specific RuntimeFilterPredicates for late materialization
@@ -2110,19 +2115,13 @@ StatusOr<size_t> SegmentIterator::_predicate_evaluate(vector<rowid_t>* rowid) {
     }
 }
 
-StatusOr<size_t> SegmentIterator::_predicate_evaluate_late_materialize(vector<rowid_t>* rowid) {
-    ASSIGN_OR_RETURN(size_t sampled_chunk_size, trigger_sample_if_necessary(rowid));
-    if (sampled_chunk_size > 0) {
-        // Sampling was triggered, return the sampled chunk size without further processing
-        return sampled_chunk_size;
-    }
-
+StatusOr<size_t> SegmentIterator::_predicate_evaluate_late_materialize_read_first_column(
+        vector<rowid_t>* rowid, std::vector<Column*>& current_columns) {
     const uint32_t chunk_capacity = _reserve_chunk_size;
     const uint32_t return_chunk_threshold = std::max<uint32_t>(chunk_capacity - chunk_capacity / 4, 1);
     const bool has_non_expr_predicate = !_non_expr_pred_tree.empty();
     const bool scan_range_normalized = _scan_range.is_sorted();
     Chunk* chunk = _context->_read_chunk.get();
-    std::vector<Column*> current_columns;
     current_columns.reserve(_context->_column_id_for_predicate_late_materialize.size());
 
     const ColumnId first_column_id = _context->_predicate_order.front();
@@ -2180,7 +2179,13 @@ StatusOr<size_t> SegmentIterator::_predicate_evaluate_late_materialize(vector<ro
     if (!_context->_is_filtered) {
         _context->_first_column_total_rows_passed += (chunk_size - original_chunk_size);
     }
+    return chunk_size;
+}
 
+Status SegmentIterator::_evaluate_late_materialize_read_other_columns(vector<rowid_t>* rowid,
+                                                                      std::vector<Column*>& current_columns,
+                                                                      size_t& chunk_size) {
+    Chunk* chunk = _context->_read_chunk.get();
     bool may_has_del_row = chunk->delete_state() != DEL_NOT_SATISFIED;
     for (int i = 1; i < _context->_predicate_order.size(); i++) {
         const ColumnId current_column_id = _context->_predicate_order[i];
@@ -2194,14 +2199,12 @@ StatusOr<size_t> SegmentIterator::_predicate_evaluate_late_materialize(vector<ro
         {
             SCOPED_RAW_TIMER(&_opts.stats->late_materialize_ns);
             // for dict column, no matter it's global or local
-            // we should get its local dict values in predicate evaluation
-            // _decode_dict_codes will translate dict value into string if this is local dict
-            // otherwise will translate local dict value into global dict value
+            // we should get its local dict values in predicate evaluation which is same as next_batch
+            // because the corresponding predicates are already rewritten by local dictionary
             ColumnIterator* cur_iter = _context->_column_ids_to_column_iterators[current_column_id];
             cur_iter->reserve_col(chunk_size, col);
             RETURN_IF_ERROR(cur_iter->fetch_values_by_rowid_for_predicate_evaluate(*ordinals, col));
         }
-        // DCHECK_EQ(ordinals->size(), col->size());
         if (ordinals->size() != col->size()) {
             return Status::Corruption("_predicate_evaluate_late_materialize col size not equal to ordinal col size");
         }
@@ -2220,6 +2223,20 @@ StatusOr<size_t> SegmentIterator::_predicate_evaluate_late_materialize(vector<ro
     chunk->check_or_die();
 
     chunk->set_delete_state(may_has_del_row ? DEL_PARTIAL_SATISFIED : DEL_NOT_SATISFIED);
+    return Status::OK();
+}
+
+StatusOr<size_t> SegmentIterator::_predicate_evaluate_late_materialize(vector<rowid_t>* rowid) {
+    ASSIGN_OR_RETURN(size_t sampled_chunk_size, trigger_sample_if_necessary(rowid));
+    if (sampled_chunk_size > 0) {
+        // Sampling was triggered, return the sampled chunk size without further processing
+        return sampled_chunk_size;
+    }
+
+    std::vector<Column*> current_columns;
+    ASSIGN_OR_RETURN(size_t chunk_size, _predicate_evaluate_late_materialize_read_first_column(rowid, current_columns));
+
+    RETURN_IF_ERROR(_evaluate_late_materialize_read_other_columns(rowid, current_columns, chunk_size));
 
     if (UNLIKELY(chunk_size == 0 && !_range_iter.has_more())) {
         // Return directly if chunk_start is zero, i.e, chunk is empty.
