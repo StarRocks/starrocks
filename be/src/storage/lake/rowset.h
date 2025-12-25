@@ -22,6 +22,10 @@
 #include "storage/options.h"
 #include "storage/rowset/base_rowset.h"
 
+namespace starrocks {
+class SeekRange;
+} // namespace starrocks
+
 namespace starrocks::lake {
 
 class MetaFileBuilder;

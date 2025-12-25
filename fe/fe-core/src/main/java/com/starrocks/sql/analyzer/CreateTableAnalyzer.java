@@ -446,8 +446,8 @@ public class CreateTableAnalyzer {
         List<OrderByElement> orderByElements = stmt.getOrderByElements();
         List<String> columnNames = columnDefs.stream().map(ColumnDef::getName).collect(Collectors.toList());
         if (Config.enable_range_distribution) {
-            // For range distribution, the sort columns must be the same as the key
-            // columns or only in a different order for none duplicate key table
+            // For range distribution, the sort columns must be the same as the key columns.
+            // For primary key table, the order must also be the same.
             if (keysType != KeysType.DUP_KEYS) {
                 List<Integer> sortKeyIdxes = Lists.newArrayList();
                 for (OrderByElement orderByElement : orderByElements) {
@@ -482,9 +482,20 @@ public class CreateTableAnalyzer {
                     keyColIdxes.add(idx);
                 }
 
-                boolean res = new HashSet<>(keyColIdxes).equals(new HashSet<>(sortKeyIdxes));
+                boolean res;
+                if (keysType == KeysType.PRIMARY_KEYS) {
+                    res = keyColIdxes.equals(sortKeyIdxes);
+                } else {
+                    res = new HashSet<>(keyColIdxes).equals(new HashSet<>(sortKeyIdxes));
+                }
+
                 if (!res) {
-                    throw new SemanticException("The sort columns must be same with key columns");
+                    if (keysType == KeysType.PRIMARY_KEYS) {
+                        throw new SemanticException("The sort columns must be same with primary key columns " +
+                                "and the order must be consistent");
+                    } else {
+                        throw new SemanticException("The sort columns must be same with key columns");
+                    }
                 }
             }
         } else {

@@ -868,4 +868,238 @@ TEST_F(SegmentIteratorTest, testCharToVarcharZoneMapFilter) {
     }
 }
 
+namespace {
+
+static SeekTuple make_int_seek_tuple(int32_t v) {
+    Schema s;
+    auto f = std::make_shared<Field>(0, "c0", TYPE_INT, -1, -1, false);
+    f->set_uid(0);
+    s.append(std::move(f));
+    std::vector<Datum> values;
+    values.emplace_back(Datum(v));
+    return SeekTuple(std::move(s), std::move(values));
+}
+
+static std::vector<int32_t> read_all_int32(ChunkIteratorPtr iter, int col_idx, int chunk_size = 1024) {
+    std::vector<int32_t> out;
+    auto chunk = ChunkHelper::new_chunk(iter->schema(), chunk_size);
+    while (true) {
+        chunk->reset();
+        Status st = iter->get_next(chunk.get());
+        if (st.is_end_of_file()) {
+            break;
+        }
+        CHECK(st.ok()) << st.to_string();
+        auto col = down_cast<const Int32Column*>(chunk->get_column_raw_ptr_by_index(col_idx));
+        const auto& data = col->get_data();
+        out.insert(out.end(), data.begin(), data.end());
+    }
+    return out;
+}
+
+} // namespace
+
+TEST_F(SegmentIteratorTest, testTabletRangePruningIntKeyBounds) {
+    using namespace starrocks::test;
+
+    std::string file_name = kSegmentDir + "/tablet_range_pruning_int_key";
+    ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(file_name));
+
+    TabletSchemaBuilder builder;
+    std::shared_ptr<TabletSchema> tablet_schema =
+            builder.create(0, false, TYPE_INT, true).create(1, false, TYPE_INT, false).build();
+
+    SegmentWriterOptions opts;
+    opts.num_rows_per_block = 16;
+    SegmentWriter writer(std::move(wfile), 0, tablet_schema, opts);
+
+    std::vector<uint32_t> column_indexes{0, 1};
+    ASSERT_OK(writer.init(column_indexes, true));
+    auto schema = ChunkHelper::convert_schema(tablet_schema, column_indexes);
+    auto chunk = ChunkHelper::new_chunk(schema, 256);
+    chunk->reset();
+    auto cols = chunk->mutable_columns();
+    for (int i = 0; i < 100; i++) {
+        cols[0]->append_datum(Datum(static_cast<int32_t>(i)));
+        cols[1]->append_datum(Datum(static_cast<int32_t>(i * 10)));
+    }
+    ASSERT_OK(writer.append_chunk(*chunk));
+    uint64_t index_size = 0;
+    ASSERT_OK(writer.finalize_columns(&index_size));
+    uint64_t file_size = 0;
+    ASSERT_OK(writer.finalize_footer(&file_size));
+
+    auto segment = *Segment::open(_fs, FileInfo{file_name}, 0, tablet_schema);
+    ASSERT_EQ(segment->num_rows(), 100);
+
+    VecSchemaBuilder schema_builder;
+    schema_builder.add(0, "c0", TYPE_INT);
+    auto vec_schema = schema_builder.build();
+
+    auto run = [&](std::optional<SeekRange> range_opt) -> std::vector<int32_t> {
+        SegmentReadOptions seg_opts;
+        seg_opts.fs = _fs;
+        OlapReaderStatistics stats;
+        seg_opts.stats = &stats;
+        seg_opts.tablet_schema = tablet_schema;
+        seg_opts.tablet_range = std::move(range_opt);
+        auto iter = new_segment_iterator(segment, vec_schema, seg_opts);
+        CHECK(iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
+        CHECK(iter->init_output_schema(std::unordered_set<uint32_t>()).ok());
+        return read_all_int32(iter, 0);
+    };
+
+    // 1) nullopt: do not prune.
+    {
+        auto keys = run(std::nullopt);
+        ASSERT_EQ(keys.size(), 100);
+        ASSERT_EQ(keys.front(), 0);
+        ASSERT_EQ(keys.back(), 99);
+    }
+    // 2) all_range: do not prune.
+    {
+        SeekRange r;
+        auto keys = run(r);
+        ASSERT_EQ(keys.size(), 100);
+    }
+    // 3) [10, +inf)
+    {
+        SeekRange r(make_int_seek_tuple(10), SeekTuple());
+        r.set_inclusive_lower(true);
+        auto keys = run(r);
+        ASSERT_EQ(keys.size(), 90);
+        ASSERT_EQ(keys.front(), 10);
+        ASSERT_EQ(keys.back(), 99);
+    }
+    // 4) (10, +inf)
+    {
+        SeekRange r(make_int_seek_tuple(10), SeekTuple());
+        r.set_inclusive_lower(false);
+        auto keys = run(r);
+        ASSERT_EQ(keys.size(), 89);
+        ASSERT_EQ(keys.front(), 11);
+        ASSERT_EQ(keys.back(), 99);
+    }
+    // 5) (-inf, 10]
+    {
+        SeekRange r(SeekTuple(), make_int_seek_tuple(10));
+        r.set_inclusive_upper(true);
+        auto keys = run(r);
+        ASSERT_EQ(keys.size(), 11);
+        ASSERT_EQ(keys.front(), 0);
+        ASSERT_EQ(keys.back(), 10);
+    }
+    // 6) (-inf, 10)
+    {
+        SeekRange r(SeekTuple(), make_int_seek_tuple(10));
+        r.set_inclusive_upper(false);
+        auto keys = run(r);
+        ASSERT_EQ(keys.size(), 10);
+        ASSERT_EQ(keys.front(), 0);
+        ASSERT_EQ(keys.back(), 9);
+    }
+    // 7) [10, 20]
+    {
+        SeekRange r(make_int_seek_tuple(10), make_int_seek_tuple(20));
+        r.set_inclusive_lower(true);
+        r.set_inclusive_upper(true);
+        auto keys = run(r);
+        ASSERT_EQ(keys.size(), 11);
+        ASSERT_EQ(keys.front(), 10);
+        ASSERT_EQ(keys.back(), 20);
+    }
+    // 8) (10, 20)
+    {
+        SeekRange r(make_int_seek_tuple(10), make_int_seek_tuple(20));
+        r.set_inclusive_lower(false);
+        r.set_inclusive_upper(false);
+        auto keys = run(r);
+        ASSERT_EQ(keys.size(), 9);
+        ASSERT_EQ(keys.front(), 11);
+        ASSERT_EQ(keys.back(), 19);
+    }
+    // 9) non-overlap: [200, 300]
+    {
+        SeekRange r(make_int_seek_tuple(200), make_int_seek_tuple(300));
+        r.set_inclusive_lower(true);
+        r.set_inclusive_upper(true);
+        auto keys = run(r);
+        ASSERT_TRUE(keys.empty());
+    }
+}
+
+TEST_F(SegmentIteratorTest, testTabletRangePruningPrefixKey) {
+    using namespace starrocks::test;
+
+    std::string file_name = kSegmentDir + "/tablet_range_pruning_prefix_key";
+    ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(file_name));
+
+    TabletSchemaBuilder builder;
+    std::shared_ptr<TabletSchema> tablet_schema =
+            builder.create(0, false, TYPE_INT, true).create(1, false, TYPE_INT, true).build();
+    // Make the short key index only use the first key column so that a 1-column SeekTuple is meaningful.
+    tablet_schema->set_num_short_key_columns(1);
+
+    SegmentWriterOptions opts;
+    opts.num_rows_per_block = 10;
+    SegmentWriter writer(std::move(wfile), 0, tablet_schema, opts);
+
+    std::vector<uint32_t> column_indexes{0, 1};
+    ASSERT_OK(writer.init(column_indexes, true));
+    auto schema = ChunkHelper::convert_schema(tablet_schema, column_indexes);
+    auto chunk = ChunkHelper::new_chunk(schema, 256);
+    chunk->reset();
+    auto cols = chunk->mutable_columns();
+    for (int k0 = 0; k0 < 10; k0++) {
+        for (int k1 = 0; k1 < 10; k1++) {
+            cols[0]->append_datum(Datum(static_cast<int32_t>(k0)));
+            cols[1]->append_datum(Datum(static_cast<int32_t>(k1)));
+        }
+    }
+    ASSERT_OK(writer.append_chunk(*chunk));
+    uint64_t index_size = 0;
+    ASSERT_OK(writer.finalize_columns(&index_size));
+    uint64_t file_size = 0;
+    ASSERT_OK(writer.finalize_footer(&file_size));
+
+    auto segment = *Segment::open(_fs, FileInfo{file_name}, 0, tablet_schema);
+    ASSERT_EQ(segment->num_rows(), 100);
+
+    VecSchemaBuilder schema_builder;
+    schema_builder.add(0, "c0", TYPE_INT).add(1, "c1", TYPE_INT);
+    auto vec_schema = schema_builder.build();
+
+    SegmentReadOptions seg_opts;
+    seg_opts.fs = _fs;
+    OlapReaderStatistics stats;
+    seg_opts.stats = &stats;
+    seg_opts.tablet_schema = tablet_schema;
+    SeekRange r(make_int_seek_tuple(5), make_int_seek_tuple(7));
+    r.set_inclusive_lower(true);
+    r.set_inclusive_upper(true);
+    seg_opts.tablet_range = r;
+
+    auto iter = new_segment_iterator(segment, vec_schema, seg_opts);
+    ASSERT_OK(iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS));
+    ASSERT_OK(iter->init_output_schema(std::unordered_set<uint32_t>()));
+
+    auto res_chunk = ChunkHelper::new_chunk(iter->schema(), 256);
+    size_t rows = 0;
+    while (true) {
+        res_chunk->reset();
+        auto st = iter->get_next(res_chunk.get());
+        if (st.is_end_of_file()) {
+            break;
+        }
+        ASSERT_OK(st);
+        auto c0 = down_cast<const Int32Column*>(res_chunk->get_column_raw_ptr_by_index(0));
+        for (int i = 0; i < res_chunk->num_rows(); i++) {
+            ASSERT_GE(c0->get_data()[i], 5);
+            ASSERT_LE(c0->get_data()[i], 7);
+        }
+        rows += res_chunk->num_rows();
+    }
+    ASSERT_EQ(rows, 30);
+}
+
 } // namespace starrocks
