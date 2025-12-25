@@ -24,6 +24,7 @@ import com.starrocks.http.rest.RestBaseAction;
 import com.starrocks.persist.gson.GsonUtils;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpResponseStatus;
+import org.json.JSONException;
 
 import java.util.List;
 
@@ -71,15 +72,19 @@ public class ProfileActionV2 extends RestBaseAction {
             List<String> profileList = fetchResultFromOtherFrontendNodes(queryPath, authorization, HttpMethod.GET, false);
             for (String profile : profileList) {
                 if (profile != null) {
-                    RestBaseResultV2<String> queryProfileResult = GsonUtils.GSON.fromJson(
-                            profile,
-                            new TypeToken<RestBaseResultV2<String>>() {
-                            }.getType());
-                    if (queryProfileResult.getResult() == null) {
-                        continue;
+                    try {
+                        RestBaseResultV2<String> queryProfileResult = GsonUtils.GSON.fromJson(
+                                profile,
+                                new TypeToken<RestBaseResultV2<String>>() {
+                                }.getType());
+                        if (queryProfileResult == null || queryProfileResult.getResult() == null) {
+                            continue;
+                        }
+                        sendSuccessResponse(response, queryProfileResult.getResult(), request);
+                        return;
+                    } catch (JSONException exception) {
+                        // skip invalid json
                     }
-                    sendSuccessResponse(response, queryProfileResult.getResult(), request);
-                    return;
                 }
             }
         }
