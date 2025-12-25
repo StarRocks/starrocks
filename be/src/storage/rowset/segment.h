@@ -220,10 +220,23 @@ public:
 
     const FileEncryptionInfo* encryption_info() const { return _encryption_info.get(); };
 
+    inline void turn_on_batch_update_cache_size() {
+#ifdef BE_TEST
+        if (!_s_allow_batch_update_mode) return;
+#endif
+        _batch_on_flags_counter.fetch_add(1, std::memory_order_relaxed);
+    }
+
+    void turn_off_batch_update_cache_size();
+
     DISALLOW_COPY_AND_MOVE(Segment);
 
     // for ut test
     void set_num_rows(uint32_t num_rows) { _num_rows = num_rows; }
+
+#ifdef BE_TEST
+    static void toggle_batch_update_cache_mode(bool enabled) { _s_allow_batch_update_mode = enabled; }
+#endif
 
 private:
     friend struct SegmentZoneMapPruner;
@@ -310,10 +323,16 @@ private:
 
     std::unique_ptr<FileEncryptionInfo> _encryption_info;
 
+    std::atomic_int _batch_on_flags_counter{0};
+    std::atomic_int _dirty_cache_counter{0};
+
     // for cloud native tablet
     lake::TabletManager* _tablet_manager = nullptr;
     // used to guarantee that segment will be opened at most once in a thread-safe way
     OnceFlag _open_once;
+#ifdef BE_TEST
+    static bool _s_allow_batch_update_mode;
+#endif
 };
 
 } // namespace starrocks
