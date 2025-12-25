@@ -353,7 +353,7 @@ void ChunkHelper::padding_char_column(const starrocks::TabletSchemaCSPtr& tschem
 
     if (field.is_nullable()) {
         auto* nullable_column = down_cast<NullableColumn*>(column);
-        auto null_column = NullColumn::static_pointer_cast(nullable_column->null_column()->as_mutable_ptr());
+        auto null_column = NullColumn::static_pointer_cast(std::move(*nullable_column->null_column()).mutate());
         auto new_column = NullableColumn::create(std::move(new_binary), std::move(null_column));
         new_column->swap_column(*column);
     } else {
@@ -486,6 +486,53 @@ StatusOr<ChunkUniquePtr> ChunkHelper::new_chunk_checked(const std::vector<SlotDe
 
 StatusOr<ChunkUniquePtr> ChunkHelper::new_chunk_checked(const TupleDescriptor& tuple_desc, size_t n) {
     return ChunkHelper::new_chunk_checked(tuple_desc.slots(), n);
+}
+
+MutableChunkPtr ChunkHelper::new_mutable_chunk(const Schema& schema, size_t n) {
+    size_t fields = schema.num_fields();
+    MutableColumns columns;
+    columns.reserve(fields);
+    for (size_t i = 0; i < fields; i++) {
+        const FieldPtr& f = schema.field(i);
+        auto col = column_from_field(*f);
+        col->reserve(n);
+        columns.emplace_back(std::move(col));
+    }
+    return std::make_shared<MutableChunk>(std::move(columns), std::make_shared<Schema>(schema));
+}
+
+MutableChunkPtr ChunkHelper::new_mutable_chunk(const TupleDescriptor& tuple_desc, size_t n) {
+    return new_mutable_chunk(tuple_desc.slots(), n);
+}
+
+MutableChunkPtr ChunkHelper::new_mutable_chunk(const std::vector<SlotDescriptor*>& slots, size_t n) {
+    auto chunk = std::make_shared<MutableChunk>();
+    for (const auto slot : slots) {
+        auto column = ColumnHelper::create_column(slot->type(), slot->is_nullable());
+        column->reserve(n);
+        chunk->append_column(std::move(column), slot->id());
+    }
+    return chunk;
+}
+
+StatusOr<MutableChunkPtr> ChunkHelper::new_mutable_chunk_checked(const Schema& schema, size_t n) {
+    TRY_CATCH_ALLOC_SCOPE_START()
+    MutableChunkPtr chunk;
+    chunk = ChunkHelper::new_mutable_chunk(schema, n);
+    return chunk;
+    TRY_CATCH_ALLOC_SCOPE_END();
+}
+
+StatusOr<MutableChunkPtr> ChunkHelper::new_mutable_chunk_checked(const std::vector<SlotDescriptor*>& slots, size_t n) {
+    TRY_CATCH_ALLOC_SCOPE_START()
+    MutableChunkPtr chunk;
+    chunk = ChunkHelper::new_mutable_chunk(slots, n);
+    return chunk;
+    TRY_CATCH_ALLOC_SCOPE_END();
+}
+
+StatusOr<MutableChunkPtr> ChunkHelper::new_mutable_chunk_checked(const TupleDescriptor& tuple_desc, size_t n) {
+    return ChunkHelper::new_mutable_chunk_checked(tuple_desc.slots(), n);
 }
 
 void ChunkHelper::reorder_chunk(const TupleDescriptor& tuple_desc, Chunk* chunk) {
