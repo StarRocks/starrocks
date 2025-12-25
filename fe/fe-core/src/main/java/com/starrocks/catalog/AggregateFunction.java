@@ -307,6 +307,7 @@ public class AggregateFunction extends Function {
             fn.setBinaryType(binaryType);
             fn.symbolName = symbolName;
             fn.setLocation(new HdfsURI(objectFile));
+            fn.setCloudConfiguration(cloudConfiguration);
             return fn;
         }
     }

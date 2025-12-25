@@ -150,6 +150,10 @@ public class CreateFunctionAnalyzer {
     }
 
     private String getJUdfUrl(String url) throws IOException {
+        if (STARROCKS_HOME_DIR == null) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                    String.format("STARROCKS_HOME not found. Please set it first."));
+        }
         String fileName = url.substring(url.lastIndexOf("/") + 1);
         StorageVolumeMgr storageVolumeMgr = GlobalStateMgr.getCurrentState().getStorageVolumeMgr();
         if (storageVolumeMgr == null) {
