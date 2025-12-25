@@ -39,7 +39,7 @@ public:
      * Uses predefined constants for empty metadata and a null variant value.
      * This ensures moved-from objects and default-constructed objects are in a valid state.
      */
-    VariantRowValue() : VariantRowValue(VariantMetadata::kEmptyMetadata, Variant::kEmptyVariant) {}
+    VariantRowValue() : VariantRowValue(VariantMetadata::kEmptyMetadata, VariantValue::kEmptyValue) {}
     /**
      * Static factory method to create a VariantRowValue from a Slice.
      * @param slice The Slice must contain the full variant binary including size header.
@@ -62,7 +62,7 @@ public:
      * Create a VariantRowValue from an existing Variant and its metadata.
      * This is the standard way to wrap a Variant into a VariantRowValue.
      */
-    static VariantRowValue from_variant(const VariantMetadata& metadata, const Variant& variant);
+    static VariantRowValue from_variant(const VariantMetadata& metadata, const VariantValue& variant);
 
     /**
      * Copy constructor. Creates a deep copy of the VariantRowValue.
@@ -130,7 +130,7 @@ public:
     std::string to_string() const;
 
     const VariantMetadata& get_metadata() const { return _metadata; }
-    const Variant& get_value() const { return _value; }
+    const VariantValue& get_value() const { return _value; }
 
     // Variant value has a maximum size limit of 16MB to prevent excessive memory usage.
     static constexpr uint32_t kMaxVariantSize = 16 * 1024 * 1024;
@@ -158,7 +158,7 @@ private:
      */
     void _rebind_views() {
         _metadata = VariantMetadata(_metadata_raw);
-        _value = Variant(_value_raw);
+        _value = VariantValue(_value_raw);
     }
 
     /**
@@ -168,7 +168,7 @@ private:
      */
     void _reset_to_empty() {
         _metadata_raw.assign(VariantMetadata::kEmptyMetadata);
-        _value_raw.assign(Variant::kEmptyVariant);
+        _value_raw.assign(VariantValue::kEmptyValue);
         _rebind_views();
     }
 
@@ -190,7 +190,7 @@ private:
     std::string _metadata_raw;
     std::string _value_raw;
     VariantMetadata _metadata;
-    Variant _value;
+    VariantValue _value;
 };
 
 // append json string to the stream

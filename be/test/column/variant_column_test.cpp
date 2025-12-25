@@ -76,7 +76,7 @@ PARALLEL_TEST(VariantColumnTest, test_build_column) {
         {
             auto copy = column->clone();
             ASSERT_EQ(copy->size(), 1);
-            auto res = copy->get(0).get_value();
+            auto res = copy->get(0).get_variant();
             ASSERT_EQ(res->serialize_size(), variant.serialize_size());
             ASSERT_EQ(res->get_metadata(), variant.get_metadata());
             ASSERT_EQ(res->get_value(), variant.get_value());
@@ -95,7 +95,7 @@ PARALLEL_TEST(VariantColumnTest, test_build_column) {
 
             VariantColumn* variant_column_ptr = down_cast<VariantColumn*>(unwrapped);
             ASSERT_EQ(variant_column_ptr->size(), 1);
-            auto res = variant_column_ptr->get(0).get_value();
+            auto res = variant_column_ptr->get(0).get_variant();
             ASSERT_EQ(res->serialize_size(), variant.serialize_size());
             ASSERT_EQ(res->get_metadata(), variant.get_metadata());
             ASSERT_EQ(res->get_value(), variant.get_value());
@@ -111,7 +111,7 @@ PARALLEL_TEST(VariantColumnTest, test_build_column) {
 
             auto variant_column_ptr = ColumnHelper::cast_to<TYPE_VARIANT>(copy);
             ASSERT_EQ(variant_column_ptr->size(), 1);
-            auto res = variant_column_ptr->get(0).get_value();
+            auto res = variant_column_ptr->get(0).get_variant();
             ASSERT_EQ(res->serialize_size(), variant.serialize_size());
             ASSERT_EQ(res->get_metadata(), variant.get_metadata());
             ASSERT_EQ(res->get_value(), variant.get_value());
@@ -120,7 +120,7 @@ PARALLEL_TEST(VariantColumnTest, test_build_column) {
 
             auto variant_column = ColumnHelper::cast_to_raw<TYPE_VARIANT>(copy);
             ASSERT_EQ(variant_column->size(), 1);
-            auto raw_res = variant_column->get(0).get_value();
+            auto raw_res = variant_column->get(0).get_variant();
             ASSERT_EQ(res->serialize_size(), variant.serialize_size());
             ASSERT_EQ(raw_res->get_metadata(), variant.get_metadata());
             ASSERT_EQ(raw_res->get_value(), variant.get_value());
@@ -166,7 +166,7 @@ PARALLEL_TEST(VariantColumnTest, test_serialize) {
     column->serialize(0, buffer.data());
     auto new_column = column->clone_empty();
     new_column->deserialize_and_append(buffer.data());
-    const VariantRowValue* deserialized_variant = new_column->get(0).get_value();
+    const VariantRowValue* deserialized_variant = new_column->get(0).get_variant();
     ASSERT_TRUE(deserialized_variant != nullptr);
     EXPECT_EQ(variant.serialize_size(), deserialized_variant->serialize_size());
     EXPECT_EQ(variant.to_string(), deserialized_variant->to_string());

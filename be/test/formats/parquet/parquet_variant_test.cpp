@@ -75,7 +75,7 @@ protected:
 
 TEST_F(ParquetVariantTest, NullValue) {
     const uint8_t null_chars[] = {primitive_header(VariantType::NULL_TYPE)};
-    Variant variant{std::string_view{reinterpret_cast<const char*>(null_chars), 1}};
+    VariantValue variant{std::string_view{reinterpret_cast<const char*>(null_chars), 1}};
     EXPECT_EQ(VariantType::NULL_TYPE, variant.type());
 }
 
@@ -111,13 +111,13 @@ TEST_F(ParquetVariantTest, PrimitiveMetadata) {
 TEST_F(ParquetVariantTest, BooleanValue) {
     auto [t_fst, t_snd] = _boolean_file_names[0];
     auto [t_metadata, t_value] = load_variant_data(t_fst, t_snd);
-    Variant variant_true{std::string_view(t_value)};
+    VariantValue variant_true{std::string_view(t_value)};
     EXPECT_EQ(VariantType::BOOLEAN_TRUE, variant_true.type());
     EXPECT_EQ(true, *variant_true.get_bool());
 
     auto [f_fst, f_snd] = _boolean_file_names[1];
     auto [f_metadata, f_value] = load_variant_data(f_fst, f_snd);
-    Variant variant_false{std::string_view(f_value)};
+    VariantValue variant_false{std::string_view(f_value)};
     EXPECT_EQ(VariantType::BOOLEAN_FALSE, variant_false.type());
     EXPECT_EQ(false, *variant_false.get_bool());
 }
@@ -126,7 +126,7 @@ TEST_F(ParquetVariantTest, IntValue) {
     // int8
     {
         auto [int8_metadata, int8_value] = load_variant_data("primitive_int8.metadata", "primitive_int8.value");
-        Variant variant{std::string_view(int8_value)};
+        VariantValue variant{std::string_view(int8_value)};
         EXPECT_EQ(VariantType::INT8, variant.type());
         EXPECT_EQ(42, *variant.get_int8());
         // get incorrect type
@@ -135,7 +135,7 @@ TEST_F(ParquetVariantTest, IntValue) {
     // int16
     {
         auto [int16_metadata, int16_value] = load_variant_data("primitive_int16.metadata", "primitive_int16.value");
-        Variant variant{std::string_view(int16_value)};
+        VariantValue variant{std::string_view(int16_value)};
         EXPECT_EQ(VariantType::INT16, variant.type());
         EXPECT_EQ(1234, *variant.get_int16());
         // get incorrect type
@@ -144,14 +144,14 @@ TEST_F(ParquetVariantTest, IntValue) {
     // int32
     {
         auto [int32_metadata, int32_value] = load_variant_data("primitive_int32.metadata", "primitive_int32.value");
-        Variant variant{std::string_view(int32_value)};
+        VariantValue variant{std::string_view(int32_value)};
         EXPECT_EQ(VariantType::INT32, variant.type());
         EXPECT_EQ(123456, *variant.get_int32());
     }
     // int64
     {
         auto [int64_metadata, int64_value] = load_variant_data("primitive_int64.metadata", "primitive_int64.value");
-        Variant variant{std::string_view(int64_value)};
+        VariantValue variant{std::string_view(int64_value)};
         EXPECT_EQ(VariantType::INT64, variant.type());
         EXPECT_EQ(1234567890123456789, *variant.get_int64());
     }
@@ -159,7 +159,7 @@ TEST_F(ParquetVariantTest, IntValue) {
 
 TEST_F(ParquetVariantTest, FloatValue) {
     auto [float_metadata, float_value] = load_variant_data("primitive_float.metadata", "primitive_float.value");
-    Variant variant{std::string_view(float_value)};
+    VariantValue variant{std::string_view(float_value)};
     EXPECT_EQ(VariantType::FLOAT, variant.type());
     EXPECT_FLOAT_EQ(1234567940.0, *variant.get_float());
     // get incorrect type
@@ -168,7 +168,7 @@ TEST_F(ParquetVariantTest, FloatValue) {
 
 TEST_F(ParquetVariantTest, DoubleValue) {
     auto [double_metadata, double_value] = load_variant_data("primitive_double.metadata", "primitive_double.value");
-    Variant variant{std::string_view(double_value)};
+    VariantValue variant{std::string_view(double_value)};
     EXPECT_EQ(VariantType::DOUBLE, variant.type());
     EXPECT_DOUBLE_EQ(1234567890.1234, *variant.get_double());
     // get incorrect type
@@ -177,7 +177,7 @@ TEST_F(ParquetVariantTest, DoubleValue) {
 
 TEST_F(ParquetVariantTest, StringValue) {
     auto [string_metadata, string_value] = load_variant_data("primitive_string.metadata", "primitive_string.value");
-    Variant variant{std::string_view(string_value)};
+    VariantValue variant{std::string_view(string_value)};
     EXPECT_EQ(VariantType::STRING, variant.type());
     EXPECT_EQ(
             "This string is longer than 64 bytes and therefore does not fit in a short_string and it also includes "
@@ -186,15 +186,15 @@ TEST_F(ParquetVariantTest, StringValue) {
 
     // short string
     auto [short_string_metadata, short_string_value] = load_variant_data("short_string.metadata", "short_string.value");
-    Variant short_string_variant{std::string_view(short_string_value)};
+    VariantValue short_string_variant{std::string_view(short_string_value)};
     EXPECT_EQ(VariantType::STRING, short_string_variant.type());
-    EXPECT_EQ(Variant::BasicType::SHORT_STRING, short_string_variant.basic_type());
+    EXPECT_EQ(VariantValue::BasicType::SHORT_STRING, short_string_variant.basic_type());
     EXPECT_EQ("Less than 64 bytes (❤️ with utf8)", *short_string_variant.get_string());
 }
 
 TEST_F(ParquetVariantTest, BinaryValue) {
     auto [binary_metadata, binary_value] = load_variant_data("primitive_binary.metadata", "primitive_binary.value");
-    Variant variant{std::string_view(binary_value)};
+    VariantValue variant{std::string_view(binary_value)};
     EXPECT_EQ(VariantType::BINARY, variant.type());
     const std::string_view result = *variant.get_binary();
     std::string expected;
@@ -207,7 +207,7 @@ TEST_F(ParquetVariantTest, DecimalValue) {
     {
         auto [decimal4_metadata, decimal4_value] =
                 load_variant_data("primitive_decimal4.metadata", "primitive_decimal4.value");
-        Variant variant{std::string_view(decimal4_value)};
+        VariantValue variant{std::string_view(decimal4_value)};
         EXPECT_EQ(VariantType::DECIMAL4, variant.type());
         auto decimal4_result = *variant.get_decimal4();
         EXPECT_EQ(2, decimal4_result.scale);
@@ -217,7 +217,7 @@ TEST_F(ParquetVariantTest, DecimalValue) {
     {
         auto [decimal8_metadata, decimal8_value] =
                 load_variant_data("primitive_decimal8.metadata", "primitive_decimal8.value");
-        Variant variant{std::string_view(decimal8_value)};
+        VariantValue variant{std::string_view(decimal8_value)};
         EXPECT_EQ(VariantType::DECIMAL8, variant.type());
         auto decimal8_result = *variant.get_decimal8();
         EXPECT_EQ(2, decimal8_result.scale);
@@ -227,7 +227,7 @@ TEST_F(ParquetVariantTest, DecimalValue) {
     {
         auto [decimal16_metadata, decimal16_value] =
                 load_variant_data("primitive_decimal16.metadata", "primitive_decimal16.value");
-        Variant variant{std::string_view(decimal16_value)};
+        VariantValue variant{std::string_view(decimal16_value)};
         EXPECT_EQ(VariantType::DECIMAL16, variant.type());
         auto decimal16_result = *variant.get_decimal16();
         EXPECT_EQ(2, decimal16_result.scale);
@@ -257,7 +257,7 @@ TEST_F(ParquetVariantTest, UUIDValue) {
                                   0x56};
 
     std::string_view uuid_string(reinterpret_cast<const char*>(uuid_chars), sizeof(uuid_chars));
-    Variant variant{uuid_string};
+    VariantValue variant{uuid_string};
     EXPECT_EQ(VariantType::UUID, variant.type());
     auto uuid_result = *variant.get_uuid();
     boost::uuids::uuid uuid{};
@@ -270,7 +270,7 @@ TEST_F(ParquetVariantTest, UUIDValue) {
 TEST_F(ParquetVariantTest, TimestampValue) {
     {
         auto [ts_metadata, ts_value] = load_variant_data("primitive_timestamp.metadata", "primitive_timestamp.value");
-        Variant variant{std::string_view(ts_value)};
+        VariantValue variant{std::string_view(ts_value)};
         EXPECT_EQ(VariantType::TIMESTAMP_TZ, variant.type());
 
         // 2025-04-16 12:34:56.78-04:00
@@ -284,7 +284,7 @@ TEST_F(ParquetVariantTest, TimestampValue) {
     {
         auto [ts_ntz_metadata, ts_ntz_value] =
                 load_variant_data("primitive_timestampntz.metadata", "primitive_timestampntz.value");
-        Variant variant{std::string_view(ts_ntz_value)};
+        VariantValue variant{std::string_view(ts_ntz_value)};
         EXPECT_EQ(VariantType::TIMESTAMP_NTZ, variant.type());
         // 2025-04-16 12:34:56.78
         TimestampValue tsv = TimestampValue::create(2025, 4, 16, 12, 34, 56, 780000);
@@ -302,7 +302,7 @@ std::string epoch_day_to_date(int32_t epoch_days) {
 
 TEST_F(ParquetVariantTest, DateValue) {
     auto [date_metadata, date_value] = load_variant_data("primitive_date.metadata", "primitive_date.value");
-    Variant variant{std::string_view(date_value)};
+    VariantValue variant{std::string_view(date_value)};
     EXPECT_EQ(VariantType::DATE, variant.type());
     // 2025-04-16
     EXPECT_EQ("2025-04-16", epoch_day_to_date(*variant.get_date()));
@@ -314,15 +314,15 @@ TEST_F(ParquetVariantTest, DateValue) {
 TEST_F(ParquetVariantTest, ObjectNested) {
     auto [object_metadata, object_value] = load_variant_data("object_nested.metadata", "object_nested.value");
     VariantMetadata metadata{std::string_view(object_metadata)};
-    Variant variant{std::string_view(object_value)};
+    VariantValue variant{std::string_view(object_value)};
     EXPECT_EQ(VariantType::OBJECT, variant.type());
     EXPECT_EQ(3, *variant.num_elements());
 
-    Variant id = *variant.get_object_by_key(metadata, "id");
+    VariantValue id = *variant.get_object_by_key(metadata, "id");
     EXPECT_EQ(VariantType::INT8, id.type());
     EXPECT_EQ(1, *id.get_int8());
 
-    Variant species = *variant.get_object_by_key(metadata, "species");
+    VariantValue species = *variant.get_object_by_key(metadata, "species");
     EXPECT_EQ(VariantType::OBJECT, species.type());
     EXPECT_EQ(2, *species.num_elements());
     {
@@ -336,7 +336,7 @@ TEST_F(ParquetVariantTest, ObjectNested) {
         EXPECT_EQ(6789, *population->get_int16());
     }
 
-    Variant observation = *variant.get_object_by_key(metadata, "observation");
+    VariantValue observation = *variant.get_object_by_key(metadata, "observation");
     EXPECT_EQ(VariantType::OBJECT, observation.type());
     EXPECT_EQ(3, *observation.num_elements());
     {
@@ -369,35 +369,35 @@ TEST_F(ParquetVariantTest, ObjectNested) {
 TEST_F(ParquetVariantTest, ObjectPrimitive) {
     auto [object_metadata, object_value] = load_variant_data("object_primitive.metadata", "object_primitive.value");
     VariantMetadata metadata{std::string_view(object_metadata)};
-    Variant variant{std::string_view(object_value)};
+    VariantValue variant{std::string_view(object_value)};
     EXPECT_EQ(VariantType::OBJECT, variant.type());
     EXPECT_EQ(7, *variant.num_elements());
 
-    Variant int_field = *variant.get_object_by_key(metadata, "int_field");
+    VariantValue int_field = *variant.get_object_by_key(metadata, "int_field");
     EXPECT_EQ(VariantType::INT8, int_field.type());
     EXPECT_EQ(1, *int_field.get_int8());
 
-    Variant double_field = *variant.get_object_by_key(metadata, "double_field");
+    VariantValue double_field = *variant.get_object_by_key(metadata, "double_field");
     EXPECT_EQ(VariantType::DECIMAL4, double_field.type());
     auto decimal4_result = *double_field.get_decimal4();
     EXPECT_EQ("1.23456789", DecimalV3Cast::to_string<int32_t>(decimal4_result.value, 4, decimal4_result.scale));
 
-    Variant boolean_true_field = *variant.get_object_by_key(metadata, "boolean_true_field");
+    VariantValue boolean_true_field = *variant.get_object_by_key(metadata, "boolean_true_field");
     EXPECT_EQ(VariantType::BOOLEAN_TRUE, boolean_true_field.type());
     EXPECT_TRUE(*boolean_true_field.get_bool());
 
-    Variant boolean_false_field = *variant.get_object_by_key(metadata, "boolean_false_field");
+    VariantValue boolean_false_field = *variant.get_object_by_key(metadata, "boolean_false_field");
     EXPECT_EQ(VariantType::BOOLEAN_FALSE, boolean_false_field.type());
     EXPECT_FALSE(*boolean_false_field.get_bool());
 
-    Variant string_field = *variant.get_object_by_key(metadata, "string_field");
+    VariantValue string_field = *variant.get_object_by_key(metadata, "string_field");
     EXPECT_EQ(VariantType::STRING, string_field.type());
     EXPECT_EQ("Apache Parquet", *string_field.get_string());
 
-    Variant null_field = *variant.get_object_by_key(metadata, "null_field");
+    VariantValue null_field = *variant.get_object_by_key(metadata, "null_field");
     EXPECT_EQ(VariantType::NULL_TYPE, null_field.type());
 
-    Variant timestamp_field = *variant.get_object_by_key(metadata, "timestamp_field");
+    VariantValue timestamp_field = *variant.get_object_by_key(metadata, "timestamp_field");
     EXPECT_EQ(VariantType::STRING, timestamp_field.type());
     EXPECT_EQ("2025-04-16T12:34:56.78", *timestamp_field.get_string());
 
@@ -407,7 +407,7 @@ TEST_F(ParquetVariantTest, ObjectPrimitive) {
 TEST_F(ParquetVariantTest, ObjectEmpty) {
     auto [object_empty_metadata, object_empty_value] = load_variant_data("object_empty.metadata", "object_empty.value");
     VariantMetadata metadata{std::string_view(object_empty_metadata)};
-    Variant variant{std::string_view(object_empty_value)};
+    VariantValue variant{std::string_view(object_empty_value)};
     EXPECT_EQ(VariantType::OBJECT, variant.type());
     EXPECT_EQ(0, *variant.num_elements());
 
@@ -417,23 +417,23 @@ TEST_F(ParquetVariantTest, ObjectEmpty) {
 TEST_F(ParquetVariantTest, ArrayPrimitive) {
     auto [array_metadata, array_value] = load_variant_data("array_primitive.metadata", "array_primitive.value");
     VariantMetadata metadata{std::string_view(array_metadata)};
-    Variant variant{std::string_view(array_value)};
+    VariantValue variant{std::string_view(array_value)};
     EXPECT_EQ(VariantType::ARRAY, variant.type());
     EXPECT_EQ(4, *variant.num_elements());
 
-    Variant first_element = *variant.get_element_at_index(metadata, 0);
+    VariantValue first_element = *variant.get_element_at_index(metadata, 0);
     EXPECT_EQ(VariantType::INT8, first_element.type());
     EXPECT_EQ(2, *first_element.get_int8());
 
-    Variant second_element = *variant.get_element_at_index(metadata, 1);
+    VariantValue second_element = *variant.get_element_at_index(metadata, 1);
     EXPECT_EQ(VariantType::INT8, second_element.type());
     EXPECT_EQ(1, *second_element.get_int8());
 
-    Variant third_element = *variant.get_element_at_index(metadata, 2);
+    VariantValue third_element = *variant.get_element_at_index(metadata, 2);
     EXPECT_EQ(VariantType::INT8, third_element.type());
     EXPECT_EQ(5, *third_element.get_int8());
 
-    Variant fourth_element = *variant.get_element_at_index(metadata, 3);
+    VariantValue fourth_element = *variant.get_element_at_index(metadata, 3);
     EXPECT_EQ(VariantType::INT8, fourth_element.type());
     EXPECT_EQ(9, *fourth_element.get_int8());
 }
@@ -441,7 +441,7 @@ TEST_F(ParquetVariantTest, ArrayPrimitive) {
 TEST_F(ParquetVariantTest, ArrayEmpty) {
     auto [array_empty_metadata, array_empty_value] = load_variant_data("array_empty.metadata", "array_empty.value");
     VariantMetadata metadata{std::string_view(array_empty_metadata)};
-    Variant variant{std::string_view(array_empty_value)};
+    VariantValue variant{std::string_view(array_empty_value)};
     EXPECT_EQ(VariantType::ARRAY, variant.type());
     EXPECT_EQ(0, *variant.num_elements());
 
@@ -452,7 +452,7 @@ TEST_F(ParquetVariantTest, ArrayEmpty) {
 TEST_F(ParquetVariantTest, ArrayNested) {
     auto [array_nested_metadata, array_nested_value] = load_variant_data("array_nested.metadata", "array_nested.value");
     VariantMetadata metadata{std::string_view(array_nested_metadata)};
-    Variant variant{std::string_view(array_nested_value)};
+    VariantValue variant{std::string_view(array_nested_value)};
     EXPECT_EQ(VariantType::ARRAY, variant.type());
     EXPECT_EQ(3, *variant.num_elements());
 

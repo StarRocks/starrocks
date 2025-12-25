@@ -262,17 +262,17 @@ static ColumnPtr cast_from_variant_fn(ColumnPtr& column) {
             continue;
         }
 
-        const VariantRowValue* variant_value = viewer.value(row);
-        if (variant_value == nullptr) {
+        const VariantRowValue* variant = viewer.value(row);
+        if (variant == nullptr) {
             builder.append_null();
             continue;
         }
 
         auto status =
-                cast_variant_value_to<ToType, AllowThrowException>(*variant_value, cctz::local_time_zone(), builder);
+                cast_variant_value_to<ToType, AllowThrowException>(*variant, cctz::local_time_zone(), builder);
         if (!status.ok()) {
             if constexpr (AllowThrowException) {
-                THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(FromType, ToType, variant_value->to_string());
+                THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(FromType, ToType, variant->to_string());
             }
             builder.append_null();
         }

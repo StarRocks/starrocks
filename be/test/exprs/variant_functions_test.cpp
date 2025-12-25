@@ -75,9 +75,9 @@ static std::pair<std::string, std::string> load_variant_test_data(const std::str
 
 // Helper function to create VariantRowValue from test data files
 static void create_variant_from_test_data(const std::string& metadata_file, const std::string& value_file,
-                                          VariantRowValue& variant_value) {
+                                          VariantRowValue& variant) {
     auto [metadata, value] = load_variant_test_data(metadata_file, value_file);
-    variant_value = VariantRowValue(metadata, value);
+    variant = VariantRowValue(metadata, value);
 }
 
 // Test cases using real variant test data
@@ -94,11 +94,11 @@ TEST_P(VariantQueryTestFixture, variant_query_with_test_data) {
     std::string param_path = std::get<2>(GetParam());
     std::string param_result = std::get<3>(GetParam());
 
-    VariantRowValue variant_value;
+    VariantRowValue variant;
 
-    create_variant_from_test_data(metadata_file, value_file, variant_value);
-    VLOG(10) << "Loaded variant value from test data: " << variant_value.to_string();
-    variant_column->append(variant_value);
+    create_variant_from_test_data(metadata_file, value_file, variant);
+    VLOG(10) << "Loaded variant value from test data: " << variant.to_string();
+    variant_column->append(variant);
 
     if (param_path == "NULL") {
         path_builder.append_null();
@@ -121,7 +121,7 @@ TEST_P(VariantQueryTestFixture, variant_query_with_test_data) {
         ASSERT_TRUE(datum.is_null());
     } else {
         ASSERT_TRUE(!datum.is_null());
-        auto variant_result = datum.get_value();
+        auto variant_result = datum.get_variant();
         ASSERT_TRUE(!!variant_result);
         auto json_result = variant_result->to_json(ctz);
         ASSERT_TRUE(json_result.ok());
@@ -231,9 +231,9 @@ TEST_F(VariantFunctionsTest, variant_query_invalid_path) {
     auto variant_column = VariantColumn::create();
     auto path_column = BinaryColumn::create();
 
-    VariantRowValue variant_value;
-    create_variant_from_test_data("primitive_int8.metadata", "primitive_int8.value", variant_value);
-    variant_column->append(variant_value);
+    VariantRowValue variant;
+    create_variant_from_test_data("primitive_int8.metadata", "primitive_int8.value", variant);
+    variant_column->append(variant);
 
     // Invalid path syntax
     path_column->append("$.invalid..path");
@@ -251,9 +251,9 @@ TEST_F(VariantFunctionsTest, variant_query_complex_types) {
     auto variant_column = VariantColumn::create();
     ColumnBuilder<TYPE_VARCHAR> path_builder(1);
 
-    VariantRowValue variant_value;
-    create_variant_from_test_data("object_primitive.metadata", "object_primitive.value", variant_value);
-    variant_column->append(variant_value);
+    VariantRowValue variant;
+    create_variant_from_test_data("object_primitive.metadata", "object_primitive.value", variant);
+    variant_column->append(variant);
     path_builder.append("$.int_field");
 
     Columns columns{variant_column, path_builder.build(true)};
@@ -268,7 +268,7 @@ TEST_F(VariantFunctionsTest, variant_query_complex_types) {
     ASSERT_FALSE(datum.is_null());
 
     // For TYPE_VARIANT result, the datum should contain a VariantRowValue pointer
-    auto variant_result = datum.get_value();
+    auto variant_result = datum.get_variant();
     ASSERT_TRUE(!!variant_result);
     auto json_result = variant_result->to_json();
     ASSERT_TRUE(json_result.ok());
@@ -287,15 +287,15 @@ TEST_F(VariantFunctionsTest, variant_query_multiple_rows) {
             {"primitive_boolean_true.metadata", "primitive_boolean_true.value"},
             {"short_string.metadata", "short_string.value"}};
 
-    std::vector<VariantRowValue> variant_values;
-    variant_values.reserve(test_files.size());
+    std::vector<VariantRowValue> variants;
+    variants.reserve(test_files.size());
 
     for (size_t i = 0; i < test_files.size(); ++i) {
         const auto& [metadata_file, value_file] = test_files[i];
-        VariantRowValue variant_value;
-        create_variant_from_test_data(metadata_file, value_file, variant_value);
-        variant_values.push_back(variant_value);
-        variant_column->append(variant_value);
+        VariantRowValue variant;
+        create_variant_from_test_data(metadata_file, value_file, variant);
+        variants.push_back(variant);
+        variant_column->append(variant);
         path_builder.append("$");
     }
 
@@ -308,7 +308,7 @@ TEST_F(VariantFunctionsTest, variant_query_multiple_rows) {
 
     std::vector<std::string> expected_results = {"42", "true", "\"Less than 64 bytes (❤️ with utf8)\""};
     for (size_t i = 0; i < 3; ++i) {
-        auto variant_result = result->get(i).get_value();
+        auto variant_result = result->get(i).get_variant();
         ASSERT_TRUE(!!variant_result);
         auto json_result = variant_result->to_json();
         ASSERT_TRUE(json_result.ok());
@@ -323,9 +323,9 @@ TEST_F(VariantFunctionsTest, variant_query_const_columns) {
     ColumnBuilder<TYPE_VARCHAR> path_builder(1);
 
     // Create variant value using test data
-    VariantRowValue variant_value;
-    create_variant_from_test_data("short_string.metadata", "short_string.value", variant_value);
-    variant_column->append(variant_value);
+    VariantRowValue variant;
+    create_variant_from_test_data("short_string.metadata", "short_string.value", variant);
+    variant_column->append(variant);
     path_builder.append("$");
 
     // Create const columns
@@ -340,7 +340,7 @@ TEST_F(VariantFunctionsTest, variant_query_const_columns) {
     ASSERT_EQ(3, result->size());
 
     for (size_t i = 0; i < 3; ++i) {
-        auto variant_result = result->get(i).get_value();
+        auto variant_result = result->get(i).get_variant();
         ASSERT_TRUE(!!variant_result);
         auto json_result = variant_result->to_json();
         ASSERT_TRUE(json_result.ok());

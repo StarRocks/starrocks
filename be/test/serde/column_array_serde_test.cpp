@@ -124,8 +124,8 @@ PARALLEL_TEST(ColumnArraySerdeTest, variant_column) {
 
     ASSERT_EQ(5, c2->size());
     for (size_t i = 0; i < c1->size(); i++) {
-        const VariantRowValue* datum1 = c1->get(i).get_value();
-        const VariantRowValue* datum2 = c2->get(i).get_value();
+        const VariantRowValue* datum1 = c1->get(i).get_variant();
+        const VariantRowValue* datum2 = c2->get(i).get_variant();
         ASSERT_EQ(datum1->serialize_size(), datum2->serialize_size());
         ASSERT_EQ(datum1->get_metadata(), datum2->get_metadata());
         ASSERT_EQ(datum1->get_value(), datum2->get_value());
@@ -142,8 +142,8 @@ PARALLEL_TEST(ColumnArraySerdeTest, variant_column) {
 
         ASSERT_EQ(5, c2->size());
         for (size_t i = 0; i < c1->size(); i++) {
-            const VariantRowValue* datum1 = c1->get(i).get_value();
-            const VariantRowValue* datum2 = c2->get(i).get_value();
+            const VariantRowValue* datum1 = c1->get(i).get_variant();
+            const VariantRowValue* datum2 = c2->get(i).get_variant();
             ASSERT_EQ(datum1->serialize_size(), datum2->serialize_size());
             ASSERT_EQ(datum1->get_metadata(), datum2->get_metadata());
             ASSERT_EQ(datum1->get_value(), datum2->get_value());

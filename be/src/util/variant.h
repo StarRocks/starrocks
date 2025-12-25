@@ -131,9 +131,9 @@ private:
     uint32_t _dict_size{0};
 };
 
-class Variant;
+class VariantValue;
 struct VariantUtil {
-    static Status variant_to_json(const VariantMetadata& metadata, const Variant& value, std::stringstream& json_str,
+    static Status variant_to_json(const VariantMetadata& metadata, const VariantValue& value, std::stringstream& json_str,
                                   cctz::time_zone timezone = cctz::local_time_zone());
 
     static inline uint32_t read_little_endian_unsigned32(const void* from, uint8_t size) {
@@ -198,7 +198,7 @@ struct VariantArrayInfo {
     uint32_t data_start_offset;
 };
 
-class Variant {
+class VariantValue {
 public:
     enum class BasicType { PRIMITIVE = 0, SHORT_STRING = 1, OBJECT = 2, ARRAY = 3 };
 
@@ -208,10 +208,10 @@ public:
      * This is used as the default value for empty VariantRowValue objects.
      */
     static constexpr char null_chars[1] = {static_cast<uint8_t>(VariantType::NULL_TYPE) << 2};
-    static constexpr std::string_view kEmptyVariant{null_chars, sizeof(null_chars)};
+    static constexpr std::string_view kEmptyValue{null_chars, sizeof(null_chars)};
 
 public:
-    explicit Variant(std::string_view value);
+    explicit VariantValue(std::string_view value);
 
     static constexpr uint8_t kHeaderSizeBytes = 1;
     static constexpr size_t kDecimalScaleSizeBytes = 1;
@@ -266,17 +266,17 @@ public:
 
     // Get the value of the object field by key.
     // returns the value of the field with the given key
-    StatusOr<Variant> get_object_by_key(const VariantMetadata& metadata, std::string_view key) const;
+    StatusOr<VariantValue> get_object_by_key(const VariantMetadata& metadata, std::string_view key) const;
 
     // Get the variant value of the object field
     // returns the value of the field with the given field id
-    StatusOr<Variant> get_element_at_index(const VariantMetadata& metadata, uint32_t index) const;
+    StatusOr<VariantValue> get_element_at_index(const VariantMetadata& metadata, uint32_t index) const;
 
     StatusOr<VariantObjectInfo> get_object_info() const;
 
     StatusOr<VariantArrayInfo> get_array_info() const;
 
-    bool operator==(const Variant& other) const {
+    bool operator==(const VariantValue& other) const {
         return _value == other._value;
     }
 

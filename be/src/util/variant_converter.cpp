@@ -18,26 +18,26 @@
 
 namespace starrocks {
 
-Status cast_variant_to_bool(const VariantRowValue& value, ColumnBuilder<TYPE_BOOLEAN>& result) {
-    const Variant& variant = value.get_value();
-    const VariantType type = variant.type();
+Status cast_variant_to_bool(const VariantRowValue& variant, ColumnBuilder<TYPE_BOOLEAN>& result) {
+    const VariantValue& value = variant.get_value();
+    const VariantType type = value.type();
     if (type == VariantType::NULL_TYPE) {
         result.append_null();
         return Status::OK();
     }
 
     if (type == VariantType::BOOLEAN_TRUE || type == VariantType::BOOLEAN_FALSE) {
-        auto value = variant.get_bool();
-        if (!value.ok()) {
-            return value.status();
+        auto ret = value.get_bool();
+        if (!ret.ok()) {
+            return ret.status();
         }
 
-        result.append(value.value());
+        result.append(ret.value());
         return Status::OK();
     }
 
     if (type == VariantType::STRING) {
-        auto str = variant.get_string();
+        auto str = value.get_string();
         if (str.ok()) {
             const char* str_value = str.value().data();
             size_t len = str.value().size();
@@ -61,16 +61,16 @@ Status cast_variant_to_bool(const VariantRowValue& value, ColumnBuilder<TYPE_BOO
     return VARIANT_CAST_NOT_SUPPORT(type, TYPE_BOOLEAN);
 }
 
-Status cast_variant_to_string(const VariantRowValue& value, const cctz::time_zone& zone,
+Status cast_variant_to_string(const VariantRowValue& variant, const cctz::time_zone& zone,
                               ColumnBuilder<TYPE_VARCHAR>& result) {
-    const Variant& variant = value.get_value();
-    switch (variant.type()) {
+    const VariantValue& value = variant.get_value();
+    switch (value.type()) {
     case VariantType::NULL_TYPE: {
         result.append(Slice("null"));
         return Status::OK();
     }
     case VariantType::STRING: {
-        auto str = variant.get_string();
+        auto str = value.get_string();
         if (!str.ok()) {
             return str.status();
         }
@@ -80,7 +80,7 @@ Status cast_variant_to_string(const VariantRowValue& value, const cctz::time_zon
     }
     default: {
         std::stringstream ss;
-        Status status = VariantUtil::variant_to_json(value.get_metadata(), variant, ss, zone);
+        Status status = VariantUtil::variant_to_json(variant.get_metadata(), value, ss, zone);
         if (!status.ok()) {
             return status;
         }

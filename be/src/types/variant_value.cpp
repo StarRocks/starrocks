@@ -86,7 +86,7 @@ StatusOr<VariantRowValue> VariantRowValue::create(const std::string_view metadat
 }
 
 // Create a VariantRowValue from a Parquet Variant.
-VariantRowValue VariantRowValue::from_variant(const VariantMetadata& metadata, const Variant& variant) {
+VariantRowValue VariantRowValue::from_variant(const VariantMetadata& metadata, const VariantValue& variant) {
     return VariantRowValue(metadata.raw(), variant.raw());
 }
 

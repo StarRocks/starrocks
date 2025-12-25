@@ -731,13 +731,12 @@ Status VariantColumnReader::read_range(const Range<uint64_t>& range, const Filte
                               << " (metadata_size=" << metadata_slice.size << ", value_size=" << value_slice.size
                               << "), treating as null variant";
                     variant_column->append(VariantRowValue::from_null());
-                } else if (auto variant_value = VariantRowValue::create(metadata_slice, value_slice);
-                           !variant_value.ok()) {
+                } else if (auto variant = VariantRowValue::create(metadata_slice, value_slice); !variant.ok()) {
                     // Read malformed variant value as null
-                    VLOG_FILE << "Failed to create variant value at row " << i << ": " << variant_value.status();
+                    VLOG_FILE << "Failed to create variant value at row " << i << ": " << variant.status();
                     variant_column->append(VariantRowValue::from_null());
                 } else {
-                    variant_column->append(variant_value.value());
+                    variant_column->append(variant.value());
                 }
             } else {
                 // Variant group is null, metadata and value should also be null
@@ -770,12 +769,11 @@ Status VariantColumnReader::read_range(const Range<uint64_t>& range, const Filte
                               << " (metadata_size=" << metadata_slice.size << ", value_size=" << value_slice.size
                               << "), treating as null variant";
                     variant_column->append(VariantRowValue::from_null());
-                } else if (auto variant_value = VariantRowValue::create(metadata_slice, value_slice);
-                           !variant_value.ok()) {
-                    VLOG_FILE << "Failed to create variant value at row " << i << ": " << variant_value.status();
+                } else if (auto variant = VariantRowValue::create(metadata_slice, value_slice); !variant.ok()) {
+                    VLOG_FILE << "Failed to create variant value at row " << i << ": " << variant.status();
                     variant_column->append(VariantRowValue::from_null());
                 } else {
-                    variant_column->append(variant_value.value());
+                    variant_column->append(variant.value());
                 }
             }
         }

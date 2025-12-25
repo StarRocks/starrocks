@@ -251,11 +251,11 @@ StatusOr<VariantRowValue> VariantPath::seek(const VariantRowValue* variant, cons
     }
 
     const VariantMetadata& metadata = variant->get_metadata();
-    Variant current{variant->get_value().raw()};
+    VariantValue current{variant->get_value().raw()};
     for (size_t seg_idx = 0; seg_idx < variant_path->segments.size(); ++seg_idx) {
         const auto& segment = variant_path->segments[seg_idx];
 
-        StatusOr<Variant> sub;
+        StatusOr<VariantValue> sub;
         std::visit(
                 [&]<typename T0>(const T0& seg) {
                     if constexpr (std::is_same_v<std::decay_t<T0>, ObjectExtraction>) {

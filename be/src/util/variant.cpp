@@ -29,15 +29,15 @@
 
 namespace starrocks {
 
-static std::string basic_type_to_string(Variant::BasicType type) {
+static std::string basic_type_to_string(VariantValue::BasicType type) {
     switch (type) {
-    case Variant::BasicType::PRIMITIVE:
+    case VariantValue::BasicType::PRIMITIVE:
         return "Primitive";
-    case Variant::BasicType::SHORT_STRING:
+    case VariantValue::BasicType::SHORT_STRING:
         return "ShortString";
-    case Variant::BasicType::OBJECT:
+    case VariantValue::BasicType::OBJECT:
         return "Object";
-    case Variant::BasicType::ARRAY:
+    case VariantValue::BasicType::ARRAY:
         return "Array";
     default:
         return "Unknown";
@@ -206,39 +206,39 @@ std::vector<uint32_t> VariantMetadata::get_index(std::string_view key) const {
 }
 
 // Variant value class
-Variant::Variant(std::string_view value) : _value(value) {
+VariantValue::VariantValue(std::string_view value) : _value(value) {
     DCHECK(!value.empty()) << "Variant value cannot be empty";
 }
 
-Variant::BasicType Variant::basic_type() const {
-    return static_cast<Variant::BasicType>(_value[0] & kBasicTypeMask);
+VariantValue::BasicType VariantValue::basic_type() const {
+    return static_cast<VariantValue::BasicType>(_value[0] & kBasicTypeMask);
 }
 
-VariantType Variant::type() const {
+VariantType VariantValue::type() const {
     switch (basic_type()) {
-    case Variant::BasicType::PRIMITIVE:
+    case VariantValue::BasicType::PRIMITIVE:
         return static_cast<VariantType>(value_header());
-    case Variant::BasicType::SHORT_STRING:
+    case VariantValue::BasicType::SHORT_STRING:
         return VariantType::STRING; // Short string is treated as a string type.
-    case Variant::BasicType::OBJECT:
+    case VariantValue::BasicType::OBJECT:
         return VariantType::OBJECT;
-    case Variant::BasicType::ARRAY:
+    case VariantValue::BasicType::ARRAY:
         return VariantType::ARRAY;
     default:
         return VariantType::NULL_TYPE; // Should not happen, but return NULL_TYPE as a fallback.
     }
 }
 
-StatusOr<VariantObjectInfo> Variant::get_object_info() const {
+StatusOr<VariantObjectInfo> VariantValue::get_object_info() const {
     const std::string_view& value = _value;
-    Variant::BasicType basic_type =
-            static_cast<Variant::BasicType>(static_cast<uint8_t>(value[0]) & Variant::kBasicTypeMask);
-    if (basic_type != Variant::BasicType::OBJECT) {
+    VariantValue::BasicType basic_type =
+            static_cast<VariantValue::BasicType>(static_cast<uint8_t>(value[0]) & VariantValue::kBasicTypeMask);
+    if (basic_type != VariantValue::BasicType::OBJECT) {
         return Status::VariantError("Cannot parse object info: basic_type is not OBJECT, basic_type=" +
                                     basic_type_to_string(basic_type));
     }
 
-    uint8_t value_header = (static_cast<uint8_t>(value[0]) >> Variant::kValueHeaderBitShift) & 0x3F;
+    uint8_t value_header = (static_cast<uint8_t>(value[0]) >> VariantValue::kValueHeaderBitShift) & 0x3F;
     uint8_t field_offset_size = (value_header & 0b11) + 1;
     uint8_t field_id_size = ((value_header >> 2) & 0b11) + 1;
     // Indicates how many bytes are used to encode the number of elements
@@ -251,7 +251,7 @@ StatusOr<VariantObjectInfo> Variant::get_object_info() const {
     }
 
     uint32_t num_elements =
-            VariantUtil::read_little_endian_unsigned32(value.data() + Variant::kHeaderSizeBytes, num_elements_size);
+            VariantUtil::read_little_endian_unsigned32(value.data() + VariantValue::kHeaderSizeBytes, num_elements_size);
 
     VariantObjectInfo object_info{};
     object_info.num_elements = num_elements;
@@ -301,16 +301,16 @@ StatusOr<VariantObjectInfo> Variant::get_object_info() const {
     return StatusOr<VariantObjectInfo>(object_info);
 }
 
-StatusOr<VariantArrayInfo> Variant::get_array_info() const {
+StatusOr<VariantArrayInfo> VariantValue::get_array_info() const {
     const std::string_view& value = _value;
-    Variant::BasicType basic_type =
-            static_cast<Variant::BasicType>(static_cast<uint8_t>(value[0]) & Variant::kBasicTypeMask);
-    if (basic_type != Variant::BasicType::ARRAY) {
+    VariantValue::BasicType basic_type =
+            static_cast<VariantValue::BasicType>(static_cast<uint8_t>(value[0]) & VariantValue::kBasicTypeMask);
+    if (basic_type != VariantValue::BasicType::ARRAY) {
         return Status::VariantError("Cannot parse array info: basic_type is not ARRAY, basic_type=" +
                                     basic_type_to_string(basic_type));
     }
 
-    uint8_t value_header = (static_cast<uint8_t>(value[0]) >> Variant::kValueHeaderBitShift) & 0x3F;
+    uint8_t value_header = (static_cast<uint8_t>(value[0]) >> VariantValue::kValueHeaderBitShift) & 0x3F;
     // represents the number of bytes used to encode the field offset.
     uint8_t field_offset_size = (value_header & 0b11) + 1;
     // is_large is a 1-bit value that indicates how many bytes are used to encode the number of elements.
@@ -322,12 +322,12 @@ StatusOr<VariantArrayInfo> Variant::get_array_info() const {
     }
 
     uint32_t num_elements =
-            VariantUtil::read_little_endian_unsigned32(value.data() + Variant::kHeaderSizeBytes, num_elements_size);
+            VariantUtil::read_little_endian_unsigned32(value.data() + VariantValue::kHeaderSizeBytes, num_elements_size);
 
     VariantArrayInfo array_info{};
     array_info.num_elements = num_elements;
     array_info.offset_size = field_offset_size;
-    array_info.offset_start_offset = Variant::kHeaderSizeBytes + num_elements_size;
+    array_info.offset_start_offset = VariantValue::kHeaderSizeBytes + num_elements_size;
 
     // Check for potential overflow in offset calculation
     uint64_t offset_list_size = static_cast<uint64_t>(num_elements + 1) * static_cast<uint64_t>(field_offset_size);
@@ -346,11 +346,11 @@ StatusOr<VariantArrayInfo> Variant::get_array_info() const {
     return StatusOr<VariantArrayInfo>(array_info);
 }
 
-uint8_t Variant::value_header() const {
+uint8_t VariantValue::value_header() const {
     return static_cast<uint8_t>(_value[0]) >> kValueHeaderBitShift;
 }
 
-Status Variant::validate_basic_type(Variant::BasicType type) const {
+Status VariantValue::validate_basic_type(VariantValue::BasicType type) const {
     if (basic_type() != type) {
         return Status::VariantError("Expected basic type: " + basic_type_to_string(type) +
                                     ", but got: " + basic_type_to_string(basic_type()));
@@ -359,8 +359,8 @@ Status Variant::validate_basic_type(Variant::BasicType type) const {
     return Status::OK();
 }
 
-Status Variant::validate_primitive_type(VariantType type, size_t size_required) const {
-    RETURN_IF_ERROR(validate_basic_type(Variant::BasicType::PRIMITIVE));
+Status VariantValue::validate_primitive_type(VariantType type, size_t size_required) const {
+    RETURN_IF_ERROR(validate_basic_type(VariantValue::BasicType::PRIMITIVE));
 
     auto primitive_type = static_cast<VariantType>(value_header());
     if (primitive_type != type) {
@@ -378,7 +378,7 @@ Status Variant::validate_primitive_type(VariantType type, size_t size_required) 
 }
 
 template <typename PrimitiveType>
-StatusOr<PrimitiveType> Variant::get_primitive(VariantType type) const {
+StatusOr<PrimitiveType> VariantValue::get_primitive(VariantType type) const {
     RETURN_IF_ERROR(validate_primitive_type(type, sizeof(PrimitiveType) + kHeaderSizeBytes));
 
     PrimitiveType primitive_value{};
@@ -388,7 +388,7 @@ StatusOr<PrimitiveType> Variant::get_primitive(VariantType type) const {
     return primitive_value;
 }
 
-StatusOr<bool> Variant::get_bool() const {
+StatusOr<bool> VariantValue::get_bool() const {
     RETURN_IF_ERROR(validate_basic_type(basic_type()));
 
     // extract the primitive type from the header
@@ -404,32 +404,32 @@ StatusOr<bool> Variant::get_bool() const {
                                 VariantUtil::variant_type_to_string(primitive_type));
 }
 
-StatusOr<int8_t> Variant::get_int8() const {
+StatusOr<int8_t> VariantValue::get_int8() const {
     return get_primitive<int8_t>(VariantType::INT8);
 }
 
-StatusOr<int16_t> Variant::get_int16() const {
+StatusOr<int16_t> VariantValue::get_int16() const {
     return get_primitive<int16_t>(VariantType::INT16);
 }
 
-StatusOr<int32_t> Variant::get_int32() const {
+StatusOr<int32_t> VariantValue::get_int32() const {
     return get_primitive<int32_t>(VariantType::INT32);
 }
 
-StatusOr<int64_t> Variant::get_int64() const {
+StatusOr<int64_t> VariantValue::get_int64() const {
     return get_primitive<int64_t>(VariantType::INT64);
 }
 
-StatusOr<float> Variant::get_float() const {
+StatusOr<float> VariantValue::get_float() const {
     return get_primitive<float>(VariantType::FLOAT);
 }
 
-StatusOr<double> Variant::get_double() const {
+StatusOr<double> VariantValue::get_double() const {
     return get_primitive<double>(VariantType::DOUBLE);
 }
 
 template <typename DecimalType>
-StatusOr<VariantDecimalValue<DecimalType>> Variant::get_primitive_decimal(VariantType type) const {
+StatusOr<VariantDecimalValue<DecimalType>> VariantValue::get_primitive_decimal(VariantType type) const {
     RETURN_IF_ERROR(validate_primitive_type(type, sizeof(DecimalType) + kHeaderSizeBytes + kDecimalScaleSizeBytes));
 
     uint8_t scale = _value[kHeaderSizeBytes];
@@ -453,15 +453,15 @@ StatusOr<VariantDecimalValue<DecimalType>> Variant::get_primitive_decimal(Varian
     return VariantDecimalValue<DecimalType>{scale, decimal_value};
 }
 
-StatusOr<VariantDecimalValue<int32_t>> Variant::get_decimal4() const {
+StatusOr<VariantDecimalValue<int32_t>> VariantValue::get_decimal4() const {
     return get_primitive_decimal<int32_t>(VariantType::DECIMAL4);
 }
 
-StatusOr<VariantDecimalValue<int64_t>> Variant::get_decimal8() const {
+StatusOr<VariantDecimalValue<int64_t>> VariantValue::get_decimal8() const {
     return get_primitive_decimal<int64_t>(VariantType::DECIMAL8);
 }
 
-StatusOr<VariantDecimalValue<int128_t>> Variant::get_decimal16() const {
+StatusOr<VariantDecimalValue<int128_t>> VariantValue::get_decimal16() const {
     return get_primitive_decimal<int128_t>(VariantType::DECIMAL16);
 }
 
@@ -478,7 +478,7 @@ std::string VariantDecimalValue<int128_t>::to_string() const {
     return DecimalV3Cast::to_string<int128_t>(value, decimal_precision_limit<int128_t>, scale);
 }
 
-StatusOr<std::string_view> Variant::get_primitive_string_or_binary(VariantType type) const {
+StatusOr<std::string_view> VariantValue::get_primitive_string_or_binary(VariantType type) const {
     // BINARY and STRING are both 4 byte little-endian size
     RETURN_IF_ERROR(validate_primitive_type(type, kHeaderSizeBytes + 4));
 
@@ -490,9 +490,9 @@ StatusOr<std::string_view> Variant::get_primitive_string_or_binary(VariantType t
     return std::string_view(_value.data() + kHeaderSizeBytes + 4, length);
 }
 
-StatusOr<std::string_view> Variant::get_string() const {
-    Variant::BasicType btype = basic_type();
-    if (btype == Variant::BasicType::SHORT_STRING) {
+StatusOr<std::string_view> VariantValue::get_string() const {
+    VariantValue::BasicType btype = basic_type();
+    if (btype == VariantValue::BasicType::SHORT_STRING) {
         // The short string header value is the length of the string.
         uint8_t short_string_length = value_header();
         if (_value.size() < static_cast<size_t>(short_string_length + kHeaderSizeBytes)) {
@@ -503,45 +503,45 @@ StatusOr<std::string_view> Variant::get_string() const {
         return std::string_view(_value.data() + kHeaderSizeBytes, short_string_length);
     }
 
-    if (btype == Variant::BasicType::PRIMITIVE) {
+    if (btype == VariantValue::BasicType::PRIMITIVE) {
         return get_primitive_string_or_binary(VariantType::STRING);
     }
 
     return Status::VariantError("Required a string or a short string, but got: " + basic_type_to_string(btype));
 }
 
-StatusOr<std::string_view> Variant::get_binary() const {
-    RETURN_IF_ERROR(validate_basic_type(Variant::BasicType::PRIMITIVE));
+StatusOr<std::string_view> VariantValue::get_binary() const {
+    RETURN_IF_ERROR(validate_basic_type(VariantValue::BasicType::PRIMITIVE));
 
     return get_primitive_string_or_binary(VariantType::BINARY);
 }
 
-StatusOr<int32_t> Variant::get_date() const {
+StatusOr<int32_t> VariantValue::get_date() const {
     return get_primitive<int32_t>(VariantType::DATE);
 }
 
-StatusOr<int64_t> Variant::get_time_micros_ntz() const {
+StatusOr<int64_t> VariantValue::get_time_micros_ntz() const {
     return get_primitive<int64_t>(VariantType::TIME_NTZ);
 }
 
-StatusOr<int64_t> Variant::get_timestamp_micros() const {
+StatusOr<int64_t> VariantValue::get_timestamp_micros() const {
     return get_primitive<int64_t>(VariantType::TIMESTAMP_TZ);
 }
 
-StatusOr<int64_t> Variant::get_timestamp_micros_ntz() const {
+StatusOr<int64_t> VariantValue::get_timestamp_micros_ntz() const {
     return get_primitive<int64_t>(VariantType::TIMESTAMP_NTZ);
 }
 
-StatusOr<int64_t> Variant::get_timestamp_nanos_tz() const {
+StatusOr<int64_t> VariantValue::get_timestamp_nanos_tz() const {
     return get_primitive<int64_t>(VariantType::TIMESTAMP_TZ_NANOS);
 }
 
-StatusOr<int64_t> Variant::get_timestamp_nanos_ntz() const {
+StatusOr<int64_t> VariantValue::get_timestamp_nanos_ntz() const {
     return get_primitive<int64_t>(VariantType::TIMESTAMP_NTZ_NANOS);
 }
 
-StatusOr<std::array<uint8_t, 16>> Variant::get_uuid() const {
-    RETURN_IF_ERROR(validate_basic_type(Variant::BasicType::PRIMITIVE));
+StatusOr<std::array<uint8_t, 16>> VariantValue::get_uuid() const {
+    RETURN_IF_ERROR(validate_basic_type(VariantValue::BasicType::PRIMITIVE));
 
     RETURN_IF_ERROR(validate_primitive_type(VariantType::UUID, 16 + kHeaderSizeBytes));
 
@@ -550,16 +550,16 @@ StatusOr<std::array<uint8_t, 16>> Variant::get_uuid() const {
     return uuid_value;
 }
 
-StatusOr<uint32_t> Variant::num_elements() const {
-    switch (Variant::BasicType btype = basic_type()) {
-    case Variant::BasicType::OBJECT: {
+StatusOr<uint32_t> VariantValue::num_elements() const {
+    switch (VariantValue::BasicType btype = basic_type()) {
+    case VariantValue::BasicType::OBJECT: {
         auto status = get_object_info();
         if (!status.ok()) {
             return status.status();
         }
         return status.value().num_elements;
     }
-    case Variant::BasicType::ARRAY: {
+    case VariantValue::BasicType::ARRAY: {
         auto status = get_array_info();
         if (!status.ok()) {
             return status.status();
@@ -571,8 +571,8 @@ StatusOr<uint32_t> Variant::num_elements() const {
     }
 }
 
-StatusOr<Variant> Variant::get_object_by_key(const VariantMetadata& metadata, std::string_view key) const {
-    RETURN_IF_ERROR(validate_basic_type(Variant::BasicType::OBJECT));
+StatusOr<VariantValue> VariantValue::get_object_by_key(const VariantMetadata& metadata, std::string_view key) const {
+    RETURN_IF_ERROR(validate_basic_type(VariantValue::BasicType::OBJECT));
 
     auto obj_status = get_object_info();
     if (!obj_status.ok()) {
@@ -610,14 +610,14 @@ StatusOr<Variant> Variant::get_object_by_key(const VariantMetadata& metadata, st
                                         ", value_size: " + std::to_string(_value.size()));
         }
 
-        return Variant(_value.substr(data_start_offset + offset));
+        return VariantValue(_value.substr(data_start_offset + offset));
     }
 
     return Status::NotFound("Field key not found: " + std::string(key));
 }
 
-StatusOr<Variant> Variant::get_element_at_index(const VariantMetadata& metadata, uint32_t index) const {
-    RETURN_IF_ERROR(validate_basic_type(Variant::BasicType::ARRAY));
+StatusOr<VariantValue> VariantValue::get_element_at_index(const VariantMetadata& metadata, uint32_t index) const {
+    RETURN_IF_ERROR(validate_basic_type(VariantValue::BasicType::ARRAY));
 
     auto array_info_status = get_array_info();
     if (!array_info_status.ok()) {
@@ -639,7 +639,7 @@ StatusOr<Variant> Variant::get_element_at_index(const VariantMetadata& metadata,
     }
 
     const std::string_view element_value = _value.substr(info.data_start_offset + offset);
-    return Variant{element_value};
+    return VariantValue{element_value};
 }
 
 static std::string epoch_day_to_date(int32_t epoch_days) {
@@ -734,7 +734,7 @@ static std::string float_to_json_string_impl(FloatType value) {
     return result;
 }
 
-Status VariantUtil::variant_to_json(const VariantMetadata& metadata, const Variant& variant,
+Status VariantUtil::variant_to_json(const VariantMetadata& metadata, const VariantValue& variant,
                                     std::stringstream& json_str, cctz::time_zone timezone) {
     switch (variant.type()) {
     case VariantType::NULL_TYPE:
@@ -856,7 +856,7 @@ Status VariantUtil::variant_to_json(const VariantMetadata& metadata, const Varia
             if (uint32_t next_pos = data_start_offset + offset; next_pos < value.size()) {
                 std::string_view next_value = value.substr(next_pos, value.size() - next_pos);
                 // Recursively convert the next value to JSON
-                auto status = variant_to_json(metadata, Variant{next_value}, json_str, timezone);
+                auto status = variant_to_json(metadata, VariantValue{next_value}, json_str, timezone);
                 if (!status.ok()) {
                     return status;
                 }
@@ -885,7 +885,7 @@ Status VariantUtil::variant_to_json(const VariantMetadata& metadata, const Varia
             if (uint32_t next_pos = data_start_offset + offset; next_pos < value.size()) {
                 std::string_view next_value = value.substr(next_pos, value.size() - next_pos);
                 // Recursively convert the next value to JSON
-                auto status = variant_to_json(metadata, Variant{next_value}, json_str, timezone);
+                auto status = variant_to_json(metadata, VariantValue{next_value}, json_str, timezone);
                 if (!status.ok()) {
                     return status;
                 }

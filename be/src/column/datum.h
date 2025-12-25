@@ -90,7 +90,7 @@ public:
     const BitmapValue* get_bitmap() const { return get<BitmapValue*>(); }
     const PercentileValue* get_percentile() const { return get<PercentileValue*>(); }
     const JsonValue* get_json() const { return get<JsonValue*>(); }
-    const VariantRowValue* get_value() const { return get<VariantRowValue*>(); }
+    const VariantRowValue* get_variant() const { return get<VariantRowValue*>(); }
 
     void set_int8(int8_t v) { set<decltype(v)>(v); }
     void set_uint8(uint8_t v) { set<decltype(v)>(v); }

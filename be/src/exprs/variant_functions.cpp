@@ -120,13 +120,13 @@ StatusOr<ColumnPtr> VariantFunctions::_do_variant_query(FunctionContext* context
             continue;
         }
 
-        const VariantRowValue* variant_value = variant_viewer.value(row);
-        if (variant_value == nullptr) {
+        const VariantRowValue* variant = variant_viewer.value(row);
+        if (variant == nullptr) {
             result.append_null();
             continue;
         }
 
-        auto field = VariantPath::seek(variant_value, variant_segments_status.value());
+        auto field = VariantPath::seek(variant, variant_segments_status.value());
         if (!field.ok()) {
             // If seek fails (e.g., path not found), append null
             result.append_null();
@@ -165,12 +165,12 @@ StatusOr<ColumnPtr> VariantFunctions::variant_typeof(FunctionContext* context, c
             result.append_null();
             continue;
         }
-        const VariantRowValue* variant_value = variant_viewer.value(row);
-        if (variant_value == nullptr) {
+        const VariantRowValue* variant = variant_viewer.value(row);
+        if (variant == nullptr) {
             result.append_null();
             continue;
         }
-        result.append(VariantUtil::variant_type_to_string(variant_value->get_value().type()));
+        result.append(VariantUtil::variant_type_to_string(variant->get_value().type()));
     }
     return result.build(ColumnHelper::is_all_const(columns));
 }
