@@ -712,12 +712,10 @@ Status LakePersistentIndex::apply_opcompaction(const TxnLogPB_OpCompaction& op_c
                                [&](const std::unique_ptr<PersistentIndexSstableFileset>& fileset) {
                                    return !fileset_contains_func(fileset);
                                });
-    if (start_it != end_it) {
-        if (new_sstable_fileset) {
-            // latest fileset may include some new flush ssable which not in input_sstables
-            // so we need to merge these sstables into new fileset
-            RETURN_IF_ERROR(new_sstable_fileset->merge_from(**std::prev(end_it)));
-        }
+    if (start_it != end_it && new_sstable_fileset) {
+        // latest fileset may include some new flush ssable which not in input_sstables
+        // so we need to merge these sstables into new fileset
+        RETURN_IF_ERROR(new_sstable_fileset->merge_from(**std::prev(end_it)));
     }
 
     // 3. Erase the range [start_it, end_it).

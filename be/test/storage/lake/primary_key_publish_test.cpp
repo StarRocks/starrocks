@@ -1927,7 +1927,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_individual_index_compaction) {
     EXPECT_EQ(compaction_score(_tablet_mgr.get(), new_tablet_metadata), 1.5);
     EXPECT_EQ(new_tablet_metadata->rowsets_size(), 1);
     EXPECT_EQ(new_tablet_metadata->rowsets(0).num_dels(), 0);
-    EXPECT_TRUE(new_tablet_metadata->sstable_meta().sstables_size() == 1);
+    EXPECT_EQ(new_tablet_metadata->sstable_meta().sstables_size(), 2);
     EXPECT_TRUE(new_tablet_metadata->orphan_files_size() >= (sst_cnt - 1));
 }
 
