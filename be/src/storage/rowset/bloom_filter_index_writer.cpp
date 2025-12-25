@@ -213,6 +213,9 @@ public:
         for (int i = 0; i < count; ++i) {
             std::vector<size_t> index;
             size_t slice_gram_num = get_utf8_index(*cur_slice, &index);
+            // slice_gram_num can be used to judge if the cur_slice is an ASCII string or not.
+            // If slice_gram_num == cur_slice->get_size(), then it is.
+            bool is_ascii = (slice_gram_num == cur_slice->get_size());
 
             size_t j;
             for (j = 0; j + gram_num <= slice_gram_num; j++) {
@@ -226,11 +229,14 @@ public:
                     if (this->_bf_options.case_sensitive) {
                         _values.insert(get_value<field_type>(&cur_ngram, this->_typeinfo, &this->_pool));
                     } else {
-                        // TODO: exist two copies of ngram, need to optimize
-                        // Use UTF-8 aware tolower for proper Unicode case folding
                         std::string lower_ngram;
-                        utf8_tolower(cur_ngram.get_data(), cur_ngram.get_size(), lower_ngram);
-                        Slice lower_ngram_slice(lower_ngram.data(), lower_ngram.size());
+                        Slice lower_ngram_slice;
+                        if (is_ascii) {
+                            lower_ngram_slice = cur_ngram.tolower(lower_ngram);
+                        } else {
+                            utf8_tolower(cur_ngram.get_data(), cur_ngram.get_size(), lower_ngram);
+                            lower_ngram_slice = Slice(lower_ngram.data(), lower_ngram.size());
+                        }
                         _values.insert(get_value<field_type>(&lower_ngram_slice, this->_typeinfo, &this->_pool));
                     }
                 }

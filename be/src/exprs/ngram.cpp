@@ -175,7 +175,11 @@ private:
 
     // UTF-8 aware tolower - uses shared implementation from util/utf8.h
     static void tolower_utf8(const Slice& str, std::string& buf) {
-        utf8_tolower(str.get_data(), str.get_size(), buf);
+        if (validate_ascii_fast(str.get_data(), str.get_size())) {
+            Slice(str.get_data(), str.get_size()).tolower(buf);
+        } else {
+            utf8_tolower(str.get_data(), str.get_size(), buf);
+        }
     }
 
     // for every gram of needle, we calculate its' hash value and store its' frequency in map, and return the number of gram in needle
