@@ -30,6 +30,11 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.MetaNotFoundException;
+<<<<<<< HEAD
+=======
+import com.starrocks.common.tvr.TvrTableSnapshot;
+import com.starrocks.common.util.UUIDUtil;
+>>>>>>> 7e78e7f74b ([BugFix] insert overwrite textformat hive table didn't set delimiter (#67199))
 import com.starrocks.connector.CachingRemoteFileIO;
 import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.ConnectorProperties;
@@ -49,9 +54,20 @@ import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.analyzer.AstToStringBuilder;
+import com.starrocks.sql.ast.AddPartitionClause;
+import com.starrocks.sql.ast.AlterClause;
+import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.DropTableStmt;
+<<<<<<< HEAD
 import com.starrocks.sql.optimizer.Memo;
+=======
+import com.starrocks.sql.ast.KeyPartitionRef;
+import com.starrocks.sql.ast.SingleItemListPartitionDesc;
+import com.starrocks.sql.ast.TableRef;
+import com.starrocks.sql.ast.TruncateTablePartitionStmt;
+import com.starrocks.sql.ast.TruncateTableStmt;
+>>>>>>> 7e78e7f74b ([BugFix] insert overwrite textformat hive table didn't set delimiter (#67199))
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -719,8 +735,13 @@ public class HiveMetadataTest {
         Map<String, String> map = new HashMap<>();
         map.put(STARROCKS_QUERY_ID, "abcd");
         Partition remotePartition = new Partition(map, null, null, null, false);
+<<<<<<< HEAD
         HivePartition hivePartition = new HivePartition(null, null, null, null, null, null, map);
         Assert.assertTrue(HiveCommitter.checkIsSamePartition(remotePartition, hivePartition));
+=======
+        HivePartition hivePartition = new HivePartition(null, null, null, null, null, null, map, new HashMap<>());
+        Assertions.assertTrue(HiveCommitter.checkIsSamePartition(remotePartition, hivePartition));
+>>>>>>> 7e78e7f74b ([BugFix] insert overwrite textformat hive table didn't set delimiter (#67199))
     }
 
     @Test
@@ -827,5 +848,125 @@ public class HiveMetadataTest {
         GetRemoteFilesParams params = GetRemoteFilesParams.newBuilder().setPartitionNames(partitionNames).build();
         List<RemoteFileInfo> remoteFileInfos = hiveMetadata.getRemoteFiles(table, params);
         Assert.assertEquals(3, remoteFileInfos.size());
+    }
+
+    @Test
+    public void testBuildHivePartition() throws Exception {
+        // Setup ConnectContext with queryId
+        ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+        ctx.setQueryId(UUIDUtil.genUUID());
+        // ctx.setExecutionId(new com.starrocks.thrift.TUniqueId(100, 200));
+        ctx.setThreadLocalInfo();
+
+        // Get a HiveTable from the mocked metadata
+        HiveTable hiveTable = (HiveTable) hiveMetadata.getTable(new ConnectContext(), "db1", "table1");
+
+        // Create PartitionUpdate
+        String partitionName = "col1=1";
+        Path writePath = new Path("hdfs://127.0.0.1:10000/tmp/staging/col1=1");
+        Path targetPath = new Path("hdfs://127.0.0.1:10000/hive.db/hive_tbl/col1=1");
+        List<String> fileNames = Lists.newArrayList("file1.parquet", "file2.parquet");
+        PartitionUpdate partitionUpdate =
+                new PartitionUpdate(partitionName, writePath, targetPath, fileNames, 100L, 2000L);
+
+        // Create HiveCommitter
+        HiveCommitter hiveCommitter = new HiveCommitter(hmsOps, fileOps, Executors.newSingleThreadExecutor(),
+                Executors.newSingleThreadExecutor(), hiveTable, new Path("hdfs://127.0.0.1:10000/tmp/staging"));
+
+        // Use reflection to call private buildHivePartition method
+        java.lang.reflect.Method method =
+                HiveCommitter.class.getDeclaredMethod("buildHivePartition", PartitionUpdate.class);
+        method.setAccessible(true);
+        HivePartition hivePartition = (HivePartition) method.invoke(hiveCommitter, partitionUpdate);
+
+        // Verify the result
+        Assertions.assertNotNull(hivePartition);
+        Assertions.assertEquals("db1", hivePartition.getDatabaseName());
+        Assertions.assertEquals("table1", hivePartition.getTableName());
+        Assertions.assertEquals(Lists.newArrayList("1"), hivePartition.getValues());
+        Assertions.assertEquals(targetPath.toString(), hivePartition.getLocation());
+        Assertions.assertNotNull(hivePartition.getParameters());
+        Assertions.assertTrue(hivePartition.getParameters().containsKey("starrocks_version"));
+        Assertions.assertTrue(hivePartition.getParameters().containsKey(STARROCKS_QUERY_ID));
+        Assertions.assertEquals(ctx.getQueryId().toString(), hivePartition.getParameters().get(STARROCKS_QUERY_ID));
+        Assertions.assertNotNull(hivePartition.getSerDeParameters());
+        Assertions.assertEquals(hiveTable.getSerdeProperties(), hivePartition.getSerDeParameters());
+        Assertions.assertEquals(hiveTable.getStorageFormat(), hivePartition.getStorage());
+        Assertions.assertEquals(hiveTable.getDataColumnNames().size(), hivePartition.getColumns().size());
+
+        // Clean up
+        ConnectContext.remove();
+    }
+
+    @Test
+    public void testAddPartitionInHiveMetadata() throws Exception {
+        // Setup ConnectContext with queryId
+        ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+        ctx.setQueryId(UUIDUtil.genUUID());
+        ctx.setThreadLocalInfo();
+
+        // Get a HiveTable from the mocked metadata
+        HiveTable hiveTable = (HiveTable) hiveMetadata.getTable(new ConnectContext(), "db1", "table1");
+
+        // Create SingleItemListPartitionDesc
+        List<String> partitionValues = Lists.newArrayList("1");
+        SingleItemListPartitionDesc partitionDesc =
+                new SingleItemListPartitionDesc(false, "p1", partitionValues, new HashMap<>());
+
+        // Create AddPartitionClause
+        AddPartitionClause addPartitionClause = new AddPartitionClause(partitionDesc, null, new HashMap<>(), false);
+
+        // Create AlterTableStmt
+        TableName tableName = new TableName("hive_catalog", "db1", "table1");
+        List<AlterClause> alterClauses = Lists.newArrayList(addPartitionClause);
+        AlterTableStmt alterTableStmt = new AlterTableStmt(tableName, alterClauses);
+
+        // Mock hmsOps.addPartitions to verify it's called
+        final AtomicBoolean addPartitionsCalled = new AtomicBoolean(false);
+        final List<HivePartitionWithStats> capturedPartitions = Lists.newArrayList();
+        new Expectations(hmsOps) {
+            {
+                hmsOps.addPartitions("db1", "table1", (List<HivePartitionWithStats>) any);
+                result = new mockit.Delegate() {
+                    @SuppressWarnings("unused")
+                    void addPartitions(String dbName, String tableName, List<HivePartitionWithStats> partitions) {
+                        addPartitionsCalled.set(true);
+                        capturedPartitions.addAll(partitions);
+                    }
+                };
+                minTimes = 1;
+            }
+        };
+
+        // Use reflection to call private addPartition method
+        java.lang.reflect.Method method = HiveMetadata.class.getDeclaredMethod(
+                "addPartition", ConnectContext.class, AlterTableStmt.class, AlterClause.class);
+        method.setAccessible(true);
+        method.invoke(hiveMetadata, ctx, alterTableStmt, addPartitionClause);
+
+        // Verify addPartitions was called
+        Assertions.assertTrue(addPartitionsCalled.get());
+        Assertions.assertEquals(1, capturedPartitions.size());
+
+        // Verify the partition details
+        HivePartitionWithStats partitionWithStats = capturedPartitions.get(0);
+        Assertions.assertEquals("col1=1", partitionWithStats.getPartitionName());
+        HivePartition hivePartition = partitionWithStats.getHivePartition();
+        Assertions.assertNotNull(hivePartition);
+        Assertions.assertEquals("db1", hivePartition.getDatabaseName());
+        Assertions.assertEquals("table1", hivePartition.getTableName());
+        Assertions.assertEquals(partitionValues, hivePartition.getValues());
+        Assertions.assertEquals(hiveTable.getTableLocation() + "/col1=1", hivePartition.getLocation());
+        Assertions.assertNotNull(hivePartition.getParameters());
+        Assertions.assertTrue(hivePartition.getParameters().containsKey("starrocks_version"));
+        Assertions.assertTrue(hivePartition.getParameters().containsKey(STARROCKS_QUERY_ID));
+        Assertions.assertEquals(ctx.getQueryId().toString(), hivePartition.getParameters().get(STARROCKS_QUERY_ID));
+        Assertions.assertNotNull(hivePartition.getSerDeParameters());
+        Assertions.assertEquals(hiveTable.getSerdeProperties(), hivePartition.getSerDeParameters());
+        Assertions.assertEquals(hiveTable.getStorageFormat(), hivePartition.getStorage());
+        Assertions.assertEquals(hiveTable.getDataColumnNames().size(), hivePartition.getColumns().size());
+
+        // Clean up
+        ConnectContext.remove();
     }
 }
