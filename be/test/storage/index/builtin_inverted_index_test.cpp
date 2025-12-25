@@ -24,6 +24,7 @@
 #include "storage/index/inverted/builtin/builtin_inverted_index_iterator.h"
 #include "storage/index/inverted/builtin/builtin_inverted_reader.h"
 #include "storage/index/inverted/builtin/builtin_inverted_writer.h"
+#include "storage/index/inverted/builtin/builtin_simple_analyzer.h"
 #include "storage/index/inverted/inverted_index_common.h"
 #include "storage/rowset/bitmap_index_reader.h"
 #include "storage/tablet_index.h"
