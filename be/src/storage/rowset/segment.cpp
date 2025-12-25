@@ -61,6 +61,7 @@
 #include "storage/tablet_schema.h"
 #include "storage/utils.h"
 #include "util/crc32c.h"
+#include "util/defer_op.h"
 #include "util/failpoint/fail_point.h"
 #include "util/json_flattener.h"
 #include "util/slice.h"
@@ -76,6 +77,10 @@ bvar::Window<bvar::Adder<int>> g_open_segments_io_minute("starrocks", "open_segm
                                                          60);
 
 namespace starrocks {
+
+#ifdef BE_TEST
+bool Segment::_s_allow_batch_update_mode = true;
+#endif
 
 using strings::Substitute;
 
@@ -649,10 +654,30 @@ size_t Segment::_column_index_mem_usage() const {
     return size;
 }
 
+void Segment::turn_off_batch_update_cache_size() {
+#ifdef BE_TEST
+    if (!_s_allow_batch_update_mode) return;
+#endif
+    if (_batch_on_flags_counter.fetch_sub(1, std::memory_order_relaxed) == 1) {
+        if (_dirty_cache_counter.exchange(0) > 0) {
+            if (_tablet_manager != nullptr) {
+                auto mem_cost = mem_usage();
+                _tablet_manager->update_segment_cache_size(file_name(), mem_cost, reinterpret_cast<intptr_t>(this));
+            }
+        }
+    }
+}
+
 void Segment::update_cache_size() {
     if (_tablet_manager != nullptr) {
-        auto mem_cost = mem_usage();
-        _tablet_manager->update_segment_cache_size(file_name(), mem_cost, reinterpret_cast<intptr_t>(this));
+        // could be race condition on this `_batch_on_flags_counter` check, but it is ok to be inaccurate in such case.
+        if (_batch_on_flags_counter.load(std::memory_order_relaxed) == 0) {
+            auto mem_cost = mem_usage();
+            _tablet_manager->update_segment_cache_size(file_name(), mem_cost, reinterpret_cast<intptr_t>(this));
+        } else {
+            // under batch mode, only increase the _dirty_cache_counter
+            _dirty_cache_counter.fetch_add(1, std::memory_order_relaxed);
+        }
     }
 }
 
