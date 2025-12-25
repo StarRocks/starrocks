@@ -119,8 +119,7 @@ Status LakePersistentIndex::merge_sstable_into_fileset(std::unique_ptr<Persisten
         need_create_new_fileset = true;
     }
     if (!need_create_new_fileset) {
-        auto st = _sstable_filesets.back()->merge_from(sstable);
-        if (!st.ok()) {
+        if (!_sstable_filesets.back()->append(sstable)) {
             // create new fileset when merge fail.
             need_create_new_fileset = true;
         }
@@ -187,7 +186,7 @@ Status LakePersistentIndex::sync_flush_all_memtables(int64_t wait_timeout_us) {
                 wait_success = true;
                 break;
             } else {
-                usleep(3000000); // wait for flush finish, 3s
+                usleep(1000000); // wait for flush finish, 1s
             }
         }
         if (!wait_success) {
@@ -701,6 +700,10 @@ Status LakePersistentIndex::apply_opcompaction(const TxnLogPB_OpCompaction& op_c
                                  [&](const std::unique_ptr<PersistentIndexSstableFileset>& fileset) {
                                      return fileset_contains_func(fileset);
                                  });
+    if (start_it == _sstable_filesets.end()) {
+        return Status::InternalError(
+                fmt::format("no matching sstable fileset found for compaction in tablet {}", _tablet_id));
+    }
 
     // 2. Find the end position of the contiguous range.
     // Since the sstable filesets are guaranteed to be contiguous, we just need to find the first one
@@ -709,6 +712,13 @@ Status LakePersistentIndex::apply_opcompaction(const TxnLogPB_OpCompaction& op_c
                                [&](const std::unique_ptr<PersistentIndexSstableFileset>& fileset) {
                                    return !fileset_contains_func(fileset);
                                });
+    if (start_it != end_it) {
+        if (new_sstable_fileset) {
+            // latest fileset may include some new flush ssable which not in input_sstables
+            // so we need to merge these sstables into new fileset
+            RETURN_IF_ERROR(new_sstable_fileset->merge_from(**std::prev(end_it)));
+        }
+    }
 
     // 3. Erase the range [start_it, end_it).
     // The erase method returns an iterator pointing to the position immediately following

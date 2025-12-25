@@ -303,7 +303,7 @@ TEST_F(LakePersistentIndexFilesetTest, test_fileset_merge_from) {
     ASSERT_OK(create_test_sstable("test_sst_2.sst", 1000, 100, &sst_pb2, &fileset_id));
     ASSIGN_OR_ABORT(auto sst2, open_sstable(sst_pb2));
 
-    ASSERT_OK(fileset.merge_from(sst2));
+    ASSERT_TRUE(fileset.append(sst2));
 
     // Verify both sstables are stored
     PersistentIndexSstableMetaPB retrieved_pbs;
@@ -327,13 +327,11 @@ TEST_F(LakePersistentIndexFilesetTest, test_fileset_merge_from_overlapping_error
     ASSERT_OK(create_test_sstable("test_sst_2.sst", 50, 100, &sst_pb2, &fileset_id));
     ASSIGN_OR_ABORT(auto sst2, open_sstable(sst_pb2));
 
-    auto st = fileset.merge_from(sst2);
-    ASSERT_FALSE(st.ok());
-    ASSERT_TRUE(st.is_internal_error());
+    ASSERT_FALSE(fileset.append(sst2));
 }
 
 // Note: can_append() method has been removed from the API
-// Validation is now done in merge_from() which returns error on overlap
+// Validation is now done in append() which returns error on overlap
 
 TEST_F(LakePersistentIndexFilesetTest, test_fileset_multi_get_single_sstable) {
     auto fileset_id = UniqueId::gen_uid();

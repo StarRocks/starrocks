@@ -160,7 +160,7 @@ private:
                                     std::vector<std::string>* sample_keys);
 
     // For UT
-    void set_tablet_mgr(TabletManager* tablet_mgr) { _tablet_mgr = tablet_mgr; }
+    void TEST_set_tablet_mgr(TabletManager* tablet_mgr) { _tablet_mgr = tablet_mgr; }
 
 private:
     // Check if two key ranges overlap

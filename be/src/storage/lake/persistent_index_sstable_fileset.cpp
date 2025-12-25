@@ -80,17 +80,17 @@ Status PersistentIndexSstableFileset::init(std::unique_ptr<PersistentIndexSstabl
     return Status::OK();
 }
 
-Status PersistentIndexSstableFileset::merge_from(std::unique_ptr<PersistentIndexSstable>& sstable) {
+bool PersistentIndexSstableFileset::append(std::unique_ptr<PersistentIndexSstable>& sstable) {
     const sstable::Comparator* comparator = sstable::BytewiseComparator();
     DCHECK(sstable->sstable_pb().has_range());
     // Make sure sstable is inorder via comparator
     if (!_sstable_map.empty()) {
         const auto& last_end_key = _sstable_map.rbegin()->first.second;
         if (comparator->Compare(Slice(last_end_key), Slice(sstable->sstable_pb().range().start_key())) >= 0) {
-            return Status::InternalError("sstables are not in order or have overlap key range");
+            return false;
         }
     } else {
-        return Status::InternalError("sstable fileset is not init yet");
+        return false;
     }
     // Extract keys before moving sstable to avoid undefined behavior
     std::string start_key = sstable->sstable_pb().range().start_key();
@@ -98,6 +98,24 @@ Status PersistentIndexSstableFileset::merge_from(std::unique_ptr<PersistentIndex
     // This sstable belong to same fileset.
     sstable->set_fileset_id(_fileset_id);
     _sstable_map.emplace(std::make_pair(std::move(start_key), std::move(end_key)), std::move(sstable));
+    return true;
+}
+
+Status PersistentIndexSstableFileset::merge_from(PersistentIndexSstableFileset& other) {
+    RETURN_IF(_sstable_map.empty(), Status::InternalError("sstable fileset's sstable_map is empty"));
+    RETURN_IF(other._sstable_map.empty(), Status::InternalError("other sstable fileset is not initialized"));
+    const sstable::Comparator* comparator = sstable::BytewiseComparator();
+    for (auto& [key_pair, sstable] : other._sstable_map) {
+        // Make sure sstable is inorder via comparator
+        const auto& last_end_key = _sstable_map.rbegin()->first.second;
+        if (comparator->Compare(Slice(last_end_key), Slice(key_pair.first)) >= 0) {
+            // skip overlapping sstables
+            continue;
+        }
+        // This sstable belong to same fileset.
+        sstable->set_fileset_id(_fileset_id);
+        _sstable_map.emplace(key_pair, std::move(sstable));
+    }
     return Status::OK();
 }
 
