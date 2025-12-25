@@ -23,6 +23,7 @@ import com.starrocks.type.ArrayType;
 import com.starrocks.type.MapType;
 import com.starrocks.type.NullType;
 import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.ScalarType;
 import com.starrocks.type.StructField;
 import com.starrocks.type.StructType;
 import com.starrocks.type.Type;
@@ -621,7 +622,9 @@ public class ColumnTypeConverter {
                 case BOOLEAN:
                     return DataTypes.BOOLEAN();
                 case TINYINT:
+                    return DataTypes.TINYINT();
                 case SMALLINT:
+                    return DataTypes.SMALLINT();
                 case INT:
                     return DataTypes.INT();
                 case BIGINT:
@@ -633,7 +636,7 @@ public class ColumnTypeConverter {
                 case DATE:
                     return DataTypes.DATE();
                 case DATETIME:
-                    return DataTypes.TIMESTAMP();
+                    return DataTypes.TIMESTAMP_WITH_LOCAL_TIME_ZONE();
                 case VARCHAR:
                     return DataTypes.VARCHAR(VarCharType.MAX_LENGTH);
                 case CHAR:

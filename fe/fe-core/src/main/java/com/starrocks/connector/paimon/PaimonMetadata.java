@@ -59,7 +59,6 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
-import com.starrocks.type.Type;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.paimon.CoreOptions;
@@ -113,8 +112,6 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
 import static com.starrocks.common.profile.Tracers.Module.EXTERNAL;
-import static com.starrocks.connector.ColumnTypeConverter.fromPaimonSchemas;
-import static com.starrocks.connector.ColumnTypeConverter.toPaimonRowType;
 import static com.starrocks.connector.ConnectorTableId.CONNECTOR_ID_GENERATOR;
 import static com.starrocks.sql.optimizer.Utils.getLongFromDateTime;
 import static org.apache.paimon.catalog.Identifier.DEFAULT_MAIN_BRANCH;
@@ -123,6 +120,7 @@ public class PaimonMetadata implements ConnectorMetadata {
     private static final Logger LOG = LogManager.getLogger(PaimonMetadata.class);
 
     public static final String PAIMON_PARTITION_NULL_VALUE = "null";
+    private static final String VIEW_DIALECTS_KEY = "starrocks";
     private final Catalog paimonNativeCatalog;
     private final HdfsEnvironment hdfsEnvironment;
     private final String catalogName;
@@ -166,13 +164,15 @@ public class PaimonMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public void createView(CreateViewStmt stmt) throws DdlException {
+    public void createView(ConnectContext context, CreateViewStmt stmt) throws DdlException {
         String dbName = stmt.getDbName();
         String viewName = stmt.getTable();
         String viewDefinition = ConnectorViewDefinition.fromCreateViewStmt(stmt).getInlineViewDef();
-        RowType rowType = toPaimonRowType(stmt.getColumns());
+        RowType rowType = ColumnTypeConverter.toPaimonRowType(stmt.getColumns());
         Identifier identifier = new org.apache.paimon.catalog.Identifier(dbName, viewName);
-        View view = new ViewImpl(identifier, rowType, viewDefinition, stmt.getComment(), new HashMap<>());
+        Map<String, String> dialects = new HashMap<>(1);
+        dialects.put(VIEW_DIALECTS_KEY, viewDefinition);
+        View view = new ViewImpl(identifier, rowType.getFields(), viewDefinition, dialects, stmt.getComment(), new HashMap<>());
         try {
             paimonNativeCatalog.createView(new Identifier(dbName, viewName), view, stmt.isSetIfNotExists());
         } catch (Catalog.ViewAlreadyExistException | Catalog.DatabaseNotExistException e) {
@@ -181,10 +181,10 @@ public class PaimonMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public void dropTable(DropTableStmt stmt) throws DdlException {
+    public void dropTable(ConnectContext context, DropTableStmt stmt) throws DdlException {
         String dbName = stmt.getDbName();
         String tableName = stmt.getTableName();
-        Table paimonTable = getTable(new ConnectContext(), stmt.getDbName(), stmt.getTableName());
+        Table paimonTable = getTable(context, stmt.getDbName(), stmt.getTableName());
         if (paimonTable == null) {
             return;
         }
@@ -314,7 +314,7 @@ public class PaimonMetadata implements ConnectorMetadata {
             return getView(dbName, tblName);
         }
         List<DataField> fields = paimonNativeTable.rowType().getFields();
-        List<Column> fullSchema = fromPaimonSchemas(fields);
+        List<Column> fullSchema = ColumnTypeConverter.fromPaimonSchemas(fields);
         String comment = "";
         if (paimonNativeTable.comment().isPresent()) {
             comment = paimonNativeTable.comment().get();
@@ -344,13 +344,20 @@ public class PaimonMetadata implements ConnectorMetadata {
 
     private PaimonView getPaimonView(String catalogName, String dbName, String viewName, View paimonNativeView) {
         List<DataField> fields = paimonNativeView.rowType().getFields();
-        List<Column> fullSchema = fromPaimonSchemas(fields);
+        List<Column> fullSchema = ColumnTypeConverter.fromPaimonSchemas(fields);
         String comment = "";
-        if (paimonNativeView.comment().isPresent()) {
-            comment = paimonNativeView.comment().get();
+        Optional<String> commentOptional = paimonNativeView.comment();
+        if (commentOptional.isPresent()) {
+            comment = commentOptional.get();
+        }
+        String query;
+        if (paimonNativeView.dialects().containsKey(VIEW_DIALECTS_KEY)) {
+            query = paimonNativeView.dialects().get(VIEW_DIALECTS_KEY);
+        } else {
+            query = paimonNativeView.query();
         }
         PaimonView view = new PaimonView(CONNECTOR_ID_GENERATOR.getNextId().asInt(),
-                catalogName, dbName, viewName, fullSchema, paimonNativeView.query());
+                catalogName, dbName, viewName, fullSchema, query);
         view.setComment(comment);
         return view;
     }
@@ -453,7 +460,7 @@ public class PaimonMetadata implements ConnectorMetadata {
                     snapshotId = paimonTable.latestSnapshot().isPresent() ? paimonTable.latestSnapshot().get().id() : -1L;
                 } else {
                     //if tag, format like tag:t_1, return the snapshot that the tag referenced
-                    TagManager tagManager =  ((DataTable) table).tagManager();
+                    TagManager tagManager = ((DataTable) table).tagManager();
                     if (!tagManager.tagExists(refNameParts[1])) {
                         throw new StarRocksConnectorException("%s does not include tag: %s",
                                 table.fullName(), refNameParts[1]);
@@ -558,7 +565,8 @@ public class PaimonMetadata implements ConnectorMetadata {
 
     /**
      * If tvrVersionRange is present, build an incremental scan from start snapshot to end snapshot.
-     * @param nativeTable paimon native table
+     *
+     * @param nativeTable     paimon native table
      * @param tvrVersionRange input tvrVersionRange
      * @return a native paimon table with
      */
