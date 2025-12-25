@@ -122,6 +122,10 @@ Status DownloadUtil::get_java_udf_url(const std::string& url, std::string* real_
         file_name = url.substr(pos + 1);
     }
     const char* starrocks_home = std::getenv("STARROCKS_HOME");
+    if (starrocks_home == nullptr) {
+        return Status::RuntimeError(
+            "STARROCKS_HOME is not set, cannot download Java UDF");
+    }
     std::string target_path = std::string(starrocks_home) + "/plugins/java_udf/" + file_name;
     std::string target_url = std::string("file://") + target_path;
     udf_downloder downloader;
