@@ -224,13 +224,19 @@ public:
     // and return glocal dict value if is global dictionary column
     Status fetch_values_by_rowid(const Column& rowids, Column* values);
 
-    // this interface will return dict value with given rowids without any translate
+    // this interface will return local dict value with given rowids without any translate
     // just like next_dict_codes but with given rowids
     virtual Status fetch_dict_codes_by_rowid(const rowid_t* rowids, size_t size, Column* values) {
         return Status::NotSupported("");
     }
 
     Status fetch_dict_codes_by_rowid(const Column& rowids, Column* values);
+
+    // used for predicate late-materialization
+    // for low dictionary column, predicate will be rewritten by local dictionary,
+    // so predicate evaluation needs to read local dictionary values if this is a low dictionary column,
+    // This method will return local dictionary value if this is a low dictionary column
+    virtual Status fetch_values_by_rowid_for_predicate_evaluate(const Column& rowids, Column* values);
 
     // for Struct type (Struct)
     virtual Status next_batch(size_t* n, Column* dst, ColumnAccessPath* path) { return next_batch(n, dst); }

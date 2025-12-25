@@ -98,7 +98,7 @@ public:
         return Status::NotSupported("Read by range Not Support");
     }
 
-    virtual Status read_by_rowds(Column* column, const rowid_t* rowids, size_t* count) {
+    virtual Status read_by_rowids(Column* column, const rowid_t* rowids, size_t* count) {
         return Status::NotSupported("Read by rowids Not Support");
     }
 
