@@ -49,14 +49,15 @@
 
 namespace starrocks {
 Status window_init_jvm_context(int64_t fid, const std::string& url, const std::string& checksum,
-                               const std::string& symbol, FunctionContext* context, const TCloudConfiguration& cloud_configuration);
+                               const std::string& symbol, FunctionContext* context,
+                               const TCloudConfiguration& cloud_configuration);
 
 Analytor::Analytor(const TPlanNode& tnode, const RowDescriptor& child_row_desc,
                    const TupleDescriptor* result_tuple_desc, bool use_hash_based_partition)
-        : _tnode(tnode),
-          _child_row_desc(child_row_desc),
-          _result_tuple_desc(result_tuple_desc),
-          _use_hash_based_partition(use_hash_based_partition) {
+    : _tnode(tnode),
+      _child_row_desc(child_row_desc),
+      _result_tuple_desc(result_tuple_desc),
+      _use_hash_based_partition(use_hash_based_partition) {
     if (tnode.analytic_node.__isset.buffered_tuple_id) {
         _buffered_tuple_id = tnode.analytic_node.buffered_tuple_id;
     }
@@ -222,7 +223,7 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
             std::string real_fn_name = fn.name.function_name;
             if (fn.ignore_nulls) {
                 DCHECK(fn.name.function_name == "first_value" || fn.name.function_name == "last_value" ||
-                       fn.name.function_name == "lead" || fn.name.function_name == "lag");
+                        fn.name.function_name == "lead" || fn.name.function_name == "lag");
                 // "in" means "ignore nulls", we use first_value_in/last_value_in instead of first_value/last_value
                 // to find right AggregateFunction to support ignore nulls.
                 real_fn_name += "_in";
@@ -440,13 +441,13 @@ std::string Analytor::debug_string() const {
 
     FrameRange frame = _get_frame_range();
     ss << "current_row_position=" << _get_global_position(_current_row_position) << ", partition=("
-       << _get_global_position(_partition.start) << ", " << _get_global_position(_partition.end) << "/"
-       << _partition.is_real << "), peer_group=(" << _get_global_position(_peer_group.start) << ", "
-       << _get_global_position(_peer_group.end) << "/" << _peer_group.is_real << ")"
-       << ", frame=[" << frame.start << ", " << frame.end << ")"
-       << ", input_chunks_size=" << _input_chunks.size() << ", output_chunk_index=" << _output_chunk_index
-       << ", removed_from_buffer_rows=" << _removed_from_buffer_rows
-       << ", removed_chunk_index=" << _removed_chunk_index;
+            << _get_global_position(_partition.start) << ", " << _get_global_position(_partition.end) << "/"
+            << _partition.is_real << "), peer_group=(" << _get_global_position(_peer_group.start) << ", "
+            << _get_global_position(_peer_group.end) << "/" << _peer_group.is_real << ")"
+            << ", frame=[" << frame.start << ", " << frame.end << ")"
+            << ", input_chunks_size=" << _input_chunks.size() << ", output_chunk_index=" << _output_chunk_index
+            << ", removed_from_buffer_rows=" << _removed_from_buffer_rows
+            << ", removed_chunk_index=" << _removed_chunk_index;
 
     return ss.str();
 }
@@ -456,8 +457,9 @@ Status Analytor::_prepare_processing_mode(RuntimeState* state, RuntimeProfile* r
     _process_impl = &Analytor::_materializing_process;
     std::stringstream process_mode;
     process_mode << (_need_partition_materializing ? "Materializing/" : "Streaming/");
-    process_mode << (_use_removable_cumulative_process ? "RemovableCumulative"
-                                                       : (_is_unbounded_preceding ? "Cumulative" : "ByDefinition"));
+    process_mode << (_use_removable_cumulative_process
+                         ? "RemovableCumulative"
+                         : (_is_unbounded_preceding ? "Cumulative" : "ByDefinition"));
     runtime_profile->add_info_string("ProcessMode", process_mode.str());
     if (!_tnode.analytic_node.__isset.window) {
         _materializing_process_impl = &Analytor::_materializing_process_for_unbounded_frame;
@@ -652,7 +654,7 @@ Status Analytor::_add_chunk(const ChunkPtr& chunk) {
 
 void Analytor::_append_column(size_t chunk_size, Column* dst_column, ColumnPtr& src_column) {
     DCHECK(!(src_column->is_constant() && dst_column->is_constant() && (!dst_column->empty()) &&
-             (!src_column->empty()) && (src_column->compare_at(0, 0, *dst_column, 1) != 0)));
+        (!src_column->empty()) && (src_column->compare_at(0, 0, *dst_column, 1) != 0)));
     if (src_column->only_null()) {
         static_cast<void>(dst_column->append_nulls(chunk_size));
     } else if (src_column->is_constant() && !dst_column->is_constant()) {
