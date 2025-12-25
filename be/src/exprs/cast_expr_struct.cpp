@@ -154,8 +154,8 @@ StatusOr<ColumnPtr> CastVariantToStruct::evaluate_checked(ExprContext* context, 
             continue;
         }
 
-        const VariantValue* variant_value = viewer.value(row);
-        const Variant& variant = variant_value->get_variant();
+        const VariantRowValue* variant_value = viewer.value(row);
+        const Variant& variant = variant_value->get_value();
         if (variant.type() != VariantType::OBJECT) {
             APPEND_NULL(variant_columns, null_column);
             continue;
@@ -171,7 +171,7 @@ StatusOr<ColumnPtr> CastVariantToStruct::evaluate_checked(ExprContext* context, 
             if (!field_variant.ok()) {
                 variant_columns[field_index].append_null();
             } else {
-                VariantValue field_value = field_variant.value();
+                VariantRowValue field_value = field_variant.value();
                 variant_columns[field_index].append(std::move(field_value));
             }
         }

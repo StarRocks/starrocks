@@ -193,7 +193,7 @@ static ColumnPtr cast_to_json_fn(ColumnPtr& column) {
             std::string str = CastToString::apply<RunTimeCppType<FromType>, std::string>(v);
             value = JsonValue::from_string(str);
         } else if constexpr (lt_is_variant<FromType>) {
-            auto json_str = static_cast<VariantValue*>(viewer.value(row))->to_json(cctz::local_time_zone());
+            auto json_str = static_cast<VariantRowValue*>(viewer.value(row))->to_json(cctz::local_time_zone());
             if (!json_str.ok()) {
                 overflow = true;
             } else {
@@ -262,7 +262,7 @@ static ColumnPtr cast_from_variant_fn(ColumnPtr& column) {
             continue;
         }
 
-        const VariantValue* variant_value = viewer.value(row);
+        const VariantRowValue* variant_value = viewer.value(row);
         if (variant_value == nullptr) {
             builder.append_null();
             continue;

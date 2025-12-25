@@ -245,13 +245,13 @@ void VariantPath::reset(VariantPath&& rhs) {
     segments = std::move(rhs.segments);
 }
 
-StatusOr<VariantValue> VariantPath::seek(const VariantValue* variant, const VariantPath* variant_path) {
+StatusOr<VariantRowValue> VariantPath::seek(const VariantRowValue* variant, const VariantPath* variant_path) {
     if (variant == nullptr || variant_path == nullptr) {
         return Status::InvalidArgument("Variant value and path must not be null");
     }
 
     const VariantMetadata& metadata = variant->get_metadata();
-    Variant current{variant->get_variant().raw()};
+    Variant current{variant->get_value().raw()};
     for (size_t seg_idx = 0; seg_idx < variant_path->segments.size(); ++seg_idx) {
         const auto& segment = variant_path->segments[seg_idx];
 
@@ -273,7 +273,7 @@ StatusOr<VariantValue> VariantPath::seek(const VariantValue* variant, const Vari
         current = sub.value();
     }
 
-    return VariantValue::from_variant(metadata, current);
+    return VariantRowValue::from_variant(metadata, current);
 }
 
 } // namespace starrocks

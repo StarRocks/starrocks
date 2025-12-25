@@ -205,7 +205,7 @@ public:
     /**
      * kEmptyVariant represents a NULL variant value.
      * The byte value is: (VariantType::NULL_TYPE << 2) | BasicType::PRIMITIVE (0)
-     * This is used as the default value for empty VariantValue objects.
+     * This is used as the default value for empty VariantRowValue objects.
      */
     static constexpr char null_chars[1] = {static_cast<uint8_t>(VariantType::NULL_TYPE) << 2};
     static constexpr std::string_view kEmptyVariant{null_chars, sizeof(null_chars)};

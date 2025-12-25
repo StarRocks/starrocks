@@ -25,51 +25,51 @@
 
 namespace starrocks {
 
-class VariantValue {
+class VariantRowValue {
 public:
-    VariantValue(const std::string_view metadata, const std::string_view value)
+    VariantRowValue(const std::string_view metadata, const std::string_view value)
             : _metadata_raw(metadata), _value_raw(value), _metadata(_metadata_raw), _value(_value_raw) {}
-    VariantValue(std::string metadata, std::string value)
+    VariantRowValue(std::string metadata, std::string value)
             : _metadata_raw(std::move(metadata)),
               _value_raw(std::move(value)),
               _metadata(_metadata_raw),
               _value(_value_raw) {}
     /**
-     * Default constructor creates an empty VariantValue representing a NULL variant.
+     * Default constructor creates an empty VariantRowValue representing a NULL variant.
      * Uses predefined constants for empty metadata and a null variant value.
      * This ensures moved-from objects and default-constructed objects are in a valid state.
      */
-    VariantValue() : VariantValue(VariantMetadata::kEmptyMetadata, Variant::kEmptyVariant) {}
+    VariantRowValue() : VariantRowValue(VariantMetadata::kEmptyMetadata, Variant::kEmptyVariant) {}
     /**
-     * Static factory method to create a VariantValue from a Slice.
+     * Static factory method to create a VariantRowValue from a Slice.
      * @param slice The Slice must contain the full variant binary including size header.
      * The first 4 bytes of the Slice are expected to be the size of the variant.
      * The memory layout is: [total size (4 bytes)][metadata][value].
-     * @return The created VariantValue or an error status.
+     * @return The created VariantRowValue or an error status.
      */
-    static StatusOr<VariantValue> create(const Slice& slice);
+    static StatusOr<VariantRowValue> create(const Slice& slice);
 
     /**
-     * Static factory method to create a VariantValue from metadata and value Slices.
+     * Static factory method to create a VariantRowValue from metadata and value Slices.
      * In this method, the metadata will be validated.
      * @param metadata The metadata Slice.
      * @param value The value Slice.
-     * @return The created VariantValue or an error status.
+     * @return The created VariantRowValue or an error status.
      */
-    static StatusOr<VariantValue> create(const std::string_view metadata, const std::string_view value);
+    static StatusOr<VariantRowValue> create(const std::string_view metadata, const std::string_view value);
 
     /**
-     * Create a VariantValue from an existing Variant and its metadata.
-     * This is the standard way to wrap a Variant into a VariantValue.
+     * Create a VariantRowValue from an existing Variant and its metadata.
+     * This is the standard way to wrap a Variant into a VariantRowValue.
      */
-    static VariantValue from_variant(const VariantMetadata& metadata, const Variant& variant);
+    static VariantRowValue from_variant(const VariantMetadata& metadata, const Variant& variant);
 
     /**
-     * Copy constructor. Creates a deep copy of the VariantValue.
+     * Copy constructor. Creates a deep copy of the VariantRowValue.
      * After copying the underlying string data, _metadata and _value are reconstructed
      * to point to the new object's _metadata_raw and _value_raw.
      */
-    VariantValue(const VariantValue& rhs)
+    VariantRowValue(const VariantRowValue& rhs)
             : _metadata_raw(rhs._metadata_raw),
               _value_raw(rhs._value_raw),
               _metadata(_metadata_raw),
@@ -80,7 +80,7 @@ public:
      * After moving, _metadata and _value are bound to the new object's storage,
      * and the source object is reset to a valid empty state to prevent dangling references.
      */
-    VariantValue(VariantValue&& rhs) noexcept
+    VariantRowValue(VariantRowValue&& rhs) noexcept
             : _metadata_raw(std::move(rhs._metadata_raw)),
               _value_raw(std::move(rhs._value_raw)),
               _metadata(_metadata_raw),
@@ -91,12 +91,12 @@ public:
     static Status validate_metadata(const std::string_view metadata);
 
     /**
-     * Create a VariantValue representing a NULL value.
+     * Create a VariantRowValue representing a NULL value.
      * Follows the codebase convention of using from_null() for null factory methods.
      */
-    static VariantValue from_null();
+    static VariantRowValue from_null();
 
-    VariantValue& operator=(const VariantValue& rhs) {
+    VariantRowValue& operator=(const VariantRowValue& rhs) {
         if (this != &rhs) {
             _metadata_raw = rhs._metadata_raw;
             _value_raw = rhs._value_raw;
@@ -105,7 +105,7 @@ public:
         return *this;
     }
 
-    VariantValue& operator=(VariantValue&& rhs) noexcept {
+    VariantRowValue& operator=(VariantRowValue&& rhs) noexcept {
         if (this != &rhs) {
             _metadata_raw = std::move(rhs._metadata_raw);
             _value_raw = std::move(rhs._value_raw);
@@ -115,11 +115,11 @@ public:
         return *this;
     }
 
-    // Serialize the VariantValue to a byte array.
+    // Serialize the VariantRowValue to a byte array.
     // return the number of bytes written
     size_t serialize(uint8_t* dst) const;
 
-    // Calculate the size of the serialized VariantValue.
+    // Calculate the size of the serialized VariantRowValue.
     // 4 bytes for value size + metadata size + value size
     uint32_t serialize_size() const;
 
@@ -130,7 +130,7 @@ public:
     std::string to_string() const;
 
     const VariantMetadata& get_metadata() const { return _metadata; }
-    const Variant& get_variant() const { return _value; }
+    const Variant& get_value() const { return _value; }
 
     // Variant value has a maximum size limit of 16MB to prevent excessive memory usage.
     static constexpr uint32_t kMaxVariantSize = 16 * 1024 * 1024;
@@ -194,15 +194,15 @@ private:
 };
 
 // append json string to the stream
-std::ostream& operator<<(std::ostream& os, const VariantValue& json);
+std::ostream& operator<<(std::ostream& os, const VariantRowValue& json);
 
 } // namespace starrocks
 
 // fmt::format
 template <>
-struct fmt::formatter<starrocks::VariantValue> : formatter<std::string> {
+struct fmt::formatter<starrocks::VariantRowValue> : formatter<std::string> {
     template <typename FormatContext>
-    auto format(const starrocks::VariantValue& p, FormatContext& ctx) -> decltype(ctx.out()) {
+    auto format(const starrocks::VariantRowValue& p, FormatContext& ctx) -> decltype(ctx.out()) {
         return formatter<std::string>::format(p.to_string(), ctx);
     }
 }; // namespace fmt

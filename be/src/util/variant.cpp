@@ -262,10 +262,9 @@ StatusOr<VariantObjectInfo> Variant::get_object_info() const {
     // Check for potential overflow in offset calculation
     if (num_elements > 0 && field_id_size > 0) {
         uint64_t id_list_size = static_cast<uint64_t>(num_elements) * static_cast<uint64_t>(field_id_size);
-        if (id_list_size > UINT32_MAX ||
-            object_info.id_start_offset > UINT32_MAX - id_list_size) {
+        if (id_list_size > UINT32_MAX || object_info.id_start_offset > UINT32_MAX - id_list_size) {
             return Status::VariantError("Object metadata overflow: num_elements=" + std::to_string(num_elements) +
-                                      ", field_id_size=" + std::to_string(field_id_size));
+                                        ", field_id_size=" + std::to_string(field_id_size));
         }
         object_info.offset_start_offset = object_info.id_start_offset + static_cast<uint32_t>(id_list_size);
     } else {
@@ -274,10 +273,9 @@ StatusOr<VariantObjectInfo> Variant::get_object_info() const {
 
     // Check for overflow in data offset calculation
     uint64_t offset_list_size = static_cast<uint64_t>(num_elements + 1) * static_cast<uint64_t>(field_offset_size);
-    if (offset_list_size > UINT32_MAX ||
-        object_info.offset_start_offset > UINT32_MAX - offset_list_size) {
+    if (offset_list_size > UINT32_MAX || object_info.offset_start_offset > UINT32_MAX - offset_list_size) {
         return Status::VariantError("Object offset list overflow: num_elements=" + std::to_string(num_elements) +
-                                  ", field_offset_size=" + std::to_string(field_offset_size));
+                                    ", field_offset_size=" + std::to_string(field_offset_size));
     }
     object_info.data_start_offset = object_info.offset_start_offset + static_cast<uint32_t>(offset_list_size);
 
@@ -333,10 +331,9 @@ StatusOr<VariantArrayInfo> Variant::get_array_info() const {
 
     // Check for potential overflow in offset calculation
     uint64_t offset_list_size = static_cast<uint64_t>(num_elements + 1) * static_cast<uint64_t>(field_offset_size);
-    if (offset_list_size > UINT32_MAX ||
-        array_info.offset_start_offset > UINT32_MAX - offset_list_size) {
+    if (offset_list_size > UINT32_MAX || array_info.offset_start_offset > UINT32_MAX - offset_list_size) {
         return Status::VariantError("Array offset list overflow: num_elements=" + std::to_string(num_elements) +
-                                  ", field_offset_size=" + std::to_string(field_offset_size));
+                                    ", field_offset_size=" + std::to_string(field_offset_size));
     }
     array_info.data_start_offset = array_info.offset_start_offset + static_cast<uint32_t>(offset_list_size);
 

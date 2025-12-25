@@ -335,13 +335,13 @@ StatusOr<ColumnPtr> CastVariantToArray::evaluate_checked(ExprContext* context, C
             continue;
         }
 
-        const VariantValue* variant_value = src.value(i);
+        const VariantRowValue* variant_value = src.value(i);
         if (variant_value == nullptr) {
             null_column->append(1);
             continue;
         }
 
-        const Variant& variant = variant_value->get_variant();
+        const Variant& variant = variant_value->get_value();
         const VariantMetadata& metadata = variant_value->get_metadata();
         if (variant.type() != VariantType::ARRAY) {
             null_column->append(1);
@@ -351,7 +351,7 @@ StatusOr<ColumnPtr> CastVariantToArray::evaluate_checked(ExprContext* context, C
         ASSIGN_OR_RETURN(const auto array_info, variant.get_array_info());
         for (uint32_t j = 0; j < array_info.num_elements; ++j) {
             ASSIGN_OR_RETURN(Variant element_variant, variant.get_element_at_index(metadata, j));
-            variant_column_builder.append(VariantValue::from_variant(metadata, element_variant));
+            variant_column_builder.append(VariantRowValue::from_variant(metadata, element_variant));
         }
         offset += array_info.num_elements;
         null_column->append(0);

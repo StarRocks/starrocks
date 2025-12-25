@@ -120,7 +120,7 @@ StatusOr<ColumnPtr> VariantFunctions::_do_variant_query(FunctionContext* context
             continue;
         }
 
-        const VariantValue* variant_value = variant_viewer.value(row);
+        const VariantRowValue* variant_value = variant_viewer.value(row);
         if (variant_value == nullptr) {
             result.append_null();
             continue;
@@ -165,12 +165,12 @@ StatusOr<ColumnPtr> VariantFunctions::variant_typeof(FunctionContext* context, c
             result.append_null();
             continue;
         }
-        const VariantValue* variant_value = variant_viewer.value(row);
+        const VariantRowValue* variant_value = variant_viewer.value(row);
         if (variant_value == nullptr) {
             result.append_null();
             continue;
         }
-        result.append(VariantUtil::variant_type_to_string(variant_value->get_variant().type()));
+        result.append(VariantUtil::variant_type_to_string(variant_value->get_value().type()));
     }
     return result.build(ColumnHelper::is_all_const(columns));
 }

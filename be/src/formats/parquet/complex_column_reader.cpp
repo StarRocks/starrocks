@@ -718,7 +718,7 @@ Status VariantColumnReader::read_range(const Range<uint64_t>& range, const Filte
                               << " but variant group marked as non-null (def_level=" << def_levels[i]
                               << " >= max_def_level=" << level_info.max_def_level << ")";
                 }
-                variant_column->append(VariantValue::from_null());
+                variant_column->append(VariantRowValue::from_null());
             } else if (def_levels[i] >= level_info.max_def_level) {
                 // Variant group exists, read data from metadata/value columns
                 const Slice metadata_slice = metadata_column->get_slice(i);
@@ -730,12 +730,12 @@ Status VariantColumnReader::read_range(const Range<uint64_t>& range, const Filte
                     VLOG_FILE << "Empty metadata or value slice at row " << i
                               << " (metadata_size=" << metadata_slice.size << ", value_size=" << value_slice.size
                               << "), treating as null variant";
-                    variant_column->append(VariantValue::from_null());
-                } else if (auto variant_value = VariantValue::create(metadata_slice, value_slice);
+                    variant_column->append(VariantRowValue::from_null());
+                } else if (auto variant_value = VariantRowValue::create(metadata_slice, value_slice);
                            !variant_value.ok()) {
                     // Read malformed variant value as null
                     VLOG_FILE << "Failed to create variant value at row " << i << ": " << variant_value.status();
-                    variant_column->append(VariantValue::from_null());
+                    variant_column->append(VariantRowValue::from_null());
                 } else {
                     variant_column->append(variant_value.value());
                 }
@@ -746,7 +746,7 @@ Status VariantColumnReader::read_range(const Range<uint64_t>& range, const Filte
                               << " but metadata/value not marked as null (metadata_null=" << metadata_nulls[i]
                               << ", value_null=" << value_nulls[i] << ")";
                 }
-                variant_column->append(VariantValue::from_null());
+                variant_column->append(VariantRowValue::from_null());
             }
         }
 
@@ -758,7 +758,7 @@ Status VariantColumnReader::read_range(const Range<uint64_t>& range, const Filte
         for (size_t i = 0; i < num_rows; ++i) {
             if (metadata_nulls[i] || value_nulls[i]) {
                 // Even for required variant group, metadata/value fields can be null
-                variant_column->append(VariantValue::from_null());
+                variant_column->append(VariantRowValue::from_null());
             } else {
                 const Slice metadata_slice = metadata_column->get_slice(i);
                 const Slice value_slice = value_column->get_slice(i);
@@ -769,11 +769,11 @@ Status VariantColumnReader::read_range(const Range<uint64_t>& range, const Filte
                     VLOG_FILE << "Empty metadata or value slice at row " << i
                               << " (metadata_size=" << metadata_slice.size << ", value_size=" << value_slice.size
                               << "), treating as null variant";
-                    variant_column->append(VariantValue::from_null());
-                } else if (auto variant_value = VariantValue::create(metadata_slice, value_slice);
+                    variant_column->append(VariantRowValue::from_null());
+                } else if (auto variant_value = VariantRowValue::create(metadata_slice, value_slice);
                            !variant_value.ok()) {
                     VLOG_FILE << "Failed to create variant value at row " << i << ": " << variant_value.status();
-                    variant_column->append(VariantValue::from_null());
+                    variant_column->append(VariantRowValue::from_null());
                 } else {
                     variant_column->append(variant_value.value());
                 }

@@ -25,7 +25,7 @@
 
 namespace starrocks {
 
-StatusOr<VariantValue> VariantValue::create(const Slice& slice) {
+StatusOr<VariantRowValue> VariantRowValue::create(const Slice& slice) {
     // Validate slice first
     if (slice.get_data() == nullptr) {
         return Status::InvalidArgument("Invalid variant slice: null data pointer");
@@ -67,10 +67,10 @@ StatusOr<VariantValue> VariantValue::create(const Slice& slice) {
     RETURN_IF_ERROR(validate_metadata(metadata));
     std::string value(variant_raw + sizeof(uint32_t) + metadata_view.size(), variant_size - metadata_view.size());
 
-    return VariantValue(std::move(metadata), std::move(value));
+    return VariantRowValue(std::move(metadata), std::move(value));
 }
 
-StatusOr<VariantValue> VariantValue::create(const std::string_view metadata, const std::string_view value) {
+StatusOr<VariantRowValue> VariantRowValue::create(const std::string_view metadata, const std::string_view value) {
     if (metadata.empty()) {
         return from_null();
     }
@@ -82,15 +82,15 @@ StatusOr<VariantValue> VariantValue::create(const std::string_view metadata, con
                                        " > " + std::to_string(kMaxVariantSize));
     }
 
-    return VariantValue(metadata, value);
+    return VariantRowValue(metadata, value);
 }
 
-// Create a VariantValue from a Parquet Variant.
-VariantValue VariantValue::from_variant(const VariantMetadata& metadata, const Variant& variant) {
-    return VariantValue(metadata.raw(), variant.raw());
+// Create a VariantRowValue from a Parquet Variant.
+VariantRowValue VariantRowValue::from_variant(const VariantMetadata& metadata, const Variant& variant) {
+    return VariantRowValue(metadata.raw(), variant.raw());
 }
 
-Status VariantValue::validate_metadata(const std::string_view metadata) {
+Status VariantRowValue::validate_metadata(const std::string_view metadata) {
     // metadata at least 3 bytes: version, dictionarySize and at least one offset.
     if (metadata.size() < kMinMetadataSize) {
         return Status::InternalError("Variant metadata is too short");
@@ -104,11 +104,11 @@ Status VariantValue::validate_metadata(const std::string_view metadata) {
     return Status::OK();
 }
 
-VariantValue VariantValue::from_null() {
-    return VariantValue();
+VariantRowValue VariantRowValue::from_null() {
+    return VariantRowValue();
 }
 
-StatusOr<std::string_view> VariantValue::load_metadata(const std::string_view variant_binary) {
+StatusOr<std::string_view> VariantRowValue::load_metadata(const std::string_view variant_binary) {
     if (variant_binary.empty()) {
         return Status::InvalidArgument("Variant is empty");
     }
@@ -161,7 +161,7 @@ StatusOr<std::string_view> VariantValue::load_metadata(const std::string_view va
     return std::string_view(variant_binary.data(), end_offset);
 }
 
-size_t VariantValue::serialize(uint8_t* dst) const {
+size_t VariantRowValue::serialize(uint8_t* dst) const {
     size_t offset = 0;
 
     // The first 4 bytes are the total size of the variant
@@ -180,11 +180,11 @@ size_t VariantValue::serialize(uint8_t* dst) const {
     return offset;
 }
 
-uint32_t VariantValue::serialize_size() const {
+uint32_t VariantRowValue::serialize_size() const {
     return sizeof(uint32_t) + _metadata_raw.size() + _value_raw.size();
 }
 
-StatusOr<std::string> VariantValue::to_json(cctz::time_zone timezone) const {
+StatusOr<std::string> VariantRowValue::to_json(cctz::time_zone timezone) const {
     std::stringstream json_str;
     auto status = VariantUtil::variant_to_json(_metadata, _value, json_str, timezone);
     if (!status.ok()) {
@@ -194,7 +194,7 @@ StatusOr<std::string> VariantValue::to_json(cctz::time_zone timezone) const {
     return json_str.str();
 }
 
-std::string VariantValue::to_string() const {
+std::string VariantRowValue::to_string() const {
     auto json_result = to_json();
     if (!json_result.ok()) {
         return "";
@@ -203,7 +203,7 @@ std::string VariantValue::to_string() const {
     return json_result.value();
 }
 
-std::ostream& operator<<(std::ostream& os, const VariantValue& value) {
+std::ostream& operator<<(std::ostream& os, const VariantRowValue& value) {
     return os << value.to_string();
 }
 

@@ -102,8 +102,8 @@ StatusOr<ColumnPtr> CastVariantToMap::evaluate_checked(ExprContext* context, Chu
             continue;
         }
 
-        const VariantValue* variant_value = variant_viewer.value(i);
-        const Variant& variant = variant_value->get_variant();
+        const VariantRowValue* variant_value = variant_viewer.value(i);
+        const Variant& variant = variant_value->get_value();
         const VariantMetadata& metadata = variant_value->get_metadata();
         // Only OBJECT type can be cast to MAP, other types are set to null
         if (variant.type() == VariantType::OBJECT) {
@@ -126,7 +126,7 @@ StatusOr<ColumnPtr> CastVariantToMap::evaluate_checked(ExprContext* context, Chu
 
                 keys_builder.append(Slice(std::string(key)));
                 auto value = variant.raw().substr(next_pos, variant.raw().size() - next_pos);
-                ASSIGN_OR_RETURN(VariantValue result, VariantValue::create(metadata.raw(), value));
+                ASSIGN_OR_RETURN(VariantRowValue result, VariantRowValue::create(metadata.raw(), value));
                 values_builder.append(std::move(result));
             }
 
