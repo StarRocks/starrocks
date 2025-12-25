@@ -385,7 +385,7 @@ public class IcebergMetadataTest extends TableTestBase {
         Assertions.assertEquals("db", icebergTable.getCatalogDBName());
         Assertions.assertEquals("tbl", icebergTable.getCatalogTableName());
         String createSql = AstToStringBuilder.getExternalCatalogTableDdlStmt(actual);
-        Assertions.assertEquals("CREATE TABLE `tbl` (\n" +
+        Assertions.assertEquals("CREATE TABLE `iceberg_catalog`.`db`.`tbl` (\n" +
                         "  `c1` int(11) DEFAULT NULL,\n" +
                         "  `c2` varchar(1048576) DEFAULT NULL\n" +
                         ")\n" +
@@ -1590,7 +1590,7 @@ public class IcebergMetadataTest extends TableTestBase {
         Assertions.assertEquals("bucket(`partition`, 32)", partitionColumnNamesWithTransform.get(1));
         Assertions.assertEquals("truncate(`partition`, 32)", partitionColumnNamesWithTransform.get(2));
 
-        // convert the icebergTable into a thrift value 
+        // convert the icebergTable into a thrift value
         List<DescriptorTable.ReferencedPartitionInfo> partitions = Lists.newArrayList();
         TTableDescriptor tableDescriptor = icebergTable.toThrift(partitions);
         Assertions.assertNotNull(tableDescriptor);
