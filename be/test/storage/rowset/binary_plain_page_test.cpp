@@ -41,7 +41,10 @@
 #include "column/binary_column.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
+#include "gutil/casts.h"
 #include "runtime/mem_pool.h"
+#include "storage/chunk_helper.h"
+#include "storage/column_predicate.h"
 #include "storage/olap_common.h"
 #include "storage/range.h"
 #include "storage/rowset/page_decoder.h"
@@ -169,6 +172,134 @@ TEST_F(BinaryPlainPageTest, test_reserve_head) {
     ASSERT_OK(decoder.next_batch(SparseRange<>(0, 1), column.get()));
     ASSERT_EQ(column->debug_string(),
               "['first value', 'second value', 'third value', 'fourth value', 'fifth value', 'first value']");
+}
+
+TEST_F(BinaryPlainPageTest, TestNextBatchWithFilter) {
+    PageBuilderOptions options;
+    options.data_page_size = 256 * 1024;
+    BinaryPlainPageBuilder builder(options);
+    Slice slices[] = {
+            "a_100", "b_200", "c_300", "d_400", "e_500",
+    };
+
+    ASSERT_EQ(5, builder.add((const uint8_t*)slices, 5));
+    OwnedSlice data_with_head = builder.finish()->build();
+    BinaryPlainPageDecoder<TYPE_VARCHAR> decoder(data_with_head.slice());
+    ASSERT_TRUE(decoder.init().ok());
+
+    // Case 1: Without NULLs
+    {
+        auto column = BinaryColumn::create();
+
+        // Prepare filter: >= "c_300"
+        std::unique_ptr<ColumnPredicate> predicate(new_column_ge_predicate(get_type_info(TYPE_VARCHAR), 0, "c_300"));
+        std::vector<const ColumnPredicate*> predicates;
+        predicates.push_back(predicate.get());
+
+        SparseRange<> range(0, 5);
+        std::vector<uint8_t> selection(5);
+        std::vector<uint16_t> selected_idx(5);
+
+        // reset selection
+        for (int i = 0; i < 5; ++i) selection[i] = 1;
+
+        Status st = decoder.next_batch_with_filter(column.get(), range, predicates, nullptr, selection.data(),
+                                                   selected_idx.data());
+        ASSERT_TRUE(st.ok()) << st.to_string();
+
+        // Check selection
+        ASSERT_EQ(0, selection[0]);
+        ASSERT_EQ(0, selection[1]);
+        ASSERT_EQ(1, selection[2]);
+        ASSERT_EQ(1, selection[3]);
+        ASSERT_EQ(1, selection[4]);
+
+        ASSERT_EQ(3, column->size());
+        ASSERT_EQ("c_300", column->get_data()[0]);
+        ASSERT_EQ("d_400", column->get_data()[1]);
+        ASSERT_EQ("e_500", column->get_data()[2]);
+    }
+
+    // Reset decoder
+    ASSERT_TRUE(decoder.seek_to_position_in_page(0).ok());
+
+    // Case 2: With NULLs
+    {
+        // Use NullableColumn with ByteColumn as data
+        auto column = ChunkHelper::column_from_field_type(TYPE_VARCHAR, true);
+
+        // Prepare filter: >= "c_300"
+        std::unique_ptr<ColumnPredicate> predicate(new_column_ge_predicate(get_type_info(TYPE_VARCHAR), 0, "c_300"));
+        std::vector<const ColumnPredicate*> predicates;
+        predicates.push_back(predicate.get());
+
+        SparseRange<> range(0, 5);
+        std::vector<uint8_t> selection(5);
+        std::vector<uint16_t> selected_idx(5);
+
+        // reset selection
+        for (int i = 0; i < 5; ++i) selection[i] = 1;
+
+        // null_data: 0->not null, 1->null
+        // Mark "c_300" (idx 2) as NULL. "e_500" (idx 4) as NULL.
+        // "b_200" (idx 1) is not null but filtered out (< "c_300")
+        // "a_100" (idx 0) is not null but filtered out
+        // "d_400" (idx 3) is not null and kept (>= "c_300")
+        uint8_t null_data[] = {0, 0, 1, 0, 1};
+
+        Status st = decoder.next_batch_with_filter(column.get(), range, predicates, null_data, selection.data(),
+                                                   selected_idx.data());
+        ASSERT_TRUE(st.ok()) << st.to_string();
+
+        // Check selection
+        ASSERT_EQ(0, selection[0]);
+        ASSERT_EQ(0, selection[1]);
+        ASSERT_EQ(0, selection[2]);
+        ASSERT_EQ(1, selection[3]);
+        ASSERT_EQ(0, selection[4]);
+
+        ASSERT_EQ(1, column->size());
+        // For NullableColumn, we need to check the data values.
+        auto nullable_col = down_cast<NullableColumn*>(column.get());
+        auto binary_col = down_cast<BinaryColumn*>(nullable_col->data_column_raw_ptr());
+
+        ASSERT_EQ("d_400", binary_col->get_data()[0]);
+    }
+}
+
+TEST_F(BinaryPlainPageTest, TestReadByRowids) {
+    PageBuilderOptions options;
+    options.data_page_size = 256 * 1024;
+    BinaryPlainPageBuilder builder(options);
+
+    std::vector<std::string> strings;
+    strings.reserve(10);
+    std::vector<Slice> slices;
+    slices.reserve(10);
+    for (int i = 0; i < 10; ++i) {
+        strings.emplace_back("val_" + std::to_string(i));
+        slices.emplace_back(strings.back());
+    }
+
+    ASSERT_EQ(10, builder.add((const uint8_t*)slices.data(), 10));
+    OwnedSlice data_with_head = builder.finish()->build();
+    BinaryPlainPageDecoder<TYPE_VARCHAR> decoder(data_with_head.slice());
+    ASSERT_TRUE(decoder.init().ok());
+
+    auto column = BinaryColumn::create();
+
+    rowid_t rowids[] = {1, 3, 5, 8};
+    size_t num_read = 4;
+
+    Status st = decoder.read_by_rowids(0, rowids, &num_read, column.get());
+    ASSERT_TRUE(st.ok());
+    ASSERT_EQ(4, num_read);
+    ASSERT_EQ(4, column->size());
+
+    ASSERT_EQ("val_1", column->get_data()[0]);
+    ASSERT_EQ("val_3", column->get_data()[1]);
+    ASSERT_EQ("val_5", column->get_data()[2]);
+    ASSERT_EQ("val_8", column->get_data()[3]);
 }
 
 } // namespace starrocks
