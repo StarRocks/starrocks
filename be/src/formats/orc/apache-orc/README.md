@@ -15,23 +15,28 @@ lists, maps, and unions.
 
 ## ORC File Library
 
-This project includes both a Java library and a C++ library for reading and writing the _Optimized Row Columnar_ (ORC) file format. The C++ and Java libraries are completely independent of each other and will each read all versions of ORC files. But the C++ library only writes the original (Hive 0.11) version of ORC files, and will be extended in the future.
+This project includes both a Java library and a C++ library for reading and writing the _Optimized Row Columnar_ (ORC)
+file format. The C++ and Java libraries are completely independent of each other and will each read all versions of ORC
+files. But the C++ library only writes the original (Hive 0.11) version of ORC files, and will be extended in the
+future.
 
 Releases:
+
 * Latest: <a href="http://orc.apache.org/releases">Apache ORC releases</a>
-* Maven Central: <a href="http://search.maven.org/#search%7Cga%7C1%7Cg%3A%22org.apache.orc%22">![Maven Central](https://maven-badges.herokuapp.com/maven-central/org.apache.orc/orc/badge.svg)</a>
+* Maven
+  Central: <a href="http://search.maven.org/#search%7Cga%7C1%7Cg%3A%22org.apache.orc%22">![Maven Central](https://maven-badges.herokuapp.com/maven-central/org.apache.orc/orc/badge.svg)</a>
 * Downloads: <a href="http://orc.apache.org/downloads">Apache ORC downloads</a>
 
 The current build status:
-* Main branch <a href="https://travis-ci.com/apache/orc/branches">
-![main build status](https://travis-ci.com/apache/orc.svg?branch=main)</a>
-* <a href="https://travis-ci.com/github/apache/orc/pull_requests">Pull Requests</a>
 
+* Main branch <a href="https://travis-ci.com/apache/orc/branches">
+  ![main build status](https://travis-ci.com/apache/orc.svg?branch=main)</a>
+* <a href="https://travis-ci.com/github/apache/orc/pull_requests">Pull Requests</a>
 
 Bug tracking: <a href="http://orc.apache.org/bugs">Apache Jira</a>
 
-
 The subdirectories are:
+
 * c++ - the c++ reader and writer
 * cmake_modules - the cmake modules
 * docker - docker scripts to build and test on various linuxes
@@ -49,6 +54,7 @@ The subdirectories are:
 * Install cmake
 
 To build a release version with debug information:
+
 ```shell
 % mkdir build
 % cd build
@@ -59,6 +65,7 @@ To build a release version with debug information:
 ```
 
 To build a debug version:
+
 ```shell
 % mkdir build
 % cd build
@@ -69,6 +76,7 @@ To build a debug version:
 ```
 
 To build a release version without debug information:
+
 ```shell
 % mkdir build
 % cd build
@@ -79,6 +87,7 @@ To build a release version without debug information:
 ```
 
 To build only the Java library:
+
 ```shell
 % cd java
 % mvn package
@@ -86,6 +95,7 @@ To build only the Java library:
 ```
 
 To build only the C++ library:
+
 ```shell
 % mkdir build
 % cd build

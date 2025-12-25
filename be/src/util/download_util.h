@@ -18,11 +18,12 @@
 
 #include "common/status.h"
 
-namespace starrocks {
-
-class DownloadUtil {
-public:
-    static Status download(const std::string& url, const std::string& target_file,
-                           const std::string& expected_checksum);
-};
+namespace starrocks
+{
+    class DownloadUtil
+    {
+    public:
+        static Status download(const std::string& url, const std::string& target_file,
+                               const std::string& expected_checksum);
+    };
 } // namespace starrocks

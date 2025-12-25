@@ -93,6 +93,6 @@ ADD_BE_LIB(Formats
         parquet/iceberg_row_id_reader.cpp
         parquet/row_source_reader.cpp
         disk_range.hpp
-        )
+)
 
 add_subdirectory(orc/apache-orc)

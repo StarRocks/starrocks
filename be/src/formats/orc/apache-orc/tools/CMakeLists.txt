@@ -15,5 +15,5 @@
 add_subdirectory(src)
 
 if (BUILD_CPP_TESTS)
-  add_subdirectory(test)
+    add_subdirectory(test)
 endif ()

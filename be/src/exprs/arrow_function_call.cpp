@@ -29,7 +29,6 @@
 #include "util/phmap/phmap.h"
 
 namespace starrocks {
-
 using InnerStateMap = phmap::parallel_flat_hash_map<int32_t, std::unique_ptr<UDFCallStub>, phmap::Hash<int32_t>,
                                                     phmap::EqualTo<int32_t>, phmap::Allocator<int32_t>,
                                                     NUM_LOCK_SHARD_LOG, std::mutex>;
@@ -39,7 +38,8 @@ struct ArrowCallStubCtx {
     std::mutex inner_states_lock;
 };
 
-ArrowFunctionCallExpr::ArrowFunctionCallExpr(const TExprNode& node) : Expr(node) {}
+ArrowFunctionCallExpr::ArrowFunctionCallExpr(const TExprNode& node) : Expr(node) {
+}
 
 StatusOr<ColumnPtr> ArrowFunctionCallExpr::evaluate_checked(ExprContext* context, Chunk* chunk) {
     Columns columns(children().size());
@@ -137,5 +137,4 @@ std::unique_ptr<UDFCallStub> ArrowFunctionCallExpr::_build_stub(int32_t driver_i
     return nullptr;
 #endif
 }
-
 } // namespace starrocks
