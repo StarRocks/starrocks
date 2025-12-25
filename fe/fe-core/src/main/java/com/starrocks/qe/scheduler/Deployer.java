@@ -313,5 +313,168 @@ public class Deployer {
     public TExecPlanFragmentParams createIncrementalScanRangesRequest(FragmentInstance instance) {
         return tFragmentInstanceFactory.createIncrementalScanRanges(instance);
     }
+<<<<<<< HEAD
+=======
+
+    public void deployFragmentsForSingleNode(List<FragmentInstanceExecState> fragmentInstanceExecStates)
+            throws RpcException, StarRocksException {
+        if (!needDeploy) {
+            return;
+        }
+
+        // 1. change state to DEPLOYING before sending rpc to avoid race condition with report status
+        fragmentInstanceExecStates.forEach(FragmentInstanceExecState::changeStateIntoDeploying);
+
+        // 2. send RPC
+        Future<PExecBatchPlanFragmentsResult> batchFuture = null;
+        try (Timer ignored = Tracers.watchScope(Tracers.Module.SCHEDULER, "DeployStageByStageTime")) {
+            batchFuture = execRemoteBatchFragmentsAsync(fragmentInstanceExecStates);
+        } catch (Exception e) {
+            LOG.warn("deployFragmentsForSingleNode failed", e);
+            throw new StarRocksException(e);
+        }
+
+        // every fragment instance share the same future
+        // if any problem occurs, the first call on this future will throw exception
+        FakeDeployFuture sharedFakeFuture = new FakeDeployFuture(batchFuture);
+        fragmentInstanceExecStates.forEach(
+                fragmentInstanceExecState -> {
+                    fragmentInstanceExecState.setDeployFuture(sharedFakeFuture);
+                });
+
+        // 3. wait
+        try (Timer ignored = Tracers.watchScope(Tracers.Module.SCHEDULER, "DeployWaitTime")) {
+            waitForDeploymentCompletion(fragmentInstanceExecStates);
+        }
+    }
+
+    private static class FakeDeployFuture implements Future<PExecPlanFragmentResult> {
+        private final Future<PExecBatchPlanFragmentsResult> batchFuture;
+        private PExecPlanFragmentResult cachedResult = null;
+
+        public FakeDeployFuture(Future<PExecBatchPlanFragmentsResult> batchFuture) {
+            this.batchFuture = batchFuture;
+        }
+
+        @Override
+        public boolean cancel(boolean mayInterruptIfRunning) {
+            return batchFuture.cancel(mayInterruptIfRunning);
+        }
+
+        @Override
+        public boolean isCancelled() {
+            return batchFuture.isCancelled();
+        }
+
+        @Override
+        public boolean isDone() {
+            return batchFuture.isDone();
+        }
+
+        @Override
+        public PExecPlanFragmentResult get() throws InterruptedException, ExecutionException {
+            if (cachedResult != null) {
+                return cachedResult;
+            }
+
+            PExecBatchPlanFragmentsResult batchResult = batchFuture.get();
+
+            PExecPlanFragmentResult singleResult = new PExecPlanFragmentResult();
+            singleResult.status = batchResult.status;
+
+            cachedResult = singleResult;
+
+            return cachedResult;
+        }
+
+        @Override
+        public PExecPlanFragmentResult get(long timeout, TimeUnit unit)
+                throws InterruptedException, ExecutionException, TimeoutException {
+            if (cachedResult != null) {
+                return cachedResult;
+            }
+
+            PExecBatchPlanFragmentsResult batchResult = batchFuture.get(timeout, unit);
+
+            PExecPlanFragmentResult singleResult = new PExecPlanFragmentResult();
+            singleResult.status = batchResult.status;
+
+            cachedResult = singleResult;
+
+            return cachedResult;
+        }
+    }
+
+    private Future<PExecBatchPlanFragmentsResult> execRemoteBatchFragmentsAsync(
+            List<FragmentInstanceExecState> fragmentInstanceExecStateList) throws TException {
+
+        // 0.collect every instance's params as unique param per instance
+        List<TExecPlanFragmentParams> requestsToDeploy = new ArrayList<>();
+        fragmentInstanceExecStateList.forEach(
+                fragmentInstanceExecState -> requestsToDeploy.add(fragmentInstanceExecState.getRequestToDeploy()));
+
+        TNetworkAddress brpcAddress = fragmentInstanceExecStateList.get(0).getWorker().getBrpcAddress();
+        TExecBatchPlanFragmentsParams tRequest = new TExecBatchPlanFragmentsParams();
+        tRequest.setUnique_param_per_instance(requestsToDeploy);
+
+        // 1. create a common param with desc table, it will prepare first to create query context and desc table
+        TExecPlanFragmentParams commonParam = requestsToDeploy.get(0).deepCopy();
+        commonParam.setDesc_tbl(jobSpec.getDescTable());
+        tRequest.setCommon_param(commonParam);
+
+        // 2. clear unique param's desc table, so fragment instances can prepare parallelly
+        tRequest.getUnique_param_per_instance().forEach(instance -> instance.setDesc_tbl(emptyDescTable));
+
+        try {
+            // Todo: consider parallel serialize if this become bottleneck
+            TSerializer serializer = AttachmentRequest.getSerializer(jobSpec.getPlanProtocol());
+            byte[] serializedRequest = serializer.serialize(tRequest);
+
+            return BackendServiceClient.getInstance()
+                    .execBatchPlanFragmentsAsync(brpcAddress, serializedRequest, jobSpec.getPlanProtocol());
+        } catch (RpcException | TException e) {
+            LOG.warn("execBatchPlanFragmentsAsync failed", e);
+            // DO NOT throw exception here, return a complete future with error code,
+            // so that the following logic will cancel the fragment.
+            return new Future<PExecBatchPlanFragmentsResult>() {
+                @Override
+                public boolean cancel(boolean mayInterruptIfRunning) {
+                    return false;
+                }
+
+                @Override
+                public boolean isCancelled() {
+                    return false;
+                }
+
+                @Override
+                public boolean isDone() {
+                    return true;
+                }
+
+                @Override
+                public PExecBatchPlanFragmentsResult get() {
+                    PExecBatchPlanFragmentsResult result = new PExecBatchPlanFragmentsResult();
+                    StatusPB pStatus = new StatusPB();
+                    pStatus.errorMsgs = new ArrayList<>();
+                    pStatus.errorMsgs.add(e.getMessage());
+                    if (e instanceof RpcException) {
+                        // use THRIFT_RPC_ERROR so that this BE will be added to the blacklist later.
+                        pStatus.statusCode = TStatusCode.THRIFT_RPC_ERROR.getValue();
+                    } else {
+                        pStatus.statusCode = TStatusCode.INTERNAL_ERROR.getValue();
+                    }
+                    result.status = pStatus;
+                    return result;
+                }
+
+                @Override
+                public PExecBatchPlanFragmentsResult get(long timeout, TimeUnit unit) {
+                    return get();
+                }
+            };
+        }
+    }
+>>>>>>> d7358423e7 ([UT] fix race condition in single-node deployment (#67215))
 }
 
