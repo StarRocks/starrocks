@@ -445,6 +445,34 @@ public:
         fslib_opts.enable_data_cache = enable_datacache;
         fslib_opts.tablet_id = opts.tablet_id;
         set_api_kind(fslib_opts, opts);
+        
+        // Set cache replication options if specified
+        if (opts.replication_options.replication_type != ReplicationType::NO_SET &&
+            !opts.replication_options.replicas.empty()) {
+            auto& repl_opts = fslib_opts.replication_options;
+            repl_opts.service_id = opts.replication_options.service_id;
+            repl_opts.shard_id = opts.replication_options.shard_id;
+            repl_opts.replicas = opts.replication_options.replicas;
+            // Convert starrocks ReplicationType to starlet ReplicationType
+            switch (opts.replication_options.replication_type) {
+            case ReplicationType::SYNC:
+                repl_opts.replication_type = staros::ReplicationType::SYNC;
+                break;
+            case ReplicationType::ASYNC:
+                repl_opts.replication_type = staros::ReplicationType::ASYNC;
+                break;
+            case ReplicationType::NO_REPLICATION:
+                repl_opts.replication_type = staros::ReplicationType::NO_REPLICATION;
+                break;
+            default:
+                repl_opts.replication_type = staros::ReplicationType::NO_SET;
+                break;
+            }
+            LOG(INFO) << "Cache replication enabled for " << path 
+                      << ", replicas=" << opts.replication_options.replicas.size()
+                      << ", type=" << static_cast<int>(opts.replication_options.replication_type);
+        }
+        
         auto file_st = (*fs_st)->create(pair.first, fslib_opts);
         if (!file_st.ok()) {
             return to_status(file_st.status());

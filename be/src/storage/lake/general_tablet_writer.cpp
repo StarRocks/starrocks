@@ -23,7 +23,6 @@
 #include "runtime/current_thread.h"
 #include "serde/column_array_serde.h"
 #include "storage/lake/filenames.h"
-#include "storage/lake/segment_warmup_manager.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/vacuum.h"
 #include "storage/rowset/segment_writer.h"
@@ -125,6 +124,21 @@ Status HorizontalGeneralTabletWriter::reset_segment_writer() {
         wopts.op_type = OperationKind::COMPACTION;
     }
     wopts.tablet_id = _tablet_id;
+    
+    // Set cache replication options if peer nodes are specified
+    // This enables starlet's built-in cache replication during write
+    if (!_peer_nodes.empty() && _is_compaction && config::lake_enable_segment_warmup) {
+        wopts.replication_options.replication_type = ReplicationType::ASYNC;
+        wopts.replication_options.shard_id = _tablet_id;
+        // peer_nodes contains only host, need to append starlet_port to form host:port
+        for (const auto& host : _peer_nodes) {
+            wopts.replication_options.replicas.push_back(
+                fmt::format("{}:{}", host, config::starlet_port));
+        }
+        LOG(INFO) << "Enabling cache replication for segment write. tablet_id=" << _tablet_id
+                  << " replicas=" << wopts.replication_options.replicas.size();
+    }
+    
     std::unique_ptr<WritableFile> of;
     std::string segment_location;
     if (_location_provider && _fs) {
@@ -172,20 +186,11 @@ Status HorizontalGeneralTabletWriter::flush_segment_writer(SegmentPB* segment) {
             }
         }
 
-        // Async warmup: send segment to peer nodes immediately after it's written
-        // This allows warmup to happen in parallel with writing next segments
-        auto* warmup_mgr = _tablet_mgr->segment_warmup_manager();
-        if (warmup_mgr) {
-            // TODO: Get warehouse_id from context
-            int64_t warehouse_id = 0;
-            // Use peer nodes from writer (set by compaction task) or empty for memtable flush
-            warmup_mgr->warm_up_segment_async(_tablet_id, segment_path, warehouse_id, _peer_nodes);
-            if (!_peer_nodes.empty()) {
-                LOG(INFO) << "Triggered async warmup for segment. tablet_id=" << _tablet_id
-                          << " segment=" << segment_name << " size=" << segment_size
-                          << " peer_nodes=" << _peer_nodes.size();
-            }
-        }
+        // Note: Cache replication is now handled by starlet's built-in mechanism
+        // when replication_options is set in WritableFileOptions during segment creation.
+        // The segment_warmup_manager is kept as a fallback for cases where starlet
+        // replication is not available, but we skip it if replication is already enabled.
+        // See reset_segment_writer() for replication setup.
 
         _seg_writer.reset();
     }
@@ -307,9 +312,9 @@ Status VerticalGeneralTabletWriter::flush_columns() {
 }
 
 Status VerticalGeneralTabletWriter::finish(SegmentPB* segment) {
-    auto* warmup_mgr = _tablet_mgr->segment_warmup_manager();
-    // TODO: Get warehouse_id from context
-    int64_t warehouse_id = 0;
+    // Note: Cache replication is now handled by starlet's built-in mechanism
+    // when replication_options is set in WritableFileOptions during segment creation.
+    // See create_segment_writer() for replication setup.
 
     for (auto& segment_writer : _segment_writers) {
         uint64_t segment_size = 0;
@@ -321,17 +326,6 @@ Status VerticalGeneralTabletWriter::finish(SegmentPB* segment) {
         _data_size += segment_size;
         collect_writer_stats(_stats, segment_writer.get());
         _stats.segment_count++;
-
-        // Async warmup: send segment to peer nodes immediately after it's finalized
-        if (warmup_mgr) {
-            // Use peer nodes from writer (set by compaction task) or empty for memtable flush
-            warmup_mgr->warm_up_segment_async(_tablet_id, segment_path, warehouse_id, _peer_nodes);
-            if (!_peer_nodes.empty()) {
-                LOG(INFO) << "Triggered async warmup for vertical segment. tablet_id=" << _tablet_id
-                          << " segment=" << segment_name << " size=" << segment_size
-                          << " peer_nodes=" << _peer_nodes.size();
-            }
-        }
 
         segment_writer.reset();
     }
@@ -377,6 +371,21 @@ StatusOr<std::shared_ptr<SegmentWriter>> VerticalGeneralTabletWriter::create_seg
         wopts.op_type = OperationKind::COMPACTION;
     }
     wopts.tablet_id = _tablet_id;
+    
+    // Set cache replication options if peer nodes are specified
+    // This enables starlet's built-in cache replication during write
+    if (!_peer_nodes.empty() && _is_compaction && config::lake_enable_segment_warmup) {
+        wopts.replication_options.replication_type = ReplicationType::ASYNC;
+        wopts.replication_options.shard_id = _tablet_id;
+        // peer_nodes contains only host, need to append starlet_port to form host:port
+        for (const auto& host : _peer_nodes) {
+            wopts.replication_options.replicas.push_back(
+                fmt::format("{}:{}", host, config::starlet_port));
+        }
+        LOG(INFO) << "Enabling cache replication for vertical segment write. tablet_id=" << _tablet_id
+                  << " replicas=" << wopts.replication_options.replicas.size();
+    }
+    
     std::unique_ptr<WritableFile> of;
     std::string segment_location;
     if (_location_provider && _fs) {

@@ -356,6 +356,22 @@ public:
     }
 };
 
+// Replication type for cache replication during write
+enum class ReplicationType {
+    NO_SET = 0,        // Not set, use default behavior
+    NO_REPLICATION = 1, // Explicitly disable replication
+    SYNC = 2,          // Synchronous replication (wait for all replicas)
+    ASYNC = 3          // Asynchronous replication (non-blocking)
+};
+
+// Options for cache replication during write
+struct CacheReplicationOptions {
+    ReplicationType replication_type = ReplicationType::NO_SET;
+    std::string service_id;
+    int64_t shard_id = 0;
+    std::vector<std::string> replicas;  // Target replica node addresses
+};
+
 // Creation-time options for WritableFile
 struct WritableFileOptions {
     // Call Sync() during Close().
@@ -370,6 +386,10 @@ struct WritableFileOptions {
     FileEncryptionInfo encryption_info;
     OperationKind op_type = OperationKind::UNDEFINED;
     int64_t tablet_id = 0;
+    std::vector<std::string> peer_nodes;
+    
+    // Cache replication options for starlet filesystem
+    CacheReplicationOptions replication_options;
 };
 
 // A `SequentialFile` is an `io::InputStream` with a name.
