@@ -230,6 +230,10 @@ public class AlterTableOperationStmtTest {
                 icebergTable.supportsOperation(TableOperation.ALTER);
                 result = true;
                 minTimes = 0;
+
+                icebergTable.getCatalogName();
+                result = "iceberg_catalog";
+                minTimes = 0;
             }
         };
 
