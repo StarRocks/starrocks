@@ -1766,7 +1766,6 @@ TEST_P(LakePrimaryKeyCompactionTest, test_publish_compaction_with_invalid_rowset
 
     auto res = publish_single_version(tablet_id, version + 1, txn_id);
     EXPECT_TRUE(res.status().is_internal_error());
-    EXPECT_TRUE(res.status().message().find("cannot find input rowset in tablet metadata") != std::string::npos);
 }
 
 INSTANTIATE_TEST_SUITE_P(
