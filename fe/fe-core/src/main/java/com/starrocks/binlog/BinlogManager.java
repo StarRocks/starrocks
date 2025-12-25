@@ -173,8 +173,9 @@ public class BinlogManager {
                         Map<String, String> properties = table.buildBinlogAvailableVersion();
                         ModifyTablePropertyOperationLog log = new ModifyTablePropertyOperationLog(db.getId(),
                                 table.getId(), properties);
-                        GlobalStateMgr.getCurrentState().getEditLog().logModifyBinlogAvailableVersion(log);
-                        table.setBinlogAvailableVersion(properties);
+                        GlobalStateMgr.getCurrentState().getEditLog().logModifyBinlogAvailableVersion(log, wal -> {
+                            table.setBinlogAvailableVersion(properties);
+                        });
                         LOG.info("set binlog available version tableName : {}, partitions : {}",
                                 table.getName(), properties.toString());
                         tabletStatistics.remove(table.getId());

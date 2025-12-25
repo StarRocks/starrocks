@@ -189,6 +189,7 @@ public class EditLogDeserializer {
             .put(OperationType.OP_MODIFY_DEFAULT_BUCKET_NUM, ModifyTablePropertyOperationLog.class)
             .put(OperationType.OP_MODIFY_BINLOG_CONFIG, ModifyTablePropertyOperationLog.class)
             .put(OperationType.OP_MODIFY_BINLOG_AVAILABLE_VERSION, ModifyTablePropertyOperationLog.class)
+            .put(OperationType.OP_MODIFY_FLAT_JSON_CONFIG, ModifyTablePropertyOperationLog.class)
             .put(OperationType.OP_MODIFY_ENABLE_PERSISTENT_INDEX, ModifyTablePropertyOperationLog.class)
             .put(OperationType.OP_MODIFY_PRIMARY_INDEX_CACHE_EXPIRE_SEC, ModifyTablePropertyOperationLog.class)
             .put(OperationType.OP_ALTER_TABLE_PROPERTIES, ModifyTablePropertyOperationLog.class)

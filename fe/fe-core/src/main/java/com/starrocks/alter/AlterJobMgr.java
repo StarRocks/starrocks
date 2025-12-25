@@ -50,7 +50,6 @@ import com.starrocks.catalog.OlapTable.OlapTableState;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.TableProperty;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.catalog.View;
 import com.starrocks.catalog.constraint.GlobalConstraintManager;
@@ -72,7 +71,6 @@ import com.starrocks.persist.AlterViewInfo;
 import com.starrocks.persist.ChangeMaterializedViewRefreshSchemeLog;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.ModifyPartitionInfo;
-import com.starrocks.persist.ModifyTablePropertyOperationLog;
 import com.starrocks.persist.OperationType;
 import com.starrocks.persist.RenameMaterializedViewLog;
 import com.starrocks.persist.SwapTableOperationLog;
@@ -478,38 +476,6 @@ public class AlterJobMgr {
                     oldMaterializedView.getName(), e);
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(oldMaterializedView.getId()), LockType.WRITE);
-        }
-    }
-
-    public void replayAlterMaterializedViewProperties(short opCode, ModifyTablePropertyOperationLog log) {
-        long dbId = log.getDbId();
-        long tableId = log.getTableId();
-        Map<String, String> properties = log.getProperties();
-
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
-        MaterializedView mv = (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                    .getTable(db.getId(), tableId);
-        if (mv == null) {
-            LOG.warn("Ignore change materialized view properties og because table:" + tableId + "is null");
-            return;
-        }
-
-        Locker locker = new Locker();
-        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(mv.getId()), LockType.WRITE);
-        try {
-            TableProperty tableProperty = mv.getTableProperty();
-            if (tableProperty == null) {
-                tableProperty = new TableProperty(properties);
-                mv.setTableProperty(tableProperty.buildProperty(opCode));
-            } else {
-                tableProperty.modifyTableProperties(properties);
-                tableProperty.buildProperty(opCode);
-            }
-        } catch (Throwable e) {
-            mv.setInactiveAndReason("replay failed: " + e.getMessage());
-            LOG.warn("replay alter materialized-view properties failed: {}", mv.getName(), e);
-        } finally {
-            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(mv.getId()), LockType.WRITE);
         }
     }
 
