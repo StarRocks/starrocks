@@ -557,7 +557,7 @@ public class HiveTable extends Table {
 
     @Override
     public Set<TableOperation> getSupportedOperations() {
-        // Hive tables support ALTER and CREATE TABLE LIKE operations
-        return Sets.newHashSet(TableOperation.ALTER, TableOperation.CREATE_TABLE_LIKE);
+        return Sets.newHashSet(TableOperation.READ, TableOperation.CREATE, TableOperation.INSERT, TableOperation.DROP,
+                TableOperation.ALTER, TableOperation.CREATE_TABLE_LIKE);
     }
 }

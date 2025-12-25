@@ -847,12 +847,12 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
     /**
      * Get the set of operations supported by this table type.
      * Subclasses can override this method to define their own supported operations.
-     * By default, tables don't support any operations.
+     * By default, tables support read operations.
      *
      * @return Set of supported operations
      */
     public Set<TableOperation> getSupportedOperations() {
-        return Sets.newHashSet();
+        return Sets.newHashSet(TableOperation.READ);
     }
 
     /**

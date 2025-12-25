@@ -27,9 +27,6 @@ public enum TableOperation {
     DROP,
     ALTER,
     CREATE_TABLE_LIKE,
-    RENAME,
-    TRUNCATE,
-    REFRESH,
 
     // Add other operations as needed
 }
