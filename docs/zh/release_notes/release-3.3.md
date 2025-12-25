@@ -11,6 +11,47 @@ displayed_sidebar: docs
 
 :::
 
+## 3.3.21
+
+发布日期：2025 年 12 月 25 日
+
+### 问题修复
+
+修复了以下问题：
+
+- `trim` 函数处理特定 Unicode 空白字符（如 `\u1680`）时的逻辑错误，以及预留内存计算导致的性能问题。 [#66428](https://github.com/StarRocks/starrocks/pull/66428), [#66477](https://github.com/StarRocks/starrocks/pull/66477)
+- FE 重启时因表加载顺序问题导致外键约束（Foreign Key Constraints）丢失的问题。 [#66474](https://github.com/StarRocks/starrocks/pull/66474)
+- 安全漏洞 CVE-2025-66566 和 CVE-2025-12183，以及上游潜在崩溃问题。 [#66453](https://github.com/StarRocks/starrocks/pull/66453), [#66362](https://github.com/StarRocks/starrocks/pull/66362), [#67075](https://github.com/StarRocks/starrocks/pull/67075)
+- Group Execution 模式下 Join 配合窗口函数使用时，计算结果不正确。 [#66441](https://github.com/StarRocks/starrocks/pull/66441)
+- Warehouse 删除后，系统仍尝试获取其元数据，导致 `SHOW LOAD` 或 SQL 执行失败。 [#66436](https://github.com/StarRocks/starrocks/pull/66436)
+- 当聚合输入的 Scan 被完全过滤（Empty Set）时，`PartitionColumnMinMaxRewriteRule` 优化导致结果错误地返回 Empty Set 而非 NULL。 [#66356](https://github.com/StarRocks/starrocks/pull/66356)
+- Rowset 提交或 Compaction 失败时 Rowset ID 未被正确释放，导致磁盘空间无法回收。 [#66301](https://github.com/StarRocks/starrocks/pull/66301)
+- 高选择率过滤导致 Scan 提前结束（EOS）时，审计日志中的 Scan 统计信息（如扫描行数/字节数）缺失。 [#66280](https://github.com/StarRocks/starrocks/pull/66280)
+- BE 发生 fatal signal (如 SIGSEGV) 进入 Crash 处理流程后仍响应心跳为 Alive，导致 FE 继续分发查询并报错。 [#66212](https://github.com/StarRocks/starrocks/pull/66212)
+- Local TopN 下推优化导致 Runtime Filter 的 `set_collector` 被多次调用，引发 BE Crash。 [#66199](https://github.com/StarRocks/starrocks/pull/66199)
+- 列模式部分更新（Partial Update）与条件更新（Conditional Update）同时使用时，因 `rssid` 未初始化导致导入任务失败。 [#66139](https://github.com/StarRocks/starrocks/pull/66139)
+- Colocate Execution Group 在提交驱动（Driver）时存在竞态条件，导致 BE Crash。 [#66099](https://github.com/StarRocks/starrocks/pull/66099)
+- `RecordBatchQueue` 关闭（如 SparkSQL 触发 Limit）后，`MemoryScratchSinkOperator` 处于 pending 状态无法取消，导致查询挂起。 [#66041](https://github.com/StarRocks/starrocks/pull/66041)
+- `ExecutionGroup` 倒计时逻辑中访问 `_num_pipelines` 存在竞态条件，导致 Use-after-free 问题。 [#65940](https://github.com/StarRocks/starrocks/pull/65940)
+- 查询错误率相关监控指标（Internal/Analysis/Timeout error rate）计算逻辑错误，导致显示负值。 [#65891](https://github.com/StarRocks/starrocks/pull/65891)
+- LDAP 用户执行任务时，因 `ConnectContext` 未设置导致空指针异常 (NPE)。 [#65843](https://github.com/StarRocks/starrocks/pull/65843)
+- 文件系统缓存（Filesystem Cache）因使用对象引用比较而非值比较，导致相同 Key 的缓存查找失败，影响性能。 [#65823](https://github.com/StarRocks/starrocks/pull/65823)
+- 快照加载失败后，因状态变量检查错误导致 Tablet 关联文件未能被正确清理。 [#65709](https://github.com/StarRocks/starrocks/pull/65709)
+- 建表或 Schema Change 时，FE 配置的压缩类型和级别未正确透传至 BE 或持久化，导致使用默认压缩设置。 [#65673](https://github.com/StarRocks/starrocks/pull/65673)
+- `COM_STMT_EXECUTE` 默认无审计日志，且 Profile 信息被错误地合并到 Prepare 阶段记录中；修复后默认开启审计并支持参数解码。 [#65448](https://github.com/StarRocks/starrocks/pull/65448)
+- Delete Vector 的 CRC32 校验在集群升级/降级场景下因版本不兼容导致检查失败。 [#65442](https://github.com/StarRocks/starrocks/pull/65442)
+- `UnionConstSourceOperator` 在合并 Union 到 Values 时，对 Nullable 属性处理不当导致 BE Crash。 [#65429](https://github.com/StarRocks/starrocks/pull/65429)
+- Alter Table 操作期间，若目标 Tablet 被 Drop，并发的导入任务（Ingestion）会在提交阶段失败。 [#65396](https://github.com/StarRocks/starrocks/pull/65396)
+- HTTP SQL 接口在切换用户时未正确设置上下文，导致鉴权失败时的错误日志信息不准确。 [#65371](https://github.com/StarRocks/starrocks/pull/65371)
+- 修复 `INSERT OVERWRITE` 后的统计信息收集问题：包括无法为临时分区收集统计信息、事务提交时行数统计不准导致未触发收集等。 [#65327](https://github.com/StarRocks/starrocks/pull/65327), [#65298](https://github.com/StarRocks/starrocks/pull/65298), [#65225](https://github.com/StarRocks/starrocks/pull/65225)
+- TCP 连接复用场景下，后续非 SQL 的 HTTP 请求覆盖了 Context，导致 SQL 相关的 `HttpConnectContext` 无法释放。 [#65203](https://github.com/StarRocks/starrocks/pull/65203)
+- BE 启动加载 Tablet 元数据时，若 RocksDB 迭代超时会导致 Tablet 加载不全从而引发版本丢失。 [#65146](https://github.com/StarRocks/starrocks/pull/65146)
+- `percentile_approx_weighted` 函数在处理压缩参数时存在越界访问风险，导致 BE Crash。 [#64838](https://github.com/StarRocks/starrocks/pull/64838)
+- 从 Follower 转发到 Leader 执行的查询丢失 Query Profile 日志。 [#64395](https://github.com/StarRocks/starrocks/pull/64395)
+- Spill 过程中，大字符串列在进行 LZ4 编码时因 Size 检查不严导致 BE Crash。 [#61495](https://github.com/StarRocks/starrocks/pull/61495)
+- 无 `PARTITION BY` 和 `GROUP BY` 的 Ranking 窗口函数优化生成了空的 `ORDER BY`，导致 `MERGING-EXCHANGE` 算子 Crash。 [#67081](https://github.com/StarRocks/starrocks/pull/67081)
+- 低基数（Low Cardinality）列重写逻辑依赖 Set 迭代顺序，导致结果不稳定或报错，改为并查集实现。 [#66724](https://github.com/StarRocks/starrocks/pull/66724)
+
 ## 3.3.20
 
 发布日期：2025 年 11 月 18 日

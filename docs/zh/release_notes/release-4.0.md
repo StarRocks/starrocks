@@ -10,6 +10,65 @@ displayed_sidebar: docs
 
 :::
 
+## 4.0.3
+
+发布日期：2025 年 12 月 25 日
+
+### 降级说明
+
+在将集群从 v4.0.3 降级到 v3.5.0~v3.5.10 之前，请先执行以下语句：
+
+```SQL
+SET GLOBAL enable_rewrite_simple_agg_to_meta_scan=false;
+```
+
+### 功能优化
+
+- 支持对 STRUCT 数据类型使用 `ORDER BY` 子句。[#66035](https://github.com/StarRocks/starrocks/pull/66035)
+- 支持创建带属性的 Iceberg 视图，并在 `SHOW CREATE VIEW` 的输出中显示这些属性。[#65938](https://github.com/StarRocks/starrocks/pull/65938)
+- 支持通过 `ALTER TABLE ADD/DROP PARTITION COLUMN` 修改 Iceberg 表的分区 Spec。[#65922](https://github.com/StarRocks/starrocks/pull/65922)
+- 支持在带窗口框架（例如 `ORDER BY` / `PARTITION BY`）的窗口函数中使用 `COUNT/SUM/AVG(DISTINCT)` 聚合，并提供优化选项。[#65815](https://github.com/StarRocks/starrocks/pull/65815)
+- 对 CSV 解析进行性能优化，对单字符分隔符使用 `memchr`。[#63715](https://github.com/StarRocks/starrocks/pull/63715)
+- 新增优化器规则，将 Partial TopN 下推到预聚合（Pre-Aggregation）阶段，以减少网络开销。[#61497](https://github.com/StarRocks/starrocks/pull/61497)
+- 增强 Data Cache 监控能力：
+  - 新增内存/磁盘配额及使用量相关指标。[#66168](https://github.com/StarRocks/starrocks/pull/66168)
+  - 在 `api/datacache/stat` HTTP 接口中新增 Page Cache 统计信息。[#66240](https://github.com/StarRocks/starrocks/pull/66240)
+  - 新增内表的命中率统计。[#66198](https://github.com/StarRocks/starrocks/pull/66198)
+- 优化 Sort 和 Aggregation 算子，在 OOM 场景下支持更快速地释放内存。[#66157](https://github.com/StarRocks/starrocks/pull/66157)
+- 在 FE 中新增 `TableSchemaService`，用于存算分离集群中 CN 按需获取指定表结构。[#66142](https://github.com/StarRocks/starrocks/pull/66142)
+- 优化快速 Schema Evolution，在所有依赖的导入作业完成前保留历史 Schema。[#65799](https://github.com/StarRocks/starrocks/pull/65799)
+- 增强 `filterPartitionsByTTL`，正确处理 NULL 分区值，避免误过滤所有分区。[#65923](https://github.com/StarRocks/starrocks/pull/65923)
+- 优化 `FusedMultiDistinctState`，在重置时清理关联的 MemPool。[#66073](https://github.com/StarRocks/starrocks/pull/66073)
+- 在 Iceberg REST Catalog 中，将 `ICEBERG_CATALOG_SECURITY` 属性检查改为大小写不敏感。[#66028](https://github.com/StarRocks/starrocks/pull/66028)
+- 在存算分离集群中新增 HTTP 接口 `GET /service_id`，用于获取 StarOS Service ID。[#65816](https://github.com/StarRocks/starrocks/pull/65816)
+- Kafka 消费者配置中使用 `bootstrap.servers` 替代已废弃的 `metadata.broker.list`。[#65437](https://github.com/StarRocks/starrocks/pull/65437)
+- 新增 FE 配置项 `lake_enable_fullvacuum`（默认值：false），用于禁用 Full Vacuum Daemon。[#66685](https://github.com/StarRocks/starrocks/pull/66685)
+- 将 lz4 库升级至 v1.10.0。[#67080](https://github.com/StarRocks/starrocks/pull/67080)
+
+### 问题修复
+
+修复了以下问题：
+
+- `latest_cached_tablet_metadata` 在批量 Publish 过程中可能导致版本被错误跳过。[#66558](https://github.com/StarRocks/starrocks/pull/66558)
+- 在存算一体集群中，`CatalogRecycleBin` 中的 `ClusterSnapshot` 相对检查可能引发的问题。[#66501](https://github.com/StarRocks/starrocks/pull/66501)
+- 在 Spill 过程中向 Iceberg 表写入复杂数据类型（ARRAY / MAP / STRUCT）时导致 BE 崩溃。[#66209](https://github.com/StarRocks/starrocks/pull/66209)
+- 当 writer 初始化或首次写入失败时，Connector Chunk Sink 可能发生卡死。[#65951](https://github.com/StarRocks/starrocks/pull/65951)
+- Connector Chunk Sink 中，`PartitionChunkWriter` 初始化失败后，在关闭阶段触发空指针异常的问题。[#66097](https://github.com/StarRocks/starrocks/pull/66097)
+- 设置不存在的系统变量时未报错而是静默成功的问题。[#66022](https://github.com/StarRocks/starrocks/pull/66022)
+- Data Cache 损坏时，Bundle 元数据解析失败的问题。[#66021](https://github.com/StarRocks/starrocks/pull/66021)
+- 当结果为空时，MetaScan 在 count 列上返回 NULL 而非 0。[#66010](https://github.com/StarRocks/starrocks/pull/66010)
+- 对于早期版本创建的资源组，`SHOW VERBOSE RESOURCE GROUP ALL` 显示 NULL 而非 `default_mem_pool`。[#65982](https://github.com/StarRocks/starrocks/pull/65982)
+- 禁用 `flat_json` 表配置后，查询执行过程中抛出 `RuntimeException`。[#65921](https://github.com/StarRocks/starrocks/pull/65921)
+- 在存算分离集群中，Schema Change 后将 `min` / `max` 统计信息重写到 MetaScan 时导致的类型不匹配问题。[#65911](https://github.com/StarRocks/starrocks/pull/65911)
+- 在缺少 `PARTITION BY` 和 `ORDER BY` 时，排名窗口优化导致 BE 崩溃的问题。[#67093](https://github.com/StarRocks/starrocks/pull/67093)
+- 合并运行时过滤器时，`can_use_bf` 判断不正确，可能导致错误结果或崩溃。[#67062](https://github.com/StarRocks/starrocks/pull/67062)
+- 将运行时 bitset 过滤器下推到嵌套 OR 谓词中导致结果不正确的问题。[#67061](https://github.com/StarRocks/starrocks/pull/67061)
+- DeltaWriter 完成后仍执行写入或 flush 操作，可能导致数据竞争和数据丢失的问题。[#66966](https://github.com/StarRocks/starrocks/pull/66966)
+- 将简单聚合重写为 MetaScan 时，由于 nullable 属性不匹配导致的执行错误。[#67068](https://github.com/StarRocks/starrocks/pull/67068)
+- MetaScan 重写规则中行数计算不正确的问题。[#66967](https://github.com/StarRocks/starrocks/pull/66967)
+- 由于 Tablet 元数据缓存不一致，批量 Publish 过程中版本可能被错误跳过。[#66575](https://github.com/StarRocks/starrocks/pull/66575)
+- HyperLogLog 操作中，内存分配失败时错误处理不当的问题。[#66827](https://github.com/StarRocks/starrocks/pull/66827)
+
 ## 4.0.2
 
 发布日期：2025 年 12 月 4 日
