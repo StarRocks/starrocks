@@ -6243,8 +6243,9 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             if (context.bracketHint().primaryExpression() != null) {
                 joinRelation.setSkewColumn((Expr) visit(context.bracketHint().primaryExpression()));
             }
-            if (context.bracketHint().literalExpressionList() != null) {
-                joinRelation.setSkewValues(visit(context.bracketHint().literalExpressionList().literalExpression(),
+            if (context.bracketHint().generalLiteralExpressionList() != null) {
+                joinRelation.setSkewValues(
+                        visit(context.bracketHint().generalLiteralExpressionList().generalLiteralExpression(),
                         Expr.class));
             }
         }
@@ -8032,27 +8033,40 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
 
     @Override
     public ParseNode visitNumericLiteral(com.starrocks.sql.parser.StarRocksParser.NumericLiteralContext context) {
-        ParseNode node = visit(context.number());
-        if (context.MINUS_SYMBOL() != null) {
-            if (node instanceof IntLiteral) {
-                return new IntLiteral(-((IntLiteral) node).getLongValue(), node.getPos());
-            } else if (node instanceof LargeIntLiteral) {
-                BigInteger val = ((LargeIntLiteral) node).getValue();
-                val = val.negate();
-                if (val.compareTo(BigInteger.valueOf(Long.MIN_VALUE)) >= 0 &&
-                        val.compareTo(BigInteger.valueOf(Long.MAX_VALUE)) <= 0) {
-                    return new IntLiteral(val.longValue(), node.getPos());
+        return visit(context.number());
+    }
+
+    @Override
+    public ParseNode visitGeneralLiteralExpression(
+            com.starrocks.sql.parser.StarRocksParser.GeneralLiteralExpressionContext context) {
+        if (context.literalExpression() != null) {
+            return visit(context.literalExpression());
+        } else {
+            ParseNode node = visit(context.number());
+            if (context.MINUS_SYMBOL() != null) {
+                if (node instanceof IntLiteral) {
+                    return new IntLiteral(-((IntLiteral) node).getLongValue(), node.getPos());
+                } else if (node instanceof LargeIntLiteral) {
+                    BigInteger val = ((LargeIntLiteral) node).getValue();
+                    val = val.negate();
+                    if (val.compareTo(BigInteger.valueOf(Long.MIN_VALUE)) >= 0 &&
+                            val.compareTo(BigInteger.valueOf(Long.MAX_VALUE)) <= 0) {
+                        return new IntLiteral(val.longValue(), node.getPos());
+                    }
+                    return new LargeIntLiteral(val.toString(), node.getPos());
+                } else if (node instanceof DecimalLiteral) {
+                    BigDecimal val = ((DecimalLiteral) node).getValue();
+                    return new DecimalLiteral(val.negate(), node.getPos());
+                } else if (node instanceof FloatLiteral) {
+                    double val = ((FloatLiteral) node).getDoubleValue();
+                    return new FloatLiteral(-val, node.getPos());
+                } else {
+                    throw new ParsingException(PARSER_ERROR_MSG.invalidNumFormat(context.getText()), node.getPos());
                 }
-                return new LargeIntLiteral(val.toString(), node.getPos());
-            } else if (node instanceof DecimalLiteral) {
-                BigDecimal val = ((DecimalLiteral) node).getValue();
-                return new DecimalLiteral(val.negate(), node.getPos());
-            } else if (node instanceof FloatLiteral) {
-                double val = ((FloatLiteral) node).getDoubleValue();
-                return new FloatLiteral(-val, node.getPos());
+            } else {
+                return node;
             }
         }
-        return node;
     }
 
     @Override

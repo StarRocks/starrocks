@@ -61,13 +61,13 @@ public class InPredicateParserBench {
         sql = generateSQL();
     }
 
-    @Param({"5000", "50000"})
+    @Param({"5000", "50000", "200000"})
     public int count;
 
-    @Param({"true", "false"})
+    @Param({"false", "true"})
     public boolean positive;
 
-    public final int baseNumber = 1_000_000;
+    public final int baseNumber = 10_000_000;
 
     @Benchmark
     public void parseInPredicate() {

@@ -707,11 +707,7 @@ class ParserTest {
         };
         SessionVariable sessionVariable = new SessionVariable();
         for (String sql : sqls) {
-            try {
-                SqlParser.parse(sql, sessionVariable);
-            } catch (Exception e) {
-                fail("sql should parse successfully: " + sql + ", error: " + e.getMessage());
-            }
+            SqlParser.parse(sql, sessionVariable);
         }
     }
 
