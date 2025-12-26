@@ -22,12 +22,15 @@
 #include <iomanip>
 #include <string_view>
 
+#include "absl/container/inlined_vector.h"
 #include "common/statusor.h"
 #include "runtime/decimalv3.h"
 #include "types/timestamp_value.h"
 #include "util/url_coding.h"
 
 namespace starrocks {
+
+using KeyIndexVector = absl::InlinedVector<uint32_t, 4>;
 
 static std::string basic_type_to_string(VariantValue::BasicType type) {
     switch (type) {
@@ -97,37 +100,39 @@ std::string VariantUtil::variant_type_to_string(VariantType type) {
     return "Unknown";
 }
 
-VariantMetadata::VariantMetadata(std::string_view metadata) : _metadata(metadata) {
-    // Empty metadata is at least 3 bytes: version, dictionarySize and
-    // at least one offset.
-    DCHECK(!metadata.empty()) << "Variant metadata cannot be empty";
-    DCHECK(metadata.size() >= 3) << "Variant metadata size is too short: " << std::to_string(metadata.size());
+Status VariantMetadata::_build_lookup_index() const {
+    uint32_t dict_sz = dict_size();
+    if (_has_built_lookup_index || dict_sz == 0) {
+        return Status::OK();
+    }
 
-    const uint8_t version = header() & kVersionMask;
-    DCHECK(version == kSupportedVersion) << "Unsupported variant version: " << std::to_string(version);
+    std::vector<std::string_view>& dict_strings = _lookup_index.dict_strings;
+    dict_strings.reserve(dict_sz);
 
-    const uint8_t offset_sz = offset_size();
-    _dict_size = VariantUtil::read_little_endian_unsigned32(metadata.data() + kHeaderSizeBytes, offset_sz);
+    uint8_t offset_sz = offset_size();
+    const char* offset_base = _metadata.data() + kHeaderSizeBytes + offset_sz;
+    const char* string_base = _metadata.data() + kHeaderSizeBytes + offset_sz * (dict_sz + 2);
+    uint32_t value_offset = VariantUtil::read_little_endian_unsigned32(offset_base, offset_sz);
+
+    for (uint32_t i = 0; i < dict_sz; i++) {
+        uint32_t value_next_offset = VariantUtil::read_little_endian_unsigned32(offset_base + offset_sz, offset_sz);
+        uint32_t key_size = value_next_offset - value_offset;
+        const char* string_start = string_base + value_offset;
+        if (string_start + key_size > _metadata.data() + _metadata.size()) {
+            return Status::VariantError("Variant string out of range");
+        }
+        std::string_view field_key(string_start, key_size);
+        dict_strings.emplace_back(field_key);
+
+        offset_base += offset_sz;
+        value_offset = value_next_offset;
+    }
+
+    _has_built_lookup_index = true;
+    return Status::OK();
 }
 
-uint8_t VariantMetadata::header() const {
-    return static_cast<uint8_t>(_metadata[0]);
-}
-
-bool VariantMetadata::is_sorted_and_unique() const {
-    return (header() & kSortedStringMask) != 0;
-}
-
-uint8_t VariantMetadata::offset_size() const {
-    // variant header stores offsetSize - 1
-    return ((header() & kOffsetMask) >> kOffsetSizeBitShift) + 1;
-}
-
-uint32_t VariantMetadata::dict_size() const {
-    return _dict_size;
-}
-
-StatusOr<std::string> VariantMetadata::get_key(uint32_t index) const {
+StatusOr<std::string_view> VariantMetadata::get_key(uint32_t index) const {
     uint8_t offset_sz = offset_size();
     uint32_t dict_sz = dict_size();
     if (index >= dict_sz) {
@@ -145,74 +150,75 @@ StatusOr<std::string> VariantMetadata::get_key(uint32_t index) const {
         return Status::VariantError("Variant string out of range");
     }
 
-    std::string field_key(_metadata.data() + string_start, key_size);
+    std::string_view field_key(_metadata.data() + string_start, key_size);
     return field_key;
 }
 
 static constexpr uint8_t kBinarySearchThreshold = 32;
 
-std::vector<uint32_t> VariantMetadata::get_index(std::string_view key) const {
+Status VariantMetadata::_get_index(std::string_view key, void* _indexes) const {
+    KeyIndexVector& indexes = *static_cast<KeyIndexVector*>(_indexes);
+
     uint32_t dict_sz = dict_size();
+    if (dict_sz == 0) {
+        return Status::OK();
+    }
+
+    // VLOG_FILE << "[xxx] will lookup key: " << key << ", _lookup_index built: " << _has_built_lookup_index
+    //           << ", object = " << (void*)this;
+
     bool is_sorted_unique = is_sorted_and_unique();
-    std::vector<uint32_t> indexes;
+    RETURN_IF_ERROR(_build_lookup_index());
+    const std::vector<std::string_view>& dict_strings = _lookup_index.dict_strings;
 
-    if (is_sorted_unique && dict_sz > kBinarySearchThreshold) {
-        // binary search
-        uint32_t left = 0;
-        uint32_t right = dict_sz - 1;
-        while (left <= right) {
-            uint32_t mid = left + (right - left) / 2;
-            auto status = get_key(mid);
-            if (!status.ok()) {
-                return indexes;
+    if (is_sorted_unique) {
+        if (dict_sz > kBinarySearchThreshold) {
+            auto it = std::lower_bound(dict_strings.begin(), dict_strings.end(), key);
+            if (it != dict_strings.end() && *it == key) {
+                indexes.push_back(std::distance(dict_strings.begin(), it));
             }
-            std::string_view field_key = status.value();
-            int cmp = field_key.compare(key);
-            if (cmp == 0) {
-                indexes.push_back(mid);
-                break;
-            }
-
-            if (cmp < 0) {
-                left = mid + 1;
-            } else {
-                right = mid - 1;
-            }
-        }
-    } else {
-        uint8_t offset_sz = this->offset_size();
-        uint32_t dict_key_offset = 0;
-        uint32_t dict_next_key_offset = 0;
-        const uint32_t key_start_offset = kHeaderSizeBytes + offset_sz * (dict_sz + 1 + 1);
-        for (uint32_t i = 0; i < dict_sz; i++) {
-            size_t offset_start_pos = kHeaderSizeBytes + (i + 1) * offset_sz;
-            dict_key_offset = dict_next_key_offset;
-            dict_next_key_offset = VariantUtil::read_little_endian_unsigned32(
-                    _metadata.data() + offset_start_pos + offset_sz, offset_sz);
-            uint32_t dict_key_size = dict_next_key_offset - dict_key_offset;
-            size_t dict_key_start = key_start_offset + dict_key_offset;
-            if (dict_key_start + dict_key_size > _metadata.size()) {
-                throw Status::VariantError("Invalid Variant metadata: string data out of range");
-            }
-
-            std::string_view field_key{_metadata.data() + dict_key_start, dict_key_size};
-            if (field_key == key) {
-                indexes.push_back(i);
+        } else {
+            auto it = std::find(dict_strings.begin(), dict_strings.end(), key);
+            if (it != dict_strings.end()) {
+                indexes.push_back(std::distance(dict_strings.begin(), it));
             }
         }
     }
 
-    return indexes;
+    // // build hash map while checking uniqueness
+    // phmap::flat_hash_map<Slice, uint32_t, SliceHash>& dict_index_map = _lookup_index.dict_index_map;
+    // if (dict_index_map.empty()) {
+    //     dict_index_map.reserve(dict_sz);
+    //     _lookup_index.is_dict_unique = true;
+    //     for (uint32_t i = 0; i < dict_sz; i++) {
+    //         const auto key = Slice(dict_strings[i]);
+    //         if (dict_index_map.find(key) != dict_index_map.end()) {
+    //             _lookup_index.is_dict_unique = false;
+    //         }
+    //         dict_index_map[key] = i;
+    //     }
+    // }
+
+    // // if unique dictionary, find directly from hash map
+    // // otherwise, fall back to linear scan
+    // if (_lookup_index.is_dict_unique) {
+    //     auto it = dict_index_map.find(Slice(key));
+    //     if (it != dict_index_map.end()) {
+    //         indexes.push_back(it->second);
+    //     }
+    // } else {
+    else {
+        // non-unique dictionary, find all matching indexes
+        for (uint32_t i = 0; i < dict_sz; i++) {
+            if (dict_strings[i] == key) {
+                indexes.push_back(i);
+            }
+        }
+    }
+    return Status::OK();
 }
 
 // Variant value class
-VariantValue::VariantValue(std::string_view value) : _value(value) {
-    DCHECK(!value.empty()) << "Variant value cannot be empty";
-}
-
-VariantValue::BasicType VariantValue::basic_type() const {
-    return static_cast<VariantValue::BasicType>(_value[0] & kBasicTypeMask);
-}
 
 VariantType VariantValue::type() const {
     switch (basic_type()) {
@@ -344,10 +350,6 @@ StatusOr<VariantArrayInfo> VariantValue::get_array_info() const {
     }
 
     return StatusOr<VariantArrayInfo>(array_info);
-}
-
-uint8_t VariantValue::value_header() const {
-    return static_cast<uint8_t>(_value[0]) >> kValueHeaderBitShift;
 }
 
 Status VariantValue::validate_basic_type(VariantValue::BasicType type) const {
@@ -581,7 +583,8 @@ StatusOr<VariantValue> VariantValue::get_object_by_key(const VariantMetadata& me
 
     const auto [num_elements, id_start_offset, id_size, offset_start_offset, offset_size, data_start_offset] =
             obj_status.value();
-    const std::vector<uint32_t> dict_indexes = metadata.get_index(key);
+    KeyIndexVector dict_indexes;
+    RETURN_IF_ERROR(metadata._get_index(key, (void*)&dict_indexes));
     if (dict_indexes.empty()) {
         return Status::NotFound("Field key not exists: " + std::string(key));
     }

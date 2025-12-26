@@ -22,6 +22,7 @@
 #include "fmt/format.h"
 #include "util/slice.h"
 #include "util/variant.h"
+#include "util/raw_container.h"
 
 namespace starrocks {
 
@@ -188,7 +189,7 @@ private:
      * The wrappers (_metadata, _value) must be kept in sync with their
      * underlying storage (_raw) via _rebind_views() whenever _raw is modified.
      */
-    std::string _raw;
+    raw::RawString _raw;
     size_t _metadata_size;
     VariantMetadata _metadata;
     VariantValue _value;

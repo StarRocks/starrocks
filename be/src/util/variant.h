@@ -22,7 +22,10 @@
 #include <string_view>
 
 #include "common/status.h"
+#include "hash.h"
 #include "util/decimal_types.h"
+#include "util/phmap/phmap.h"
+#include "util/slice.h"
 
 namespace starrocks {
 
@@ -92,22 +95,49 @@ struct VariantDecimalValue {
     std::string to_string() const;
 };
 
+class VariantValue;
+class VariantMetadata;
+
+struct VariantUtil {
+    static Status variant_to_json(const VariantMetadata& metadata, const VariantValue& value,
+                                  std::stringstream& json_str, cctz::time_zone timezone = cctz::local_time_zone());
+
+    static inline uint32_t read_little_endian_unsigned32(const void* from, uint8_t size) {
+        DCHECK_LE(size, 4);
+        DCHECK_GE(size, 1);
+
+        uint32_t result = 0;
+        memcpy(&result, from, size);
+        return arrow::bit_util::FromLittleEndian(result);
+    }
+
+    static std::string variant_type_to_string(VariantType type);
+};
+
 class VariantMetadata {
 public:
     // We probably will optimize internal state like to build indexes for dictionary lookups.
     // so the cost of creating VariantMetadata is not trivial
-    explicit VariantMetadata(std::string_view metadata);
+    explicit VariantMetadata(std::string_view metadata) : _metadata(metadata) {
+        if (_metadata.data() == kEmptyMetadata.data()) {
+            return;
+        }
+
+        // Empty metadata is at least 3 bytes: version, dictionarySize and
+        // at least one offset.
+        DCHECK(!metadata.empty()) << "Variant metadata cannot be empty";
+        DCHECK(metadata.size() >= 3) << "Variant metadata size is too short: " << std::to_string(metadata.size());
+
+        const uint8_t version = header() & kVersionMask;
+        DCHECK(version == kSupportedVersion) << "Unsupported variant version: " << std::to_string(version);
+
+        // unintialize dict size, will be lazily computed
+        _dict_size = -1;
+    }
     VariantMetadata() : _metadata(kEmptyMetadata) {}
 
-    uint8_t header() const;
-    bool is_sorted_and_unique() const;
-    uint8_t offset_size() const;
-    // indicating the number of strings in the dictionary
-    uint32_t dict_size() const;
-    // return the index for the key in the dictionary
-    std::vector<uint32_t> get_index(std::string_view key) const;
     // return the field name for the index
-    StatusOr<std::string> get_key(uint32_t index) const;
+    StatusOr<std::string_view> get_key(uint32_t index) const;
 
     // return the metadata raw string view
     std::string_view raw() const { return _metadata; }
@@ -126,25 +156,38 @@ private:
     static constexpr uint8_t kOffsetSizeBitShift = 6;
     static constexpr uint8_t kOffsetSizeMask = 0b11;
 
-    std::string_view _metadata;
-    uint32_t _dict_size{0};
-};
-
-class VariantValue;
-struct VariantUtil {
-    static Status variant_to_json(const VariantMetadata& metadata, const VariantValue& value,
-                                  std::stringstream& json_str, cctz::time_zone timezone = cctz::local_time_zone());
-
-    static inline uint32_t read_little_endian_unsigned32(const void* from, uint8_t size) {
-        DCHECK_LE(size, 4);
-        DCHECK_GE(size, 1);
-
-        uint32_t result = 0;
-        memcpy(&result, from, size);
-        return arrow::bit_util::FromLittleEndian(result);
+    uint8_t header() const { return static_cast<uint8_t>(_metadata[0]); }
+    bool is_sorted_and_unique() const { return (header() & kSortedStringMask) != 0; }
+    uint8_t offset_size() const { return ((header() & kOffsetMask) >> kOffsetSizeBitShift) + 1; }
+    // indicating the number of strings in the dictionary
+    uint32_t dict_size() const {
+        if (_dict_size != -1) {
+            return _dict_size;
+        }
+        const uint8_t offset_sz = offset_size();
+        _dict_size = VariantUtil::read_little_endian_unsigned32(_metadata.data() + kHeaderSizeBytes, offset_sz);
+        return _dict_size;
     }
 
-    static std::string variant_type_to_string(VariantType type);
+    std::string_view _metadata;
+    mutable int32_t _dict_size{0};
+
+    friend class VariantValue;
+    // return the index for the key in the dictionary
+    // we use void* to avoid expose specific type in the header
+    Status _get_index(std::string_view key, void* indexes) const;
+
+    Status _build_lookup_index() const;
+
+    // fields for optimization. they are computed lazily
+    struct LookupIndex {
+        bool is_dict_unique = false;
+        std::vector<std::string_view> dict_strings;
+        phmap::flat_hash_map<Slice, uint32_t, SliceHash> dict_index_map;
+    };
+
+    mutable bool _has_built_lookup_index = false;
+    mutable LookupIndex _lookup_index;
 };
 
 // Representing the details of a Variant of Object
@@ -210,7 +253,9 @@ public:
     static constexpr std::string_view kEmptyValue{null_chars, sizeof(null_chars)};
 
 public:
-    explicit VariantValue(std::string_view value);
+    explicit VariantValue(std::string_view value) : _value(value) {
+        DCHECK(!value.empty()) << "Variant value cannot be empty";
+    }
     VariantValue() : _value(kEmptyValue) {}
 
     static constexpr uint8_t kHeaderSizeBytes = 1;
@@ -218,7 +263,7 @@ public:
     static constexpr uint8_t kBasicTypeMask = 0b00000011;
     static constexpr uint8_t kValueHeaderBitShift = 2;
 
-    BasicType basic_type() const;
+    BasicType basic_type() const { return static_cast<VariantValue::BasicType>(_value[0] & kBasicTypeMask); }
     std::string_view raw() const { return _value; }
     VariantType type() const;
 
@@ -279,9 +324,8 @@ public:
     bool operator==(const VariantValue& other) const { return _value == other._value; }
 
 private:
-    uint8_t value_header() const;
+    uint8_t value_header() const { return static_cast<uint8_t>(_value[0]) >> kValueHeaderBitShift; }
     Status validate_basic_type(BasicType type) const;
-
     Status validate_primitive_type(VariantType type, size_t size_required) const;
 
     template <typename PrimitiveType>
