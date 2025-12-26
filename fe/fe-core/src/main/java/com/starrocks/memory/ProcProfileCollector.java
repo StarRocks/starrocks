@@ -87,6 +87,10 @@ public class ProcProfileCollector extends FrontendDaemon {
                 LOG.info("change the system property {} to {}", libPathProperty, dir);
             }
         }
+        // Suppress async-profiler warnings about kernel symbols being unavailable.
+        // This warning is harmless and occurs when kernel.perf_event_paranoid or kernel.kptr_restrict
+        // are set to restrictive values, which is common in production environments.
+        System.setProperty("one.profiler.quiet", "true");
     }
 
     private void collectMemProfile() {
