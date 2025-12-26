@@ -2482,7 +2482,7 @@ outerAndSemiJoinType
 
 bracketHint
     : '[' identifier (',' identifier)* ']'
-    | '[' identifier '|' primaryExpression literalExpressionList']'
+    | '[' identifier '|' primaryExpression generalLiteralExpressionList']'
     ;
 
 hintMap
@@ -2672,6 +2672,12 @@ literalExpression
     | unitBoundary                                                                        #unitBoundaryLiteral
     | binary                                                                              #binaryLiteral
     | PARAMETER                                                                           #Parameter
+    ;
+
+// can represents negative number along with other literal expression
+generalLiteralExpression
+    : literalExpression
+    | MINUS_SYMBOL number
     ;
 
 functionCall
@@ -2883,6 +2889,10 @@ integerList
 
 literalExpressionList
     : '(' literalExpression (',' literalExpression)* ')'
+    ;
+
+generalLiteralExpressionList
+    : '(' generalLiteralExpression (',' generalLiteralExpression)* ')'
     ;
 
 rangePartitionDesc
