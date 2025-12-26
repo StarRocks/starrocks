@@ -7968,9 +7968,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
-<<<<<<< HEAD
-    public ParseNode visitIntegerValue(StarRocksParser.IntegerValueContext context) {
-=======
     public ParseNode visitGeneralLiteralExpression(
             com.starrocks.sql.parser.StarRocksParser.GeneralLiteralExpressionContext context) {
         if (context.literalExpression() != null) {
@@ -8004,8 +8001,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
-    public ParseNode visitIntegerValue(com.starrocks.sql.parser.StarRocksParser.IntegerValueContext context) {
->>>>>>> 2dba160a6a ([BugFix] support negative value in skew hint (#66922))
+    public ParseNode visitIntegerValue(StarRocksParser.IntegerValueContext context) {
         NodePosition pos = createPos(context);
         try {
             BigInteger intLiteral = new BigInteger(context.getText());
