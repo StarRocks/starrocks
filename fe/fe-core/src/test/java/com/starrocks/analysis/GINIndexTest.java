@@ -19,6 +19,8 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Index;
 import com.starrocks.common.Config;
+import com.starrocks.common.DdlException;
+import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.InvertedIndexParams.IndexParamsKey;
 import com.starrocks.common.InvertedIndexParams.InvertedIndexImpType;
 import com.starrocks.common.InvertedIndexParams.SearchParamsKey;
@@ -197,5 +199,47 @@ public class GINIndexTest extends PlanTestBase {
         StringLiteral stringExpr = new StringLiteral("test");
         MatchExpr expr = new MatchExpr(slot, stringExpr);
         MatchExpr newMatch = (MatchExpr) expr.clone();
+    }
+
+    @Test
+    public void testGINWithAutoIncrement() throws Exception {
+        // Test builtin GIN with AUTO_INCREMENT and replicated_storage = true (Should succeed)
+        ExceptionChecker.expectThrowsNoException(() -> starRocksAssert.withTable(
+                "CREATE TABLE `t_builtin` (" +
+                        "  `k` BIGINT AUTO_INCREMENT," +
+                        "  `msg_all` varchar(100)," +
+                        "  INDEX idx_msg_all (`msg_all`) USING GIN(\"imp_lib\" = \"builtin\", \"parser\" = \"standard\")" +
+                        ") ENGINE=OLAP " +
+                        "DUPLICATE KEY(`k`) " +
+                        "DISTRIBUTED BY HASH(`k`) BUCKETS 1 " +
+                        "PROPERTIES ( \"replication_num\" = \"1\", \"replicated_storage\" = \"true\" );"));
+        starRocksAssert.dropTable("t_builtin");
+
+        // Test clucene GIN with AUTO_INCREMENT and replicated_storage = true (Should fail)
+        // because OlapTableFactory will force replicated_storage to false for clucene GIN
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                "Table with AUTO_INCREMENT column must use Replicated Storage",
+                () -> starRocksAssert.withTable(
+                        "CREATE TABLE `t_clucene` (" +
+                                "  `k` BIGINT AUTO_INCREMENT," +
+                                "  `msg_all` varchar(100)," +
+                                "  INDEX idx_msg_all (`msg_all`) USING GIN(\"imp_lib\" = \"clucene\", \"parser\" = \"standard\")" +
+                                ") ENGINE=OLAP " +
+                                "DUPLICATE KEY(`k`) " +
+                                "DISTRIBUTED BY HASH(`k`) BUCKETS 1 " +
+                                "PROPERTIES ( \"replication_num\" = \"1\", \"replicated_storage\" = \"true\" );"));
+
+        // Test builtin GIN with AUTO_INCREMENT and replicated_storage = false (Should fail)
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                "Table with AUTO_INCREMENT column must use Replicated Storage",
+                () -> starRocksAssert.withTable(
+                        "CREATE TABLE `t_builtin_no_rs` (" +
+                                "  `k` BIGINT AUTO_INCREMENT," +
+                                "  `msg_all` varchar(100)," +
+                                "  INDEX idx_msg_all (`msg_all`) USING GIN(\"imp_lib\" = \"builtin\", \"parser\" = \"standard\")" +
+                                ") ENGINE=OLAP " +
+                                "DUPLICATE KEY(`k`) " +
+                                "DISTRIBUTED BY HASH(`k`) BUCKETS 1 " +
+                                "PROPERTIES ( \"replication_num\" = \"1\", \"replicated_storage\" = \"false\" );"));
     }
 }
