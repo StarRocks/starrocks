@@ -475,6 +475,7 @@
                     },
                     "items": [
                         "administration/management/logs",
+                        "administration/management/proc_profile",
                         "administration/management/Scale_up_down",
                         "administration/management/BE_blacklist",
                         "administration/management/Backup_and_restore",
