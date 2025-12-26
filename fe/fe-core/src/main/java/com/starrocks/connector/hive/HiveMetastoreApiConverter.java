@@ -251,6 +251,7 @@ public class HiveMetastoreApiConverter {
         HiveStorageFormat hiveSd = partition.getStorage();
         serdeInfo.setName(partition.getTableName());
         serdeInfo.setSerializationLib(hiveSd.getSerde());
+        serdeInfo.setParameters(partition.getSerDeParameters());
 
         StorageDescriptor sd = new StorageDescriptor();
         sd.setLocation(emptyToNull(partition.getLocation()));
