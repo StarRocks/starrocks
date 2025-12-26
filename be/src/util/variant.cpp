@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #include <arrow/util/endian.h>
+#include <fmt/format.h>
 #include <glog/logging.h>
 #include <util/variant.h>
 
@@ -132,20 +133,27 @@ Status VariantMetadata::_build_lookup_index() const {
     uint8_t offset_sz = offset_size();
     const char* offset_base = _metadata.data() + kHeaderSizeBytes + offset_sz;
     const char* string_base = _metadata.data() + kHeaderSizeBytes + offset_sz * (dict_sz + 2);
-    uint32_t value_offset = inline_read_little_endian_unsigned32(offset_base, offset_sz);
 
-    for (uint32_t i = 0; i < dict_sz; i++) {
-        uint32_t value_next_offset = inline_read_little_endian_unsigned32(offset_base + offset_sz, offset_sz);
-        uint32_t key_size = value_next_offset - value_offset;
-        const char* string_start = string_base + value_offset;
-        if (string_start + key_size > _metadata.data() + _metadata.size()) {
-            return Status::VariantError("Variant string out of range");
-        }
-        std::string_view field_key(string_start, key_size);
-        dict_strings.emplace_back(field_key);
+#define DECODE_VALUE_OFFSET(sz)                                                                                    \
+    case sz: {                                                                                                     \
+        uint32_t offset = inline_read_little_endian_unsigned32_fixed_size<sz>(offset_base);                        \
+        for (uint32_t i = 0; i < dict_sz; i++) {                                                                   \
+            uint32_t next_offset = inline_read_little_endian_unsigned32_fixed_size<sz>(offset_base + i * sz + sz); \
+            std::string_view field_key(string_base + offset, next_offset - offset);                                \
+            dict_strings.emplace_back(field_key);                                                                  \
+            offset = next_offset;                                                                                  \
+        }                                                                                                          \
+        if (string_base + offset > _metadata.data() + _metadata.size()) {                                          \
+            return Status::VariantError("Variant string out of range");                                            \
+        }                                                                                                          \
+        break;                                                                                                     \
+    }
 
-        offset_base += offset_sz;
-        value_offset = value_next_offset;
+    switch (offset_sz) {
+        DECODE_VALUE_OFFSET(1);
+        DECODE_VALUE_OFFSET(2);
+        DECODE_VALUE_OFFSET(3);
+        DECODE_VALUE_OFFSET(4);
     }
 
     _has_built_lookup_index = true;
@@ -202,28 +210,31 @@ Status VariantMetadata::_get_index(std::string_view key, void* _indexes) const {
         }
     }
 
-    // // build hash map while checking uniqueness
-    // phmap::flat_hash_map<Slice, uint32_t, SliceHash>& dict_index_map = _lookup_index.dict_index_map;
-    // if (dict_index_map.empty()) {
-    //     dict_index_map.reserve(dict_sz);
-    //     _lookup_index.is_dict_unique = true;
-    //     for (uint32_t i = 0; i < dict_sz; i++) {
-    //         const auto key = Slice(dict_strings[i]);
-    //         if (dict_index_map.find(key) != dict_index_map.end()) {
-    //             _lookup_index.is_dict_unique = false;
-    //         }
-    //         dict_index_map[key] = i;
-    //     }
-    // }
+#define USE_PHMAP 0
+#if USE_PHMAP
+    // build hash map while checking uniqueness
+    phmap::flat_hash_map<Slice, uint32_t, SliceHash>& dict_index_map = _lookup_index.dict_index_map;
+    if (dict_index_map.empty()) {
+        dict_index_map.reserve(dict_sz);
+        _lookup_index.is_dict_unique = true;
+        for (uint32_t i = 0; i < dict_sz; i++) {
+            const auto key = Slice(dict_strings[i]);
+            if (dict_index_map.find(key) != dict_index_map.end()) {
+                _lookup_index.is_dict_unique = false;
+            }
+            dict_index_map[key] = i;
+        }
+    }
 
-    // // if unique dictionary, find directly from hash map
-    // // otherwise, fall back to linear scan
-    // if (_lookup_index.is_dict_unique) {
-    //     auto it = dict_index_map.find(Slice(key));
-    //     if (it != dict_index_map.end()) {
-    //         indexes.push_back(it->second);
-    //     }
-    // } else {
+    // if unique dictionary, find directly from hash map
+    // otherwise, fall back to linear scan
+    if (_lookup_index.is_dict_unique) {
+        auto it = dict_index_map.find(Slice(key));
+        if (it != dict_index_map.end()) {
+            indexes.push_back(it->second);
+        }
+    }
+#endif
     else {
         // non-unique dictionary, find all matching indexes
         for (uint32_t i = 0; i < dict_sz; i++) {
