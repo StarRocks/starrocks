@@ -2826,7 +2826,7 @@ outerAndSemiJoinType
 
 bracketHint
     : '[' identifier (',' identifier)* ']'
-    | '[' identifier '|' primaryExpression literalExpressionList']'
+    | '[' identifier '|' primaryExpression generalLiteralExpressionList']'
     ;
 
 hintMap
@@ -3045,6 +3045,12 @@ literalExpression
     | PARAMETER                                                                           #Parameter
     ;
 
+// can represents negative number along with other literal expression
+generalLiteralExpression
+    : literalExpression
+    | MINUS_SYMBOL number
+    ;
+
 functionCall
     : EXTRACT '(' identifier FROM valueExpression ')'                                     #extract
     | GROUPING '(' (expression (',' expression)*)? ')'                                    #groupingOperation
@@ -3254,6 +3260,10 @@ integerList
 
 literalExpressionList
     : '(' literalExpression (',' literalExpression)* ')'
+    ;
+
+generalLiteralExpressionList
+    : '(' generalLiteralExpression (',' generalLiteralExpression)* ')'
     ;
 
 rangePartitionDesc
