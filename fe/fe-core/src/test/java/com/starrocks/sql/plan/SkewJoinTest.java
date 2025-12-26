@@ -93,6 +93,14 @@ public class SkewJoinTest extends PlanTestBase {
 
 
     @Test
+    public void testSkewJoinWithRightSideHint() throws Exception {
+        String sql = "select * from t0 left join [skew|t1.v4(100)] t1 on t0.v1 = t1.v4";
+        String sqlPlan = getFragmentPlan(sql);
+        assertCContains(sqlPlan, "equal join conjunct: 14: rand_col = 7: rand_col");
+        assertCContains(sqlPlan, "equal join conjunct: 1: v1 = 4: v4");
+    }
+
+    @Test
     public void testSkewJoin() throws Exception {
         String sql = "select v2, v5 from t0 join[skew|t0.v1(1,2)] t1 on v1 = v4 ";
         String sqlPlan = getFragmentPlan(sql);
@@ -229,12 +237,12 @@ public class SkewJoinTest extends PlanTestBase {
                 "join[skew|test.struct_tbl.c1.a(1,2)] test.t0 on t0.v1 = c1.a ";
         sqlPlan = getFragmentPlan(sql);
         assertCContains(sqlPlan, "HASH JOIN\n" +
-                "  |  join op: INNER JOIN (PARTITIONED)\n" +
-                "  |  colocate: false, reason: \n" +
-                "  |  equal join conjunct: 10: rand_col = 17: rand_col\n" +
-                "  |  equal join conjunct: 9: cast = 5: v1",
-                "<slot 10> : CASE WHEN 2: c1.a[true] IS NULL THEN 23: round WHEN 2: c1.a[true] IN (1, 2) THEN " +
-                        "23: round ELSE 0 END");
+                        "  |  join op: INNER JOIN (PARTITIONED)\n" +
+                        "  |  colocate: false, reason: \n" +
+                        "  |  equal join conjunct: 10: rand_col = 17: rand_col\n" +
+                        "  |  equal join conjunct: 9: cast = 5: v1",
+                "<slot 10> : CASE WHEN 22: cast IS NULL THEN 24: round WHEN 22: cast IN (1, 2) THEN 24: round " +
+                        "ELSE 0 END");
     }
 
     @Test
