@@ -843,7 +843,7 @@ public class HiveMetadataTest {
         ctx.setThreadLocalInfo();
 
         // Get a HiveTable from the mocked metadata
-        HiveTable hiveTable = (HiveTable) hiveMetadata.getTable(new ConnectContext(), "db1", "table1");
+        HiveTable hiveTable = (HiveTable) hiveMetadata.getTable("db1", "table1");
 
         // Create PartitionUpdate
         String partitionName = "col1=1";
@@ -864,19 +864,19 @@ public class HiveMetadataTest {
         HivePartition hivePartition = (HivePartition) method.invoke(hiveCommitter, partitionUpdate);
 
         // Verify the result
-        Assertions.assertNotNull(hivePartition);
-        Assertions.assertEquals("db1", hivePartition.getDatabaseName());
-        Assertions.assertEquals("table1", hivePartition.getTableName());
-        Assertions.assertEquals(Lists.newArrayList("1"), hivePartition.getValues());
-        Assertions.assertEquals(targetPath.toString(), hivePartition.getLocation());
-        Assertions.assertNotNull(hivePartition.getParameters());
-        Assertions.assertTrue(hivePartition.getParameters().containsKey("starrocks_version"));
-        Assertions.assertTrue(hivePartition.getParameters().containsKey(STARROCKS_QUERY_ID));
-        Assertions.assertEquals(ctx.getQueryId().toString(), hivePartition.getParameters().get(STARROCKS_QUERY_ID));
-        Assertions.assertNotNull(hivePartition.getSerDeParameters());
-        Assertions.assertEquals(hiveTable.getSerdeProperties(), hivePartition.getSerDeParameters());
-        Assertions.assertEquals(hiveTable.getStorageFormat(), hivePartition.getStorage());
-        Assertions.assertEquals(hiveTable.getDataColumnNames().size(), hivePartition.getColumns().size());
+        Assert.assertNotNull(hivePartition);
+        Assert.assertEquals("db1", hivePartition.getDatabaseName());
+        Assert.assertEquals("table1", hivePartition.getTableName());
+        Assert.assertEquals(Lists.newArrayList("1"), hivePartition.getValues());
+        Assert.assertEquals(targetPath.toString(), hivePartition.getLocation());
+        Assert.assertNotNull(hivePartition.getParameters());
+        Assert.assertTrue(hivePartition.getParameters().containsKey("starrocks_version"));
+        Assert.assertTrue(hivePartition.getParameters().containsKey(STARROCKS_QUERY_ID));
+        Assert.assertEquals(ctx.getQueryId().toString(), hivePartition.getParameters().get(STARROCKS_QUERY_ID));
+        Assert.assertNotNull(hivePartition.getSerDeParameters());
+        Assert.assertEquals(hiveTable.getSerdeProperties(), hivePartition.getSerDeParameters());
+        Assert.assertEquals(hiveTable.getStorageFormat(), hivePartition.getStorage());
+        Assert.assertEquals(hiveTable.getDataColumnNames().size(), hivePartition.getColumns().size());
 
         // Clean up
         ConnectContext.remove();
@@ -890,7 +890,7 @@ public class HiveMetadataTest {
         ctx.setThreadLocalInfo();
 
         // Get a HiveTable from the mocked metadata
-        HiveTable hiveTable = (HiveTable) hiveMetadata.getTable(new ConnectContext(), "db1", "table1");
+        HiveTable hiveTable = (HiveTable) hiveMetadata.getTable("db1", "table1");
 
         // Create SingleItemListPartitionDesc
         List<String> partitionValues = Lists.newArrayList("1");
@@ -924,31 +924,31 @@ public class HiveMetadataTest {
 
         // Use reflection to call private addPartition method
         java.lang.reflect.Method method = HiveMetadata.class.getDeclaredMethod(
-                "addPartition", ConnectContext.class, AlterTableStmt.class, AlterClause.class);
+                "addPartition", AlterTableStmt.class, AlterClause.class);
         method.setAccessible(true);
-        method.invoke(hiveMetadata, ctx, alterTableStmt, addPartitionClause);
+        method.invoke(hiveMetadata, alterTableStmt, addPartitionClause);
 
         // Verify addPartitions was called
-        Assertions.assertTrue(addPartitionsCalled.get());
-        Assertions.assertEquals(1, capturedPartitions.size());
+        Assert.assertTrue(addPartitionsCalled.get());
+        Assert.assertEquals(1, capturedPartitions.size());
 
         // Verify the partition details
         HivePartitionWithStats partitionWithStats = capturedPartitions.get(0);
-        Assertions.assertEquals("col1=1", partitionWithStats.getPartitionName());
+        Assert.assertEquals("col1=1", partitionWithStats.getPartitionName());
         HivePartition hivePartition = partitionWithStats.getHivePartition();
-        Assertions.assertNotNull(hivePartition);
-        Assertions.assertEquals("db1", hivePartition.getDatabaseName());
-        Assertions.assertEquals("table1", hivePartition.getTableName());
-        Assertions.assertEquals(partitionValues, hivePartition.getValues());
-        Assertions.assertEquals(hiveTable.getTableLocation() + "/col1=1", hivePartition.getLocation());
-        Assertions.assertNotNull(hivePartition.getParameters());
-        Assertions.assertTrue(hivePartition.getParameters().containsKey("starrocks_version"));
-        Assertions.assertTrue(hivePartition.getParameters().containsKey(STARROCKS_QUERY_ID));
-        Assertions.assertEquals(ctx.getQueryId().toString(), hivePartition.getParameters().get(STARROCKS_QUERY_ID));
-        Assertions.assertNotNull(hivePartition.getSerDeParameters());
-        Assertions.assertEquals(hiveTable.getSerdeProperties(), hivePartition.getSerDeParameters());
-        Assertions.assertEquals(hiveTable.getStorageFormat(), hivePartition.getStorage());
-        Assertions.assertEquals(hiveTable.getDataColumnNames().size(), hivePartition.getColumns().size());
+        Assert.assertNotNull(hivePartition);
+        Assert.assertEquals("db1", hivePartition.getDatabaseName());
+        Assert.assertEquals("table1", hivePartition.getTableName());
+        Assert.assertEquals(partitionValues, hivePartition.getValues());
+        Assert.assertEquals(hiveTable.getTableLocation() + "/col1=1", hivePartition.getLocation());
+        Assert.assertNotNull(hivePartition.getParameters());
+        Assert.assertTrue(hivePartition.getParameters().containsKey("starrocks_version"));
+        Assert.assertTrue(hivePartition.getParameters().containsKey(STARROCKS_QUERY_ID));
+        Assert.assertEquals(ctx.getQueryId().toString(), hivePartition.getParameters().get(STARROCKS_QUERY_ID));
+        Assert.assertNotNull(hivePartition.getSerDeParameters());
+        Assert.assertEquals(hiveTable.getSerdeProperties(), hivePartition.getSerDeParameters());
+        Assert.assertEquals(hiveTable.getStorageFormat(), hivePartition.getStorage());
+        Assert.assertEquals(hiveTable.getDataColumnNames().size(), hivePartition.getColumns().size());
 
         // Clean up
         ConnectContext.remove();
