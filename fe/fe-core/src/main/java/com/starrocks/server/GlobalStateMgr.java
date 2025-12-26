@@ -170,6 +170,7 @@ import com.starrocks.load.streamload.StreamLoadMgr;
 import com.starrocks.memory.MemoryUsageTracker;
 import com.starrocks.memory.ProcProfileCollector;
 import com.starrocks.meta.SqlBlackList;
+import com.starrocks.meta.SqlDigestBlackList;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.BackendIdsUpdateInfo;
 import com.starrocks.persist.EditLog;
@@ -532,6 +533,7 @@ public class GlobalStateMgr {
     private final ClusterSnapshotMgr clusterSnapshotMgr;
 
     private final SqlBlackList sqlBlackList;
+    private final SqlDigestBlackList sqlDigestBlackList;
     private final ReportHandler reportHandler;
     private final TabletCollector tabletCollector;
     private final SQLPlanStorage sqlPlanStorage;
@@ -854,6 +856,7 @@ public class GlobalStateMgr {
         this.ddlStmtExecutor = new DDLStmtExecutor(DDLStmtExecutor.StmtExecutorVisitor.getInstance());
         this.showExecutor = new ShowExecutor(ShowExecutor.ShowExecutorVisitor.getInstance());
         this.sqlBlackList = new SqlBlackList();
+        this.sqlDigestBlackList = new SqlDigestBlackList();
         this.temporaryTableCleaner = new TemporaryTableCleaner();
         this.queryDeployExecutor =
                 ThreadPoolManager.newDaemonFixedThreadPool(Config.query_deploy_threadpool_size, Integer.MAX_VALUE,
@@ -1633,6 +1636,7 @@ public class GlobalStateMgr {
                 .put(SRMetaBlockID.WAREHOUSE_MGR, warehouseMgr::load)
                 .put(SRMetaBlockID.CLUSTER_SNAPSHOT_MGR, clusterSnapshotMgr::load)
                 .put(SRMetaBlockID.BLACKLIST_MGR, sqlBlackList::load)
+                .put(SRMetaBlockID.DIGEST_BLACKLIST_MGR, sqlDigestBlackList::load)
                 .put(SRMetaBlockID.HISTORICAL_NODE_MGR, historicalNodeMgr::load)
                 .put(SRMetaBlockID.TABLET_RESHARD_JOB_MGR, tabletReshardJobMgr::load)
                 .build();
@@ -1863,6 +1867,7 @@ public class GlobalStateMgr {
                 clusterSnapshotMgr.save(imageWriter);
                 historicalNodeMgr.save(imageWriter);
                 tabletReshardJobMgr.save(imageWriter);
+                sqlDigestBlackList.save(imageWriter);
             } catch (SRMetaBlockException e) {
                 LOG.error("Save meta block failed ", e);
                 throw new IOException("Save meta block failed ", e);
@@ -2300,6 +2305,10 @@ public class GlobalStateMgr {
 
     public SqlBlackList getSqlBlackList() {
         return this.sqlBlackList;
+    }
+
+    public SqlDigestBlackList getSqlDigestBlackList() {
+        return this.sqlDigestBlackList;
     }
 
     public MaterializedViewMgr getMaterializedViewMgr() {

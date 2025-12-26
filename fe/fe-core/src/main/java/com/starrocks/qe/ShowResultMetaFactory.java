@@ -102,6 +102,7 @@ import com.starrocks.sql.ast.ShowRunningQueriesStmt;
 import com.starrocks.sql.ast.ShowSmallFilesStmt;
 import com.starrocks.sql.ast.ShowSnapshotStmt;
 import com.starrocks.sql.ast.ShowSqlBlackListStmt;
+import com.starrocks.sql.ast.ShowSqlDigestBlackListStmt;
 import com.starrocks.sql.ast.ShowStatusStmt;
 import com.starrocks.sql.ast.ShowStmt;
 import com.starrocks.sql.ast.ShowStorageVolumesStmt;
@@ -364,6 +365,14 @@ public class ShowResultMetaFactory implements AstVisitorExtendInterface<ShowResu
         return ShowResultSetMetaData.builder()
                 .addColumn(new Column("Id", TypeFactory.createVarcharType(20)))
                 .addColumn(new Column("Forbidden SQL", TypeFactory.createVarcharType(100)))
+                .build();
+    }
+
+    @Override
+    public ShowResultSetMetaData visitShowSqlDigestBlackListStatement(ShowSqlDigestBlackListStmt statement,
+                                                                      Void context) {
+        return ShowResultSetMetaData.builder()
+                .addColumn(new Column("Digests", TypeFactory.createVarcharType(32)))
                 .build();
     }
 
