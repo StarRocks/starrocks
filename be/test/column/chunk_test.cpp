@@ -211,7 +211,7 @@ TEST_F(ChunkTest, test_basic) {
 // NOLINTNEXTLINE
 TEST_F(ChunkTest, test_append_column) {
     auto chunk = std::make_unique<Chunk>(make_columns(2), make_schema(2));
-    chunk->append_column(std::move(make_column(2)), make_field(2));
+    chunk->append_column(make_column(2), make_field(2));
 
     Columns columns = chunk->columns();
     ASSERT_EQ(3, columns.size());

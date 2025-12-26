@@ -944,7 +944,7 @@ static Chunk generate_chunk(SchemaPtr schema, size_t num_rows, size_t num_column
         col->append_numbers(col_v.data(), col_v.size() * sizeof(int));
         columns.push_back(std::move(col));
     }
-    return Chunk(columns, schema);
+    return Chunk(std::move(columns), schema);
 }
 
 void LakeDuplicateTablet10kColumnReaderTest::test_10k_column_read_perf_body(bool enable_batch_update,
