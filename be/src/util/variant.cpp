@@ -352,18 +352,11 @@ StatusOr<VariantArrayInfo> VariantValue::get_array_info() const {
     return StatusOr<VariantArrayInfo>(array_info);
 }
 
-Status VariantValue::validate_basic_type(VariantValue::BasicType type) const {
-    if (basic_type() != type) {
-        return Status::VariantError("Expected basic type: " + basic_type_to_string(type) +
+Status VariantValue::validate_primitive_type(VariantType type, size_t size_required) const {
+    if (basic_type() != VariantValue::BasicType::PRIMITIVE) {
+        return Status::VariantError("Expected basic type: " + basic_type_to_string(VariantValue::BasicType::PRIMITIVE) +
                                     ", but got: " + basic_type_to_string(basic_type()));
     }
-
-    return Status::OK();
-}
-
-Status VariantValue::validate_primitive_type(VariantType type, size_t size_required) const {
-    RETURN_IF_ERROR(validate_basic_type(VariantValue::BasicType::PRIMITIVE));
-
     auto primitive_type = static_cast<VariantType>(value_header());
     if (primitive_type != type) {
         return Status::VariantError("Expected primitive type: " + VariantUtil::variant_type_to_string(type) +
@@ -391,8 +384,6 @@ StatusOr<PrimitiveType> VariantValue::get_primitive(VariantType type) const {
 }
 
 StatusOr<bool> VariantValue::get_bool() const {
-    RETURN_IF_ERROR(validate_basic_type(basic_type()));
-
     // extract the primitive type from the header
     VariantType primitive_type = static_cast<VariantType>(value_header());
     if (primitive_type == VariantType::BOOLEAN_TRUE) {
@@ -513,8 +504,6 @@ StatusOr<std::string_view> VariantValue::get_string() const {
 }
 
 StatusOr<std::string_view> VariantValue::get_binary() const {
-    RETURN_IF_ERROR(validate_basic_type(VariantValue::BasicType::PRIMITIVE));
-
     return get_primitive_string_or_binary(VariantType::BINARY);
 }
 
@@ -543,8 +532,6 @@ StatusOr<int64_t> VariantValue::get_timestamp_nanos_ntz() const {
 }
 
 StatusOr<std::array<uint8_t, 16>> VariantValue::get_uuid() const {
-    RETURN_IF_ERROR(validate_basic_type(VariantValue::BasicType::PRIMITIVE));
-
     RETURN_IF_ERROR(validate_primitive_type(VariantType::UUID, 16 + kHeaderSizeBytes));
 
     std::array<uint8_t, 16> uuid_value;
@@ -574,8 +561,6 @@ StatusOr<uint32_t> VariantValue::num_elements() const {
 }
 
 StatusOr<VariantValue> VariantValue::get_object_by_key(const VariantMetadata& metadata, std::string_view key) const {
-    RETURN_IF_ERROR(validate_basic_type(VariantValue::BasicType::OBJECT));
-
     auto obj_status = get_object_info();
     if (!obj_status.ok()) {
         return obj_status.status();
@@ -620,8 +605,6 @@ StatusOr<VariantValue> VariantValue::get_object_by_key(const VariantMetadata& me
 }
 
 StatusOr<VariantValue> VariantValue::get_element_at_index(const VariantMetadata& metadata, uint32_t index) const {
-    RETURN_IF_ERROR(validate_basic_type(VariantValue::BasicType::ARRAY));
-
     auto array_info_status = get_array_info();
     if (!array_info_status.ok()) {
         return array_info_status.status();

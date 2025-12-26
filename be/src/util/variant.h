@@ -325,7 +325,6 @@ public:
 
 private:
     uint8_t value_header() const { return static_cast<uint8_t>(_value[0]) >> kValueHeaderBitShift; }
-    Status validate_basic_type(BasicType type) const;
     Status validate_primitive_type(VariantType type, size_t size_required) const;
 
     template <typename PrimitiveType>
