@@ -17,11 +17,11 @@ keywords: ['profile', 'query']
    `QueryPeakMemoryUsagePerNode > 80 %` または `QuerySpillBytes > 1 GB` の場合、メモリとスピルのレシピに直接進みます。
 
 2. **最も遅いパイプライン / オペレーターを見つける**  
-   ⟶ *Query Profile UI* で **Sort by OperatorTotalTime %** をクリックします。  
+   ⟶ _Query Profile UI_ で **Sort by OperatorTotalTime %** をクリックします。  
    最も負荷の高いオペレーターが次に読むべきレシピブロックを教えてくれます（Scan, Join, Aggregate など）。
 
 3. **ボトルネックのサブタイプを確認する**  
-   各レシピはその*シグネチャ*メトリックパターンから始まります。修正を試みる前にそれらを一致させます。
+   各レシピはその_シグネチャ_メトリックパターンから始まります。修正を試みる前にそれらを一致させます。
 
 ---
 
@@ -47,17 +47,17 @@ Scan Operator は、IO タスクを実行するための追加のスレッドプ
 
 #### 一般的なパフォーマンスのボトルネック
 
-**コールドまたは遅いストレージ** – `BytesRead`、`ScanTime`、または `IOTaskExecTime` が支配的で、ディスク I/O が 80‑100 % の範囲にある場合、スキャンはコールドまたは過小プロビジョニングされたストレージにヒットしています。ホットデータを NVMe/SSD に移動し、ストレージキャッシュを有効にするか、S3/HDFS をスキャンしている場合は `remote_cache_capacity` を増やします。
+**コールドまたは遅いストレージ** – `BytesRead`、`ScanTime`、または `IOTaskExecTime` が支配的で、ディスク I/O が 80–100% に張り付いている場合、コールドデータや性能/容量が不足したストレージに当たっています。ホットデータを NVMe/SSD に移動し、Data Cache を有効化してください。BE の `datacache_*`（互換の旧 `block_cache_*`）で容量を設定し、セッション変数 `enable_scan_datacache` によりスキャン時にキャッシュを利用します。
 
 **フィルタープッシュダウンの欠如** – `PushdownPredicates` が 0 に近いままで `ExprFilterRows` が高い場合、述語がストレージ層に到達していません。単純な比較として書き直す（`%LIKE%` や広範な `OR` チェーンを避ける）か、ゾーンマップ/Bloom インデックスやマテリアライズドビューを追加してプッシュダウンできるようにします。
 
-**スレッドプールの枯渇** – 高い `IOTaskWaitTime` と低い `PeakIOTasks` は、I/O スレッドプールが飽和していることを示します。BE の `max_io_threads` を増やすか、キャッシュを拡大してより多くのタスクを同時に実行できるようにします。
+**スレッドプールの枯渇** – 高い `IOTaskWaitTime` と低い `PeakIOTasks` は、I/O 並列度の飽和を示します。BE の I/O タスク並列度を上げても改善しません。代わりに、Data Cache を有効化して適切にサイジング（BE `datacache_*` とセッション `enable_scan_datacache`）、ホットデータを NVMe/SSD へ移動、上流の並列度を下げる（`pipeline_dop` を下げる、過剰な同時スキャンを避ける）ことを推奨します。
 
 **タブレット間のデータスキュー** – 最大と最小の `OperatorTotalTime` の間に大きなギャップがある場合、一部のタブレットが他よりも多くの作業をしています。高いカーディナリティのキーで再バケット化するか、バケット数を増やして負荷を分散します。
 
 **Rowset/segment の断片化** – `RowsetsReadCount`/`SegmentsReadCount` が急増し、長い `SegmentInitTime` がある場合、多くの小さな rowset が存在します。手動でのコンパクションをトリガーし、小さなロードをバッチ処理してセグメントを事前にマージします。
 
-**累積されたソフトデリート** – 大きな `DeleteFilterRows` は、ソフトデリートの使用が多いことを示します。BE コンパクションを実行してトゥームストーンを削除し、削除ビットマップを統合します。
+**累積されたソフトデリート** – 大きな `DeleteFilterRows` は、ソフトデリートの使用が多いことを示します。BE コンパクションを実行してソフトデリートをパージします。
 
 ### 2.2 集計  [[metrics]](./query_profile_operator_metrics.md#aggregate-operator)
 
@@ -137,9 +137,11 @@ StarRocks は、ベクトル化され、パイプラインに適したハッシ�
 
 ### 2.4 Exchange (ネットワーク)  [[metrics]](./query_profile_operator_metrics.md#exchange-operator)
 
-**サイズ超過のシャッフルまたはブロードキャスト** – `NetworkTime` が 30 % を超え、`BytesSent` が大きい場合、クエリは過剰なデータを送信しています。ジョイン戦略を再評価するか、Exchange Compaction (`pipeline_enable_exchange_compaction`) を有効にします。
+**サイズ超過のシャッフルまたはブロードキャスト** – `NetworkTime` が 30% を超え、`BytesSent` が大きい場合、送信データ量が過剰です。ジョイン戦略を再評価し、シャッフル/ブロードキャスト量を減らします（例: ブロードキャストの代わりにシャッフルを強制、上流で事前フィルタ）。
 
 **レシーバーのバックログ** – 送信者キューが常に満杯である場合、シンクでの高い `WaitTime` はレシーバーが追いつけないことを示します。レシーバースレッドプール (`brpc_num_threads`) を増やし、NIC の帯域幅と QoS 設定を確認します。
+
+**交換データの圧縮を有効化** – ネットワーク帯域がボトルネックの場合、Exchange のペイロードを圧縮します。`SET transmission_compression_type = 'zstd';` を設定し、必要に応じて `SET transmission_encode_level = 7;` で適応型カラムエンコードを有効化します。帯域削減の代償として CPU 使用率が上がります。
 
 ### 2.5 ソート / マージ / ウィンドウ
 
@@ -161,7 +163,7 @@ StarRocks は、ベクトル化され、パイプラインに適したハッシ�
             PROCESS
 ```
 
-**ソートスピリング** – `MaxBufferedBytes` が約 2 GB を超えるか `SpillBytes` がゼロでない場合、ソートフェーズがディスクにスピルしています。`LIMIT` を追加し、上流で事前集計するか、マシンに十分なメモリがある場合は `sort_spill_threshold` を上げます。
+**ソートスピリング** – `MaxBufferedBytes` が約 2 GB を超えるか `SpillBytes` がゼロでない場合、ソートフェーズがディスクにスピルしています。`LIMIT` を追加し、上流で事前集計するか、十分なメモリがある場合はセッション `full_sort_max_buffered_bytes`（および/または `full_sort_max_buffered_rows`）を引き上げます。
 
 **マージの飢餓状態** – 高い `PendingStageTime` は、マージが上流のチャンクを待っていることを示します。最初にプロデューサーオペレーターを最適化するか、パイプラインバッファを拡大します。
 
