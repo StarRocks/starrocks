@@ -1344,8 +1344,6 @@ public class IcebergMetadata implements ConnectorMetadata {
         try {
             batchWrite.commit();
             transaction.commitTransaction();
-            // Refresh table metadata in FE
-            refreshTable(dbName, table, new ArrayList<>(), false);
             asyncRefreshOthersFeMetadataCache(dbName, tableName);
         } catch (Exception e) {
             if (!(e instanceof CommitStateUnknownException)) {
