@@ -846,6 +846,7 @@ public class HiveMetadataTest {
     public void testBuildHivePartition() throws Exception {
         // Setup ConnectContext with queryId
         ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+        ctx.setQueryId(UUIDUtil.genUUID());
         ctx.setThreadLocalInfo();
 
         // Get a HiveTable from the mocked metadata
