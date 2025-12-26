@@ -483,6 +483,10 @@ public class StatisticUtils {
                     .startsWith(FeConstants.GENERATED_PARTITION_COLUMN_PREFIX)) {
                 continue;
             }
+            // skip hidden columns
+            if (column.isHidden()) {
+                continue;
+            }
             // generated column doesn't support cross DB use
             if (column.isGeneratedColumn() && column.generatedColumnExprToString() != null) {
                 String expr = column.generatedColumnExprToString().toLowerCase();
