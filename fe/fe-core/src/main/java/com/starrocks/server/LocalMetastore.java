@@ -1501,8 +1501,8 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             if (isTempPartition) {
                 olapTable.dropTempPartition(partitionName, true);
             } else {
-                olapTable.dropPartition(db.getId(), partitionName, isForceDrop);
                 Partition partition = olapTable.getPartition(partitionName);
+                olapTable.dropPartition(db.getId(), partitionName, isForceDrop);
                 if (partition != null) {
                     GlobalStateMgr.getCurrentState().getAnalyzeMgr().recordDropPartition(partition.getId());
                     if (partitionInfo instanceof RangePartitionInfo && (olapTable instanceof MaterializedView mv)) {
