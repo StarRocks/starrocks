@@ -520,17 +520,24 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
             }
         }
         if (!l1.isEmpty()) {
-            List<Long> tableIds = l1.stream()
+            List<RecycleTableInfo> tableInfos = l1.stream()
                     .filter(RecycleTableInfo::isRecoverable)
-                    .peek(i -> i.setRecoverable(false))
-                    .map(i -> i.getTable().getId())
-                    .collect(Collectors.toList());
-            logDisableTableRecovery(tableIds);
+                    .toList();
+            if (!tableInfos.isEmpty()) {
+                List<Long> tableIds = tableInfos.stream()
+                        .map(info -> info.getTable().getId())
+                        .collect(Collectors.toList());
+                GlobalStateMgr.getCurrentState().getEditLog().logDisableTableRecovery(tableIds, wal -> {
+                    for (RecycleTableInfo info : tableInfos) {
+                        info.setRecoverable(false);
+                    }
+                });
+                LOG.info("Finished log disable table recovery of tables: {}", StringUtils.join(tableIds, ","));
+            }
         }
         if (!l2.isEmpty()) {
             List<Long> tableIds = l2.stream().map(i -> i.getTable().getId()).collect(Collectors.toList());
-            removeTableFromRecycleBin(tableIds);
-            logEraseTables(tableIds);
+            logAddApplyEraseTables(tableIds);
         }
         return ListUtils.union(l1, l2);
     }
@@ -551,19 +558,13 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
         }
     }
 
-    static void logDisableTableRecovery(List<Long> tableIds) {
+    void logAddApplyEraseTables(List<Long> tableIds) {
         if (tableIds.isEmpty()) {
             return;
         }
-        GlobalStateMgr.getCurrentState().getEditLog().logDisableTableRecovery(tableIds);
-        LOG.info("Finished log disable table recovery of tables: {}", StringUtils.join(tableIds, ","));
-    }
-
-    static void logEraseTables(List<Long> tableIds) {
-        if (tableIds.isEmpty()) {
-            return;
-        }
-        GlobalStateMgr.getCurrentState().getEditLog().logEraseMultiTables(tableIds);
+        GlobalStateMgr.getCurrentState().getEditLog().logEraseMultiTables(tableIds, wal -> {
+            removeTableFromRecycleBin(tableIds);
+        });
         LOG.info("Finished log erase tables: {}", StringUtils.join(tableIds, ","));
     }
 
@@ -636,8 +637,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
             }
         }
 
-        removeTableFromRecycleBin(finishedTables);
-        logEraseTables(finishedTables);
+        logAddApplyEraseTables(finishedTables);
     }
 
     public synchronized void replayDisablePartitionRecovery(long partitionId) {

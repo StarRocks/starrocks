@@ -88,7 +88,6 @@ import com.starrocks.thrift.TStatusCode;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.Type;
 import com.starrocks.utframe.UtFrameUtils;
-import mockit.Delegate;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -197,29 +196,6 @@ public class BackupHandlerTest {
     public void testCreateAndDropRepository(
             @Mocked GlobalStateMgr globalStateMgr, @Mocked BrokerMgr brokerMgr, @Mocked EditLog editLog) throws Exception {
         setUpMocker(globalStateMgr, brokerMgr, editLog);
-        new Expectations() {
-            {
-                editLog.logCreateRepository((Repository) any);
-                minTimes = 0;
-                result = new Delegate() {
-                    public void logCreateRepository(Repository repo) {
-
-                    }
-                };
-
-                editLog.logDropRepository(anyString);
-                minTimes = 0;
-                result = new Delegate() {
-                    public void logDropRepository(String repoName) {
-
-                    }
-                };
-
-                globalStateMgr.getLocalMetastore().getDb(anyLong);
-                minTimes = 0;
-                result = db;
-            }
-        };
 
         new MockUp<Repository>() {
             @Mock
@@ -643,30 +619,6 @@ public class BackupHandlerTest {
     public void testCreateDbInRestore(
             @Mocked GlobalStateMgr globalStateMgr, @Mocked BrokerMgr brokerMgr, @Mocked EditLog editLog) throws Exception {
         setUpMocker(globalStateMgr, brokerMgr, editLog);
-
-        new Expectations() {
-            {
-                editLog.logCreateRepository((Repository) any);
-                minTimes = 0;
-                result = new Delegate() {
-                    public void logCreateRepository(Repository repo) {
-
-                    }
-                };
-
-                editLog.logDropRepository(anyString);
-                minTimes = 0;
-                result = new Delegate() {
-                    public void logDropRepository(String repoName) {
-
-                    }
-                };
-
-                globalStateMgr.getLocalMetastore().getDb(anyLong);
-                minTimes = 0;
-                result = db;
-            }
-        };
 
         new MockUp<Repository>() {
             @Mock

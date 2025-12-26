@@ -228,11 +228,6 @@ public class CatalogRecycleBinTest {
                 GlobalStateMgr.getCurrentState();
                 result = globalStateMgr;
 
-                globalStateMgr.getCurrentState().getEditLog().logEraseMultiTables((List<Long>) any);
-                minTimes = 1;
-                maxTimes = 1;
-                result = null;
-
                 globalStateMgr.getCurrentState().getClusterSnapshotMgr();
                 minTimes = 0;
                 result = clusterSnapshotMgr;
@@ -555,14 +550,6 @@ public class CatalogRecycleBinTest {
                 result = editLog;
             }
         };
-        new Expectations() {
-            {
-                editLog.logEraseMultiTables((List<Long>) any);
-                minTimes = 1;
-                maxTimes = 1;
-                result = null;
-            }
-        };
         ClusterSnapshotMgr clusterSnapshotMgr = new ClusterSnapshotMgr();
         new Expectations() {
             {
@@ -599,13 +586,6 @@ public class CatalogRecycleBinTest {
                 globalStateMgr.getEditLog();
                 minTimes = 0;
                 result = editLog;
-            }
-        };
-        new Expectations() {
-            {
-                editLog.logEraseMultiTables((List<Long>) any);
-                minTimes = 0;
-                result = null;
             }
         };
         ClusterSnapshotMgr clusterSnapshotMgr = new ClusterSnapshotMgr();
@@ -895,13 +875,6 @@ public class CatalogRecycleBinTest {
                 globalStateMgr.getEditLog();
                 minTimes = 0;
                 result = editLog;
-            }
-        };
-        new Expectations() {
-            {
-                editLog.logEraseMultiTables((List<Long>) any);
-                minTimes = 0;
-                result = null;
             }
         };
         String tz = "Asia/Shanghai";

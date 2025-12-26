@@ -42,9 +42,10 @@ public class TransactionIdGenerator implements GsonPostProcessable {
             ++nextId;
             return nextId;
         } else {
-            batchEndId = batchEndId + BATCH_ID_INTERVAL;
-            GlobalStateMgr.getCurrentState().getEditLog().logSaveTransactionId(batchEndId);
-            ++nextId;
+            GlobalStateMgr.getCurrentState().getEditLog().logSaveTransactionId(batchEndId, wal -> {
+                batchEndId = batchEndId + BATCH_ID_INTERVAL;
+                ++nextId;
+            });
             return nextId;
         }
     }

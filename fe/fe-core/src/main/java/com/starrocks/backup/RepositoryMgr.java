@@ -76,30 +76,39 @@ public class RepositoryMgr extends Daemon implements Writable, GsonPostProcessab
         }
     }
 
-    public Status addAndInitRepoIfNotExist(Repository repo, boolean isReplay) {
+    public Status addAndInitRepoIfNotExist(Repository repo) {
         lock.lock();
         try {
             if (!repoNameMap.containsKey(repo.getName())) {
-                if (!isReplay) {
-                    // create repository path and repo info file in remote storage
-                    Status st = repo.initRepository();
-                    if (!st.ok()) {
-                        return st;
-                    }
+                // create repository path and repo info file in remote storage
+                Status st = repo.initRepository();
+                if (!st.ok()) {
+                    return st;
                 }
+
+                // write log
+                GlobalStateMgr.getCurrentState().getEditLog().logCreateRepository(repo, wal -> {
+                    repoNameMap.put(repo.getName(), repo);
+                    repoIdMap.put(repo.getId(), repo);
+                });
+                LOG.info("successfully adding repo {} to repository mgr. ", repo.getName());
+                return Status.OK;
+            } else {
+                return new Status(ErrCode.COMMON_ERROR, "repository with same name already exist: " + repo.getName());
+            }
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    public void replayAddRepo(Repository repo) {
+        lock.lock();
+        try {
+            if (!repoNameMap.containsKey(repo.getName())) {
                 repoNameMap.put(repo.getName(), repo);
                 repoIdMap.put(repo.getId(), repo);
-
-                if (!isReplay) {
-                    // write log
-                    GlobalStateMgr.getCurrentState().getEditLog().logCreateRepository(repo);
-                }
-
-                LOG.info("successfully adding repo {} to repository mgr. is replay: {}",
-                        repo.getName(), isReplay);
-                return Status.OK;
+                LOG.info("successfully adding repo {} to repository mgr. ", repo.getName());
             }
-            return new Status(ErrCode.COMMON_ERROR, "repository with same name already exist: " + repo.getName());
         } finally {
             lock.unlock();
         }
@@ -113,21 +122,33 @@ public class RepositoryMgr extends Daemon implements Writable, GsonPostProcessab
         return repoIdMap.get(repoId);
     }
 
-    public Status removeRepo(String repoName, boolean isReplay) {
+    public Status removeRepo(String repoName) {
+        lock.lock();
+        try {
+            Repository repo = repoNameMap.get(repoName);
+            if (repo != null) {
+                // log
+                GlobalStateMgr.getCurrentState().getEditLog().logDropRepository(repoName, wal -> {
+                    repoIdMap.remove(repo.getId());
+                    repoNameMap.remove(repoName);
+                });
+                LOG.info("successfully removing repo {} from repository mgr", repoName);
+                return Status.OK;
+            }
+            return new Status(ErrCode.NOT_FOUND, "repository does not exist");
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    public void replayRemoveRepo(String repoName) {
         lock.lock();
         try {
             Repository repo = repoNameMap.remove(repoName);
             if (repo != null) {
                 repoIdMap.remove(repo.getId());
-
-                if (!isReplay) {
-                    // log
-                    GlobalStateMgr.getCurrentState().getEditLog().logDropRepository(repoName);
-                }
                 LOG.info("successfully removing repo {} from repository mgr", repoName);
-                return Status.OK;
             }
-            return new Status(ErrCode.NOT_FOUND, "repository does not exist");
         } finally {
             lock.unlock();
         }
@@ -140,9 +161,6 @@ public class RepositoryMgr extends Daemon implements Writable, GsonPostProcessab
         }
         return infos;
     }
-
-
-
 
     @Override
     public void gsonPostProcess() throws IOException {

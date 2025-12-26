@@ -283,7 +283,8 @@ public class HiveTable extends Table {
         locker.lockDatabase(db.getId(), LockType.WRITE);
         try {
             if (GlobalStateMgr.getCurrentState().isLeader()) {
-                ModifyTableColumnOperationLog log = new ModifyTableColumnOperationLog(dbName, tableName, new ArrayList<>(fullSchemaTemp.build()));
+                ModifyTableColumnOperationLog log =
+                        new ModifyTableColumnOperationLog(dbName, tableName, new ArrayList<>(fullSchemaTemp.build()));
                 GlobalStateMgr.getCurrentState().getEditLog().logModifyTableColumn(log, wal -> {
                     modifyTableSchemaInternal(fullSchemaTemp.build(), dataColumnNamesTemp.build());
                 });

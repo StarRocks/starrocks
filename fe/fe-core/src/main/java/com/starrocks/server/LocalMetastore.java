@@ -4826,24 +4826,8 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         }
     }
 
-    // Convert table's distribution type from random to hash.
-    // random distribution is no longer supported.
-    public void convertDistributionType(Database db, OlapTable tbl) throws DdlException {
-        TableInfo tableInfo = TableInfo.createForModifyDistribution(db.getId(), tbl.getId());
-        GlobalStateMgr.getCurrentState().getEditLog().logModifyDistributionType(tableInfo);
-        LOG.info("finished to modify distribution type of table: " + tbl.getName());
-    }
-
     public void replayConvertDistributionType(TableInfo tableInfo) {
-        Database db = getDb(tableInfo.getDbId());
-        Locker locker = new Locker();
-        locker.lockDatabase(db.getId(), LockType.WRITE);
-        try {
-            OlapTable tbl = (OlapTable) getTable(db.getId(), tableInfo.getTableId());
-            LOG.info("replay modify distribution type of table: " + tbl.getName());
-        } finally {
-            locker.unLockDatabase(db.getId(), LockType.WRITE);
-        }
+        // nothing to do, for compatibility
     }
 
     /*

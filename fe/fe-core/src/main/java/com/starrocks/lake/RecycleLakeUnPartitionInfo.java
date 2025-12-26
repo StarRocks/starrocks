@@ -33,8 +33,8 @@ public class RecycleLakeUnPartitionInfo extends RecycleUnPartitionInfo {
     @Override
     public boolean delete() {
         if (isRecoverable()) {
-            setRecoverable(false);
-            GlobalStateMgr.getCurrentState().getEditLog().logDisablePartitionRecovery(partition.getId());
+            GlobalStateMgr.getCurrentState().getEditLog()
+                    .logDisablePartitionRecovery(partition.getId(), wal -> setRecoverable(false));
         }
         try {
             ComputeResource computeResource =
