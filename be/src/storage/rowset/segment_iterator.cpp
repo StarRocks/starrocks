@@ -2373,7 +2373,7 @@ Status SegmentIterator::_evaluate_col_runtime_filters(ColumnId column_id, Column
     Chunk chunk;
     // `column` is owned by storage layer, we don't have ownership
     ColumnPtr bits = col->as_mutable_ptr();
-    chunk.append_column(bits, column_id);
+    chunk.append_column(bits, column_id, true);
 
     RETURN_IF_ERROR(iter->second.evaluate(&chunk, selection, from, to));
 
