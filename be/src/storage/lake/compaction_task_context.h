@@ -60,6 +60,7 @@ struct CompactionTaskStats {
     int64_t io_ns_write_remote = 0;
     int64_t pk_sst_merge_ns = 0;
     int64_t input_file_size = 0;
+    int64_t peak_mem_usage = 0;
 
     void collect(const OlapReaderStatistics& reader_stats);
     void collect(const OlapWriterStatistics& writer_stats);

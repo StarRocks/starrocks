@@ -101,6 +101,11 @@ Status VerticalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flush
         _tablet.tablet_manager()->update_mgr()->preload_compaction_state(*txn_log, t, _tablet_schema);
     }
 
+    // record peak memory usage
+    if (_mem_tracker) {
+        _context->stats->peak_mem_usage = _mem_tracker->peak_consumption();
+    }
+
     LOG(INFO) << "Vertical compaction finished. tablet: " << _tablet.id() << ", txn_id: " << _txn_id
               << ", statistics: " << _context->stats->to_json_stats();
 
