@@ -1868,6 +1868,7 @@ public class OlapTable extends Table {
                         dataCacheInfo, values, multiValues);
             } catch (AnalysisException ex) {
                 LOG.warn("failed to add list partition, should not happen", ex);
+                throw new SemanticException(ex.getMessage());
             }
         } else {
             partitionInfo.dropPartition(oldPartition.getId());
