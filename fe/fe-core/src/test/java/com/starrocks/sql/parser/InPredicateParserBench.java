@@ -14,7 +14,6 @@
 
 package com.starrocks.sql.parser;
 
-import com.starrocks.qe.GlobalVariable;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.ast.StatementBase;
 import org.antlr.v4.runtime.BaseErrorListener;
@@ -36,7 +35,6 @@ import org.openjdk.jmh.runner.RunnerException;
 import org.openjdk.jmh.runner.options.Options;
 import org.openjdk.jmh.runner.options.OptionsBuilder;
 
-import java.util.IdentityHashMap;
 import java.util.concurrent.TimeUnit;
 
 @BenchmarkMode(Mode.AverageTime)
@@ -100,8 +98,7 @@ public class InPredicateParserBench {
         parser.addErrorListener(new BaseErrorListener());
         parser.removeParseListeners();
         com.starrocks.sql.parser.StarRocksParser.SqlStatementsContext sqlStatements = parser.sqlStatements();
-        return (StatementBase) new AstBuilder(SqlModeHelper.MODE_DEFAULT, GlobalVariable.enableTableNameCaseInsensitive,
-                new IdentityHashMap<>())
+        return (StatementBase) new AstBuilder(SqlModeHelper.MODE_DEFAULT)
                 .visitSingleStatement(sqlStatements.singleStatement(0));
     }
 }
