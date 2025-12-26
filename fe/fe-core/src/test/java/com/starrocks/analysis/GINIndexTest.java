@@ -127,11 +127,12 @@ public class GINIndexTest extends PlanTestBase {
                 return true;
             }
         };
-        // Without imp_lib or with clucene in shared-data mode should be rejected.
-        Assertions.assertThrows(
-                SemanticException.class,
-                () -> IndexAnalyzer.checkInvertedIndexValid(c2, new HashMap<>(), KeysType.DUP_KEYS),
-                "Clucene inverted index does not support shared data mode");
+        // Without imp_lib in shared-data mode should default to builtin.
+        HashMap<String, String> properties = new HashMap<>();
+        Assertions.assertDoesNotThrow(
+                () -> IndexAnalyzer.checkInvertedIndexValid(c2, properties, KeysType.DUP_KEYS));
+        Assertions.assertEquals(InvertedIndexImpType.BUILTIN.name().toLowerCase(Locale.ROOT),
+                properties.get(IMP_LIB.name().toLowerCase(Locale.ROOT)));
 
         Assertions.assertThrows(
                 SemanticException.class,
