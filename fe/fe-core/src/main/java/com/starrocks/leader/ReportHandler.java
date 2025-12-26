@@ -1080,7 +1080,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
             hashToDiskInfo.put(diskInfo.getPathHash(), diskInfo);
         }
         final long MAX_DB_WLOCK_HOLDING_TIME_MS = 1000L;
-        List<Tablet> deleteTablets = new ArrayList<>();
+        List<LocalTablet> deleteTablets = new ArrayList<>();
         List<ReplicaPersistInfo> replicaPersistInfoList = new ArrayList<>();
         DB_TRAVERSE:
         for (Long dbId : tabletDeleteFromMeta.keySet()) {
@@ -1092,6 +1092,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
             locker.lockDatabase(db.getId(), LockType.WRITE);
             long lockStartTime = System.currentTimeMillis();
             try {
+                int deleteCounter = 0;
                 List<Long> tabletIds = tabletDeleteFromMeta.get(dbId);
                 List<TabletMeta> tabletMetaList = invertedIndex.getTabletMetaList(tabletIds);
                 for (int i = 0; i < tabletMetaList.size(); i++) {
@@ -1269,6 +1270,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                             continue;
                         }
 
+                        deleteCounter++;
                         deleteTablets.add(tablet);
                         replicaPersistInfoList.add(ReplicaPersistInfo.createForDelete(
                                 dbId, tableId, partitionId, indexId, tabletId, backendId));
@@ -1278,7 +1280,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                                 currentBackendReportVersion);
                     }
                 } // end for tabletMetas
-                LOG.info("delete {} replica(s) from globalStateMgr in db[{}]", deleteTablets.size(), dbId);
+                LOG.info("delete {} replica(s) from globalStateMgr in db[{}]", deleteCounter, dbId);
             } finally {
                 locker.unLockDatabase(db.getId(), LockType.WRITE);
             }
@@ -1290,11 +1292,10 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
             GlobalStateMgr.getCurrentState().getEditLog().logBatchDeleteReplica(
                     new BatchDeleteReplicaInfo(backendId, tabletIds, replicaPersistInfoList),
                     wal -> {
-                        for (Tablet tablet : deleteTablets) {
-                            LocalTablet localTablet = (LocalTablet) tablet;
-                            localTablet.deleteReplicaByBackendId(backendId);
+                        for (LocalTablet tablet : deleteTablets) {
+                            tablet.deleteReplicaByBackendId(backendId);
                             // remove replica related tasks
-                            AgentTaskQueue.removeReplicaRelatedTasks(backendId, localTablet.getId());
+                            AgentTaskQueue.removeReplicaRelatedTasks(backendId, tablet.getId());
                         }
                     });
         }

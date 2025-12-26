@@ -121,7 +121,7 @@ public abstract class RecyclePartitionInfo extends JsonWriter {
         }
     }
 
-    public void recoverRangePartition(OlapTable table) {
+    protected void recoverRangePartition(OlapTable table) {
         // recover partition
         Partition recoverPartition = this.getPartition();
         table.addPartition(recoverPartition);

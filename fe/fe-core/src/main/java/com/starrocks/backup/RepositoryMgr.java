@@ -88,10 +88,8 @@ public class RepositoryMgr extends Daemon implements Writable, GsonPostProcessab
 
                 // write log
                 GlobalStateMgr.getCurrentState().getEditLog().logCreateRepository(repo, wal -> {
-                    repoNameMap.put(repo.getName(), repo);
-                    repoIdMap.put(repo.getId(), repo);
+                    addRepoWithoutLock(repo);
                 });
-                LOG.info("successfully adding repo {} to repository mgr. ", repo.getName());
                 return Status.OK;
             } else {
                 return new Status(ErrCode.COMMON_ERROR, "repository with same name already exist: " + repo.getName());
@@ -105,13 +103,17 @@ public class RepositoryMgr extends Daemon implements Writable, GsonPostProcessab
         lock.lock();
         try {
             if (!repoNameMap.containsKey(repo.getName())) {
-                repoNameMap.put(repo.getName(), repo);
-                repoIdMap.put(repo.getId(), repo);
-                LOG.info("successfully adding repo {} to repository mgr. ", repo.getName());
+                addRepoWithoutLock(repo);
             }
         } finally {
             lock.unlock();
         }
+    }
+
+    private void addRepoWithoutLock(Repository repo) {
+        repoNameMap.put(repo.getName(), repo);
+        repoIdMap.put(repo.getId(), repo);
+        LOG.info("successfully adding repo {} to repository mgr. ", repo.getName());
     }
 
     public Repository getRepo(String repoName) {
@@ -129,10 +131,8 @@ public class RepositoryMgr extends Daemon implements Writable, GsonPostProcessab
             if (repo != null) {
                 // log
                 GlobalStateMgr.getCurrentState().getEditLog().logDropRepository(repoName, wal -> {
-                    repoIdMap.remove(repo.getId());
-                    repoNameMap.remove(repoName);
+                    removeRepoWithoutLock(repo);
                 });
-                LOG.info("successfully removing repo {} from repository mgr", repoName);
                 return Status.OK;
             }
             return new Status(ErrCode.NOT_FOUND, "repository does not exist");
@@ -144,14 +144,19 @@ public class RepositoryMgr extends Daemon implements Writable, GsonPostProcessab
     public void replayRemoveRepo(String repoName) {
         lock.lock();
         try {
-            Repository repo = repoNameMap.remove(repoName);
+            Repository repo = repoNameMap.get(repoName);
             if (repo != null) {
-                repoIdMap.remove(repo.getId());
-                LOG.info("successfully removing repo {} from repository mgr", repoName);
+                removeRepoWithoutLock(repo);
             }
         } finally {
             lock.unlock();
         }
+    }
+
+    private void removeRepoWithoutLock(Repository repo) {
+        repoIdMap.remove(repo.getId());
+        repoNameMap.remove(repo.getName());
+        LOG.info("successfully removing repo {} from repository mgr", repo.getName());
     }
 
     public List<List<String>> getReposInfo() {

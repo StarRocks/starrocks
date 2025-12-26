@@ -1466,28 +1466,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         DropPartitionsInfo info =
                 new DropPartitionsInfo(dbId, tableId, isTempPartition, clause.isForceDrop(), existPartitions);
         editLog.logDropPartitions(info, wal -> {
-            for (String partitionName : existPartitions) {
-                // drop
-                if (isTempPartition) {
-                    olapTable.dropTempPartition(partitionName, true);
-                } else {
-                    olapTable.dropPartition(db.getId(), partitionName, clause.isForceDrop());
-                    Partition partition = olapTable.getPartition(partitionName);
-                    if (partition != null) {
-                        GlobalStateMgr.getCurrentState().getAnalyzeMgr().recordDropPartition(partition.getId());
-                        if (partitionInfo instanceof RangePartitionInfo && (olapTable instanceof MaterializedView mv)) {
-                            Range<PartitionKey> partitionRange =
-                                    ((RangePartitionInfo) partitionInfo).getRange(partition.getId());
-                            try {
-                                SyncPartitionUtils.dropBaseVersionMeta(mv, partitionName, partitionRange);
-                            } catch (Exception e) {
-                                LOG.warn("failed to drop base version meta for mv {}, partition {}",
-                                        mv.getName(), partitionName, e);
-                            }
-                        }
-                    }
-                }
-            }
+            dropPartitionInternal(olapTable, db, existPartitions, isTempPartition, clause.isForceDrop());
         });
 
         if (!isTempPartition) {
@@ -1509,6 +1488,36 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                 db.getFullName(), olapTable.getName(),
                 isTempPartition,
                 clause.isForceDrop());
+    }
+
+    private void dropPartitionInternal(OlapTable olapTable,
+                                       Database db,
+                                       List<String> partitionNames,
+                                       boolean isTempPartition,
+                                       boolean isForceDrop) {
+        PartitionInfo partitionInfo = olapTable.getPartitionInfo();
+        for (String partitionName : partitionNames) {
+            // drop
+            if (isTempPartition) {
+                olapTable.dropTempPartition(partitionName, true);
+            } else {
+                olapTable.dropPartition(db.getId(), partitionName, isForceDrop);
+                Partition partition = olapTable.getPartition(partitionName);
+                if (partition != null) {
+                    GlobalStateMgr.getCurrentState().getAnalyzeMgr().recordDropPartition(partition.getId());
+                    if (partitionInfo instanceof RangePartitionInfo && (olapTable instanceof MaterializedView mv)) {
+                        Range<PartitionKey> partitionRange =
+                                ((RangePartitionInfo) partitionInfo).getRange(partition.getId());
+                        try {
+                            SyncPartitionUtils.dropBaseVersionMeta(mv, partitionName, partitionRange);
+                        } catch (Exception e) {
+                            LOG.warn("failed to drop base version meta for mv {}, partition {}",
+                                    mv.getName(), partitionName, e);
+                        }
+                    }
+                }
+            }
+        }
     }
 
     public void replayDropPartition(DropPartitionInfo info) {
@@ -3480,7 +3489,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         if (getTable(db.getFullName(), newTableName) != null) {
             throw new DdlException("Table name[" + newTableName + "] is already used");
         }
-        olapTable.checkAndSetName(newTableName, true);
+        olapTable.checkNameConflict(newTableName);
 
         TableInfo tableInfo = TableInfo.createForTableRename(db.getId(), olapTable.getId(), newTableName);
         GlobalStateMgr.getCurrentState().getEditLog().logTableRename(tableInfo, wal -> {
@@ -4939,11 +4948,8 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         return Pair.create(replica, meta);
     }
 
-    private void setReplicaBadStatus(Replica replica, TabletMeta meta, long tabletId, boolean isToSetBad) {
+    private void setReplicaBadStatus(Replica replica, long tabletId, boolean isToSetBad) {
         replica.setBadForce(isToSetBad);
-        // Put this tablet into urgent table so that it can be repaired ASAP.
-        stateMgr.getTabletChecker().setTabletForUrgentRepair(
-                meta.getDbId(), meta.getTableId(), meta.getPhysicalPartitionId());
         LOG.info("set replica {} of tablet {} on backend {} as {}.",
                 replica.getId(), tabletId, replica.getBackendId(),
                 isToSetBad ? Replica.ReplicaStatus.BAD : Replica.ReplicaStatus.OK);
@@ -4957,12 +4963,11 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             return;
         }
         Replica replica = pair.first;
-        TabletMeta meta = pair.second;
         Replica.ReplicaStatus status = log.getReplicaStatus();
         if (status == Replica.ReplicaStatus.BAD || status == Replica.ReplicaStatus.OK) {
             boolean isToSetBad = (status == Replica.ReplicaStatus.BAD);
             if (replica.isBad() != isToSetBad) {
-                setReplicaBadStatus(replica, meta, tabletId, isToSetBad);
+                setReplicaBadStatus(replica, tabletId, isToSetBad);
             }
         }
     }
@@ -4980,8 +4985,11 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                 SetReplicaStatusOperationLog log =
                         new SetReplicaStatusOperationLog(backendId, tabletId, status);
                 GlobalStateMgr.getCurrentState().getEditLog().logSetReplicaStatus(log, wal -> {
-                    setReplicaBadStatus(replica, meta, tabletId, isToSetBad);
+                    setReplicaBadStatus(replica, tabletId, isToSetBad);
                 });
+                // Put this tablet into urgent table so that it can be repaired ASAP.
+                stateMgr.getTabletChecker().setTabletForUrgentRepair(
+                        meta.getDbId(), meta.getTableId(), meta.getPhysicalPartitionId());
             }
         }
     }

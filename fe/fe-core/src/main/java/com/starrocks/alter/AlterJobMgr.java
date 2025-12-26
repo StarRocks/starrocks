@@ -516,11 +516,11 @@ public class AlterJobMgr {
         db.dropTable(newTblName);
 
         // rename new table name to origin table name and add it to database
-        newTbl.checkAndSetName(origTblName, false);
+        newTbl.checkAndSetName(origTblName);
         db.registerTableUnlocked(newTbl);
 
         // rename origin table name to new table name and add it to database
-        origTable.checkAndSetName(newTblName, false);
+        origTable.checkAndSetName(newTblName);
         db.registerTableUnlocked(origTable);
 
         // swap dependencies of base table
@@ -586,7 +586,7 @@ public class AlterJobMgr {
             try {
                 view.checkInlineViewDef(inlineViewDef, sqlMode);
             } catch (StarRocksException e) {
-                throw new AlterJobException("failed to check inline view def view stmt", e);
+                throw new AlterJobException("failed to check inline view def", e);
             }
             GlobalStateMgr.getCurrentState().getEditLog().logModifyViewDef(alterViewInfo, wal -> {
                 view.setInlineViewDefWithSqlMode(inlineViewDef, sqlMode);

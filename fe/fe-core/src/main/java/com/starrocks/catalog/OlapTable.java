@@ -570,16 +570,18 @@ public class OlapTable extends Table {
         return this.sessionId != null;
     }
 
-    public void checkAndSetName(String newName, boolean onlyCheck) throws DdlException {
+    public void checkNameConflict(String newName) throws DdlException {
         // check if rollup has same name
         for (String idxName : getIndexNameToMetaId().keySet()) {
             if (idxName.equals(newName)) {
                 throw new DdlException("New name conflicts with rollup index name: " + idxName);
             }
         }
-        if (!onlyCheck) {
-            setName(newName);
-        }
+    }
+
+    public void checkAndSetName(String newName) throws DdlException {
+        checkNameConflict(newName);
+        setName(newName);
     }
 
     public void setName(String newName) {

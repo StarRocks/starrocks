@@ -360,8 +360,8 @@ public class AlterJobExecutor implements AstVisitorExtendInterface<Void, Connect
 
             // First, we need to check whether the table to be operated on can be renamed
             try {
-                olapNewTbl.checkAndSetName(origTblName, true);
-                origTable.checkAndSetName(newTblName, true);
+                olapNewTbl.checkNameConflict(origTblName);
+                origTable.checkNameConflict(newTblName);
 
                 if (origTable.isMaterializedView() || newTbl.isMaterializedView()) {
                     if (!(origTable.isMaterializedView() && newTbl.isMaterializedView())) {
