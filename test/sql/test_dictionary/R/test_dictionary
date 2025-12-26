@@ -1168,7 +1168,7 @@ DROP DICTIONARY test_dictionary_common_expression;
 DROP TABLE t_dictionary_common_expression;
 -- result:
 -- !result
--- name: test_dictionary_multiple_row
+-- name: test_dictionary_multiple_row @native
 CREATE TABLE `t_dictionary_multiple_row` (
   `id1` BIGINT NOT NULL COMMENT "",
   `id2` BIGINT NOT NULL COMMENT "",
