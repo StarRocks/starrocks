@@ -153,7 +153,7 @@ public class IndexInfoProcDir implements ProcDirInterface {
                 schema = table.getBaseSchema();
             }
             IndexSchemaProcNode node = new IndexSchemaProcNode(schema, bfColumns);
-            if (table.getType() == TableType.OLAP || table.getType() == TableType.OLAP_EXTERNAL) {
+            if (table.isNativeTable() || table.isOlapExternalTable()) {
                 node.setHideAggregationType(true);
             }
             return node;
