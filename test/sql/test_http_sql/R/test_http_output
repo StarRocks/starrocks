@@ -1,4 +1,4 @@
--- name: test_http_output_correct
+-- name: test_http_output_correct @native
 use ${db[0]};
 -- result:
 -- !result

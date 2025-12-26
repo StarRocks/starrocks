@@ -281,7 +281,7 @@ drop table tab1;
 drop database test_fast_schema_evolution;
 -- result:
 -- !result
--- name: test_meta_scan
+-- name: test_meta_scan @native
 create database meta_scan;
 -- result:
 -- !result
@@ -416,7 +416,7 @@ None
 drop database meta_scan;
 -- result:
 -- !result
--- name: test_fast_schema_evolution_and_alter
+-- name: test_fast_schema_evolution_and_alter @native
 create database test_fast_schema_evolution_and_alter;
 -- result:
 -- !result
