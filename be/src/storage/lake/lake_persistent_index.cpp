@@ -200,7 +200,8 @@ Status LakePersistentIndex::sync_flush_all_memtables(int64_t wait_timeout_us) {
         auto sstable = _memtable->release_sstable();
         DCHECK(sstable != nullptr);
         RETURN_IF_ERROR(merge_sstable_into_fileset(sstable));
-        _memtable = std::make_shared<PersistentIndexMemtable>(_tablet_mgr, _tablet_id, _memtable->max_rss_rowid());
+        const uint64_t next_max_rss_rowid = _memtable->max_rss_rowid();
+        _memtable = std::make_shared<PersistentIndexMemtable>(_tablet_mgr, _tablet_id, next_max_rss_rowid);
     }
     // Reset rebuild file count, avoid useless flush.
     _need_rebuild_file_cnt = 0;
@@ -245,19 +246,26 @@ Status LakePersistentIndex::flush_memtable(bool force) {
             _inactive_memtables.erase(_inactive_memtables.begin(), _inactive_memtables.begin() + finish_point + 1);
         }
         // 3. flush current memtable
-        if (_inactive_memtables.size() + 1 >= config::pk_index_memtable_max_count) {
-            // If too many memtables, switch to sync flush.
-            RETURN_IF_ERROR(_memtable->flush());
-            auto sstable = _memtable->release_sstable();
-            RETURN_IF_ERROR(merge_sstable_into_fileset(sstable));
-        } else {
-            // submit this memtable to flush thread pool
-            RETURN_IF_ERROR(ExecEnv::GetInstance()->pk_index_memtable_flush_thread_pool()->submit(_memtable));
-            // move current memtable to inactive memtables
-            _inactive_memtables.push_back(_memtable);
+        bool flush_async = false;
+        if (_inactive_memtables.size() + 1 < config::pk_index_memtable_max_count) {
+            if (ExecEnv::GetInstance()->pk_index_memtable_flush_thread_pool()->submit(_memtable).ok()) {
+                flush_async = true;
+            }
         }
-        auto max_rss_rowid = _memtable->max_rss_rowid();
-        _memtable = std::make_shared<PersistentIndexMemtable>(_tablet_mgr, _tablet_id, max_rss_rowid);
+        if (flush_async) {
+            _inactive_memtables.push_back(_memtable);
+        } else {
+            // If too many memtables or submit flush job fail, switch to sync flush.
+            RETURN_IF_ERROR(_memtable->flush());
+            if (_inactive_memtables.empty()) {
+                auto sstable = _memtable->release_sstable();
+                RETURN_IF_ERROR(merge_sstable_into_fileset(sstable));
+            } else {
+                _inactive_memtables.push_back(_memtable);
+            }
+        }
+        const uint64_t next_max_rss_rowid = _memtable->max_rss_rowid();
+        _memtable = std::make_shared<PersistentIndexMemtable>(_tablet_mgr, _tablet_id, next_max_rss_rowid);
         // Reset rebuild file count, avoid useless flush.
         _need_rebuild_file_cnt = 0;
     }

@@ -463,7 +463,7 @@ CONF_mInt32(pk_index_parallel_get_threadpool_size, "1048576");
 // Memtable flush threadpool max thread num for pk index in shared-data mode.
 CONF_mInt32(pk_index_memtable_flush_threadpool_max_threads, "4");
 // The queue size for pk index memtable flush threadpool in shared-data mode.
-CONF_mInt32(pk_index_memtable_flush_threadpool_size, "1048576");
+CONF_mInt32(pk_index_memtable_flush_threadpool_size, "2048");
 // The maximum number of memtables for pk index in shared-data mode.
 CONF_mInt32(pk_index_memtable_max_count, "1");
 // The maximum wait flush timeout for pk index memtable in shared-data mode, in milliseconds.

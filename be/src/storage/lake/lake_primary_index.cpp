@@ -523,11 +523,11 @@ Status LakePrimaryIndex::parallel_upsert(ThreadPoolToken* token, uint32_t rssid,
         TRACE_COUNTER_SCOPE_LATENCY_US("parallel_upsert_wait_us");
         token->wait(); // Wait for all submitted tasks to complete
 
+        // Check for errors from parallel tasks
+        RETURN_IF_ERROR(status);
         // Flush accumulated updates to sstable file (batch optimization)
         RETURN_IF_ERROR(flush_memtable());
     }
-
-    RETURN_IF_ERROR(status); // Check for errors from parallel tasks
     return segment_pk_iterator->status();
 }
 
