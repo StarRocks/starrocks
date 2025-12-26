@@ -11,6 +11,47 @@ displayed_sidebar: docs
 
 :::
 
+## 3.3.21
+
+リリース日: 2025年12月25日
+
+### バグ修正
+
+以下の問題が修正されました:
+
+- `trim`関数が特定のUnicode空白文字（`\u1680`など）を処理する際のロジックエラーおよびメモリ予約計算によるパフォーマンスの問題。 [#66428](https://github.com/StarRocks/starrocks/pull/66428), [#66477](https://github.com/StarRocks/starrocks/pull/66477)
+- テーブルのロード順序の問題により、FE再起動後に外部キー制約が失われる問題。 [#66474](https://github.com/StarRocks/starrocks/pull/66474)
+- `lz4-java`のセキュリティ脆弱性CVE-2025-66566およびCVE-2025-12183、およびアップストリームの潜在的なクラッシュ。 [#66453](https://github.com/StarRocks/starrocks/pull/66453), [#66362](https://github.com/StarRocks/starrocks/pull/66362), [#67075](https://github.com/StarRocks/starrocks/pull/67075)
+- Group ExecutionモードでJoinとウィンドウ関数を併用した場合に、計算結果が正しくない問題。 [#66441](https://github.com/StarRocks/starrocks/pull/66441)
+- 削除されたウェアハウスのメタデータをシステムが取得しようとし続け、`SHOW LOAD`やSQLの実行が失敗する問題。 [#66436](https://github.com/StarRocks/starrocks/pull/66436)
+- 集計入力のScanが完全にフィルタリングされた場合、`PartitionColumnMinMaxRewriteRule`最適化がNULLではなくEmpty Setを誤って返す問題。 [#66356](https://github.com/StarRocks/starrocks/pull/66356)
+- RowsetのコミットまたはCompactionが失敗した際にRowset IDが適切に解放されず、ディスク領域が回収されない問題。 [#66301](https://github.com/StarRocks/starrocks/pull/66301)
+- 高い選択率のフィルタによりScanが早期に終了（EOS）した場合に、監査ログのScan統計情報（スキャン行数/バイト数など）が欠落する問題。 [#66280](https://github.com/StarRocks/starrocks/pull/66280)
+- BEがクラッシュ処理プロセス（SIGSEGVなど）に入った後もハートビートにAliveとして応答し続け、FEがクエリをディスパッチし続けてエラーを報告する問題。 [#66212](https://github.com/StarRocks/starrocks/pull/66212)
+- Local TopNのプッシュダウン最適化によりRuntime Filterの`set_collector`が複数回呼び出され、BEクラッシュが発生する問題。 [#66199](https://github.com/StarRocks/starrocks/pull/66199)
+- カラムモードの部分更新（Partial Update）と条件付き更新（Conditional Update）を同時に使用した際、`rssid`が初期化されずにインポートタスクが失敗する問題。 [#66139](https://github.com/StarRocks/starrocks/pull/66139)
+- Colocate Execution Groupでドライバーを送信する際の競合状態により、BEクラッシュが発生する問題。 [#66099](https://github.com/StarRocks/starrocks/pull/66099)
+- `RecordBatchQueue`が閉じられた後（例：SparkSQLのLimitによってトリガーされる）、`MemoryScratchSinkOperator`が保留状態のままキャンセルできず、クエリがハングする問題。 [#66041](https://github.com/StarRocks/starrocks/pull/66041)
+- `ExecutionGroup`のカウントダウンロジックで`_num_pipelines`にアクセスする際の競合状態によるUse-after-free問題。 [#65940](https://github.com/StarRocks/starrocks/pull/65940)
+- クエリエラー率の監視メトリクス（Internal/Analysis/Timeoutエラー率）の計算ロジックが誤っており、負の値が表示される問題。 [#65891](https://github.com/StarRocks/starrocks/pull/65891)
+- LDAPユーザーとしてタスクを実行する際、`ConnectContext`が設定されていないために発生するNull Pointer Exception (NPE)。 [#65843](https://github.com/StarRocks/starrocks/pull/65843)
+- ファイルシステムキャッシュ（Filesystem Cache）で、値の比較ではなくオブジェクト参照の比較が使用されていたため、同じKeyのキャッシュ検索が失敗し、パフォーマンスに影響する問題。 [#65823](https://github.com/StarRocks/starrocks/pull/65823)
+- スナップショットのロード失敗後、ステータス変数のチェックミスにより、タブレット関連ファイルが正しくクリーンアップされない問題。 [#65709](https://github.com/StarRocks/starrocks/pull/65709)
+- テーブル作成時やSchema Change時に、FEで設定された圧縮タイプとレベルがBEに正しく伝播または永続化されず、デフォルトの圧縮設定が使用される問題。 [#65673](https://github.com/StarRocks/starrocks/pull/65673)
+- `COM_STMT_EXECUTE`の監査ログがデフォルトで存在せず、Profile情報がPrepare段階の記録に誤ってマージされる問題。 [#65448](https://github.com/StarRocks/starrocks/pull/65448)
+- クラスタのアップグレード/ダウングレードのシナリオにおいて、バージョンの非互換性によりDelete VectorのCRC32チェックが失敗する問題。 [#65442](https://github.com/StarRocks/starrocks/pull/65442)
+- `UnionConstSourceOperator`がUnionをValuesにマージする際、Nullable属性の処理が不適切でBEクラッシュが発生する問題。 [#65429](https://github.com/StarRocks/starrocks/pull/65429)
+- Alter Table操作中にターゲットのタブレットがDropされた場合、並行して実行されているインポートタスク（Ingestion）がコミットフェーズで失敗する問題。 [#65396](https://github.com/StarRocks/starrocks/pull/65396)
+- HTTP SQLインターフェースでユーザーを切り替える際、コンテキストの設定が正しくないために認証が失敗した場合の不正確なエラーログ情報。 [#65371](https://github.com/StarRocks/starrocks/pull/65371)
+- 一時パーティションの統計収集の失敗や、トランザクションコミット時の行数統計が不正確で収集がトリガーされないなど、`INSERT OVERWRITE`後の統計情報収集に関する問題。 [#65327](https://github.com/StarRocks/starrocks/pull/65327), [#65298](https://github.com/StarRocks/starrocks/pull/65298), [#65225](https://github.com/StarRocks/starrocks/pull/65225)
+- TCP接続の再利用シナリオにおいて、後続の非SQL HTTPリクエストがコンテキストを上書きしたため、SQLに関連する`HttpConnectContext`が解放されない問題。 [#65203](https://github.com/StarRocks/starrocks/pull/65203)
+- BE起動時のメタデータロード中にRocksDBの反復処理がタイムアウトすると、タブレットのロードが不完全になりバージョンが失われる可能性がある問題。 [#65146](https://github.com/StarRocks/starrocks/pull/65146)
+- `percentile_approx_weighted`関数で圧縮パラメータを処理する際の境界外アクセスにより、BEクラッシュが発生する問題。 [#64838](https://github.com/StarRocks/starrocks/pull/64838)
+- FollowerからLeaderに転送されて実行されたクエリのQuery Profileログが欠落する問題。 [#64395](https://github.com/StarRocks/starrocks/pull/64395)
+- Spillingプロセス中に、大きな文字列カラムのLZ4エンコード時のサイズチェックが甘く、BEクラッシュが発生する問題。 [#61495](https://github.com/StarRocks/starrocks/pull/61495)
+- `PARTITION BY`と`GROUP BY`がない場合に、Rankingウィンドウ関数の最適化が空の`ORDER BY`を生成し、`MERGING-EXCHANGE`オペレータがクラッシュする問題。 [#67081](https://github.com/StarRocks/starrocks/pull/67081)
+- 低基数（Low Cardinality）カラムの書き換えロジックがSetの反復順序に依存しており、結果が不安定になったりエラーが発生したりする問題。 [#66724](https://github.com/StarRocks/starrocks/pull/66724)
+
 ## 3.3.20
 
 リリース日：2025年11月18日
