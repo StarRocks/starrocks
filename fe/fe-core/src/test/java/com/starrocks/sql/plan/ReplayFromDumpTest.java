@@ -1181,4 +1181,14 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
         PlanTestBase.assertContains(replayPair.second, "  1:OlapScanNode\n"
                 + "     TABLE: rpt_crm_reach_goal_cust_all_d");
     }
+
+    @Test
+    public void testMemoGroupRefSelf() throws Exception {
+        String dumpString = getDumpInfoFromFile("query_dump/memo_self_reference");
+        QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(dumpString);
+        Pair<QueryDumpInfo, String> replayPair = getPlanFragment(dumpString, queryDumpInfo.getSessionVariable(),
+                TExplainLevel.NORMAL);
+        PlanTestBase.assertContains(replayPair.second, "0:OlapScanNode\n"
+                + "     TABLE: llm_account_scores");
+    }
 }
