@@ -100,8 +100,7 @@ public class InPredicateParserBench {
         parser.addErrorListener(new BaseErrorListener());
         parser.removeParseListeners();
         com.starrocks.sql.parser.StarRocksParser.SqlStatementsContext sqlStatements = parser.sqlStatements();
-        return (StatementBase) new AstBuilder(SqlModeHelper.MODE_DEFAULT, GlobalVariable.enableTableNameCaseInsensitive,
-                new IdentityHashMap<>())
+        return (StatementBase) new AstBuilder(SqlModeHelper.MODE_DEFAULT)
                 .visitSingleStatement(sqlStatements.singleStatement(0));
     }
 }
