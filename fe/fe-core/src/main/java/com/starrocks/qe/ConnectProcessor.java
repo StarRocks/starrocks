@@ -210,6 +210,11 @@ public class ConnectProcessor {
     }
 
     public void auditAfterExec(String origStmt, StatementBase parsedStmt, PQueryStatistics statistics) {
+        auditAfterExec(origStmt, parsedStmt, statistics, null);
+    }
+
+    public void auditAfterExec(String origStmt, StatementBase parsedStmt, PQueryStatistics statistics,
+                               String digestFromLeader) {
         // slow query
         long endTime = System.currentTimeMillis();
         long elapseMs = endTime - ctx.getStartTime();
@@ -272,8 +277,12 @@ public class ConnectProcessor {
 
         // Build Digest and queryFeMemory for SELECT/INSERT/UPDATE/DELETE
         if (ctx.getState().isQuery() || parsedStmt instanceof DmlStmt) {
-            if (Config.enable_sql_digest || ctx.getSessionVariable().isEnableSQLDigest()) {
-                ctx.getAuditEventBuilder().setDigest(computeStatementDigest(parsedStmt));
+            String digest = digestFromLeader;
+            if (digest == null && (Config.enable_sql_digest || ctx.getSessionVariable().isEnableSQLDigest())) {
+                digest = computeStatementDigest(parsedStmt);
+            }
+            if (digest != null) {
+                ctx.getAuditEventBuilder().setDigest(digest);
             }
             long threadAllocatedMemory =
                     getThreadAllocatedBytes(Thread.currentThread().getId()) - ctx.getCurrentThreadAllocatedMemory();
@@ -373,11 +382,19 @@ public class ConnectProcessor {
         // TODO(cmy): when user send multi-statement, the executor is the last statement's executor.
         // We may need to find some way to resolve this.
         if (executor != null) {
-            auditAfterExec(originStmt, executor.getParsedStmt(), executor.getQueryStatisticsForAuditLog());
+            String digestFromLeader = null;
+            if (executor.getIsForwardToLeaderOrInit(false) && executor.getLeaderOpExecutor() != null) {
+                TMasterOpResult leaderResult = executor.getLeaderOpExecutor().getResult();
+                if (leaderResult != null && leaderResult.isSetSql_digest()) {
+                    digestFromLeader = leaderResult.getSql_digest();
+                }
+            }
+            auditAfterExec(originStmt, executor.getParsedStmt(),
+                          executor.getQueryStatisticsForAuditLog(), digestFromLeader);
             executor.addFinishedQueryDetail();
         } else {
             // executor can be null if we encounter analysis error.
-            auditAfterExec(originStmt, null, null);
+            auditAfterExec(originStmt, null, null, null);
         }
     }
 
@@ -656,7 +673,15 @@ public class ConnectProcessor {
             }
 
             if (enableAudit) {
-                auditAfterExec(originStmt, executor.getParsedStmt(), executor.getQueryStatisticsForAuditLog());
+                String digestFromLeader = null;
+                if (executor.getIsForwardToLeaderOrInit(false) && executor.getLeaderOpExecutor() != null) {
+                    TMasterOpResult leaderResult = executor.getLeaderOpExecutor().getResult();
+                    if (leaderResult != null && leaderResult.isSetSql_digest()) {
+                        digestFromLeader = leaderResult.getSql_digest();
+                    }
+                }
+                auditAfterExec(originStmt, executor.getParsedStmt(),
+                              executor.getQueryStatisticsForAuditLog(), digestFromLeader);
             }
         } catch (Throwable e) {
             // Catch all throwable.
@@ -1055,6 +1080,17 @@ public class ConnectProcessor {
         }
         executor.setProxy();
         executor.execute();
+
+        if (executor.getParsedStmt() != null) {
+            StatementBase parsedStmt = executor.getParsedStmt();
+            if ((Config.enable_sql_digest || ctx.getSessionVariable().isEnableSQLDigest()) &&
+                    (ctx.getState().isQuery() || parsedStmt instanceof DmlStmt)) {
+                String digest = computeStatementDigest(parsedStmt);
+                if (!digest.isEmpty()) {
+                    result.setSql_digest(digest);
+                }
+            }
+        }
 
         return executor;
     }
