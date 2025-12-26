@@ -150,8 +150,12 @@ public class MockIcebergMetadata implements ConnectorMetadata {
     private static List<Column> addMetaColumns(List<Column> originalColumns) {
         ImmutableList.Builder<Column> builder = ImmutableList.builder();
         builder.addAll(originalColumns);
-        builder.add(new Column(IcebergTable.FILE_PATH, StringType.STRING, true));
-        builder.add(new Column(IcebergTable.ROW_POSITION, IntegerType.BIGINT, true));
+        Column filePathColumn = new Column(IcebergTable.FILE_PATH, StringType.STRING, true);
+        Column rowPositionColumn = new Column(IcebergTable.ROW_POSITION, IntegerType.BIGINT, true);
+        filePathColumn.setIsHidden(true);
+        rowPositionColumn.setIsHidden(true);
+        builder.add(filePathColumn);
+        builder.add(rowPositionColumn);
         return builder.build();
     }
 

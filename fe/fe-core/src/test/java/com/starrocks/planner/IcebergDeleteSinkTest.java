@@ -16,6 +16,7 @@ package com.starrocks.planner;
 
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.IcebergTable;
+import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.IcebergUtil;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.qe.SessionVariable;
@@ -110,8 +111,8 @@ public class IcebergDeleteSinkTest {
         when(nativeTable.location()).thenReturn("/tmp/iceberg");
 
         // Should throw exception
-        IllegalStateException exception = assertThrows(IllegalStateException.class,
-                () -> new IcebergDeleteSink(icebergTable, desc, new SessionVariable()));
+        IcebergDeleteSink deleteSink = new IcebergDeleteSink(icebergTable, desc, new SessionVariable());
+        StarRocksConnectorException exception = assertThrows(StarRocksConnectorException.class, deleteSink::init);
         assertTrue(exception.getMessage().contains("_file"));
     }
 
@@ -138,6 +139,7 @@ public class IcebergDeleteSinkTest {
         when(icebergTable.getUUID()).thenReturn("iceberg_catalog.db.table");
 
         IcebergDeleteSink sink = new IcebergDeleteSink(icebergTable, desc, new SessionVariable());
+        sink.init();
 
         // Check thrift serialization
         TDataSink tDataSink = sink.toThrift();
