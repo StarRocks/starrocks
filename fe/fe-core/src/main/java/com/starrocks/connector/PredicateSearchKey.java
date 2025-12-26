@@ -79,6 +79,9 @@ public class PredicateSearchKey {
         if (params.isEnableColumnStats() != that.params.isEnableColumnStats()) {
             return false;
         }
+        if (params.isKeepDataFileStats() != that.params.isKeepDataFileStats()) {
+            return false;
+        }
 
         return Objects.equals(getVersion(), that.getVersion()) &&
                 Objects.equals(databaseName, that.databaseName) &&
@@ -87,7 +90,8 @@ public class PredicateSearchKey {
 
     @Override
     public int hashCode() {
-        return Objects.hash(databaseName, tableName, getVersion(), getPredicate(), params.isEnableColumnStats());
+        return Objects.hash(databaseName, tableName, getVersion(), getPredicate(), params.isEnableColumnStats(),
+                params.isKeepDataFileStats());
     }
 
     @Override
@@ -97,6 +101,7 @@ public class PredicateSearchKey {
                 ", version=" + getVersion() +
                 ", predicate=" + getPredicate() +
                 ", enableColumnStats=" + params.isEnableColumnStats() +
+                ", keepDataFileStats=" + params.isKeepDataFileStats() +
                 '}';
     }
 }

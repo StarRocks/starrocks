@@ -16,6 +16,7 @@ package com.starrocks.connector.iceberg;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
+import com.starrocks.common.util.TimeUtils;
 import com.starrocks.planner.SlotDescriptor;
 import com.starrocks.thrift.TExprMinMaxValue;
 import com.starrocks.thrift.TExprNodeType;
@@ -28,6 +29,9 @@ import org.apache.iceberg.types.Types;
 import org.apache.iceberg.util.LocationUtil;
 
 import java.nio.ByteBuffer;
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -70,6 +74,7 @@ public final class IcebergUtil {
                     break;
                 case BIGINT:
                 case TIME:
+                case DATETIME:
                     texpr.setType(TExprNodeType.INT_LITERAL);
                     if (minValue instanceof Integer) {
                         texpr.setMin_int_value(((Integer) minValue).longValue());
@@ -118,7 +123,8 @@ public final class IcebergUtil {
             Type.TypeID.FLOAT,
             Type.TypeID.DOUBLE,
             Type.TypeID.DATE,
-            Type.TypeID.TIME
+            Type.TypeID.TIME,
+            Type.TypeID.TIMESTAMP
     );
 
     @VisibleForTesting
@@ -161,8 +167,24 @@ public final class IcebergUtil {
             Object high = Conversions.fromByteBuffer(field.type(), upperBounds.get(field.fieldId()));
             minMaxValue.minValue = low;
             minMaxValue.maxValue = high;
+            if (type.typeId() == Type.TypeID.TIMESTAMP) {
+                Types.TimestampType tsType = (Types.TimestampType) type;
+                if (tsType.shouldAdjustToUTC() && low instanceof Long && high instanceof Long) {
+                    minMaxValue.minValue = adjustTimestampMicrosToSessionTz((Long) low);
+                    minMaxValue.maxValue = adjustTimestampMicrosToSessionTz((Long) high);
+                }
+            }
         }
         return minMaxValues;
+    }
+
+    private static long adjustTimestampMicrosToSessionTz(long micros) {
+        long seconds = Math.floorDiv(micros, 1_000_000L);
+        long microsRemainder = Math.floorMod(micros, 1_000_000L);
+        int nanos = (int) (microsRemainder * 1000L);
+        ZoneId zoneId = TimeUtils.getTimeZone().toZoneId();
+        ZoneOffset offset = zoneId.getRules().getOffset(Instant.ofEpochSecond(seconds, nanos));
+        return micros + offset.getTotalSeconds() * 1_000_000L;
     }
 
     public static Map<Integer, TExprMinMaxValue> toThriftMinMaxValueBySlots(Schema schema,

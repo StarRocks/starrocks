@@ -866,7 +866,8 @@ public class IcebergMetadata implements ConnectorMetadata {
             FileScanTask icebergSplitScanTask = scanTask;
             if (enableCollectColumnStatistics) {
                 try (Timer ignored = Tracers.watchScope(EXTERNAL, "ICEBERG.buildSplitScanTask")) {
-                    icebergSplitScanTask = buildIcebergSplitScanTask(scanTask, icebergPredicate, key);
+                    icebergSplitScanTask = buildIcebergSplitScanTask(
+                            scanTask, icebergPredicate, key, params.isKeepDataFileStats());
                 }
 
                 List<Types.NestedField> fullColumns = nativeTbl.schema().columns();
@@ -1199,12 +1200,12 @@ public class IcebergMetadata implements ConnectorMetadata {
     }
 
     private IcebergSplitScanTask buildIcebergSplitScanTask(
-            FileScanTask fileScanTask, Expression icebergPredicate, PredicateSearchKey filter) {
+            FileScanTask fileScanTask, Expression icebergPredicate, PredicateSearchKey filter, boolean keepFileStats) {
         long offset = fileScanTask.start();
         long length = fileScanTask.length();
-        DataFile dataFileWithoutStats = fileScanTask.file().copyWithoutStats();
+        DataFile dataFile = keepFileStats ? fileScanTask.file() : fileScanTask.file().copyWithoutStats();
         DeleteFile[] deleteFiles = fileScanTask.deletes().stream()
-                .map(DeleteFile::copyWithoutStats)
+                .map(deleteFile -> keepFileStats ? deleteFile : deleteFile.copyWithoutStats())
                 .toArray(DeleteFile[]::new);
 
         PartitionSpec taskSpec = fileScanTask.spec();
@@ -1226,7 +1227,7 @@ public class IcebergMetadata implements ConnectorMetadata {
         ResidualEvaluator residualEvaluator = ResidualEvaluator.of(taskSpec, icebergPredicate, true);
 
         BaseFileScanTask baseFileScanTask = new BaseFileScanTask(
-                dataFileWithoutStats,
+                dataFile,
                 deleteFiles,
                 schemaString,
                 partitionString,

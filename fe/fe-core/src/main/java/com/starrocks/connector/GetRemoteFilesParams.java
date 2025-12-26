@@ -33,6 +33,7 @@ public class GetRemoteFilesParams {
     private boolean useCache = true;
     private boolean checkPartitionExistence = true;
     private boolean enableColumnStats = false;
+    private boolean keepDataFileStats = false;
     private Optional<Boolean> isRecursive = Optional.empty();
 
     protected GetRemoteFilesParams(Builder builder) {
@@ -46,6 +47,7 @@ public class GetRemoteFilesParams {
         this.useCache = builder.useCache;
         this.checkPartitionExistence = builder.checkPartitionExistence;
         this.enableColumnStats = builder.enableColumnStats;
+        this.keepDataFileStats = builder.keepDataFileStats;
         this.isRecursive = builder.isRecursive;
     }
 
@@ -70,7 +72,8 @@ public class GetRemoteFilesParams {
                 .setLimit(limit)
                 .setUseCache(useCache)
                 .setCheckPartitionExistence(checkPartitionExistence)
-                .setEnableColumnStats(enableColumnStats);
+                .setEnableColumnStats(enableColumnStats)
+                .setKeepDataFileStats(keepDataFileStats);
         if (isRecursive.isPresent()) {
             paramsBuilder.setIsRecursive(isRecursive.get());
         }
@@ -149,6 +152,10 @@ public class GetRemoteFilesParams {
         return enableColumnStats;
     }
 
+    public boolean isKeepDataFileStats() {
+        return keepDataFileStats;
+    }
+
     public Optional<Boolean> getIsRecursive() {
         return isRecursive;
     }
@@ -164,6 +171,7 @@ public class GetRemoteFilesParams {
         private boolean useCache = true;
         private boolean checkPartitionExistence = true;
         private boolean enableColumnStats = false;
+        private boolean keepDataFileStats = false;
         private Optional<Boolean> isRecursive = Optional.empty();
 
         public Builder setPartitionKeys(List<PartitionKey> partitionKeys) {
@@ -213,6 +221,11 @@ public class GetRemoteFilesParams {
 
         public Builder setEnableColumnStats(boolean enableColumnStats) {
             this.enableColumnStats = enableColumnStats;
+            return this;
+        }
+
+        public Builder setKeepDataFileStats(boolean keepDataFileStats) {
+            this.keepDataFileStats = keepDataFileStats;
             return this;
         }
 

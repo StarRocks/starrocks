@@ -26,6 +26,8 @@
 #include "io/shared_buffered_input_stream.h"
 #include "storage/predicate_parser.h"
 #include "storage/runtime_range_pruner.hpp"
+#include "runtime/time_types.h"
+#include "types/timestamp_value.h"
 #include "util/compression/compression_utils.h"
 #include "util/compression/stream_compression.h"
 namespace starrocks {
@@ -722,6 +724,18 @@ MutableColumnPtr HdfsScannerContext::create_min_max_value_column(SlotDescriptor*
             data.emplace_back((double)value.min_int_value * 1e-6);
             data.emplace_back((double)value.max_int_value * 1e-6);
             break;
+        case TYPE_DATETIME: {
+            auto to_ts = [](int64_t micros) {
+                TimestampValue ts;
+                int64_t seconds = micros / USECS_PER_SEC;
+                int64_t usec = micros % USECS_PER_SEC;
+                ts.from_unix_second(seconds, usec);
+                return ts;
+            };
+            data.emplace_back(to_ts(value.min_int_value));
+            data.emplace_back(to_ts(value.max_int_value));
+            break;
+        }
         default:
             break;
         }
