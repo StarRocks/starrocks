@@ -172,6 +172,23 @@ select count(*) from predicate_lm_v2_high_full where col_string != '' and col_in
 
 
 set enable_predicate_col_late_materialize = true;
+-- Scenario 7: low cardinality column, predicate order col_int then col_string
+set enable_predicate_col_late_materialize = true;
+select count(*) from predicate_lm_v2_low_full where col_int > 0 and col_string = 'abc';
+
+-- Scenario 8: join, col_string and col_int in ON clause, predicate order col_int then col_string
+select count(*) 
+from predicate_lm_v2_low_full t1 
+join predicate_lm_v2_low_full t2 on t1.col_int = t2.col_int and t1.col_string = t2.col_string 
+where t1.col_int > 0 and t1.col_string = 'abc';
+
+set enable_predicate_col_late_materialize = false;
+select count(*) from predicate_lm_v2_low_full where col_int > 0 and col_string = 'abc';
+select count(*) 
+from predicate_lm_v2_low_full t1 
+join predicate_lm_v2_low_full t2 on t1.col_int = t2.col_int and t1.col_string = t2.col_string 
+where t1.col_int > 0 and t1.col_string = 'abc';
+
 
 drop table if exists predicate_lm_v1_sparse;
 drop table if exists predicate_lm_v2_low_full;

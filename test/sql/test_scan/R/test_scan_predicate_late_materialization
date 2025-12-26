@@ -277,6 +277,34 @@ select count(*) from predicate_lm_v2_high_full where col_string != '' and col_in
 set enable_predicate_col_late_materialize = true;
 -- result:
 -- !result
+set enable_predicate_col_late_materialize = true;
+-- result:
+-- !result
+select count(*) from predicate_lm_v2_low_full where col_int > 0 and col_string = 'abc';
+-- result:
+2000
+-- !result
+select count(*) 
+from predicate_lm_v2_low_full t1 
+join predicate_lm_v2_low_full t2 on t1.col_int = t2.col_int and t1.col_string = t2.col_string 
+where t1.col_int > 0 and t1.col_string = 'abc';
+-- result:
+2000
+-- !result
+set enable_predicate_col_late_materialize = false;
+-- result:
+-- !result
+select count(*) from predicate_lm_v2_low_full where col_int > 0 and col_string = 'abc';
+-- result:
+2000
+-- !result
+select count(*) 
+from predicate_lm_v2_low_full t1 
+join predicate_lm_v2_low_full t2 on t1.col_int = t2.col_int and t1.col_string = t2.col_string 
+where t1.col_int > 0 and t1.col_string = 'abc';
+-- result:
+2000
+-- !result
 drop table if exists predicate_lm_v1_sparse;
 -- result:
 -- !result
