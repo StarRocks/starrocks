@@ -111,10 +111,7 @@ FROM iceberg_catalog.db.table_with_variants;
 VARIANT functions can be used to query and extract data from VARIANT columns. For detailed information, please refer to the individual function documentation:
 
 - [variant_query](../../sql-functions/variant-functions/variant_query.md): Queries a path in a VARIANT value and returns a VARIANT
-- [get_variant_int](../../sql-functions/variant-functions/get_variant_int.md): Extracts an integer value from a VARIANT
-- [get_variant_bool](../../sql-functions/variant-functions/get_variant_bool.md): Extracts a boolean value from a VARIANT
-- [get_variant_double](../../sql-functions/variant-functions/get_variant_double.md): Extracts a double value from a VARIANT
-- [get_variant_string](../../sql-functions/variant-functions/get_variant_string.md): Extracts a string value from a VARIANT
+- [get_variant](../../sql-functions/variant-functions/get_variant.md): Extracts typed values (int, bool, double, string) from a VARIANT
 - [variant_typeof](../../sql-functions/variant-functions/variant_typeof.md): Returns the type name of a VARIANT value
 
 ## VARIANT Path Expressions

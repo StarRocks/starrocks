@@ -111,10 +111,7 @@ FROM iceberg_catalog.db.table_with_variants;
 VARIANT 函数可用于查询和提取 VARIANT 列中的数据。有关详细信息,请参阅各个函数的文档:
 
 - [variant_query](../../sql-functions/variant-functions/variant_query.md):查询 VARIANT 值中的路径并返回 VARIANT
-- [get_variant_int](../../sql-functions/variant-functions/get_variant_int.md):从 VARIANT 提取整数值
-- [get_variant_bool](../../sql-functions/variant-functions/get_variant_bool.md):从 VARIANT 提取布尔值
-- [get_variant_double](../../sql-functions/variant-functions/get_variant_double.md):从 VARIANT 提取双精度浮点值
-- [get_variant_string](../../sql-functions/variant-functions/get_variant_string.md):从 VARIANT 提取字符串值
+- [get_variant](../../sql-functions/variant-functions/get_variant.md):从 VARIANT 提取类型化的值(整数、布尔值、双精度浮点数、字符串)
 - [variant_typeof](../../sql-functions/variant-functions/variant_typeof.md):返回 VARIANT 值的类型名称
 
 ## VARIANT 路径表达式
