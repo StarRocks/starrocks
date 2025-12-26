@@ -457,6 +457,9 @@ public class HiveCommitter {
                         .put("starrocks_version", Version.STARROCKS_VERSION + "-" + Version.STARROCKS_COMMIT_HASH)
                         .put(STARROCKS_QUERY_ID, ConnectContext.get().getQueryId().toString())
                         .buildOrThrow())
+                .setSerDeParameters(ImmutableMap.<String, String>builder()
+                        .putAll(table.getSerdeProperties())
+                        .buildOrThrow())
                 .setStorageFormat(table.getStorageFormat())
                 .setLocation(partitionUpdate.getTargetPath().toString())
                 .build();
