@@ -589,6 +589,116 @@ class ParserTest {
         }
     }
 
+<<<<<<< HEAD
+=======
+    @Test
+    public void testSplitTabletClause() {
+        {
+            String sql = "ALTER TABLE test_db.test_table\n" + //
+                    "SPLIT TABLET\n" + //
+                    "PROPERTIES (\n" + //
+                    "    \"tablet_reshard_target_size\"=\"1024\")";
+
+            SessionVariable sessionVariable = new SessionVariable();
+            try {
+                List<StatementBase> stmts = SqlParser.parse(sql, sessionVariable);
+                Assertions.assertEquals(1, stmts.size());
+
+                AlterTableStmt alterTableStmt = (AlterTableStmt) stmts.get(0);
+                Assertions.assertEquals("test_db", alterTableStmt.getDbName());
+                Assertions.assertEquals("test_table", alterTableStmt.getTableName());
+
+                List<AlterClause> alterClauses = alterTableStmt.getAlterClauseList();
+                Assertions.assertEquals(1, alterClauses.size());
+
+                SplitTabletClause splitTabletClause = (SplitTabletClause) alterClauses.get(0);
+                Assertions.assertEquals(null, splitTabletClause.getPartitionNames());
+                Assertions.assertEquals(null, splitTabletClause.getTabletList());
+                Assertions.assertEquals(Map.of("tablet_reshard_target_size", "1024"), splitTabletClause.getProperties());
+                Assertions.assertNotNull(splitTabletClause.toString());
+            } catch (Exception e) {
+                Assertions.fail("sql should success. errMsg: " + e.getMessage());
+            }
+        }
+
+        {
+            String sql = "ALTER TABLE test_db.test_table\n" + //
+                    "SPLIT TABLET\n" + //
+                    "    PARTITION (partiton_name1, partition_name2)\n" + //
+                    "PROPERTIES (\n" + //
+                    "    \"tablet_reshard_target_size\"=\"1024\")";
+
+            SessionVariable sessionVariable = new SessionVariable();
+            try {
+                List<StatementBase> stmts = SqlParser.parse(sql, sessionVariable);
+                Assertions.assertEquals(1, stmts.size());
+
+                AlterTableStmt alterTableStmt = (AlterTableStmt) stmts.get(0);
+                Assertions.assertEquals("test_db", alterTableStmt.getDbName());
+                Assertions.assertEquals("test_table", alterTableStmt.getTableName());
+
+                List<AlterClause> alterClauses = alterTableStmt.getAlterClauseList();
+                Assertions.assertEquals(1, alterClauses.size());
+
+                SplitTabletClause splitTabletClause = (SplitTabletClause) alterClauses.get(0);
+                Assertions.assertEquals(Lists.newArrayList("partiton_name1", "partition_name2"),
+                        splitTabletClause.getPartitionNames().getPartitionNames());
+                Assertions.assertEquals(null, splitTabletClause.getTabletList());
+                Assertions.assertEquals(Map.of("tablet_reshard_target_size", "1024"), splitTabletClause.getProperties());
+                Assertions.assertNotNull(splitTabletClause.toString());
+            } catch (Exception e) {
+                Assertions.fail("sql should success. errMsg: " + e.getMessage());
+            }
+        }
+
+        {
+            String sql = "ALTER TABLE test_db.test_table\n" + //
+                    "SPLIT TABLET (1, 2, 3)\n" + //
+                    "PROPERTIES (\n" + //
+                    "    \"tablet_reshard_target_size\"=\"1024\")";
+
+            SessionVariable sessionVariable = new SessionVariable();
+            try {
+                List<StatementBase> stmts = SqlParser.parse(sql, sessionVariable);
+                Assertions.assertEquals(1, stmts.size());
+
+                AlterTableStmt alterTableStmt = (AlterTableStmt) stmts.get(0);
+                Assertions.assertEquals("test_db", alterTableStmt.getDbName());
+                Assertions.assertEquals("test_table", alterTableStmt.getTableName());
+
+                List<AlterClause> alterClauses = alterTableStmt.getAlterClauseList();
+                Assertions.assertEquals(1, alterClauses.size());
+
+                SplitTabletClause splitTabletClause = (SplitTabletClause) alterClauses.get(0);
+                Assertions.assertEquals(null, splitTabletClause.getPartitionNames());
+                Assertions.assertEquals(Lists.newArrayList(1L, 2L, 3L),
+                        splitTabletClause.getTabletList().getTabletIds());
+                Assertions.assertEquals(Map.of("tablet_reshard_target_size", "1024"), splitTabletClause.getProperties());
+                Assertions.assertNotNull(splitTabletClause.toString());
+            } catch (Exception e) {
+                Assertions.fail("sql should success. errMsg: " + e.getMessage());
+            }
+        }
+
+        SplitTabletClause splitTabletClause = new SplitTabletClause(null, null, null);
+        Assertions.assertEquals(null, splitTabletClause.getPartitionNames());
+    }
+
+    @Test
+    void testSkewHintWithNegativeValues() {
+        String[] sqls = {
+                "select * from t1 join [skew|t1.c_int(-100)] t2 on t1.c_int = t2.c_int",
+                "select * from t1 join [skew|t1.c_int(-100, -200)] t2 on t1.c_int = t2.c_int",
+                "select * from t1 join [skew|t1.c_float(-10.5)] t2 on t1.c_float = t2.c_float",
+                "select * from t1 join [skew|t1.c_decimal(-10.5)] t2 on t1.c_decimal = t2.c_decimal"
+        };
+        SessionVariable sessionVariable = new SessionVariable();
+        for (String sql : sqls) {
+            SqlParser.parse(sql, sessionVariable);
+        }
+    }
+
+>>>>>>> 2dba160a6a ([BugFix] support negative value in skew hint (#66922))
 }
 
 
