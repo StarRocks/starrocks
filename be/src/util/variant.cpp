@@ -566,8 +566,7 @@ StatusOr<VariantValue> VariantValue::get_object_by_key(const VariantMetadata& me
         return obj_status.status();
     }
 
-    const auto [num_elements, id_start_offset, id_size, offset_start_offset, offset_size, data_start_offset] =
-            obj_status.value();
+    const VariantObjectInfo& info = obj_status.value();
     KeyIndexVector dict_indexes;
     RETURN_IF_ERROR(metadata._get_index(key, (void*)&dict_indexes));
     if (dict_indexes.empty()) {
@@ -576,9 +575,9 @@ StatusOr<VariantValue> VariantValue::get_object_by_key(const VariantMetadata& me
 
     for (uint32_t dict_index : dict_indexes) {
         std::optional<uint32_t> field_index_opt;
-        for (uint32_t i = 0; i < num_elements; i++) {
-            uint32_t field_id =
-                    VariantUtil::read_little_endian_unsigned32(_value.data() + id_start_offset + i * id_size, id_size);
+        for (uint32_t i = 0; i < info.num_elements; i++) {
+            uint32_t field_id = VariantUtil::read_little_endian_unsigned32(
+                    _value.data() + info.id_start_offset + i * info.id_size, info.id_size);
             if (field_id == dict_index) {
                 field_index_opt = i;
                 break;
@@ -591,14 +590,14 @@ StatusOr<VariantValue> VariantValue::get_object_by_key(const VariantMetadata& me
 
         const uint32_t field_index = field_index_opt.value();
         const uint32_t offset = VariantUtil::read_little_endian_unsigned32(
-                _value.data() + offset_start_offset + field_index * offset_size, offset_size);
-        if (data_start_offset + offset >= _value.size()) {
+                _value.data() + info.offset_start_offset + field_index * info.offset_size, info.offset_size);
+        if (info.data_start_offset + offset >= _value.size()) {
             return Status::VariantError("Offset is out of bounds: " + std::to_string(offset) +
-                                        ", data_start_offset: " + std::to_string(data_start_offset) +
+                                        ", data_start_offset: " + std::to_string(info.data_start_offset) +
                                         ", value_size: " + std::to_string(_value.size()));
         }
 
-        return VariantValue(_value.substr(data_start_offset + offset));
+        return VariantValue(_value.substr(info.data_start_offset + offset));
     }
 
     return Status::NotFound("Field key not found: " + std::string(key));
@@ -637,7 +636,7 @@ static std::string epoch_day_to_date(int32_t epoch_days) {
 }
 
 // Escape a string according to JSON specification (RFC 8259)
-static std::string escape_json_string(std::string_view str) {
+static std::string escape_json_string(const std::string_view str) {
     std::stringstream ss;
     for (unsigned char c : str) {
         switch (c) {
@@ -675,7 +674,7 @@ static std::string escape_json_string(std::string_view str) {
     return ss.str();
 }
 
-void append_quoted_string(std::stringstream& ss, const std::string& str) {
+void append_quoted_string(std::stringstream& ss, const std::string_view str) {
     ss << '"' << escape_json_string(str) << '"';
 }
 
@@ -771,8 +770,7 @@ Status VariantUtil::variant_to_json(const VariantMetadata& metadata, const Varia
     }
     case VariantType::STRING: {
         const std::string_view str_view = *variant.get_string();
-        const std::string str(str_view.data(), str_view.size());
-        append_quoted_string(json_str, str);
+        append_quoted_string(json_str, str_view);
         break;
     }
     case VariantType::BINARY: {
