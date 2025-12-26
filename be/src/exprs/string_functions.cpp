@@ -23,8 +23,10 @@
 #endif
 
 #include <unicode/ucasemap.h>
+#include <unicode/uchar.h>
 #include <unicode/unistr.h>
 #include <unicode/urename.h>
+#include <unicode/utf8.h>
 #include <unicode/utypes.h>
 
 #include <algorithm>
@@ -5044,6 +5046,105 @@ StatusOr<ColumnPtr> StringFunctions::format_bytes(FunctionContext* context, cons
     }
 
     return result.build(ColumnHelper::is_all_const(columns));
+}
+
+static Status initcap_impl(const Slice& str, std::string* result) {
+    if (str.empty()) {
+        return Status::OK();
+    }
+
+    if (validate_ascii_fast(str.data, str.size)) {
+        result->resize(str.size);
+        const char* src = str.data;
+        char* dst = result->data();
+        bool word_start = true;
+
+        for (size_t i = 0; i < str.size; ++i) {
+            unsigned char c = static_cast<unsigned char>(src[i]);
+            if (std::isalnum(c)) {
+                if (word_start) {
+                    dst[i] = std::toupper(c);
+                    word_start = false;
+                } else {
+                    dst[i] = std::tolower(c);
+                }
+            } else {
+                dst[i] = c;
+                word_start = true;
+            }
+        }
+        return Status::OK();
+    }
+
+    result->reserve(str.size);
+    int32_t len = static_cast<int32_t>(str.size);
+    int32_t i = 0;
+    bool word_start = true;
+
+    while (i < len) {
+        UChar32 c;
+        int32_t old_i = i;
+        U8_NEXT(str.data, i, len, c);
+
+        if (c < 0) {
+            unsigned char bad_byte = static_cast<unsigned char>(str.data[old_i]);
+            std::stringstream ss;
+            ss << "0x" << std::hex << std::uppercase << std::setw(2) << std::setfill('0') << static_cast<int>(bad_byte);
+            return Status::InvalidArgument(
+                    strings::Substitute("Invalid UTF-8 sequence at index $0, byte: $1", old_i, ss.str()));
+        }
+
+        if (u_isalnum(c)) {
+            if (word_start) {
+                c = u_toupper(c);
+                word_start = false;
+            } else {
+                c = u_tolower(c);
+            }
+        } else {
+            word_start = true;
+        }
+
+        char temp[4];
+        int32_t offset = 0;
+        UBool is_error = false;
+        U8_APPEND(temp, offset, 4, c, is_error);
+
+        if (is_error) {
+            return Status::InvalidArgument("Invalid UTF-8 sequence during encoding");
+        }
+        result->append(temp, offset);
+    }
+    return Status::OK();
+}
+
+StatusOr<ColumnPtr> StringFunctions::initcap(FunctionContext* context, const Columns& columns) {
+    ColumnViewer<TYPE_VARCHAR> viewer(columns[0]);
+    size_t num_rows = columns[0]->size();
+
+    ColumnBuilder<TYPE_VARCHAR> builder(num_rows);
+
+    std::string result_buffer;
+
+    for (size_t i = 0; i < num_rows; ++i) {
+        if (viewer.is_null(i)) {
+            builder.append_null();
+            continue;
+        }
+
+        Slice str = viewer.value(i);
+        result_buffer.clear();
+
+        Status st = initcap_impl(str, &result_buffer);
+
+        if (!st.ok()) {
+            return st;
+        }
+
+        builder.append(Slice(result_buffer));
+    }
+
+    return builder.build(ColumnHelper::is_all_const(columns));
 }
 } // namespace starrocks
 

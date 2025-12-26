@@ -260,6 +260,13 @@ public:
      * @paramType: [BinaryColumn]
      * @return: BinaryColumn
      */
+    DEFINE_VECTORIZED_FN(initcap);
+
+    /**
+     * @param: [string_value]
+     * @paramType: [BinaryColumn]
+     * @return: BinaryColumn
+     */
     DEFINE_VECTORIZED_FN(trim);
 
     /**
