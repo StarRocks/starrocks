@@ -62,6 +62,11 @@ public class FloatLiteral extends LiteralExpr {
         init(value);
     }
 
+    public FloatLiteral(Double value, NodePosition pos) throws AnalysisException {
+        checkValue(value);
+        init(value);
+    }
+
     /**
      * C'tor forcing type, e.g., due to implicit cast
      */
