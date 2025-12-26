@@ -7689,44 +7689,44 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
-<<<<<<< HEAD
-    public ParseNode visitIntegerValue(StarRocksParser.IntegerValueContext context) {
-=======
     public ParseNode visitGeneralLiteralExpression(
             com.starrocks.sql.parser.StarRocksParser.GeneralLiteralExpressionContext context) {
         if (context.literalExpression() != null) {
             return visit(context.literalExpression());
         } else {
             ParseNode node = visit(context.number());
-            if (context.MINUS_SYMBOL() != null) {
-                if (node instanceof IntLiteral) {
-                    return new IntLiteral(-((IntLiteral) node).getLongValue(), node.getPos());
-                } else if (node instanceof LargeIntLiteral) {
-                    BigInteger val = ((LargeIntLiteral) node).getValue();
-                    val = val.negate();
-                    if (val.compareTo(BigInteger.valueOf(Long.MIN_VALUE)) >= 0 &&
-                            val.compareTo(BigInteger.valueOf(Long.MAX_VALUE)) <= 0) {
-                        return new IntLiteral(val.longValue(), node.getPos());
+            try {
+                if (context.MINUS_SYMBOL() != null) {
+                    if (node instanceof IntLiteral) {
+                        return new IntLiteral(-((IntLiteral) node).getLongValue(), node.getPos());
+                    } else if (node instanceof LargeIntLiteral) {
+                        BigInteger val = ((LargeIntLiteral) node).getValue();
+                        val = val.negate();
+                        if (val.compareTo(BigInteger.valueOf(Long.MIN_VALUE)) >= 0 &&
+                                val.compareTo(BigInteger.valueOf(Long.MAX_VALUE)) <= 0) {
+                            return new IntLiteral(val.longValue(), node.getPos());
+                        }
+                        return new LargeIntLiteral(val.toString(), node.getPos());
+                    } else if (node instanceof DecimalLiteral) {
+                        BigDecimal val = ((DecimalLiteral) node).getValue();
+                        return new DecimalLiteral(val.negate(), node.getPos());
+                    } else if (node instanceof FloatLiteral) {
+                        double val = ((FloatLiteral) node).getDoubleValue();
+                        return new FloatLiteral(-val, node.getPos());
+                    } else {
+                        throw new ParsingException(PARSER_ERROR_MSG.invalidNumFormat(context.getText()), node.getPos());
                     }
-                    return new LargeIntLiteral(val.toString(), node.getPos());
-                } else if (node instanceof DecimalLiteral) {
-                    BigDecimal val = ((DecimalLiteral) node).getValue();
-                    return new DecimalLiteral(val.negate(), node.getPos());
-                } else if (node instanceof FloatLiteral) {
-                    double val = ((FloatLiteral) node).getDoubleValue();
-                    return new FloatLiteral(-val, node.getPos());
                 } else {
-                    throw new ParsingException(PARSER_ERROR_MSG.invalidNumFormat(context.getText()), node.getPos());
+                    return node;
                 }
-            } else {
-                return node;
+            } catch (AnalysisException e) {
+                throw new ParsingException(PARSER_ERROR_MSG.invalidNumFormat(context.getText()), node.getPos());
             }
         }
     }
 
     @Override
-    public ParseNode visitIntegerValue(com.starrocks.sql.parser.StarRocksParser.IntegerValueContext context) {
->>>>>>> 2dba160a6a ([BugFix] support negative value in skew hint (#66922))
+    public ParseNode visitIntegerValue(StarRocksParser.IntegerValueContext context) {
         NodePosition pos = createPos(context);
         try {
             BigInteger intLiteral = new BigInteger(context.getText());
