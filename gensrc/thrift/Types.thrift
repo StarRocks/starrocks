@@ -336,6 +336,7 @@ struct TTableFunction {
   2: optional string symbol
   // Table function left join
   3: optional bool is_left_join
+  4: optional bool is_array_join
 }
 
 struct TAggStateDesc {

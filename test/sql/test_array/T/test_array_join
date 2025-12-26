@@ -1,0 +1,27 @@
+-- name: test_array_join
+
+CREATE TABLE `student_score` (
+  `id` bigint(20) NULL COMMENT "",
+  `scores` array<int(11)> NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`id`)
+DISTRIBUTED BY HASH(`id`)
+PROPERTIES (
+"replication_num" = "1"
+);
+
+INSERT INTO student_score VALUES
+(1, [80,85,87]),
+(2, [77, null, 89]),
+(3, null),
+(4, []),
+(5, [90,92]);
+
+select id , c1 from student_score array join scores as c1 order by id,c1
+
+select id , c1 from student_score left array join scores as c1 order by id,c1
+
+select id ,c1 ,c2 from student_score array join scores as c1, scores as c2 order by id,c1
+
+select id ,c1 ,c2 from student_score left array join scores as c1, scores as c2 order by id,c1
+
