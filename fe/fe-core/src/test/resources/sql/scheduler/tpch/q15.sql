@@ -152,169 +152,161 @@ PLAN FRAGMENT 6(F01)
 
 [fragment]
 PLAN FRAGMENT 0
- OUTPUT EXPRS:1: s_suppkey | 2: s_name | 3: s_address | 5: s_phone | 26: sum
-  PARTITION: UNPARTITIONED
+OUTPUT EXPRS:1: s_suppkey | 2: s_name | 3: s_address | 5: s_phone | 26: sum
+PARTITION: UNPARTITIONED
 
-  RESULT SINK
+RESULT SINK
 
-  24:MERGING-EXCHANGE
+22:MERGING-EXCHANGE
 
 PLAN FRAGMENT 1
- OUTPUT EXPRS:
-  PARTITION: RANDOM
+OUTPUT EXPRS:
+PARTITION: RANDOM
 
-  STREAM DATA SINK
-    EXCHANGE ID: 24
-    UNPARTITIONED
+STREAM DATA SINK
+EXCHANGE ID: 22
+UNPARTITIONED
 
-  23:SORT
-  |  order by: <slot 1> 1: s_suppkey ASC
-  |  offset: 0
-  |  
-  22:Project
-  |  <slot 1> : 1: s_suppkey
-  |  <slot 2> : 2: s_name
-  |  <slot 3> : 3: s_address
-  |  <slot 5> : 5: s_phone
-  |  <slot 26> : 26: sum
-  |  
-  21:HASH JOIN
-  |  join op: INNER JOIN (BUCKET_SHUFFLE)
-  |  colocate: false, reason: 
-  |  equal join conjunct: 1: s_suppkey = 10: L_SUPPKEY
-  |  
-  |----20:EXCHANGE
-  |    
-  0:OlapScanNode
-     TABLE: supplier
-     PREAGGREGATION: ON
-     partitions=1/1
-     rollup: supplier
-     tabletRatio=12/12
-     tabletList=1487,1489,1491,1493,1495,1497,1499,1501,1503,1505 ...
-     cardinality=1
-     avgRowSize=84.0
+21:SORT
+|  order by: <slot 1> 1: s_suppkey ASC
+|  offset: 0
+|
+20:Project
+|  <slot 1> : 1: s_suppkey
+|  <slot 2> : 2: s_name
+|  <slot 3> : 3: s_address
+|  <slot 5> : 5: s_phone
+|  <slot 26> : 26: sum
+|
+19:HASH JOIN
+|  join op: INNER JOIN (BUCKET_SHUFFLE)
+|  colocate: false, reason:
+|  equal join conjunct: 1: s_suppkey = 10: L_SUPPKEY
+|
+|----18:EXCHANGE
+|
+0:OlapScanNode
+TABLE: supplier
+PREAGGREGATION: ON
+partitions=1/1
+rollup: supplier
+tabletRatio=12/12
+cardinality=1
+avgRowSize=84.0
 
 PLAN FRAGMENT 2
- OUTPUT EXPRS:
-  PARTITION: HASH_PARTITIONED: 10: L_SUPPKEY
+OUTPUT EXPRS:
+PARTITION: HASH_PARTITIONED: 10: L_SUPPKEY
 
-  STREAM DATA SINK
-    EXCHANGE ID: 20
-    BUCKET_SHUFFLE_HASH_PARTITIONED: 10: L_SUPPKEY
+STREAM DATA SINK
+EXCHANGE ID: 18
+BUCKET_SHUFFLE_HASH_PARTITIONED: 10: L_SUPPKEY
 
-  19:Project
-  |  <slot 10> : 10: L_SUPPKEY
-  |  <slot 26> : 26: sum
-  |  
-  18:HASH JOIN
-  |  join op: INNER JOIN (BROADCAST)
-  |  colocate: false, reason: 
-  |  equal join conjunct: 26: sum = 46: max
-  |  
-  |----17:EXCHANGE
-  |    
-  5:AGGREGATE (merge finalize)
-  |  output: sum(26: sum)
-  |  group by: 10: L_SUPPKEY
-  |  having: 26: sum IS NOT NULL
-  |  
-  4:EXCHANGE
+17:Project
+|  <slot 10> : 10: L_SUPPKEY
+|  <slot 26> : 26: sum
+|
+16:HASH JOIN
+|  join op: INNER JOIN (BROADCAST)
+|  colocate: false, reason:
+|  equal join conjunct: 26: sum = 46: max
+|
+|----15:EXCHANGE
+|
+5:AGGREGATE (merge finalize)
+|  output: sum(26: sum)
+|  group by: 10: L_SUPPKEY
+|  having: 26: sum IS NOT NULL
+|
+4:EXCHANGE
 
 PLAN FRAGMENT 3
- OUTPUT EXPRS:
-  PARTITION: UNPARTITIONED
+OUTPUT EXPRS:
+PARTITION: UNPARTITIONED
 
-  STREAM DATA SINK
-    EXCHANGE ID: 17
-    UNPARTITIONED
+STREAM DATA SINK
+EXCHANGE ID: 15
+UNPARTITIONED
 
-  16:SELECT
-  |  predicates: 46: max IS NOT NULL
-  |  
-  15:ASSERT NUMBER OF ROWS
-  |  assert number of rows: LE 1
-  |  
-  14:AGGREGATE (merge finalize)
-  |  output: max(46: max)
-  |  group by: 
-  |  
-  13:EXCHANGE
+14:AGGREGATE (merge finalize)
+|  output: max(46: max)
+|  group by:
+|  having: 46: max IS NOT NULL
+|
+13:EXCHANGE
 
 PLAN FRAGMENT 4
- OUTPUT EXPRS:
-  PARTITION: HASH_PARTITIONED: 29: L_SUPPKEY
+OUTPUT EXPRS:
+PARTITION: HASH_PARTITIONED: 29: L_SUPPKEY
 
-  STREAM DATA SINK
-    EXCHANGE ID: 13
-    UNPARTITIONED
+STREAM DATA SINK
+EXCHANGE ID: 13
+UNPARTITIONED
 
-  12:AGGREGATE (update serialize)
-  |  output: max(45: sum)
-  |  group by: 
-  |  
-  11:Project
-  |  <slot 45> : 45: sum
-  |  
-  10:AGGREGATE (merge finalize)
-  |  output: sum(45: sum)
-  |  group by: 29: L_SUPPKEY
-  |  
-  9:EXCHANGE
+12:AGGREGATE (update serialize)
+|  output: max(45: sum)
+|  group by:
+|
+11:Project
+|  <slot 45> : 45: sum
+|
+10:AGGREGATE (merge finalize)
+|  output: sum(45: sum)
+|  group by: 29: L_SUPPKEY
+|
+9:EXCHANGE
 
 PLAN FRAGMENT 5
- OUTPUT EXPRS:
-  PARTITION: RANDOM
+OUTPUT EXPRS:
+PARTITION: RANDOM
 
-  STREAM DATA SINK
-    EXCHANGE ID: 09
-    HASH_PARTITIONED: 29: L_SUPPKEY
+STREAM DATA SINK
+EXCHANGE ID: 09
+HASH_PARTITIONED: 29: L_SUPPKEY
 
-  8:AGGREGATE (update serialize)
-  |  STREAMING
-  |  output: sum(44: expr)
-  |  group by: 29: L_SUPPKEY
-  |  
-  7:Project
-  |  <slot 29> : 29: L_SUPPKEY
-  |  <slot 44> : 32: L_EXTENDEDPRICE * 1.0 - 33: L_DISCOUNT
-  |  
-  6:OlapScanNode
-     TABLE: lineitem
-     PREAGGREGATION: ON
-     PREDICATES: 37: L_SHIPDATE >= '1995-07-01', 37: L_SHIPDATE < '1995-10-01'
-     partitions=1/1
-     rollup: lineitem
-     tabletRatio=20/20
-     tabletList=1004,1006,1008,1010,1012,1014,1016,1018,1020,1022 ...
-     cardinality=1
-     avgRowSize=32.0
+8:AGGREGATE (update serialize)
+|  STREAMING
+|  output: sum(44: expr)
+|  group by: 29: L_SUPPKEY
+|
+7:Project
+|  <slot 29> : 29: L_SUPPKEY
+|  <slot 44> : 32: L_EXTENDEDPRICE * 1.0 - 33: L_DISCOUNT
+|
+6:OlapScanNode
+TABLE: lineitem
+PREAGGREGATION: ON
+PREDICATES: 37: L_SHIPDATE >= '1995-07-01', 37: L_SHIPDATE < '1995-10-01'
+partitions=1/1
+rollup: lineitem
+tabletRatio=20/20
+cardinality=1
+avgRowSize=32.0
 
 PLAN FRAGMENT 6
- OUTPUT EXPRS:
-  PARTITION: RANDOM
+OUTPUT EXPRS:
+PARTITION: RANDOM
 
-  STREAM DATA SINK
-    EXCHANGE ID: 04
-    HASH_PARTITIONED: 10: L_SUPPKEY
+STREAM DATA SINK
+EXCHANGE ID: 04
+HASH_PARTITIONED: 10: L_SUPPKEY
 
-  3:AGGREGATE (update serialize)
-  |  STREAMING
-  |  output: sum(25: expr)
-  |  group by: 10: L_SUPPKEY
-  |  
-  2:Project
-  |  <slot 10> : 10: L_SUPPKEY
-  |  <slot 25> : 13: L_EXTENDEDPRICE * 1.0 - 14: L_DISCOUNT
-  |  
-  1:OlapScanNode
-     TABLE: lineitem
-     PREAGGREGATION: ON
-     PREDICATES: 18: L_SHIPDATE >= '1995-07-01', 18: L_SHIPDATE < '1995-10-01'
-     partitions=1/1
-     rollup: lineitem
-     tabletRatio=20/20
-     tabletList=1004,1006,1008,1010,1012,1014,1016,1018,1020,1022 ...
-     cardinality=1
-     avgRowSize=32.0
+3:AGGREGATE (update serialize)
+|  STREAMING
+|  output: sum(25: expr)
+|  group by: 10: L_SUPPKEY
+|
+2:Project
+|  <slot 10> : 10: L_SUPPKEY
+|  <slot 25> : 13: L_EXTENDEDPRICE * 1.0 - 14: L_DISCOUNT
+|
+1:OlapScanNode
+TABLE: lineitem
+PREAGGREGATION: ON
+PREDICATES: 18: L_SHIPDATE >= '1995-07-01', 18: L_SHIPDATE < '1995-10-01'
+partitions=1/1
+rollup: lineitem
+tabletRatio=20/20
+cardinality=1
+avgRowSize=32.0
 [end]
