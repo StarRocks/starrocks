@@ -59,7 +59,7 @@ public class FloatLiteral extends LiteralExpr {
         init(value);
     }
 
-    public FloatLiteral(Double value, NodePosition pos) {
+    public FloatLiteral(Double value, NodePosition pos) throws AnalysisException {
         super(pos);
         checkValue(value);
         init(value);
