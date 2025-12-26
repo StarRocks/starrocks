@@ -5793,13 +5793,21 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         SelectList selectList = new SelectList(selectItems, isDistinct);
         selectList.setHintNodes(hintMap.get(context));
 
-        SelectRelation resultSelectRelation = new SelectRelation(
-                selectList,
-                from,
-                (Expr) visitIfPresent(context.where),
-                (GroupByClause) visitIfPresent(context.groupingElement()),
-                (Expr) visitIfPresent(context.having),
-                createPos(context));
+        SelectRelation resultSelectRelation = null;
+
+        //Convert ARRAY JOIN to UNNSET + LATERAL JOIN
+        if (context.arrayJoinClause() != null) {
+            resultSelectRelation = transFormArrayJoinToUnnest(selectList, from, context);
+        } else {
+            resultSelectRelation = new SelectRelation(
+                    selectList,
+                    from,
+                    (Expr) visitIfPresent(context.where),
+                    (GroupByClause) visitIfPresent(context.groupingElement()),
+                    (Expr) visitIfPresent(context.having),
+                    createPos(context));
+        }
+
 
         // extend Query with QUALIFY to nested queries with filter.
         if (context.qualifyFunction != null) {
@@ -9417,6 +9425,81 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         }
 
         return QualifiedName.of(parts, qualifiedName.getPos());
+    }
+
+    private SelectRelation transFormArrayJoinToUnnest(SelectList selectList,
+                          Relation fromRelation,
+                          com.starrocks.sql.parser.StarRocksParser.QuerySpecificationContext context) {
+
+        com.starrocks.sql.parser.StarRocksParser.ArrayJoinClauseContext arrayJoinExprContext = context.arrayJoinClause();
+
+        JoinOperator joinType = JoinOperator.INNER_JOIN;
+        if (arrayJoinExprContext.LEFT() != null) {
+            joinType = JoinOperator.LEFT_OUTER_JOIN;
+        }
+
+        fromRelation = buildUnnestJoin(fromRelation, arrayJoinExprContext.arrayJoinList(), joinType);
+
+        return new SelectRelation(
+                selectList,
+                fromRelation,
+                (Expr) visitIfPresent(context.where),
+                (GroupByClause) visitIfPresent(context.groupingElement()),
+                (Expr) visitIfPresent(context.having),
+                createPos(context)
+        );
+    }
+
+    private Relation buildUnnestJoin(Relation leftRelation,
+                                     com.starrocks.sql.parser.StarRocksParser.ArrayJoinListContext exprListContext,
+                                     JoinOperator joinType) {
+
+        List<Expr> arrayExprs = Lists.newArrayList();
+        List<String> aliasList = Lists.newArrayList();
+        for (com.starrocks.sql.parser.StarRocksParser.ArrayJoinExprContext exprContext : exprListContext.arrayJoinExpr()) {
+            Expr arrayExpr = (Expr) visit(exprContext.expression());
+            String alias = null;
+            if (exprContext.identifier() != null) {
+                alias = ((Identifier) visit(exprContext.identifier())).getValue();
+            } else {
+                //If no alias is provided, use the expression string as the column name
+                alias = exprContext.expression().getText();
+            }
+            aliasList.add(alias);
+            arrayExprs.add(arrayExpr);
+        }
+
+        FunctionCallExpr unnestFunction = createUnnestFunction(arrayExprs);
+
+        String tableAlias = generateTableAlias(aliasList.get(0));
+
+        TableFunctionRelation unnestRelation = new TableFunctionRelation(unnestFunction);
+        unnestRelation.setChildExpressions(arrayExprs);
+        unnestRelation.setAlias(new TableName(null, tableAlias));
+        unnestRelation.setColumnOutputNames(aliasList);
+        unnestRelation.setIsArrayJoin(true);
+        BoolLiteral boolLiteral = null;
+        if (joinType.isLeftOuterJoin()) {
+            unnestRelation.setIsLeftJoin(true);
+            boolLiteral = new BoolLiteral(true);
+        }
+
+        return new JoinRelation(
+                joinType,
+                leftRelation,
+                unnestRelation,
+                boolLiteral,
+                true);
+    }
+
+    private FunctionCallExpr createUnnestFunction(List<Expr> params) {
+        FunctionCallExpr unnestFunc = new FunctionCallExpr("unnest", params);
+        return unnestFunc;
+    }
+
+    private String generateTableAlias(String columnAlias) {
+        // Generate table aliases to avoid conflicts
+        return "t_" + columnAlias;
     }
 
     public static IndexDef.IndexType getIndexType(com.starrocks.sql.parser.StarRocksParser.IndexTypeContext indexTypeContext) {

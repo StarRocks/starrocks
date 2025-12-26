@@ -52,10 +52,12 @@ public:
         copy_count_column->append(offset);
         for (int row_idx = 0; row_idx < row_count; ++row_idx) {
             uint32_t max_length_array_size = 0;
+            uint32_t min_length_array_size = UINT32_MAX;
             for (auto& col_idx : state->get_columns()) {
                 Column* column = col_idx->as_mutable_raw_ptr();
                 if (column->is_null(row_idx)) {
                     // current row is null, ignore the offset.
+                    min_length_array_size = 0;
                     continue;
                 }
                 auto* col_array = down_cast<ArrayColumn*>(ColumnHelper::get_data_column(column));
@@ -66,7 +68,14 @@ public:
                 if (array_element_length > max_length_array_size) {
                     max_length_array_size = array_element_length;
                 }
+                if (array_element_length < min_length_array_size) {
+                    min_length_array_size = array_element_length;
+                }
             }
+             if (max_length_array_size != min_length_array_size && state->get_is_array_join_mode()) {
+                state->set_status(Status::InternalError("Sizes of ARRAY-JOIN-ed arrays do not match."));
+                return {};
+             }
             if (max_length_array_size == 0 && state->get_is_left_join()) {
                 offset += 1;
                 copy_count_column->append(offset);
@@ -121,6 +130,9 @@ public:
         const auto& table_fn = fn.table_fn;
         if (table_fn.__isset.is_left_join) {
             (*state)->set_is_left_join(table_fn.is_left_join);
+        }
+        if (table_fn.__isset.is_array_join) {
+            (*state)->set_is_array_join_mode(table_fn.is_array_join);
         }
         return Status::OK();
     }
