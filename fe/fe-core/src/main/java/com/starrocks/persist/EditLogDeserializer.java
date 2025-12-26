@@ -237,7 +237,7 @@ public class EditLogDeserializer {
             .put(OperationType.OP_REVOKE_ROLE_FROM_GROUP, UpdateGroupToRoleLog.class)
             .put(OperationType.OP_MV_JOB_STATE, MVMaintenanceJob.class)
             .put(OperationType.OP_MV_EPOCH_UPDATE, MVEpoch.class)
-            .put(OperationType.OP_MODIFY_TABLE_ADD_OR_DROP_COLUMNS, TableAddOrDropColumnsInfo.class)
+            .put(OperationType.OP_FAST_ALTER_TABLE_COLUMNS, TableColumnAlterInfo.class)
             .put(OperationType.OP_SET_DEFAULT_STORAGE_VOLUME, SetDefaultStorageVolumeLog.class)
             .put(OperationType.OP_DROP_STORAGE_VOLUME, DropStorageVolumeLog.class)
             .put(OperationType.OP_CREATE_STORAGE_VOLUME, StorageVolume.class)

@@ -80,6 +80,7 @@ import com.starrocks.planner.TupleDescriptor;
 import com.starrocks.planner.expression.ExprToThrift;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.AnalyzeState;
 import com.starrocks.sql.analyzer.ExpressionAnalyzer;
 import com.starrocks.sql.analyzer.Field;
@@ -1223,6 +1224,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
         }
 
         // one line for one shadow index
+        boolean isSharedData = RunMode.isSharedDataMode();
         for (Map.Entry<Long, Long> entry : indexIdMap.entrySet()) {
             long shadowIndexId = entry.getKey();
             List<Comparable> info = Lists.newArrayList();
@@ -1234,12 +1236,22 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
             info.add(Column.removeNamePrefix(indexIdToName.get(shadowIndexId)));
             info.add(shadowIndexId);
             info.add(entry.getValue());
-            info.add(indexSchemaVersionAndHashMap.get(shadowIndexId).toString());
+            if (isSharedData) {
+                // schema hash is useless for shared-data, so always set 0
+                info.add(String.format("%d:0", indexSchemaVersionAndHashMap.get(shadowIndexId).schemaVersion));
+            } else {
+                info.add(indexSchemaVersionAndHashMap.get(shadowIndexId).toString());
+            }
             info.add(watershedTxnId);
             info.add(jobState.name());
             info.add(errMsg);
             info.add(progress);
             info.add(timeoutMs / 1000);
+            if (isSharedData) {
+                // although fast schema evolution is not executed on CN,
+                // assume it uses default warehouse
+                info.add("default_warehouse");
+            }
             infos.add(info);
         }
     }

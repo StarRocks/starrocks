@@ -45,28 +45,48 @@ import java.util.Map;
 import java.util.Objects;
 
 /**
- * PersistInfo for Table properties
+ * TableColumnAlterInfo represents the information for table column alteration operations,
+ * including adding, dropping, and modifying columns.
+ * 
+ * This class stores the materialized index that needs to be altered and all column information
+ * (not just the columns being altered). It is used in:
+ * - Shared-nothing fast schema change: add/drop columns
+ * - Shared-data fast schema change v2: add/drop/modify columns
  */
-public class TableAddOrDropColumnsInfo implements Writable {
+public class TableColumnAlterInfo implements Writable {
+
+    @SerializedName(value = "jobId")
+    private long jobId;
 
     @SerializedName(value = "dbId")
     private long dbId;
+    
     @SerializedName(value = "tableId")
     private long tableId;
-    @SerializedName(value = "indexSchemaMap")
-    private Map<Long, List<Column>> indexSchemaMap;
-    @SerializedName(value = "indexes")
-    private List<Index> indexes;
-    @SerializedName(value = "jobId")
-    private long jobId;
+
+    /**
+     * Transaction ID for the column alteration operation.
+     * Transactions started after this txnId will use the updated schema,
+     * while only transactions started before this txnId may use the old schema.
+     */
     @SerializedName(value = "txnId")
     private long txnId;
+    
+    /** Map from materialized index ID to all column information (including existing and new columns) */
+    @SerializedName(value = "indexSchemaMap")
+    private Map<Long, List<Column>> indexSchemaMap;
+
+    /** Updated index information. */
+    @SerializedName(value = "indexes")
+    private List<Index> indexes;
+
+    /** Map from materialized index ID to new schema ID */
     @SerializedName(value = "indexToNewSchemaId")
     private Map<Long, Long> indexToNewSchemaId;
 
-    public TableAddOrDropColumnsInfo(long dbId, long tableId, Map<Long, List<Column>> indexSchemaMap,
-                                     List<Index> indexes, long jobId, long txnId,
-                                     Map<Long, Long> indexToNewSchemaId) {
+    public TableColumnAlterInfo(long dbId, long tableId, Map<Long, List<Column>> indexSchemaMap,
+                                List<Index> indexes, long jobId, long txnId,
+                                Map<Long, Long> indexToNewSchemaId) {
         this.dbId = dbId;
         this.tableId = tableId;
         this.indexSchemaMap = indexSchemaMap;
@@ -110,11 +130,11 @@ public class TableAddOrDropColumnsInfo implements Writable {
             return true;
         }
 
-        if (!(obj instanceof TableAddOrDropColumnsInfo)) {
+        if (!(obj instanceof TableColumnAlterInfo)) {
             return false;
         }
 
-        TableAddOrDropColumnsInfo info = (TableAddOrDropColumnsInfo) obj;
+        TableColumnAlterInfo info = (TableColumnAlterInfo) obj;
 
         return (dbId == info.dbId && tableId == info.tableId
                 && indexSchemaMap.equals(info.indexSchemaMap) && indexes.equals(info.indexes)

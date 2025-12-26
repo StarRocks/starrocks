@@ -1094,9 +1094,9 @@ public class EditLog {
                     GlobalStateMgr.getCurrentState().getMaterializedViewMgr().replayEpoch(epoch);
                     break;
                 }
-                case OperationType.OP_MODIFY_TABLE_ADD_OR_DROP_COLUMNS: {
-                    final TableAddOrDropColumnsInfo info = (TableAddOrDropColumnsInfo) journal.data();
-                    globalStateMgr.getSchemaChangeHandler().replayModifyTableAddOrDrop(info);
+                case OperationType.OP_FAST_ALTER_TABLE_COLUMNS: {
+                    final TableColumnAlterInfo info = (TableColumnAlterInfo) journal.data();
+                    globalStateMgr.getSchemaChangeHandler().replayFastSchemaEvolutionMetaChange(info);
                     break;
                 }
                 case OperationType.OP_SET_DEFAULT_STORAGE_VOLUME: {
@@ -2143,8 +2143,8 @@ public class EditLog {
         logJsonObject(OperationType.OP_ALTER_PIPE, log, walApplier);
     }
 
-    public void logModifyTableAddOrDrop(TableAddOrDropColumnsInfo info) {
-        logJsonObject(OperationType.OP_MODIFY_TABLE_ADD_OR_DROP_COLUMNS, info);
+    public void logModifyTableAddOrDrop(TableColumnAlterInfo info) {
+        logJsonObject(OperationType.OP_FAST_ALTER_TABLE_COLUMNS, info);
     }
 
     public void logAlterTask(AlterTaskInfo info, WALApplier applier) {

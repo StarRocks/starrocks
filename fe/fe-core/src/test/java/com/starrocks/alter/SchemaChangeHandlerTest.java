@@ -430,14 +430,14 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
 
         Assertions.assertDoesNotThrow(
                     () -> GlobalStateMgr.getCurrentState().getAlterJobMgr().getSchemaChangeHandler()
-                                .modifyTableAddOrDrop(db, tbl, indexSchemaMap, newIndexes, 100,
+                                .applyFastSchemaEvolutionMetaChange(db, tbl, indexSchemaMap, newIndexes, 100,
                                             indexToNewSchemaId, false, -1));
         jobSize++;
         Assertions.assertEquals(jobSize, alterJobs.size());
 
         Assertions.assertDoesNotThrow(
                     () -> GlobalStateMgr.getCurrentState().getAlterJobMgr().getSchemaChangeHandler()
-                                .modifyTableAddOrDrop(db, tbl, indexSchemaMap, newIndexes, 101,
+                                .applyFastSchemaEvolutionMetaChange(db, tbl, indexSchemaMap, newIndexes, 101,
                                             indexToNewSchemaId, true, 101));
         jobSize++;
         Assertions.assertEquals(jobSize, alterJobs.size());
@@ -446,7 +446,7 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
         tbl.setState(OlapTableState.ROLLUP);
         Assertions.assertThrows(DdlException.class,
                     () -> GlobalStateMgr.getCurrentState().getAlterJobMgr().getSchemaChangeHandler()
-                                .modifyTableAddOrDrop(db, tbl, indexSchemaMap, newIndexes, 102, indexToNewSchemaId,
+                                .applyFastSchemaEvolutionMetaChange(db, tbl, indexSchemaMap, newIndexes, 102, indexToNewSchemaId,
                                             false, -1));
         tbl.setState(beforeState);
     }
