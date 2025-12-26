@@ -499,6 +499,147 @@ TEST_F(LakeRowsetTest, test_tablet_range_missing_does_not_prune) {
     ASSERT_EQ(count_rows_from_iters(iters), 3 * (22 + 12));
 }
 
+TEST_F(LakeRowsetTest, test_tablet_range_multi_column_range_pruning) {
+    // Rebuild a tablet with two key columns so that TabletRangePB carries
+    // a multi-column range and Rowset / SegmentIterator must honor it.
+    _tablet_metadata = generate_simple_tablet_metadata(PRIMARY_KEYS);
+    _tablet_metadata->set_id(next_id());
+    _tablet_metadata->set_version(1);
+    _tablet_metadata->mutable_schema()->set_id(next_id());
+
+    auto* schema_pb = _tablet_metadata->mutable_schema();
+    schema_pb->clear_column();
+
+    // Key columns: (c0 INT, c1 INT), plus one non-key column.
+    {
+        auto* c0 = schema_pb->add_column();
+        c0->set_unique_id(next_id());
+        c0->set_name("c0");
+        c0->set_type("INT");
+        c0->set_is_key(true);
+        c0->set_is_nullable(false);
+    }
+    {
+        auto* c1 = schema_pb->add_column();
+        c1->set_unique_id(next_id());
+        c1->set_name("c1");
+        c1->set_type("INT");
+        c1->set_is_key(true);
+        c1->set_is_nullable(false);
+    }
+    {
+        auto* c2 = schema_pb->add_column();
+        c2->set_unique_id(next_id());
+        c2->set_name("v");
+        c2->set_type("INT");
+        c2->set_is_key(false);
+        c2->set_is_nullable(false);
+    }
+    schema_pb->set_num_short_key_columns(2);
+
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
+    ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_metadata->id()));
+
+    int64_t txn_id = next_id();
+    ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kHorizontal, txn_id));
+    ASSERT_OK(writer->open());
+
+    auto tablet_schema = TabletSchema::create(_tablet_metadata->schema());
+    auto schema = std::make_shared<Schema>(ChunkHelper::convert_schema(tablet_schema));
+    auto c0 = Int32Column::create();
+    auto c1 = Int32Column::create();
+    auto v = Int32Column::create();
+
+    // Insert a small grid of (c0, c1) pairs:
+    //   (0,0), (0,1), (0,2),
+    //   (1,0), (1,1), (1,2),
+    //   (2,0), (2,1), (2,2)
+    for (int k0 = 0; k0 < 3; ++k0) {
+        for (int k1 = 0; k1 < 3; ++k1) {
+            c0->append(k0);
+            c1->append(k1);
+            v->append(k0 * 10 + k1);
+        }
+    }
+
+    Chunk chunk({c0, c1, v}, schema);
+    ASSERT_OK(writer->write(chunk));
+    ASSERT_OK(writer->finish());
+    auto files = writer->files();
+    writer->close();
+
+    // Build rowset metadata for the written segment.
+    _tablet_metadata->set_version(2);
+    auto* rowset = _tablet_metadata->add_rowsets();
+    rowset->set_overlapped(true);
+    rowset->set_id(1);
+    for (auto& file : files) {
+        rowset->add_segments(std::move(file.path));
+    }
+    set_rowset_shared_segments(rowset, true);
+
+    // Set tablet range: [ (1,1), (2,2) ] (inclusive on both sides).
+    auto* range = _tablet_metadata->mutable_range();
+    range->Clear();
+    {
+        auto* lb = range->mutable_lower_bound();
+        *lb->add_values() = make_int_variant_pb(1);
+        *lb->add_values() = make_int_variant_pb(1);
+        range->set_lower_bound_included(true);
+    }
+    {
+        auto* ub = range->mutable_upper_bound();
+        *ub->add_values() = make_int_variant_pb(2);
+        *ub->add_values() = make_int_variant_pb(2);
+        range->set_upper_bound_included(true);
+    }
+
+    auto rowset_obj =
+            std::make_shared<lake::Rowset>(_tablet_mgr.get(), _tablet_metadata, 0, 0 /* compaction_segment_limit */);
+    RowsetReadOptions rs_opts;
+    OlapReaderStatistics stats;
+    rs_opts.stats = &stats;
+    rs_opts.tablet_schema = std::make_shared<const TabletSchema>(_tablet_metadata->schema());
+
+    // Read both key columns so that we can assert the effective key range.
+    auto input_schema = ChunkHelper::convert_schema(tablet_schema, std::vector<ColumnId>{0, 1});
+    ASSIGN_OR_ABORT(auto iters, rowset_obj->read(input_schema, rs_opts));
+
+    size_t rows = 0;
+    for (const auto& it : iters) {
+        ASSERT_OK(it->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS));
+        ASSERT_OK(it->init_output_schema(std::unordered_set<uint32_t>()));
+        auto out_chunk = ChunkHelper::new_chunk(it->schema(), 16);
+        while (true) {
+            out_chunk->reset();
+            auto st = it->get_next(out_chunk.get());
+            if (st.is_end_of_file()) {
+                break;
+            }
+            ASSERT_OK(st);
+            auto kc0 = down_cast<const Int32Column*>(out_chunk->get_column_raw_ptr_by_index(0));
+            auto kc1 = down_cast<const Int32Column*>(out_chunk->get_column_raw_ptr_by_index(1));
+            for (int i = 0; i < out_chunk->num_rows(); ++i) {
+                int v0 = kc0->get_data()[i];
+                int v1 = kc1->get_data()[i];
+                ASSERT_GE(v0, 1);
+                ASSERT_LE(v0, 2);
+                if (v0 == 1) {
+                    ASSERT_GE(v1, 1);
+                }
+                if (v0 == 2) {
+                    ASSERT_LE(v1, 2);
+                }
+            }
+            rows += out_chunk->num_rows();
+        }
+    }
+
+    // The valid pairs within [ (1,1), (2,2) ] are:
+    //   (1,1), (1,2), (2,0), (2,1), (2,2) => 5 rows.
+    ASSERT_EQ(rows, 5);
+}
+
 TEST_F(LakeRowsetTest, test_tablet_range_char_type_parsed_as_varchar) {
     // Build a new tablet whose sort key column type is CHAR so that Rowset::_get_tablet_range() will
     // take the TYPE_CHAR parsing branch.

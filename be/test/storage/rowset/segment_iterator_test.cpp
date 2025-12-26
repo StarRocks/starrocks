@@ -1102,4 +1102,84 @@ TEST_F(SegmentIteratorTest, testTabletRangePruningPrefixKey) {
     ASSERT_EQ(rows, 30);
 }
 
+// NOLINTNEXTLINE
+TEST_F(SegmentIteratorTest, testTabletRangeConvertToKeepsRange) {
+    using namespace starrocks::test;
+
+    // Build a simple INT key schema and a segment with a few rows.
+    std::string file_name = kSegmentDir + "/tablet_range_convert_to";
+    ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(file_name));
+
+    TabletSchemaBuilder builder;
+    std::shared_ptr<TabletSchema> tablet_schema = builder.create(0, false, TYPE_INT, true).build();
+
+    SegmentWriterOptions opts;
+    opts.num_rows_per_block = 16;
+    SegmentWriter writer(std::move(wfile), 0, tablet_schema, opts);
+
+    std::vector<uint32_t> column_indexes{0};
+    ASSERT_OK(writer.init(column_indexes, true));
+    auto schema = ChunkHelper::convert_schema(tablet_schema, column_indexes);
+    auto chunk = ChunkHelper::new_chunk(schema, 16);
+    chunk->reset();
+    auto cols = chunk->mutable_columns();
+    for (int i = 0; i < 10; i++) {
+        cols[0]->append_datum(Datum(static_cast<int32_t>(i)));
+    }
+    ASSERT_OK(writer.append_chunk(*chunk));
+    uint64_t index_size = 0;
+    ASSERT_OK(writer.finalize_columns(&index_size));
+    uint64_t file_size = 0;
+    ASSERT_OK(writer.finalize_footer(&file_size));
+
+    auto segment = *Segment::open(_fs, FileInfo{file_name}, 0, tablet_schema);
+    ASSERT_EQ(segment->num_rows(), 10);
+
+    VecSchemaBuilder schema_builder;
+    schema_builder.add(0, "c0", TYPE_INT);
+    auto vec_schema = schema_builder.build();
+
+    // Construct an original SegmentReadOptions with a concrete tablet_range.
+    SegmentReadOptions src_opts;
+    src_opts.fs = _fs;
+    OlapReaderStatistics stats;
+    src_opts.stats = &stats;
+    src_opts.tablet_schema = tablet_schema;
+    SeekRange r(make_int_seek_tuple(3), make_int_seek_tuple(6));
+    r.set_inclusive_lower(true);
+    r.set_inclusive_upper(false);
+    src_opts.tablet_range = r;
+
+    // Convert to a new options object using a compatible type list (single INT key).
+    SegmentReadOptions dst_opts;
+    std::vector<LogicalType> new_types{TYPE_INT};
+    ObjectPool pool;
+    ASSERT_OK(src_opts.convert_to(&dst_opts, new_types, &pool));
+    ASSERT_TRUE(dst_opts.tablet_range.has_value());
+
+    // Use the converted options to read the segment and verify the pruned range.
+    auto iter = new_segment_iterator(segment, vec_schema, dst_opts);
+    ASSERT_OK(iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS));
+    ASSERT_OK(iter->init_output_schema(std::unordered_set<uint32_t>()));
+
+    auto res_chunk = ChunkHelper::new_chunk(iter->schema(), 16);
+    std::vector<int32_t> keys;
+    while (true) {
+        res_chunk->reset();
+        auto st = iter->get_next(res_chunk.get());
+        if (st.is_end_of_file()) {
+            break;
+        }
+        ASSERT_OK(st);
+        auto c0 = down_cast<const Int32Column*>(res_chunk->get_column_raw_ptr_by_index(0));
+        const auto& data = c0->get_data();
+        keys.insert(keys.end(), data.begin(), data.end());
+    }
+
+    ASSERT_EQ(keys.size(), 3);
+    ASSERT_EQ(keys[0], 3);
+    ASSERT_EQ(keys[1], 4);
+    ASSERT_EQ(keys[2], 5);
+}
+
 } // namespace starrocks
