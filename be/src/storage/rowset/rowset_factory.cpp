@@ -45,8 +45,8 @@
 namespace starrocks {
 
 Status RowsetFactory::create_rowset(const TabletSchemaCSPtr& schema, const std::string& rowset_path,
-                                    const RowsetMetaSharedPtr& rowset_meta, RowsetSharedPtr* rowset) {
-    *rowset = Rowset::create(schema, rowset_path, rowset_meta);
+                                    const RowsetMetaSharedPtr& rowset_meta, RowsetSharedPtr* rowset, KVStore* kvstore) {
+    *rowset = Rowset::create(schema, rowset_path, rowset_meta, kvstore);
     RETURN_IF_ERROR((*rowset)->init());
     return Status::OK();
 }

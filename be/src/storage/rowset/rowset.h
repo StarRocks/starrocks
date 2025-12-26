@@ -133,17 +133,28 @@ private:
     RowsetState _rowset_state{ROWSET_UNLOADED};
 };
 
+// Controls which types of metadata to load when reading segments
+// NONE: No metadata loaded, for non-PK tables or when metadata not needed
+// DELETE_VEC_ONLY: Only load Delete Vectors (tracks deleted rows in PK tables)
+// DCG_ONLY: Only load Delta Column Groups (partial update/schema change data)
+// ALL: Load both Delete Vectors and Delta Column Groups
+enum class MetaLoadMode { NONE = 0, DELETE_VEC_ONLY, DCG_ONLY, ALL };
+
 class Rowset : public std::enable_shared_from_this<Rowset>, public BaseRowset {
 public:
-    Rowset(const TabletSchemaCSPtr&, std::string rowset_path, RowsetMetaSharedPtr rowset_meta);
+    // Constructor for Rowset
+    // |kvstore| - The KVStore associated with this rowset's tablet. For PK tables, this is critical
+    //             to access the correct metadata (Delete Vectors and DCGs), especially when the same
+    //             tablet exists on multiple disks within the same BE node.
+    Rowset(const TabletSchemaCSPtr&, std::string rowset_path, RowsetMetaSharedPtr rowset_meta, KVStore* kvstore);
     Rowset(const Rowset&) = delete;
     const Rowset& operator=(const Rowset&) = delete;
 
     virtual ~Rowset();
 
     static std::shared_ptr<Rowset> create(const TabletSchemaCSPtr& schema, std::string rowset_path,
-                                          RowsetMetaSharedPtr rowset_meta) {
-        return std::make_shared<Rowset>(schema, std::move(rowset_path), std::move(rowset_meta));
+                                          RowsetMetaSharedPtr rowset_meta, KVStore* kvstore) {
+        return std::make_shared<Rowset>(schema, std::move(rowset_path), std::move(rowset_meta), kvstore);
     }
 
     // Open all segment files in this rowset and load necessary metadata.
@@ -182,17 +193,17 @@ public:
     // only used for updatable tablets' rowset
     // simply get iterators to iterate all rows without complex options like predicates
     // |schema| read schema
-    // |meta| olap meta, used for get delvec, if null do not fetch&use delvec
-    // |version| read version, use for get delvec
+    // |tablet_schema| tablet schema
+    // |meta_load_mode| to decide which meta need to load
+    // |version| the version to read
     // |stats| used for iterator read stats
     // return iterator list, an iterator for each segment,
     // if the segment is empty, put an empty pointer in list
     // caller is also responsible to call rowset's acquire/release
     StatusOr<std::vector<ChunkIteratorPtr>> get_segment_iterators2(const Schema& schema,
                                                                    const TabletSchemaCSPtr& tablet_schema,
-                                                                   KVStore* meta, int64_t version,
-                                                                   OlapReaderStatistics* stats,
-                                                                   KVStore* dcg_meta = nullptr, size_t chunk_size = 0);
+                                                                   const MetaLoadMode& meta_load_mode, int64_t version,
+                                                                   OlapReaderStatistics* stats, size_t chunk_size = 0);
 
     // only used for updatable tablets' rowset in column mode partial update
     // simply get iterators to iterate all rows without complex options like predicates
@@ -254,8 +265,6 @@ public:
     // TODO should we rename the method to remove_files() to be more specific?
     Status remove();
 
-    Status remove_delta_column_group(KVStore* kvstore);
-
     Status remove_delta_column_group();
 
     // close to clear the resource owned by rowset
@@ -290,10 +299,10 @@ public:
 
     // hard link all files in this rowset to `dir` to form a new rowset with id `new_rowset_id`.
     // `version` is used for link col files, default using INT64_MAX means link all col files
-    Status link_files_to(KVStore* kvstore, const std::string& dir, RowsetId new_rowset_id, int64_t version = INT64_MAX);
+    Status link_files_to(const std::string& dir, RowsetId new_rowset_id, int64_t version = INT64_MAX);
 
     // copy all files to `dir`, returns total copy bytes
-    StatusOr<int64_t> copy_files_to(KVStore* kvstore, const std::string& dir);
+    StatusOr<int64_t> copy_files_to(const std::string& dir);
 
     static std::string segment_file_path(const std::string& segment_dir, const RowsetId& rowset_id, int segment_id);
     static std::string segment_temp_file_path(const std::string& dir, const RowsetId& rowset_id, int segment_id);
@@ -415,6 +424,12 @@ protected:
     TabletSchemaCSPtr _schema;
     std::string _rowset_path;
     RowsetMetaSharedPtr _rowset_meta;
+    // For PK tables, rowset data consists of more than just data files;
+    // it also includes metadata within the KVStore, such as Delete Vectors and DCGs.
+    // Therefore, we maintain the correct KVStore within the Rowset to prevent a Tablet,
+    // when duplicated across different disks on the same BE node,
+    // from accessing incorrect metadata.
+    KVStore* _kvstore{nullptr};
 
     // mutex lock for load/close api because it is costly
     std::mutex _lock;
@@ -426,11 +441,11 @@ protected:
 private:
     int64_t _mem_usage() const { return sizeof(Rowset) + _rowset_path.length(); }
 
-    Status _remove_delta_column_group_files(const std::shared_ptr<FileSystem>& fs, KVStore* kvstore);
+    Status _remove_delta_column_group_files(const std::shared_ptr<FileSystem>& fs);
 
-    Status _link_delta_column_group_files(KVStore* kvstore, const std::string& dir, int64_t version);
+    Status _link_delta_column_group_files(const std::string& dir, int64_t version);
 
-    StatusOr<int64_t> _copy_delta_column_group_files(KVStore* kvstore, const std::string& dir, int64_t version);
+    StatusOr<int64_t> _copy_delta_column_group_files(const std::string& dir, int64_t version);
 
     StatusOr<std::shared_ptr<Segment>> _load_segment(int32_t idx, const TabletSchemaCSPtr& schema,
                                                      std::shared_ptr<FileSystem>& fs,
