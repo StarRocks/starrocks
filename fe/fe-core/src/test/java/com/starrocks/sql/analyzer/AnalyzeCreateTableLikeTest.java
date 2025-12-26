@@ -16,15 +16,20 @@
 package com.starrocks.sql.analyzer;
 
 import com.starrocks.catalog.Catalog;
+import com.starrocks.catalog.IcebergTable;
+import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableOperation;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.ast.CreateTableLikeStmt;
 import mockit.Expectations;
+import mockit.Mocked;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
-import java.util.HashMap;
-import java.util.Map;
+import java.util.Set;
 
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
@@ -64,22 +69,50 @@ public class AnalyzeCreateTableLikeTest {
     }
 
     @Test
-    public void testNotExistCatalog() {
+    public void testNotExistCatalog(@Mocked Table table) {
+        MetadataMgr metadataMgr = AnalyzeTestUtil.getConnectContext().getGlobalStateMgr().getMetadataMgr();
+        new Expectations(metadataMgr) {
+            {
+                metadataMgr.getTable((ConnectContext) any, anyString, anyString, anyString);
+                result = table;
+                minTimes = 0;
+
+                table.getCatalogName();
+                result = "ice";
+                minTimes = 0;
+            }
+        };
         analyzeFail("CREATE TABLE test.table2 LIKE ice.db1.t0", "Catalog ice is not found");
     }
 
     @Test
-    public void testCreateTableLikeIcebergTable() {
+    public void testCreateTableLikeIcebergTable(@Mocked IcebergTable table, @Mocked Catalog catalog) {
+        MetadataMgr metadataMgr = AnalyzeTestUtil.getConnectContext().getGlobalStateMgr().getMetadataMgr();
         CatalogMgr catalogMgr = AnalyzeTestUtil.getConnectContext().getGlobalStateMgr().getCatalogMgr();
-        Map<String, String> config = new HashMap<>();
-        config.put("type", "iceberg");
-        new Expectations(catalogMgr) {
+        new Expectations(metadataMgr, catalogMgr) {
             {
-                catalogMgr.getCatalogByName("ice");
-                result = new Catalog(1111, "ice", config, "");
+                metadataMgr.getTable((ConnectContext) any, anyString, anyString, anyString);
+                result = table;
+                minTimes = 0;
+
+                table.getCatalogName();
+                result = "ice";
+                minTimes = 0;
+
+                catalogMgr.getCatalogByName(anyString);
+                result = catalog;
+                minTimes = 0;
+
+                table.getSupportedOperations();
+                result = Set.of(TableOperation.ALTER);
+                minTimes = 0;
+
+                table.getType();
+                result = Table.TableType.ICEBERG;
+                minTimes = 0;
             }
         };
 
-        analyzeFail("CREATE TABLE test.table2 LIKE ice.db1.t0", "Table of iceberg catalog doesn't support [CREATE TABLE LIKE]");
+        analyzeFail("CREATE TABLE test.table2 LIKE ice.db1.t0", "Table of ICEBERG catalog doesn't support [CREATE_TABLE_LIKE].");
     }
 }

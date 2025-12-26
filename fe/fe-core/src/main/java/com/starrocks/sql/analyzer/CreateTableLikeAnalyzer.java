@@ -18,6 +18,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
+import com.starrocks.catalog.TableOperation;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.qe.ConnectContext;
@@ -40,12 +41,13 @@ public class CreateTableLikeAnalyzer {
         String tableName = stmt.getTableName();
         FeNameFormat.checkTableName(tableName);
 
-        MetaUtils.checkNotSupportCatalog(existedDbTbl.getCatalog(), "CREATE TABLE LIKE");
         Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(context, existedDbTbl.getCatalog(),
                 existedDbTbl.getDb(), existedDbTbl.getTbl());
         if (table == null) {
-            throw new SemanticException("Table %s is not found", tableName);
+            throw new SemanticException("Table %s.%s.%s is not found", existedDbTbl.getCatalog(), existedDbTbl.getDb(),
+                    existedDbTbl.getTbl());
         }
+        MetaUtils.checkNotSupportCatalog(table, TableOperation.CREATE_TABLE_LIKE);
 
         List<String> createTableStmt = Lists.newArrayList();
 

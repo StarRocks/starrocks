@@ -20,6 +20,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
+import com.starrocks.catalog.TableOperation;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.StarRocksException;
@@ -66,6 +67,7 @@ public class AlterTableStatementAnalyzer {
         }
 
         Table table = MetaUtils.getSessionAwareTable(context, null, tbl);
+        MetaUtils.checkNotSupportCatalog(table, TableOperation.ALTER);
         if (table.isTemporaryTable()) {
             throw new SemanticException("temporary table doesn't support alter table statement");
         }

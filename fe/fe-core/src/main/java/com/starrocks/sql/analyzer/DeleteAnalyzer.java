@@ -22,6 +22,7 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
+import com.starrocks.catalog.TableOperation;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.load.Load;
@@ -198,13 +199,13 @@ public class DeleteAnalyzer {
         analyzeProperties(deleteStatement, session);
 
         TableName tableName = deleteStatement.getTableName();
-        MetaUtils.checkNotSupportCatalog(tableName.getCatalog(), "DELETE");
         Database db = GlobalStateMgr.getCurrentState().getMetadataMgr()
                 .getDb(session, tableName.getCatalog(), tableName.getDb());
         if (db == null) {
             throw new SemanticException("Database %s is not found", tableName.getCatalogAndDb());
         }
         Table table = MetaUtils.getSessionAwareTable(session, null, tableName);
+        MetaUtils.checkNotSupportCatalog(table, TableOperation.DELETE);
 
         if (table instanceof MaterializedView) {
             String msg = String.format("The data of '%s' cannot be deleted because it is a materialized view," +

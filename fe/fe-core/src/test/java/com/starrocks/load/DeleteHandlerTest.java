@@ -42,6 +42,7 @@ import com.starrocks.qe.QueryStateException;
 import com.starrocks.qe.VariableMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.PartitionRef;
@@ -74,6 +75,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -161,6 +163,14 @@ public class DeleteHandlerTest {
                 result = db.getTable("test_tbl");
 
                 globalStateMgr.getLocalMetastore().getTable(CatalogMocker.TEST_DB_ID, CatalogMocker.TEST_TBL_ID);
+                minTimes = 0;
+                result = db.getTable("test_tbl");
+
+                globalStateMgr.getMetadataMgr().getTemporaryTable((UUID) any, anyString, anyLong, anyString);
+                minTimes = 0;
+                result = null;
+
+                globalStateMgr.getMetadataMgr().getTable((ConnectContext) any, anyString, anyString, anyString);
                 minTimes = 0;
                 result = db.getTable("test_tbl");
 
@@ -569,7 +579,7 @@ public class DeleteHandlerTest {
     }
 
     @Test
-    public void testRemoveOldOnReplay() throws Exception {
+    public void testRemoveOldOnReplay(@Mocked MetadataMgr metadataMgr) throws Exception {
         new Expectations(globalStateMgr) {
             {
                 globalStateMgr.getLocalMetastore().getDb(1L);
@@ -577,6 +587,23 @@ public class DeleteHandlerTest {
                 result = db;
 
                 globalStateMgr.getLocalMetastore().getTable(anyLong, anyLong);
+                minTimes = 0;
+                result = db.getTable("test_tbl");
+
+                globalStateMgr.getMetadataMgr();
+                minTimes = 0;
+                result = metadataMgr;
+
+            }
+        };
+
+        new Expectations(metadataMgr) {
+            {
+                metadataMgr.getTemporaryTable((UUID) any, anyString, anyLong, anyString);
+                minTimes = 0;
+                result = null;
+
+                metadataMgr.getTable((ConnectContext) any, anyString, anyString, anyString);
                 minTimes = 0;
                 result = db.getTable("test_tbl");
             }

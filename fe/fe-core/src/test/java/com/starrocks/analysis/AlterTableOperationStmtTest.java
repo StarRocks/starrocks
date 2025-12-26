@@ -18,6 +18,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableOperation;
 import com.starrocks.connector.iceberg.procedure.CherryPickSnapshotProcedure;
 import com.starrocks.connector.iceberg.procedure.ExpireSnapshotsProcedure;
 import com.starrocks.connector.iceberg.procedure.FastForwardProcedure;
@@ -224,6 +225,14 @@ public class AlterTableOperationStmtTest {
                 icebergTable.getPartitionColumnsIncludeTransformed();
                 result = List.of(new Column("k1", IntegerType.INT, true),
                         new Column("partition_date", DateType.DATE, true));
+                minTimes = 0;
+
+                icebergTable.supportsOperation(TableOperation.ALTER);
+                result = true;
+                minTimes = 0;
+
+                icebergTable.getCatalogName();
+                result = "iceberg_catalog";
                 minTimes = 0;
             }
         };

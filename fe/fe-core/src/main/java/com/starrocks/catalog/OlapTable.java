@@ -3367,4 +3367,9 @@ public class OlapTable extends Table {
         }
         return shardGroupIds;
     }
+
+    @Override
+    public Set<TableOperation> getSupportedOperations() {
+        return Sets.newHashSet(TableOperation.values());
+    }
 }
