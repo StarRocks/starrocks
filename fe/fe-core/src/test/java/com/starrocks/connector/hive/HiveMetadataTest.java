@@ -31,11 +31,8 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.MetaNotFoundException;
-<<<<<<< HEAD
-=======
 import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.common.util.UUIDUtil;
->>>>>>> 7e78e7f74b ([BugFix] insert overwrite textformat hive table didn't set delimiter (#67199))
 import com.starrocks.connector.CachingRemoteFileIO;
 import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.ConnectorProperties;
@@ -60,14 +57,11 @@ import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.DropTableStmt;
-<<<<<<< HEAD
-=======
 import com.starrocks.sql.ast.KeyPartitionRef;
 import com.starrocks.sql.ast.SingleItemListPartitionDesc;
 import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.TruncateTablePartitionStmt;
 import com.starrocks.sql.ast.TruncateTableStmt;
->>>>>>> 7e78e7f74b ([BugFix] insert overwrite textformat hive table didn't set delimiter (#67199))
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.OptimizerFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
