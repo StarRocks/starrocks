@@ -278,7 +278,9 @@ private:
         std::shared_ptr<VectorIndexReader> ann_reader;
 
         // Helper method to check if rowid should always be built
-        bool always_build_rowid() const { return use_vector_index && !use_ivfpq; }
+        bool always_build_rowid() const {
+            return use_vector_index && !use_ivfpq;
+        }
     };
 
     // Inverted index related context, only created when needed
@@ -797,9 +799,10 @@ SegmentIterator::SegmentIterator(std::shared_ptr<Segment> segment, Schema schema
     }
     if (_opts.dcg_loader != nullptr) {
         SCOPED_RAW_TIMER(&_opts.stats->get_delta_column_group_ns);
-        if (_opts.is_primary_keys ||
-            (_opts.read_by_generated_column_adding && _opts.tablet_schema != nullptr &&
-             _opts.tablet_schema->keys_type() == KeysType::PRIMARY_KEYS) /* for adding generated column */) {
+        // Load delta column groups based on table type
+        // For PK tables: use tablet segment id and version
+        // For other table types: use tablet id, rowset id, and segment id
+        if (_opts.is_primary_keys) {
             TabletSegmentId tsid;
             tsid.tablet_id = _opts.tablet_id;
             tsid.segment_id = _opts.rowset_id + segment_id();
