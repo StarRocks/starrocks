@@ -141,7 +141,7 @@ public final class QeProcessorImpl implements QeProcessor, MemoryTrackable {
         long slowCount = 0;
         long now = System.currentTimeMillis();
         for (Map.Entry<TUniqueId, QueryInfo> entry : coordinatorMap.entrySet()) {
-            if (now - entry.getValue().getStartExecTime() >= Config.qe_slow_log_ms) {
+            if (now - entry.getValue().getStartExecTime() > Config.qe_slow_log_ms) {
                 slowCount ++;
             }
         }
