@@ -253,7 +253,7 @@ class TestSQLCases(sr_sql_lib.StarrocksSQLApiLib):
     def _check_db_unique(self):
         all_db_dict = dict()
         for case in case_list:
-            sql_list = self._replace_uuid_variables(case.sql, self.variable_dict)
+            sql_list, _ = self._replace_uuid_variables(case.sql, self.variable_dict)
 
             for sql in sql_list:
                 if isinstance(sql, str):
@@ -449,11 +449,11 @@ Start to run: %s
                     expect_res = case_info.result[sql_id]
                     # replace expect_res variables
                     if isinstance(expect_res, list):
-                        expect_res = self._replace_uuid_variables(expect_res, variable_dict)
+                        expect_res, _ = self._replace_uuid_variables(expect_res, variable_dict)
                         expect_res = expect_res[0] if expect_res else []
                     elif isinstance(expect_res, str):
                         expect_res_list = [expect_res]
-                        expect_res_list = self._replace_uuid_variables(expect_res_list, variable_dict)
+                        expect_res_list, _ = self._replace_uuid_variables(expect_res_list, variable_dict)
                         expect_res = expect_res_list[0]
                     expect_res_for_log = expect_res if len(expect_res) < 1000 else expect_res[:1000] + "..."
 
