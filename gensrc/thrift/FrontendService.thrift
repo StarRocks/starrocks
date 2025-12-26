@@ -885,6 +885,8 @@ struct TMasterOpResult {
     7: optional TAuditStatistics audit_statistics;
     8: optional string errorMsg;
     9: optional i64 txn_id;
+    // SQL digest computed by Leader after analyze
+    10:optional string sql_digest;
 }
 
 struct TIsMethodSupportedRequest {
