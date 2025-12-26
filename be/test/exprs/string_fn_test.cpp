@@ -4404,4 +4404,74 @@ PARALLEL_TEST(VecStringFunctionsTest, regexpCountTest) {
     }
 }
 
+PARALLEL_TEST(VecStringFunctionsTest, initcapTest) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    Columns columns;
+    auto str = BinaryColumn::create();
+
+    // --- Fast Path (ASCII) Tests ---
+    str->append("hello world");
+    str->append("HELLO WORLD");
+    str->append("hElLo wOrLd");
+    str->append("Starrocks Database");
+    str->append("1st place, in-the-world!");
+    str->append("   hello   world   ");
+    str->append("abc_def.ghi+jkl");
+    str->append("a");
+    str->append("");
+
+    // --- Slow Path (UTF-8/ICU) Tests ---
+    str->append("héllo");
+    str->append("école");
+    str->append("ÇA VA");
+    str->append("café resumé");
+    str->append("привет мир");
+    str->append("hello-wörld_123");
+
+    columns.emplace_back(str);
+
+    // Check Happy Path (Valid Inputs)
+    auto result_status = StringFunctions::initcap(ctx.get(), columns);
+    ASSERT_TRUE(result_status.ok());
+
+    ColumnPtr result = result_status.value();
+    ASSERT_EQ(15, result->size());
+
+    auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
+
+    // Fast Path Assertions
+    ASSERT_EQ("Hello World", v->get_data()[0].to_string());
+    ASSERT_EQ("Hello World", v->get_data()[1].to_string());
+    ASSERT_EQ("Hello World", v->get_data()[2].to_string());
+    ASSERT_EQ("Starrocks Database", v->get_data()[3].to_string());
+    ASSERT_EQ("1st Place, In-The-World!", v->get_data()[4].to_string());
+    ASSERT_EQ("   Hello   World   ", v->get_data()[5].to_string());
+    ASSERT_EQ("Abc_Def.Ghi+Jkl", v->get_data()[6].to_string());
+    ASSERT_EQ("A", v->get_data()[7].to_string());
+    ASSERT_EQ("", v->get_data()[8].to_string());
+
+    // Slow Path Assertions
+    ASSERT_EQ("Héllo", v->get_data()[9].to_string());
+    ASSERT_EQ("École", v->get_data()[10].to_string());
+    ASSERT_EQ("Ça Va", v->get_data()[11].to_string());
+    ASSERT_EQ("Café Resumé", v->get_data()[12].to_string());
+    ASSERT_EQ("Привет Мир", v->get_data()[13].to_string());
+    ASSERT_EQ("Hello-Wörld_123", v->get_data()[14].to_string());
+
+    // --- Error Path (Invalid UTF-8) ---
+    Columns invalid_columns;
+    auto invalid_str = BinaryColumn::create();
+    // 0xFF is an invalid byte in UTF-8
+    invalid_str->append(std::string(1, (char)0xFF));
+    invalid_columns.emplace_back(invalid_str);
+
+    auto error_result = StringFunctions::initcap(ctx.get(), invalid_columns);
+
+    // Should return Status::InvalidArgument, NOT throw exception
+    ASSERT_FALSE(error_result.ok());
+    ASSERT_TRUE(error_result.status().is_invalid_argument());
+    // Verify specific error message logic (covers Substitute and ToHex lines)
+    ASSERT_NE(std::string(error_result.status().message()).find("Invalid UTF-8 sequence"), std::string::npos);
+}
+
 } // namespace starrocks

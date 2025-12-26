@@ -323,6 +323,7 @@ vectorized_functions = [
     [30151, 'ucase', True, False, 'VARCHAR', ['VARCHAR'], 'StringFunctions::upper', 'StringFunctions::upper_prepare', 'StringFunctions::upper_close'],
 
     [30160, 'reverse', True, False, 'VARCHAR', ['VARCHAR'], 'StringFunctions::reverse'],
+    [30161, 'initcap', True, False, 'VARCHAR', ['VARCHAR'], 'StringFunctions::initcap'],
 
     [30170, 'trim', True, False, 'VARCHAR', ['VARCHAR'], 'StringFunctions::trim',
      'StringFunctions::trim_prepare', 'StringFunctions::trim_close'],
