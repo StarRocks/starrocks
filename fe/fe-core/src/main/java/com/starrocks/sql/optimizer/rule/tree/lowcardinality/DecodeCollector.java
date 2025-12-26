@@ -1222,7 +1222,8 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
             return;
         }
         DictExpressionCollector dictExpressionCollector = new DictExpressionCollector(info.outputStringColumns,
-                structOpToFieldUseStringRef, sessionVariable.isEnableStructLowCardinalityOptimize());
+                structOpToFieldUseStringRef, this::getFieldUseStringRefMap,
+                sessionVariable.isEnableStructLowCardinalityOptimize());
         dictExpressionCollector.collect(operator.getPredicate());
 
         info.outputStringColumns.getStream().forEach(c -> {
@@ -1241,7 +1242,11 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
             return;
         }
 
-        ColumnRefSet decodeInput = info.outputStringColumns;
+        ColumnRefSet decodeInput = new ColumnRefSet();
+        decodeInput.union(info.outputStringColumns);
+        info.outputStringColumns.getStream().filter(structRefToFieldUseStringRef::containsKey).forEach(
+                c -> decodeInput.union(structRefToFieldUseStringRef.get(c).values())
+        );
         info.outputStringColumns = new ColumnRefSet();
         for (ColumnRefOperator key : operator.getProjection().getColumnRefMap().keySet()) {
             if (decodeInput.contains(key)) {
@@ -1250,7 +1255,8 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
             }
 
             DictExpressionCollector dictExpressionCollector = new DictExpressionCollector(decodeInput,
-                    structOpToFieldUseStringRef, sessionVariable.isEnableStructLowCardinalityOptimize());
+                    structOpToFieldUseStringRef, this::getFieldUseStringRefMap,
+                    sessionVariable.isEnableStructLowCardinalityOptimize());
 
             ScalarOperator value = operator.getProjection().getColumnRefMap().get(key);
             dictExpressionCollector.collect(value);
@@ -1312,13 +1318,17 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
         private final ColumnRefSet matchChildren = new ColumnRefSet();
 
         private final Map<ScalarOperator, Map<String, ColumnRefOperator>> structOpToFieldUseStringRef;
+        private final java.util.function.Function<ScalarOperator, Map<String, ColumnRefOperator>> getFieldsUseStringRef;
         private final boolean isEnableStructLowCardinalityOptimize;
 
         public DictExpressionCollector(ColumnRefSet allDictColumnRefs,
                                        Map<ScalarOperator, Map<String, ColumnRefOperator>> structOpToFieldUseStringRef,
+                                       java.util.function.Function<ScalarOperator, Map<String, ColumnRefOperator>>
+                                               getFieldsUseStringRef,
                                        boolean isEnableStructLowCardinalityOptimize) {
             this.allDictColumnRefs = allDictColumnRefs;
             this.structOpToFieldUseStringRef = structOpToFieldUseStringRef;
+            this.getFieldsUseStringRef = getFieldsUseStringRef;
             this.isEnableStructLowCardinalityOptimize = isEnableStructLowCardinalityOptimize;
         }
 
@@ -1493,7 +1503,7 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
                 return result;
             }
             ScalarOperator child = op.getChild(0);
-            Map<String, ColumnRefOperator> fieldsUseStringRef = structOpToFieldUseStringRef.get(child);
+            Map<String, ColumnRefOperator> fieldsUseStringRef = getFieldsUseStringRef.apply(child);
             if (op.getFieldNames().size() == 1 && fieldsUseStringRef != null
                     && fieldsUseStringRef.containsKey(op.getFieldNames().get(0))) {
                 return fieldsUseStringRef.get(op.getFieldNames().get(0));

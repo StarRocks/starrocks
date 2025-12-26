@@ -335,14 +335,14 @@ public class LowCardinalityStructTest extends PlanTestBase {
     public void testAggregationGetFields() throws Exception {
         String sql = """
                 WITH TB AS (
-                    SELECT STRUCT(VARCHAR_COL, INTEGER_COL) S
+                    SELECT STRUCT(VARCHAR_COL, INTEGER_COL, ARRAY_VARCHAR_COL) S
                         FROM T
                 ),
                 TB2 AS (
                     SELECT ANY_VALUE(S) A
                     FROM TB
                 )
-                SELECT A.col1, A.col2
+                SELECT A.col1, A.col2, A.col3
                 FROM TB2
                 """;
         ExecPlan plan2 = getExecPlan(sql);
@@ -350,9 +350,12 @@ public class LowCardinalityStructTest extends PlanTestBase {
         String plan = getVerboseExplain(sql);
         String expected = "  3:Project\n" +
                 "  |  output columns:\n" +
-                "  |  7 <-> DictDecode([11: VARCHAR_COL, INT, true], [<place-holder>], [13: any_value, struct<col1 " +
-                "int(11), col2 int(11)>, true].col1[true])\n" +
-                "  |  8 <-> [13: any_value, struct<col1 int(11), col2 int(11)>, true].col2[false]";
+                "  |  7 <-> DictDecode([13: VARCHAR_COL, INT, true], [<place-holder>], [16: any_value, struct<col1 " +
+                "int(11), col2 int(11), col3 array<int(11)>>, true].col1[true])\n" +
+                "  |  8 <-> [16: any_value, struct<col1 int(11), col2 int(11), col3 array<int(11)>>, true].col2" +
+                "[false]\n" +
+                "  |  9 <-> DictDecode([14: ARRAY_VARCHAR_COL, ARRAY<INT>, true], [<place-holder>], [16: any_value, " +
+                "struct<col1 int(11), col2 int(11), col3 array<int(11)>>, true].col3[true])\n";
         Assertions.assertTrue(plan.contains(expected), plan);
     }
 
