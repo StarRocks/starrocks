@@ -54,6 +54,7 @@ import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.rpc.ThriftConnectionPool;
 import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.ExecuteEnv;
 import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.SystemVariable;
@@ -232,6 +233,21 @@ public class VariableMgr {
         return attr.show().isEmpty() ? attr.name() : attr.show();
     }
 
+    // Validate that the warehouse exists before setting it
+    private void validateWarehouseExists(String warehouseName) throws DdlException {
+        if (warehouseName == null || warehouseName.isEmpty()) {
+            return;
+        }
+        // Default warehouse is always valid
+        if (warehouseName.equalsIgnoreCase(WarehouseManager.DEFAULT_WAREHOUSE_NAME)) {
+            return;
+        }
+        WarehouseManager warehouseMgr = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+        if (!warehouseMgr.warehouseExists(warehouseName)) {
+            ErrorReport.reportDdlException(ErrorCode.ERR_UNKNOWN_WAREHOUSE, warehouseName);
+        }
+    }
+
     private void handleSetWarehouse(ConnectContext connectContext, SessionVariable sessionVariable, Field field, Object value)
             throws DdlException {
         final String originalWarehouseName = sessionVariable.getWarehouseName();
@@ -353,6 +369,11 @@ public class VariableMgr {
         }
 
         Object parsedVal = parseValue(ctx.getField().getType(), getVarName(ctx.getField()), value);
+
+        // Validate warehouse exists before setting it
+        if (SessionVariable.WAREHOUSE_NAME.equalsIgnoreCase(attr.name())) {
+            validateWarehouseExists((String) parsedVal);
+        }
 
         if (!onlySetSessionVar && setVar.getType() == SetType.GLOBAL) {
             setGlobalVariableAndWriteEditLog(ctx, attr.name(), parsedVal);
