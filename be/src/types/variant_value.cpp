@@ -25,6 +25,9 @@
 
 namespace starrocks {
 
+static const std::string kDefultVariantRowValueBinary =
+        std::string(VariantMetadata::kEmptyMetadata) + std::string(VariantValue::kEmptyValue);
+
 StatusOr<VariantRowValue> VariantRowValue::create(const Slice& slice) {
     // Validate slice first
     if (slice.get_data() == nullptr) {
@@ -165,19 +168,31 @@ size_t VariantRowValue::serialize(uint8_t* dst) const {
     size_t offset = 0;
 
     // The first 4 bytes are the total size of the variant
+    const char* raw_data = _raw.data();
     uint32_t total_size = static_cast<uint32_t>(_raw.size());
+    if (total_size == 0) {
+        // For null variant, use predefined empty variant size
+        total_size = static_cast<uint32_t>(kDefultVariantRowValueBinary.size());
+        raw_data = kDefultVariantRowValueBinary.data();
+    }
+
     memcpy(dst + offset, &total_size, sizeof(uint32_t));
     offset += sizeof(uint32_t);
 
     // Copy the entire contiguous buffer [metadata][value]
-    memcpy(dst + offset, _raw.data(), _raw.size());
-    offset += _raw.size();
+    memcpy(dst + offset, raw_data, total_size);
+    offset += total_size;
 
     return offset;
 }
 
 uint32_t VariantRowValue::serialize_size() const {
-    return sizeof(uint32_t) + _raw.size();
+    uint32_t total_size = static_cast<uint32_t>(_raw.size());
+    if (total_size == 0) {
+        // For null variant, use predefined empty variant size
+        total_size = static_cast<uint32_t>(kDefultVariantRowValueBinary.size());
+    }
+    return sizeof(uint32_t) + total_size;
 }
 
 StatusOr<std::string> VariantRowValue::to_json(cctz::time_zone timezone) const {
