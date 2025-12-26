@@ -106,8 +106,12 @@ struct VariantUtil {
         DCHECK_LE(size, 4);
         DCHECK_GE(size, 1);
 
+        if (size == 1) {
+            return static_cast<uint32_t>(*(static_cast<const uint8_t*>(from)));
+        }
+
         uint32_t result = 0;
-        memcpy(&result, from, size);
+        __builtin_memcpy(&result, from, size);
         return arrow::bit_util::FromLittleEndian(result);
     }
 
