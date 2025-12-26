@@ -227,6 +227,9 @@ public interface IcebergCatalog extends MemoryTrackable {
     default void refreshTable(String dbName, String tableName, ConnectContext ctx, ExecutorService refreshExecutor) {
     }
 
+    default void invalidateTableCache(String dbName, String tableName) {
+    }
+
     default void invalidatePartitionCache(String dbName, String tableName) {
     }
 

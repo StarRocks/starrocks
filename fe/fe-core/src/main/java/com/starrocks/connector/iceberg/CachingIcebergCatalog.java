@@ -448,10 +448,15 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     }
 
     @Override
+    public void invalidateTableCache(String dbName, String tableName) {
+        IcebergTableName key = new IcebergTableName(dbName, tableName);
+        tables.invalidate(new IcebergTableCacheKey(key, new ConnectContext()));
+    }
+
+    @Override
     public void invalidateCache(String dbName, String tableName) {
         IcebergTableName key = new IcebergTableName(dbName, tableName);
         invalidateCache(key);
-
     }
 
     private void invalidateCache(IcebergTableName key) {
