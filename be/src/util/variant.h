@@ -22,10 +22,7 @@
 #include <string_view>
 
 #include "common/status.h"
-#include "hash.h"
 #include "util/decimal_types.h"
-#include "util/phmap/phmap.h"
-#include "util/slice.h"
 
 namespace starrocks {
 
@@ -179,18 +176,16 @@ private:
     friend class VariantValue;
     // return the index for the key in the dictionary
     // we use void* to avoid expose specific type in the header
-    Status _get_index(std::string_view key, void* indexes) const;
+    Status _get_index(std::string_view key, void* indexes, int hint) const;
 
     Status _build_lookup_index() const;
 
     // fields for optimization. they are computed lazily
     struct LookupIndex {
-        bool is_dict_unique = false;
+        bool has_built = false;
         std::vector<std::string_view> dict_strings;
-        phmap::flat_hash_map<Slice, uint32_t, SliceHash> dict_index_map;
     };
 
-    mutable bool _has_built_lookup_index = false;
     mutable LookupIndex _lookup_index;
 };
 
@@ -246,7 +241,7 @@ struct VariantArrayInfo {
 
 class VariantValue {
 public:
-    enum class BasicType { PRIMITIVE = 0, SHORT_STRING = 1, OBJECT = 2, ARRAY = 3 };
+    enum class BasicType : uint8_t { PRIMITIVE = 0, SHORT_STRING = 1, OBJECT = 2, ARRAY = 3 };
 
     /**
      * kEmptyVariant represents a NULL variant value.

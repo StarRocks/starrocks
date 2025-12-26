@@ -123,7 +123,7 @@ static inline uint32_t inline_read_little_endian_unsigned32(const char* data, si
 
 Status VariantMetadata::_build_lookup_index() const {
     uint32_t dict_sz = dict_size();
-    if (_has_built_lookup_index || dict_sz == 0) {
+    if (_lookup_index.has_built || dict_sz == 0) {
         return Status::OK();
     }
 
@@ -156,7 +156,7 @@ Status VariantMetadata::_build_lookup_index() const {
         DECODE_VALUE_OFFSET(4);
     }
 
-    _has_built_lookup_index = true;
+    _lookup_index.has_built = true;
     return Status::OK();
 }
 
@@ -184,7 +184,7 @@ StatusOr<std::string_view> VariantMetadata::get_key(uint32_t index) const {
 
 static constexpr uint8_t kBinarySearchThreshold = 32;
 
-Status VariantMetadata::_get_index(std::string_view key, void* _indexes) const {
+Status VariantMetadata::_get_index(std::string_view key, void* _indexes, int hint) const {
     KeyIndexVector& indexes = *static_cast<KeyIndexVector*>(_indexes);
 
     uint32_t dict_sz = dict_size();
@@ -208,34 +208,7 @@ Status VariantMetadata::_get_index(std::string_view key, void* _indexes) const {
                 indexes.push_back(std::distance(dict_strings.begin(), it));
             }
         }
-    }
-
-#define USE_PHMAP 0
-#if USE_PHMAP
-    // build hash map while checking uniqueness
-    phmap::flat_hash_map<Slice, uint32_t, SliceHash>& dict_index_map = _lookup_index.dict_index_map;
-    if (dict_index_map.empty()) {
-        dict_index_map.reserve(dict_sz);
-        _lookup_index.is_dict_unique = true;
-        for (uint32_t i = 0; i < dict_sz; i++) {
-            const auto key = Slice(dict_strings[i]);
-            if (dict_index_map.find(key) != dict_index_map.end()) {
-                _lookup_index.is_dict_unique = false;
-            }
-            dict_index_map[key] = i;
-        }
-    }
-
-    // if unique dictionary, find directly from hash map
-    // otherwise, fall back to linear scan
-    if (_lookup_index.is_dict_unique) {
-        auto it = dict_index_map.find(Slice(key));
-        if (it != dict_index_map.end()) {
-            indexes.push_back(it->second);
-        }
-    }
-#endif
-    else {
+    } else {
         // non-unique dictionary, find all matching indexes
         for (uint32_t i = 0; i < dict_sz; i++) {
             if (dict_strings[i] == key) {
@@ -282,15 +255,8 @@ StatusOr<VariantObjectInfo> VariantValue::get_object_info() const {
         return Status::VariantError("Too short object value: " + std::to_string(value.size()) + " for at least " +
                                     std::to_string(1 + num_elements_size));
     }
-
-    uint32_t num_elements = 0;
-    if (is_large) {
-        num_elements =
-                inline_read_little_endian_unsigned32_fixed_size<4>(value.data() + VariantValue::kHeaderSizeBytes);
-    } else {
-        num_elements =
-                inline_read_little_endian_unsigned32_fixed_size<1>(value.data() + VariantValue::kHeaderSizeBytes);
-    }
+    uint32_t num_elements =
+            inline_read_little_endian_unsigned32(value.data() + VariantValue::kHeaderSizeBytes, num_elements_size);
 
     VariantObjectInfo object_info{};
     object_info.num_elements = num_elements;
@@ -359,15 +325,8 @@ StatusOr<VariantArrayInfo> VariantValue::get_array_info() const {
         return Status::VariantError("Too short array value: " + std::to_string(value.size()) + " for at least " +
                                     std::to_string(1 + num_elements_size));
     }
-
-    uint32_t num_elements = 0;
-    if (is_large) {
-        num_elements =
-                inline_read_little_endian_unsigned32_fixed_size<4>(value.data() + VariantValue::kHeaderSizeBytes);
-    } else {
-        num_elements =
-                inline_read_little_endian_unsigned32_fixed_size<1>(value.data() + VariantValue::kHeaderSizeBytes);
-    }
+    uint32_t num_elements =
+            inline_read_little_endian_unsigned32(value.data() + VariantValue::kHeaderSizeBytes, num_elements_size);
 
     VariantArrayInfo array_info{};
     array_info.num_elements = num_elements;
@@ -606,40 +565,57 @@ StatusOr<VariantValue> VariantValue::get_object_by_key(const VariantMetadata& me
     }
 
     const VariantObjectInfo& info = obj_status.value();
+    // hint: used to speed up the lookup for non-unique dictionary
+    // even if the flag is non-unique, the dictionary may still be unique in most cases
+    // so we try hint=0 first, which means just return the first matched index
+    // if failed, we try hint=1, which means return all matched indexes. but we can skip the first item
+    // because it has been tried in the previous attempt
+
     KeyIndexVector dict_indexes;
-    RETURN_IF_ERROR(metadata._get_index(key, (void*)&dict_indexes));
+    RETURN_IF_ERROR(metadata._get_index(key, (void*)&dict_indexes, 0));
     if (dict_indexes.empty()) {
         return Status::NotFound("Field key not exists: " + std::string(key));
     }
 
-    for (uint32_t dict_index : dict_indexes) {
-        std::optional<uint32_t> field_index_opt;
-        for (uint32_t i = 0; i < info.num_elements; i++) {
-            uint32_t field_id = inline_read_little_endian_unsigned32(
-                    _value.data() + info.id_start_offset + i * info.id_size, info.id_size);
-            if (field_id == dict_index) {
-                field_index_opt = i;
-                break;
-            }
-        }
-
-        if (!field_index_opt.has_value()) {
-            continue;
-        }
-
-        const uint32_t field_index = field_index_opt.value();
-        const uint32_t offset = inline_read_little_endian_unsigned32(
-                _value.data() + info.offset_start_offset + field_index * info.offset_size, info.offset_size);
-        if (info.data_start_offset + offset >= _value.size()) {
-            return Status::VariantError("Offset is out of bounds: " + std::to_string(offset) +
-                                        ", data_start_offset: " + std::to_string(info.data_start_offset) +
-                                        ", value_size: " + std::to_string(_value.size()));
-        }
-
-        return VariantValue(_value.substr(info.data_start_offset + offset));
+    int32_t field_index = -1;
+#define SEARCH_DICT_INDEX_SZ(sz)                                                                       \
+    case sz: {                                                                                         \
+        const char* id_base = _value.data() + info.id_start_offset;                                    \
+        for (uint32_t i = 0; i < info.num_elements; i++) {                                             \
+            uint32_t field_id = inline_read_little_endian_unsigned32_fixed_size<sz>(id_base + i * sz); \
+            for (uint32_t dict_index : dict_indexes) {                                                 \
+                if (field_id == dict_index) {                                                          \
+                    field_index = i;                                                                   \
+                    break;                                                                             \
+                }                                                                                      \
+            }                                                                                          \
+            if (field_index != -1) {                                                                   \
+                break;                                                                                 \
+            }                                                                                          \
+        }                                                                                              \
+        break;                                                                                         \
     }
 
-    return Status::NotFound("Field key not found: " + std::string(key));
+    switch (info.id_size) {
+        SEARCH_DICT_INDEX_SZ(1);
+        SEARCH_DICT_INDEX_SZ(2);
+        SEARCH_DICT_INDEX_SZ(3);
+        SEARCH_DICT_INDEX_SZ(4);
+    }
+
+    if (field_index == -1) {
+        return Status::NotFound("Field key not found: " + std::string(key));
+    }
+
+    const uint32_t offset = inline_read_little_endian_unsigned32(
+            _value.data() + info.offset_start_offset + field_index * info.offset_size, info.offset_size);
+    if (info.data_start_offset + offset >= _value.size()) {
+        return Status::VariantError("Offset is out of bounds: " + std::to_string(offset) +
+                                    ", data_start_offset: " + std::to_string(info.data_start_offset) +
+                                    ", value_size: " + std::to_string(_value.size()));
+    }
+
+    return VariantValue(_value.substr(info.data_start_offset + offset));
 }
 
 StatusOr<VariantValue> VariantValue::get_element_at_index(const VariantMetadata& metadata, uint32_t index) const {

@@ -20,9 +20,9 @@
 
 #include "common/statusor.h"
 #include "fmt/format.h"
+#include "util/raw_container.h"
 #include "util/slice.h"
 #include "util/variant.h"
-#include "util/raw_container.h"
 
 namespace starrocks {
 
@@ -30,9 +30,11 @@ class VariantRowValue {
 public:
     VariantRowValue(const std::string_view metadata, const std::string_view value)
             : _raw(), _metadata_size(metadata.size()), _metadata(), _value() {
-        _raw.reserve(metadata.size() + value.size());
-        _raw.assign(metadata.data(), metadata.size());
-        _raw.append(value.data(), value.size());
+        if (metadata.data() != VariantMetadata::kEmptyMetadata.data()) {
+            _raw.reserve(metadata.size() + value.size());
+            _raw.assign(metadata.data(), metadata.size());
+            _raw.append(value.data(), value.size());
+        }
         _rebind_views();
     }
 
@@ -156,9 +158,14 @@ private:
      * - Reset to empty (after assigning empty constants)
      */
     void _rebind_views() {
-        std::string_view raw_view(_raw);
-        _metadata = VariantMetadata(raw_view.substr(0, _metadata_size));
-        _value = VariantValue(raw_view.substr(_metadata_size));
+        if (!_raw.empty()) {
+            std::string_view raw_view(_raw);
+            _metadata = VariantMetadata(raw_view.substr(0, _metadata_size));
+            _value = VariantValue(raw_view.substr(_metadata_size));
+        } else {
+            _metadata = VariantMetadata(VariantMetadata::kEmptyMetadata);
+            _value = VariantValue(VariantValue::kEmptyValue);
+        }
     }
 
     /**
@@ -168,9 +175,6 @@ private:
      */
     void _reset_to_empty() {
         _raw.clear();
-        _raw.reserve(VariantMetadata::kEmptyMetadata.size() + VariantValue::kEmptyValue.size());
-        _raw.assign(VariantMetadata::kEmptyMetadata.data(), VariantMetadata::kEmptyMetadata.size());
-        _raw.append(VariantValue::kEmptyValue.data(), VariantValue::kEmptyValue.size());
         _metadata_size = VariantMetadata::kEmptyMetadata.size();
         _rebind_views();
     }
