@@ -554,4 +554,10 @@ public class HiveTable extends Table {
                     storageFormat, hiveTableType);
         }
     }
+
+    @Override
+    public Set<TableOperation> getSupportedOperations() {
+        return Sets.newHashSet(TableOperation.READ, TableOperation.CREATE, TableOperation.INSERT, TableOperation.DROP,
+                TableOperation.ALTER, TableOperation.CREATE_TABLE_LIKE);
+    }
 }

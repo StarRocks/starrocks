@@ -26,6 +26,7 @@ import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
+import com.starrocks.catalog.TableOperation;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.util.DebugUtil;
@@ -73,15 +74,30 @@ public class MetaUtils {
         }
     }
 
-    public static void checkNotSupportCatalog(String catalogName, String operation) {
+    /**
+     * Check if the specified operation is supported on the given table.
+     * Throws SemanticException if the operation is not supported by the table type.
+     * For internal catalog tables, all operations are supported.
+     *
+     * @param table The table to check
+     * @param operation The operation to check
+     * @throws SemanticException if the operation is not supported
+     */
+    public static void checkNotSupportCatalog(Table table, TableOperation operation) {
+        if (table == null) {
+            throw new SemanticException("Table is null");
+        }
+        if (operation == null) {
+            throw new SemanticException("Operation is null");
+        }
+
+        String catalogName = table.getCatalogName();
         if (catalogName == null) {
             throw new SemanticException("Catalog is null");
         }
+        // Internal catalog tables support all operations
         if (CatalogMgr.isInternalCatalog(catalogName)) {
             return;
-        }
-        if (operation == null) {
-            throw new SemanticException("operation is null");
         }
 
         Catalog catalog = GlobalStateMgr.getCurrentState().getCatalogMgr().getCatalogByName(catalogName);
@@ -89,8 +105,9 @@ public class MetaUtils {
             throw new SemanticException("Catalog %s is not found", catalogName);
         }
 
-        if (!operation.equals("ALTER") && catalog.getType().equalsIgnoreCase("iceberg")) {
-            throw new SemanticException("Table of iceberg catalog doesn't support [%s]", operation);
+        if (!table.supportsOperation(operation)) {
+            throw new SemanticException("Table of %s catalog doesn't support [%s]",
+                    table.getType().name(), operation.name());
         }
     }
 
