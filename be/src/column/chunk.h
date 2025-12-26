@@ -127,6 +127,7 @@ public:
     // - When those method are called, the column will be moved into the chunk, and the original column will be reset.
     // - If the column is shared with others, it will be cloned and moved into the chunk.
     void append_column(ColumnPtr&& column, const FieldPtr& field);
+    void append_column(ColumnPtr&& column, ColumnId column_id);
     void append_column(ColumnPtr&& column, SlotId slot_id);
     void update_column(ColumnPtr&& column, SlotId slot_id);
     // - When those method are called, ensure the column is not shared with other columns in the chunk;
