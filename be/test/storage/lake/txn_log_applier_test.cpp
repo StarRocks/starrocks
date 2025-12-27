@@ -47,9 +47,10 @@ MutableTabletMetadataPtr build_pk_metadata(int64_t id) {
 }
 
 // Create an op_write txn log
-std::shared_ptr<TxnLogPB> make_op_write_log(int64_t txn_id, int64_t num_rows, int64_t data_size,
+std::shared_ptr<TxnLogPB> make_op_write_log(int64_t tablet_id, int64_t txn_id, int64_t num_rows, int64_t data_size,
                                             const std::vector<std::string>& segments) {
     auto log = std::make_shared<TxnLogPB>();
+    log->set_tablet_id(tablet_id);
     log->set_txn_id(txn_id);
     auto* opw = log->mutable_op_write();
     auto* rowset = opw->mutable_rowset();
@@ -82,9 +83,9 @@ TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchMergeBasic) {
     auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
 
     TxnLogVector logs;
-    logs.push_back(make_op_write_log(10, 5, 100, {"seg_a"}));
-    logs.push_back(make_op_write_log(11, 7, 140, {"seg_b1", "seg_b2"}));
-    logs.push_back(make_op_write_log(12, 3, 60, {"seg_c"}));
+    logs.push_back(make_op_write_log(10001, 10, 5, 100, {"seg_a"}));
+    logs.push_back(make_op_write_log(10001, 11, 7, 140, {"seg_b1", "seg_b2"}));
+    logs.push_back(make_op_write_log(10001, 12, 3, 60, {"seg_c"}));
 
     Status st = applier->apply(logs);
     EXPECT_TRUE(st.ok()) << st.to_string();
@@ -114,8 +115,9 @@ TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchDeletePredicateUnsupported) {
     auto meta = build_non_pk_metadata(10003);
     auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
 
-    auto log1 = make_op_write_log(20, 10, 100, {"seg1"});
+    auto log1 = make_op_write_log(10003, 20, 10, 100, {"seg1"});
     auto log2 = std::make_shared<TxnLogPB>();
+    log2->set_tablet_id(10003);
     log2->set_txn_id(21);
     auto* opw = log2->mutable_op_write();
     auto* rowset = opw->mutable_rowset();
@@ -137,10 +139,11 @@ TEST(TxnLogApplierBatchTest, PrimaryKeyBatchRejectsNonWriteOp) {
     auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
 
     auto log1 = std::make_shared<TxnLogPB>();
+    log1->set_tablet_id(20001);
     log1->set_txn_id(30);
     (void)log1->mutable_op_schema_change();
 
-    auto log2 = make_op_write_log(31, 4, 40, {"pks1"});
+    auto log2 = make_op_write_log(20001, 31, 4, 40, {"pks1"});
 
     TxnLogVector logs{log1, log2};
     Status st = applier->apply(logs);
@@ -154,6 +157,7 @@ TEST(TxnLogApplierBatchTest, PrimaryKeyBatchRejectsLogWithoutWrite) {
     auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
 
     auto log = std::make_shared<TxnLogPB>();
+    log->set_tablet_id(20002);
     log->set_txn_id(40);
 
     TxnLogVector logs{log};
