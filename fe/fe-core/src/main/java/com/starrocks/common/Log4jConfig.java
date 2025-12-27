@@ -45,6 +45,9 @@ import org.apache.logging.log4j.core.config.ConfigurationSource;
 import org.apache.logging.log4j.core.config.xml.XmlConfiguration;
 import org.apache.logging.log4j.core.lookup.Interpolator;
 import org.apache.logging.log4j.core.lookup.StrSubstitutor;
+import org.slf4j.bridge.SLF4JBridgeHandler;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
@@ -335,7 +338,31 @@ public class Log4jConfig extends XmlConfiguration {
     }
 
     private static void reconfig() throws IOException {
+
         String xmlConfTemplate = generateActiveLog4jXmlConfig();
+
+        SLF4JBridgeHandler.removeHandlersForRootLogger();
+        SLF4JBridgeHandler.install();
+
+        Level targetJulLevel = Level.INFO;
+        if (sysLogLevel != null) {
+            String normalizedLevel = sysLogLevel.toUpperCase();
+            if (DEBUG_LEVELS.contains(normalizedLevel)) {
+                if ("DEBUG".equals(normalizedLevel)) {
+                    targetJulLevel = Level.FINE;
+                } else if ("INFO".equals(normalizedLevel)) {
+                    targetJulLevel = Level.INFO;
+                } else if ("WARN".equals(normalizedLevel)) {
+                    targetJulLevel = Level.WARNING;
+                } else if ("ERROR".equals(normalizedLevel) || "FATAL".equals(normalizedLevel)) {
+                    targetJulLevel = Level.SEVERE;
+                }
+            } else {
+                targetJulLevel = Level.INFO;
+            }
+        }
+        Logger.getLogger("").setLevel(targetJulLevel);
+
         if (!FeConstants.runningUnitTest && !FeConstants.isReplayFromQueryDump) {
             System.out.println("=====");
             System.out.println(xmlConfTemplate);
