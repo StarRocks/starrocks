@@ -131,6 +131,18 @@ private:
 
     Status _evaluate_agg_input_columns(Chunk* chunk);
 
+    template <bool EnablePreAgg>
+    Status _push_one_chunk_to_partitioner_impl(RuntimeState* state, const ChunkPtr& chunk);
+
+    template <bool EnablePreAgg>
+    Status _transfer_all_chunks_from_partitioner_to_sorters_impl(RuntimeState* state);
+
+    template <bool EnablePreAgg>
+    StatusOr<ChunkPtr> _pull_one_chunk_impl();
+
+    template <bool EnablePreAgg>
+    StatusOr<ChunkPtr> _pull_one_chunk_from_sorters_impl();
+
     MutableColumns _create_agg_result_columns(size_t num_rows);
     const std::vector<TExpr>& _t_partition_exprs;
     std::vector<ExprContext*> _partition_exprs;
@@ -149,6 +161,16 @@ private:
     ChunksPartitionerPtr _chunks_partitioner;
     bool _is_transfered = false;
     size_t _partition_num = 0;
+
+    using PushChunkFn = Status (LocalPartitionTopnContext::*)(RuntimeState*, const ChunkPtr&);
+    using TransferFn = Status (LocalPartitionTopnContext::*)(RuntimeState*);
+    using PullFn = StatusOr<ChunkPtr> (LocalPartitionTopnContext::*)();
+    using PullFromSorterFn = StatusOr<ChunkPtr> (LocalPartitionTopnContext::*)();
+
+    PushChunkFn _push_chunk_fn = nullptr;
+    TransferFn _transfer_fn = nullptr;
+    PullFn _pull_fn = nullptr;
+    PullFromSorterFn _pull_from_sorter_fn = nullptr;
 
     // Every partition holds a chunks_sorter
     ChunksSorters _chunks_sorters;
