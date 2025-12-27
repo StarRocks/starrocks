@@ -41,7 +41,7 @@ private:
     std::unique_ptr<WritableFile> _file;
 };
 
-class AsyncOutputStreamFile final : public OutputStream {
+class AsyncOutputStreamFile : public OutputStream {
 public:
     AsyncOutputStreamFile(io::AsyncFlushOutputStream* stream, size_t buff_size)
             : OutputStream(buff_size), _stream(stream) {}
@@ -59,7 +59,6 @@ protected:
         return _stream->write(p, size);
     }
 
-private:
     io::AsyncFlushOutputStream* _stream;
 };
 
