@@ -577,7 +577,7 @@ bool operator!=(const StatusOr<T>& lhs, const StatusOr<T>& rhs) {
 
 // TODO(sbenza): avoid the string here completely.
 template <typename T>
-StatusOr<T>::StatusOr() : Base(Status::Unknown("")) {}
+StatusOr<T>::StatusOr() : Base(Status::OK()) {}
 
 template <typename T>
 template <typename U>
