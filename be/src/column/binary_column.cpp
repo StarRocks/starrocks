@@ -59,8 +59,15 @@ void BinaryColumnBase<T>::append(const Column& src, size_t offset, size_t count)
     DCHECK(offset + count <= src.size());
     const auto& b = down_cast<const BinaryColumnBase<T>&>(src);
 
-    const unsigned char* p = &b._bytes[b._offsets[offset]];
-    const unsigned char* e = &b._bytes[b._offsets[offset + count]];
+    size_t start_off = b._offsets[offset];
+    size_t end_off = b._offsets[offset + count];
+
+    if (end_off < start_off) {
+        return;
+    }
+
+    const unsigned char* p = &b._bytes[start_off];
+    const unsigned char* e = &b._bytes[end_off];
     _bytes.insert(_bytes.end(), p, e);
 
     // `new_offsets[i] = offsets[(num_prev_offsets + i - 1) + 1]` is the end offset of the new i-th string.
