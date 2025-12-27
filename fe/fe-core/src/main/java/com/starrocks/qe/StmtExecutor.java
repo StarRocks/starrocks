@@ -1601,7 +1601,7 @@ public class StmtExecutor {
                     // For some language driver, getting error packet after fields packet will be recognized as a success result
                     // so We need to send fields after first batch arrived
                     if (!isSendFields) {
-                        sendFields(colNames, outputExprs);
+                        responseFields(colNames, outputExprs);
                         isSendFields = true;
                     }
                     if (!isProxy && channel.isSendBufferNull()) {
@@ -1613,13 +1613,7 @@ public class StmtExecutor {
                         channel.initBuffer(bufferSize + 8);
                     }
 
-                    for (ByteBuffer row : batch.getBatch().getRows()) {
-                        if (isProxy) {
-                            proxyResultBuffer.add(row);
-                        } else {
-                            channel.sendOnePacket(row);
-                        }
-                    }
+                    responseRowBatch(batch, channel);
                 }
                 if (batch.getBatch() != null) {
                     context.updateReturnRows(batch.getBatch().getRows().size());
@@ -1627,12 +1621,31 @@ public class StmtExecutor {
             } while (!batch.isEos());
 
             if (!isSendFields && !isOutfileQuery && !isExplainAnalyze && !isPlanAdvisorAnalyze && !isArrowFlight) {
-                sendFields(colNames, outputExprs);
+                responseFields(colNames, outputExprs);
             }
+            final Long res = Tracers.getSpecifiedTimer("clientResponse").map(Timer::getTotalTime).orElse(0L);
+            context.getAuditEventBuilder().setWriteClientTimeMs(res);
         }
 
         processQueryStatisticsFromResult(batch, execPlan, isOutfileQuery);
         GlobalStateMgr.getCurrentState().getQueryHistoryMgr().addQueryHistory(context, execPlan);
+    }
+    private void responseRowBatch(RowBatch batch, MysqlChannel channel) throws IOException {
+        try (final Timer ignore = Tracers.watchScope(Tracers.Module.CLIENT, "clientResponse")) {
+            for (ByteBuffer row : batch.getBatch().getRows()) {
+                if (isProxy) {
+                    proxyResultBuffer.add(row);
+                } else {
+                    channel.sendOnePacket(row);
+                }
+            }
+        }
+    }
+
+    private void responseFields(List<String> colNames, List<Expr> exprs) throws IOException {
+        try (final Timer ignore = Tracers.watchScope(Tracers.Module.CLIENT, "clientResponse")) {
+            sendFields(colNames, exprs);
+        }
     }
 
     /**
