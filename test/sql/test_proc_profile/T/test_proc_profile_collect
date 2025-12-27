@@ -1,0 +1,100 @@
+-- name: test_proc_profile_collect
+-- Test FE /proc_profile/collect endpoint for on-demand profile collection
+
+-- Get BE IP and HTTP port from show backends command
+shell: ${mysql_cmd} -e "show backends\G" | grep "IP" | head -1 | awk -F':' '{print $2}' | xargs > be_ip.txt
+shell: ${mysql_cmd} -e "show backends\G" | grep "HttpPort" | head -1 | awk -F':' '{print $2}' | xargs > be_http_port.txt
+[UC]shell: echo "BE_IP=$(cat be_ip.txt), BE_HTTP_PORT=$(cat be_http_port.txt)"
+
+-- Test 1: Check that collect form is present on FE /proc_profile page
+shell: curl -s -u root: "${url}/proc_profile?node=FE" | grep -c "Collect Profile"
+
+-- Test 2: Check that collect form has default duration of 10 seconds
+shell: curl -s -u root: "${url}/proc_profile?node=FE" | grep -c 'value="10"'
+
+-- Test 3: Check that collect form has profile type selector
+shell: curl -s -u root: "${url}/proc_profile?node=FE" | grep -c "Profile Type"
+
+-- Test 4: Test collecting CPU profile on FE with default duration (10 seconds)
+-- This will take about 10 seconds to complete
+shell: curl -s -X POST -u root: "${url}/proc_profile/collect" -d "node=FE&seconds=10&type=cpu" | grep -c '"status":"success"'
+
+-- Test 5: Test collecting memory profile on FE with default duration
+shell: curl -s -X POST -u root: "${url}/proc_profile/collect" -d "node=FE&seconds=10&type=mem" | grep -c '"status":"success"'
+
+-- Test 6: Test collecting both CPU and memory profiles on FE
+shell: curl -s -X POST -u root: "${url}/proc_profile/collect" -d "node=FE&seconds=10&type=both" | grep -c '"status":"success"'
+
+-- Test 7: Test collecting profile with custom duration (5 seconds)
+shell: curl -s -X POST -u root: "${url}/proc_profile/collect" -d "node=FE&seconds=5&type=cpu" | grep -c '"status":"success"'
+
+-- Test 8: Test collecting CPU profile on BE
+shell: curl -s -X POST -u root: "${url}/proc_profile/collect" -d "node=BE:$(cat be_ip.txt):$(cat be_http_port.txt)&seconds=10&type=cpu" | grep -c '"status":"success"'
+
+-- Test 9: Test collecting contention profile on BE
+shell: curl -s -X POST -u root: "${url}/proc_profile/collect" -d "node=BE:$(cat be_ip.txt):$(cat be_http_port.txt)&seconds=10&type=mem" | grep -c '"status":"success"'
+
+-- Test 10: Test collecting both profiles on BE
+shell: curl -s -X POST -u root: "${url}/proc_profile/collect" -d "node=BE:$(cat be_ip.txt):$(cat be_http_port.txt)&seconds=10&type=both" | grep -c '"status":"success"'
+
+-- Test 11: Test error handling - invalid node parameter
+shell: curl -s -X POST -u root: "${url}/proc_profile/collect" -d "node=INVALID&seconds=10&type=cpu" | grep -c '"status":"error"'
+
+-- Test 12: Test error handling - invalid seconds (negative)
+shell: curl -s -X POST -u root: "${url}/proc_profile/collect" -d "node=FE&seconds=-1&type=cpu" | grep -c '"status":"success"'
+
+-- Test 13: Test error handling - invalid seconds (too large, should default to 10)
+shell: curl -s -X POST -u root: "${url}/proc_profile/collect" -d "node=FE&seconds=99999&type=cpu" | grep -c '"status":"success"'
+
+-- Test 14: Test error handling - missing node parameter (should default to FE)
+shell: curl -s -X POST -u root: "${url}/proc_profile/collect" -d "seconds=10&type=cpu" | grep -c '"status":"success"'
+
+-- Test 15: Test error handling - missing seconds parameter (should default to 10)
+shell: curl -s -X POST -u root: "${url}/proc_profile/collect" -d "node=FE&type=cpu" | grep -c '"status":"success"'
+
+-- Test 16: Test error handling - missing type parameter (should default to both)
+shell: curl -s -X POST -u root: "${url}/proc_profile/collect" -d "node=FE&seconds=10" | grep -c '"status":"success"'
+
+-- Test 17: Verify that collected profiles appear in the profile list (FE)
+-- Wait a moment for profile to be saved, then check list
+shell: sleep 2
+shell: curl -s -u root: "${url}/proc_profile?node=FE" | grep -c "cpu-profile-"
+
+-- Test 18: Verify that collected profiles appear in the profile list (BE)
+-- Wait a moment for profile to be saved, then check list
+shell: sleep 2
+shell: curl -s -u root: "${url}/proc_profile?node=BE:$(cat be_ip.txt):$(cat be_http_port.txt)" | grep -c "cpu-profile-"
+
+-- Test 19: Test BE /api/proc_profile?action=save endpoint directly
+-- First collect a profile via pprof endpoint
+shell: curl -s "http://$(cat be_ip.txt):$(cat be_http_port.txt)/pprof/profile?seconds=2" > /tmp/test_profile.pprof
+shell: gzip -c /tmp/test_profile.pprof > /tmp/test_profile.pprof.gz
+shell: curl -s -X POST "http://$(cat be_ip.txt):$(cat be_http_port.txt)/api/proc_profile?action=save&filename=test-profile-$(date +%Y%m%d-%H%M%S)-pprof.gz" --data-binary @/tmp/test_profile.pprof.gz | grep -c '"status":"success"'
+shell: rm -f /tmp/test_profile.pprof /tmp/test_profile.pprof.gz
+
+-- Test 20: Test BE /api/proc_profile?action=save with invalid filename (directory traversal attempt)
+shell: curl -s -X POST "http://$(cat be_ip.txt):$(cat be_http_port.txt)/api/proc_profile?action=save&filename=../../../etc/passwd" -d "test" | grep -c '"status":"error"'
+
+-- Test 21: Test BE /api/proc_profile?action=save with missing filename
+shell: curl -s -X POST "http://$(cat be_ip.txt):$(cat be_http_port.txt)/api/proc_profile?action=save" -d "test" | grep -c '"status":"error"'
+
+-- Test 22: Test collect form on BE node page
+shell: curl -s -u root: "${url}/proc_profile?node=BE:$(cat be_ip.txt):$(cat be_http_port.txt)" | grep -c "Collect Profile"
+
+-- Test 23: Test collect form shows correct profile types for BE (cpu, contention, both)
+shell: curl -s -u root: "${url}/proc_profile?node=BE:$(cat be_ip.txt):$(cat be_http_port.txt)" | grep -c "Contention"
+
+-- Test 24: Test collect form shows correct profile types for FE (cpu, mem, both)
+shell: curl -s -u root: "${url}/proc_profile?node=FE" | grep -c 'value="mem"'
+
+-- Test 25: Test JavaScript form submission handler is present
+shell: curl -s -u root: "${url}/proc_profile?node=FE" | grep -c "collectProfileForm"
+
+-- Test 26: Test that form has proper action and method
+shell: curl -s -u root: "${url}/proc_profile?node=FE" | grep -c 'action="/proc_profile/collect"'
+
+-- Test 27: Test that form has hidden node parameter
+shell: curl -s -u root: "${url}/proc_profile?node=FE" | grep -c 'name="node"'
+
+-- Cleanup
+shell: rm -f be_ip.txt be_http_port.txt
