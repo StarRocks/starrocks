@@ -86,7 +86,6 @@ import static com.starrocks.common.util.DateUtils.DATE_TIME_FORMATTER;
  * This class represents the column-related metadata.
  */
 public class Column implements Writable, GsonPreProcessable, GsonPostProcessable {
-
     public static final String CAN_NOT_CHANGE_DEFAULT_VALUE = "Can not change default value";
     public static final int COLUMN_UNIQUE_ID_INIT_VALUE = -1;
 
@@ -138,7 +137,8 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
     @SerializedName(value = "comment")
     private String comment;
     // Define expr may exist in two forms, one is analyzed, and the other is not analyzed.
-    // Currently, analyzed define expr is only used when creating materialized views, so the define expr in RollupJob must be
+    // Currently, analyzed define expr is only used when creating materialized views, so the define expr in RollupJob
+    // must be
     // analyzed.
     // In other cases, such as define expr in `MaterializedIndexMeta`, it may not be analyzed after being relayed.
     private Expr defineExpr; // use to define column in materialize view
@@ -179,34 +179,35 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         Preconditions.checkArgument(dataType.isValid());
     }
 
-    public Column(String name, Type type, boolean isKey, AggregateType aggregateType, String defaultValue,
-                  String comment) {
+    public Column(String name, Type type, boolean isKey, AggregateType aggregateType,
+                  String defaultValue, String comment) {
         this(name, type, isKey, aggregateType, null, false,
                 new ColumnDef.DefaultValueDef(true, new StringLiteral(defaultValue)), comment,
                 COLUMN_UNIQUE_ID_INIT_VALUE);
     }
 
     public Column(String name, Type type, boolean isKey, AggregateType aggregateType,
-                  ColumnDef.DefaultValueDef defaultValue,
-                  String comment) {
-        this(name, type, isKey, aggregateType, null, false, defaultValue, comment,
-                COLUMN_UNIQUE_ID_INIT_VALUE);
+                  ColumnDef.DefaultValueDef defaultValue, String comment) {
+        this(name, type, isKey, aggregateType, null, false, defaultValue, comment, COLUMN_UNIQUE_ID_INIT_VALUE);
     }
 
-    public Column(String name, Type type, boolean isKey, AggregateType aggregateType, boolean isAllowNull,
-                  ColumnDef.DefaultValueDef defaultValueDef, String comment) {
+    public Column(String name, Type type, boolean isKey, AggregateType aggregateType,
+                  boolean isAllowNull, ColumnDef.DefaultValueDef defaultValueDef, String comment) {
         this(name, type, isKey, aggregateType, null, isAllowNull, defaultValueDef, comment,
                 COLUMN_UNIQUE_ID_INIT_VALUE);
     }
 
-    public Column(String name, Type type, boolean isKey, AggregateType aggregateType, AggStateDesc aggStateDesc,
-                  boolean isAllowNull, ColumnDef.DefaultValueDef defaultValueDef, String comment, int columnUniqId) {
+    public Column(String name, Type type, boolean isKey, AggregateType aggregateType,
+                  AggStateDesc aggStateDesc, boolean isAllowNull, ColumnDef.DefaultValueDef defaultValueDef,
+                  String comment,
+                  int columnUniqId) {
         this(name, type, isKey, aggregateType, aggStateDesc, isAllowNull, defaultValueDef, comment, columnUniqId, "");
     }
 
-    public Column(String name, Type type, boolean isKey, AggregateType aggregateType, AggStateDesc aggStateDesc,
-                  boolean isAllowNull, ColumnDef.DefaultValueDef defaultValueDef, String comment, int columnUniqId,
-                  String physicalName) {
+    public Column(String name, Type type, boolean isKey, AggregateType aggregateType,
+                  AggStateDesc aggStateDesc, boolean isAllowNull, ColumnDef.DefaultValueDef defaultValueDef,
+                  String comment,
+                  int columnUniqId, String physicalName) {
         this.name = name;
         if (this.name == null) {
             this.name = "";
@@ -216,13 +217,14 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         if (this.type == null) {
             this.type = NullType.NULL;
         }
-        Preconditions.checkArgument(this.type.isComplexType() ||
-                this.type.getPrimitiveType() != PrimitiveType.INVALID_TYPE);
+        Preconditions.checkArgument(
+                this.type.isComplexType() || this.type.getPrimitiveType() != PrimitiveType.INVALID_TYPE);
 
         this.aggregationType = aggregateType;
         if (aggregateType != null && aggregateType == AggregateType.AGG_STATE_UNION) {
-            Preconditions.checkArgument(aggStateDesc != null, "aggStateDesc should not be null if " +
-                    "aggregation type is AGG_STATE_UNION");
+            Preconditions.checkArgument(aggStateDesc != null,
+                    "aggStateDesc should not be null if "
+                            + "aggregation type is AGG_STATE_UNION");
         }
         this.aggStateDesc = aggStateDesc;
         this.type.setAggStateDesc(aggStateDesc);
@@ -272,8 +274,8 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         this.comment = column.getComment();
         this.defineExpr = column.getDefineExpr();
         this.defaultExpr = column.defaultExpr;
-        Preconditions.checkArgument(this.type.isComplexType() ||
-                this.type.getPrimitiveType() != PrimitiveType.INVALID_TYPE);
+        Preconditions.checkArgument(
+                this.type.isComplexType() || this.type.getPrimitiveType() != PrimitiveType.INVALID_TYPE);
         this.uniqueId = column.getUniqueId();
         this.generatedColumnExpr = column.generatedColumnExpr;
         this.isHidden = column.isHidden;
@@ -448,6 +450,15 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         return this.name.startsWith(SchemaChangeHandler.SHADOW_NAME_PREFIX);
     }
 
+    /**
+     * Check if this column is a virtual column.
+     * Virtual columns are read-only metadata columns that are not persisted.
+     * Currently supported: _tablet_id_
+     */
+    public boolean isVirtualColumn() {
+        return "_tablet_id_".equalsIgnoreCase(this.name) && isHidden();
+    }
+
     public int getOlapColumnIndexSize() {
         PrimitiveType type = this.getPrimitiveType();
         if (type == PrimitiveType.CHAR) {
@@ -556,7 +567,6 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
     }
 
     private boolean isSameDefaultValue(Column other) {
-
         DefaultValueType thisDefaultValueType = this.getDefaultValueType();
         DefaultValueType otherDefaultValueType = other.getDefaultValueType();
 
@@ -682,7 +692,8 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
                 sb.append("DEFAULT ").append("(").append(defaultExpr.getExpr()).append(") ");
             }
         } else if (defaultValue != null && !type.isOnlyMetricType()) {
-            sb.append("DEFAULT \"").append(new UnicodeUnescaper().translate(StringEscapeUtils.escapeJava(defaultValue)))
+            sb.append("DEFAULT \"")
+                    .append(new UnicodeUnescaper().translate(StringEscapeUtils.escapeJava(defaultValue)))
                     .append("\" ");
         } else if (isGeneratedColumn()) {
             String generatedColumnSql;
@@ -699,9 +710,9 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
     }
 
     public enum DefaultValueType {
-        NULL,       // default value is not set or default value is null
-        CONST,      // const expr e.g. default "1"
-        VARY        // variable expr e.g. uuid() function
+        NULL, // default value is not set or default value is null
+        CONST, // const expr e.g. default "1"
+        VARY // variable expr e.g. uuid() function
     }
 
     public DefaultValueType getDefaultValueType() {
@@ -728,7 +739,8 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
                 // current transaction time
                 if (ConnectContext.get() != null) {
                     LocalDateTime localDateTime = Instant.ofEpochMilli(ConnectContext.get().getStartTime())
-                            .atZone(TimeUtils.getTimeZone().toZoneId()).toLocalDateTime();
+                            .atZone(TimeUtils.getTimeZone().toZoneId())
+                            .toLocalDateTime();
                     return localDateTime.format(DATE_TIME_FORMATTER);
                 } else {
                     // should not run up here
@@ -754,7 +766,8 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         if (defaultExpr != null) {
             if (isEmptyDefaultTimeFunction(defaultExpr)) {
                 LocalDateTime localDateTime = Instant.ofEpochMilli(currentTimestamp)
-                        .atZone(TimeUtils.getTimeZone().toZoneId()).toLocalDateTime();
+                        .atZone(TimeUtils.getTimeZone().toZoneId())
+                        .toLocalDateTime();
                 return localDateTime.format(DATE_TIME_FORMATTER);
             }
         }
@@ -800,7 +813,8 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
                 sb.append("AUTO_INCREMENT ");
             }
             if (defaultValue != null && !type.isOnlyMetricType()) {
-                sb.append("DEFAULT \"").append(new UnicodeUnescaper().translate(StringEscapeUtils.escapeJava(defaultValue)))
+                sb.append("DEFAULT \"")
+                        .append(new UnicodeUnescaper().translate(StringEscapeUtils.escapeJava(defaultValue)))
                         .append("\" ");
             }
         } else {
@@ -877,8 +891,7 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         if (this.isGeneratedColumn() && !other.isGeneratedColumn()) {
             return false;
         }
-        if (this.isGeneratedColumn() &&
-                !this.generatedColumnExpr.equals(other.generatedColumnExpr)) {
+        if (this.isGeneratedColumn() && !this.generatedColumnExpr.equals(other.generatedColumnExpr)) {
             return false;
         }
         if (this.isHidden != other.isHidden()) {
@@ -895,8 +908,9 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         if (!this.getType().equals(other.getType())) {
             return false;
         }
-        if (!(aggregationType == other.aggregationType || (AggregateType.isNullOrNone(aggregationType) &&
-                AggregateType.isNullOrNone(other.getAggregationType())))) {
+        if (!(aggregationType == other.aggregationType
+                || (AggregateType.isNullOrNone(aggregationType)
+                && AggregateType.isNullOrNone(other.getAggregationType())))) {
             return false;
         }
         if (this.aggStateDesc != null && !this.aggStateDesc.equals(other.aggStateDesc)) {
@@ -984,5 +998,4 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
     public AggStateDesc getAggStateDesc() {
         return this.aggStateDesc;
     }
-
 }

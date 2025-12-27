@@ -176,6 +176,7 @@ set(STORAGE_FILES
     compaction_manager.cpp
     horizontal_compaction_task.cpp
     vertical_compaction_task.cpp
+    virtual_column.cpp
     compaction_task_factory.cpp
     default_compaction_policy.cpp
     size_tiered_compaction_policy.cpp

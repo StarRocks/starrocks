@@ -454,6 +454,9 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static boolean enable_task_run_fe_evaluation = true;
 
+    @ConfField(mutable = true, comment = "Whether enable virtual columns like _tablet_id_")
+    public static boolean enable_virtual_column = true;
+
     // whether mask credential info in `information_schema.tasks` and `information_schema.task_runs`
     // if task count is big, mask process can be time consuming
     @ConfField(mutable = true)

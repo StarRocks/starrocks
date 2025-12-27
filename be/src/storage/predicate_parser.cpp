@@ -24,6 +24,7 @@
 #include "storage/predicate_tree/predicate_tree.hpp"
 #include "storage/tablet_schema.h"
 #include "storage/type_utils.h"
+#include "storage/virtual_column.h"
 
 namespace starrocks {
 
@@ -125,6 +126,13 @@ bool OlapPredicateParser::can_pushdown(const ConstPredicateNodePtr& pred_tree) c
 
 template <typename ConditionType>
 StatusOr<ColumnPredicate*> OlapPredicateParser::t_parse_thrift_cond(const ConditionType& condition) const {
+    // Virtual columns cannot be pushed down as predicates
+    // Check using SlotDescriptor::is_virtual_column() if slot descriptors are available,
+    // otherwise fall back to name-based check for backward compatibility
+    auto it = _slot_desc_map.find(condition.column_name);
+    if (it != _slot_desc_map.end() && (it->second->is_virtual_column())) {
+        return Status::NotSupported("virtual column " + condition.column_name + " cannot be pushed down");
+    }
     const size_t index = _schema->field_index(condition.column_name);
     RETURN_IF(index >= _schema->num_columns(), Status::Unknown("unknown column " + condition.column_name));
     const TabletColumn& col = _schema->column(index);
@@ -152,6 +160,10 @@ StatusOr<ColumnPredicate*> OlapPredicateParser::parse_thrift_cond(const GeneralC
 
 StatusOr<ColumnPredicate*> OlapPredicateParser::parse_expr_ctx(const SlotDescriptor& slot_desc, RuntimeState* state,
                                                                ExprContext* expr_ctx) const {
+    // Virtual columns cannot be pushed down as predicates
+    if (slot_desc.is_virtual_column()) {
+        return Status::NotSupported("virtual column " + slot_desc.col_name() + " cannot be pushed down");
+    }
     const size_t column_id = _schema->field_index(slot_desc.col_name());
     RETURN_IF(column_id >= _schema->num_columns(), nullptr);
     const TabletColumn& col = _schema->column(column_id);
@@ -179,20 +191,23 @@ bool ConnectorPredicateParser::can_pushdown(const ConstPredicateNodePtr& pred_tr
 }
 
 template <typename ConditionType>
-ColumnPredicate* ConnectorPredicateParser::t_parse_thrift_cond(const ConditionType& condition) const {
+StatusOr<ColumnPredicate*> ConnectorPredicateParser::t_parse_thrift_cond(const ConditionType& condition) const {
     uint8_t precision = 0;
     uint8_t scale = 0;
     LogicalType type = LogicalType::TYPE_UNKNOWN;
     size_t index = 0;
 
-    for (const SlotDescriptor* slot : *_slot_desc) {
-        if (slot->col_name() == condition.column_name) {
-            type = slot->type().type;
-            precision = slot->type().precision;
-            scale = slot->type().scale;
-            index = slot->id();
-            break;
+    auto it = _slot_desc_map.find(condition.column_name);
+    if (it != _slot_desc_map.end()) {
+        const SlotDescriptor* slot = it->second;
+        // Virtual columns cannot be pushed down as predicates
+        if (slot->is_virtual_column()) {
+            return Status::NotSupported("virtual column " + condition.column_name + " cannot be pushed down");
         }
+        type = slot->type().type;
+        precision = slot->type().precision;
+        scale = slot->type().scale;
+        index = slot->id();
     }
     // column not found
     RETURN_IF(type == LogicalType::TYPE_UNKNOWN, nullptr);
