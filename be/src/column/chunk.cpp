@@ -162,6 +162,14 @@ void Chunk::append_column(ColumnPtr&& column, const FieldPtr& field) {
     check_or_die();
 }
 
+void Chunk::append_column(const ColumnPtr& column, ColumnId column_id, [[maybe_unused]] bool is_column_id) {
+    DCHECK(is_column_id);
+    DCHECK(!_cid_to_index.contains(column_id));
+    _cid_to_index[column_id] = _columns.size();
+    _append_column_checked(_columns.size(), column);
+    check_or_die();
+}
+
 void Chunk::append_column(const ColumnPtr& column, const FieldPtr& field) {
     DCHECK(!_cid_to_index.contains(field->id()));
     _cid_to_index[field->id()] = _columns.size();

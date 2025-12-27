@@ -64,6 +64,10 @@ Status ColumnIterator::fetch_dict_codes_by_rowid(const Column& rowids, Column* v
     return fetch_dict_codes_by_rowid(p, rowids.size(), values);
 }
 
+Status ColumnIterator::fetch_values_by_rowid_for_predicate_evaluate(const Column& rowids, Column* values) {
+    return fetch_values_by_rowid(rowids, values);
+}
+
 Status ColumnIterator::next_batch(const SparseRange<>& range, Column* dst) {
     auto iter = range.new_iterator();
     auto to_read = range.span_size();
