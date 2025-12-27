@@ -109,10 +109,19 @@ Status ExportSinkIOBuffer::_open_file_writer() {
         return Status::NotSupported(strings::Substitute("Unsupported file type $0", file_type));
     }
 
-    _file_builder = std::make_unique<PlainTextBuilder>(
-            PlainTextBuilderOptions{.column_terminated_by = _t_export_sink.column_separator,
-                                    .line_terminated_by = _t_export_sink.row_delimiter},
-            std::move(output_file), _output_expr_ctxs);
+    PlainTextBuilderOptions builder_options{.column_terminated_by = _t_export_sink.column_separator,
+                                            .line_terminated_by = _t_export_sink.row_delimiter};
+
+    // Set header options if configured
+    if (_t_export_sink.__isset.with_header && _t_export_sink.with_header) {
+        builder_options.with_header = true;
+        if (_t_export_sink.__isset.column_names) {
+            builder_options.column_names = _t_export_sink.column_names;
+        }
+    }
+
+    _file_builder =
+            std::make_unique<PlainTextBuilder>(std::move(builder_options), std::move(output_file), _output_expr_ctxs);
 
     _state->add_export_output_file(file_path);
     return Status::OK();

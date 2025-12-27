@@ -14,8 +14,10 @@
 
 #include "csv_file_writer.h"
 
+#include <boost/algorithm/string.hpp>
 #include <utility>
 
+#include "csv_escape.h"
 #include "formats/utils.h"
 #include "output_stream_file.h"
 #include "runtime/current_thread.h"
@@ -56,6 +58,20 @@ Status CSVFileWriter::init() {
         }
         _column_converters.emplace_back(std::move(nullable_conv), csv::get_converter(type, false));
     }
+
+    // Write header row if include_header is enabled
+    if (_writer_options->include_header && !_column_names.empty()) {
+        for (size_t i = 0; i < _column_names.size(); i++) {
+            // Escape column names that contain special characters (delimiter, quotes, newlines)
+            std::string escaped_name = csv::escape_csv_field(_column_names[i], _writer_options->column_terminated_by);
+            RETURN_IF_ERROR(_output_stream->write(escaped_name));
+            if (i + 1 != _column_names.size()) {
+                RETURN_IF_ERROR(_output_stream->write(_writer_options->column_terminated_by));
+            }
+        }
+        RETURN_IF_ERROR(_output_stream->write(_writer_options->line_terminated_by));
+    }
+
     return Status::OK();
 }
 
@@ -138,6 +154,9 @@ Status CSVFileWriterFactory::init() {
     }
     if (_options.contains(CSVWriterOptions::LINE_TERMINATED_BY)) {
         _parsed_options->line_terminated_by = _options[CSVWriterOptions::LINE_TERMINATED_BY];
+    }
+    if (_options.contains(CSVWriterOptions::INCLUDE_HEADER)) {
+        _parsed_options->include_header = boost::iequals(_options[CSVWriterOptions::INCLUDE_HEADER], "true");
     }
     return Status::OK();
 }
