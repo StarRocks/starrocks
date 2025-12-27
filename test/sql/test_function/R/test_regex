@@ -268,3 +268,120 @@ select regexp_count('test', NULL);
 -- result:
 None
 -- !result
+-- name: test_regexp_position
+SELECT regexp_position('a.b:c;d', '[.]');
+-- result:
+2
+-- !result
+SELECT regexp_position('a.b:c;d', '[\\.:;]', 2);
+-- result:
+2
+-- !result
+SELECT regexp_position('a.b:c;d', ':');
+-- result:
+4
+-- !result
+SELECT regexp_position('a,b,c', ',');
+-- result:
+2
+-- !result
+SELECT regexp_position('a1b2c3d', '[0-9]');
+-- result:
+2
+-- !result
+SELECT regexp_position('a,b,c', ',', 3);
+-- result:
+4
+-- !result
+SELECT regexp_position('a1b2c3d', '[0-9]', 5);
+-- result:
+6
+-- !result
+SELECT regexp_position('a1b2c3d4e', '[0-9]', 4, 2);
+-- result:
+6
+-- !result
+SELECT regexp_position('a1b2c3d',  '[0-9]', 4, 3);
+-- result:
+-1
+-- !result
+SELECT regexp_position('a1b2c3d', '', 1);
+-- result:
+1
+-- !result
+SELECT regexp_position('a1b2c3d', '', 2);
+-- result:
+2
+-- !result
+SELECT regexp_position('a1b2c3d', '', 2, 2);
+-- result:
+3
+-- !result
+SELECT regexp_position('a1b2c3d', '', 2, 6);
+-- result:
+7
+-- !result
+SELECT regexp_position('a1b2c3d', '', 2, 7);
+-- result:
+8
+-- !result
+SELECT regexp_position('a1b2c3d', '', 2, 8);
+-- result:
+-1
+-- !result
+SELECT regexp_position('', ',');
+-- result:
+-1
+-- !result
+SELECT regexp_position('', ',', 4);
+-- result:
+-1
+-- !result
+SELECT regexp_position('', ',', 4, 2);
+-- result:
+-1
+-- !result
+SELECT regexp_position('a,b,c',  ',', 2);
+-- result:
+2
+-- !result
+SELECT regexp_position('a1b2c3d', '[0-9]', 4);
+-- result:
+4
+-- !result
+SELECT regexp_position('a,b,c', ',', 1000);
+-- result:
+-1
+-- !result
+SELECT regexp_position('a,b,c', ',', 8);
+-- result:
+-1
+-- !result
+SELECT regexp_position('有朋$%X自9远方来', '[0-9]', 7);
+-- result:
+7
+-- !result
+SELECT regexp_position('有朋$%X自9远方9来', '[0-9]', 10, 1);
+-- result:
+10
+-- !result
+SELECT regexp_position('有朋$%X自9远方9来', '[0-9]', 10, 2);
+-- result:
+-1
+-- !result
+SELECT regexp_position('有朋$%X自9远方9来', '来', 999);
+-- result:
+-1
+-- !result
+SELECT regexp_position('行成于思str而毁123于随', '于', 3, 2);
+-- result:
+13
+-- !result
+SELECT regexp_position('行成于思str而毁123于随', '',  3, 1);
+-- result:
+3
+-- !result
+SELECT regexp_position('行成于思str而毁123于随', '',  3, 2);
+-- result:
+4
+-- !result
