@@ -76,14 +76,13 @@ class TestSQLCases(sr_sql_lib.StarrocksSQLApiLib):
 
     _multiprocess_can_split_ = True
 
-    variable_dict = {}
-
     def __init__(self, *args, **kwargs):
         """
         init
         """
         super(TestSQLCases, self).__init__(*args, **kwargs)
         self.case_info: choose_cases.ChooseCase.CaseTR
+        self.variable_dict = {}
         self._check_db_unique()
 
     def setUp(self, *args, **kwargs):
@@ -253,7 +252,8 @@ class TestSQLCases(sr_sql_lib.StarrocksSQLApiLib):
     def _check_db_unique(self):
         all_db_dict = dict()
         for case in case_list:
-            sql_list, _ = self._replace_uuid_variables(case.sql, self.variable_dict)
+            temp_variable_dict = {}
+            sql_list, _ = self._replace_uuid_variables(case.sql, temp_variable_dict)
 
             for sql in sql_list:
                 if isinstance(sql, str):
