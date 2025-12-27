@@ -1529,6 +1529,31 @@ public class StmtExecutor {
 
         List<PlanFragment> fragments = execPlan.getFragments();
         List<ScanNode> scanNodes = execPlan.getScanNodes();
+        long planMaxScanRows = -1;
+        long planMaxScanPartitions = -1;
+        long planMaxScanTablets = -1;
+        for (ScanNode scanNode : scanNodes) {
+            if (scanNode instanceof OlapScanNode) {
+                planMaxScanRows = Math.max(planMaxScanRows, scanNode.getCardinality());
+                planMaxScanPartitions = Math.max(planMaxScanPartitions, scanNode.getSelectedPartitionNum());
+                planMaxScanTablets = Math.max(planMaxScanTablets, ((OlapScanNode) scanNode).getScanTabletIds().size());
+            }
+
+            if  (scanNode instanceof IcebergScanNode) {
+                planMaxScanRows = Math.max(planMaxScanRows, scanNode.getCardinality());
+                planMaxScanPartitions = Math.max(planMaxScanPartitions, scanNode.getSelectedPartitionNum());
+            }
+        }
+        context.getAuditEventBuilder()
+                .setPlanMaxScanRows(planMaxScanRows)
+                .setPlanMaxScanPartitions(planMaxScanPartitions)
+                .setPlanMaxScanTablets(planMaxScanTablets);
+
+        checkPlanScanLimits(context,
+                planMaxScanRows,
+                planMaxScanPartitions,
+                planMaxScanTablets);
+
         TDescriptorTable descTable = execPlan.getDescTbl().toThrift();
         List<String> colNames = execPlan.getColNames();
         List<Expr> outputExprs = execPlan.getOutputExprs();
@@ -3420,4 +3445,55 @@ public class StmtExecutor {
         }
         return ConnectContext.get().getSessionVariable().getInsertMaxFilterRatio();
     }
+
+    private void checkScanLimit(long scannedValue,
+                                long scanLimit,
+                                String ruleName)
+            throws DdlException {
+
+        if (scanLimit <= 0 || scannedValue <= scanLimit) {
+            return;
+        }
+
+        String errorMsg = String.format(
+                "%s %d over %d",
+                ruleName,
+                scannedValue,
+                scanLimit);
+
+        ErrorReport.reportDdlException(
+                ErrorCode.ERR_PERFORM_QUERY_ERROR,
+                errorMsg
+        );
+    }
+
+    private void checkPlanScanLimits(ConnectContext context,
+                                     long planMaxScanRows,
+                                     long planMaxScanPartitions,
+                                     long planMaxScanTablets)
+            throws DdlException {
+
+        TWorkGroup resourceGroup = CoordinatorPreprocessor
+                .prepareResourceGroup(context, ResourceGroupClassifier.QueryType.SELECT);
+
+        if (resourceGroup == null) {
+            return;
+        }
+
+        checkScanLimit(
+                planMaxScanRows,
+                resourceGroup.getPlan_scan_rows_limit(),
+                "scan rows");
+
+        checkScanLimit(
+                planMaxScanPartitions,
+                resourceGroup.getPlan_scan_partitions_limit(),
+                "scan partitions");
+
+        checkScanLimit(
+                planMaxScanTablets,
+                resourceGroup.getPlan_scan_tablets_limit(),
+                "scan tablets");
+    }
+    
 }

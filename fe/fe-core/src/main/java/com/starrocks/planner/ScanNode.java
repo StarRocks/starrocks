@@ -83,6 +83,8 @@ public abstract class ScanNode extends PlanNode {
 
     private Map<SlotId, Expr> heavyExprs = Maps.newHashMap();
 
+    protected long selectedPartitionNum = -1;
+
     public ScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName) {
         super(id, desc.getId().asList(), planNodeName);
         this.desc = desc;
@@ -268,5 +270,9 @@ public abstract class ScanNode extends PlanNode {
 
     public Map<SlotId, Expr> getHeavyExprs() {
         return heavyExprs;
+    }
+
+    public long getSelectedPartitionNum() {
+        return selectedPartitionNum;
     }
 }

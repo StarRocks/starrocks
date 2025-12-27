@@ -54,7 +54,7 @@ SET(SOURCE_FILES
 
 if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86" OR "${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86_64")
     set(SOURCE_FILES ${SOURCE_FILES} atomicops-internals-x86.cc)
-endif()
+endif ()
 
 SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fPIC")
 
@@ -70,5 +70,5 @@ set_target_properties(Gutil PROPERTIES COMPILE_FLAGS "-funsigned-char -Wno-depre
 #ADD_EXPORTABLE_LIBRARY(gutil
 #  SRCS ${GUTIL_SRCS}
 #  DEPS ${GUTIL_LIBS}
-  # Disable warnings which trigger a lot in the Google code:
+# Disable warnings which trigger a lot in the Google code:
 #  COMPILE_FLAGS "-funsigned-char -Wno-deprecated -Wno-char-subscripts")

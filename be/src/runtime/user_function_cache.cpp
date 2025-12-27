@@ -52,17 +52,18 @@
 #include "util/spinlock.h"
 
 namespace starrocks {
-
 static const int kLibShardNum = 128;
 
 // function cache entry, store information for
 struct UserFunctionCacheEntry {
     UserFunctionCacheEntry(int64_t fid_, std::string checksum_, std::string lib_file_,
                            TFunctionBinaryType::type function_type)
-            : function_id(fid_),
-              checksum(std::move(checksum_)),
-              lib_file(std::move(lib_file_)),
-              function_type(function_type) {}
+        : function_id(fid_),
+          checksum(std::move(checksum_)),
+          lib_file(std::move(lib_file_)),
+          function_type(function_type) {
+    }
+
     ~UserFunctionCacheEntry();
 
     int64_t function_id = 0;
@@ -140,7 +141,7 @@ Status UserFunctionCache::get_libpath(int64_t fid, const std::string& url, const
                                       FuncType function_type, std::string* libpath) {
     UserFunctionCacheEntryPtr entry;
     RETURN_IF_ERROR(_get_cache_entry(fid, url, checksum, function_type, &entry,
-                                     [](const auto& entry) -> StatusOr<std::any> { return std::any{}; }));
+        [](const auto& entry) -> StatusOr<std::any> { return std::any{}; }));
     *libpath = entry->lib_file;
     return Status::OK();
 }
@@ -177,7 +178,7 @@ Status UserFunctionCache::_load_entry_from_lib(const std::string& dir, const std
     auto it = _entry_map.find(function_id);
     if (it != _entry_map.end()) {
         LOG(WARNING) << "meet a same function id user function library, function_id=" << function_id
-                     << ", one_checksum=" << checksum << ", other_checksum=" << it->second->checksum;
+                << ", one_checksum=" << checksum << ", other_checksum=" << it->second->checksum;
         return Status::InternalError("duplicate function id");
     }
     // create a cache entry and put it into entry map
@@ -210,6 +211,7 @@ Status UserFunctionCache::_load_cached_lib() {
     }
     return Status::OK();
 }
+
 template <class Loader>
 Status UserFunctionCache::_get_cache_entry(int64_t fid, const std::string& url, const std::string& checksum,
                                            FuncType type, UserFunctionCacheEntryPtr* output_entry, Loader&& loader) {
@@ -336,5 +338,4 @@ Status UserFunctionCache::_remove_all_lib_file() {
     }
     return Status::OK();
 }
-
 } // namespace starrocks

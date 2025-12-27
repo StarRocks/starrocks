@@ -24,7 +24,6 @@
 #include "util/uuid_generator.h"
 
 namespace starrocks {
-
 Status DownloadUtil::download(const std::string& url, const std::string& target_file,
                               const std::string& expected_checksum) {
     auto success = false;

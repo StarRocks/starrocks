@@ -34,7 +34,6 @@
 #include "util/defer_op.h"
 
 namespace starrocks {
-
 const TableFunction* getJavaUDTFFunction() {
     static JavaUDTFFunction java_table_function;
     return &java_table_function;
@@ -43,10 +42,12 @@ const TableFunction* getJavaUDTFFunction() {
 class JavaUDTFState : public TableFunctionState {
 public:
     JavaUDTFState(std::string libpath, std::string symbol, std::vector<TypeDescriptor> type_desc, const TTypeDesc& desc)
-            : _libpath(std::move(libpath)),
-              _symbol(std::move(symbol)),
-              _arg_type_descs(std::move(type_desc)),
-              _ret_type(TypeDescriptor::from_thrift(desc)) {}
+        : _libpath(std::move(libpath)),
+          _symbol(std::move(symbol)),
+          _arg_type_descs(std::move(type_desc)),
+          _ret_type(TypeDescriptor::from_thrift(desc)) {
+    }
+
     ~JavaUDTFState() override = default;
 
     Status open();
@@ -231,5 +232,4 @@ std::pair<Columns, UInt32Column::Ptr> JavaUDTFFunction::process(RuntimeState* ru
 
     return std::make_pair(std::move(res), std::move(offsets_col));
 }
-
 } // namespace starrocks

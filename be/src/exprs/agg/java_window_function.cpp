@@ -19,7 +19,6 @@
 #include "runtime/user_function_cache.h"
 
 namespace starrocks {
-
 const AggregateFunction* getJavaWindowFunction() {
     static JavaWindowFunction java_window_func;
     return &java_window_func;

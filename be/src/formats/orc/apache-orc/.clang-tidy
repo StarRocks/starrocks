@@ -1,4 +1,4 @@
 ---
 Checks: >
-    -*,
-    readability-identifier-naming,
+  -*,
+  readability-identifier-naming,
