@@ -36,6 +36,7 @@
 
 #include <malloc.h>
 
+#include "cache/mem_cache/pagecache_arena.h"
 #include "runtime/current_thread.h"
 #include "util/defer_op.h"
 #include "util/lru_cache.h"
@@ -159,6 +160,33 @@ Status StoragePageCache::insert(const std::string& key, std::vector<uint8_t>* da
 
     auto deleter = [](const starrocks::CacheKey& key, void* value) {
         auto* cache_item = (std::vector<uint8_t>*)value;
+        delete cache_item;
+    };
+
+    MemCacheHandle* obj_handle = nullptr;
+    // Use mem size managed by memory allocator as this record charge size.
+    // At the same time, we should record this record size for data fetching when lookup.
+    Status st = _cache->insert(key, (void*)data, mem_size, deleter, &obj_handle, opts);
+    if (st.ok()) {
+        *handle = PageCacheHandle(_cache, obj_handle);
+        StoragePageCacheMetrics::returned_page_handle_count++;
+    }
+    return st;
+}
+
+Status StoragePageCache::insert(const std::string& key, PageCacheVector* data, const MemCacheWriteOptions& opts,
+                                PageCacheHandle* handle) {
+#ifndef BE_TEST
+    int64_t mem_size = malloc_usable_size(data->data()) + sizeof(*data);
+    tls_thread_status.mem_release(mem_size);
+    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(nullptr);
+    tls_thread_status.mem_consume(mem_size);
+#else
+    int64_t mem_size = data->capacity() + sizeof(*data);
+#endif
+
+    auto deleter = [](const starrocks::CacheKey& key, void* value) {
+        auto* cache_item = (PageCacheVector*)value;
         delete cache_item;
     };
 
