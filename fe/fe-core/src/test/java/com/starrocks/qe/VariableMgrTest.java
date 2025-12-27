@@ -290,6 +290,40 @@ public class VariableMgrTest {
     }
 
     @Test
+    public void testSetNonExistentWarehouse() {
+        // Mock the WarehouseManager to simulate warehouse validation
+        UtFrameUtils.mockInitWarehouseEnv();
+
+        SystemVariable systemVariable =
+                new SystemVariable(SetType.SESSION, SessionVariable.WAREHOUSE_NAME, new StringLiteral("non_existent_warehouse"));
+        VariableMgr variableMgr = new VariableMgr();
+        SessionVariable sessionVariable = variableMgr.newSessionVariable();
+
+        // Setting a non-existent warehouse should throw an exception
+        DdlException exception = assertThrows(DdlException.class, () -> {
+            variableMgr.setSystemVariable(sessionVariable, systemVariable, false);
+        });
+        Assertions.assertTrue(exception.getMessage().contains("non_existent_warehouse"),
+                "Exception message should contain the warehouse name");
+    }
+
+    @Test
+    public void testSetDefaultWarehouse() throws DdlException {
+        // Mock the WarehouseManager
+        UtFrameUtils.mockInitWarehouseEnv();
+
+        // Setting the default warehouse should succeed
+        SystemVariable systemVariable =
+                new SystemVariable(SetType.SESSION, SessionVariable.WAREHOUSE_NAME, new StringLiteral("default_warehouse"));
+        VariableMgr variableMgr = new VariableMgr();
+        SessionVariable sessionVariable = variableMgr.newSessionVariable();
+
+        // This should not throw an exception since default_warehouse is always valid
+        variableMgr.setSystemVariable(sessionVariable, systemVariable, false);
+        Assertions.assertEquals("default_warehouse", sessionVariable.getWarehouseName());
+    }
+
+    @Test
     public void testImagePersist() throws Exception {
         VariableMgr mgr = new VariableMgr();
         GlobalVarPersistInfo info = new GlobalVarPersistInfo();
