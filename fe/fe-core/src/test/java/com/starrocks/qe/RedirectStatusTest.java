@@ -1787,7 +1787,7 @@ public class RedirectStatusTest {
 
     @Test
     public void testAlterStorageVolumeStmtCoverage() {
-        AlterStorageVolumeStmt stmt = new AlterStorageVolumeStmt("test_volume", java.util.Collections.emptyMap(), null,
+        AlterStorageVolumeStmt stmt = new AlterStorageVolumeStmt(false, "test_volume", java.util.Collections.emptyMap(), null,
                 NodePosition.ZERO);
         Assertions.assertEquals(RedirectStatus.FORWARD_WITH_SYNC, RedirectStatus.getRedirectStatus(stmt));
     }
