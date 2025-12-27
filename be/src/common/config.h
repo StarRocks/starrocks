@@ -156,6 +156,8 @@ CONF_Int32(storage_medium_migrate_count, "3");
 CONF_mInt32(check_consistency_worker_count, "1");
 // The count of thread to update scheam
 CONF_Int32(update_schema_worker_count, "3");
+// The max count of thread to update tablet meta info (lake/get_tablet_stats), 0 means same as cpu cores.
+CONF_mInt32(update_tablet_meta_info_worker_count, "2");
 // The count of thread to upload.
 CONF_mInt32(upload_worker_count, "0");
 // The count of thread to download.
