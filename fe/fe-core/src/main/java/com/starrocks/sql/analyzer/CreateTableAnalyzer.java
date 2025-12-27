@@ -59,6 +59,7 @@ import com.starrocks.sql.ast.RangeDistributionDesc;
 import com.starrocks.sql.ast.RangePartitionDesc;
 import com.starrocks.sql.ast.SingleItemListPartitionDesc;
 import com.starrocks.sql.ast.SingleRangePartitionDesc;
+import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.expression.DictionaryGetExpr;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprToSql;
@@ -90,24 +91,29 @@ public class CreateTableAnalyzer {
     private static final Logger LOG = LoggerFactory.getLogger(CreateTableAnalyzer.class);
 
     public static void analyze(CreateTableStmt statement, ConnectContext context) {
-        final TableName tableNameObject = statement.getDbTbl();
-        tableNameObject.normalization(context);
+        TableRef tableRef = statement.getTableRef();
+        if (tableRef == null) {
+            throw new SemanticException("Table reference cannot be null");
+        }
+        tableRef = AnalyzerUtils.normalizedTableRef(tableRef, context);
+        statement.setTableRef(tableRef);
 
-        final String catalogName = tableNameObject.getCatalog();
+        final String catalogName = tableRef.getCatalogName();
         MetaUtils.checkCatalogExistAndReport(catalogName);
 
-        final String tableName = tableNameObject.getTbl();
+        final String db = tableRef.getDbName();
+        final String tableName = tableRef.getTableName();
         FeNameFormat.checkTableName(tableName);
 
-        Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(context, catalogName, tableNameObject.getDb());
-        if (db == null) {
-            ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, tableNameObject.getDb());
+        Database dbObj = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(context, catalogName, db);
+        if (dbObj == null) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, db);
         }
         if (statement instanceof CreateTemporaryTableStmt) {
-            analyzeTemporaryTable(statement, context, catalogName, db, tableName);
+            analyzeTemporaryTable(statement, context, catalogName, dbObj, tableName);
         } else {
             if (GlobalStateMgr.getCurrentState().getMetadataMgr()
-                    .tableExists(context, catalogName, tableNameObject.getDb(), tableName) && !statement.isSetIfNotExists()) {
+                    .tableExists(context, catalogName, db, tableName) && !statement.isSetIfNotExists()) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_TABLE_EXISTS_ERROR, tableName);
             }
         }
@@ -115,7 +121,8 @@ public class CreateTableAnalyzer {
         analyzeEngineName(statement, catalogName);
         analyzeCharsetName(statement);
 
-        analyzeMultiExprsPartition(statement, tableNameObject);
+        com.starrocks.catalog.TableName tableNameObj = com.starrocks.catalog.TableName.fromTableRef(tableRef);
+        analyzeMultiExprsPartition(statement, tableNameObj);
         preCheckColumnRef(statement);
         analyzeKeysDesc(statement);
         analyzeSortKeys(statement);
@@ -799,7 +806,7 @@ public class CreateTableAnalyzer {
             throw new SemanticException("Generated Column does not support AGG table");
         }
 
-        final TableName tableNameObject = stmt.getDbTbl();
+        final com.starrocks.catalog.TableName tableNameObject = com.starrocks.catalog.TableName.fromTableRef(stmt.getTableRef());
 
         List<Column> columns = stmt.getColumns();
         Map<String, Column> columnsMap = Maps.newHashMap();

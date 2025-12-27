@@ -15,7 +15,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.catalog.TableName;
 import com.starrocks.sql.parser.NodePosition;
 
 /**
@@ -30,32 +29,40 @@ import com.starrocks.sql.parser.NodePosition;
 public class DropMaterializedViewStmt extends DdlStmt {
 
     private final boolean ifExists;
-    private final TableName dbMvName;
+    private TableRef tableRef;
 
-    public DropMaterializedViewStmt(boolean ifExists, TableName dbMvName) {
-        this(ifExists, dbMvName, NodePosition.ZERO);
+    public DropMaterializedViewStmt(boolean ifExists, TableRef tableRef) {
+        this(ifExists, tableRef, NodePosition.ZERO);
     }
 
-    public DropMaterializedViewStmt(boolean ifExists, TableName dbMvName, NodePosition pos) {
+    public DropMaterializedViewStmt(boolean ifExists, TableRef tableRef, NodePosition pos) {
         super(pos);
         this.ifExists = ifExists;
-        this.dbMvName = dbMvName;
+        this.tableRef = tableRef;
     }
 
     public boolean isSetIfExists() {
         return ifExists;
     }
 
-    public String getMvName() {
-        return dbMvName.getTbl();
+    public TableRef getTableRef() {
+        return tableRef;
+    }
+
+    public void setTableRef(TableRef tableRef) {
+        this.tableRef = tableRef;
+    }
+
+    public String getCatalogName() {
+        return tableRef == null ? null : tableRef.getCatalogName();
     }
 
     public String getDbName() {
-        return dbMvName.getDb();
+        return tableRef == null ? null : tableRef.getDbName();
     }
 
-    public TableName getDbMvName() {
-        return dbMvName;
+    public String getMvName() {
+        return tableRef == null ? null : tableRef.getTableName();
     }
 
     @Override

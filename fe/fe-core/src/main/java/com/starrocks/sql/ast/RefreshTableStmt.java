@@ -14,7 +14,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.catalog.TableName;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
@@ -26,21 +25,37 @@ import java.util.List;
  * This sql will refresh table1 of db1 in catalog1.
  */
 public class RefreshTableStmt extends DdlStmt {
-    private final TableName tableName;
+    private TableRef tableRef;
     private final List<String> partitionNames;
 
-    public RefreshTableStmt(TableName tableName, List<String> partitionNames) {
-        this(tableName, partitionNames, NodePosition.ZERO);
+    public RefreshTableStmt(TableRef tableRef, List<String> partitionNames) {
+        this(tableRef, partitionNames, NodePosition.ZERO);
     }
 
-    public RefreshTableStmt(TableName tableName, List<String> partitionNames, NodePosition pos) {
+    public RefreshTableStmt(TableRef tableRef, List<String> partitionNames, NodePosition pos) {
         super(pos);
-        this.tableName = tableName;
+        this.tableRef = tableRef;
         this.partitionNames = partitionNames;
     }
 
-    public TableName getTableName() {
-        return tableName;
+    public TableRef getTableRef() {
+        return tableRef;
+    }
+
+    public void setTableRef(TableRef tableRef) {
+        this.tableRef = tableRef;
+    }
+
+    public String getCatalogName() {
+        return tableRef == null ? null : tableRef.getCatalogName();
+    }
+
+    public String getDbName() {
+        return tableRef == null ? null : tableRef.getDbName();
+    }
+
+    public String getTableName() {
+        return tableRef == null ? null : tableRef.getTableName();
     }
 
     public List<String> getPartitions() {

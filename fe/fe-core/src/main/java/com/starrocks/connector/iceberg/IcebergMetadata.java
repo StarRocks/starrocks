@@ -362,8 +362,15 @@ public class IcebergMetadata implements ConnectorMetadata {
         org.apache.iceberg.Table table = icebergCatalog.getTable(context, dbName, tableName);
 
         if (table == null) {
-            throw new StarRocksConnectorException(
-                    "Failed to load iceberg table: " + stmt.getTbl().toString());
+            String tableNameStr;
+            if (dbName != null && tableName != null) {
+                tableNameStr = dbName + "." + tableName;
+            } else if (tableName != null) {
+                tableNameStr = tableName;
+            } else {
+                tableNameStr = "unknown";
+            }
+            throw new StarRocksConnectorException("Failed to load iceberg table: " + tableNameStr);
         }
 
         IcebergAlterTableExecutor executor = new IcebergAlterTableExecutor(stmt, table, icebergCatalog, context, hdfsEnvironment);

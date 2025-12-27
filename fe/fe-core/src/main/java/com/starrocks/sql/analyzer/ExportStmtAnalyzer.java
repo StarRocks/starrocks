@@ -17,7 +17,6 @@ package com.starrocks.sql.analyzer;
 import com.google.common.base.Strings;
 import com.starrocks.catalog.FsBroker;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.PartitionNames;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
 import com.starrocks.common.AnalysisException;
@@ -33,8 +32,10 @@ import com.starrocks.sql.ast.CancelExportStmt;
 import com.starrocks.sql.ast.ExportStmt;
 import com.starrocks.sql.ast.OrderByElement;
 import com.starrocks.sql.ast.OrderByPair;
+import com.starrocks.sql.ast.PartitionRef;
 import com.starrocks.sql.ast.ShowExportStmt;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.expression.BinaryPredicate;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.ast.expression.Expr;
@@ -66,9 +67,10 @@ public class ExportStmtAnalyzer {
         @Override
         public Void visitExportStatement(ExportStmt statement, ConnectContext context) {
             GlobalStateMgr mgr = context.getGlobalStateMgr();
-            TableName tableName = statement.getTableRef().getName();
-            // make sure catalog, db, table
-            tableName.normalization(context);
+            TableRef tableRef = AnalyzerUtils.normalizedTableRef(statement.getTableRef(), context);
+            statement.setTableRef(tableRef);
+            TableName tableName = new TableName(tableRef.getCatalogName(), tableRef.getDbName(),
+                    tableRef.getTableName(), tableRef.getPos());
             Table table = MetaUtils.getSessionAwareTable(context, null, tableName);
             if (table.getType() == Table.TableType.OLAP &&
                     (((OlapTable) table).getState() == OlapTable.OlapTableState.RESTORE ||
@@ -79,20 +81,19 @@ public class ExportStmtAnalyzer {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
                         "Do not support exporting temporary table");
             }
-            statement.setTblName(tableName);
-            PartitionNames partitionNames = statement.getTableRef().getPartitionNames();
-            if (partitionNames != null) {
-                if (partitionNames.isTemp()) {
+            PartitionRef partitionRef = tableRef.getPartitionRef();
+            if (partitionRef != null) {
+                if (partitionRef.isTemp()) {
                     ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
                             "Do not support exporting temporary partitions");
                 }
-                statement.setPartitions(partitionNames.getPartitionNames());
+                statement.setPartitions(partitionRef.getPartitionNames());
             }
 
             // check db, table && partitions && columns whether exist
             // check path is valid
             // generate file name prefix
-            analyzeDbName(tableName.getDb(), context);
+            analyzeDbName(statement.getDbName(), context);
             statement.checkTable(mgr);
             statement.checkPath();
 

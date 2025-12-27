@@ -15,7 +15,6 @@
 package com.starrocks.sql.ast;
 
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.TableName;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.type.Type;
@@ -26,7 +25,7 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 public class AnalyzeStmt extends StatementBase {
-    private final TableName tbl;
+    private TableRef tableRef;
     private final boolean isSample;
     private boolean isAsync;
     private boolean isExternal = false;
@@ -42,11 +41,11 @@ public class AnalyzeStmt extends StatementBase {
     private final boolean usePredicateColumns;
     // Mode 3: all columns, identical to empty columns
 
-    public AnalyzeStmt(TableName tbl, List<Expr> columns, PartitionRef partitionNames, Map<String, String> properties,
+    public AnalyzeStmt(TableRef tableRef, List<Expr> columns, PartitionRef partitionNames, Map<String, String> properties,
                        boolean isSample, boolean isAsync, boolean usePredicateColumns,
                        AnalyzeTypeDesc analyzeTypeDesc, NodePosition pos) {
         super(pos);
-        this.tbl = tbl;
+        this.tableRef = tableRef;
         this.columns = columns;
         this.partitionNames = partitionNames;
         this.isSample = isSample;
@@ -72,8 +71,24 @@ public class AnalyzeStmt extends StatementBase {
         this.columnNames = columnNames;
     }
 
-    public TableName getTableName() {
-        return tbl;
+    public TableRef getTableRef() {
+        return tableRef;
+    }
+
+    public void setTableRef(TableRef tableRef) {
+        this.tableRef = tableRef;
+    }
+
+    public String getCatalogName() {
+        return tableRef == null ? null : tableRef.getCatalogName();
+    }
+
+    public String getDbName() {
+        return tableRef == null ? null : tableRef.getDbName();
+    }
+
+    public String getTableName() {
+        return tableRef == null ? null : tableRef.getTableName();
     }
 
     public boolean isSample() {

@@ -18,7 +18,6 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.TableName;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.util.DebugUtil;
@@ -30,10 +29,13 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.OriginStatement;
+import com.starrocks.sql.ast.QualifiedName;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.statistic.base.PartitionSampler;
 import com.starrocks.statistic.hyper.HyperQueryJob;
 import com.starrocks.type.Type;
@@ -198,7 +200,9 @@ public class HyperStatisticsCollectJob extends StatisticsCollectJob {
         String sql = "INSERT INTO _statistics_.column_statistics(" + String.join(", ", targetColumnNames) +
                 ") values " + String.join(", ", sqlBuffer) + ";";
         QueryStatement qs = new QueryStatement(new ValuesRelation(rowsBuffer, targetColumnNames));
-        InsertStmt insert = new InsertStmt(new TableName("_statistics_", "column_statistics"), qs);
+        TableRef tableRef = new TableRef(QualifiedName.of(Lists.newArrayList("_statistics_", "column_statistics")),
+                null, NodePosition.ZERO);
+        InsertStmt insert = new InsertStmt(tableRef, qs);
         insert.setTargetColumnNames(targetColumnNames);
         insert.setOrigStmt(new OriginStatement(sql, 0));
         return insert;

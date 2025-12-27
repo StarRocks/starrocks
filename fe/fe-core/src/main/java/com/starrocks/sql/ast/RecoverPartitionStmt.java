@@ -15,33 +15,40 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.catalog.TableName;
 import com.starrocks.sql.parser.NodePosition;
 
 public class RecoverPartitionStmt extends DdlStmt {
-    private final TableName dbTblName;
+    private TableRef tableRef;
     private final String partitionName;
 
-    public RecoverPartitionStmt(TableName dbTblName, String partitionName) {
-        this(dbTblName, partitionName, NodePosition.ZERO);
+    public RecoverPartitionStmt(TableRef tableRef, String partitionName) {
+        this(tableRef, partitionName, NodePosition.ZERO);
     }
 
-    public RecoverPartitionStmt(TableName dbTblName, String partitionName, NodePosition pos) {
+    public RecoverPartitionStmt(TableRef tableRef, String partitionName, NodePosition pos) {
         super(pos);
-        this.dbTblName = dbTblName;
+        this.tableRef = tableRef;
         this.partitionName = partitionName;
     }
 
+    public TableRef getTableRef() {
+        return tableRef;
+    }
+
+    public void setTableRef(TableRef tableRef) {
+        this.tableRef = tableRef;
+    }
+
+    public String getCatalogName() {
+        return tableRef == null ? null : tableRef.getCatalogName();
+    }
+
     public String getDbName() {
-        return dbTblName.getDb();
+        return tableRef == null ? null : tableRef.getDbName();
     }
 
     public String getTableName() {
-        return dbTblName.getTbl();
-    }
-
-    public TableName getDbTblName() {
-        return dbTblName;
+        return tableRef == null ? null : tableRef.getTableName();
     }
 
     public String getPartitionName() {

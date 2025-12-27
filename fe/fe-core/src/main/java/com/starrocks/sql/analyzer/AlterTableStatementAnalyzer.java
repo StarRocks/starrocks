@@ -31,6 +31,7 @@ import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.CreateIndexClause;
 import com.starrocks.sql.ast.DropIndexClause;
 import com.starrocks.sql.ast.ModifyTablePropertiesClause;
+import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.common.MetaUtils;
 
 import java.util.List;
@@ -40,8 +41,13 @@ import static com.starrocks.common.util.PropertyAnalyzer.PROPERTIES_BF_COLUMNS;
 
 public class AlterTableStatementAnalyzer {
     public static void analyze(AlterTableStmt statement, ConnectContext context) {
-        TableName tbl = statement.getTbl();
-        tbl.normalization(context);
+        TableRef tableRef = statement.getTableRef();
+        if (tableRef == null) {
+            throw new SemanticException("Table reference is null");
+        }
+        tableRef = AnalyzerUtils.normalizedTableRef(tableRef, context);
+        statement.setTableRef(tableRef);
+        TableName tbl = TableName.fromTableRef(tableRef);
 
         List<AlterClause> alterClauseList = statement.getAlterClauseList();
         if (alterClauseList == null || alterClauseList.isEmpty()) {

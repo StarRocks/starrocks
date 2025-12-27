@@ -16,13 +16,13 @@ package com.starrocks.connector.unified;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Lists;
 import com.starrocks.catalog.DeltaLakeTable;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.HudiTable;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.KuduTable;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.TableName;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.MetaNotFoundException;
@@ -43,6 +43,9 @@ import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.CreateTableStmt;
+import com.starrocks.sql.ast.QualifiedName;
+import com.starrocks.sql.ast.TableRef;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mocked;
@@ -81,7 +84,8 @@ public class UnifiedMetadataTest {
     @Mocked
     private KuduMetadata kuduMetadata;
     private final CreateTableStmt createTableStmt = new CreateTableStmt(false, true,
-            new TableName("test_db", "test_tbl"), ImmutableList.of(), "hive",
+            new TableRef(QualifiedName.of(Lists.newArrayList("test_db", "test_tbl")),
+                    null, NodePosition.ZERO), ImmutableList.of(), "hive",
             null, null, null, null, null, null);
 
     private UnifiedMetadata unifiedMetadata;

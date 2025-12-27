@@ -88,8 +88,6 @@ import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.ShowAnalyzeJobStmt;
 import com.starrocks.sql.ast.ShowAnalyzeStatusStmt;
 import com.starrocks.sql.ast.ShowAuthenticationStmt;
-import com.starrocks.sql.ast.ShowBasicStatsMetaStmt;
-import com.starrocks.sql.ast.ShowHistogramStatsMetaStmt;
 import com.starrocks.sql.ast.ShowStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SubqueryRelation;
@@ -895,7 +893,7 @@ public class PrivilegeCheckerTest extends StarRocksTestBase {
         BasicStatsMeta basicStatsMeta = new BasicStatsMeta(db1.getId(), tbl1.getId(), null,
                 StatsConstants.AnalyzeType.FULL,
                 LocalDateTime.of(2020, 1, 1, 1, 1), Maps.newHashMap());
-        showResult = ShowBasicStatsMetaStmt.showBasicStatsMeta(ctx, basicStatsMeta);
+        showResult = ShowExecutor.showBasicStatsMeta(ctx, basicStatsMeta);
         logSysInfo(showResult);
         // can show result for stats on table that user has any privilege on
         Assertions.assertNotNull(showResult);
@@ -904,7 +902,7 @@ public class PrivilegeCheckerTest extends StarRocksTestBase {
                 StatsConstants.AnalyzeType.HISTOGRAM,
                 LocalDateTime.of(2020, 1, 1, 1, 1),
                 Maps.newHashMap());
-        showResult = ShowHistogramStatsMetaStmt.showHistogramStatsMeta(ctx, histogramStatsMeta);
+        showResult = ShowExecutor.showHistogramStatsMeta(ctx, histogramStatsMeta);
         logSysInfo(showResult);
         // can show result for stats on table that user has any privilege on
         Assertions.assertNotNull(showResult);
@@ -923,7 +921,7 @@ public class PrivilegeCheckerTest extends StarRocksTestBase {
         basicStatsMeta = new BasicStatsMeta(db2.getId(), tbl1.getId(), null,
                 StatsConstants.AnalyzeType.FULL,
                 LocalDateTime.of(2020, 1, 1, 1, 1), Maps.newHashMap());
-        showResult = ShowBasicStatsMetaStmt.showBasicStatsMeta(ctx, basicStatsMeta);
+        showResult = ShowExecutor.showBasicStatsMeta(ctx, basicStatsMeta);
         logSysInfo(showResult);
         // cannot show result for stats on table that user doesn't have any privilege on
         Assertions.assertNull(showResult);
@@ -932,7 +930,7 @@ public class PrivilegeCheckerTest extends StarRocksTestBase {
                 StatsConstants.AnalyzeType.HISTOGRAM,
                 LocalDateTime.of(2020, 1, 1, 1, 1),
                 Maps.newHashMap());
-        showResult = ShowHistogramStatsMetaStmt.showHistogramStatsMeta(ctx, histogramStatsMeta);
+        showResult = ShowExecutor.showHistogramStatsMeta(ctx, histogramStatsMeta);
         logSysInfo(showResult);
         // cannot show result for stats on table that user doesn't have any privilege on
         Assertions.assertNull(showResult);
