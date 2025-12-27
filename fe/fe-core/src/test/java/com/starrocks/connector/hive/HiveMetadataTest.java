@@ -296,7 +296,7 @@ public class HiveMetadataTest {
     @Test
     public void testShowCreateHiveTbl() {
         HiveTable hiveTable = (HiveTable) hiveMetadata.getTable(new ConnectContext(), "db1", "table1");
-        Assertions.assertEquals("CREATE TABLE `table1` (\n" +
+        Assertions.assertEquals("CREATE TABLE `hive_catalog`.`db1`.`table1` (\n" +
                         "  `col2` int(11) DEFAULT NULL,\n" +
                         "  `col1` int(11) DEFAULT NULL\n" +
                         ")\n" +
