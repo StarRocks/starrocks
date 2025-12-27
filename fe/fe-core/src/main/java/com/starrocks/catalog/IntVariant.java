@@ -105,4 +105,42 @@ public class IntVariant extends Variant {
                 throw new IllegalArgumentException("Invalid type: " + type);
         }
     }
+
+    /**
+     * Returns the minimum value for the given integer {@link Type}.
+     * Supported primitive types: TINYINT, SMALLINT, INT, BIGINT.
+     */
+    public static IntVariant minValue(Type type) {
+        switch (type.getPrimitiveType()) {
+            case TINYINT:
+                return new IntVariant(type, Byte.MIN_VALUE);
+            case SMALLINT:
+                return new IntVariant(type, Short.MIN_VALUE);
+            case INT:
+                return new IntVariant(type, Integer.MIN_VALUE);
+            case BIGINT:
+                return new IntVariant(type, Long.MIN_VALUE);
+            default:
+                throw new IllegalArgumentException("Unsupported integer type for IntVariant.minValue: " + type);
+        }
+    }
+
+    /**
+     * Returns the maximum value for the given integer {@link Type}.
+     * Supported primitive types: TINYINT, SMALLINT, INT, BIGINT.
+     */
+    public static IntVariant maxValue(Type type) {
+        switch (type.getPrimitiveType()) {
+            case TINYINT:
+                return new IntVariant(type, Byte.MAX_VALUE);
+            case SMALLINT:
+                return new IntVariant(type, Short.MAX_VALUE);
+            case INT:
+                return new IntVariant(type, Integer.MAX_VALUE);
+            case BIGINT:
+                return new IntVariant(type, Long.MAX_VALUE);
+            default:
+                throw new IllegalArgumentException("Unsupported integer type for IntVariant.maxValue: " + type);
+        }
+    }
 }

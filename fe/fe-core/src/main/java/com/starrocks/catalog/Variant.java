@@ -116,4 +116,57 @@ public abstract class Variant implements Comparable<Variant> {
         return Integer.compare(key1Length, key2Length);
     }
 
+    public static Variant minVariant(Type type) {
+        Preconditions.checkArgument(type.isValid(), "Invalid type for Variant.minVariant");
+        switch (type.getPrimitiveType()) {
+            case BOOLEAN:
+                return BoolVariant.minValue();
+            case TINYINT:
+            case SMALLINT:
+            case INT:
+            case BIGINT:
+                return IntVariant.minValue(type);
+            case LARGEINT:
+                return LargeIntVariant.minValue();
+            case CHAR:
+            case VARCHAR:
+            case BINARY:
+            case VARBINARY:
+            case HLL:
+                return StringVariant.minValue(type);
+            case DATE:
+            case DATETIME:
+            case TIME:
+                return DateVariant.minValue(type);
+            default:
+                throw new IllegalArgumentException("Type[" + type.toSql() + "] not supported in Variant.minVariant");
+        }
+    }
+
+    public static Variant maxVariant(Type type) {
+        Preconditions.checkArgument(type.isValid(), "Invalid type for Variant.maxVariant");
+        switch (type.getPrimitiveType()) {
+            case BOOLEAN:
+                return BoolVariant.maxValue();
+            case TINYINT:
+            case SMALLINT:
+            case INT:
+            case BIGINT:
+                return IntVariant.maxValue(type);
+            case LARGEINT:
+                return LargeIntVariant.maxValue();
+            case CHAR:
+            case VARCHAR:
+            case BINARY:
+            case VARBINARY:
+            case HLL:
+                return StringVariant.maxValue(type);
+            case DATE:
+            case DATETIME:
+            case TIME:
+                return DateVariant.maxValue(type);
+            default:
+                throw new IllegalArgumentException("Type[" + type.toSql() + "] not supported in Variant.maxVariant");
+        }
+    }
 }

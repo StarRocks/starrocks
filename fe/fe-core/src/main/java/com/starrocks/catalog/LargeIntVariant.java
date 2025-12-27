@@ -16,6 +16,7 @@ package com.starrocks.catalog;
 
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.Int128;
+import com.starrocks.sql.ast.expression.LargeIntLiteral;
 import com.starrocks.thrift.TVariant;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.TypeSerializer;
@@ -93,5 +94,19 @@ public class LargeIntVariant extends Variant {
     @Override
     public int hashCode() {
         return value.hashCode();
+    }
+
+    /**
+     * Returns the minimum {@link LargeIntVariant} value (corresponding to LARGE_INT_MIN).
+     */
+    public static LargeIntVariant minValue() {
+        return new LargeIntVariant(LargeIntLiteral.LARGE_INT_MIN);
+    }
+
+    /**
+     * Returns the maximum {@link LargeIntVariant} value (corresponding to LARGE_INT_MAX).
+     */
+    public static LargeIntVariant maxValue() {
+        return new LargeIntVariant(LargeIntLiteral.LARGE_INT_MAX);
     }
 }
