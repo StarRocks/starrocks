@@ -1677,3 +1677,97 @@ displayed_sidebar: docs
 
 - 单位：个
 - 描述: 黑名单 SQL 被拦截的次数。
+
+### Merge Commit 指标
+
+这些指标用于跟踪等型批量写入路径中的 merge commit 操作。
+
+#### merge_commit_request_total
+
+- 单位：个
+- 类型：累积值
+- 描述：BE 收到的 merge commit 请求总数。
+
+#### merge_commit_request_bytes
+
+- 单位：字节
+- 类型：累积值
+- 描述：所有 merge commit 请求接收的数据总量。
+
+#### merge_commit_success_total
+
+- 单位：个
+- 类型：累积值
+- 描述：成功完成的 merge commit 请求数。
+
+#### merge_commit_fail_total
+
+- 单位：个
+- 类型：累积值
+- 描述：失败的 merge commit 请求数。
+
+#### merge_commit_pending_total
+
+- 单位：个
+- 类型：瞬时值
+- 描述：当前等待执行的 merge commit 任务数量。
+
+#### merge_commit_pending_bytes
+
+- 单位：字节
+- 类型：瞬时值
+- 描述：当前等待执行的 merge commit 任务持有的数据总量。
+
+#### merge_commit_send_rpc_total
+
+- 单位：个
+- 类型：累积值
+- 描述：用于启动 merge commit 的 RPC 请求数。
+
+#### merge_commit_register_pipe_total
+
+- 单位：个
+- 类型：累积值
+- 描述：为 merge commit 注册的 stream load pipe 数量。
+
+#### merge_commit_unregister_pipe_total
+
+- 单位：个
+- 类型：累积值
+- 描述：为 merge commit 取消注册的 stream load pipe 数量。
+
+延迟指标会输出百分位序列，例如 `merge_commit_request_latency_99` 和 `merge_commit_request_latency_90`，单位为微秒。端到端延迟遵循以下公式：
+
+`merge_commit_request = merge_commit_pending + merge_commit_wait_plan + merge_commit_append_pipe + merge_commit_wait_finish`
+
+> **注意**：在 v3.4.11、v3.5.12 和 v4.0.4 之前，这些延迟指标的单位为纳秒。
+
+#### merge_commit_request
+
+- 单位：微秒
+- 类型：Summary
+- 描述：merge commit 请求的端到端处理延迟。
+
+#### merge_commit_pending
+
+- 单位：微秒
+- 类型：Summary
+- 描述：merge commit 任务在执行前等待的时间。
+
+#### merge_commit_wait_plan
+
+- 单位：微秒
+- 类型：Summary
+- 描述：RPC 请求与等待 stream load pipe 可用的合计耗时。
+
+#### merge_commit_append_pipe
+
+- 单位：微秒
+- 类型：Summary
+- 描述：向 stream load pipe 追加数据的耗时。
+
+#### merge_commit_wait_finish
+
+- 单位：微秒
+- 类型：Summary
+- 描述：等待 merge commit 导入完成的耗时。
