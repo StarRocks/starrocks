@@ -23,6 +23,7 @@
 #include "common/statusor.h"
 #include "fmt/format.h"
 #include "runtime/descriptors.h"
+#include "storage/lake/tablet_range_helper.h"
 #include "storage/types.h"
 
 namespace starrocks {
@@ -49,60 +50,7 @@ Status RangeRouter::init(const std::vector<TTabletRange>& tablet_ranges, size_t 
         return Status::OK();
     }
 
-    // Infer TypeDescriptor for each range-distributed column from tablet ranges.
-    // Caller should guarantee that for every column for range distribution, at least one
-    // tablet range provides a concrete type information for lower bound or upper bound.
-    std::vector<std::unique_ptr<TypeDescriptor>> type_descs(num_columns);
-    for (size_t i = 0; i < num_columns; ++i) {
-        for (const auto& tablet_range : tablet_ranges) {
-            const TTuple* lower = tablet_range.__isset.lower_bound ? &tablet_range.lower_bound : nullptr;
-            const TTuple* upper = tablet_range.__isset.upper_bound ? &tablet_range.upper_bound : nullptr;
-            DCHECK(lower != nullptr || upper != nullptr);
-
-            if (lower != nullptr) {
-                DCHECK(i < lower->values.size());
-                type_descs[i] = std::make_unique<TypeDescriptor>(TypeDescriptor::from_thrift(lower->values[i].type));
-                break;
-            }
-
-            if (upper != nullptr) {
-                DCHECK(i < upper->values.size());
-                type_descs[i] = std::make_unique<TypeDescriptor>(TypeDescriptor::from_thrift(upper->values[i].type));
-                break;
-            }
-        }
-    }
-
-    auto parse_bound = [&](const TTuple& bound, MutableColumns& boundary_columns) {
-        for (size_t i = 0; i < num_columns; ++i) {
-            const auto& type_desc = type_descs[i];
-            DCHECK(type_desc != nullptr);
-            MutableColumnPtr& column = boundary_columns[i];
-            if (!column) {
-                column = ColumnHelper::create_column(*type_desc, false);
-                column->reserve(num_ranges);
-            }
-
-            const auto& value = bound.values[i];
-            Datum datum;
-            std::string value_str;
-            auto type_info = get_type_info(type_desc->type, type_desc->precision, type_desc->scale);
-            if (value.__isset.value) {
-                value_str = value.value;
-            } else {
-                return Status::InternalError("Missing value in range bound");
-            }
-            RETURN_IF_ERROR(datum_from_string(type_info.get(), &datum, value_str, nullptr));
-
-            column->append_datum(datum);
-        }
-        return Status::OK();
-    };
-
-    for (size_t range_idx = 0; range_idx < num_ranges - 1; ++range_idx) {
-        const auto& tablet_range = tablet_ranges[range_idx];
-        RETURN_IF_ERROR(parse_bound(tablet_range.upper_bound, _upper_boundaries));
-    }
+    ASSIGN_OR_RETURN(_upper_boundaries, lake::TabletRangeHelper::get_lower_boundaries_from(tablet_ranges, num_columns));
 
     return Status::OK();
 }

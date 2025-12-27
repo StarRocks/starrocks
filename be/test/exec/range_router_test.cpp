@@ -27,7 +27,9 @@
 #include "column/schema.h"
 #include "runtime/descriptors.h"
 #include "runtime/types.h"
+#include "storage/lake/tablet_range_helper.h"
 #include "storage/type_utils.h"
+#include "testutil/assert.h"
 
 namespace starrocks {
 
@@ -506,6 +508,154 @@ TEST_F(RangeRouterTest, VarcharThreeRangesFullCoverage) {
     // "banana","cherry" -> R1 (20)
     // "date", "fig"     -> R2 (30)
     std::vector<int64_t> expected = {10, 20, 20, 30, 30};
+    ASSERT_EQ(expected.size(), routed_ids.size());
+    for (int i = 0; i < static_cast<int>(expected.size()); ++i) {
+        ASSERT_EQ(expected[i], routed_ids[i]) << "row " << i << " value " << values[i] << " mismatch";
+    }
+}
+
+// ----------------------------------------------------------------------
+// Tests that explicitly exercise RangeRouter::_validate_range() error
+// branches as well as the integration with TabletRangeHelper::
+// get_lower_boundaries_from().
+// ----------------------------------------------------------------------
+
+// NOLINTNEXTLINE
+TEST_F(RangeRouterTest, ValidateRangeRejectsOverlappingInclusiveBounds) {
+    // Two ranges that both include the shared boundary value at 10.
+    // R0: (-inf, 10]
+    // R1: [10, +inf)
+    std::vector<TTabletRange> ranges;
+    ranges.emplace_back(make_single_long_range(std::nullopt, false, 10, true));
+    ranges.emplace_back(make_single_long_range(10, true, std::nullopt, false));
+
+    RangeRouter router;
+    Status st = router.init(ranges, 1);
+    ASSERT_FALSE(st.ok());
+    assert_status_message_contains(
+            st, "adjacent ranges are overlapping / not complementary for the inclusive/exclusive bound");
+}
+
+// NOLINTNEXTLINE
+TEST_F(RangeRouterTest, ValidateRangeRejectsTypeMismatchOnBoundary) {
+    // Two ranges whose boundary values are equal in string form but use
+    // different TVariant.type descriptors, which should be rejected.
+    //
+    // To simulate this, construct the TTabletRanges manually instead of using
+    // the helpers above.
+    std::vector<TTabletRange> ranges(2);
+
+    // R0: (-inf, 10) with INT type
+    {
+        TVariant v;
+        v.__set_type(TYPE_INT_DESC.to_thrift());
+        v.__set_value("10");
+        TTuple upper;
+        upper.__set_values(std::vector<TVariant>{v});
+        ranges[0].__set_upper_bound(upper);
+        ranges[0].__set_upper_bound_included(false);
+    }
+
+    // R1: [10, +inf) with VARCHAR type
+    {
+        TVariant v;
+        v.__set_type(TYPE_VARCHAR_DESC.to_thrift());
+        v.__set_value("10");
+        TTuple lower;
+        lower.__set_values(std::vector<TVariant>{v});
+        ranges[1].__set_lower_bound(lower);
+        ranges[1].__set_lower_bound_included(true);
+    }
+
+    RangeRouter router;
+    Status st = router.init(ranges, 1);
+    ASSERT_FALSE(st.ok());
+    assert_status_message_contains(st, "Type mismatch at column 0 between range[0] and range[1]");
+}
+
+// NOLINTNEXTLINE
+TEST_F(RangeRouterTest, ValidateRangeRejectsUpperLowerValueMismatch) {
+    // Two ranges whose boundary types are the same but the encoded values
+    // differ, which should be rejected.
+    //
+    // R0: (-inf, 10)
+    // R1: [20, +inf)
+    std::vector<TTabletRange> ranges(2);
+
+    {
+        TVariant v;
+        v.__set_type(TYPE_INT_DESC.to_thrift());
+        v.__set_value("10");
+        TTuple upper;
+        upper.__set_values(std::vector<TVariant>{v});
+        ranges[0].__set_upper_bound(upper);
+        ranges[0].__set_upper_bound_included(false);
+    }
+
+    {
+        TVariant v;
+        v.__set_type(TYPE_INT_DESC.to_thrift());
+        v.__set_value("20");
+        TTuple lower;
+        lower.__set_values(std::vector<TVariant>{v});
+        ranges[1].__set_lower_bound(lower);
+        ranges[1].__set_lower_bound_included(true);
+    }
+
+    RangeRouter router;
+    Status st = router.init(ranges, 1);
+    ASSERT_FALSE(st.ok());
+    assert_status_message_contains(st, "Range[0] != range[1] at column 0");
+}
+
+// NOLINTNEXTLINE
+TEST_F(RangeRouterTest, UsesTabletRangeHelperForUpperBoundaries) {
+    // Build four ranges on a single INT column:
+    //   R0: (-inf, 10)
+    //   R1: [10, 20)
+    //   R2: [20, 30)
+    //   R3: [30, +inf)
+    //
+    // TabletRangeHelper::get_lower_boundaries_from() will produce the
+    // lower-bound values of R1..R3, which must match the upper-boundaries
+    // that RangeRouter expects for its binary search.
+    std::vector<TTabletRange> ranges;
+    ranges.emplace_back(make_single_long_range(std::nullopt, false, 10, false));
+    ranges.emplace_back(make_single_long_range(10, true, 20, false));
+    ranges.emplace_back(make_single_long_range(20, true, 30, false));
+    ranges.emplace_back(make_single_long_range(30, true, std::nullopt, false));
+
+    // Sanity check: TabletRangeHelper can parse these ranges.
+    auto lower_bounds_or = lake::TabletRangeHelper::get_lower_boundaries_from(ranges, /*num_columns=*/1);
+    ASSERT_OK(lower_bounds_or.status());
+    auto lower_bounds = std::move(lower_bounds_or).value();
+    ASSERT_EQ(1, lower_bounds.size());
+    ASSERT_NE(nullptr, lower_bounds[0]);
+    // There should be 3 stored boundaries: 10, 20, 30.
+    ASSERT_EQ(3, lower_bounds[0]->size());
+
+    // The RangeRouter should be able to initialize and route correctly
+    // using the same representation.
+    std::vector<int64_t> tablet_ids{100, 200, 300, 400};
+    RangeRouter router;
+    ASSERT_TRUE(router.init(ranges, 1).ok());
+
+    std::vector<int32_t> values{5, 10, 15, 20, 25, 30, 35};
+    Chunk chunk = make_int_chunk("c1", values);
+
+    SlotDescriptor slot_desc(0, "c1", TypeDescriptor::from_logical_type(TYPE_INT));
+    std::vector<SlotDescriptor*> slot_descs{&slot_desc};
+    chunk.set_slot_id_to_index(slot_desc.id(), 0);
+
+    std::vector<uint16_t> row_indices;
+    for (int i = 0; i < chunk.num_rows(); ++i) {
+        row_indices.emplace_back(i);
+    }
+    std::vector<int64_t> routed_ids;
+
+    ASSERT_TRUE(router.route_chunk_rows(&chunk, slot_descs, row_indices, tablet_ids, &routed_ids).ok());
+
+    std::vector<int64_t> expected = {100, 200, 200, 300, 300, 400, 400};
     ASSERT_EQ(expected.size(), routed_ids.size());
     for (int i = 0; i < static_cast<int>(expected.size()); ++i) {
         ASSERT_EQ(expected[i], routed_ids[i]) << "row " << i << " value " << values[i] << " mismatch";

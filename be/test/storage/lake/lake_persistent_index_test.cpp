@@ -16,7 +16,14 @@
 
 #include <gtest/gtest.h>
 
+#include "column/binary_column.h"
+#include "column/column_helper.h"
+#include "column/datum.h"
+#include "column/type_traits.h"
+#include "storage/chunk_helper.h"
 #include "storage/lake/meta_file.h"
+#include "storage/lake/tablet_range_helper.h"
+#include "storage/primary_key_encoder.h"
 #include "storage/record_predicate/column_hash_is_congruent.h"
 #include "test_util.h"
 #include "testutil/assert.h"
@@ -71,6 +78,37 @@ protected:
     constexpr static const char* const kTestDirectory = "test_lake_persistent_index";
 
     std::shared_ptr<TabletMetadata> _tablet_metadata;
+
+    TabletSchemaPB create_tablet_schema_pb(const std::vector<std::pair<std::string, std::string>>& columns,
+                                           int num_key_columns) {
+        TabletSchemaPB schema_pb;
+        schema_pb.set_keys_type(PRIMARY_KEYS);
+        schema_pb.set_num_short_key_columns(num_key_columns);
+        for (int i = 0; i < (int)columns.size(); ++i) {
+            auto* c = schema_pb.add_column();
+            c->set_name(columns[i].first);
+            c->set_type(columns[i].second);
+            c->set_is_key(i < num_key_columns);
+            c->set_is_nullable(false);
+        }
+        return schema_pb;
+    }
+
+    VariantPB make_int_variant_pb(int32_t v) {
+        VariantPB var;
+        TypeDescriptor type_desc(TYPE_INT);
+        var.mutable_type()->CopyFrom(type_desc.to_protobuf());
+        var.set_value(std::to_string(v));
+        return var;
+    }
+
+    VariantPB make_string_variant_pb(const std::string& v) {
+        VariantPB var;
+        TypeDescriptor type_desc(TYPE_VARCHAR);
+        var.mutable_type()->CopyFrom(type_desc.to_protobuf());
+        var.set_value(v);
+        return var;
+    }
 };
 
 TEST_F(LakePersistentIndexTest, test_basic_api) {
@@ -556,6 +594,96 @@ TEST_F(LakePersistentIndexTest, test_major_compaction_with_predicate) {
             ASSERT_EQ(IndexValue(NullIndexValue), get_values[i]);
         }
     }
+}
+
+TEST_F(LakePersistentIndexTest, test_tablet_range_single_column_pk) {
+    auto schema_pb = create_tablet_schema_pb({{"pk", "INT"}, {"v1", "INT"}}, 1);
+    auto schema = std::make_shared<const TabletSchema>(schema_pb);
+
+    TabletRangePB range_pb;
+    range_pb.mutable_lower_bound()->add_values()->CopyFrom(make_int_variant_pb(100));
+    range_pb.mutable_upper_bound()->add_values()->CopyFrom(make_int_variant_pb(200));
+
+    ASSIGN_OR_ABORT(auto sst_seek_range, TabletRangeHelper::create_sst_seek_range_from(range_pb, schema));
+
+    // Encode expected keys
+    std::vector<ColumnId> pk_columns = {0};
+    auto pkey_schema = ChunkHelper::convert_schema(schema, pk_columns);
+
+    auto encode_key = [&](int32_t v) {
+        auto chunk = std::make_unique<Chunk>();
+        auto col = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), false);
+        col->append_datum(Datum(v));
+        chunk->append_column(std::move(col), (SlotId)0);
+
+        MutableColumnPtr pk_column;
+        EXPECT_OK(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column));
+        PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, 1, pk_column.get());
+        if (pk_column->is_binary()) {
+            return down_cast<BinaryColumn*>(pk_column.get())->get_slice(0).to_string();
+        } else {
+            return std::string(reinterpret_cast<const char*>(pk_column->raw_data()), pk_column->type_size());
+        }
+    };
+
+    ASSERT_EQ(sst_seek_range.seek_key, encode_key(100));
+    ASSERT_EQ(sst_seek_range.stop_key, encode_key(200));
+}
+
+TEST_F(LakePersistentIndexTest, test_tablet_range_multi_column_pk) {
+    auto schema_pb = create_tablet_schema_pb({{"pk1", "INT"}, {"pk2", "VARCHAR"}, {"v1", "INT"}}, 2);
+    auto schema = std::make_shared<const TabletSchema>(schema_pb);
+
+    TabletRangePB range_pb;
+    auto* lower = range_pb.mutable_lower_bound();
+    lower->add_values()->CopyFrom(make_int_variant_pb(100));
+    lower->add_values()->CopyFrom(make_string_variant_pb("abc"));
+
+    auto* upper = range_pb.mutable_upper_bound();
+    upper->add_values()->CopyFrom(make_int_variant_pb(200));
+    upper->add_values()->CopyFrom(make_string_variant_pb("def"));
+
+    ASSIGN_OR_ABORT(auto sst_seek_range, TabletRangeHelper::create_sst_seek_range_from(range_pb, schema));
+
+    // Encode expected keys
+    std::vector<ColumnId> pk_columns = {0, 1};
+    auto pkey_schema = ChunkHelper::convert_schema(schema, pk_columns);
+
+    auto encode_key = [&](int32_t v1, const std::string& v2) {
+        auto chunk = std::make_unique<Chunk>();
+        auto col1 = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), false);
+        col1->append_datum(Datum(v1));
+        chunk->append_column(std::move(col1), (SlotId)0);
+
+        auto col2 = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), false);
+        col2->append_datum(Datum(Slice(v2)));
+        chunk->append_column(std::move(col2), (SlotId)1);
+
+        MutableColumnPtr pk_column;
+        EXPECT_OK(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column));
+        PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, 1, pk_column.get());
+        if (pk_column->is_binary()) {
+            return down_cast<BinaryColumn*>(pk_column.get())->get_slice(0).to_string();
+        } else {
+            return std::string(reinterpret_cast<const char*>(pk_column->raw_data()), pk_column->type_size());
+        }
+    };
+
+    ASSERT_EQ(sst_seek_range.seek_key, encode_key(100, "abc"));
+    ASSERT_EQ(sst_seek_range.stop_key, encode_key(200, "def"));
+}
+
+TEST_F(LakePersistentIndexTest, test_tablet_range_infinite_bounds) {
+    auto schema_pb = create_tablet_schema_pb({{"pk", "INT"}}, 1);
+    auto schema = std::make_shared<const TabletSchema>(schema_pb);
+
+    TabletRangePB range_pb;
+    // No lower or upper bound
+
+    ASSIGN_OR_ABORT(auto sst_seek_range, TabletRangeHelper::create_sst_seek_range_from(range_pb, schema));
+
+    ASSERT_TRUE(sst_seek_range.seek_key.empty());
+    ASSERT_TRUE(sst_seek_range.stop_key.empty());
 }
 
 } // namespace starrocks::lake
