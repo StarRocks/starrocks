@@ -184,6 +184,14 @@ The variables are described **in alphabetical order**. Variables with the `globa
 
 If you want to activate the roles assigned to you in a session, use the [SET ROLE](sql-statements/account-management/SET_DEFAULT_ROLE.md) command.
 
+### array_low_cardinality_optimize
+
+* **Scope**: Session
+* **Description**: Controls whether the optimizer will consider array&lt;varchar&gt; columns for low-cardinality (dictionary-based) decoding and related optimizations. When enabled, the optimizer's low-cardinality rules (e.g., `DecodeCollector`) may define dictionary columns and apply dictionary decoding to expressions whose type is `varchar` or `array&lt;varchar&gt;`. When disabled, only scalar `varchar` columns are eligible and `array&lt;varchar&gt;` types are ignored by those low-cardinality optimizations. The variable is read by `DecodeCollector.supportAndEnabledLowCardinality(...)` to gate array support and is exposed through `SessionVariable` getter/setter methods.
+* **Default**: `true`
+* **Data Type**: boolean
+* **Introduced in**: v3.3.0, v3.4.0, v3.5.0
+
 ### authentication_policy
 
 * **Scope**: Session
@@ -205,6 +213,14 @@ Used for MySQL client compatibility. No practical usage.
 * **Unit**: Second
 * **Data type**: String
 * **Introduced in**: v3.1
+
+### broadcast_row_limit
+
+* **Scope**: Session
+* **Description**: Limits the right-side table's output row count for considering a broadcast join. The optimizer (see `EnforceAndCostTask`) treats a candidate as ineligible for broadcast when the right table's row count exceeds this limit or when combined size/scale checks indicate the right table is not sufficiently smaller than the left. A non‑positive value disables this limit (the code checks `sv.getBroadcastRowCountLimit() &lt;= 0` and will skip broadcast consideration). `PushDownAggregateCollector` also uses this variable to identify "small broadcast" joins for aggregate push‑down: it requires the rightRows &lt;= this limit and &lt;= `cbo_push_down_aggregate_on_broadcast_join_row_count_limit` before allowing push‑down. It interacts with `getBroadcastRightTableScaleFactor()` (used as `broadcast_right_table_scale_factor`) and the number of BE nodes when comparing left/right sizes: e.g., when leftOutputSize &lt; rightOutputSize * beNum * `broadcast_right_table_scale_factor` and rightRowCount &gt; `broadcast_row_limit`, broadcast is rejected.
+* **Default**: `15000000`
+* **Data Type**: long
+* **Introduced in**: v3.2.0
 
 ### catalog
 
@@ -240,6 +256,17 @@ Used for MySQL client compatibility. No practical usage.
 
 * **Description**: Whether to enable low cardinality optimization. After this feature is enabled, the performance of querying STRING columns improves by about three times.
 * **Default**: true
+
+### cbo_enable_low_cardinality_optimize_for_join
+
+* **Scope**: Session
+* **Description**: Controls whether the optimizer rewrites join operators to take advantage of low-cardinality (dictionary-encoded) string columns. When enabled (default), the optimizer (DecodeCollector / DecodeRewriter) will:
+  * rewrite join ON predicates, join predicates and projections to use dictionary-encoded column refs for low-cardinality string columns (affects hash joins);
+  * extract equality groups for join columns and enable decoding-based optimizations for supported join patterns.
+  When disabled, join-related low-cardinality rewrites are skipped and string columns are left unchanged for join processing. Note: the implementation currently targets broadcast joins and avoids rewrite when both sides use shuffle distribution.
+* **Default**: `true`
+* **Data Type**: boolean
+* **Introduced in**: -
 
 ### cbo_eq_base_type
 
@@ -510,6 +537,14 @@ Used for MySQL client compatibility. No practical usage.
 * **Default**: true
 * **Introduced in**: v2.5
 
+### enable_cost_based_multi_stage_agg
+
+* **Description**: Controls whether the new planner uses cost-based decisions to generate and compare multi-stage aggregation plans for queries with DISTINCT aggregates. When effectively enabled, the optimizer (see `SplitMultiPhaseAggRule`) may produce alternative 3-stage and 4-stage aggregation candidates and rely on cost estimates to pick the better plan. It also enables post-processing in `PruneAggregateNodeRule` to merge or prune split aggregate nodes when beneficial (reducing unnecessary serialization/deserialization). Note: the effective check in code is gated by `new_planner_agg_stage` — the helper `isEnableCostBasedMultiStageAgg()` returns true only when `new_planner_agg_stage` is set to `AUTO` and this flag is true; if `new_planner_agg_stage` is non-AUTO, this variable will not enable cost-based multi-stage behavior. Disabling this flag forces the planner to prefer the simpler 3-stage transformation for distinct aggregations and skips cost-driven candidate generation and certain aggregate-node merges.
+* **Scope**: Session
+* **Default**: `true`
+* **Data Type**: boolean
+* **Introduced in**: -
+
 ### enable_datacache_async_populate_mode
 
 * **Description**: Whether to populate the data cache in asynchronous mode. By default, the system uses the synchronous mode to populate data cache, that is, populating the cache while querying data.
@@ -573,6 +608,14 @@ Used for MySQL client compatibility. No practical usage.
 * **Description**: Whether to enable query rewrite for queries against multiple tables in the optimizer's rule-based optimization phase. Enabling this feature will improve the robustness of the query rewrite. However, it will also increase the time consumption if the query misses the materialized view.
 * **Default**: true
 * **Introduced in**: v3.3.0
+
+### enable_gather_fragment_locality_optimization
+
+* **Description**: Session-level toggle (used for testing) that enables "gather fragment locality" optimization. When true, the scheduler (RemoteFragmentAssignmentStrategy.assignGatherFragmentToWorker) checks other execution fragments in the same ExecutionDAG; if all other fragments' instances are located on the same worker node, the gather fragment is placed on that same node. If the other fragments are on multiple nodes, or the optimization is disabled, the scheduler falls back to selecting a worker via `WorkerProvider.selectNextWorker()`. The variable is declared in `SessionVariable` with `@VariableMgr.VarAttr` and only affects assignment logic for gather fragments in `RemoteFragmentAssignmentStrategy`.
+* **Scope**: Session
+* **Default**: `false`
+* **Data Type**: boolean
+* **Introduced in**: -
 
 ### enable_gin_filter
 
@@ -719,6 +762,22 @@ If a Join (other than Broadcast Join and Replicated Join) has multiple equi-join
 * **Data Type**: boolean
 * **Introduced in**: v3.2.0
 
+### enable_optimize_skew_join_v1
+
+* **Scope**: Session
+* **Description**: Controls which skew-join optimization strategy the optimizer uses. When `true`, the optimizer enables the query-rewrite based skew join optimization: QueryOptimizer checks `sessionVariable.isEnableOptimizerSkewJoinByQueryRewrite()` after join-expression pushdown and, if enabled and `enableOptimizerSkewJoinByBroadCastSkewValues` is disabled, invokes `skewJoinOptimize(...)` which applies `SkewJoinOptimizeRule`. If `isEnableStatsToOptimizeSkewJoin` is enabled, `skewJoinOptimize` first merges projects and computes statistics (`Utils.calculateStatistics`) before applying the rule. The session setters enforce mutual exclusivity between `enableOptimizerSkewJoinByQueryRewrite` and `enableOptimizerSkewJoinByBroadCastSkewValues` (setting one flips the other), so only one skew strategy is active at a time.
+* **Default**: `true`
+* **Data Type**: boolean
+* **Introduced in**: -
+
+### enable_optimize_skew_join_v2
+
+* **Description**: When enabled, the optimizer uses the broadcasted-skew-values strategy (v2) to handle skewed joins. In the optimizer this flag activates the SkewShuffleJoinEliminationRule during dynamic rewrite and disables the query-rewrite based skew-join path (skewJoinOptimize). The two skew-join strategies are mutually exclusive: enabling this variable sets `enable_optimize_skew_join_v1` off and vice versa. This is a session-level toggle intended to switch optimizer behavior for queries that benefit from using broadcasted skew statistics instead of query-rewrite transformations. Usage locations: `QueryOptimizer.dynamicRewrite(...)` and the main optimization flow in `QueryOptimizer` where skew-join optimization is applied.
+* **Scope**: Session
+* **Default**: `false`
+* **Data Type**: boolean
+* **Introduced in**: -
+
 ### enable_parallel_merge
 
 * **Description**: Whether to enable parallel merge for sorting. When this feature is enabled, the merge phase of sorting will utilize multiple threads for merge operations.
@@ -798,6 +857,13 @@ If a Join (other than Broadcast Join and Replicated Join) has multiple equi-join
 * **Default**: false
 * **Introduced in**: v2.5
 
+### enable_query_dump
+
+* **Description**: Controls per-session query dumping. When `enable_query_dump` is set to true the ConnectContext::shouldDumpQuery() will return true (unless HTTP query-dump mode is active), causing the server to collect and persist the session's DumpInfo. In practice, StmtExecutor.dumpException() uses this flag: for non-HTTP queries it will serialize the session DumpInfo and write it to the QueryDumpLog when an exception occurs. For HTTP-triggered dumps ConnectContext uses a separate path (adds exception stack traces into the connection's DumpInfo). Use this variable to opt a session into FE-side query dump collection for post-mortem analysis and debugging; it is evaluated at runtime per session and does not affect global behavior.
+* **Default**: false
+* **Data Type**: boolean
+* **Introduced in**: v3.2.0
+
 ### enable_query_queue_load (global)
 
 * **Description**: Boolean value to enable query queues for loading tasks.
@@ -835,6 +901,14 @@ If a Join (other than Broadcast Join and Replicated Join) has multiple equi-join
 
 * **Description**: When enabled, the optimizer applies Rule-Based (RBO) table pruning for cardinality-preserving joins in the current session. The optimizer runs a sequence of rewrite and pruning steps (partition pruning, project merge/separate, `UniquenessBasedTablePruneRule`, join reorder, and `RboTablePruneRule`) to remove unnecessary table scan alternatives and reduce scanned partitions/rows in joins. Enabling this option also disables join-equivalence derivation (`context.setEnableJoinEquivalenceDerive(false)`) while logical rule rewrite is running to avoid conflicting transformations. The pruning flow may additionally run `PrimaryKeyUpdateTableRule` for update statements if `enable_table_prune_on_update` is set. The rule is only executed when a query contains prunable joins (checked via `Utils.hasPrunableJoin(tree)`).
 * **Scope**: Session
+* **Default**: `false`
+* **Data Type**: boolean
+* **Introduced in**: v3.2.0
+
+### enable_rewrite_groupingsets_to_union_all
+
+* **Scope**: Session
+* **Description**: When enabled, the optimizer applies the RewriteGroupingSetsByCTERule to transform SQL GROUPING SETS (including ROLLUP/CUBE semantics) into equivalent plans expressed as multiple aggregation branches combined with UNION ALL (implemented via CTEs). QueryOptimizer calls this flag inside rewriteGroupingSets(...) to conditionally run the iterative rewrite pass. This rewrite can improve compatibility with existing aggregation planning rules and enable further rule-based optimizations, but it typically expands the plan into multiple aggregation/union branches which may increase intermediate rows, memory use, and planning time. If `cbo_push_down_grouping_set` is also enabled, the optimizer may additionally attempt push-down of grouping-set aggregates after or instead of this rewrite.
 * **Default**: `false`
 * **Data Type**: boolean
 * **Introduced in**: v3.2.0
@@ -991,6 +1065,14 @@ If a Join (other than Broadcast Join and Replicated Join) has multiple equi-join
 
 Used for MySQL client compatibility. No practical usage.
 
+### force_schedule_local (Session)
+
+* **Scope**: Session
+* **Description**: When enabled, the query scheduler prefers assigning HDFS/file scan ranges to co‑located (local) compute backends that host the data blocks. The `HDFSBackendSelector` receives this flag from the session and calls its computeForceScheduleLocalAssignment(...) path to: 1) select backends whose hostnames match scan-range locations, 2) choose among those local backends using reBalanceScanRangeForComputeNode(...) (which considers per-node assigned bytes and a max imbalance ratio), and 3) return remaining ranges for remote assignment via consistent hashing. `HiveConnectorScanRangeSource` also reads this session flag and, when set, emits block-level scan ranges (one per block) to enable local placement. Use this to improve data locality and reduce network IO; note it can increase skew (assignment imbalance) and may cause more rebalancing in heavy-locality scenarios.
+* **Default**: `false`
+* **Data Type**: boolean
+* **Introduced in**: v3.2.0
+
 ### forward_to_leader
 
 Used to specify whether some commands will be forwarded to the leader FE for execution. Alias: `forward_to_master`. The default value is `false`, meaning not forwarding to the leader FE. There are multiple FEs in a StarRocks cluster, one of which is the leader FE. Normally, users can connect to any FE for full-featured operations. However, some information is only available on the leader FE.
@@ -1073,12 +1155,6 @@ Used for MySQL client compatibility. No practical usage.
 
 Used for MySQL client compatibility. No practical usage.
 
-### interpolate_passthrough
-
-* **Description**: Whether to add local-exchange-passthrough for certain operators. Currently supported operators include streaming aggregates, etc. Adding local-exchange can mitigate the impact of data skew on computation, but will slightly increase memory usage. 
-* **Default**: true
-* **Introduced in**: v3.2
-
 ### io_tasks_per_scan_operator
 
 * **Description**: The number of concurrent I/O tasks that can be issued by a scan operator. Increase this value if you want to access remote storage systems such as HDFS or S3 but the latency is high. However, a larger value causes more memory consumption.
@@ -1155,6 +1231,14 @@ Specifies the maximum number of unqualified data rows that can be logged. Valid 
   * `true` (Default): Enable low cardinality optimization on data lake queries.
   * `false`: Disable low cardinality optimization on data lake queries.
 * **Introduced in**: v3.5.0
+
+### low_cardinality_optimize_v2
+
+* **Scope**: Session
+* **Description**: Session-level boolean that selects which low-cardinality optimization rewrite the optimizer applies. When `true` the optimizer will attempt the newer V2 rewrite implemented by `LowCardinalityRewriteRule` (uses `DecodeCollector` / `DecodeRewriter` to encode/decode low-cardinality VARCHAR columns). When `false` the optimizer falls back to the legacy rewrite implemented by `AddDecodeNodeForDictStringRule`. Execution of either rewrite also requires `enableLowCardinalityOptimize` to be enabled; if `enableLowCardinalityOptimize` is disabled no low-cardinality rewrite is performed. The variable is checked in optimizer tree-rewrite paths to choose the appropriate transformation.
+* **Default**: `true`
+* **Data Type**: boolean
+* **Introduced in**: v3.3.0, v3.4.0, v3.5.0
 
 ### lower_case_table_names (global)
 
@@ -1239,6 +1323,20 @@ Used for MySQL client compatibility. No practical usage.
 ### net_write_timeout
 
 Used for MySQL client compatibility. No practical usage.
+
+### new_planner_agg_stage
+
+* **Scope**: Session
+* **Description**: Controls how the new planner selects aggregation phase decomposition. Valid integer values (0–4):
+  * `0` (AUTO) — let the optimizer choose the aggregation stage selection. When `0`, cost-based multi-stage decisions can be enabled via `enable_cost_based_multi_stage_agg`.
+  * `1` (ONE_STAGE) — force a single-stage aggregate.
+  * `2` (TWO_STAGE) — force a two-stage aggregate.
+  * `3` (THREE_STAGE) — force a three-stage aggregate (only producible for single-column DISTINCT scenarios).
+  * `4` (FOUR_STAGE) — force a four-stage aggregate (only producible for single-column DISTINCT scenarios).
+  Setting a forced stage overrides automatic selection logic used by optimizer rules (for example, SplitMultiPhaseAggRule and related cost checks). When AUTO, the planner may still be constrained by `enable_cost_based_multi_stage_agg` (checked as newPlannerAggStage == `SessionVariableConstants.AggregationStage.AUTO.ordinal()` && `enable_cost_based_multi_stage_agg`). The variable is consulted in cost enforcement (EnforceAndCostTask), aggregation-splitting rules, and plan-fragment construction to influence exchange/partitioning and pruning decisions.
+* **Default**: `SessionVariableConstants.AggregationStage.AUTO.ordinal()`
+* **Data Type**: int
+* **Introduced in**: v3.2.0
 
 ### new_planner_optimize_timeout
 
@@ -1631,9 +1729,25 @@ Used to set the time zone of the current session. The time zone can affect the r
 * **Default**: OFF
 * **Introduced in**: v2.5.18, v3.0.9, v3.1.7
 
+### transmission_compression_type
+
+* **Description**: Controls the compression algorithm used for transmitting query-related data (RPC/exchange payloads). The session value is serialized into Thrift via `TQueryOptions.transmission_compression_type` (see `SessionVariable.toThrift()`), where `CompressionUtils.findTCompressionByName(transmissionCompressionType)` maps the string to a `TCompressionType`. Use `AUTO` to let the system pick a suitable algorithm based on environment (trade CPU for network bandwidth when beneficial). Valid names are those recognized by `CompressionUtils.findTCompressionByName()` (e.g., codec identifiers exposed by the runtime). For load-specific transmission you can use the separate `load_transmission_compression_type` session variable or supply transmission compression in stream-load parameters (HTTP header `HTTP_TRANSMISSION_COMPRESSION_TYPE` / thrift field `transmission_compression_type`).
+* **Scope**: Session
+* **Default**: `AUTO`
+* **Data Type**: String
+* **Introduced in**: v3.2.0
+
 ### tx_isolation
 
 Used for MySQL client compatibility. No practical usage. The alias is `transaction_isolation`.
+
+### tx_visible_wait_timeout
+
+* **Description**: Session-scoped timeout (in seconds) that controls how long the server waits for a committed transaction to become visible (published) before proceeding. It is multiplied by 1000 to compute the millisecond publish wait used by commit flows in `StmtExecutor` and `TransactionStmtExecutor`. If the visible wait expires, the transaction is treated as COMMITTED but not yet VISIBLE. Materialized view refresh logic (`MVTaskRunProcessor`) temporarily sets this variable to `Long.MAX_VALUE / 1000` to wait effectively indefinitely for visibility and restores the original value after refresh. When `enable_sync_publish` is enabled, this variable is ignored because the publish wait is derived from the job deadline instead.
+* **Scope**: Session
+* **Default**: `10`
+* **Data Type**: long
+* **Introduced in**: v3.2.0
 
 ### use_compute_nodes
 
