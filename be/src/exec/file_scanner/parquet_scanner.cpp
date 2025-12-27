@@ -143,10 +143,14 @@ Status ParquetScanner::finalize_src_chunk(ChunkPtr* chunk) {
             column = ColumnHelper::unfold_const_column(slot_desc->type(), (*chunk)->num_rows(), std::move(column));
             cast_chunk->append_column(column, slot_desc->id());
         }
-        auto range = _scan_range.ranges.at(_next_file - 1);
+        const auto& range = _scan_range.ranges.at(_next_file - 1);
         if (range.__isset.num_of_columns_from_file) {
             fill_columns_from_path(cast_chunk, range.num_of_columns_from_file, range.columns_from_path,
                                    cast_chunk->num_rows());
+        }
+        if (range.__isset.include_file_path_column && range.include_file_path_column) {
+            int path_column_slot = range.num_of_columns_from_file + range.columns_from_path.size();
+            fill_file_path_column(cast_chunk, path_column_slot, range.path, cast_chunk->num_rows());
         }
         if (VLOG_ROW_IS_ON) {
             VLOG_ROW << "after finalize chunk: " << cast_chunk->debug_columns();

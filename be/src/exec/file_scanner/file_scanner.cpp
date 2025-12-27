@@ -168,6 +168,17 @@ void FileScanner::fill_columns_from_path(starrocks::ChunkPtr& chunk, int slot_st
     }
 }
 
+void FileScanner::fill_file_path_column(starrocks::ChunkPtr& chunk, int slot_index, const std::string& file_path,
+                                        int size) {
+    auto varchar_type = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
+    auto slot_desc = _src_slot_descriptors.at(slot_index);
+    if (slot_desc == nullptr) return;
+    auto col = ColumnHelper::create_column(varchar_type, slot_desc->is_nullable());
+    Slice s(file_path.c_str(), file_path.size());
+    col->append_value_multiple_times(&s, size);
+    chunk->append_column(std::move(col), slot_desc->id());
+}
+
 StatusOr<ChunkPtr> FileScanner::materialize(const starrocks::ChunkPtr& src, starrocks::ChunkPtr& cast) {
     SCOPED_RAW_TIMER(&_counter->materialize_ns);
 
