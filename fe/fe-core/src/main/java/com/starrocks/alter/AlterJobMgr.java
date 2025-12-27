@@ -516,11 +516,11 @@ public class AlterJobMgr {
         db.dropTable(newTblName);
 
         // rename new table name to origin table name and add it to database
-        newTbl.checkAndSetName(origTblName, false);
+        newTbl.checkAndSetName(origTblName);
         db.registerTableUnlocked(newTbl);
 
         // rename origin table name to new table name and add it to database
-        origTable.checkAndSetName(newTblName, false);
+        origTable.checkAndSetName(newTblName);
         db.registerTableUnlocked(origTable);
 
         // swap dependencies of base table
@@ -573,34 +573,48 @@ public class AlterJobMgr {
         relatedMvIds.clear();
     }
 
-    public void alterView(AlterViewInfo alterViewInfo, boolean isReplay) {
-        long dbId = alterViewInfo.getDbId();
-        long tableId = alterViewInfo.getTableId();
+    public void alterView(AlterViewInfo alterViewInfo) {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(alterViewInfo.getDbId());
+        View view = (View) GlobalStateMgr.getCurrentState()
+                .getLocalMetastore().getTable(db.getId(), alterViewInfo.getTableId());
         String inlineViewDef = alterViewInfo.getInlineViewDef();
-        List<Column> newFullSchema = alterViewInfo.getNewFullSchema();
-        String comment = alterViewInfo.getComment();
-
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
-        View view = (View) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+        long sqlMode = alterViewInfo.getSqlMode();
 
         Locker locker = new Locker();
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(view.getId()), LockType.WRITE);
         try {
-            String viewName = view.getName();
-            view.setInlineViewDefWithSqlMode(inlineViewDef, alterViewInfo.getSqlMode());
             try {
-                view.init();
+                view.checkInlineViewDef(inlineViewDef, sqlMode);
             } catch (StarRocksException e) {
-                throw new AlterJobException("failed to init view stmt", e);
+                throw new AlterJobException("failed to check inline view def", e);
             }
-            view.setNewFullSchema(newFullSchema);
-            view.setComment(comment);
+            GlobalStateMgr.getCurrentState().getEditLog().logModifyViewDef(alterViewInfo, wal -> {
+                view.setInlineViewDefWithSqlMode(inlineViewDef, sqlMode);
+                view.setNewFullSchema(alterViewInfo.getNewFullSchema());
+                view.setComment(alterViewInfo.getComment());
+            });
             AlterMVJobExecutor.inactiveRelatedMaterializedViewsRecursive(view,
-                    MaterializedViewExceptions.inactiveReasonForBaseViewChanged(viewName), isReplay);
-            db.dropTable(viewName);
-            db.registerTableUnlocked(view);
+                    MaterializedViewExceptions.inactiveReasonForBaseViewChanged(view.getName()), false);
+            LOG.info("modify view[{}] definition to {}", view.getName(), inlineViewDef);
+        } finally {
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(view.getId()), LockType.WRITE);
+        }
+    }
 
-            LOG.info("replay modify view[{}] definition to {}", viewName, inlineViewDef);
+    public void replayAlterView(AlterViewInfo alterViewInfo) {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(alterViewInfo.getDbId());
+        View view = (View) GlobalStateMgr.getCurrentState()
+                .getLocalMetastore().getTable(db.getId(), alterViewInfo.getTableId());
+
+        Locker locker = new Locker();
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(view.getId()), LockType.WRITE);
+        try {
+            view.setInlineViewDefWithSqlMode(alterViewInfo.getInlineViewDef(), alterViewInfo.getSqlMode());
+            view.setNewFullSchema(alterViewInfo.getNewFullSchema());
+            view.setComment(alterViewInfo.getComment());
+            AlterMVJobExecutor.inactiveRelatedMaterializedViewsRecursive(view,
+                    MaterializedViewExceptions.inactiveReasonForBaseViewChanged(view.getName()), true);
+            LOG.info("modify view[{}] definition to {}", view.getName(), alterViewInfo.getInlineViewDef());
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(view.getId()), LockType.WRITE);
         }

@@ -38,15 +38,15 @@ public class TransactionIdGenerator implements GsonPostProcessable {
 
     // performance is more quickly
     public synchronized long getNextTransactionId() {
-        if (nextId < batchEndId) {
-            ++nextId;
-            return nextId;
-        } else {
-            batchEndId = batchEndId + BATCH_ID_INTERVAL;
-            GlobalStateMgr.getCurrentState().getEditLog().logSaveTransactionId(batchEndId);
-            ++nextId;
-            return nextId;
+        if (nextId >= batchEndId) {
+            long newBatchEndId = batchEndId + BATCH_ID_INTERVAL;
+            GlobalStateMgr.getCurrentState().getEditLog().logSaveTransactionId(newBatchEndId,
+                    wal -> {
+                        batchEndId = newBatchEndId;
+                    });
         }
+        ++nextId;
+        return nextId;
     }
 
     public synchronized long peekNextTransactionId() {
