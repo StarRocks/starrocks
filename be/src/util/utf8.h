@@ -150,4 +150,13 @@ static inline bool validate_ascii_fast(const char* src, size_t len) {
     return simdutf::validate_ascii(src, len);
 }
 
+// UTF-8 aware tolower using ICU
+// DCHECKs on ICU failure - ICU should always be available
+void utf8_tolower(const char* src, size_t src_len, std::string& dst);
+
+// Convenience overload for std::string
+static inline void utf8_tolower(const std::string& src, std::string& dst) {
+    utf8_tolower(src.data(), src.size(), dst);
+}
+
 } // namespace starrocks
