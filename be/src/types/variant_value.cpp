@@ -55,13 +55,7 @@ StatusOr<VariantRowValue> VariantRowValue::create(const Slice& slice) {
     }
 
     const auto variant = std::string_view(variant_raw + sizeof(uint32_t), variant_size);
-
-    auto metadata_status = load_metadata(variant);
-    if (!metadata_status.ok()) {
-        return metadata_status.status();
-    }
-
-    const auto& metadata_view = metadata_status.value();
+    ASSIGN_OR_RETURN(const auto metadata_view, load_metadata(variant));
     if (metadata_view.size() > variant_size) {
         return Status::InvalidArgument("Metadata size exceeds variant size");
     }
