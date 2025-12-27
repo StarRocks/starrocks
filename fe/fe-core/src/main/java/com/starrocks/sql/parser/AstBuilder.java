@@ -4381,7 +4381,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             }
         }
 
-        return new AlterStorageVolumeStmt(svName, properties, comment, pos);
+        return new AlterStorageVolumeStmt(context.IF() != null, svName, properties, comment, pos);
     }
 
     @Override

@@ -21,14 +21,25 @@ import com.starrocks.sql.parser.NodePosition;
 import java.util.Map;
 
 public class AlterStorageVolumeStmt extends DdlStmt {
+<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/sql/ast/AlterStorageVolumeStmt.java
     private String storageVolumeName;
 
     private Map<String, String> properties;
+=======
+    private final boolean ifExists;
+    private final String storageVolumeName;
+    private final Map<String, String> properties;
+>>>>>>> bf73f06fdc ([BugFix] fixed `ALTER STORAGE VOLUME [IF EXISTS]` (#66691)):fe/fe-parser/src/main/java/com/starrocks/sql/ast/AlterStorageVolumeStmt.java
     private final String comment;
 
-    public AlterStorageVolumeStmt(String storageVolumeName, Map<String, String> properties,
-                                  String comment, NodePosition pos) {
+    public AlterStorageVolumeStmt(boolean ifExists,
+                                  String storageVolumeName,
+                                  Map<String, String> properties,
+                                  String comment,
+                                  NodePosition pos) {
         super(pos);
+
+        this.ifExists = ifExists;
         this.storageVolumeName = storageVolumeName;
         this.properties = properties;
         this.comment = Strings.nullToEmpty(comment);
@@ -44,6 +55,10 @@ public class AlterStorageVolumeStmt extends DdlStmt {
 
     public String getComment() {
         return comment;
+    }
+
+    public boolean isSetIfExists() {
+        return ifExists;
     }
 
     @Override
