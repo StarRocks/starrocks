@@ -112,11 +112,15 @@ Status SparkLoadHandler::_load_convert(VersionedTablet& cur_tablet) {
     txn_log->set_tablet_id(cur_tablet.id());
     txn_log->set_txn_id(_request.transaction_id);
     auto op_write = txn_log->mutable_op_write();
-    for (auto& f : writer->files()) {
+    for (const auto& f : writer->segments()) {
         if (is_segment(f.path)) {
-            op_write->mutable_rowset()->add_segments(std::move(f.path));
+            op_write->mutable_rowset()->add_segments(f.path);
             op_write->mutable_rowset()->add_segment_size(f.size.value());
             op_write->mutable_rowset()->add_segment_encryption_metas(f.encryption_meta);
+            auto* segment_meta = op_write->mutable_rowset()->add_segment_metas();
+            f.sort_key_min.to_proto(segment_meta->mutable_sort_key_min());
+            f.sort_key_max.to_proto(segment_meta->mutable_sort_key_max());
+            segment_meta->set_num_rows(f.num_rows);
         } else {
             return Status::InternalError(fmt::format("unknown file {}", f.path));
         }

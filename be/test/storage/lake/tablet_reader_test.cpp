@@ -107,7 +107,7 @@ TEST_F(LakeDuplicateTabletReaderTest, test_read_success) {
         ASSERT_OK(writer->write(chunk1));
         ASSERT_OK(writer->finish());
 
-        auto files = writer->files();
+        const auto& files = writer->segments();
         ASSERT_EQ(2, files.size());
 
         // add rowset metadata
@@ -116,9 +116,9 @@ TEST_F(LakeDuplicateTabletReaderTest, test_read_success) {
         rowset->set_id(1);
         auto* segs = rowset->mutable_segments();
         auto* segs_size = rowset->mutable_segment_size();
-        for (auto& file : writer->files()) {
-            segs->Add(std::move(file.path));
-            segs_size->Add(std::move(file.size.value()));
+        for (const auto& file : writer->segments()) {
+            segs->Add()->assign(file.path);
+            segs_size->Add(file.size.value());
         }
 
         writer->close();
@@ -234,7 +234,7 @@ TEST_F(LakeAggregateTabletReaderTest, test_read_success) {
         ASSERT_OK(writer->write(chunk1));
         ASSERT_OK(writer->finish());
 
-        auto files = writer->files();
+        const auto& files = writer->segments();
         ASSERT_EQ(2, files.size());
 
         // add rowset metadata
@@ -243,9 +243,9 @@ TEST_F(LakeAggregateTabletReaderTest, test_read_success) {
         rowset->set_id(1);
         auto* segs = rowset->mutable_segments();
         auto* segs_size = rowset->mutable_segment_size();
-        for (auto& file : writer->files()) {
-            segs->Add(std::move(file.path));
-            segs_size->Add(std::move(file.size.value()));
+        for (const auto& file : writer->segments()) {
+            segs->Add()->assign(file.path);
+            segs_size->Add(file.size.value());
         }
 
         writer->close();
@@ -263,7 +263,7 @@ TEST_F(LakeAggregateTabletReaderTest, test_read_success) {
         ASSERT_OK(writer->write(chunk1));
         ASSERT_OK(writer->finish());
 
-        auto files = writer->files();
+        const auto& files = writer->segments();
         ASSERT_EQ(1, files.size());
 
         // add rowset metadata
@@ -272,9 +272,9 @@ TEST_F(LakeAggregateTabletReaderTest, test_read_success) {
         rowset->set_id(2);
         auto* segs = rowset->mutable_segments();
         auto* segs_size = rowset->mutable_segment_size();
-        for (auto& file : writer->files()) {
-            segs->Add(std::move(file.path));
-            segs_size->Add(std::move(file.size.value()));
+        for (const auto& file : writer->segments()) {
+            segs->Add()->assign(file.path);
+            segs_size->Add(file.size.value());
         }
 
         writer->close();
@@ -371,7 +371,7 @@ TEST_F(LakeDuplicateTabletReaderWithDeleteTest, test_read_success) {
         ASSERT_OK(writer->write(chunk1));
         ASSERT_OK(writer->finish());
 
-        auto files = writer->files();
+        const auto& files = writer->segments();
         ASSERT_EQ(2, files.size());
 
         // add rowset metadata
@@ -380,9 +380,9 @@ TEST_F(LakeDuplicateTabletReaderWithDeleteTest, test_read_success) {
         rowset->set_id(1);
         auto* segs = rowset->mutable_segments();
         auto* segs_size = rowset->mutable_segment_size();
-        for (auto& file : writer->files()) {
-            segs->Add(std::move(file.path));
-            segs_size->Add(std::move(file.size.value()));
+        for (const auto& file : writer->segments()) {
+            segs->Add()->assign(file.path);
+            segs_size->Add(file.size.value());
         }
 
         writer->close();
@@ -524,7 +524,7 @@ TEST_F(LakeDuplicateTabletReaderWithDeleteNotInOneValueTest, test_read_success) 
         ASSERT_OK(writer->write(chunk0));
         ASSERT_OK(writer->finish());
 
-        auto files = writer->files();
+        const auto& files = writer->segments();
         ASSERT_EQ(1, files.size());
 
         // add rowset metadata
@@ -533,9 +533,9 @@ TEST_F(LakeDuplicateTabletReaderWithDeleteNotInOneValueTest, test_read_success) 
         rowset->set_id(1);
         auto* segs = rowset->mutable_segments();
         auto* segs_size = rowset->mutable_segment_size();
-        for (auto& file : writer->files()) {
-            segs->Add(std::move(file.path));
-            segs_size->Add(std::move(file.size.value()));
+        for (const auto& file : writer->segments()) {
+            segs->Add()->assign(file.path);
+            segs_size->Add(file.size.value());
         }
 
         writer->close();
@@ -651,7 +651,7 @@ TEST_F(LakeTabletReaderSpit, test_reader_split) {
         ASSERT_OK(writer->write(chunk1));
         ASSERT_OK(writer->finish());
 
-        auto files = writer->files();
+        const auto& files = writer->segments();
         ASSERT_EQ(2, files.size());
 
         // add rowset metadata
@@ -661,9 +661,9 @@ TEST_F(LakeTabletReaderSpit, test_reader_split) {
         rowset->set_num_rows(2 * (chunk0.num_rows() + chunk1.num_rows()));
         auto* segs = rowset->mutable_segments();
         auto* segs_size = rowset->mutable_segment_size();
-        for (auto& file : writer->files()) {
-            segs->Add(std::move(file.path));
-            segs_size->Add(std::move(file.size.value()));
+        for (const auto& file : writer->segments()) {
+            segs->Add()->assign(file.path);
+            segs_size->Add(file.size.value());
         }
 
         writer->close();
@@ -681,7 +681,7 @@ TEST_F(LakeTabletReaderSpit, test_reader_split) {
         ASSERT_OK(writer->write(chunk1));
         ASSERT_OK(writer->finish());
 
-        auto files = writer->files();
+        const auto& files = writer->segments();
         ASSERT_EQ(1, files.size());
 
         // add rowset metadata
@@ -691,9 +691,9 @@ TEST_F(LakeTabletReaderSpit, test_reader_split) {
         rowset->set_num_rows(chunk0.num_rows() + chunk1.num_rows());
         auto* segs = rowset->mutable_segments();
         auto* segs_size = rowset->mutable_segment_size();
-        for (auto& file : writer->files()) {
-            segs->Add(std::move(file.path));
-            segs_size->Add(std::move(file.size.value()));
+        for (const auto& file : writer->segments()) {
+            segs->Add()->assign(file.path);
+            segs_size->Add(file.size.value());
         }
 
         writer->close();
@@ -850,7 +850,7 @@ TEST_F(DISABLED_LakeLoadSegmentParallelTest, test_normal) {
         ASSERT_OK(writer->write(chunk1));
         ASSERT_OK(writer->finish());
 
-        auto files = writer->files();
+        const auto& files = writer->segments();
         ASSERT_EQ(2, files.size());
 
         // add rowset metadata
@@ -859,9 +859,9 @@ TEST_F(DISABLED_LakeLoadSegmentParallelTest, test_normal) {
         rowset->set_id(1);
         auto* segs = rowset->mutable_segments();
         auto* segs_size = rowset->mutable_segment_size();
-        for (auto& file : writer->files()) {
-            segs->Add(std::move(file.path));
-            segs_size->Add(std::move(file.size.value()));
+        for (const auto& file : writer->segments()) {
+            segs->Add()->assign(file.path);
+            segs_size->Add(file.size.value());
         }
 
         writer->close();
