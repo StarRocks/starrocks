@@ -254,25 +254,17 @@ StatusOr<VariantRowValue> VariantPath::seek(const VariantRowValue* variant, cons
     VariantValue current{variant->get_value().raw()};
     for (size_t seg_idx = 0; seg_idx < variant_path->segments.size(); ++seg_idx) {
         const auto& segment = variant_path->segments[seg_idx];
-
-        StatusOr<VariantValue> sub;
-        std::visit(
-                [&]<typename T0>(const T0& seg) {
+        RETURN_IF_ERROR(std::visit(
+                [&]<typename T0>(const T0& seg) -> Status {
                     if constexpr (std::is_same_v<std::decay_t<T0>, VariantObjectExtraction>) {
-                        sub = current.get_object_by_key(metadata, seg.get_key());
+                        ASSIGN_OR_RETURN(current, current.get_object_by_key(metadata, seg.get_key()));
                     } else if constexpr (std::is_same_v<std::decay_t<T0>, VariantArrayExtraction>) {
-                        sub = current.get_element_at_index(metadata, seg.get_index());
+                        ASSIGN_OR_RETURN(current, current.get_element_at_index(metadata, seg.get_index()));
                     }
+                    return Status::OK();
                 },
-                segment);
-
-        if (!sub.ok()) {
-            return sub.status();
-        }
-
-        current = sub.value();
+                segment));
     }
-
     return VariantRowValue::from_variant(metadata, current);
 }
 
