@@ -133,8 +133,10 @@ Status HorizontalPkTabletWriter::flush_segment_writer(SegmentPB* segment) {
         _seg_writer.reset();
     }
     if (_pk_sst_writer && _pk_sst_writer->has_file_info()) {
-        ASSIGN_OR_RETURN(auto sst_file_info, _pk_sst_writer->flush_sst_writer());
+        ASSIGN_OR_RETURN(auto sst_ret, _pk_sst_writer->flush_sst_writer());
+        auto [sst_file_info, sst_range] = std::move(sst_ret);
         _ssts.emplace_back(sst_file_info);
+        _sst_ranges.emplace_back(sst_range);
     }
     return Status::OK();
 }
@@ -199,8 +201,10 @@ Status VerticalPkTabletWriter::write_columns(const Chunk& data, const std::vecto
 Status VerticalPkTabletWriter::finish(SegmentPB* segment) {
     for (auto& sst_writer : _pk_sst_writers) {
         if (sst_writer->has_file_info()) {
-            ASSIGN_OR_RETURN(auto sst_file_info, sst_writer->flush_sst_writer());
+            ASSIGN_OR_RETURN(auto sst_ret, sst_writer->flush_sst_writer());
+            auto [sst_file_info, sst_range] = std::move(sst_ret);
             _ssts.emplace_back(sst_file_info);
+            _sst_ranges.emplace_back(sst_range);
         }
     }
     _pk_sst_writers.clear();
