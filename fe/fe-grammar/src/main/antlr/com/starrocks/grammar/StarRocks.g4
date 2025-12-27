@@ -939,7 +939,7 @@ dropStorageVolumeStatement
     ;
 
 alterStorageVolumeStatement
-    : ALTER STORAGE VOLUME identifierOrString alterStorageVolumeClause (',' alterStorageVolumeClause)*
+    : ALTER STORAGE VOLUME (IF EXISTS)? identifierOrString alterStorageVolumeClause (',' alterStorageVolumeClause)*
     ;
 
 alterStorageVolumeClause
