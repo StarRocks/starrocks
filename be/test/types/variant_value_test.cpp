@@ -20,8 +20,6 @@
 #include <boost/uuid/uuid_io.hpp>
 
 #include "cctz/time_zone.h"
-#include "runtime/decimalv3.h"
-#include "types/timestamp_value.h"
 #include "util/timezone_utils.h"
 #include "util/variant.h"
 
@@ -38,8 +36,7 @@ public:
 
 protected:
     void SetUp() override {
-        std::string starrocks_home = getenv("STARROCKS_HOME");
-        test_exec_dir = starrocks_home + "/be/test/formats/parquet/test_data/variant";
+        test_exec_dir = "./be/test/formats/parquet/test_data/variant";
 
         _primitive_metadata_file_names = {
                 "primitive_null.metadata",      "primitive_boolean_true.metadata", "primitive_boolean_false.metadata",
@@ -400,7 +397,7 @@ TEST_F(VariantRowValueTest, InvalidVariant) {
         Slice variant_slice(variant_data);
         auto unsupported_variant = VariantRowValue::create(variant_slice);
         ASSERT_FALSE(unsupported_variant.ok());
-        EXPECT_EQ("Not supported: Unsupported variant version: 2", unsupported_variant.status().to_string());
+        EXPECT_EQ("Not supported: Unsupported variant version: 2", unsupported_variant.status().to_string(false));
     }
     // Test exceed maximum variant size
     {

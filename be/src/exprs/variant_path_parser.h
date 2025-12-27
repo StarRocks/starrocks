@@ -26,28 +26,28 @@
 namespace starrocks {
 
 // Object key extraction like .field or ['field'] or ["field"]
-class ObjectExtraction {
+class VariantObjectExtraction {
 private:
     std::string _key;
 
 public:
-    explicit ObjectExtraction(std::string key) : _key(std::move(key)) {}
+    explicit VariantObjectExtraction(std::string key) : _key(std::move(key)) {}
 
     const std::string& get_key() const { return _key; }
 };
 
 // Array index extraction like [123]
-class ArrayExtraction {
+class VariantArrayExtraction {
 private:
     int _index;
 
 public:
-    explicit ArrayExtraction(int index) : _index(index) {}
+    explicit VariantArrayExtraction(int index) : _index(index) {}
 
     int get_index() const { return _index; }
 };
 
-using VariantPathExtraction = std::variant<ObjectExtraction, ArrayExtraction>;
+using VariantPathExtraction = std::variant<VariantObjectExtraction, VariantArrayExtraction>;
 
 struct VariantPath {
     std::vector<VariantPathExtraction> segments;
@@ -97,9 +97,9 @@ private:
     // Parser methods
     static bool parse_root(ParserState& state);
     static StatusOr<VariantPathExtraction> parse_segment(ParserState& state);
-    static StatusOr<ArrayExtraction> parse_array_index(ParserState& state);
-    static StatusOr<ObjectExtraction> parse_object_key(ParserState& state);
-    static StatusOr<ObjectExtraction> parse_quoted_key(ParserState& state);
+    static StatusOr<VariantArrayExtraction> parse_array_index(ParserState& state);
+    static StatusOr<VariantObjectExtraction> parse_object_key(ParserState& state);
+    static StatusOr<VariantObjectExtraction> parse_quoted_key(ParserState& state);
     static std::string parse_number(ParserState& state);
     static std::string parse_unquoted_key(ParserState& state);
     static std::string parse_quoted_string(ParserState& state, char quote);

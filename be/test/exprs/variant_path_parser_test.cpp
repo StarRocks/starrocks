@@ -103,20 +103,20 @@ TEST_P(VariantPathParserTest, ParseAndVerifySegments) {
         const std::string& expected_type = test_case.expected_types[i];
 
         if (expected_type == "object") {
-            EXPECT_TRUE(std::holds_alternative<ObjectExtraction>(segment))
+            EXPECT_TRUE(std::holds_alternative<VariantObjectExtraction>(segment))
                     << "Expected object extraction at index " << i << " for path: " << test_case.path;
 
-            if (std::holds_alternative<ObjectExtraction>(segment)) {
-                const auto& obj_extraction = std::get<ObjectExtraction>(segment);
+            if (std::holds_alternative<VariantObjectExtraction>(segment)) {
+                const auto& obj_extraction = std::get<VariantObjectExtraction>(segment);
                 EXPECT_EQ(obj_extraction.get_key(), expected_value)
                         << "Unexpected object key at index " << i << " for path: " << test_case.path;
             }
         } else if (expected_type == "array") {
-            EXPECT_TRUE(std::holds_alternative<ArrayExtraction>(segment))
+            EXPECT_TRUE(std::holds_alternative<VariantArrayExtraction>(segment))
                     << "Expected array extraction at index " << i << " for path: " << test_case.path;
 
-            if (std::holds_alternative<ArrayExtraction>(segment)) {
-                const auto& arr_extraction = std::get<ArrayExtraction>(segment);
+            if (std::holds_alternative<VariantArrayExtraction>(segment)) {
+                const auto& arr_extraction = std::get<VariantArrayExtraction>(segment);
                 EXPECT_EQ(std::to_string(arr_extraction.get_index()), expected_value)
                         << "Unexpected array index at index " << i << " for path: " << test_case.path;
             }
@@ -186,24 +186,24 @@ TEST_F(VariantPathParserBasicTest, SpecificPathTests) {
                  EXPECT_EQ(segments.size(), 5);
 
                  // $.users
-                 EXPECT_TRUE(std::holds_alternative<ObjectExtraction>(segments[0]));
-                 EXPECT_EQ(std::get<ObjectExtraction>(segments[0]).get_key(), "users");
+                 EXPECT_TRUE(std::holds_alternative<VariantObjectExtraction>(segments[0]));
+                 EXPECT_EQ(std::get<VariantObjectExtraction>(segments[0]).get_key(), "users");
 
                  // [0]
-                 EXPECT_TRUE(std::holds_alternative<ArrayExtraction>(segments[1]));
-                 EXPECT_EQ(std::get<ArrayExtraction>(segments[1]).get_index(), 0);
+                 EXPECT_TRUE(std::holds_alternative<VariantArrayExtraction>(segments[1]));
+                 EXPECT_EQ(std::get<VariantArrayExtraction>(segments[1]).get_index(), 0);
 
                  // .profile
-                 EXPECT_TRUE(std::holds_alternative<ObjectExtraction>(segments[2]));
-                 EXPECT_EQ(std::get<ObjectExtraction>(segments[2]).get_key(), "profile");
+                 EXPECT_TRUE(std::holds_alternative<VariantObjectExtraction>(segments[2]));
+                 EXPECT_EQ(std::get<VariantObjectExtraction>(segments[2]).get_key(), "profile");
 
                  // ['personal-data']
-                 EXPECT_TRUE(std::holds_alternative<ObjectExtraction>(segments[3]));
-                 EXPECT_EQ(std::get<ObjectExtraction>(segments[3]).get_key(), "personal-data");
+                 EXPECT_TRUE(std::holds_alternative<VariantObjectExtraction>(segments[3]));
+                 EXPECT_EQ(std::get<VariantObjectExtraction>(segments[3]).get_key(), "personal-data");
 
                  // .address
-                 EXPECT_TRUE(std::holds_alternative<ObjectExtraction>(segments[4]));
-                 EXPECT_EQ(std::get<ObjectExtraction>(segments[4]).get_key(), "address");
+                 EXPECT_TRUE(std::holds_alternative<VariantObjectExtraction>(segments[4]));
+                 EXPECT_EQ(std::get<VariantObjectExtraction>(segments[4]).get_key(), "address");
              }}};
 
     for (const auto& test : specific_tests) {

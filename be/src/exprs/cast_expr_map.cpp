@@ -117,14 +117,14 @@ StatusOr<ColumnPtr> CastVariantToMap::evaluate_checked(ExprContext* context, Chu
                 uint32_t offset_pos = VariantUtil::read_little_endian_unsigned32(
                         value.raw().data() + object_info.offset_start_offset + idx * object_info.offset_size,
                         object_info.offset_size);
-                ASSIGN_OR_RETURN(std::string key, metadata.get_key(filed_id));
+                ASSIGN_OR_RETURN(std::string_view key, metadata.get_key(filed_id));
                 uint32_t next_pos = object_info.data_start_offset + offset_pos;
                 if (next_pos >= value.raw().size()) {
-                    return Status::InternalError("Cannot get variant object field value by key: " + key +
-                                                 ", offset out of bounds");
+                    return Status::InternalError(
+                            fmt::format("Cannot get variant object field value by key: {}, offset out of bounds", key));
                 }
 
-                keys_builder.append(Slice(std::string(key)));
+                keys_builder.append(Slice(key));
                 auto sub_value = value.raw().substr(next_pos, value.raw().size() - next_pos);
                 ASSIGN_OR_RETURN(VariantRowValue result, VariantRowValue::create(metadata.raw(), sub_value));
                 values_builder.append(std::move(result));
