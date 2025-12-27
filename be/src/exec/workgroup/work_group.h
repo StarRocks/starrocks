@@ -122,7 +122,6 @@ public:
     void init(std::shared_ptr<MemTracker>& parent_mem_tracker);
 
     TWorkGroup to_thrift() const;
-    TWorkGroup to_thrift_verbose() const;
     std::string to_string() const;
 
     // Copy metrics from the other work group
