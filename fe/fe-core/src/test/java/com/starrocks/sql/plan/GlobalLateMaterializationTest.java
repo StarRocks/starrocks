@@ -151,6 +151,44 @@ public class GlobalLateMaterializationTest extends ConnectorPlanTestBase {
     }
 
     @Test
+    public void testIcebergV2TableJoin() throws Exception {
+        String sql;
+        String plan;
+
+        // Test GLM with Iceberg v2 tables (without equality delete)
+        sql = "select * from iceberg0.unpartitioned_db.t0_v2 t0 inner join iceberg0.partitioned_db.t1_v2 t1 on t0.id = t1.id";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "FETCH");
+        assertContains(plan, "lookup node");
+
+        sql = "select t0.* from iceberg0.unpartitioned_db.t0_v2 t0 inner join iceberg0.partitioned_db.t1_v2 t1 on t0.id = t1.id";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "FETCH");
+        assertContains(plan, "table: t0_v2");
+
+        // Test TopN with v2 table
+        sql = "select * from iceberg0.unpartitioned_db.t0_v2 order by id limit 10";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "FETCH");
+        assertContains(plan, "table: t0_v2");
+    }
+
+    @Test
+    public void testIcebergV2AndV3Join() throws Exception {
+        String sql;
+        String plan;
+
+        // Test GLM with v2 and v3 tables joined together
+        sql = "select t0.date, t1.date from iceberg0.unpartitioned_db.t0 t0 " +
+                "inner join iceberg0.unpartitioned_db.t0_v2 t1 on t0.id = t1.id";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "FETCH");
+        // Both tables should be in the fetch plan
+        assertContains(plan, "table: t0");
+        assertContains(plan, "table: t0_v2");
+    }
+
+    @Test
     public void testUnsupportedTables() throws Exception {
         String sql;
         String plan;
