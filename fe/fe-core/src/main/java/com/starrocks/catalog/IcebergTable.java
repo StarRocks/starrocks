@@ -595,7 +595,7 @@ public class IcebergTable extends Table {
     @Override
     public Set<TableOperation> getSupportedOperations() {
         return Sets.newHashSet(TableOperation.READ, TableOperation.INSERT, TableOperation.DROP, TableOperation.CREATE,
-                TableOperation.ALTER);
+                TableOperation.ALTER, TableOperation.DELETE);
     }
 
     public void setIcebergMetricsReporter(IcebergMetricsReporter reporter) {
