@@ -571,6 +571,27 @@ public class GlobalStateMgr {
         return nodesInfo;
     }
 
+    public TNodesInfo createNodesInfo(ComputeResource computeResource,
+                                      SystemInfoService systemInfoService,
+                                      boolean withExtNode) {
+        if (withExtNode) {
+            TNodesInfo nodesInfo = new TNodesInfo();
+            List<Long> computeNodeIds = Lists.newArrayList();
+            computeNodeIds.addAll(systemInfoService.getBackendIds());
+            computeNodeIds.addAll(systemInfoService.getComputeNodeIds(false));
+
+            for (Long cnId : computeNodeIds) {
+                ComputeNode cn = systemInfoService.getBackendOrComputeNode(cnId);
+                if (cn != null) {
+                    nodesInfo.addToNodes(new TNodeInfo(cnId, 0, cn.getIP(), cn.getBrpcPort()));
+                }
+            }
+            return nodesInfo;
+        } else {
+            return createNodesInfo(computeResource, systemInfoService);
+        }
+    }
+
     public HeartbeatMgr getHeartbeatMgr() {
         return heartbeatMgr;
     }
