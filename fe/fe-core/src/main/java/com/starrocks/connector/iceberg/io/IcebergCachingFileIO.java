@@ -196,6 +196,8 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
     }
 
     public FileIO getWrappedIO() {
+        Configuration configuration = conf != null ? conf.get() : new Configuration();
+        wrappedIO.setConf(configuration);
         return wrappedIO;
     }
 
