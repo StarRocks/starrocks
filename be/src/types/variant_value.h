@@ -30,7 +30,8 @@ class VariantRowValue {
 public:
     VariantRowValue(const std::string_view metadata, const std::string_view value)
             : _raw(), _metadata_size(metadata.size()), _metadata(), _value() {
-        if (metadata.data() != VariantMetadata::kEmptyMetadata.data()) {
+        if (metadata.data() != VariantMetadata::kEmptyMetadata.data() ||
+            value.data() != VariantValue::kEmptyValue.data()) {
             _raw.reserve(metadata.size() + value.size());
             _raw.assign(metadata.data(), metadata.size());
             _raw.append(value.data(), value.size());

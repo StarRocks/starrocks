@@ -742,54 +742,62 @@ Status VariantUtil::variant_to_json(const VariantMetadata& metadata, const Varia
         break;
     case VariantType::BOOLEAN_TRUE:
     case VariantType::BOOLEAN_FALSE: {
-        bool res = *variant.get_bool();
+        ASSIGN_OR_RETURN(bool res, variant.get_bool());
         json_str << (res ? "true" : "false");
         break;
     }
-    case VariantType::INT8:
-        json_str << std::to_string(*variant.get_int8());
+    case VariantType::INT8: {
+        ASSIGN_OR_RETURN(int8_t value, variant.get_int8());
+        json_str << std::to_string(value);
         break;
-    case VariantType::INT16:
-        json_str << std::to_string(*variant.get_int16());
+    }
+    case VariantType::INT16: {
+        ASSIGN_OR_RETURN(int16_t value, variant.get_int16());
+        json_str << std::to_string(value);
         break;
-    case VariantType::INT32:
-        json_str << std::to_string(*variant.get_int32());
+    }
+    case VariantType::INT32: {
+        ASSIGN_OR_RETURN(int32_t value, variant.get_int32());
+        json_str << std::to_string(value);
         break;
-    case VariantType::INT64:
-        json_str << std::to_string(*variant.get_int64());
+    }
+    case VariantType::INT64: {
+        ASSIGN_OR_RETURN(int64_t value, variant.get_int64());
+        json_str << std::to_string(value);
         break;
+    }
     case VariantType::FLOAT: {
-        const float f = *variant.get_float();
+        ASSIGN_OR_RETURN(float f, variant.get_float());
         json_str << float_to_json_string_impl(f);
         break;
     }
     case VariantType::DOUBLE: {
-        const double d = *variant.get_double();
+        ASSIGN_OR_RETURN(double d, variant.get_double());
         json_str << float_to_json_string_impl(d);
         break;
     }
     case VariantType::DECIMAL4: {
-        VariantDecimalValue<int32_t> decimal = *variant.get_decimal4();
+        ASSIGN_OR_RETURN(VariantDecimalValue<int32_t> decimal, variant.get_decimal4());
         json_str << remove_trailing_zeros(decimal.to_string());
         break;
     }
     case VariantType::DECIMAL8: {
-        VariantDecimalValue<int64_t> decimal = *variant.get_decimal8();
+        ASSIGN_OR_RETURN(VariantDecimalValue<int64_t> decimal, variant.get_decimal8());
         json_str << remove_trailing_zeros(decimal.to_string());
         break;
     }
     case VariantType::DECIMAL16: {
-        VariantDecimalValue<int128_t> decimal = *variant.get_decimal16();
+        ASSIGN_OR_RETURN(VariantDecimalValue<int128_t> decimal, variant.get_decimal16());
         json_str << remove_trailing_zeros(decimal.to_string());
         break;
     }
     case VariantType::STRING: {
-        const std::string_view str_view = *variant.get_string();
+        ASSIGN_OR_RETURN(const std::string_view str_view, variant.get_string());
         append_quoted_string(json_str, str_view);
         break;
     }
     case VariantType::BINARY: {
-        const std::string_view binary = *variant.get_binary();
+        ASSIGN_OR_RETURN(const std::string_view binary, variant.get_binary());
         const std::string binary_str(binary.data(), binary.size());
         std::string encoded;
         base64_encode(binary_str, &encoded);
@@ -797,7 +805,7 @@ Status VariantUtil::variant_to_json(const VariantMetadata& metadata, const Varia
         break;
     }
     case VariantType::UUID: {
-        const auto uuid_arr = *variant.get_uuid();
+        ASSIGN_OR_RETURN(const auto uuid_arr, variant.get_uuid());
         boost::uuids::uuid uuid{};
         for (size_t i = 0; i < uuid.size(); ++i) {
             uuid.data[i] = uuid_arr[i];
@@ -806,13 +814,13 @@ Status VariantUtil::variant_to_json(const VariantMetadata& metadata, const Varia
         break;
     }
     case VariantType::DATE: {
-        int32_t date = *variant.get_date();
+        ASSIGN_OR_RETURN(int32_t date, variant.get_date());
         std::string date_str = epoch_day_to_date(date);
         append_quoted_string(json_str, date_str);
         break;
     }
     case VariantType::TIMESTAMP_TZ: {
-        const int64_t timestamp_micros = *variant.get_timestamp_micros();
+        ASSIGN_OR_RETURN(const int64_t timestamp_micros, variant.get_timestamp_micros());
         TimestampValue tsv{};
         tsv.from_unix_second(timestamp_micros / 1000000, timestamp_micros % 1000000);
         std::string timestamp_str = timestamp::to_string_with_timezone<false, false>(tsv.timestamp(), timezone);
@@ -820,7 +828,7 @@ Status VariantUtil::variant_to_json(const VariantMetadata& metadata, const Varia
         break;
     }
     case VariantType::TIMESTAMP_NTZ: {
-        const int64_t timestamp_micros = *variant.get_timestamp_micros_ntz();
+        ASSIGN_OR_RETURN(const int64_t timestamp_micros, variant.get_timestamp_micros_ntz());
         TimestampValue tsv{};
         tsv.from_unix_second(timestamp_micros / 1000000, timestamp_micros % 1000000);
         std::string timestamp_str = tsv.to_string(false);
