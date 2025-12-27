@@ -143,6 +143,7 @@ Status VariantMetadata::_build_lookup_index() const {
             dict_strings.emplace_back(field_key);                                                                  \
             offset = next_offset;                                                                                  \
         }                                                                                                          \
+        _lookup_index.has_built = true;                                                                            \
         if (string_base + offset > _metadata.data() + _metadata.size()) {                                          \
             return Status::VariantError("Variant string out of range");                                            \
         }                                                                                                          \
@@ -155,8 +156,6 @@ Status VariantMetadata::_build_lookup_index() const {
         DECODE_VALUE_OFFSET(3);
         DECODE_VALUE_OFFSET(4);
     }
-
-    _lookup_index.has_built = true;
     return Status::OK();
 }
 

@@ -41,7 +41,7 @@ Status cast_variant_to_bool(const VariantRowValue& variant, ColumnBuilder<TYPE_B
         if (parsed != StringParser::PARSE_SUCCESS) {
             const bool casted = StringParser::string_to_bool(str_value, len, &parsed);
             if (parsed != StringParser::PARSE_SUCCESS) {
-                return Status::VariantError(fmt::format("Failed to cast string '{}' to BOOLEAN", str_value));
+                return Status::VariantError(fmt::format("Failed to cast string '{}' to BOOLEAN", str));
             }
             result.append(casted);
         } else {
