@@ -405,6 +405,15 @@ public class CompactionScheduler extends Daemon {
             request.encryptionMeta = GlobalStateMgr.getCurrentState().getKeyMgr().getCurrentKEKAsEncryptionMeta();
             request.forceBaseCompaction = (priority == PartitionStatistics.CompactionPriority.MANUAL_COMPACT);
 
+            // Set parallel compaction configuration if enabled
+            if (Config.lake_compaction_enable_parallel_per_tablet) {
+                com.starrocks.proto.TabletParallelConfig parallelConfig = new com.starrocks.proto.TabletParallelConfig();
+                parallelConfig.enableParallel = true;
+                parallelConfig.maxParallelPerTablet = Config.lake_compaction_max_parallel_per_tablet;
+                parallelConfig.maxBytesPerSubtask = Config.lake_compaction_max_bytes_per_subtask;
+                request.parallelConfig = parallelConfig;
+            }
+
             CompactionTask task = new CompactionTask(node.getId(), service, request);
             tasks.add(task);
         }
@@ -441,14 +450,23 @@ public class CompactionScheduler extends Daemon {
             request.forceBaseCompaction = (priority == PartitionStatistics.CompactionPriority.MANUAL_COMPACT);
             request.skipWriteTxnlog = true;
 
+            // Set parallel compaction configuration if enabled
+            if (Config.lake_compaction_enable_parallel_per_tablet) {
+                com.starrocks.proto.TabletParallelConfig parallelConfig = new com.starrocks.proto.TabletParallelConfig();
+                parallelConfig.enableParallel = true;
+                parallelConfig.maxParallelPerTablet = Config.lake_compaction_max_parallel_per_tablet;
+                parallelConfig.maxBytesPerSubtask = Config.lake_compaction_max_bytes_per_subtask;
+                request.parallelConfig = parallelConfig;
+            }
+
             aggRequest.requests.add(request);
             aggRequest.computeNodes.add(nodePB);
         }
 
-        // 2. pick aggregator node and build lake serivce
+        // 2. pick aggregator node and build lake service
         WarehouseManager manager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
         LakeAggregator aggregator = new LakeAggregator();
-        ComputeNode aggregatorNode = aggregator.chooseAggregatorNode(computeResource);
+        ComputeNode aggregatorNode = LakeAggregator.chooseAggregatorNode(computeResource);
         if (aggregatorNode == null) {
             throw new NoAliveBackendException("No alive compute node available for aggregate compaction");
         }

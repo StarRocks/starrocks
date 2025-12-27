@@ -27,6 +27,10 @@ StatusOr<std::string> LocalPrimaryKeyCompactionConflictResolver::filename() cons
     return local_rows_mapper_filename(_tablet, _rowset->rowset_id_str());
 }
 
+int64_t LocalPrimaryKeyCompactionConflictResolver::tablet_id() const {
+    return _rowset->rowset_meta()->tablet_id();
+}
+
 Schema LocalPrimaryKeyCompactionConflictResolver::generate_pkey_schema() {
     const auto& schema = _rowset->schema();
     vector<uint32_t> pk_columns;

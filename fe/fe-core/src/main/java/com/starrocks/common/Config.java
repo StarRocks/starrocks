@@ -3193,6 +3193,16 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static boolean lake_compaction_allow_partial_success = true;
 
+    // Per-tablet parallel compaction configurations (FE-scheduled mode)
+    @ConfField(mutable = true, comment = "Enable per-tablet parallel compaction in FE-scheduled mode")
+    public static boolean lake_compaction_enable_parallel_per_tablet = false;
+
+    @ConfField(mutable = true, comment = "Maximum number of parallel compaction subtasks per tablet")
+    public static int lake_compaction_max_parallel_per_tablet = 3;
+
+    @ConfField(mutable = true, comment = "Maximum data volume (bytes) per parallel subtask (1GB default)")
+    public static long lake_compaction_max_bytes_per_subtask = 1073741824L;
+
     @ConfField(mutable = true, comment = "the max number of previous version files to keep")
     public static int lake_autovacuum_max_previous_versions = 0;
 

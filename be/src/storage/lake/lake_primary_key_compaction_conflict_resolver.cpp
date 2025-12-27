@@ -30,6 +30,10 @@ StatusOr<std::string> LakePrimaryKeyCompactionConflictResolver::filename() const
     return lake_rows_mapper_filename(_rowset->tablet_id(), _txn_id);
 }
 
+int64_t LakePrimaryKeyCompactionConflictResolver::tablet_id() const {
+    return _rowset->tablet_id();
+}
+
 Schema LakePrimaryKeyCompactionConflictResolver::generate_pkey_schema() {
     std::shared_ptr<TabletSchema> tablet_schema = std::make_shared<TabletSchema>(_metadata->schema());
     std::vector<uint32_t> pk_columns;
