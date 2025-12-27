@@ -1,0 +1,47 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package staros;
+option java_package = "com.staros.proto";
+option java_multiple_files = true;
+
+enum StatusCode {
+    OK = 0;
+    INVALID_ARGUMENT = 1;
+    NOT_EXIST = 2;
+    ALREADY_EXIST = 3;
+    NOT_ALLOWED = 4;
+    UNKNOWN = 5;
+    GRPC = 6;
+    JOURNAL = 7;
+    IO = 8;
+    NOT_LEADER = 9;
+    NOT_IMPLEMENTED = 10;
+    FAILED_PRECONDITION = 11;
+    INTERNAL = 12;
+    SHUT_DOWN = 13;
+    WORKER_NOT_HEALTHY = 14;
+}
+
+message StarStatus {
+    StatusCode status_code = 1;
+    string error_msg = 2;
+    // Additional info sent from server side, can be different for different status_code.
+    // Most status code will not have this extra information. Currently known info as the following:
+    // * NOT_LEADER
+    //   - extra_info -> LeaderInfo
+    bytes extra_info = 3;
+}

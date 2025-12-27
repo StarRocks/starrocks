@@ -24,5 +24,8 @@ include(
     "plugin:spark-dpp",
     "plugin:hive-udf",
     "fe-core",
-    "fe-server"
+    "fe-server",
+    "staros:starcommon",
+    "staros:starclient",
+    "staros:starmanager"
 )
