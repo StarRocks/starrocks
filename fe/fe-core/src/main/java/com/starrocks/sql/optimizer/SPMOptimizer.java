@@ -93,6 +93,7 @@ public class SPMOptimizer extends Optimizer {
         tree = OptExpression.create(new LogicalTreeAnchorOperator(), tree);
         deriveLogicalProperty(tree);
 
+        scheduler.rewriteIterative(tree, rootTaskContext, new EliminateConstantCTERule());
         CTEContext cteContext = context.getCteContext();
         CTEUtils.collectCteOperators(tree, context);
 
@@ -102,7 +103,6 @@ public class SPMOptimizer extends Optimizer {
             CTEUtils.collectCteOperators(tree, context);
         }
 
-        scheduler.rewriteIterative(tree, rootTaskContext, new EliminateConstantCTERule());
         CTEUtils.collectCteOperators(tree, context);
 
         scheduler.rewriteIterative(tree, rootTaskContext, RuleSet.AGGREGATE_REWRITE_RULES);
@@ -146,7 +146,6 @@ public class SPMOptimizer extends Optimizer {
         scheduler.rewriteIterative(tree, rootTaskContext, RuleSet.MERGE_LIMIT_RULES);
         scheduler.rewriteIterative(tree, rootTaskContext, new PushDownProjectLimitRule());
 
-        scheduler.rewriteIterative(tree, rootTaskContext, RuleSet.PRUNE_ASSERT_ROW_RULES);
         scheduler.rewriteIterative(tree, rootTaskContext, RuleSet.PRUNE_PROJECT_RULES);
 
         CTEUtils.collectCteOperators(tree, context);

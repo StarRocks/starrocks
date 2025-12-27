@@ -309,11 +309,10 @@ INNER JOIN (join-predicate [4: sum < multiply(105, 8: max)] post-join-predicate 
     AGGREGATE ([GLOBAL] aggregate [{4: sum=sum(3: v3)}] group by [[1: v1]] having [null]
         SCAN (columns[1: v1, 3: v3] predicate[null])
     EXCHANGE BROADCAST
-        ASSERT LE 1
-            AGGREGATE ([GLOBAL] aggregate [{8: max=max(8: max)}] group by [[]] having [null]
-                EXCHANGE GATHER
-                    AGGREGATE ([LOCAL] aggregate [{8: max=max(5: v4)}] group by [[]] having [null]
-                        SCAN (columns[5: v4] predicate[null])
+        AGGREGATE ([GLOBAL] aggregate [{8: max=max(8: max)}] group by [[]] having [null]
+            EXCHANGE GATHER
+                AGGREGATE ([LOCAL] aggregate [{8: max=max(5: v4)}] group by [[]] having [null]
+                    SCAN (columns[5: v4] predicate[null])
 [end]
 
 [sql]
@@ -323,31 +322,22 @@ INNER JOIN (join-predicate [3: v3 = 6: cast] post-join-predicate [null])
     SCAN (columns[1: v1, 2: v2, 3: v3] predicate[3: v3 IS NOT NULL])
     EXCHANGE BROADCAST
         PREDICATE cast(4: column_0 as bigint(20)) IS NOT NULL
-            ASSERT LE 1
-                VALUES (2)
+            VALUES (2)
 [end]
 
 [sql]
 select * from t0 where v3 > (select * from (values(2)) t);
 [result]
-INNER JOIN (join-predicate [3: v3 > cast(4: column_0 as bigint(20))] post-join-predicate [null])
-    SCAN (columns[1: v1, 2: v2, 3: v3] predicate[null])
-    EXCHANGE BROADCAST
-        ASSERT LE 1
-            VALUES (2)
+SCAN (columns[1: v1, 2: v2, 3: v3] predicate[3: v3 > 2])
 [end]
 
 [sql]
 select v3 from t0 group by v3 having sum(v2) > (select * from (values(2)) t);
 [result]
-INNER JOIN (join-predicate [4: sum > cast(5: column_0 as bigint(20))] post-join-predicate [null])
-    AGGREGATE ([GLOBAL] aggregate [{4: sum=sum(4: sum)}] group by [[3: v3]] having [null]
-        EXCHANGE SHUFFLE[3]
-            AGGREGATE ([LOCAL] aggregate [{4: sum=sum(2: v2)}] group by [[3: v3]] having [null]
-                SCAN (columns[2: v2, 3: v3] predicate[null])
-    EXCHANGE BROADCAST
-        ASSERT LE 1
-            VALUES (2)
+AGGREGATE ([GLOBAL] aggregate [{4: sum=sum(4: sum)}] group by [[3: v3]] having [4: sum > 2]
+    EXCHANGE SHUFFLE[3]
+        AGGREGATE ([LOCAL] aggregate [{4: sum=sum(2: v2)}] group by [[3: v3]] having [null]
+            SCAN (columns[2: v2, 3: v3] predicate[null])
 [end]
 
 [sql]
@@ -416,11 +406,10 @@ select t0.v1, (select max(v4) from t1) / 2 from t0;
 CROSS JOIN (join-predicate [null] post-join-predicate [null])
     SCAN (columns[1: v1] predicate[null])
     EXCHANGE BROADCAST
-        ASSERT LE 1
-            AGGREGATE ([GLOBAL] aggregate [{7: max=max(7: max)}] group by [[]] having [null]
-                EXCHANGE GATHER
-                    AGGREGATE ([LOCAL] aggregate [{7: max=max(4: v4)}] group by [[]] having [null]
-                        SCAN (columns[4: v4] predicate[null])
+        AGGREGATE ([GLOBAL] aggregate [{7: max=max(7: max)}] group by [[]] having [null]
+            EXCHANGE GATHER
+                AGGREGATE ([LOCAL] aggregate [{7: max=max(4: v4)}] group by [[]] having [null]
+                    SCAN (columns[4: v4] predicate[null])
 [end]
 
 [sql]
@@ -440,12 +429,10 @@ select t0.v1 from t0 where t0.v2 = (select SUM(v4) from t1) / 2;
 INNER JOIN (join-predicate [9: cast = 10: divide] post-join-predicate [null])
     SCAN (columns[1: v1, 2: v2] predicate[cast(2: v2 as double) IS NOT NULL])
     EXCHANGE BROADCAST
-        PREDICATE divide(cast(7: sum as double), 2) IS NOT NULL
-            ASSERT LE 1
-                AGGREGATE ([GLOBAL] aggregate [{7: sum=sum(7: sum)}] group by [[]] having [null]
-                    EXCHANGE GATHER
-                        AGGREGATE ([LOCAL] aggregate [{7: sum=sum(4: v4)}] group by [[]] having [null]
-                            SCAN (columns[4: v4] predicate[null])
+        AGGREGATE ([GLOBAL] aggregate [{7: sum=sum(7: sum)}] group by [[]] having [divide(cast(7: sum as double), 2) IS NOT NULL]
+            EXCHANGE GATHER
+                AGGREGATE ([LOCAL] aggregate [{7: sum=sum(4: v4)}] group by [[]] having [null]
+                    SCAN (columns[4: v4] predicate[null])
 [end]
 
 [sql]
@@ -605,18 +592,16 @@ select * from t0 where v1 = (select min(t1c )from test_all_type where t1d = (sel
 INNER JOIN (join-predicate [1: v1 = 23: cast] post-join-predicate [null])
     SCAN (columns[1: v1, 2: v2, 3: v3] predicate[1: v1 IS NOT NULL])
     EXCHANGE BROADCAST
-        PREDICATE cast(20: min as bigint(20)) IS NOT NULL
-            ASSERT LE 1
-                AGGREGATE ([GLOBAL] aggregate [{20: min=min(20: min)}] group by [[]] having [null]
-                    EXCHANGE GATHER
-                        AGGREGATE ([LOCAL] aggregate [{20: min=min(6: t1c)}] group by [[]] having [null]
-                            INNER JOIN (join-predicate [24: cast = 22: cast AND 7: t1d = 18: max] post-join-predicate [null])
-                                SCAN (columns[4: t1a, 6: t1c, 7: t1d] predicate[cast(4: t1a as double) IS NOT NULL AND 7: t1d IS NOT NULL])
-                                EXCHANGE BROADCAST
-                                    AGGREGATE ([GLOBAL] aggregate [{18: max=max(18: max)}] group by [[22: cast]] having [18: max IS NOT NULL]
-                                        EXCHANGE SHUFFLE[22]
-                                            AGGREGATE ([LOCAL] aggregate [{18: max=max(17: expr)}] group by [[22: cast]] having [null]
-                                                SCAN (columns[14: v4, 15: v5] predicate[cast(14: v4 as double) IS NOT NULL AND 14: v4 = 2])
+        AGGREGATE ([GLOBAL] aggregate [{20: min=min(20: min)}] group by [[]] having [cast(20: min as bigint(20)) IS NOT NULL]
+            EXCHANGE GATHER
+                AGGREGATE ([LOCAL] aggregate [{20: min=min(6: t1c)}] group by [[]] having [null]
+                    INNER JOIN (join-predicate [24: cast = 22: cast AND 7: t1d = 18: max] post-join-predicate [null])
+                        SCAN (columns[4: t1a, 6: t1c, 7: t1d] predicate[cast(4: t1a as double) IS NOT NULL AND 7: t1d IS NOT NULL])
+                        EXCHANGE BROADCAST
+                            AGGREGATE ([GLOBAL] aggregate [{18: max=max(18: max)}] group by [[22: cast]] having [18: max IS NOT NULL]
+                                EXCHANGE SHUFFLE[22]
+                                    AGGREGATE ([LOCAL] aggregate [{18: max=max(17: expr)}] group by [[22: cast]] having [null]
+                                        SCAN (columns[14: v4, 15: v5] predicate[cast(14: v4 as double) IS NOT NULL AND 14: v4 = 2])
 [end]
 
 [sql]
@@ -625,17 +610,16 @@ select v1, (select min(t1c) from test_all_type where t1d = (select max(v4 + v5) 
 CROSS JOIN (join-predicate [null] post-join-predicate [null])
     SCAN (columns[1: v1] predicate[null])
     EXCHANGE BROADCAST
-        ASSERT LE 1
-            AGGREGATE ([GLOBAL] aggregate [{20: min=min(20: min)}] group by [[]] having [null]
-                EXCHANGE GATHER
-                    AGGREGATE ([LOCAL] aggregate [{20: min=min(6: t1c)}] group by [[]] having [null]
-                        INNER JOIN (join-predicate [23: cast = 22: cast AND 7: t1d = 18: max] post-join-predicate [null])
-                            SCAN (columns[4: t1a, 6: t1c, 7: t1d] predicate[cast(4: t1a as double) IS NOT NULL AND 7: t1d IS NOT NULL])
-                            EXCHANGE BROADCAST
-                                AGGREGATE ([GLOBAL] aggregate [{18: max=max(18: max)}] group by [[22: cast]] having [18: max IS NOT NULL]
-                                    EXCHANGE SHUFFLE[22]
-                                        AGGREGATE ([LOCAL] aggregate [{18: max=max(17: expr)}] group by [[22: cast]] having [null]
-                                            SCAN (columns[14: v4, 15: v5] predicate[cast(14: v4 as double) IS NOT NULL AND 14: v4 = 2])
+        AGGREGATE ([GLOBAL] aggregate [{20: min=min(20: min)}] group by [[]] having [null]
+            EXCHANGE GATHER
+                AGGREGATE ([LOCAL] aggregate [{20: min=min(6: t1c)}] group by [[]] having [null]
+                    INNER JOIN (join-predicate [23: cast = 22: cast AND 7: t1d = 18: max] post-join-predicate [null])
+                        SCAN (columns[4: t1a, 6: t1c, 7: t1d] predicate[cast(4: t1a as double) IS NOT NULL AND 7: t1d IS NOT NULL])
+                        EXCHANGE BROADCAST
+                            AGGREGATE ([GLOBAL] aggregate [{18: max=max(18: max)}] group by [[22: cast]] having [18: max IS NOT NULL]
+                                EXCHANGE SHUFFLE[22]
+                                    AGGREGATE ([LOCAL] aggregate [{18: max=max(17: expr)}] group by [[22: cast]] having [null]
+                                        SCAN (columns[14: v4, 15: v5] predicate[cast(14: v4 as double) IS NOT NULL AND 14: v4 = 2])
 [end]
 
 [sql]
