@@ -129,6 +129,7 @@ Status LakePersistentIndexParallelCompactTask::do_run() {
                 continue;
             }
             TRACE_COUNTER_INCREMENT("compact_input_bytes", sstable_pb.filesize());
+            TRACE_COUNTER_INCREMENT("compact_input_sst_cnt", 1);
 
             // Open sstable file
             RandomAccessFileOptions opts;

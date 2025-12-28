@@ -101,24 +101,6 @@ bool PersistentIndexSstableFileset::append(std::unique_ptr<PersistentIndexSstabl
     return true;
 }
 
-Status PersistentIndexSstableFileset::merge_from(PersistentIndexSstableFileset& other) {
-    RETURN_IF(_sstable_map.empty(), Status::InternalError("sstable fileset's sstable_map is empty"));
-    RETURN_IF(other._sstable_map.empty(), Status::InternalError("other sstable fileset is not initialized"));
-    const sstable::Comparator* comparator = sstable::BytewiseComparator();
-    for (auto& [key_pair, sstable] : other._sstable_map) {
-        // Make sure sstable is inorder via comparator
-        const auto& last_end_key = _sstable_map.rbegin()->first.second;
-        if (comparator->Compare(Slice(last_end_key), Slice(key_pair.first)) >= 0) {
-            // skip overlapping sstables
-            continue;
-        }
-        // This sstable belong to same fileset.
-        sstable->set_fileset_id(_fileset_id);
-        _sstable_map.emplace(key_pair, std::move(sstable));
-    }
-    return Status::OK();
-}
-
 Status PersistentIndexSstableFileset::multi_get(const Slice* keys, const KeyIndexSet& key_indexes, int64_t version,
                                                 IndexValue* values, KeyIndexSet* found_key_indexes) const {
     const sstable::Comparator* comparator = sstable::BytewiseComparator();

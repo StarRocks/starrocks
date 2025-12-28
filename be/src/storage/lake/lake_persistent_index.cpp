@@ -226,7 +226,7 @@ Status LakePersistentIndex::sync_flush_all_memtables(int64_t wait_timeout_us) {
 // - Multiple memtables can be flushing concurrently (up to pk_index_memtable_max_count)
 // - If too many pending flushes, switches to synchronous flush to avoid unbounded memory growth
 Status LakePersistentIndex::flush_memtable(bool force) {
-    if (force || is_memtable_full()) {
+    if (!_memtable->empty() && (force || is_memtable_full())) {
         TRACE_COUNTER_SCOPE_LATENCY_US("flush_memtable_us");
         // 1. check whether previous flush task finish.
         int finish_point = -1;
@@ -720,11 +720,6 @@ Status LakePersistentIndex::apply_opcompaction(const TxnLogPB_OpCompaction& op_c
                                [&](const std::unique_ptr<PersistentIndexSstableFileset>& fileset) {
                                    return !fileset_contains_func(fileset);
                                });
-    if (start_it != end_it && new_sstable_fileset) {
-        // latest fileset may include some new flush ssable which not in input_sstables
-        // so we need to merge these sstables into new fileset
-        RETURN_IF_ERROR(new_sstable_fileset->merge_from(**std::prev(end_it)));
-    }
 
     // 3. Erase the range [start_it, end_it).
     // The erase method returns an iterator pointing to the position immediately following

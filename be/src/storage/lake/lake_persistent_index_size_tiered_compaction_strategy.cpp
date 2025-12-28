@@ -51,12 +51,21 @@ StatusOr<CompactionCandidateResult> LakePersistentIndexSizeTieredCompactionStrat
     std::vector<FilesetInfo> filesets;
     std::unordered_map<UniqueId, size_t> fileset_id_to_index;
     UniqueId base_level_fileset_id; // fileset id of base level (the first fileset)
+    // fileset id of active level (the last fileset)
+    UniqueId active_fileset_id =
+            sstable_meta.sstables(sstable_meta.sstables_size() - 1).has_fileset_id()
+                    ? UniqueId(sstable_meta.sstables(sstable_meta.sstables_size() - 1).fileset_id())
+                    : UniqueId::gen_uid();
 
     for (int i = 0; i < sstable_meta.sstables_size(); ++i) {
         const auto& sstable_pb = sstable_meta.sstables(i);
         // Every sstable without an explicit fileset_id will be treated as belonging to a different fileset.
         // That is because these sstable lack of key range info, and we cannot group them correctly.
         UniqueId fileset_id = sstable_pb.has_fileset_id() ? sstable_pb.fileset_id() : UniqueId::gen_uid();
+        if (fileset_id == active_fileset_id) {
+            // Active fileset should not be compacted
+            continue;
+        }
         if (i == 0) {
             base_level_fileset_id = fileset_id;
         }
