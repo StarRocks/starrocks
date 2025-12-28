@@ -20,6 +20,7 @@
 
 #include "common/statusor.h"
 #include "fmt/format.h"
+#include "util/raw_container.h"
 #include "util/slice.h"
 #include "util/variant.h"
 
@@ -28,12 +29,16 @@ namespace starrocks {
 class VariantRowValue {
 public:
     VariantRowValue(const std::string_view metadata, const std::string_view value)
-            : _metadata_raw(metadata), _value_raw(value), _metadata(_metadata_raw), _value(_value_raw) {}
-    VariantRowValue(std::string metadata, std::string value)
-            : _metadata_raw(std::move(metadata)),
-              _value_raw(std::move(value)),
-              _metadata(_metadata_raw),
-              _value(_value_raw) {}
+            : _raw(), _metadata_size(metadata.size()), _metadata(), _value() {
+        if (metadata.data() != VariantMetadata::kEmptyMetadata.data() ||
+            value.data() != VariantValue::kEmptyValue.data()) {
+            _raw.reserve(metadata.size() + value.size());
+            _raw.assign(metadata.data(), metadata.size());
+            _raw.append(value.data(), value.size());
+        }
+        _rebind_views();
+    }
+
     /**
      * Default constructor creates an empty VariantRowValue representing a NULL variant.
      * Uses predefined constants for empty metadata and a null variant value.
@@ -67,13 +72,12 @@ public:
     /**
      * Copy constructor. Creates a deep copy of the VariantRowValue.
      * After copying the underlying string data, _metadata and _value are reconstructed
-     * to point to the new object's _metadata_raw and _value_raw.
+     * to point to the new object's _raw string.
      */
     VariantRowValue(const VariantRowValue& rhs)
-            : _metadata_raw(rhs._metadata_raw),
-              _value_raw(rhs._value_raw),
-              _metadata(_metadata_raw),
-              _value(_value_raw) {}
+            : _raw(rhs._raw), _metadata_size(rhs._metadata_size), _metadata(), _value() {
+        _rebind_views();
+    }
 
     /**
      * Move constructor. Transfers ownership of the underlying string data.
@@ -81,10 +85,8 @@ public:
      * and the source object is reset to a valid empty state to prevent dangling references.
      */
     VariantRowValue(VariantRowValue&& rhs) noexcept
-            : _metadata_raw(std::move(rhs._metadata_raw)),
-              _value_raw(std::move(rhs._value_raw)),
-              _metadata(_metadata_raw),
-              _value(_value_raw) {
+            : _raw(std::move(rhs._raw)), _metadata_size(rhs._metadata_size), _metadata(), _value() {
+        _rebind_views();
         rhs._reset_to_empty();
     }
 
@@ -98,8 +100,8 @@ public:
 
     VariantRowValue& operator=(const VariantRowValue& rhs) {
         if (this != &rhs) {
-            _metadata_raw = rhs._metadata_raw;
-            _value_raw = rhs._value_raw;
+            _raw = rhs._raw;
+            _metadata_size = rhs._metadata_size;
             _rebind_views();
         }
         return *this;
@@ -107,8 +109,8 @@ public:
 
     VariantRowValue& operator=(VariantRowValue&& rhs) noexcept {
         if (this != &rhs) {
-            _metadata_raw = std::move(rhs._metadata_raw);
-            _value_raw = std::move(rhs._value_raw);
+            _raw = std::move(rhs._raw);
+            _metadata_size = rhs._metadata_size;
             _rebind_views();
             rhs._reset_to_empty();
         }
@@ -144,21 +146,27 @@ private:
     static constexpr size_t kMinMetadataSize = 3;
 
     /**
-     * Rebinds the metadata/value views after _metadata_raw or _value_raw change.
+     * Rebinds the metadata/value views after _raw changes.
      *
-     * CRITICAL: VariantMetadata and Variant store string_views pointing to the
-     * underlying _metadata_raw and _value_raw strings. After copy/move operations
-     * that change these strings, we must reconstruct _metadata and _value to
-     * point to the new storage, otherwise we'd have dangling references.
+     * CRITICAL: VariantMetadata and VariantValue store string_views pointing to the
+     * underlying _raw string. After copy/move operations that change _raw, we must
+     * reconstruct _metadata and _value to point to the new storage, otherwise we'd
+     * have dangling references.
      *
      * This is called after:
-     * - Copy assignment (after copying strings)
-     * - Move assignment (after moving strings)
+     * - Copy assignment (after copying string)
+     * - Move assignment (after moving string)
      * - Reset to empty (after assigning empty constants)
      */
     void _rebind_views() {
-        _metadata = VariantMetadata(_metadata_raw);
-        _value = VariantValue(_value_raw);
+        if (!_raw.empty()) {
+            std::string_view raw_view(_raw);
+            _metadata = VariantMetadata(raw_view.substr(0, _metadata_size));
+            _value = VariantValue(raw_view.substr(_metadata_size));
+        } else {
+            _metadata = VariantMetadata(VariantMetadata::kEmptyMetadata);
+            _value = VariantValue(VariantValue::kEmptyValue);
+        }
     }
 
     /**
@@ -167,8 +175,8 @@ private:
      * safely destroyed or reassigned, as required by C++ move semantics.
      */
     void _reset_to_empty() {
-        _metadata_raw.assign(VariantMetadata::kEmptyMetadata);
-        _value_raw.assign(VariantValue::kEmptyValue);
+        _raw.clear();
+        _metadata_size = VariantMetadata::kEmptyMetadata.size();
         _rebind_views();
     }
 
@@ -178,17 +186,16 @@ private:
 
     /**
      * Data layout:
-     * - _metadata_raw: Owns the metadata string data
-     * - _value_raw: Owns the variant value string data
-     * - _metadata: Wrapper holding a string_view into _metadata_raw
-     * - _value: Wrapper holding a string_view into _value_raw
+     * - _raw: Owns a single contiguous buffer containing [metadata][value]
+     * - _metadata_size: The size of the metadata portion in bytes
+     * - _metadata: Wrapper holding a string_view into _raw[0.._metadata_size)
+     * - _value: Wrapper holding a string_view into _raw[_metadata_size.._raw.size())
      *
      * The wrappers (_metadata, _value) must be kept in sync with their
-     * underlying storage (_metadata_raw, _value_raw) via _rebind_views()
-     * whenever the storage strings are modified.
+     * underlying storage (_raw) via _rebind_views() whenever _raw is modified.
      */
-    std::string _metadata_raw;
-    std::string _value_raw;
+    raw::RawString _raw;
+    size_t _metadata_size;
     VariantMetadata _metadata;
     VariantValue _value;
 };

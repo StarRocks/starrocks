@@ -203,6 +203,10 @@ MemTracker::~MemTracker() {
 #ifdef DEBUG
     {
         std::unique_lock<std::mutex> lock(_child_trackers_lock);
+        for (const auto& child : _child_trackers) {
+            LOG(WARNING) << "MemTracker '" << _label << "' is being destroyed without releasing child tracker "
+                         << child->label();
+        }
         DCHECK(_child_trackers.empty()) << err_msg("Child mem trackers have not been released, may cause corruption");
     }
 #endif
