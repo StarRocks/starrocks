@@ -563,24 +563,20 @@ StatusOr<uint32_t> VariantValue::num_elements() const {
 }
 
 StatusOr<VariantValue> VariantValue::get_object_by_key(const VariantMetadata& metadata, std::string_view key) const {
-    auto obj_status = get_object_info();
-    if (!obj_status.ok()) {
-        return obj_status.status();
-    }
-    const VariantObjectInfo& info = obj_status.value();
-
+    ASSIGN_OR_RETURN(const VariantObjectInfo& info, get_object_info());
     // hint: used to speed up the lookup for non-unique dictionary
     // even if the flag is non-unique, the dictionary may still be unique in most cases
     // so we try hint=0 first, which means just return the first matched index
     // if failed, we try hint=(last matched index), which means return all matched indexes.
 
     KeyIndexVector dict_indexes;
+    dict_indexes.reserve(4);
     int32_t field_index = -1;
 
     auto search = [&](int from_index) {
         RETURN_IF_ERROR(metadata._get_index(key, (void*)&dict_indexes, from_index));
         if (dict_indexes.empty()) {
-            return Status::NotFound("Field key not exists: " + std::string(key));
+            return Status::NotFound({});
         }
 #define SEARCH_DICT_INDEX_SZ(sz)                                                                       \
     case sz: {                                                                                         \
@@ -617,7 +613,7 @@ StatusOr<VariantValue> VariantValue::get_object_by_key(const VariantMetadata& me
     }
 
     if (field_index == -1) {
-        return Status::NotFound("Field key not found: " + std::string(key));
+        return Status::NotFound({});
     }
 
     const uint32_t offset = inline_read_little_endian_unsigned32(
