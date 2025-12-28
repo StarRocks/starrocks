@@ -411,7 +411,7 @@ public class PaimonPredicateConverterTest {
     public void testOrWithFunction() {
         //    (f0 = 44 and (case when f0 = 44 then 'test' end) = 'test')
         // OR (f0 <= 46 and (case when f0 = 44 then 'test' end) = 'test')
-        // OR(f0 <= 30 and (case when f0 = 44 then 'test' end) = 'test')
+        // OR((case when f0 = 44 then 'test' end) = 'test' and f1 like 'ttt%')
         // return f0 = 44 OR f0 <= 46 OR f0 <= 20
         BinaryPredicateOperator op2 = new BinaryPredicateOperator(
                 BinaryType.EQ, F0, ConstantOperator.createInt(44));
@@ -427,10 +427,10 @@ public class PaimonPredicateConverterTest {
         ScalarOperator op21 = new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.AND, op12,
                 test.clone());
 
-        BinaryPredicateOperator op13 = new BinaryPredicateOperator(
-                BinaryType.LE, F0, ConstantOperator.createInt(20));
-        ScalarOperator op22 = new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.AND, op13,
-                test.clone());
+        ConstantOperator value = ConstantOperator.createVarchar("ttt%");
+        ScalarOperator op13 = new LikePredicateOperator(LikePredicateOperator.LikeType.LIKE, F1, value);
+        ScalarOperator op22 = new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.AND,
+                test.clone(), op13);
 
         CompoundPredicateOperator compoundPredicateOperator =
                 new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.OR, op20, op21);
@@ -439,7 +439,7 @@ public class PaimonPredicateConverterTest {
                         op22);
         CompoundPredicate convert = (CompoundPredicate) CONVERTER.convert(compoundPredicateOperator1);
         Assertions.assertTrue(
-                "Or([Or([Equal(f0, 44), LessOrEqual(f0, 46)]), LessOrEqual(f0, 20)])".equals(convert.toString()));
+                "Or([Or([Equal(f0, 44), LessOrEqual(f0, 46)]), StartsWith(f1, ttt)])".equals(convert.toString()));
 
         // (case when f0 = 44 then 'test' end) = 'test'
         // OR (f0 <= 46 and (case when f0 = 44 then 'test' end) = 'test')
@@ -449,9 +449,9 @@ public class PaimonPredicateConverterTest {
         CompoundPredicate convert1 = (CompoundPredicate) CONVERTER.convert(op40.clone());
         Assertions.assertTrue(convert1 == null);
 
-        // NOT (f0 <= 46 and (case when f0 = 44 then 'test' end) = 'test')
+        // NOT ((case when f0 = 44 then 'test' end) = 'test' and  f1 like 'ttt%')
         // return null
-        ScalarOperator op52 = new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.NOT, op21.clone());
+        ScalarOperator op52 = new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.NOT, op22.clone());
         Predicate convert2 = CONVERTER.convert(op52);
         Assertions.assertTrue(convert2 == null);
     }
