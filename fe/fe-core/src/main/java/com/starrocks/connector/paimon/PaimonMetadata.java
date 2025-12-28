@@ -78,9 +78,6 @@ import org.apache.paimon.table.source.InnerTableScan;
 import org.apache.paimon.table.source.ReadBuilder;
 import org.apache.paimon.table.source.Split;
 import org.apache.paimon.table.system.SnapshotsTable;
-import org.apache.paimon.table.system.PartitionsTable;
-import org.apache.paimon.table.system.SchemasTable;
-import org.apache.paimon.table.system.SnapshotsTable;
 import org.apache.paimon.types.DataField;
 import org.apache.paimon.types.DataType;
 import org.apache.paimon.types.DataTypeChecks;
@@ -179,14 +176,13 @@ public class PaimonMetadata implements ConnectorMetadata {
 
         try {
             List<org.apache.paimon.partition.Partition> partitions = paimonNativeCatalog.listPartitions(identifier);
-            boolean partitionLegacyName = getPartitionLegacyName(paimonTable);for (org.apache.paimon.partition.Partition partition : partitions) {
+            boolean partitionLegacyName = getPartitionLegacyName(paimonTable);
+            for (org.apache.paimon.partition.Partition partition : partitions) {
                 String partitionPath = PartitionPathUtils.generatePartitionPath(partition.spec(), dataTableRowType);
-                String[] partitionValues = Arrays.stream(partitionPath.split("/"))
-                        .map(part -> part.split("=")[1])
-                        .toArray(String[]::new);
-                Partition srPartition = getPartition(partition,
-                        partitionColumnNames, partitionColumnTypes,
-                        partitionValues, partitionLegacyName);
+                String[] partitionValues =
+                        Arrays.stream(partitionPath.split("/")).map(part -> part.split("=")[1]).toArray(String[]::new);
+                Partition srPartition =
+                        getPartition(partition, partitionColumnNames, partitionColumnTypes, partitionValues, partitionLegacyName);
                 this.partitionInfos.get(identifier).put(srPartition.getPartitionName(), srPartition);
             }
         } catch (Catalog.TableNotExistException e) {
