@@ -216,7 +216,7 @@ public class ImplicitCastRuleTest {
         assertTrue(result.getChild(0).getChild(0).getType().isBigint());
         assertTrue(result.getChild(2).getChild(0).getType().isDate());
 
-        //date_format(str_to_date('20241209','%Y%m%d'),'%Y-%m-%d 00:00:00') in (str_to_date('20241209','%Y%m%d'),str_to_date('20241208','%Y%m%d'))
+        // date_format(str_to_date('20241209','%Y%m%d'),'%Y-%m-%d 00:00:00') in (str_to_date('20241209','%Y%m%d'),str_to_date('20241208','%Y%m%d'))
         InPredicateOperator op1 = new InPredicateOperator(ConstantOperator.createVarchar("2024-12-09 00:00:00"),
                 ConstantOperator.createDate(LocalDate.of(2024, 12, 9).atStartOfDay()),
                 ConstantOperator.createDate(LocalDateTime.now()));
