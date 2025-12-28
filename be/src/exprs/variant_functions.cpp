@@ -137,12 +137,7 @@ StatusOr<ColumnPtr> VariantFunctions::_do_variant_query(FunctionContext* context
             result.append(std::move(field.value()));
         } else {
             const RuntimeState* state = context->state();
-            cctz::time_zone zone;
-            if (state == nullptr) {
-                zone = cctz::local_time_zone();
-            } else {
-                zone = context->state()->timezone_obj();
-            }
+            cctz::time_zone zone = (state == nullptr) ? cctz::local_time_zone() : context->state()->timezone_obj();
             Status casted = cast_variant_value_to<ResultType, true>(field.value(), zone, result);
             // Append null if casting fails
             if (!casted.ok()) {

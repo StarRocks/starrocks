@@ -27,35 +27,27 @@ Status cast_variant_to_bool(const VariantRowValue& variant, ColumnBuilder<TYPE_B
     }
 
     if (type == VariantType::BOOLEAN_TRUE || type == VariantType::BOOLEAN_FALSE) {
-        auto ret = value.get_bool();
-        if (!ret.ok()) {
-            return ret.status();
-        }
-
-        result.append(ret.value());
+        ASSIGN_OR_RETURN(const auto ret, value.get_bool());
+        result.append(ret);
         return Status::OK();
     }
 
     if (type == VariantType::STRING) {
-        auto str = value.get_string();
-        if (str.ok()) {
-            const char* str_value = str.value().data();
-            size_t len = str.value().size();
-            StringParser::ParseResult parsed;
-            auto r = StringParser::string_to_int<int32_t>(str_value, len, &parsed);
+        ASSIGN_OR_RETURN(const auto str, value.get_string());
+        const char* str_value = str.data();
+        size_t len = str.size();
+        StringParser::ParseResult parsed;
+        auto r = StringParser::string_to_int<int32_t>(str_value, len, &parsed);
+        if (parsed != StringParser::PARSE_SUCCESS) {
+            const bool casted = StringParser::string_to_bool(str_value, len, &parsed);
             if (parsed != StringParser::PARSE_SUCCESS) {
-                const bool casted = StringParser::string_to_bool(str_value, len, &parsed);
-                if (parsed != StringParser::PARSE_SUCCESS) {
-                    return Status::VariantError(fmt::format("Failed to cast string '{}' to BOOLEAN", str.value()));
-                }
-
-                result.append(casted);
-            } else {
-                result.append(r != 0);
+                return Status::VariantError(fmt::format("Failed to cast string '{}' to BOOLEAN", str));
             }
-
-            return Status::OK();
+            result.append(casted);
+        } else {
+            result.append(r != 0);
         }
+        return Status::OK();
     }
 
     return VARIANT_CAST_NOT_SUPPORT(type, TYPE_BOOLEAN);
@@ -70,21 +62,14 @@ Status cast_variant_to_string(const VariantRowValue& variant, const cctz::time_z
         return Status::OK();
     }
     case VariantType::STRING: {
-        auto str = value.get_string();
-        if (!str.ok()) {
-            return str.status();
-        }
-
-        result.append(Slice(std::string(str.value())));
+        ASSIGN_OR_RETURN(const auto str, value.get_string());
+        result.append(Slice(str));
         return Status::OK();
     }
     default: {
+        // TODO: extra copy. from variant -> ss, and ss -> result.
         std::stringstream ss;
-        Status status = VariantUtil::variant_to_json(variant.get_metadata(), value, ss, zone);
-        if (!status.ok()) {
-            return status;
-        }
-
+        RETURN_IF_ERROR(VariantUtil::variant_to_json(variant.get_metadata(), value, ss, zone));
         std::string json_str = ss.str();
         result.append(Slice(json_str));
         return Status::OK();
