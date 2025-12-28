@@ -59,6 +59,23 @@ public class LowCardinalityStructTest extends PlanTestBase {
                 );
                 """);
 
+        starRocksAssert.withTable("""
+                CREATE TABLE T_WITH_STRUCT (
+                    KEY_COL             INTEGER NOT NULL,
+                    VARCHAR_COL         VARCHAR(25),
+                    ARRAY_VARCHAR_COL   ARRAY<VARCHAR(40)>,
+                    INTEGER_COL         INTEGER,
+                    STRUCT_COL          STRUCT<VARCHAR_FIELD VARCHAR(50), INTEGER_FIELD INTEGER>)
+                ENGINE=OLAP
+                DUPLICATE KEY(`KEY_COL`)
+                COMMENT "OLAP"
+                DISTRIBUTED by HASH(`KEY_COL`) BUCKETS 1
+                PROPERTIES (
+                    "replication_num" = "1",
+                    "in_memory" = "false"
+                );
+                """);
+
         FeConstants.USE_MOCK_DICT_MANAGER = true;
         connectContext.getSessionVariable().setSqlMode(2);
         connectContext.getSessionVariable().setEnableLowCardinalityOptimize(true);
@@ -435,5 +452,22 @@ public class LowCardinalityStructTest extends PlanTestBase {
                 "struct<col1 int(11), col2 int(11)>, true].col2[true]); args: VARCHAR,VARCHAR,VARCHAR,INT; result: " +
                 "struct<col1 varchar(25), col2 int(11)>; args nullable: true; result nullable: true]); args: " +
                 "INVALID_TYPE; result: JSON; args nullable: true; result nullable: true]\n"), plan);
+    }
+
+    @Test
+    public void testStructInScan() throws Exception {
+        String sql = """
+                SELECT STRUCT_COL, UPPER(STRUCT_COL.VARCHAR_FIELD), UPPER(VARCHAR_COL)
+                FROM T_WITH_STRUCT
+                """;
+        String plan = getVerboseExplain(sql);
+        String expected = "  1:Project\n" +
+                "  |  output columns:\n" +
+                "  |  5 <-> [5: STRUCT_COL, struct<VARCHAR_FIELD varchar(50), INTEGER_FIELD int(11)>, true]\n" +
+                "  |  6 <-> upper[([5: STRUCT_COL, struct<VARCHAR_FIELD varchar(50), INTEGER_FIELD int(11)>, true]." +
+                "VARCHAR_FIELD[true]); args: VARCHAR; result: VARCHAR; args nullable: true; result nullable: true]\n" +
+                "  |  7 <-> DictDecode([8: VARCHAR_COL, INT, true], [upper[(<place-holder>); args: VARCHAR; " +
+                "result: VARCHAR; args nullable: true; result nullable: true]])\n";
+        Assertions.assertTrue(plan.contains(expected), plan);
     }
 }

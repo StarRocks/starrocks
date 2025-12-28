@@ -166,12 +166,14 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
     private final Map<Integer, ScalarOperator> stringRefToDefineExprMap = Maps.newHashMap();
 
     // Maintains a mapping from structs operators to field columnRefs to use for encoded fields. Currently only fields
-    // which correspond to a column ref can be encoded.
+    // which correspond to a column ref can be encoded. All field ColumnRefOperators should have STRING or ARRAY<STRING>
+    // types. Nested structs are not supported.
     private final Map<ScalarOperator, Map<String, ColumnRefOperator>> structOpToFieldUseStringRef =
             Maps.newIdentityHashMap();
 
     // Maintains a mapping from structs ColumnRefs to field columnRefs to use for encoded fields. Currently only fields
-    // which correspond to a column ref can be encoded.
+    // which correspond to a column ref can be encoded. All field ColumnRefOperators should have STRING or ARRAY<STRING>
+    // types. Nested structs are not supported.
     private final Map<Integer, Map<String, ColumnRefOperator>> structRefToFieldUseStringRef = Maps.newHashMap();
 
     // string column use counter, 0 meanings decoded immediately after it was generated.
@@ -447,9 +449,20 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
         ScalarOperator define = stringRefToDefineExprMap.get(cid);
         if (define.getType().isStructType()) {
             Map<String, ColumnRefOperator> fieldsMap = getFieldUseStringRefMap(define);
-            Preconditions.checkNotNull(fieldsMap);
+            if (fieldsMap == null) {
+                return false;
+            }
             // Any structs with encoded fields should pass. We filter the fields list later.
             return fieldsMap.values().stream().anyMatch(c -> checkDependOnExpr(c.getId(), checkList));
+        }
+        if (define instanceof SubfieldOperator) {
+            SubfieldOperator subfieldOperator = define.cast();
+            Map<String, ColumnRefOperator> fieldsMap = getFieldUseStringRefMap(subfieldOperator.getChild(0));
+            if (fieldsMap == null || subfieldOperator.getFieldNames().size() != 1) {
+                return false;
+            }
+            ColumnRefOperator fieldRef = fieldsMap.get(subfieldOperator.getFieldNames().get(0));
+            return fieldRef != null && checkDependOnExpr(fieldRef.getId(), checkList);
         }
         for (ColumnRefOperator ref : getColumnRefs(define)) {
             if (ref.getId() == cid) {
@@ -1000,7 +1013,7 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
         DecodeInfo info = new DecodeInfo();
         for (ColumnRefOperator column : scan.getColRefToColumnMetaMap().keySet()) {
             // Condition 1:
-            if (!supportAndEnabledLowCardinality(column.getType())) {
+            if (!supportAndEnabledLowCardinalityForScanOperator(column.getType())) {
                 continue;
             }
 
@@ -1058,7 +1071,7 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
     private Pair<Boolean, Optional<ColumnDict>> checkConnectorGlobalDict(PhysicalScanOperator scan, Table table,
                                                                          ColumnRefOperator column) {
         // Condition 1:
-        if (!supportAndEnabledLowCardinality(column.getType())) {
+        if (!supportAndEnabledLowCardinalityForScanOperator(column.getType())) {
             return new Pair<>(false, Optional.empty());
         }
 
@@ -1288,13 +1301,13 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
                 || type.isStructType());
     }
 
-    private boolean supportAndEnabledLowCardinality(Type type) {
+    private boolean supportAndEnabledLowCardinalityForScanOperator(Type type) {
         if (!supportLowCardinality(type)) {
             return false;
         } else if (type.isArrayType()) {
             return sessionVariable.isEnableArrayLowCardinalityOptimize();
         } else if (type.isStructType()) {
-            return sessionVariable.isEnableStructLowCardinalityOptimize();
+            return false;
         }
         return true;
     }

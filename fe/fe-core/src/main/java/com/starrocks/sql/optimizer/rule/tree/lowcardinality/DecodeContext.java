@@ -103,11 +103,13 @@ class DecodeContext {
     Map<ScalarOperator, ScalarOperator> stringExprToDictExprMap = Maps.newHashMap();
 
     // Maintains a mapping from struct ColumnRefs to field ColumnRefs to use for encoded fields.
-    // Currently only fields which correspond to a ColumnRef can be encoded.
+    // Currently only fields which correspond to a ColumnRef can be encoded. All field ColumnRefOperators should have
+    // STRING or ARRAY<STRING> types. Nested structs are not supported.
     Map<Integer, Map<String, ColumnRefOperator>> structRefToFieldUseStringRefMap = Maps.newHashMap();
 
     // Maintains a mapping from struct operators to field ColumnRefs to use for encoded fields.
-    // Currently only fields which correspond to a ColumnRef can be encoded.
+    // Currently only fields which correspond to a ColumnRef can be encoded. All field ColumnRefOperators should have
+    // STRING or ARRAY<STRING> types. Nested structs are not supported.
     Map<ScalarOperator, Map<String, ColumnRefOperator>> structOpToFieldUseStringRefMap =
             Maps.newIdentityHashMap();
 
@@ -251,6 +253,7 @@ class DecodeContext {
             StructType type = (StructType) column.getType();
             for (int i = 0; i < type.getFields().size(); ++i) {
                 if (fieldsData.containsKey(type.getField(i).getName())) {
+                    // DecodeCollector ensures all ColumnRefOperators in this map have STRING or ARRAY<STRING> type.
                     Preconditions.checkState(type.getField(i).getType().isStringArrayType()
                             || type.getField(i).getType().isStringType());
                     structFields.add(new StructField(type.getField(i).getName(),

@@ -373,6 +373,14 @@ public class DecodeRewriter extends OptExpressionVisitor<OptExpression, ColumnRe
         DecodeInfo info = context.operatorDecodeInfo.get(exchange);
         // compute the dicts and expressions used by in the fragment
         Map<Integer, ColumnDict> dictMap = Maps.newHashMap();
+        ColumnRefSet inputColumns = new ColumnRefSet();
+        inputColumns.union(info.inputStringColumns);
+        info.inputStringColumns.getStream()
+                .map(factory::getColumnRef)
+                .filter(c -> c.getType().isStructType())
+                .map(context::getFieldUseStringRefMap)
+                .map(Map::values)
+                .forEach(inputColumns::union);
         for (int sid : info.inputStringColumns.getColumnIds()) {
             ColumnRefOperator stringRef = factory.getColumnRef(sid);
             if (!context.stringRefToDictRefMap.containsKey(stringRef)) {
@@ -382,16 +390,7 @@ public class DecodeRewriter extends OptExpressionVisitor<OptExpression, ColumnRe
             ColumnRefOperator dictRef = context.stringRefToDictRefMap.get(stringRef);
             if (context.stringRefToDicts.containsKey(sid)) {
                 dictMap.put(dictRef.getId(), context.stringRefToDicts.get(sid));
-            } else if (dictRef.getType().isStructType()) {
-                Map<String, ColumnRefOperator> fieldsUseStringRefMap = context.getFieldUseStringRefMap(stringRef);
-                Preconditions.checkNotNull(fieldsUseStringRefMap);
-                fieldsUseStringRefMap.values().forEach(c -> {
-                    if (context.stringRefToDicts.containsKey(c.getId())) {
-                        ColumnRefOperator fieldDictRef = context.stringRefToDictRefMap.get(c);
-                        dictMap.put(fieldDictRef.getId(),  context.stringRefToDicts.get(c.getId()));
-                    }
-                });
-            } else {
+            } else if (context.globalDictsExpr.containsKey(dictRef.getId())) {
                 // compute expressions depend-on dict
                 for (ColumnRefOperator useRefs : context.globalDictsExpr.get(dictRef.getId()).getColumnRefs()) {
                     if (context.stringRefToDicts.containsKey(useRefs.getId())) {
