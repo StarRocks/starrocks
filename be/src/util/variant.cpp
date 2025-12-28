@@ -184,13 +184,12 @@ StatusOr<std::string_view> VariantMetadata::get_key(uint32_t index) const {
 static constexpr uint8_t kBinarySearchThreshold = 32;
 
 Status VariantMetadata::_get_index(std::string_view key, void* _indexes, int hint) const {
-    KeyIndexVector& indexes = *static_cast<KeyIndexVector*>(_indexes);
-
     uint32_t dict_sz = dict_size();
     if (dict_sz == 0) {
         return Status::OK();
     }
 
+    KeyIndexVector& indexes = *static_cast<KeyIndexVector*>(_indexes);
     bool is_sorted_unique = is_sorted_and_unique();
     RETURN_IF_ERROR(_build_lookup_index());
     const std::vector<std::string_view>& dict_strings = _lookup_index.dict_strings;
@@ -207,9 +206,15 @@ Status VariantMetadata::_get_index(std::string_view key, void* _indexes, int hin
                 indexes.push_back(std::distance(dict_strings.begin(), it));
             }
         }
-    } else {
-        // non-unique dictionary, find all matching indexes
+    } else if (hint == 0) {
         for (uint32_t i = 0; i < dict_sz; i++) {
+            if (dict_strings[i] == key) {
+                indexes.push_back(i);
+                break;
+            }
+        }
+    } else {
+        for (uint32_t i = hint; i < dict_sz; i++) {
             if (dict_strings[i] == key) {
                 indexes.push_back(i);
             }
@@ -219,21 +224,6 @@ Status VariantMetadata::_get_index(std::string_view key, void* _indexes, int hin
 }
 
 // Variant value class
-
-VariantType VariantValue::type() const {
-    switch (basic_type()) {
-    case VariantValue::BasicType::PRIMITIVE:
-        return static_cast<VariantType>(value_header());
-    case VariantValue::BasicType::SHORT_STRING:
-        return VariantType::STRING; // Short string is treated as a string type.
-    case VariantValue::BasicType::OBJECT:
-        return VariantType::OBJECT;
-    case VariantValue::BasicType::ARRAY:
-        return VariantType::ARRAY;
-    default:
-        return VariantType::NULL_TYPE; // Should not happen, but return NULL_TYPE as a fallback.
-    }
-}
 
 StatusOr<VariantObjectInfo> VariantValue::get_object_info() const {
     const std::string_view& value = _value;
@@ -558,25 +548,20 @@ StatusOr<uint32_t> VariantValue::num_elements() const {
 }
 
 StatusOr<VariantValue> VariantValue::get_object_by_key(const VariantMetadata& metadata, std::string_view key) const {
-    auto obj_status = get_object_info();
-    if (!obj_status.ok()) {
-        return obj_status.status();
-    }
-
-    const VariantObjectInfo& info = obj_status.value();
+    ASSIGN_OR_RETURN(const VariantObjectInfo& info, get_object_info());
     // hint: used to speed up the lookup for non-unique dictionary
     // even if the flag is non-unique, the dictionary may still be unique in most cases
     // so we try hint=0 first, which means just return the first matched index
-    // if failed, we try hint=1, which means return all matched indexes. but we can skip the first item
-    // because it has been tried in the previous attempt
+    // if failed, we try hint=(last matched index), which means return all matched indexes.
 
     KeyIndexVector dict_indexes;
-    RETURN_IF_ERROR(metadata._get_index(key, (void*)&dict_indexes, 0));
-    if (dict_indexes.empty()) {
-        return Status::NotFound("Field key not exists: " + std::string(key));
-    }
-
     int32_t field_index = -1;
+
+    auto search = [&](int from_index) {
+        RETURN_IF_ERROR(metadata._get_index(key, (void*)&dict_indexes, from_index));
+        if (dict_indexes.empty()) {
+            return Status::OK();
+        }
 #define SEARCH_DICT_INDEX_SZ(sz)                                                                       \
     case sz: {                                                                                         \
         const char* id_base = _value.data() + info.id_start_offset;                                    \
@@ -595,15 +580,32 @@ StatusOr<VariantValue> VariantValue::get_object_by_key(const VariantMetadata& me
         break;                                                                                         \
     }
 
-    switch (info.id_size) {
-        SEARCH_DICT_INDEX_SZ(1);
-        SEARCH_DICT_INDEX_SZ(2);
-        SEARCH_DICT_INDEX_SZ(3);
-        SEARCH_DICT_INDEX_SZ(4);
+        switch (info.id_size) {
+            SEARCH_DICT_INDEX_SZ(1);
+            SEARCH_DICT_INDEX_SZ(2);
+            SEARCH_DICT_INDEX_SZ(3);
+            SEARCH_DICT_INDEX_SZ(4);
+        }
+
+        return Status::OK();
+    };
+
+    RETURN_IF_ERROR(search(0));
+
+    // don't find key in the dict, then return null value.
+    if (dict_indexes.empty()) {
+        return VariantValue();
+    }
+
+    // but if not find field_index, and the dict is non-unique, we need to search again
+    if (field_index == -1 && !metadata.is_sorted_and_unique()) {
+        int from_index = dict_indexes[0] + 1;
+        dict_indexes.clear();
+        RETURN_IF_ERROR(search(from_index));
     }
 
     if (field_index == -1) {
-        return Status::NotFound("Field key not found: " + std::string(key));
+        return VariantValue();
     }
 
     const uint32_t offset = inline_read_little_endian_unsigned32(
@@ -625,8 +627,9 @@ StatusOr<VariantValue> VariantValue::get_element_at_index(const VariantMetadata&
 
     const auto& info = array_info_status.value();
     if (index >= info.num_elements) {
-        return Status::VariantError("Array index out of range: " + std::to_string(index) +
-                                    " >= " + std::to_string(info.num_elements));
+        // if you access out-of-bounds index, just return a null variant value
+        // it does not mean error, and usually it is the normal case.
+        return VariantValue();
     }
 
     uint32_t offset = inline_read_little_endian_unsigned32(

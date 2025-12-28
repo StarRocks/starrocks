@@ -264,7 +264,21 @@ public:
 
     BasicType basic_type() const { return static_cast<VariantValue::BasicType>(_value[0] & kBasicTypeMask); }
     std::string_view raw() const { return _value; }
-    VariantType type() const;
+    VariantType type() const {
+        switch (basic_type()) {
+        case VariantValue::BasicType::PRIMITIVE:
+            return static_cast<VariantType>(value_header());
+        case VariantValue::BasicType::SHORT_STRING:
+            return VariantType::STRING; // Short string is treated as a string type.
+        case VariantValue::BasicType::OBJECT:
+            return VariantType::OBJECT;
+        case VariantValue::BasicType::ARRAY:
+            return VariantType::ARRAY;
+        default:
+            return VariantType::NULL_TYPE; // Should not happen, but return NULL_TYPE as a fallback.
+        }
+    }
+    bool is_null() const { return _value[0] == 0; }
 
     // Get the primitive boolean value.
     StatusOr<bool> get_bool() const;

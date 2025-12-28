@@ -20,6 +20,11 @@ static const char g_moved_from_state[5] = {'\x00', '\x00', '\x00', '\x00', TStat
 inline const char* assemble_state(TStatusCode::type code, std::string_view msg, std::string_view ctx) {
     DCHECK(code != TStatusCode::OK);
 
+    if (msg.empty() && ctx.empty()) {
+        auto result = new char[5]{0, 0, 0, 0, static_cast<char>(code)};
+        return result;
+    }
+
     auto msg_size = std::min<size_t>(msg.size(), std::numeric_limits<uint16_t>::max());
     auto ctx_size = std::min<size_t>(ctx.size(), std::numeric_limits<uint16_t>::max());
 

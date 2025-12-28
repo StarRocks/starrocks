@@ -264,6 +264,9 @@ StatusOr<VariantRowValue> VariantPath::seek(const VariantRowValue* variant, cons
                     return Status::OK();
                 },
                 segment));
+        if (current.is_null()) {
+            break;
+        }
     }
     return VariantRowValue::from_variant(metadata, current);
 }

@@ -150,7 +150,7 @@ ORDER BY case_id;
 -- result:
 1	alpha	10	hot	Decimal4	Decimal4	1.50000000	3.50000000	1.5	3.5
 2	beta	0	cold	Decimal4	Decimal4	-0.50000000	0.50000000	-0.5	0.5
-3	None	None	None	None	None	None	None	None	None
+3	None	None	None	Null	Null	None	None	None	None
 4	delta	99	warm	Decimal4	Decimal4	0E-8	2.00000000	0.0	2.0
 -- !result
 SELECT 'Query 3: Use variant_query + CAST to coerce nested payloads into primitives.' AS case_description;
