@@ -401,7 +401,7 @@ TEST_F(ParquetVariantTest, ObjectPrimitive) {
     EXPECT_EQ(VariantType::STRING, timestamp_field.type());
     EXPECT_EQ("2025-04-16T12:34:56.78", *timestamp_field.get_string());
 
-    EXPECT_ERROR(variant.get_object_by_key(metadata, "unknow"));
+    EXPECT_EQ(variant.get_object_by_key(metadata, "unknow")->type(), VariantType::NULL_TYPE);
 }
 
 TEST_F(ParquetVariantTest, ObjectEmpty) {
@@ -411,7 +411,8 @@ TEST_F(ParquetVariantTest, ObjectEmpty) {
     EXPECT_EQ(VariantType::OBJECT, variant.type());
     EXPECT_EQ(0, *variant.num_elements());
 
-    EXPECT_ERROR(variant.get_object_by_key(metadata, "key"));
+    EXPECT_EQ(variant.get_object_by_key(metadata, "key")->type(), VariantType::NULL_TYPE);
+    EXPECT_ERROR(variant.get_element_at_index(metadata, 0));
 }
 
 TEST_F(ParquetVariantTest, ArrayPrimitive) {
@@ -445,7 +446,7 @@ TEST_F(ParquetVariantTest, ArrayEmpty) {
     EXPECT_EQ(VariantType::ARRAY, variant.type());
     EXPECT_EQ(0, *variant.num_elements());
 
-    EXPECT_ERROR(variant.get_element_at_index(metadata, 0));
+    EXPECT_EQ(variant.get_element_at_index(metadata, 0)->type(), VariantType::NULL_TYPE);
     EXPECT_ERROR(variant.get_object_by_key(metadata, "key"));
 }
 
