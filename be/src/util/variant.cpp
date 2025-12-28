@@ -225,21 +225,6 @@ Status VariantMetadata::_get_index(std::string_view key, void* _indexes, int hin
 
 // Variant value class
 
-VariantType VariantValue::type() const {
-    switch (basic_type()) {
-    case VariantValue::BasicType::PRIMITIVE:
-        return static_cast<VariantType>(value_header());
-    case VariantValue::BasicType::SHORT_STRING:
-        return VariantType::STRING; // Short string is treated as a string type.
-    case VariantValue::BasicType::OBJECT:
-        return VariantType::OBJECT;
-    case VariantValue::BasicType::ARRAY:
-        return VariantType::ARRAY;
-    default:
-        return VariantType::NULL_TYPE; // Should not happen, but return NULL_TYPE as a fallback.
-    }
-}
-
 StatusOr<VariantObjectInfo> VariantValue::get_object_info() const {
     const std::string_view& value = _value;
     VariantValue::BasicType btype = basic_type();
@@ -570,13 +555,12 @@ StatusOr<VariantValue> VariantValue::get_object_by_key(const VariantMetadata& me
     // if failed, we try hint=(last matched index), which means return all matched indexes.
 
     KeyIndexVector dict_indexes;
-    dict_indexes.reserve(4);
     int32_t field_index = -1;
 
     auto search = [&](int from_index) {
         RETURN_IF_ERROR(metadata._get_index(key, (void*)&dict_indexes, from_index));
         if (dict_indexes.empty()) {
-            return Status::NotFound({});
+            return Status::OK();
         }
 #define SEARCH_DICT_INDEX_SZ(sz)                                                                       \
     case sz: {                                                                                         \
@@ -602,10 +586,18 @@ StatusOr<VariantValue> VariantValue::get_object_by_key(const VariantMetadata& me
             SEARCH_DICT_INDEX_SZ(3);
             SEARCH_DICT_INDEX_SZ(4);
         }
+
         return Status::OK();
     };
 
     RETURN_IF_ERROR(search(0));
+
+    // don't find key in the dict, then return null value.
+    if (dict_indexes.empty()) {
+        return VariantValue();
+    }
+
+    // but if not find field_index, and the dict is non-unique, we need to search again
     if (field_index == -1 && !metadata.is_sorted_and_unique()) {
         int from_index = dict_indexes[0] + 1;
         dict_indexes.clear();
@@ -613,7 +605,7 @@ StatusOr<VariantValue> VariantValue::get_object_by_key(const VariantMetadata& me
     }
 
     if (field_index == -1) {
-        return Status::NotFound({});
+        return VariantValue();
     }
 
     const uint32_t offset = inline_read_little_endian_unsigned32(
@@ -635,8 +627,9 @@ StatusOr<VariantValue> VariantValue::get_element_at_index(const VariantMetadata&
 
     const auto& info = array_info_status.value();
     if (index >= info.num_elements) {
-        return Status::VariantError("Array index out of range: " + std::to_string(index) +
-                                    " >= " + std::to_string(info.num_elements));
+        // if you access out-of-bounds index, just return a null variant value
+        // it does not mean error, and usually it is the normal case.
+        return VariantValue();
     }
 
     uint32_t offset = inline_read_little_endian_unsigned32(
