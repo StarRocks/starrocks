@@ -510,13 +510,17 @@ public class RedirectStatusTest {
 
     @Test
     public void testDropStatsStmt() {
-        DropStatsStmt stmt = new DropStatsStmt(null, false, NodePosition.ZERO);
+        QualifiedName qualifiedName = QualifiedName.of(Lists.newArrayList("test_db", "test_table"));
+        TableRef tableRef = new TableRef(qualifiedName, null, NodePosition.ZERO);
+        DropStatsStmt stmt = new DropStatsStmt(tableRef, false, NodePosition.ZERO);
         Assertions.assertEquals(RedirectStatus.FORWARD_WITH_SYNC, RedirectStatus.getRedirectStatus(stmt));
     }
 
     @Test
     public void testDropHistogramStmt() {
-        DropHistogramStmt stmt = new DropHistogramStmt(null, java.util.Collections.emptyList(), NodePosition.ZERO);
+        QualifiedName qualifiedName = QualifiedName.of(Lists.newArrayList("test_db", "test_table"));
+        TableRef tableRef = new TableRef(qualifiedName, null, NodePosition.ZERO);
+        DropHistogramStmt stmt = new DropHistogramStmt(tableRef, java.util.Collections.emptyList(), NodePosition.ZERO);
         Assertions.assertEquals(RedirectStatus.FORWARD_WITH_SYNC, RedirectStatus.getRedirectStatus(stmt));
     }
 
@@ -531,7 +535,8 @@ public class RedirectStatusTest {
         CreateTableStmt createTableStmt = new CreateTableStmt(
                 false,
                 false,
-                new TableName("hive_catalog", "hive_db", "hive_table"),
+                new TableRef(QualifiedName.of(Lists.newArrayList("hive_catalog", "hive_db", "hive_table")),
+                        null, NodePosition.ZERO),
                 Lists.newArrayList(
                         new ColumnDef("c1", new TypeDef(TypeFactory.createType(PrimitiveType.INT))),
                         new ColumnDef("p1", new TypeDef(TypeFactory.createType(PrimitiveType.INT)))),
@@ -554,7 +559,9 @@ public class RedirectStatusTest {
 
     @Test
     public void testCreateTemporaryTableAsSelectStatement() {
-        CreateTemporaryTableStmt createTemporaryTableStmt = new CreateTemporaryTableStmt(false, false, null,
+        CreateTemporaryTableStmt createTemporaryTableStmt = new CreateTemporaryTableStmt(false, false,
+                new TableRef(QualifiedName.of(Lists.newArrayList("test_catalog", "test_db", "test_table")),
+                        null, NodePosition.ZERO),
                 java.util.Collections.emptyList(),
                 null, null, null, null, null, null, java.util.Collections.emptyMap(), java.util.Collections.emptyMap(), null,
                 java.util.Collections.emptyList(), java.util.Collections.emptyList(), NodePosition.ZERO);
@@ -754,7 +761,9 @@ public class RedirectStatusTest {
 
     @Test
     public void testShowPartitionsStmt() {
-        ShowPartitionsStmt stmt = new ShowPartitionsStmt(new TableName(), null, null, null, false);
+        TableRef tableRef = new TableRef(QualifiedName.of(Lists.newArrayList("test_db", "test_table")),
+                null, NodePosition.ZERO);
+        ShowPartitionsStmt stmt = new ShowPartitionsStmt(tableRef, null, null, null, false);
         Assertions.assertEquals(RedirectStatus.NO_FORWARD, RedirectStatus.getRedirectStatus(stmt));
     }
 
@@ -766,13 +775,16 @@ public class RedirectStatusTest {
 
     @Test
     public void testShowIndexStmt() {
-        ShowIndexStmt stmt = new ShowIndexStmt(null, null);
+        ShowIndexStmt stmt = new ShowIndexStmt(new TableRef(
+                QualifiedName.of(Lists.newArrayList("test_table")), null, NodePosition.ZERO));
         Assertions.assertEquals(RedirectStatus.NO_FORWARD, RedirectStatus.getRedirectStatus(stmt));
     }
 
     @Test
     public void testShowColumnStmt() {
-        ShowColumnStmt stmt = new ShowColumnStmt(null, null, null, false);
+        QualifiedName qualifiedName = QualifiedName.of(Lists.newArrayList("test_table"));
+        TableRef tableRef = new TableRef(qualifiedName, null, NodePosition.ZERO);
+        ShowColumnStmt stmt = new ShowColumnStmt(tableRef, null, false);
         Assertions.assertEquals(RedirectStatus.NO_FORWARD, RedirectStatus.getRedirectStatus(stmt));
     }
 
@@ -856,7 +868,10 @@ public class RedirectStatusTest {
         QueryStatement queryStatement = new QueryStatement(selectRelation);
 
         TableName tableName = new TableName("catalog", "db", "table");
-        InsertStmt stmt = new InsertStmt(tableName, queryStatement);
+        InsertStmt stmt = new InsertStmt(
+                new TableRef(QualifiedName.of(Lists.newArrayList(
+                        tableName.getCatalog(), tableName.getDb(), tableName.getTbl())),
+                        null, NodePosition.ZERO), queryStatement);
         Assertions.assertEquals(RedirectStatus.FORWARD_WITH_SYNC, RedirectStatus.getRedirectStatus(stmt));
     }
 
@@ -917,7 +932,10 @@ public class RedirectStatusTest {
         TableName tableName = new TableName("catalog", "db", "mv");
         SelectRelation selectRelation = new SelectRelation(new SelectList(), null, null, null, null);
         QueryStatement queryStatement = new QueryStatement(selectRelation);
-        CreateMaterializedViewStmt stmt = new CreateMaterializedViewStmt(tableName, queryStatement,
+        CreateMaterializedViewStmt stmt = new CreateMaterializedViewStmt(
+                new TableRef(QualifiedName.of(Lists.newArrayList(
+                        tableName.getCatalog(), tableName.getDb(), tableName.getTbl())),
+                        null, NodePosition.ZERO), queryStatement,
                 java.util.Collections.emptyMap());
         Assertions.assertEquals(RedirectStatus.FORWARD_WITH_SYNC, RedirectStatus.getRedirectStatus(stmt));
     }
@@ -946,7 +964,9 @@ public class RedirectStatusTest {
                 null, null, null, null);
         QueryStatement queryStatement = new QueryStatement(selectRelation);
 
-        InsertStmt insertStmt = new InsertStmt(new TableName(), queryStatement);
+        InsertStmt insertStmt = new InsertStmt(
+                new TableRef(QualifiedName.of(Lists.newArrayList("test_catalog", "test_db", "test_insert_table")),
+                        null, NodePosition.ZERO), queryStatement);
         SubmitTaskStmt stmt = new SubmitTaskStmt(new TaskName("", ""), 0, insertStmt, NodePosition.ZERO);
         Assertions.assertEquals(RedirectStatus.FORWARD_WITH_SYNC, RedirectStatus.getRedirectStatus(stmt));
     }
@@ -1164,7 +1184,7 @@ public class RedirectStatusTest {
     @Test
     public void testCreateViewStmt() {
         CreateViewStmt stmt = new CreateViewStmt(false, false,
-                new TableName("catalog", "db", "table"),
+                new TableRef(QualifiedName.of(Lists.newArrayList("catalog", "db", "table")), null, NodePosition.ZERO),
                 Lists.newArrayList(new ColWithComment("k1", "",
                         NodePosition.ZERO)),
                 "",
@@ -1252,7 +1272,9 @@ public class RedirectStatusTest {
     // Additional uncovered StatementBase subclasses tests
     @Test
     public void testDescribeStmt() {
-        DescribeStmt stmt = new DescribeStmt(null, false);
+        TableRef tableRef = new TableRef(QualifiedName.of(Lists.newArrayList("test_db", "test_table")),
+                null, NodePosition.ZERO);
+        DescribeStmt stmt = new DescribeStmt(tableRef, false);
         Assertions.assertEquals(RedirectStatus.NO_FORWARD, RedirectStatus.getRedirectStatus(stmt));
     }
 
@@ -1364,7 +1386,9 @@ public class RedirectStatusTest {
 
     @Test
     public void testDropTemporaryTableStmt() {
-        DropTemporaryTableStmt stmt = new DropTemporaryTableStmt(true, new TableName(), false);
+        DropTemporaryTableStmt stmt = new DropTemporaryTableStmt(true,
+                new TableRef(QualifiedName.of(Lists.newArrayList("test_catalog", "test_db", "test_temp_table")),
+                        null, NodePosition.ZERO), false);
         Assertions.assertEquals(RedirectStatus.FORWARD_WITH_SYNC, RedirectStatus.getRedirectStatus(stmt));
     }
 
@@ -1400,7 +1424,7 @@ public class RedirectStatusTest {
 
     @Test
     public void testCancelRefreshMaterializedViewStmt() {
-        CancelRefreshMaterializedViewStmt stmt = new CancelRefreshMaterializedViewStmt(null, false, NodePosition.ZERO);
+        CancelRefreshMaterializedViewStmt stmt = new CancelRefreshMaterializedViewStmt(null, false);
         Assertions.assertEquals(RedirectStatus.FORWARD_WITH_SYNC, RedirectStatus.getRedirectStatus(stmt));
     }
 
@@ -1441,7 +1465,10 @@ public class RedirectStatusTest {
 
     @Test
     public void testAdminSetPartitionVersionStmt() {
-        AdminSetPartitionVersionStmt stmt = new AdminSetPartitionVersionStmt(null, "partition", 1L, NodePosition.ZERO);
+        QualifiedName qualifiedName = QualifiedName.of(Lists.newArrayList("test_db", "test_tbl"));
+        TableRef tableRef = new TableRef(qualifiedName, null, NodePosition.ZERO);
+        AdminSetPartitionVersionStmt stmt =
+                new AdminSetPartitionVersionStmt(tableRef, "partition", 1L, NodePosition.ZERO);
         Assertions.assertEquals(RedirectStatus.FORWARD_NO_SYNC, RedirectStatus.getRedirectStatus(stmt));
     }
 
@@ -1495,7 +1522,10 @@ public class RedirectStatusTest {
         QueryStatement queryStatement = new QueryStatement(selectRelation);
 
         TableName tableName = new TableName("catalog", "db", "table");
-        InsertStmt insertStmt = new InsertStmt(tableName, queryStatement);
+        InsertStmt insertStmt = new InsertStmt(
+                new TableRef(QualifiedName.of(Lists.newArrayList(
+                        tableName.getCatalog(), tableName.getDb(), tableName.getTbl())),
+                        null, NodePosition.ZERO), queryStatement);
 
         DataCacheSelectStatement stmt = new DataCacheSelectStatement(insertStmt, new HashMap<>(), NodePosition.ZERO);
         Assertions.assertEquals(RedirectStatus.FORWARD_WITH_SYNC, RedirectStatus.getRedirectStatus(stmt));
@@ -1534,7 +1564,7 @@ public class RedirectStatusTest {
 
     @Test
     public void testCancelAlterTableStmt() {
-        CancelAlterTableStmt stmt = new CancelAlterTableStmt(null, null, null);
+        CancelAlterTableStmt stmt = new CancelAlterTableStmt(ShowAlterStmt.AlterType.COLUMN, null, null);
         Assertions.assertEquals(RedirectStatus.FORWARD_WITH_SYNC, RedirectStatus.getRedirectStatus(stmt));
     }
 

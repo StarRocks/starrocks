@@ -356,7 +356,7 @@ public class DDLStmtExecutor {
             ErrorReport.wrapWithRuntimeException(() -> {
                 if (stmt.getTemporaryTableMark()) {
                     DropTemporaryTableStmt dropTemporaryTableStmt = new DropTemporaryTableStmt(
-                            stmt.isSetIfExists(), stmt.getTbl(), stmt.isForceDrop());
+                            stmt.isSetIfExists(), stmt.getTableRef(), stmt.isForceDrop());
                     dropTemporaryTableStmt.setSessionId(context.getSessionId());
                     context.getGlobalStateMgr().getMetadataMgr().dropTemporaryTable(dropTemporaryTableStmt);
                 } else {
@@ -981,8 +981,8 @@ public class DDLStmtExecutor {
                             stmt.getProperties(), StatsConstants.ScheduleStatus.PENDING,
                             LocalDateTime.MIN);
                 } else {
-                    analyzeJob = new ExternalAnalyzeJob(stmt.getTableName().getCatalog(), stmt.getTableName().getDb(),
-                            stmt.getTableName().getTbl(), stmt.getColumnNames(),
+                    analyzeJob = new ExternalAnalyzeJob(stmt.getCatalogName(), stmt.getDbName(),
+                            stmt.getTableName(), stmt.getColumnNames(),
                             stmt.getColumnTypes(),
                             stmt.getAnalyzeType(),
                             StatsConstants.ScheduleType.SCHEDULE,

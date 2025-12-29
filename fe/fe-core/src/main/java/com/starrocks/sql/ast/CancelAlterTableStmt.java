@@ -15,7 +15,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.catalog.TableName;
 import com.starrocks.sql.ast.ShowAlterStmt.AlterType;
 import com.starrocks.sql.parser.NodePosition;
 
@@ -28,42 +27,46 @@ public class CancelAlterTableStmt extends CancelStmt {
 
     private final AlterType alterType;
 
-    private final TableName dbTableName;
+    private TableRef tableRef;
 
     public AlterType getAlterType() {
         return alterType;
     }
 
+    public TableRef getTableRef() {
+        return tableRef;
+    }
+
+    public void setTableRef(TableRef tableRef) {
+        this.tableRef = tableRef;
+    }
+
+    public String getCatalogName() {
+        return tableRef == null ? null : tableRef.getCatalogName();
+    }
+
     public String getDbName() {
-        return dbTableName.getDb();
-    }
-
-    public void setDbName(String dbName) {
-        this.dbTableName.setDb(dbName);
-    }
-
-    public TableName getDbTableName() {
-        return this.dbTableName;
+        return tableRef == null ? null : tableRef.getDbName();
     }
 
     public String getTableName() {
-        return dbTableName.getTbl();
+        return tableRef == null ? null : tableRef.getTableName();
     }
 
     private final List<Long> alterJobIdList;
 
-    public CancelAlterTableStmt(AlterType alterType, TableName dbTableName) {
-        this(alterType, dbTableName, null);
+    public CancelAlterTableStmt(AlterType alterType, TableRef tableRef) {
+        this(alterType, tableRef, null);
     }
 
-    public CancelAlterTableStmt(AlterType alterType, TableName dbTableName, List<Long> alterJobIdList) {
-        this(alterType, dbTableName, alterJobIdList, NodePosition.ZERO);
+    public CancelAlterTableStmt(AlterType alterType, TableRef tableRef, List<Long> alterJobIdList) {
+        this(alterType, tableRef, alterJobIdList, NodePosition.ZERO);
     }
 
-    public CancelAlterTableStmt(AlterType alterType, TableName dbTableName, List<Long> alterJobIdList, NodePosition pos) {
+    public CancelAlterTableStmt(AlterType alterType, TableRef tableRef, List<Long> alterJobIdList, NodePosition pos) {
         super(pos);
         this.alterType = alterType;
-        this.dbTableName = dbTableName;
+        this.tableRef = tableRef;
         this.alterJobIdList = alterJobIdList;
     }
 

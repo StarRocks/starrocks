@@ -15,36 +15,30 @@
 
 package com.starrocks.sql.ast;
 
-import com.google.common.base.Strings;
-import com.starrocks.catalog.TableName;
 import com.starrocks.sql.parser.NodePosition;
 
 public class ShowIndexStmt extends ShowStmt {
-    private final String dbName;
-    private final TableName tableName;
+    private TableRef tableRef;
 
-    public ShowIndexStmt(String dbName, TableName tableName) {
-        this(dbName, tableName, NodePosition.ZERO);
+    public ShowIndexStmt(TableRef tableRef) {
+        this(tableRef, NodePosition.ZERO);
     }
 
-    public ShowIndexStmt(String dbName, TableName tableName, NodePosition pos) {
+    public ShowIndexStmt(TableRef tableRef, NodePosition pos) {
         super(pos);
-        this.dbName = dbName;
-        this.tableName = tableName;
+        this.tableRef = tableRef;
     }
 
-    public void init() {
-        if (!Strings.isNullOrEmpty(dbName)) {
-            tableName.setDb(dbName);
-        }
+    public TableRef getTableRef() {
+        return tableRef;
+    }
+
+    public void setTableRef(TableRef tableRef) {
+        this.tableRef = tableRef;
     }
 
     public String getDbName() {
-        return tableName.getDb();
-    }
-
-    public TableName getTableName() {
-        return tableName;
+        return tableRef == null ? null : tableRef.getDbName();
     }
 
     @Override

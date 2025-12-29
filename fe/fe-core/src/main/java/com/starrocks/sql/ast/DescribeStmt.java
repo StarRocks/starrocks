@@ -15,7 +15,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.catalog.TableName;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.ArrayList;
@@ -40,7 +39,7 @@ public class DescribeStmt extends ShowStmt {
     // empty col num equals to DESC_OLAP_TABLE_ALL_META_DATA.size()
     public static final List<String> EMPTY_ROW = initEmptyRow();
 
-    private final TableName dbTableName;
+    private TableRef tableRef;
     private String procPath;
 
     List<List<String>> totalRows;
@@ -52,20 +51,20 @@ public class DescribeStmt extends ShowStmt {
     private boolean isTableFunctionTable = false;
     private Map<String, String> tableFunctionProperties = null;
 
-    public DescribeStmt(TableName dbTableName, boolean isAllTables) {
-        this(dbTableName, isAllTables, NodePosition.ZERO);
+    public DescribeStmt(TableRef tableRef, boolean isAllTables) {
+        this(tableRef, isAllTables, NodePosition.ZERO);
     }
 
-    public DescribeStmt(TableName dbTableName, boolean isAllTables, NodePosition pos) {
+    public DescribeStmt(TableRef tableRef, boolean isAllTables, NodePosition pos) {
         super(pos);
-        this.dbTableName = dbTableName;
+        this.tableRef = tableRef;
         this.totalRows = new LinkedList<>();
         this.isAllTables = isAllTables;
     }
 
     public DescribeStmt(Map<String, String> tableFunctionProperties, NodePosition pos) {
         super(pos);
-        this.dbTableName = null;
+        this.tableRef = null;
         this.totalRows = new LinkedList<>();
         this.isTableFunctionTable = true;
         this.tableFunctionProperties = tableFunctionProperties;
@@ -75,16 +74,24 @@ public class DescribeStmt extends ShowStmt {
         return isAllTables;
     }
 
-    public String getTableName() {
-        return dbTableName.getTbl();
+    public TableRef getTableRef() {
+        return tableRef;
+    }
+
+    public void setTableRef(TableRef tableRef) {
+        this.tableRef = tableRef;
+    }
+
+    public String getCatalogName() {
+        return tableRef == null ? null : tableRef.getCatalogName();
     }
 
     public String getDb() {
-        return dbTableName.getDb();
+        return tableRef == null ? null : tableRef.getDbName();
     }
 
-    public TableName getDbTableName() {
-        return dbTableName;
+    public String getTableName() {
+        return tableRef == null ? null : tableRef.getTableName();
     }
 
     public List<List<String>> getTotalRows() {

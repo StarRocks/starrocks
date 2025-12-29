@@ -251,8 +251,8 @@ public class RefreshMaterializedViewTest extends MVTestBase {
         String refreshMvSql = "refresh materialized view test.mv_to_refresh";
         RefreshMaterializedViewStatement alterMvStmt =
                 (RefreshMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(refreshMvSql, connectContext);
-        String dbName = alterMvStmt.getMvName().getDb();
-        String mvName = alterMvStmt.getMvName().getTbl();
+        String dbName = alterMvStmt.getDbName();
+        String mvName = alterMvStmt.getMvName();
         Assertions.assertEquals("test", dbName);
         Assertions.assertEquals("mv_to_refresh", mvName);
 
@@ -627,8 +627,8 @@ public class RefreshMaterializedViewTest extends MVTestBase {
             public void handleDMLStmt(ExecPlan execPlan, DmlStmt stmt) throws Exception {
                 if (stmt instanceof InsertStmt) {
                     InsertStmt insertStmt = (InsertStmt) stmt;
-                    TableName tableName = insertStmt.getTableName();
-                    Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(stmt.getTableName().getDb());
+                    TableName tableName = com.starrocks.catalog.TableName.fromTableRef(insertStmt.getTableRef());
+                    Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(com.starrocks.catalog.TableName.fromTableRef(stmt.getTableRef()).getDb());
                     OlapTable tbl = ((OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
                             .getTable(testDb.getFullName(), tableName.getTbl()));
                     for (Partition partition : tbl.getPartitions()) {
@@ -731,8 +731,8 @@ public class RefreshMaterializedViewTest extends MVTestBase {
             public void handleDMLStmt(ExecPlan execPlan, DmlStmt stmt) throws Exception {
                 if (stmt instanceof InsertStmt) {
                     InsertStmt insertStmt = (InsertStmt) stmt;
-                    TableName tableName = insertStmt.getTableName();
-                    Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(stmt.getTableName().getDb());
+                    TableName tableName = com.starrocks.catalog.TableName.fromTableRef(insertStmt.getTableRef());
+                    Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(com.starrocks.catalog.TableName.fromTableRef(stmt.getTableRef()).getDb());
                     OlapTable tbl = ((OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
                             .getTable(testDb.getFullName(), tableName.getTbl()));
                     for (Partition partition : tbl.getPartitions()) {

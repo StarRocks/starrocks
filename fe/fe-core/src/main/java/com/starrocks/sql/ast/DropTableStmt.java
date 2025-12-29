@@ -15,13 +15,12 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.catalog.TableName;
 import com.starrocks.sql.parser.NodePosition;
 
 // DROP TABLE
 public class DropTableStmt extends DdlStmt {
     private final boolean ifExists;
-    private final TableName tableName;
+    private TableRef tableRef;
     private final boolean isView;
     private final boolean forceDrop;
 
@@ -29,18 +28,18 @@ public class DropTableStmt extends DdlStmt {
     // it should be set during analysis phase
     private boolean temporaryTableMark = false;
 
-    public DropTableStmt(boolean ifExists, TableName tableName, boolean forceDrop) {
-        this(ifExists, tableName, false, forceDrop, NodePosition.ZERO);
+    public DropTableStmt(boolean ifExists, TableRef tableRef, boolean forceDrop) {
+        this(ifExists, tableRef, false, forceDrop, NodePosition.ZERO);
     }
 
-    public DropTableStmt(boolean ifExists, TableName tableName, boolean isView, boolean forceDrop) {
-        this(ifExists, tableName, isView, forceDrop, NodePosition.ZERO);
+    public DropTableStmt(boolean ifExists, TableRef tableRef, boolean isView, boolean forceDrop) {
+        this(ifExists, tableRef, isView, forceDrop, NodePosition.ZERO);
     }
 
-    public DropTableStmt(boolean ifExists, TableName tableName, boolean isView, boolean forceDrop, NodePosition pos) {
+    public DropTableStmt(boolean ifExists, TableRef tableRef, boolean isView, boolean forceDrop, NodePosition pos) {
         super(pos);
         this.ifExists = ifExists;
-        this.tableName = tableName;
+        this.tableRef = tableRef;
         this.isView = isView;
         this.forceDrop = forceDrop;
     }
@@ -49,24 +48,24 @@ public class DropTableStmt extends DdlStmt {
         return ifExists;
     }
 
-    public TableName getTbl() {
-        return tableName;
+    public TableRef getTableRef() {
+        return tableRef;
+    }
+
+    public void setTableRef(TableRef tableRef) {
+        this.tableRef = tableRef;
     }
 
     public String getCatalogName() {
-        return tableName.getCatalog();
+        return tableRef == null ? null : tableRef.getCatalogName();
     }
 
     public String getDbName() {
-        return tableName.getDb();
+        return tableRef == null ? null : tableRef.getDbName();
     }
 
     public String getTableName() {
-        return tableName.getTbl();
-    }
-
-    public TableName getTableNameObject() {
-        return tableName;
+        return tableRef == null ? null : tableRef.getTableName();
     }
 
     public boolean isView() {

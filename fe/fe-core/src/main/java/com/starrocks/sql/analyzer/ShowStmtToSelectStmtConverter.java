@@ -31,6 +31,7 @@ import com.starrocks.sql.ast.ShowStmt;
 import com.starrocks.sql.ast.ShowTableStatusStmt;
 import com.starrocks.sql.ast.ShowTableStmt;
 import com.starrocks.sql.ast.ShowVariablesStmt;
+import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.expression.BinaryPredicate;
 import com.starrocks.sql.ast.expression.BinaryType;
@@ -215,12 +216,13 @@ public final class ShowStmtToSelectStmtConverter {
         }
 
         Expr rewrittenWhere = ExprSubstitutionVisitor.rewrite(where, aliasMap);
+        TableRef tableRef = stmt.getTableRef();
         Expr finalWhere = new CompoundPredicate(CompoundPredicate.Operator.AND, rewrittenWhere,
                 new CompoundPredicate(CompoundPredicate.Operator.AND,
                         new BinaryPredicate(BinaryType.EQ, new SlotRef(SHOW_COLUMNS_TABLE_NAME, "TABLE_NAME"),
-                                new StringLiteral(stmt.getTableName().getTbl())),
+                                new StringLiteral(tableRef.getTableName())),
                         new BinaryPredicate(BinaryType.EQ, new SlotRef(SHOW_COLUMNS_TABLE_NAME, "TABLE_SCHEMA"),
-                                new StringLiteral(stmt.getTableName().getDb()))));
+                                new StringLiteral(tableRef.getDbName()))));
         return new QueryStatement(new SelectRelation(selectList, new TableRelation(SHOW_COLUMNS_TABLE_NAME),
                 finalWhere, null, null), stmt.getOrigStmt());
     }

@@ -74,7 +74,10 @@ import com.starrocks.sql.analyzer.DDLTestBase;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.ModifyTablePropertiesClause;
+import com.starrocks.sql.ast.QualifiedName;
 import com.starrocks.sql.ast.ReorderColumnsClause;
+import com.starrocks.sql.ast.TableRef;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.utframe.MockedWarehouseManager;
 import com.starrocks.utframe.UtFrameUtils;
@@ -286,7 +289,9 @@ public class SchemaChangeJobV2Test extends DDLTestBase {
             }
         };
         TableName tableName = new TableName(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, db.getFullName(), olapTable.getName());
-        new AlterJobExecutor().process(new AlterTableStmt(tableName, alterClauses), ctx);
+        new AlterJobExecutor().process(new AlterTableStmt(
+                new TableRef(QualifiedName.of(Lists.newArrayList(tableName.getCatalog(), tableName.getDb(), tableName.getTbl())),
+                        null, NodePosition.ZERO), alterClauses), ctx);
 
         //schemaChangeHandler.process(alterClauses, db, olapTable);
         Assertions.assertTrue(olapTable.getTableProperty().getDynamicPartitionProperty().isExists());
@@ -300,34 +305,44 @@ public class SchemaChangeJobV2Test extends DDLTestBase {
         ArrayList<AlterClause> tmpAlterClauses = new ArrayList<>();
         properties.put(DynamicPartitionProperty.ENABLE, "false");
         tmpAlterClauses.add(new ModifyTablePropertiesClause(properties));
-        new AlterJobExecutor().process(new AlterTableStmt(tableName, tmpAlterClauses), ctx);
+        new AlterJobExecutor().process(new AlterTableStmt(
+                new TableRef(QualifiedName.of(Lists.newArrayList(tableName.getCatalog(), tableName.getDb(), tableName.getTbl())),
+                        null, NodePosition.ZERO), tmpAlterClauses), ctx);
         Assertions.assertFalse(olapTable.getTableProperty().getDynamicPartitionProperty().isEnabled());
         // set dynamic_partition.time_unit = week
         tmpAlterClauses = new ArrayList<>();
         properties.put(DynamicPartitionProperty.TIME_UNIT, "week");
         tmpAlterClauses.add(new ModifyTablePropertiesClause(properties));
-        new AlterJobExecutor().process(new AlterTableStmt(tableName, tmpAlterClauses), ctx);
+        new AlterJobExecutor().process(new AlterTableStmt(
+                new TableRef(QualifiedName.of(Lists.newArrayList(tableName.getCatalog(), tableName.getDb(), tableName.getTbl())),
+                        null, NodePosition.ZERO), tmpAlterClauses), ctx);
 
         Assertions.assertEquals("week", olapTable.getTableProperty().getDynamicPartitionProperty().getTimeUnit());
         // set dynamic_partition.end = 10
         tmpAlterClauses = new ArrayList<>();
         properties.put(DynamicPartitionProperty.END, "10");
         tmpAlterClauses.add(new ModifyTablePropertiesClause(properties));
-        new AlterJobExecutor().process(new AlterTableStmt(tableName, tmpAlterClauses), ctx);
+        new AlterJobExecutor().process(new AlterTableStmt(
+                new TableRef(QualifiedName.of(Lists.newArrayList(tableName.getCatalog(), tableName.getDb(), tableName.getTbl())),
+                        null, NodePosition.ZERO), tmpAlterClauses), ctx);
 
         Assertions.assertEquals(10, olapTable.getTableProperty().getDynamicPartitionProperty().getEnd());
         // set dynamic_partition.prefix = p1
         tmpAlterClauses = new ArrayList<>();
         properties.put(DynamicPartitionProperty.PREFIX, "p1");
         tmpAlterClauses.add(new ModifyTablePropertiesClause(properties));
-        new AlterJobExecutor().process(new AlterTableStmt(tableName, tmpAlterClauses), ctx);
+        new AlterJobExecutor().process(new AlterTableStmt(
+                new TableRef(QualifiedName.of(Lists.newArrayList(tableName.getCatalog(), tableName.getDb(), tableName.getTbl())),
+                        null, NodePosition.ZERO), tmpAlterClauses), ctx);
 
         Assertions.assertEquals("p1", olapTable.getTableProperty().getDynamicPartitionProperty().getPrefix());
         // set dynamic_partition.buckets = 3
         tmpAlterClauses = new ArrayList<>();
         properties.put(DynamicPartitionProperty.BUCKETS, "3");
         tmpAlterClauses.add(new ModifyTablePropertiesClause(properties));
-        new AlterJobExecutor().process(new AlterTableStmt(tableName, tmpAlterClauses), ctx);
+        new AlterJobExecutor().process(new AlterTableStmt(
+                new TableRef(QualifiedName.of(Lists.newArrayList(tableName.getCatalog(), tableName.getDb(), tableName.getTbl())),
+                        null, NodePosition.ZERO), tmpAlterClauses), ctx);
 
         Assertions.assertEquals(3, olapTable.getTableProperty().getDynamicPartitionProperty().getBuckets());
     }
@@ -366,7 +381,10 @@ public class SchemaChangeJobV2Test extends DDLTestBase {
         TableName tableName = new TableName(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, db.getFullName(), olapTable.getName());
 
         try {
-            new AlterJobExecutor().process(new AlterTableStmt(tableName, alterClauses), ctx);
+            new AlterJobExecutor().process(new AlterTableStmt(
+                    new TableRef(QualifiedName.of(Lists.newArrayList(
+                            tableName.getCatalog(), tableName.getDb(), tableName.getTbl())),
+                            null, NodePosition.ZERO), alterClauses), ctx);
         } catch (AlterJobException e) {
             assertThat(e.getMessage(), containsString(expectErrMsg));
         }
