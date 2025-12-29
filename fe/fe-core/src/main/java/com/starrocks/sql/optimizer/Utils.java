@@ -824,7 +824,7 @@ public class Utils {
             return false;
         }
         Set<ColumnRefOperator> distinctChildren = Sets.newHashSet();
-        for (CallOperator callOperator : aggCallOperators) {
+        for (CallOperator callOperator : distinctFuncs) {
             if (distinctChildren.isEmpty()) {
                 distinctChildren = Sets.newHashSet(callOperator.getColumnRefs());
             } else {
