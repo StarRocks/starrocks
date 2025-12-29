@@ -14,9 +14,11 @@
 
 package com.starrocks.sql;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.TableName;
@@ -25,22 +27,29 @@ import com.starrocks.common.StarRocksException;
 import com.starrocks.load.Load;
 import com.starrocks.planner.DataSink;
 import com.starrocks.planner.DescriptorTable;
+import com.starrocks.planner.IcebergDeleteSink;
 import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.SlotDescriptor;
 import com.starrocks.planner.TupleDescriptor;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.TableRef;
+import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Optimizer;
 import com.starrocks.sql.optimizer.OptimizerFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
+import com.starrocks.sql.optimizer.base.DistributionProperty;
+import com.starrocks.sql.optimizer.base.DistributionSpec;
+import com.starrocks.sql.optimizer.base.HashDistributionDesc;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 import com.starrocks.sql.plan.ExecPlan;
@@ -49,6 +58,7 @@ import com.starrocks.thrift.TResultSinkType;
 import com.starrocks.type.IntegerType;
 
 import java.util.List;
+import java.util.function.Consumer;
 
 public class DeletePlanner {
     public ExecPlan plan(DeleteStmt deleteStatement, ConnectContext session) {
@@ -71,7 +81,16 @@ public class DeletePlanner {
         ColumnRefFactory columnRefFactory = new ColumnRefFactory();
         LogicalPlan logicalPlan = new RelationTransformer(columnRefFactory, session).transform(query);
 
-        PhysicalPropertySet requiredProperty = new PhysicalPropertySet();
+        // Determine physical properties based on table type
+        PhysicalPropertySet requiredProperty;
+        if (table instanceof IcebergTable) {
+            // For Iceberg, create shuffled property based on partitioning
+            List<ColumnRefOperator> outputColumns = logicalPlan.getOutputColumn();
+            requiredProperty = createShuffleProperty((IcebergTable) table, outputColumns);
+        } else {
+            // For other tables, use default empty property
+            requiredProperty = new PhysicalPropertySet();
+        }
 
         // Optimize logical plan, create physical plan, setup sink and configure pipeline
         return createDeletePlan(
@@ -118,10 +137,16 @@ public class DeletePlanner {
                     logicalPlan.getOutputColumn(), columnRefFactory,
                     colNames, TResultSinkType.MYSQL_PROTOCAL, false);
 
-            // Setup OLAP table sink for delete operations
-            setupOlapTableSink(execPlan, deleteStatement, session);
-            // Configure pipeline for the sink
-            configurePipelineSink(execPlan, session, table, canUsePipeline);
+            // Create sink based on table type
+            if (table instanceof IcebergTable) {
+                setupIcebergDeleteSink(execPlan, colNames, (IcebergTable) table, session);
+                configureIcebergTableSinkPipeline(execPlan, session, canUsePipeline);
+            } else if (table instanceof OlapTable) {
+                setupOlapTableSink(execPlan, deleteStatement, session);
+                configureOlapTableSinkPipeline(execPlan, session, canUsePipeline);
+            } else {
+                throw new SemanticException("Unsupported table type for delete: " + table.getType());
+            }
 
             return execPlan;
         } finally {
@@ -147,8 +172,6 @@ public class DeletePlanner {
                 slotDescriptor.setType(column.getType());
                 slotDescriptor.setColumn(column);
                 slotDescriptor.setIsNullable(column.isAllowNull());
-            } else {
-                continue;
             }
         }
         SlotDescriptor slotDescriptor = descriptorTable.addSlotDescriptor(olapTuple);
@@ -187,24 +210,140 @@ public class DeletePlanner {
     }
 
     /**
-     * Configures pipeline for sink fragment
+     * Sets up Iceberg delete sink for delete operations
      */
-    private void configurePipelineSink(ExecPlan execPlan, ConnectContext session,
-                                       com.starrocks.catalog.Table table, boolean canUsePipeline) {
-        if (canUsePipeline) {
-            PlanFragment sinkFragment = execPlan.getFragments().get(0);
-            if (session.getSessionVariable().getEnableAdaptiveSinkDop()) {
-                long warehouseId = session.getCurrentComputeResource().getWarehouseId();
-                sinkFragment.setPipelineDop(session.getSessionVariable().getSinkDegreeOfParallelism(warehouseId));
-            } else {
-                sinkFragment.setPipelineDop(session.getSessionVariable().getParallelExecInstanceNum());
-            }
-            sinkFragment.setHasOlapTableSink();
-            sinkFragment.setForceSetTableSinkDop();
-            sinkFragment.setForceAssignScanRangesPerDriverSeq();
-            sinkFragment.disableRuntimeAdaptiveDop();
-        } else {
-            execPlan.getFragments().get(0).setPipelineDop(1);
+    private void setupIcebergDeleteSink(ExecPlan execPlan, List<String> colNames,
+                                        IcebergTable icebergTable, ConnectContext session) {
+        DescriptorTable descriptorTable = execPlan.getDescTbl();
+        TupleDescriptor deleteTuple = descriptorTable.createTupleDescriptor();
+
+        List<Expr> outputExprs = execPlan.getOutputExprs();
+        Preconditions.checkArgument(colNames.size() == outputExprs.size(),
+                "output column size mismatch");
+        for (int index = 0; index < colNames.size(); ++index) {
+            SlotDescriptor slot = descriptorTable.addSlotDescriptor(deleteTuple);
+            slot.setIsMaterialized(true);
+            slot.setType(outputExprs.get(index).getType());
+            slot.setColumn(new Column(colNames.get(index), outputExprs.get(index).getType()));
+            slot.setIsNullable(outputExprs.get(index).isNullable());
         }
+        deleteTuple.computeMemLayout();
+
+        // Initialize IcebergDeleteSink
+        descriptorTable.addReferencedTable(icebergTable);
+        IcebergDeleteSink dataSink = new IcebergDeleteSink(
+                icebergTable,
+                deleteTuple,
+                session.getSessionVariable()
+        );
+        dataSink.init();
+        execPlan.getFragments().get(0).setSink(dataSink);
+    }
+
+    /**
+     * Configures pipeline for Olap Table sink fragment
+     */
+    private void configureOlapTableSinkPipeline(ExecPlan execPlan, ConnectContext session,
+                                                boolean canUsePipeline) {
+        if (!canUsePipeline) {
+            execPlan.getFragments().get(0).setPipelineDop(1);
+            return;
+        }
+
+        PlanFragment sinkFragment = execPlan.getFragments().get(0);
+        configureCommonSinkPipeline(sinkFragment, session, PlanFragment::setHasOlapTableSink);
+        sinkFragment.setForceAssignScanRangesPerDriverSeq();
+    }
+
+    /**
+     * Configures pipeline for Iceberg Table sink fragment
+     */
+    private void configureIcebergTableSinkPipeline(ExecPlan execPlan, ConnectContext session, boolean canUsePipeline) {
+        if (!canUsePipeline) {
+            execPlan.getFragments().get(0).setPipelineDop(1);
+            return;
+        }
+
+        // enable spill for connector sink
+        SessionVariable sv = session.getSessionVariable();
+        if (sv.isEnableConnectorSinkSpill()) {
+            sv.setEnableSpill(true);
+            if (sv.getConnectorSinkSpillMemLimitThreshold() < sv.getSpillMemLimitThreshold()) {
+                sv.setSpillMemLimitThreshold(sv.getConnectorSinkSpillMemLimitThreshold());
+            }
+        }
+
+        PlanFragment sinkFragment = execPlan.getFragments().get(0);
+        configureCommonSinkPipeline(sinkFragment, session, PlanFragment::setHasIcebergTableSink);
+    }
+
+    /**
+     * Common pipeline configuration logic for both OLAP and Iceberg sinks.
+     * Extracts the shared configuration patterns to reduce duplication.
+     * @param sinkFragment The sink fragment to configure
+     * @param session The connect context
+     * @param setSinkTypeFlag Consumer to set the sink type flag on the fragment
+     */
+    private void configureCommonSinkPipeline(
+            PlanFragment sinkFragment,
+            ConnectContext session,
+            Consumer<PlanFragment> setSinkTypeFlag) {
+        SessionVariable sv = session.getSessionVariable();
+
+        // Set pipeline dop based on adaptive sink configuration
+        if (sv.getEnableAdaptiveSinkDop()) {
+            long warehouseId = session.getCurrentComputeResource().getWarehouseId();
+            sinkFragment.setPipelineDop(sv.getSinkDegreeOfParallelism(warehouseId));
+        } else {
+            sinkFragment.setPipelineDop(sv.getParallelExecInstanceNum());
+        }
+        setSinkTypeFlag.accept(sinkFragment);
+
+        // Common pipeline settings for sink operations
+        sinkFragment.disableRuntimeAdaptiveDop();
+        sinkFragment.setForceSetTableSinkDop();
+    }
+
+
+    /**
+     *
+     * @param icebergTable  The Iceberg table
+     * @param outputColumns Output columns from the logical plan (includes virtual columns + partition columns)
+     * @return PhysicalPropertySet with shuffle requirement or empty property
+     */
+    private PhysicalPropertySet createShuffleProperty(IcebergTable icebergTable,
+                                                      List<ColumnRefOperator> outputColumns) {
+        // Check if table is partitioned
+        if (!icebergTable.isPartitioned()) {
+            // No shuffle for non-partitioned tables
+            return new PhysicalPropertySet();
+        }
+
+        List<String> partitionColNames = icebergTable.getPartitionColumnNames();
+        List<Integer> partitionColumnIds = Lists.newArrayList();
+        for (String partCol : partitionColNames) {
+            for (ColumnRefOperator outputCol : outputColumns) {
+                if (outputCol.getName().equalsIgnoreCase(partCol)) {
+                    partitionColumnIds.add(outputCol.getId());
+                    break;
+                }
+            }
+        }
+
+        if (partitionColumnIds.isEmpty()) {
+            // Partition column not in output, cannot shuffle
+            return new PhysicalPropertySet();
+        }
+
+        // Create HASH distribution spec
+        HashDistributionDesc distributionDesc = new HashDistributionDesc(
+                partitionColumnIds,
+                HashDistributionDesc.SourceType.SHUFFLE_AGG
+        );
+
+        DistributionProperty distributionProperty = DistributionProperty.createProperty(
+                DistributionSpec.createHashDistributionSpec(distributionDesc));
+
+        return new PhysicalPropertySet(distributionProperty);
     }
 }

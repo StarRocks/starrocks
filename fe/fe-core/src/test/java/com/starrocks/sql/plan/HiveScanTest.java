@@ -21,7 +21,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.File;
-import java.io.IOException;
 import java.util.List;
 
 public class HiveScanTest extends ConnectorPlanTestBase {
@@ -175,14 +174,5 @@ public class HiveScanTest extends ConnectorPlanTestBase {
             }
         }
         connectContext.getSessionVariable().setEnableRewriteSimpleAggToHdfsScan(false);
-    }
-
-    private static File newFolder(File root, String... subDirs) throws IOException {
-        String subFolder = String.join("/", subDirs);
-        File result = new File(root, subFolder);
-        if (!result.mkdirs()) {
-            throw new IOException("Couldn't create folders " + root);
-        }
-        return result;
     }
 }
