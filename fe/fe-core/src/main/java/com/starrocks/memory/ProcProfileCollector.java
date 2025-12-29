@@ -87,18 +87,19 @@ public class ProcProfileCollector extends FrontendDaemon {
                 LOG.info("change the system property {} to {}", libPathProperty, dir);
             }
         }
-        // Suppress async-profiler warnings about kernel symbols being unavailable.
-        // This warning is harmless and occurs when kernel.perf_event_paranoid or kernel.kptr_restrict
-        // are set to restrictive values, which is common in production environments.
-        System.setProperty("one.profiler.quiet", "true");
+    }
+
+    private static String genStartCommand(String event, String fileName, int jstackDepth) {
+        return String.format("start,quiet,event=%s,loglevel=error,cstack=vm,jstackdepth=%d,file=%s",
+                event, jstackDepth, fileName);
     }
 
     private void collectMemProfile() {
         String fileName = MEM_FILE_NAME_PREFIX + currentTimeString() + ".html";
         AsyncProfiler profiler = AsyncProfiler.getInstance();
         try {
-            profiler.execute(String.format("start,quiet,event=alloc,alloc=2m,cstack=vm,jstackdepth=%d,file=%s",
-                    Config.proc_profile_jstack_depth, profileLogDir + "/" + fileName));
+            profiler.execute(genStartCommand(
+                    "alloc,alloc=2m", profileLogDir + "/" + fileName, Config.proc_profile_jstack_depth));
             Thread.sleep(Config.proc_profile_collect_time_s * 1000L);
             profiler.execute(String.format("stop,file=%s", profileLogDir + "/" + fileName));
         } catch (Exception e) {
@@ -118,8 +119,8 @@ public class ProcProfileCollector extends FrontendDaemon {
         String fileName = CPU_FILE_NAME_PREFIX + currentTimeString() + ".html";
         AsyncProfiler profiler = AsyncProfiler.getInstance();
         try {
-            profiler.execute(String.format("start,quiet,event=cpu,cstack=vm,jstackdepth=%d,file=%s",
-                    Config.proc_profile_jstack_depth, profileLogDir + "/" + fileName));
+            profiler.execute(genStartCommand(
+                    "cpu", profileLogDir + "/" + fileName, Config.proc_profile_jstack_depth));
             Thread.sleep(Config.proc_profile_collect_time_s * 1000L);
             profiler.execute(String.format("stop,file=%s", profileLogDir + "/" + fileName));
         } catch (Exception e) {
