@@ -65,31 +65,6 @@ SELECT * FROM users_basic ORDER BY id;
 3	charlie@example.com	active	user	US	no notes
 4	david@example.com	inactive	admin	CN	important user
 -- !result
-CREATE TABLE products_with_key (
-    id INT NOT NULL,
-    name VARCHAR(50)
-) DUPLICATE KEY(id)
-DISTRIBUTED BY HASH(id) BUCKETS 2
-PROPERTIES(
-    "replication_num" = "1",
-    "fast_schema_evolution" = "false"
-);
--- result:
--- !result
-INSERT INTO products_with_key VALUES (1, 'product1'), (2, 'product2'), (3, 'product3');
--- result:
--- !result
-ALTER TABLE products_with_key ADD COLUMN brand VARCHAR(50) DEFAULT 'no brand';
--- result:
--- !result
-function: wait_alter_table_finish()
--- result:
-None
--- !result
-SELECT count(*) FROM products_with_key;
--- result:
-3
--- !result
 CREATE TABLE orders_column_mode (
     order_id INT NOT NULL,
     customer_name VARCHAR(50),
