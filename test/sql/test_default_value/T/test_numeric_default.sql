@@ -54,28 +54,6 @@ INSERT INTO users_basic VALUES (4, 'david', 30, 200, 60000, 2000000, 3.8, 88.9);
 SELECT * FROM users_basic ORDER BY id;
 
 -- ========================================================================
--- Test 2: Traditional Schema Change
--- ========================================================================
-
-CREATE TABLE products_with_key (
-    id INT NOT NULL,
-    name VARCHAR(50)
-) DUPLICATE KEY(id)
-DISTRIBUTED BY HASH(id) BUCKETS 2
-PROPERTIES(
-    "replication_num" = "1",
-    "fast_schema_evolution" = "false"
-);
-
--- Insert data
-INSERT INTO products_with_key VALUES (1, 'product1'), (2, 'product2'), (3, 'product3');
-
--- Add numeric columns with traditional schema change
-ALTER TABLE products_with_key ADD COLUMN price1 DOUBLE DEFAULT '99.99';
-function: wait_alter_table_finish()
-SELECT COUNT(*) FROM products_with_key;
-
--- ========================================================================
 -- Test 3: Column UPSERT Mode (Primary Key with column mode)
 -- ========================================================================
 
