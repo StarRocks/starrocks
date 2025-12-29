@@ -29,7 +29,7 @@ public class Tracers {
     }
 
     public enum Module {
-        NONE, ALL, BASE, OPTIMIZER, SCHEDULER, ANALYZE, MV, EXTERNAL, PARSER
+        NONE, ALL, BASE, OPTIMIZER, SCHEDULER, CLIENT, ANALYZE, MV, EXTERNAL, PARSER
     }
 
     private static final Tracer EMPTY_TRACER = new Tracer() {
@@ -120,6 +120,7 @@ public class Tracers {
             tracers.moduleMask |= 1 << Module.BASE.ordinal();
             tracers.moduleMask |= 1 << Module.EXTERNAL.ordinal();
             tracers.moduleMask |= 1 << Module.SCHEDULER.ordinal();
+            tracers.moduleMask |= 1 << Module.CLIENT.ordinal();
             tracers.moduleMask |= 1 << Module.MV.ordinal();
 
             tracers.modeMask |= 1 << Mode.TIMER.ordinal();

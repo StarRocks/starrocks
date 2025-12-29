@@ -30,6 +30,7 @@ public class AuditEventTest {
                 .setState("state")
                 .setBigQueryLogCPUSecondThreshold(1)
                 .setCatalog("catalog")
+                .setWriteClientTimeMs(100)
                 .setStmtId(123)
                 .setStmt("stmt")
                 .setDigest("digest")
@@ -53,5 +54,6 @@ public class AuditEventTest {
         Assertions.assertEquals("errorCode", event.errorCode);
         Assertions.assertEquals(true, event.isQuery);
         Assertions.assertEquals("wh", event.warehouse);
+        Assertions.assertEquals(100, event.writeClientTimeMs);
     }
 }
