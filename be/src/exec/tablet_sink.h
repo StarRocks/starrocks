@@ -118,9 +118,11 @@ private:
     // So we need to pad char column after compute buckect hash.
     void _padding_char_column(Chunk* chunk);
 
-    void _print_varchar_error_msg(RuntimeState* state, const Slice& str, SlotDescriptor* desc);
+    void _print_varchar_error_msg(RuntimeState* state, const Slice& str, SlotDescriptor* desc, Chunk* chunk,
+                                  int32_t row_index);
 
-    static void _print_decimal_error_msg(RuntimeState* state, const DecimalV2Value& decimal, SlotDescriptor* desc);
+    static void _print_decimal_error_msg(RuntimeState* state, const DecimalV2Value& decimal, SlotDescriptor* desc,
+                                         Chunk* chunk, int32_t row_index);
 
     Status _fill_auto_increment_id(Chunk* chunk);
 
