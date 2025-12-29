@@ -30,11 +30,7 @@ public class AuditEventTest {
                 .setState("state")
                 .setBigQueryLogCPUSecondThreshold(1)
                 .setCatalog("catalog")
-<<<<<<< HEAD
-=======
-                .setQueryId("queryId")
                 .setWriteClientTimeMs(100)
->>>>>>> 1f4389bcf4 ([Enhancement] Record the time taken to write to the client (#67144))
                 .setStmtId(123)
                 .setStmt("stmt")
                 .setDigest("digest")
@@ -58,14 +54,6 @@ public class AuditEventTest {
         Assertions.assertEquals("errorCode", event.errorCode);
         Assertions.assertEquals(true, event.isQuery);
         Assertions.assertEquals("wh", event.warehouse);
-<<<<<<< HEAD
-=======
-        Assertions.assertEquals("sessionId", event.sessionId);
-        Assertions.assertEquals("customQueryId", event.customQueryId);
-        Assertions.assertEquals("test_cngroup", event.cnGroup);
-        Assertions.assertEquals("50.0%", event.cacheHitRatio);
         Assertions.assertEquals(100, event.writeClientTimeMs);
-        Assertions.assertEquals((float) 50, event.getCacheMissRatio());
->>>>>>> 1f4389bcf4 ([Enhancement] Record the time taken to write to the client (#67144))
     }
 }
