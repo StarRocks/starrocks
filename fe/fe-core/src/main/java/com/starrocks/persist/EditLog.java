@@ -78,6 +78,7 @@ import com.starrocks.journal.JournalTask;
 import com.starrocks.journal.LeaderTransferException;
 import com.starrocks.journal.SerializeException;
 import com.starrocks.journal.bdbje.Timestamp;
+import com.starrocks.lake.restore.SnapshotRestoreJob;
 import com.starrocks.load.DeleteMgr;
 import com.starrocks.load.ExportJob;
 import com.starrocks.load.ExportMgr;
@@ -401,6 +402,12 @@ public class EditLog {
                     globalStateMgr.getBackupHandler().replayAddJob(job);
                     break;
                 }
+                case OperationTypeEPack.OP_RESTORE_FROM_SNAPSHOT: {
+                    SnapshotRestoreJob job = (SnapshotRestoreJob) journal.data();
+                    GlobalStateMgr.getCurrentState().getBackupHandler().replayAddJob(job);
+                    break;
+                }
+
                 case OperationType.OP_DROP_ROLLUP_V2: {
                     DropInfo info = (DropInfo) journal.data();
                     globalStateMgr.getRollupHandler().replayDropRollup(info, globalStateMgr);

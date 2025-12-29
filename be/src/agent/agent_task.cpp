@@ -21,6 +21,8 @@
 #include "agent/task_signatures_manager.h"
 #include "boost/lexical_cast.hpp"
 #include "common/status.h"
+#include "common/statusor.h"
+#include "fs/fs.h"
 #include "gutil/strings/join.h"
 #include "io/io_profiler.h"
 #include "runtime/current_thread.h"
@@ -30,6 +32,7 @@
 #include "storage/lake/replication_txn_manager.h"
 #include "storage/lake/schema_change.h"
 #include "storage/lake/tablet_manager.h"
+#include "storage/lake/tablet_restore.h"
 #include "storage/metadata_util.h"
 #include "storage/replication_txn_manager.h"
 #include "storage/snapshot_manager.h"
@@ -47,7 +50,6 @@
 namespace starrocks {
 
 extern std::atomic<int64_t> g_report_version;
-
 static AgentStatus get_tablet_info(TTabletId tablet_id, TSchemaHash schema_hash, int64_t signature,
                                    TTabletInfo* tablet_info) {
     AgentStatus status = STARROCKS_SUCCESS;
@@ -1102,6 +1104,59 @@ void run_replicate_snapshot_task(const std::shared_ptr<ReplicateSnapshotAgentTas
     finish_task_request.__set_task_type(agent_task_req->task_type);
     finish_task_request.__set_signature(agent_task_req->signature);
 
+    task_status.__set_status_code(status_code);
+    task_status.__set_error_msgs(error_msgs);
+    finish_task_request.__set_task_status(task_status);
+
+#ifndef BE_TEST
+    finish_task(finish_task_request);
+#endif
+    auto task_queue_size = remove_task_info(agent_task_req->task_type, agent_task_req->signature);
+    VLOG(1) << "Remove task success. type=" << agent_task_req->task_type << ", signature=" << agent_task_req->signature
+            << ", task_count_in_queue=" << task_queue_size;
+}
+
+void run_restore_tablet_task(const std::shared_ptr<RestoreTabletAgentTaskRequest>& agent_task_req, ExecEnv* exec_env) {
+    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(GlobalEnv::GetInstance()->replication_mem_tracker());
+    DeferOp op([prev_tracker] { tls_thread_status.set_mem_tracker(prev_tracker); });
+
+    const auto& restore_req = agent_task_req->task_req;
+
+    TFinishTaskRequest finish_task_request;
+    finish_task_request.__set_backend(BackendOptions::get_localBackend());
+    finish_task_request.__set_task_type(agent_task_req->task_type);
+    finish_task_request.__set_signature(agent_task_req->signature);
+
+    TStatusCode::type status_code = TStatusCode::OK;
+    std::vector<std::string> error_msgs;
+    bool restore_success = false;
+    std::string result_error_msg;
+
+    if (!restore_req.__isset.tablet_infos || restore_req.tablet_infos.empty()) {
+        status_code = TStatusCode::RUNTIME_ERROR;
+        result_error_msg = "tablet restore request missing tablet infos";
+        error_msgs.emplace_back(result_error_msg);
+    } else {
+        Status status = lake::restore_tablet_data(exec_env, restore_req);
+        if (!status.ok()) {
+            status_code = status.is_not_supported() ? TStatusCode::NOT_IMPLEMENTED_ERROR : TStatusCode::RUNTIME_ERROR;
+            result_error_msg = status.to_string();
+            error_msgs.emplace_back(result_error_msg);
+        } else {
+            restore_success = true;
+            LOG(INFO) << fmt::format("tablet restore success. job signature={}, tablets restored={}",
+                                     agent_task_req->signature, restore_req.tablet_infos.size());
+        }
+    }
+
+    TRestoreTabletResult result;
+    result.__set_success(restore_success);
+    if (!restore_success && !result_error_msg.empty()) {
+        result.__set_error_msg(result_error_msg);
+    }
+    finish_task_request.__set_restore_tablet_result(result);
+
+    TStatus task_status;
     task_status.__set_status_code(status_code);
     task_status.__set_error_msgs(error_msgs);
     finish_task_request.__set_task_status(task_status);

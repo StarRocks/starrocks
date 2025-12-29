@@ -1268,6 +1268,13 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static int tablet_delete_timeout_second = 2;
+
+    /**
+     * Timeout of a single tablet restore task sent to BE. If a restore task does not report back within
+     * this duration, FE considers it timed out and will rely on higher level retry logic.
+     */
+    @ConfField(mutable = true)
+    public static int tablet_restore_task_timeout_second = 3600;
     /**
      * The high water of disk capacity used percent.
      * This is used for calculating load score of a backend.

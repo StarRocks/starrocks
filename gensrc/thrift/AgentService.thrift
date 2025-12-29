@@ -413,7 +413,7 @@ struct TRemoteSnapshotRequest {
      15: optional Types.TVersion data_version
  }
 
- struct TReplicateSnapshotRequest {
+struct TReplicateSnapshotRequest {
      1: optional Types.TTransactionId transaction_id
      2: optional Types.TTableId table_id
      3: optional Types.TPartitionId partition_id
@@ -451,6 +451,22 @@ struct TExternalClusterSnapshotRequest {
     8: optional Types.TTabletId dest_tablet_id
     9: optional bool is_filebundling
     10: optional list<TComputeNodeTablets> compute_node_tablets
+}
+
+struct TRestoreTabletRequest {
+    1: optional list<TRestoreTabletInfo> tablet_infos
+    2: optional i64 source_visible_version
+}
+
+struct TRestoreTabletInfo {
+    1: optional Types.TTabletId source_tablet_id
+    2: optional Types.TTabletId target_tablet_id
+    3: optional i64 target_schema_id
+}
+
+struct TRestoreTabletResult {
+     1: optional bool success
+     2: optional string error_msg
 }
 
 enum TTabletMetaType {
@@ -539,6 +555,7 @@ struct TAgentTaskRequest {
     31: optional TUpdateSchemaReq update_schema_req
     32: optional TCompactionControlReq compaction_control_req
     33: optional TExternalClusterSnapshotRequest external_cluster_snapshot_req
+    34: optional TRestoreTabletRequest restore_tablet_req
 }
 
 struct TAgentResult {
@@ -597,4 +614,3 @@ struct TDeleteEtlFilesRequest {
     3: required string db_name
     4: required string label
 }
-

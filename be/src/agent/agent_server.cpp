@@ -413,6 +413,7 @@ void AgentServer::Impl::submit_tasks(TAgentResult& agent_result, const std::vect
             HANDLE_TYPE(TTaskType::REMOTE_SNAPSHOT, remote_snapshot_req);
             HANDLE_TYPE(TTaskType::REPLICATE_SNAPSHOT, replicate_snapshot_req);
             HANDLE_TYPE(TTaskType::EXTERNAL_CLUSTER_SNAPSHOT, external_cluster_snapshot_req);
+            HANDLE_TYPE(TTaskType::TABLET_RESTORE, restore_tablet_req);
 
         case TTaskType::REALTIME_PUSH:
             if (!task.__isset.push_req) {
@@ -574,6 +575,10 @@ void AgentServer::Impl::submit_tasks(TAgentResult& agent_result, const std::vect
         case TTaskType::EXTERNAL_CLUSTER_SNAPSHOT:
             HANDLE_TASK(TTaskType::EXTERNAL_CLUSTER_SNAPSHOT, all_tasks, run_external_cluster_snapshot_task,
                         ExternalClusterSnapshotTaskRequest, external_cluster_snapshot_req, _exec_env);
+            break;
+        case TTaskType::TABLET_RESTORE:
+            HANDLE_TASK(TTaskType::TABLET_RESTORE, all_tasks, run_restore_tablet_task, RestoreTabletAgentTaskRequest,
+                        restore_tablet_req, _exec_env);
             break;
         case TTaskType::REALTIME_PUSH:
         case TTaskType::PUSH: {
@@ -782,6 +787,9 @@ ThreadPool* AgentServer::Impl::get_thread_pool(int type) const {
         break;
     case TTaskType::EXTERNAL_CLUSTER_SNAPSHOT:
         ret = _thread_pool_cluster_snapshot.get();
+        break;
+    case TTaskType::TABLET_RESTORE:
+        ret = _thread_pool_remote_snapshot.get();
         break;
     case TTaskType::PUSH:
     case TTaskType::REALTIME_PUSH:

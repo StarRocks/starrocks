@@ -51,6 +51,7 @@ import com.starrocks.epack.persist.UpdateFailoverGroupLog;
 import com.starrocks.epack.system.SystemInfo;
 import com.starrocks.ha.LeaderInfo;
 import com.starrocks.journal.bdbje.Timestamp;
+import com.starrocks.lake.restore.SnapshotRestoreJob;
 import com.starrocks.load.ExportJob;
 import com.starrocks.load.MultiDeleteInfo;
 import com.starrocks.load.loadv2.LoadJob;
@@ -124,6 +125,7 @@ public class EditLogDeserializer {
             .put(OperationTypeEPack.OP_MANUAL_CLUSTER_SNAPSHOT_LOG, ManualClusterSnapshotLog.class)
             .put(OperationTypeEPack.OP_INIT_SYSTEM_INFO, SystemInfo.class)
             .put(OperationTypeEPack.OP_REGISTER_LICENSE, RegisterLicenseLog.class)
+            .put(OperationTypeEPack.OP_RESTORE_FROM_SNAPSHOT, SnapshotRestoreJob.class)
 
             .put(OperationType.OP_SAVE_TRANSACTION_ID_V2, TransactionIdInfo.class)
             .put(OperationType.OP_SAVE_AUTO_INCREMENT_ID, AutoIncrementInfo.class)

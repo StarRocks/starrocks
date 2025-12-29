@@ -170,6 +170,7 @@ import com.starrocks.lake.backup.LakeBackupJob;
 import com.starrocks.lake.backup.LakeRestoreJob;
 import com.starrocks.lake.backup.LakeTableSnapshotInfo;
 import com.starrocks.lake.compaction.CompactionTxnCommitAttachment;
+import com.starrocks.lake.restore.SnapshotRestoreJob;
 import com.starrocks.lake.snapshot.ClusterSnapshot;
 import com.starrocks.lake.snapshot.ClusterSnapshotJob;
 import com.starrocks.lake.snapshot.ExternalClusterSnapshotJob;
@@ -443,7 +444,8 @@ public class GsonUtils {
                     .registerSubtype(BackupJob.class, "BackupJob")
                     .registerSubtype(LakeBackupJob.class, "LakeBackupJob")
                     .registerSubtype(RestoreJob.class, "RestoreJob")
-                    .registerSubtype(LakeRestoreJob.class, "LakeRestoreJob");
+                    .registerSubtype(LakeRestoreJob.class, "LakeRestoreJob")
+                    .registerSubtype(SnapshotRestoreJob.class, "SnapshotRestoreJob");
 
     public static final RuntimeTypeAdapterFactory<Function> FUNCTION_TYPE_RUNTIME_ADAPTER_FACTORY =
             RuntimeTypeAdapterFactory.of(Function.class, "clazz")

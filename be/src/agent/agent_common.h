@@ -111,5 +111,6 @@ using RemoteSnapshotAgentTaskRequest = AgentTaskRequestWithReqBody<TRemoteSnapsh
 using ReplicateSnapshotAgentTaskRequest = AgentTaskRequestWithReqBody<TReplicateSnapshotRequest>;
 using UpdateSchemaTaskRequest = AgentTaskRequestWithReqBody<TUpdateSchemaReq>;
 using ExternalClusterSnapshotTaskRequest = AgentTaskRequestWithReqBody<TExternalClusterSnapshotRequest>;
+using RestoreTabletAgentTaskRequest = AgentTaskRequestWithReqBody<TRestoreTabletRequest>;
 
 } // namespace starrocks

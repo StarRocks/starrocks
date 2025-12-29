@@ -53,7 +53,7 @@ import java.util.Map;
 public abstract class AbstractJob implements Writable {
 
     public enum JobType {
-        BACKUP, RESTORE, LAKE_BACKUP, LAKE_RESTORE
+        BACKUP, RESTORE, LAKE_BACKUP, LAKE_RESTORE, TABLE_SNAPSHOT_RESTORE
     }
 
     @SerializedName(value = "type")
@@ -197,4 +197,3 @@ public abstract class AbstractJob implements Writable {
         return sb.toString();
     }
 }
-

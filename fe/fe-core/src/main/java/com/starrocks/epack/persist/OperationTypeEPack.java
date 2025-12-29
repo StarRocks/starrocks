@@ -49,6 +49,7 @@ public class OperationTypeEPack extends OperationType {
 
     // Manual Cluster Snapshot
     public static final short OP_MANUAL_CLUSTER_SNAPSHOT_LOG = 20601;
+    public static final short OP_RESTORE_FROM_SNAPSHOT = 20602;
 
     // License
     public static final short OP_INIT_SYSTEM_INFO = 20610;

@@ -201,6 +201,7 @@ set(STORAGE_FILES
     lake/rowset.cpp
     lake/schema_change.cpp
     lake/starlet_location_provider.cpp
+    lake/tablet_restore.cpp
     lake/tablet.cpp
     lake/tablet_manager.cpp
     lake/tablet_reader.cpp

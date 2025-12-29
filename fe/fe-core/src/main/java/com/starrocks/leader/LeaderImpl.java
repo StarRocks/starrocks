@@ -144,6 +144,7 @@ import com.starrocks.thrift.TRange;
 import com.starrocks.thrift.TRangePartitionDesc;
 import com.starrocks.thrift.TReplicaMeta;
 import com.starrocks.thrift.TReportRequest;
+import com.starrocks.thrift.TRestoreTabletResult;
 import com.starrocks.thrift.TSchemaMeta;
 import com.starrocks.thrift.TSinglePartitionDesc;
 import com.starrocks.thrift.TStatus;
@@ -264,7 +265,8 @@ public class LeaderImpl {
                         && taskType != TTaskType.DROP_AUTO_INCREMENT_MAP
                         && taskType != TTaskType.STORAGE_MEDIUM_MIGRATE
                         && taskType != TTaskType.REMOTE_SNAPSHOT && taskType != TTaskType.REPLICATE_SNAPSHOT
-                        && taskType != TTaskType.UPDATE_SCHEMA) {
+                        && taskType != TTaskType.UPDATE_SCHEMA
+                        && taskType != TTaskType.TABLET_RESTORE) {
                     if (taskType == TTaskType.REALTIME_PUSH) {
                         PushTask pushTask = (PushTask) task;
                         if (pushTask.getPushType() == TPushType.DELETE) {
@@ -350,6 +352,9 @@ public class LeaderImpl {
                     break;
                 case REPLICATE_SNAPSHOT:
                     finishReplicateSnapshotTask(task, request);
+                    break;
+                case TABLET_RESTORE:
+                    finishTabletRestoreTask(task, request);
                     break;
                 case UPDATE_SCHEMA:
                     finishUpdateSchemaTask(task, request);
@@ -484,6 +489,33 @@ public class LeaderImpl {
         }
     }
 
+    private void finishTabletRestoreTask(AgentTask task, TFinishTaskRequest request) {
+        try {
+            boolean success = request.getTask_status() != null
+                    && request.getTask_status().getStatus_code() == TStatusCode.OK;
+            String errorMsg = null;
+            if (request.isSetRestore_tablet_result()) {
+                TRestoreTabletResult result = request.getRestore_tablet_result();
+                if (result.isSetSuccess()) {
+                    success = result.isSuccess();
+                }
+                if (result.isSetError_msg() && !Strings.isNullOrEmpty(result.getError_msg())) {
+                    errorMsg = result.getError_msg();
+                }
+            }
+            if (!success && request.getTask_status() != null
+                    && request.getTask_status().getError_msgs() != null
+                    && !request.getTask_status().getError_msgs().isEmpty()) {
+                errorMsg = Joiner.on(", ").join(request.getTask_status().getError_msgs());
+            }
+            long physicalPartitionId = task.getPartitionId();
+            GlobalStateMgr.getCurrentState().getBackupHandler()
+                    .notifyTableSnapshotRestoreTaskFinished(task.getDbId(), physicalPartitionId, success, errorMsg);
+        } finally {
+            AgentTaskQueue.removeTask(task.getBackendId(), task.getTaskType(), task.getSignature());
+        }
+    }
+
     private void finishUpdateSchemaTask(AgentTask task, TFinishTaskRequest request) {
         try {
             long dbId = task.getDbId();
@@ -496,7 +528,7 @@ public class LeaderImpl {
                 locker.lockDatabase(db.getId(), LockType.READ);
                 try {
                     OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                                .getTable(db.getId(), tableId);
+                            .getTable(db.getId(), tableId);
                     if (olapTable != null) {
                         MaterializedIndexMeta indexMeta = olapTable.getIndexMetaByIndexId(indexId);
                         if (indexMeta != null) {

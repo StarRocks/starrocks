@@ -447,6 +447,37 @@ public class TabletTaskExecutor {
         return Collections.max(tasksPerBackend.values());
     }
 
+    public static boolean sendTabletRestoreTask(TabletRestoreAgentTask task) {
+        if (task == null) {
+            return false;
+        }
+        return sendTabletRestoreTasks(Collections.singletonList(task));
+    }
+
+    public static boolean sendTabletRestoreTasks(List<TabletRestoreAgentTask> tasks) {
+        if (tasks == null || tasks.isEmpty()) {
+            return false;
+        }
+
+        AgentBatchTask batchTask = new AgentBatchTask();
+        boolean added = false;
+        for (TabletRestoreAgentTask task : tasks) {
+            if (!AgentTaskQueue.addTask(task)) {
+                LOG.warn("skip duplicated tablet restore task, backendId={}, signature={}, tabletId={}",
+                        task.getBackendId(), task.getSignature(), task.getTabletId());
+                continue;
+            }
+            batchTask.addTask(task);
+            added = true;
+        }
+
+        if (added && batchTask.getTaskNum() > 0) {
+            AgentTaskExecutor.submit(batchTask);
+            return true;
+        }
+        return false;
+    }
+
     public static void deleteAllReplicas(OlapTable olapTable) {
         HashMap<Long, AgentBatchTask> batchTaskMap = new HashMap<>();
 

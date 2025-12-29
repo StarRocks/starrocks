@@ -19,6 +19,7 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.epack.persist.EditLogEPack;
 import com.starrocks.epack.persist.ManualClusterSnapshotLog;
+import com.starrocks.lake.restore.RestoreHandler;
 import com.starrocks.lake.snapshot.ClusterSnapshotJob.ClusterSnapshotJobState;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
@@ -45,6 +46,8 @@ public class ClusterSnapshotMgrEPack extends ClusterSnapshotMgr {
     private Queue<ManualClusterSnapshotRequest> manualClusterSnapshotRequestQueue = new LinkedBlockingQueue<>();
     @SerializedName(value = "manualClusterSnapshotJobs")
     private NavigableMap<Long, ManualClusterSnapshotJob> manualClusterSnapshotJobs = new ConcurrentSkipListMap<>();
+
+    private final RestoreHandler tableSnapshotRestoreHandler = new RestoreHandler();
 
     public ClusterSnapshotMgrEPack() {
     }
@@ -91,8 +94,8 @@ public class ClusterSnapshotMgrEPack extends ClusterSnapshotMgr {
                     "Cannot drop cluster snapshot '%s' because snapshot job is still running with state: %s. " +
                             "Please wait for the job to complete.",
                     snapshotName, job.getState().name());
-        // TODO: Support CANCEL CLUSTER SNAPSHOT statement to allow users to cancel
-        // running snapshot jobs
+            // TODO: Support CANCEL CLUSTER SNAPSHOT statement to allow users to cancel
+            // running snapshot jobs
         }
 
         try {
@@ -110,6 +113,11 @@ public class ClusterSnapshotMgrEPack extends ClusterSnapshotMgr {
         editLogEPack.logManualClusterSnapshotLog(log);
 
         LOG.info("Drop cluster snapshot successfully, snapshot name: {}", snapshotName);
+    }
+
+    public void submitTableSnapshotRestore(RestoreTableFromSnapshotStmt stmt, ConnectContext context)
+            throws StarRocksException {
+        tableSnapshotRestoreHandler.submitTableSnapshotRestore(stmt, context);
     }
 
     void removeClusterSnapshotJobByName(String snapshotName) {
@@ -160,9 +168,9 @@ public class ClusterSnapshotMgrEPack extends ClusterSnapshotMgr {
 
     public boolean isManualClusterSnapshotNameValid(String snapshotName) {
         return !snapshotName.startsWith(ClusterSnapshotMgr.AUTOMATED_NAME_PREFIX) &&
-                    manualClusterSnapshotRequestQueue.stream().anyMatch(
+                manualClusterSnapshotRequestQueue.stream().anyMatch(
                         request -> request.getSnapshotName().equals(snapshotName)) ||
-                                getClusterSnapshotJobByName(snapshotName) != null;
+                getClusterSnapshotJobByName(snapshotName) != null;
     }
 
     public void addManualClusterSnapshotRequest(ManualClusterSnapshotRequest request) {
@@ -173,7 +181,7 @@ public class ClusterSnapshotMgrEPack extends ClusterSnapshotMgr {
         if (!manualClusterSnapshotRequestQueue.isEmpty() && snapshotName != null) {
             ManualClusterSnapshotRequest peekRequest = manualClusterSnapshotRequestQueue.peek();
             if (peekRequest != null && peekRequest.getSnapshotName() != null &&
-                        peekRequest.getSnapshotName().equals(snapshotName)) {
+                    peekRequest.getSnapshotName().equals(snapshotName)) {
                 manualClusterSnapshotRequestQueue.remove();
             }
         }
@@ -340,7 +348,7 @@ public class ClusterSnapshotMgrEPack extends ClusterSnapshotMgr {
 
     @Override
     public boolean isShardGroupIdInClusterSnapshotInfo(
-                   long dbId, long tableId, long partId, long physicalPartId, long shardGroupId) {
+            long dbId, long tableId, long partId, long physicalPartId, long shardGroupId) {
         for (ClusterSnapshotInfo info : getAllClusterSnapshotInfo()) {
             if (info.containsShardGroupId(dbId, tableId, partId, physicalPartId, shardGroupId)) {
                 return true;
@@ -367,11 +375,6 @@ public class ClusterSnapshotMgrEPack extends ClusterSnapshotMgr {
             }
         }
         return response;
-    }
-
-    public void submitTableSnapshotRestore(RestoreTableFromSnapshotStmt stmt, ConnectContext context)
-            throws StarRocksException {
-        throw new StarRocksException("Table snapshot recovery is not supported");
     }
 
     @Override

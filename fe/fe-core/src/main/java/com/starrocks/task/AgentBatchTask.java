@@ -61,6 +61,7 @@ import com.starrocks.thrift.TPushReq;
 import com.starrocks.thrift.TReleaseSnapshotRequest;
 import com.starrocks.thrift.TRemoteSnapshotRequest;
 import com.starrocks.thrift.TReplicateSnapshotRequest;
+import com.starrocks.thrift.TRestoreTabletRequest;
 import com.starrocks.thrift.TSnapshotRequest;
 import com.starrocks.thrift.TStorageMediumMigrateReq;
 import com.starrocks.thrift.TTaskType;
@@ -348,6 +349,12 @@ public class AgentBatchTask implements Runnable {
                     LOG.debug(request.toString());
                 }
                 tAgentTaskRequest.setMove_dir_req(request);
+                return tAgentTaskRequest;
+            }
+            case TABLET_RESTORE: {
+                TabletRestoreAgentTask restoreTask = (TabletRestoreAgentTask) task;
+                TRestoreTabletRequest restoreRequest = restoreTask.toThrift();
+                tAgentTaskRequest.setRestore_tablet_req(restoreRequest);
                 return tAgentTaskRequest;
             }
             case UPDATE_TABLET_META_INFO: {

@@ -113,6 +113,7 @@ import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.credential.CredentialUtil;
 import com.starrocks.datacache.DataCacheMgr;
+import com.starrocks.lake.restore.SnapshotRestoreJob;
 import com.starrocks.load.DeleteMgr;
 import com.starrocks.load.ExportJob;
 import com.starrocks.load.ExportMgr;
@@ -2040,14 +2041,15 @@ public class ShowExecutor {
 
             for (Database db : dbs) {
                 AbstractJob jobI = GlobalStateMgr.getCurrentState().getBackupHandler().getJob(db.getId());
-                if (jobI == null || !(jobI instanceof RestoreJob)) {
-                    // show next db
+                if (jobI instanceof RestoreJob restoreJob) {
+                    List<String> info = restoreJob.getInfo();
+                    infos.add(info);
+                } else if (jobI instanceof SnapshotRestoreJob restoreJob) {
+                    List<String> info = restoreJob.getInfo();
+                    infos.add(info);
+                } else {
                     continue;
                 }
-
-                RestoreJob restoreJob = (RestoreJob) jobI;
-                List<String> info = restoreJob.getInfo();
-                infos.add(info);
             }
 
             // restore info for external catalog

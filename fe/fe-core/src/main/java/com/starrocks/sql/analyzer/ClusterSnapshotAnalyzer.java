@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.analyzer;
 
+import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
 import com.starrocks.common.DdlException;
 import com.starrocks.lake.snapshot.ClusterSnapshotJob;
@@ -21,6 +22,7 @@ import com.starrocks.lake.snapshot.ClusterSnapshotMgr;
 import com.starrocks.lake.snapshot.ClusterSnapshotMgrEPack;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.StorageVolumeMgr;
 import com.starrocks.sql.ast.AdminSetAutomatedSnapshotOffStmt;
@@ -65,7 +67,7 @@ public class ClusterSnapshotAnalyzer {
                 if (scope != null) {
                     String scopeLower = scope.toLowerCase();
                     if (!scopeLower.equals("local") && !scopeLower.equals("external")) {
-                        throw new 
+                        throw new
                             SemanticException("Invalid snapshot_scope property value: %s. Must be 'local' or 'external'", scope);
                     }
                 }
@@ -162,6 +164,17 @@ public class ClusterSnapshotAnalyzer {
             ClusterSnapshotJob job = clusterSnapshotMgr.getClusterSnapshotJobByName(snapshotName);
             if (job == null || !job.isFinished()) {
                 throw new SemanticException("Cluster snapshot '%s' is not available for restore", snapshotName);
+            }
+
+            // Check if target table already exists
+            MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
+            Table existingTable = metadataMgr.getTable(context,
+                    targetTable.getCatalog(),
+                    targetTable.getDb(),
+                    targetTable.getTbl());
+            if (existingTable != null) {
+                throw new SemanticException("Table '%s' already exists in database '%s'",
+                        targetTable.getTbl(), targetTable.getDb());
             }
 
             return null;

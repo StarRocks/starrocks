@@ -57,6 +57,7 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionNames;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
+import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
@@ -66,6 +67,7 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.lake.restore.SnapshotRestoreJob;
 import com.starrocks.memory.MemoryTrackable;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.TableRefPersist;
@@ -207,6 +209,30 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
 
     public AbstractJob getJob(long dbId) {
         return dbIdToBackupOrRestoreJob.get(dbId);
+    }
+
+    public void submitTableSnapshotRestoreJob(SnapshotRestoreJob job) throws AlreadyExistsException {
+        Preconditions.checkNotNull(job, "Table snapshot restore job is null");
+        long dbId = job.getDbId();
+        AbstractJob existingJob = dbIdToBackupOrRestoreJob.get(dbId);
+        if (existingJob != null && !existingJob.isDone()) {
+            throw new AlreadyExistsException("Another backup/restore job is running on database " + dbId);
+        }
+
+        dbIdToBackupOrRestoreJob.put(dbId, job);
+        LOG.info("Submitted table snapshot restore job {} for table {} in database {}", job.getLabel(),
+                job.getTableId(), dbId);
+    }
+
+    public void notifyTableSnapshotRestoreTaskFinished(long dbId, long physicalPartitionId,
+                                                       boolean success, String errorMessage) {
+        AbstractJob job = dbIdToBackupOrRestoreJob.get(dbId);
+        if (!(job instanceof SnapshotRestoreJob)) {
+            LOG.warn("Restore task for physical partition {} finished but no running restore job on database {}",
+                    physicalPartitionId, dbId);
+            return;
+        }
+        ((SnapshotRestoreJob) job).onPartitionRestoreFinished(physicalPartitionId, success, errorMessage);
     }
 
     @Override

@@ -49,4 +49,6 @@ void run_replicate_snapshot_task(const std::shared_ptr<ReplicateSnapshotAgentTas
                                  ExecEnv* exec_env);
 void run_external_cluster_snapshot_task(const std::shared_ptr<ExternalClusterSnapshotTaskRequest>& agent_task_req,
                                         ExecEnv* exec_env);
+void run_restore_tablet_task(const std::shared_ptr<RestoreTabletAgentTaskRequest>& agent_task_req,
+                             ExecEnv* exec_env);
 } // namespace starrocks

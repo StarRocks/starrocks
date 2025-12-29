@@ -531,6 +531,9 @@ public class GlobalStateMgr {
     private static GlobalStateMgr FAILOVER_GROUP_STATE = null;
     private static long failoverGroupThreadId = -1;
 
+    private static GlobalStateMgr RESTORE_STATE = null;
+    private static long restoreThreadId = -1;
+
     private final ResourceUsageMonitor resourceUsageMonitor = new ResourceUsageMonitor();
     private final BaseSlotManager slotManager;
     private final GlobalSlotProvider globalSlotProvider = new GlobalSlotProvider();
@@ -933,6 +936,12 @@ public class GlobalStateMgr {
         }
     }
 
+    public static void destroyRestoreState() {
+        if (RESTORE_STATE != null) {
+            RESTORE_STATE = null;
+        }
+    }
+
     public static GlobalStateMgr getCurrentState() {
         if (isCheckpointThread()) {
             // only checkpoint thread itself will go here.
@@ -946,6 +955,11 @@ public class GlobalStateMgr {
                 FAILOVER_GROUP_STATE = new GlobalStateMgr(true);
             }
             return FAILOVER_GROUP_STATE;
+        } else if (isRestoreGroupThread()) {
+            if (RESTORE_STATE == null) {
+                RESTORE_STATE = new GlobalStateMgr(true);
+            }
+            return RESTORE_STATE;
         } else {
             return SingletonHolder.INSTANCE;
         }
@@ -1052,6 +1066,19 @@ public class GlobalStateMgr {
 
     public static void resetFailoverGroupThread() {
         failoverGroupThreadId = -1;
+    }
+
+    public static void setRestoreThreadId() {
+        restoreThreadId = Thread.currentThread().getId();
+    }
+
+    public static void resetRestoreThreadId() {
+        restoreThreadId = -1;
+    }
+
+    public static boolean isRestoreGroupThread() {
+        return restoreThreadId != -1 &&
+                Thread.currentThread().getId() == restoreThreadId;
     }
 
     public static PluginMgr getCurrentPluginMgr() {
