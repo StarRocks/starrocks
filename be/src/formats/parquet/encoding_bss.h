@@ -41,6 +41,10 @@ public:
     }
     ~ByteStreamSplitEncoder() override = default;
 
+    std::string to_string() const override {
+        return fmt::format("ByteStreamSplitEncoder<{}>", typeid(T).name());
+    }
+
     void set_type_length(int byte_width) override {
         if constexpr (IS_FLBA) {
             byte_width_ = byte_width;
@@ -114,6 +118,10 @@ public:
         }
     }
     ~ByteStreamSplitDecoder() override = default;
+
+    std::string to_string() const override {
+        return fmt::format("ByteStreamSplitDecoder<{}>", typeid(T).name());
+    }
 
     void set_type_length(int byte_width) override {
         if constexpr (IS_FLBA) {
