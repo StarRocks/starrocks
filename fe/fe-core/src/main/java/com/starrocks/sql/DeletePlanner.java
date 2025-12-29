@@ -33,6 +33,7 @@ import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.SlotDescriptor;
 import com.starrocks.planner.TupleDescriptor;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.DeleteStmt;
@@ -57,6 +58,7 @@ import com.starrocks.thrift.TResultSinkType;
 import com.starrocks.type.IntegerType;
 
 import java.util.List;
+import java.util.function.Consumer;
 
 public class DeletePlanner {
     public ExecPlan plan(DeleteStmt deleteStatement, ConnectContext session) {
@@ -138,13 +140,13 @@ public class DeletePlanner {
             // Create sink based on table type
             if (table instanceof IcebergTable) {
                 setupIcebergDeleteSink(execPlan, colNames, (IcebergTable) table, session);
+                configureIcebergTableSinkPipeline(execPlan, session, canUsePipeline);
             } else if (table instanceof OlapTable) {
                 setupOlapTableSink(execPlan, deleteStatement, session);
+                configureOlapTableSinkPipeline(execPlan, session, canUsePipeline);
             } else {
                 throw new SemanticException("Unsupported table type for delete: " + table.getType());
             }
-            // Configure pipeline for the sink
-            configurePipelineSink(execPlan, session, table, canUsePipeline);
 
             return execPlan;
         } finally {
@@ -170,8 +172,6 @@ public class DeletePlanner {
                 slotDescriptor.setType(column.getType());
                 slotDescriptor.setColumn(column);
                 slotDescriptor.setIsNullable(column.isAllowNull());
-            } else {
-                continue;
             }
         }
         SlotDescriptor slotDescriptor = descriptorTable.addSlotDescriptor(olapTuple);
@@ -215,25 +215,25 @@ public class DeletePlanner {
     private void setupIcebergDeleteSink(ExecPlan execPlan, List<String> colNames,
                                         IcebergTable icebergTable, ConnectContext session) {
         DescriptorTable descriptorTable = execPlan.getDescTbl();
-        TupleDescriptor mergeTuple = descriptorTable.createTupleDescriptor();
+        TupleDescriptor deleteTuple = descriptorTable.createTupleDescriptor();
 
         List<Expr> outputExprs = execPlan.getOutputExprs();
         Preconditions.checkArgument(colNames.size() == outputExprs.size(),
                 "output column size mismatch");
         for (int index = 0; index < colNames.size(); ++index) {
-            SlotDescriptor slot = descriptorTable.addSlotDescriptor(mergeTuple);
+            SlotDescriptor slot = descriptorTable.addSlotDescriptor(deleteTuple);
             slot.setIsMaterialized(true);
             slot.setType(outputExprs.get(index).getType());
             slot.setColumn(new Column(colNames.get(index), outputExprs.get(index).getType()));
             slot.setIsNullable(outputExprs.get(index).isNullable());
         }
-        mergeTuple.computeMemLayout();
+        deleteTuple.computeMemLayout();
 
         // Initialize IcebergDeleteSink
         descriptorTable.addReferencedTable(icebergTable);
         IcebergDeleteSink dataSink = new IcebergDeleteSink(
                 icebergTable,
-                mergeTuple,
+                deleteTuple,
                 session.getSessionVariable()
         );
         dataSink.init();
@@ -241,26 +241,69 @@ public class DeletePlanner {
     }
 
     /**
-     * Configures pipeline for sink fragment
+     * Configures pipeline for Olap Table sink fragment
      */
-    private void configurePipelineSink(ExecPlan execPlan, ConnectContext session,
-                                       com.starrocks.catalog.Table table, boolean canUsePipeline) {
-        if (canUsePipeline) {
-            PlanFragment sinkFragment = execPlan.getFragments().get(0);
-            if (session.getSessionVariable().getEnableAdaptiveSinkDop()) {
-                long warehouseId = session.getCurrentComputeResource().getWarehouseId();
-                sinkFragment.setPipelineDop(session.getSessionVariable().getSinkDegreeOfParallelism(warehouseId));
-            } else {
-                sinkFragment.setPipelineDop(session.getSessionVariable().getParallelExecInstanceNum());
-            }
-            sinkFragment.setHasOlapTableSink();
-            sinkFragment.setForceSetTableSinkDop();
-            sinkFragment.setForceAssignScanRangesPerDriverSeq();
-            sinkFragment.disableRuntimeAdaptiveDop();
-        } else {
+    private void configureOlapTableSinkPipeline(ExecPlan execPlan, ConnectContext session,
+                                                boolean canUsePipeline) {
+        if (!canUsePipeline) {
             execPlan.getFragments().get(0).setPipelineDop(1);
+            return;
         }
+
+        PlanFragment sinkFragment = execPlan.getFragments().get(0);
+        configureCommonSinkPipeline(sinkFragment, session, PlanFragment::setHasOlapTableSink);
+        sinkFragment.setForceAssignScanRangesPerDriverSeq();
     }
+
+    /**
+     * Configures pipeline for Iceberg Table sink fragment
+     */
+    private void configureIcebergTableSinkPipeline(ExecPlan execPlan, ConnectContext session, boolean canUsePipeline) {
+        if (!canUsePipeline) {
+            execPlan.getFragments().get(0).setPipelineDop(1);
+            return;
+        }
+
+        // enable spill for connector sink
+        SessionVariable sv = session.getSessionVariable();
+        if (sv.isEnableConnectorSinkSpill()) {
+            sv.setEnableSpill(true);
+            if (sv.getConnectorSinkSpillMemLimitThreshold() < sv.getSpillMemLimitThreshold()) {
+                sv.setSpillMemLimitThreshold(sv.getConnectorSinkSpillMemLimitThreshold());
+            }
+        }
+
+        PlanFragment sinkFragment = execPlan.getFragments().get(0);
+        configureCommonSinkPipeline(sinkFragment, session, PlanFragment::setHasIcebergTableSink);
+    }
+
+    /**
+     * Common pipeline configuration logic for both OLAP and Iceberg sinks.
+     * Extracts the shared configuration patterns to reduce duplication.
+     * @param sinkFragment The sink fragment to configure
+     * @param session The connect context
+     * @param setSinkTypeFlag Consumer to set the sink type flag on the fragment
+     */
+    private void configureCommonSinkPipeline(
+            PlanFragment sinkFragment,
+            ConnectContext session,
+            Consumer<PlanFragment> setSinkTypeFlag) {
+        SessionVariable sv = session.getSessionVariable();
+
+        // Set pipeline dop based on adaptive sink configuration
+        if (sv.getEnableAdaptiveSinkDop()) {
+            long warehouseId = session.getCurrentComputeResource().getWarehouseId();
+            sinkFragment.setPipelineDop(sv.getSinkDegreeOfParallelism(warehouseId));
+        } else {
+            sinkFragment.setPipelineDop(sv.getParallelExecInstanceNum());
+        }
+        setSinkTypeFlag.accept(sinkFragment);
+
+        // Common pipeline settings for sink operations
+        sinkFragment.disableRuntimeAdaptiveDop();
+        sinkFragment.setForceSetTableSinkDop();
+    }
+
 
     /**
      *

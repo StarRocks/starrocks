@@ -222,25 +222,26 @@ public class DeleteAnalyzer {
             throw new SemanticException("Delete for Iceberg table do not support `with` clause");
         }
 
+        TableName tableName = TableName.fromTableRef(deleteStatement.getTableRef());
         // Create select list: SELECT _file, _pos, partition_col1, partition_col2, ...
         SelectList selectList = new SelectList();
         // Add _file column
-        SlotRef filePathColumn = new SlotRef(deleteStatement.getTableName(), IcebergTable.FILE_PATH);
+        SlotRef filePathColumn = new SlotRef(tableName, IcebergTable.FILE_PATH);
         selectList.addItem(new SelectListItem(filePathColumn, IcebergTable.FILE_PATH));
 
         // Add _pos column
-        SlotRef posColumn = new SlotRef(deleteStatement.getTableName(), IcebergTable.ROW_POSITION);
+        SlotRef posColumn = new SlotRef(tableName, IcebergTable.ROW_POSITION);
         selectList.addItem(new SelectListItem(posColumn, IcebergTable.ROW_POSITION));
 
         // Add partition columns for shuffle
         List<Column> partitionColumns = table.getPartitionColumns().stream().filter(java.util.Objects::nonNull).toList();
         for (Column partitionCol : partitionColumns) {
-            SlotRef partitionColumnRef = new SlotRef(deleteStatement.getTableName(), partitionCol.getName());
+            SlotRef partitionColumnRef = new SlotRef(tableName, partitionCol.getName());
             selectList.addItem(new SelectListItem(partitionColumnRef, partitionCol.getName()));
         }
 
         // Create table relation with WHERE predicate
-        TableRelation tableRelation = new TableRelation(deleteStatement.getTableName());
+        TableRelation tableRelation = new TableRelation(tableName);
         SelectRelation selectRelation = new SelectRelation(
                 selectList,
                 tableRelation,
