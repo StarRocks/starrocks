@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.ast;
 
 import com.starrocks.sql.parser.NodePosition;
@@ -27,29 +26,9 @@ public class GrantPrivilegeStmt extends BaseGrantRevokePrivilegeStmt {
             String objectTypeUnResolved,
             GrantRevokeClause grantRevokeClause,
             GrantRevokePrivilegeObjects objects,
-            boolean withGrantOption) {
-        this(privilegeTypeUnResolved, objectTypeUnResolved, grantRevokeClause, objects,
-                withGrantOption, NodePosition.ZERO);
-    }
-
-    public GrantPrivilegeStmt(
-            List<String> privilegeTypeUnResolved,
-            String objectTypeUnResolved,
-            GrantRevokeClause grantRevokeClause,
-            GrantRevokePrivilegeObjects objects,
             boolean withGrantOption,
             NodePosition pos) {
         super(privilegeTypeUnResolved, objectTypeUnResolved, grantRevokeClause, objects, pos);
-        this.withGrantOption = withGrantOption;
-    }
-
-    /**
-     * The following functions is used to generate sql when excuting `show grants` in old privilege framework
-     */
-    public GrantPrivilegeStmt(List<String> privilegeTypeUnResolved, String objectTypeUnResolved, UserRef user,
-                              boolean withGrantOption) {
-        super(privilegeTypeUnResolved, objectTypeUnResolved, new GrantRevokeClause(user, null),
-                new GrantRevokePrivilegeObjects());
         this.withGrantOption = withGrantOption;
     }
 

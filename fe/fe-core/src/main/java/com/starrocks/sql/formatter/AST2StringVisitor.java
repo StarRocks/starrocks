@@ -17,8 +17,6 @@ package com.starrocks.sql.formatter;
 import com.google.common.base.Joiner;
 import com.google.common.base.Strings;
 import com.starrocks.authorization.ObjectType;
-import com.starrocks.authorization.PEntryObject;
-import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.TableName;
 import com.starrocks.common.util.ParseUtil;
@@ -45,6 +43,7 @@ import com.starrocks.sql.ast.ExceptRelation;
 import com.starrocks.sql.ast.ExecuteStmt;
 import com.starrocks.sql.ast.ExportStmt;
 import com.starrocks.sql.ast.FileTableFunctionRelation;
+import com.starrocks.sql.ast.FunctionRef;
 import com.starrocks.sql.ast.GrantPrivilegeStmt;
 import com.starrocks.sql.ast.GrantRoleStmt;
 import com.starrocks.sql.ast.GrantType;
@@ -222,27 +221,40 @@ public class AST2StringVisitor implements AstVisitorExtendInterface<String, Void
             sb.append("REVOKE ");
         }
         List<String> privList = new ArrayList<>();
-        for (PrivilegeType privilegeType : stmt.getPrivilegeTypes()) {
-            privList.add(privilegeType.name().replace("_", " "));
+        for (String privilegeTypeStr : stmt.getPrivilegeTypeUnResolved()) {
+            privList.add(privilegeTypeStr.replace("_", " "));
         }
 
         sb.append(Joiner.on(", ").join(privList));
         sb.append(" ON ");
 
-        if (stmt.getObjectType().equals(ObjectType.SYSTEM)) {
-            sb.append(stmt.getObjectType().name());
+        ObjectType objectType = ObjectType.NAME_TO_OBJECT.get(stmt.getObjectTypeUnResolved());
+        if (objectType != null && objectType.equals(ObjectType.SYSTEM)) {
+            sb.append(objectType.name());
         } else {
-            if (stmt.getObjectList().stream().anyMatch(PEntryObject::isFuzzyMatching)) {
-                sb.append(stmt.getObjectList().get(0).toString());
-            } else {
-                sb.append(stmt.getObjectType().name()).append(" ");
+            sb.append(objectType != null ? objectType.name() : stmt.getObjectTypeUnResolved()).append(" ");
 
-                List<String> objectString = new ArrayList<>();
-                for (PEntryObject pEntryObject : stmt.getObjectList()) {
-                    objectString.add(pEntryObject.toString());
+            List<String> objectStrings = new ArrayList<>();
+            
+            // Build object strings from unresolved AST elements
+            if (stmt.getUserPrivilegeObjectList() != null && !stmt.getUserPrivilegeObjectList().isEmpty()) {
+                // USER objects
+                for (UserRef userRef : stmt.getUserPrivilegeObjectList()) {
+                    objectStrings.add(userRef.toString());
                 }
-                sb.append(Joiner.on(", ").join(objectString));
+            } else if (stmt.getFunctionRefs() != null && !stmt.getFunctionRefs().isEmpty()) {
+                // FUNCTION objects
+                for (FunctionRef funcRef : stmt.getFunctionRefs()) {
+                    objectStrings.add(funcRef.toString());
+                }
+            } else if (stmt.getPrivilegeObjectNameTokensList() != null) {
+                // TABLE/DATABASE/etc objects
+                for (List<String> tokens : stmt.getPrivilegeObjectNameTokensList()) {
+                    objectStrings.add(Joiner.on(".").join(tokens));
+                }
             }
+            
+            sb.append(Joiner.on(", ").join(objectStrings));
         }
         if (stmt instanceof GrantPrivilegeStmt) {
             sb.append(" TO ");

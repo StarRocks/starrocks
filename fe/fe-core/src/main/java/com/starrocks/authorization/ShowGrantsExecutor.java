@@ -38,6 +38,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 /**
  * Executor for SHOW GRANTS statement.
@@ -141,21 +142,26 @@ public class ShowGrantsExecutor {
                         userOrRoleName.getRoleName() : userOrRoleName.getUser().toString());
                 info.add(catalogName);
 
-                GrantPrivilegeStmt grantPrivilegeStmt = new GrantPrivilegeStmt(new ArrayList<>(), objectType.name(),
-                        userOrRoleName, null, privilegeEntry.isWithGrantOption());
-
-                grantPrivilegeStmt.setObjectType(objectType);
                 ActionSet actionSet = privilegeEntry.getActionSet();
                 List<PrivilegeType> privList = authorizationManager.analyzeActionSet(objectType, actionSet);
-                grantPrivilegeStmt.setPrivilegeTypes(privList);
-                grantPrivilegeStmt.setObjectList(Lists.newArrayList(privilegeEntry.getObject()));
-
-                try {
-                    info.add(AstToSQLBuilder.toSQL(grantPrivilegeStmt));
-                    infos.add(info);
-                } catch (com.starrocks.sql.common.MetaNotFoundException e) {
-                    //Ignore the case of MetaNotFound in the show statement, such as metadata being deleted
+                
+                // Build GRANT statement string manually since we can't use AST anymore
+                StringBuilder sqlBuilder = new StringBuilder("GRANT ");
+                sqlBuilder.append(privList.stream()
+                        .map(p -> p.name().replace("_", " "))
+                        .collect(Collectors.joining(", ")));
+                sqlBuilder.append(" ON ").append(objectType.name()).append(" ");
+                sqlBuilder.append(privilegeEntry.getObject() != null ? privilegeEntry.getObject().toString() : "");
+                sqlBuilder.append(" TO ");
+                sqlBuilder.append(userOrRoleName.getRoleName() != null ?
+                        userOrRoleName.getRoleName() : userOrRoleName.getUser().toString());
+                if (privilegeEntry.isWithGrantOption()) {
+                    sqlBuilder.append(" WITH GRANT OPTION");
                 }
+                
+                
+                info.add(sqlBuilder.toString());
+                infos.add(info);
             }
         }
 

@@ -25,6 +25,7 @@ import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.catalog.system.SystemId;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
@@ -42,6 +43,7 @@ import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
+import com.starrocks.sql.analyzer.AuthorizationAnalyzer;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AlterRoleStmt;
@@ -403,26 +405,43 @@ public class AuthorizationMgr {
         userReadUnlock();
     }
 
-    public void grant(GrantPrivilegeStmt stmt) throws DdlException {
+    public void grant(GrantPrivilegeStmt stmt, ConnectContext context) throws DdlException {
         try {
+            ObjectType objectType = ObjectType.NAME_TO_OBJECT.get(stmt.getObjectTypeUnResolved());
+            if (objectType == null) {
+                throw new DdlException("Unknown object type: " + stmt.getObjectTypeUnResolved());
+            }
+            
+            List<PrivilegeType> privilegeTypes = new ArrayList<>();
+            for (String privTypeStr : stmt.getPrivilegeTypeUnResolved()) {
+                PrivilegeType privType = getPrivilegeType(privTypeStr);
+                if (privType == null) {
+                    throw new DdlException("Unknown privilege type: " + privTypeStr);
+                }
+                privilegeTypes.add(privType);
+            }
+            
+            // Build objectList using AuthorizationAnalyzer helper method
+            List<PEntryObject> objectList = AuthorizationAnalyzer.buildObjectList(stmt, objectType, context);
+            
             if (stmt.getRole() != null) {
                 grantToRole(
-                        stmt.getObjectType(),
-                        stmt.getPrivilegeTypes(),
-                        stmt.getObjectList(),
+                        objectType,
+                        privilegeTypes,
+                        objectList,
                         stmt.isWithGrantOption(),
                         stmt.getRole());
             } else {
                 UserRef user = stmt.getUser();
                 UserIdentity userIdentity = new UserIdentity(user.getUser(), user.getHost(), user.isDomain());
                 grantToUser(
-                        stmt.getObjectType(),
-                        stmt.getPrivilegeTypes(),
-                        stmt.getObjectList(),
+                        objectType,
+                        privilegeTypes,
+                        objectList,
                         stmt.isWithGrantOption(),
                         userIdentity);
             }
-        } catch (PrivilegeException e) {
+        } catch (PrivilegeException | AnalysisException e) {
             throw new DdlException("failed to grant: " + e.getMessage(), e);
         }
     }
@@ -474,22 +493,39 @@ public class AuthorizationMgr {
         }
     }
 
-    public void revoke(RevokePrivilegeStmt stmt) throws DdlException {
+    public void revoke(RevokePrivilegeStmt stmt, ConnectContext context) throws DdlException {
         try {
+            ObjectType objectType = ObjectType.NAME_TO_OBJECT.get(stmt.getObjectTypeUnResolved());
+            if (objectType == null) {
+                throw new DdlException("Unknown object type: " + stmt.getObjectTypeUnResolved());
+            }
+            
+            List<PrivilegeType> privilegeTypes = new ArrayList<>();
+            for (String privTypeStr : stmt.getPrivilegeTypeUnResolved()) {
+                PrivilegeType privType = getPrivilegeType(privTypeStr);
+                if (privType == null) {
+                    throw new DdlException("Unknown privilege type: " + privTypeStr);
+                }
+                privilegeTypes.add(privType);
+            }
+            
+            // Build objectList using AuthorizationAnalyzer helper method
+            List<PEntryObject> objectList = AuthorizationAnalyzer.buildObjectList(stmt, objectType, context);
+            
             if (stmt.getRole() != null) {
                 revokeFromRole(
-                        stmt.getObjectType(),
-                        stmt.getPrivilegeTypes(),
-                        stmt.getObjectList(),
+                        objectType,
+                        privilegeTypes,
+                        objectList,
                         stmt.getRole());
             } else {
                 revokeFromUser(
-                        stmt.getObjectType(),
-                        stmt.getPrivilegeTypes(),
-                        stmt.getObjectList(),
+                        objectType,
+                        privilegeTypes,
+                        objectList,
                         stmt.getUser());
             }
-        } catch (PrivilegeException e) {
+        } catch (PrivilegeException | AnalysisException e) {
             throw new DdlException(e.getMessage());
         }
     }

@@ -20,6 +20,7 @@ import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.AuthorizationMgr;
 import com.starrocks.authorization.ColumnPrivilege;
 import com.starrocks.authorization.ObjectType;
+import com.starrocks.authorization.PEntryObject;
 import com.starrocks.authorization.PrivilegeBuiltinConstants;
 import com.starrocks.authorization.PrivilegeException;
 import com.starrocks.authorization.PrivilegeType;
@@ -35,6 +36,7 @@ import com.starrocks.catalog.Resource;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.UserIdentity;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -253,6 +255,7 @@ import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -1472,9 +1475,35 @@ public class AuthorizerStmtVisitor implements AstVisitorExtendInterface<Void, Co
             Authorizer.checkSystemAction(context, PrivilegeType.GRANT);
         } catch (AccessDeniedException e) {
             try {
-                Authorizer.withGrantOption(context, stmt.getObjectType(),
-                        stmt.getPrivilegeTypes(), stmt.getObjectList());
+                ObjectType objectType = ObjectType.NAME_TO_OBJECT.get(stmt.getObjectTypeUnResolved());
+                if (objectType == null) {
+                    AccessDeniedException.reportAccessDenied(
+                            InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                            context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                            PrivilegeType.GRANT.name(), ObjectType.SYSTEM.name(), null);
+                }
+                
+                // Convert privilege type strings to PrivilegeType objects
+                List<PrivilegeType> privilegeTypes = new ArrayList<>();
+                AuthorizationMgr authMgr = context.getGlobalStateMgr().getAuthorizationMgr();
+                for (String privTypeStr : stmt.getPrivilegeTypeUnResolved()) {
+                    PrivilegeType privType = authMgr.getPrivilegeType(privTypeStr);
+                    if (privType != null) {
+                        privilegeTypes.add(privType);
+                    }
+                }
+                
+                // Build objectList for authorization check
+                List<PEntryObject> objectList = AuthorizationAnalyzer.buildObjectList(stmt, objectType, context);
+                
+                Authorizer.withGrantOption(context, objectType, privilegeTypes, objectList);
             } catch (AccessDeniedException e2) {
+                AccessDeniedException.reportAccessDenied(
+                        InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                        context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                        PrivilegeType.GRANT.name(), ObjectType.SYSTEM.name(), null);
+            } catch (PrivilegeException | AnalysisException e3) {
+                // Handle build objectList exceptions
                 AccessDeniedException.reportAccessDenied(
                         InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
                         context.getCurrentUserIdentity(), context.getCurrentRoleIds(),

@@ -599,9 +599,9 @@ public class DDLStmtExecutor {
                                                                 ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
                 if (stmt instanceof GrantPrivilegeStmt) {
-                    GlobalStateMgr.getCurrentState().getAuthorizationMgr().grant((GrantPrivilegeStmt) stmt);
+                    GlobalStateMgr.getCurrentState().getAuthorizationMgr().grant((GrantPrivilegeStmt) stmt, context);
                 } else {
-                    GlobalStateMgr.getCurrentState().getAuthorizationMgr().revoke((RevokePrivilegeStmt) stmt);
+                    GlobalStateMgr.getCurrentState().getAuthorizationMgr().revoke((RevokePrivilegeStmt) stmt, context);
                 }
             });
             return null;

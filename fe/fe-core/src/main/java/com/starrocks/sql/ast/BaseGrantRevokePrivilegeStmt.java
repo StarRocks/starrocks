@@ -15,9 +15,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.authorization.ObjectType;
-import com.starrocks.authorization.PEntryObject;
-import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
@@ -32,19 +29,6 @@ public class BaseGrantRevokePrivilegeStmt extends DdlStmt {
     protected String role;
     protected String objectTypeUnResolved;
     protected List<String> privilegeTypeUnResolved;
-
-    // the following fields is set by analyzer, for new RBAC privilege framework
-    private ObjectType objectType;
-    private List<PrivilegeType> privilegeTypes;
-    private List<PEntryObject> objectList;
-
-    public BaseGrantRevokePrivilegeStmt(
-            List<String> privilegeTypeUnResolved,
-            String objectTypeUnResolved,
-            GrantRevokeClause clause,
-            GrantRevokePrivilegeObjects objects) {
-        this(privilegeTypeUnResolved, objectTypeUnResolved, clause, objects, NodePosition.ZERO);
-    }
 
     public BaseGrantRevokePrivilegeStmt(
             List<String> privilegeTypeUnResolved,
@@ -108,30 +92,6 @@ public class BaseGrantRevokePrivilegeStmt extends DdlStmt {
 
     public List<String> getPrivilegeTypeUnResolved() {
         return privilegeTypeUnResolved;
-    }
-
-    public ObjectType getObjectType() {
-        return objectType;
-    }
-
-    public void setObjectType(ObjectType objectType) {
-        this.objectType = objectType;
-    }
-
-    public List<PrivilegeType> getPrivilegeTypes() {
-        return privilegeTypes;
-    }
-
-    public void setPrivilegeTypes(List<PrivilegeType> privilegeTypes) {
-        this.privilegeTypes = privilegeTypes;
-    }
-
-    public List<PEntryObject> getObjectList() {
-        return objectList;
-    }
-
-    public void setObjectList(List<PEntryObject> objectList) {
-        this.objectList = objectList;
     }
 
     @Override
