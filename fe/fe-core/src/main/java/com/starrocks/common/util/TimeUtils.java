@@ -35,8 +35,6 @@
 package com.starrocks.common.util;
 
 import com.google.common.collect.ImmutableMap;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
