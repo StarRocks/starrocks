@@ -2851,6 +2851,15 @@ public class JoinTest extends PlanTestBase {
                     "  RESULT SINK\n" +
                     "\n" +
                     "  0:OlapScanNode");
+
+            sql = "select v1 from t0 where v2 = 1 union select v4 from t1 where v5 = 2";
+            plan = getFragmentPlan(sql);
+            assertContains(plan, "RESULT SINK\n" +
+                    "\n" +
+                    "  9:AGGREGATE (merge finalize)\n" +
+                    "  |  group by: 7: v1\n" +
+                    "  |  \n" +
+                    "  8:EXCHANGE");
         } finally {
             Config.run_mode = RunMode.SHARED_NOTHING.getName();
             RunMode.detectRunMode();
