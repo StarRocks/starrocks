@@ -23,6 +23,7 @@
 #include "exec/pipeline/empty_set_operator.h"
 #include "exec/pipeline/fragment_context.h"
 #include "runtime/descriptor_helper.h"
+#include "runtime/types.h"
 #include "testutil/assert.h"
 
 namespace starrocks {
@@ -190,4 +191,93 @@ TEST_F(IcebergTableSinkTest, path_construction_logic) {
         EXPECT_EQ(sink_ctx->path, "s3://bucket/table-location/data");
     }
 }
+
+// Test update_partition_expr_slot_refs_by_map function
+TEST_F(IcebergTableSinkTest, update_partition_expr_slot_refs_by_map) {
+    std::vector<TExpr> partition_expr;
+    std::vector<std::string> partition_source_column_names;
+    std::unordered_map<std::string, TExprNode> column_slot_map;
+
+    // Setup: Create a partition expression for column "dt"
+    TExpr partition_dt_expr;
+    TExprNode slot_ref_node;
+    slot_ref_node.node_type = TExprNodeType::SLOT_REF;
+    slot_ref_node.__isset.slot_ref = true;
+    slot_ref_node.slot_ref.slot_id = 999; // Wrong slot id initially
+    partition_dt_expr.nodes.push_back(slot_ref_node);
+    partition_expr.push_back(partition_dt_expr);
+    partition_source_column_names.push_back("dt");
+
+    // Setup column slot map with correct slot reference for "dt"
+    TExprNode correct_dt_node;
+    correct_dt_node.node_type = TExprNodeType::SLOT_REF;
+    correct_dt_node.__isset.slot_ref = true;
+    correct_dt_node.slot_ref.slot_id = 5;
+    correct_dt_node.slot_ref.tuple_id = 0;
+    column_slot_map["dt"] = correct_dt_node;
+
+    // Create sink instance (need a valid TExpr vector for constructor)
+    std::vector<TExpr> output_exprs;
+    IcebergTableSink sink(&_pool, output_exprs);
+
+    // Execute the function
+    ASSERT_OK(sink.update_partition_expr_slot_refs_by_map(partition_expr, column_slot_map,
+                                                          partition_source_column_names));
+
+    // Verify the partition expression was updated with correct slot reference
+    ASSERT_EQ(partition_expr.size(), 1);
+    ASSERT_EQ(partition_expr[0].nodes.size(), 1);
+    EXPECT_EQ(partition_expr[0].nodes[0].slot_ref.slot_id, 5);
+    EXPECT_EQ(partition_expr[0].nodes[0].slot_ref.tuple_id, 0);
+}
+
+// Test update_partition_expr_slot_refs_by_map with mismatched sizes
+TEST_F(IcebergTableSinkTest, update_partition_expr_slot_refs_by_map_mismatched_sizes) {
+    std::vector<TExpr> partition_expr;
+    std::vector<std::string> partition_source_column_names;
+    std::unordered_map<std::string, TExprNode> column_slot_map;
+
+    // Create 2 partition expressions
+    TExpr expr1, expr2;
+    partition_expr.push_back(expr1);
+    partition_expr.push_back(expr2);
+
+    // But only 1 column name
+    partition_source_column_names.push_back("dt");
+
+    // Create sink instance
+    std::vector<TExpr> output_exprs;
+    IcebergTableSink sink(&_pool, output_exprs);
+
+    // Should return error for mismatched sizes
+    auto st =
+            sink.update_partition_expr_slot_refs_by_map(partition_expr, column_slot_map, partition_source_column_names);
+    EXPECT_FALSE(st.ok());
+    EXPECT_TRUE(st.message().find("Mismatched partition expression and column name counts") != std::string::npos);
+}
+
+// Test update_partition_expr_slot_refs_by_map with missing column slot
+TEST_F(IcebergTableSinkTest, update_partition_expr_slot_refs_by_map_missing_slot) {
+    std::vector<TExpr> partition_expr;
+    std::vector<std::string> partition_source_column_names;
+    std::unordered_map<std::string, TExprNode> column_slot_map;
+
+    // Setup: Create partition expression for column "dt"
+    TExpr partition_dt_expr;
+    partition_expr.push_back(partition_dt_expr);
+    partition_source_column_names.push_back("dt");
+
+    // Don't add "dt" to column_slot_map (missing slot reference)
+
+    // Create sink instance
+    std::vector<TExpr> output_exprs;
+    IcebergTableSink sink(&_pool, output_exprs);
+
+    // Should return error for missing slot reference
+    auto st =
+            sink.update_partition_expr_slot_refs_by_map(partition_expr, column_slot_map, partition_source_column_names);
+    EXPECT_FALSE(st.ok());
+    EXPECT_TRUE(st.message().find("Could not find slot reference for partition column: dt") != std::string::npos);
+}
+
 } // namespace starrocks
