@@ -52,6 +52,7 @@
 #include "storage/rowset/bitmap_index_reader.h"
 #include "storage/rowset/column_decoder.h"
 #include "storage/rowset/common.h"
+#include "storage/rowset/options.h"
 #include "storage/rowset/data_sample.h"
 #include "storage/rowset/default_value_column_iterator.h"
 #include "storage/rowset/dictcode_column_iterator.h"
@@ -2298,8 +2299,16 @@ Status SegmentIterator::_init_inverted_index_iterators() {
         ColumnId cid = pair.first;
         ColumnUID ucid = cid_2_ucid[cid];
 
+        IndexReadOptions index_opts;
+        index_opts.use_page_cache =
+                !_opts.temporary_data && _opts.use_page_cache && !config::disable_storage_page_cache;
+        index_opts.lake_io_opts = _opts.lake_io_opts;
+        index_opts.read_file = _column_files[cid].get();
+        index_opts.stats = _opts.stats;
+
         if (_inverted_index_iterators[cid] == nullptr) {
-            RETURN_IF_ERROR(_segment->new_inverted_index_iterator(ucid, &_inverted_index_iterators[cid], _opts));
+            RETURN_IF_ERROR(_segment->new_inverted_index_iterator(
+                    ucid, &_inverted_index_iterators[cid], _opts, index_opts));
             _has_inverted_index |= (_inverted_index_iterators[cid] != nullptr);
         }
     }
@@ -2359,6 +2368,12 @@ Status SegmentIterator::_apply_inverted_index() {
                 // inverted index filtering.These columns may can be pruned.
                 _prune_cols_candidate_by_inverted_index.insert(cid);
             }
+        }
+    }
+
+    for (auto* iter : _inverted_index_iterators) {
+        if (iter != nullptr) {
+            RETURN_IF_ERROR(iter->close());
         }
     }
 

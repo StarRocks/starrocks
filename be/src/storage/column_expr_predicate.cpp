@@ -336,8 +336,13 @@ Status ColumnExprPredicate::seek_inverted_index(const std::string& column_name, 
     }
     std::string str_v = padded_value.to_string();
     InvertedIndexQueryType query_type = InvertedIndexQueryType::UNKNOWN_QUERY;
-    if (str_v.find('*') == std::string::npos && str_v.find('%') == std::string::npos) {
-        query_type = InvertedIndexQueryType::EQUAL_QUERY;
+    bool has_wildcard = str_v.find('%') != std::string::npos;
+
+    // TODO: The logic for determining query_type will be abstracted into a separate method in the future.
+    if (vaild_match && expr->op() == TExprOpcode::MATCH_ANY) {
+        query_type = InvertedIndexQueryType::MATCH_ANY_QUERY;
+    } else if (vaild_match && expr->op() == TExprOpcode::MATCH_ALL) {
+        query_type = InvertedIndexQueryType::MATCH_ALL_QUERY;
     } else {
         query_type = InvertedIndexQueryType::MATCH_WILDCARD_QUERY;
     }

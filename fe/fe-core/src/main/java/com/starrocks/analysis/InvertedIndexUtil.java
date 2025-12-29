@@ -32,6 +32,7 @@ import java.util.stream.Collectors;
 
 import static com.starrocks.common.InvertedIndexParams.CommonIndexParamKey.IMP_LIB;
 import static com.starrocks.common.InvertedIndexParams.IndexParamsKey.PARSER;
+import static com.starrocks.common.InvertedIndexParams.InvertedIndexImpType.BUILTIN;
 import static com.starrocks.common.InvertedIndexParams.InvertedIndexImpType.CLUCENE;
 
 public class InvertedIndexUtil {
@@ -73,14 +74,11 @@ public class InvertedIndexUtil {
     }
 
     public static void checkInvertedIndexValid(Column column, Map<String, String> properties, KeysType keysType) {
-        if (keysType != KeysType.DUP_KEYS) {
-            throw new SemanticException("The inverted index can only be build on DUPLICATE table.");
+        if (keysType != KeysType.DUP_KEYS && keysType != KeysType.PRIMARY_KEYS) {
+            throw new SemanticException("The inverted index can only be build on DUPLICATE/PRIMARY_KEYS table.");
         }
         if (!validGinColumnType(column)) {
             throw new SemanticException("The inverted index can only be build on column with type of CHAR/STRING/VARCHAR type.");
-        }
-        if (RunMode.isSharedDataMode()) {
-            throw new SemanticException("The inverted index does not support shared data mode");
         }
         if (!Config.enable_experimental_gin) {
             throw new SemanticException("The inverted index is disabled, enable it by setting FE config `enable_experimental_gin` to true");
@@ -89,9 +87,15 @@ public class InvertedIndexUtil {
         String impLibKey = IMP_LIB.name().toLowerCase(Locale.ROOT);
         if (properties.containsKey(impLibKey)) {
             String impValue = properties.get(impLibKey);
-            if (!CLUCENE.name().equalsIgnoreCase(impValue)) {
-                throw new SemanticException("Only support clucene implement for now. ");
+            if (!(CLUCENE.name().equalsIgnoreCase(impValue) || BUILTIN.name().equalsIgnoreCase(impValue))) {
+                throw new SemanticException("Only support clucene or builtin implement for now. ");
             }
+
+            if (!BUILTIN.name().equalsIgnoreCase(impValue) && RunMode.isSharedDataMode()) {
+                throw new SemanticException("Clucene inverted index does not support shared data mode");
+            }
+        } else if (RunMode.isSharedDataMode()) {
+            properties.put(impLibKey, BUILTIN.name().toLowerCase(Locale.ROOT));
         }
 
         String noMatchParamKey = properties.keySet().stream()

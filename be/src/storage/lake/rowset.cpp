@@ -220,6 +220,8 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::read(const Schema& schema, const
         seg_options.short_key_ranges = options.short_key_ranges_option->short_key_ranges;
     }
     seg_options.reader_type = options.reader_type;
+    seg_options.enable_gin_filter = options.enable_gin_filter;
+    seg_options.prune_column_after_index_filter = options.prune_column_after_index_filter;
 
     std::unique_ptr<Schema> segment_schema_guard;
     auto* segment_schema = const_cast<Schema*>(&schema);

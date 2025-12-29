@@ -571,7 +571,7 @@ Status ScalarColumnWriter::write_bloom_filter_index() {
 
 Status ScalarColumnWriter::write_inverted_index() {
     if (_inverted_index_builder != nullptr) {
-        return _inverted_index_builder->finish();
+        return _inverted_index_builder->finish(_wfile, _opts.meta);
     }
     return Status::OK();
 }

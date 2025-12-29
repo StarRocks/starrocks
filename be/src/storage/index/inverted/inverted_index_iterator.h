@@ -32,18 +32,22 @@ public:
                 get_parser_string_from_properties(_index_meta->index_properties()));
     }
 
-    Status read_from_inverted_index(const std::string& column_name, const void* query_value,
-                                    InvertedIndexQueryType query_type, roaring::Roaring* bit_map);
+    virtual ~InvertedIndexIterator() = default;
 
-    Status read_null(const std::string& column_name, roaring::Roaring* bit_map);
+    virtual Status read_from_inverted_index(const std::string& column_name, const void* query_value,
+                                            InvertedIndexQueryType query_type, roaring::Roaring* bit_map);
 
-    InvertedIndexParserType get_inverted_index_analyser_type() const;
+    virtual Status read_null(const std::string& column_name, roaring::Roaring* bit_map);
 
-    InvertedIndexReaderType get_inverted_index_reader_type() const;
+    virtual InvertedIndexParserType get_inverted_index_analyser_type() const;
 
-    bool is_untokenized() const { return _analyser_type == InvertedIndexParserType::PARSER_NONE; }
+    virtual InvertedIndexReaderType get_inverted_index_reader_type() const;
 
-private:
+    virtual bool is_untokenized() const { return _analyser_type == InvertedIndexParserType::PARSER_NONE; }
+
+    virtual Status close() { return Status::OK(); }
+
+protected:
     const std::shared_ptr<TabletIndex> _index_meta;
     OlapReaderStatistics* _stats;
     InvertedReader* _reader;

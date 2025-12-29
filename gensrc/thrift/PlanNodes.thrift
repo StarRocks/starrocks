@@ -679,6 +679,10 @@ struct TLakeScanNode {
   40: optional i64 back_pressure_throttle_time
   41: optional i64 back_pressure_throttle_time_upper_bound
   42: optional i64 back_pressure_num_rows
+
+  // inverted index
+  43: optional bool enable_prune_column_after_index_filter
+  44: optional bool enable_gin_filter
 }
 
 struct TEqJoinCondition {

@@ -14,29 +14,22 @@
 
 #pragma once
 
-#include "common/status.h"
-#include "storage/collection.h"
+#include "storage/index/inverted/inverted_writer.h"
+#include "storage/types.h"
 
 namespace starrocks {
-class WritableFile;
-class ColumnMetaPB;
-
-class InvertedWriter {
+class TabletIndex;
+class BuiltinInvertedWriter : public InvertedWriter {
 public:
-    InvertedWriter() = default;
+    static Status create(const TypeInfoPtr& typeinfo, TabletIndex* tablet_index, std::unique_ptr<InvertedWriter>* res);
 
-    InvertedWriter(InvertedWriter&& other_writer) noexcept = default;
+    BuiltinInvertedWriter(const BuiltinInvertedWriter&) = delete;
 
-    virtual ~InvertedWriter() = default;
+    const BuiltinInvertedWriter& operator=(const BuiltinInvertedWriter&) = delete;
 
-    virtual Status init() = 0;
+    BuiltinInvertedWriter() = default;
 
-    virtual void add_values(const void* values, size_t count) = 0;
-
-    virtual void add_nulls(uint32_t count) = 0;
-
-    virtual Status finish(WritableFile* wfile, ColumnMetaPB* meta) = 0;
-
-    virtual uint64_t size() const = 0;
+    ~BuiltinInvertedWriter() override = default;
 };
+
 } // namespace starrocks
