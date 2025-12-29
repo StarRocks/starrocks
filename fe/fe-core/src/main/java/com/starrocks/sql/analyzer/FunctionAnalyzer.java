@@ -966,7 +966,7 @@ public class FunctionAnalyzer {
             argumentTypes = node.getChildren().stream().map(Expr::getType).toArray(Type[]::new);
         } else if (FunctionSet.REGEXP_POSITION.equals(fnName)) {
             fn = getRegexpPositionFunction(node);
-            argumentTypes = fn.getArgs();
+            argumentTypes = node.getChildren().stream().map(Expr::getType).toArray(Type[]::new);
         } else if (FunctionSet.BITMAP_UNION.equals(fnName)) {
             // bitmap_union is analyzed here rather than `getAnalyzedAggregateFunction` because
             // it's just a syntax sugar for bitmap_agg transformed from bitmap_union(to_bitmap())
