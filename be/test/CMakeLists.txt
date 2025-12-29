@@ -107,6 +107,11 @@ set(EXEC_FILES
         ./exec/repeat_node_test.cpp
         ./exec/sorting_test.cpp
         ./exec/tablet_sink_index_channel_test.cpp
+<<<<<<< HEAD
+=======
+        ./exec/tablet_sink_sender_range_test.cpp
+        ./exec/tablet_sink_test.cpp
+>>>>>>> 1bb98a3a5d ([BugFix] Error log not records the row for invalid decimal/varchar data (#67018))
         ./exec/table_function_node_test.cpp
         ./exec/olap_scan_prepare_test.cpp
         ./exprs/agg/data_sketch/ds_theta_test.cpp
