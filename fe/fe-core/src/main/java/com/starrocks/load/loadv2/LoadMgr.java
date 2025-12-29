@@ -499,6 +499,24 @@ public class LoadMgr implements MemoryTrackable {
         }
     }
 
+    public void removeLoadJobsByDb(long dbId) {
+        writeLock();
+        try {
+            // Get all jobs belonging to the database
+            List<LoadJob> jobsToRemove = idToLoadJob.values().stream()
+                    .filter(job -> job.getDbId() == dbId)
+                    .collect(Collectors.toList());
+
+            // Remove each job
+            for (LoadJob job : jobsToRemove) {
+                LOG.info("remove load job {} of database {}", job.getLabel(), dbId);
+                unprotectedRemoveJobReleatedMeta(job);
+            }
+        } finally {
+            writeUnlock();
+        }
+    }
+
     // only for those jobs which transaction is not started
     public void processTimeoutJobs() {
         idToLoadJob.values().stream().forEach(entity -> entity.processTimeout());
