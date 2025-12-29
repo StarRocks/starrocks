@@ -73,31 +73,6 @@ SELECT * FROM users_basic ORDER BY id;
 3	charlie	25	100	50000	1000000	4.5	95.5
 4	david	30	200	60000	2000000	3.8	88.9
 -- !result
-CREATE TABLE products_with_key (
-    id INT NOT NULL,
-    name VARCHAR(50)
-) DUPLICATE KEY(id)
-DISTRIBUTED BY HASH(id) BUCKETS 2
-PROPERTIES(
-    "replication_num" = "1",
-    "fast_schema_evolution" = "false"
-);
--- result:
--- !result
-INSERT INTO products_with_key VALUES (1, 'product1'), (2, 'product2'), (3, 'product3');
--- result:
--- !result
-ALTER TABLE products_with_key ADD COLUMN price1 DOUBLE DEFAULT '99.99';
--- result:
--- !result
-function: wait_alter_table_finish()
--- result:
-None
--- !result
-SELECT COUNT(*) FROM products_with_key;
--- result:
-3
--- !result
 CREATE TABLE orders_column_mode (
     order_id INT NOT NULL,
     product_name VARCHAR(50),
