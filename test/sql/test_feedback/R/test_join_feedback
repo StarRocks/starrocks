@@ -63,5 +63,99 @@ None
 -- !result
 truncate plan advisor;
 -- result:
-[REGEX]Clear all plan advisor in FE.*
+[REGEX].*
+-- !result
+CREATE TABLE `skew_table` (
+  `c0` int(11) NULL COMMENT "",
+  `c1` char(50) NULL COMMENT "",
+  `c2` int(11) NULL COMMENT "",
+  `c3` int(11) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`c0`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`c0`) BUCKETS 5
+PROPERTIES (
+"compression" = "LZ4",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "true",
+"replication_num" = "1"
+);
+-- result:
+-- !result
+insert into skew_table select generate_series, 'a', generate_series, generate_series from TABLE(generate_series(1, 10000));
+-- result:
+-- !result
+insert into skew_table select generate_series, 'b', generate_series, generate_series from TABLE(generate_series(10001, 20000));
+-- result:
+-- !result
+insert into skew_table select generate_series, 'c', generate_series, generate_series from TABLE(generate_series(20001, 30000));
+-- result:
+-- !result
+insert into skew_table select generate_series, 'd', generate_series, generate_series from TABLE(generate_series(30001, 40000));
+-- result:
+-- !result
+insert into skew_table select generate_series, 'e', generate_series, generate_series from TABLE(generate_series(40001, 50000));
+-- result:
+-- !result
+insert into skew_table select generate_series, 'f', generate_series, 10000000 from TABLE(generate_series(40001, 5100000));
+-- result:
+-- !result
+analyze table skew_table;
+-- result:
+[REGEX].*
+-- !result
+set enable_global_runtime_filter = false;
+-- result:
+-- !result
+set enable_plan_advisor_blacklist=false;
+-- result:
+-- !result
+alter plan advisor add SELECT  COUNT(*) FROM (SELECT  * FROM skew_table t1 left JOIN ( SELECT  * FROM skew_table WHERE c3 = 10000000) t2 ON t1.c2 = t2.c2 where t1.c1 in ('a', 'b', 'c', 'd', 'e') ) t;
+-- result:
+[REGEX].*
+-- !result
+function: assert_trace_values_contains("SELECT  COUNT(*) FROM (SELECT  * FROM skew_table t1 left JOIN ( SELECT  * FROM skew_table WHERE c3 = 10000000) t2 ON t1.c2 = t2.c2 where t1.c1 in ('a', 'b', 'c', 'd', 'e') ) t", "CandidateTuningGuides")
+-- result:
+None
+-- !result
+function: assert_explain_not_contains("SELECT  COUNT(*) FROM (SELECT  * FROM skew_table t1 left JOIN ( SELECT  * FROM skew_table WHERE c3 = 10000000) t2 ON t1.c2 = t2.c2 where t1.c1 in ('a', 'b', 'c', 'd', 'e') ) t", "RIGHT OUTER JOIN")
+-- result:
+None
+-- !result
+alter plan advisor add SELECT  COUNT(*) FROM (SELECT  * FROM skew_table t1 NULL AWARE LEFT ANTI JOIN ( SELECT  * FROM skew_table WHERE c3 = 10000000) t2 ON t1.c2 = t2.c2 where t1.c1 in ('a', 'b', 'c', 'd', 'e') ) t;
+-- result:
+[REGEX].*
+-- !result
+function: assert_trace_values_contains("SELECT  COUNT(*) FROM (SELECT  * FROM skew_table t1 NULL AWARE LEFT ANTI JOIN ( SELECT  * FROM skew_table WHERE c3 = 10000000) t2 ON t1.c2 = t2.c2 where t1.c1 in ('a', 'b', 'c', 'd', 'e') ) t", "CandidateTuningGuides")
+-- result:
+None
+-- !result
+function: assert_explain_not_contains("SELECT  COUNT(*) FROM (SELECT  * FROM skew_table t1 NULL AWARE LEFT ANTI JOIN ( SELECT  * FROM skew_table WHERE c3 = 10000000) t2 ON t1.c2 = t2.c2 where t1.c1 in ('a', 'b', 'c', 'd', 'e') ) t", "RIGHT OUTER JOIN")
+-- result:
+None
+-- !result
+set broadcast_row_limit = -1;
+-- result:
+-- !result
+alter plan advisor add SELECT  COUNT(*) FROM (SELECT  * FROM skew_table t1 left JOIN ( SELECT  * FROM skew_table WHERE c3 = 10000000) t2 ON t1.c2 = t2.c2 where t1.c1 in ('a', 'b', 'c', 'd', 'e') ) t;
+-- result:
+[REGEX].*
+-- !result
+function: assert_trace_values_contains("SELECT  COUNT(*) FROM (SELECT  * FROM skew_table t1 left JOIN ( SELECT  * FROM skew_table WHERE c3 = 10000000) t2 ON t1.c2 = t2.c2 where t1.c1 in ('a', 'b', 'c', 'd', 'e') ) t", "CandidateTuningGuides")
+-- result:
+None
+-- !result
+function: assert_explain_not_contains("SELECT  COUNT(*) FROM (SELECT  * FROM skew_table t1 left JOIN ( SELECT  * FROM skew_table WHERE c3 = 10000000) t2 ON t1.c2 = t2.c2 where t1.c1 in ('a', 'b', 'c', 'd', 'e') ) t", "RIGHT OUTER JOIN")
+-- result:
+None
+-- !result
+set broadcast_row_limit = 15000000;
+-- result:
+-- !result
+set enable_plan_advisor_blacklist=true;
+-- result:
+-- !result
+truncate plan advisor;
+-- result:
+[REGEX].*
 -- !result
