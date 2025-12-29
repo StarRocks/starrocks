@@ -120,7 +120,7 @@ protected:
         partition.partitions[0].id = 0;
         partition.partitions[0].indexes.resize(1);
         partition.partitions[0].indexes[0].index_id = 0;
-        partition.partitions[0].indexes[0].tablet_ids.push_back(0);
+        partition.partitions[0].indexes[0].tablets.push_back(0);
 
         TOlapTableLocationParam& location = table_sink.location;
         location.db_id = _db_id;
@@ -177,7 +177,8 @@ protected:
             if (slot->type().type == skip_type) {
                 continue; // Skip the column being tested
             }
-            auto* column = chunk->get_column_raw_ptr_by_slot_id(slot->id());
+            // NOTE: slot_id->index mapping is setup later by _setup_chunk_slot_map(), so use column index here.
+            auto* column = chunk->get_column_by_index(i).get();
             if (slot->type().type == TYPE_INT) {
                 for (size_t j = 0; j < num_rows; ++j) {
                     column->append_datum(Datum(static_cast<int32_t>(100 + j * 100)));
@@ -226,7 +227,8 @@ protected:
         _fill_chunk_base_data(chunk, desc_tbl->get_tuple_descriptor(0)->slots(), num_rows, test_type);
 
         auto* slot = desc_tbl->get_tuple_descriptor(0)->slots()[slot_index];
-        auto* column = chunk->get_column_raw_ptr_by_slot_id(slot->id());
+        // NOTE: slot_id->index mapping is setup later by _setup_chunk_slot_map(), so use column index here.
+        auto* column = chunk->get_column_by_index(slot_index).get();
         fill_column(column);
 
         chunk->materialized_nullable();
