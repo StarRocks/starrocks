@@ -1690,6 +1690,19 @@ public class PlanFragmentWithCostTest extends PlanWithCostTestBase {
                     "  |  group by: 2: v2\n" +
                     "  |  \n" +
                     "  2:EXCHANGE");
+
+            // case 10: SELECT DISTINCT should preserve withLocalShuffle in single-phase agg
+            isSingleBackendAndComputeNode.setRef(true);
+            cardinality.setRef(avgHighCardinality);
+            sql = "SELECT DISTINCT v2 FROM colocate_t0";
+            execPlan = getExecPlan(sql);
+            plan = execPlan.getExplainString(TExplainLevel.NORMAL);
+            
+            assertContains(plan, "1:AGGREGATE (update finalize)\n" +
+                    "  |  group by: 2: v2\n" +
+                    "  |  withLocalShuffle: true\n" +
+                    "  |  \n" +
+                    "  0:OlapScanNode");
         } finally {
             connectContext.getSessionVariable().setEnableLocalShuffleAgg(prevEnableLocalShuffleAgg);
             connectContext.getSessionVariable().setEnableEliminateAgg(prevEliminateAgg);
