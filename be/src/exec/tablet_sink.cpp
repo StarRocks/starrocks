@@ -976,7 +976,7 @@ void OlapTableSink::_validate_data(RuntimeState* state, Chunk* chunk) {
     size_t num_rows = chunk->num_rows();
     for (int i = 0; i < _output_tuple_desc->slots().size(); ++i) {
         SlotDescriptor* desc = _output_tuple_desc->slots()[i];
-        auto* column_ptr = chunk->get_column_raw_ptr_by_slot_id(desc->id());
+        auto& column_ptr = chunk->get_column_by_slot_id(desc->id());
 
         // change validation selection value back to OK/FAILED
         // because in previous run, some validation selection value could
@@ -988,7 +988,7 @@ void OlapTableSink::_validate_data(RuntimeState* state, Chunk* chunk) {
 
         // update_column for auto increment column.
         if (_has_auto_increment && _auto_increment_slot_id == desc->id() && column_ptr->is_nullable()) {
-            auto* nullable = down_cast<NullableColumn*>(column_ptr);
+            auto* nullable = down_cast<NullableColumn*>(column_ptr->as_mutable_raw_ptr);
             // If nullable->has_null() && _null_expr_in_auto_increment == true, it means that user specify a
             // null value in auto increment column, we abort the all rows with null.
             // Because be know nothing about whether this row is specified by the user as null or setted during planning.
@@ -1013,11 +1013,8 @@ void OlapTableSink::_validate_data(RuntimeState* state, Chunk* chunk) {
                     }
                 }
             }
-            chunk->update_column(nullable->data_column(), desc->id());
+            chunk->update_column(std::move(nullable->data_column()), desc->id());
         }
-
-        // since column_ptr is moved in the previous step, we need to get it again
-        column_ptr = chunk->get_column_raw_ptr_by_slot_id(desc->id());
 
         // Validate column nullable info
         // Column nullable info need to respect slot nullable info
@@ -1028,7 +1025,7 @@ void OlapTableSink::_validate_data(RuntimeState* state, Chunk* chunk) {
             // Auto increment column is not nullable but use NullableColumn to implement. We should skip the check for it.
         } else if (!desc->is_nullable() && column_ptr->is_nullable() &&
                    (!_has_auto_increment || _auto_increment_slot_id != desc->id())) {
-            auto* nullable = down_cast<NullableColumn*>(column_ptr);
+            auto* nullable = down_cast<NullableColumn*>(column_ptr->as_mutable_raw_ptr);
             // Non-nullable column shouldn't have null value,
             // If there is null value, which means expr compute has a error.
             if (nullable->has_null()) {
@@ -1051,9 +1048,9 @@ void OlapTableSink::_validate_data(RuntimeState* state, Chunk* chunk) {
                     }
                 }
             }
-            chunk->update_column(nullable->data_column(), desc->id());
+            chunk->update_column(std::move(nullable->data_column()), desc->id());
         } else if (column_ptr->has_null()) {
-            auto* nullable = down_cast<NullableColumn*>(column_ptr);
+            auto* nullable = down_cast<NullableColumn*>(column_ptr->as_mutable_raw_ptr);
             NullData& nulls = nullable->null_column_data();
             for (size_t j = 0; j < num_rows; ++j) {
                 if (nulls[j] && _validate_selection[j] != VALID_SEL_FAILED) {
