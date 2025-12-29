@@ -5042,6 +5042,8 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
     public void onEraseDatabase(long dbId) {
         // remove database transaction manager
         stateMgr.getGlobalTransactionMgr().removeDatabaseTransactionMgr(dbId);
+        // remove load jobs belonging to this database
+        stateMgr.getLoadMgr().removeLoadJobsByDb(dbId);
         // unbind db to storage volume
         stateMgr.getStorageVolumeMgr().unbindDbToStorageVolume(dbId);
     }
