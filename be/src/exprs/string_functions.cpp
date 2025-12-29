@@ -4461,28 +4461,29 @@ Status StringFunctions::regexp_position_prepare(FunctionContext* context,
     auto* state = new StringFunctionsState();
     context->set_function_state(scope, state);
     
-    // check if pattern is constant
-    if (context->is_constant_column(1)) {
-        const auto pattern_col = context->get_constant_column(1);
-        if (!pattern_col->only_null()) {
-            Slice pattern = ColumnHelper::get_const_value<TYPE_VARCHAR>(pattern_col);
-            state->pattern = std::string(pattern.data, pattern.size);
-            state->const_pattern = true;
+    if (!context->is_constant_column(1)) {
+        return Status::OK();
+    }
 
-            state->options = std::make_unique<re2::RE2::Options>();
-            state->options->set_log_errors(false);
+    const auto pattern_col = context->get_constant_column(1);
+    if (!pattern_col->only_null()) {
+        Slice pattern = ColumnHelper::get_const_value<TYPE_VARCHAR>(pattern_col);
+        state->pattern = std::string(pattern.data, pattern.size);
+        state->const_pattern = true;
 
-            state->regex = std::make_unique<re2::RE2>(state->pattern, *state->options);
-            if (!state->regex->ok()) {
-                std::stringstream error;
-                error << "Invalid regex expression: " << state->pattern;
-                context->set_error(error.str().c_str());
-                return Status::InvalidArgument(error.str());
-            }
+        state->options = std::make_unique<re2::RE2::Options>();
+        state->options->set_log_errors(false);
+
+        state->regex = std::make_unique<re2::RE2>(state->pattern, *state->options);
+        if (!state->regex->ok()) {
+            std::stringstream error;
+            error << "Invalid regex expression: " << state->pattern;
+            context->set_error(error.str().c_str());
+            return Status::InvalidArgument(error.str());
         }
     }
+    
     return Status::OK();
-
 }
 
 Status StringFunctions::regexp_position_close(FunctionContext* context, 
