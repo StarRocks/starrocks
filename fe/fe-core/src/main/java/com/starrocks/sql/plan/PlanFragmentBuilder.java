@@ -351,7 +351,9 @@ public class PlanFragmentBuilder {
                 && (execPlan.getScanNodes().stream().map(d -> ((OlapScanNode) d).getScanTabletIds().size())
                 .reduce(Integer::sum).orElse(2) <= 1)) || execPlan.isShortCircuit()) {
             inputFragment.setOutputExprs(outputExprs);
-            inputFragment.setSingleTabletGatherOutputFragment(true);
+            for (PlanFragment fragment : execPlan.getFragments()) {
+                fragment.setSingleTabletGatherOutputFragment(true);
+            }
             return;
         }
 
