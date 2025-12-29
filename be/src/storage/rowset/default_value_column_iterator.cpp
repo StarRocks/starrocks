@@ -83,7 +83,7 @@ Status DefaultValueColumnIterator::init(const ColumnIteratorOptions& opts) {
                 if (!json_or.ok()) {
                     // If JSON parse fails, treat as NULL to avoid query errors
                     // This prevents returning malformed data when FE validation is bypassed
-                    LOG(ERROR) << "Failed to parse JSON default value '" << _default_value
+                    LOG(WARNING) << "Failed to parse JSON default value '" << _default_value
                                << "', treating as NULL: " << json_or.status();
                     _is_default_value_null = true;
                 } else {

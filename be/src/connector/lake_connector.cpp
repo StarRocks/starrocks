@@ -20,6 +20,7 @@
 #include "exec/connector_scan_node.h"
 #include "exec/olap_scan_prepare.h"
 #include "exec/pipeline/fragment_context.h"
+#include "exprs/jsonpath.h"
 #include "runtime/global_dict/parser.h"
 #include "storage/chunk_helper.h"
 #include "storage/column_predicate_rewriter.h"
@@ -416,6 +417,75 @@ Status LakeDataSource::init_tablet_reader(RuntimeState* runtime_state) {
     return Status::OK();
 }
 
+// Inherit default value from JSON parent column for extended subcolumn.
+// This method extracts the default value of a JSON subfield based on the access path
+// and sets it to the column if extraction succeeds.
+void LakeDataSource::_inherit_default_value_from_json(TabletColumn* column, const TabletColumn& root_column,
+                                                       const ColumnAccessPath* path) {
+    if (!root_column.has_default_value() || root_column.type() != TYPE_JSON) {
+        return;
+    }
+
+    const std::string& json_default = root_column.default_value();
+    auto json_value_or = JsonValue::parse_json_or_string(Slice(json_default));
+    if (!json_value_or.ok()) {
+        LOG(WARNING) << "Failed to parse JSON default value: " << json_value_or.status();
+        return;
+    }
+
+    // Extract the sub path from linear path, e.g. "profile.level" -> "$.level"
+    std::string linear = path->linear_path();
+    std::string parent = path->path();
+    std::string json_path_str;
+    if (linear.size() > parent.size() && linear.compare(0, parent.size(), parent) == 0) {
+        // linear = "profile.level", parent = "profile" -> sub = ".level" -> "$level"
+        json_path_str = "$" + linear.substr(parent.size());
+    } else {
+        json_path_str = "$";
+    }
+
+    auto json_path_or = JsonPath::parse(Slice(json_path_str));
+    if (!json_path_or.ok()) {
+        LOG(WARNING) << "Failed to parse JSON path: " << json_path_str;
+        return;
+    }
+
+    vpack::Builder builder;
+    vpack::Slice extracted = JsonPath::extract(&json_value_or.value(), json_path_or.value(), &builder);
+    if (extracted.isNone()) {
+        return;
+    }
+
+    std::string default_value_str;
+    LogicalType value_type = column->type();
+
+    // For string types (VARCHAR/CHAR), extract the raw string value without JSON quotes
+    // For other types (INT/DOUBLE/BOOLEAN/etc), use JSON representation
+    if (value_type == TYPE_VARCHAR || value_type == TYPE_CHAR) {
+        if (extracted.isString()) {
+            default_value_str = extracted.copyString();
+        } else {
+            JsonValue extracted_value(extracted);
+            auto result_or = extracted_value.to_string();
+            if (result_or.ok()) {
+                default_value_str = *result_or;
+            } else {
+                return;
+            }
+        }
+    } else {
+        JsonValue extracted_value(extracted);
+        auto result_or = extracted_value.to_string();
+        if (result_or.ok()) {
+            default_value_str = *result_or;
+        } else {
+            return;
+        }
+    }
+
+    column->set_default_value(default_value_str);
+}
+
 // Extend the schema fields based on the column access paths.
 // This ensures that only the necessary subfields required by the query are retained in the schema.
 Status LakeDataSource::_extend_schema_by_access_paths() {
@@ -444,6 +514,10 @@ Status LakeDataSource::_extend_schema_by_access_paths() {
         column.set_is_nullable(true);
         int32_t root_uid = _tablet_schema->column(static_cast<size_t>(root_column_index)).unique_id();
         column.set_extended_info(std::make_unique<ExtendedColumnInfo>(path.get(), root_uid));
+
+        // Inherit default value from parent column if exists
+        const auto& root_column = _tablet_schema->column(static_cast<size_t>(root_column_index));
+        _inherit_default_value_from_json(&column, root_column, path.get());
 
         // For UNIQUE/AGG tables, extended flat JSON subcolumns behave like value columns
         // and must carry a valid aggregation for pre-aggregation. Use REPLACE.

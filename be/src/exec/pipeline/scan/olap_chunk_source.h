@@ -70,6 +70,8 @@ private:
     Status _init_column_access_paths(Schema* schema);
     Status _prune_schema_by_access_paths(Schema* schema);
     Status _extend_schema_by_access_paths();
+    void _inherit_default_value_from_json(TabletColumn* column, const TabletColumn& root_column,
+                                           const ColumnAccessPath* path);
 
 private:
     TabletReaderParams _params{};

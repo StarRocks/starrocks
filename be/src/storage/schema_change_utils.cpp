@@ -637,9 +637,6 @@ Status SchemaChangeUtils::parse_request_normal(const TabletSchemaCSPtr& base_sch
                 *sc_directly = true;
             }
 
-            LOG(ERROR) << "[DEFAULT_VALUE_PATH_3] Schema change parsing new column: " << new_column.name()
-                       << ", type: " << new_column.type() << ", has_default: " << (new_column.has_default_value())
-                       << ", default_value: " << new_column.default_value();
             if (!init_column_mapping(column_mapping, new_column, new_column.default_value()).ok()) {
                 LOG(WARNING) << "init column mapping failed. column=" << new_column.name();
                 return Status::InternalError("init column mapping failed");
