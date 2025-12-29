@@ -41,6 +41,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.authentication.AccessControlContext;
+import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.authentication.AuthenticationProvider;
 import com.starrocks.authentication.UserProperty;
 import com.starrocks.authorization.AccessDeniedException;
@@ -1012,14 +1013,57 @@ public class ConnectContext {
     }
 
     public void setCurrentWarehouse(String currentWarehouse) {
+        final VariableMgr variableMgr = GlobalStateMgr.getCurrentState().getVariableMgr();
+        this.sessionVariable = variableMgr.newSessionVariable();
         this.sessionVariable.setWarehouseName(currentWarehouse);
+        // apply warehouse variable
+        variableMgr.applyWarehouseVariable(this.sessionVariable);
         this.resetComputeResource();
+        // apply user property variable
+        try {
+            String user = getQualifiedUser();
+            final AuthenticationMgr authMgr = GlobalStateMgr.getCurrentState().getAuthenticationMgr();
+            if (user != null) {
+                final UserProperty userProperty = authMgr.getUserProperty(getQualifiedUser());
+                if (!userProperty.getSessionVariables().isEmpty()) {
+                    this.updateUserPropertySessionVariable(userProperty.getSessionVariables(), true);
+                }
+            }
+        } catch (Exception e) {
+            LOG.warn("failed to apply user property session variable", e);
+        }
+
+        // apply modified session variable
+        try {
+            for (Map.Entry<String, SystemVariable> entry : modifiedSessionVariables.entrySet()) {
+                variableMgr.setSystemVariable(sessionVariable, entry.getValue(), true);
+            }
+        } catch (Exception e) {
+            LOG.warn("failed to apply user session variable", e);
+        }
+
+    }
+
+    // Note: Map sessionVariables should be CASE_INSENSITIVE
+    private void updateUserPropertySessionVariable(Map<String, String> sessionVariables, boolean ignoreWarehouse)
+            throws DdlException {
+        String warehouse = "warehouse";
+        if (!ignoreWarehouse && sessionVariables.containsKey(warehouse)) {
+            setCurrentWarehouse(sessionVariables.get(warehouse));
+        }
+
+        for (Map.Entry<String, String> entry : sessionVariables.entrySet()) {
+            if (entry.getKey().equals(warehouse)) {
+                continue;
+            }
+            SystemVariable variable = new SystemVariable(entry.getKey(), new StringLiteral(entry.getValue()));
+            globalStateMgr.getVariableMgr().setSystemVariable(sessionVariable, variable, true);
+        }
     }
 
     public void setCurrentWarehouseId(long warehouseId) {
         Warehouse warehouse = globalStateMgr.getWarehouseMgr().getWarehouse(warehouseId);
-        this.sessionVariable.setWarehouseName(warehouse.getName());
-        this.resetComputeResource();
+        this.setCurrentWarehouse(warehouse.getName());
     }
 
     public void setCurrentComputeResource(ComputeResource computeResource) {
@@ -1073,8 +1117,9 @@ public class ConnectContext {
                 } else {
                     // throw exception if the current compute resource is not available.
                     // and reset compute resource, so that we can acquire a new one next time.
-                    String errMsg = String.format("Current connection's compute resource(%s) is not available:%s, please " +
-                            "try again.", this.getCurrentWarehouseName(), computeResource);
+                    String errMsg =
+                            String.format("Current connection's compute resource(%s) is not available:%s, please " +
+                                    "try again.", this.getCurrentWarehouseName(), computeResource);
                     this.resetComputeResource();
                     throw new RuntimeException(errMsg);
                 }
@@ -1451,7 +1496,8 @@ public class ConnectContext {
             try {
                 Authorizer.checkAnyActionOnCatalog(this, newCatalogName);
             } catch (AccessDeniedException e) {
-                AccessDeniedException.reportAccessDenied(newCatalogName, this.getCurrentUserIdentity(), this.getCurrentRoleIds(),
+                AccessDeniedException.reportAccessDenied(newCatalogName, this.getCurrentUserIdentity(),
+                        this.getCurrentRoleIds(),
                         PrivilegeType.ANY.name(), ObjectType.CATALOG.name(), newCatalogName);
             }
         }
@@ -1539,11 +1585,7 @@ public class ConnectContext {
     public void updateByUserProperty(UserProperty userProperty) {
         try {
             // set session variables
-            Map<String, String> sessionVariables = userProperty.getSessionVariables();
-            for (Map.Entry<String, String> entry : sessionVariables.entrySet()) {
-                SystemVariable variable = new SystemVariable(entry.getKey(), new StringLiteral(entry.getValue()));
-                globalStateMgr.getVariableMgr().setSystemVariable(sessionVariable, variable, true);
-            }
+            updateUserPropertySessionVariable(userProperty.getSessionVariables(), false);
 
             // set catalog and database
             String catalog = userProperty.getCatalog();

@@ -57,6 +57,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.ExecuteEnv;
 import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.SystemVariable;
+import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.ast.expression.VariableExpr;
 import com.starrocks.system.Frontend;
 import com.starrocks.thrift.TNetworkAddress;
@@ -67,6 +68,7 @@ import com.starrocks.type.BooleanType;
 import com.starrocks.type.FloatType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.VarcharType;
+import com.starrocks.warehouse.Warehouse;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.text.similarity.JaroWinklerDistance;
 import org.apache.logging.log4j.LogManager;
@@ -232,17 +234,16 @@ public class VariableMgr {
         return attr.show().isEmpty() ? attr.name() : attr.show();
     }
 
-    private void handleSetWarehouse(ConnectContext connectContext, SessionVariable sessionVariable, Field field, Object value)
+    private void handleSetWarehouse(ConnectContext connectContext, SessionVariable sessionVariable, Field field,
+                                    Object value)
             throws DdlException {
         final String originalWarehouseName = sessionVariable.getWarehouseName();
         setParsedValue(sessionVariable, field, value);
         final String newWarehouseName = sessionVariable.getWarehouseName();
 
         // after set warehouse, need to reset compute resource
-        if (newWarehouseName != null && newWarehouseName.equalsIgnoreCase(originalWarehouseName)) {
-            connectContext.ensureCurrentComputeResourceAvailable();
-        } else {
-            connectContext.resetComputeResource();
+        if (newWarehouseName != null && !newWarehouseName.equalsIgnoreCase(originalWarehouseName)) {
+            connectContext.setCurrentWarehouse(newWarehouseName);
         }
     }
 
@@ -285,7 +286,28 @@ public class VariableMgr {
     }
 
     public SessionVariable newSessionVariable() {
-        return (SessionVariable) defaultSessionVariable.clone();
+        return defaultSessionVariable.clone();
+    }
+
+    public void applyWarehouseVariable(SessionVariable sv) {
+        final String warehouseName = sv.getWarehouseName();
+        final Map<String, String> warehouseVariables = getWarehouseVariables(warehouseName);
+        if (!warehouseVariables.isEmpty()) {
+            try {
+                for (Map.Entry<String, String> vars : warehouseVariables.entrySet()) {
+                    final SystemVariable systemVariable =
+                            new SystemVariable(vars.getKey(), new StringLiteral(vars.getValue()));
+                    setSystemVariable(sv, systemVariable, true);
+                }
+            } catch (DdlException e) {
+                LOG.warn("failed to init warehouse session variable. ignored", e);
+            }
+        }
+    }
+
+    private Map<String, String> getWarehouseVariables(String warehouseName) {
+        final Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseName);
+        return warehouse.getWarehouseSessionVariable();
     }
 
     // Check if this sessionVariable can be set correctly
@@ -490,7 +512,7 @@ public class VariableMgr {
         try {
             String json = info.getPersistJsonString();
             JSONObject root = new JSONObject(json);
-            
+
             for (String varName : root.keySet()) {
                 VarContext varContext = getVarContext(varName);
                 if (varContext == null) {
@@ -661,7 +683,7 @@ public class VariableMgr {
         SessionVariable defaultVar;
         rLock.lock();
         try {
-            defaultVar = (SessionVariable) defaultSessionVariable.clone();
+            defaultVar = defaultSessionVariable.clone();
         } finally {
             rLock.unlock();
         }
@@ -673,7 +695,7 @@ public class VariableMgr {
                     refreshedCount++;
                 }
             } catch (Exception e) {
-                LOG.warn("Failed to refresh variables for connection {}: {}", 
+                LOG.warn("Failed to refresh variables for connection {}: {}",
                         ctx.getConnectionId(), e.getMessage());
             }
         }
@@ -683,18 +705,18 @@ public class VariableMgr {
 
     /**
      * Refresh variables for a single connection.
-     * 
-     * @param ctx the connection context
+     *
+     * @param ctx        the connection context
      * @param defaultVar the default session variables (current global defaults)
-     * @param force if true, force refresh all variables even if they have been modified by the session
+     * @param force      if true, force refresh all variables even if they have been modified by the session
      * @return true if any variables were refreshed
      */
     private boolean refreshConnectionVariables(ConnectContext ctx, SessionVariable defaultVar, boolean force) {
         SessionVariable sessionVar = ctx.getSessionVariable();
         Map<String, SystemVariable> modifiedVars = ctx.getModifiedSessionVariablesMap();
-        
+
         boolean refreshed = false;
-        
+
         // Iterate through all session variables and refresh those that haven't been modified
         for (Field field : SessionVariable.class.getDeclaredFields()) {
             VarAttr attr = field.getAnnotation(VarAttr.class);

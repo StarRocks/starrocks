@@ -700,6 +700,8 @@ public class StmtExecutor {
         context.setCurrentThreadId(Thread.currentThread().getId());
 
         SessionVariable sessionVariableBackup = context.getSessionVariable();
+        // set true to change session variable
+        boolean skipRestore = false;
         // set execution id.
         // For statements other than `cache select`, try to use query id as execution id when execute first time.
         UUID uuid = context.getQueryId();
@@ -881,12 +883,14 @@ public class StmtExecutor {
                 }
             } else if (parsedStmt instanceof SetStmt) {
                 handleSetStmt();
+                skipRestore = true;
             } else if (parsedStmt instanceof RefreshConnectionsStmt) {
                 handleRefreshConnectionsStmt();
             } else if (parsedStmt instanceof UseDbStmt) {
                 handleUseDbStmt();
             } else if (parsedStmt instanceof SetWarehouseStmt) {
                 handleSetWarehouseStmt();
+                skipRestore = true;
             } else if (parsedStmt instanceof UseCatalogStmt) {
                 handleUseCatalogStmt();
             } else if (parsedStmt instanceof SetCatalogStmt) {
@@ -1001,7 +1005,9 @@ public class StmtExecutor {
             }
 
             // restore session variable in connect context
-            context.setSessionVariable(sessionVariableBackup);
+            if (!skipRestore) {
+                context.setSessionVariable(sessionVariableBackup);
+            }
 
             if (shouldMarkIdleCheck && originWarehouseId != null) {
                 WarehouseIdleChecker.decreaseRunningSQL(originWarehouseId);
