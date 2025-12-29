@@ -434,8 +434,8 @@ void LakeDataSource::_inherit_default_value_from_json(TabletColumn* column, cons
     }
 
     // Extract the sub path from linear path, e.g. "profile.level" -> "$.level"
-    std::string linear = path->linear_path();
-    std::string parent = path->path();
+    const std::string& linear = path->linear_path();
+    const std::string& parent = path->path();
     std::string json_path_str;
     if (linear.size() > parent.size() && linear.compare(0, parent.size(), parent) == 0) {
         // linear = "profile.level", parent = "profile" -> sub = ".level" -> "$level"
