@@ -1015,6 +1015,7 @@ void OlapTableSink::_validate_data(RuntimeState* state, Chunk* chunk) {
             }
             chunk->update_column(std::move(nullable->data_column()), desc->id());
         }
+        column_ptr = chunk->get_column_by_slot_id(desc->id());
 
         // Validate column nullable info
         // Column nullable info need to respect slot nullable info
