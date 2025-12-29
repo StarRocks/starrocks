@@ -15,10 +15,10 @@
 package com.starrocks.qe.feedback.guide;
 
 import com.google.common.collect.Lists;
+import com.starrocks.analysis.JoinOperator;
 import com.starrocks.qe.feedback.NodeExecStats;
 import com.starrocks.qe.feedback.skeleton.JoinNode;
 import com.starrocks.qe.feedback.skeleton.SkeletonNode;
-import com.starrocks.sql.ast.JoinOperator;
 import com.starrocks.sql.optimizer.JoinHelper;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
