@@ -17,36 +17,26 @@ package com.starrocks.sql.ast;
 
 import com.starrocks.sql.parser.NodePosition;
 
-import java.util.List;
+import java.util.UUID;
 
-public class SetUserPropertyStmt extends DdlStmt {
-    private String user;
-    private final List<SetUserPropertyVar> propertyList;
+public class DropTemporaryTableStmt extends DropTableStmt {
+    // the session's id associated with this temporary table
+    private UUID sessionId = null;
 
-    public SetUserPropertyStmt(String user, List<SetUserPropertyVar> propertyList) {
-        this(user, propertyList, NodePosition.ZERO);
+    public DropTemporaryTableStmt(boolean ifExists, TableRef tableRef, boolean forceDrop) {
+        super(ifExists, tableRef, false, forceDrop, NodePosition.ZERO);
     }
 
-    public SetUserPropertyStmt(String user, List<SetUserPropertyVar> propertyList, NodePosition pos) {
-        super(pos);
-        this.user = user;
-        this.propertyList = propertyList;
+    public void setSessionId(UUID sessionId) {
+        this.sessionId = sessionId;
     }
 
-    public String getUser() {
-        return user;
-    }
-
-    public void setUser(String user) {
-        this.user = user;
-    }
-
-    public List<SetUserPropertyVar> getPropertyList() {
-        return this.propertyList;
+    public UUID getSessionId() {
+        return sessionId;
     }
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return ((AstVisitorExtendInterface<R, C>) visitor).visitSetUserPropertyStatement(this, context);
+        return visitor.visitDropTemporaryTableStatement(this, context);
     }
 }

@@ -393,6 +393,7 @@ import com.starrocks.sql.ast.SingleItemListPartitionDesc;
 import com.starrocks.sql.ast.SingleRangePartitionDesc;
 import com.starrocks.sql.ast.SplitTabletClause;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.StatisticsType;
 import com.starrocks.sql.ast.StopRoutineLoadStmt;
 import com.starrocks.sql.ast.StructFieldDesc;
 import com.starrocks.sql.ast.SubmitTaskStmt;
@@ -2973,8 +2974,8 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         Pair<Boolean, List<Expr>> analyzeColumn = visitAnalyzeColumnClause(context.analyzeColumnClause());
         AnalyzeTypeDesc analyzeTypeDesc = new AnalyzeBasicDesc();
         if (context.analyzeColumnClause() instanceof com.starrocks.sql.parser.StarRocksParser.MultiColumnSetContext) {
-            List<StatsConstants.StatisticsType> statisticsTypes = Lists.newArrayList();
-            statisticsTypes.add(StatsConstants.StatisticsType.MCDISTINCT);
+            List<StatisticsType> statisticsTypes = Lists.newArrayList();
+            statisticsTypes.add(StatisticsType.MCDISTINCT);
 
             // we use sample strategy to collect multi-column combined statistics as default.
             isSample = context.FULL() == null;

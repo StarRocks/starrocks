@@ -39,7 +39,6 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
-import com.starrocks.catalog.Replica.ReplicaStatus;
 import com.starrocks.catalog.Table.TableType;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
@@ -51,6 +50,7 @@ import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
 import com.starrocks.sql.ast.PartitionRef;
+import com.starrocks.sql.ast.ReplicaStatus;
 import com.starrocks.sql.ast.expression.BinaryPredicate;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.ast.expression.Expr;
@@ -68,7 +68,7 @@ public class MetadataViewer {
 
     public static List<List<String>> getTabletStatus(AdminShowReplicaStatusStmt stmt, ConnectContext context)
             throws DdlException {
-        Replica.ReplicaStatus statusFilter = null;
+        ReplicaStatus statusFilter = null;
         BinaryType op = null; // Default to null instead of stmt.getOp()
         Expr where = stmt.getWhere();
 
@@ -80,7 +80,7 @@ public class MetadataViewer {
                 Expr rightChild = binaryPredicate.getChild(1);
                 String leftKey = ((SlotRef) leftChild).getColumnName();
                 if (rightChild instanceof StringLiteral && leftKey.equalsIgnoreCase("status")) {
-                    statusFilter = Enums.getIfPresent(Replica.ReplicaStatus.class,
+                    statusFilter = Enums.getIfPresent(ReplicaStatus.class,
                             ((StringLiteral) rightChild).getStringValue().toUpperCase()).orNull();
                 }
             }

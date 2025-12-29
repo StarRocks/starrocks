@@ -14,21 +14,13 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.sql.parser.NodePosition;
-import com.starrocks.statistic.StatsConstants;
-
-import java.util.List;
-
-public class AnalyzeMultiColumnDesc extends AnalyzeTypeDesc {
-    // we will support more statistics type on multi column like ndv/dependencies/mcv...
-    private final List<StatsConstants.StatisticsType> statsTypes;
-
-    public AnalyzeMultiColumnDesc(List<StatsConstants.StatisticsType> statsTypes) {
-        super(NodePosition.ZERO);
-        this.statsTypes = statsTypes;
-    }
-
-    public List<StatsConstants.StatisticsType> getStatsTypes() {
-        return statsTypes;
-    }
+// used to record statistics type for multi-columns.
+// For version compatibility, single-column statistics are not recorded StatisticsType
+public enum StatisticsType {
+    // for single column statistics
+    COMMON,
+    // for single column histogram
+    HISTOGRAM,
+    // for multi-column combined ndv
+    MCDISTINCT
 }

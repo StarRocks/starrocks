@@ -12,23 +12,38 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.ast;
 
 import com.starrocks.sql.parser.NodePosition;
 
-public class RecoverPartitionStmt extends DdlStmt {
-    private TableRef tableRef;
-    private final String partitionName;
+// SHOW CREATE TABLE statement.
+public class ShowCreateTableStmt extends ShowStmt {
+    public enum CreateTableType {
+        TABLE("TABLE"),
+        VIEW("VIEW"),
+        MATERIALIZED_VIEW("MATERIALIZED VIEW");
+        private final String value;
 
-    public RecoverPartitionStmt(TableRef tableRef, String partitionName) {
-        this(tableRef, partitionName, NodePosition.ZERO);
+        CreateTableType(String value) {
+            this.value = value;
+        }
+
+        public String getValue() {
+            return value;
+        }
     }
 
-    public RecoverPartitionStmt(TableRef tableRef, String partitionName, NodePosition pos) {
+    private TableRef tableRef;
+    private final CreateTableType type;
+
+    public ShowCreateTableStmt(TableRef tableRef, CreateTableType type) {
+        this(tableRef, type, NodePosition.ZERO);
+    }
+
+    public ShowCreateTableStmt(TableRef tableRef, CreateTableType type, NodePosition pos) {
         super(pos);
         this.tableRef = tableRef;
-        this.partitionName = partitionName;
+        this.type = type;
     }
 
     public TableRef getTableRef() {
@@ -43,20 +58,20 @@ public class RecoverPartitionStmt extends DdlStmt {
         return tableRef == null ? null : tableRef.getCatalogName();
     }
 
-    public String getDbName() {
+    public String getDb() {
         return tableRef == null ? null : tableRef.getDbName();
     }
 
-    public String getTableName() {
+    public String getTable() {
         return tableRef == null ? null : tableRef.getTableName();
     }
 
-    public String getPartitionName() {
-        return partitionName;
+    public CreateTableType getType() {
+        return type;
     }
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return ((AstVisitorExtendInterface<R, C>) visitor).visitRecoverPartitionStatement(this, context);
+        return visitor.visitShowCreateTableStatement(this, context);
     }
 }

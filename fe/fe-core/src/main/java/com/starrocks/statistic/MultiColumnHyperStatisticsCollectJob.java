@@ -23,6 +23,7 @@ import com.starrocks.sql.ast.OriginStatement;
 import com.starrocks.sql.ast.QualifiedName;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.StatisticsType;
 import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.parser.NodePosition;
@@ -38,7 +39,7 @@ public class MultiColumnHyperStatisticsCollectJob extends HyperStatisticsCollect
     public MultiColumnHyperStatisticsCollectJob(Database db, Table table, List<Long> partitionIdList, List<String> columnNames,
                                                 List<Type> columnTypes, StatsConstants.AnalyzeType type,
                                                 StatsConstants.ScheduleType scheduleType, Map<String, String> properties,
-                                                List<StatsConstants.StatisticsType> statsTypes,
+                                                List<StatisticsType> statsTypes,
                                                 List<List<String>> columnGroups) {
         super(db, table, partitionIdList, columnNames, columnTypes, type, scheduleType,
                 properties, statsTypes, columnGroups, false);

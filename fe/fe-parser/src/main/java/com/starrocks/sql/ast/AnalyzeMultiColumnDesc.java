@@ -12,31 +12,22 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.ast;
 
 import com.starrocks.sql.parser.NodePosition;
 
-import java.util.UUID;
+import java.util.List;
 
-public class DropTemporaryTableStmt extends DropTableStmt {
-    // the session's id associated with this temporary table
-    private UUID sessionId = null;
+public class AnalyzeMultiColumnDesc extends AnalyzeTypeDesc {
+    // we will support more statistics type on multi column like ndv/dependencies/mcv...
+    private final List<StatisticsType> statsTypes;
 
-    public DropTemporaryTableStmt(boolean ifExists, TableRef tableRef, boolean forceDrop) {
-        super(ifExists, tableRef, false, forceDrop, NodePosition.ZERO);
+    public AnalyzeMultiColumnDesc(List<StatisticsType> statsTypes) {
+        super(NodePosition.ZERO);
+        this.statsTypes = statsTypes;
     }
 
-    public void setSessionId(UUID sessionId) {
-        this.sessionId = sessionId;
-    }
-
-    public UUID getSessionId() {
-        return sessionId;
-    }
-
-    @Override
-    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return ((AstVisitorExtendInterface<R, C>) visitor).visitDropTemporaryTableStatement(this, context);
+    public List<StatisticsType> getStatsTypes() {
+        return statsTypes;
     }
 }

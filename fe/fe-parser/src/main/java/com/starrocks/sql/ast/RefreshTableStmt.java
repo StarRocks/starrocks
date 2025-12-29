@@ -16,34 +16,26 @@ package com.starrocks.sql.ast;
 
 import com.starrocks.sql.parser.NodePosition;
 
-// SHOW CREATE TABLE statement.
-public class ShowCreateTableStmt extends ShowStmt {
-    public enum CreateTableType {
-        TABLE("TABLE"),
-        VIEW("VIEW"),
-        MATERIALIZED_VIEW("MATERIALIZED VIEW");
-        private final String value;
+import java.util.List;
 
-        CreateTableType(String value) {
-            this.value = value;
-        }
-
-        public String getValue() {
-            return value;
-        }
-    }
-
+/**
+ * This command used to refresh connector table of external catalog.
+ * For example:
+ * 'REFRESH EXTERNAL TABLE catalog1.db1.table1'
+ * This sql will refresh table1 of db1 in catalog1.
+ */
+public class RefreshTableStmt extends DdlStmt {
     private TableRef tableRef;
-    private final CreateTableType type;
+    private final List<String> partitionNames;
 
-    public ShowCreateTableStmt(TableRef tableRef, CreateTableType type) {
-        this(tableRef, type, NodePosition.ZERO);
+    public RefreshTableStmt(TableRef tableRef, List<String> partitionNames) {
+        this(tableRef, partitionNames, NodePosition.ZERO);
     }
 
-    public ShowCreateTableStmt(TableRef tableRef, CreateTableType type, NodePosition pos) {
+    public RefreshTableStmt(TableRef tableRef, List<String> partitionNames, NodePosition pos) {
         super(pos);
         this.tableRef = tableRef;
-        this.type = type;
+        this.partitionNames = partitionNames;
     }
 
     public TableRef getTableRef() {
@@ -58,20 +50,20 @@ public class ShowCreateTableStmt extends ShowStmt {
         return tableRef == null ? null : tableRef.getCatalogName();
     }
 
-    public String getDb() {
+    public String getDbName() {
         return tableRef == null ? null : tableRef.getDbName();
     }
 
-    public String getTable() {
+    public String getTableName() {
         return tableRef == null ? null : tableRef.getTableName();
     }
 
-    public CreateTableType getType() {
-        return type;
+    public List<String> getPartitions() {
+        return partitionNames;
     }
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return ((AstVisitorExtendInterface<R, C>) visitor).visitShowCreateTableStatement(this, context);
+        return visitor.visitRefreshTableStatement(this, context);
     }
 }

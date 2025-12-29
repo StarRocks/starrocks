@@ -14,32 +14,11 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.sql.parser.NodePosition;
-import com.starrocks.statistic.StatsConstants;
-
-import java.util.List;
-
-public abstract class AnalyzeTypeDesc implements ParseNode {
-    protected final NodePosition pos;
-
-    protected AnalyzeTypeDesc(NodePosition pos) {
-        this.pos = pos;
-    }
-
-    @Override
-    public NodePosition getPos() {
-        return pos;
-    }
-
-    public boolean isHistogram() {
-        return false;
-    }
-
-    public boolean isBasic() {
-        return false;
-    }
-
-    public List<StatsConstants.StatisticsType> getStatsTypes() {
-        return List.of();
-    }
+public enum ReplicaStatus {
+    OK, // health
+    DEAD, // backend is not available
+    VERSION_ERROR, // missing version
+    MISSING, // replica does not exist
+    SCHEMA_ERROR, // replica's schema hash does not equal to index's schema hash
+    BAD // replica is broken.
 }

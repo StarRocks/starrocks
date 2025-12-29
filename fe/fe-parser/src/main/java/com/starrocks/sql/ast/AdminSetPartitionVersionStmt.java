@@ -12,24 +12,28 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.ast;
 
 import com.starrocks.sql.parser.NodePosition;
 
-public class DropStatsStmt extends StatementBase {
+public class AdminSetPartitionVersionStmt extends DdlStmt {
     private TableRef tableRef;
-    private boolean isExternal = false;
-    private boolean isMultiColumn = false;
+    private String partitionName;
+    private long partitionId = -1L;
+    private final long version;
 
-    public DropStatsStmt(TableRef tableRef) {
-        this(tableRef, false, NodePosition.ZERO);
-    }
-
-    public DropStatsStmt(TableRef tableRef, boolean isMultiColumn, NodePosition pos) {
+    public AdminSetPartitionVersionStmt(TableRef tableRef, String partitionName, long version, NodePosition pos) {
         super(pos);
         this.tableRef = tableRef;
-        this.isMultiColumn = isMultiColumn;
+        this.partitionName = partitionName;
+        this.version = version;
+    }
+
+    public AdminSetPartitionVersionStmt(TableRef tableRef, long partitionId, long version, NodePosition pos) {
+        super(pos);
+        this.tableRef = tableRef;
+        this.partitionId = partitionId;
+        this.version = version;
     }
 
     public TableRef getTableRef() {
@@ -40,32 +44,20 @@ public class DropStatsStmt extends StatementBase {
         this.tableRef = tableRef;
     }
 
-    public String getCatalogName() {
-        return tableRef == null ? null : tableRef.getCatalogName();
+    public String getPartitionName() {
+        return partitionName;
     }
 
-    public String getDbName() {
-        return tableRef == null ? null : tableRef.getDbName();
+    public long getPartitionId() {
+        return partitionId;
     }
 
-    public String getTableName() {
-        return tableRef == null ? null : tableRef.getTableName();
-    }
-
-    public boolean isExternal() {
-        return isExternal;
-    }
-
-    public void setExternal(boolean isExternal) {
-        this.isExternal = isExternal;
-    }
-
-    public boolean isMultiColumn() {
-        return isMultiColumn;
+    public long getVersion() {
+        return version;
     }
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return ((AstVisitorExtendInterface<R, C>) visitor).visitDropStatsStatement(this, context);
+        return visitor.visitAdminSetPartitionVersionStmt(this, context);
     }
 }
