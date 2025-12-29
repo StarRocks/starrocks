@@ -88,12 +88,16 @@ import org.threeten.extra.PeriodDuration;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import javax.validation.constraints.NotNull;
+
+import static com.starrocks.common.InvertedIndexParams.CommonIndexParamKey.IMP_LIB;
+import static com.starrocks.common.InvertedIndexParams.InvertedIndexImpType.CLUCENE;
 
 public class OlapTableFactory implements AbstractTableFactory {
 
@@ -524,9 +528,19 @@ public class OlapTableFactory implements AbstractTableFactory {
                 // replicated storage
                 table.setEnableReplicatedStorage(enableReplicatedStorage);
 
-                boolean hasGin = table.getIndexes().stream()
+                boolean hasGin = table.getIndexes() != null && table.getIndexes().stream()
                         .anyMatch(index -> index.getIndexType() == IndexType.GIN);
-                if (hasGin && table.enableReplicatedStorage()) {
+                boolean hasCLuceneGin = table.getIndexes() != null && table.getIndexes().stream()
+                        .anyMatch(index -> {
+                            if (index.getIndexType() != IndexType.GIN) {
+                                return false;
+                            }
+                            String impVal = index.getProperties() == null ? null :
+                                    index.getProperties().get(IMP_LIB.name().toLowerCase(Locale.ROOT));
+                            return impVal == null ? !RunMode.isSharedDataMode() /* default to CLUCENE for share nothing */
+                                                  : CLUCENE.name().equalsIgnoreCase(impVal);
+                        });
+                if (hasGin && hasCLuceneGin && table.enableReplicatedStorage()) {
                     // GIN indexes are incompatible with replicated_storage right now and we will disable replicated_storage
                     // if table contains GIN Index.
                     table.setEnableReplicatedStorage(false);
