@@ -155,22 +155,6 @@ public:
         }
     }
 
-    static MutableColumnPtr unfold_const_column(const TypeDescriptor& type_desc, size_t size, ColumnPtr&& column) {
-        if (column->only_null()) {
-            auto col = ColumnHelper::create_column(type_desc, true);
-            [[maybe_unused]] bool ok = col->append_nulls(size);
-            DCHECK(ok);
-            return col;
-        } else if (column->is_constant()) {
-            auto mut_column = Column::mutate(std::move(column));
-            auto* const_column = down_cast<ConstColumn*>(mut_column.get());
-            const_column->assign(size, 0);
-            return const_column->data_column()->as_mutable_ptr();
-        } else {
-            return Column::mutate(std::move(column));
-        }
-    }
-
     static ColumnPtr copy_and_unfold_const_column(const TypeDescriptor& dst_type_desc, bool dst_nullable,
                                                   const ColumnPtr& src_column, int num_rows) {
         auto dst_column = create_column(dst_type_desc, dst_nullable);

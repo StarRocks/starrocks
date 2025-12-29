@@ -695,8 +695,9 @@ Status OlapTablePartitionParam::find_tablets(Chunk* chunk, std::vector<OlapTable
         if (!_partitions_expr_ctxs.empty()) {
             for (size_t i = 0; i < partition_columns.size(); ++i) {
                 ASSIGN_OR_RETURN(auto partition_column, _partitions_expr_ctxs[i]->evaluate(chunk));
-                partition_columns[i] = ColumnHelper::unfold_const_column(_partition_slot_descs[i]->type(), num_rows,
-                                                                         std::move(partition_column));
+                partition_columns[i] =
+                        ColumnHelper::unfold_const_column(_partition_slot_descs[i]->type(), num_rows, partition_column)
+                                ->as_mutable_ptr();
             }
         } else {
             for (size_t i = 0; i < partition_columns.size(); ++i) {
