@@ -131,6 +131,8 @@ public class AuditEvent {
     public long bigQueryLogScanRowsThreshold = -1;
     @AuditField(value = "SpilledBytes", ignore_zero = true)
     public long spilledBytes = -1;
+    @AuditField(value = "writeClientTimeMs", ignore_zero = true)
+    public long writeClientTimeMs = -1;
     @AuditField(value = "Warehouse")
     public String warehouse = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
 
@@ -297,6 +299,24 @@ public class AuditEvent {
             return this;
         }
 
+<<<<<<< HEAD
+=======
+        public AuditEventBuilder setWriteClientTimeMs(long writeClientTimeMs) {
+            auditEvent.writeClientTimeMs = writeClientTimeMs;
+            return this;
+        }
+
+        public AuditEventBuilder addReadLocalCnt(long readLocalCnt) {
+            auditEvent.readLocalCnt += readLocalCnt;
+            return this;
+        }
+
+        public AuditEventBuilder addReadRemoteCnt(long readRemoteCnt) {
+            auditEvent.readRemoteCnt += readRemoteCnt;
+            return this;
+        }
+
+>>>>>>> 1f4389bcf4 ([Enhancement] Record the time taken to write to the client (#67144))
         public AuditEventBuilder setWarehouse(String warehouse) {
             auditEvent.warehouse = warehouse;
             return this;
