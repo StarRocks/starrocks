@@ -14,7 +14,7 @@
 
 package com.starrocks.planner;
 
-import com.starrocks.catalog.IcebergTable;;
+import com.starrocks.catalog.IcebergTable;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.IcebergUtil;
 import com.starrocks.credential.CloudConfiguration;
@@ -24,8 +24,6 @@ import com.starrocks.thrift.TDataSink;
 import com.starrocks.thrift.TDataSinkType;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TIcebergTableSink;
-import com.starrocks.type.IntegerType;
-import com.starrocks.type.VarcharType;
 import org.apache.iceberg.Table;
 
 import static com.starrocks.sql.ast.OutFileClause.PARQUET_COMPRESSION_TYPE_MAP;
@@ -87,18 +85,21 @@ public class IcebergDeleteSink extends DataSink {
         boolean hasPosColumn = false;
 
         for (SlotDescriptor slot : desc.getSlots()) {
-            if (slot.getColumn() != null) {
-                String colName = slot.getColumn().getName();
-                if (IcebergTable.FILE_PATH.equals(colName)) {
-                    hasFilePathColumn = true;
-                    if (!slot.getType().equals(VarcharType.VARCHAR)) {
-                        throw new StarRocksConnectorException("_file column must be type of VARCHAR");
-                    }
-                } else if (IcebergTable.ROW_POSITION.equals(colName)) {
-                    hasPosColumn = true;
-                    if (!slot.getType().equals(IntegerType.BIGINT)) {
-                        throw new StarRocksConnectorException("_pos column must be type of BIGINT");
-                    }
+            if (slot.getColumn() == null) {
+                continue;
+            }
+            String colName = slot.getColumn().getName();
+            if (IcebergTable.FILE_PATH.equals(colName)) {
+                hasFilePathColumn = true;
+                if (!slot.getType().isVarchar()) {
+                    throw new StarRocksConnectorException("_file column must be type of VARCHAR");
+                }
+                continue;
+            }
+            if (IcebergTable.ROW_POSITION.equals(colName)) {
+                hasPosColumn = true;
+                if (!slot.getType().isBigint()) {
+                    throw new StarRocksConnectorException("_pos column must be type of BIGINT");
                 }
             }
         }
