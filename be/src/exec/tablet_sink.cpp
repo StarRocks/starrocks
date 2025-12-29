@@ -988,7 +988,7 @@ void OlapTableSink::_validate_data(RuntimeState* state, Chunk* chunk) {
 
         // update_column for auto increment column.
         if (_has_auto_increment && _auto_increment_slot_id == desc->id() && column_ptr->is_nullable()) {
-            auto* nullable = down_cast<NullableColumn*>(column_ptr->as_mutable_raw_ptr);
+            auto* nullable = down_cast<NullableColumn*>(column_ptr->as_mutable_raw_ptr());
             // If nullable->has_null() && _null_expr_in_auto_increment == true, it means that user specify a
             // null value in auto increment column, we abort the all rows with null.
             // Because be know nothing about whether this row is specified by the user as null or setted during planning.
@@ -1025,7 +1025,7 @@ void OlapTableSink::_validate_data(RuntimeState* state, Chunk* chunk) {
             // Auto increment column is not nullable but use NullableColumn to implement. We should skip the check for it.
         } else if (!desc->is_nullable() && column_ptr->is_nullable() &&
                    (!_has_auto_increment || _auto_increment_slot_id != desc->id())) {
-            auto* nullable = down_cast<NullableColumn*>(column_ptr->as_mutable_raw_ptr);
+            auto* nullable = down_cast<NullableColumn*>(column_ptr->as_mutable_raw_ptr());
             // Non-nullable column shouldn't have null value,
             // If there is null value, which means expr compute has a error.
             if (nullable->has_null()) {
@@ -1050,7 +1050,7 @@ void OlapTableSink::_validate_data(RuntimeState* state, Chunk* chunk) {
             }
             chunk->update_column(std::move(nullable->data_column()), desc->id());
         } else if (column_ptr->has_null()) {
-            auto* nullable = down_cast<NullableColumn*>(column_ptr->as_mutable_raw_ptr);
+            auto* nullable = down_cast<NullableColumn*>(column_ptr->as_mutable_raw_ptr());
             NullData& nulls = nullable->null_column_data();
             for (size_t j = 0; j < num_rows; ++j) {
                 if (nulls[j] && _validate_selection[j] != VALID_SEL_FAILED) {
