@@ -63,11 +63,7 @@ None
 -- !result
 truncate plan advisor;
 -- result:
-<<<<<<< HEAD
-[REGEX]Clear all plan advisor in FE.*
-=======
 [REGEX].*
->>>>>>> d6c4b282d6 ([BugFix] Fix incorrect broadcast rewrite for right/full outer joins in Plan Advisor (#66968))
 -- !result
 CREATE TABLE `skew_table` (
   `c0` int(11) NULL COMMENT "",
