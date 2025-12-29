@@ -147,6 +147,18 @@ public class MockIcebergMetadata implements ConnectorMetadata {
         }
     }
 
+    private static List<Column> addMetaColumns(List<Column> originalColumns) {
+        ImmutableList.Builder<Column> builder = ImmutableList.builder();
+        builder.addAll(originalColumns);
+        Column filePathColumn = new Column(IcebergTable.FILE_PATH, StringType.STRING, true);
+        Column rowPositionColumn = new Column(IcebergTable.ROW_POSITION, IntegerType.BIGINT, true);
+        filePathColumn.setIsHidden(true);
+        rowPositionColumn.setIsHidden(true);
+        builder.add(filePathColumn);
+        builder.add(rowPositionColumn);
+        return builder.build();
+    }
+
     public static void mockUnPartitionedTable() throws IOException {
         MOCK_TABLE_MAP.putIfAbsent(MOCKED_UNPARTITIONED_DB_NAME, new CaseInsensitiveMap<>());
         Map<String, IcebergTableInfo> icebergTableInfoMap = MOCK_TABLE_MAP.get(MOCKED_UNPARTITIONED_DB_NAME);
@@ -154,6 +166,7 @@ public class MockIcebergMetadata implements ConnectorMetadata {
         List<Column> schemas = ImmutableList.of(new Column("id", IntegerType.INT, true),
                 new Column("data", StringType.STRING, true),
                 new Column("date", StringType.STRING, true));
+        schemas = addMetaColumns(schemas);
 
         Schema schema =
                 new Schema(required(3, "id", Types.IntegerType.get()),
@@ -187,6 +200,8 @@ public class MockIcebergMetadata implements ConnectorMetadata {
 
         for (String tblName : PARTITION_TABLE_NAMES) {
             List<Column> columns = getPartitionedTableSchema(tblName);
+            columns = addMetaColumns(columns);
+
             MockIcebergTable icebergTable = getPartitionIcebergTable(tblName, columns);
             Map<String, ColumnStatistic> columnStatisticMap;
             List<String> colNames = columns.stream().map(Column::getName).collect(Collectors.toList());

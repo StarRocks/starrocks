@@ -47,8 +47,8 @@ public class GlobalLateMaterializationTest extends ConnectorPlanTestBase {
                 "  |    <slot 2> => data\n" +
                 "  |    <slot 3> => date\n" +
                 "  |  table: t1\n" +
-                "  |    <slot 5> => data\n" +
-                "  |    <slot 6> => date\n" +
+                "  |    <slot 7> => data\n" +
+                "  |    <slot 8> => date\n" +
                 "  |  \n" +
                 "  3:HASH JOIN");
 
@@ -77,7 +77,7 @@ public class GlobalLateMaterializationTest extends ConnectorPlanTestBase {
                 "inner join iceberg0.partitioned_db.t1 t1 on t0.id = t1.id limit 10";
         plan = getFragmentPlan(sql);
         assertContains(plan, "  6:Project\n" +
-                "  |  <slot 7> : CAST(length(2: data) AS BIGINT) + CAST(length(6: date) AS BIGINT)\n" +
+                "  |  <slot 11> : CAST(length(2: data) AS BIGINT) + CAST(length(8: date) AS BIGINT)\n" +
                 "  |  limit: 10\n" +
                 "  |  \n" +
                 "  5:FETCH\n" +
@@ -85,7 +85,7 @@ public class GlobalLateMaterializationTest extends ConnectorPlanTestBase {
                 "  |  table: t0\n" +
                 "  |    <slot 2> => data\n" +
                 "  |  table: t1\n" +
-                "  |    <slot 6> => date\n" +
+                "  |    <slot 8> => date\n" +
                 "  |  limit: 10\n" +
                 "  |  \n" +
                 "  3:HASH JOIN");
@@ -96,10 +96,10 @@ public class GlobalLateMaterializationTest extends ConnectorPlanTestBase {
         plan = getFragmentPlan(sql);
         assertContains(plan, "  5:FETCH\n" +
                 "  |  lookup node: 04\n" +
+                "  |  table: t1\n" +
+                "  |    <slot 8> => date\n" +
                 "  |  table: t0\n" +
                 "  |    <slot 2> => data\n" +
-                "  |  table: t1\n" +
-                "  |    <slot 6> => date\n" +
                 "  |  \n" +
                 "  3:HASH JOIN");
     }
@@ -145,8 +145,8 @@ public class GlobalLateMaterializationTest extends ConnectorPlanTestBase {
                 "  |  table: t0\n" +
                 "  |    <slot 2> => data\n" +
                 "  |  table: t1\n" +
-                "  |    <slot 5> => data\n" +
-                "  |    <slot 6> => date\n" +
+                "  |    <slot 7> => data\n" +
+                "  |    <slot 8> => date\n" +
                 "  |  limit: 10");
     }
 
@@ -169,7 +169,7 @@ public class GlobalLateMaterializationTest extends ConnectorPlanTestBase {
         plan = getFragmentPlan(sql);
         assertContains(plan, "  6:Project\n" +
                 "  |  <slot 3> : 3: date\n" +
-                "  |  <slot 5> : 5: b\n" +
+                "  |  <slot 7> : 7: b\n" +
                 "  |  \n" +
                 "  5:FETCH\n" +
                 "  |  lookup node: 04\n" +
