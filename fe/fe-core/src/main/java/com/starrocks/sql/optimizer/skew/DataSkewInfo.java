@@ -12,21 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.sql.optimizer.operator;
+package com.starrocks.sql.optimizer.skew;
 
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 
 public class DataSkewInfo {
     private ColumnRefOperator skewColumnRef;
-    private double penaltyFactor = 1.0;
-    private int stage = 0;
+    private double penaltyFactor;
+    private int stage;
 
     public ColumnRefOperator getSkewColumnRef() {
         return skewColumnRef;
-    }
-
-    public void setSkewColumnRef(ColumnRefOperator skewColumnRef) {
-        this.skewColumnRef = skewColumnRef;
     }
 
     public double getPenaltyFactor() {
@@ -43,6 +39,10 @@ public class DataSkewInfo {
 
     public void setStage(int stage) {
         this.stage = stage;
+    }
+
+    public void setSkewColumnRef(ColumnRefOperator skewColumnRef) {
+        this.skewColumnRef = skewColumnRef;
     }
 
     public DataSkewInfo(ColumnRefOperator skewColumnRef, double penaltyFactor, int stage) {
