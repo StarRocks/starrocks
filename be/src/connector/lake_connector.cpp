@@ -421,7 +421,7 @@ Status LakeDataSource::init_tablet_reader(RuntimeState* runtime_state) {
 // This method extracts the default value of a JSON subfield based on the access path
 // and sets it to the column if extraction succeeds.
 void LakeDataSource::_inherit_default_value_from_json(TabletColumn* column, const TabletColumn& root_column,
-                                                       const ColumnAccessPath* path) {
+                                                      const ColumnAccessPath* path) {
     if (!root_column.has_default_value() || root_column.type() != TYPE_JSON) {
         return;
     }
