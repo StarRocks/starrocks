@@ -727,9 +727,10 @@ Status VariantColumnReader::read_range(const Range<uint64_t>& range, const Filte
                 // Even if null flags are false, slices can be empty (empty strings are valid non-null values in BinaryColumn)
                 // But Variant requires non-empty value, so treat empty slices as null
                 if (metadata_slice.empty() || value_slice.empty()) {
-                    VLOG_FILE << "Empty metadata or value slice at row " << i
-                              << " (metadata_size=" << metadata_slice.size << ", value_size=" << value_slice.size
-                              << "), treating as null variant";
+                    // value slice probably is empty since it's been filtered out during encoding according to `filter`
+                    // VLOG_FILE << "Empty metadata or value slice at row " << i
+                    //           << " (metadata_size=" << metadata_slice.size << ", value_size=" << value_slice.size
+                    //           << "), treating as null variant";
                     variant_column->append(VariantRowValue::from_null());
                 } else if (auto variant = VariantRowValue::create(metadata_slice, value_slice); !variant.ok()) {
                     // Read malformed variant value as null
