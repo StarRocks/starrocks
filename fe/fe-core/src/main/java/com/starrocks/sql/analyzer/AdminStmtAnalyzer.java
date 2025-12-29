@@ -17,7 +17,6 @@ package com.starrocks.sql.analyzer;
 import com.google.common.base.Enums;
 import com.google.common.base.Strings;
 import com.starrocks.catalog.CatalogUtils;
-import com.starrocks.catalog.Replica;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.util.PropertyAnalyzer;
@@ -33,6 +32,7 @@ import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.PartitionRef;
 import com.starrocks.sql.ast.Property;
+import com.starrocks.sql.ast.ReplicaStatus;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.expression.BinaryPredicate;
 import com.starrocks.sql.ast.expression.BinaryType;
@@ -60,7 +60,7 @@ public class AdminStmtAnalyzer {
                                                         ConnectContext session) {
             long tabletId = -1;
             long backendId = -1;
-            Replica.ReplicaStatus status = null;
+            ReplicaStatus status = null;
             NodePosition pos = NodePosition.ZERO;
             for (Property property : adminSetReplicaStatusStmt.getProperties().getPropertySet()) {
                 String key = property.getKey();
@@ -79,8 +79,8 @@ public class AdminStmtAnalyzer {
                         throw new SemanticException(PARSER_ERROR_MSG.invalidIdFormat("backend", val), pos);
                     }
                 } else if (key.equalsIgnoreCase(AdminSetReplicaStatusStmt.STATUS)) {
-                    status = Enums.getIfPresent(Replica.ReplicaStatus.class, val.toUpperCase()).orNull();
-                    if (status != Replica.ReplicaStatus.BAD && status != Replica.ReplicaStatus.OK) {
+                    status = Enums.getIfPresent(ReplicaStatus.class, val.toUpperCase()).orNull();
+                    if (status != ReplicaStatus.BAD && status != ReplicaStatus.OK) {
                         throw new SemanticException(PARSER_ERROR_MSG.invalidPropertyValue("replica status", val), pos);
                     }
                 } else {
@@ -252,7 +252,7 @@ public class AdminStmtAnalyzer {
             if (!leftKey.equalsIgnoreCase("status")) {
                 return false;
             }
-            Replica.ReplicaStatus statusFilter = Enums.getIfPresent(Replica.ReplicaStatus.class,
+            ReplicaStatus statusFilter = Enums.getIfPresent(ReplicaStatus.class,
                     ((StringLiteral) rightChild).getStringValue().toUpperCase()).orNull();
             return statusFilter != null;
         }

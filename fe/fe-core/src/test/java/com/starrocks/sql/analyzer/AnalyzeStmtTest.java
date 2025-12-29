@@ -90,8 +90,8 @@ import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.connectContext;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.getConnectContext;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.getStarRocksAssert;
+import static com.starrocks.sql.ast.StatisticsType.MCDISTINCT;
 import static com.starrocks.statistic.AnalyzeMgr.IS_MULTI_COLUMN_STATS;
-import static com.starrocks.statistic.StatsConstants.StatisticsType.MCDISTINCT;
 
 public class AnalyzeStmtTest {
     private static StarRocksAssert starRocksAssert;

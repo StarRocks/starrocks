@@ -42,6 +42,7 @@ import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.StatisticsType;
 import com.starrocks.transaction.InsertTxnCommitAttachment;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TxnCommitAttachment;
@@ -1101,9 +1102,9 @@ public class AnalyzeMgr implements Writable {
     public static class MultiColumnStatsKey {
         private final long tableId;
         private final Set<Integer> columnIds;
-        private final List<StatsConstants.StatisticsType> statisticsTypes;
+        private final List<StatisticsType> statisticsTypes;
 
-        public MultiColumnStatsKey(long tableId, Set<Integer> columnIds, List<StatsConstants.StatisticsType> statisticsTypes) {
+        public MultiColumnStatsKey(long tableId, Set<Integer> columnIds, List<StatisticsType> statisticsTypes) {
             this.tableId = tableId;
             this.columnIds = columnIds;
             this.statisticsTypes = statisticsTypes;
@@ -1117,7 +1118,7 @@ public class AnalyzeMgr implements Writable {
             return columnIds;
         }
 
-        public List<StatsConstants.StatisticsType> getStatisticsTypes() {
+        public List<StatisticsType> getStatisticsTypes() {
             return statisticsTypes;
         }
 

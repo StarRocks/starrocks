@@ -32,6 +32,7 @@ import com.starrocks.sql.ast.OriginStatement;
 import com.starrocks.sql.ast.QualifiedName;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.StatisticsType;
 import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.ast.expression.Expr;
@@ -72,7 +73,7 @@ public class HyperStatisticsCollectJob extends StatisticsCollectJob {
     public HyperStatisticsCollectJob(Database db, Table table, List<Long> partitionIdList, List<String> columnNames,
                                      List<Type> columnTypes, StatsConstants.AnalyzeType type,
                                      StatsConstants.ScheduleType scheduleType, Map<String, String> properties,
-                                     List<StatsConstants.StatisticsType> statisticsTypes, List<List<String>> columnGroups,
+                                     List<StatisticsType> statisticsTypes, List<List<String>> columnGroups,
                                      boolean isManualJob) {
         super(db, table, columnNames, columnTypes, type, scheduleType, properties, statisticsTypes, columnGroups);
         this.partitionIdList = partitionIdList;

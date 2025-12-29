@@ -12,31 +12,33 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.ast;
 
 import com.starrocks.sql.parser.NodePosition;
 
-public class TruncatePartitionClause extends AlterTableClause {
+import java.util.List;
 
-    private PartitionRef partitionNames;
+public abstract class AnalyzeTypeDesc implements ParseNode {
+    protected final NodePosition pos;
 
-    public TruncatePartitionClause(PartitionRef partitionNames) {
-        this(partitionNames, NodePosition.ZERO);
-    }
-
-
-    public TruncatePartitionClause(PartitionRef partitionNames, NodePosition pos) {
-        super(pos);
-        this.partitionNames = partitionNames;
-    }
-
-    public PartitionRef getPartitionNames() {
-        return partitionNames;
+    protected AnalyzeTypeDesc(NodePosition pos) {
+        this.pos = pos;
     }
 
     @Override
-    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return ((AstVisitorExtendInterface<R, C>) visitor).visitTruncatePartitionClause(this, context);
+    public NodePosition getPos() {
+        return pos;
+    }
+
+    public boolean isHistogram() {
+        return false;
+    }
+
+    public boolean isBasic() {
+        return false;
+    }
+
+    public List<StatisticsType> getStatsTypes() {
+        return List.of();
     }
 }

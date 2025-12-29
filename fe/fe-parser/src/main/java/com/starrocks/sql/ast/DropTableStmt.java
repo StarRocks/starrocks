@@ -17,28 +17,31 @@ package com.starrocks.sql.ast;
 
 import com.starrocks.sql.parser.NodePosition;
 
-/**
- * DROP MATERIALIZED VIEW [ IF EXISTS ] <mv_name> IN|FROM [db_name].<table_name>
- * <p>
- * Parameters
- * IF EXISTS: Do not throw an error if the materialized view does not exist. A notice is issued in this case.
- * mv_name: The name of the materialized view to remove.
- * db_name: The name of db to which materialized view belongs.
- * table_name: The name of table to which materialized view belongs.
- */
-public class DropMaterializedViewStmt extends DdlStmt {
-
+// DROP TABLE
+public class DropTableStmt extends DdlStmt {
     private final boolean ifExists;
     private TableRef tableRef;
+    private final boolean isView;
+    private final boolean forceDrop;
 
-    public DropMaterializedViewStmt(boolean ifExists, TableRef tableRef) {
-        this(ifExists, tableRef, NodePosition.ZERO);
+    // used to mark whether it should be treated as a temporary table to distinguish subsequent processing logic,
+    // it should be set during analysis phase
+    private boolean temporaryTableMark = false;
+
+    public DropTableStmt(boolean ifExists, TableRef tableRef, boolean forceDrop) {
+        this(ifExists, tableRef, false, forceDrop, NodePosition.ZERO);
     }
 
-    public DropMaterializedViewStmt(boolean ifExists, TableRef tableRef, NodePosition pos) {
+    public DropTableStmt(boolean ifExists, TableRef tableRef, boolean isView, boolean forceDrop) {
+        this(ifExists, tableRef, isView, forceDrop, NodePosition.ZERO);
+    }
+
+    public DropTableStmt(boolean ifExists, TableRef tableRef, boolean isView, boolean forceDrop, NodePosition pos) {
         super(pos);
         this.ifExists = ifExists;
         this.tableRef = tableRef;
+        this.isView = isView;
+        this.forceDrop = forceDrop;
     }
 
     public boolean isSetIfExists() {
@@ -61,12 +64,28 @@ public class DropMaterializedViewStmt extends DdlStmt {
         return tableRef == null ? null : tableRef.getDbName();
     }
 
-    public String getMvName() {
+    public String getTableName() {
         return tableRef == null ? null : tableRef.getTableName();
+    }
+
+    public boolean isView() {
+        return isView;
+    }
+
+    public boolean isForceDrop() {
+        return this.forceDrop;
+    }
+
+    public void setTemporaryTableMark(boolean mark) {
+        this.temporaryTableMark = mark;
+    }
+
+    public boolean getTemporaryTableMark() {
+        return temporaryTableMark;
     }
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return ((AstVisitorExtendInterface<R, C>) visitor).visitDropMaterializedViewStatement(this, context);
+        return visitor.visitDropTableStatement(this, context);
     }
 }

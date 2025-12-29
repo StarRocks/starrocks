@@ -12,25 +12,25 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+
 package com.starrocks.sql.ast;
 
+import com.starrocks.sql.ast.ShowAlterStmt.AlterType;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
 
-// Alter table statement.
-public class AlterTableStmt extends DdlStmt {
+/*
+ * CANCEL ALTER COLUMN|ROLLUP FROM db_name.table_name
+ */
+public class CancelAlterTableStmt extends CancelStmt {
+
+    private final AlterType alterType;
+
     private TableRef tableRef;
-    private final List<AlterClause> alterClauseList;
 
-    public AlterTableStmt(TableRef tableRef, List<AlterClause> ops) {
-        this(tableRef, ops, NodePosition.ZERO);
-    }
-
-    public AlterTableStmt(TableRef tableRef, List<AlterClause> ops, NodePosition pos) {
-        super(pos);
-        this.tableRef = tableRef;
-        this.alterClauseList = ops;
+    public AlterType getAlterType() {
+        return alterType;
     }
 
     public TableRef getTableRef() {
@@ -39,10 +39,6 @@ public class AlterTableStmt extends DdlStmt {
 
     public void setTableRef(TableRef tableRef) {
         this.tableRef = tableRef;
-    }
-
-    public List<AlterClause> getAlterClauseList() {
-        return alterClauseList;
     }
 
     public String getCatalogName() {
@@ -57,8 +53,35 @@ public class AlterTableStmt extends DdlStmt {
         return tableRef == null ? null : tableRef.getTableName();
     }
 
+    private final List<Long> alterJobIdList;
+
+    public CancelAlterTableStmt(AlterType alterType, TableRef tableRef) {
+        this(alterType, tableRef, null);
+    }
+
+    public CancelAlterTableStmt(AlterType alterType, TableRef tableRef, List<Long> alterJobIdList) {
+        this(alterType, tableRef, alterJobIdList, NodePosition.ZERO);
+    }
+
+    public CancelAlterTableStmt(AlterType alterType, TableRef tableRef, List<Long> alterJobIdList, NodePosition pos) {
+        super(pos);
+        this.alterType = alterType;
+        this.tableRef = tableRef;
+        this.alterJobIdList = alterJobIdList;
+    }
+
+    public List<Long> getAlterJobIdList() {
+        return alterJobIdList;
+    }
+
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return ((AstVisitorExtendInterface<R, C>) visitor).visitAlterTableStatement(this, context);
+        return visitor.visitCancelAlterTableStatement(this, context);
     }
+
+    @Override
+    public String toString() {
+        return toSql();
+    }
+
 }

@@ -18,8 +18,8 @@
 package com.starrocks.persist;
 
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.catalog.Replica.ReplicaStatus;
 import com.starrocks.common.io.Writable;
+import com.starrocks.sql.ast.ReplicaStatus;
 
 public class SetReplicaStatusOperationLog implements Writable {
 

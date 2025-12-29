@@ -12,22 +12,37 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+
 package com.starrocks.sql.ast;
 
 import com.starrocks.sql.parser.NodePosition;
 
-public class CancelRefreshMaterializedViewStmt extends DdlStmt {
-    private TableRef tableRef;
-    private final boolean force;
+/**
+ * DROP MATERIALIZED VIEW [ IF EXISTS ] <mv_name> IN|FROM [db_name].<table_name>
+ * <p>
+ * Parameters
+ * IF EXISTS: Do not throw an error if the materialized view does not exist. A notice is issued in this case.
+ * mv_name: The name of the materialized view to remove.
+ * db_name: The name of db to which materialized view belongs.
+ * table_name: The name of table to which materialized view belongs.
+ */
+public class DropMaterializedViewStmt extends DdlStmt {
 
-    public CancelRefreshMaterializedViewStmt(TableRef tableRef, boolean force) {
-        this(tableRef, force, NodePosition.ZERO);
+    private final boolean ifExists;
+    private TableRef tableRef;
+
+    public DropMaterializedViewStmt(boolean ifExists, TableRef tableRef) {
+        this(ifExists, tableRef, NodePosition.ZERO);
     }
 
-    public CancelRefreshMaterializedViewStmt(TableRef tableRef, boolean force, NodePosition pos) {
+    public DropMaterializedViewStmt(boolean ifExists, TableRef tableRef, NodePosition pos) {
         super(pos);
+        this.ifExists = ifExists;
         this.tableRef = tableRef;
-        this.force = force;
+    }
+
+    public boolean isSetIfExists() {
+        return ifExists;
     }
 
     public TableRef getTableRef() {
@@ -50,12 +65,8 @@ public class CancelRefreshMaterializedViewStmt extends DdlStmt {
         return tableRef == null ? null : tableRef.getTableName();
     }
 
-    public boolean isForce() {
-        return force;
-    }
-
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return ((AstVisitorExtendInterface<R, C>) visitor).visitCancelRefreshMaterializedViewStatement(this, context);
+        return visitor.visitDropMaterializedViewStatement(this, context);
     }
 }

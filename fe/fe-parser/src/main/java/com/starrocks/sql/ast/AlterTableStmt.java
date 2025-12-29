@@ -12,29 +12,25 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.ast;
 
-import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
 
-public class DropHistogramStmt extends StatementBase {
+// Alter table statement.
+public class AlterTableStmt extends DdlStmt {
     private TableRef tableRef;
-    private List<String> columnNames;
-    private final List<Expr> columns;
+    private final List<AlterClause> alterClauseList;
 
-    private boolean isExternal = false;
-
-    public DropHistogramStmt(TableRef tableRef, List<Expr> columns) {
-        this(tableRef, columns, NodePosition.ZERO);
+    public AlterTableStmt(TableRef tableRef, List<AlterClause> ops) {
+        this(tableRef, ops, NodePosition.ZERO);
     }
 
-    public DropHistogramStmt(TableRef tableRef, List<Expr> columns, NodePosition pos) {
+    public AlterTableStmt(TableRef tableRef, List<AlterClause> ops, NodePosition pos) {
         super(pos);
         this.tableRef = tableRef;
-        this.columns = columns;
+        this.alterClauseList = ops;
     }
 
     public TableRef getTableRef() {
@@ -43,6 +39,10 @@ public class DropHistogramStmt extends StatementBase {
 
     public void setTableRef(TableRef tableRef) {
         this.tableRef = tableRef;
+    }
+
+    public List<AlterClause> getAlterClauseList() {
+        return alterClauseList;
     }
 
     public String getCatalogName() {
@@ -57,28 +57,8 @@ public class DropHistogramStmt extends StatementBase {
         return tableRef == null ? null : tableRef.getTableName();
     }
 
-    public List<String> getColumnNames() {
-        return columnNames;
-    }
-
-    public void setColumnNames(List<String> columnNames) {
-        this.columnNames = columnNames;
-    }
-
-    public List<Expr> getColumns() {
-        return columns;
-    }
-
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return ((AstVisitorExtendInterface<R, C>) visitor).visitDropHistogramStatement(this, context);
-    }
-
-    public boolean isExternal() {
-        return isExternal;
-    }
-
-    public void setExternal(boolean isExternal) {
-        this.isExternal = isExternal;
+        return visitor.visitAlterTableStatement(this, context);
     }
 }

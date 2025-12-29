@@ -18,7 +18,6 @@ import com.google.common.collect.Lists;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.type.Type;
-import org.apache.commons.collections4.CollectionUtils;
 
 import java.util.List;
 import java.util.Map;
@@ -100,7 +99,7 @@ public class AnalyzeStmt extends StatementBase {
     }
 
     public boolean isAllColumns() {
-        return CollectionUtils.isEmpty(columns);
+        return columns == null || columns.isEmpty();
     }
 
     public boolean isUsePredicateColumns() {
@@ -145,6 +144,6 @@ public class AnalyzeStmt extends StatementBase {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return ((AstVisitorExtendInterface<R, C>) visitor).visitAnalyzeStatement(this, context);
+        return visitor.visitAnalyzeStatement(this, context);
     }
 }

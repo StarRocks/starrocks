@@ -17,34 +17,32 @@ package com.starrocks.sql.ast;
 
 import com.starrocks.sql.parser.NodePosition;
 
-import java.util.Map;
+public class ShowIndexStmt extends ShowStmt {
+    private TableRef tableRef;
 
-public class InstallPluginStmt extends DdlStmt {
-
-    private final String pluginPath;
-    private final Map<String, String> properties;
-
-    public InstallPluginStmt(String pluginPath, Map<String, String> properties) {
-        this(pluginPath, properties, NodePosition.ZERO);
+    public ShowIndexStmt(TableRef tableRef) {
+        this(tableRef, NodePosition.ZERO);
     }
 
-    public InstallPluginStmt(String pluginPath, Map<String, String> properties, NodePosition pos) {
+    public ShowIndexStmt(TableRef tableRef, NodePosition pos) {
         super(pos);
-        this.pluginPath = pluginPath;
-        this.properties = properties;
+        this.tableRef = tableRef;
     }
 
-    public String getPluginPath() {
-        return pluginPath;
+    public TableRef getTableRef() {
+        return tableRef;
     }
 
-    public Map<String, String> getProperties() {
-        return properties;
+    public void setTableRef(TableRef tableRef) {
+        this.tableRef = tableRef;
+    }
+
+    public String getDbName() {
+        return tableRef == null ? null : tableRef.getDbName();
     }
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return ((AstVisitorExtendInterface<R, C>) visitor).visitInstallPluginStatement(this, context);
+        return visitor.visitShowIndexStatement(this, context);
     }
 }
-

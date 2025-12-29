@@ -148,6 +148,6 @@ public class DescribeStmt extends ShowStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return ((AstVisitorExtendInterface<R, C>) visitor).visitDescTableStmt(this, context);
+        return visitor.visitDescTableStmt(this, context);
     }
 }

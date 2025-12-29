@@ -35,6 +35,6 @@ public class ShowTemporaryTableStmt extends ShowTableStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return ((AstVisitorExtendInterface<R, C>) visitor).visitShowTemporaryTablesStatement(this, context);
+        return visitor.visitShowTemporaryTablesStatement(this, context);
     }
 }
