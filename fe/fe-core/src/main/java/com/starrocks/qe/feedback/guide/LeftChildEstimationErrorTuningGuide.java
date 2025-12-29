@@ -15,6 +15,7 @@
 package com.starrocks.qe.feedback.guide;
 
 import com.google.common.collect.Lists;
+import com.starrocks.analysis.JoinOperator;
 import com.starrocks.qe.feedback.NodeExecStats;
 import com.starrocks.qe.feedback.skeleton.JoinNode;
 import com.starrocks.qe.feedback.skeleton.SkeletonNode;
@@ -67,6 +68,11 @@ public class LeftChildEstimationErrorTuningGuide extends JoinTuningGuide {
         }
 
         PhysicalHashJoinOperator joinOperator = (PhysicalHashJoinOperator) optExpression.getOp();
+        JoinOperator joinType = joinOperator.getJoinType();
+        if (joinType.isAsofJoin() || joinType.isNullAwareLeftAntiJoin()) {
+            return Optional.empty();
+        }
+
         SkeletonNode rightChildNode = joinNode.getChild(1);
 
         NodeExecStats rightNodeExecStats = rightChildNode.getNodeExecStats();
