@@ -7605,7 +7605,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             sb.append(".");
             String text = context.identifier(i).getText();
             if (StringUtils.isNumeric(text)) {
-                sb.append("[" + integer.parseInt(text) + "]");
+                sb.append("[" + Integer.parseInt(text) + "]");
             } else {
                 sb.append(text);
             }
