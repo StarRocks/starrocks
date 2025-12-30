@@ -4485,11 +4485,10 @@ Status StringFunctions::regexp_position_prepare(FunctionContext* context, Functi
     return Status::OK();
 }
 
-Status StringFunctions::regexp_position_close(FunctionContext* context, 
-                                              FunctionContext::FunctionStateScope scope) {
+Status StringFunctions::regexp_position_close(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
     if (scope == FunctionContext::FRAGMENT_LOCAL) {
-        auto* state = reinterpret_cast<StringFunctionsState*>(
-            context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
+        auto* state =
+                reinterpret_cast<StringFunctionsState*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
         delete state;
     }
     return Status::OK();
@@ -4499,28 +4498,28 @@ static ColumnPtr regexp_position_const_pattern(re2::RE2* const_re, const Columns
     auto str_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
     auto start_viewer = ColumnViewer<TYPE_INT>(columns[2]);
     auto occurrence_viewer = ColumnViewer<TYPE_INT>(columns[3]);
-    
+
     auto size = columns[0]->size();
     ColumnBuilder<TYPE_INT> result(size);
-    
+
     for (int row = 0; row < size; ++row) {
         if (str_viewer.is_null(row) || start_viewer.is_null(row) || occurrence_viewer.is_null(row)) {
             result.append_null();
             continue;
         }
-        
+
         int start_pos = start_viewer.value(row);
         int occurrence = occurrence_viewer.value(row);
-        
+
         if (start_pos < 1 || occurrence < 1) {
             result.append(-1);
             continue;
         }
-        
+
         auto str_value = str_viewer.value(row);
         // get the number of code points in the string
         int utf8_length = utf8_len(str_value.data, str_value.data + str_value.size);
-        
+
         if (start_pos > utf8_length) {
             result.append(-1);
             continue;
@@ -4528,11 +4527,11 @@ static ColumnPtr regexp_position_const_pattern(re2::RE2* const_re, const Columns
         
         const char* search_start = skip_leading_utf8(str_value.data, str_value.data + str_value.size, start_pos - 1);
         int byte_offset = search_start - str_value.data;
-        
+
         int count = 0;
         re2::StringPiece str_sp(str_value.data, str_value.size);
         re2::StringPiece match;
-        
+
         bool found = false;
         while (byte_offset <= str_value.size) {
             if (const_re->Match(str_sp, byte_offset, str_value.size, re2::RE2::UNANCHORED, &match, 1)) {
@@ -4544,7 +4543,7 @@ static ColumnPtr regexp_position_const_pattern(re2::RE2* const_re, const Columns
                     found = true;
                     break;
                 }
-                
+
                 byte_offset = match.data() - str_value.data + match.size();
                 if (match.size() == 0) {
                     byte_offset++;
@@ -4553,64 +4552,64 @@ static ColumnPtr regexp_position_const_pattern(re2::RE2* const_re, const Columns
                 break;
             }
         }
-        
+
         if (!found) {
             result.append(-1);
         }
     }
-    
+
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
-static StatusOr<ColumnPtr> regexp_position_general(FunctionContext* context, re2::RE2::Options* options, const Columns& columns) {
+static StatusOr<ColumnPtr> regexp_position_general(FunctionContext* context, re2::RE2::Options* options,
+                                                   const Columns& columns) {
     auto str_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
     auto pattern_viewer = ColumnViewer<TYPE_VARCHAR>(columns[1]);
     auto start_viewer = ColumnViewer<TYPE_INT>(columns[2]);
     auto occurrence_viewer = ColumnViewer<TYPE_INT>(columns[3]);
-    
+
     auto size = columns[0]->size();
     ColumnBuilder<TYPE_INT> result(size);
-    
+
     for (int row = 0; row < size; ++row) {
-        if (str_viewer.is_null(row) || pattern_viewer.is_null(row) || 
-            start_viewer.is_null(row) || occurrence_viewer.is_null(row)) {
+        if (str_viewer.is_null(row) || pattern_viewer.is_null(row) || start_viewer.is_null(row) ||
+            occurrence_viewer.is_null(row)) {
             result.append_null();
             continue;
         }
-        
+
         int start_pos = start_viewer.value(row);
         int occurrence = occurrence_viewer.value(row);
-        
+
         if (start_pos < 1 || occurrence < 1) {
             result.append(-1);
             continue;
         }
-        
+
         auto str_value = str_viewer.value(row);
         auto pattern_value = pattern_viewer.value(row);
-        
+
         std::string pattern_str = pattern_value.to_string();
         // compile the pattern for each new row, keep in stack memory
         re2::RE2 local_re(pattern_str, *options);
         if (!local_re.ok()) {
-            return Status::InvalidArgument(
-                strings::Substitute("Invalid regex expression: $0", pattern_str));
+            return Status::InvalidArgument(strings::Substitute("Invalid regex expression: $0", pattern_str));
         }
-        
+
         int utf8_length = utf8_len(str_value.data, str_value.data + str_value.size);
-        
+
         if (start_pos > utf8_length) {
             result.append(-1);
             continue;
         }
-        
+
         const char* search_start = skip_leading_utf8(str_value.data, str_value.data + str_value.size, start_pos - 1);
         int byte_offset = search_start - str_value.data;
-        
+
         int count = 0;
         re2::StringPiece str_sp(str_value.data, str_value.size);
         re2::StringPiece match;
-        
+
         bool found = false;
         while (byte_offset <= str_value.size) {
             if (local_re.Match(str_sp, byte_offset, str_value.size, re2::RE2::UNANCHORED, &match, 1)) {
@@ -4621,7 +4620,7 @@ static StatusOr<ColumnPtr> regexp_position_general(FunctionContext* context, re2
                     found = true;
                     break;
                 }
-                
+
                 byte_offset = match.data() - str_value.data + match.size();
                 if (match.size() == 0) {
                     byte_offset++;
@@ -4630,12 +4629,12 @@ static StatusOr<ColumnPtr> regexp_position_general(FunctionContext* context, re2
                 break;
             }
         }
-        
+
         if (!found) {
             result.append(-1);
         }
     }
-    
+
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
