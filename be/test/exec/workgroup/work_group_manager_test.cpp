@@ -30,7 +30,7 @@ TWorkGroup create_twg(const int64_t id, const int64_t version, const std::string
     return twg;
 }
 
-TWorkGroupOp make_twg_op(const TWorkGroup &twg, const TWorkGroupOpType::type op_type)  {
+TWorkGroupOp make_twg_op(const TWorkGroup& twg, const TWorkGroupOpType::type op_type) {
     TWorkGroupOp op;
     op.__set_workgroup(twg);
     op.__set_op_type(op_type);
@@ -100,9 +100,9 @@ PARALLEL_TEST(WorkGroupManagerTest, test_if_unused_memory_pools_are_cleaned_up) 
         auto twg3 = create_twg(112, 1, "wg112", WorkGroup::DEFAULT_MEM_POOL, 0.5);
 
         std::vector create_operations{
-            make_twg_op(twg1, TWorkGroupOpType::WORKGROUP_OP_CREATE),
-            make_twg_op(twg2, TWorkGroupOpType::WORKGROUP_OP_CREATE),
-            make_twg_op(twg3, TWorkGroupOpType::WORKGROUP_OP_CREATE),
+                make_twg_op(twg1, TWorkGroupOpType::WORKGROUP_OP_CREATE),
+                make_twg_op(twg2, TWorkGroupOpType::WORKGROUP_OP_CREATE),
+                make_twg_op(twg3, TWorkGroupOpType::WORKGROUP_OP_CREATE),
         };
 
         _manager->apply(create_operations);
@@ -113,10 +113,8 @@ PARALLEL_TEST(WorkGroupManagerTest, test_if_unused_memory_pools_are_cleaned_up) 
         twg1.version++;
         twg2.version++;
 
-        std::vector delete_operations{
-            make_twg_op(twg1, TWorkGroupOpType::WORKGROUP_OP_DELETE),
-            make_twg_op(twg2, TWorkGroupOpType::WORKGROUP_OP_DELETE)
-        };
+        std::vector delete_operations{make_twg_op(twg1, TWorkGroupOpType::WORKGROUP_OP_DELETE),
+                                      make_twg_op(twg2, TWorkGroupOpType::WORKGROUP_OP_DELETE)};
 
         _manager->apply(delete_operations);
         std::this_thread::sleep_for(std::chrono::seconds(1));

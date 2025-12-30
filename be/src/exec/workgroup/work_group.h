@@ -159,8 +159,10 @@ public:
     void mark_del(const std::chrono::seconds expiration_time) {
         bool expect_false = false;
         if (_is_marked_del.compare_exchange_strong(expect_false, true)) {
-            _vacuum_ttl.store(duration_cast<vacuum_time_precision>(
-                steady_clock::now().time_since_epoch() + expiration_time).count(), std::memory_order_release);
+            _vacuum_ttl.store(
+                    duration_cast<vacuum_time_precision>(steady_clock::now().time_since_epoch() + expiration_time)
+                            .count(),
+                    std::memory_order_release);
         }
     }
     // no drivers shall be added to this workgroup
