@@ -1824,7 +1824,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
                 (QueryStatement) visit(context.queryStatement()),
                 createPos(context),
                 getCaseInsensitiveProperties(context.properties())
-                );
+        );
     }
 
     @Override
@@ -5034,7 +5034,6 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         return new DropPartitionColumnClause(partitionExprList, createPos(context));
     }
 
-
     @Override
     public ParseNode visitAddColumnsClause(com.starrocks.sql.parser.StarRocksParser.AddColumnsClauseContext context) {
         List<ColumnDef> columnDefs = getColumnDefs(context.columnDesc());
@@ -6310,7 +6309,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             if (context.bracketHint().generalLiteralExpressionList() != null) {
                 joinRelation.setSkewValues(
                         visit(context.bracketHint().generalLiteralExpressionList().generalLiteralExpression(),
-                        Expr.class));
+                                Expr.class));
             }
         }
 
@@ -7334,7 +7333,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         Expr compareExpr = (Expr) visit(context.value);
 
         ConnectContext connectContext = ConnectContext.get();
-        
+
         List<com.starrocks.sql.parser.StarRocksParser.StringContext> stringNodes = context.stringList().string();
         int literalCount = stringNodes.size();
         List<Expr> stringExprList = visit(stringNodes, Expr.class);
@@ -7357,7 +7356,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         Expr compareExpr = (Expr) visit(context.value);
 
         com.starrocks.qe.ConnectContext connectContext = com.starrocks.qe.ConnectContext.get();
-        
+
         List<org.antlr.v4.runtime.tree.TerminalNode> integerNodes = context.integerList().INTEGER_VALUE();
         int literalCount = integerNodes.size();
 
@@ -7395,7 +7394,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
 
         return new InPredicate(compareExpr, intList, isNotIn, createPos(context));
     }
-    
+
     /**
      * Parse integer literal with the exact same logic as visitIntegerValue
      */
@@ -7596,6 +7595,30 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         } catch (Exception e) {
             throw new IllegalArgumentException(String.format("Cast argument %s to int type failed.", ExprToSql.toSql(value)));
         }
+    }
+
+    @Override
+    public ParseNode visitVariantReference(com.starrocks.sql.parser.StarRocksParser.VariantReferenceContext context) {
+        String field = context.identifier(0).getText();
+        StringBuilder sb = new StringBuilder("$");
+        for (int i = 1; i < context.identifier().size(); i++) {
+            sb.append(".");
+            String text = context.identifier(i).getText();
+            if (StringUtils.isNumeric(text)) {
+                sb.append("[" + integer.parseInt(text) + "]");
+            } else {
+                sb.append(text);
+            }
+        }
+        String functionName = "variant_query";
+        if (context.type() != null) {
+            String type = context.type().identifier().getText().lowerCase();
+            functionName = "get_variant_" + type;
+        }
+        List<Expr> args = new ArrayList<>();
+        args.add(new StringLiteral(field));
+        args.add(new StringLiteral(sb.toString()));
+        return new FunctionCallExpr(functionName, args, createPos(context));
     }
 
     @Override
@@ -9319,7 +9342,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         Type intermediateType = aggFunc.getIntermediateTypeOrReturnType();
         Type finalType = AnalyzerUtils.transformTableColumnType(intermediateType, false);
         AggStateDesc aggStateDesc = new AggStateDesc(aggFunc.functionName(), aggFunc.getReturnType().clone(),
-                argTypes.stream().map(c -> c.clone()).collect(toList()), 
+                argTypes.stream().map(c -> c.clone()).collect(toList()),
                 AggStateDesc.isAggFuncResultNullable(aggFunc.functionName()));
         return Pair.create(finalType.clone(), aggStateDesc);
     }
