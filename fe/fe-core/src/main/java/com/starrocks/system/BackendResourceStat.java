@@ -27,6 +27,7 @@ import org.apache.logging.log4j.Logger;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Collectors;
@@ -145,7 +146,7 @@ public class BackendResourceStat {
         return DEFAULT_CORES_OF_BE;
     }
 
-    public int getMinNumHardwareCoresOfBe() {
+    public int getMinNumCoresOfBe() {
         int snapshot = cachedMinNumCores;
         if (snapshot > 0) {
             return snapshot;
@@ -166,6 +167,36 @@ public class BackendResourceStat {
 
             return min;
         }
+    }
+
+    public int getMinNumCoresOfBe(long warehouseId) {
+        WarehouseResourceStat stat = warehouseIdToStat.get(warehouseId);
+        if (stat != null) {
+            return stat.getMinNumCoresOfBe();
+        }
+        return DEFAULT_CORES_OF_BE;
+    }
+
+    public int getMinNumCoresOfBeExceptWarehouses(Set<Long> warehouseIds) {
+        if (warehouseIds.isEmpty()) {
+            return getMinNumCoresOfBe();
+        }
+
+        int min = Integer.MAX_VALUE;
+        for (Map.Entry<Long, WarehouseResourceStat> entry : warehouseIdToStat.entrySet()) {
+            if (warehouseIds.contains(entry.getKey())) {
+                continue;
+            }
+
+            int curMin = entry.getValue().getMinNumCoresOfBe();
+            if (curMin < min) {
+                min = curMin;
+            }
+        }
+        if (min == Integer.MAX_VALUE) {
+            return DEFAULT_CORES_OF_BE;
+        }
+        return min;
     }
 
     public long getAvgMemLimitBytes(long warehouseId) {
@@ -331,6 +362,25 @@ public class BackendResourceStat {
                 int avg = sum / snapshotNumCoresPerBe.size();
                 cachedAvgNumCores = avg;
                 return avg;
+            }
+        }
+
+        public int getMinNumCoresOfBe() {
+            int snapshotMin = cachedMinNumCores;
+            if (snapshotMin > 0) {
+                return snapshotMin;
+            }
+
+            try (CloseableLock ignored = CloseableLock.lock(lock)) {
+                if (numCoresPerBe.isEmpty()) {
+                    return DEFAULT_CORES_OF_BE;
+                }
+
+                List<Integer> snapshotNumCoresPerBe = new ArrayList<>(numCoresPerBe.values());
+                int min = snapshotNumCoresPerBe.stream().reduce(Integer::min).orElse(DEFAULT_CORES_OF_BE);
+                min = Math.max(min, 1);
+                cachedMinNumCores = min;
+                return min;
             }
         }
 
