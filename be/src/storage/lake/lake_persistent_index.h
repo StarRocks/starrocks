@@ -14,10 +14,13 @@
 
 #pragma once
 
+#include "storage/lake/lake_persistent_index_key_value_merger.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/types_fwd.h"
 #include "storage/persistent_index.h"
+#include "storage/sstable/filter_policy.h"
 #include "storage/sstable/sstable_predicate_utils.h"
+#include "storage/sstable/table_builder.h"
 
 namespace starrocks {
 class TxnLogPB;
@@ -30,38 +33,10 @@ class TableBuilder;
 
 namespace lake {
 
-using KeyIndex = size_t;
-using KeyIndexSet = std::set<KeyIndex>;
 class MetaFileBuilder;
 class PersistentIndexMemtable;
 class PersistentIndexSstable;
 class TabletManager;
-
-class KeyValueMerger {
-public:
-    explicit KeyValueMerger(const std::string& key, uint64_t max_rss_rowid, sstable::TableBuilder* builder,
-                            bool merge_base_level)
-            : _key(std::move(key)),
-              _max_rss_rowid(max_rss_rowid),
-              _builder(builder),
-              _merge_base_level(merge_base_level) {}
-
-    Status merge(const sstable::Iterator* iter_ptr);
-
-    Status finish() { return flush(); }
-
-private:
-    Status flush();
-
-private:
-    std::string _key;
-    uint64_t _max_rss_rowid = 0;
-    sstable::TableBuilder* _builder;
-    std::list<IndexValueWithVer> _index_value_vers;
-    // If do merge base level, that means we can delete NullIndexValue items safely.
-    bool _merge_base_level = false;
-    sstable::CachedPredicateEvaluator _predicate_evaluator;
-};
 
 // LakePersistentIndex is not thread-safe.
 // Caller should take care of the multi-thread safety
@@ -189,8 +164,9 @@ private:
                                            std::unique_ptr<sstable::Iterator>* merging_iter_ptr,
                                            bool* merge_base_level);
 
-    static Status merge_sstables(std::unique_ptr<sstable::Iterator> iter_ptr, sstable::TableBuilder* builder,
-                                 bool base_level_merge);
+    static StatusOr<std::vector<KeyValueMerger::KeyValueMergerOutput>> merge_sstables(
+            std::unique_ptr<sstable::Iterator> iter_ptr, bool base_level_merge, TabletManager* tablet_mgr,
+            int64_t tablet_id);
 
 private:
     std::unique_ptr<PersistentIndexMemtable> _memtable;

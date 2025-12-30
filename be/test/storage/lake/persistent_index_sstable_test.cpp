@@ -218,7 +218,8 @@ TEST_F(PersistentIndexSstableTest, test_persistent_index_sstable) {
         map.emplace(fmt::format("test_key_{:016X}", i), std::make_pair(100, IndexValue(i)));
     }
     uint64_t filesize = 0;
-    ASSERT_OK(PersistentIndexSstable::build_sstable(map, file.get(), &filesize));
+    PersistentIndexSstableRangePB range_pb;
+    ASSERT_OK(PersistentIndexSstable::build_sstable(map, file.get(), &filesize, &range_pb));
     // 2. open sstable
     std::unique_ptr<PersistentIndexSstable> sst = std::make_unique<PersistentIndexSstable>();
     ASSIGN_OR_ABORT(auto read_file, fs::new_random_access_file(lake::join_path(kTestDir, filename)));
@@ -227,6 +228,8 @@ TEST_F(PersistentIndexSstableTest, test_persistent_index_sstable) {
     PersistentIndexSstablePB sstable_pb;
     sstable_pb.set_filename(filename);
     sstable_pb.set_filesize(filesize);
+    sstable_pb.mutable_range()->CopyFrom(range_pb);
+    sstable_pb.mutable_fileset_id()->CopyFrom(UniqueId::gen_uid().to_proto());
     ASSERT_OK(sst->init(std::move(read_file), sstable_pb, cache_ptr.get()));
     // check memory usage
     ASSERT_TRUE(sst->memory_usage() > 0);

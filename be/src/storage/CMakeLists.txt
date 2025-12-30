@@ -225,6 +225,10 @@ set(STORAGE_FILES
     lake/external_cluster_snapshot_task_helper.cpp
     lake/external_cluster_snapshot_task_rpc.cpp
     lake/external_cluster_snapshot_task.cpp
+    lake/lake_persistent_index_parallel_compact_mgr.cpp
+    lake/lake_persistent_index_size_tiered_compaction_strategy.cpp
+    lake/persistent_index_sstable_fileset.cpp
+    lake/lake_persistent_index_key_value_merger.cpp
     load_spill_block_manager.cpp
     load_chunk_spiller.cpp
     sstable/block_builder.cpp
