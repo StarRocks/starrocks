@@ -77,7 +77,11 @@ public interface WorkerProvider {
 
     void reportDataNodeNotFoundException() throws NonRecoverableException;
 
-    void reportWorkerNotFoundException() throws NonRecoverableException;
+    void reportWorkerNotFoundException(String errorMessagePrefix) throws NonRecoverableException;
+
+    default void reportWorkerNotFoundException() throws NonRecoverableException {
+        reportWorkerNotFoundException("");
+    }
 
     boolean isWorkerSelected(long workerId);
 
