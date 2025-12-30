@@ -1099,7 +1099,7 @@ public class FunctionAnalyzer {
 
         Type[] argumentTypes = node.getChildren().stream().map(Expr::getType).toArray(Type[]::new);
 
-        return Expr.getBuiltinFunction(FunctionSet.REGEXP_POSITION, argumentTypes,
+        return ExprUtils.getBuiltinFunction(FunctionSet.REGEXP_POSITION, argumentTypes,
                 Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
     }
 
