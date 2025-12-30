@@ -202,8 +202,6 @@ public class ShortCircuitHybridExecutor extends ShortCircuitExecutor {
 
     /**
      * compute all tablets per be
-     *
-     * @return
      */
     private SetMultimap<TNetworkAddress, TabletWithVersion> assignTablet2Backends() throws NonRecoverableException {
         SetMultimap<TNetworkAddress, TabletWithVersion> backend2Tablets = HashMultimap.create();
@@ -221,7 +219,7 @@ public class ShortCircuitHybridExecutor extends ShortCircuitExecutor {
 
             Optional<Backend> be = pick(scanBackendIds, aliveIdToBackends);
             if (be.isEmpty()) {
-                workerProvider.reportWorkerNotFoundException();
+                workerProvider.reportWorkerNotFoundException("No alive backend for short-circuit query. ");
             }
             be.ifPresent(backend -> backend2Tablets.put(be.get().getBrpcAddress(), tabletWithVersion));
         }
