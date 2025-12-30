@@ -43,6 +43,7 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 public class DefaultWorkerProviderTest {
     private final ImmutableMap<Long, ComputeNode> id2Backend = genWorkers(0, 10, Backend::new, false);
@@ -394,5 +395,20 @@ public class DefaultWorkerProviderTest {
     public static void testUsingWorkerHelper(DefaultWorkerProvider workerProvider, Long workerId) {
         Assertions.assertTrue(workerProvider.isWorkerSelected(workerId));
         assertThat(workerProvider.getSelectedWorkerIds()).contains(workerId);
+    }
+
+    @Test
+    public void testReportNotFoundException() {
+        DefaultWorkerProvider provider = new DefaultWorkerProvider(id2Backend, id2ComputeNode,
+                availableId2Backend, availableId2ComputeNode, true, 0);
+        assertThatThrownBy(provider::reportWorkerNotFoundException)
+                .isInstanceOf(NonRecoverableException.class)
+                .hasMessageContaining("Compute node not found. Check if any compute node is down.compute node:");
+        assertThatThrownBy(() -> provider.reportWorkerNotFoundException("prefix:"))
+                .isInstanceOf(NonRecoverableException.class)
+                .hasMessageContaining("prefix:Compute node not found. Check if any compute node is down.compute node:");
+        assertThatThrownBy(provider::reportDataNodeNotFoundException)
+                .isInstanceOf(NonRecoverableException.class)
+                .hasMessageContaining("Backend node not found. Check if any backend node is down.backend: ");
     }
 }
