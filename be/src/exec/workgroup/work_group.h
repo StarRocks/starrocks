@@ -253,8 +253,8 @@ private:
     int64_t _spill_mem_limit_bytes = -1;
 
     std::string _mem_pool;
-    std::shared_ptr<MemTracker> _mem_tracker = nullptr;
     std::shared_ptr<MemTracker> _shared_mem_tracker = nullptr;
+    std::shared_ptr<MemTracker> _mem_tracker = nullptr;
     std::shared_ptr<MemTracker> _connector_scan_mem_tracker = nullptr;
 
     WorkGroupDriverSchedEntity _driver_sched_entity;
