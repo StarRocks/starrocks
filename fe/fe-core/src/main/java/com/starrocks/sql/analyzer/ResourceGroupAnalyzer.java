@@ -28,10 +28,12 @@ import com.starrocks.catalog.ResourceGroupClassifier;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.BackendResourceStat;
 import com.starrocks.thrift.TWorkGroupType;
+import com.starrocks.warehouse.Warehouse;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.net.util.SubnetUtils;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -156,12 +158,23 @@ public class ResourceGroupAnalyzer {
     public static void analyzeProperties(ResourceGroup resourceGroup, Map<String, String> properties)
             throws SemanticException {
         final int avgCoreNum = BackendResourceStat.getInstance().getAvgNumCoresOfBe();
+        final boolean hasWarehouseProperty =
+                properties.keySet().stream().anyMatch(key -> key.equalsIgnoreCase(ResourceGroup.WAREHOUSES));
         for (Map.Entry<String, String> e : properties.entrySet()) {
             String key = e.getKey();
             String value = e.getValue();
             try {
+                if (key.equalsIgnoreCase(ResourceGroup.WAREHOUSES)) {
+                    List<String> warehouses = parseWarehouses(value);
+                    resourceGroup.setWarehouses(warehouses);
+                    continue;
+                }
                 if (key.equalsIgnoreCase(ResourceGroup.CPU_CORE_LIMIT) || key.equalsIgnoreCase(ResourceGroup.CPU_WEIGHT)) {
                     int cpuWeight = Integer.parseInt(value);
+                    if (cpuWeight > 0 && hasWarehouseProperty) {
+                        throw new SemanticException("'cpu_weight' cannot be set when 'warehouses' is specified, " +
+                                "please use 'cpu_weight_percent' instead");
+                    }
                     if (cpuWeight > avgCoreNum) {
                         throw new SemanticException(
                                 String.format("%s should range from 0 to %d", ResourceGroup.CPU_WEIGHT, avgCoreNum));
@@ -169,9 +182,22 @@ public class ResourceGroupAnalyzer {
                     resourceGroup.setCpuWeight(cpuWeight);
                     continue;
                 }
+                if (key.equalsIgnoreCase(ResourceGroup.CPU_WEIGHT_PERCENT)) {
+                    int cpuWeightPercent = Integer.parseInt(value);
+                    if (cpuWeightPercent < 0 || cpuWeightPercent > 100) {
+                        throw new SemanticException(
+                                String.format("%s should range from [0, 100]", ResourceGroup.CPU_WEIGHT_PERCENT));
+                    }
+                    resourceGroup.setCpuWeightPercent(cpuWeightPercent);
+                    continue;
+                }
                 if (key.equalsIgnoreCase(ResourceGroup.EXCLUSIVE_CPU_CORES)) {
                     final int exclusiveCpuCores = Integer.parseInt(value);
-                    final int minCoreNum = BackendResourceStat.getInstance().getMinNumHardwareCoresOfBe();
+                    if (exclusiveCpuCores > 0 && hasWarehouseProperty) {
+                        throw new SemanticException("'exclusive_cpu_cores' cannot be set when 'warehouses' is specified, " +
+                                "please use 'exclusive_cpu_percent' instead");
+                    }
+                    final int minCoreNum = BackendResourceStat.getInstance().getMinNumCoresOfBe();
                     if (exclusiveCpuCores >= minCoreNum) {
                         throw new SemanticException(String.format(
                                 "%s cannot exceed the minimum number of CPU cores available on the backends minus one [%d]",
@@ -180,8 +206,20 @@ public class ResourceGroupAnalyzer {
                     resourceGroup.setExclusiveCpuCores(exclusiveCpuCores);
                     continue;
                 }
+                if (key.equalsIgnoreCase(ResourceGroup.EXCLUSIVE_CPU_PERCENT)) {
+                    int exclusiveCpuPercent = Integer.parseInt(value);
+                    if (exclusiveCpuPercent < 0 || exclusiveCpuPercent >= 100) {
+                        throw new SemanticException(
+                                String.format("%s should range from [0, 100)", ResourceGroup.EXCLUSIVE_CPU_PERCENT));
+                    }
+                    resourceGroup.setExclusiveCpuPercent(exclusiveCpuPercent);
+                    continue;
+                }
                 if (key.equalsIgnoreCase(ResourceGroup.MAX_CPU_CORES)) {
                     int maxCpuCores = Integer.parseInt(value);
+                    if (maxCpuCores > 0 && hasWarehouseProperty) {
+                        throw new SemanticException("'max_cpu_cores' cannot be set when 'warehouses' is specified");
+                    }
                     if (maxCpuCores > avgCoreNum) {
                         throw new SemanticException(String.format("max_cpu_cores should range from 0 to %d", avgCoreNum));
                     }
@@ -282,4 +320,122 @@ public class ResourceGroupAnalyzer {
             throw new SemanticException("Unknown property: " + key);
         }
     }
+<<<<<<< HEAD
+=======
+
+    /**
+     * Analyze CreateResourceGroupStmt for validation only
+     * The actual ResourceGroup construction is now handled by ResourceGroupBuilder
+     */
+    public static void analyzeCreateResourceGroupStmt(CreateResourceGroupStmt stmt) throws SemanticException {
+        // Validate classifiers by converting them (this validates the syntax and format)
+        for (List<Predicate> predicates : stmt.getClassifiers()) {
+            convertPredicateToClassifier(predicates);
+        }
+
+        // Create a temporary ResourceGroup to validate properties
+        ResourceGroup tempResourceGroup = new ResourceGroup();
+        analyzeProperties(tempResourceGroup, stmt.getProperties());
+
+        // Validate required properties exist
+        if (tempResourceGroup.getMemLimit() == null) {
+            throw new SemanticException("property 'mem_limit' is absent");
+        }
+
+        // Set default type if not specified for validation
+        if (tempResourceGroup.getResourceGroupType() == null) {
+            tempResourceGroup.setResourceGroupType(TWorkGroupType.WG_NORMAL);
+        }
+
+        // Validate short query resource group constraints
+        if (tempResourceGroup.getResourceGroupType() == TWorkGroupType.WG_SHORT_QUERY &&
+                (tempResourceGroup.getExclusiveCpuCores() != null && tempResourceGroup.getExclusiveCpuCores() > 0)) {
+            throw new SemanticException("short query resource group should not set exclusive_cpu_cores");
+        }
+
+        // Validate CPU parameters
+        ResourceGroup.validateCpuParameters(tempResourceGroup.getRawCpuWeight(), tempResourceGroup.getCpuWeightPercent(),
+                tempResourceGroup.getExclusiveCpuCores(), tempResourceGroup.getExclusiveCpuPercent(),
+                tempResourceGroup.getMaxCpuCores(),
+                tempResourceGroup.getResourceGroupType(), tempResourceGroup.getWarehouses());
+    }
+
+    /**
+     * Analyze AlterResourceGroupStmt for validation only
+     * The actual ResourceGroup modification is now handled by ResourceGroupBuilder
+     */
+    public static void analyzeAlterResourceGroupStmt(AlterResourceGroupStmt stmt) throws SemanticException {
+        String name = stmt.getName();
+        AlterResourceGroupStmt.SubCommand cmd = stmt.getCmd();
+
+        // Validate classifiers by converting them (this validates the syntax and format)
+        if (cmd instanceof AlterResourceGroupStmt.AddClassifiers addClassifiers) {
+            for (List<Predicate> predicates : addClassifiers.getClassifiers()) {
+                convertPredicateToClassifier(predicates);
+            }
+        } else if (cmd instanceof AlterResourceGroupStmt.AlterProperties alterProperties) {
+            // Create a temporary ResourceGroup to validate properties
+            ResourceGroup tempResourceGroup = new ResourceGroup();
+            analyzeProperties(tempResourceGroup, alterProperties.getProperties());
+
+            // Validate that type cannot be changed
+            if (tempResourceGroup.getResourceGroupType() != null) {
+                throw new SemanticException("type of ResourceGroup is immutable");
+            }
+
+            // Validate that at least one property is specified
+            if (tempResourceGroup.getRawCpuWeight() == null &&
+                    tempResourceGroup.getCpuWeightPercent() == null &&
+                    tempResourceGroup.getExclusiveCpuCores() == null &&
+                    tempResourceGroup.getExclusiveCpuPercent() == null &&
+                    tempResourceGroup.getMemLimit() == null &&
+                    tempResourceGroup.getConcurrencyLimit() == null &&
+                    tempResourceGroup.getMaxCpuCores() == null &&
+                    tempResourceGroup.getBigQueryCpuSecondLimit() == null &&
+                    tempResourceGroup.getBigQueryMemLimit() == null &&
+                    tempResourceGroup.getBigQueryScanRowsLimit() == null &&
+                    tempResourceGroup.getSpillMemLimitThreshold() == null &&
+                    tempResourceGroup.getWarehouses() == null) {
+                throw new SemanticException("At least one of ('cpu_weight','cpu_weight_percent'," +
+                        "'exclusive_cpu_cores','exclusive_cpu_percent','mem_limit','max_cpu_cores','concurrency_limit'," +
+                        "'big_query_mem_limit', 'big_query_scan_rows_limit','big_query_cpu_second_limit'," +
+                        "'spill_mem_limit_threshold','warehouses') should be specified");
+            }
+        }
+
+        // Validate builtin resource group constraints
+        if (ResourceGroup.BUILTIN_WG_NAMES.contains(name) && !(cmd instanceof AlterResourceGroupStmt.AlterProperties)) {
+            throw new SemanticException(String.format("cannot alter classifiers of builtin resource group [%s]", name));
+        }
+    }
+
+    public static void analyzeDropResourceGroupStmt(DropResourceGroupStmt stmt) throws SemanticException {
+        String name = stmt.getName();
+        if (ResourceGroup.BUILTIN_WG_NAMES.contains(name)) {
+            throw new SemanticException(String.format("cannot drop builtin resource group [%s]", name));
+        }
+    }
+
+    private static List<String> parseWarehouses(String warehousesValue) {
+        List<String> warehouses = new ArrayList<>();
+        for (String token : warehousesValue.split(",")) {
+            String name = token.trim();
+            if (!name.isEmpty()) {
+                warehouses.add(name);
+            }
+        }
+
+        Set<String> dedup = new HashSet<>();
+        for (String warehouseName : warehouses) {
+            if (!dedup.add(warehouseName)) {
+                throw new SemanticException(String.format("Duplicate warehouse in warehouses: %s", warehouseName));
+            }
+            Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouseAllowNull(warehouseName);
+            if (warehouse == null) {
+                throw new SemanticException(String.format("Unknown warehouse: %s", warehouseName));
+            }
+        }
+        return warehouses;
+    }
+>>>>>>> df7b521d15 ([Feature] Support warehouses, cpu_weight_percent, exclusive_cpu_weight for resource group (#66947))
 }

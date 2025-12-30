@@ -16,6 +16,7 @@ package com.starrocks.catalog;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.authorization.AuthorizationMgr;
 import com.starrocks.authorization.PrivilegeBuiltinConstants;
@@ -42,10 +43,12 @@ import com.starrocks.sql.ast.DropResourceGroupStmt;
 import com.starrocks.sql.ast.ShowResourceGroupStmt;
 import com.starrocks.sql.optimizer.cost.feature.CostPredictor;
 import com.starrocks.system.BackendResourceStat;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TWorkGroup;
 import com.starrocks.thrift.TWorkGroupOp;
 import com.starrocks.thrift.TWorkGroupOpType;
 import com.starrocks.thrift.TWorkGroupType;
+import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -68,9 +71,6 @@ import static com.starrocks.server.WarehouseManager.DEFAULT_WAREHOUSE_ID;
 public class ResourceGroupMgr implements Writable {
     private static final Logger LOG = LogManager.getLogger(ResourceGroupMgr.class);
 
-    private static final String EXCEED_TOTAL_EXCLUSIVE_CPU_CORES_ERR_MSG =
-            "the sum of %s across all resource groups cannot exceed the minimum number of CPU cores " +
-                    "available on the backends minus one [%d]";
     public static final String SHORT_QUERY_SET_EXCLUSIVE_CPU_CORES_ERR_MSG =
             "'short_query' ResourceGroup cannot set 'exclusive_cpu_cores', " +
                     "since it use 'cpu_weight' as 'exclusive_cpu_cores'";
@@ -87,7 +87,6 @@ public class ResourceGroupMgr implements Writable {
     private final Map<Long, Map<Long, TWorkGroup>> activeResourceGroupsPerBe = new HashMap<>();
     private final Map<Long, Long> minVersionPerBe = new HashMap<>();
     private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
-    private int sumExclusiveCpuCores = 0;
     private volatile boolean hasCreatedDefaultResourceGroups = false;
 
     private void readLock() {
@@ -138,12 +137,8 @@ public class ResourceGroupMgr implements Writable {
                 throw new DdlException("This type Resource Group need define classifiers.");
             }
 
-            final int minCoreNum = BackendResourceStat.getInstance().getMinNumHardwareCoresOfBe();
-            if (wg.getNormalizedExclusiveCpuCores() > 0 &&
-                    sumExclusiveCpuCores + wg.getNormalizedExclusiveCpuCores() >= minCoreNum) {
-                throw new DdlException(String.format(EXCEED_TOTAL_EXCLUSIVE_CPU_CORES_ERR_MSG,
-                        ResourceGroup.EXCLUSIVE_CPU_CORES, minCoreNum - 1));
-            }
+            validateExclusiveCpuCoresInlock(
+                    wg.getNormalizedExclusiveCpuCores(), wg.getExclusiveCpuPercent(), wg.getWarehouses(), wg);
 
             if (needReplace) {
                 dropResourceGroupUnlocked(wg.getName());
@@ -320,6 +315,126 @@ public class ResourceGroupMgr implements Writable {
         }
     }
 
+    private int getExclusiveCpuCores(Integer exclusiveCpuCores, Integer exclusiveCpuPercent, int minCoreNum) {
+        if (exclusiveCpuCores != null && exclusiveCpuCores > 0) {
+            return exclusiveCpuCores;
+        } else if (exclusiveCpuPercent != null && exclusiveCpuPercent > 0) {
+            return minCoreNum * exclusiveCpuPercent / 100;
+        } else {
+            return 0;
+        }
+    }
+
+    private static class WarehouseCoresInfo {
+        private final int minCores;
+        private int sumExclusiveCpuCores = 0;
+
+        private WarehouseCoresInfo(int minCores) {
+            this.minCores = minCores;
+        }
+    }
+
+    /**
+     * For each warehouse, the sum of the exclusive CPU cores of all effective resource groups on that warehouse plus one must
+     * not exceed the number of CPU cores of the smallest BE in that resource group.
+     *
+     * <p> The resource groups that are effective on a warehouse are defined as follows:
+     * - For a warehouse with bound resource groups: both the resource groups bound to that warehouse and the resource groups not
+     * bound to any warehouse.
+     * - For a warehouse without bound resource groups: the resource groups not bound to any warehouse.
+     */
+    private void validateExclusiveCpuCoresInlock(Integer exclusiveCpuCores, Integer exclusiveCpuPercent, List<String> warehouses,
+                                                 ResourceGroup wg)
+            throws DdlException {
+        Set<Long> boundWhIds = Sets.newHashSet();
+        Map<String, WarehouseCoresInfo> boundWhToItem = new HashMap<>();
+
+        List<ResourceGroup> groups = new ArrayList<>(resourceGroupMap.values());
+        if (!resourceGroupMap.containsKey(wg.getName())) {
+            groups.add(wg);
+        }
+
+        // First, iterate over the resource groups that are bound to a warehouse to determine
+        // which warehouses have resource groups bound to them.
+        for (ResourceGroup group : groups) {
+            if (group.getWarehouses() == null || group.getWarehouses().isEmpty()) {
+                continue;
+            }
+
+            Integer curExclusiveCpuCores;
+            Integer curExclusiveCpuPercent;
+            List<String> curWarehouses;
+            if (group.getName().equals(wg.getName())) {
+                curExclusiveCpuCores = exclusiveCpuCores;
+                curExclusiveCpuPercent = exclusiveCpuPercent;
+                curWarehouses = warehouses;
+            } else {
+                curExclusiveCpuCores = group.getNormalizedExclusiveCpuCores();
+                curExclusiveCpuPercent = group.getExclusiveCpuPercent();
+                curWarehouses = group.getWarehouses();
+            }
+
+            for (String warehouseName : curWarehouses) {
+                WarehouseCoresInfo item = boundWhToItem.get(warehouseName);
+                if (item == null) {
+                    Warehouse wh = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouseAllowNull(warehouseName);
+                    if (wh == null) {
+                        continue;
+                    }
+                    boundWhIds.add(wh.getId());
+                    int minCores = BackendResourceStat.getInstance().getMinNumCoresOfBe(wh.getId());
+                    item = new WarehouseCoresInfo(minCores);
+                    boundWhToItem.put(warehouseName, item);
+                }
+
+                int exclusiveCores = getExclusiveCpuCores(curExclusiveCpuCores, curExclusiveCpuPercent, item.minCores);
+                item.sumExclusiveCpuCores += exclusiveCores;
+            }
+        }
+
+        // Then, iterate over the resource groups that are not bound to any warehouse.
+        final int nonBoundWhMinCores = BackendResourceStat.getInstance().getMinNumCoresOfBeExceptWarehouses(boundWhIds);
+        int nonBoundWhSumExclusiveCores = 0;
+        for (ResourceGroup group : groups) {
+            if (group.getWarehouses() != null && !group.getWarehouses().isEmpty()) {
+                continue;
+            }
+
+            Integer curExclusiveCpuCores;
+            Integer curExclusiveCpuPercent;
+            if (group.getName().equals(wg.getName())) {
+                curExclusiveCpuCores = exclusiveCpuCores;
+                curExclusiveCpuPercent = exclusiveCpuPercent;
+            } else {
+                curExclusiveCpuCores = group.getNormalizedExclusiveCpuCores();
+                curExclusiveCpuPercent = group.getExclusiveCpuPercent();
+            }
+
+            int nonUsedWhExclusiveCores = getExclusiveCpuCores(curExclusiveCpuCores, curExclusiveCpuPercent, nonBoundWhMinCores);
+            nonBoundWhSumExclusiveCores += nonUsedWhExclusiveCores;
+
+            for (WarehouseCoresInfo item : boundWhToItem.values()) {
+                int exclusiveCores = getExclusiveCpuCores(curExclusiveCpuCores, curExclusiveCpuPercent, item.minCores);
+                item.sumExclusiveCpuCores += exclusiveCores;
+            }
+        }
+
+        if (nonBoundWhSumExclusiveCores + 1 > nonBoundWhMinCores) {
+            throw new DdlException(String.format("The effective exclusive CPU allocation (%d) exceeds the available cores " +
+                    "(%d, that is, total cores minus one reserved for non-exclusive groups) on the smallest BE " +
+                    "not assigned to any warehouse.", nonBoundWhSumExclusiveCores, nonBoundWhMinCores - 1));
+        }
+        for (Map.Entry<String, WarehouseCoresInfo> entry : boundWhToItem.entrySet()) {
+            String warehouseName = entry.getKey();
+            WarehouseCoresInfo item = entry.getValue();
+            if (item.sumExclusiveCpuCores + 1 > item.minCores) {
+                throw new DdlException(String.format("The effective exclusive CPU allocation (%d) exceeds the available cores " +
+                        "(%d, that is, total cores minus one reserved for non-exclusive groups) on the smallest BE " +
+                        "of warehouse %s.", item.sumExclusiveCpuCores, item.minCores - 1, warehouseName));
+            }
+        }
+    }
+
     public void alterResourceGroup(AlterResourceGroupStmt stmt) throws DdlException {
         writeLock();
         try {
@@ -347,37 +462,52 @@ public class ResourceGroupMgr implements Writable {
 
                 Integer cpuWeight = changedProperties.getRawCpuWeight();
                 if (cpuWeight == null) {
-                    cpuWeight = wg.geNormalizedCpuWeight();
+                    cpuWeight = wg.getNormalizedCpuWeight();
+                }
+                Integer cpuWeightPercent = changedProperties.getCpuWeightPercent();
+                if (cpuWeightPercent == null) {
+                    cpuWeightPercent = wg.getCpuWeightPercent();
                 }
                 Integer exclusiveCpuCores = changedProperties.getExclusiveCpuCores();
                 if (exclusiveCpuCores == null) {
                     exclusiveCpuCores = wg.getExclusiveCpuCores();
                 }
-
-                ResourceGroup.validateCpuParameters(cpuWeight, exclusiveCpuCores);
-
-                if (exclusiveCpuCores != null && exclusiveCpuCores > 0) {
-                    if (sumExclusiveCpuCores + exclusiveCpuCores - wg.getNormalizedExclusiveCpuCores() >=
-                            BackendResourceStat.getInstance().getMinNumHardwareCoresOfBe()) {
-                        throw new DdlException(String.format(EXCEED_TOTAL_EXCLUSIVE_CPU_CORES_ERR_MSG,
-                                ResourceGroup.EXCLUSIVE_CPU_CORES,
-                                BackendResourceStat.getInstance().getMinNumHardwareCoresOfBe() - 1));
-                    }
+                Integer exclusiveCpuPercent = changedProperties.getExclusiveCpuPercent();
+                if (exclusiveCpuPercent == null) {
+                    exclusiveCpuPercent = wg.getExclusiveCpuPercent();
+                }
+                List<String> warehouses = changedProperties.getWarehouses();
+                if (warehouses == null) {
+                    warehouses = wg.getWarehouses();
+                }
+                Integer maxCpuCores = changedProperties.getMaxCpuCores();
+                if (maxCpuCores == null) {
+                    maxCpuCores = wg.getMaxCpuCores();
+                }
+                ResourceGroup.validateCpuParameters(cpuWeight, cpuWeightPercent,
+                        exclusiveCpuCores, exclusiveCpuPercent, maxCpuCores, wg.getResourceGroupType(), warehouses);
+                if ((exclusiveCpuCores != null && exclusiveCpuCores > 0) ||
+                        (exclusiveCpuPercent != null && exclusiveCpuPercent > 0)) {
+                    validateExclusiveCpuCoresInlock(exclusiveCpuCores, exclusiveCpuPercent, warehouses, wg);
                     if (wg.getResourceGroupType() == TWorkGroupType.WG_SHORT_QUERY) {
                         throw new SemanticException(SHORT_QUERY_SET_EXCLUSIVE_CPU_CORES_ERR_MSG);
                     }
                 }
+<<<<<<< HEAD
                 // NOTE that validate cpu parameters should be called before setting properties.
 
                 if (cpuWeight != null) {
                     wg.setCpuWeight(cpuWeight);
                 }
                 wg.normalizeCpuWeight();
+=======
+>>>>>>> df7b521d15 ([Feature] Support warehouses, cpu_weight_percent, exclusive_cpu_weight for resource group (#66947))
 
                 String memPool = wg.getMemPool();
                 if (wg.hasDefaultMemPool()) {
                     memPool = ResourceGroup.DEFAULT_MEM_POOL;
                 }
+<<<<<<< HEAD
 
                 if (exclusiveCpuCores != null) {
                     sumExclusiveCpuCores -= wg.getNormalizedExclusiveCpuCores();
@@ -389,6 +519,8 @@ public class ResourceGroupMgr implements Writable {
                 if (maxCpuCores != null) {
                     wg.setMaxCpuCores(maxCpuCores);
                 }
+=======
+>>>>>>> df7b521d15 ([Feature] Support warehouses, cpu_weight_percent, exclusive_cpu_weight for resource group (#66947))
                 if (changedProperties.getMemPool() != null && !changedProperties.getMemPool().equals(memPool)) {
                     throw new DdlException("Property `mem_pool` cannot be altered [" + wg.getMemPool() + "].");
                 }
@@ -399,6 +531,31 @@ public class ResourceGroupMgr implements Writable {
                             "Property `mem_limit` cannot be altered for resource groups with mem_pool [" +
                                     wg.getMemPool() + "].");
                 }
+
+                // NOTE that validate parameters should be called before setting properties.
+
+                cpuWeightPercent = changedProperties.getCpuWeightPercent();
+                if (cpuWeightPercent != null) {
+                    alterResourceGroupLog.setCpuWeightPercent(cpuWeightPercent);
+                }
+                cpuWeight = changedProperties.getRawCpuWeight();
+                if (cpuWeight != null) {
+                    alterResourceGroupLog.setCpuWeight(cpuWeight);
+                }
+                exclusiveCpuCores = changedProperties.getExclusiveCpuCores();
+                if (exclusiveCpuCores != null) {
+                    alterResourceGroupLog.setExclusiveCpuCores(exclusiveCpuCores);
+                }
+                exclusiveCpuPercent = changedProperties.getExclusiveCpuPercent();
+                if (exclusiveCpuPercent != null) {
+                    alterResourceGroupLog.setExclusiveCpuPercent(exclusiveCpuPercent);
+                }
+
+                maxCpuCores = changedProperties.getMaxCpuCores();
+                if (maxCpuCores != null) {
+                    alterResourceGroupLog.setMaxCpuCores(maxCpuCores);
+                }
+
                 Double memLimit = changedProperties.getMemLimit();
                 if (memLimit != null) {
                     wg.setMemLimit(memLimit);
@@ -427,6 +584,11 @@ public class ResourceGroupMgr implements Writable {
                 Double spillMemLimitThreshold = changedProperties.getSpillMemLimitThreshold();
                 if (spillMemLimitThreshold != null) {
                     wg.setSpillMemLimitThreshold(spillMemLimitThreshold);
+                }
+
+                warehouses = changedProperties.getWarehouses();
+                if (warehouses != null) {
+                    alterResourceGroupLog.setWarehouses(warehouses);
                 }
 
                 // Type is guaranteed to be immutable during the analyzer phase.
@@ -459,6 +621,66 @@ public class ResourceGroupMgr implements Writable {
         }
     }
 
+<<<<<<< HEAD
+=======
+    private void updateResourceGroup(ResourceGroup wg, AlterResourceGroupLog log) {
+        if (log.getClassifiers() != null) {
+            List<ResourceGroupClassifier> oldClassifiers = wg.getClassifiers();
+            Set<Long> newClassifierIds = log.getClassifiers().stream()
+                    .map(ResourceGroupClassifier::getId).collect(Collectors.toSet());
+            for (ResourceGroupClassifier classifier : oldClassifiers) {
+                if (!newClassifierIds.contains(classifier.getId())) {
+                    classifierMap.remove(classifier.getId());
+                }
+            }
+            for (ResourceGroupClassifier classifier : log.getClassifiers()) {
+                classifierMap.put(classifier.getId(), classifier);
+            }
+            wg.setClassifiers(log.getClassifiers());
+        }
+        if (log.getCpuWeight() != null) {
+            wg.setCpuWeight(log.getCpuWeight());
+            wg.normalizeCpuWeight();
+        }
+        if (log.getCpuWeightPercent() != null) {
+            wg.setCpuWeightPercent(log.getCpuWeightPercent());
+        }
+        if (log.getExclusiveCpuCores() != null) {
+            wg.setExclusiveCpuCores(log.getExclusiveCpuCores());
+        }
+        if (log.getExclusiveCpuPercent() != null) {
+            wg.setExclusiveCpuPercent(log.getExclusiveCpuPercent());
+        }
+        if (log.getMaxCpuCores() != null) {
+            wg.setMaxCpuCores(log.getMaxCpuCores());
+        }
+        if (log.getMemLimit() != null) {
+            wg.setMemLimit(log.getMemLimit());
+        }
+        if (log.getBigQueryMemLimit() != null) {
+            wg.setBigQueryMemLimit(log.getBigQueryMemLimit());
+        }
+        if (log.getBigQueryScanRowsLimit() != null) {
+            wg.setBigQueryScanRowsLimit(log.getBigQueryScanRowsLimit());
+        }
+        if (log.getBigQueryCpuSecondLimit() != null) {
+            wg.setBigQueryCpuSecondLimit(log.getBigQueryCpuSecondLimit());
+        }
+        if (log.getConcurrencyLimit() != null) {
+            wg.setConcurrencyLimit(log.getConcurrencyLimit());
+        }
+        if (log.getSpillMemLimitThreshold() != null) {
+            wg.setSpillMemLimitThreshold(log.getSpillMemLimitThreshold());
+        }
+        if (log.getWarehouses() != null) {
+            wg.setWarehouses(log.getWarehouses());
+        }
+        if (log.getVersion() != 0) {
+            wg.setVersion(log.getVersion());
+        }
+    }
+
+>>>>>>> df7b521d15 ([Feature] Support warehouses, cpu_weight_percent, exclusive_cpu_weight for resource group (#66947))
     public void dropResourceGroup(DropResourceGroupStmt stmt) throws DdlException {
         writeLock();
         try {
@@ -516,7 +738,6 @@ public class ResourceGroupMgr implements Writable {
         if (wg.getResourceGroupType() == TWorkGroupType.WG_SHORT_QUERY) {
             shortQueryResourceGroup = null;
         }
-        sumExclusiveCpuCores -= wg.getNormalizedExclusiveCpuCores();
     }
 
     private void addResourceGroupInternal(ResourceGroup wg) {
@@ -528,20 +749,56 @@ public class ResourceGroupMgr implements Writable {
         if (wg.getResourceGroupType() == TWorkGroupType.WG_SHORT_QUERY) {
             shortQueryResourceGroup = wg;
         }
-        sumExclusiveCpuCores += wg.getNormalizedExclusiveCpuCores();
         if (ResourceGroup.DEFAULT_RESOURCE_GROUP_NAME.equals(wg.getName())) {
             hasCreatedDefaultResourceGroups = true;
         }
     }
 
+    /**
+     * If a resource group is bound to specific warehouses, and the warehouse that the current BE belongs to is not among those
+     * bound warehouses, then the TWorkGroupOp sent to that BE will be marked as inactive, meaning this resource group will not
+     * take effect on that BE.
+     *
+     * <p> We separate the logic of pushing resource groups to BEs from the logic of deciding whether they should be inactive,
+     * to avoid complicated handling when the set of warehouses bound to a resource group changes.
+     *
+     * @param op            the resource group operation will be sent to this BE
+     * @param warehouseName the warehouse name that the current BE belongs to
+     * @return the TWorkGroupOp that may be marked as inactive
+     */
+    private TWorkGroupOp setInactiveOp(TWorkGroupOp op, String warehouseName) {
+        List<String> warehouses = op.getWorkgroup().getWarehouses();
+        if (warehouseName == null || warehouses == null || warehouses.isEmpty() || warehouses.contains(warehouseName)) {
+            return op;
+        }
+
+        // Only when we need to set `inactive` do we create a copied instance.
+        // In all other cases, all BEs share the same TWorkGroupOp instance.
+        TWorkGroupOp newOp = op.deepCopy();
+        newOp.getWorkgroup().setInactive(true);
+        return newOp;
+    }
+
     public List<TWorkGroupOp> getResourceGroupsNeedToDeliver(Long beId) {
+        ComputeNode computeNode = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(beId);
+        String warehouseName = null;
+        if (computeNode != null) {
+            Warehouse wh = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouseAllowNull(computeNode.getWarehouseId());
+            if (wh != null) {
+                warehouseName = wh.getName();
+            }
+        }
+
         readLock();
         try {
             List<TWorkGroupOp> currentResourceGroupOps = new ArrayList<>();
             if (!activeResourceGroupsPerBe.containsKey(beId)) {
-                currentResourceGroupOps.addAll(resourceGroupOps);
+                for (TWorkGroupOp op : resourceGroupOps) {
+                    currentResourceGroupOps.add(setInactiveOp(op, warehouseName));
+                }
                 return currentResourceGroupOps;
             }
+
             Long minVersion = minVersionPerBe.get(beId);
             Map<Long, TWorkGroup> activeResourceGroup = activeResourceGroupsPerBe.get(beId);
             for (TWorkGroupOp op : resourceGroupOps) {
@@ -549,12 +806,14 @@ public class ResourceGroupMgr implements Writable {
                 if (twg.getVersion() < minVersion) {
                     continue;
                 }
+
                 boolean active = activeResourceGroup.containsKey(twg.getId());
                 if ((!active && id2ResourceGroupMap.containsKey(twg.getId())) ||
                         (active && twg.getVersion() > activeResourceGroup.get(twg.getId()).getVersion())) {
-                    currentResourceGroupOps.add(op);
+                    currentResourceGroupOps.add(setInactiveOp(op, warehouseName));
                 }
             }
+
             return currentResourceGroupOps;
         } finally {
             readUnlock();
@@ -666,10 +925,8 @@ public class ResourceGroupMgr implements Writable {
                 return;
             }
 
-            final int avgCpuCores = BackendResourceStat.getInstance().getAvgNumCoresOfBe(DEFAULT_WAREHOUSE_ID);
-
             Map<String, String> defaultWgProperties = ImmutableMap.of(
-                    ResourceGroup.CPU_WEIGHT, Integer.toString(avgCpuCores),
+                    ResourceGroup.CPU_WEIGHT_PERCENT, "100",
                     ResourceGroup.MEM_LIMIT, "1.0"
             );
             CreateResourceGroupStmt defaultWgStmt = new CreateResourceGroupStmt(ResourceGroup.DEFAULT_RESOURCE_GROUP_NAME,
@@ -678,7 +935,7 @@ public class ResourceGroupMgr implements Writable {
             createResourceGroup(defaultWgStmt);
 
             Map<String, String> defaultMvWgProperties = ImmutableMap.of(
-                    ResourceGroup.CPU_WEIGHT, "1",
+                    ResourceGroup.CPU_WEIGHT_PERCENT, "1",
                     ResourceGroup.MEM_LIMIT, "0.8",
                     ResourceGroup.SPILL_MEM_LIMIT_THRESHOLD, "0.8"
             );
