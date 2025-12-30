@@ -34,8 +34,12 @@
 
 #include "storage/rowset/default_value_column_iterator.h"
 
+#include <algorithm>
+#include <variant>
+
 #include "column/array_column.h"
 #include "column/column.h"
+#include "column/column_access_path.h"
 #include "column/column_builder.h"
 #include "column/datum.h"
 #include "runtime/decimalv3.h"
@@ -51,6 +55,49 @@
 #include "velocypack/Iterator.h"
 
 namespace starrocks {
+
+static void _project_struct_default_datum_if_needed(Datum* datum, const TypeInfo* type_info,
+                                                    const ColumnAccessPath* path) {
+    if (datum == nullptr || path == nullptr) return;
+    if (type_info == nullptr || type_info->type() != TYPE_STRUCT) return;
+    if (path->children().empty()) return;
+    if (datum->is_null()) return;
+
+    try {
+        const DatumStruct& full = datum->get_struct();
+        const auto& field_types = get_struct_field_types(type_info);
+
+        std::vector<const ColumnAccessPath*> selected(field_types.size(), nullptr);
+        for (const auto& child : path->children()) {
+            uint32_t idx = child->index();
+            if (idx < selected.size()) {
+                selected[idx] = child.get();
+            } else {
+                LOG(WARNING) << "Struct default projection: child index out of range. idx=" << idx
+                             << ", field_size=" << selected.size() << ", path=" << path->to_string();
+            }
+        }
+
+        DatumStruct projected;
+        projected.reserve(path->children().size());
+        for (size_t i = 0; i < selected.size(); ++i) {
+            if (selected[i] == nullptr) continue;
+            if (i < full.size()) {
+                projected.emplace_back(full[i]);
+            } else {
+                Datum null_datum;
+                null_datum.set_null();
+                projected.emplace_back(std::move(null_datum));
+            }
+        }
+
+        datum->set(projected);
+    } catch (const std::bad_variant_access& e) {
+        LOG(WARNING) << "Struct default projection failed (bad_variant_access). Treat as NULL. path="
+                     << path->to_string() << ", err=" << e.what();
+        datum->set_null();
+    }
+}
 
 class VPackToDatumCaster {
 public:
@@ -406,6 +453,10 @@ Status DefaultValueColumnIterator::init(const ColumnIteratorOptions& opts) {
                         _is_default_value_null = true;
                     } else {
                         new (_mem_value) Datum(std::move(datum_or.value()));
+                        if (_type_info->type() == TYPE_STRUCT && _path != nullptr) {
+                            _project_struct_default_datum_if_needed(reinterpret_cast<Datum*>(_mem_value),
+                                                                    _type_info.get(), _path);
+                        }
                     }
                 }
             } else {
