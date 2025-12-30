@@ -63,6 +63,10 @@ INSERT INTO test_varbinary_alter VALUES (1, 'alice'), (2, 'bob'), (3, 'charlie')
 ALTER TABLE test_varbinary_alter ADD COLUMN binary_col VARBINARY DEFAULT "";
 -- result:
 -- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
 SELECT 
     id,
     name,

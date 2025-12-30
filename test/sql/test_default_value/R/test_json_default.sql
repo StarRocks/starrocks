@@ -109,6 +109,10 @@ INSERT INTO fast_schema_change VALUES (1, 'alice'), (2, 'bob');
 ALTER TABLE fast_schema_change ADD COLUMN metadata JSON DEFAULT '{"version": 1, "enabled": true}';
 -- result:
 -- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
 SELECT id, name, metadata FROM fast_schema_change ORDER BY id;
 -- result:
 1	alice	{"enabled": true, "version": 1}
@@ -160,6 +164,10 @@ INSERT INTO extended_column_basic VALUES
 -- !result
 ALTER TABLE extended_column_basic ADD COLUMN profile JSON DEFAULT '{"level": 1, "vip": false, "tags": ["default"]}';
 -- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
 -- !result
 SELECT 
     id,
@@ -214,6 +222,10 @@ ALTER TABLE extended_complex_types
 ADD COLUMN profile JSON DEFAULT '{"level": 10, "vip": true, "score": 95.5, "tags": ["gold", "premium"], "meta": {"city": "Beijing", "age": 25}}';
 -- result:
 -- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
 SELECT 
     id,
     name,
@@ -265,6 +277,10 @@ ALTER TABLE extended_multi_json ADD COLUMN config JSON DEFAULT '{"theme": "dark"
 ALTER TABLE extended_multi_json ADD COLUMN stats JSON DEFAULT '{"views": 100, "likes": 50}';
 -- result:
 -- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
 SELECT 
     id,
     name,
@@ -291,6 +307,10 @@ INSERT INTO extended_null_values VALUES (1), (2);
 ALTER TABLE extended_null_values ADD COLUMN data JSON DEFAULT '{"value": null, "count": 0, "name": "test"}';
 -- result:
 -- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
 SELECT 
     id,
     get_json_string(data, '$.value') AS value_field,
@@ -314,6 +334,10 @@ INSERT INTO extended_empty_structures VALUES (1), (2);
 -- !result
 ALTER TABLE extended_empty_structures ADD COLUMN info JSON DEFAULT '{"tags": [], "meta": {}}';
 -- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
 -- !result
 SELECT 
     id,
@@ -339,6 +363,10 @@ INSERT INTO extended_deep_nested VALUES (1), (2);
 ALTER TABLE extended_deep_nested ADD COLUMN deep JSON DEFAULT '{"level1": {"level2": {"level3": {"value": 42, "flag": true}}}}';
 -- result:
 -- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
 SELECT 
     id,
     cast(get_json_int(deep, '$.level1.level2.level3.value') AS INT) AS nested_value,
@@ -362,6 +390,10 @@ INSERT INTO extended_arrays VALUES (1), (2), (3);
 -- !result
 ALTER TABLE extended_arrays ADD COLUMN items JSON DEFAULT '{"products": ["apple", "banana", "orange"], "prices": [1.5, 2.0, 1.8]}';
 -- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
 -- !result
 SELECT 
     id,
@@ -390,6 +422,10 @@ INSERT INTO extended_function_compat VALUES (1), (2);
 -- !result
 ALTER TABLE extended_function_compat ADD COLUMN profile JSON DEFAULT '{"user": {"name": "Alice", "age": 25}, "score": 95}';
 -- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
 -- !result
 SELECT 
     id,
@@ -521,6 +557,10 @@ ORDER BY order_id;
 -- !result
 ALTER TABLE pk_partial_update ADD COLUMN extras JSON DEFAULT '{"discount": 0.0, "tax": 0.08}';
 -- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
 -- !result
 INSERT INTO pk_partial_update (order_id, product_name) VALUES (6, 'mouse');
 -- result:
