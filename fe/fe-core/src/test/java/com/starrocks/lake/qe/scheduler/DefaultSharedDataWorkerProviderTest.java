@@ -679,26 +679,25 @@ public class DefaultSharedDataWorkerProviderTest {
 
     @Test
     public void testReportNotFoundException() {
-        WorkerProvider provider = new DefaultSharedDataWorkerProvider(
-                ImmutableMap.copyOf(id2AllNodes), ImmutableMap.copyOf(id2AllNodes), 0);
+        WorkerProvider provider = new DefaultSharedDataWorkerProvider(ImmutableMap.copyOf(id2AllNodes), ImmutableMap.of());
 
         assertThatThrownBy(provider::reportWorkerNotFoundException)
                 .isInstanceOf(NonRecoverableException.class)
                 .hasMessageContaining("Compute node not found. Check if any compute node is down. " +
-                        "nodeId: -1 compute node: , compute resource: {warehouseId=0}");
+                        "nodeId: -1 compute node: ");
         assertThatThrownBy(() -> provider.reportWorkerNotFoundException("prefix:"))
                 .isInstanceOf(NonRecoverableException.class)
                 .hasMessageContaining("prefix:Compute node not found. Check if any compute node is down. " +
-                        "nodeId: -1 compute node: , compute resource: {warehouseId=0}");
+                        "nodeId: -1 compute node:");
 
         assertThatThrownBy(provider::reportDataNodeNotFoundException)
                 .isInstanceOf(NonRecoverableException.class)
                 .hasMessageContaining("Compute node not found. Check if any compute node is down. " +
-                        "nodeId: -1 compute node: , compute resource: {warehouseId=0}");
+                        "nodeId: -1 compute node:");
 
         assertThatThrownBy(() -> provider.selectWorker(9999)) // select a non-existing worker
                 .isInstanceOf(NonRecoverableException.class)
                 .hasMessageContaining("Compute node not found. Check if any compute node is down. " +
-                        "nodeId: 9999 compute node: , compute resource: {warehouseId=0");
+                        "nodeId: 9999 compute node:");
     }
 }

@@ -32,10 +32,6 @@ import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.utframe.UtFrameUtils;
-import com.starrocks.warehouse.cngroup.CRAcquireContext;
-import com.starrocks.warehouse.cngroup.ComputeResource;
-import mockit.Mock;
-import mockit.MockUp;
 import org.jetbrains.annotations.NotNull;
 import org.junit.AfterClass;
 import org.junit.Assert;
@@ -101,20 +97,13 @@ public class ShortCircuitTest extends PlanTestBase {
 
     @Test
     public void testShortCircuitForShareData() throws Exception {
-        new MockUp<WarehouseManager>() {
-            @Mock
-            public ComputeResource acquireComputeResource(CRAcquireContext acquireContext) {
-                return WarehouseManager.DEFAULT_RESOURCE;
-            }
-        };
-
         OLD_VALUE = FeConstants.runningUnitTest;
         FeConstants.runningUnitTest = false;
 
         {
             String sql = "select /*+SET_VAR(enable_short_circuit=true)*/ pk1 || v3 from tprimary1 where pk1=20";
             String planFragment = getFragmentPlan(sql);
-            Assertions.assertTrue(planFragment.contains("Short Circuit Scan: true"));
+            Assert.assertTrue(planFragment.contains("Short Circuit Scan: true"));
         }
 
         Config.run_mode = RunMode.SHARED_DATA.getName();
@@ -122,7 +111,7 @@ public class ShortCircuitTest extends PlanTestBase {
         try {
             String sql = "select /*+SET_VAR(enable_short_circuit=true)*/ pk1 || v3 from tprimary1 where pk1=20";
             String planFragment = getFragmentPlan(sql);
-            Assertions.assertFalse(planFragment.contains("Short Circuit Scan: true"));
+            Assert.assertFalse(planFragment.contains("Short Circuit Scan: true"));
         } finally {
             Config.run_mode = RunMode.SHARED_NOTHING.getName();
             RunMode.detectRunMode();
@@ -152,10 +141,7 @@ public class ShortCircuitTest extends PlanTestBase {
         coord.startScheduling();
 
         ExecutionFragment execFragment = coord.getExecutionDAG().getRootFragment();
-<<<<<<< HEAD
-        Assert.assertEquals(true, execFragment.getPlanFragment().isShortCircuit());
-=======
-        Assertions.assertTrue(execFragment.getPlanFragment().isShortCircuit());
+        Assert.assertTrue(execFragment.getPlanFragment().isShortCircuit());
     }
 
     @Test
@@ -171,17 +157,16 @@ public class ShortCircuitTest extends PlanTestBase {
 
         OlapScanNode scanNode = OlapScanNode.createOlapScanNodeByLocation(execPlan.getNextNodeId(), tupleDescriptor,
                 "OlapScanNodeForShortCircuit", ImmutableList.of(scanRangeLocations),
-                WarehouseManager.DEFAULT_RESOURCE);
+                WarehouseManager.DEFAULT_WAREHOUSE_ID);
         List<Long> selectPartitionIds = ImmutableList.of(1L);
         scanNode.setSelectedPartitionIds(selectPartitionIds);
 
         DefaultCoordinator coord = new DefaultCoordinator.Factory().createQueryScheduler(connectContext,
-                execPlan.getFragments(), ImmutableList.of(scanNode), execPlan.getDescTbl().toThrift(), execPlan);
+                execPlan.getFragments(), ImmutableList.of(scanNode), execPlan.getDescTbl().toThrift());
         assertThatThrownBy(coord::exec)
                 .isInstanceOf(NonRecoverableException.class)
                 .hasMessageContaining("No alive backend for short-circuit query. " +
                         "Backend node not found. Check if any backend node is down.backend:");
->>>>>>> b12d4cdc05 ([BugFix] Fallback to non-short-circuit execution in share-data mode (#67323))
     }
 
     @NotNull
