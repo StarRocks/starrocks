@@ -47,6 +47,8 @@ import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.ast.ColWithComment;
 import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.DropTableStmt;
+import com.starrocks.sql.ast.QualifiedName;
+import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -1014,8 +1016,11 @@ public class PaimonMetadataTest {
                 result = new Catalog.ViewNotExistException(new Identifier("test", "ViewNotExist"));
             }
         };
-        CreateViewStmt stmt = new CreateViewStmt(false, false, new TableName("paimon_catalog", "db", "test_view"),
-                Lists.newArrayList(new ColWithComment("k1", "", NodePosition.ZERO)), "", false, null, NodePosition.ZERO);
+        CreateViewStmt stmt = new CreateViewStmt(false, false,
+                new TableRef(QualifiedName.of(
+                        Lists.newArrayList("paimon_catalog", "db", "test_view")), null, NodePosition.ZERO),
+                Lists.newArrayList(new ColWithComment("k1", "", NodePosition.ZERO)),
+                "", false, null, NodePosition.ZERO);
         stmt.setColumns(Lists.newArrayList(new Column("k1", INT)));
         metadata.createView(connectContext, stmt);
 
@@ -1034,7 +1039,9 @@ public class PaimonMetadataTest {
         assertEquals("select * from table", view.getInlineViewDef());
 
         //test drop normal
-        DropTableStmt dropStmt = new DropTableStmt(true, new TableName("paimon_catalog", "db", "test_view"), true, true);
+        DropTableStmt dropStmt = new DropTableStmt(true, new TableRef(QualifiedName.of(
+                Lists.newArrayList("paimon_catalog", "db", "test_view")), null, NodePosition.ZERO),
+                true, true);
         metadata.dropTable(connectContext, dropStmt);
 
         //test drop not exist
