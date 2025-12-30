@@ -64,7 +64,7 @@ subprojects {
         set("jetty.version", "9.4.57.v20241219")
         set("jprotobuf-starrocks.version", "1.0.0")
         set("junit.version", "5.8.2")
-        set("kafka-clients.version", "3.4.0")
+        set("kafka-clients.version", "3.9.1")
         set("kudu.version", "1.17.1")
         set("log4j.version", "2.19.0")
         set("nimbusds.version", "9.37.2")
