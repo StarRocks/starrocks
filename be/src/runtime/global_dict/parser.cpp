@@ -303,7 +303,7 @@ Status DictOptimizeParser::_eval_and_rewrite(ExprContext* ctx, Expr* expr, DictO
         std::vector<Status> err_status;
         err_status.resize(num_rows);
         auto input_column = binary_column->clone_empty();
-        temp_chunk->update_column(std::move(input_column), expr_slot_id);
+        temp_chunk->update_column(input_column, expr_slot_id);
         for (size_t i = 0; i < num_rows; ++i) {
             input_column->reset_column();
             input_column->append(*binary_column, i, 1);
