@@ -15,12 +15,9 @@
 package com.starrocks.sql.plan;
 
 import com.google.common.collect.ImmutableList;
-<<<<<<< HEAD
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.TupleDescriptor;
-=======
 import com.starrocks.common.Config;
->>>>>>> b12d4cdc05 ([BugFix] Fallback to non-short-circuit execution in share-data mode (#67323))
 import com.starrocks.common.FeConstants;
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.qe.DefaultCoordinator;
