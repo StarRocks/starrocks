@@ -56,12 +56,15 @@
 
 namespace starrocks {
 
-static void _project_struct_default_datum_if_needed(Datum* datum, const TypeInfo* type_info,
-                                                    const ColumnAccessPath* path) {
-    if (datum == nullptr || path == nullptr) return;
-    if (type_info == nullptr || type_info->type() != TYPE_STRUCT) return;
+static void _project_default_datum_by_path_if_needed(Datum* datum, const TypeInfo* type_info,
+                                                     const ColumnAccessPath* path) {
+    if (datum == nullptr || path == nullptr || type_info == nullptr) return;
     if (path->children().empty()) return;
     if (datum->is_null()) return;
+
+    if (type_info->type() != TYPE_STRUCT) {
+        return;
+    }
 
     try {
         const DatumStruct& full = datum->get_struct();
@@ -82,13 +85,19 @@ static void _project_struct_default_datum_if_needed(Datum* datum, const TypeInfo
         projected.reserve(path->children().size());
         for (size_t i = 0; i < selected.size(); ++i) {
             if (selected[i] == nullptr) continue;
+
+            Datum child_datum;
             if (i < full.size()) {
-                projected.emplace_back(full[i]);
+                child_datum = full[i];
             } else {
-                Datum null_datum;
-                null_datum.set_null();
-                projected.emplace_back(std::move(null_datum));
+                child_datum.set_null();
             }
+
+            if (i < field_types.size() && field_types[i] != nullptr) {
+                _project_default_datum_by_path_if_needed(&child_datum, field_types[i].get(), selected[i]);
+            }
+
+            projected.emplace_back(std::move(child_datum));
         }
 
         datum->set(projected);
@@ -331,7 +340,6 @@ private:
 
             // Use sequential iteration (true) to preserve field order
             for (const auto& pair : vpack::ObjectIterator(_json_slice, true)) {
-                std::string_view key_name = pair.key.stringView();
                 if (field_idx >= field_types.size()) {
                     break;
                 }
@@ -454,8 +462,8 @@ Status DefaultValueColumnIterator::init(const ColumnIteratorOptions& opts) {
                     } else {
                         new (_mem_value) Datum(std::move(datum_or.value()));
                         if (_type_info->type() == TYPE_STRUCT && _path != nullptr) {
-                            _project_struct_default_datum_if_needed(reinterpret_cast<Datum*>(_mem_value),
-                                                                    _type_info.get(), _path);
+                            _project_default_datum_by_path_if_needed(reinterpret_cast<Datum*>(_mem_value),
+                                                                     _type_info.get(), _path);
                         }
                     }
                 }
