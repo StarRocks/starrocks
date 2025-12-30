@@ -396,49 +396,11 @@ public class DefaultWorkerProviderTest {
         Assertions.assertTrue(workerProvider.isWorkerSelected(workerId));
         assertThat(workerProvider.getSelectedWorkerIds()).contains(workerId);
     }
-<<<<<<< HEAD
-=======
-
-    @Test
-    public void getNextComputeNodeIndex_returnsIncrementedValueInSharedDataMode(@Mocked ComputeResource computeResource) {
-        new MockUp<RunMode>() {
-            @Mock
-            public RunMode getCurrentRunMode() {
-                return RunMode.SHARED_DATA;
-            }
-        };
-        AtomicInteger mockIndex = new AtomicInteger(5);
-        new MockUp<WarehouseManager>() {
-            @Mock
-            public AtomicInteger getNextComputeNodeIndexFromWarehouse(ComputeResource resource) {
-                return mockIndex;
-            }
-        };
-
-        int result = DefaultWorkerProvider.getNextComputeNodeIndex(computeResource);
-        Assertions.assertEquals(5, result);
-        Assertions.assertEquals(6, mockIndex.get());
-    }
-
-    @Test
-    public void getNextComputeNodeIndex_returnsIncrementedValueInSharedNothingMode(@Mocked ComputeResource computeResource) {
-        new MockUp<RunMode>() {
-            @Mock
-            public RunMode getCurrentRunMode() {
-                return RunMode.SHARED_NOTHING;
-            }
-        };
-
-        int initialIndex = DefaultWorkerProvider.getNextComputeNodeIndexer().get();
-        int result = DefaultWorkerProvider.getNextComputeNodeIndex(computeResource);
-        Assertions.assertEquals(initialIndex, result);
-        Assertions.assertEquals(initialIndex + 1, DefaultWorkerProvider.getNextComputeNodeIndexer().get());
-    }
 
     @Test
     public void testReportNotFoundException() {
         DefaultWorkerProvider provider = new DefaultWorkerProvider(id2Backend, id2ComputeNode,
-                availableId2Backend, availableId2ComputeNode, true, WarehouseManager.DEFAULT_RESOURCE);
+                availableId2Backend, availableId2ComputeNode, true, 0);
         assertThatThrownBy(provider::reportWorkerNotFoundException)
                 .isInstanceOf(NonRecoverableException.class)
                 .hasMessageContaining("Compute node not found. Check if any compute node is down.compute node:");
@@ -449,5 +411,4 @@ public class DefaultWorkerProviderTest {
                 .isInstanceOf(NonRecoverableException.class)
                 .hasMessageContaining("Backend node not found. Check if any backend node is down.backend: ");
     }
->>>>>>> b12d4cdc05 ([BugFix] Fallback to non-short-circuit execution in share-data mode (#67323))
 }

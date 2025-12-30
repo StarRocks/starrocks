@@ -680,7 +680,7 @@ public class DefaultSharedDataWorkerProviderTest {
     @Test
     public void testReportNotFoundException() {
         WorkerProvider provider = new DefaultSharedDataWorkerProvider(
-                ImmutableMap.copyOf(id2AllNodes), ImmutableMap.copyOf(id2AllNodes), WarehouseManager.DEFAULT_RESOURCE);
+                ImmutableMap.copyOf(id2AllNodes), ImmutableMap.copyOf(id2AllNodes), 0);
 
         assertThatThrownBy(provider::reportWorkerNotFoundException)
                 .isInstanceOf(NonRecoverableException.class)
