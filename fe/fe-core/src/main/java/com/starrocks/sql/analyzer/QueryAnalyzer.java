@@ -413,6 +413,9 @@ public class QueryAnalyzer {
                 }
             }
             this.currentRecursiveCTE = null;
+            if (!withQuery.isRecursive()) {
+                return false;
+            }
             if (withQuery.isRecursive() && (unionRelation.hasOrderByClause() || unionRelation.hasLimit())) {
                 throw new SemanticException(String.format("ORDER BY is not allowed in recursive CTE '%s'", cteName));
             }

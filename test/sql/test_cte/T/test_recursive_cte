@@ -41,6 +41,8 @@ INSERT INTO employees VALUES
 (24, 'Xavier', 18, 'ML Engineer'),
 (25, 'Yolanda', 14, 'Junior Engineer');
 
+set recursive_cte_throw_limit_exception=false;
+
 -- Test 1: Basic recursive CTE
 WITH RECURSIVE org_hierarchy AS (
     SELECT employee_id, name, manager_id, title, cast(1 as bigint) AS `level`, name AS path

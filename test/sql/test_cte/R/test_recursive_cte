@@ -43,6 +43,9 @@ INSERT INTO employees VALUES
 (25, 'Yolanda', 14, 'Junior Engineer');
 -- result:
 -- !result
+set recursive_cte_throw_limit_exception=false;
+-- result:
+-- !result
 WITH RECURSIVE org_hierarchy AS (
     SELECT employee_id, name, manager_id, title, cast(1 as bigint) AS `level`, name AS path
     FROM employees

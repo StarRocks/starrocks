@@ -105,12 +105,26 @@ public class RecursiveCTETest extends PlanTestBase {
     }
 
     @Test
+    public void testMultipleRecursiveCTE3() throws Exception {
+        String sql = "with recursive " +
+                "cte1 as (select v1 from t0 union all "
+                + "select v1 + 1 from cte1 where v1 < 5 union all "
+                + "select v1 + 2 from cte1 where v1 < 10)" +
+                "select * from cte1";
+        String plan = explainRecursiveCte(sql);
+        assertContains(plan, "Recursive CTE Name: cte1\n"
+                + "Temporary Table: cte1_");
+        assertContains(plan, "WHERE `cte1`.`v1` < 5");
+        assertContains(plan, "UNION ALL");
+    }
+
+    @Test
     public void testNestedRecursiveCTE() throws Exception {
         String sql = "with recursive cte1 as " +
                 "(select v1 from t0 union all select v1 + 1 from cte1 where v1 < 10) " +
                 "select * from (select * from cte1 where v1 > 5) t";
         String plan = explainRecursiveCte(sql);
-        assertContains(plan, ".*, 0 AS `_cte_level`");
+        assertContains(plan, ".*, 0 AS `_cte_level_");
         assertContains(plan, "WHERE `cte1`.`v1` < 10");
         assertContains(plan, "WHERE `cte1`.`v1` > 5) `t`");
     }
@@ -134,6 +148,17 @@ public class RecursiveCTETest extends PlanTestBase {
                 "(select v1 from t0 union select v1 + 1 from cte where v1 < 10) " +
                 "select * from cte";
         Assertions.assertThrows(SemanticException.class, () -> getFragmentPlan(sql), "Recursive CTE is not supported.");
+    }
+
+    @Test
+    public void testNormalCTE() throws Exception {
+        String sql = "with recursive cte as " +
+                "(select 100 as x union all select 123456.789 as y) " +
+                "select * from cte";
+        String plan = explainRecursiveCte(sql);
+        assertContains(plan, "constant exprs: \n"
+                + "         100\n"
+                + "         123456.789");
     }
 
     @Test
