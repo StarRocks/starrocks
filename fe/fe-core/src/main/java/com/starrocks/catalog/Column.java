@@ -481,7 +481,7 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         tColumn.setIs_auto_increment(this.isAutoIncrement);
         if (this.defaultExpr != null && this.defaultExpr.getExprObject() != null) {
             tColumn.setDefault_expr(ExprToThrift.treeToThrift(this.defaultExpr.getExprObject()));
-        } else if (this.defaultValue != null && !this.defaultValue.isEmpty()) {
+        } else if (this.defaultValue != null) {
             tColumn.setDefault_value(this.defaultValue);
         }
 

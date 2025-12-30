@@ -89,7 +89,6 @@ static void _project_default_datum_by_path_if_needed(Datum* datum, const TypeInf
         }
 
         if (type_info->type() == TYPE_MAP) {
-            // MAP paths are represented similarly with a single child (INDEX/ALL) applied to values.
             const ColumnAccessPath* value_path = nullptr;
             if (path->children().size() == 1) {
                 auto* p = path->children()[0].get();
