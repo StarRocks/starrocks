@@ -691,7 +691,7 @@ void WorkGroupManager::change_enable_resource_group_cpu_borrowing(const bool val
     _executors_manager.change_enable_resource_group_cpu_borrowing(val);
 }
 
-void WorkGroupManager::set_workgroup_expiration_time(const milliseconds value) {
+void WorkGroupManager::set_workgroup_expiration_time(const std::chrono::seconds value) {
     _workgroup_expiration_time = value;
 }
 

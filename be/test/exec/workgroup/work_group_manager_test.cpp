@@ -93,7 +93,7 @@ PARALLEL_TEST(WorkGroupManagerTest, add_workgroups_same_mem_pools) {
 PARALLEL_TEST(WorkGroupManagerTest, test_if_unused_memory_pools_are_cleaned_up) {
     PipelineExecutorSetConfig config{10, 1, 1, 1, CpuUtil::CpuIds{}, false, false};
     auto _manager = std::make_unique<WorkGroupManager>(config);
-    _manager->set_workgroup_expiration_time(milliseconds(0));
+    _manager->set_workgroup_expiration_time(std::chrono::seconds(0));
     {
         auto twg1 = create_twg(110, 1, "wg110", "test_pool_2", 0.5);
         auto twg2 = create_twg(111, 1, "wg111", "test_pool_2", 0.5);
@@ -119,7 +119,7 @@ PARALLEL_TEST(WorkGroupManagerTest, test_if_unused_memory_pools_are_cleaned_up) 
         };
 
         _manager->apply(delete_operations);
-        std::this_thread::sleep_for(seconds(2));
+        std::this_thread::sleep_for(std::chrono::seconds(1));
         // The expired workgroups will only get erased in the next call to apply
         _manager->apply({});
 

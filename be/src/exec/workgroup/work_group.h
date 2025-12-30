@@ -36,8 +36,7 @@ class TWorkGroup;
 
 namespace workgroup {
 
-using seconds = std::chrono::seconds;
-using milliseconds = std::chrono::microseconds;
+using vacuum_time_precision = std::chrono::microseconds;
 using steady_clock = std::chrono::steady_clock;
 using std::chrono::duration_cast;
 
@@ -157,24 +156,25 @@ public:
     // mark the workgroup is deleted, but at the present, it can not be removed from WorkGroupManager, because
     // 1. there exists pending drivers
     // 2. there is a race condition that a driver is attached to the workgroup after it is marked del.
-    void mark_del(const milliseconds expires_after) {
+    void mark_del(const std::chrono::seconds expiration_time) {
         bool expect_false = false;
         if (_is_marked_del.compare_exchange_strong(expect_false, true)) {
-            _vacuum_ttl = duration_cast<milliseconds>(steady_clock::now().time_since_epoch() + expires_after).count();
+            _vacuum_ttl.store(duration_cast<vacuum_time_precision>(
+                steady_clock::now().time_since_epoch() + expiration_time).count(), std::memory_order_release);
         }
     }
     // no drivers shall be added to this workgroup
     bool is_marked_del() const { return _is_marked_del.load(std::memory_order_acquire); }
     // a workgroup should wait several seconds to be cleaned safely.
     bool is_expired() const {
-        auto now = duration_cast<milliseconds>(steady_clock::now().time_since_epoch()).count();
-        return now > _vacuum_ttl;
+        const auto now = duration_cast<vacuum_time_precision>(steady_clock::now().time_since_epoch()).count();
+        return now > _vacuum_ttl.load(std::memory_order_acquire);
     }
 
     // return true if current workgroup is removable:
     // 1. is already marked del
     // 2. no pending drivers exists
-    // 3. wait for a period of vacuum_ttl to prevent race condition
+    // 3. wait until vacuum_ttl to prevent race condition
     bool is_removable() const {
         return is_marked_del() && _num_running_drivers.load(std::memory_order_acquire) == 0 && is_expired();
     }
@@ -263,7 +263,9 @@ private:
 
     std::atomic<size_t> _num_running_drivers = 0;
     std::atomic<size_t> _acc_num_drivers = 0;
-    int64_t _vacuum_ttl = std::numeric_limits<int64_t>::max();
+    // vacuum_ttl is int64_t instead of chrono::time_point because std::atomic requires a trivially copyable type
+    // vacuum_ttl is set to max, as a data race might cause a thread to read `is_marked_del = true` and `vacuum_ttl = 0`
+    std::atomic<int64_t> _vacuum_ttl = std::numeric_limits<int64_t>::max();
 
     // Metrics of this workgroup
     std::atomic<int64_t> _num_running_queries = 0;
@@ -315,7 +317,7 @@ public:
     void for_each_executors(const ExecutorsManager::ExecutorsConsumer& consumer) const;
     void change_num_connector_scan_threads(uint32_t num_connector_scan_threads);
     void change_enable_resource_group_cpu_borrowing(bool val);
-    void set_workgroup_expiration_time(milliseconds value);
+    void set_workgroup_expiration_time(std::chrono::seconds value);
 
 private:
     using MutexType = std::shared_mutex;
@@ -342,12 +344,12 @@ private:
     std::unordered_map<int128_t, WorkGroupPtr> _workgroups;
     std::unordered_map<int64_t, int64_t> _workgroup_versions;
     std::list<int128_t> _workgroup_expired_versions;
+    std::chrono::seconds _workgroup_expiration_time{120};
 
     std::atomic<size_t> _sum_cpu_weight = 0;
     MemTrackerManager _shared_mem_tracker_manager;
     std::once_flag init_metrics_once_flag;
     std::unordered_map<std::string, WorkGroupMetricsPtr> _wg_metrics;
-    milliseconds _workgroup_expiration_time{milliseconds(120 * MILLIS_PER_SEC)};
 };
 
 class DefaultWorkGroupInitialization {
