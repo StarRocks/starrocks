@@ -2675,6 +2675,7 @@ primaryExpression
     | primaryExpression COLLATE (identifier | string)                                     #collate
     | literalExpression                                                                   #literal
     | columnReference                                                                     #columnRef
+    | variantReference                                                                    #variantRef
     | base = primaryExpression (DOT_IDENTIFIER | '.' fieldName = identifier )             #dereference
     | left = primaryExpression CONCAT right = primaryExpression                           #concat
     | operator = (MINUS_SYMBOL | PLUS_SYMBOL | BITNOT) primaryExpression                  #arithmeticUnary
@@ -2750,6 +2751,10 @@ systemVariable
 
 columnReference
     : identifier
+    ;
+
+variantReference
+    : identifier ( ':' identifier )* ('::' type)?
     ;
 
 informationFunctionExpression
