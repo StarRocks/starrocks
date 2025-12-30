@@ -68,6 +68,8 @@ public:
 
     std::vector<FileInfo> ssts() const { return _ssts; }
 
+    const std::vector<PersistentIndexSstableRangePB>& sst_ranges() const { return _sst_ranges; }
+
     // The sum of all segment file sizes, in bytes.
     int64_t data_size() const { return _data_size; }
 

@@ -28,6 +28,7 @@
 #include "storage/lake/lake_persistent_index.h"
 #include "storage/lake/persistent_index_sstable.h"
 #include "storage/lake/tablet_manager.h"
+#include "storage/lake/update_manager.h"
 #include "storage/sstable/comparator.h"
 #include "storage/sstable/concatenating_iterator.h"
 #include "storage/sstable/iterator.h"
@@ -84,6 +85,12 @@ void LakePersistentIndexParallelCompactTask::run() {
     }
 }
 
+void LakePersistentIndexParallelCompactTask::cancel() {
+    // When canceling, just update the status to cancelled.
+    DCHECK(_cb != nullptr);
+    _cb->update_status(Status::Cancelled("LakePersistentIndexParallelCompactTask cancelled"));
+}
+
 Status LakePersistentIndexParallelCompactTask::do_run() {
     Trace* trace = _cb->trace();
     scoped_refptr<Trace> child_trace(new Trace);
@@ -122,6 +129,7 @@ Status LakePersistentIndexParallelCompactTask::do_run() {
                 continue;
             }
             TRACE_COUNTER_INCREMENT("compact_input_bytes", sstable_pb.filesize());
+            TRACE_COUNTER_INCREMENT("compact_input_sst_cnt", 1);
 
             // Open sstable file
             RandomAccessFileOptions opts;
@@ -352,10 +360,29 @@ bool LakePersistentIndexParallelCompactMgr::key_ranges_overlap(const std::string
     return !(cond1 || cond2);
 }
 
-// TODO : use data sample to improve segment generation.
+Status LakePersistentIndexParallelCompactMgr::sample_keys_from_sstable(const PersistentIndexSstablePB& sstable_pb,
+                                                                       const TabletMetadataPtr& metadata,
+                                                                       std::vector<std::string>* sample_keys) {
+    if (sstable_pb.filesize() <= config::pk_index_sstable_sample_interval_bytes) {
+        // use start key as boundary key only for small sstables
+        sample_keys->push_back(sstable_pb.range().start_key());
+    } else {
+        // get sample keys from large sstables
+        auto* block_cache = _tablet_mgr->update_mgr()->block_cache();
+        ASSIGN_OR_RETURN(auto sstable,
+                         PersistentIndexSstable::new_sstable(
+                                 sstable_pb, _tablet_mgr->sst_location(metadata->id(), sstable_pb.filename()),
+                                 block_cache ? block_cache->cache() : nullptr, false));
+        RETURN_IF_ERROR(sstable->sample_keys(sample_keys, config::pk_index_sstable_sample_interval_bytes));
+    }
+    return Status::OK();
+}
+
 void LakePersistentIndexParallelCompactMgr::generate_compaction_tasks(
         const std::vector<std::vector<PersistentIndexSstablePB>>& candidates, const TabletMetadataPtr& metadata,
         bool merge_base_level, std::vector<std::shared_ptr<LakePersistentIndexParallelCompactTask>>* tasks) {
+    TRACE_COUNTER_SCOPE_LATENCY_US("generate_sst_compact_tasks_latency_us");
+    const int64_t start_us = butil::gettimeofday_us();
     if (candidates.empty()) {
         return;
     }
@@ -385,25 +412,41 @@ void LakePersistentIndexParallelCompactMgr::generate_compaction_tasks(
     };
 
     std::vector<SstableWithFileset> all_sstables;
+    std::set<std::string, std::function<bool(const std::string&, const std::string&)>> boundary_keys(
+            [](const std::string& a, const std::string& b) { return comparator->Compare(Slice(a), Slice(b)) < 0; });
+    std::vector<std::string> boundary_keys_vec;
     size_t total_size = 0;
     for (size_t i = 0; i < candidates.size(); ++i) {
         for (const auto& sst : candidates[i]) {
             all_sstables.push_back({sst, i});
             total_size += sst.filesize();
+            std::vector<std::string> sample_keys;
+            auto st = sample_keys_from_sstable(sst, metadata, &sample_keys);
+            if (st.ok()) {
+                for (const auto& key : sample_keys) {
+                    boundary_keys.insert(key);
+                }
+            } else {
+                LOG(WARNING) << "Failed to sample keys from sstable " << sst.filename()
+                             << ", use start_key as boundary key only: " << st;
+                boundary_keys.insert(sst.range().start_key());
+            }
         }
     }
     if (all_sstables.empty()) {
         return;
     }
 
+    // prepare boundary keys vector
+    boundary_keys_vec.assign(boundary_keys.begin(), boundary_keys.end());
     // Sort by start_key to ensure sstables are processed in order
     std::sort(all_sstables.begin(), all_sstables.end());
 
     // Calculate segment number based on total size, threshold and parallelism config
-    size_t segment_num =
-            std::max<size_t>(1, total_size / config::pk_index_parallel_compaction_task_split_threshold_bytes);
+    size_t segment_num = std::max<size_t>(
+            1, total_size / std::max<size_t>(1, config::pk_index_parallel_compaction_task_split_threshold_bytes));
     segment_num =
-            std::min<size_t>(segment_num, std::max(1, config::pk_index_parallel_compaction_threadpool_max_threads) * 4);
+            std::min<size_t>(segment_num, std::max(1, config::pk_index_parallel_compaction_threadpool_max_threads) * 2);
 
     struct Segment {
         // [seek_key, stop_key)
@@ -424,19 +467,19 @@ void LakePersistentIndexParallelCompactMgr::generate_compaction_tasks(
     // Range count <= segment_num * Step-X
     // And range count = sst count
     // So Step-X = sst count / segment_num
-    size_t step_x = std::max((size_t)std::ceil((double)all_sstables.size() / (double)segment_num), (size_t)1);
+    size_t step_x = std::max((size_t)std::ceil((double)boundary_keys_vec.size() / (double)segment_num), (size_t)1);
     std::vector<Segment> segments;
-    for (size_t i = 0; i < all_sstables.size();) {
+    for (size_t i = 0; i < boundary_keys_vec.size();) {
         size_t end_idx = i + step_x;
-        // Create a segment from all_sstables[i] to all_sstables[end_idx]
+        // Create a segment from i to end_idx
         Segment segment;
-        segment.seek_range.seek_key = all_sstables[i].sstable.range().start_key();
+        segment.seek_range.seek_key = boundary_keys_vec[i];
         do {
-            if (end_idx >= all_sstables.size()) {
+            if (end_idx >= boundary_keys_vec.size()) {
                 // last segment with infinite boundary
                 segment.seek_range.stop_key = "";
             } else {
-                segment.seek_range.stop_key = all_sstables[end_idx].sstable.range().start_key();
+                segment.seek_range.stop_key = boundary_keys_vec[end_idx];
             }
             if (!segment.seek_range.stop_key.empty() &&
                 comparator->Compare(Slice(segment.seek_range.seek_key), Slice(segment.seek_range.stop_key)) >= 0) {
@@ -462,9 +505,6 @@ void LakePersistentIndexParallelCompactMgr::generate_compaction_tasks(
         }
     }
 
-    LOG(INFO) << fmt::format("LakePersistentIndexParallelCompactMgr: generated {} compaction segments for tablet {}",
-                             segments.size(), metadata->id());
-
     // Create tasks from segments
     UniqueId fileset_id = UniqueId::gen_uid();
     for (auto& seg : segments) {
@@ -473,12 +513,22 @@ void LakePersistentIndexParallelCompactMgr::generate_compaction_tasks(
                     std::move(seg.filesets), _tablet_mgr, metadata, merge_base_level, fileset_id, seg.seek_range));
         }
     }
+
+    LOG(INFO) << fmt::format(
+            "LakePersistentIndexParallelCompactMgr: generated {} compaction segments for tablet {}, cost {} us",
+            segments.size(), metadata->id(), butil::gettimeofday_us() - start_us);
 }
 
 void LakePersistentIndexParallelCompactMgr::TEST_generate_compaction_tasks(
         const std::vector<std::vector<PersistentIndexSstablePB>>& candidates, const TabletMetadataPtr& metadata,
         bool merge_base_level, std::vector<std::shared_ptr<LakePersistentIndexParallelCompactTask>>* tasks) {
     generate_compaction_tasks(candidates, metadata, merge_base_level, tasks);
+}
+
+Status LakePersistentIndexParallelCompactMgr::TEST_sample_keys_from_sstable(const PersistentIndexSstablePB& sstable_pb,
+                                                                            const TabletMetadataPtr& metadata,
+                                                                            std::vector<std::string>* sample_keys) {
+    return sample_keys_from_sstable(sstable_pb, metadata, sample_keys);
 }
 
 } // namespace starrocks::lake

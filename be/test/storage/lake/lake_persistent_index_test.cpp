@@ -224,7 +224,7 @@ TEST_F(LakePersistentIndexTest, test_major_compaction) {
         vector<IndexValue> upsert_old_values(keys.size());
         ASSERT_OK(index->upsert(N, key_slices.data(), values.data(), upsert_old_values.data()));
         // generate sst files.
-        index->minor_compact();
+        index->flush_memtable(true);
     }
     ASSERT_TRUE(index->memory_usage() > 0);
 
@@ -525,7 +525,7 @@ TEST_F(LakePersistentIndexTest, test_major_compaction_with_predicate) {
         vector<IndexValue> upsert_old_values(keys.size());
         ASSERT_OK(index->upsert(N, key_slices.data(), values.data(), upsert_old_values.data()));
         // generate sst files.
-        index->flush_memtable();
+        index->flush_memtable(true);
     }
     ASSERT_TRUE(index->memory_usage() > 0);
 

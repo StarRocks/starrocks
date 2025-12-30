@@ -17,17 +17,22 @@
 #include <string>
 #include <unordered_map>
 
+#include "storage/lake/lake_persistent_index_parallel_compact_mgr.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/types_fwd.h"
 #include "storage/primary_index.h"
 
 namespace starrocks {
 
+class ParallelPublishContext;
+
 namespace lake {
 
 class Tablet;
 class MetaFileBuilder;
 class TabletManager;
+class LakePersistentIndexParallelCompactMgr;
+class SegmentPKIterator;
 
 class LakePrimaryIndex : public PrimaryIndex {
 public:
@@ -68,8 +73,8 @@ public:
 
     Status commit(const TabletMetadataPtr& metadata, MetaFileBuilder* builder);
 
-    Status ingest_sst(const FileMetaPB& sst_meta, uint32_t rssid, int64_t version, const DelvecPagePB& delvec_page,
-                      DelVectorPtr delvec);
+    Status ingest_sst(const FileMetaPB& sst_meta, const PersistentIndexSstableRangePB& sst_range, uint32_t rssid,
+                      int64_t version, const DelvecPagePB& delvec_page, DelVectorPtr delvec);
 
     double get_local_pk_index_write_amp_score();
 
@@ -86,6 +91,26 @@ public:
     //
     // |rowset_id| The rowset that keys belong to. Used for setup rebuild point (cloud native index only).
     Status erase(const TabletMetadataPtr& metadata, const Column& pks, DeletesMap* deletes, uint32_t rowset_id);
+
+    int32_t current_fileset_index() const;
+
+    StatusOr<AsyncCompactCBPtr> early_sst_compact(LakePersistentIndexParallelCompactMgr* compact_mgr,
+                                                  TabletManager* tablet_mgr, const TabletMetadataPtr& metadata,
+                                                  int32_t fileset_start_idx);
+
+    // This function could be called in cloud native persistent index only.
+    Status parallel_get(ThreadPoolToken* token, SegmentPKIterator* segment_pk_iterator, DeletesMap* new_deletes);
+
+    // This function will be called when parallel upsert happens.
+    // The process flow of parallel upsert is:
+    // 1. upsert into memtable. (serialize)
+    // 2. parallel get from inactive memtables and sstables. (parallel)
+    // 3. Call `flush_memtable`, and flush memtable into sstable when memtable is full. (serialize)
+    Status parallel_upsert(ThreadPoolToken* token, uint32_t rssid, SegmentPKIterator* segment_pk_iterator,
+                           DeletesMap* new_deletes);
+
+    // Flush memtable data into sstable.
+    Status flush_memtable(bool force = false);
 
 private:
     Status _do_lake_load(TabletManager* tablet_mgr, const TabletMetadataPtr& metadata, int64_t base_version,

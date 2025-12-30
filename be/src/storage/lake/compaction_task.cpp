@@ -86,6 +86,9 @@ Status CompactionTask::fill_compaction_segment_info(TxnLogPB_OpCompaction* op_co
             file_meta->set_size(sst.size.value());
             file_meta->set_encryption_meta(sst.encryption_meta);
         }
+        for (auto& sst_range : writer->sst_ranges()) {
+            op_compaction->add_sst_ranges()->CopyFrom(sst_range);
+        }
     }
     return Status::OK();
 }

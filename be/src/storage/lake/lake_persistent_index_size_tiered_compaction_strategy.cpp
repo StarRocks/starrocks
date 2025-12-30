@@ -51,12 +51,21 @@ StatusOr<CompactionCandidateResult> LakePersistentIndexSizeTieredCompactionStrat
     std::vector<FilesetInfo> filesets;
     std::unordered_map<UniqueId, size_t> fileset_id_to_index;
     UniqueId base_level_fileset_id; // fileset id of base level (the first fileset)
+    // fileset id of active level (the last fileset)
+    UniqueId active_fileset_id =
+            sstable_meta.sstables(sstable_meta.sstables_size() - 1).has_fileset_id()
+                    ? UniqueId(sstable_meta.sstables(sstable_meta.sstables_size() - 1).fileset_id())
+                    : UniqueId::gen_uid();
 
     for (int i = 0; i < sstable_meta.sstables_size(); ++i) {
         const auto& sstable_pb = sstable_meta.sstables(i);
         // Every sstable without an explicit fileset_id will be treated as belonging to a different fileset.
         // That is because these sstable lack of key range info, and we cannot group them correctly.
         UniqueId fileset_id = sstable_pb.has_fileset_id() ? sstable_pb.fileset_id() : UniqueId::gen_uid();
+        if (fileset_id == active_fileset_id) {
+            // Active fileset should not be compacted
+            continue;
+        }
         if (i == 0) {
             base_level_fileset_id = fileset_id;
         }
@@ -71,6 +80,11 @@ StatusOr<CompactionCandidateResult> LakePersistentIndexSizeTieredCompactionStrat
             filesets.push_back(std::move(info));
         } else {
             size_t index = it->second;
+            if (filesets[index].sstable_indices.back() != i - 1) {
+                // Should not happen, filesets should be continuous in sstable list
+                LOG(ERROR) << fmt::format("Inconsistent fileset_id in sstables: {}", sstable_meta.ShortDebugString());
+                return Status::InternalError("inconsistent fileset_id in sstables");
+            }
             filesets[index].sstable_indices.push_back(i);
             filesets[index].total_size += sstable_pb.filesize();
         }
@@ -183,6 +197,7 @@ StatusOr<CompactionCandidateResult> LakePersistentIndexSizeTieredCompactionStrat
         result.candidate_filesets.push_back(std::move(fileset_sstables));
     }
     result.merge_base_level = merge_base_level;
+    result.max_max_rss_rowid = max_max_rss_rowid;
 
     return result;
 }
