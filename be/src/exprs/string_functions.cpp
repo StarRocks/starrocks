@@ -4447,15 +4447,14 @@ StatusOr<ColumnPtr> StringFunctions::regexp_count(FunctionContext* context, cons
     }
 }
 
-Status StringFunctions::regexp_position_prepare(FunctionContext* context, 
-                                                FunctionContext::FunctionStateScope scope) {
+Status StringFunctions::regexp_position_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
     if (scope != FunctionContext::FRAGMENT_LOCAL) {
         return Status::OK();
     }
 
     auto* state = new StringFunctionsState();
     context->set_function_state(scope, state);
-    
+
     if (!context->is_constant_column(1)) {
         return Status::OK();
     }
@@ -4477,7 +4476,7 @@ Status StringFunctions::regexp_position_prepare(FunctionContext* context,
             return Status::InvalidArgument(error.str());
         }
     }
-    
+
     return Status::OK();
 }
 
