@@ -49,26 +49,31 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.common.ErrorType.INTERNAL_ERROR;
+import static com.starrocks.sql.common.ErrorType.USER_ERROR;
 
 public class MetaScanNode extends AbstractOlapTableScanNode {
     private static final Logger LOG = LogManager.getLogger(MetaScanNode.class);
     private final Map<Integer, Pair<String, Column>> columnIdToColumns;
     private final List<Column> tableSchema;
     private final List<String> selectPartitionNames;
+    private final List<Long> hintsTabletIds;
     private final List<TScanRangeLocations> result = Lists.newArrayList();
 
     public MetaScanNode(PlanNodeId id, TupleDescriptor desc, OlapTable olapTable,
                         Map<Integer, Pair<String, Column>> aggColumnIdToColumns, List<String> selectPartitionNames,
-                        long selectedIndexId, ComputeResource computeResource) {
+                        List<Long> hintsTabletIds, long selectedIndexId, ComputeResource computeResource) {
         super(id, desc, "MetaScan", olapTable, selectedIndexId);
         this.tableSchema = olapTable.getBaseSchema();
         this.columnIdToColumns = aggColumnIdToColumns;
         this.selectPartitionNames = selectPartitionNames;
+        this.hintsTabletIds = hintsTabletIds != null ? hintsTabletIds : Collections.emptyList();
         this.computeResource = computeResource;
     }
 
@@ -85,6 +90,10 @@ public class MetaScanNode extends AbstractOlapTableScanNode {
                 return olapTable.getPartition(name, true);
             }).map(Partition::getSubPartitions).flatMap(Collection::stream).collect(Collectors.toList());
         }
+        // Build tablet hint set for filtering
+        Set<Long> hintTabletSet = hintsTabletIds.isEmpty() ?
+                Collections.emptySet() : new HashSet<>(hintsTabletIds);
+
         for (PhysicalPartition partition : partitions) {
             MaterializedIndex index = partition.getBaseIndex();
             int schemaHash = olapTable.getSchemaHashByIndexMetaId(index.getId());
@@ -95,6 +104,12 @@ public class MetaScanNode extends AbstractOlapTableScanNode {
 
             for (Tablet tablet : tablets) {
                 long tabletId = tablet.getId();
+
+                // Skip tablets not in hint set if hints are provided
+                if (!hintTabletSet.isEmpty() && !hintTabletSet.contains(tabletId)) {
+                    continue;
+                }
+
                 TScanRangeLocations scanRangeLocations = new TScanRangeLocations();
 
                 TInternalScanRange internalRange = new TInternalScanRange();
@@ -223,6 +238,13 @@ public class MetaScanNode extends AbstractOlapTableScanNode {
         }
         if (!selectPartitionNames.isEmpty()) {
             output.append(prefix).append("Partitions: ").append(selectPartitionNames).append("\n");
+        }
+        // Only show TabletIds when tablet hint was provided
+        if (!hintsTabletIds.isEmpty()) {
+            List<Long> tabletIds = result.stream()
+                    .map(loc -> loc.getScan_range().getInternal_scan_range().getTablet_id())
+                    .collect(Collectors.toList());
+            output.append(prefix).append("TabletIds: ").append(tabletIds).append("\n");
         }
 
         if (detailLevel == TExplainLevel.VERBOSE) {
