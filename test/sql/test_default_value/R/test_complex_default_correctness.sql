@@ -736,3 +736,268 @@ ORDER BY id;
 1	999	test	2	[1,2,3,4]	1
 2	999	test	2	[1,2,3,4]	1
 -- !result
+SELECT
+    id,
+    st_arr.id AS struct_id,
+    st_arr.scores AS scores_array,
+    st_arr.scores[1] AS first_score,
+    st_map.attributes['color'] AS color_value,
+    st_deep.items[1].id AS first_item_id,
+    st_deep.items[2].value AS second_item_value
+FROM struct_nested
+ORDER BY id;
+-- result:
+1	1	[90,85,95]	90	red	1	item2
+2	1	[90,85,95]	90	red	1	item2
+-- !result
+SELECT
+    id,
+    arr_st1[1].id AS first_person_id,
+    arr_st1[1].name AS first_person_name,
+    arr_st2[2].score AS second_student_score,
+    arr_st3[1].tags[2] AS first_record_second_tag
+FROM test_correctness_db.array_struct
+ORDER BY id;
+-- result:
+1	1	alice	88	tag2
+2	1	alice	88	tag2
+-- !result
+SELECT
+    id,
+    mp_arr1[1] AS array_for_key_1,
+    mp_arr1[1][2] AS second_elem_of_array_for_key_1,
+    mp_arr2['scores'][1] AS first_score,
+    mp_arr3[1][1][2] AS nested_array_element
+FROM test_correctness_db.map_array
+ORDER BY id;
+-- result:
+1	["a","b","c"]	b	90	2
+2	["a","b","c"]	b	90	2
+-- !result
+SELECT
+    id,
+    mp_st1[1].name AS person_1_name,
+    mp_st1[2].age AS person_2_age,
+    mp_st3[1].s4 AS key_1_s4_value,
+    mp_st3[1].ks[3] AS key_1_ks_third_element,
+    mp_st4[10].nested.z AS nested_struct_z_field
+FROM test_correctness_db.map_struct
+ORDER BY id;
+-- result:
+1	alice	30	2	3	999
+2	alice	30	2	3	999
+-- !result
+SELECT
+    id,
+    arr_st_map_arr[1].data[10][2] AS deep_array_access,
+    map_st_arr_map[1].tags[1] AS map_struct_array_elem,
+    st_map_st_arr.data[1].vals[2] AS struct_map_struct_array_elem,
+    map_arr_st_arr_st[1][1].items[1].k AS very_deep_struct_field
+FROM test_correctness_db.deep_nesting_1, test_correctness_db.deep_nesting_2
+ORDER BY id;
+-- result:
+E: (1064, "Getting analyzing error. Detail message: Column 'id' is ambiguous.")
+-- !result
+SELECT
+    id,
+    arr_st_dec256[1].amount AS first_amount,
+    map_st_dec256[1].price AS price_for_key_1,
+    map_st_dec256[1].history[2] AS second_history_value,
+    st_map_arr_dec256.data[1][1].val AS nested_decimal_value
+FROM test_correctness_db.decimal256_nested
+ORDER BY id;
+-- result:
+1	12345678901234.1234567890	99999999999.9999999999	22222222222.2222222222	12345.1234567890
+-- !result
+CREATE TABLE t_ns (id INT) DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES("replication_num"="1", "fast_schema_evolution"="true");
+-- result:
+-- !result
+INSERT INTO t_ns VALUES (1), (2);
+-- result:
+-- !result
+ALTER TABLE t_ns
+ADD COLUMN st_outer STRUCT<
+  k1 INT,
+  mid STRUCT<
+    a INT,
+    sub STRUCT<x INT, y VARCHAR(20)>
+  >,
+  k2 VARCHAR(20)
+>
+DEFAULT row(10, row(1, row(7, 'yy')), 'end');
+-- result:
+-- !result
+SELECT
+  id,
+  st_outer.mid,
+  st_outer.mid.sub
+FROM t_ns
+ORDER BY id;
+-- result:
+1	{"a":1,"sub":{"x":7,"y":"yy"}}	{"x":7,"y":"yy"}
+2	{"a":1,"sub":{"x":7,"y":"yy"}}	{"x":7,"y":"yy"}
+-- !result
+SELECT
+  id,
+  st_outer.mid,
+  st_outer.mid.sub.x
+FROM t_ns
+ORDER BY id;
+-- result:
+1	{"a":1,"sub":{"x":7,"y":"yy"}}	7
+2	{"a":1,"sub":{"x":7,"y":"yy"}}	7
+-- !result
+SELECT
+  id,
+  st_outer.mid.sub
+FROM t_ns
+ORDER BY id;
+-- result:
+1	{"x":7,"y":"yy"}
+2	{"x":7,"y":"yy"}
+-- !result
+SET cbo_prune_subfield=true;
+-- result:
+-- !result
+CREATE TABLE t_prune_mix (id INT) DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES("replication_num"="1", "fast_schema_evolution"="true");
+-- result:
+-- !result
+INSERT INTO t_prune_mix VALUES (1), (2);
+-- result:
+-- !result
+ALTER TABLE t_prune_mix
+ADD COLUMN st_mix STRUCT<
+  sid INT,
+  arr ARRAY<STRUCT<s INT, meta STRUCT<x INT, y VARCHAR(10)>>>,
+  mp MAP<INT, STRUCT<m VARCHAR(10), vals ARRAY<INT>>>,
+  name VARCHAR(10)
+>
+DEFAULT row(
+  1,
+  [row(10, row(7, 'a')), row(20, row(8, 'b'))],
+  map{1: row('v', [1, 2, 3]), 2: row('w', [9])},
+  'n'
+);
+-- result:
+-- !result
+SELECT
+  id,
+  st_mix.arr[1] AS first_elem,
+  st_mix.arr[1].meta.x AS first_elem_meta_x
+FROM t_prune_mix
+ORDER BY id;
+-- result:
+1	{"s":10,"meta":{"x":7,"y":"a"}}	7
+2	{"s":10,"meta":{"x":7,"y":"a"}}	7
+-- !result
+SELECT
+  id,
+  st_mix.arr[2].meta.y AS second_elem_meta_y
+FROM t_prune_mix
+ORDER BY id;
+-- result:
+1	b
+2	b
+-- !result
+SELECT
+  id,
+  st_mix.mp[1].m AS m1,
+  st_mix.mp[1].vals[2] AS mp1_vals_2
+FROM t_prune_mix
+ORDER BY id;
+-- result:
+1	v	2
+2	v	2
+-- !result
+SELECT
+  id,
+  st_mix.mp AS mp_all,
+  st_mix.mp[2].vals AS mp2_vals
+FROM t_prune_mix
+ORDER BY id;
+-- result:
+1	{1:{"m":"v","vals":[1,2,3]},2:{"m":"w","vals":[9]}}	[9]
+2	{1:{"m":"v","vals":[1,2,3]},2:{"m":"w","vals":[9]}}	[9]
+-- !result
+SELECT
+  id,
+  st_mix.name AS name,
+  st_mix.arr[1].s AS first_s
+FROM t_prune_mix
+ORDER BY id;
+-- result:
+1	n	10
+2	n	10
+-- !result
+CREATE TABLE t_prune_arr_mp (id INT) DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES("replication_num"="1", "fast_schema_evolution"="true");
+-- result:
+-- !result
+INSERT INTO t_prune_arr_mp VALUES (1), (2);
+-- result:
+-- !result
+ALTER TABLE t_prune_arr_mp
+ADD COLUMN arr_mp ARRAY<MAP<INT, STRUCT<a INT, b STRUCT<x INT, y VARCHAR(10)>>>>
+DEFAULT [
+  map{1: row(10, row(7, 'aa')), 2: row(20, row(8, 'bb'))}
+];
+-- result:
+-- !result
+SELECT
+  id,
+  arr_mp[1][2].b.y AS y_2
+FROM t_prune_arr_mp
+ORDER BY id;
+-- result:
+1	bb
+2	bb
+-- !result
+SELECT
+  id,
+  arr_mp[1][1] AS v1,
+  arr_mp[1][1].b.x AS v1_b_x
+FROM t_prune_arr_mp
+ORDER BY id;
+-- result:
+1	{"a":10,"b":{"x":7,"y":"aa"}}	7
+2	{"a":10,"b":{"x":7,"y":"aa"}}	7
+-- !result
+CREATE TABLE t_prune_mp_arr (id INT) DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES("replication_num"="1", "fast_schema_evolution"="true");
+-- result:
+-- !result
+INSERT INTO t_prune_mp_arr VALUES (1), (2);
+-- result:
+-- !result
+ALTER TABLE t_prune_mp_arr
+ADD COLUMN mp_arr MAP<VARCHAR(10), ARRAY<STRUCT<id INT, meta STRUCT<p INT, q VARCHAR(10)>>>>
+DEFAULT map{
+  'k': [row(1, row(7, 'qq')), row(2, row(8, 'ww'))]
+};
+-- result:
+-- !result
+SELECT
+  id,
+  mp_arr['k'][2].meta.q AS q2
+FROM t_prune_mp_arr
+ORDER BY id;
+-- result:
+1	ww
+2	ww
+-- !result
+SELECT
+  id,
+  mp_arr['k'][1] AS e1,
+  mp_arr['k'][1].meta.p AS e1_p
+FROM t_prune_mp_arr
+ORDER BY id;
+-- result:
+1	{"id":1,"meta":{"p":7,"q":"qq"}}	7
+2	{"id":1,"meta":{"p":7,"q":"qq"}}	7
+-- !result

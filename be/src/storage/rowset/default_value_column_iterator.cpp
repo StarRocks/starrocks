@@ -62,11 +62,61 @@ static void _project_default_datum_by_path_if_needed(Datum* datum, const TypeInf
     if (path->children().empty()) return;
     if (datum->is_null()) return;
 
-    if (type_info->type() != TYPE_STRUCT) {
-        return;
-    }
-
     try {
+        if (type_info->type() == TYPE_ARRAY) {
+            const ColumnAccessPath* value_path = nullptr;
+            if (path->children().size() == 1) {
+                auto* p = path->children()[0].get();
+                if (p->is_index() || p->is_all()) {
+                    value_path = p;
+                }
+            }
+            if (value_path == nullptr || value_path->children().empty()) return;
+
+            auto element_type_info = get_item_type_info(type_info);
+            if (element_type_info == nullptr) return;
+
+            const auto& array = datum->get<DatumArray>();
+            DatumArray projected;
+            projected.reserve(array.size());
+            for (const auto& elem : array) {
+                Datum child_datum = elem;
+                _project_default_datum_by_path_if_needed(&child_datum, element_type_info.get(), value_path);
+                projected.emplace_back(std::move(child_datum));
+            }
+            datum->set_array(std::move(projected));
+            return;
+        }
+
+        if (type_info->type() == TYPE_MAP) {
+            // MAP paths are represented similarly with a single child (INDEX/ALL) applied to values.
+            const ColumnAccessPath* value_path = nullptr;
+            if (path->children().size() == 1) {
+                auto* p = path->children()[0].get();
+                if (p->is_index() || p->is_all()) {
+                    value_path = p;
+                }
+            }
+            if (value_path == nullptr || value_path->children().empty()) return;
+
+            auto value_type_info = get_value_type_info(type_info);
+            if (value_type_info == nullptr) return;
+
+            const auto& mp = datum->get<DatumMap>();
+            DatumMap projected;
+            for (const auto& it : mp) {
+                Datum v = it.second;
+                _project_default_datum_by_path_if_needed(&v, value_type_info.get(), value_path);
+                projected.emplace(it.first, std::move(v));
+            }
+            datum->set<DatumMap>(std::move(projected));
+            return;
+        }
+
+        if (type_info->type() != TYPE_STRUCT) {
+            return;
+        }
+
         const DatumStruct& full = datum->get_struct();
         const auto& field_types = get_struct_field_types(type_info);
 
@@ -461,7 +511,7 @@ Status DefaultValueColumnIterator::init(const ColumnIteratorOptions& opts) {
                         _is_default_value_null = true;
                     } else {
                         new (_mem_value) Datum(std::move(datum_or.value()));
-                        if (_type_info->type() == TYPE_STRUCT && _path != nullptr) {
+                        if (_path != nullptr) {
                             _project_default_datum_by_path_if_needed(reinterpret_cast<Datum*>(_mem_value),
                                                                      _type_info.get(), _path);
                         }
