@@ -63,12 +63,7 @@ subprojects {
         set("jackson.version", "2.15.2")
         set("jetty.version", "9.4.57.v20241219")
         set("jprotobuf-starrocks.version", "1.0.0")
-<<<<<<< HEAD
-        set("kafka-clients.version", "3.4.0")
-=======
-        set("junit.version", "5.8.2")
         set("kafka-clients.version", "3.9.1")
->>>>>>> 564ab8f439 ([BugFix][CVE-2025-27818] upgrade kafka-clients to v3.9.1 (#67335))
         set("kudu.version", "1.17.1")
         set("log4j.version", "2.19.0")
         set("nimbusds.version", "9.37.2")
