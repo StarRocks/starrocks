@@ -27,17 +27,37 @@ INSERT INTO users_basic VALUES
 ALTER TABLE users_basic ADD COLUMN age TINYINT DEFAULT '25';
 -- result:
 -- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
 ALTER TABLE users_basic ADD COLUMN score SMALLINT DEFAULT '100';
 -- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
 -- !result
 ALTER TABLE users_basic ADD COLUMN salary INT DEFAULT '50000';
 -- result:
 -- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
 ALTER TABLE users_basic ADD COLUMN revenue BIGINT DEFAULT '1000000';
 -- result:
 -- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
 ALTER TABLE users_basic ADD COLUMN rating FLOAT DEFAULT '4.5';
 -- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
 -- !result
 ALTER TABLE users_basic ADD COLUMN percentage DOUBLE DEFAULT '95.5';
 -- result:
@@ -147,6 +167,10 @@ SELECT * FROM orders_column_mode ORDER BY order_id;
 ALTER TABLE orders_column_mode ADD COLUMN tax_rate DOUBLE DEFAULT '0.08';
 -- result:
 -- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
 INSERT INTO orders_column_mode (order_id, product_name) VALUES (6, 'mouse');
 -- result:
 -- !result
@@ -209,6 +233,10 @@ SELECT * FROM users_pk_table ORDER BY user_id;
 ALTER TABLE users_pk_table ADD COLUMN credit_limit BIGINT DEFAULT '5000';
 -- result:
 -- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
 INSERT INTO users_pk_table (user_id, username) VALUES (4, 'david');
 -- result:
 -- !result
@@ -247,6 +275,10 @@ INSERT INTO event_logs VALUES (1, 'event_1'), (2, 'event_2');
 -- !result
 ALTER TABLE event_logs ADD COLUMN event_count INT DEFAULT '1';
 -- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
 -- !result
 SELECT * FROM event_logs ORDER BY log_id;
 -- result:
@@ -322,6 +354,10 @@ INSERT INTO sales_summary (product_id, region) VALUES (1, 'North'), (1, 'North')
 ALTER TABLE sales_summary ADD COLUMN avg_discount DOUBLE REPLACE DEFAULT '0.05';
 -- result:
 -- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
 SELECT * FROM sales_summary ORDER BY product_id, region;
 -- result:
 1	North	0	0.0	0.0	999999.99	0.05
@@ -342,6 +378,10 @@ INSERT INTO inventory_items (item_id, item_name) VALUES (1, 'widget'), (2, 'gadg
 -- !result
 ALTER TABLE inventory_items ADD COLUMN max_stock INT DEFAULT '1000';
 -- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
 -- !result
 SELECT * FROM inventory_items ORDER BY item_id;
 -- result:
