@@ -92,9 +92,9 @@ class MyTable(Base):
     __table_args__ = {
         'comment': 'table comment',
 
-        'starrocks_PRIMARY_KEY': 'id',
-        'starrocks_DISTRIBUTED_BY': 'HASH(id) BUCKETS 10',
-        'starrocks_PROPERTIES': {'replication_num': '1'}
+        'starrocks_primary_key': 'id',
+        'starrocks_distributed_by': 'HASH(id) BUCKETS 10',
+        'starrocks_properties': {'replication_num': '1'}
     }
 
 # Create the table in the database
@@ -106,7 +106,7 @@ Base.metadata.create_all(engine)
 Alternatively, you can use SQLAlchemy Core to define tables programmatically.
 
 ```python
-from sqlalchemy import Table, MetaData, Column
+from sqlalchemy import Column, MetaData, Table
 from starrocks import INTEGER, VARCHAR
 
 metadata = MetaData()
@@ -118,9 +118,9 @@ my_core_table = Table(
     Column('name', VARCHAR(50)),
 
     # StarRocks-specific arguments
-    starrocks_PRIMARY_KEY='id',
-    starrocks_DISTRIBUTED_BY='HASH(id) BUCKETS 10',
-    starrocks_PROPERTIES={"replication_num": "1"}
+    starrocks_primary_key='id',
+    starrocks_distributed_by='HASH(id) BUCKETS 10',
+    starrocks_properties={"replication_num": "1"}
 )
 
 # Create the table in the database
