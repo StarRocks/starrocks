@@ -1439,12 +1439,9 @@ public class StarMgrMetaSyncerTest {
         // only groups in expectedCleanedGroupIds should be cleaned
         Assertions.assertEquals(expectedCleanedGroupIds, cleanedGroupIds);
     }
-<<<<<<< HEAD
-=======
 
     @Test
     public void testDropTabletAndDeleteShardPartialFailedTablets() throws StarRocksException {
-        ComputeResource computeResource = GlobalStateMgr.getCurrentState().getWarehouseMgr().getBackgroundComputeResource();
         List<Long> failedIds = Lists.newArrayList(1001L, 1003L);
         List<Long> successIds = Lists.newArrayList(1000L, 1002L);
         List<Long> allShardIds = new ArrayList<>(failedIds);
@@ -1475,6 +1472,9 @@ public class StarMgrMetaSyncerTest {
                 starOSAgent.getPrimaryComputeNodeIdByShard(anyLong, anyLong);
                 result = computeNodeId;
 
+                starOSAgent.getWorkersByWorkerGroup(anyLong);
+                result = Lists.newArrayList(computeNodeId);
+
                 systemInfoService.getBackendOrComputeNode(computeNodeId);
                 result = computeNode;
             }
@@ -1489,7 +1489,7 @@ public class StarMgrMetaSyncerTest {
         };
 
         Assertions.assertTrue(deletedShardIds.isEmpty());
-        StarMgrMetaSyncer.dropTabletAndDeleteShard(computeResource, allShardIds, starOSAgent, false);
+        StarMgrMetaSyncer.dropTabletAndDeleteShard(allShardIds, starOSAgent);
         Assertions.assertEquals(successIds.size(), deletedShardIds.size());
         Set<Long> expectedShardIds = new HashSet<>(successIds);
         Assertions.assertEquals(expectedShardIds, deletedShardIds);
@@ -1497,7 +1497,6 @@ public class StarMgrMetaSyncerTest {
 
     @Test
     public void testDropTabletAndDeleteShardNoFailedTablets() throws StarRocksException {
-        ComputeResource computeResource = GlobalStateMgr.getCurrentState().getWarehouseMgr().getBackgroundComputeResource();
         List<Long> shardIds = Stream.of(1000L, 1001L, 1002L, 1003L).collect(Collectors.toList());
         long computeNodeId = 10001L;
         ComputeNode computeNode = new ComputeNode(computeNodeId, "127.0.0.1", 9060);
@@ -1525,6 +1524,9 @@ public class StarMgrMetaSyncerTest {
                 starOSAgent.getPrimaryComputeNodeIdByShard(anyLong, anyLong);
                 result = computeNodeId;
 
+                starOSAgent.getWorkersByWorkerGroup(anyLong);
+                result = Lists.newArrayList(computeNodeId);
+
                 systemInfoService.getBackendOrComputeNode(computeNodeId);
                 result = computeNode;
             }
@@ -1539,134 +1541,9 @@ public class StarMgrMetaSyncerTest {
         };
 
         Assertions.assertTrue(deletedShardIds.isEmpty());
-        StarMgrMetaSyncer.dropTabletAndDeleteShard(computeResource, shardIds, starOSAgent, false);
+        StarMgrMetaSyncer.dropTabletAndDeleteShard(shardIds, starOSAgent);
         Assertions.assertEquals(shardIds.size(), deletedShardIds.size());
         Set<Long> expectedShardIds = new HashSet<>(shardIds);
         Assertions.assertEquals(expectedShardIds, deletedShardIds);
     }
-
-    @Test
-    public void testDeleteUnusedShardAndShardGroupWithIndexSnapshotInfo() {
-        boolean oldValue = Config.meta_sync_force_delete_shard_meta;
-        Config.meta_sync_force_delete_shard_meta = false;
-        Config.shard_group_clean_threshold_sec = 0;
-        long groupIdToClear = shardGroupId + 1;
-        // build shardGroupInfos
-        List<Long> allShardIds = Stream.of(1000L, 1001L, 1002L, 1003L).collect(Collectors.toList());
-        int numOfShards = allShardIds.size();
-        List<ShardGroupInfo> shardGroupInfos = new ArrayList<>();
-        ShardGroupInfo info = ShardGroupInfo.newBuilder()
-                .setGroupId(groupIdToClear)
-                .putLabels("tableId", String.valueOf(6L))
-                .putLabels("dbId", String.valueOf(66L))
-                .putLabels("partitionId", String.valueOf(666L))
-                .putLabels("indexId", String.valueOf(6666L))
-                .putProperties("createTime", String.valueOf(System.currentTimeMillis() - 86400 * 1000))
-                .addAllShardIds(allShardIds)
-                .build();
-        shardGroupInfos.add(info);
-
-        new MockUp<StarOSAgent>() {
-            @Mock
-            public void deleteShardGroup(List<Long> groupIds) {
-                for (long groupId : groupIds) {
-                    shardGroupInfos.removeIf(item -> item.getGroupId() == groupId);
-                }
-            }
-
-            @Mock
-            public StarOSAgent.ListShardGroupResult listShardGroup(long startGroupId) {
-                return new StarOSAgent.ListShardGroupResult(shardGroupInfos, 0L);
-            }
-
-            @Mock
-            public List<Long> listShard(long groupId) {
-                if (groupId == groupIdToClear) {
-                    return allShardIds;
-                } else {
-                    return Lists.newArrayList();
-                }
-            }
-
-            @Mock
-            public void deleteShards(Set<Long> shardIds) {
-                allShardIds.removeAll(shardIds);
-            }
-        };
-
-        new Expectations(clusterSnapshotMgr) {
-            {
-                clusterSnapshotMgr.isMaterializedIndexInClusterSnapshotInfo(anyLong, anyLong, anyLong, anyLong);
-                minTimes = 1;
-                result = true;
-            }
-        };
-
-        Deencapsulation.invoke(starMgrMetaSyncer, "deleteUnusedShardAndShardGroup");
-
-        Config.meta_sync_force_delete_shard_meta = oldValue;
-    }
-
-    @Test
-    public void testDeleteUnusedShardAndShardGroupWithShardGroupIdSnapshotInfo() {
-        boolean oldValue = Config.meta_sync_force_delete_shard_meta;
-        Config.meta_sync_force_delete_shard_meta = false;
-        Config.shard_group_clean_threshold_sec = 0;
-        long groupIdToClear = shardGroupId + 1;
-        // build shardGroupInfos
-        List<Long> allShardIds = Stream.of(1000L, 1001L, 1002L, 1003L).collect(Collectors.toList());
-        int numOfShards = allShardIds.size();
-        List<ShardGroupInfo> shardGroupInfos = new ArrayList<>();
-        ShardGroupInfo info = ShardGroupInfo.newBuilder()
-                .setGroupId(groupIdToClear)
-                .putLabels("tableId", String.valueOf(6L))
-                .putLabels("dbId", String.valueOf(66L))
-                .putLabels("partitionId", String.valueOf(666L))
-                .putLabels("indexId", String.valueOf(6666L))
-                .putProperties("createTime", String.valueOf(System.currentTimeMillis() - 86400 * 1000))
-                .addAllShardIds(allShardIds)
-                .build();
-        shardGroupInfos.add(info);
-
-        new MockUp<StarOSAgent>() {
-            @Mock
-            public void deleteShardGroup(List<Long> groupIds) {
-                for (long groupId : groupIds) {
-                    shardGroupInfos.removeIf(item -> item.getGroupId() == groupId);
-                }
-            }
-
-            @Mock
-            public StarOSAgent.ListShardGroupResult listShardGroup(long startGroupId) {
-                return new StarOSAgent.ListShardGroupResult(shardGroupInfos, 0L);
-            }
-
-            @Mock
-            public List<Long> listShard(long groupId) {
-                if (groupId == groupIdToClear) {
-                    return allShardIds;
-                } else {
-                    return Lists.newArrayList();
-                }
-            }
-
-            @Mock
-            public void deleteShards(Set<Long> shardIds) {
-                allShardIds.removeAll(shardIds);
-            }
-        };
-
-        new Expectations(clusterSnapshotMgr) {
-            {
-                clusterSnapshotMgr.isShardGroupIdInClusterSnapshotInfo(anyLong, anyLong, anyLong, anyLong);
-                minTimes = 1;
-                result = true;
-            }
-        };
-
-        Deencapsulation.invoke(starMgrMetaSyncer, "deleteUnusedShardAndShardGroup");
-
-        Config.meta_sync_force_delete_shard_meta = oldValue;
-    }
->>>>>>> ffda854a2f ([BugFix] Fix shard deletion logic in StarMgrMetaSyncer (#67334))
 }
