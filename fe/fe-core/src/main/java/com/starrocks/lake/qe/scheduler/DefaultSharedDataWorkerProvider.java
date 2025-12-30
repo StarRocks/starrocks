@@ -143,7 +143,7 @@ public class DefaultSharedDataWorkerProvider implements WorkerProvider {
     @Override
     public void selectWorker(long workerId) throws NonRecoverableException {
         if (getWorkerById(workerId) == null) {
-            reportWorkerNotFoundException(workerId);
+            reportWorkerNotFoundException("", workerId);
         }
         selectWorkerUnchecked(workerId);
     }
@@ -204,13 +204,14 @@ public class DefaultSharedDataWorkerProvider implements WorkerProvider {
     }
 
     @Override
-    public void reportWorkerNotFoundException() throws NonRecoverableException {
-        reportWorkerNotFoundException(-1);
+    public void reportWorkerNotFoundException(String errorMessagePrefix) throws NonRecoverableException {
+        reportWorkerNotFoundException(errorMessagePrefix, -1);
     }
 
-    private void reportWorkerNotFoundException(long workerId) throws NonRecoverableException {
+    private void reportWorkerNotFoundException(String errorMessagePrefix, long workerId) throws NonRecoverableException {
         throw new NonRecoverableException(
-                FeConstants.getNodeNotFoundError(true) + " nodeId: " + workerId + " " + computeNodesToString(false));
+                errorMessagePrefix + FeConstants.getNodeNotFoundError(true) + " nodeId: " + workerId + " " +
+                        computeNodesToString(false));
     }
 
     @Override
