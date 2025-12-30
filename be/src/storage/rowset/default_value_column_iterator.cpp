@@ -41,10 +41,10 @@
 #include "runtime/decimalv3.h"
 #include "storage/range.h"
 #include "storage/types.h"
-#include "util/json.h"
 #include "types/array_type_info.h"
 #include "types/map_type_info.h"
 #include "types/struct_type_info.h"
+#include "util/json.h"
 #include "util/json_converter.h"
 #include "util/mem_util.hpp"
 #include "velocypack/Builder.h"
@@ -459,7 +459,6 @@ Status DefaultValueColumnIterator::next_batch(const SparseRange<>& range, Column
     }
     if (_is_default_value_null) {
         [[maybe_unused]] bool ok = dst->append_nulls(to_read);
-        _current_rowid = range.end();
         DCHECK(ok) << "cannot append null to non-nullable column";
     } else {
         if (_type_info->type() == TYPE_OBJECT || _type_info->type() == TYPE_HLL ||
@@ -472,9 +471,9 @@ Status DefaultValueColumnIterator::next_batch(const SparseRange<>& range, Column
             [[maybe_unused]] auto ret = dst->append_strings(slices);
         } else {
             dst->append_value_multiple_times(_mem_value, to_read);
-            _current_rowid = range.end();
         }
     }
+    _current_rowid = range.end();
     if (_may_contain_deleted_row) {
         dst->set_delete_state(DEL_PARTIAL_SATISFIED);
     }

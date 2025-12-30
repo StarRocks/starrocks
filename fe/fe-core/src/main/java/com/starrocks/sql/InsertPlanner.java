@@ -683,7 +683,7 @@ public class InsertPlanner {
                     if (defaultValueType == Column.DefaultValueType.NULL || targetColumn.isAutoIncrement()) {
                         scalarOperator = ConstantOperator.createNull(targetColumn.getType());
                     } else if (defaultValueType == Column.DefaultValueType.CONST) {
-                        if (targetColumn.getDefaultExpr() != null && targetColumn.getDefaultExpr().hasExprObject()) {
+                        if (targetColumn.getDefaultExpr() != null && targetColumn.getDefaultExpr().getExprObject() != null) {
                             Expr expr = targetColumn.getDefaultExpr().obtainExpr();
                             if (!expr.getType().equals(targetColumn.getType())) {
                                 expr = new CastExpr(targetColumn.getType(), expr);
