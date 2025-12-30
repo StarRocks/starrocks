@@ -23,7 +23,7 @@ This allows Python users to maintain StarRocks schemas in a **declarative**, **v
 
 ## Key benefits
 
-Although schema migration is traditionally associated with OLTP databases, it is also valuable in data warehousing systems such as StarRocks. Teams use [Alembic](https://alembic.sqlalchemy.org/) together with the StarRocks dialect because of the benefits lised below.
+Although schema migration is traditionally associated with OLTP databases, it is also valuable in data warehousing systems such as StarRocks. Teams use [Alembic](https://alembic.sqlalchemy.org/) together with the StarRocks dialect because of the benefits listed below.
 
 ### Declarative schema definition
 
@@ -43,7 +43,7 @@ Schema changes can be applied to development, staging, and production with the s
 
 ## Installation and Connection
 
-### Preprequisites**
+### Prerequisites**
 
 - StarRocks Python client: 1.3.2 or later
 - `SQLAlchemy`: 1.4 or later (SQLAlchemy 2.0 is recommended and is required to use `sqlacodegen`)
@@ -565,7 +565,7 @@ alembic upgrade head
 ```bash
 sqlacodegen --options include_dialect_options,keep_dialect_types \
   --generator tables \
-  starrocks://<user>:<password>@<FE_host>:<quer_port>/[catalog.]<database> > models.py
+  starrocks://<user>:<password>@<FE_host>:<query_port>/[catalog.]<database> > models.py
 ```
 
 Supported objects:
