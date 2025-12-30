@@ -32,10 +32,6 @@ import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.utframe.UtFrameUtils;
-import com.starrocks.warehouse.cngroup.CRAcquireContext;
-import com.starrocks.warehouse.cngroup.ComputeResource;
-import mockit.Mock;
-import mockit.MockUp;
 import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Assertions;
@@ -101,13 +97,6 @@ public class ShortCircuitTest extends PlanTestBase {
 
     @Test
     public void testShortCircuitForShareData() throws Exception {
-        new MockUp<WarehouseManager>() {
-            @Mock
-            public ComputeResource acquireComputeResource(CRAcquireContext acquireContext) {
-                return WarehouseManager.DEFAULT_RESOURCE;
-            }
-        };
-
         OLD_VALUE = FeConstants.runningUnitTest;
         FeConstants.runningUnitTest = false;
 
@@ -168,7 +157,7 @@ public class ShortCircuitTest extends PlanTestBase {
 
         OlapScanNode scanNode = OlapScanNode.createOlapScanNodeByLocation(execPlan.getNextNodeId(), tupleDescriptor,
                 "OlapScanNodeForShortCircuit", ImmutableList.of(scanRangeLocations),
-                WarehouseManager.DEFAULT_RESOURCE);
+                WarehouseManager.DEFAULT_WAREHOUSE_ID);
         List<Long> selectPartitionIds = ImmutableList.of(1L);
         scanNode.setSelectedPartitionIds(selectPartitionIds);
 
