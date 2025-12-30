@@ -27,14 +27,30 @@ INSERT INTO users_basic VALUES
 ALTER TABLE users_basic ADD COLUMN status VARCHAR(20) DEFAULT 'active';
 -- result:
 -- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
 ALTER TABLE users_basic ADD COLUMN role VARCHAR(20) DEFAULT 'user';
 -- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
 -- !result
 ALTER TABLE users_basic ADD COLUMN country CHAR(2) DEFAULT 'US';
 -- result:
 -- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
 ALTER TABLE users_basic ADD COLUMN notes STRING DEFAULT 'no notes';
 -- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
 -- !result
 SELECT * FROM users_basic ORDER BY id;
 -- result:
@@ -139,6 +155,10 @@ SELECT * FROM orders_column_mode ORDER BY order_id;
 ALTER TABLE orders_column_mode ADD COLUMN tracking_number VARCHAR(50) DEFAULT 'N/A';
 -- result:
 -- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
 INSERT INTO orders_column_mode (order_id, customer_name) VALUES (6, 'frank');
 -- result:
 -- !result
@@ -201,6 +221,10 @@ SELECT * FROM users_pk_table ORDER BY user_id;
 ALTER TABLE users_pk_table ADD COLUMN email VARCHAR(100) DEFAULT 'unknown@example.com';
 -- result:
 -- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
 INSERT INTO users_pk_table (user_id, username) VALUES (4, 'david');
 -- result:
 -- !result
@@ -239,6 +263,10 @@ INSERT INTO event_logs VALUES (1, 'event_1'), (2, 'event_2');
 -- !result
 ALTER TABLE event_logs ADD COLUMN severity VARCHAR(20) DEFAULT 'INFO';
 -- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
 -- !result
 SELECT * FROM event_logs ORDER BY log_id;
 -- result:
@@ -310,6 +338,10 @@ INSERT INTO sales_summary (product_id, region) VALUES (1, 'North'), (1, 'North')
 ALTER TABLE sales_summary ADD COLUMN last_updated_by VARCHAR(50) REPLACE DEFAULT 'system';
 -- result:
 -- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
 SELECT * FROM sales_summary ORDER BY product_id, region;
 -- result:
 1	North	unknown	0	system
@@ -330,6 +362,10 @@ INSERT INTO inventory_items (item_id, item_name) VALUES (1, 'widget'), (2, 'gadg
 -- !result
 ALTER TABLE inventory_items ADD COLUMN barcode VARCHAR(50) DEFAULT 'NO_BARCODE';
 -- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
 -- !result
 SELECT * FROM inventory_items ORDER BY item_id;
 -- result:

@@ -27,17 +27,37 @@ INSERT INTO users_basic VALUES
 ALTER TABLE users_basic ADD COLUMN balance DECIMAL(10, 2) DEFAULT '1000.50';
 -- result:
 -- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
 ALTER TABLE users_basic ADD COLUMN interest_rate DECIMAL(5, 4) DEFAULT '0.0525';
 -- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
 -- !result
 ALTER TABLE users_basic ADD COLUMN score DECIMAL(8, 3) DEFAULT '85.125';
 -- result:
 -- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
 ALTER TABLE users_basic ADD COLUMN percentage DECIMAL(5, 2) DEFAULT '99.99';
 -- result:
 -- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
 ALTER TABLE users_basic ADD COLUMN big_balance DECIMAL(50, 10) DEFAULT '123456789012345678901234567890.1234567890';
 -- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
 -- !result
 SELECT * FROM users_basic ORDER BY id;
 -- result:
@@ -118,6 +138,10 @@ SELECT * FROM orders_column_mode ORDER BY order_id;
 ALTER TABLE orders_column_mode ADD COLUMN shipping_fee DECIMAL(8, 2) DEFAULT '15.50';
 -- result:
 -- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
 INSERT INTO orders_column_mode (order_id, customer_name) VALUES (6, 'frank');
 -- result:
 -- !result
@@ -180,6 +204,10 @@ SELECT * FROM users_pk_table ORDER BY user_id;
 ALTER TABLE users_pk_table ADD COLUMN reward_points DECIMAL(10, 2) DEFAULT '100.00';
 -- result:
 -- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
 INSERT INTO users_pk_table (user_id, username) VALUES (4, 'david');
 -- result:
 -- !result
@@ -218,6 +246,10 @@ INSERT INTO event_logs VALUES (1, 'event_1'), (2, 'event_2');
 -- !result
 ALTER TABLE event_logs ADD COLUMN processing_time DECIMAL(8, 3) DEFAULT '1.500';
 -- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
 -- !result
 SELECT * FROM event_logs ORDER BY log_id;
 -- result:
@@ -293,6 +325,10 @@ INSERT INTO sales_summary (product_id, region) VALUES (1, 'North'), (1, 'North')
 ALTER TABLE sales_summary ADD COLUMN avg_tax DECIMAL(5, 4) REPLACE DEFAULT '0.0800';
 -- result:
 -- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
 SELECT * FROM sales_summary ORDER BY product_id, region;
 -- result:
 1	North	0.00	0.00	0.00	0.0800
@@ -313,6 +349,10 @@ INSERT INTO inventory_items (item_id, item_name) VALUES (1, 'widget'), (2, 'gadg
 -- !result
 ALTER TABLE inventory_items ADD COLUMN markup_rate DECIMAL(5, 2) DEFAULT '20.00';
 -- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
 -- !result
 SELECT * FROM inventory_items ORDER BY item_id;
 -- result:
