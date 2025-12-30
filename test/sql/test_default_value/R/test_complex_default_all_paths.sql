@@ -1,4 +1,4 @@
--- name: test_complex_default_all_paths
+-- name: test_complex_default_all_paths @slow
 DROP DATABASE IF EXISTS test_complex_default_db;
 -- result:
 -- !result
@@ -21,11 +21,23 @@ INSERT INTO fast_schema_evolution (id) VALUES (1), (2), (3);
 ALTER TABLE fast_schema_evolution ADD COLUMN arr_col ARRAY<INT> DEFAULT [10, 20, 30];
 -- result:
 -- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
 ALTER TABLE fast_schema_evolution ADD COLUMN map_col MAP<INT, VARCHAR(20)> DEFAULT map{1: 'apple', 2: 'banana'};
 -- result:
 -- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
 ALTER TABLE fast_schema_evolution ADD COLUMN struct_col STRUCT<f1 INT, f2 VARCHAR(20)> DEFAULT row(100, 'hello');
 -- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
 -- !result
 SELECT * FROM fast_schema_evolution ORDER BY id;
 -- result:
@@ -46,8 +58,16 @@ INSERT INTO nested_complex (id) VALUES (1), (2);
 ALTER TABLE nested_complex ADD COLUMN nested_array ARRAY<ARRAY<INT>> DEFAULT [[1, 2], [3, 4, 5]];
 -- result:
 -- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
 ALTER TABLE nested_complex ADD COLUMN map_with_array MAP<INT, ARRAY<VARCHAR(20)>> DEFAULT map{1: ['a', 'b'], 2: ['c', 'd']};
 -- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
 -- !result
 ALTER TABLE nested_complex ADD COLUMN complex_struct STRUCT<
     id INT, 
@@ -55,6 +75,10 @@ ALTER TABLE nested_complex ADD COLUMN complex_struct STRUCT<
     tags MAP<VARCHAR(20), INT>
 > DEFAULT row(999, [100, 200], map{'k1': 1, 'k2': 2});
 -- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
 -- !result
 SELECT * FROM nested_complex ORDER BY id;
 -- result:
@@ -75,12 +99,20 @@ ALTER TABLE map_struct_order ADD COLUMN data MAP<INT, STRUCT<s4 INT, ks ARRAY<IN
 DEFAULT map{1: row(2, [1, 2, 3, 4])};
 -- result:
 -- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
 ALTER TABLE map_struct_order ADD COLUMN complex_data MAP<INT, STRUCT<
     field_b VARCHAR(20),
     field_a INT,
     nested STRUCT<z INT, a VARCHAR(20)>
 >> DEFAULT map{10: row('hello', 100, row(999, 'world'))};
 -- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
 -- !result
 SELECT * FROM map_struct_order ORDER BY id;
 -- result:
@@ -100,8 +132,16 @@ INSERT INTO empty_collections (id) VALUES (1), (2);
 ALTER TABLE empty_collections ADD COLUMN empty_arr ARRAY<INT> DEFAULT [];
 -- result:
 -- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
 ALTER TABLE empty_collections ADD COLUMN empty_map MAP<INT, VARCHAR(20)> DEFAULT map{};
 -- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
 -- !result
 ALTER TABLE empty_collections ADD COLUMN struct_with_empty STRUCT<
     id INT,
@@ -109,6 +149,10 @@ ALTER TABLE empty_collections ADD COLUMN struct_with_empty STRUCT<
     mp MAP<VARCHAR(20), INT>
 > DEFAULT row(0, [], map{});
 -- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
 -- !result
 SELECT * FROM empty_collections ORDER BY id;
 -- result:
@@ -128,29 +172,65 @@ INSERT INTO all_primitive_types (id) VALUES (1);
 ALTER TABLE all_primitive_types ADD COLUMN arr_int ARRAY<INT> DEFAULT [1, 2, 3];
 -- result:
 -- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
 ALTER TABLE all_primitive_types ADD COLUMN arr_bigint ARRAY<BIGINT> DEFAULT [1000000000, 2000000000];
 -- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
 -- !result
 ALTER TABLE all_primitive_types ADD COLUMN arr_string ARRAY<VARCHAR(20)> DEFAULT ['hello', 'world'];
 -- result:
 -- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
 ALTER TABLE all_primitive_types ADD COLUMN arr_double ARRAY<DOUBLE> DEFAULT [1.1, 2.2, 3.3];
 -- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
 -- !result
 ALTER TABLE all_primitive_types ADD COLUMN arr_bool ARRAY<BOOLEAN> DEFAULT [true, false, true];
 -- result:
 -- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
 ALTER TABLE all_primitive_types ADD COLUMN arr_decimal ARRAY<DECIMAL(10, 2)> DEFAULT [99.99, 199.99, 299.99];
 -- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
 -- !result
 ALTER TABLE all_primitive_types ADD COLUMN map_int_str MAP<INT, VARCHAR(20)> DEFAULT map{1: 'one', 2: 'two'};
 -- result:
 -- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
 ALTER TABLE all_primitive_types ADD COLUMN map_str_int MAP<VARCHAR(20), INT> DEFAULT map{'a': 10, 'b': 20};
 -- result:
 -- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
 ALTER TABLE all_primitive_types ADD COLUMN map_str_bool MAP<VARCHAR(20), BOOLEAN> DEFAULT map{'flag1': true, 'flag2': false};
 -- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
 -- !result
 ALTER TABLE all_primitive_types ADD COLUMN struct_mixed STRUCT<
     f_int INT,
@@ -161,6 +241,10 @@ ALTER TABLE all_primitive_types ADD COLUMN struct_mixed STRUCT<
     f_decimal DECIMAL(10, 2)
 > DEFAULT row(100, 1000000000, 'text', 99.99, true, 123.45);
 -- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
 -- !result
 SELECT * FROM all_primitive_types;
 -- result:
@@ -179,11 +263,23 @@ INSERT INTO nullable_complex (id) VALUES (1), (2);
 ALTER TABLE nullable_complex ADD COLUMN nullable_arr ARRAY<INT> NULL DEFAULT [100, 200];
 -- result:
 -- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
 ALTER TABLE nullable_complex ADD COLUMN nullable_map MAP<INT, VARCHAR(20)> NULL DEFAULT map{1: 'test'};
 -- result:
 -- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
 ALTER TABLE nullable_complex ADD COLUMN nullable_struct STRUCT<f1 INT> NULL DEFAULT row(999);
 -- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
 -- !result
 SELECT * FROM nullable_complex ORDER BY id;
 -- result:
@@ -213,14 +309,30 @@ INSERT INTO reorder_test (id, name) VALUES (1, 'alice'), (2, 'bob'), (3, 'charli
 ALTER TABLE reorder_test ADD COLUMN arr ARRAY<INT> DEFAULT [1, 2, 3];
 -- result:
 -- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
 ALTER TABLE reorder_test ADD COLUMN mp MAP<INT, VARCHAR(20)> DEFAULT map{10: 'ten'};
 -- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
 -- !result
 ALTER TABLE reorder_test ADD COLUMN st STRUCT<f1 INT, f2 VARCHAR(20)> DEFAULT row(100, 'test');
 -- result:
 -- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
 ALTER TABLE reorder_test ORDER BY (id, mp, st, arr, name);
 -- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
 -- !result
 SELECT SLEEP(2);
 -- result:
@@ -294,6 +406,10 @@ SELECT * FROM pk_column_mode ORDER BY order_id;
 -- !result
 ALTER TABLE pk_column_mode ADD COLUMN extras STRUCT<discount DOUBLE, items ARRAY<INT>> DEFAULT row(0.1, [1, 2, 3]);
 -- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
 -- !result
 INSERT INTO pk_column_mode (order_id, product_name) VALUES (4, 'mouse');
 -- result:

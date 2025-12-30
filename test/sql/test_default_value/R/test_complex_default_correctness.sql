@@ -1,4 +1,4 @@
--- name: test_complex_default_correctness
+-- name: test_complex_default_correctness @native
 DROP DATABASE IF EXISTS test_correctness_db;
 -- result:
 -- !result
