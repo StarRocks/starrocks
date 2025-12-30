@@ -400,7 +400,7 @@ public class DefaultWorkerProviderTest {
     @Test
     public void testReportNotFoundException() {
         DefaultWorkerProvider provider = new DefaultWorkerProvider(id2Backend, id2ComputeNode,
-                availableId2Backend, availableId2ComputeNode, true, 0);
+                availableId2Backend, availableId2ComputeNode, true);
         assertThatThrownBy(provider::reportWorkerNotFoundException)
                 .isInstanceOf(NonRecoverableException.class)
                 .hasMessageContaining("Compute node not found. Check if any compute node is down.compute node:");
