@@ -777,7 +777,11 @@ public class StmtExecutor {
                     || parsedStmt instanceof CreateTableAsSelectStmt)
                     && Config.enable_sql_blacklist && !parsedStmt.isExplain() && !isProxy) {
                 OriginStatement origStmt = parsedStmt.getOrigStmt();
-                if (origStmt != null) {
+                if (context.isStatisticsConnection() || context.isStatisticsJob()) {
+                    // For statistics connection or job, we trust it and skip sql blacklist check
+                    LOG.debug("skip sql blacklist check for statistics connection or job. stmt: {}",
+                            origStmt.originStmt);
+                } else if (origStmt != null) {
                     String originSql = origStmt.originStmt.trim()
                             .toLowerCase().replaceAll(" +", " ");
                     // If this sql is in blacklist, show message.
