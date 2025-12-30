@@ -7599,25 +7599,42 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
 
     @Override
     public ParseNode visitVariantReference(com.starrocks.sql.parser.StarRocksParser.VariantReferenceContext context) {
-        String field = context.identifier(0).getText();
-        StringBuilder sb = new StringBuilder("$");
-        for (int i = 1; i < context.identifier().size(); i++) {
-            sb.append(".");
-            String text = context.identifier(i).getText();
-            if (StringUtils.isNumeric(text)) {
-                sb.append("[" + Integer.parseInt(text) + "]");
-            } else {
-                sb.append(text);
+        // the first one is slot ref
+        List<Expr> args = new ArrayList<>();
+        {
+            Identifier identifier = (Identifier) visit(context.identifier(0));
+            List<String> parts = new ArrayList<>();
+            parts.add(identifier.getValue());
+            QualifiedName qualifiedName = QualifiedName.of(parts, createPos(context));
+            SlotRef slotRef = new SlotRef(qualifiedName);
+            if (identifier.isBackQuoted()) {
+                slotRef.setBackQuoted(true);
             }
+            args.add(slotRef);
         }
+
+        {
+            // the rest ones are path in variant
+            StringBuilder sb = new StringBuilder("$");
+            for (int i = 1; i < context.identifier().size(); i++) {
+                sb.append(".");
+                Identifier identifier = (Identifier) visit(context.identifier(i));
+                String text = identifier.getValue();
+                if (StringUtils.isNumeric(text)) {
+                    sb.append("[" + Integer.parseInt(text) + "]");
+                } else {
+                    sb.append(text);
+                }
+            }
+            args.add(new StringLiteral(sb.toString()));
+        }
+
         String functionName = "variant_query";
         if (context.type() != null) {
-            String type = context.type().identifier().getText().lowerCase();
+            String type = context.type().getText().toLowerCase();
             functionName = "get_variant_" + type;
         }
-        List<Expr> args = new ArrayList<>();
-        args.add(new StringLiteral(field));
-        args.add(new StringLiteral(sb.toString()));
+
         return new FunctionCallExpr(functionName, args, createPos(context));
     }
 
