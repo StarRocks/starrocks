@@ -51,6 +51,51 @@ SELECT * FROM users_basic ORDER BY id;
 
 
 -- ========================================================================
+-- Test 2: Traditional Schema Change (Adding KEY column forces data rewrite)
+-- ========================================================================
+-- Adding KEY column requires rewriting data, triggers SchemaChangeUtils
+
+CREATE TABLE products_with_key (
+    id INT NOT NULL,
+    price INT
+) DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 2
+PROPERTIES(
+    "replication_num" = "1",
+    "fast_schema_evolution" = "false"
+);
+
+-- Insert data
+INSERT INTO products_with_key VALUES (1, 100), (2, 200), (3, 300);
+
+-- Add boolean columns with traditional schema change
+ALTER TABLE products_with_key ADD COLUMN active BOOLEAN DEFAULT 'true';
+function: wait_alter_table_finish()
+
+SELECT count(*) FROM products_with_key;
+
+-- Test 3: Modify column type also forces schema change
+CREATE TABLE items_type_change (
+    id INT NOT NULL,
+    quantity SMALLINT,
+    available BOOLEAN DEFAULT 'true'
+) DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 2
+PROPERTIES(
+    "replication_num" = "1",
+    "fast_schema_evolution" = "false"
+);
+
+INSERT INTO items_type_change VALUES (1, 10, 1), (2, 20, 0);
+
+-- Add boolean column after type modification
+ALTER TABLE items_type_change ADD COLUMN verified BOOLEAN DEFAULT '1';
+function: wait_alter_table_finish()
+
+SELECT count(*) FROM items_type_change;
+
+
+-- ========================================================================
 -- Test 4: Column UPSERT Mode (Primary Key with column mode)
 -- ========================================================================
 -- Tests partial_update_mode='column' with PRIMARY KEY table

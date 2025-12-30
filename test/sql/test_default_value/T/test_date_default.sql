@@ -48,6 +48,32 @@ SELECT * FROM users_basic ORDER BY id;
 
 
 -- ========================================================================
+-- Test 2: Traditional Schema Change
+-- ========================================================================
+
+CREATE TABLE products_with_key (
+    id INT NOT NULL,
+    name VARCHAR(50)
+) DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 2
+PROPERTIES(
+    "replication_num" = "1",
+    "fast_schema_evolution" = "false"
+);
+
+-- Insert data
+INSERT INTO products_with_key VALUES (1, 'product1'), (2, 'product2'), (3, 'product3');
+
+-- Add date columns with traditional schema change
+ALTER TABLE products_with_key 
+    ADD COLUMN launch_date DATE DEFAULT '2024-01-01',
+    ADD COLUMN last_updated DATETIME DEFAULT '2024-12-17 00:00:00';
+function: wait_alter_table_finish()
+
+SELECT count(*) FROM products_with_key ORDER BY id;
+
+
+-- ========================================================================
 -- Test 3: Column UPSERT Mode (Primary Key with column mode)
 -- ========================================================================
 

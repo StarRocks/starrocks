@@ -65,6 +65,57 @@ SELECT * FROM users_basic ORDER BY id;
 3	charlie	1	0	1	0
 4	david	0	1	0	1
 -- !result
+CREATE TABLE products_with_key (
+    id INT NOT NULL,
+    price INT
+) DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 2
+PROPERTIES(
+    "replication_num" = "1",
+    "fast_schema_evolution" = "false"
+);
+-- result:
+-- !result
+INSERT INTO products_with_key VALUES (1, 100), (2, 200), (3, 300);
+-- result:
+-- !result
+ALTER TABLE products_with_key ADD COLUMN active BOOLEAN DEFAULT 'true';
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+SELECT count(*) FROM products_with_key;
+-- result:
+3
+-- !result
+CREATE TABLE items_type_change (
+    id INT NOT NULL,
+    quantity SMALLINT,
+    available BOOLEAN DEFAULT 'true'
+) DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 2
+PROPERTIES(
+    "replication_num" = "1",
+    "fast_schema_evolution" = "false"
+);
+-- result:
+-- !result
+INSERT INTO items_type_change VALUES (1, 10, 1), (2, 20, 0);
+-- result:
+-- !result
+ALTER TABLE items_type_change ADD COLUMN verified BOOLEAN DEFAULT '1';
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+SELECT count(*) FROM items_type_change;
+-- result:
+2
+-- !result
 CREATE TABLE orders_column_mode (
     order_id INT NOT NULL,
     product_name VARCHAR(50),
