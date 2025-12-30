@@ -5244,7 +5244,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     }
 
     public boolean isEnableShortCircuit() {
-        return enableShortCircuit;
+        return enableShortCircuit && !RunMode.isSharedDataMode();
     }
 
     public boolean isEnablePrepareStmt() {

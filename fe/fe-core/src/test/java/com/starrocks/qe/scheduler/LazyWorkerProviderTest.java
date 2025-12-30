@@ -74,7 +74,7 @@ public class LazyWorkerProviderTest {
         }
 
         @Override
-        public void reportWorkerNotFoundException() throws NonRecoverableException {
+        public void reportWorkerNotFoundException(String errorMessagePrefix) throws NonRecoverableException {
 
         }
 
