@@ -161,16 +161,7 @@ public class ColumnDefAnalyzer {
             }
             // not set default value
         }
-        if (type.isHllType()) {
-            if (defaultValueDef.isSet) {
-                throw new AnalysisException(String.format("Invalid default value for '%s'", name));
-            }
-        }
-        if (type.isBitmapType()) {
-            if (defaultValueDef.isSet) {
-                throw new AnalysisException(String.format("Invalid default value for '%s'", name));
-            }
-        }
+
         if (aggregateType == AggregateType.REPLACE_IF_NOT_NULL) {
             // If aggregate type is REPLACE_IF_NOT_NULL, we set it nullable.
             // If default value is not set, we set it NULL
@@ -260,12 +251,19 @@ public class ColumnDefAnalyzer {
                     break;
                 case CHAR:
                 case VARCHAR:
-                case HLL:
                     if (defaultValue.length() > scalarType.getLength()) {
                         throw new AnalysisException("Default value is too long: " + defaultValue);
                     }
                     break;
+                case HLL:
                 case BITMAP:
+                case VARBINARY:
+                    // HLL, BITMAP and VARBINARY only support empty string "" as default value
+                    // Empty string creates: empty HLL object, empty BITMAP object, or 0-byte binary data
+                    if (!defaultValue.isEmpty()) {
+                        throw new AnalysisException(
+                                String.format("Type '%s' only supports empty string \"\" as default value", type));
+                    }
                     break;
                 default:
                     throw new AnalysisException(String.format("Cannot add default value for type '%s'", type));
