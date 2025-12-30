@@ -1,4 +1,4 @@
--- name: test_overwrite_statistics @sequential
+-- name: test_overwrite_statistics @sequential @native
 
 drop database if exists test_overwrite_statistics;
 create database test_overwrite_statistics;
