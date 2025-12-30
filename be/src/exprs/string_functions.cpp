@@ -4524,7 +4524,7 @@ static ColumnPtr regexp_position_const_pattern(re2::RE2* const_re, const Columns
             result.append(-1);
             continue;
         }
-        
+
         const char* search_start = skip_leading_utf8(str_value.data, str_value.data + str_value.size, start_pos - 1);
         int byte_offset = search_start - str_value.data;
 
