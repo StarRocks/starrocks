@@ -37,6 +37,7 @@
 #include "column/column.h"
 #include "storage/range.h"
 #include "storage/types.h"
+#include "util/json.h"
 #include "util/mem_util.hpp"
 
 namespace starrocks {
@@ -77,6 +78,25 @@ Status DefaultValueColumnIterator::init(const ColumnIteratorOptions& opts) {
                 memory_copy(string_buffer, _default_value.c_str(), length);
                 (static_cast<Slice*>(_mem_value))->size = length;
                 (static_cast<Slice*>(_mem_value))->data = string_buffer;
+            } else if (_type_info->type() == TYPE_JSON) {
+                auto json_or = JsonValue::parse_json_or_string(Slice(_default_value));
+                if (!json_or.ok()) {
+                    // If JSON parse fails, treat as NULL to avoid query errors
+                    // This prevents returning malformed data when FE validation is bypassed
+                    LOG(WARNING) << "Failed to parse JSON default value '" << _default_value
+                                 << "', treating as NULL: " << json_or.status();
+                    _is_default_value_null = true;
+                } else {
+                    Slice json_slice = json_or.value().get_slice();
+                    auto length = static_cast<int32_t>(json_slice.size);
+                    char* string_buffer = reinterpret_cast<char*>(_pool.allocate(length));
+                    if (UNLIKELY(string_buffer == nullptr)) {
+                        return Status::InternalError("Mem usage has exceed the limit of BE");
+                    }
+                    memory_copy(string_buffer, json_slice.data, length);
+                    (static_cast<Slice*>(_mem_value))->size = length;
+                    (static_cast<Slice*>(_mem_value))->data = string_buffer;
+                }
             } else if (_type_info->type() == TYPE_ARRAY || _type_info->type() == TYPE_MAP ||
                        _type_info->type() == TYPE_STRUCT) {
                 // @todo: need support complex type literal
@@ -101,7 +121,7 @@ Status DefaultValueColumnIterator::next_batch(size_t* n, Column* dst) {
         DCHECK(ok) << "cannot append null to non-nullable column";
     } else {
         if (_type_info->type() == TYPE_OBJECT || _type_info->type() == TYPE_HLL ||
-            _type_info->type() == TYPE_PERCENTILE) {
+            _type_info->type() == TYPE_PERCENTILE || _type_info->type() == TYPE_JSON) {
             std::vector<Slice> slices;
             slices.reserve(*n);
             for (size_t i = 0; i < *n; i++) {
@@ -136,7 +156,7 @@ Status DefaultValueColumnIterator::next_batch(const SparseRange<>& range, Column
         DCHECK(ok) << "cannot append null to non-nullable column";
     } else {
         if (_type_info->type() == TYPE_OBJECT || _type_info->type() == TYPE_HLL ||
-            _type_info->type() == TYPE_PERCENTILE) {
+            _type_info->type() == TYPE_PERCENTILE || _type_info->type() == TYPE_JSON) {
             std::vector<Slice> slices;
             slices.reserve(to_read);
             for (size_t i = 0; i < to_read; i++) {
