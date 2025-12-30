@@ -229,12 +229,12 @@ public class DefaultWorkerProvider implements WorkerProvider {
 
     @Override
     public void reportDataNodeNotFoundException() throws NonRecoverableException {
-        reportWorkerNotFoundException(false);
+        reportWorkerNotFoundException("", false);
     }
 
     @Override
-    public void reportWorkerNotFoundException() throws NonRecoverableException {
-        reportWorkerNotFoundException(usedComputeNode);
+    public void reportWorkerNotFoundException(String errorMessagePrefix) throws NonRecoverableException {
+        reportWorkerNotFoundException(errorMessagePrefix, usedComputeNode);
     }
 
     @Override
@@ -309,9 +309,10 @@ public class DefaultWorkerProvider implements WorkerProvider {
                 backendsToString(allowNormalNodes);
     }
 
-    private void reportWorkerNotFoundException(boolean chooseComputeNode) throws NonRecoverableException {
+    private void reportWorkerNotFoundException(String errorMessagePrefix, boolean chooseComputeNode)
+            throws NonRecoverableException {
         throw new NonRecoverableException(
-                FeConstants.getNodeNotFoundError(chooseComputeNode) + toString(chooseComputeNode, false));
+                errorMessagePrefix + FeConstants.getNodeNotFoundError(chooseComputeNode) + toString(chooseComputeNode, false));
     }
 
     private String computeNodesToString(boolean allowNormalNodes) {

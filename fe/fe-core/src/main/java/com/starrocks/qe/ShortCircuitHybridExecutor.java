@@ -218,11 +218,7 @@ public class ShortCircuitHybridExecutor extends ShortCircuitExecutor {
 
             Optional<Backend> be = pick(scanBackendIds, aliveIdToBackends);
             if (be.isEmpty()) {
-                try {
-                    workerProvider.get().reportWorkerNotFoundException();
-                } catch (NonRecoverableException e) {
-                    throw new NonRecoverableException("No alive backend for short-circuit query. " + e.getMessage());
-                }
+                workerProvider.get().reportWorkerNotFoundException("No alive backend for short-circuit query. ");
             }
             be.ifPresent(backend -> backend2Tablets.put(be.get().getBrpcAddress(), tabletWithVersion));
         }
