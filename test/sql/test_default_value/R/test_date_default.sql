@@ -61,6 +61,33 @@ SELECT * FROM users_basic ORDER BY id;
 3	charlie	2000-01-01	2024-01-01 00:00:00	2024-12-17 10:00:00
 4	david	1995-05-15	2024-06-01 12:30:00	2024-12-18 15:45:30
 -- !result
+CREATE TABLE products_with_key (
+    id INT NOT NULL,
+    name VARCHAR(50)
+) DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 2
+PROPERTIES(
+    "replication_num" = "1",
+    "fast_schema_evolution" = "false"
+);
+-- result:
+-- !result
+INSERT INTO products_with_key VALUES (1, 'product1'), (2, 'product2'), (3, 'product3');
+-- result:
+-- !result
+ALTER TABLE products_with_key 
+    ADD COLUMN launch_date DATE DEFAULT '2024-01-01',
+    ADD COLUMN last_updated DATETIME DEFAULT '2024-12-17 00:00:00';
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+SELECT count(*) FROM products_with_key ORDER BY id;
+-- result:
+E: (1064, "Getting analyzing error at line 1, column 48. Detail message: '`test_date_comprehensive`.`products_with_key`.`id`' must be an aggregate expression or appear in GROUP BY clause.")
+-- !result
 CREATE TABLE orders_column_mode (
     order_id INT NOT NULL,
     customer_name VARCHAR(50),
