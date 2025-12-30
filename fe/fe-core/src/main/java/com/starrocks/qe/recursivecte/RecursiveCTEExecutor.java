@@ -39,6 +39,7 @@ import com.starrocks.sql.ast.KeysDesc;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.OrderByElement;
 import com.starrocks.sql.ast.OriginStatement;
+import com.starrocks.sql.ast.QualifiedName;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.RandomDistributionDesc;
 import com.starrocks.sql.ast.Relation;
@@ -48,6 +49,7 @@ import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.SetQualifier;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SubqueryRelation;
+import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.UnionRelation;
 import com.starrocks.sql.ast.expression.BinaryPredicate;
@@ -57,6 +59,7 @@ import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.TypeDef;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.StringType;
 import org.apache.logging.log4j.LogManager;
@@ -76,7 +79,7 @@ public class RecursiveCTEExecutor {
 
     private final Map<String, RecursiveCTEGroup> recursiveCTEGroups = Maps.newLinkedHashMap();
 
-    private final Map<String, TableName> cteTempTableMap = Maps.newHashMap();
+    private final Map<String, TableRef> cteTempTableMap = Maps.newHashMap();
 
     private final ConnectContext connectContext;
 
@@ -132,7 +135,7 @@ public class RecursiveCTEExecutor {
         StmtExecutor executor;
         for (String cteName : recursiveCTEGroups.keySet()) {
             RecursiveCTEGroup group = recursiveCTEGroups.get(cteName);
-            TableName tempTableName = cteTempTableMap.get(cteName);
+            TableRef tempTableRef = cteTempTableMap.get(cteName);
             // temp table creation
             try (var ignore = Tracers.watchScope("createRecursiveCTETempTable")) {
                 analyze(group.tempTableStmt, connectContext);
@@ -142,7 +145,7 @@ public class RecursiveCTEExecutor {
             }
             // start plan
             try (var ignore = Tracers.watchScope("executeRecursiveCTEStartStmt")) {
-                InsertStmt insert = new InsertStmt(tempTableName, group.startStmt);
+                InsertStmt insert = new InsertStmt(tempTableRef, group.startStmt);
                 insert.setOrigStmt(new OriginStatement(AstToSQLBuilder.toSQL(insert)));
                 executor = StmtExecutor.newInternalExecutor(connectContext, insert);
                 connectContext.setQueryId(UUIDUtil.genUUID());
@@ -156,7 +159,7 @@ public class RecursiveCTEExecutor {
             }
             try (var ignore = Tracers.watchScope("executeRecursiveCTERecursiveStmt")) {
                 // recursive plan
-                RecursiveCTEStager stager = new RecursiveCTEStager(group, tempTableName);
+                RecursiveCTEStager stager = new RecursiveCTEStager(group, tempTableRef);
                 for (int i = 1; i < connectContext.getSessionVariable().getRecursiveCteMaxDepth(); i++) {
                     InsertStmt insert = stager.next();
                     executor = StmtExecutor.newInternalExecutor(connectContext, insert);
@@ -187,27 +190,27 @@ public class RecursiveCTEExecutor {
         if (!connectContext.getSessionVariable().isRecursiveCteFinalizeTemporalTable()) {
             return;
         }
-        for (TableName tempTableName : cteTempTableMap.values()) {
+        for (TableRef tempTableRef : cteTempTableMap.values()) {
             try {
-                DropTemporaryTableStmt dropStmt = new DropTemporaryTableStmt(true, tempTableName, true);
+                DropTemporaryTableStmt dropStmt = new DropTemporaryTableStmt(true, tempTableRef, true);
                 analyze(dropStmt, connectContext);
                 DDLStmtExecutor.execute(dropStmt, connectContext);
             } catch (Exception e) {
-                LOG.warn("Error occurred during dropping recursive CTE temporary table: {}", tempTableName, e);
+                LOG.warn("Error occurred during dropping recursive CTE temporary table: {}", tempTableRef, e);
             }
         }
     }
 
     private static class RecursiveCTEStager extends AstTraverser<Void, Void> {
         private int currentLoops;
-        private final TableName tempTableName;
+        private final TableRef tempTableRef;
         private final RecursiveCTEGroup group;
         private Expr tempPredicate = null;
         private boolean initPredicate = false;
 
-        public RecursiveCTEStager(RecursiveCTEGroup group, TableName tempTableName) {
+        public RecursiveCTEStager(RecursiveCTEGroup group, TableRef tempTableRef) {
             this.currentLoops = 0;
-            this.tempTableName = tempTableName;
+            this.tempTableRef = tempTableRef;
             this.group = group;
         }
 
@@ -222,7 +225,7 @@ public class RecursiveCTEExecutor {
                     group.isDistinct), subquery, null, null, null);
             recursiveSelect.getCteRelations().addAll(group.nonRecursiveCTEs);
 
-            InsertStmt insert = new InsertStmt(tempTableName, new QueryStatement(recursiveSelect));
+            InsertStmt insert = new InsertStmt(tempTableRef, new QueryStatement(recursiveSelect));
             insert.setOrigStmt(new OriginStatement(AstToSQLBuilder.toSQL(insert)));
             return insert;
         }
@@ -231,7 +234,7 @@ public class RecursiveCTEExecutor {
         public Void visitSelect(SelectRelation node, Void context) {
             super.visitSelect(node, context);
             if (node.getRelation() instanceof TableRelation tableRelation) {
-                if (tempTableName.equals(tableRelation.getName())) {
+                if (tableRelation.getName().getTbl().equals(tempTableRef.getTableName())) {
                     // add predicate to filter current level
                     IntLiteral levelLiteral = new IntLiteral(currentLoops);
                     Expr equalsLevel = new BinaryPredicate(BinaryType.EQ,
@@ -306,7 +309,8 @@ public class RecursiveCTEExecutor {
             if (relation instanceof CTERelation cteRelation && cteRelation.isRecursive()
                     && recursiveCTEGroups.containsKey(cteRelation.getName())) {
                 CreateTemporaryTableStmt tempTableStmt = recursiveCTEGroups.get(cteRelation.getName()).tempTableStmt;
-                TableName name = tempTableStmt.getDbTbl();
+                TableName name =
+                        new TableName(tempTableStmt.getTableRef().getDbName(), tempTableStmt.getTableRef().getTableName());
 
                 List<SelectListItem> selectItems = Lists.newArrayList();
                 for (int i = 0; i < tempTableStmt.getColumnDefs().size() - 1; i++) {
@@ -362,10 +366,11 @@ public class RecursiveCTEExecutor {
 
             Map<String, String> prop = Maps.newHashMap();
             prop.put("replication_num", "1");
-            TableName tempTableName =
-                    new TableName(connectContext.getDatabase(), node.getName() + "_" + System.currentTimeMillis());
+            String tempTableName = node.getName() + "_" + System.currentTimeMillis();
+            TableRef tableRef = new TableRef(QualifiedName.of(connectContext.getDatabase(), tempTableName),
+                    null, NodePosition.ZERO);
             CreateTemporaryTableStmt tempTableStmt = new CreateTemporaryTableStmt(false, false,
-                    tempTableName, columnDefs, List.of(), "OLAP", "utf8",
+                    tableRef, columnDefs, List.of(), "OLAP", "utf8",
                     new KeysDesc(KeysType.DUP_KEYS, Lists.newArrayList(columnDefs.get(0).getName())),
                     null, new RandomDistributionDesc(), prop, Maps.newHashMap(),
                     "Temporary Table for Recursive CTE", Lists.newArrayList(), null);
@@ -392,7 +397,7 @@ public class RecursiveCTEExecutor {
 
             recursiveCTEGroups.put(node.getName(), new RecursiveCTEGroup(start, recursive, isDistinct,
                     List.copyOf(nonRecursiveCTEs), tempTableStmt, levelColumnName));
-            cteTempTableMap.put(node.getName(), tempTableName);
+            cteTempTableMap.put(node.getName(), tableRef);
 
             visit(start.getQueryRelation());
             visit(recursive.getQueryRelation());
