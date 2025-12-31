@@ -219,6 +219,17 @@ Status t_column_to_pb_column(int32_t unique_id, const TColumn& t_column, ColumnP
     // Default value
     if (t_column.__isset.default_value) {
         column_pb->set_default_value(t_column.default_value);
+    } else if (t_column.__isset.default_expr) {
+        // Complex type defaults are usually delivered via `default_expr` (TExpr).
+        // ColumnPB only persists `default_value`, so convert it here to avoid losing defaults in all callers of
+        // convert_t_schema_to_pb_schema (e.g. lake schema fetch, lake schema change, create tablet metadata).
+        auto converted = convert_default_expr_to_json_string(t_column.default_expr);
+        if (converted.ok()) {
+            column_pb->set_default_value(converted.value());
+        } else {
+            LOG(WARNING) << "Failed to convert default_expr to JSON String for column '" << t_column.column_name
+                         << "': " << converted.status().to_string();
+        }
     }
     if (t_column.__isset.is_bloom_filter_column) {
         column_pb->set_is_bf_column(t_column.is_bloom_filter_column);
