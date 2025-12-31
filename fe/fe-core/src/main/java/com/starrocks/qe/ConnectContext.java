@@ -1036,6 +1036,9 @@ public class ConnectContext {
         // apply modified session variable
         try {
             for (Map.Entry<String, SystemVariable> entry : modifiedSessionVariables.entrySet()) {
+                if (entry.getKey().equalsIgnoreCase("warehouse")) {
+                    continue;
+                }
                 variableMgr.setSystemVariable(sessionVariable, entry.getValue(), true);
             }
         } catch (Exception e) {
