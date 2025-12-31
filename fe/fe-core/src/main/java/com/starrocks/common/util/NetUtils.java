@@ -103,7 +103,7 @@ public class NetUtils {
         if (isLocalAddress(address)) {
             // Prefer binding check to avoid false positives when connect() is redirected or black-holed by VPN/firewall.
             try (ServerSocket serverSocket = new ServerSocket()) {
-                serverSocket.setReuseAddress(false);
+                serverSocket.setReuseAddress(true);
                 serverSocket.bind(new InetSocketAddress(address, port));
                 return false;
             } catch (BindException e) {
