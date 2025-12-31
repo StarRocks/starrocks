@@ -43,7 +43,15 @@ public class ShowResourceGroupUsageStmt extends ShowStmt {
                     Pair.create(new Column("BEInUseMemBytes", ScalarType.createVarchar(64)),
                             item -> Long.toString(item.usage.getMemUsageBytes())),
                     Pair.create(new Column("BERunningQueries", ScalarType.createVarchar(64)),
-                            item -> Integer.toString(item.usage.getNumRunningQueries()))
+                            item -> Integer.toString(item.usage.getNumRunningQueries())),
+                    Pair.create(new Column("BEMemLimitBytes", ScalarType.createVarchar(64)),
+                            item -> Long.toString(item.usage.getMemLimitBytes())),
+                    Pair.create(new Column("BEMemPool", ScalarType.createVarchar(64)),
+                            item -> item.usage.getMemPool()),
+                    Pair.create(new Column("BEMemPoolInUseMemBytes", ScalarType.createVarchar(64)),
+                            item -> Long.toString(item.usage.getMemPoolMemUsageBytes())),
+                    Pair.create(new Column("BEMemPoolMemLimitBytes", ScalarType.createVarchar(64)),
+                            item -> Long.toString(item.usage.getMemPoolMemLimitBytes()))
             );
 
     private static final ShowResultSetMetaData COLUMN_META_DATA;
