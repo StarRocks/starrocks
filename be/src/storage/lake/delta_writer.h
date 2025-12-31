@@ -54,6 +54,8 @@ struct DeltaWriterStat {
     std::atomic_int32_t write_count = 0;
     // The number of rows to write
     std::atomic_int32_t row_count = 0;
+    // The number of bytes to write (approximate)
+    std::atomic_int64_t input_bytes = 0;
     // Accumulated time for write()
     std::atomic_int64_t write_time_ns = 0;
     // The number that memtable is full
