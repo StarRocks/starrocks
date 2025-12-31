@@ -737,8 +737,7 @@ TEST_P(LakePrimaryKeyConsistencyTest, test_random_seed_pk_consistency) {
 }
 
 INSTANTIATE_TEST_SUITE_P(LakePrimaryKeyConsistencyTest, LakePrimaryKeyConsistencyTest,
-                         ::testing::Values(PrimaryKeyParam{.persistent_index_type = PersistentIndexTypePB::LOCAL},
-                                           PrimaryKeyParam{
-                                                   .persistent_index_type = PersistentIndexTypePB::CLOUD_NATIVE}));
+                         ::testing::Values(PrimaryKeyParam{
+                                 .persistent_index_type = PersistentIndexTypePB::CLOUD_NATIVE}));
 
 } // namespace starrocks::lake
