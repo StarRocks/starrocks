@@ -71,3 +71,8 @@ select id ,c1 ,c2 from student_score left array join scores as c1, scores as c2 
 5	90	90
 5	92	92
 -- !result
+
+select id, c1, c2 from student_score array join scores as c1, [1,2] as c2
+-- result:
+E: (1064, 'Sizes of ARRAY-JOIN-ed arrays do not match.')
+-- !result

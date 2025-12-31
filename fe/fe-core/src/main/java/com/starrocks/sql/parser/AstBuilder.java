@@ -10085,6 +10085,9 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             } else {
                 //If no alias is provided, use the expression string as the column name
                 alias = exprContext.expression().getText();
+                if (alias.length() > 128) {
+                    alias = alias.substring(0, 128);
+                }
             }
             aliasList.add(alias);
             arrayExprs.add(arrayExpr);
@@ -10120,7 +10123,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
 
     private String generateTableAlias(String columnAlias) {
         // Generate table aliases to avoid conflicts
-        return "t_" + columnAlias;
+        return "t_array" + columnAlias + "_" + System.currentTimeMillis();
     }
 
     public static IndexDef.IndexType getIndexType(com.starrocks.sql.parser.StarRocksParser.IndexTypeContext indexTypeContext) {

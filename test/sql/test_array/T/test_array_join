@@ -25,3 +25,5 @@ select id ,c1 ,c2 from student_score array join scores as c1, scores as c2 order
 
 select id ,c1 ,c2 from student_score left array join scores as c1, scores as c2 order by id,c1
 
+select id, c1, c2 from student_score array join scores as c1, [1,2] as c2
+
