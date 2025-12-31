@@ -21,6 +21,7 @@ import com.starrocks.sql.ast.AlterStorageVolumeStmt;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.BaseCreateAlterUserStmt;
 import com.starrocks.sql.ast.CreateCatalogStmt;
+import com.starrocks.sql.ast.CreateRepositoryStmt;
 import com.starrocks.sql.ast.CreateResourceStmt;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
 import com.starrocks.sql.ast.CreateStorageVolumeStmt;
@@ -150,6 +151,11 @@ public class AuditEncryptionChecker implements AstVisitor<Boolean, Void> {
 
     @Override
     public Boolean visitCreateCatalogStatement(CreateCatalogStmt statement, Void context) {
+        return true;
+    }
+
+    @Override
+    public Boolean visitCreateRepositoryStatement(CreateRepositoryStmt statement, Void context) {
         return true;
     }
 
