@@ -141,7 +141,12 @@ Status LakeDataSource::get_next(RuntimeState* state, ChunkPtr* chunk) {
 
     do {
         RETURN_IF_ERROR(state->check_mem_limit("read chunk from storage"));
-        RETURN_IF_ERROR(_prj_iter->get_next(chunk_ptr));
+        Status status = _prj_iter->get_next(chunk_ptr);
+        // update counter when eof or error
+        if (UNLIKELY(!status.ok())) {
+            update_realtime_counter(chunk_ptr);
+            return status;
+        }
 
         TRY_CATCH_ALLOC_SCOPE_START()
 
