@@ -697,6 +697,10 @@ public class ShowResultMetaFactory implements AstVisitorEPack<ShowResultSetMetaD
                 .addColumn(new Column("BEInUseCpuCores", TypeFactory.createVarcharType(64)))
                 .addColumn(new Column("BEInUseMemBytes", TypeFactory.createVarcharType(64)))
                 .addColumn(new Column("BERunningQueries", TypeFactory.createVarcharType(64)))
+                .addColumn(new Column("BEMemLimitBytes", TypeFactory.createVarcharType(64)))
+                .addColumn(new Column("BEMemPool", TypeFactory.createVarcharType(64)))
+                .addColumn(new Column("BEMemPoolInUseMemBytes", TypeFactory.createVarcharType(64)))
+                .addColumn(new Column("BEMemPoolMemLimitBytes", TypeFactory.createVarcharType(64)))
                 .build();
     }
 
