@@ -258,7 +258,16 @@ Status LakeDataSource::init_reader_params(const std::vector<OlapScanRange*>& key
             !config::disable_storage_page_cache && _scan_range.fill_data_cache && !_scan_range.skip_page_cache;
     _params.lake_io_opts.fill_data_cache = _scan_range.fill_data_cache;
     _params.lake_io_opts.skip_disk_cache = _scan_range.skip_disk_cache;
+<<<<<<< HEAD
     _params.runtime_range_pruner = OlapRuntimeScanRangePruner(parser, _conjuncts_manager.unarrived_runtime_filters());
+=======
+
+    if (thrift_lake_scan_node.__isset.sorted_by_keys_per_tablet) {
+        _params.sorted_by_keys_per_tablet = thrift_lake_scan_node.sorted_by_keys_per_tablet;
+    }
+
+    _params.runtime_range_pruner = RuntimeScanRangePruner(parser, _conjuncts_manager->unarrived_runtime_filters());
+>>>>>>> 246b302e57 ([BugFix] fix sorted streaming aggregate cause wrong result in shared data (#67376))
     _params.lake_io_opts.cache_file_only = _runtime_state->query_options().__isset.enable_cache_select &&
                                            _runtime_state->query_options().enable_cache_select &&
                                            config::lake_cache_select_in_physical_way;
