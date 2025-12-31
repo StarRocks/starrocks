@@ -803,7 +803,9 @@ void Aggregator::offer_chunk_to_buffer(const ChunkPtr& chunk) {
     if (_limited_buffer == nullptr) {
         // This should not happen in normal operation as offer_chunk_to_buffer is only
         // called from push_chunk which is called after open() initializes _limited_buffer.
-        // However, we handle it defensively to prevent crashes.
+        // If this occurs, it indicates a programming error in the pipeline execution order.
+        // We handle it defensively to prevent crashes, but note that the chunk data will be
+        // lost in this case. The DCHECK will catch this issue in debug builds.
         DCHECK(false) << "offer_chunk_to_buffer called before _limited_buffer is initialized";
         return;
     }
