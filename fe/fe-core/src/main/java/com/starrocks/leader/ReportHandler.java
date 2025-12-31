@@ -134,6 +134,7 @@ import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TException;
 
 import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -168,8 +169,8 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
             for (Map<Long, ReportTask> taskMap : pendingTaskMap.values()) {
                 count += taskMap.size();
             }
-            return ImmutableMap.of("PendingTask", count,
-                    "ReportQueue", (long) reportQueue.size());
+            long queueSize = (long) reportQueue.size() + (long) resourceReportQueue.size();
+            return ImmutableMap.of("PendingTask", count, "ReportQueue", queueSize);
         }
     }
 
@@ -189,12 +190,17 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
     private static final long MAX_REPORT_HANDLING_TIME_LOGGING_THRESHOLD_MS = 3000;
 
     private static final Logger LOG = LogManager.getLogger(ReportHandler.class);
+    private static final Set<ReportType> RESOURCE_REPORT_TYPES =
+            EnumSet.of(ReportType.RESOURCE_GROUP_REPORT, ReportType.RESOURCE_USAGE_REPORT);
 
     private final BlockingQueue<Pair<Long, ReportType>> reportQueue = Queues.newLinkedBlockingQueue();
+    private final BlockingQueue<Pair<Long, ReportType>> resourceReportQueue = Queues.newLinkedBlockingQueue();
 
     private final Map<ReportType, Map<Long, ReportTask>> pendingTaskMap = Maps.newHashMap();
 
     private final ReadWriteLock lock = new ReentrantReadWriteLock();
+
+    private final Daemon resourceReportDaemon = new ResourceReportDaemon();
 
     /**
      * Record the mapping of <tablet id, backend id> to the to be dropped time of tablet.
@@ -346,7 +352,8 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
         } catch (Exception e) {
             tStatus.setStatus_code(TStatusCode.INTERNAL_ERROR);
             List<String> errorMsgs = Lists.newArrayList();
-            errorMsgs.add("failed to put report task to queue. queue size: " + reportQueue.size());
+            errorMsgs.add(String.format("failed to put report task to queue. queue size: %s, resource usage queue size: %s",
+                    reportQueue.size(), resourceReportQueue.size()));
             errorMsgs.add("err: " + e.getMessage());
             tStatus.setError_msgs(errorMsgs);
 
@@ -354,8 +361,8 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
             return result;
         }
 
-        LOG.debug("report received from be/computeNode {}. type: {}, current queue size: {}",
-                beId, reportType, reportQueue.size());
+        LOG.debug("report received from be/computeNode {}. type: {}, current queue size: {}, resource usage queue size: {}",
+                beId, reportType, reportQueue.size(), resourceReportQueue.size());
         return result;
     }
 
@@ -372,14 +379,20 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
             if (!pendingTaskMap.containsKey(reportTask.type)) {
                 throw new Exception("Unknown report task type" + reportTask.toString());
             }
-            ReportTask oldTask = pendingTaskMap.get(reportTask.type).get(reportTask.beId);
+            Map<Long, ReportTask> pendingTasks = pendingTaskMap.get(reportTask.type);
+            ReportTask oldTask = pendingTasks.get(reportTask.beId);
             if (oldTask == null) {
-                reportQueue.put(Pair.create(reportTask.beId, reportTask.type));
+                BlockingQueue<Pair<Long, ReportType>> targetQueue = getQueueByType(reportTask.type);
+                targetQueue.put(Pair.create(reportTask.beId, reportTask.type));
             } else {
                 LOG.info("update be {} report task, type: {}", oldTask.beId, oldTask.type);
             }
-            pendingTaskMap.get(reportTask.type).put(reportTask.beId, reportTask);
+            pendingTasks.put(reportTask.beId, reportTask);
         }
+    }
+
+    private BlockingQueue<Pair<Long, ReportType>> getQueueByType(ReportType reportType) {
+        return RESOURCE_REPORT_TYPES.contains(reportType) ? resourceReportQueue : reportQueue;
     }
 
     private Map<Long, TTablet> buildTabletMap(List<TTablet> tabletList) {
@@ -394,7 +407,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
         return tabletMap;
     }
 
-    private class ReportTask extends LeaderTask {
+    private static class ReportTask extends LeaderTask {
 
         public long beId;
         public ReportType type;
@@ -2145,17 +2158,33 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
     }
 
     public int getReportQueueSize() {
-        return reportQueue.size();
+        return reportQueue.size() + resourceReportQueue.size();
+    }
+
+    @Override
+    public synchronized void start() {
+        resourceReportDaemon.start();
+        super.start();
+    }
+
+    @Override
+    public void setStop() {
+        super.setStop();
+        resourceReportDaemon.setStop();
     }
 
     @Override
     protected void runOneCycle() {
+        consumeQueue(reportQueue, "report");
+    }
+
+    private void consumeQueue(BlockingQueue<Pair<Long, ReportType>> queue, String queueName) {
         while (true) {
             try {
-                Pair<Long, ReportType> pair = reportQueue.take();
-                ReportTask task = null;
+                Pair<Long, ReportType> pair = queue.take();
+                ReportTask task;
                 try (CloseableLock ignored = CloseableLock.lock(lock.writeLock())) {
-                    // using the lastest task
+                    // using the latest task
                     task = pendingTaskMap.get(pair.second).get(pair.first);
                     if (task == null) {
                         throw new Exception("pendingTaskMap not exists " + pair.first);
@@ -2164,8 +2193,19 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                 }
                 task.exec();
             } catch (Exception e) {
-                LOG.warn("got interupted exception when executing report", e);
+                LOG.warn("got exception when executing {} report", queueName, e);
             }
+        }
+    }
+
+    private class ResourceReportDaemon extends Daemon {
+        public ResourceReportDaemon() {
+            super("resource-report-handler");
+        }
+
+        @Override
+        protected void runOneCycle() {
+            consumeQueue(resourceReportQueue, "resource");
         }
     }
 }
