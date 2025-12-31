@@ -52,7 +52,7 @@ public class CreateTableLikeAnalyzer {
         if (table == null) {
             throw new SemanticException("Table %s is not found", existedTableName.getTbl());
         }
-        MetaUtils.checkNotSupportCatalog(table, TableOperation.CREATE_TABLE_LIKE);
+        MetaUtils.checkNotSupportCatalog(table, TableOperation.CREATE_TABLE_LIKE, existedTableName.getCatalog());
 
         List<String> createTableStmt = Lists.newArrayList();
 
