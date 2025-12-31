@@ -25,6 +25,7 @@
 #include "column/vectorized_fwd.h"
 #include "common/statusor.h"
 #include "exprs/string_functions.h"
+#include "util/defer_op.h"
 
 namespace starrocks {
 
@@ -157,6 +158,18 @@ TEST_F(StringFunctionRegexpReplaceTest, testMultipleRowsWithPackagePattern) {
         FAIL() << "ERROR: Unable to allocate scratch space.";
     }
     
+    // Ensure cleanup happens even if assertions fail
+    DeferOp cleanup([&] {
+        if (state->scratch != nullptr) {
+            hs_free_scratch(state->scratch);
+            state->scratch = nullptr;
+        }
+        if (state->database != nullptr) {
+            hs_free_database(state->database);
+            state->database = nullptr;
+        }
+    });
+    
     // Test vectorized version
     auto r_vec = StringFunctions::regexp_replace_use_hyperscan_vec(state.get(), columns);
     ASSERT_TRUE(r_vec.ok());
@@ -172,10 +185,6 @@ TEST_F(StringFunctionRegexpReplaceTest, testMultipleRowsWithPackagePattern) {
     ASSERT_EQ(ori_result->debug_item(1), "'activity_50'");
     ASSERT_EQ(vec_result->debug_item(0), "'activity_60'");
     ASSERT_EQ(vec_result->debug_item(1), "'activity_50'");
-    
-    // Cleanup
-    hs_free_scratch(state->scratch);
-    hs_free_database(state->database);
 }
 
 } // namespace starrocks
