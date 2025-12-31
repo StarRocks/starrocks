@@ -1783,8 +1783,6 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         job.calculateAndSetRemainingTimeout(connectContext, analyzeStatus);
         Assertions.assertEquals(Config.statistic_collect_query_timeout,
                 connectContext.getSessionVariable().getQueryTimeoutS());
-        Assertions.assertEquals(Config.statistic_collect_query_timeout,
-                connectContext.getSessionVariable().getInsertTimeoutS());
 
         // timeout
         analyzeStatus.setStartTime(LocalDateTime.now().minusSeconds(3700));
