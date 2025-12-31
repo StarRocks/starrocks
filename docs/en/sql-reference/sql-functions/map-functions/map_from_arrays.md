@@ -8,7 +8,7 @@ displayed_sidebar: docs
 
 Creates a MAP value from the given pair of key item array and value item array.
 
-This function is supported from v3.1 onwards.
+This function has an alias [map_agg()](map_agg.md). It is supported from v3.1 onwards.
 
 ## Syntax
 
