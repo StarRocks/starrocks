@@ -72,10 +72,10 @@ public:
                     min_length_array_size = array_element_length;
                 }
             }
-             if (max_length_array_size != min_length_array_size && state->get_is_array_join_mode()) {
+            if (max_length_array_size != min_length_array_size && state->get_is_array_join_mode()) {
                 state->set_status(Status::InternalError("Sizes of ARRAY-JOIN-ed arrays do not match."));
                 return {};
-             }
+            }
             if (max_length_array_size == 0 && state->get_is_left_join()) {
                 offset += 1;
                 copy_count_column->append(offset);
