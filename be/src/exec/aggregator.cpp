@@ -784,35 +784,20 @@ void Aggregator::close(RuntimeState* state) {
 }
 
 bool Aggregator::is_chunk_buffer_empty() {
-    if (_limited_buffer == nullptr) {
-        return true;
-    }
     return _limited_buffer->is_empty();
 }
 
 ChunkPtr Aggregator::poll_chunk_buffer() {
     auto notify = defer_notify_sink();
-    if (_limited_buffer == nullptr) {
-        return nullptr;
-    }
     return _limited_buffer->pull();
 }
 
 void Aggregator::offer_chunk_to_buffer(const ChunkPtr& chunk) {
     auto notify = defer_notify_source();
-    if (_limited_buffer == nullptr) {
-        // Defensive check: this should only be called after open() initializes _limited_buffer.
-        // Returning early prevents crash but results in data loss.
-        DCHECK(_limited_buffer != nullptr) << "offer_chunk_to_buffer called before initialization";
-        return;
-    }
     _limited_buffer->push(chunk);
 }
 
 bool Aggregator::is_chunk_buffer_full() {
-    if (_limited_buffer == nullptr) {
-        return false;
-    }
     return _limited_buffer->is_full();
 }
 

@@ -804,9 +804,9 @@ std::string PipelineDriver::to_readable_string() const {
        << block_reasons << ", operator-chain: [";
     for (size_t i = 0; i < _operators.size(); ++i) {
         if (i == 0) {
-            ss << _operators[i]->get_name();
+            ss << _operators[i]->get_raw_name();
         } else {
-            ss << " -> " << _operators[i]->get_name();
+            ss << " -> " << _operators[i]->get_raw_name();
         }
     }
     ss << "]";
