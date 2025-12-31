@@ -45,6 +45,7 @@ import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
 
 import java.time.Clock;
 import java.time.LocalDateTime;
@@ -123,7 +124,8 @@ public class StatisticsExecutorTest extends PlanTestBase {
             }
         };
 
-        Assert.assertThrows(DdlException.class, () -> collectJob.collectStatisticSync(sql, context));
+        AnalyzeStatus analyzeStatus = new NativeAnalyzeStatus();
+        Assertions.assertThrows(DdlException.class, () -> collectJob.collectStatisticSync(sql, context, analyzeStatus));
 
         new Expectations(context) {
             {
@@ -132,7 +134,7 @@ public class StatisticsExecutorTest extends PlanTestBase {
             }
         };
 
-        collectJob.collectStatisticSync(sql, context);
+        collectJob.collectStatisticSync(sql, context, analyzeStatus);
     }
 
     @Test
