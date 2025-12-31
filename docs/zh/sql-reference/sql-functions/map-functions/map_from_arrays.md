@@ -8,7 +8,7 @@ displayed_sidebar: docs
 
 将两个 ARRAY 数组作为 Key 和 Value 组合成一个 MAP 对象。
 
-该函数有一个别名 [map_agg()](map_agg.md)。该函数从 3.0 版本开始支持。
+该函数有一个别名 [map_agg()](map_agg.md)。该函数从 3.1 版本开始支持。
 
 ## 语法
 
