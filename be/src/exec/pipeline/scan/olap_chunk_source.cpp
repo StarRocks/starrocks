@@ -50,6 +50,7 @@
 #include "types/logical_type.h"
 #include "util/json.h"
 #include "util/runtime_profile.h"
+#include "util/string_parser.hpp"
 #include "util/table_metrics.h"
 
 namespace starrocks::pipeline {
@@ -528,35 +529,63 @@ void OlapChunkSource::_inherit_default_value_from_json(TabletColumn* column, con
 
     vpack::Builder builder;
     vpack::Slice extracted = JsonPath::extract(&json_value_or.value(), json_path_or.value(), &builder);
-    if (extracted.isNone()) {
+    if (extracted.isNone() || extracted.isNull()) {
         return;
     }
 
+    const LogicalType value_type = column->type();
     std::string default_value_str;
-    LogicalType value_type = column->type();
 
-    // For string types (VARCHAR/CHAR), extract the raw string value without JSON quotes
-    // For other types (INT/DOUBLE/BOOLEAN/etc), use JSON representation
     if (value_type == TYPE_VARCHAR || value_type == TYPE_CHAR) {
         if (extracted.isString()) {
             default_value_str = extracted.copyString();
         } else {
-            JsonValue extracted_value(extracted);
-            auto result_or = extracted_value.to_string();
-            if (result_or.ok()) {
-                default_value_str = *result_or;
-            } else {
-                return;
-            }
+            vpack::Options options = vpack::Options::Defaults;
+            options.singleLinePrettyPrint = true;
+            default_value_str = extracted.toJson(&options);
         }
-    } else {
-        JsonValue extracted_value(extracted);
-        auto result_or = extracted_value.to_string();
-        if (result_or.ok()) {
-            default_value_str = *result_or;
+        column->set_default_value(default_value_str);
+        return;
+    }
+
+    if (value_type == TYPE_BOOLEAN) {
+        if (extracted.isString()) {
+            vpack::ValueLength len;
+            const char* str = extracted.getStringUnchecked(len);
+            StringParser::ParseResult parse_result;
+            auto as_int = StringParser::string_to_int<int32_t>(str, len, &parse_result);
+            if (parse_result == StringParser::PARSE_SUCCESS) {
+                default_value_str = (as_int != 0) ? "1" : "0";
+            } else {
+                bool b = StringParser::string_to_bool(str, len, &parse_result);
+                if (parse_result != StringParser::PARSE_SUCCESS) {
+                    return;
+                }
+                default_value_str = b ? "1" : "0";
+            }
+        } else if (extracted.isBool()) {
+            default_value_str = extracted.getBool() ? "1" : "0";
+        } else if (extracted.isNumber()) {
+            vpack::Options options = vpack::Options::Defaults;
+            options.singleLinePrettyPrint = true;
+            default_value_str = extracted.toJson(&options);
         } else {
             return;
         }
+        column->set_default_value(default_value_str);
+        return;
+    }
+
+    if (extracted.isString()) {
+        default_value_str = extracted.copyString();
+    } else if (extracted.isBool()) {
+        default_value_str = extracted.getBool() ? "1" : "0";
+    } else if (extracted.isNumber()) {
+        vpack::Options options = vpack::Options::Defaults;
+        options.singleLinePrettyPrint = true;
+        default_value_str = extracted.toJson(&options);
+    } else {
+        return;
     }
 
     column->set_default_value(default_value_str);
