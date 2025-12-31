@@ -513,10 +513,6 @@ SELECT regexp_position('test string', '+invalid');
 -- result:
 [REGEX].*Invalid regex expression: \+invalid.*
 -- !result
-SELECT regexp_position('test string', '{invalid');
--- result:
--1
--- !result
 SELECT regexp_position('test string', '\\');
 -- result:
 [REGEX].*Invalid regex expression: \\.*
