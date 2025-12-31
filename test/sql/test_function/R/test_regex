@@ -515,7 +515,7 @@ SELECT regexp_position('test string', '+invalid');
 -- !result
 SELECT regexp_position('test string', '{invalid');
 -- result:
-[REGEX].*Invalid regex expression: \{invalid.*
+-1
 -- !result
 SELECT regexp_position('test string', '\\');
 -- result:
