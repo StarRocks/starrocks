@@ -219,6 +219,19 @@ Status t_column_to_pb_column(int32_t unique_id, const TColumn& t_column, ColumnP
     // Default value
     if (t_column.__isset.default_value) {
         column_pb->set_default_value(t_column.default_value);
+    } else if (t_column.__isset.default_expr) {
+        // Fallback strategy:
+        // In most paths, BE will preprocess `default_expr` (TExpr) into `default_value` before reaching here.
+        // However, ColumnPB only persists `default_value`, so if some caller forgets the preprocessing step,
+        // the default may be lost (especially for complex types). Convert `default_expr` -> `default_value` here
+        // only when `default_value` is not set to make schema conversion robust.
+        auto converted = convert_default_expr_to_json_string(t_column.default_expr);
+        if (converted.ok()) {
+            column_pb->set_default_value(converted.value());
+        } else {
+            LOG(WARNING) << "Failed to convert default_expr to JSON String for column '" << t_column.column_name
+                         << "': " << converted.status().to_string();
+        }
     }
     if (t_column.__isset.is_bloom_filter_column) {
         column_pb->set_is_bf_column(t_column.is_bloom_filter_column);
