@@ -100,6 +100,18 @@ import static java.util.function.Function.identity;
 public class Utils {
     private static final Logger LOG = LogManager.getLogger(Utils.class);
 
+    /**
+     * Check if a column name represents a virtual column.
+     * Virtual columns are read-only metadata columns that are not persisted.
+     * Currently supported: _tablet_id_
+     * 
+     * @param columnName the column name to check
+     * @return true if the column name is a virtual column, false otherwise
+     */
+    public static boolean isVirtualColumn(String columnName) {
+        return "_tablet_id_".equalsIgnoreCase(columnName);
+    }
+
     public static List<ScalarOperator> extractConjuncts(ScalarOperator root) {
         LinkedList<ScalarOperator> list = new LinkedList<>();
         if (null == root) {

@@ -19,6 +19,7 @@
 
 #include "common/statusor.h"
 #include "exec/filter_condition.h"
+#include "runtime/descriptors.h"
 #include "storage/predicate_tree/predicate_tree_fwd.h"
 #include "tablet_schema.h"
 
@@ -61,8 +62,15 @@ protected:
 
 class OlapPredicateParser final : public PredicateParser {
 public:
-    explicit OlapPredicateParser(TabletSchemaCSPtr schema) : _schema(std::move(schema)) {}
-    // explicit PredicateParser(const std::vector<SlotDescriptor*>* slot_descriptors) : _slot_desc(slot_descriptors) {}
+    explicit OlapPredicateParser(TabletSchemaCSPtr schema,
+                                 const std::vector<SlotDescriptor*>* slot_descriptors = nullptr)
+            : _schema(std::move(schema)) {
+        if (slot_descriptors != nullptr) {
+            for (const SlotDescriptor* slot : *slot_descriptors) {
+                _slot_desc_map[slot->col_name()] = slot;
+            }
+        }
+    }
 
     // check if an expression can be pushed down to the storage level
     bool can_pushdown(const ColumnPredicate* predicate) const override;
@@ -86,13 +94,18 @@ private:
     StatusOr<ColumnPredicate*> t_parse_thrift_cond(const ConditionType& condition) const;
 
     const TabletSchemaCSPtr _schema = nullptr;
-    // const std::vector<SlotDescriptor*>* _slot_desc = nullptr;
+    std::unordered_map<std::string, const SlotDescriptor*> _slot_desc_map; // For checking virtual column
 };
 
 class ConnectorPredicateParser final : public PredicateParser {
 public:
-    explicit ConnectorPredicateParser(const std::vector<SlotDescriptor*>* slot_descriptors)
-            : _slot_desc(slot_descriptors) {}
+    explicit ConnectorPredicateParser(const std::vector<SlotDescriptor*>* slot_descriptors) {
+        if (slot_descriptors != nullptr) {
+            for (const SlotDescriptor* slot : *slot_descriptors) {
+                _slot_desc_map[slot->col_name()] = slot;
+            }
+        }
+    }
 
     bool can_pushdown(const ColumnPredicate* predicate) const override;
 
@@ -110,9 +123,10 @@ public:
 
 private:
     template <typename ConditionType>
-    ColumnPredicate* t_parse_thrift_cond(const ConditionType& condition) const;
+    StatusOr<ColumnPredicate*> t_parse_thrift_cond(const ConditionType& condition) const;
 
     const std::vector<SlotDescriptor*>* _slot_desc = nullptr;
+    std::unordered_map<std::string, const SlotDescriptor*> _slot_desc_map; // For checking virtual column
 };
 
 } // namespace starrocks

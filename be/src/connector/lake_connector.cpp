@@ -14,9 +14,13 @@
 
 #include "connector/lake_connector.h"
 
+#include <algorithm>
+#include <sstream>
+#include <unordered_set>
 #include <vector>
 
 #include "column/column_access_path.h"
+#include "column/fixed_length_column.h"
 #include "exec/connector_scan_node.h"
 #include "exec/olap_scan_prepare.h"
 #include "exec/pipeline/fragment_context.h"
@@ -31,6 +35,7 @@
 #include "storage/projection_iterator.h"
 #include "storage/rowset/short_key_range_option.h"
 #include "storage/runtime_range_pruner.hpp"
+#include "storage/virtual_column.h"
 #include "util/starrocks_metrics.h"
 
 namespace starrocks::connector {
@@ -151,10 +156,7 @@ Status LakeDataSource::get_next(RuntimeState* state, ChunkPtr* chunk) {
 
         TRY_CATCH_ALLOC_SCOPE_START()
 
-        for (auto slot : _query_slots) {
-            size_t column_index = chunk_ptr->schema()->get_field_index_by_name(slot->col_name());
-            chunk_ptr->set_slot_id_to_index(slot->id(), column_index);
-        }
+        process_virtual_columns(chunk_ptr, _query_slots, _scan_range.tablet_id);
 
         if (!_non_pushdown_pred_tree.empty()) {
             SCOPED_TIMER(_expr_filter_timer);
@@ -244,6 +246,14 @@ Status LakeDataSource::init_scanner_columns(std::vector<uint32_t>& scanner_colum
                                             std::vector<uint32_t>& reader_columns) {
     for (auto slot : *_slots) {
         DCHECK(slot->is_materialized());
+
+        // Virtual column, skip tablet schema lookup
+        // It will be populated in get_next()
+        if (slot->is_virtual_column()) {
+            _query_slots.push_back(slot);
+            continue;
+        }
+
         int32_t index = _tablet_schema->field_index(slot->col_name());
         if (index < 0) {
             std::stringstream ss;
@@ -259,8 +269,21 @@ Status LakeDataSource::init_scanner_columns(std::vector<uint32_t>& scanner_colum
     // Put key columns before non-key columns, as the `MergeIterator` and `AggregateIterator`
     // required.
     std::sort(scanner_columns.begin(), scanner_columns.end());
+
+    // If scanner_columns is empty (only virtual columns selected), we need to read at least
+    // one column to determine the number of rows. Use the first key column for this purpose.
     if (scanner_columns.empty()) {
-        return Status::InternalError("failed to build storage scanner, no materialized slot!");
+        if (_tablet_schema->num_key_columns() > 0) {
+            // Add the first key column to scanner_columns to read row count
+            // This column won't be in _query_slots, so it won't appear in output
+            scanner_columns.push_back(0);
+        } else if (_tablet_schema->num_columns() > 0) {
+            // If no key columns, use the first column
+            scanner_columns.push_back(0);
+        } else {
+            return Status::InternalError(
+                    "failed to build storage scanner, no materialized slot and no columns in table!");
+        }
     }
 
     // Return columns
@@ -294,7 +317,7 @@ void LakeDataSource::decide_chunk_size(bool has_predicate) {
 Status LakeDataSource::init_reader_params(const std::vector<OlapScanRange*>& key_ranges) {
     const TLakeScanNode& thrift_lake_scan_node = _provider->_t_lake_scan_node;
     bool skip_aggregation = thrift_lake_scan_node.is_preaggregation;
-    auto parser = _obj_pool.add(new OlapPredicateParser(_tablet_schema));
+    auto parser = _obj_pool.add(new OlapPredicateParser(_tablet_schema, _slots));
     _params.is_pipeline = true;
     _params.reader_type = READER_QUERY;
     _params.skip_aggregation = skip_aggregation;
