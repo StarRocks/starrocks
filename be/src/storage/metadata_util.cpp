@@ -15,10 +15,20 @@
 #include "storage/metadata_util.h"
 
 #include <boost/algorithm/string.hpp>
+#include <chrono>
+#include <ctime>
 
+#include "column/column_helper.h"
 #include "common/config.h"
+#include "common/object_pool.h"
+#include "exprs/cast_expr.h"
+#include "exprs/expr.h"
+#include "exprs/expr_context.h"
 #include "gen_cpp/AgentService_types.h"
+#include "gen_cpp/Types_types.h"
 #include "gutil/strings/substitute.h"
+#include "runtime/exec_env.h"
+#include "runtime/runtime_state.h"
 #include "storage/aggregate_type.h"
 #include "storage/olap_common.h"
 #include "storage/tablet_schema.h"
@@ -416,6 +426,90 @@ Status convert_t_schema_to_pb_schema(const TTabletSchema& t_schema, TabletSchema
     auto compression_level = t_schema.__isset.compression_level ? t_schema.compression_level : -1;
     out_schema->set_compression_level(compression_level);
     return convert_t_schema_to_pb_schema(t_schema, compression_type, out_schema);
+}
+
+// Helper function to create a minimal RuntimeState for constant expression evaluation
+static std::unique_ptr<RuntimeState> create_temp_runtime_state() {
+    TUniqueId dummy_query_id;
+    dummy_query_id.hi = 0;
+    dummy_query_id.lo = 0;
+
+    TQueryOptions query_options;
+    TQueryGlobals query_globals;
+    auto now = std::chrono::system_clock::now();
+    auto now_time_t = std::chrono::system_clock::to_time_t(now);
+    auto now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
+
+    std::tm tm_buf;
+    localtime_r(&now_time_t, &tm_buf);
+    char time_str[64];
+    strftime(time_str, sizeof(time_str), "%Y-%m-%d %H:%M:%S", &tm_buf);
+
+    query_globals.now_string = time_str;
+    query_globals.timestamp_ms = now_ms;
+    query_globals.time_zone = "UTC";
+
+    auto state = std::make_unique<RuntimeState>(dummy_query_id, query_options, query_globals, ExecEnv::GetInstance());
+    state->init_instance_mem_tracker();
+
+    return state;
+}
+
+StatusOr<std::string> convert_default_expr_to_json_string(const TExpr& t_expr) {
+    auto state = create_temp_runtime_state();
+    ObjectPool pool;
+
+    ExprContext* ctx = nullptr;
+    RETURN_IF_ERROR(Expr::create_expr_tree(&pool, t_expr, &ctx, state.get()));
+
+    if (ctx == nullptr || ctx->root() == nullptr) {
+        return Status::InternalError("Failed to create expression tree from TExpr");
+    }
+
+    RETURN_IF_ERROR(ctx->prepare(state.get()));
+    RETURN_IF_ERROR(ctx->open(state.get()));
+
+    ColumnPtr column;
+    auto eval_result = ctx->root()->evaluate_const(ctx);
+    if (!eval_result.ok()) {
+        ctx->close(state.get());
+        return eval_result.status();
+    }
+    column = eval_result.value();
+
+    if (column == nullptr || column->size() == 0) {
+        ctx->close(state.get());
+        return Status::InternalError("Failed to evaluate default expression: empty result");
+    }
+
+    if (column->is_constant()) {
+        auto const_col = down_cast<const ConstColumn*>(column.get());
+        column = const_col->data_column()->clone();
+    }
+
+    DCHECK_EQ(column->size(), 1) << "Default constant expression should produce exactly one value";
+
+    ASSIGN_OR_RETURN(auto json_str, cast_type_to_json_str(column, 0, true));
+    ctx->close(state.get());
+
+    return json_str;
+}
+
+Status preprocess_default_expr_for_tcolumns(std::vector<TColumn>& columns) {
+    for (auto& column : columns) {
+        if (column.__isset.default_expr) {
+            auto result = convert_default_expr_to_json_string(column.default_expr);
+            if (result.ok()) {
+                column.default_value = result.value();
+                column.__isset.default_value = true;
+            } else {
+                LOG(ERROR) << "Failed to convert default_expr to JSON String for column '" << column.column_name
+                           << "': " << result.status().to_string();
+            }
+        }
+    }
+
+    return Status::OK();
 }
 
 } // namespace starrocks
