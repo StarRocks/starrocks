@@ -653,12 +653,25 @@ public class ShowResultMetaFactory implements AstVisitor<ShowResultSetMetaData, 
     @Override
     public ShowResultSetMetaData visitShowResourceGroupUsageStatement(ShowResourceGroupUsageStmt statement, Void context) {
         return ShowResultSetMetaData.builder()
+<<<<<<< HEAD
                 .addColumn(new Column("Name", ScalarType.createVarchar(64)))
                 .addColumn(new Column("Id", ScalarType.createVarchar(64)))
                 .addColumn(new Column("Backend", ScalarType.createVarchar(64)))
                 .addColumn(new Column("BEInUseCpuCores", ScalarType.createVarchar(64)))
                 .addColumn(new Column("BEInUseMemBytes", ScalarType.createVarchar(64)))
                 .addColumn(new Column("BERunningQueries", ScalarType.createVarchar(64)))
+=======
+                .addColumn(new Column("Name", TypeFactory.createVarcharType(64)))
+                .addColumn(new Column("Id", TypeFactory.createVarcharType(64)))
+                .addColumn(new Column("Backend", TypeFactory.createVarcharType(64)))
+                .addColumn(new Column("BEInUseCpuCores", TypeFactory.createVarcharType(64)))
+                .addColumn(new Column("BEInUseMemBytes", TypeFactory.createVarcharType(64)))
+                .addColumn(new Column("BERunningQueries", TypeFactory.createVarcharType(64)))
+                .addColumn(new Column("BEMemLimitBytes", TypeFactory.createVarcharType(64)))
+                .addColumn(new Column("BEMemPool", TypeFactory.createVarcharType(64)))
+                .addColumn(new Column("BEMemPoolInUseMemBytes", TypeFactory.createVarcharType(64)))
+                .addColumn(new Column("BEMemPoolMemLimitBytes", TypeFactory.createVarcharType(64)))
+>>>>>>> f4a8df573a ([Enhancement] Extend 'show usage resource groups;' with mem_pool metrics (#66690))
                 .build();
     }
 

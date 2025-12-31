@@ -41,8 +41,21 @@ public class ShowResourceGroupUsageStmt extends ShowStmt {
                             item -> Double.toString(item.usage.getCpuCoreUsagePermille() / 1000.0D)),
                     Pair.create(new Column("BEInUseMemBytes", ScalarType.createVarchar(64)),
                             item -> Long.toString(item.usage.getMemUsageBytes())),
+<<<<<<< HEAD
                     Pair.create(new Column("BERunningQueries", ScalarType.createVarchar(64)),
                             item -> Integer.toString(item.usage.getNumRunningQueries()))
+=======
+                    Pair.create(new Column("BERunningQueries", TypeFactory.createVarcharType(64)),
+                            item -> Integer.toString(item.usage.getNumRunningQueries())),
+                    Pair.create(new Column("BEMemLimitBytes", TypeFactory.createVarcharType(64)),
+                            item -> Long.toString(item.usage.getMemLimitBytes())),
+                    Pair.create(new Column("BEMemPool", TypeFactory.createVarcharType(64)),
+                            item -> item.usage.getMemPool()),
+                    Pair.create(new Column("BEMemPoolInUseMemBytes", TypeFactory.createVarcharType(64)),
+                            item -> Long.toString(item.usage.getMemPoolMemUsageBytes())),
+                    Pair.create(new Column("BEMemPoolMemLimitBytes", TypeFactory.createVarcharType(64)),
+                            item -> Long.toString(item.usage.getMemPoolMemLimitBytes()))
+>>>>>>> f4a8df573a ([Enhancement] Extend 'show usage resource groups;' with mem_pool metrics (#66690))
             );
 
     private static final List<Function<ShowItem, String>> COLUMN_SUPPLIERS = META_DATA.stream()
