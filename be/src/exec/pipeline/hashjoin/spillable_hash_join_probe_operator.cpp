@@ -64,7 +64,6 @@ void SpillableHashJoinProbeOperator::close(RuntimeState* state) {
 
 bool SpillableHashJoinProbeOperator::has_output() const {
     if (!is_ready()) {
-        DCHECK(false) << "is_ready() must be true before call has_output";
         return false;
     }
     if (!spilled()) {
@@ -132,7 +131,6 @@ bool SpillableHashJoinProbeOperator::has_output() const {
 
 bool SpillableHashJoinProbeOperator::need_input() const {
     if (!is_ready()) {
-        DCHECK(false) << "is_ready() must be true before call has_output";
         return false;
     }
     if (!spilled()) {
