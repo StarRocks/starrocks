@@ -121,7 +121,8 @@ public class StatisticsExecutorTest extends PlanTestBase {
             }
         };
 
-        Assert.assertThrows(DdlException.class, () -> collectJob.collectStatisticSync(sql, context));
+        AnalyzeStatus analyzeStatus = new NativeAnalyzeStatus();
+        Assert.assertThrows(DdlException.class, () -> collectJob.collectStatisticSync(sql, context, analyzeStatus));
 
         new Expectations(context) {
             {
@@ -130,7 +131,7 @@ public class StatisticsExecutorTest extends PlanTestBase {
             }
         };
 
-        collectJob.collectStatisticSync(sql, context);
+        collectJob.collectStatisticSync(sql, context, analyzeStatus);
     }
 
     @Test
