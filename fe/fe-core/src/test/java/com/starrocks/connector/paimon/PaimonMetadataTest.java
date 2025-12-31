@@ -1040,21 +1040,23 @@ public class PaimonMetadataTest {
         RowType tblRowType1 = RowType.of(new DataType[] {new IntType(true), new IntType(true)}, new String[] {"year", "month"});
         RowType tblRowType2 = RowType.of(new DataType[] {new IntType(true), new IntType(true)}, new String[] {"year", "month"});
 
+        Map<String, String> spec1 = new LinkedHashMap<>();
+        spec1.put("year", "2020");
+        spec1.put("month", "1");
         org.apache.paimon.partition.Partition db1PaimonPartition1 =
-                new org.apache.paimon.partition.Partition(new LinkedHashMap<String, String>() {{
-                    put("year", "2020");
-                    put("month", "1");
-                }}, 100L, 2048L, 2L, System.currentTimeMillis(), false);
+                new org.apache.paimon.partition.Partition(spec1, 100L, 2048L, 2L, System.currentTimeMillis(), false);
+
+        Map<String, String> spec2 = new LinkedHashMap<>();
+        spec2.put("year", "2021");
+        spec2.put("month", "1");
         org.apache.paimon.partition.Partition db2PaimonPartition1 =
-                new org.apache.paimon.partition.Partition(new LinkedHashMap<String, String>() {{
-                    put("year", "2021");
-                    put("month", "1");
-                }}, 100L, 2048L, 2L, System.currentTimeMillis(), false);
+                new org.apache.paimon.partition.Partition(spec2, 100L, 2048L, 2L, System.currentTimeMillis(), false);
+
+        Map<String, String> spec3 = new LinkedHashMap<>();
+        spec2.put("year", "2022");
+        spec2.put("month", "1");
         org.apache.paimon.partition.Partition db2PaimonPartition2 =
-                new org.apache.paimon.partition.Partition(new LinkedHashMap<String, String>() {{
-                    put("year", "2022");
-                    put("month", "1");
-                }}, 100L, 2048L, 2L, System.currentTimeMillis(), false);
+                new org.apache.paimon.partition.Partition(spec2, 100L, 2048L, 2L, System.currentTimeMillis(), false);
 
         new Expectations() {
             {
