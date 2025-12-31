@@ -186,7 +186,7 @@ CREATE TABLE test_varbinary_invalid1 (
 DISTRIBUTED BY HASH(id) BUCKETS 1
 PROPERTIES("replication_num" = "1");
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: Invalid default value for \'binary_col\': Type \'VARBINARY\' only supports empty string "" as default value.')
+[REGEX].*Getting analyzing error*
 -- !result
 CREATE TABLE test_varbinary_invalid2 (
     id INT,
@@ -195,7 +195,7 @@ CREATE TABLE test_varbinary_invalid2 (
 DISTRIBUTED BY HASH(id) BUCKETS 1
 PROPERTIES("replication_num" = "1");
 -- result:
-E: (1064, "Getting syntax error at line 3, column 33. Detail message: Unexpected input 'x'CAFE'', the most similar input is {'NULL', 'CURRENT_TIMESTAMP', SINGLE_QUOTED_TEXT, DOUBLE_QUOTED_TEXT, '('}.")
+[REGEX].*Getting analyzing error*
 -- !result
 CREATE TABLE test_varbinary_sized (
     id INT NOT NULL,

@@ -16,7 +16,6 @@
 
 #include "column/array_column.h"
 #include "column/column_builder.h"
-#include "column/column_viewer.h"
 #include "column/column_visitor_adapter.h"
 #include "column/json_column.h"
 #include "column/map_column.h"
@@ -37,11 +36,16 @@ constexpr bool is_type_complete_v<T, std::void_t<decltype(sizeof(T))>> = true;
 // NOTE: cast in rowwise is not efficent but intuitive
 class CastColumnItemVisitor final : public ColumnVisitorAdapter<CastColumnItemVisitor> {
 public:
-    CastColumnItemVisitor(int row, const std::string& field_name, vpack::Builder* builder)
-            : ColumnVisitorAdapter(this), _row(row), _field_name(field_name), _builder(builder) {}
+    CastColumnItemVisitor(int row, const std::string& field_name, vpack::Builder* builder, bool unindexed_struct)
+            : ColumnVisitorAdapter(this),
+              _row(row),
+              _field_name(field_name),
+              _builder(builder),
+              _unindexed_struct(unindexed_struct) {}
 
-    static Status cast_datum_to_json(const ColumnPtr& col, int row, const std::string& name, vpack::Builder* builder) {
-        CastColumnItemVisitor visitor(row, name, builder);
+    static Status cast_datum_to_json(const ColumnPtr& col, int row, const std::string& name, vpack::Builder* builder,
+                                     bool unindexed_struct = false) {
+        CastColumnItemVisitor visitor(row, name, builder, unindexed_struct);
         try {
             return col->accept(&visitor);
         } catch (const arangodb::velocypack::Exception& e) {
@@ -111,17 +115,19 @@ public:
     }
 
     Status do_visit(const StructColumn& col) {
+        // Use indexed or unindexed object based on _unindexed_struct flag
+        // unindexed=true preserves field insertion order (crucial for default values)
         if (_field_name.empty()) {
-            _builder->openObject();
+            _builder->openObject(_unindexed_struct);
         } else {
-            _builder->add(_field_name, vpack::Value(vpack::ValueType::Object));
+            _builder->add(_field_name, vpack::Value(vpack::ValueType::Object, _unindexed_struct));
         }
         const auto& names = col.field_names();
         const auto columns = col.fields();
         for (int i = 0; i < columns.size(); i++) {
             auto name = names.size() > i ? names[i] : fmt::format("k{}", i);
             auto& field_column = columns[i];
-            RETURN_IF_ERROR(cast_datum_to_json(field_column, _row, name, _builder));
+            RETURN_IF_ERROR(cast_datum_to_json(field_column, _row, name, _builder, _unindexed_struct));
         }
         if (!_builder->isClosed()) {
             _builder->close();
@@ -132,9 +138,9 @@ public:
 
     Status do_visit(const MapColumn& col) {
         if (_field_name.empty()) {
-            _builder->openObject();
+            _builder->openObject(_unindexed_struct);
         } else {
-            _builder->add(_field_name, vpack::Value(vpack::ValueType::Object));
+            _builder->add(_field_name, vpack::Value(vpack::ValueType::Object, _unindexed_struct));
         }
         auto [map_start, map_size] = col.get_map_offset_size(_row);
         const auto& val_col = col.values_column();
@@ -165,7 +171,7 @@ public:
                 continue;
             }
             // VLOG(2) << "map key " << i << ": " << key_col->debug_item(i) << " , name=" << name;
-            RETURN_IF_ERROR(cast_datum_to_json(val_col, i, name, _builder));
+            RETURN_IF_ERROR(cast_datum_to_json(val_col, i, name, _builder, _unindexed_struct));
         }
 
         if (!_builder->isClosed()) {
@@ -184,7 +190,7 @@ public:
         auto [offset, size] = col.get_element_offset_size(_row);
         const auto& elements = col.elements_column();
         for (int i = offset; i < offset + size; i++) {
-            RETURN_IF_ERROR(cast_datum_to_json(elements, i, "", _builder));
+            RETURN_IF_ERROR(cast_datum_to_json(elements, i, "", _builder, _unindexed_struct));
         }
 
         if (!_builder->isClosed()) {
@@ -198,7 +204,7 @@ public:
         if (col.is_null(_row)) {
             _add_element(vpack::ValueType::Null);
         } else {
-            RETURN_IF_ERROR(cast_datum_to_json(col.data_column(), _row, _field_name, _builder));
+            RETURN_IF_ERROR(cast_datum_to_json(col.data_column(), _row, _field_name, _builder, _unindexed_struct));
         }
         return {};
     }
@@ -219,6 +225,7 @@ private:
     int _row;
     const std::string& _field_name;
     vpack::Builder* _builder;
+    bool _unindexed_struct;
 };
 
 // Cast nested type(including struct/map/* to json)
@@ -258,13 +265,15 @@ StatusOr<ColumnPtr> cast_nested_to_json(const ColumnPtr& column, bool allow_thro
     return column_builder.build(false);
 }
 
-StatusOr<std::string> cast_type_to_json_str(const ColumnPtr& column, int idx) {
+StatusOr<std::string> cast_type_to_json_str(const ColumnPtr& column, int idx, bool unindexed_struct) {
     vpack::Builder json_builder;
     json_builder.clear();
-    RETURN_IF_ERROR(CastColumnItemVisitor::cast_datum_to_json(column, idx, "", &json_builder));
-    JsonValue json(json_builder.slice());
+    RETURN_IF_ERROR(CastColumnItemVisitor::cast_datum_to_json(column, idx, "", &json_builder, unindexed_struct));
 
-    return json.to_string();
+    auto slice = json_builder.slice();
+    JsonValue json(slice);
+    auto result = json.to_string();
+    return result;
 }
 
 } // namespace starrocks
