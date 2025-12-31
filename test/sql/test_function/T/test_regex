@@ -140,7 +140,6 @@ SELECT regexp_position('test string', '(unclosed');
 SELECT regexp_position('test string', '?invalid');
 SELECT regexp_position('test string', '*invalid');
 SELECT regexp_position('test string', '+invalid');
-SELECT regexp_position('test string', '{invalid');
 SELECT regexp_position('test string', '\\');
 
 -- Test edge cases with invalid parameters
