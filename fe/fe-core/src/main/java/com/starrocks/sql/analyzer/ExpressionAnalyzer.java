@@ -1093,6 +1093,14 @@ public class ExpressionAnalyzer {
             // Handle named arguments reordering before function lookup
             List<String> exprsNames = node.getParams().getExprsNames();
             if (exprsNames != null && !exprsNames.isEmpty()) {
+                // Check for mixed named and positional arguments
+                // Positional arguments have empty string "" as their name in exprsNames
+                boolean hasNamedArg = exprsNames.stream().anyMatch(name -> !name.isEmpty());
+                boolean hasPositionalArg = exprsNames.stream().anyMatch(String::isEmpty);
+                if (hasNamedArg && hasPositionalArg) {
+                    throw new SemanticException("Mixing named and positional arguments is not allowed", node.getPos());
+                }
+
                 // Named arguments are used - we need to find the function first, then reorder
                 Function fn = FunctionAnalyzer.getAnalyzedFunctionForNamedArgs(session, node, argumentTypes, exprsNames);
                 if (fn == null) {
