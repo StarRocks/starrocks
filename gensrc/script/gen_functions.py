@@ -203,7 +203,13 @@ def generate_default_value(param, fn_id):
     elif isinstance(default, int):
         return f'            defaults{fn_id}.add(new Pair<>("{name}", new IntLiteral({default})));'
     elif isinstance(default, str):
-        escaped = default.replace('\\', '\\\\').replace('"', '\\"')
+        # Escape all special characters for Java string literals
+        escaped = (default
+            .replace('\\', '\\\\')  # backslash first
+            .replace('"', '\\"')    # double quote
+            .replace('\n', '\\n')   # newline
+            .replace('\r', '\\r')   # carriage return
+            .replace('\t', '\\t'))  # tab
         return f'            defaults{fn_id}.add(new Pair<>("{name}", new StringLiteral("{escaped}")));'
     return None
 
