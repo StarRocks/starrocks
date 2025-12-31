@@ -8,7 +8,7 @@ displayed_sidebar: docs
 
 将两个 ARRAY 数组作为 Key 和 Value 组合成一个 MAP 对象。`map_agg` 是 [map_from_arrays](map_from_arrays.md) 的别名。
 
-该命令从 3.0 版本开始支持。
+该函数从 3.0 版本开始支持。
 
 ## 语法
 
@@ -19,7 +19,7 @@ MAP map_agg(ARRAY keys, ARRAY values)
 ## 参数说明
 
 - `keys`: 用于生成 MAP 中的 Key 值。`keys` 中的元素必须唯一。
-- `values`: 用于生成 MAP 中的 Value 值.
+- `values`: 用于生成 MAP 中的 Value 值。
 
 ## 返回值说明
 

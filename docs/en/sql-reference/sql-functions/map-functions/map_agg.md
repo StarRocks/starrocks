@@ -47,7 +47,9 @@ select map_agg([1, 2], NULL);
 +-----------------------+
 | NULL                  |
 +-----------------------+
+```
 
+```Plaintext
 select map_agg([1,3,null,2,null],['ab','cdd',null,null,'abc']);
 +------------------------------------------------------------------+
 | map_agg([1, 3, NULL, 2, NULL], ['ab', 'cdd', NULL, NULL, 'abc']) |
