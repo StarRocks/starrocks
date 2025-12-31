@@ -537,6 +537,7 @@ SET(DW_TEST_FILES
     ./storage/lake/tablet_retain_info_test.cpp
     ./storage/lake/tablet_test.cpp
     ./storage/lake/tablet_writer_test.cpp
+    ./storage/lake/delete_test.cpp
     ./storage/lake/transactions_test.cpp
     ./storage/lake/pk_tablet_sst_writer_test.cpp
     ./storage/lake/txn_log_applier_test.cpp
