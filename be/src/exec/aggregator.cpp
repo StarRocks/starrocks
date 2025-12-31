@@ -801,6 +801,10 @@ ChunkPtr Aggregator::poll_chunk_buffer() {
 void Aggregator::offer_chunk_to_buffer(const ChunkPtr& chunk) {
     auto notify = defer_notify_source();
     if (_limited_buffer == nullptr) {
+        // This should not happen in normal operation as offer_chunk_to_buffer is only
+        // called from push_chunk which is called after open() initializes _limited_buffer.
+        // However, we handle it defensively to prevent crashes.
+        DCHECK(false) << "offer_chunk_to_buffer called before _limited_buffer is initialized";
         return;
     }
     _limited_buffer->push(chunk);
