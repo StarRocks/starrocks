@@ -18,7 +18,7 @@ MAP map_agg(ARRAY keys, ARRAY values)
 
 ## Parameters
 
-- `keys`: uses to construct the keys of the result MAP. Make sure the elements of keys are unique.
+- `keys`: used to construct the keys of the result MAP. Make sure the elements of keys are unique.
 - `values`: used to construct the values of the result MAP.
 
 ## Return value
