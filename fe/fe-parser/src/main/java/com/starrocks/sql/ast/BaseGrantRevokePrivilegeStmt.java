@@ -19,8 +19,6 @@ import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
 
-import static com.starrocks.common.util.Util.normalizeNames;
-
 public class BaseGrantRevokePrivilegeStmt extends DdlStmt {
     protected GrantRevokeClause clause;
     protected GrantRevokePrivilegeObjects objectsUnResolved;
@@ -39,7 +37,7 @@ public class BaseGrantRevokePrivilegeStmt extends DdlStmt {
         this.privilegeTypeUnResolved = privilegeTypeUnResolved;
         this.objectTypeUnResolved = objectTypeUnResolved;
         this.clause = clause;
-        this.objectsUnResolved = normalizeNames(objectTypeUnResolved, objectsUnResolved);
+        this.objectsUnResolved = objectsUnResolved;
         this.role = clause.getRoleName();
     }
 
@@ -96,6 +94,6 @@ public class BaseGrantRevokePrivilegeStmt extends DdlStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return ((AstVisitorExtendInterface<R, C>) visitor).visitGrantRevokePrivilegeStatement(this, context);
+        return visitor.visitGrantRevokePrivilegeStatement(this, context);
     }
 }

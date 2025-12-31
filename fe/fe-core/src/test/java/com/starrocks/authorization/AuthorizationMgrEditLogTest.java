@@ -81,7 +81,7 @@ public class AuthorizationMgrEditLogTest {
         GrantPrivilegeStmt grantStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(grantSql, ctx);
 
         // 3. Execute grantToUser operation (master side)
-        authorizationMgr.grant(grantStmt);
+        authorizationMgr.grant(grantStmt, ctx);
 
         // 4. Verify master state
         UserPrivilegeCollectionV2 userCollection = authorizationMgr.getUserPrivilegeCollection(userIdentity);
@@ -155,7 +155,7 @@ public class AuthorizationMgrEditLogTest {
 
         // 4. Execute grant operation and expect exception
         RuntimeException exception = Assertions.assertThrows(RuntimeException.class, () -> {
-            authorizationMgr.grant(grantStmt);
+            authorizationMgr.grant(grantStmt, ctx);
         });
         Assertions.assertEquals("EditLog write failed", exception.getMessage());
 
@@ -190,7 +190,7 @@ public class AuthorizationMgrEditLogTest {
         GrantPrivilegeStmt grantStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(grantSql, ctx);
 
         // 3. Execute grantToRole operation (master side)
-        authorizationMgr.grant(grantStmt);
+        authorizationMgr.grant(grantStmt, ctx);
 
         // 4. Verify master state
         RolePrivilegeCollectionV2 roleCollection = authorizationMgr.getRolePrivilegeCollection(roleName);
@@ -254,7 +254,7 @@ public class AuthorizationMgrEditLogTest {
 
         // 4. Execute grant operation and expect exception
         RuntimeException exception = Assertions.assertThrows(RuntimeException.class, () -> {
-            authorizationMgr.grant(grantStmt);
+            authorizationMgr.grant(grantStmt, ctx);
         });
         Assertions.assertEquals("EditLog write failed", exception.getMessage());
 
@@ -282,14 +282,14 @@ public class AuthorizationMgrEditLogTest {
 
         String grantSql = "GRANT SELECT ON ALL TABLES IN ALL DATABASES TO '" + userName + "'@'%'";
         GrantPrivilegeStmt grantStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(grantSql, ctx);
-        authorizationMgr.grant(grantStmt);
+        authorizationMgr.grant(grantStmt, ctx);
 
         // 2. Prepare revoke statement
         String revokeSql = "REVOKE SELECT ON ALL TABLES IN ALL DATABASES FROM '" + userName + "'@'%'";
         RevokePrivilegeStmt revokeStmt = (RevokePrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(revokeSql, ctx);
 
         // 3. Execute revokeFromUser operation (master side)
-        authorizationMgr.revoke(revokeStmt);
+        authorizationMgr.revoke(revokeStmt, ctx);
 
         // 4. Verify master state
         UserPrivilegeCollectionV2 userCollection = authorizationMgr.getUserPrivilegeCollection(userIdentity);
@@ -350,7 +350,7 @@ public class AuthorizationMgrEditLogTest {
 
         String grantSql = "GRANT SELECT ON ALL TABLES IN ALL DATABASES TO '" + userName + "'@'%'";
         GrantPrivilegeStmt grantStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(grantSql, ctx);
-        authorizationMgr.grant(grantStmt);
+        authorizationMgr.grant(grantStmt, ctx);
 
         // 2. Prepare revoke statement
         String revokeSql = "REVOKE SELECT ON ALL TABLES IN ALL DATABASES FROM '" + userName + "'@'%'";
@@ -377,7 +377,7 @@ public class AuthorizationMgrEditLogTest {
 
         // 4. Execute revoke operation and expect exception
         RuntimeException exception = Assertions.assertThrows(RuntimeException.class, () -> {
-            authorizationMgr.revoke(revokeStmt);
+            authorizationMgr.revoke(revokeStmt, ctx);
         });
         Assertions.assertEquals("EditLog write failed", exception.getMessage());
 
@@ -409,14 +409,14 @@ public class AuthorizationMgrEditLogTest {
 
         String grantSql = "GRANT SELECT ON ALL TABLES IN ALL DATABASES TO ROLE " + roleName;
         GrantPrivilegeStmt grantStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(grantSql, ctx);
-        authorizationMgr.grant(grantStmt);
+        authorizationMgr.grant(grantStmt, ctx);
 
         // 2. Prepare revoke statement
         String revokeSql = "REVOKE SELECT ON ALL TABLES IN ALL DATABASES FROM ROLE " + roleName;
         RevokePrivilegeStmt revokeStmt = (RevokePrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(revokeSql, ctx);
 
         // 3. Execute revokeFromRole operation (master side)
-        authorizationMgr.revoke(revokeStmt);
+        authorizationMgr.revoke(revokeStmt, ctx);
 
         // 4. Verify master state
         RolePrivilegeCollectionV2 roleCollection = authorizationMgr.getRolePrivilegeCollection(roleName);
@@ -465,7 +465,7 @@ public class AuthorizationMgrEditLogTest {
 
         String grantSql = "GRANT SELECT ON ALL TABLES IN ALL DATABASES TO ROLE " + roleName;
         GrantPrivilegeStmt grantStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(grantSql, ctx);
-        authorizationMgr.grant(grantStmt);
+        authorizationMgr.grant(grantStmt, ctx);
 
         // 2. Prepare revoke statement
         String revokeSql = "REVOKE SELECT ON ALL TABLES IN ALL DATABASES FROM ROLE " + roleName;
@@ -490,7 +490,7 @@ public class AuthorizationMgrEditLogTest {
 
         // 4. Execute revoke operation and expect exception
         RuntimeException exception = Assertions.assertThrows(RuntimeException.class, () -> {
-            authorizationMgr.revoke(revokeStmt);
+            authorizationMgr.revoke(revokeStmt, ctx);
         });
         Assertions.assertEquals("EditLog write failed", exception.getMessage());
 

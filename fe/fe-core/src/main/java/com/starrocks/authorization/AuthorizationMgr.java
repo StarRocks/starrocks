@@ -407,23 +407,27 @@ public class AuthorizationMgr {
 
     public void grant(GrantPrivilegeStmt stmt, ConnectContext context) throws DdlException {
         try {
-            ObjectType objectType = ObjectType.NAME_TO_OBJECT.get(stmt.getObjectTypeUnResolved());
+            ObjectType objectType = getObjectType(stmt.getObjectTypeUnResolved());
             if (objectType == null) {
                 throw new DdlException("Unknown object type: " + stmt.getObjectTypeUnResolved());
             }
-            
+
             List<PrivilegeType> privilegeTypes = new ArrayList<>();
             for (String privTypeStr : stmt.getPrivilegeTypeUnResolved()) {
-                PrivilegeType privType = getPrivilegeType(privTypeStr);
-                if (privType == null) {
-                    throw new DdlException("Unknown privilege type: " + privTypeStr);
+                if (privTypeStr.equalsIgnoreCase("all") || privTypeStr.equalsIgnoreCase("all privileges")) {
+                    privilegeTypes.addAll(getAvailablePrivType(objectType));
+                } else {
+                    PrivilegeType privType = getPrivilegeType(privTypeStr);
+                    if (privType == null) {
+                        throw new DdlException("Unknown privilege type: " + privTypeStr);
+                    }
+                    privilegeTypes.add(privType);
                 }
-                privilegeTypes.add(privType);
             }
-            
+
             // Build objectList using AuthorizationAnalyzer helper method
             List<PEntryObject> objectList = AuthorizationAnalyzer.buildObjectList(stmt, objectType, context);
-            
+
             if (stmt.getRole() != null) {
                 grantToRole(
                         objectType,
@@ -495,23 +499,27 @@ public class AuthorizationMgr {
 
     public void revoke(RevokePrivilegeStmt stmt, ConnectContext context) throws DdlException {
         try {
-            ObjectType objectType = ObjectType.NAME_TO_OBJECT.get(stmt.getObjectTypeUnResolved());
+            ObjectType objectType = getObjectType(stmt.getObjectTypeUnResolved());
             if (objectType == null) {
                 throw new DdlException("Unknown object type: " + stmt.getObjectTypeUnResolved());
             }
-            
+
             List<PrivilegeType> privilegeTypes = new ArrayList<>();
             for (String privTypeStr : stmt.getPrivilegeTypeUnResolved()) {
-                PrivilegeType privType = getPrivilegeType(privTypeStr);
-                if (privType == null) {
-                    throw new DdlException("Unknown privilege type: " + privTypeStr);
+                if (privTypeStr.equalsIgnoreCase("all") || privTypeStr.equalsIgnoreCase("all privileges")) {
+                    privilegeTypes.addAll(getAvailablePrivType(objectType));
+                } else {
+                    PrivilegeType privType = getPrivilegeType(privTypeStr);
+                    if (privType == null) {
+                        throw new DdlException("Unknown privilege type: " + privTypeStr);
+                    }
+                    privilegeTypes.add(privType);
                 }
-                privilegeTypes.add(privType);
             }
-            
+
             // Build objectList using AuthorizationAnalyzer helper method
             List<PEntryObject> objectList = AuthorizationAnalyzer.buildObjectList(stmt, objectType, context);
-            
+
             if (stmt.getRole() != null) {
                 revokeFromRole(
                         objectType,
