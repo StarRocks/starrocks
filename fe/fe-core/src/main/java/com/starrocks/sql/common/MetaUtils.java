@@ -74,6 +74,10 @@ public class MetaUtils {
         }
     }
 
+    public static void checkNotSupportCatalog(Table table, TableOperation operation) {
+        checkNotSupportCatalog(table, operation, null);
+    }
+
     /**
      * Check if the specified operation is supported on the given table.
      * Throws SemanticException if the operation is not supported by the table type.
@@ -81,9 +85,10 @@ public class MetaUtils {
      *
      * @param table The table to check
      * @param operation The operation to check
+     * @param catalogName The catalog name to check, defaults to table.getCatalogName() when null
      * @throws SemanticException if the operation is not supported
      */
-    public static void checkNotSupportCatalog(Table table, TableOperation operation) {
+    public static void checkNotSupportCatalog(Table table, TableOperation operation, String catalogName) {
         if (table == null) {
             throw new SemanticException("Table is null");
         }
@@ -91,18 +96,18 @@ public class MetaUtils {
             throw new SemanticException("Operation is null");
         }
 
-        String catalogName = table.getCatalogName();
-        if (catalogName == null) {
+        String targetCatalogName = table.getCatalogName() != null ? table.getCatalogName() : catalogName;
+        if (targetCatalogName == null) {
             throw new SemanticException("Catalog is null");
         }
         // Internal catalog tables support all operations
-        if (CatalogMgr.isInternalCatalog(catalogName)) {
+        if (CatalogMgr.isInternalCatalog(targetCatalogName)) {
             return;
         }
 
-        Catalog catalog = GlobalStateMgr.getCurrentState().getCatalogMgr().getCatalogByName(catalogName);
+        Catalog catalog = GlobalStateMgr.getCurrentState().getCatalogMgr().getCatalogByName(targetCatalogName);
         if (catalog == null) {
-            throw new SemanticException("Catalog %s is not found", catalogName);
+            throw new SemanticException("Catalog %s is not found", targetCatalogName);
         }
 
         if (!table.supportsOperation(operation)) {
