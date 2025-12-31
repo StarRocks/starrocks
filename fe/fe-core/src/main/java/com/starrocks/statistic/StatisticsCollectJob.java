@@ -155,13 +155,6 @@ public abstract class StatisticsCollectJob {
         sessionVariable.setEnableMaterializedViewRewrite(false);
     }
 
-<<<<<<< HEAD
-    protected void collectStatisticSync(String sql, ConnectContext context) throws Exception {
-=======
-    public void setPartitionTabletRowCounts(com.google.common.collect.Table<Long, Long, Long> partitionTabletRowCounts) {
-        this.partitionTabletRowCounts = partitionTabletRowCounts;
-    }
-
     /**
      * Calculate remaining timeout for the analyze job and set it to the context.
      * The timeout is calculated based on the job start time and the configured total timeout.
@@ -178,7 +171,6 @@ public abstract class StatisticsCollectJob {
             // If start time is not set, use full timeout
             int timeout = (int) Config.statistic_collect_query_timeout;
             context.getSessionVariable().setQueryTimeoutS(timeout);
-            context.getSessionVariable().setInsertTimeoutS(timeout);
             return timeout;
         }
 
@@ -194,13 +186,11 @@ public abstract class StatisticsCollectJob {
 
         // Use remaining time, but not less than minimum
         context.getSessionVariable().setQueryTimeoutS((int) remainingSeconds);
-        context.getSessionVariable().setInsertTimeoutS((int) remainingSeconds);
         return (int) remainingSeconds;
     }
 
     protected void collectStatisticSync(String sql, ConnectContext context, AnalyzeStatus analyzeStatus)
             throws Exception {
->>>>>>> 8cb0e5f8cf ([BugFix] fix the behavior of fe_conf.statistic_collect_query_timeout (backport #66363) (#66788))
         int count = 0;
         int maxRetryTimes = 5;
         do {
