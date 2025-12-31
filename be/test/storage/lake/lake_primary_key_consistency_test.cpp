@@ -269,8 +269,8 @@ public:
         config::enable_pindex_minor_compaction = false;
         _old_enable_pk_strict_memcheck = config::enable_pk_strict_memcheck;
         config::enable_pk_strict_memcheck = false;
-        _old_pk_parallel_execution_threshold_bytes = config::pk_parallel_execution_threshold_bytes;
-        config::pk_parallel_execution_threshold_bytes = 1;
+        _old_pk_index_eager_build_threshold_bytes = config::pk_index_eager_build_threshold_bytes;
+        config::pk_index_eager_build_threshold_bytes = 1;
     }
 
     void TearDown() override {
@@ -278,7 +278,7 @@ public:
         config::l0_max_mem_usage = _old_l0_size;
         config::write_buffer_size = _old_memtable_size;
         config::enable_pk_strict_memcheck = _old_enable_pk_strict_memcheck;
-        config::pk_parallel_execution_threshold_bytes = _old_pk_parallel_execution_threshold_bytes;
+        config::pk_index_eager_build_threshold_bytes = _old_pk_index_eager_build_threshold_bytes;
     }
 
     std::shared_ptr<TabletMetadataPB> generate_tablet_metadata(KeysType keys_type) {
@@ -395,16 +395,16 @@ public:
         return force_flush_guard;
     }
 
-    // 20% chance to enable pk parallel execution
-    std::unique_ptr<ConfigResetGuard<bool>> random_pk_parallel_execution() {
-        std::unique_ptr<ConfigResetGuard<bool>> pk_parallel_execution_guard;
+    // 20% chance to enable eager PK index build
+    std::unique_ptr<ConfigResetGuard<bool>> random_pk_index_eager_build() {
+        std::unique_ptr<ConfigResetGuard<bool>> pk_index_eager_build_guard;
         uint32_t r = _random_generator->random() % 100;
         if (r < 20) {
-            // 20% chance to enable pk parallel execution
-            pk_parallel_execution_guard =
-                    std::make_unique<ConfigResetGuard<bool>>(&config::enable_pk_parallel_execution, true);
+            // 20% chance to enable eager PK index build
+            pk_index_eager_build_guard =
+                    std::make_unique<ConfigResetGuard<bool>>(&config::enable_pk_index_eager_build, true);
         }
-        return pk_parallel_execution_guard;
+        return pk_index_eager_build_guard;
     }
 
     ChunkPtr read(int64_t tablet_id, int64_t version) {
@@ -427,7 +427,7 @@ public:
 
     Status upsert_op() {
         std::unique_ptr<ConfigResetGuard<int64_t>> force_index_mem_flush_guard = random_force_index_mem_flush();
-        std::unique_ptr<ConfigResetGuard<bool>> pk_parallel_execution_guard = random_pk_parallel_execution();
+        std::unique_ptr<ConfigResetGuard<bool>> pk_index_eager_build_guard = random_pk_index_eager_build();
         auto txn_id = next_id();
         ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
                                                    .set_tablet_manager(_tablet_mgr.get())
@@ -464,7 +464,7 @@ public:
 
     Status partial_update_op(PartialUpdateMode mode) {
         std::unique_ptr<ConfigResetGuard<int64_t>> force_index_mem_flush_guard = random_force_index_mem_flush();
-        std::unique_ptr<ConfigResetGuard<bool>> pk_parallel_execution_guard = random_pk_parallel_execution();
+        std::unique_ptr<ConfigResetGuard<bool>> pk_index_eager_build_guard = random_pk_index_eager_build();
         auto txn_id = next_id();
         ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
                                                    .set_tablet_manager(_tablet_mgr.get())
@@ -501,7 +501,7 @@ public:
 
     Status condition_update() {
         std::unique_ptr<ConfigResetGuard<int64_t>> force_index_mem_flush_guard = random_force_index_mem_flush();
-        std::unique_ptr<ConfigResetGuard<bool>> pk_parallel_execution_guard = random_pk_parallel_execution();
+        std::unique_ptr<ConfigResetGuard<bool>> pk_index_eager_build_guard = random_pk_index_eager_build();
         auto txn_id = next_id();
         // c2 as merge_condition
         std::string merge_condition = "c2";
@@ -534,7 +534,7 @@ public:
 
     Status upsert_with_batch_pub_op() {
         std::unique_ptr<ConfigResetGuard<int64_t>> force_index_mem_flush_guard = random_force_index_mem_flush();
-        std::unique_ptr<ConfigResetGuard<bool>> pk_parallel_execution_guard = random_pk_parallel_execution();
+        std::unique_ptr<ConfigResetGuard<bool>> pk_index_eager_build_guard = random_pk_index_eager_build();
         size_t batch_cnt = std::max(_random_generator->random() % MaxBatchCnt, (size_t)1);
         std::vector<int64_t> txn_ids;
         for (int i = 0; i < batch_cnt; i++) {
@@ -577,7 +577,7 @@ public:
 
     Status delete_op() {
         std::unique_ptr<ConfigResetGuard<int64_t>> force_index_mem_flush_guard = random_force_index_mem_flush();
-        std::unique_ptr<ConfigResetGuard<bool>> pk_parallel_execution_guard = random_pk_parallel_execution();
+        std::unique_ptr<ConfigResetGuard<bool>> pk_index_eager_build_guard = random_pk_index_eager_build();
         auto chunk_index = gen_upsert_data(false);
         auto txn_id = next_id();
         ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
@@ -604,7 +604,7 @@ public:
 
     Status compact_op() {
         std::unique_ptr<ConfigResetGuard<int64_t>> force_index_mem_flush_guard = random_force_index_mem_flush();
-        std::unique_ptr<ConfigResetGuard<bool>> pk_parallel_execution_guard = random_pk_parallel_execution();
+        std::unique_ptr<ConfigResetGuard<bool>> pk_index_eager_build_guard = random_pk_index_eager_build();
         auto txn_id = next_id();
         auto task_context = std::make_unique<CompactionTaskContext>(txn_id, _tablet_metadata->id(), _version, false,
                                                                     false, nullptr);
@@ -713,7 +713,7 @@ protected:
     int64_t _old_l0_size = 0;
     int64_t _old_memtable_size = 0;
     bool _old_enable_pk_strict_memcheck = false;
-    int64_t _old_pk_parallel_execution_threshold_bytes = 0;
+    int64_t _old_pk_index_eager_build_threshold_bytes = 0;
 };
 
 TEST_P(LakePrimaryKeyConsistencyTest, test_local_pk_consistency) {

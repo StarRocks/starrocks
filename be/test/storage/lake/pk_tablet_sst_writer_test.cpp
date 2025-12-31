@@ -297,8 +297,8 @@ TEST_F(PkTabletSSTWriterTest, test_publish_multi_segments_with_sst) {
     auto version = 1;
     auto tablet_id = _tablet_metadata->id();
     ConfigResetGuard<int64_t> guard(&config::write_buffer_size, 1);
-    ConfigResetGuard<bool> guard2(&config::enable_pk_parallel_execution, true);
-    ConfigResetGuard<int64_t> guard3(&config::pk_parallel_execution_threshold_bytes, 1);
+    ConfigResetGuard<bool> guard2(&config::enable_pk_index_eager_build, true);
+    ConfigResetGuard<int64_t> guard3(&config::pk_index_eager_build_threshold_bytes, 1);
     for (int i = 0; i < 5; i++) {
         int64_t txn_id = next_id();
         ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
@@ -343,8 +343,8 @@ TEST_F(PkTabletSSTWriterTest, test_publish_multi_segments_with_sst) {
 TEST_F(PkTabletSSTWriterTest, test_parallel_execution_data_import) {
     const int64_t tablet_id = _tablet_metadata->id();
     ConfigResetGuard<int64_t> guard(&config::write_buffer_size, 1024);
-    ConfigResetGuard<bool> guard2(&config::enable_pk_parallel_execution, true);
-    ConfigResetGuard<int64_t> guard3(&config::pk_parallel_execution_threshold_bytes, 1);
+    ConfigResetGuard<bool> guard2(&config::enable_pk_index_eager_build, true);
+    ConfigResetGuard<int64_t> guard3(&config::pk_index_eager_build_threshold_bytes, 1);
 
     auto chunk0 = generate_data(100, 0);
     auto chunk1 = generate_data(100, 100);
@@ -462,8 +462,8 @@ TEST_F(PkTabletSSTWriterTest, test_no_parallel_execution_with_update_operations)
 TEST_F(PkTabletSSTWriterTest, test_parallel_execution_with_update_operations) {
     const int64_t tablet_id = _tablet_metadata->id();
     ConfigResetGuard<int64_t> guard(&config::write_buffer_size, 1);
-    ConfigResetGuard<bool> guard2(&config::enable_pk_parallel_execution, true);
-    ConfigResetGuard<int64_t> guard3(&config::pk_parallel_execution_threshold_bytes, 1);
+    ConfigResetGuard<bool> guard2(&config::enable_pk_index_eager_build, true);
+    ConfigResetGuard<int64_t> guard3(&config::pk_index_eager_build_threshold_bytes, 1);
 
     auto chunk0 = generate_data(50, 0);
     auto indexes = std::vector<uint32_t>(chunk0.num_rows());
@@ -510,8 +510,8 @@ TEST_F(PkTabletSSTWriterTest, test_parallel_execution_compaction_consistency) {
     const int64_t tablet_id = _tablet_metadata->id();
     ConfigResetGuard<int64_t> guard(&config::lake_pk_compaction_min_input_segments, 2);
     ConfigResetGuard<int64_t> guard2(&config::write_buffer_size, 512);
-    ConfigResetGuard<bool> guard3(&config::enable_pk_parallel_execution, true);
-    ConfigResetGuard<int64_t> guard4(&config::pk_parallel_execution_threshold_bytes, 1);
+    ConfigResetGuard<bool> guard3(&config::enable_pk_index_eager_build, true);
+    ConfigResetGuard<int64_t> guard4(&config::pk_index_eager_build_threshold_bytes, 1);
 
     auto chunk0 = generate_data(80, 0);
     auto chunk1 = generate_data(80, 80);
@@ -571,8 +571,8 @@ TEST_F(PkTabletSSTWriterTest, test_parallel_execution_compaction_consistency) {
 TEST_F(PkTabletSSTWriterTest, test_parallel_execution_vs_serial_execution_results) {
     const int64_t tablet_id = _tablet_metadata->id();
     ConfigResetGuard<int64_t> guard(&config::write_buffer_size, 1);
-    ConfigResetGuard<bool> guard2(&config::enable_pk_parallel_execution, true);
-    ConfigResetGuard<int64_t> guard3(&config::pk_parallel_execution_threshold_bytes, 1);
+    ConfigResetGuard<bool> guard2(&config::enable_pk_index_eager_build, true);
+    ConfigResetGuard<int64_t> guard3(&config::pk_index_eager_build_threshold_bytes, 1);
 
     auto chunk0 = generate_data(60, 0);
     auto indexes = std::vector<uint32_t>(chunk0.num_rows());
@@ -609,7 +609,7 @@ TEST_F(PkTabletSSTWriterTest, test_parallel_execution_vs_serial_execution_result
         ASSERT_OK(publish_single_version(tablet_id, 2, txn_id).status());
     }
 
-    ConfigResetGuard<bool> guard4(&config::enable_pk_parallel_execution, false);
+    ConfigResetGuard<bool> guard4(&config::enable_pk_index_eager_build, false);
     {
         int64_t txn_id = next_id();
         ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
@@ -659,10 +659,10 @@ TEST_F(PkTabletSSTWriterTest, test_publish_with_parallel_index_get) {
     auto version = 1;
     auto tablet_id = _tablet_metadata->id();
     ConfigResetGuard<int64_t> guard(&config::write_buffer_size, 1);
-    ConfigResetGuard<bool> guard2(&config::enable_pk_parallel_execution, true);
-    ConfigResetGuard<int64_t> guard3(&config::pk_parallel_execution_threshold_bytes, 1);
-    ConfigResetGuard<bool> guard4(&config::enable_pk_index_parallel_get, true);
-    ConfigResetGuard<int64_t> guard5(&config::pk_index_parallel_get_min_rows, 4096);
+    ConfigResetGuard<bool> guard2(&config::enable_pk_index_eager_build, true);
+    ConfigResetGuard<int64_t> guard3(&config::pk_index_eager_build_threshold_bytes, 1);
+    ConfigResetGuard<bool> guard4(&config::enable_pk_index_parallel_execution, true);
+    ConfigResetGuard<int64_t> guard5(&config::pk_index_parallel_execution_min_rows, 4096);
     for (int i = 0; i < 5; i++) {
         int64_t txn_id = next_id();
         ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
@@ -708,10 +708,10 @@ TEST_F(PkTabletSSTWriterTest, test_publish_early_sst_compact) {
     const int64_t tablet_id = _tablet_metadata->id();
     // Configure to generate SST files during write phase:
     // - Small write_buffer_size to generate multiple segments per write
-    // - Enable parallel execution to generate SST files
+    // - Enable eager PK index build to generate SST files
     ConfigResetGuard<int64_t> guard1(&config::write_buffer_size, 1);
-    ConfigResetGuard<bool> guard2(&config::enable_pk_parallel_execution, true);
-    ConfigResetGuard<int64_t> guard3(&config::pk_parallel_execution_threshold_bytes, 1);
+    ConfigResetGuard<bool> guard2(&config::enable_pk_index_eager_build, true);
+    ConfigResetGuard<int64_t> guard3(&config::pk_index_eager_build_threshold_bytes, 1);
     // Set a lower threshold to trigger early_sst_compact more easily
     ConfigResetGuard<int32_t> guard4(&config::pk_index_early_sst_compaction_threshold, 3);
 

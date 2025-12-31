@@ -1899,29 +1899,29 @@ When this value is set to less than `0`, the system uses the product of its abso
 
 ##### enable_pk_index_parallel_compaction
 
-- Default: false
+- Default: true
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
 - Description: Whether to enable parallel Compaction for Primary Key index in a shared-data cluster.
 - Introduced in: -
 
-##### enable_pk_index_parallel_get
-
-- Default: false
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: Whether to enable parallel GET for Primary Key index in a shared-data cluster.
-- Introduced in: -
-
-##### enable_pk_parallel_execution
+##### enable_pk_index_parallel_execution
 
 - Default: true
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: Determines whether the Primary Key table parallel execution strategy is enabled. When enabled, PK index files will be generated during the import and compaction phases.
+- Description: Whether to enable parallel execution for Primary Key index operations in a shared-data cluster. When enabled, the system uses a thread pool to process segments concurrently during publish operations, significantly improving performance for large tablets.
+- Introduced in: -
+
+##### enable_pk_index_eager_build
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to eagerly build Primary Key index files during data import and compaction phases. When enabled, the system generates persistent PK index files immediately during data writes, improving subsequent query performance.
 - Introduced in: -
 
 ##### enable_pk_size_tiered_compaction_strategy
@@ -2295,16 +2295,16 @@ When this value is set to less than `0`, the system uses the product of its abso
 
 ##### pk_index_memtable_flush_threadpool_max_threads
 
-- Default: 4
+- Default: 0
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: The maximum number of threads in the thread pool for Primary Key index MemTable flush in a shared-data cluster.
+- Description: The maximum number of threads in the thread pool for Primary Key index MemTable flush in a shared-data cluster. `0` means automatically set to the number of CPU cores.
 - Introduced in: -
 
 ##### pk_index_memtable_max_count
 
-- Default: 1
+- Default: 2
 - Type: Int
 - Unit: -
 - Is mutable: Yes
@@ -2331,29 +2331,29 @@ When this value is set to less than `0`, the system uses the product of its abso
 
 ##### pk_index_parallel_compaction_threadpool_max_threads
 
-- Default: 4
+- Default: 0
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: The maximum number of threads in the thread pool for cloud native Primary Key index parallel Compaction in a shared-data cluster.
+- Description: The maximum number of threads in the thread pool for cloud native Primary Key index parallel Compaction in a shared-data cluster. `0` means automatically set to the number of CPU cores.
 - Introduced in: -
 
-##### pk_index_parallel_get_min_rows
+##### pk_index_parallel_execution_min_rows
 
 - Default: 16384
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: The minimum rows threshold to enable parallel GET for Primary Key index in a shared-data cluster.
+- Description: The minimum rows threshold to enable parallel execution for Primary Key index operations in a shared-data cluster.
 - Introduced in: -
 
-##### pk_index_parallel_get_threadpool_max_threads
+##### pk_index_parallel_execution_threadpool_max_threads
 
 - Default: 0
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: The maximum number of threads in the thread pool for Primary Key index parallel GET in a shared-data cluster. `0` means adaptive configuration.
+- Description: The maximum number of threads in the thread pool for Primary Key index parallel execution in a shared-data cluster. `0` means adaptive configuration.
 - Introduced in: -
 
 ##### pk_index_size_tiered_level_multiplier
@@ -2401,13 +2401,13 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Description: The target file size for Primary Key index in a shared-data cluster.
 - Introduced in: -
 
-##### pk_parallel_execution_threshold_bytes
+##### pk_index_eager_build_threshold_bytes
 
 - Default: 104857600
 - Type: Int
 - Unit: Bytes
 - Is mutable: Yes
-- Description: When `enable_pk_parallel_execution` is set to true, the Primary Key table parallel execution strategy will be enabled if the data generated during import or compaction exceeds this threshold.
+- Description: When `enable_pk_index_eager_build` is set to true, the system will eagerly build PK index files only if the data generated during import or compaction exceeds this threshold. Default is 100MB.
 - Introduced in: -
 
 ##### primary_key_limit_size

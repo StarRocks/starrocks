@@ -279,10 +279,17 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
             if (tablet_mgr != nullptr) tablet_mgr->update_metacache_limit(config::lake_metadata_cache_limit);
             return Status::OK();
         });
-        _config_callback.emplace("pk_index_parallel_get_threadpool_max_threads", [&]() -> Status {
-            auto thread_pool = _exec_env->pk_index_get_thread_pool();
+        _config_callback.emplace("pk_index_parallel_execution_threadpool_max_threads", [&]() -> Status {
+            auto thread_pool = _exec_env->pk_index_execution_thread_pool();
             if (thread_pool != nullptr) {
-                return thread_pool->update_max_threads(config::pk_index_parallel_get_threadpool_max_threads);
+                return thread_pool->update_max_threads(config::pk_index_parallel_execution_threadpool_max_threads);
+            }
+            return Status::OK();
+        });
+        _config_callback.emplace("pk_index_memtable_flush_threadpool_max_threads", [&]() -> Status {
+            auto thread_pool = _exec_env->pk_index_memtable_flush_thread_pool();
+            if (thread_pool != nullptr) {
+                return thread_pool->update_max_threads(config::pk_index_memtable_flush_threadpool_max_threads);
             }
             return Status::OK();
         });

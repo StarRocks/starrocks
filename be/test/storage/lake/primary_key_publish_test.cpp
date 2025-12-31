@@ -2105,13 +2105,13 @@ TEST_P(LakePrimaryKeyPublishTest, test_write_with_delvec_corrupt) {
 }
 
 TEST_P(LakePrimaryKeyPublishTest, test_parallel_upsert_with_multiple_memtables) {
-    bool old_enable_pk_index_parallel_get = config::enable_pk_index_parallel_get;
-    int64_t old_pk_index_parallel_get_min_rows = config::pk_index_parallel_get_min_rows;
+    bool old_enable_pk_index_parallel_execution = config::enable_pk_index_parallel_execution;
+    int64_t old_pk_index_parallel_execution_min_rows = config::pk_index_parallel_execution_min_rows;
     int64_t old_l0_max_mem_usage = config::l0_max_mem_usage;
     int64_t old_pk_index_memtable_max_count = config::pk_index_memtable_max_count;
     config::l0_max_mem_usage = 10;
-    config::enable_pk_index_parallel_get = true;
-    config::pk_index_parallel_get_min_rows = 4096;
+    config::enable_pk_index_parallel_execution = true;
+    config::pk_index_parallel_execution_min_rows = 4096;
     config::pk_index_memtable_max_count = 3;
     const int64_t chunk_size = 3 * 4096;
     auto [chunk0, indexes] = gen_data_and_index(chunk_size, 0, true, true);
@@ -2141,8 +2141,8 @@ TEST_P(LakePrimaryKeyPublishTest, test_parallel_upsert_with_multiple_memtables) 
     EXPECT_TRUE(_update_mgr->mem_tracker()->consumption() > 0);
     ASSERT_EQ(chunk_size, read_rows(tablet_id, version));
     // reset configs
-    config::enable_pk_index_parallel_get = old_enable_pk_index_parallel_get;
-    config::pk_index_parallel_get_min_rows = old_pk_index_parallel_get_min_rows;
+    config::enable_pk_index_parallel_execution = old_enable_pk_index_parallel_execution;
+    config::pk_index_parallel_execution_min_rows = old_pk_index_parallel_execution_min_rows;
     config::l0_max_mem_usage = old_l0_max_mem_usage;
     config::pk_index_memtable_max_count = old_pk_index_memtable_max_count;
 }

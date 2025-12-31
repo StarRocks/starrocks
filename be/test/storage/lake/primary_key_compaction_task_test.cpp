@@ -1602,7 +1602,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_major_compaction_thread_safe) {
     config::l0_max_mem_usage = l0_max_mem_usage;
 }
 
-TEST_P(LakePrimaryKeyCompactionTest, test_should_enable_pk_parallel_execution) {
+TEST_P(LakePrimaryKeyCompactionTest, test_should_enable_pk_index_eager_build) {
     // Prepare data for writing
     auto chunk0 = generate_data(kChunkSize, 0);
     auto indexes = std::vector<uint32_t>(kChunkSize);
@@ -1635,17 +1635,17 @@ TEST_P(LakePrimaryKeyCompactionTest, test_should_enable_pk_parallel_execution) {
     auto txn_id = next_id();
     auto task_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, false, nullptr);
     ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(task_context.get()));
-    // check should_enable_pk_parallel_execution
+    // check should_enable_pk_index_eager_build
     if (!GetParam().enable_persistent_index || GetParam().persistent_index_type == PersistentIndexTypePB::LOCAL) {
-        EXPECT_FALSE(task->should_enable_pk_parallel_execution(0));
-        EXPECT_FALSE(task->should_enable_pk_parallel_execution(config::pk_parallel_execution_threshold_bytes - 1));
-        EXPECT_FALSE(task->should_enable_pk_parallel_execution(config::pk_parallel_execution_threshold_bytes));
-        EXPECT_FALSE(task->should_enable_pk_parallel_execution(config::pk_parallel_execution_threshold_bytes + 1));
+        EXPECT_FALSE(task->should_enable_pk_index_eager_build(0));
+        EXPECT_FALSE(task->should_enable_pk_index_eager_build(config::pk_index_eager_build_threshold_bytes - 1));
+        EXPECT_FALSE(task->should_enable_pk_index_eager_build(config::pk_index_eager_build_threshold_bytes));
+        EXPECT_FALSE(task->should_enable_pk_index_eager_build(config::pk_index_eager_build_threshold_bytes + 1));
     } else {
-        EXPECT_FALSE(task->should_enable_pk_parallel_execution(0));
-        EXPECT_FALSE(task->should_enable_pk_parallel_execution(config::pk_parallel_execution_threshold_bytes - 1));
-        EXPECT_TRUE(task->should_enable_pk_parallel_execution(config::pk_parallel_execution_threshold_bytes));
-        EXPECT_TRUE(task->should_enable_pk_parallel_execution(config::pk_parallel_execution_threshold_bytes + 1));
+        EXPECT_FALSE(task->should_enable_pk_index_eager_build(0));
+        EXPECT_FALSE(task->should_enable_pk_index_eager_build(config::pk_index_eager_build_threshold_bytes - 1));
+        EXPECT_TRUE(task->should_enable_pk_index_eager_build(config::pk_index_eager_build_threshold_bytes));
+        EXPECT_TRUE(task->should_enable_pk_index_eager_build(config::pk_index_eager_build_threshold_bytes + 1));
     }
 }
 

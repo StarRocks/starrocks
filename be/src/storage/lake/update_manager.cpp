@@ -757,7 +757,7 @@ Status UpdateManager::publish_column_mode_partial_update(const TxnLogPB_OpWrite&
 // This method supports both serial and parallel execution modes.
 //
 // Parallel Execution:
-// When enabled (config::enable_pk_index_parallel_get && is_cloud_native_index), this method
+// When enabled (config::enable_pk_index_parallel_execution && is_cloud_native_index), this method
 // uses a thread pool to process segments concurrently, significantly improving performance
 // for large tablets during publish operations.
 //
@@ -785,10 +785,10 @@ Status UpdateManager::_do_update(uint32_t rowset_id, int32_t upsert_idx, const S
     // Prepare parallel execution infrastructure if enabled
     std::unique_ptr<ThreadPoolToken> token;
 
-    // Enable parallel execution for cloud-native index when configured
     // Note: Only cloud-native index supports parallel_get/parallel_upsert, local index does not support it
-    if (config::enable_pk_index_parallel_get && is_cloud_native_index) {
-        token = ExecEnv::GetInstance()->pk_index_get_thread_pool()->new_token(ThreadPool::ExecutionMode::CONCURRENT);
+    if (config::enable_pk_index_parallel_execution && is_cloud_native_index) {
+        token = ExecEnv::GetInstance()->pk_index_execution_thread_pool()->new_token(
+                ThreadPool::ExecutionMode::CONCURRENT);
     }
 
     if (read_only && is_cloud_native_index) {

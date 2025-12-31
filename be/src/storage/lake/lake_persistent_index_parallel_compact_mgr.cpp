@@ -36,6 +36,7 @@
 #include "storage/sstable/options.h"
 #include "storage/sstable/table_builder.h"
 #include "util/countdown_latch.h"
+#include "util/cpu_info.h"
 #include "util/defer_op.h"
 #include "util/trace.h"
 
@@ -289,9 +290,13 @@ LakePersistentIndexParallelCompactMgr::~LakePersistentIndexParallelCompactMgr() 
 Status LakePersistentIndexParallelCompactMgr::init() {
     ThreadPoolBuilder builder("cloud_native_pk_index_compact");
     builder.set_min_threads(1);
-    builder.set_max_threads(std::max(1, config::pk_index_parallel_compaction_threadpool_max_threads));
+    builder.set_max_threads(calc_max_threads());
     builder.set_max_queue_size(config::pk_index_parallel_compaction_threadpool_size);
-    return builder.build(&_thread_pool);
+    auto st = builder.build(&_thread_pool);
+    if (st.ok()) {
+        REGISTER_THREAD_POOL_METRICS(cloud_native_pk_index_compact, _thread_pool);
+    }
+    return st;
 }
 
 void LakePersistentIndexParallelCompactMgr::shutdown() {
@@ -306,6 +311,14 @@ Status LakePersistentIndexParallelCompactMgr::update_max_threads(int max_threads
         return _thread_pool->update_max_threads(max_threads);
     }
     return Status::OK();
+}
+
+int32_t LakePersistentIndexParallelCompactMgr::calc_max_threads() const {
+    int32_t max_threads = config::pk_index_parallel_compaction_threadpool_max_threads;
+    if (max_threads <= 0) {
+        max_threads = CpuInfo::num_cores();
+    }
+    return std::max(1, max_threads);
 }
 
 StatusOr<AsyncCompactCBPtr> LakePersistentIndexParallelCompactMgr::async_compact(
@@ -445,8 +458,7 @@ void LakePersistentIndexParallelCompactMgr::generate_compaction_tasks(
     // Calculate segment number based on total size, threshold and parallelism config
     size_t segment_num = std::max<size_t>(
             1, total_size / std::max<size_t>(1, config::pk_index_parallel_compaction_task_split_threshold_bytes));
-    segment_num =
-            std::min<size_t>(segment_num, std::max(1, config::pk_index_parallel_compaction_threadpool_max_threads) * 2);
+    segment_num = std::min<size_t>(segment_num, calc_max_threads() * 2);
 
     struct Segment {
         // [seek_key, stop_key)

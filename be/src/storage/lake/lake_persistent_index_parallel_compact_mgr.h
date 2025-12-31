@@ -130,6 +130,8 @@ public:
 
     Status update_max_threads(int max_threads);
 
+    int32_t calc_max_threads() const;
+
     StatusOr<AsyncCompactCBPtr> async_compact(
             const std::vector<std::vector<PersistentIndexSstablePB>>& candidates, const TabletMetadataPtr& metadata,
             bool merge_base_level, const std::function<Status(const std::vector<PersistentIndexSstablePB>&)>& callback);

@@ -427,14 +427,13 @@ CONF_Bool(enable_event_based_compaction_framework, "true");
 
 CONF_Bool(enable_size_tiered_compaction_strategy, "true");
 CONF_mBool(enable_pk_size_tiered_compaction_strategy, "true");
-// Enable parallel execution within tablet for primary key tables.
-CONF_mBool(enable_pk_parallel_execution, "true");
-// The minimum threshold of data size for enabling pk parallel execution.
+// Enable eager build of PK index files during import and compaction.
+CONF_mBool(enable_pk_index_eager_build, "true");
+// The minimum threshold of data size for enabling pk index eager build.
 // Default is 100MB.
-CONF_mInt64(pk_parallel_execution_threshold_bytes, "104857600");
+CONF_mInt64(pk_index_eager_build_threshold_bytes, "104857600");
 // Compaction threadpool max thread num for cloud native pk index compact in shared-data mode.
-// Default is 4.
-CONF_mInt32(pk_index_parallel_compaction_threadpool_max_threads, "4");
+CONF_mInt32(pk_index_parallel_compaction_threadpool_max_threads, "0");
 // The queue size for pk index parallel compaction threadpool in shared-data mode.
 CONF_mInt32(pk_index_parallel_compaction_threadpool_size, "1048576");
 // The splitting threshold for PK index compaction tasks — when the total size of the files involved in a task is
@@ -451,21 +450,21 @@ CONF_mDouble(pk_index_compaction_score_ratio, "1.5");
 // early sst compaction threshold for primary key index in shared-data mode.
 CONF_mInt32(pk_index_early_sst_compaction_threshold, "5");
 // Whether enable parallel compaction for primary key index in shared-data mode.
-CONF_mBool(enable_pk_index_parallel_compaction, "false");
+CONF_mBool(enable_pk_index_parallel_compaction, "true");
 // Whether enable parallel get for primary key index in shared-data mode.
-CONF_mBool(enable_pk_index_parallel_get, "false");
+CONF_mBool(enable_pk_index_parallel_execution, "true");
 // The minimum rows threshold to enable parallel get for primary key index in shared-data mode.
-CONF_mInt64(pk_index_parallel_get_min_rows, "16384");
+CONF_mInt64(pk_index_parallel_execution_min_rows, "16384");
 // The threadpool max thread num for pk index get in shared-data mode.
-CONF_mInt32(pk_index_parallel_get_threadpool_max_threads, "0");
+CONF_mInt32(pk_index_parallel_execution_threadpool_max_threads, "0");
 // The queue size for pk index parallel get threadpool in shared-data mode.
-CONF_mInt32(pk_index_parallel_get_threadpool_size, "1048576");
+CONF_mInt32(pk_index_parallel_execution_threadpool_size, "1048576");
 // Memtable flush threadpool max thread num for pk index in shared-data mode.
-CONF_mInt32(pk_index_memtable_flush_threadpool_max_threads, "4");
+CONF_mInt32(pk_index_memtable_flush_threadpool_max_threads, "0");
 // The queue size for pk index memtable flush threadpool in shared-data mode.
 CONF_mInt32(pk_index_memtable_flush_threadpool_size, "2048");
 // The maximum number of memtables for pk index in shared-data mode.
-CONF_mInt32(pk_index_memtable_max_count, "1");
+CONF_mInt32(pk_index_memtable_max_count, "2");
 // The maximum wait flush timeout for pk index memtable in shared-data mode, in milliseconds.
 CONF_mInt64(pk_index_memtable_max_wait_flush_timeout_ms, "30000");
 // The parameters for pk index size-tiered compaction strategy.
