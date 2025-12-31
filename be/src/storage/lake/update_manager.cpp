@@ -786,11 +786,13 @@ Status UpdateManager::_do_update(uint32_t rowset_id, int32_t upsert_idx, const S
     std::unique_ptr<ThreadPoolToken> token;
 
     // Enable parallel execution for cloud-native index when configured
+    // Note: Only cloud-native index supports parallel_get/parallel_upsert, local index does not support it
     if (config::enable_pk_index_parallel_get && is_cloud_native_index) {
         token = ExecEnv::GetInstance()->pk_index_get_thread_pool()->new_token(ThreadPool::ExecutionMode::CONCURRENT);
     }
 
-    if (read_only) {
+    if (read_only && is_cloud_native_index) {
+        // Note: Only cloud-native index supports readonly execution mode.
         // Query existing rows to delete without modifying the index
         RETURN_IF_ERROR(index.parallel_get(token.get(), upsert.get(), new_deletes));
     } else {
