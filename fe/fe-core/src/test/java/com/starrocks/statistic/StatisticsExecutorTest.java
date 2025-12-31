@@ -45,6 +45,7 @@ import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
 
 import java.time.Clock;
 import java.time.LocalDateTime;
@@ -123,12 +124,8 @@ public class StatisticsExecutorTest extends PlanTestBase {
             }
         };
 
-<<<<<<< HEAD
-        Assert.assertThrows(DdlException.class, () -> collectJob.collectStatisticSync(sql, context));
-=======
         AnalyzeStatus analyzeStatus = new NativeAnalyzeStatus();
         Assertions.assertThrows(DdlException.class, () -> collectJob.collectStatisticSync(sql, context, analyzeStatus));
->>>>>>> 8cb0e5f8cf ([BugFix] fix the behavior of fe_conf.statistic_collect_query_timeout (backport #66363) (#66788))
 
         new Expectations(context) {
             {
@@ -299,51 +296,6 @@ public class StatisticsExecutorTest extends PlanTestBase {
         context.setThreadLocalInfo();
 
         ConnectContext statsContext = StatisticUtils.buildConnectContext();
-<<<<<<< HEAD
         Assert.assertEquals(1, statsContext.getSessionVariable().getParallelExecInstanceNum());
-=======
-        Assertions.assertEquals(1, statsContext.getSessionVariable().getParallelExecInstanceNum());
-    }
-
-    @Test
-    public void testSpecifyStatisticsCollectWarehouse() {
-        String sql = "analyze table test.t0_stats";
-        FeConstants.enableUnitStatistics = false;
-        AnalyzeStmt stmt = (AnalyzeStmt) analyzeSuccess(sql);
-        StmtExecutor executor = new StmtExecutor(connectContext, stmt);
-        AnalyzeStatus analyzeStatus = new NativeAnalyzeStatus(1, 2, 3, Lists.newArrayList(),
-                StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.SCHEDULE, Maps.newHashMap(),
-                LocalDateTime.now());
-
-        Database db = connectContext.getGlobalStateMgr().getMetadataMgr().getDb(connectContext, "default_catalog", "test");
-        Table table =
-                connectContext.getGlobalStateMgr().getLocalMetastore().getTable(connectContext, "test", "t0_stats");
-
-        Config.lake_background_warehouse = "xxx";
-        Deencapsulation.invoke(executor, "executeAnalyze", connectContext, stmt, analyzeStatus, db, table);
-        Assertions.assertTrue(analyzeStatus.getReason().contains("Warehouse xxx not exist"));
-        Config.lake_background_warehouse = "default_warehouse";
-        FeConstants.enableUnitStatistics = true;
-    }
-
-    @Test
-    public void testDropHistogramWithEmptyColumnNames() {
-        // Test that dropHistogram and dropExternalHistogram methods handle empty column lists
-        // without throwing exceptions (which would happen if SQL with "in ()" was generated)
-        StatisticExecutor statisticExecutor = new StatisticExecutor();
-        ConnectContext context = StatisticUtils.buildConnectContext();
-
-        // Should not throw any exception when columnNames is empty
-        statisticExecutor.dropHistogram(context, 1L, Lists.newArrayList());
-        statisticExecutor.dropHistogram(context, 1L, null);
-
-        // Should not throw any exception when columnNames is empty for external histogram
-        statisticExecutor.dropExternalHistogram(context, "test-uuid", Lists.newArrayList());
-        statisticExecutor.dropExternalHistogram(context, "test-uuid", null);
-
-        // Should not throw any exception for the overloaded version with catalog/db/table names
-        statisticExecutor.dropExternalHistogram(context, "catalog", "db", "table", Lists.newArrayList());
-        statisticExecutor.dropExternalHistogram(context, "catalog", "db", "table", null);
->>>>>>> 8cb0e5f8cf ([BugFix] fix the behavior of fe_conf.statistic_collect_query_timeout (backport #66363) (#66788))
     }
 }
