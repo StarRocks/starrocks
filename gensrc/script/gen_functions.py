@@ -211,7 +211,11 @@ def generate_default_value(param, fn_id):
             .replace('\r', '\\r')   # carriage return
             .replace('\t', '\\t'))  # tab
         return f'            defaults{fn_id}.add(new Pair<>("{name}", new StringLiteral("{escaped}")));'
-    return None
+    else:
+        print(f"WARNING: Unsupported default value type '{type(default).__name__}' "
+              f"for parameter '{name}' in function {fn_id}. "
+              f"Parameter will be treated as required.")
+        return None
 
 
 def generate_fe(path):
