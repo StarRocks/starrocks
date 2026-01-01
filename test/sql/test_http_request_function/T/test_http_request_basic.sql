@@ -21,6 +21,9 @@ ADMIN SET FRONTEND CONFIG ("http_request_host_allowlist_regexp" = "jsonplacehold
 -- Allow ssl_verify=false for SSL verification tests
 ADMIN SET FRONTEND CONFIG ("http_request_ssl_verification_required" = "false");
 
+-- Wait for config propagation to BE (heartbeat interval is typically 1 second)
+SELECT sleep(2);
+
 -- Test 1: NULL input returns error (required parameter cannot be NULL)
 SELECT http_request(url => NULL);
 

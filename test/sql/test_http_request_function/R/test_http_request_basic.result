@@ -27,6 +27,12 @@ ADMIN SET FRONTEND CONFIG ("http_request_ssl_verification_required" = "false");
 -- result:
 -- !result
 
+-- Wait for config propagation to BE (heartbeat interval is typically 1 second)
+SELECT sleep(2);
+-- result:
+1
+-- !result
+
 -- Test 1: NULL input returns error (required parameter cannot be NULL)
 SELECT http_request(url => NULL);
 -- result:
