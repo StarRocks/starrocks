@@ -1364,9 +1364,13 @@ public class FunctionAnalyzer {
      * Validate named arguments for any function that supports them.
      * This is the main validation entry point that delegates to specialized methods.
      *
+     * IMPORTANT: This method should be called AFTER reordering when node is provided,
+     * because NULL constraints validation relies on parameter positions matching
+     * the function definition order (node.getChild(i) corresponds to fn.getArgNames()[i]).
+     *
      * This method performs validation in two stages:
-     * 1. Structure validation (duplicates, unknown params, missing required) - safe before reordering
-     * 2. NULL constraints validation - requires correct parameter positions after reordering
+     * 1. Structure validation (duplicates, unknown params, missing required)
+     * 2. NULL constraints validation (only if node is provided)
      *
      * @param fnName      function name for error messages
      * @param fn          the function definition
@@ -1376,10 +1380,11 @@ public class FunctionAnalyzer {
      */
     public static void validateNamedArguments(String fnName, Function fn, List<String> paramNames,
                                               FunctionCallExpr node) {
-        // Always validate structure first
+        // Validate structure first
         validateNamedArgumentsStructure(fnName, fn, paramNames);
 
         // Validate NULL constraints only if node is provided
+        // Note: This assumes arguments are already reordered to match function definition order
         if (node != null) {
             validateNullConstraints(fnName, fn, node);
         }
@@ -1406,6 +1411,14 @@ public class FunctionAnalyzer {
     public static void validateNamedArgumentsStructure(String fnName, Function fn, List<String> paramNames) {
         if (fn == null || !fn.hasNamedArg()) {
             throw new SemanticException(fnName + "() does not support named parameters");
+        }
+
+        // Check for mixed named and positional arguments
+        // Positional arguments have empty string "" as their name
+        boolean hasNamedArg = paramNames.stream().anyMatch(name -> !name.isEmpty());
+        boolean hasPositionalArg = paramNames.stream().anyMatch(String::isEmpty);
+        if (hasNamedArg && hasPositionalArg) {
+            throw new SemanticException(fnName + "() mixing named and positional arguments is not allowed");
         }
 
         String[] validParamNames = fn.getArgNames();
@@ -1595,11 +1608,18 @@ public class FunctionAnalyzer {
         Function fn = ExprUtils.getBuiltinFunction(fnName, argumentTypes,
                 Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
 
-        if (fn != null && fn.hasNamedArg()) {
-            // Function exists and supports named args - validate to get specific error
-            validateNamedArguments(fnName, fn, paramNames, null);
+        if (fn != null) {
+            if (fn.hasNamedArg()) {
+                // Function exists and supports named args - validate structure to get specific error
+                // Note: Use validateNamedArgumentsStructure (not validateNamedArguments) because
+                // this is called BEFORE reordering, and NULL validation requires reordered arguments
+                validateNamedArgumentsStructure(fnName, fn, paramNames);
+            } else {
+                // Function exists but does not support named arguments
+                throw new SemanticException(fnName + "() does not support named arguments");
+            }
         }
-        // If we reach here, throw generic error (will be handled by caller)
+        // If we reach here (fn == null), throw generic error (will be handled by caller)
     }
 
     /**
