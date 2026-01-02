@@ -187,6 +187,7 @@ public class PaimonScanNode extends ScanNode {
 
         }
         scanNodePredicates.setSelectedPartitionIds(selectedPartitions.values());
+        selectedPartitionNum = selectedPartitions.size();
         traceJniMetrics();
         traceDeletionVectorMetrics();
     }

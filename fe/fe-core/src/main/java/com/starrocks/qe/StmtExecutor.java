@@ -109,9 +109,11 @@ import com.starrocks.persist.CreateInsertOverwriteJobLog;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.planner.FileScanNode;
 import com.starrocks.planner.HiveTableSink;
+import com.starrocks.planner.HudiScanNode;
 import com.starrocks.planner.IcebergScanNode;
 import com.starrocks.planner.IcebergTableSink;
 import com.starrocks.planner.OlapScanNode;
+import com.starrocks.planner.PaimonScanNode;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.PlanNodeId;
 import com.starrocks.planner.ScanNode;
@@ -1544,9 +1546,14 @@ public class StmtExecutor {
                 planMaxScanTablets = Math.max(planMaxScanTablets, ((OlapScanNode) scanNode).getScanTabletIds().size());
             }
 
-            if  (scanNode instanceof IcebergScanNode) {
+            if  (scanNode instanceof PaimonScanNode || scanNode instanceof HudiScanNode) {
                 planMaxScanRows = Math.max(planMaxScanRows, scanNode.getCardinality());
                 planMaxScanPartitions = Math.max(planMaxScanPartitions, scanNode.getSelectedPartitionNum());
+            }
+
+            if  (scanNode instanceof IcebergScanNode) {
+                planMaxScanRows = Math.max(planMaxScanRows, scanNode.getCardinality());
+                planMaxScanPartitions = Math.max(planMaxScanPartitions, ((IcebergScanNode) scanNode).getScanNodePredicates().getSelectedPartitionIds().size());
             }
         }
         context.getAuditEventBuilder()
