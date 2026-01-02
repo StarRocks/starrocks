@@ -423,7 +423,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: DNS cache TTL (Time-To-Live) in seconds for successful DNS lookups. This sets the Java security property `networkaddress.cache.ttl` which controls how long the JVM caches successful DNS lookups. Set to -1 to cache forever, or 0 to disable caching. This is particularly useful in environments where IP addresses change frequently, such as Kubernetes deployments or when using dynamic DNS. This is a static configuration and requires FE restart to take effect.
 - Introduced in: v3.5.11, v4.0.4
 
-##### http_async_threads_num
+##### priority_networks
 
 - Default: Empty string
 - Type: String
