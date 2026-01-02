@@ -271,14 +271,14 @@ public class MergeCommitJob implements MergeCommitTaskCallback {
             lock.writeLock().unlock();
         }
 
-        Optional<Long> txnId = executor.getTxnId();
-        if (!asyncMode && txnId.isPresent()) {
+        long txnId = executor.getTxnId();
+        if (!asyncMode && txnId > 0) {
             for (long backendId : executor.getBackendIds()) {
                 try {
-                    txnUpdateDispatch.submitTask(tableId.getDbName(), txnId.get(), backendId);
+                    txnUpdateDispatch.submitTask(tableId.getDbName(), txnId, backendId);
                 } catch (Exception e) {
                     LOG.error("Fail to submit transaction state update task, db: {}, txn_id: {}, backend id: {}",
-                            tableId.getDbName(), txnId.get(), backendId, e);
+                            tableId.getDbName(), txnId, backendId, e);
                 }
             }
         }
