@@ -791,7 +791,7 @@ void PipelineDriver::_update_global_rf_timer() {
     WARN_IF_ERROR(_fragment_ctx->pipeline_timer()->schedule(_global_rf_timer.get(), abstime), "schedule:");
 }
 
-std::string PipelineDriver::to_readable_string() const {
+std::string PipelineDriver::_build_readable_string(bool use_raw_name) const {
     std::stringstream ss;
     std::string block_reasons = "";
     if (_state == PRECONDITION_BLOCK) {
@@ -804,35 +804,21 @@ std::string PipelineDriver::to_readable_string() const {
        << block_reasons << ", operator-chain: [";
     for (size_t i = 0; i < _operators.size(); ++i) {
         if (i == 0) {
-            ss << _operators[i]->get_name();
+            ss << (use_raw_name ? _operators[i]->get_raw_name() : _operators[i]->get_name());
         } else {
-            ss << " -> " << _operators[i]->get_name();
+            ss << " -> " << (use_raw_name ? _operators[i]->get_raw_name() : _operators[i]->get_name());
         }
     }
     ss << "]";
     return ss.str();
 }
 
+std::string PipelineDriver::to_readable_string() const {
+    return _build_readable_string(false);
+}
+
 std::string PipelineDriver::get_raw_string_name() const {
-    std::stringstream ss;
-    std::string block_reasons = "";
-    if (_state == PRECONDITION_BLOCK) {
-        block_reasons = const_cast<PipelineDriver*>(this)->get_preconditions_block_reasons();
-    }
-    ss << "query_id=" << (this->_query_ctx == nullptr ? "None" : print_id(this->query_ctx()->query_id()))
-       << " fragment_id="
-       << (this->_fragment_ctx == nullptr ? "None" : print_id(this->fragment_ctx()->fragment_instance_id()))
-       << " driver=" << _driver_name << " addr=" << this << ", status=" << ds_to_string(this->driver_state())
-       << block_reasons << ", operator-chain: [";
-    for (size_t i = 0; i < _operators.size(); ++i) {
-        if (i == 0) {
-            ss << _operators[i]->get_raw_name();
-        } else {
-            ss << " -> " << _operators[i]->get_raw_name();
-        }
-    }
-    ss << "]";
-    return ss.str();
+    return _build_readable_string(true);
 }
 
 workgroup::WorkGroup* PipelineDriver::workgroup() {
