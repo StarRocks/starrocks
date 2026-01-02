@@ -3931,15 +3931,14 @@ static StatusOr<ColumnPtr> hyperscan_vec_evaluate(const BinaryColumn* src, Strin
     size_t match_index = 0;
     size_t match_size = match_info_chain_in_one_row.info_chain.size();
     dst_offsets[0] = 0;
-    
+
     for (size_t i = 0; i < num_rows; i++) {
         size_t row_start = src_offsets[i];
         size_t row_end = src_offsets[i + 1];
         size_t last_to = row_start;
-        
+
         // Process all matches in this row
-        while (match_index < match_size && 
-               match_info_chain_in_one_row.info_chain[match_index].from >= row_start &&
+        while (match_index < match_size && match_info_chain_in_one_row.info_chain[match_index].from >= row_start &&
                match_info_chain_in_one_row.info_chain[match_index].to <= row_end) {
             const auto& info = match_info_chain_in_one_row.info_chain[match_index];
             // Copy data before the match
@@ -3954,7 +3953,7 @@ static StatusOr<ColumnPtr> hyperscan_vec_evaluate(const BinaryColumn* src, Strin
         // Copy remaining data in this row
         strings::memcpy_inlined(cursor, data + last_to, row_end - last_to);
         cursor += row_end - last_to;
-        
+
         // Calculate offset for this row
         dst_offsets[i + 1] = cursor - reinterpret_cast<char*>(dst_bytes.data());
     }
