@@ -138,7 +138,6 @@ public class ResourceGroupBuilder {
                 changedProperties.getBigQueryScanRowsLimit() == null &&
                 changedProperties.getSpillMemLimitThreshold() == null &&
                 changedProperties.getWarehouses() == null &&
-                changedProperties.getSpillMemLimitThreshold() == null &&
                 changedProperties.getPlanScanPartitionsLimit() == null &&
                 changedProperties.getPlanScanRowsLimit() == null &&
                 changedProperties.getPlanScanTabletsLimit() == null) {

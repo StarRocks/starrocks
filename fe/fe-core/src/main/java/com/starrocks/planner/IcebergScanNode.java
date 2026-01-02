@@ -169,7 +169,7 @@ public class IcebergScanNode extends ScanNode {
 
         if (selectedPartitionNum == -1) {
             while (scanRangeSource.hasMoreOutput()) {
-                scanRangeLocationsList.addAll(scanRangeSource.getSourceOutputs(1000));
+                scanRangeLocationsList.addAll(scanRangeSource.getOutputs(1000));
             }
             selectedPartitionNum = scanRangeSource.selectedPartitionCount();
         }
