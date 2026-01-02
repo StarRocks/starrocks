@@ -223,7 +223,7 @@ static bool is_valid_json(const std::string& s) {
 static std::string build_json_response(long http_status, const std::string& body) {
     // Validate UTF-8 encoding
     if (!is_valid_utf8(body)) {
-        return fmt::format(R"({{"status": {}, "body": null, "error": "Response contains invalid UTF-8 encoding"}})", http_status);
+        return fmt::format(R"({{"status": -1, "body": null, "error": "Response contains invalid UTF-8 encoding"}})");
     }
 
     if (is_valid_json(body)) {

@@ -272,8 +272,10 @@ public class ConfigBase {
             case "http_request_ip_allowlist":
                 // Validate comma-separated IPv4 address list
                 // Valid: "192.168.1.1" or "10.0.0.1, 172.16.0.1"
+                // IPv4 pattern: each octet must be 0-255
                 if (!confVal.isEmpty()) {
-                    String ipv4Pattern = "^\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}$";
+                    Pattern ipv4Pattern = Pattern.compile(
+                            "^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$");
                     String[] ips = confVal.split(",");
                     for (String ip : ips) {
                         String trimmed = ip.trim();
@@ -282,10 +284,10 @@ public class ConfigBase {
                                     "Invalid 'http_request_ip_allowlist': empty value between commas. " +
                                             "Current value: '" + confVal + "'");
                         }
-                        if (!trimmed.matches(ipv4Pattern)) {
+                        if (!ipv4Pattern.matcher(trimmed).matches()) {
                             throw new InvalidConfException(
                                     "Invalid 'http_request_ip_allowlist': '" + trimmed + "' is not a valid IPv4 address. " +
-                                            "Expected format: '192.168.1.1' or '10.0.0.1,172.16.0.1'");
+                                            "Each octet must be 0-255. Expected format: '192.168.1.1' or '10.0.0.1,172.16.0.1'");
                         }
                     }
                 }
