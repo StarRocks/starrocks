@@ -190,7 +190,7 @@ public class MergeCommitJob implements MergeCommitTaskCallback {
         lock.readLock().lock();
         try {
             for (MergeCommitTask mergeCommitTask : mergeCommitTasks.values()) {
-                if (mergeCommitTask.isActive() && mergeCommitTask.containCoordinatorBackend(backendId)) {
+                if (mergeCommitTask.isActive() && mergeCommitTask.containsBackend(backendId)) {
                     status.setStatus_code(TStatusCode.OK);
                     return new RequestLoadResult(status, mergeCommitTask.getLabel());
                 }
@@ -202,7 +202,7 @@ public class MergeCommitJob implements MergeCommitTaskCallback {
         lock.writeLock().lock();
         try {
             for (MergeCommitTask mergeCommitTask : mergeCommitTasks.values()) {
-                if (mergeCommitTask.isActive() && mergeCommitTask.containCoordinatorBackend(backendId)) {
+                if (mergeCommitTask.isActive() && mergeCommitTask.containsBackend(backendId)) {
                     status.setStatus_code(TStatusCode.OK);
                     return new RequestLoadResult(status, mergeCommitTask.getLabel());
                 }
@@ -230,8 +230,9 @@ public class MergeCommitJob implements MergeCommitTaskCallback {
             TUniqueId loadId = UUIDUtil.genTUniqueId();
             String label = LABEL_PREFIX + DebugUtil.printId(loadId);
             MergeCommitTask mergeCommitTask = new MergeCommitTask(
+                    GlobalStateMgr.getCurrentState().getNextId(),
                     tableId, label, loadId, streamLoadInfo, batchWriteIntervalMs, loadParameters,
-                    backendIds, queryCoordinatorFactory, this);
+                    warehouseName, backendIds, queryCoordinatorFactory, this);
             mergeCommitTasks.put(label, mergeCommitTask);
             try {
                 executor.execute(mergeCommitTask);
@@ -270,21 +271,14 @@ public class MergeCommitJob implements MergeCommitTaskCallback {
             lock.writeLock().unlock();
         }
 
-        if (executor.getFailure() == null) {
-            MergeCommitMetricRegistry.getInstance().incSuccessTask();
-        } else {
-            MergeCommitMetricRegistry.getInstance().incFailTask();
-        }
-        MergeCommitMetricRegistry.getInstance().updateRunningTask(-1L);
-
-        long txnId = executor.getTxnId();
-        if (!asyncMode && txnId > 0) {
+        Optional<Long> txnId = executor.getTxnId();
+        if (!asyncMode && txnId.isPresent()) {
             for (long backendId : executor.getBackendIds()) {
                 try {
-                    txnUpdateDispatch.submitTask(tableId.getDbName(), txnId, backendId);
+                    txnUpdateDispatch.submitTask(tableId.getDbName(), txnId.get(), backendId);
                 } catch (Exception e) {
                     LOG.error("Fail to submit transaction state update task, db: {}, txn_id: {}, backend id: {}",
-                            tableId.getDbName(), txnId, backendId, e);
+                            tableId.getDbName(), txnId.get(), backendId, e);
                 }
             }
         }
