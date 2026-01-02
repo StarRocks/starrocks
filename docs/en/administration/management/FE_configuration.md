@@ -414,9 +414,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: The IP address of the FE node.
 - Introduced in: -
 
-<<<<<<< HEAD
-##### priority_networks
-=======
 ##### dns_cache_ttl_seconds
 
 - Default: 60
@@ -427,7 +424,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Introduced in: v3.5.11, v4.0.4
 
 ##### http_async_threads_num
->>>>>>> 3fd5bc092b ([Enhancement] Make networkaddress.cache.ttl configurable (#66723))
 
 - Default: Empty string
 - Type: String
