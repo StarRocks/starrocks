@@ -2486,7 +2486,6 @@ namedArgumentList
 
 namedArgument
     : identifier '=>' expression                                                        #namedArguments
-    | identifier '=' expression                                                         #namedArguments
     ;
 
 joinRelation
