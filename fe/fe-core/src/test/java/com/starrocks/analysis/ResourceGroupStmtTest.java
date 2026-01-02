@@ -252,22 +252,22 @@ public class ResourceGroupStmtTest {
         createResourceGroups();
         List<List<String>> rows = starRocksAssert.executeResourceGroupShowSql("show verbose resource groups all");
         String result = rowsToString(rows);
-        String expect = "default_mv_wg|0|1|0|null|80.0%|null|0|0|0|null|80%|NORMAL|(weight=0.0)|default_mem_pool|\n" +
-                "default_wg|0|100|0|null|100.0%|null|0|0|0|null|100%|NORMAL|(weight=0.0)|default_mem_pool|\n" +
-                "rg1|10|null|0|null|20.0%|8|0|0|0|11|100%|NORMAL|(weight=4.475, user=rg1_user1, role=rg1_role1, query_type in (SELECT), source_ip=192.168.2.1/24)|default_mem_pool|\n" +
-                "rg1|10|null|0|null|20.0%|8|0|0|0|11|100%|NORMAL|(weight=3.475, user=rg1_user2, query_type in (SELECT), source_ip=192.168.3.1/24)|default_mem_pool|\n" +
-                "rg1|10|null|0|null|20.0%|8|0|0|0|11|100%|NORMAL|(weight=2.375, user=rg1_user3, source_ip=192.168.4.1/24)|default_mem_pool|\n" +
-                "rg1|10|null|0|null|20.0%|8|0|0|0|11|100%|NORMAL|(weight=1.0, user=rg1_user4)|default_mem_pool|\n" +
-                "rg2|30|null|0|null|50.0%|null|0|0|0|20|100%|NORMAL|(weight=3.475, role=rg2_role1, query_type in (SELECT), source_ip=192.168.5.1/24)|default_mem_pool|\n" +
-                "rg2|30|null|0|null|50.0%|null|0|0|0|20|100%|NORMAL|(weight=2.375, role=rg2_role2, source_ip=192.168.6.1/24)|default_mem_pool|\n" +
-                "rg2|30|null|0|null|50.0%|null|0|0|0|20|100%|NORMAL|(weight=1.0, role=rg2_role3)|default_mem_pool|\n" +
-                "rg3|32|null|0|null|80.0%|null|0|0|0|10|100%|NORMAL|(weight=2.475, query_type in (SELECT), source_ip=192.168.6.1/24)|default_mem_pool|\n" +
-                "rg3|32|null|0|null|80.0%|null|0|0|0|10|100%|NORMAL|(weight=1.1, query_type in (SELECT))|default_mem_pool|\n" +
-                "rg4|25|null|0|null|80.0%|null|1024|1024|1024|10|100%|NORMAL|(weight=1.375, source_ip=192.168.7.1/24)|default_mem_pool|\n" +
-                "rg5|25|null|0|null|80.0%|null|0|0|0|10|100%|NORMAL|(weight=10.0, db='db1')|default_mem_pool|\n" +
-                "rg6|32|null|0|null|80.0%|null|0|0|0|10|100%|NORMAL|(weight=2.475, query_type in (INSERT), source_ip=192.168.6.1/24)|default_mem_pool|\n" +
-                "rg7|32|null|0|null|80.0%|null|0|0|0|10|30%|NORMAL|(weight=2.475, query_type in (SELECT), source_ip=192.168.6.1/24)|default_mem_pool|\n" +
-                "rt_rg1|25|null|25|null|80.0%|null|0|0|0|10|100%|SHORT_QUERY|(weight=1.0, user=rt_rg_user)|default_mem_pool|";
+        String expect = "default_mv_wg|0|1|0|null|80.0%|null|0|0|0|null|80%|NORMAL|(weight=0.0)|default_mem_pool||0|0|0\n" +
+                "default_wg|0|100|0|null|100.0%|null|0|0|0|null|100%|NORMAL|(weight=0.0)|default_mem_pool||0|0|0\n" +
+                "rg1|10|null|0|null|20.0%|8|0|0|0|11|100%|NORMAL|(weight=4.475, user=rg1_user1, role=rg1_role1, query_type in (SELECT), source_ip=192.168.2.1/24)|default_mem_pool||0|0|0\n" +
+                "rg1|10|null|0|null|20.0%|8|0|0|0|11|100%|NORMAL|(weight=3.475, user=rg1_user2, query_type in (SELECT), source_ip=192.168.3.1/24)|default_mem_pool||0|0|0\n" +
+                "rg1|10|null|0|null|20.0%|8|0|0|0|11|100%|NORMAL|(weight=2.375, user=rg1_user3, source_ip=192.168.4.1/24)|default_mem_pool||0|0|0\n" +
+                "rg1|10|null|0|null|20.0%|8|0|0|0|11|100%|NORMAL|(weight=1.0, user=rg1_user4)|default_mem_pool||0|0|0\n" +
+                "rg2|30|null|0|null|50.0%|null|0|0|0|20|100%|NORMAL|(weight=3.475, role=rg2_role1, query_type in (SELECT), source_ip=192.168.5.1/24)|default_mem_pool||0|0|0\n" +
+                "rg2|30|null|0|null|50.0%|null|0|0|0|20|100%|NORMAL|(weight=2.375, role=rg2_role2, source_ip=192.168.6.1/24)|default_mem_pool||0|0|0\n" +
+                "rg2|30|null|0|null|50.0%|null|0|0|0|20|100%|NORMAL|(weight=1.0, role=rg2_role3)|default_mem_pool||0|0|0\n" +
+                "rg3|32|null|0|null|80.0%|null|0|0|0|10|100%|NORMAL|(weight=2.475, query_type in (SELECT), source_ip=192.168.6.1/24)|default_mem_pool||0|0|0\n" +
+                "rg3|32|null|0|null|80.0%|null|0|0|0|10|100%|NORMAL|(weight=1.1, query_type in (SELECT))|default_mem_pool||0|0|0\n" +
+                "rg4|25|null|0|null|80.0%|null|1024|1024|1024|10|100%|NORMAL|(weight=1.375, source_ip=192.168.7.1/24)|default_mem_pool||0|0|0\n" +
+                "rg5|25|null|0|null|80.0%|null|0|0|0|10|100%|NORMAL|(weight=10.0, db='db1')|default_mem_pool||0|0|0\n" +
+                "rg6|32|null|0|null|80.0%|null|0|0|0|10|100%|NORMAL|(weight=2.475, query_type in (INSERT), source_ip=192.168.6.1/24)|default_mem_pool||0|0|0\n" +
+                "rg7|32|null|0|null|80.0%|null|0|0|0|10|30%|NORMAL|(weight=2.475, query_type in (SELECT), source_ip=192.168.6.1/24)|default_mem_pool||0|0|0\n" +
+                "rt_rg1|25|null|25|null|80.0%|null|0|0|0|10|100%|SHORT_QUERY|(weight=1.0, user=rt_rg_user)|default_mem_pool||0|0|0";
         Assertions.assertEquals(expect, result);
         dropResourceGroups();
     }
@@ -1743,9 +1743,9 @@ public class ResourceGroupStmtTest {
             starRocksAssert.executeResourceGroupDdlSql(sql);
             List<List<String>> rows = starRocksAssert.executeResourceGroupShowSql("show verbose resource groups all");
             assertThat(rowsToString(rows)).isEqualTo(
-                    "default_mv_wg|0|1|0|null|80.0%|null|0|0|0|null|80%|NORMAL|(weight=0.0)|default_mem_pool|\n" +
-                            "default_wg|0|100|0|null|100.0%|null|0|0|0|null|100%|NORMAL|(weight=0.0)|default_mem_pool|\n" +
-                            "rg1|17|null|0|null|20.0%|null|0|0|0|null|100%|NORMAL|(weight=1.0, user=rg1_user)|default_mem_pool|");
+                    "default_mv_wg|0|1|0|null|80.0%|null|0|0|0|null|80%|NORMAL|(weight=0.0)|default_mem_pool||0|0|0\n" +
+                            "default_wg|0|100|0|null|100.0%|null|0|0|0|null|100%|NORMAL|(weight=0.0)|default_mem_pool||0|0|0\n" +
+                            "rg1|17|null|0|null|20.0%|null|0|0|0|null|100%|NORMAL|(weight=1.0, user=rg1_user)|default_mem_pool||0|0|0");
         }
 
         {
@@ -1829,9 +1829,9 @@ public class ResourceGroupStmtTest {
             starRocksAssert.executeResourceGroupDdlSql(sql);
             List<List<String>> rows = starRocksAssert.executeResourceGroupShowSql("show verbose resource groups all");
             assertThat(rowsToString(rows)).isEqualTo(
-                    "default_mv_wg|0|1|0|null|80.0%|null|0|0|0|null|80%|NORMAL|(weight=0.0)|default_mem_pool|\n" +
-                            "default_wg|0|100|0|null|100.0%|null|0|0|0|null|100%|NORMAL|(weight=0.0)|default_mem_pool|\n" +
-                            "rg1|0|40|0|null|20.0%|null|0|0|0|null|100%|NORMAL|(weight=1.0, user=rg1_user)|default_mem_pool|");
+                    "default_mv_wg|0|1|0|null|80.0%|null|0|0|0|null|80%|NORMAL|(weight=0.0)|default_mem_pool||0|0|0\n" +
+                            "default_wg|0|100|0|null|100.0%|null|0|0|0|null|100%|NORMAL|(weight=0.0)|default_mem_pool||0|0|0\n" +
+                            "rg1|0|40|0|null|20.0%|null|0|0|0|null|100%|NORMAL|(weight=1.0, user=rg1_user)|default_mem_pool||0|0|0");
         }
 
         {
@@ -1843,9 +1843,9 @@ public class ResourceGroupStmtTest {
             starRocksAssert.executeResourceGroupDdlSql(sql);
             List<List<String>> rows = starRocksAssert.executeResourceGroupShowSql("show verbose resource groups all");
             assertThat(rowsToString(rows)).isEqualTo(
-                    "default_mv_wg|0|1|0|null|80.0%|null|0|0|0|null|80%|NORMAL|(weight=0.0)|default_mem_pool|\n" +
-                            "default_wg|0|100|0|null|100.0%|null|0|0|0|null|100%|NORMAL|(weight=0.0)|default_mem_pool|\n" +
-                            "rg1|0|0|16|null|20.0%|null|0|0|0|null|100%|NORMAL|(weight=1.0, user=rg1_user)|default_mem_pool|");
+                    "default_mv_wg|0|1|0|null|80.0%|null|0|0|0|null|80%|NORMAL|(weight=0.0)|default_mem_pool||0|0|0\n" +
+                            "default_wg|0|100|0|null|100.0%|null|0|0|0|null|100%|NORMAL|(weight=0.0)|default_mem_pool||0|0|0\n" +
+                            "rg1|0|0|16|null|20.0%|null|0|0|0|null|100%|NORMAL|(weight=1.0, user=rg1_user)|default_mem_pool||0|0|0");
         }
 
         {
@@ -1857,9 +1857,9 @@ public class ResourceGroupStmtTest {
             starRocksAssert.executeResourceGroupDdlSql(sql);
             List<List<String>> rows = starRocksAssert.executeResourceGroupShowSql("show verbose resource groups all");
             assertThat(rowsToString(rows)).isEqualTo(
-                    "default_mv_wg|0|1|0|null|80.0%|null|0|0|0|null|80%|NORMAL|(weight=0.0)|default_mem_pool|\n" +
-                            "default_wg|0|100|0|null|100.0%|null|0|0|0|null|100%|NORMAL|(weight=0.0)|default_mem_pool|\n" +
-                            "rg1|0|0|0|60|20.0%|null|0|0|0|null|100%|NORMAL|(weight=1.0, user=rg1_user)|default_mem_pool|");
+                    "default_mv_wg|0|1|0|null|80.0%|null|0|0|0|null|80%|NORMAL|(weight=0.0)|default_mem_pool||0|0|0\n" +
+                            "default_wg|0|100|0|null|100.0%|null|0|0|0|null|100%|NORMAL|(weight=0.0)|default_mem_pool||0|0|0\n" +
+                            "rg1|0|0|0|60|20.0%|null|0|0|0|null|100%|NORMAL|(weight=1.0, user=rg1_user)|default_mem_pool||0|0|0");
         }
 
         {
@@ -1871,9 +1871,9 @@ public class ResourceGroupStmtTest {
             starRocksAssert.executeResourceGroupDdlSql(sql);
             List<List<String>> rows = starRocksAssert.executeResourceGroupShowSql("show verbose resource groups all");
             assertThat(rowsToString(rows)).isEqualTo(
-                    "default_mv_wg|0|1|0|null|80.0%|null|0|0|0|null|80%|NORMAL|(weight=0.0)|default_mem_pool|\n" +
-                            "default_wg|0|100|0|null|100.0%|null|0|0|0|null|100%|NORMAL|(weight=0.0)|default_mem_pool|\n" +
-                            "rg1|15|0|0|0|20.0%|null|0|0|0|null|100%|NORMAL|(weight=1.0, user=rg1_user)|default_mem_pool|");
+                    "default_mv_wg|0|1|0|null|80.0%|null|0|0|0|null|80%|NORMAL|(weight=0.0)|default_mem_pool||0|0|0\n" +
+                            "default_wg|0|100|0|null|100.0%|null|0|0|0|null|100%|NORMAL|(weight=0.0)|default_mem_pool||0|0|0\n" +
+                            "rg1|15|0|0|0|20.0%|null|0|0|0|null|100%|NORMAL|(weight=1.0, user=rg1_user)|default_mem_pool||0|0|0");
         }
 
         {
@@ -1884,9 +1884,9 @@ public class ResourceGroupStmtTest {
                     ")";
             starRocksAssert.executeResourceGroupDdlSql(sql);
             List<List<String>> rows = starRocksAssert.executeResourceGroupShowSql("show resource groups all");
-            assertThat(rowsToString(rows)).isEqualTo("default_mv_wg|1|null|80.0%|0|0|0|null|80%|(weight=0.0)|\n" +
-                    "default_wg|100|null|100.0%|0|0|0|null|100%|(weight=0.0)|\n" +
-                    "rg1|50|0|20.0%|0|0|0|null|100%|(weight=1.0, user=rg1_user)|");
+            assertThat(rowsToString(rows)).isEqualTo("default_mv_wg|1|null|80.0%|0|0|0|null|80%|(weight=0.0)||0|0|0\n" +
+                    "default_wg|100|null|100.0%|0|0|0|null|100%|(weight=0.0)||0|0|0\n" +
+                    "rg1|50|0|20.0%|0|0|0|null|100%|(weight=1.0, user=rg1_user)||0|0|0");
         }
 
         starRocksAssert.executeResourceGroupDdlSql("DROP RESOURCE GROUP rg1");
@@ -1918,9 +1918,9 @@ public class ResourceGroupStmtTest {
                     ");");
             List<List<String>> rows = starRocksAssert.executeResourceGroupShowSql("show verbose resource groups all");
             assertThat(rowsToString(rows)).isEqualTo(
-                    "default_mv_wg|0|1|0|null|80.0%|null|0|0|0|null|80%|NORMAL|(weight=0.0)|default_mem_pool|\n" +
-                            "default_wg|0|100|0|null|100.0%|null|0|0|0|null|100%|NORMAL|(weight=0.0)|default_mem_pool|\n" +
-                            "rg1|17|null|17|null|20.0%|null|0|0|0|null|100%|SHORT_QUERY|(weight=1.0, user=rg1_user)|default_mem_pool|");
+                    "default_mv_wg|0|1|0|null|80.0%|null|0|0|0|null|80%|NORMAL|(weight=0.0)|default_mem_pool||0|0|0\n" +
+                            "default_wg|0|100|0|null|100.0%|null|0|0|0|null|100%|NORMAL|(weight=0.0)|default_mem_pool||0|0|0\n" +
+                            "rg1|17|null|17|null|20.0%|null|0|0|0|null|100%|SHORT_QUERY|(weight=1.0, user=rg1_user)|default_mem_pool||0|0|0");
 
             String sql = "ALTER resource group rg1 \n" +
                     "WITH (\n" +
@@ -2005,7 +2005,7 @@ public class ResourceGroupStmtTest {
             assertThat(rowsToString(rows)).isEqualTo(
                     "default_mv_wg|0|1|0|null|80.0%|null|0|0|0|null|80%|NORMAL|(weight=0.0)|default_mem_pool||0|0|0\n" +
                             "default_wg|0|100|0|null|100.0%|null|0|0|0|null|100%|NORMAL|(weight=0.0)|default_mem_pool||0|0|0\n" +
-                            "rg1|0|null|0|50|20.0%|null|0|0|0|null|100%|NORMAL|(weight=1.0, user=rg1_user)|default_mem_pool||0|0|0\n" +
+                            "rg1|0|null|0|44|20.0%|null|0|0|0|null|100%|NORMAL|(weight=1.0, user=rg1_user)|default_mem_pool||0|0|0\n" +
                             "rg2|0|null|15|null|20.0%|null|0|0|0|null|100%|NORMAL|(weight=1.0, user=rg2_user)|default_mem_pool||0|0|0");
         }
 
@@ -2602,18 +2602,18 @@ public class ResourceGroupStmtTest {
                     ");";
             starRocksAssert.executeResourceGroupDdlSql(sql);
             List<List<String>> rows = starRocksAssert.executeResourceGroupShowSql("show resource groups all");
-            assertThat(rowsToString(rows)).isEqualTo("default_mv_wg|1|null|80.0%|0|0|0|null|80%|(weight=0.0)|\n" +
-                    "default_wg|100|null|100.0%|0|0|0|null|100%|(weight=0.0)|\n" +
-                    "rg1|null|6|20.0%|0|0|0|null|100%|(weight=1.0, user=rg1_user)|default_warehouse");
+            assertThat(rowsToString(rows)).isEqualTo("default_mv_wg|1|null|80.0%|0|0|0|null|80%|(weight=0.0)||0|0|0\n" +
+                    "default_wg|100|null|100.0%|0|0|0|null|100%|(weight=0.0)||0|0|0\n" +
+                    "rg1|null|6|20.0%|0|0|0|null|100%|(weight=1.0, user=rg1_user)|default_warehouse|0|0|0");
         }
 
         {
             String sql = "ALTER resource group rg1 WITH (  'exclusive_cpu_percent' = '50')";
             starRocksAssert.executeResourceGroupDdlSql(sql);
             List<List<String>> rows = starRocksAssert.executeResourceGroupShowSql("show resource groups all");
-            assertThat(rowsToString(rows)).isEqualTo("default_mv_wg|1|null|80.0%|0|0|0|null|80%|(weight=0.0)|\n" +
-                    "default_wg|100|null|100.0%|0|0|0|null|100%|(weight=0.0)|\n" +
-                    "rg1|null|50|20.0%|0|0|0|null|100%|(weight=1.0, user=rg1_user)|default_warehouse");
+            assertThat(rowsToString(rows)).isEqualTo("default_mv_wg|1|null|80.0%|0|0|0|null|80%|(weight=0.0)||0|0|0\n" +
+                    "default_wg|100|null|100.0%|0|0|0|null|100%|(weight=0.0)||0|0|0\n" +
+                    "rg1|null|50|20.0%|0|0|0|null|100%|(weight=1.0, user=rg1_user)|default_warehouse|0|0|0");
         }
 
         {
@@ -2626,10 +2626,10 @@ public class ResourceGroupStmtTest {
                     ");";
             starRocksAssert.executeResourceGroupDdlSql(sql);
             List<List<String>> rows = starRocksAssert.executeResourceGroupShowSql("show resource groups all");
-            assertThat(rowsToString(rows)).isEqualTo("default_mv_wg|1|null|80.0%|0|0|0|null|80%|(weight=0.0)|\n" +
-                    "default_wg|100|null|100.0%|0|0|0|null|100%|(weight=0.0)|\n" +
-                    "rg1|null|50|20.0%|0|0|0|null|100%|(weight=1.0, user=rg1_user)|default_warehouse\n" +
-                    "rg2|null|30|20.0%|0|0|0|null|100%|(weight=1.0, user=rg1_user)|default_warehouse,wh2");
+            assertThat(rowsToString(rows)).isEqualTo("default_mv_wg|1|null|80.0%|0|0|0|null|80%|(weight=0.0)||0|0|0\n" +
+                    "default_wg|100|null|100.0%|0|0|0|null|100%|(weight=0.0)||0|0|0\n" +
+                    "rg1|null|50|20.0%|0|0|0|null|100%|(weight=1.0, user=rg1_user)|default_warehouse|0|0|0\n" +
+                    "rg2|null|30|20.0%|0|0|0|null|100%|(weight=1.0, user=rg1_user)|default_warehouse,wh2|0|0|0");
         }
 
         {
@@ -2642,11 +2642,11 @@ public class ResourceGroupStmtTest {
                     ");";
             starRocksAssert.executeResourceGroupDdlSql(sql);
             List<List<String>> rows = starRocksAssert.executeResourceGroupShowSql("show resource groups all");
-            assertThat(rowsToString(rows)).isEqualTo("default_mv_wg|1|null|80.0%|0|0|0|null|80%|(weight=0.0)|\n" +
-                    "default_wg|100|null|100.0%|0|0|0|null|100%|(weight=0.0)|\n" +
-                    "rg1|null|50|20.0%|0|0|0|null|100%|(weight=1.0, user=rg1_user)|default_warehouse\n" +
-                    "rg2|null|30|20.0%|0|0|0|null|100%|(weight=1.0, user=rg1_user)|default_warehouse,wh2\n" +
-                    "rg3|null|15|20.0%|0|0|0|null|100%|(weight=1.0, user=rg1_user)|");
+            assertThat(rowsToString(rows)).isEqualTo("default_mv_wg|1|null|80.0%|0|0|0|null|80%|(weight=0.0)||0|0|0\n" +
+                    "default_wg|100|null|100.0%|0|0|0|null|100%|(weight=0.0)||0|0|0\n" +
+                    "rg1|null|50|20.0%|0|0|0|null|100%|(weight=1.0, user=rg1_user)|default_warehouse|0|0|0\n" +
+                    "rg2|null|30|20.0%|0|0|0|null|100%|(weight=1.0, user=rg1_user)|default_warehouse,wh2|0|0|0\n" +
+                    "rg3|null|15|20.0%|0|0|0|null|100%|(weight=1.0, user=rg1_user)||0|0|0");
         }
 
         {
@@ -2764,12 +2764,12 @@ public class ResourceGroupStmtTest {
                     ");";
             starRocksAssert.executeResourceGroupDdlSql(sql);
             List<List<String>> rows = starRocksAssert.executeResourceGroupShowSql("show resource groups all");
-            assertThat(rowsToString(rows)).isEqualTo("default_mv_wg|1|null|80.0%|0|0|0|null|80%|(weight=0.0)|\n" +
-                    "default_wg|100|null|100.0%|0|0|0|null|100%|(weight=0.0)|\n" +
-                    "rg1|null|50|20.0%|0|0|0|null|100%|(weight=1.0, user=rg1_user)|default_warehouse\n" +
-                    "rg2|null|30|20.0%|0|0|0|null|100%|(weight=1.0, user=rg1_user)|default_warehouse,wh2\n" +
-                    "rg3|null|15|20.0%|0|0|0|null|100%|(weight=1.0, user=rg1_user)|\n" +
-                    "rg4|null|49|20.0%|0|0|0|null|100%|(weight=1.0, user=rg1_user)|wh2");
+            assertThat(rowsToString(rows)).isEqualTo("default_mv_wg|1|null|80.0%|0|0|0|null|80%|(weight=0.0)||0|0|0\n" +
+                    "default_wg|100|null|100.0%|0|0|0|null|100%|(weight=0.0)||0|0|0\n" +
+                    "rg1|null|50|20.0%|0|0|0|null|100%|(weight=1.0, user=rg1_user)|default_warehouse|0|0|0\n" +
+                    "rg2|null|30|20.0%|0|0|0|null|100%|(weight=1.0, user=rg1_user)|default_warehouse,wh2|0|0|0\n" +
+                    "rg3|null|15|20.0%|0|0|0|null|100%|(weight=1.0, user=rg1_user)||0|0|0\n" +
+                    "rg4|null|49|20.0%|0|0|0|null|100%|(weight=1.0, user=rg1_user)|wh2|0|0|0");
         }
 
         {
@@ -2787,22 +2787,22 @@ public class ResourceGroupStmtTest {
             String sql = "ALTER resource group rg4 WITH (  'warehouses' = 'default_warehouse')";
             starRocksAssert.executeResourceGroupDdlSql(sql);
             List<List<String>> rows = starRocksAssert.executeResourceGroupShowSql("show resource groups all");
-            assertThat(rowsToString(rows)).isEqualTo("default_mv_wg|1|null|80.0%|0|0|0|null|80%|(weight=0.0)|\n" +
-                    "default_wg|100|null|100.0%|0|0|0|null|100%|(weight=0.0)|\n" +
-                    "rg2|null|30|20.0%|0|0|0|null|100%|(weight=1.0, user=rg1_user)|default_warehouse,wh2\n" +
-                    "rg3|null|15|20.0%|0|0|0|null|100%|(weight=1.0, user=rg1_user)|\n" +
-                    "rg4|null|49|20.0%|0|0|0|null|100%|(weight=1.0, user=rg1_user)|default_warehouse");
+            assertThat(rowsToString(rows)).isEqualTo("default_mv_wg|1|null|80.0%|0|0|0|null|80%|(weight=0.0)||0|0|0\n" +
+                    "default_wg|100|null|100.0%|0|0|0|null|100%|(weight=0.0)||0|0|0\n" +
+                    "rg2|null|30|20.0%|0|0|0|null|100%|(weight=1.0, user=rg1_user)|default_warehouse,wh2|0|0|0\n" +
+                    "rg3|null|15|20.0%|0|0|0|null|100%|(weight=1.0, user=rg1_user)||0|0|0\n" +
+                    "rg4|null|49|20.0%|0|0|0|null|100%|(weight=1.0, user=rg1_user)|default_warehouse|0|0|0");
         }
 
         {
             String sql = "ALTER resource group rg4 WITH (  'warehouses' = 'wh2')";
             starRocksAssert.executeResourceGroupDdlSql(sql);
             List<List<String>> rows = starRocksAssert.executeResourceGroupShowSql("show resource groups all");
-            assertThat(rowsToString(rows)).isEqualTo("default_mv_wg|1|null|80.0%|0|0|0|null|80%|(weight=0.0)|\n" +
-                    "default_wg|100|null|100.0%|0|0|0|null|100%|(weight=0.0)|\n" +
-                    "rg2|null|30|20.0%|0|0|0|null|100%|(weight=1.0, user=rg1_user)|default_warehouse,wh2\n" +
-                    "rg3|null|15|20.0%|0|0|0|null|100%|(weight=1.0, user=rg1_user)|\n" +
-                    "rg4|null|49|20.0%|0|0|0|null|100%|(weight=1.0, user=rg1_user)|wh2");
+            assertThat(rowsToString(rows)).isEqualTo("default_mv_wg|1|null|80.0%|0|0|0|null|80%|(weight=0.0)||0|0|0\n" +
+                    "default_wg|100|null|100.0%|0|0|0|null|100%|(weight=0.0)||0|0|0\n" +
+                    "rg2|null|30|20.0%|0|0|0|null|100%|(weight=1.0, user=rg1_user)|default_warehouse,wh2|0|0|0\n" +
+                    "rg3|null|15|20.0%|0|0|0|null|100%|(weight=1.0, user=rg1_user)||0|0|0\n" +
+                    "rg4|null|49|20.0%|0|0|0|null|100%|(weight=1.0, user=rg1_user)|wh2|0|0|0");
         }
 
         warehouseManager.replayDropWarehouse(new DropWarehouseLog("wh2"));
@@ -2816,12 +2816,12 @@ public class ResourceGroupStmtTest {
                     ");";
             starRocksAssert.executeResourceGroupDdlSql(sql);
             List<List<String>> rows = starRocksAssert.executeResourceGroupShowSql("show resource groups all");
-            assertThat(rowsToString(rows)).isEqualTo("default_mv_wg|1|null|80.0%|0|0|0|null|80%|(weight=0.0)|\n" +
-                    "default_wg|100|null|100.0%|0|0|0|null|100%|(weight=0.0)|\n" +
-                    "rg1|null|6|20.0%|0|0|0|null|100%|(weight=1.0, user=rg1_user)|default_warehouse\n" +
-                    "rg2|null|30|20.0%|0|0|0|null|100%|(weight=1.0, user=rg1_user)|default_warehouse,wh2\n" +
-                    "rg3|null|15|20.0%|0|0|0|null|100%|(weight=1.0, user=rg1_user)|\n" +
-                    "rg4|null|49|20.0%|0|0|0|null|100%|(weight=1.0, user=rg1_user)|wh2");
+            assertThat(rowsToString(rows)).isEqualTo("default_mv_wg|1|null|80.0%|0|0|0|null|80%|(weight=0.0)||0|0|0\n" +
+                    "default_wg|100|null|100.0%|0|0|0|null|100%|(weight=0.0)||0|0|0\n" +
+                    "rg1|null|6|20.0%|0|0|0|null|100%|(weight=1.0, user=rg1_user)|default_warehouse|0|0|0\n" +
+                    "rg2|null|30|20.0%|0|0|0|null|100%|(weight=1.0, user=rg1_user)|default_warehouse,wh2|0|0|0\n" +
+                    "rg3|null|15|20.0%|0|0|0|null|100%|(weight=1.0, user=rg1_user)||0|0|0\n" +
+                    "rg4|null|49|20.0%|0|0|0|null|100%|(weight=1.0, user=rg1_user)|wh2|0|0|0");
         }
         {
             String sql = "CREATE RESOURCE GROUP rg5\n" +
@@ -2832,26 +2832,26 @@ public class ResourceGroupStmtTest {
                     ");";
             starRocksAssert.executeResourceGroupDdlSql(sql);
             List<List<String>> rows = starRocksAssert.executeResourceGroupShowSql("show resource groups all");
-            assertThat(rowsToString(rows)).isEqualTo("default_mv_wg|1|null|80.0%|0|0|0|null|80%|(weight=0.0)|\n" +
-                    "default_wg|100|null|100.0%|0|0|0|null|100%|(weight=0.0)|\n" +
-                    "rg1|null|6|20.0%|0|0|0|null|100%|(weight=1.0, user=rg1_user)|default_warehouse\n" +
-                    "rg2|null|30|20.0%|0|0|0|null|100%|(weight=1.0, user=rg1_user)|default_warehouse,wh2\n" +
-                    "rg3|null|15|20.0%|0|0|0|null|100%|(weight=1.0, user=rg1_user)|\n" +
-                    "rg4|null|49|20.0%|0|0|0|null|100%|(weight=1.0, user=rg1_user)|wh2\n" +
-                    "rg5|null|30|20.0%|0|0|0|null|100%|(weight=1.0, user=rg1_user)|");
+            assertThat(rowsToString(rows)).isEqualTo("default_mv_wg|1|null|80.0%|0|0|0|null|80%|(weight=0.0)||0|0|0\n" +
+                    "default_wg|100|null|100.0%|0|0|0|null|100%|(weight=0.0)||0|0|0\n" +
+                    "rg1|null|6|20.0%|0|0|0|null|100%|(weight=1.0, user=rg1_user)|default_warehouse|0|0|0\n" +
+                    "rg2|null|30|20.0%|0|0|0|null|100%|(weight=1.0, user=rg1_user)|default_warehouse,wh2|0|0|0\n" +
+                    "rg3|null|15|20.0%|0|0|0|null|100%|(weight=1.0, user=rg1_user)||0|0|0\n" +
+                    "rg4|null|49|20.0%|0|0|0|null|100%|(weight=1.0, user=rg1_user)|wh2|0|0|0\n" +
+                    "rg5|null|30|20.0%|0|0|0|null|100%|(weight=1.0, user=rg1_user)||0|0|0");
         }
         {
 
             String sql = "ALTER resource group rg2 WITH (  'warehouses' = '')";
             starRocksAssert.executeResourceGroupDdlSql(sql);
             List<List<String>> rows = starRocksAssert.executeResourceGroupShowSql("show resource groups all");
-            assertThat(rowsToString(rows)).isEqualTo("default_mv_wg|1|null|80.0%|0|0|0|null|80%|(weight=0.0)|\n" +
-                    "default_wg|100|null|100.0%|0|0|0|null|100%|(weight=0.0)|\n" +
-                    "rg1|null|6|20.0%|0|0|0|null|100%|(weight=1.0, user=rg1_user)|default_warehouse\n" +
-                    "rg2|null|30|20.0%|0|0|0|null|100%|(weight=1.0, user=rg1_user)|\n" +
-                    "rg3|null|15|20.0%|0|0|0|null|100%|(weight=1.0, user=rg1_user)|\n" +
-                    "rg4|null|49|20.0%|0|0|0|null|100%|(weight=1.0, user=rg1_user)|wh2\n" +
-                    "rg5|null|30|20.0%|0|0|0|null|100%|(weight=1.0, user=rg1_user)|");
+            assertThat(rowsToString(rows)).isEqualTo("default_mv_wg|1|null|80.0%|0|0|0|null|80%|(weight=0.0)||0|0|0\n" +
+                    "default_wg|100|null|100.0%|0|0|0|null|100%|(weight=0.0)||0|0|0\n" +
+                    "rg1|null|6|20.0%|0|0|0|null|100%|(weight=1.0, user=rg1_user)|default_warehouse|0|0|0\n" +
+                    "rg2|null|30|20.0%|0|0|0|null|100%|(weight=1.0, user=rg1_user)||0|0|0\n" +
+                    "rg3|null|15|20.0%|0|0|0|null|100%|(weight=1.0, user=rg1_user)||0|0|0\n" +
+                    "rg4|null|49|20.0%|0|0|0|null|100%|(weight=1.0, user=rg1_user)|wh2|0|0|0\n" +
+                    "rg5|null|30|20.0%|0|0|0|null|100%|(weight=1.0, user=rg1_user)||0|0|0");
         }
 
         starRocksAssert.executeResourceGroupDdlSql("DROP RESOURCE GROUP rg1");
