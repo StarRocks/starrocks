@@ -31,6 +31,10 @@ public class TimeoutWatcher {
         return System.currentTimeMillis() >= deadline;
     }
 
+    public long getLeftTimeoutMillis() {
+        return Math.max(0, deadline - System.currentTimeMillis());
+    }
+
     public long getElapsedMillis() {
         return System.currentTimeMillis() - startTime;
     }
