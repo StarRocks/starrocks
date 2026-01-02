@@ -56,6 +56,7 @@ import com.starrocks.transaction.TabletCommitInfo;
 import com.starrocks.transaction.TabletFailInfo;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.VisibleStateWaiter;
+import org.apache.arrow.util.VisibleForTesting;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -99,11 +100,11 @@ public class MergeCommitTask extends AbstractTxnStateChangeCallback implements R
         /** Created but not started yet. */
         PENDING(false),
         /** Beginning the transaction. */
-        BEGIN_TXN(false),
+        BEGINNING_TXN(false),
         /** Planning the load execution. */
         PLANNING(false),
         /** Executing the load and waiting for completion. */
-        LOADING(false),
+        EXECUTING(false),
         /** Committing the transaction. */
         COMMITTING(false),
         /** Transaction committed; waiting for publish/visibility. */
@@ -115,15 +116,15 @@ public class MergeCommitTask extends AbstractTxnStateChangeCallback implements R
         /** Cancelled explicitly. */
         CANCELLED(true);
 
-        /** Whether this is a terminal state. */
-        private final boolean terminal;
+        /** Whether this is a final state. */
+        private final boolean finalState;
 
-        TaskState(boolean terminal) {
-            this.terminal = terminal;
+        TaskState(boolean finalState) {
+            this.finalState = finalState;
         }
 
-        public boolean isTerminal() {
-            return terminal;
+        public boolean isFinalState() {
+            return finalState;
         }
     }
 
@@ -159,12 +160,12 @@ public class MergeCommitTask extends AbstractTxnStateChangeCallback implements R
     private static final Map<TaskState, EnumSet<TaskState>> TASK_STATE_TRANSITION = new EnumMap<>(TaskState.class);
     static {
         TASK_STATE_TRANSITION.put(TaskState.PENDING,
-                EnumSet.of(TaskState.BEGIN_TXN, TaskState.CANCELLED, TaskState.ABORTED));
-        TASK_STATE_TRANSITION.put(TaskState.BEGIN_TXN,
+                EnumSet.of(TaskState.BEGINNING_TXN, TaskState.CANCELLED, TaskState.ABORTED));
+        TASK_STATE_TRANSITION.put(TaskState.BEGINNING_TXN,
                 EnumSet.of(TaskState.PLANNING, TaskState.CANCELLED, TaskState.ABORTED));
         TASK_STATE_TRANSITION.put(TaskState.PLANNING,
-                EnumSet.of(TaskState.LOADING, TaskState.CANCELLED, TaskState.ABORTED));
-        TASK_STATE_TRANSITION.put(TaskState.LOADING,
+                EnumSet.of(TaskState.EXECUTING, TaskState.CANCELLED, TaskState.ABORTED));
+        TASK_STATE_TRANSITION.put(TaskState.EXECUTING,
                 EnumSet.of(TaskState.COMMITTING, TaskState.CANCELLED, TaskState.ABORTED));
         TASK_STATE_TRANSITION.put(TaskState.COMMITTING,
                 EnumSet.of(TaskState.COMMITTED, TaskState.ABORTED));
@@ -208,13 +209,15 @@ public class MergeCommitTask extends AbstractTxnStateChangeCallback implements R
     // The message describing the current state. For CANCELLED/ABORTED, it's the reason.
     // For FINISHED, describe whether publish success before load timeouts
     private volatile String taskStateMessage = null;
-    // Cancel handler for the current non-terminal state; invoked when the task is cancelled in that state.
+    // Cancel handler for the current non-final state; invoked when the task is cancelled in that state.
     // It may be null depending on the current state (e.g. states without meaningful cancel action).
     private volatile TaskStateCancelHandler taskStateCancelHandler = null;
     // Transaction id; set in {@link #run()} after transaction begins.
     private volatile long txnId = -1;
     // Load statistics; set when entering COMMITTING in {@link #run()}.
     private volatile LoadStats loadStats = null;
+    // Observes state transitions for unit tests.
+    private volatile StateTransitionObserver stateTransitionObserver = null;
 
     /**
      * Creates a new merge-commit task.
@@ -260,30 +263,10 @@ public class MergeCommitTask extends AbstractTxnStateChangeCallback implements R
     }
 
     /**
-     * Backward-compatible constructor for tests and older call sites.
-     *
-     * <p>Warehouse name is optional for merge-commit execution.
-     */
-    public MergeCommitTask(
-            long taskId,
-            TableId tableRef,
-            String label,
-            TUniqueId loadId,
-            StreamLoadInfo streamLoadInfo,
-            int mergeCommitIntervalMs,
-            StreamLoadKvParams loadKvParams,
-            Set<Long> backendIds,
-            Coordinator.Factory coordinatorFactory,
-            MergeCommitTaskCallback completionCallback) {
-        this(taskId, tableRef, label, loadId, streamLoadInfo, mergeCommitIntervalMs, loadKvParams, "",
-                backendIds, coordinatorFactory, completionCallback);
-    }
-
-    /**
      * Runs the merge-commit load.
      *
      * <p>On success, the task reaches {@link TaskState#FINISHED}. On failure, it transitions to
-     * {@link TaskState#ABORTED} and best-effort aborts the transaction if it has been created.
+     * {@link TaskState#ABORTED} and aborts the transaction if it has been created.
      */
     @Override
     public void run() {
@@ -296,16 +279,16 @@ public class MergeCommitTask extends AbstractTxnStateChangeCallback implements R
         Coordinator coordinator = null;
         try {
             // 1) Resolve database/table and begin transaction.
-            transitionToState(TaskState.BEGIN_TXN, "", null, () -> {});
+            transitionToState(TaskState.BEGINNING_TXN, "", null, () -> {});
             final Database database = getDatabase();
             final OlapTable table = getOlapTable(database);
             dbId = database.getId();
             GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getCallbackFactory().addCallback(this);
             localTxnId = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().beginTransaction(
-                    dbId, Lists.newArrayList(table.getId()), label,
+                    dbId, Lists.newArrayList(table.getId()), label, null,
                     TransactionState.TxnCoordinator.fromThisFE(),
                     TransactionState.LoadJobSourceType.FRONTEND_STREAMING,
-                    streamLoadInfo.getTimeout(), streamLoadInfo.getComputeResource());
+                    taskId, streamLoadInfo.getTimeout(), streamLoadInfo.getComputeResource());
 
             // 2) Build execution plan and prepare coordinator.
             final long finalTxnId = localTxnId;
@@ -321,7 +304,7 @@ public class MergeCommitTask extends AbstractTxnStateChangeCallback implements R
 
             // 3) Execute load and collect load statistics.
             final Coordinator finalCoordinator = coordinator;
-            transitionToState(TaskState.LOADING, "", new LoadingStateCancelHandler(finalCoordinator), () -> {});
+            transitionToState(TaskState.EXECUTING, "", new ExecutingStateCancelHandler(finalCoordinator), () -> {});
             LoadResult loadResult = executeLoad(connectContext, coordinator, timeoutWatcher.getLeftTimeoutMillis());
 
             // 4) Validate data quality and commit transaction.
@@ -347,7 +330,7 @@ public class MergeCommitTask extends AbstractTxnStateChangeCallback implements R
             String publishFailMsg = "";
             try (ScopedTimer ignored = new ScopedTimer(loadTimeTrace.publishCostMs)) {
                 long publishTimeoutMs = timeoutWatcher.getLeftTimeoutMillis();
-                boolean timeout = !waiter.await(publishTimeoutMs, TimeUnit.MILLISECONDS);
+                boolean timeout = !awaitPublish(waiter, publishTimeoutMs);
                 if (timeout) {
                     throw new Exception(String.format("publish timed out after %sms", publishTimeoutMs));
                 }
@@ -387,10 +370,9 @@ public class MergeCommitTask extends AbstractTxnStateChangeCallback implements R
             }
         } finally {
             loadTimeTrace.endTimeMs.set(System.currentTimeMillis());
-            completionCallback.finish(this);
             GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getCallbackFactory().removeCallback(taskId);
+            completionCallback.finish(this);
             updateMetrics();
-            // Keep profile collection last because it can be slow.
             collectProfile(connectContext, loadPlanner, coordinator);
             // close tracer after collection profile
             Tracers.close();
@@ -569,6 +551,11 @@ public class MergeCommitTask extends AbstractTxnStateChangeCallback implements R
                 coordinator.getTrackingUrl(), coordinator.getRejectedRecordPaths());
     }
 
+    @VisibleForTesting
+    boolean awaitPublish(VisibleStateWaiter waiter, long publishTimeoutMs) throws InterruptedException {
+        return waiter.await(publishTimeoutMs, TimeUnit.MILLISECONDS);
+    }
+
     private void updateMetrics() {
         LoadStats loadStats = this.loadStats;
         if (loadStats != null) {
@@ -632,6 +619,8 @@ public class MergeCommitTask extends AbstractTxnStateChangeCallback implements R
             summaryProfile.addInfoString(ProfileManager.PROFILE_COLLECT_TIME,
                     DebugUtil.getPrettyStringMs(collectProfileCostMs.get()));
             summaryProfile.addInfoString("IsProfileAsync", String.valueOf(true));
+            summaryProfile.addInfoString("Pending Time",
+                    DebugUtil.getPrettyStringMs(loadTimeTrace.pendingCostMs.get()));
             summaryProfile.addInfoString("Label", label);
             summaryProfile.addInfoString("Txn ID", String.valueOf(txnId));
             summaryProfile.addInfoString("Txn Commit Time",
@@ -691,6 +680,8 @@ public class MergeCommitTask extends AbstractTxnStateChangeCallback implements R
     private void transitionToState(TaskState targetState, String targetStateMsg,
             TaskStateCancelHandler taskStateCancelHandler, Runnable afterStateChange) throws Exception {
         TaskStateCancelHandler prevTaskStateCancelHandler;
+        StateTransitionObserver observer = stateTransitionObserver;
+        TaskState prevStateForObserver = null;
         try (AutoCloseable ignored = CloseableLock.lock(lock)) {
             EnumSet<TaskState> transition = TASK_STATE_TRANSITION.getOrDefault(taskState, EnumSet.noneOf(TaskState.class));
             if (!transition.contains(targetState)) {
@@ -702,25 +693,34 @@ public class MergeCommitTask extends AbstractTxnStateChangeCallback implements R
             prevTaskStateCancelHandler = this.taskStateCancelHandler;
             this.taskStateCancelHandler = taskStateCancelHandler;
             afterStateChange.run();
+            prevStateForObserver = prevState;
             LOG.debug("Transition state from {} to {}. db={}, table={}, taskId={}, label={}, loadId={}, txnId={}, stateMsg={}",
                     prevState, targetState, tableRef.getDbName(), tableRef.getTableName(),
                     taskId, label, DebugUtil.printId(loadId), txnId, targetStateMsg);
+        }
+        if (observer != null && prevStateForObserver != null) {
+            observer.onTransition(prevStateForObserver, targetState, targetStateMsg, taskStateCancelHandler != null);
         }
         if (targetState == TaskState.CANCELLED && prevTaskStateCancelHandler != null) {
             prevTaskStateCancelHandler.cancel(targetStateMsg);
         }
     }
 
+    @VisibleForTesting
+    void setStateTransitionObserver(StateTransitionObserver observer) {
+        this.stateTransitionObserver = observer;
+    }
+
     /**
      * Checks if this execution is active and can accept new load requests.
      *
-     * <p>A task is considered active if it is not in a terminal state and either has not started joining
+     * <p>A task is considered active if it is not in a final state and either has not started joining
      * execution yet, or its join start time is within the merge-commit interval window.
      *
      * @return {@code true} if the task is active, otherwise {@code false}
      */
     public boolean isActive() {
-        if (taskState.isTerminal() || taskState == TaskState.COMMITTING || taskState == TaskState.COMMITTED) {
+        if (taskState.isFinalState() || taskState == TaskState.COMMITTING || taskState == TaskState.COMMITTED) {
             return false;
         }
         long execWaitStartTimeMs = loadTimeTrace.execWaitStartTimeMs.get();
@@ -748,11 +748,10 @@ public class MergeCommitTask extends AbstractTxnStateChangeCallback implements R
     /**
      * Returns the transaction ID once it has been assigned.
      *
-     * @return the transaction ID; empty if the transaction has not started yet
+     * @return the transaction ID; -1 if the transaction has not started yet
      */
-    public Optional<Long> getTxnId() {
-        long txnId = this.txnId;
-        return txnId > 0 ? Optional.of(txnId) : Optional.empty();
+    public long getTxnId() {
+        return this.txnId;
     }
 
     private static String getErrorTrackingSql(long taskId) {
@@ -875,8 +874,8 @@ public class MergeCommitTask extends AbstractTxnStateChangeCallback implements R
             if (taskState == null) {
                 throw new IllegalArgumentException("task state is null");
             }
-            if (taskState.isTerminal()) {
-                throw new IllegalArgumentException("Terminal state has no cancel handler: " + taskState);
+            if (taskState.isFinalState()) {
+                throw new IllegalArgumentException("Final state has no cancel handler: " + taskState);
             }
         }
 
@@ -884,15 +883,15 @@ public class MergeCommitTask extends AbstractTxnStateChangeCallback implements R
     }
 
     /**
-     * The handler to cancel {@link TaskState#LOADING}.
+     * The handler to cancel {@link TaskState#EXECUTING}.
      *
      * <p>It wraps the {@link Coordinator} running the load so that the in-flight execution can be cancelled.
      */
-    private static final class LoadingStateCancelHandler extends TaskStateCancelHandler {
+    private static final class ExecutingStateCancelHandler extends TaskStateCancelHandler {
         private final Coordinator coordinator;
 
-        private LoadingStateCancelHandler(Coordinator coordinator) {
-            super(TaskState.LOADING);
+        private ExecutingStateCancelHandler(Coordinator coordinator) {
+            super(TaskState.EXECUTING);
             this.coordinator = coordinator;
         }
 
@@ -902,5 +901,10 @@ public class MergeCommitTask extends AbstractTxnStateChangeCallback implements R
                 coordinator.cancel(PPlanFragmentCancelReason.USER_CANCEL, reason);
             }
         }
+    }
+
+    @VisibleForTesting
+    interface StateTransitionObserver {
+        void onTransition(TaskState fromState, TaskState toState, String toStateMsg, boolean hasCancelHandler);
     }
 }
