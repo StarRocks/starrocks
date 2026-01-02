@@ -114,25 +114,25 @@ TEST_F(StringFunctionRegexpReplaceTest, testMultipleRowsWithPackagePattern) {
     // Test case for the reported issue with '_package_.*' pattern
     const TypeDescriptor type_desc = TypeDescriptor(TYPE_VARCHAR);
     Columns columns;
-    
+
     // Create input column with two rows
     auto str_column = BinaryColumn::create();
     str_column->append("activity_60_package_2");
     str_column->append("activity_50_package_7");
     columns.push_back(std::move(str_column));
-    
+
     // Create pattern column (constant)
     MutableColumnPtr pattern_data = ColumnHelper::create_column(type_desc, false);
     pattern_data->append_datum(Datum(Slice("_package_.*")));
     auto pattern_column = ConstColumn::create(std::move(pattern_data), 2);
     columns.push_back(std::move(pattern_column));
-    
+
     // Create replacement column (constant empty string)
     MutableColumnPtr rpl_data = ColumnHelper::create_column(type_desc, false);
     rpl_data->append_datum(Datum(Slice("")));
     auto rpl_column = ConstColumn::create(std::move(rpl_data), 2);
     columns.push_back(std::move(rpl_column));
-    
+
     // Setup state with hyperscan
     auto state = std::make_shared<StringFunctionsState>();
     state->options = std::make_unique<re2::RE2::Options>();
@@ -144,7 +144,7 @@ TEST_F(StringFunctionRegexpReplaceTest, testMultipleRowsWithPackagePattern) {
     state->pattern = pattern;
     state->use_hyperscan = true;
     state->size_of_pattern = int(pattern.size());
-    
+
     if (hs_compile(pattern.c_str(), HS_FLAG_ALLOWEMPTY | HS_FLAG_DOTALL | HS_FLAG_UTF8 | HS_FLAG_SOM_LEFTMOST,
                    HS_MODE_BLOCK, nullptr, &state->database, &state->compile_err) != HS_SUCCESS) {
         std::stringstream error;
@@ -152,12 +152,12 @@ TEST_F(StringFunctionRegexpReplaceTest, testMultipleRowsWithPackagePattern) {
         hs_free_compile_error(state->compile_err);
         FAIL() << error.str();
     }
-    
+
     if (hs_alloc_scratch(state->database, &state->scratch) != HS_SUCCESS) {
         hs_free_database(state->database);
         FAIL() << "ERROR: Unable to allocate scratch space.";
     }
-    
+
     // Ensure cleanup happens even if assertions fail
     DeferOp cleanup([&] {
         if (state->scratch != nullptr) {
@@ -169,17 +169,17 @@ TEST_F(StringFunctionRegexpReplaceTest, testMultipleRowsWithPackagePattern) {
             state->database = nullptr;
         }
     });
-    
+
     // Test vectorized version
     auto r_vec = StringFunctions::regexp_replace_use_hyperscan_vec(state.get(), columns);
     ASSERT_TRUE(r_vec.ok());
     auto vec_result = r_vec.value();
-    
+
     // Test non-vectorized version (expected to be correct)
     auto r_ori = StringFunctions::regexp_replace_use_hyperscan(state.get(), columns);
     ASSERT_TRUE(r_ori.ok());
     auto ori_result = r_ori.value();
-    
+
     // Both should produce "activity_60" and "activity_50"
     ASSERT_EQ(ori_result->debug_item(0), "'activity_60'");
     ASSERT_EQ(ori_result->debug_item(1), "'activity_50'");
