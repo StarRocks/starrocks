@@ -365,34 +365,37 @@ public class AnalyzeFunctionTest {
     @Test
     public void testMixingNamedAndPositionalArguments() {
         // Test mixing named and positional arguments - should fail
-        // This tests ExpressionAnalyzer.java lines 1098-1102
+        // With grammar separation, mixing is now a syntax error (not semantic)
+        // namedArgsFunctionCall only accepts namedArgumentList
+        // simpleFunctionCall only accepts expression list
         analyzeFail("select concat('hello', sep => ', ')",
-                "Mixing named and positional arguments is not allowed");
+                "Unexpected input");
 
         // Positional first, then named - should fail
         analyzeFail("select substr('hello', len => 3)",
-                "Mixing named and positional arguments is not allowed");
+                "Unexpected input");
 
-        // Named first, then positional - should fail
+        // Named first, then positional - should fail with syntax error
         analyzeFail("select substr(str => 'hello', 1)",
-                "Mixing named and positional arguments is not allowed");
+                "Unexpected input");
     }
 
     @Test
     public void testMixingNamedAndPositionalArgumentsSpecialFunctions() {
         // Special handler functions should also validate mixing
+        // With grammar separation, mixing is now caught at parse time
 
         // LPAD - special handler in AstBuilder
         analyzeFail("select lpad('hello', len => 10)",
-                "Mixing named and positional arguments is not allowed");
+                "Unexpected input");
 
         // Multiple positional then named
         analyzeFail("select concat('a', 'b', sep => ',')",
-                "Mixing named and positional arguments is not allowed");
+                "Unexpected input");
 
         // RPAD
         analyzeFail("select rpad('hi', size => 5)",
-                "Mixing named and positional arguments is not allowed");
+                "Unexpected input");
     }
 
     @Test
