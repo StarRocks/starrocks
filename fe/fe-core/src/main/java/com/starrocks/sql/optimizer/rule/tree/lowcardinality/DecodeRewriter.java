@@ -62,6 +62,7 @@ import org.jetbrains.annotations.NotNull;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
@@ -379,9 +380,10 @@ public class DecodeRewriter extends OptExpressionVisitor<OptExpression, ColumnRe
                 .map(factory::getColumnRef)
                 .filter(c -> c.getType().isStructType())
                 .map(context::getFieldUseStringRefMap)
+                .filter(Objects::nonNull)
                 .map(Map::values)
                 .forEach(inputColumns::union);
-        for (int sid : info.inputStringColumns.getColumnIds()) {
+        for (int sid : inputColumns.getColumnIds()) {
             ColumnRefOperator stringRef = factory.getColumnRef(sid);
             if (!context.stringRefToDictRefMap.containsKey(stringRef)) {
                 // count/count distinct
