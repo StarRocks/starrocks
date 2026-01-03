@@ -109,21 +109,22 @@ public class BatchWriteMgr extends FrontendDaemon {
     /**
      * Requests a load operation for the specified table and load parameters.
      *
-     * @param tableId The ID of the table for which the load is requested.
-     * @param params The parameters for the stream load.
-     * @param backendId The id of the backend where the request is from.
-     * @param backendHost The host of the backend where the request is from.
-     * @return A RequestLoadResult containing the status of the operation and the load result.
+     * @param tableId the ID of the table for which the load is requested
+     * @param params the parameters for the stream load
+     * @param user the user who initiated the load request
+     * @param backendId the id of the backend where the request is from
+     * @param backendHost the host of the backend where the request is from
+     * @return a RequestLoadResult containing the status of the operation and the load label if successful
      */
     public RequestLoadResult requestLoad(
-            TableId tableId, StreamLoadKvParams params, long backendId, String backendHost) {
+            TableId tableId, StreamLoadKvParams params, String user, long backendId, String backendHost) {
         lock.readLock().lock();
         try {
             Pair<TStatus, MergeCommitJob> result = getOrCreateJob(tableId, params);
             if (result.first.getStatus_code() != TStatusCode.OK) {
                 return new RequestLoadResult(result.first, null);
             }
-            return result.second.requestLoad(backendId, backendHost);
+            return result.second.requestLoad(user, backendId, backendHost);
         } finally {
             lock.readLock().unlock();
         }
