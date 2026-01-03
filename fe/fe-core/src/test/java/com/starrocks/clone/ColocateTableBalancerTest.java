@@ -39,6 +39,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Sets;
+import com.starrocks.alter.SystemHandler;
 import com.starrocks.catalog.ColocateGroupSchema;
 import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.ColocateTableIndex.GroupId;
@@ -56,6 +57,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.leader.TabletCollector;
+import com.starrocks.load.routineload.RoutineLoadTaskScheduler;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
@@ -109,16 +111,28 @@ public class ColocateTableBalancerTest {
                 System.out.println("Mocked ColocateTableBalancer.runAfterCatalogReady() called");
             }
         };
+        new MockUp<SystemHandler>() {
+            @Mock
+            protected void runAfterCatalogReady() {
+                System.out.println("Mocked SystemHandler.runAfterCatalogReady() called");
+            }
+        };
+        new MockUp<RoutineLoadTaskScheduler>() {
+            @Mock
+            protected void runAfterCatalogReady() {
+                // the interval is 0, so skip log printing to prevent too many logs
+            }
+        };
 
-        GlobalStateMgr.getCurrentState().getAlterJobMgr().stop();
         UtFrameUtils.createMinStarRocksCluster();
-        ConnectContext ctx = UtFrameUtils.createDefaultCtx();
-        starRocksAssert = new StarRocksAssert(ctx);
+        GlobalStateMgr.getCurrentState().getAlterJobMgr().stop();
         GlobalStateMgr.getCurrentState().getHeartbeatMgr().setStop();
         GlobalStateMgr.getCurrentState().getTabletScheduler().setStop();
         TabletCollector collector = (TabletCollector) Deencapsulation.getField(GlobalStateMgr.getCurrentState(),
                 "tabletCollector");
         collector.setStop();
+        ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+        starRocksAssert = new StarRocksAssert(ctx);
     }
 
     @BeforeEach
