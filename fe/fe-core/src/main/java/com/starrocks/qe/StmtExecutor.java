@@ -1550,14 +1550,6 @@ public class StmtExecutor {
                 planMaxScanRows = Math.max(planMaxScanRows, scanNode.getCardinality());
                 planMaxScanPartitions = Math.max(planMaxScanPartitions, scanNode.getSelectedPartitionNum());
             }
-
-            if  (scanNode instanceof IcebergScanNode) {
-                planMaxScanRows = Math.max(planMaxScanRows, scanNode.getCardinality());
-                planMaxScanPartitions = Math.max(planMaxScanPartitions, ((IcebergScanNode) scanNode)
-                        .getScanNodePredicates()
-                        .getSelectedPartitionIds()
-                        .size());
-            }
         }
         context.getAuditEventBuilder()
                 .setPlanMaxScanRows(planMaxScanRows)
