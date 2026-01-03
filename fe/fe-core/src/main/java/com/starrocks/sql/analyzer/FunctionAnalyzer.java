@@ -1409,6 +1409,8 @@ public class FunctionAnalyzer {
      * @throws SemanticException if validation fails
      */
     public static void validateNamedArgumentsStructure(String fnName, Function fn, List<String> paramNames) {
+        // hasNamedArg() checks: argNames != null && argNames.length > 0
+        // So if we pass this check, getArgNames() is guaranteed to not return null
         if (fn == null || !fn.hasNamedArg()) {
             throw new SemanticException(fnName + "() does not support named parameters");
         }
@@ -1421,6 +1423,7 @@ public class FunctionAnalyzer {
             throw new SemanticException(fnName + "() mixing named and positional arguments is not allowed");
         }
 
+        // Safe to call: hasNamedArg() above guarantees argNames is not null
         String[] validParamNames = fn.getArgNames();
         Set<String> validParams = new HashSet<>(Arrays.asList(validParamNames));
         Set<String> providedParams = new HashSet<>();
@@ -1444,12 +1447,15 @@ public class FunctionAnalyzer {
         }
 
         // Check all required parameters are provided
-        int requiredCount = fn.getRequiredArgNum();
-        for (int i = 0; i < requiredCount; i++) {
-            String requiredParam = validParamNames[i];
-            if (!providedParams.contains(requiredParam)) {
-                throw new SemanticException(String.format(
-                        "%s() required parameter '%s' is missing", fnName, requiredParam));
+        // A parameter is required if it has no default value (getDefaultNamedExpr returns null)
+        // This approach does not rely on positional ordering assumption
+        for (String paramName : validParamNames) {
+            if (fn.getDefaultNamedExpr(paramName) == null) {
+                // No default value - this is a required parameter
+                if (!providedParams.contains(paramName)) {
+                    throw new SemanticException(String.format(
+                            "%s() required parameter '%s' is missing", fnName, paramName));
+                }
             }
         }
     }
@@ -1472,15 +1478,21 @@ public class FunctionAnalyzer {
         }
 
         String[] validParamNames = fn.getArgNames();
-        int requiredCount = fn.getRequiredArgNum();
+        if (validParamNames == null || validParamNames.length == 0) {
+            return;  // Function doesn't support named arguments
+        }
 
         // Check required parameters (without defaults) cannot be NULL
-        // Required parameters are those without default values, indicated by index < requiredCount
-        for (int i = 0; i < requiredCount && i < node.getChildren().size(); i++) {
-            com.starrocks.sql.ast.expression.Expr argExpr = node.getChild(i);
-            if (argExpr instanceof com.starrocks.sql.ast.expression.NullLiteral) {
-                throw new SemanticException(String.format(
-                        "%s() required parameter '%s' cannot be NULL", fnName, validParamNames[i]));
+        // A parameter is required if it has no default value (getDefaultNamedExpr returns null)
+        // This approach does not rely on positional ordering assumption
+        for (int i = 0; i < validParamNames.length && i < node.getChildren().size(); i++) {
+            if (fn.getDefaultNamedExpr(validParamNames[i]) == null) {
+                // No default value - this is a required parameter
+                com.starrocks.sql.ast.expression.Expr argExpr = node.getChild(i);
+                if (argExpr instanceof com.starrocks.sql.ast.expression.NullLiteral) {
+                    throw new SemanticException(String.format(
+                            "%s() required parameter '%s' cannot be NULL", fnName, validParamNames[i]));
+                }
             }
         }
     }
