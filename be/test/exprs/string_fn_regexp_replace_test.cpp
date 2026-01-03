@@ -151,12 +151,12 @@ TEST_F(StringFunctionRegexpReplaceTest, testMultipleRowsWithPackagePattern) {
         std::stringstream error;
         error << "Invalid regex expression: " << pattern << ": " << state->compile_err->message;
         hs_free_compile_error(state->compile_err);
-        FAIL() << error.str();
+        LOG(FATAL) << error.str();
     }
 
     if (hs_alloc_scratch(state->database, &state->scratch) != HS_SUCCESS) {
         hs_free_database(state->database);
-        FAIL() << "ERROR: Unable to allocate scratch space.";
+        LOG(FATAL) << "ERROR: Unable to allocate scratch space.";
     }
 
     // Ensure cleanup happens even if assertions fail
