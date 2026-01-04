@@ -71,7 +71,7 @@ void DataCacheAction::_handle(HttpRequest* req, const std::function<void(rapidjs
     root.SetObject();
     func(root);
     rapidjson::StringBuffer strbuf;
-    rapidjson::PrettyWriter writer(strbuf);
+    rapidjson::PrettyWriter<rapidjson::StringBuffer> writer(strbuf);
     root.Accept(writer);
     req->add_output_header(HttpHeaders::CONTENT_TYPE, HEADER_JSON.c_str());
     HttpChannel::send_reply(req, HttpStatus::OK, strbuf.GetString());
