@@ -337,8 +337,8 @@ public:
                 std::ranges::sort(sorted_ngram_dicts);
 
                 RETURN_IF_ERROR(_write_dictionary(sorted_ngram_dicts, wfile, meta->mutable_ngram_dict_column()));
-                RETURN_IF_ERROR(
-                        _write_bitmap(ngram_index, sorted_ngram_dicts, wfile, meta->mutable_ngram_bitmap_column()));
+                RETURN_IF_ERROR(_write_bitmap(ngram_index, sorted_ngram_dicts, wfile,
+                                              meta->mutable_ngram_bitmap_column(), false));
             }
         }
         _mem_index.clear();
@@ -385,10 +385,9 @@ private:
             // Use Slice pointing into dictionary memory as key; dictionary values are already deep-copied
             // into `_pool` when building `_mem_index`, so this Slice remains valid for the lifetime of
             // the bitmap index writer. This avoids an extra deep copy per distinct ngram.
-            auto [it, inserted] =
-                    ngram_index.try_emplace(cur_ngram, static_cast<uint32_t>(offset));
+            auto [it, inserted] = ngram_index.try_emplace(cur_ngram, static_cast<uint32_t>(offset));
             if (!inserted) {
-                it->second.add(static_cast<uint32_t>(offset));
+                it->second.add(static_cast<uint32_t>(offset), &_pool);
             }
         }
         return Status::OK();
@@ -410,7 +409,7 @@ private:
     }
 
     Status _write_bitmap(UnorderedMemoryIndexType& ordered_mem_index, const std::vector<CppType>& sorted_dicts,
-                         WritableFile* wfile, IndexedColumnMetaPB* meta) {
+                         WritableFile* wfile, IndexedColumnMetaPB* meta, bool write_null = true) {
         std::vector<BitmapUpdateContextRefOrSingleValue*> bitmaps;
         bitmaps.reserve(sorted_dicts.size());
         for (const auto& dict : sorted_dicts) {
@@ -465,7 +464,7 @@ private:
             Slice buf_slice(buf);
             RETURN_IF_ERROR(bitmap_column_writer.add(&buf_slice));
         }
-        if (!_null_bitmap.isEmpty()) {
+        if (write_null && !_null_bitmap.isEmpty()) {
             _null_bitmap.runOptimize();
             buf.resize(_null_bitmap.getSizeInBytes(false)); // so that buf[0..size) can be read and written
             _null_bitmap.write(reinterpret_cast<char*>(buf.data()), false);

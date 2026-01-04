@@ -192,39 +192,7 @@ public:
      * @param offset start position
      * @return position if found, otherwise -1
      */
-    int64_t find(const char c, const int64_t offset = 0) const {
-        int64_t pos = offset;
-        while (0 <= pos && pos < size && data[pos] != c) ++pos;
-        if (pos < 0 || pos >= size) return -1;
-        return pos;
-    }
-
-    /**
-     * build next array for KMP algorithm
-     * @return next array
-     */
-    std::vector<size_t> build_next() const {
-        if (size <= 0) return {};
-
-        std::vector<size_t> next(size);
-
-        next[0] = 0;
-        size_t i = 1;
-        size_t j = 0;
-
-        while (i < size) {
-            if (data[i] == data[j]) {
-                next[i++] = ++j;
-            } else {
-                if (j != 0) {
-                    j = next[j - 1];
-                } else {
-                    next[i++] = 0;
-                }
-            }
-        }
-        return next;
-    }
+    int64_t find(const char& c, const int64_t& offset = 0) const;
 
     /**
      * find sub slice in this slice by KMP algorithm
@@ -233,34 +201,13 @@ public:
      * @param offset start position
      * @return position if found, otherwise -1
      */
-    int64_t find(const Slice& pattern, const std::vector<size_t>& next, const int64_t offset = 0) const {
-        if (pattern.size <= 0 || pattern.size > size) return -1;
-        if (offset < 0 || offset > size) return -1;
-        if (next.size() != pattern.size) return -1;
+    int64_t find(const Slice& pattern, const std::vector<size_t>& next, const int64_t& offset = 0) const;
 
-        int64_t pos = offset;
-        int64_t j = 0;
-
-        while (pos < size) {
-            if (data[pos] == pattern[j]) {
-                ++pos;
-                ++j;
-            }
-
-            if (j == pattern.size) {
-                return pos - j;
-            }
-
-            if (pos < size && data[pos] != pattern[j]) {
-                if (j != 0) {
-                    j = next[j - 1];
-                } else {
-                    ++pos;
-                }
-            }
-        }
-        return -1;
-    }
+    /**
+     * build next array for KMP algorithm
+     * @return next array
+     */
+    std::vector<size_t> build_next() const;
 
     Slice tolower(std::string& buf) {
         // copy this slice into buf

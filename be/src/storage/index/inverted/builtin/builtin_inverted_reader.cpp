@@ -28,7 +28,11 @@ Status BuiltinInvertedReader::new_iterator(const std::shared_ptr<TabletIndex> in
     RETURN_IF_ERROR(_bitmap_index->new_iterator(index_opt, &iter));
     std::unique_ptr<BitmapIndexIterator> bitmap_itr;
     bitmap_itr.reset(iter);
-    *iterator = new BuiltinInvertedIndexIterator(index_meta, this, index_opt.stats, bitmap_itr);
+    if (!index_opt.segment_rows.has_value()) {
+        return Status::InvalidArgument(fmt::format("No segment rows specified"));
+    }
+    *iterator =
+            new BuiltinInvertedIndexIterator(index_meta, this, index_opt.stats, bitmap_itr, *index_opt.segment_rows);
     return Status::OK();
 }
 

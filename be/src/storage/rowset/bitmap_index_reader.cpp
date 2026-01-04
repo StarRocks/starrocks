@@ -136,14 +136,15 @@ Status BitmapIndexIterator::seek_dict_by_ngram(const void* value, roaring::Roari
 
     const auto gram_num = _reader->gram_num();
     const auto* slice_val = static_cast<const Slice*>(value);
-    if (slice_val->get_size() < gram_num) {
+
+    std::vector<size_t> index;
+    const size_t slice_gram_num = get_utf8_index(*slice_val, &index);
+
+    if (slice_gram_num < gram_num) {
         // _num_bitmap means how many dicts exist. should return all dicts here.
         roaring->addRange(0, _num_bitmap);
         return Status::OK();
     }
-
-    std::vector<size_t> index;
-    const size_t slice_gram_num = get_utf8_index(*slice_val, &index);
 
     std::vector<Slice> ngrams;
     ngrams.reserve(slice_gram_num - gram_num + 1);
