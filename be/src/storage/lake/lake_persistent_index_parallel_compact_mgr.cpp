@@ -38,6 +38,7 @@
 #include "util/countdown_latch.h"
 #include "util/cpu_info.h"
 #include "util/defer_op.h"
+#include "util/starrocks_metrics.h"
 #include "util/trace.h"
 
 namespace starrocks::lake {
