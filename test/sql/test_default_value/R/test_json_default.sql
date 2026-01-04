@@ -64,7 +64,7 @@ SELECT
     'without_default',
     data,
     data IS NULL
-FROM without_default;
+FROM without_default order by 1;
 -- result:
 with_default	{"default": true}	0
 without_default	None	1
@@ -207,6 +207,78 @@ ORDER BY id;
 2	bob	1	0	default
 3	charlie	10	1	premium
 -- !result
+CREATE TABLE extended_default_inherit_types (
+    k1 INT
+) DUPLICATE KEY(k1)
+DISTRIBUTED BY HASH(k1) BUCKETS 1
+PROPERTIES("replication_num" = "1", "fast_schema_evolution" = "true");
+-- result:
+-- !result
+INSERT INTO extended_default_inherit_types SELECT 1;
+-- result:
+-- !result
+ALTER TABLE extended_default_inherit_types
+ADD COLUMN json_col JSON DEFAULT '{
+  "i_str": "222",
+  "i_num": 223,
+  "b_str": "true",
+  "b_bool": true,
+  "d_str": "1.25",
+  "d_num": 2.5,
+  "s": "hello",
+  "nullv": null,
+  "obj": {"x": "7"},
+  "arr": ["9"]
+}';
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+SELECT
+  k1,
+  get_json_int(json_col, '$.i_str') AS i_str,
+  get_json_int(json_col, '$.i_num') AS i_num,
+  get_json_bool(json_col, '$.b_str') AS b_str,
+  get_json_bool(json_col, '$.b_bool') AS b_bool,
+  get_json_double(json_col, '$.d_str') AS d_str,
+  get_json_double(json_col, '$.d_num') AS d_num,
+  get_json_string(json_col, '$.s') AS s,
+  get_json_int(json_col, '$.nullv') AS nullv_int,
+  get_json_int(json_col, '$.obj') AS obj_int,
+  get_json_int(json_col, '$.arr[0]') AS arr0_int
+FROM extended_default_inherit_types
+ORDER BY k1;
+-- result:
+1	222	223	1	1	1.25	2.5	hello	None	None	9
+-- !result
+INSERT INTO extended_default_inherit_types(k1) SELECT 2;
+-- result:
+-- !result
+INSERT INTO extended_default_inherit_types
+SELECT 3, '{"i_str":"333","i_num":334,"b_str":"false","b_bool":false,"d_str":"3.75","d_num":4.5,"s":"world","nullv":null,"obj":{"x":"8"},"arr":["10"]}';
+-- result:
+-- !result
+SELECT
+  k1,
+  get_json_int(json_col, '$.i_str') AS i_str,
+  get_json_int(json_col, '$.i_num') AS i_num,
+  get_json_bool(json_col, '$.b_str') AS b_str,
+  get_json_bool(json_col, '$.b_bool') AS b_bool,
+  get_json_double(json_col, '$.d_str') AS d_str,
+  get_json_double(json_col, '$.d_num') AS d_num,
+  get_json_string(json_col, '$.s') AS s,
+  get_json_int(json_col, '$.nullv') AS nullv_int,
+  get_json_int(json_col, '$.obj') AS obj_int,
+  get_json_int(json_col, '$.arr[0]') AS arr0_int
+FROM extended_default_inherit_types
+ORDER BY k1;
+-- result:
+1	222	223	1	1	1.25	2.5	hello	None	None	9
+2	222	223	1	1	1.25	2.5	hello	None	None	9
+3	333	334	0	0	3.75	4.5	world	None	None	10
+-- !result
 CREATE TABLE extended_complex_types (
     id INT NOT NULL,
     name VARCHAR(50)
@@ -239,9 +311,9 @@ SELECT
 FROM extended_complex_types
 ORDER BY id;
 -- result:
-1	alice	10	0	95.5	gold	premium	Beijing	25
-2	bob	10	0	95.5	gold	premium	Beijing	25
-3	charlie	10	0	95.5	gold	premium	Beijing	25
+1	alice	10	1	95.5	gold	premium	Beijing	25
+2	bob	10	1	95.5	gold	premium	Beijing	25
+3	charlie	10	1	95.5	gold	premium	Beijing	25
 -- !result
 INSERT INTO extended_complex_types VALUES 
     (4, 'david', '{"level": 99, "vip": false, "score": 88.8, "tags": ["silver"], "meta": {"city": "Shanghai", "age": 30}}');
@@ -255,9 +327,9 @@ SELECT
 FROM extended_complex_types
 ORDER BY id;
 -- result:
-1	alice	10	0
-2	bob	10	0
-3	charlie	10	0
+1	alice	10	1
+2	bob	10	1
+3	charlie	10	1
 4	david	99	0
 -- !result
 CREATE TABLE extended_multi_json (
@@ -273,6 +345,10 @@ INSERT INTO extended_multi_json VALUES (1, 'user1'), (2, 'user2');
 -- !result
 ALTER TABLE extended_multi_json ADD COLUMN config JSON DEFAULT '{"theme": "dark", "lang": "en"}';
 -- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
 -- !result
 ALTER TABLE extended_multi_json ADD COLUMN stats JSON DEFAULT '{"views": 100, "likes": 50}';
 -- result:
@@ -319,8 +395,8 @@ SELECT
 FROM extended_null_values
 ORDER BY id;
 -- result:
-1	null	0	test
-2	null	0	test
+1	None	0	test
+2	None	0	test
 -- !result
 CREATE TABLE extended_empty_structures (
     id INT NOT NULL
@@ -339,7 +415,7 @@ function: wait_alter_table_finish()
 -- result:
 None
 -- !result
-SELECT 
+SELECT
     id,
     json_query(info, '$.tags') AS tags,
     json_query(info, '$.meta') AS meta,
@@ -375,8 +451,8 @@ SELECT
 FROM extended_deep_nested
 ORDER BY id;
 -- result:
-1	42	0	{"level3": {"flag": true, "value": 42}}
-2	42	0	{"level3": {"flag": true, "value": 42}}
+1	42	1	{"level3": {"flag": true, "value": 42}}
+2	42	1	{"level3": {"flag": true, "value": 42}}
 -- !result
 CREATE TABLE extended_arrays (
     id INT NOT NULL
@@ -395,7 +471,7 @@ function: wait_alter_table_finish()
 -- result:
 None
 -- !result
-SELECT 
+SELECT
     id,
     get_json_string(items, '$.products[0]') AS product_0,
     get_json_string(items, '$.products[1]') AS product_1,
