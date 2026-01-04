@@ -28,12 +28,13 @@ fixed_poms = [
     ("org.eclipse.jetty:jetty-xml", "10.0.24"),
     ("org.eclipse.jetty:jetty-io", "10.0.24"),
     ("commons-beanutils:commons-beanutils", "1.11.0"),
+    ("org.apache.httpcomponents.client5:httpclient5", "5.4.3"),
 ]
 
 fixed_jars = [
     # common jars
     "kudu-client-1.17.1.jar",
-    "paimon-bundle-1.2.0.jar",
+    "paimon-bundle-1.3.1.jar",
     "bundle-2.29.52.jar",
     "hadoop-client-runtime-3.4.1.jar",
     "gcs-connector-hadoop3-2.2.26-shaded.jar",
