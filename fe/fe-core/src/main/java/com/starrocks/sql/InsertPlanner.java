@@ -62,8 +62,10 @@ import com.starrocks.sql.analyzer.RelationFields;
 import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.KeysType;
+import com.starrocks.sql.ast.PartitionRef;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectListItem;
@@ -928,6 +930,20 @@ public class InsertPlanner {
                 return new PhysicalPropertySet(DistributionProperty
                         .createProperty(DistributionSpec.createHashDistributionSpec(desc)));
             }
+
+            // Adaptive global shuffle based on partition count and backend count
+            if (session.isEnableIcebergSinkAdaptiveShuffle() && (!icebergTable.getPartitionColumns().isEmpty())) {
+                boolean shouldEnableGlobalShuffle = shouldEnableAdaptiveGlobalShuffle(
+                        insertStmt, icebergTable, session);
+                if (shouldEnableGlobalShuffle) {
+                    List<Integer> partitionColumnIDs = icebergTable.partitionColumnIndexes().stream()
+                            .map(x -> outputColumns.get(x).getId()).collect(Collectors.toList());
+                    HashDistributionDesc desc = new HashDistributionDesc(partitionColumnIDs,
+                            HashDistributionDesc.SourceType.SHUFFLE_AGG);
+                    return new PhysicalPropertySet(DistributionProperty
+                            .createProperty(DistributionSpec.createHashDistributionSpec(desc)));
+                }
+            }
         }
 
         if (targetTable instanceof TableFunctionTable) {
@@ -1107,5 +1123,304 @@ public class InsertPlanner {
         }
         checkPartitionInsertValid(targetTable);
         return true;
+    }
+
+    /**
+     * Judge whether adaptive global shuffle should be enabled based on partition count and backend count.
+     *
+     * Decision criteria (configurable via session variables):
+     * 1. Enable when estimated partition count >= backend count * ratio
+     * 2. OR when estimated partition count >= absolute threshold
+     *
+     * @param insertStmt INSERT statement
+     * @param icebergTable target Iceberg table
+     * @param session Session variable
+     * @return whether to enable global shuffle
+     */
+    private boolean shouldEnableAdaptiveGlobalShuffle(InsertStmt insertStmt,
+                                                       IcebergTable icebergTable,
+                                                       SessionVariable session) {
+        // Get the number of alive BE nodes in the cluster
+        int aliveBackendNum = GlobalStateMgr.getCurrentState().getNodeMgr()
+                .getClusterInfo().getAliveBackendNumber();
+
+        if (aliveBackendNum <= 0) {
+            return false;
+        }
+
+        // Estimate the number of partitions that may be involved in this insert
+        long estimatedPartitionCount = estimatePartitionCountForInsert(insertStmt, icebergTable);
+
+        // Get configured thresholds
+        long partitionCountThreshold = session.getIcebergSinkShufflePartitionThreshold();
+        double partitionCountNodeRatio = session.getIcebergSinkShufflePartitionNodeRatio();
+
+        // Decision logic:
+        // 1. estimated partitions >= backend count * ratio coefficient
+        // 2. OR estimated partitions >= absolute threshold
+        boolean shouldEnable = estimatedPartitionCount >= (long) (aliveBackendNum * partitionCountNodeRatio)
+                || estimatedPartitionCount >= partitionCountThreshold;
+
+        if (shouldEnable && LOG.isDebugEnabled()) {
+            LOG.debug("Enable adaptive global shuffle for iceberg table {}.{}: " +
+                            "estimated partitions={}, alive backends={}, threshold={}, ratio={}",
+                    icebergTable.getDbName(), icebergTable.getTableName(),
+                    estimatedPartitionCount, aliveBackendNum,
+                    partitionCountThreshold, partitionCountNodeRatio);
+        }
+
+        return shouldEnable;
+    }
+
+    /**
+     * Estimate the number of partitions that may be involved in this INSERT operation.
+     *
+     * @param insertStmt INSERT statement
+     * @param icebergTable target Iceberg table
+     * @return estimated partition count
+     */
+    private long estimatePartitionCountForInsert(InsertStmt insertStmt, IcebergTable icebergTable) {
+        // 1. First try to get current partition count from table metadata
+        try {
+            List<String> partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                    .listPartitionNames(icebergTable.getCatalogName(),
+                            icebergTable.getDbName(),
+                            icebergTable.getTableName(),
+                            new ConnectorMetadatRequestContext());
+
+            if (!partitionNames.isEmpty()) {
+                long existingPartitionCount = partitionNames.size();
+
+                // 2. For static partition INSERT, we can know exactly how many partitions to write
+                if (insertStmt.isStaticKeyPartitionInsert()) {
+                    PartitionRef targetPartitionNames = insertStmt.getTargetPartitionNames();
+                    if (targetPartitionNames != null && !targetPartitionNames.getPartitionColNames().isEmpty()) {
+                        // Static partition insert, only writing to one specified partition
+                        return 1;
+                    }
+                }
+
+                // 3. If there's partition predicate filtering, try to estimate involved partitions
+                long filteredEstimate = estimatePartitionsFromPredicates(insertStmt, icebergTable);
+                if (filteredEstimate > 0 && filteredEstimate < existingPartitionCount) {
+                    return filteredEstimate;
+                }
+
+                // 4. Default to returning existing partition count (conservative: assume writing to all partitions)
+                return existingPartitionCount;
+            }
+        } catch (Exception e) {
+            LOG.warn("Failed to get partition count for iceberg table {}.{}: {}",
+                    icebergTable.getDbName(), icebergTable.getTableName(), e.getMessage());
+        }
+
+        // 5. When unable to get partition info, return a large default value to enable shuffle
+        // Or could estimate based on table statistics
+        return Long.MAX_VALUE;
+    }
+
+    /**
+     * Estimate the number of partitions that may be involved based on query predicates.
+     *
+     * @param insertStmt INSERT statement
+     * @param icebergTable target Iceberg table
+     * @return estimated partition count, -1 means unable to estimate
+     */
+    private long estimatePartitionsFromPredicates(InsertStmt insertStmt, IcebergTable icebergTable) {
+        QueryRelation queryRelation = insertStmt.getQueryStatement().getQueryRelation();
+
+        // Only support SelectRelation with WHERE clause
+        if (!(queryRelation instanceof SelectRelation)) {
+            return -1;
+        }
+
+        SelectRelation selectRelation = (SelectRelation) queryRelation;
+        if (!selectRelation.hasWhereClause()) {
+            return -1;
+        }
+
+        com.starrocks.sql.ast.expression.Expr predicate = selectRelation.getPredicate();
+        if (predicate == null) {
+            return -1;
+        }
+
+        // Get partition column names (case-insensitive)
+        Set<String> partitionColNames = icebergTable.getPartitionColumns().stream()
+                .map(col -> col.getName().toLowerCase())
+                .collect(Collectors.toSet());
+
+        if (partitionColNames.isEmpty()) {
+            return -1;
+        }
+
+        // Extract partition column predicates and estimate partition count
+        PartitionEstimator estimator = new PartitionEstimator(partitionColNames);
+        Long estimatedCount = estimator.estimate(predicate);
+        return estimatedCount != null ? estimatedCount : -1;
+    }
+
+    /**
+     * Helper class to estimate partition count from predicates on partition columns.
+     *
+     * Algorithm:
+     * 1. Extract all conjunctive predicates (split by AND)
+     * 2. For each predicate that references a partition column:
+     *    - Equality (EQ): count distinct values (typically 1 per column)
+     *    - IN clause: count number of values in list
+     *    - Range predicates: conservatively estimate as -1 (unable to estimate)
+     * 3. Combine estimates: if all partition columns have equality predicates,
+     *    the estimated partitions = product of distinct values
+     */
+    private static class PartitionEstimator {
+        private final Set<String> partitionColNames;
+        private final Map<String, Long> columnDistinctValues;
+
+        PartitionEstimator(Set<String> partitionColNames) {
+            this.partitionColNames = partitionColNames;
+            this.columnDistinctValues = new HashMap<>();
+        }
+
+        Long estimate(com.starrocks.sql.ast.expression.Expr predicate) {
+            // Split compound predicate into conjuncts
+            List<com.starrocks.sql.ast.expression.Expr> conjuncts = extractConjuncts(predicate);
+
+            for (com.starrocks.sql.ast.expression.Expr conjunct : conjuncts) {
+                if (!processPredicate(conjunct)) {
+                    // If we encounter a predicate we can't handle, return null to indicate
+                    // we cannot reliably estimate
+                    return null;
+                }
+            }
+
+            // If we have equality predicates for all partition columns, return product
+            if (columnDistinctValues.size() == partitionColNames.size()) {
+                long totalPartitions = 1;
+                for (long count : columnDistinctValues.values()) {
+                    totalPartitions *= count;
+                    // Cap at a reasonable max to avoid overflow
+                    if (totalPartitions > 1000000) {
+                        return 1000000L;
+                    }
+                }
+                return totalPartitions;
+            }
+
+            // Partial match - if we have at least one equality predicate on partition column
+            // we can provide some estimate, but be conservative
+            if (!columnDistinctValues.isEmpty()) {
+                return columnDistinctValues.values().stream().reduce(1L, (a, b) -> a * b);
+            }
+
+            return null;
+        }
+
+        private List<com.starrocks.sql.ast.expression.Expr> extractConjuncts(com.starrocks.sql.ast.expression.Expr expr) {
+            List<com.starrocks.sql.ast.expression.Expr> result = new ArrayList<>();
+            extractConjunctsRecursive(expr, result);
+            return result;
+        }
+
+        private void extractConjunctsRecursive(com.starrocks.sql.ast.expression.Expr expr,
+                                               List<com.starrocks.sql.ast.expression.Expr> result) {
+            if (expr instanceof com.starrocks.sql.ast.expression.CompoundPredicate) {
+                com.starrocks.sql.ast.expression.CompoundPredicate compound =
+                        (com.starrocks.sql.ast.expression.CompoundPredicate) expr;
+                if (compound.getOp() == com.starrocks.sql.ast.expression.CompoundPredicate.Operator.AND) {
+                    extractConjunctsRecursive(expr.getChild(0), result);
+                    extractConjunctsRecursive(expr.getChild(1), result);
+                    return;
+                }
+            }
+            result.add(expr);
+        }
+
+        private boolean processPredicate(com.starrocks.sql.ast.expression.Expr predicate) {
+            // Handle BinaryPredicate (equality, range comparisons)
+            if (predicate instanceof com.starrocks.sql.ast.expression.BinaryPredicate) {
+                return processBinaryPredicate((com.starrocks.sql.ast.expression.BinaryPredicate) predicate);
+            }
+
+            // Handle InPredicate
+            if (predicate instanceof com.starrocks.sql.ast.expression.InPredicate) {
+                return processInPredicate((com.starrocks.sql.ast.expression.InPredicate) predicate);
+            }
+
+            // For other predicate types we can't analyze (like LIKE, range predicates),
+            // return false to indicate we can't reliably estimate
+            return true;
+        }
+
+        private boolean processBinaryPredicate(com.starrocks.sql.ast.expression.BinaryPredicate binary) {
+            // Only handle equality predicates
+            if (binary.getOp() != com.starrocks.sql.ast.expression.BinaryType.EQ) {
+                // Range predicates (LT, LE, GT, GE) are hard to estimate without statistics
+                // For now, be conservative and allow the estimation to continue
+                // but don't count this as a partition-reducing predicate
+                return true;
+            }
+
+            // Check if one side is a partition column reference
+            com.starrocks.sql.ast.expression.SlotRef slotRef = extractSlotRef(binary.getChild(0));
+            if (slotRef == null) {
+                slotRef = extractSlotRef(binary.getChild(1));
+            }
+
+            if (slotRef == null) {
+                return true; // Neither side is a simple column reference
+            }
+
+            String colName = slotRef.getColumnName().toLowerCase();
+            if (!partitionColNames.contains(colName)) {
+                return true; // Not a partition column
+            }
+
+            // Equality predicate on partition column - typically selects 1 partition
+            columnDistinctValues.put(colName, 1L);
+            return true;
+        }
+
+        private boolean processInPredicate(com.starrocks.sql.ast.expression.InPredicate inPred) {
+            // Only handle IN (not NOT IN) with constant values
+            if (inPred.isNotIn()) {
+                return true; // NOT IN doesn't help estimate partition count
+            }
+
+            if (!inPred.isConstantValues()) {
+                return true; // Non-constant values, can't estimate
+            }
+
+            // Check if the left side is a partition column reference
+            com.starrocks.sql.ast.expression.SlotRef slotRef = extractSlotRef(inPred.getChild(0));
+            if (slotRef == null) {
+                return true;
+            }
+
+            String colName = slotRef.getColumnName().toLowerCase();
+            if (!partitionColNames.contains(colName)) {
+                return true; // Not a partition column
+            }
+
+            // Count distinct values in IN list
+            long distinctCount = inPred.getInElementNum();
+            columnDistinctValues.put(colName, distinctCount);
+            return true;
+        }
+
+        private com.starrocks.sql.ast.expression.SlotRef extractSlotRef(com.starrocks.sql.ast.expression.Expr expr) {
+            // Direct SlotRef
+            if (expr instanceof com.starrocks.sql.ast.expression.SlotRef) {
+                return (com.starrocks.sql.ast.expression.SlotRef) expr;
+            }
+
+            // Unwrap implicit cast
+            if (expr instanceof com.starrocks.sql.ast.expression.CastExpr) {
+                com.starrocks.sql.ast.expression.CastExpr cast = (com.starrocks.sql.ast.expression.CastExpr) expr;
+                if (cast.isImplicit() && cast.getChild(0) instanceof com.starrocks.sql.ast.expression.SlotRef) {
+                    return (com.starrocks.sql.ast.expression.SlotRef) cast.getChild(0);
+                }
+            }
+
+            return null;
+        }
     }
 }
