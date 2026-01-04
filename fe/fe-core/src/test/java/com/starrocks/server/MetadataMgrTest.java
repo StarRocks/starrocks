@@ -33,6 +33,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.ast.CreateTableLikeStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
+import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
@@ -500,6 +501,40 @@ public class MetadataMgrTest {
         Assertions.assertFalse(MetadataTableName.isMetadataTable("table$"));
         Assertions.assertFalse(MetadataTableName.isMetadataTable("table$unknown_type"));
         Assertions.assertTrue(MetadataTableName.isMetadataTable("table$logical_iceberg_metadata"));
+    }
+
+    @Test
+    public void testTruncateTableOnExternalCatalog() throws Exception {
+        ConnectContext connectContext = AnalyzeTestUtil.getConnectContext();
+        MetadataMgr metadataMgr = connectContext.getGlobalStateMgr().getMetadataMgr();
+
+        // Test truncate table on Iceberg catalog
+        String catalogName = "iceberg_catalog_truncate_test";
+        String createIcebergCatalogStmt = String.format(
+                "create external catalog %s properties (\"type\"=\"iceberg\", " +
+                        "\"hive.metastore.uris\"=\"thrift://hms:9083\", \"iceberg.catalog.type\"=\"hive\")",
+                catalogName);
+        dropCatalogIfExists(catalogName);
+        try {
+            AnalyzeTestUtil.getStarRocksAssert().withCatalog(createIcebergCatalogStmt);
+
+            String truncateSql = "TRUNCATE TABLE " + catalogName + ".test_db.test_table";
+            TruncateTableStmt truncateTableStmt = (TruncateTableStmt) AnalyzeTestUtil.analyzeSuccess(truncateSql);
+
+            ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                    "TRUNCATE TABLE is not supported for external catalog tables",
+                    () -> metadataMgr.truncateTable(connectContext, truncateTableStmt));
+
+            // Test truncate table on Hive catalog
+            String truncateHiveSql = "TRUNCATE TABLE hive_catalog.test_db.test_table";
+            TruncateTableStmt truncateHiveTableStmt = (TruncateTableStmt) AnalyzeTestUtil.analyzeSuccess(truncateHiveSql);
+
+            ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                    "TRUNCATE TABLE is not supported for external catalog tables",
+                    () -> metadataMgr.truncateTable(connectContext, truncateHiveTableStmt));
+        } finally {
+            dropCatalogIfExists(catalogName);
+        }
     }
 
     private void dropCatalogIfExists(String catalogName) {

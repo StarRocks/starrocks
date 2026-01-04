@@ -409,8 +409,15 @@ public class MetadataMgr {
 
     public void truncateTable(ConnectContext context, TruncateTableStmt stmt) throws StarRocksException {
         String catalogName = stmt.getCatalogName();
-        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
+        if (catalogName == null) {
+            catalogName = context.getCurrentCatalog();
+        }
 
+        if (CatalogMgr.isExternalCatalog(catalogName)) {
+            throw new DdlException("TRUNCATE TABLE is not supported for external catalog tables");
+        }
+
+        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
         if (connectorMetadata.isPresent()) {
             connectorMetadata.get().truncateTable(stmt, context);
         }

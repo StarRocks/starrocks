@@ -14,11 +14,14 @@
 
 package com.starrocks.sql.analyzer;
 
+import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.ast.TruncateTableStmt;
+import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
@@ -28,6 +31,7 @@ import org.junit.jupiter.api.Test;
 
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
+import static com.starrocks.sql.analyzer.AnalyzeTestUtil.getStarRocksAssert;
 
 public class AnalyzeTruncateTableTest {
 
@@ -35,6 +39,13 @@ public class AnalyzeTruncateTableTest {
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         AnalyzeTestUtil.init();
+        StarRocksAssert starRocksAssert = getStarRocksAssert();
+        String createIcebergCatalogStmt = "create external catalog iceberg_catalog properties (\"type\"=\"iceberg\", " +
+                "\"hive.metastore.uris\"=\"thrift://hms:9083\", \"iceberg.catalog.type\"=\"hive\")";
+        starRocksAssert.withCatalog(createIcebergCatalogStmt);
+
+        starRocksAssert.withCatalog("create external catalog hive_catalog properties (\"type\"=\"hive\", " +
+                "\"hive.metastore.uris\"=\"thrift://hms:9083\")");
     }
 
     @Test
@@ -66,5 +77,39 @@ public class AnalyzeTruncateTableTest {
     @Test
     public void failureTest() {
         analyzeFail("TRUNCATE TABLE tbl PARTITION();");
+    }
+
+    @Test
+    public void testTruncateExternalCatalogTable() {
+        analyzeFail("TRUNCATE TABLE not_exist_catalog.db.tbl");
+
+        MetadataMgr metadata = AnalyzeTestUtil.getConnectContext().getGlobalStateMgr().getMetadataMgr();
+        new Expectations(metadata) {
+            {
+                metadata.getDb(anyString, anyString);
+                result = new Database();
+                minTimes = 0;
+
+                metadata.getTable(anyString, anyString, anyString);
+                result = new Table(Table.TableType.ICEBERG);
+                minTimes = 0;
+            }
+        };
+
+        analyzeFail("TRUNCATE TABLE iceberg_catalog.iceberg_db.iceberg_table");
+
+        new Expectations(metadata) {
+            {
+                metadata.getDb(anyString, anyString);
+                result = new Database();
+                minTimes = 0;
+
+                metadata.getTable(anyString, anyString, anyString);
+                result = new Table(Table.TableType.HIVE);
+                minTimes = 0;
+            }
+        };
+
+        analyzeFail("TRUNCATE TABLE hive_catalog.hive_db.hive_table");
     }
 }
