@@ -636,6 +636,10 @@ Status UpdateManager::_handle_column_upsert_mode(const TxnLogPB_OpWrite& op_writ
         if (config::enable_transparent_data_encryption) {
             new_rows_op.mutable_rowset()->add_segment_encryption_metas(writer.encryption_meta());
         }
+        auto* segment_meta = new_rows_op.mutable_rowset()->add_segment_metas();
+        writer.get_sort_key_min().to_proto(segment_meta->mutable_sort_key_min());
+        writer.get_sort_key_max().to_proto(segment_meta->mutable_sort_key_max());
+        segment_meta->set_num_rows(writer.num_rows());
 
         uint32_t new_segment_id = new_rows_op.rowset().segments_size() - 1;
         PrimaryIndex::DeletesMap segment_deletes;

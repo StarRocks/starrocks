@@ -131,25 +131,33 @@ Status Rowset::add_partial_compaction_segments_info(TxnLogPB_OpCompaction* op_co
             op_compaction->mutable_output_rowset()->add_segment_encryption_metas(
                     metadata().segment_encryption_metas(i));
         }
-        if (metadata().shared_segments_size() > 0) {
+        if (i < metadata().shared_segments_size()) {
             op_compaction->mutable_output_rowset()->add_shared_segments(metadata().shared_segments(i));
         }
-
+        if (i < metadata().segment_metas_size()) {
+            op_compaction->mutable_output_rowset()->add_segment_metas()->CopyFrom(metadata().segment_metas(i));
+        }
         uncompacted_num_rows += already_compacted_segments[i]->num_rows();
         uncompacted_data_size += file_size;
     }
 
     // 2. add compacted segments in this round
     op_compaction->set_new_segment_offset(op_compaction->output_rowset().segments_size());
-    for (auto& file : writer->files()) {
+    for (const auto& file : writer->segments()) {
         op_compaction->mutable_output_rowset()->add_segments(file.path);
         op_compaction->mutable_output_rowset()->add_segment_size(file.size.value());
         op_compaction->mutable_output_rowset()->add_segment_encryption_metas(file.encryption_meta);
         if (metadata().shared_segments_size() > 0) {
             op_compaction->mutable_output_rowset()->add_shared_segments(false);
         }
+        if (metadata().segment_metas_size() > 0) {
+            auto* segment_meta = op_compaction->mutable_output_rowset()->add_segment_metas();
+            file.sort_key_min.to_proto(segment_meta->mutable_sort_key_min());
+            file.sort_key_max.to_proto(segment_meta->mutable_sort_key_max());
+            segment_meta->set_num_rows(file.num_rows);
+        }
     }
-    op_compaction->set_new_segment_count(writer->files().size());
+    op_compaction->set_new_segment_count(writer->segments().size());
 
     // 3. set next compaction offset
     op_compaction->mutable_output_rowset()->set_next_compaction_offset(op_compaction->output_rowset().segments_size());
@@ -173,8 +181,11 @@ Status Rowset::add_partial_compaction_segments_info(TxnLogPB_OpCompaction* op_co
             op_compaction->mutable_output_rowset()->add_segment_encryption_metas(
                     metadata().segment_encryption_metas(i));
         }
-        if (metadata().shared_segments_size() > 0) {
+        if (i < metadata().shared_segments_size()) {
             op_compaction->mutable_output_rowset()->add_shared_segments(metadata().shared_segments(i));
+        }
+        if (i < metadata().segment_metas_size()) {
+            op_compaction->mutable_output_rowset()->add_segment_metas()->CopyFrom(metadata().segment_metas(i));
         }
 
         uncompacted_num_rows += uncompacted_segments[idx]->num_rows();

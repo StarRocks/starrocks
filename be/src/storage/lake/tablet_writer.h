@@ -23,6 +23,7 @@
 #include "gen_cpp/lake_types.pb.h"
 #include "runtime/global_dict/types_fwd_decl.h"
 #include "storage/lake/location_provider.h"
+#include "storage/rowset/segment_file_info.h"
 #include "storage/tablet_schema.h"
 
 namespace starrocks {
@@ -64,9 +65,11 @@ public:
     // Note: The path of `FileInfo` is only base filename, no directory component.
     //
     // PREREQUISITES: the writer has successfully `finish()`ed but not yet `close()`ed.
-    std::vector<FileInfo> files() const { return _files; }
+    const std::vector<SegmentFileInfo>& segments() const { return _segments; }
 
-    std::vector<FileInfo> ssts() const { return _ssts; }
+    const std::vector<FileInfo>& dels() const { return _dels; }
+
+    const std::vector<FileInfo>& ssts() const { return _ssts; }
 
     const std::vector<PersistentIndexSstableRangePB>& sst_ranges() const { return _sst_ranges; }
 
@@ -180,7 +183,8 @@ protected:
     TabletSchemaCSPtr _schema;
     int64_t _txn_id;
     ThreadPool* _flush_pool;
-    std::vector<FileInfo> _files;
+    std::vector<SegmentFileInfo> _segments;
+    std::vector<FileInfo> _dels;
     std::vector<FileInfo> _ssts;
     std::vector<PersistentIndexSstableRangePB> _sst_ranges;
     int64_t _num_rows = 0;

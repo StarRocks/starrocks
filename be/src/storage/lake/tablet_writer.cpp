@@ -61,7 +61,8 @@ void TabletWriter::check_global_dict(SegmentWriter* segment_writer) {
 Status TabletWriter::merge_other_writers(const std::vector<std::unique_ptr<TabletWriter>>& other_writers) {
     // merge other writers' files into current writer
     for (const auto& writer : other_writers) {
-        _files.insert(_files.end(), writer->_files.begin(), writer->_files.end());
+        _segments.insert(_segments.end(), writer->_segments.begin(), writer->_segments.end());
+        _dels.insert(_dels.end(), writer->_dels.begin(), writer->_dels.end());
         _ssts.insert(_ssts.end(), writer->_ssts.begin(), writer->_ssts.end());
         _sst_ranges.insert(_sst_ranges.end(), writer->_sst_ranges.begin(), writer->_sst_ranges.end());
         _num_rows += writer->_num_rows;
