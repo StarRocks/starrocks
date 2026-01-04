@@ -131,6 +131,12 @@ message DelfileWithRowsetId {
     optional bool shared = 5 [default=false];
 }
 
+message SegmentMetadataPB {
+    optional TuplePB sort_key_min = 1;
+    optional TuplePB sort_key_max = 2;
+    optional int64 num_rows = 3;
+}
+
 message RowsetMetadataPB {
     optional uint32 id = 1;
     optional bool overlapped = 2;
@@ -157,6 +163,7 @@ message RowsetMetadataPB {
     repeated bool shared_segments = 15;
     // Record Predicate use for filtering all segments for the current rowset
     optional RecordPredicatePB record_predicate = 16;
+    repeated SegmentMetadataPB segment_metas = 17;
 }
 
 // At present, the lake persistent index reuses the logic of the persistent index,

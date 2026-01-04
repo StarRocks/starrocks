@@ -70,12 +70,16 @@ Status CompactionTask::fill_compaction_segment_info(TxnLogPB_OpCompaction* op_co
         op_compaction->mutable_output_rowset()->set_overlapped(true);
     } else {
         op_compaction->set_new_segment_offset(0);
-        for (auto& file : writer->files()) {
+        for (const auto& file : writer->segments()) {
             op_compaction->mutable_output_rowset()->add_segments(file.path);
             op_compaction->mutable_output_rowset()->add_segment_size(file.size.value());
             op_compaction->mutable_output_rowset()->add_segment_encryption_metas(file.encryption_meta);
+            auto* segment_meta = op_compaction->mutable_output_rowset()->add_segment_metas();
+            file.sort_key_min.to_proto(segment_meta->mutable_sort_key_min());
+            file.sort_key_max.to_proto(segment_meta->mutable_sort_key_max());
+            segment_meta->set_num_rows(file.num_rows);
         }
-        op_compaction->set_new_segment_count(writer->files().size());
+        op_compaction->set_new_segment_count(writer->segments().size());
         op_compaction->mutable_output_rowset()->set_num_rows(writer->num_rows());
         op_compaction->mutable_output_rowset()->set_data_size(writer->data_size());
         op_compaction->mutable_output_rowset()->set_overlapped(false);

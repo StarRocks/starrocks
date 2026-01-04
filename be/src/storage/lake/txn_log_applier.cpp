@@ -591,6 +591,7 @@ public:
         std::vector<std::string> all_segments;
         std::vector<int64_t> all_segment_sizes;
         std::vector<std::string> all_segment_encryption_metas;
+        std::vector<const SegmentMetadataPB*> all_segment_metas;
 
         // Traverse all transaction logs and collect op_write information
         VLOG(2) << "Collecting op_write information from transaction logs for tablet " << _tablet.id();
@@ -630,6 +631,12 @@ public:
                     for (int i = 0; i < rowset.segment_encryption_metas_size(); i++) {
                         all_segment_encryption_metas.emplace_back(rowset.segment_encryption_metas(i));
                     }
+
+                    // Collect segment metas
+                    all_segment_metas.reserve(all_segment_metas.size() + rowset.segment_metas_size());
+                    for (int i = 0; i < rowset.segment_metas_size(); i++) {
+                        all_segment_metas.emplace_back(&rowset.segment_metas(i));
+                    }
                 }
             } else {
                 return Status::NotSupported(
@@ -664,6 +671,11 @@ public:
         // Set segment encryption metas directly
         for (const auto& meta : all_segment_encryption_metas) {
             merged_rowset->add_segment_encryption_metas(meta);
+        }
+
+        // Set segment metas
+        for (const auto* segment_meta : all_segment_metas) {
+            merged_rowset->add_segment_metas()->CopyFrom(*segment_meta);
         }
 
         // Set rowset ID and update next_rowset_id

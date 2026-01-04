@@ -136,7 +136,7 @@ TEST_P(SpillMemTableSinkTest, test_flush_chunk) {
         }
     }
     ASSERT_OK(sink.merge_blocks_to_segments());
-    ASSERT_EQ(config::enable_load_spill_parallel_merge ? 3 : 1, tablet_writer->files().size());
+    ASSERT_EQ(config::enable_load_spill_parallel_merge ? 3 : 1, tablet_writer->segments().size());
 }
 
 TEST_P(SpillMemTableSinkTest, test_flush_chunk_with_deletes) {
@@ -174,7 +174,7 @@ TEST_P(SpillMemTableSinkTest, test_flush_chunk_with_deletes) {
             EXPECT_EQ((j + i * kChunkSize) * 3, result_chunk->get(j)[1].get_int32());
         }
     }
-    ASSERT_EQ(3, tablet_writer->files().size());
+    ASSERT_EQ(3, tablet_writer->dels().size());
 }
 
 TEST_P(SpillMemTableSinkTest, test_flush_chunk2) {
@@ -189,7 +189,7 @@ TEST_P(SpillMemTableSinkTest, test_flush_chunk2) {
     auto chunk = gen_data(kChunkSize, 0);
     starrocks::SegmentPB segment;
     ASSERT_OK(sink.flush_chunk(*chunk, &segment, true));
-    ASSERT_EQ(1, tablet_writer->files().size());
+    ASSERT_EQ(1, tablet_writer->segments().size());
 }
 
 TEST_P(SpillMemTableSinkTest, test_flush_chunk_with_delete2) {
@@ -204,7 +204,8 @@ TEST_P(SpillMemTableSinkTest, test_flush_chunk_with_delete2) {
     auto chunk = gen_data(kChunkSize, 0);
     starrocks::SegmentPB segment;
     ASSERT_OK(sink.flush_chunk_with_deletes(*chunk, *(chunk->columns()[0]), &segment, true));
-    ASSERT_EQ(2, tablet_writer->files().size());
+    ASSERT_EQ(1, tablet_writer->segments().size());
+    ASSERT_EQ(1, tablet_writer->dels().size());
 }
 
 TEST_P(SpillMemTableSinkTest, test_flush_chunk_with_limit) {
@@ -247,7 +248,7 @@ TEST_P(SpillMemTableSinkTest, test_flush_chunk_with_limit) {
         config::load_spill_max_chunk_bytes = old_val;
     }
     ASSERT_OK(sink.merge_blocks_to_segments());
-    ASSERT_EQ(config::enable_load_spill_parallel_merge ? 3 : 1, tablet_writer->files().size());
+    ASSERT_EQ(config::enable_load_spill_parallel_merge ? 3 : 1, tablet_writer->segments().size());
 }
 
 TEST_P(SpillMemTableSinkTest, test_merge) {
@@ -265,7 +266,7 @@ TEST_P(SpillMemTableSinkTest, test_merge) {
     starrocks::SegmentPB segment1;
     ASSERT_OK(sink.flush_chunk(*chunk, &segment1, true));
     ASSERT_OK(sink.merge_blocks_to_segments());
-    ASSERT_EQ(config::enable_load_spill_parallel_merge ? 2 : 1, tablet_writer->files().size());
+    ASSERT_EQ(config::enable_load_spill_parallel_merge ? 2 : 1, tablet_writer->segments().size());
 }
 
 TEST_P(SpillMemTableSinkTest, test_out_of_disk_space) {
@@ -290,7 +291,7 @@ TEST_P(SpillMemTableSinkTest, test_out_of_disk_space) {
     starrocks::SegmentPB segment1;
     ASSERT_OK(sink.flush_chunk(*chunk, &segment1, true));
     ASSERT_OK(sink.merge_blocks_to_segments());
-    ASSERT_EQ(config::enable_load_spill_parallel_merge ? 2 : 1, tablet_writer->files().size());
+    ASSERT_EQ(config::enable_load_spill_parallel_merge ? 2 : 1, tablet_writer->segments().size());
 }
 
 INSTANTIATE_TEST_SUITE_P(SpillMemTableSinkTest, SpillMemTableSinkTest,

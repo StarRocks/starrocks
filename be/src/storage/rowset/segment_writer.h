@@ -49,6 +49,7 @@
 #include "runtime/global_dict/types_fwd_decl.h"
 #include "storage/row_store_encoder_factory.h"
 #include "storage/tablet_schema.h"
+#include "storage/variant_tuple.h"
 
 namespace starrocks {
 
@@ -156,6 +157,12 @@ public:
 
     StatusOr<std::unique_ptr<io::NumericStatistics>> get_numeric_statistics();
 
+    bool has_key() { return _has_key; }
+
+    const VariantTuple& get_sort_key_min() { return _sort_key_min; }
+
+    const VariantTuple& get_sort_key_max() { return _sort_key_max; }
+
 private:
     Status _write_short_key_index();
     Status _write_footer();
@@ -178,6 +185,8 @@ private:
     std::vector<uint32_t> _column_indexes;
     bool _has_key = true;
     std::vector<uint32_t> _sort_column_indexes;
+    VariantTuple _sort_key_min;
+    VariantTuple _sort_key_max;
     std::unique_ptr<Schema> _schema_without_full_row_column;
 
     // num rows written when appending [partial] columns

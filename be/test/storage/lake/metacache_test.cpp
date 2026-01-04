@@ -170,7 +170,7 @@ TEST_F(LakeMetacacheTest, test_segment_cache) {
         ASSERT_OK(writer->write(chunk1));
         ASSERT_OK(writer->finish());
 
-        auto files = writer->files();
+        const auto& files = writer->segments();
         ASSERT_EQ(2, files.size());
 
         // add rowset metadata
@@ -178,8 +178,8 @@ TEST_F(LakeMetacacheTest, test_segment_cache) {
         rowset->set_overlapped(true);
         rowset->set_id(1);
         auto* segs = rowset->mutable_segments();
-        for (auto& file : writer->files()) {
-            segs->Add(std::move(file.path));
+        for (const auto& file : writer->segments()) {
+            segs->Add()->assign(file.path);
         }
 
         writer->close();

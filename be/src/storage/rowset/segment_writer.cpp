@@ -429,6 +429,15 @@ Status SegmentWriter::append_chunk(const Chunk& chunk) {
     }
 
     if (_has_key) {
+        if (chunk_num_rows > 0) {
+            if (_sort_key_min.empty()) {
+                // The append_chunk is ordered, so the first is min
+                _sort_key_min = chunk.get(0, _sort_column_indexes);
+            }
+            // The append_chunk is ordered, so the last is max
+            _sort_key_max = chunk.get(chunk_num_rows - 1, _sort_column_indexes);
+        }
+
         for (size_t i = 0; i < chunk_num_rows; i++) {
             // At the begin of one block, so add a short key index entry
             if ((_num_rows_written % _opts.num_rows_per_block) == 0) {

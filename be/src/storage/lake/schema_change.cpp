@@ -215,10 +215,14 @@ Status DirectSchemaChange::process(RowsetPtr rowset, RowsetMetadata* new_rowset_
     RETURN_IF_ERROR(writer->finish());
 
     // update new rowset meta
-    for (auto& f : writer->files()) {
-        new_rowset_metadata->add_segments(std::move(f.path));
+    for (const auto& f : writer->segments()) {
+        new_rowset_metadata->add_segments(f.path);
         new_rowset_metadata->add_segment_size(f.size.value());
         new_rowset_metadata->add_segment_encryption_metas(f.encryption_meta);
+        auto* segment_meta = new_rowset_metadata->add_segment_metas();
+        f.sort_key_min.to_proto(segment_meta->mutable_sort_key_min());
+        f.sort_key_max.to_proto(segment_meta->mutable_sort_key_max());
+        segment_meta->set_num_rows(f.num_rows);
     }
 
     new_rowset_metadata->set_id(_next_rowset_id);
@@ -300,10 +304,14 @@ Status SortedSchemaChange::process(RowsetPtr rowset, RowsetMetadata* new_rowset_
 
     RETURN_IF_ERROR(writer->finish());
 
-    for (auto& f : writer->files()) {
-        new_rowset_metadata->add_segments(std::move(f.path));
+    for (const auto& f : writer->segments()) {
+        new_rowset_metadata->add_segments(f.path);
         new_rowset_metadata->add_segment_size(f.size.value());
         new_rowset_metadata->add_segment_encryption_metas(f.encryption_meta);
+        auto* segment_meta = new_rowset_metadata->add_segment_metas();
+        f.sort_key_min.to_proto(segment_meta->mutable_sort_key_min());
+        f.sort_key_max.to_proto(segment_meta->mutable_sort_key_max());
+        segment_meta->set_num_rows(f.num_rows);
     }
 
     new_rowset_metadata->set_id(_next_rowset_id);

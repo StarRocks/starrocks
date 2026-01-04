@@ -96,7 +96,7 @@ TEST_P(LakeTabletWriterTest, test_write_success) {
     ASSERT_OK(writer->write(chunk1));
     ASSERT_OK(writer->finish());
 
-    auto files = writer->files();
+    auto files = writer->segments();
     ASSERT_EQ(2, files.size());
     ASSERT_NE(files[0].path, files[1].path);
     ASSERT_GT(files[0].size.value(), 0);
@@ -187,7 +187,7 @@ TEST_P(LakeTabletWriterTest, test_vertical_write_success) {
     ASSERT_OK(writer->flush_columns());
     ASSERT_OK(writer->finish());
 
-    auto files = writer->files();
+    auto files = writer->segments();
     ASSERT_EQ(2, files.size());
     ASSERT_NE(files[0].path, files[1].path);
     ASSERT_GT(files[0].size.value(), 0);
@@ -252,6 +252,8 @@ TEST_P(LakeTabletWriterTest, test_write_fail) {
     ASSERT_OK(writer->open());
     ASSERT_OK(fs::remove_all(kTestDirectory));
     ASSERT_ERROR(writer->write(chunk0));
+
+    writer->close();
 }
 
 TEST_P(LakeTabletWriterTest, test_close_without_finish) {
@@ -273,8 +275,8 @@ TEST_P(LakeTabletWriterTest, test_close_without_finish) {
     ASSERT_OK(writer->write(chunk0));
     ASSERT_OK(writer->flush());
 
-    ASSERT_EQ(1, writer->files().size());
-    auto seg_path = _tablet_mgr->segment_location(_tablet_metadata->id(), writer->files()[0].path);
+    ASSERT_EQ(1, writer->segments().size());
+    auto seg_path = _tablet_mgr->segment_location(_tablet_metadata->id(), writer->segments()[0].path);
     ASSERT_OK(fs->path_exists(seg_path));
 
     // `close()` directly without calling `finish()`
@@ -329,7 +331,7 @@ TEST_P(LakeTabletWriterTest, test_vertical_write_close_without_finish) {
     ASSERT_OK(writer->write_columns(c3_chunk, {1}, false));
     ASSERT_OK(writer->flush_columns());
 
-    auto files = writer->files();
+    const auto& files = writer->segments();
     ASSERT_EQ(0, files.size());
 
     // `close()` directly without calling `finish()`
@@ -537,9 +539,9 @@ TEST_P(LakeTabletWriterTest, test_clone_writer) {
     ASSERT_OK(cloned_writer->finish());
 
     // Verify both writers have their own files
-    ASSERT_EQ(1, writer->files().size());
-    ASSERT_EQ(1, cloned_writer->files().size());
-    ASSERT_NE(writer->files()[0].path, cloned_writer->files()[0].path);
+    ASSERT_EQ(1, writer->segments().size());
+    ASSERT_EQ(1, cloned_writer->segments().size());
+    ASSERT_NE(writer->segments()[0].path, cloned_writer->segments()[0].path);
 
     // Verify row counts
     ASSERT_EQ(k0.size(), writer->num_rows());
@@ -607,7 +609,7 @@ TEST_P(LakeTabletWriterTest, test_merge_other_writers) {
     ASSERT_EQ(expected_data_size, main_writer->data_size());
 
     // Verify file count (1 from main + 3 from other writers)
-    ASSERT_EQ(4, main_writer->files().size());
+    ASSERT_EQ(4, main_writer->segments().size());
 
     main_writer->close();
     for (auto& writer : other_writers) {
