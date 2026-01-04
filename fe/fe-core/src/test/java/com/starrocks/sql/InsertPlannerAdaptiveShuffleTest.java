@@ -33,6 +33,8 @@ import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.InPredicate;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.StringLiteral;
+import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
+import com.starrocks.sql.optimizer.statistics.StatisticStorage;
 import mockit.Deencapsulation;
 import mockit.Delegate;
 import mockit.Expectations;
@@ -221,6 +223,97 @@ public class InsertPlannerAdaptiveShuffleTest {
         long partitionCount = Deencapsulation.invoke(insertPlanner, "estimatePartitionCountForInsert",
                 insertStmt, icebergTable);
         assertEquals(Long.MAX_VALUE, partitionCount);
+    }
+
+    /**
+     * Test partition estimation falls back to column statistics when partition names are unavailable.
+     */
+    @Test
+    public void testPartitionCountFromStatistics(@Mocked GlobalStateMgr gsm,
+                                                 @Mocked MetadataMgr metadataMgr,
+                                                 @Mocked IcebergTable icebergTable,
+                                                 @Mocked InsertStmt insertStmt,
+                                                 @Mocked SessionVariable sessionVariable,
+                                                 @Mocked QueryStatement queryStatement,
+                                                 @Mocked SelectRelation selectRelation,
+                                                 @Mocked StatisticStorage statisticStorage) {
+        new Expectations() {{
+            GlobalStateMgr.getCurrentState();
+            result = gsm;
+            minTimes = 0;
+
+            gsm.getMetadataMgr();
+            result = metadataMgr;
+            minTimes = 0;
+
+            metadataMgr.listPartitionNames(anyString, anyString, anyString,
+                    withInstanceOf(ConnectorMetadatRequestContext.class));
+            result = new ArrayList<String>();
+            minTimes = 0;
+
+            gsm.getStatisticStorage();
+            result = statisticStorage;
+            minTimes = 0;
+
+            statisticStorage.getColumnStatistic(icebergTable, "dt");
+            result = ColumnStatistic.buildFrom(ColumnStatistic.unknown()).setDistinctValuesCount(10).build();
+            minTimes = 0;
+
+            statisticStorage.getColumnStatistic(icebergTable, "country");
+            result = ColumnStatistic.buildFrom(ColumnStatistic.unknown()).setDistinctValuesCount(5).build();
+            minTimes = 0;
+
+            icebergTable.getPartitionColumns();
+            result = Lists.newArrayList(
+                    new Column("dt", Type.DATE),
+                    new Column("country", Type.VARCHAR)
+            );
+            minTimes = 0;
+
+            icebergTable.getCatalogName();
+            result = "test_catalog";
+            minTimes = 0;
+
+            icebergTable.getDbName();
+            result = "test_db";
+            minTimes = 0;
+
+            icebergTable.getTableName();
+            result = "test_table";
+            minTimes = 0;
+
+            insertStmt.isStaticKeyPartitionInsert();
+            result = false;
+            minTimes = 0;
+
+            insertStmt.getQueryStatement();
+            result = queryStatement;
+            minTimes = 0;
+
+            queryStatement.getQueryRelation();
+            result = selectRelation;
+            minTimes = 0;
+
+            selectRelation.hasWhereClause();
+            result = false;
+            minTimes = 0;
+
+            sessionVariable.getIcebergSinkShufflePartitionThreshold();
+            result = 100L;
+            minTimes = 0;
+
+            sessionVariable.getIcebergSinkShufflePartitionNodeRatio();
+            result = 2.0;
+            minTimes = 0;
+
+            gsm.getNodeMgr().getClusterInfo().getAliveBackendNumber();
+            result = 5;
+            minTimes = 0;
+        }};
+
+        long partitionCount = Deencapsulation.invoke(insertPlanner, "estimatePartitionCountForInsert",
+                insertStmt, icebergTable);
+        assertEquals(50L, partitionCount);
     }
 
     /**
