@@ -62,7 +62,7 @@ SELECT
     'without_default',
     data,
     data IS NULL
-FROM without_default;
+FROM without_default order by 1;
 
 -- Test: Empty string handling
 CREATE TABLE empty_string_test (
@@ -187,6 +187,69 @@ SELECT
     get_json_string(profile, '$.tags[0]') AS first_tag
 FROM extended_column_basic
 ORDER BY id;
+
+-- ====================================================================================
+-- SECTION 4.1: Extended subcolumn inherits DEFAULT from JSON parent (type coverage)
+-- ====================================================================================
+
+CREATE TABLE extended_default_inherit_types (
+    k1 INT
+) DUPLICATE KEY(k1)
+DISTRIBUTED BY HASH(k1) BUCKETS 1
+PROPERTIES("replication_num" = "1", "fast_schema_evolution" = "true");
+
+-- Old rows before ALTER (missing json_col in old segments)
+INSERT INTO extended_default_inherit_types SELECT 1;
+
+ALTER TABLE extended_default_inherit_types
+ADD COLUMN json_col JSON DEFAULT '{
+  "i_str": "222",
+  "i_num": 223,
+  "b_str": "true",
+  "b_bool": true,
+  "d_str": "1.25",
+  "d_num": 2.5,
+  "s": "hello",
+  "nullv": null,
+  "obj": {"x": "7"},
+  "arr": ["9"]
+}';
+
+-- Old row: should read inherited defaults from JSON parent
+SELECT
+  k1,
+  get_json_int(json_col, '$.i_str') AS i_str,
+  get_json_int(json_col, '$.i_num') AS i_num,
+  get_json_bool(json_col, '$.b_str') AS b_str,
+  get_json_bool(json_col, '$.b_bool') AS b_bool,
+  get_json_double(json_col, '$.d_str') AS d_str,
+  get_json_double(json_col, '$.d_num') AS d_num,
+  get_json_string(json_col, '$.s') AS s,
+  get_json_int(json_col, '$.nullv') AS nullv_int,
+  get_json_int(json_col, '$.obj') AS obj_int,
+  get_json_int(json_col, '$.arr[0]') AS arr0_int
+FROM extended_default_inherit_types
+ORDER BY k1;
+
+INSERT INTO extended_default_inherit_types(k1) SELECT 2;
+
+INSERT INTO extended_default_inherit_types
+SELECT 3, '{"i_str":"333","i_num":334,"b_str":"false","b_bool":false,"d_str":"3.75","d_num":4.5,"s":"world","nullv":null,"obj":{"x":"8"},"arr":["10"]}';
+
+SELECT
+  k1,
+  get_json_int(json_col, '$.i_str') AS i_str,
+  get_json_int(json_col, '$.i_num') AS i_num,
+  get_json_bool(json_col, '$.b_str') AS b_str,
+  get_json_bool(json_col, '$.b_bool') AS b_bool,
+  get_json_double(json_col, '$.d_str') AS d_str,
+  get_json_double(json_col, '$.d_num') AS d_num,
+  get_json_string(json_col, '$.s') AS s,
+  get_json_int(json_col, '$.nullv') AS nullv_int,
+  get_json_int(json_col, '$.obj') AS obj_int,
+  get_json_int(json_col, '$.arr[0]') AS arr0_int
+FROM extended_default_inherit_types
+ORDER BY k1;
 
 -- ====================================================================================
 -- SECTION 5: Extended Column - Comprehensive Scenarios
