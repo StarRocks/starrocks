@@ -413,10 +413,6 @@ public class MetadataMgr {
             catalogName = context.getCurrentCatalog();
         }
 
-        if (CatalogMgr.isExternalCatalog(catalogName)) {
-            throw new DdlException("TRUNCATE TABLE is not supported for external catalog tables");
-        }
-
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
         if (connectorMetadata.isPresent()) {
             connectorMetadata.get().truncateTable(stmt, context);
