@@ -59,15 +59,21 @@ Status BuiltinInvertedIndexIterator::_wildcard_query(const Slice* search_query, 
         return Status::InternalError("invalid wildcard query for builtin inverted index");
     }
 
+    if (wildcard_pos == search_query->get_size() - 1 && search_query->get_size() == 1) {
+        // It means all the rows are matched.
+        bitmap->addRange(0, _segment_rows);
+        return Status::OK();
+    }
+
     if (wildcard_pos == search_query->get_size() - 1) {
         SCOPED_RAW_TIMER(&_stats->gin_prefix_filter_ns);
         // optimize for pure prefix query
         Slice prefix_s(search_query->data, wildcard_pos);
         std::string next_prefix = get_next_prefix(prefix_s);
-        Slice next_prefix_s(next_prefix);
 
         rowid_t lower_rowid = 0;
-        rowid_t upper_rowid = _bitmap_itr->has_null_bitmap() ? _bitmap_itr->bitmap_nums() - 1 : _bitmap_itr->bitmap_nums();
+        rowid_t upper_rowid =
+                _bitmap_itr->has_null_bitmap() ? _bitmap_itr->bitmap_nums() - 1 : _bitmap_itr->bitmap_nums();
         std::pair<rowid_t, std::string> lower = std::make_pair(lower_rowid, Slice::min_value().to_string());
         std::pair<rowid_t, std::string> upper = std::make_pair(upper_rowid, Slice::max_value().to_string());
 
@@ -90,7 +96,10 @@ Status BuiltinInvertedIndexIterator::_wildcard_query(const Slice* search_query, 
         };
 
         ASSIGN_OR_RETURN(lower, seek(prefix_s));
-        ASSIGN_OR_RETURN(upper, seek(next_prefix_s));
+        if (!next_prefix.empty()) {
+            Slice next_prefix_s(next_prefix);
+            ASSIGN_OR_RETURN(upper, seek(next_prefix_s));
+        }
 
         if (lower.first >= upper.first) {
             // prefix not found

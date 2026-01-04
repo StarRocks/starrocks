@@ -182,7 +182,7 @@ public class IndexAnalyzer {
                 throw new SemanticException("Clucene inverted index does not support shared data mode");
             }
         } else if (RunMode.isSharedDataMode()) {
-            properties.put(impLibKey, BUILTIN.name().toLowerCase(Locale.ROOT));
+            properties.put(INVERTED_INDEX_IMP_LIB_KEY, BUILTIN.name().toLowerCase(Locale.ROOT));
         }
 
         String noMatchParamKey = properties.keySet().stream()
@@ -230,6 +230,10 @@ public class IndexAnalyzer {
 
         if (!StringUtils.isNumeric(gramNum)) {
             throw new SemanticException("INVERTED index dict gram num " + gramNum + " is a invalid number.");
+        }
+        int realGramNum = Integer.parseInt(gramNum);
+        if (realGramNum <= 0) {
+            throw new SemanticException("INVERTED index dict gram num " + gramNum + " should be greater than zero.");
         }
 
         String impValue = properties.get(INVERTED_INDEX_IMP_LIB_KEY);

@@ -26,8 +26,11 @@ std::string get_next_prefix(const Slice& prefix_s);
 class BuiltinInvertedIndexIterator final : public InvertedIndexIterator {
 public:
     BuiltinInvertedIndexIterator(const std::shared_ptr<TabletIndex>& index_meta, InvertedReader* reader,
-                                 OlapReaderStatistics* stats, std::unique_ptr<BitmapIndexIterator>& bitmap_itr)
-            : InvertedIndexIterator(index_meta, reader, stats), _bitmap_itr(std::move(bitmap_itr)) {}
+                                 OlapReaderStatistics* stats, std::unique_ptr<BitmapIndexIterator>& bitmap_itr,
+                                 const size_t& segment_rows)
+            : InvertedIndexIterator(index_meta, reader, stats),
+              _bitmap_itr(std::move(bitmap_itr)),
+              _segment_rows(segment_rows) {}
 
     ~BuiltinInvertedIndexIterator() override = default;
 
@@ -42,6 +45,7 @@ private:
     Status _wildcard_query(const Slice* search_query, roaring::Roaring* bit_map);
 
     std::unique_ptr<BitmapIndexIterator> _bitmap_itr;
+    size_t _segment_rows;
 };
 
 } // namespace starrocks
