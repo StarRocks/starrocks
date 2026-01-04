@@ -19,6 +19,7 @@
 
 #include "common/http/content_type.h"
 #include "csv_escape.h"
+#include "exec/hdfs_scanner_text.h"
 #include "formats/utils.h"
 #include "output_stream_file.h"
 #include "runtime/current_thread.h"
@@ -54,6 +55,17 @@ Status CSVFileWriter::init() {
             return Status::InternalError(fmt::format("No CSV converter for type: {}", type.debug_string()));
         }
         _column_converters.emplace_back(std::move(nullable_conv), csv::get_converter(type, false));
+    }
+    _converter_options = std::make_shared<csv::Converter::Options>();
+    if (_writer_options->is_hive) {
+        _converter_options->is_hive = true;
+        _converter_options->array_format_type = csv::ArrayFormatType::kHive;
+        _converter_options->array_hive_collection_delimiter = _writer_options->collection_delim.empty()
+                                                                      ? DEFAULT_COLLECTION_DELIM.front()
+                                                                      : _writer_options->collection_delim.front();
+        _converter_options->array_hive_mapkey_delimiter = _writer_options->mapkey_delim.empty()
+                                                                  ? DEFAULT_MAPKEY_DELIM.front()
+                                                                  : _writer_options->mapkey_delim.front();
     }
     return Status::OK();
 }
@@ -119,7 +131,7 @@ Status CSVFileWriter::write(Chunk* chunk) {
             } else {
                 converter = _column_converters[c].second.get();
             }
-            RETURN_IF_ERROR(converter->write_string(_output_stream.get(), *columns[c], r, {}));
+            RETURN_IF_ERROR(converter->write_string(_output_stream.get(), *columns[c], r, *_converter_options));
             if (c + 1 != columns.size()) {
                 RETURN_IF_ERROR(_output_stream->write(_writer_options->column_terminated_by));
             }
@@ -177,6 +189,15 @@ Status CSVFileWriterFactory::init() {
     }
     if (_options.contains(CSVWriterOptions::INCLUDE_HEADER)) {
         _parsed_options->include_header = boost::iequals(_options[CSVWriterOptions::INCLUDE_HEADER], "true");
+    }
+    if (_options.contains(CSVWriterOptions::COLLECTION_DELIM)) {
+        _parsed_options->collection_delim = _options[CSVWriterOptions::COLLECTION_DELIM];
+    }
+    if (_options.contains(CSVWriterOptions::MAPKEY_DELIM)) {
+        _parsed_options->mapkey_delim = _options[CSVWriterOptions::MAPKEY_DELIM];
+    }
+    if (_options.contains(CSVWriterOptions::IS_HIVE)) {
+        _parsed_options->is_hive = _options[CSVWriterOptions::IS_HIVE] == "true";
     }
     return Status::OK();
 }
