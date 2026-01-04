@@ -317,7 +317,7 @@ Status LakePersistentIndexParallelCompactMgr::update_max_threads(int max_threads
 int32_t LakePersistentIndexParallelCompactMgr::calc_max_threads() const {
     int32_t max_threads = config::pk_index_parallel_compaction_threadpool_max_threads;
     if (max_threads <= 0) {
-        max_threads = CpuInfo::num_cores();
+        max_threads = CpuInfo::num_cores() / 2;
     }
     return std::max(1, max_threads);
 }

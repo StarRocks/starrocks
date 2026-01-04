@@ -2299,7 +2299,7 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: The maximum number of threads in the thread pool for Primary Key index MemTable flush in a shared-data cluster. `0` means automatically set to the number of CPU cores.
+- Description: The maximum number of threads in the thread pool for Primary Key index MemTable flush in a shared-data cluster. `0` means automatically set to half of the number of CPU cores.
 - Introduced in: -
 
 ##### pk_index_memtable_max_count
@@ -2335,7 +2335,7 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: The maximum number of threads in the thread pool for cloud native Primary Key index parallel Compaction in a shared-data cluster. `0` means automatically set to the number of CPU cores.
+- Description: The maximum number of threads in the thread pool for cloud native Primary Key index parallel Compaction in a shared-data cluster. `0` means automatically set to half of the number of CPU cores.
 - Introduced in: -
 
 ##### pk_index_parallel_execution_min_rows
@@ -2353,7 +2353,7 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: The maximum number of threads in the thread pool for Primary Key index parallel execution in a shared-data cluster. `0` means adaptive configuration.
+- Description: The maximum number of threads in the thread pool for Primary Key index parallel execution in a shared-data cluster. `0` means automatically set to half of the number of CPU cores.
 - Introduced in: -
 
 ##### pk_index_size_tiered_level_multiplier

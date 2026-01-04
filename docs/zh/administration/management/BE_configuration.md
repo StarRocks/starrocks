@@ -1797,7 +1797,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 类型：Int
 - 单位：-
 - 是否动态：是
-- 描述：存算分离集群中，主键索引 MemTable 刷盘的线程池最大线程数。0 表示自动设置为 CPU 核数。
+- 描述：存算分离集群中，主键索引 MemTable 刷盘的线程池最大线程数。0 表示自动设置为 CPU 核数的一半。
 - 引入版本：-
 
 ##### pk_index_memtable_max_count
@@ -1833,7 +1833,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 类型：Int
 - 单位：-
 - 是否动态：是
-- 描述：存算分离集群中，主键索引并行 Compaction 的线程池最大线程数。0 表示自动设置为 CPU 核数。
+- 描述：存算分离集群中，主键索引并行 Compaction 的线程池最大线程数。0 表示自动设置为 CPU 核数的一半。
 - 引入版本：-
 
 ##### pk_index_parallel_execution_min_rows
@@ -1851,7 +1851,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 类型：Int
 - 单位：-
 - 是否动态：是
-- 描述：存算分离集群中，主键索引并行执行的线程池最大线程数。0 表示自动配置。
+- 描述：存算分离集群中，主键索引并行执行的线程池最大线程数。0 表示自动设置为 CPU 核数的一半。
 - 引入版本：-
 
 ##### pk_index_size_tiered_level_multiplier
