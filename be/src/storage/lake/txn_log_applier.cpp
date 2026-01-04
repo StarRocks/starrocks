@@ -489,7 +489,20 @@ private:
 
                 _metadata->set_next_rowset_id(copied_tablet_meta.next_rowset_id());
                 _metadata->set_cumulative_point(0);
-                old_rowsets.Swap(_metadata->mutable_compaction_inputs());
+
+                // In lake replication scenario, we need to carefully handle compaction_inputs.
+                // The new rowsets may still reference the same rowset id as old rowsets (incremental sync).
+                // Only add rowsets whose id is NOT present in new rowsets to compaction_inputs.
+                // This ensures that files still referenced by new rowsets won't be deleted by vacuum.
+                std::unordered_set<uint32_t> new_rowset_ids;
+                for (const auto& rowset : _metadata->rowsets()) {
+                    new_rowset_ids.insert(rowset.id());
+                }
+                for (auto& old_rowset : old_rowsets) {
+                    if (new_rowset_ids.count(old_rowset.id()) == 0) {
+                        _metadata->mutable_compaction_inputs()->Add(std::move(old_rowset));
+                    }
+                }
 
                 _tablet.update_mgr()->unload_primary_index(_tablet.id());
 
@@ -937,7 +950,20 @@ private:
 
                 _metadata->set_next_rowset_id(copied_tablet_meta.next_rowset_id());
                 _metadata->set_cumulative_point(0);
-                old_rowsets.Swap(_metadata->mutable_compaction_inputs());
+
+                // In lake replication scenario, we need to carefully handle compaction_inputs.
+                // The new rowsets may still reference the same rowset id as old rowsets (incremental sync).
+                // Only add rowsets whose id is NOT present in new rowsets to compaction_inputs.
+                // This ensures that files still referenced by new rowsets won't be deleted by vacuum.
+                std::unordered_set<uint32_t> new_rowset_ids;
+                for (const auto& rowset : _metadata->rowsets()) {
+                    new_rowset_ids.insert(rowset.id());
+                }
+                for (auto& old_rowset : old_rowsets) {
+                    if (new_rowset_ids.count(old_rowset.id()) == 0) {
+                        _metadata->mutable_compaction_inputs()->Add(std::move(old_rowset));
+                    }
+                }
 
                 VLOG(3) << "Apply replication log with tablet metadata provided. tablet_id: " << _tablet.id()
                         << ", base_version: " << base_version << ", new_version: " << _new_version
