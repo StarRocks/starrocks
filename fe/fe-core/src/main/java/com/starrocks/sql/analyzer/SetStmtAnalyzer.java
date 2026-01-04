@@ -28,6 +28,7 @@ import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.CompressionUtils;
 import com.starrocks.common.util.ParseUtil;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.connector.ConnectorSinkShuffleMode;
 import com.starrocks.connector.PlanMode;
 import com.starrocks.datacache.DataCachePopulateMode;
 import com.starrocks.monitor.unit.TimeValue;
@@ -345,6 +346,11 @@ public class SetStmtAnalyzer {
         // check populate datacache mode
         if (variable.equalsIgnoreCase(SessionVariable.POPULATE_DATACACHE_MODE)) {
             DataCachePopulateMode.fromName(resolvedExpression.getStringValue());
+        }
+
+        // check connector sink shuffle mode
+        if (variable.equalsIgnoreCase(SessionVariable.CONNECTOR_SINK_SHUFFLE_MODE)) {
+            ConnectorSinkShuffleMode.fromName(resolvedExpression.getStringValue());
         }
 
         // count_distinct_implementation

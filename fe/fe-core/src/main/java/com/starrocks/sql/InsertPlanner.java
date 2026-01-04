@@ -39,6 +39,7 @@ import com.starrocks.common.StarRocksException;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.connector.ConnectorMetadatRequestContext;
+import com.starrocks.connector.ConnectorSinkShuffleMode;
 import com.starrocks.load.Load;
 import com.starrocks.planner.BlackHoleTableSink;
 import com.starrocks.planner.DataSink;
@@ -72,9 +73,13 @@ import com.starrocks.sql.ast.SelectListItem;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.ValuesRelation;
+import com.starrocks.sql.ast.expression.BinaryPredicate;
+import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.ast.expression.CastExpr;
+import com.starrocks.sql.ast.expression.CompoundPredicate;
 import com.starrocks.sql.ast.expression.DefaultValueExpr;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.InPredicate;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.NullLiteral;
 import com.starrocks.sql.ast.expression.SlotRef;
@@ -928,26 +933,28 @@ public class InsertPlanner {
         Table targetTable = insertStmt.getTargetTable();
         if (targetTable instanceof IcebergTable) {
             IcebergTable icebergTable = (IcebergTable) targetTable;
-            if (session.isEnableIcebergSinkGlobalShuffle() && (!icebergTable.getPartitionColumns().isEmpty())) {
-                List<Integer> partitionColumnIDs = icebergTable.partitionColumnIndexes().stream()
-                        .map(x -> outputColumns.get(x).getId()).collect(Collectors.toList());
-                HashDistributionDesc desc = new HashDistributionDesc(partitionColumnIDs,
-                        HashDistributionDesc.SourceType.SHUFFLE_AGG);
-                return new PhysicalPropertySet(DistributionProperty
-                        .createProperty(DistributionSpec.createHashDistributionSpec(desc)));
-            }
+            ConnectorSinkShuffleMode shuffleMode = session.getConnectorSinkShuffleMode();
 
-            // Adaptive global shuffle based on partition count and backend count
-            if (session.isEnableIcebergSinkAdaptiveShuffle() && (!icebergTable.getPartitionColumns().isEmpty())) {
-                boolean shouldEnableGlobalShuffle = shouldEnableAdaptiveGlobalShuffle(
-                        insertStmt, icebergTable, session);
-                if (shouldEnableGlobalShuffle) {
+            // For shuffle mode except NEVER, only apply shuffle to partitioned tables
+            if (shuffleMode != ConnectorSinkShuffleMode.NEVER && !icebergTable.getPartitionColumns().isEmpty()) {
+
+                // Handle FORCE mode - always enable global shuffle
+                // We also handle the old session variable `enable_iceberg_sink_global_shuffle` for compatibility.
+                if (shuffleMode == ConnectorSinkShuffleMode.FORCE) {
                     List<Integer> partitionColumnIDs = icebergTable.partitionColumnIndexes().stream()
                             .map(x -> outputColumns.get(x).getId()).collect(Collectors.toList());
-                    HashDistributionDesc desc = new HashDistributionDesc(partitionColumnIDs,
-                            HashDistributionDesc.SourceType.SHUFFLE_AGG);
-                    return new PhysicalPropertySet(DistributionProperty
-                            .createProperty(DistributionSpec.createHashDistributionSpec(desc)));
+                    return createShufflePropertyFromPartitions(partitionColumnIDs);
+                }
+
+                // Handle AUTO mode - use adaptive logic based on partition count and backend count
+                if (shuffleMode == ConnectorSinkShuffleMode.AUTO) {
+                    boolean shouldEnableGlobalShuffle = shouldEnableAdaptiveGlobalShuffle(
+                            insertStmt, icebergTable, session);
+                    if (shouldEnableGlobalShuffle) {
+                        List<Integer> partitionColumnIDs = icebergTable.partitionColumnIndexes().stream()
+                                .map(x -> outputColumns.get(x).getId()).collect(Collectors.toList());
+                        return createShufflePropertyFromPartitions(partitionColumnIDs);
+                    }
                 }
             }
         }
@@ -967,10 +974,7 @@ public class InsertPlanner {
                 } else { // use hash shuffle for partitioned table
                     List<Integer> partitionColumnIDs = table.getPartitionColumnIDs().stream()
                             .map(x -> outputColumns.get(x).getId()).collect(Collectors.toList());
-                    HashDistributionDesc desc = new HashDistributionDesc(partitionColumnIDs,
-                            HashDistributionDesc.SourceType.SHUFFLE_AGG);
-                    return new PhysicalPropertySet(DistributionProperty
-                            .createProperty(DistributionSpec.createHashDistributionSpec(desc)));
+                    return createShufflePropertyFromPartitions(partitionColumnIDs);
                 }
             }
 
@@ -1021,6 +1025,13 @@ public class InsertPlanner {
 
         shuffleServiceEnable = true;
 
+        return new PhysicalPropertySet(property);
+    }
+
+    private PhysicalPropertySet createShufflePropertyFromPartitions(List<Integer> partitionColumnIDs) {
+        HashDistributionDesc desc = new HashDistributionDesc(partitionColumnIDs, HashDistributionDesc.SourceType.SHUFFLE_AGG);
+        DistributionSpec spec = DistributionSpec.createHashDistributionSpec(desc);
+        DistributionProperty property = DistributionProperty.createProperty(spec);
         return new PhysicalPropertySet(property);
     }
 
@@ -1157,9 +1168,9 @@ public class InsertPlanner {
         // Estimate the number of partitions that may be involved in this insert
         long estimatedPartitionCount = estimatePartitionCountForInsert(insertStmt, icebergTable);
 
-        // Get configured thresholds
-        long partitionCountThreshold = session.getIcebergSinkShufflePartitionThreshold();
-        double partitionCountNodeRatio = session.getIcebergSinkShufflePartitionNodeRatio();
+        // Get configured thresholds from connector variables
+        long partitionCountThreshold = session.getConnectorSinkShufflePartitionThreshold();
+        double partitionCountNodeRatio = session.getConnectorSinkShufflePartitionNodeRatio();
 
         // Decision logic:
         // 1. estimated partitions >= backend count * ratio coefficient
@@ -1168,7 +1179,7 @@ public class InsertPlanner {
                 || estimatedPartitionCount >= partitionCountThreshold;
 
         if (shouldEnable && LOG.isDebugEnabled()) {
-            LOG.debug("Enable adaptive global shuffle for iceberg table {}.{}: " +
+            LOG.debug("Enable adaptive global shuffle for connector table {}.{}: " +
                             "estimated partitions={}, alive backends={}, threshold={}, ratio={}",
                     icebergTable.getCatalogDBName(), icebergTable.getCatalogTableName(),
                     estimatedPartitionCount, aliveBackendNum,
@@ -1257,7 +1268,7 @@ public class InsertPlanner {
             return existingPartitionCount > 0 ? existingPartitionCount : -1;
         }
 
-        com.starrocks.sql.ast.expression.Expr predicate = selectRelation.getPredicate();
+        Expr predicate = selectRelation.getPredicate();
         if (predicate == null) {
             return existingPartitionCount > 0 ? existingPartitionCount : -1;
         }
@@ -1362,11 +1373,11 @@ public class InsertPlanner {
             this.existingPartitionCount = existingPartitionCount;
         }
 
-        Long estimate(com.starrocks.sql.ast.expression.Expr predicate) {
+        Long estimate(Expr predicate) {
             // Split compound predicate into conjuncts
-            List<com.starrocks.sql.ast.expression.Expr> conjuncts = extractConjuncts(predicate);
+            List<Expr> conjuncts = extractConjuncts(predicate);
 
-            for (com.starrocks.sql.ast.expression.Expr conjunct : conjuncts) {
+            for (Expr conjunct : conjuncts) {
                 if (!processPredicate(conjunct)) {
                     // If we encounter a predicate we can't handle, return null to indicate
                     // we cannot reliably estimate
@@ -1417,18 +1428,17 @@ public class InsertPlanner {
             return estimate;
         }
 
-        private List<com.starrocks.sql.ast.expression.Expr> extractConjuncts(com.starrocks.sql.ast.expression.Expr expr) {
-            List<com.starrocks.sql.ast.expression.Expr> result = new ArrayList<>();
+        private List<Expr> extractConjuncts(Expr expr) {
+            List<Expr> result = new ArrayList<>();
             extractConjunctsRecursive(expr, result);
             return result;
         }
 
-        private void extractConjunctsRecursive(com.starrocks.sql.ast.expression.Expr expr,
-                                               List<com.starrocks.sql.ast.expression.Expr> result) {
-            if (expr instanceof com.starrocks.sql.ast.expression.CompoundPredicate) {
-                com.starrocks.sql.ast.expression.CompoundPredicate compound =
-                        (com.starrocks.sql.ast.expression.CompoundPredicate) expr;
-                if (compound.getOp() == com.starrocks.sql.ast.expression.CompoundPredicate.Operator.AND) {
+        private void extractConjunctsRecursive(Expr expr,
+                                               List<Expr> result) {
+            if (expr instanceof CompoundPredicate) {
+                CompoundPredicate compound = (CompoundPredicate) expr;
+                if (compound.getOp() == CompoundPredicate.Operator.AND) {
                     extractConjunctsRecursive(expr.getChild(0), result);
                     extractConjunctsRecursive(expr.getChild(1), result);
                     return;
@@ -1437,15 +1447,15 @@ public class InsertPlanner {
             result.add(expr);
         }
 
-        private boolean processPredicate(com.starrocks.sql.ast.expression.Expr predicate) {
+        private boolean processPredicate(Expr predicate) {
             // Handle BinaryPredicate (equality, range comparisons)
-            if (predicate instanceof com.starrocks.sql.ast.expression.BinaryPredicate) {
-                return processBinaryPredicate((com.starrocks.sql.ast.expression.BinaryPredicate) predicate);
+            if (predicate instanceof BinaryPredicate) {
+                return processBinaryPredicate((BinaryPredicate) predicate);
             }
 
             // Handle InPredicate
-            if (predicate instanceof com.starrocks.sql.ast.expression.InPredicate) {
-                return processInPredicate((com.starrocks.sql.ast.expression.InPredicate) predicate);
+            if (predicate instanceof InPredicate) {
+                return processInPredicate((InPredicate) predicate);
             }
 
             // For other predicate types we can't analyze (like LIKE, range predicates),
@@ -1453,17 +1463,17 @@ public class InsertPlanner {
             return true;
         }
 
-        private boolean processBinaryPredicate(com.starrocks.sql.ast.expression.BinaryPredicate binary) {
+        private boolean processBinaryPredicate(BinaryPredicate binary) {
             // Check if this is an equality predicate
-            boolean isEquality = binary.getOp() == com.starrocks.sql.ast.expression.BinaryType.EQ;
+            boolean isEquality = binary.getOp() == BinaryType.EQ;
             boolean isRange = !isEquality && (
-                    binary.getOp() == com.starrocks.sql.ast.expression.BinaryType.LT ||
-                    binary.getOp() == com.starrocks.sql.ast.expression.BinaryType.LE ||
-                    binary.getOp() == com.starrocks.sql.ast.expression.BinaryType.GT ||
-                    binary.getOp() == com.starrocks.sql.ast.expression.BinaryType.GE);
+                    binary.getOp() == BinaryType.LT ||
+                    binary.getOp() == BinaryType.LE ||
+                    binary.getOp() == BinaryType.GT ||
+                    binary.getOp() == BinaryType.GE);
 
             // Check if one side is a partition column reference
-            com.starrocks.sql.ast.expression.SlotRef slotRef = extractSlotRef(binary.getChild(0));
+            SlotRef slotRef = extractSlotRef(binary.getChild(0));
             if (slotRef == null) {
                 slotRef = extractSlotRef(binary.getChild(1));
             }
@@ -1497,7 +1507,7 @@ public class InsertPlanner {
             return true;
         }
 
-        private boolean processInPredicate(com.starrocks.sql.ast.expression.InPredicate inPred) {
+        private boolean processInPredicate(InPredicate inPred) {
             // Only handle IN (not NOT IN) with constant values
             if (inPred.isNotIn()) {
                 return true; // NOT IN doesn't help estimate partition count
@@ -1508,7 +1518,7 @@ public class InsertPlanner {
             }
 
             // Check if the left side is a partition column reference
-            com.starrocks.sql.ast.expression.SlotRef slotRef = extractSlotRef(inPred.getChild(0));
+            SlotRef slotRef = extractSlotRef(inPred.getChild(0));
             if (slotRef == null) {
                 return true;
             }
@@ -1524,17 +1534,17 @@ public class InsertPlanner {
             return true;
         }
 
-        private com.starrocks.sql.ast.expression.SlotRef extractSlotRef(com.starrocks.sql.ast.expression.Expr expr) {
+        private SlotRef extractSlotRef(Expr expr) {
             // Direct SlotRef
-            if (expr instanceof com.starrocks.sql.ast.expression.SlotRef) {
-                return (com.starrocks.sql.ast.expression.SlotRef) expr;
+            if (expr instanceof SlotRef) {
+                return (SlotRef) expr;
             }
 
             // Unwrap implicit cast
-            if (expr instanceof com.starrocks.sql.ast.expression.CastExpr) {
-                com.starrocks.sql.ast.expression.CastExpr cast = (com.starrocks.sql.ast.expression.CastExpr) expr;
-                if (cast.isImplicit() && cast.getChild(0) instanceof com.starrocks.sql.ast.expression.SlotRef) {
-                    return (com.starrocks.sql.ast.expression.SlotRef) cast.getChild(0);
+            if (expr instanceof CastExpr) {
+                CastExpr cast = (CastExpr) expr;
+                if (cast.isImplicit() && cast.getChild(0) instanceof SlotRef) {
+                    return (SlotRef) cast.getChild(0);
                 }
             }
 

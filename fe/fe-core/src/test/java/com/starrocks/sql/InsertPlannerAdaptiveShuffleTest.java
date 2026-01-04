@@ -304,11 +304,11 @@ public class InsertPlannerAdaptiveShuffleTest {
                 result = false;
                 minTimes = 0;
 
-                sessionVariable.getIcebergSinkShufflePartitionThreshold();
+                sessionVariable.getConnectorSinkShufflePartitionThreshold();
                 result = 100L;
                 minTimes = 0;
 
-                sessionVariable.getIcebergSinkShufflePartitionNodeRatio();
+                sessionVariable.getConnectorSinkShufflePartitionNodeRatio();
                 result = 2.0;
                 minTimes = 0;
 
@@ -448,11 +448,11 @@ public class InsertPlannerAdaptiveShuffleTest {
                 minTimes = 0;
 
                 // SessionVariable setup
-                sessionVariable.getIcebergSinkShufflePartitionThreshold();
+                sessionVariable.getConnectorSinkShufflePartitionThreshold();
                 result = threshold;
                 minTimes = 0;
 
-                sessionVariable.getIcebergSinkShufflePartitionNodeRatio();
+                sessionVariable.getConnectorSinkShufflePartitionNodeRatio();
                 result = ratio;
                 minTimes = 0;
             }
