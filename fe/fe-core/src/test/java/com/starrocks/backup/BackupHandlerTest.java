@@ -76,11 +76,7 @@ import com.starrocks.sql.ast.CreateRepositoryStmt;
 import com.starrocks.sql.ast.DropRepositoryStmt;
 import com.starrocks.sql.ast.FunctionRef;
 import com.starrocks.sql.ast.RestoreStmt;
-<<<<<<< HEAD
-=======
-import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.common.AuditEncryptionChecker;
->>>>>>> f8eaa55cb9 ([BugFix] redact credentials for create repository (#67367))
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.task.DirMoveTask;
 import com.starrocks.task.DownloadTask;
