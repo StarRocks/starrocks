@@ -103,6 +103,7 @@ import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 import com.starrocks.sql.optimizer.rewrite.scalar.FoldConstantsRule;
 import com.starrocks.sql.optimizer.rewrite.scalar.ScalarOperatorRewriteRule;
 import com.starrocks.sql.optimizer.statistics.ColumnDict;
+import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
 import com.starrocks.sql.optimizer.transformer.ExpressionMapping;
 import com.starrocks.sql.optimizer.transformer.LogicalPlan;
@@ -138,6 +139,8 @@ import static com.starrocks.sql.optimizer.rule.mv.MVUtils.MATERIALIZED_VIEW_NAME
 public class InsertPlanner {
     // Only for unit test
     public static boolean enableSingleReplicationShuffle = false;
+    private static final double PARTITION_RANGE_SELECTIVITY = 0.1;
+    private static final long PARTITION_ESTIMATE_CAP = 1_000_000_000L;
     private boolean shuffleServiceEnable = false;
     private boolean forceReplicatedStorage = false;
     private boolean useOptimisticLock;
@@ -1180,6 +1183,7 @@ public class InsertPlanner {
      * @return estimated partition count
      */
     private long estimatePartitionCountForInsert(InsertStmt insertStmt, IcebergTable icebergTable) {
+        Map<String, Double> partitionNdv = getPartitionColumnNdv(icebergTable);
         // 1. First try to get current partition count from table metadata
         try {
             List<String> partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr()
@@ -1201,7 +1205,8 @@ public class InsertPlanner {
                 }
 
                 // 3. If there's partition predicate filtering, try to estimate involved partitions
-                long filteredEstimate = estimatePartitionsFromPredicates(insertStmt, icebergTable);
+                long filteredEstimate = estimatePartitionsFromPredicates(insertStmt, icebergTable,
+                        existingPartitionCount, partitionNdv);
                 if (filteredEstimate > 0 && filteredEstimate < existingPartitionCount) {
                     return filteredEstimate;
                 }
@@ -1214,8 +1219,12 @@ public class InsertPlanner {
                     icebergTable.getDbName(), icebergTable.getTableName(), e.getMessage());
         }
 
+        long statsEstimate = estimatePartitionCountFromStatistics(icebergTable, partitionNdv);
+        if (statsEstimate > 0) {
+            return statsEstimate;
+        }
+
         // 5. When unable to get partition info, return a large default value to enable shuffle
-        // Or could estimate based on table statistics
         return Long.MAX_VALUE;
     }
 
@@ -1226,7 +1235,9 @@ public class InsertPlanner {
      * @param icebergTable target Iceberg table
      * @return estimated partition count, -1 means unable to estimate
      */
-    private long estimatePartitionsFromPredicates(InsertStmt insertStmt, IcebergTable icebergTable) {
+    private long estimatePartitionsFromPredicates(InsertStmt insertStmt, IcebergTable icebergTable,
+                                                 long existingPartitionCount,
+                                                 Map<String, Double> partitionNdv) {
         QueryRelation queryRelation = insertStmt.getQueryStatement().getQueryRelation();
 
         // Only support SelectRelation with WHERE clause
@@ -1236,12 +1247,12 @@ public class InsertPlanner {
 
         SelectRelation selectRelation = (SelectRelation) queryRelation;
         if (!selectRelation.hasWhereClause()) {
-            return -1;
+            return existingPartitionCount > 0 ? existingPartitionCount : -1;
         }
 
         com.starrocks.sql.ast.expression.Expr predicate = selectRelation.getPredicate();
         if (predicate == null) {
-            return -1;
+            return existingPartitionCount > 0 ? existingPartitionCount : -1;
         }
 
         // Get partition column names (case-insensitive)
@@ -1254,9 +1265,61 @@ public class InsertPlanner {
         }
 
         // Extract partition column predicates and estimate partition count
-        PartitionEstimator estimator = new PartitionEstimator(partitionColNames);
+        PartitionEstimator estimator = new PartitionEstimator(partitionColNames, partitionNdv, existingPartitionCount);
         Long estimatedCount = estimator.estimate(predicate);
         return estimatedCount != null ? estimatedCount : -1;
+    }
+
+    private Map<String, Double> getPartitionColumnNdv(IcebergTable icebergTable) {
+        Map<String, Double> partitionNdv = new HashMap<>();
+        if (icebergTable == null || icebergTable.getPartitionColumns().isEmpty()) {
+            return partitionNdv;
+        }
+
+        try {
+            if (GlobalStateMgr.getCurrentState().getStatisticStorage() == null) {
+                return partitionNdv;
+            }
+            for (Column partitionCol : icebergTable.getPartitionColumns()) {
+                ColumnStatistic statistic = GlobalStateMgr.getCurrentState().getStatisticStorage()
+                        .getColumnStatistic(icebergTable, partitionCol.getName());
+                if (statistic == null || statistic.isUnknown()) {
+                    continue;
+                }
+                double ndv = statistic.getDistinctValuesCount();
+                if (!Double.isNaN(ndv) && ndv > 0) {
+                    partitionNdv.put(partitionCol.getName().toLowerCase(), ndv);
+                }
+            }
+        } catch (Exception e) {
+            LOG.debug("Failed to fetch partition column NDV for iceberg table {}.{}: {}",
+                    icebergTable.getDbName(), icebergTable.getTableName(), e.getMessage());
+        }
+        return partitionNdv;
+    }
+
+    private long estimatePartitionCountFromStatistics(IcebergTable icebergTable, Map<String, Double> partitionNdv) {
+        if (partitionNdv == null || partitionNdv.isEmpty()) {
+            return -1;
+        }
+        long estimate = 1;
+        for (double ndv : partitionNdv.values()) {
+            if (Double.isNaN(ndv) || ndv <= 0) {
+                continue;
+            }
+            estimate = multiplyAndCap(estimate, (long) Math.ceil(ndv));
+        }
+        return estimate > 0 ? estimate : -1;
+    }
+
+    private static long multiplyAndCap(long base, long factor) {
+        if (base == 0 || factor == 0) {
+            return 0;
+        }
+        if (base > PARTITION_ESTIMATE_CAP / factor) {
+            return PARTITION_ESTIMATE_CAP;
+        }
+        return base * factor;
     }
 
     /**
@@ -1274,10 +1337,15 @@ public class InsertPlanner {
     private static class PartitionEstimator {
         private final Set<String> partitionColNames;
         private final Map<String, Long> columnDistinctValues;
+        private final Map<String, Double> partitionNdv;
+        private final long existingPartitionCount;
 
-        PartitionEstimator(Set<String> partitionColNames) {
+        PartitionEstimator(Set<String> partitionColNames, Map<String, Double> partitionNdv,
+                           long existingPartitionCount) {
             this.partitionColNames = partitionColNames;
             this.columnDistinctValues = new HashMap<>();
+            this.partitionNdv = partitionNdv;
+            this.existingPartitionCount = existingPartitionCount;
         }
 
         Long estimate(com.starrocks.sql.ast.expression.Expr predicate) {
@@ -1296,22 +1364,43 @@ public class InsertPlanner {
             if (columnDistinctValues.size() == partitionColNames.size()) {
                 long totalPartitions = 1;
                 for (long count : columnDistinctValues.values()) {
-                    totalPartitions *= count;
-                    // Cap at a reasonable max to avoid overflow
-                    if (totalPartitions > 1000000) {
-                        return 1000000L;
-                    }
+                    totalPartitions = multiplyAndCap(totalPartitions, count);
                 }
-                return totalPartitions;
+                return capWithExisting(totalPartitions);
             }
 
             // Partial match - if we have at least one equality predicate on partition column
             // we can provide some estimate, but be conservative
             if (!columnDistinctValues.isEmpty()) {
-                return columnDistinctValues.values().stream().reduce(1L, (a, b) -> a * b);
+                long estimate = columnDistinctValues.values().stream()
+                        .reduce(1L, InsertPlanner::multiplyAndCap);
+                return capWithExisting(estimate);
+            }
+
+            // No predicate-derived estimate; fall back to NDV from statistics if available
+            if (partitionNdv != null && !partitionNdv.isEmpty()) {
+                long estimate = 1;
+                boolean hasNdv = false;
+                for (double ndv : partitionNdv.values()) {
+                    if (Double.isNaN(ndv) || ndv <= 0) {
+                        continue;
+                    }
+                    hasNdv = true;
+                    estimate = multiplyAndCap(estimate, (long) Math.ceil(ndv));
+                }
+                if (hasNdv) {
+                    return capWithExisting(estimate);
+                }
             }
 
             return null;
+        }
+
+        private long capWithExisting(long estimate) {
+            if (existingPartitionCount > 0) {
+                return Math.min(estimate, existingPartitionCount);
+            }
+            return estimate;
         }
 
         private List<com.starrocks.sql.ast.expression.Expr> extractConjuncts(com.starrocks.sql.ast.expression.Expr expr) {
@@ -1352,12 +1441,7 @@ public class InsertPlanner {
 
         private boolean processBinaryPredicate(com.starrocks.sql.ast.expression.BinaryPredicate binary) {
             // Only handle equality predicates
-            if (binary.getOp() != com.starrocks.sql.ast.expression.BinaryType.EQ) {
-                // Range predicates (LT, LE, GT, GE) are hard to estimate without statistics
-                // For now, be conservative and allow the estimation to continue
-                // but don't count this as a partition-reducing predicate
-                return true;
-            }
+            boolean isEquality = binary.getOp() == com.starrocks.sql.ast.expression.BinaryType.EQ;
 
             // Check if one side is a partition column reference
             com.starrocks.sql.ast.expression.SlotRef slotRef = extractSlotRef(binary.getChild(0));
@@ -1374,8 +1458,17 @@ public class InsertPlanner {
                 return true; // Not a partition column
             }
 
-            // Equality predicate on partition column - typically selects 1 partition
-            columnDistinctValues.put(colName, 1L);
+            if (isEquality) {
+                columnDistinctValues.put(colName, 1L);
+            } else {
+                // Use statistics to estimate selectivity for range predicates on partition columns
+                double ndv = partitionNdv != null && partitionNdv.containsKey(colName)
+                        ? partitionNdv.get(colName) : -1;
+                if (ndv > 0) {
+                    long estimated = (long) Math.ceil(ndv * PARTITION_RANGE_SELECTIVITY);
+                    columnDistinctValues.put(colName, Math.max(1L, estimated));
+                }
+            }
             return true;
         }
 
