@@ -311,16 +311,10 @@ struct TEsScanRange {
   4: required i32 shard_id
 }
 
-enum TIcebergFileContent {
-    DATA,
-    POSITION_DELETES,
-    EQUALITY_DELETES,
-}
-
 struct TIcebergDeleteFile {
     1: optional string full_path
     2: optional Descriptors.THdfsFileFormat file_format
-    3: optional TIcebergFileContent file_content
+    3: optional Types.TIcebergFileContent file_content
     4: optional i64 length
 }
 
