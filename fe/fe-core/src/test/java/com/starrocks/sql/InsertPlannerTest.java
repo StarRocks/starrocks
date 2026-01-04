@@ -19,9 +19,11 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.connector.ConnectorMetadatRequestContext;
+import com.starrocks.persist.ClusterInfo;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
+import com.starrocks.server.NodeMgr;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.PartitionRef;
 import com.starrocks.sql.ast.QueryStatement;
@@ -35,6 +37,7 @@ import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.StatisticStorage;
+import com.starrocks.system.SystemInfoService;
 import com.starrocks.type.DateType;
 import com.starrocks.type.VarcharType;
 import mockit.Delegate;
@@ -51,9 +54,9 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Unit tests for Iceberg adaptive global shuffle feature in InsertPlanner
+ * Unit tests for InsertPlanner
  */
-public class InsertPlannerAdaptiveShuffleTest {
+public class InsertPlannerTest {
 
     private InsertPlanner insertPlanner;
 
@@ -72,11 +75,13 @@ public class InsertPlannerAdaptiveShuffleTest {
                                                            @Mocked InsertStmt insertStmt,
                                                            @Mocked SessionVariable sessionVariable,
                                                            @Mocked QueryStatement queryStatement,
-                                                           @Mocked SelectRelation selectRelation) {
+                                                           @Mocked SelectRelation selectRelation,
+                                                           @Mocked NodeMgr nodeMgr,
+                                                           @Mocked SystemInfoService clusterInfo) {
         // Setup: 10 backends, 50 partitions, ratio = 2.0
         // Expected: 50 >= 10 * 2.0 = 20, so should enable shuffle
-        setupMockExpectations(gsm, metadataMgr, icebergTable, insertStmt, sessionVariable,
-                queryStatement, selectRelation, 10, 50, 100L, 2.0, false, null, null, false);
+        setupMockExpectationsForAdaptiveShuffle(gsm, metadataMgr, icebergTable, insertStmt, sessionVariable,
+                queryStatement, selectRelation, 10, 50, 100L, 2.0, false, null, null, false, nodeMgr, clusterInfo);
 
         boolean enabled = Deencapsulation.invoke(insertPlanner, "shouldEnableAdaptiveGlobalShuffle",
                 insertStmt, icebergTable, sessionVariable);
@@ -93,11 +98,13 @@ public class InsertPlannerAdaptiveShuffleTest {
                                                               @Mocked InsertStmt insertStmt,
                                                               @Mocked SessionVariable sessionVariable,
                                                               @Mocked QueryStatement queryStatement,
-                                                              @Mocked SelectRelation selectRelation) {
+                                                              @Mocked SelectRelation selectRelation,
+                                                              @Mocked NodeMgr nodeMgr,
+                                                              @Mocked SystemInfoService clusterInfo) {
         // Setup: 10 backends, 150 partitions, threshold = 100, ratio = 2.0
-        // Expected: 150 >= 100, so should enable shuffle
-        setupMockExpectations(gsm, metadataMgr, icebergTable, insertStmt, sessionVariable,
-                queryStatement, selectRelation, 10, 150, 100L, 2.0, false, null, null, false);
+        // Expected: 1500 >= 500, so should enable shuffle
+        setupMockExpectationsForAdaptiveShuffle(gsm, metadataMgr, icebergTable, insertStmt, sessionVariable,
+                queryStatement, selectRelation, 10, 1500, 100L, 2.0, false, null, null, false, nodeMgr, clusterInfo);
 
         boolean enabled = Deencapsulation.invoke(insertPlanner, "shouldEnableAdaptiveGlobalShuffle",
                 insertStmt, icebergTable, sessionVariable);
@@ -114,11 +121,13 @@ public class InsertPlannerAdaptiveShuffleTest {
                                                              @Mocked InsertStmt insertStmt,
                                                              @Mocked SessionVariable sessionVariable,
                                                              @Mocked QueryStatement queryStatement,
-                                                             @Mocked SelectRelation selectRelation) {
+                                                             @Mocked SelectRelation selectRelation,
+                                                             @Mocked NodeMgr nodeMgr,
+                                                             @Mocked SystemInfoService clusterInfo) {
         // Setup: 10 backends, 5 partitions, threshold = 100, ratio = 2.0
         // Expected: 5 < 100 and 5 < 10 * 2.0 = 20, so should NOT enable shuffle
-        setupMockExpectations(gsm, metadataMgr, icebergTable, insertStmt, sessionVariable,
-                queryStatement, selectRelation, 10, 5, 100L, 2.0, false, null, null, false);
+        setupMockExpectationsForAdaptiveShuffle(gsm, metadataMgr, icebergTable, insertStmt, sessionVariable,
+                queryStatement, selectRelation, 10, 5, 100L, 2.0, false, null, null, false, nodeMgr, clusterInfo);
 
         boolean enabled = Deencapsulation.invoke(insertPlanner, "shouldEnableAdaptiveGlobalShuffle",
                 insertStmt, icebergTable, sessionVariable);
@@ -136,10 +145,12 @@ public class InsertPlannerAdaptiveShuffleTest {
                                           @Mocked SessionVariable sessionVariable,
                                           @Mocked PartitionRef partitionRef,
                                           @Mocked QueryStatement queryStatement,
-                                          @Mocked SelectRelation selectRelation) {
+                                          @Mocked SelectRelation selectRelation,
+                                          @Mocked NodeMgr nodeMgr,
+                                          @Mocked SystemInfoService clusterInfo) {
         // Setup: static partition insert
-        setupMockExpectations(gsm, metadataMgr, icebergTable, insertStmt, sessionVariable,
-                queryStatement, selectRelation, 10, 100, 100L, 2.0, true, partitionRef, null, false);
+        setupMockExpectationsForAdaptiveShuffle(gsm, metadataMgr, icebergTable, insertStmt, sessionVariable,
+                queryStatement, selectRelation, 10, 100, 100L, 2.0, true, partitionRef, null, false, nodeMgr, clusterInfo);
 
         long partitionCount = Deencapsulation.invoke(insertPlanner, "estimatePartitionCountForInsert",
                 insertStmt, icebergTable);
@@ -156,10 +167,12 @@ public class InsertPlannerAdaptiveShuffleTest {
                                                           @Mocked InsertStmt insertStmt,
                                                           @Mocked SessionVariable sessionVariable,
                                                           @Mocked QueryStatement queryStatement,
-                                                          @Mocked SelectRelation selectRelation) {
+                                                          @Mocked SelectRelation selectRelation,
+                                                          @Mocked NodeMgr nodeMgr,
+                                                          @Mocked SystemInfoService clusterInfo) {
         // Setup: 0 backends
-        setupMockExpectations(gsm, metadataMgr, icebergTable, insertStmt, sessionVariable,
-                queryStatement, selectRelation, 0, 50, 100L, 2.0, false, null, null, false);
+        setupMockExpectationsForAdaptiveShuffle(gsm, metadataMgr, icebergTable, insertStmt, sessionVariable,
+                queryStatement, selectRelation, 0, 50, 100L, 2.0, false, null, null, false, nodeMgr, clusterInfo);
 
         boolean enabled = Deencapsulation.invoke(insertPlanner, "shouldEnableAdaptiveGlobalShuffle",
                 insertStmt, icebergTable, sessionVariable);
@@ -233,6 +246,7 @@ public class InsertPlannerAdaptiveShuffleTest {
     /**
      * Test partition estimation falls back to column statistics when partition names are unavailable.
      */
+
     @Test
     public void testPartitionCountFromStatistics(@Mocked GlobalStateMgr gsm,
                                                  @Mocked MetadataMgr metadataMgr,
@@ -241,7 +255,9 @@ public class InsertPlannerAdaptiveShuffleTest {
                                                  @Mocked SessionVariable sessionVariable,
                                                  @Mocked QueryStatement queryStatement,
                                                  @Mocked SelectRelation selectRelation,
-                                                 @Mocked StatisticStorage statisticStorage) {
+                                                 @Mocked StatisticStorage statisticStorage,
+                                                 @Mocked NodeMgr nodeMgr,
+                                                 @Mocked SystemInfoService clusterInfo) {
         new Expectations() {
             {
                 GlobalStateMgr.getCurrentState();
@@ -262,11 +278,13 @@ public class InsertPlannerAdaptiveShuffleTest {
                 minTimes = 0;
 
                 statisticStorage.getColumnStatistic(icebergTable, "dt");
-                result = ColumnStatistic.buildFrom(ColumnStatistic.unknown()).setDistinctValuesCount(10).build();
+                result = ColumnStatistic.buildFrom(ColumnStatistic.unknown()).setDistinctValuesCount(10).setType(
+                        ColumnStatistic.StatisticType.ESTIMATE).build();
                 minTimes = 0;
 
                 statisticStorage.getColumnStatistic(icebergTable, "country");
-                result = ColumnStatistic.buildFrom(ColumnStatistic.unknown()).setDistinctValuesCount(5).build();
+                result = ColumnStatistic.buildFrom(ColumnStatistic.unknown()).setDistinctValuesCount(5).setType(
+                        ColumnStatistic.StatisticType.ESTIMATE).build();
                 minTimes = 0;
 
                 icebergTable.getPartitionColumns();
@@ -312,7 +330,15 @@ public class InsertPlannerAdaptiveShuffleTest {
                 result = 2.0;
                 minTimes = 0;
 
-                gsm.getNodeMgr().getClusterInfo().getAliveBackendNumber();
+                gsm.getNodeMgr();
+                result = nodeMgr;
+                minTimes = 0;
+
+                nodeMgr.getClusterInfo();
+                result = clusterInfo;
+                minTimes = 0;
+
+                clusterInfo.getAliveBackendNumber();
                 result = 5;
                 minTimes = 0;
             }
@@ -333,15 +359,17 @@ public class InsertPlannerAdaptiveShuffleTest {
                                                  @Mocked InsertStmt insertStmt,
                                                  @Mocked SessionVariable sessionVariable,
                                                  @Mocked QueryStatement queryStatement,
-                                                 @Mocked SelectRelation selectRelation) {
+                                                 @Mocked SelectRelation selectRelation,
+                                                 @Mocked NodeMgr nodeMgr,
+                                                 @Mocked SystemInfoService clusterInfo) {
         Expr dtPredicate = new BinaryPredicate(BinaryType.EQ, new SlotRef(null, "dt"),
                 new StringLiteral("2024-01-01"));
         Expr countryPredicate = new InPredicate(new SlotRef(null, "country"),
                 Lists.newArrayList(new StringLiteral("US"), new StringLiteral("CA")), false);
         Expr predicate = new CompoundPredicate(CompoundPredicate.Operator.AND, dtPredicate, countryPredicate);
 
-        setupMockExpectations(gsm, metadataMgr, icebergTable, insertStmt, sessionVariable,
-                queryStatement, selectRelation, 10, 100, 200L, 10.0, false, null, predicate, true);
+        setupMockExpectationsForAdaptiveShuffle(gsm, metadataMgr, icebergTable, insertStmt, sessionVariable,
+                queryStatement, selectRelation, 10, 100, 200L, 10.0, false, null, predicate, true, nodeMgr, clusterInfo);
 
         long partitionCount = Deencapsulation.invoke(insertPlanner, "estimatePartitionCountForInsert",
                 insertStmt, icebergTable);
@@ -349,22 +377,23 @@ public class InsertPlannerAdaptiveShuffleTest {
     }
 
     // Helper method to setup common mock expectations
-    private void setupMockExpectations(GlobalStateMgr gsm,
-                                       MetadataMgr metadataMgr,
-                                       IcebergTable icebergTable,
-                                       InsertStmt insertStmt,
-                                       SessionVariable sessionVariable,
-                                       QueryStatement queryStatement,
-                                       SelectRelation selectRelation,
-                                       int backendCount,
-                                       int partitionCount,
-                                       long threshold,
-                                       double ratio,
-                                       boolean isStaticPartitionInsert,
-                                       PartitionRef partitionRef,
-                                       Expr predicate,
-                                       boolean hasWhereClause) {
-
+    private void setupMockExpectationsForAdaptiveShuffle(GlobalStateMgr gsm,
+                                                         MetadataMgr metadataMgr,
+                                                         IcebergTable icebergTable,
+                                                         InsertStmt insertStmt,
+                                                         SessionVariable sessionVariable,
+                                                         QueryStatement queryStatement,
+                                                         SelectRelation selectRelation,
+                                                         int backendCount,
+                                                         int partitionCount,
+                                                         long threshold,
+                                                         double ratio,
+                                                         boolean isStaticPartitionInsert,
+                                                         PartitionRef partitionRef,
+                                                         Expr predicate,
+                                                         boolean hasWhereClause,
+                                                         NodeMgr nodeMgr,
+                                                         SystemInfoService clusterInfo) {
         new Expectations() {
             {
                 // GlobalStateMgr setup
@@ -376,7 +405,15 @@ public class InsertPlannerAdaptiveShuffleTest {
                 result = metadataMgr;
                 minTimes = 0;
 
-                gsm.getNodeMgr().getClusterInfo().getAliveBackendNumber();
+                gsm.getNodeMgr();
+                result = nodeMgr;
+                minTimes = 0;
+
+                nodeMgr.getClusterInfo();
+                result = clusterInfo;
+                minTimes = 0;
+
+                clusterInfo.getAliveBackendNumber();
                 result = backendCount;
                 minTimes = 0;
 
