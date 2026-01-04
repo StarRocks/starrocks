@@ -274,8 +274,8 @@ Status BinaryPlainPageDecoder<Type>::next_range_with_filter(
         }
 
         // Evaluate predicates on the temporary column
-        Status predicate_result = compound_and_predicates_evaluate(compound_and_predicates, temp_eval_column.get(),
-                                                                   selection, selected_idx, 0, num_rows);
+        RETURN_IF_ERROR(compound_and_predicates_evaluate(compound_and_predicates, temp_eval_column.get(), selection,
+                                                         selected_idx, 0, num_rows));
 
         uint32_t selected_count = SIMD::count_nonzero(selection, num_rows);
         if (selected_count == 0) {
