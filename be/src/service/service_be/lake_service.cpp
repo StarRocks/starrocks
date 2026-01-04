@@ -1392,6 +1392,62 @@ void LakeServiceImpl::vacuum_full(::google::protobuf::RpcController* controller,
     latch.wait();
 }
 
+// Check missing files, like segment, delete vector, pk index sst, cols file
+static Status check_missing_files(const TabletMetadata& metadata, const lake::TabletManager* tablet_mgr,
+                                  ::starrocks::TabletMetadataEntry* entry) {
+    std::unordered_set<std::string> missing_files;
+    std::shared_ptr<FileSystem> fs = nullptr;
+    auto check_file = [&](const std::string& path, const std::string& filename) -> Status {
+        if (fs == nullptr) {
+            ASSIGN_OR_RETURN(fs, FileSystem::CreateSharedFromString(path));
+        }
+        auto st = fs->path_exists(path);
+        if (st.is_not_found()) {
+            missing_files.emplace(filename);
+        } else if (!st.ok()) {
+            return st;
+        }
+        return Status::OK();
+    };
+
+    auto tablet_id = metadata.id();
+
+    // segment
+    for (const auto& rowset : metadata.rowsets()) {
+        for (const auto& seg_name : rowset.segments()) {
+            RETURN_IF_ERROR(check_file(tablet_mgr->segment_location(tablet_id, seg_name), seg_name));
+        }
+    }
+
+    // delete vector
+    if (metadata.has_delvec_meta()) {
+        for (const auto& [_, file_meta] : metadata.delvec_meta().version_to_file()) {
+            RETURN_IF_ERROR(check_file(tablet_mgr->delvec_location(tablet_id, file_meta.name()), file_meta.name()));
+        }
+    }
+
+    // pk index sst
+    if (metadata.has_sstable_meta()) {
+        for (const auto& sst : metadata.sstable_meta().sstables()) {
+            RETURN_IF_ERROR(check_file(tablet_mgr->sst_location(tablet_id, sst.filename()), sst.filename()));
+        }
+    }
+
+    // cols
+    if (metadata.has_dcg_meta()) {
+        for (const auto& [_, dcg_ver] : metadata.dcg_meta().dcgs()) {
+            for (const auto& filename : dcg_ver.column_files()) {
+                RETURN_IF_ERROR(check_file(tablet_mgr->segment_location(tablet_id, filename), filename));
+            }
+        }
+    }
+
+    for (const auto& filename : missing_files) {
+        entry->add_missing_files(filename);
+    }
+    return Status::OK();
+}
+
 // Get metadatas for a list of tablets within a specified version range.
 // This function supports concurrent processing of tablet metadata fetch tasks.
 void LakeServiceImpl::get_tablet_metadatas(::google::protobuf::RpcController* controller,
@@ -1426,58 +1482,65 @@ void LakeServiceImpl::get_tablet_metadatas(::google::protobuf::RpcController* co
     auto latch = BThreadCountDownLatch(request->tablet_ids_size());
     int64_t max_version = request->max_version();
     int64_t min_version = request->min_version();
+    bool enable_check_missing_files = request->has_check_missing_files() && request->check_missing_files();
 
-    response->mutable_tablet_metadatas()->Reserve(request->tablet_ids_size());
+    response->mutable_tablet_results()->Reserve(request->tablet_ids_size());
     for (int i = 0; i < request->tablet_ids_size(); ++i) {
-        response->add_tablet_metadatas();
+        response->add_tablet_results();
     }
 
     // traverse each tablet_id and submit get tablet metadatas task
     for (int i = 0; i < request->tablet_ids_size(); ++i) {
         auto tablet_id = request->tablet_ids(i);
-        auto* tablet_metadatas = response->mutable_tablet_metadatas(i);
-        tablet_metadatas->set_tablet_id(tablet_id);
+        auto* tablet_result = response->mutable_tablet_results(i);
+        tablet_result->set_tablet_id(tablet_id);
 
         auto task = std::make_shared<CancellableRunnable>(
-                [&, tablet_id, max_version, min_version, tablet_metadatas] {
+                [&, tablet_id, max_version, min_version, tablet_result] {
                     DeferOp defer([&] { latch.count_down(); });
 
                     // get tablet metadatas within the specified version range
-                    std::vector<TabletMetadataPtr> metadatas;
                     for (int64_t version = max_version; version >= min_version; --version) {
                         // don't fill meta cache to avoid polluting the cache
                         lake::CacheOptions cache_opts{.fill_meta_cache = false, .fill_data_cache = true};
                         auto tablet_metadata_or = _tablet_mgr->get_tablet_metadata(tablet_id, version, cache_opts);
                         const auto& st = tablet_metadata_or.status();
                         if (st.ok()) {
-                            metadatas.emplace_back(std::move(tablet_metadata_or).value());
+                            const auto& tablet_metadata = tablet_metadata_or.value();
+                            auto* entry = tablet_result->add_metadata_entries();
+                            entry->mutable_metadata()->CopyFrom(*tablet_metadata);
+
+                            if (enable_check_missing_files) {
+                                auto check_st = check_missing_files(*tablet_metadata, _tablet_mgr, entry);
+                                if (!check_st.ok()) {
+                                    check_st.to_protobuf(tablet_result->mutable_status());
+                                    return;
+                                }
+                            }
                         } else if (!st.is_not_found()) {
-                            st.to_protobuf(tablet_metadatas->mutable_status());
+                            st.to_protobuf(tablet_result->mutable_status());
                             return;
                         }
                     }
 
-                    if (metadatas.empty()) {
+                    if (tablet_result->metadata_entries_size() > 0) {
+                        Status::OK().to_protobuf(tablet_result->mutable_status());
+                    } else {
                         auto st = Status::NotFound(fmt::format("tablet {} metadata not found in version range [{}, {}]",
                                                                tablet_id, min_version, max_version));
-                        st.to_protobuf(tablet_metadatas->mutable_status());
-                    } else {
-                        Status::OK().to_protobuf(tablet_metadatas->mutable_status());
-                        for (const auto& metadata : metadatas) {
-                            (*tablet_metadatas->mutable_version_metadatas())[metadata->version()].CopyFrom(*metadata);
-                        }
+                        st.to_protobuf(tablet_result->mutable_status());
                     }
                 },
-                [&, tablet_id, tablet_metadatas] {
+                [&, tablet_id, tablet_result] {
                     auto st = Status::Cancelled(
                             fmt::format("get tablet metadatas task has been cancelled. tablet: {}", tablet_id));
-                    st.to_protobuf(tablet_metadatas->mutable_status());
+                    st.to_protobuf(tablet_result->mutable_status());
                     latch.count_down();
                 });
 
         auto st = thread_pool->submit(std::move(task));
         if (!st.ok()) {
-            st.to_protobuf(tablet_metadatas->mutable_status());
+            st.to_protobuf(tablet_result->mutable_status());
             latch.count_down();
         }
     }
@@ -1487,7 +1550,7 @@ void LakeServiceImpl::get_tablet_metadatas(::google::protobuf::RpcController* co
     // add a warning log if any tablets fail, show the first 10 failed tablets
     std::vector<std::string> messages;
     size_t failed_count = 0;
-    for (const auto& tm : response->tablet_metadatas()) {
+    for (const auto& tm : response->tablet_results()) {
         if (tm.status().status_code() != 0) {
             ++failed_count;
             if (messages.size() < 10) {

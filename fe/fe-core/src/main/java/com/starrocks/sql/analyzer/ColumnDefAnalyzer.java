@@ -27,15 +27,23 @@ import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.ColumnDef;
+import com.starrocks.sql.ast.expression.ArrayExpr;
+import com.starrocks.sql.ast.expression.CastExpr;
 import com.starrocks.sql.ast.expression.DecimalLiteral;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprCastFunction;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.FloatLiteral;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.FunctionParams;
+import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.LiteralExprFactory;
+import com.starrocks.sql.ast.expression.MapExpr;
+import com.starrocks.sql.ast.expression.MaxLiteral;
 import com.starrocks.sql.ast.expression.NullLiteral;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.ast.expression.TypeDef;
+import com.starrocks.sql.common.TypeManager;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.type.AggStateDesc;
 import com.starrocks.type.PrimitiveType;
@@ -177,7 +185,10 @@ public class ColumnDefAnalyzer {
 
         if (defaultValueDef.isSet && defaultValueDef.expr != null) {
             try {
-                validateDefaultValue(type, defaultValueDef.expr);
+                Expr validatedExpr = validateDefaultValue(type, defaultValueDef.expr);
+                if (validatedExpr != defaultValueDef.expr) {
+                    defaultValueDef.expr = validatedExpr;
+                }
             } catch (AnalysisException e) {
                 throw new AnalysisException(String.format("Invalid default value for '%s': %s", name, e.getMessage()));
             }
@@ -218,12 +229,15 @@ public class ColumnDefAnalyzer {
         return type;
     }
 
-    public static void validateDefaultValue(Type type, Expr defaultExpr) throws AnalysisException {
+    public static Expr validateDefaultValue(Type type, Expr defaultExpr) throws AnalysisException {
         if (defaultExpr instanceof StringLiteral) {
             String defaultValue = ((StringLiteral) defaultExpr).getValue();
             Preconditions.checkNotNull(defaultValue);
+            // For complex types with string literals, they should be handled as expressions
             if (type.isComplexType()) {
-                throw new AnalysisException(String.format("Default value for complex type '%s' not supported", type));
+                throw new AnalysisException(
+                        String.format("Default value for complex type '%s' requires expression syntax (e.g., [], map{}, row())",
+                                type));
             }
             ScalarType scalarType = (ScalarType) type;
             // check if default value is valid. if not, some literal constructor will throw AnalysisException
@@ -285,6 +299,11 @@ public class ColumnDefAnalyzer {
         } else if (defaultExpr instanceof FunctionCallExpr) {
             FunctionCallExpr functionCallExpr = (FunctionCallExpr) defaultExpr;
             String functionName = functionCallExpr.getFunctionName();
+            // for struct type default value
+            if ("row".equalsIgnoreCase(functionName)) {
+                return validateComplexTypeDefaultValue(type, defaultExpr, false);
+            }
+
             boolean supported = isValidDefaultFunction(functionName + "()");
 
             if (!supported) {
@@ -311,9 +330,107 @@ public class ColumnDefAnalyzer {
             }
         } else if (defaultExpr instanceof NullLiteral) {
             // nothing to check
+        } else if (defaultExpr instanceof ArrayExpr || defaultExpr instanceof MapExpr) {
+            return validateComplexTypeDefaultValue(type, defaultExpr, false);
         } else {
             throw new AnalysisException(String.format("Unsupported expr %s for default value", defaultExpr));
         }
+
+        return defaultExpr;
+    }
+
+    public static Expr validateComplexTypeDefaultValue(Type columnType, Expr defaultExpr,
+                                                       boolean allowOuterCast)
+            throws AnalysisException {
+        validateComplexTypeDefaultExpressionForm(defaultExpr, allowOuterCast);
+
+        try {
+            ExpressionAnalyzer.analyzeExpressionIgnoreSlot(defaultExpr, ConnectContext.get());
+        } catch (Exception e) {
+            throw new AnalysisException(
+                    "Failed to analyze default value expression: " + e.getMessage(), e);
+        }
+
+        Type exprType = defaultExpr.getType();
+        if (exprType == null) {
+            throw new AnalysisException("Cannot determine type of default value expression");
+        }
+
+        AnalyzerUtils.replaceNullTypeInExprTree(defaultExpr);
+        exprType = defaultExpr.getType();
+
+        if (!TypeManager.canCastTo(exprType, columnType)) {
+            throw new AnalysisException(
+                    String.format("Default value type %s cannot be cast to column type %s",
+                            exprType, columnType));
+        }
+
+        if (!exprType.equals(columnType)) {
+            return ExprCastFunction.uncheckedCastTo(defaultExpr, columnType);
+        }
+
+        return defaultExpr;
+    }
+
+    private static void validateComplexTypeDefaultExpressionForm(Expr expr, boolean allowOuterCast)
+            throws AnalysisException {
+        if (expr instanceof CastExpr castExpr) {
+            if (allowOuterCast) {
+                validateComplexTypeDefaultExpressionForm(castExpr.getChild(0), true);
+                return;
+            } else {
+                throw new AnalysisException(
+                        "CAST expression is not allowed in complex type default value. " +
+                                "Type conversion will be handled automatically. " +
+                                "Expression: " + ExprToSql.toSql(expr));
+            }
+        }
+
+        // TODO(stephen): support null default value on subfield
+        if (expr instanceof NullLiteral || expr instanceof MaxLiteral) {
+            throw new AnalysisException(
+                    "NULL literal is not supported in complex type default value. " +
+                            "Only constant expressions (literals, arrays, maps, and row()) are allowed.");
+        }
+
+        if (expr instanceof LiteralExpr) {
+            return;
+        }
+
+        if (expr instanceof ArrayExpr arrayExpr) {
+            for (Expr child : arrayExpr.getChildren()) {
+                validateComplexTypeDefaultExpressionForm(child, allowOuterCast);
+            }
+            return;
+        }
+
+        if (expr instanceof MapExpr mapExpr) {
+            for (Expr child : mapExpr.getChildren()) {
+                validateComplexTypeDefaultExpressionForm(child, allowOuterCast);
+            }
+            return;
+        }
+
+        if (expr instanceof FunctionCallExpr funcExpr) {
+            String funcName = funcExpr.getFnName().toString();
+
+            if (!"row".equalsIgnoreCase(funcName)) {
+                throw new AnalysisException(
+                        String.format("Function '%s' is not supported in complex type default value. " +
+                                        "Only constant expressions (literals, arrays, maps, and row()) are allowed.",
+                                funcName));
+            }
+
+            for (Expr child : funcExpr.getChildren()) {
+                validateComplexTypeDefaultExpressionForm(child, allowOuterCast);
+            }
+            return;
+        }
+
+        throw new AnalysisException(
+                String.format("Expression type '%s' is not supported in complex type default value. " +
+                        "Only constant expressions (literals, arrays, maps, and row()) are allowed. " +
+                        "Expression: %s", expr.getClass().getSimpleName(), ExprToSql.toSql(expr)));
     }
 
 }

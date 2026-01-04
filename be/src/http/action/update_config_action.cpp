@@ -58,6 +58,7 @@
 #include "runtime/load_channel_mgr.h"
 #include "storage/compaction_manager.h"
 #include "storage/lake/compaction_scheduler.h"
+#include "storage/lake/lake_persistent_index_parallel_compact_mgr.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/update_manager.h"
 #include "storage/load_spill_block_manager.h"
@@ -276,6 +277,20 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
         _config_callback.emplace("lake_metadata_cache_limit", [&]() -> Status {
             auto tablet_mgr = _exec_env->lake_tablet_manager();
             if (tablet_mgr != nullptr) tablet_mgr->update_metacache_limit(config::lake_metadata_cache_limit);
+            return Status::OK();
+        });
+        _config_callback.emplace("pk_index_parallel_get_threadpool_max_threads", [&]() -> Status {
+            auto thread_pool = _exec_env->pk_index_get_thread_pool();
+            if (thread_pool != nullptr) {
+                return thread_pool->update_max_threads(config::pk_index_parallel_get_threadpool_max_threads);
+            }
+            return Status::OK();
+        });
+        _config_callback.emplace("pk_index_parallel_compaction_threadpool_max_threads", [&]() -> Status {
+            auto mgr = _exec_env->parallel_compact_mgr();
+            if (mgr != nullptr) {
+                return mgr->update_max_threads(config::pk_index_parallel_compaction_threadpool_max_threads);
+            }
             return Status::OK();
         });
 #ifdef USE_STAROS
