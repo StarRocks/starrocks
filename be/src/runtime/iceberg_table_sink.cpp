@@ -64,7 +64,6 @@ Status IcebergTableSink::decompose_to_pipeline(pipeline::OpFactories prev_operat
     auto* iceberg_table_desc = down_cast<IcebergTableDescriptor*>(table_desc);
     auto& t_iceberg_sink = thrift_sink.iceberg_table_sink;
 
-
     // Determine if this is a delete sink (delete files) or regular sink (data files)
     bool is_delete_sink = (thrift_sink.type == TDataSinkType::ICEBERG_DELETE_SINK);
 
@@ -77,12 +76,12 @@ Status IcebergTableSink::decompose_to_pipeline(pipeline::OpFactories prev_operat
         RETURN_IF_ERROR(create_delete_sink_context(thrift_sink, runtime_state, context, iceberg_table_desc,
                                                    sink_provider, sink_ctx, partition_expr));
     } else {
-        RETURN_IF_ERROR(create_data_sink_context(thrift_sink, runtime_state, context, iceberg_table_desc,
-                                                 sink_provider, sink_ctx, partition_expr));
+        RETURN_IF_ERROR(create_data_sink_context(thrift_sink, runtime_state, context, iceberg_table_desc, sink_provider,
+                                                 sink_ctx, partition_expr));
     }
 
     auto op = std::make_shared<pipeline::ConnectorSinkOperatorFactory>(
-                context->next_operator_id(), std::move(sink_provider), sink_ctx, fragment_ctx);
+            context->next_operator_id(), std::move(sink_provider), sink_ctx, fragment_ctx);
     size_t sink_dop = context->data_sink_dop();
 
     if (iceberg_table_desc->is_unpartitioned_table() || t_iceberg_sink.is_static_partition_sink) {
@@ -118,16 +117,13 @@ Status IcebergTableSink::decompose_to_pipeline(pipeline::OpFactories prev_operat
 }
 
 Status IcebergTableSink::create_delete_sink_context(
-        const TDataSink& thrift_sink,
-        RuntimeState* runtime_state,
-        pipeline::PipelineBuilderContext* context,
+        const TDataSink& thrift_sink, RuntimeState* runtime_state, pipeline::PipelineBuilderContext* context,
         IcebergTableDescriptor* iceberg_table_desc,
         std::unique_ptr<connector::ConnectorChunkSinkProvider>& sink_provider,
-        std::shared_ptr<connector::ConnectorChunkSinkContext>& sink_ctx,
-        std::vector<TExpr>& partition_expr) const {
+        std::shared_ptr<connector::ConnectorChunkSinkContext>& sink_ctx, std::vector<TExpr>& partition_expr) const {
     auto* fragment_ctx = context->fragment_context();
     auto& t_iceberg_sink = thrift_sink.iceberg_table_sink;
-    
+
     // Create merge sink context for delete files
     auto delete_sink_ctx = std::make_shared<connector::IcebergDeleteSinkContext>();
     delete_sink_ctx->path = t_iceberg_sink.data_location;
@@ -152,15 +148,14 @@ Status IcebergTableSink::create_delete_sink_context(
     // Build column name to slot reference map for partition column updates
     TupleDescriptor* tuple_desc = runtime_state->desc_tbl().get_tuple_descriptor(t_iceberg_sink.tuple_id);
     if (tuple_desc == nullptr) {
-        return Status::InternalError(fmt::format("Failed to find tuple descriptor with id {}",
-                                                t_iceberg_sink.tuple_id));
+        return Status::InternalError(
+                fmt::format("Failed to find tuple descriptor with id {}", t_iceberg_sink.tuple_id));
     }
 
     const auto& slots = tuple_desc->slots();
     if (slots.size() != output_exprs.size()) {
-        return Status::InternalError(fmt::format(
-            "Mismatched slot and output expression counts: {} vs {}",
-            slots.size(), output_exprs.size()));
+        return Status::InternalError(fmt::format("Mismatched slot and output expression counts: {} vs {}", slots.size(),
+                                                 output_exprs.size()));
     }
 
     for (size_t i = 0; i < slots.size(); ++i) {
@@ -178,33 +173,31 @@ Status IcebergTableSink::create_delete_sink_context(
         partition_expr = iceberg_table_desc->get_partition_exprs();
         const auto& partition_source_column_names = iceberg_table_desc->partition_source_column_names();
 
-        RETURN_IF_ERROR(update_partition_expr_slot_refs_by_map(
-            partition_expr, delete_sink_ctx->column_slot_map, partition_source_column_names));
+        RETURN_IF_ERROR(update_partition_expr_slot_refs_by_map(partition_expr, delete_sink_ctx->column_slot_map,
+                                                               partition_source_column_names));
         delete_sink_ctx->partition_evaluators = ColumnExprEvaluator::from_exprs(partition_expr, runtime_state);
     }
 
     sink_ctx = delete_sink_ctx;
     auto connector = connector::ConnectorManager::default_instance()->get(connector::Connector::ICEBERG);
     sink_provider = connector->create_delete_sink_provider();
-    
+
     return Status::OK();
 }
 
-Status IcebergTableSink::create_data_sink_context(
-        const TDataSink& thrift_sink,
-        RuntimeState* runtime_state,
-        pipeline::PipelineBuilderContext* context,
-        IcebergTableDescriptor* iceberg_table_desc,
-        std::unique_ptr<connector::ConnectorChunkSinkProvider>& sink_provider,
-        std::shared_ptr<connector::ConnectorChunkSinkContext>& sink_ctx,
-        std::vector<TExpr>& partition_expr) const {
+Status IcebergTableSink::create_data_sink_context(const TDataSink& thrift_sink, RuntimeState* runtime_state,
+                                                  pipeline::PipelineBuilderContext* context,
+                                                  IcebergTableDescriptor* iceberg_table_desc,
+                                                  std::unique_ptr<connector::ConnectorChunkSinkProvider>& sink_provider,
+                                                  std::shared_ptr<connector::ConnectorChunkSinkContext>& sink_ctx,
+                                                  std::vector<TExpr>& partition_expr) const {
     auto* fragment_ctx = context->fragment_context();
     auto& t_iceberg_sink = thrift_sink.iceberg_table_sink;
-    
+
     auto data_sink_ctx = std::make_shared<connector::IcebergChunkSinkContext>();
     data_sink_ctx->path = t_iceberg_sink.__isset.data_location && !t_iceberg_sink.data_location.empty()
-                            ? t_iceberg_sink.data_location
-                            : t_iceberg_sink.location + connector::IcebergUtils::DATA_DIRECTORY;
+                                  ? t_iceberg_sink.data_location
+                                  : t_iceberg_sink.location + connector::IcebergUtils::DATA_DIRECTORY;
     data_sink_ctx->cloud_conf = t_iceberg_sink.cloud_configuration;
     data_sink_ctx->column_names = iceberg_table_desc->full_column_names();
     data_sink_ctx->partition_column_names = iceberg_table_desc->partition_column_names();
@@ -212,7 +205,7 @@ Status IcebergTableSink::create_data_sink_context(
     data_sink_ctx->format = t_iceberg_sink.file_format; // iceberg sink only supports parquet
     data_sink_ctx->compression_type = t_iceberg_sink.compression_type;
     if (t_iceberg_sink.__isset.target_max_file_size) {
-            data_sink_ctx->max_file_size = t_iceberg_sink.target_max_file_size;
+        data_sink_ctx->max_file_size = t_iceberg_sink.target_max_file_size;
     }
     data_sink_ctx->parquet_field_ids =
             connector::IcebergUtils::generate_parquet_field_ids(iceberg_table_desc->get_iceberg_schema()->fields);
@@ -224,7 +217,7 @@ Status IcebergTableSink::create_data_sink_context(
     if (!sort_order.sort_key_idxes.empty()) {
         data_sink_ctx->sort_ordering = std::make_shared<connector::SortOrdering>();
         data_sink_ctx->sort_ordering->sort_key_idxes.assign(sort_order.sort_key_idxes.begin(),
-                                                        sort_order.sort_key_idxes.end());
+                                                            sort_order.sort_key_idxes.end());
         data_sink_ctx->sort_ordering->sort_descs.descs.reserve(sort_order.sort_key_idxes.size());
         for (size_t idx = 0; idx < sort_order.sort_key_idxes.size(); ++idx) {
             bool is_asc = idx < sort_order.is_ascs.size() ? sort_order.is_ascs[idx] : true;
@@ -239,7 +232,7 @@ Status IcebergTableSink::create_data_sink_context(
             data_sink_ctx->sort_ordering->sort_descs.descs.emplace_back(is_asc, is_null_first);
         }
     }
-    
+
     sink_ctx = data_sink_ctx;
     auto connector = connector::ConnectorManager::default_instance()->get(connector::Connector::ICEBERG);
     sink_provider = connector->create_data_sink_provider();
@@ -287,10 +280,9 @@ Status IcebergTableSink::create_data_sink_context(
         }
         data_sink_ctx->partition_evaluators = ColumnExprEvaluator::from_exprs(partition_expr, runtime_state);
     }
-    
+
     return Status::OK();
 }
-
 
 // Updates partition expression slot references using the column slot map.
 // For each partition expression, replaces the slot reference node with the correct
@@ -303,14 +295,12 @@ Status IcebergTableSink::create_data_sink_context(
 //
 // Returns Status::OK() on success, or an error if a required slot reference is missing.
 Status IcebergTableSink::update_partition_expr_slot_refs_by_map(
-        std::vector<TExpr>& partition_expr,
-        const std::unordered_map<std::string, TExprNode>& column_slot_map,
+        std::vector<TExpr>& partition_expr, const std::unordered_map<std::string, TExprNode>& column_slot_map,
         const std::vector<std::string>& partition_source_column_names) const {
     // Validate input sizes match
     if (partition_expr.size() != partition_source_column_names.size()) {
-        return Status::InternalError(fmt::format(
-            "Mismatched partition expression and column name counts: {} vs {}",
-            partition_expr.size(), partition_source_column_names.size()));
+        return Status::InternalError(fmt::format("Mismatched partition expression and column name counts: {} vs {}",
+                                                 partition_expr.size(), partition_source_column_names.size()));
     }
 
     // Update each partition expression's slot reference
@@ -321,7 +311,7 @@ Status IcebergTableSink::update_partition_expr_slot_refs_by_map(
         auto it = column_slot_map.find(source_col_name);
         if (it == column_slot_map.end()) {
             return Status::InternalError(
-                fmt::format("Could not find slot reference for partition column: {}", source_col_name));
+                    fmt::format("Could not find slot reference for partition column: {}", source_col_name));
         }
 
         const TExprNode& slot_info = it->second;
@@ -338,7 +328,7 @@ Status IcebergTableSink::update_partition_expr_slot_refs_by_map(
 
         if (!slot_ref_updated) {
             return Status::InternalError(
-                fmt::format("No slot reference found in partition expression for column: {}", source_col_name));
+                    fmt::format("No slot reference found in partition expression for column: {}", source_col_name));
         }
     }
 

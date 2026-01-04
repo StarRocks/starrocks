@@ -191,6 +191,9 @@ StatusOr<std::unique_ptr<ConnectorChunkSink>> IcebergDeleteSinkProvider::create_
     std::vector<std::string> column_names = {"file_path", "pos"};
     // We only need evaluators for the two columns: file_path and pos
     std::vector<std::unique_ptr<ColumnEvaluator>> column_evaluators_vec;
+    if (ctx->column_evaluators.size() < 2) {
+        return Status::InternalError("Not enough column evaluators, expected at least 2");
+    }
     column_evaluators_vec.push_back(ctx->column_evaluators[0]->clone());
     column_evaluators_vec.push_back(ctx->column_evaluators[1]->clone());
     auto column_evaluators =
