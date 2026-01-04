@@ -73,13 +73,6 @@ Status IcebergDeleteSink::add(const ChunkPtr& chunk) {
     bool is_partitioned = !_partition_column_names.empty();
     std::vector<int8_t> partition_field_null_list;
 
-    // Compute partition name if table is partitioned
-    if (is_partitioned) {
-        ASSIGN_OR_RETURN(partition, HiveUtils::iceberg_make_partition_name(
-                                            _partition_column_names, _partition_column_evaluators, _transform_exprs,
-                                            chunk.get(), _support_null_partition, partition_field_null_list));
-    }
-
     // Find file_path column slot_id from the mapping
     auto file_path_it = _column_slot_map.find("_file");
     if (file_path_it == _column_slot_map.end()) {
@@ -100,13 +93,18 @@ Status IcebergDeleteSink::add(const ChunkPtr& chunk) {
     // Group rows by file_path for file-level delete files
     std::unordered_map<std::string, std::vector<uint32_t>> file_path_to_indices;
     for (int i = 0; i < num_rows; ++i) {
-        // Skip NULL file_path values (they don't reference any file)
         if (file_path_column->is_null(i)) {
-            LOG(WARNING) << "Skipping row " << i << " with NULL file_path";
-            continue;
+            return Status::InternalError("file_path is NULL value");
         }
         std::string file_path = binary_column->get_slice(i).to_string();
         file_path_to_indices[std::move(file_path)].push_back(i);
+    }
+
+    // Compute partition name if table is partitioned
+    if (is_partitioned) {
+        ASSIGN_OR_RETURN(partition, HiveUtils::iceberg_make_partition_name(
+                                            _partition_column_names, _partition_column_evaluators, _transform_exprs,
+                                            chunk.get(), _support_null_partition, partition_field_null_list));
     }
 
     // Write separate delete files for each file_path
