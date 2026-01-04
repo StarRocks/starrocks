@@ -139,7 +139,17 @@ import static com.starrocks.sql.optimizer.rule.mv.MVUtils.MATERIALIZED_VIEW_NAME
 public class InsertPlanner {
     // Only for unit test
     public static boolean enableSingleReplicationShuffle = false;
+    /**
+     * Default selectivity for range predicates on partition columns.
+     * Assumes 10% of partitions are selected by range predicates (e.g., dt > '2024-01-01').
+     * This is conservative; actual selectivity depends on data distribution and range bounds.
+     * Future improvement: use histogram statistics for more accurate estimation.
+     */
     private static final double PARTITION_RANGE_SELECTIVITY = 0.1;
+    /**
+     * Maximum cap for partition count estimation to avoid overflow.
+     * When actual partition count cannot be determined, estimates are capped at this value.
+     */
     private static final long PARTITION_ESTIMATE_CAP = 1_000_000_000L;
     private boolean shuffleServiceEnable = false;
     private boolean forceReplicatedStorage = false;
@@ -1219,12 +1229,16 @@ public class InsertPlanner {
                     icebergTable.getDbName(), icebergTable.getTableName(), e.getMessage());
         }
 
+        // When partition metadata is unavailable (empty list or exception), fall back to statistics
+        // This is useful for new tables or when metadata cannot be accessed
         long statsEstimate = estimatePartitionCountFromStatistics(icebergTable, partitionNdv);
         if (statsEstimate > 0) {
-            return statsEstimate;
+            // Cap the statistics-based estimate to avoid overly aggressive partition counts
+            // Without existing partition count to bound it, use PARTITION_ESTIMATE_CAP
+            return Math.min(statsEstimate, PARTITION_ESTIMATE_CAP);
         }
 
-        // 5. When unable to get partition info, return a large default value to enable shuffle
+        // When unable to get partition info from any source, return a large default value to enable shuffle
         return Long.MAX_VALUE;
     }
 
@@ -1298,18 +1312,25 @@ public class InsertPlanner {
         return partitionNdv;
     }
 
+    /**
+     * Estimate partition count from column NDV statistics.
+     * This is used as a fallback when partition metadata is unavailable.
+     * Returns -1 if unable to estimate (invalid or missing statistics).
+     */
     private long estimatePartitionCountFromStatistics(IcebergTable icebergTable, Map<String, Double> partitionNdv) {
         if (partitionNdv == null || partitionNdv.isEmpty()) {
             return -1;
         }
         long estimate = 1;
+        boolean hasValidNdv = false;
         for (double ndv : partitionNdv.values()) {
             if (Double.isNaN(ndv) || ndv <= 0) {
-                continue;
+                return -1;  // Any invalid NDV makes the entire estimate unreliable
             }
+            hasValidNdv = true;
             estimate = multiplyAndCap(estimate, (long) Math.ceil(ndv));
         }
-        return estimate > 0 ? estimate : -1;
+        return hasValidNdv ? estimate : -1;
     }
 
     private static long multiplyAndCap(long base, long factor) {
@@ -1440,8 +1461,13 @@ public class InsertPlanner {
         }
 
         private boolean processBinaryPredicate(com.starrocks.sql.ast.expression.BinaryPredicate binary) {
-            // Only handle equality predicates
+            // Check if this is an equality predicate
             boolean isEquality = binary.getOp() == com.starrocks.sql.ast.expression.BinaryType.EQ;
+            boolean isRange = !isEquality && (
+                    binary.getOp() == com.starrocks.sql.ast.expression.BinaryType.LT ||
+                    binary.getOp() == com.starrocks.sql.ast.expression.BinaryType.LE ||
+                    binary.getOp() == com.starrocks.sql.ast.expression.BinaryType.GT ||
+                    binary.getOp() == com.starrocks.sql.ast.expression.BinaryType.GE);
 
             // Check if one side is a partition column reference
             com.starrocks.sql.ast.expression.SlotRef slotRef = extractSlotRef(binary.getChild(0));
@@ -1459,15 +1485,20 @@ public class InsertPlanner {
             }
 
             if (isEquality) {
+                // Equality predicate: typically selects 1 value per column
                 columnDistinctValues.put(colName, 1L);
-            } else {
-                // Use statistics to estimate selectivity for range predicates on partition columns
+            } else if (isRange) {
+                // Range predicate: use NDV statistics to estimate selectivity
                 double ndv = partitionNdv != null && partitionNdv.containsKey(colName)
                         ? partitionNdv.get(colName) : -1;
                 if (ndv > 0) {
+                    // Estimate using fixed selectivity (10% of partitions)
+                    // This is conservative; actual selectivity depends on range bounds
                     long estimated = (long) Math.ceil(ndv * PARTITION_RANGE_SELECTIVITY);
+                    // Ensure at least 1 partition is estimated
                     columnDistinctValues.put(colName, Math.max(1L, estimated));
                 }
+                // If no NDV statistics available, we can't estimate - leave empty to trigger fallback
             }
             return true;
         }
