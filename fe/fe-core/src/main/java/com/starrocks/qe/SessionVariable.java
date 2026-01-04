@@ -551,6 +551,23 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // We will make it be controlled by the common connector session.
     public static final String ENABLE_ICEBERG_SINK_GLOBAL_SHUFFLE = "enable_iceberg_sink_global_shuffle";
 
+    // Enable adaptive global shuffle for Iceberg table sink based on partition count and backend count.
+    // When enabled, the system will automatically decide whether to use global shuffle based on:
+    // 1. The estimated number of partitions being written
+    // 2. The number of available backends
+    // This allows automatic optimization without manual configuration.
+    public static final String ENABLE_ICEBERG_SINK_ADAPTIVE_SHUFFLE = "enable_iceberg_sink_adaptive_shuffle";
+
+    // The absolute threshold of partition count to enable adaptive global shuffle.
+    // When the estimated partition count is >= this value, adaptive shuffle will be enabled.
+    // Default is 100 partitions.
+    public static final String ICEBERG_SINK_SHUFFLE_PARTITION_THRESHOLD = "iceberg_sink_shuffle_partition_threshold";
+
+    // The ratio of partition count to backend count to enable adaptive global shuffle.
+    // When estimated partition count >= backend count * this ratio, adaptive shuffle will be enabled.
+    // Default is 2.0 (i.e., enable shuffle when partitions >= backends * 2).
+    public static final String ICEBERG_SINK_SHUFFLE_PARTITION_NODE_RATIO = "iceberg_sink_shuffle_partition_node_ratio";
+
     public static final String ENABLE_CONNECTOR_SINK_SPILL = "enable_connector_sink_spill";
     public static final String CONNECTOR_SINK_SPILL_MEM_LIMIT_THRESHOLD = "connector_sink_spill_mem_limit_threshold";
     public static final String PIPELINE_SINK_DOP = "pipeline_sink_dop";
@@ -1426,6 +1443,16 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = ENABLE_ICEBERG_SINK_GLOBAL_SHUFFLE, flag = VariableMgr.INVISIBLE)
     private boolean enableIcebergSinkGlobalShuffle = false;
+
+    @VariableMgr.VarAttr(name = ENABLE_ICEBERG_SINK_ADAPTIVE_SHUFFLE, flag = VariableMgr.INVISIBLE)
+    private boolean enableIcebergSinkAdaptiveShuffle = true;
+
+    @VariableMgr.VarAttr(name = ICEBERG_SINK_SHUFFLE_PARTITION_THRESHOLD, flag = VariableMgr.INVISIBLE)
+    private long icebergSinkShufflePartitionThreshold = 100;
+
+    @VariableMgr.VarAttr(name = ICEBERG_SINK_SHUFFLE_PARTITION_NODE_RATIO, flag = VariableMgr.INVISIBLE)
+    private double icebergSinkShufflePartitionNodeRatio = 2.0;
+
     @VariableMgr.VarAttr(name = ENABLE_CONNECTOR_SINK_SPILL, flag = VariableMgr.INVISIBLE)
     private boolean enableConnectorSinkSpill = true;
 
@@ -4237,6 +4264,18 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isEnableIcebergSinkGlobalShuffle() {
         return enableIcebergSinkGlobalShuffle;
+    }
+
+    public boolean isEnableIcebergSinkAdaptiveShuffle() {
+        return enableIcebergSinkAdaptiveShuffle;
+    }
+
+    public long getIcebergSinkShufflePartitionThreshold() {
+        return icebergSinkShufflePartitionThreshold;
+    }
+
+    public double getIcebergSinkShufflePartitionNodeRatio() {
+        return icebergSinkShufflePartitionNodeRatio;
     }
 
     public boolean isEnableConnectorSinkSpill() {
