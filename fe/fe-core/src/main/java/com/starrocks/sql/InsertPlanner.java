@@ -38,6 +38,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
+import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.load.Load;
 import com.starrocks.planner.BlackHoleTableSink;
 import com.starrocks.planner.DataSink;
@@ -62,7 +63,6 @@ import com.starrocks.sql.analyzer.RelationFields;
 import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.PartitionRef;
@@ -139,13 +139,6 @@ import static com.starrocks.sql.optimizer.rule.mv.MVUtils.MATERIALIZED_VIEW_NAME
 public class InsertPlanner {
     // Only for unit test
     public static boolean enableSingleReplicationShuffle = false;
-    /**
-     * Default selectivity for range predicates on partition columns.
-     * Assumes 10% of partitions are selected by range predicates (e.g., dt > '2024-01-01').
-     * This is conservative; actual selectivity depends on data distribution and range bounds.
-     * Future improvement: use histogram statistics for more accurate estimation.
-     */
-    private static final double PARTITION_RANGE_SELECTIVITY = 0.1;
     /**
      * Maximum cap for partition count estimation to avoid overflow.
      * When actual partition count cannot be determined, estimates are capped at this value.
@@ -1177,7 +1170,7 @@ public class InsertPlanner {
         if (shouldEnable && LOG.isDebugEnabled()) {
             LOG.debug("Enable adaptive global shuffle for iceberg table {}.{}: " +
                             "estimated partitions={}, alive backends={}, threshold={}, ratio={}",
-                    icebergTable.getDbName(), icebergTable.getTableName(),
+                    icebergTable.getCatalogDBName(), icebergTable.getCatalogTableName(),
                     estimatedPartitionCount, aliveBackendNum,
                     partitionCountThreshold, partitionCountNodeRatio);
         }
@@ -1198,8 +1191,8 @@ public class InsertPlanner {
         try {
             List<String> partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr()
                     .listPartitionNames(icebergTable.getCatalogName(),
-                            icebergTable.getDbName(),
-                            icebergTable.getTableName(),
+                            icebergTable.getCatalogDBName(),
+                            icebergTable.getCatalogTableName(),
                             new ConnectorMetadatRequestContext());
 
             if (!partitionNames.isEmpty()) {
@@ -1226,7 +1219,7 @@ public class InsertPlanner {
             }
         } catch (Exception e) {
             LOG.warn("Failed to get partition count for iceberg table {}.{}: {}",
-                    icebergTable.getDbName(), icebergTable.getTableName(), e.getMessage());
+                    icebergTable.getCatalogDBName(), icebergTable.getCatalogTableName(), e.getMessage());
         }
 
         // When partition metadata is unavailable (empty list or exception), fall back to statistics
@@ -1307,7 +1300,7 @@ public class InsertPlanner {
             }
         } catch (Exception e) {
             LOG.debug("Failed to fetch partition column NDV for iceberg table {}.{}: {}",
-                    icebergTable.getDbName(), icebergTable.getTableName(), e.getMessage());
+                    icebergTable.getCatalogDBName(), icebergTable.getCatalogTableName(), e.getMessage());
         }
         return partitionNdv;
     }
@@ -1493,8 +1486,9 @@ public class InsertPlanner {
                         ? partitionNdv.get(colName) : -1;
                 if (ndv > 0) {
                     // Estimate using fixed selectivity (10% of partitions)
+                    // Assumes 10% of partitions are selected by range predicates (e.g., dt > '2024-01-01').
                     // This is conservative; actual selectivity depends on range bounds
-                    long estimated = (long) Math.ceil(ndv * PARTITION_RANGE_SELECTIVITY);
+                    long estimated = (long) Math.ceil(ndv * 0.1);
                     // Ensure at least 1 partition is estimated
                     columnDistinctValues.put(colName, Math.max(1L, estimated));
                 }

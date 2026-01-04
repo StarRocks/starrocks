@@ -17,7 +17,7 @@ package com.starrocks.sql;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.IcebergTable;
-import com.starrocks.catalog.Type;
+import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
@@ -35,7 +35,8 @@ import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.StatisticStorage;
-import mockit.Deencapsulation;
+import com.starrocks.type.DateType;
+import com.starrocks.type.VarcharType;
 import mockit.Delegate;
 import mockit.Expectations;
 import mockit.Mocked;
@@ -66,12 +67,12 @@ public class InsertPlannerAdaptiveShuffleTest {
      */
     @Test
     public void testAdaptiveShuffleEnabledByPartitionRatio(@Mocked GlobalStateMgr gsm,
-                                                            @Mocked MetadataMgr metadataMgr,
-                                                            @Mocked IcebergTable icebergTable,
-                                                            @Mocked InsertStmt insertStmt,
-                                                            @Mocked SessionVariable sessionVariable,
-                                                            @Mocked QueryStatement queryStatement,
-                                                            @Mocked SelectRelation selectRelation) {
+                                                           @Mocked MetadataMgr metadataMgr,
+                                                           @Mocked IcebergTable icebergTable,
+                                                           @Mocked InsertStmt insertStmt,
+                                                           @Mocked SessionVariable sessionVariable,
+                                                           @Mocked QueryStatement queryStatement,
+                                                           @Mocked SelectRelation selectRelation) {
         // Setup: 10 backends, 50 partitions, ratio = 2.0
         // Expected: 50 >= 10 * 2.0 = 20, so should enable shuffle
         setupMockExpectations(gsm, metadataMgr, icebergTable, insertStmt, sessionVariable,
@@ -87,12 +88,12 @@ public class InsertPlannerAdaptiveShuffleTest {
      */
     @Test
     public void testAdaptiveShuffleEnabledByAbsoluteThreshold(@Mocked GlobalStateMgr gsm,
-                                                               @Mocked MetadataMgr metadataMgr,
-                                                               @Mocked IcebergTable icebergTable,
-                                                               @Mocked InsertStmt insertStmt,
-                                                               @Mocked SessionVariable sessionVariable,
-                                                               @Mocked QueryStatement queryStatement,
-                                                               @Mocked SelectRelation selectRelation) {
+                                                              @Mocked MetadataMgr metadataMgr,
+                                                              @Mocked IcebergTable icebergTable,
+                                                              @Mocked InsertStmt insertStmt,
+                                                              @Mocked SessionVariable sessionVariable,
+                                                              @Mocked QueryStatement queryStatement,
+                                                              @Mocked SelectRelation selectRelation) {
         // Setup: 10 backends, 150 partitions, threshold = 100, ratio = 2.0
         // Expected: 150 >= 100, so should enable shuffle
         setupMockExpectations(gsm, metadataMgr, icebergTable, insertStmt, sessionVariable,
@@ -108,12 +109,12 @@ public class InsertPlannerAdaptiveShuffleTest {
      */
     @Test
     public void testAdaptiveShuffleDisabledWhenPartitionsLow(@Mocked GlobalStateMgr gsm,
-                                                               @Mocked MetadataMgr metadataMgr,
-                                                               @Mocked IcebergTable icebergTable,
-                                                               @Mocked InsertStmt insertStmt,
-                                                               @Mocked SessionVariable sessionVariable,
-                                                               @Mocked QueryStatement queryStatement,
-                                                               @Mocked SelectRelation selectRelation) {
+                                                             @Mocked MetadataMgr metadataMgr,
+                                                             @Mocked IcebergTable icebergTable,
+                                                             @Mocked InsertStmt insertStmt,
+                                                             @Mocked SessionVariable sessionVariable,
+                                                             @Mocked QueryStatement queryStatement,
+                                                             @Mocked SelectRelation selectRelation) {
         // Setup: 10 backends, 5 partitions, threshold = 100, ratio = 2.0
         // Expected: 5 < 100 and 5 < 10 * 2.0 = 20, so should NOT enable shuffle
         setupMockExpectations(gsm, metadataMgr, icebergTable, insertStmt, sessionVariable,
@@ -150,12 +151,12 @@ public class InsertPlannerAdaptiveShuffleTest {
      */
     @Test
     public void testAdaptiveShuffleDisabledWhenNoBackends(@Mocked GlobalStateMgr gsm,
-                                                           @Mocked MetadataMgr metadataMgr,
-                                                           @Mocked IcebergTable icebergTable,
-                                                           @Mocked InsertStmt insertStmt,
-                                                           @Mocked SessionVariable sessionVariable,
-                                                           @Mocked QueryStatement queryStatement,
-                                                           @Mocked SelectRelation selectRelation) {
+                                                          @Mocked MetadataMgr metadataMgr,
+                                                          @Mocked IcebergTable icebergTable,
+                                                          @Mocked InsertStmt insertStmt,
+                                                          @Mocked SessionVariable sessionVariable,
+                                                          @Mocked QueryStatement queryStatement,
+                                                          @Mocked SelectRelation selectRelation) {
         // Setup: 0 backends
         setupMockExpectations(gsm, metadataMgr, icebergTable, insertStmt, sessionVariable,
                 queryStatement, selectRelation, 0, 50, 100L, 2.0, false, null, null, false);
@@ -175,20 +176,22 @@ public class InsertPlannerAdaptiveShuffleTest {
                                        @Mocked InsertStmt insertStmt,
                                        @Mocked SessionVariable sessionVariable) {
         // Setup: empty partition list (should return MAX_VALUE to enable shuffle)
-        new Expectations() {{
-            GlobalStateMgr.getCurrentState();
-            result = gsm;
-            minTimes = 0;
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                result = gsm;
+                minTimes = 0;
 
-            gsm.getMetadataMgr();
-            result = metadataMgr;
-            minTimes = 0;
+                gsm.getMetadataMgr();
+                result = metadataMgr;
+                minTimes = 0;
 
-            metadataMgr.listPartitionNames(anyString, anyString, anyString,
-                    withInstanceOf(ConnectorMetadatRequestContext.class));
-            result = new ArrayList<String>(); // Empty partition list
-            minTimes = 0;
-        }};
+                metadataMgr.listPartitionNames(anyString, anyString, anyString,
+                        withInstanceOf(ConnectorMetadatRequestContext.class));
+                result = new ArrayList<String>(); // Empty partition list
+                minTimes = 0;
+            }
+        };
 
         long partitionCount = Deencapsulation.invoke(insertPlanner, "estimatePartitionCountForInsert",
                 insertStmt, icebergTable);
@@ -205,20 +208,22 @@ public class InsertPlannerAdaptiveShuffleTest {
                                            @Mocked InsertStmt insertStmt,
                                            @Mocked SessionVariable sessionVariable) {
         // Setup: exception when getting partition list
-        new Expectations() {{
-            GlobalStateMgr.getCurrentState();
-            result = gsm;
-            minTimes = 0;
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                result = gsm;
+                minTimes = 0;
 
-            gsm.getMetadataMgr();
-            result = metadataMgr;
-            minTimes = 0;
+                gsm.getMetadataMgr();
+                result = metadataMgr;
+                minTimes = 0;
 
-            metadataMgr.listPartitionNames(anyString, anyString, anyString,
-                    withInstanceOf(ConnectorMetadatRequestContext.class));
-            result = new Exception("Failed to get partitions");
-            minTimes = 0;
-        }};
+                metadataMgr.listPartitionNames(anyString, anyString, anyString,
+                        withInstanceOf(ConnectorMetadatRequestContext.class));
+                result = new Exception("Failed to get partitions");
+                minTimes = 0;
+            }
+        };
 
         long partitionCount = Deencapsulation.invoke(insertPlanner, "estimatePartitionCountForInsert",
                 insertStmt, icebergTable);
@@ -237,79 +242,81 @@ public class InsertPlannerAdaptiveShuffleTest {
                                                  @Mocked QueryStatement queryStatement,
                                                  @Mocked SelectRelation selectRelation,
                                                  @Mocked StatisticStorage statisticStorage) {
-        new Expectations() {{
-            GlobalStateMgr.getCurrentState();
-            result = gsm;
-            minTimes = 0;
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                result = gsm;
+                minTimes = 0;
 
-            gsm.getMetadataMgr();
-            result = metadataMgr;
-            minTimes = 0;
+                gsm.getMetadataMgr();
+                result = metadataMgr;
+                minTimes = 0;
 
-            metadataMgr.listPartitionNames(anyString, anyString, anyString,
-                    withInstanceOf(ConnectorMetadatRequestContext.class));
-            result = new ArrayList<String>();
-            minTimes = 0;
+                metadataMgr.listPartitionNames(anyString, anyString, anyString,
+                        withInstanceOf(ConnectorMetadatRequestContext.class));
+                result = new ArrayList<String>();
+                minTimes = 0;
 
-            gsm.getStatisticStorage();
-            result = statisticStorage;
-            minTimes = 0;
+                gsm.getStatisticStorage();
+                result = statisticStorage;
+                minTimes = 0;
 
-            statisticStorage.getColumnStatistic(icebergTable, "dt");
-            result = ColumnStatistic.buildFrom(ColumnStatistic.unknown()).setDistinctValuesCount(10).build();
-            minTimes = 0;
+                statisticStorage.getColumnStatistic(icebergTable, "dt");
+                result = ColumnStatistic.buildFrom(ColumnStatistic.unknown()).setDistinctValuesCount(10).build();
+                minTimes = 0;
 
-            statisticStorage.getColumnStatistic(icebergTable, "country");
-            result = ColumnStatistic.buildFrom(ColumnStatistic.unknown()).setDistinctValuesCount(5).build();
-            minTimes = 0;
+                statisticStorage.getColumnStatistic(icebergTable, "country");
+                result = ColumnStatistic.buildFrom(ColumnStatistic.unknown()).setDistinctValuesCount(5).build();
+                minTimes = 0;
 
-            icebergTable.getPartitionColumns();
-            result = Lists.newArrayList(
-                    new Column("dt", Type.DATE),
-                    new Column("country", Type.VARCHAR)
-            );
-            minTimes = 0;
+                icebergTable.getPartitionColumns();
+                result = Lists.newArrayList(
+                        new Column("dt", DateType.DATE),
+                        new Column("country", VarcharType.VARCHAR)
+                );
+                minTimes = 0;
 
-            icebergTable.getCatalogName();
-            result = "test_catalog";
-            minTimes = 0;
+                icebergTable.getCatalogName();
+                result = "test_catalog";
+                minTimes = 0;
 
-            icebergTable.getDbName();
-            result = "test_db";
-            minTimes = 0;
+                icebergTable.getCatalogDBName();
+                result = "test_db";
+                minTimes = 0;
 
-            icebergTable.getTableName();
-            result = "test_table";
-            minTimes = 0;
+                icebergTable.getCatalogTableName();
+                result = "test_table";
+                minTimes = 0;
 
-            insertStmt.isStaticKeyPartitionInsert();
-            result = false;
-            minTimes = 0;
+                insertStmt.isStaticKeyPartitionInsert();
+                result = false;
+                minTimes = 0;
 
-            insertStmt.getQueryStatement();
-            result = queryStatement;
-            minTimes = 0;
+                insertStmt.getQueryStatement();
+                result = queryStatement;
+                minTimes = 0;
 
-            queryStatement.getQueryRelation();
-            result = selectRelation;
-            minTimes = 0;
+                queryStatement.getQueryRelation();
+                result = selectRelation;
+                minTimes = 0;
 
-            selectRelation.hasWhereClause();
-            result = false;
-            minTimes = 0;
+                selectRelation.hasWhereClause();
+                result = false;
+                minTimes = 0;
 
-            sessionVariable.getIcebergSinkShufflePartitionThreshold();
-            result = 100L;
-            minTimes = 0;
+                sessionVariable.getIcebergSinkShufflePartitionThreshold();
+                result = 100L;
+                minTimes = 0;
 
-            sessionVariable.getIcebergSinkShufflePartitionNodeRatio();
-            result = 2.0;
-            minTimes = 0;
+                sessionVariable.getIcebergSinkShufflePartitionNodeRatio();
+                result = 2.0;
+                minTimes = 0;
 
-            gsm.getNodeMgr().getClusterInfo().getAliveBackendNumber();
-            result = 5;
-            minTimes = 0;
-        }};
+                gsm.getNodeMgr().getClusterInfo().getAliveBackendNumber();
+                result = 5;
+                minTimes = 0;
+            }
+        };
 
         long partitionCount = Deencapsulation.invoke(insertPlanner, "estimatePartitionCountForInsert",
                 insertStmt, icebergTable);
@@ -358,95 +365,97 @@ public class InsertPlannerAdaptiveShuffleTest {
                                        Expr predicate,
                                        boolean hasWhereClause) {
 
-        new Expectations() {{
-            // GlobalStateMgr setup
-            GlobalStateMgr.getCurrentState();
-            result = gsm;
-            minTimes = 0;
+        new Expectations() {
+            {
+                // GlobalStateMgr setup
+                GlobalStateMgr.getCurrentState();
+                result = gsm;
+                minTimes = 0;
 
-            gsm.getMetadataMgr();
-            result = metadataMgr;
-            minTimes = 0;
+                gsm.getMetadataMgr();
+                result = metadataMgr;
+                minTimes = 0;
 
-            gsm.getNodeMgr().getClusterInfo().getAliveBackendNumber();
-            result = backendCount;
-            minTimes = 0;
+                gsm.getNodeMgr().getClusterInfo().getAliveBackendNumber();
+                result = backendCount;
+                minTimes = 0;
 
-            // MetadataMgr setup for partition names
-            metadataMgr.listPartitionNames(anyString, anyString, anyString,
-                    withInstanceOf(ConnectorMetadatRequestContext.class));
-            result = new Delegate<List<String>>() {
-                @SuppressWarnings("unused")
-                List<String> delegate(String catalog, String db, String table,
-                                     ConnectorMetadatRequestContext context) {
-                    List<String> partitions = new ArrayList<>();
-                    for (int i = 0; i < partitionCount; i++) {
-                        partitions.add("p" + i);
+                // MetadataMgr setup for partition names
+                metadataMgr.listPartitionNames(anyString, anyString, anyString,
+                        withInstanceOf(ConnectorMetadatRequestContext.class));
+                result = new Delegate<List<String>>() {
+                    @SuppressWarnings("unused")
+                    List<String> delegate(String catalog, String db, String table,
+                                          ConnectorMetadatRequestContext context) {
+                        List<String> partitions = new ArrayList<>();
+                        for (int i = 0; i < partitionCount; i++) {
+                            partitions.add("p" + i);
+                        }
+                        return partitions;
                     }
-                    return partitions;
+                };
+                minTimes = 0;
+
+                // IcebergTable setup
+                icebergTable.getCatalogName();
+                result = "test_catalog";
+                minTimes = 0;
+
+                icebergTable.getCatalogDBName();
+                result = "test_db";
+                minTimes = 0;
+
+                icebergTable.getCatalogTableName();
+                result = "test_table";
+                minTimes = 0;
+
+                icebergTable.getPartitionColumns();
+                result = Lists.newArrayList(
+                        new Column("dt", DateType.DATE),
+                        new Column("country", VarcharType.VARCHAR)
+                );
+                minTimes = 0;
+
+                // InsertStmt setup
+                insertStmt.isStaticKeyPartitionInsert();
+                result = isStaticPartitionInsert;
+                minTimes = 0;
+
+                insertStmt.getTargetPartitionNames();
+                result = partitionRef;
+                minTimes = 0;
+
+                if (partitionRef != null) {
+                    partitionRef.getPartitionColNames();
+                    result = Lists.newArrayList("p1");
+                    minTimes = 0;
                 }
-            };
-            minTimes = 0;
 
-            // IcebergTable setup
-            icebergTable.getCatalogName();
-            result = "test_catalog";
-            minTimes = 0;
+                insertStmt.getQueryStatement();
+                result = queryStatement;
+                minTimes = 0;
 
-            icebergTable.getDbName();
-            result = "test_db";
-            minTimes = 0;
+                queryStatement.getQueryRelation();
+                result = selectRelation;
+                minTimes = 0;
 
-            icebergTable.getTableName();
-            result = "test_table";
-            minTimes = 0;
+                selectRelation.hasWhereClause();
+                result = hasWhereClause;
+                minTimes = 0;
 
-            icebergTable.getPartitionColumns();
-            result = Lists.newArrayList(
-                    new Column("dt", Type.DATE),
-                    new Column("country", Type.VARCHAR)
-            );
-            minTimes = 0;
+                selectRelation.getPredicate();
+                result = predicate;
+                minTimes = 0;
 
-            // InsertStmt setup
-            insertStmt.isStaticKeyPartitionInsert();
-            result = isStaticPartitionInsert;
-            minTimes = 0;
+                // SessionVariable setup
+                sessionVariable.getIcebergSinkShufflePartitionThreshold();
+                result = threshold;
+                minTimes = 0;
 
-            insertStmt.getTargetPartitionNames();
-            result = partitionRef;
-            minTimes = 0;
-
-            if (partitionRef != null) {
-                partitionRef.getPartitionColNames();
-                result = Lists.newArrayList("p1");
+                sessionVariable.getIcebergSinkShufflePartitionNodeRatio();
+                result = ratio;
                 minTimes = 0;
             }
-
-            insertStmt.getQueryStatement();
-            result = queryStatement;
-            minTimes = 0;
-
-            queryStatement.getQueryRelation();
-            result = selectRelation;
-            minTimes = 0;
-
-            selectRelation.hasWhereClause();
-            result = hasWhereClause;
-            minTimes = 0;
-
-            selectRelation.getPredicate();
-            result = predicate;
-            minTimes = 0;
-
-            // SessionVariable setup
-            sessionVariable.getIcebergSinkShufflePartitionThreshold();
-            result = threshold;
-            minTimes = 0;
-
-            sessionVariable.getIcebergSinkShufflePartitionNodeRatio();
-            result = ratio;
-            minTimes = 0;
-        }};
+        };
     }
 }
