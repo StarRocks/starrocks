@@ -40,6 +40,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <cstring>
+#include <memory>
 #include <ostream>
 
 #include "column/fixed_length_column.h"
@@ -427,7 +428,7 @@ inline Status BitShufflePageDecoder<Type>::read_by_rowids(const ordinal_t first_
     }
     size_t total = *count;
     size_t read_count = 0;
-    [[maybe_unused]] CppType data[total];
+    auto data = std::make_unique_for_overwrite<CppType[]>(total);
     for (size_t i = 0; i < total; i++) {
         ordinal_t ord = rowids[i] - first_ordinal_in_page;
         if (UNLIKELY(ord >= _num_elements)) {
@@ -437,7 +438,7 @@ inline Status BitShufflePageDecoder<Type>::read_by_rowids(const ordinal_t first_
     }
 
     if (read_count > 0) {
-        size_t nappend = column->append_numbers(data, SIZE_OF_TYPE * read_count);
+        size_t nappend = column->append_numbers(data.get(), SIZE_OF_TYPE * read_count);
         if (UNLIKELY(nappend != read_count)) {
             return Status::InternalError(
                     fmt::format("append_numbers failed, expected rows[{}], actual rows[{}]", read_count, nappend));

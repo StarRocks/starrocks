@@ -1322,7 +1322,7 @@ StatusOr<size_t> SegmentIterator::trigger_sample_if_necessary(vector<rowid_t>* r
                                                   ? 1
                                                   : static_cast<double>(_context->_first_column_total_rows_passed) /
                                                             _context->_first_column_total_rows_read;
-        if (first_column_selectivity > config::tigger_sample_selectivity) {
+        if (first_column_selectivity > config::predicate_sampling_trigger_selectivity_threshold) {
             ColumnId old_first_column_id = _context->_predicate_order[0];
 
             // Sample and update predicate selectivity
@@ -2170,7 +2170,7 @@ StatusOr<size_t> SegmentIterator::_predicate_evaluate_late_materialize_read_firs
     size_t chunk_size = first_col->size();
 
     if (expr_column_predicate_map.contains(first_column_id) && !_context->_is_filtered) {
-        // Don't apply runtime filter here because it was already applied in non_expr predicate filtering
+        // column-expr-predicate doesn't support [begin, end] interface
         ASSIGN_OR_RETURN(chunk_size, _filter_by_compound_and_predicates(chunk, rowid, 0, chunk_size, first_column_id,
                                                                         expr_column_predicate_map.at(first_column_id),
                                                                         current_columns, false));

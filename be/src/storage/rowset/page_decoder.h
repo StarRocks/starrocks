@@ -147,10 +147,6 @@ public:
 
     virtual void reserve_col(size_t n, Column* column) { column->reserve(n); }
 
-    // Check if this page decoder supports push down predicate for late materialization
-    // Returns true if this decoder can efficiently handle predicates in next_batch_with_filter
-    virtual bool support_push_down_predicate() const { return false; }
-
     virtual bool supports_read_by_rowids() const { return false; }
 
 protected:

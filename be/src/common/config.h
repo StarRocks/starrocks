@@ -1880,7 +1880,8 @@ CONF_mBool(enable_cow_optimization, "true");
 // The diagnose level for cow optimization, 0 means no diagnose, 1 means diagnose when use_count > 1, 2 means diagnose when use_count > 2.
 CONF_Int32(cow_optimization_diagnose_level, "0");
 
-// if the first predicate column's selectivity bigger than this, trigger sample,
-// which means if the selectivity is very good already, we don't need to sample
-CONF_mDouble(tigger_sample_selectivity, "0.2");
+// If the first predicate column's selectivity is higher than this threshold, trigger sampling
+// to potentially find a better predicate order. When selectivity is already good (low), sampling
+// is unlikely to help and will be skipped.
+CONF_mDouble(predicate_sampling_trigger_selectivity_threshold, "0.2");
 } // namespace starrocks::config

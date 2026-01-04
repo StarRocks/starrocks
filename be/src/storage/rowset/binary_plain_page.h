@@ -276,7 +276,6 @@ public:
         return -1;
     }
 
-    bool support_push_down_predicate() const override { return Type == TYPE_VARCHAR; }
     bool supports_read_by_rowids() const override { return Type == TYPE_VARCHAR; }
 
     uint32_t max_value_length() const {

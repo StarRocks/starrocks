@@ -792,14 +792,14 @@ bool ScalarColumnIterator::support_push_down_predicate(
         }
     }
 
-    // Check if the decoder supports push down predicate
-    // First check dict decoder, then check current page decoder
-    if (_dict_decoder != nullptr) {
-        return _dict_decoder->support_push_down_predicate();
+    // if this column is low cardinality column, do not push down filter
+    if (_reader->has_all_dict_encoded() && _reader->all_dict_encoded()) {
+        return false;
     }
 
-    // No decoder available yet, conservatively return false
-    return false;
+    // push down filter is this is varchar, since varchar doesn't support zero copy
+    // and copy varchar is a heavy operation
+    return _reader->column_type() == TYPE_VARCHAR;
 }
 
 } // namespace starrocks
