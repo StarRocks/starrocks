@@ -101,9 +101,6 @@ private:
     // Column name to slot reference mapping (stores slot_ref and type)
     std::unordered_map<std::string, TExprNode> _column_slot_map;
 
-    // Runtime state (for metrics and commit info)
-    RuntimeState* _state = nullptr;
-
     // Map: (partition, file_path) -> writer for file-level delete files
     std::map<std::pair<std::string, std::string>, PartitionChunkWriterPtr> _file_writers;
 

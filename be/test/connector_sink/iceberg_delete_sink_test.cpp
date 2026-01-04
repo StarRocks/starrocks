@@ -219,4 +219,167 @@ TEST_F(IcebergDeleteSinkTest, context_required_fields) {
     EXPECT_NE(context->column_slot_map.find("_pos"), context->column_slot_map.end());
 }
 
+// Test callback_on_commit function
+TEST_F(IcebergDeleteSinkTest, callback_on_commit) {
+    auto context = create_delete_sink_context();
+    auto provider = std::make_unique<IcebergDeleteSinkProvider>();
+    auto result = provider->create_chunk_sink(context, 0);
+    ASSERT_TRUE(result.ok());
+
+    auto sink = std::move(result).value();
+    auto delete_sink = dynamic_cast<IcebergDeleteSink*>(sink.get());
+    ASSERT_NE(delete_sink, nullptr);
+
+    // Call the callback function - it should not crash
+    CommitResult result_obj;
+    delete_sink->callback_on_commit(result_obj);
+    // Callback is currently empty (TODO), but should not crash
+}
+
+// Test IcebergDeleteSink::add with chunk containing file_path and pos data
+TEST_F(IcebergDeleteSinkTest, add_with_data) {
+    auto context = create_delete_sink_context();
+    auto provider = std::make_unique<IcebergDeleteSinkProvider>();
+    auto result = provider->create_chunk_sink(context, 0);
+    ASSERT_TRUE(result.ok());
+
+    auto sink = std::move(result).value();
+    auto delete_sink = dynamic_cast<IcebergDeleteSink*>(sink.get());
+    ASSERT_NE(delete_sink, nullptr);
+
+    // Create chunk with file_path and pos columns
+    auto file_path_col = BinaryColumn::create();
+    file_path_col->append(Slice("/path/to/file1.parquet"));
+    file_path_col->append(Slice("/path/to/file2.parquet"));
+    
+    auto pos_col = Int64Column::create();
+    pos_col->append(100);
+    pos_col->append(200);
+
+    Chunk chunk;
+    chunk.append_column(file_path_col, 0);  // slot_id 0
+    chunk.append_column(pos_col, 1);        // slot_id 1
+
+    // Add should succeed
+    ASSERT_OK(delete_sink->add(std::make_shared<Chunk>(chunk)));
+}
+
+// Test IcebergDeleteSink::finish function
+TEST_F(IcebergDeleteSinkTest, finish_function) {
+    auto context = create_delete_sink_context();
+    auto provider = std::make_unique<IcebergDeleteSinkProvider>();
+    auto result = provider->create_chunk_sink(context, 0);
+    ASSERT_TRUE(result.ok());
+
+    auto sink = std::move(result).value();
+    auto delete_sink = dynamic_cast<IcebergDeleteSink*>(sink.get());
+    ASSERT_NE(delete_sink, nullptr);
+
+    // Finish should succeed
+    ASSERT_OK(delete_sink->finish());
+}
+
+// Test error condition: missing _file column in column_slot_map
+TEST_F(IcebergDeleteSinkTest, missing_file_column) {
+    auto context = std::make_shared<IcebergDeleteSinkContext>();
+    context->tuple_desc_id = 0;
+    context->fragment_context = _fragment_context.get();
+    
+    // Only add _pos, not _file
+    TExprNode pos_node;
+    pos_node.node_type = TExprNodeType::SLOT_REF;
+    pos_node.__set_slot_ref(TSlotRef());
+    pos_node.slot_ref.slot_id = 1;
+    context->column_slot_map["_pos"] = pos_node;
+
+    auto provider = std::make_unique<IcebergDeleteSinkProvider>();
+    auto result = provider->create_chunk_sink(context, 0);
+    
+    // Should fail because _file column is missing
+    ASSERT_FALSE(result.ok());
+    EXPECT_THAT(result.status().message(), testing::HasSubstr("Could not find _file column"));
+}
+
+// Test error condition: missing _pos column in column_slot_map
+TEST_F(IcebergDeleteSinkTest, missing_pos_column) {
+    auto context = std::make_shared<IcebergDeleteSinkContext>();
+    context->tuple_desc_id = 0;
+    context->fragment_context = _fragment_context.get();
+    
+    // Only add _file, not _pos
+    TExprNode file_node;
+    file_node.node_type = TExprNodeType::SLOT_REF;
+    file_node.__set_slot_ref(TSlotRef());
+    file_node.slot_ref.slot_id = 0;
+    context->column_slot_map["_file"] = file_node;
+
+    auto provider = std::make_unique<IcebergDeleteSinkProvider>();
+    auto result = provider->create_chunk_sink(context, 0);
+    
+    // Should fail because _pos column is missing
+    ASSERT_FALSE(result.ok());
+    EXPECT_THAT(result.status().message(), testing::HasSubstr("Could not find _pos column"));
+}
+
+// Test error condition: not enough column evaluators
+TEST_F(IcebergDeleteSinkTest, not_enough_evaluators) {
+    auto context = std::make_shared<IcebergDeleteSinkContext>();
+    context->tuple_desc_id = 0;
+    context->fragment_context = _fragment_context.get();
+    
+    // Setup required columns
+    TExprNode file_node;
+    file_node.node_type = TExprNodeType::SLOT_REF;
+    file_node.__set_slot_ref(TSlotRef());
+    file_node.slot_ref.slot_id = 0;
+    context->column_slot_map["_file"] = file_node;
+    
+    TExprNode pos_node;
+    pos_node.node_type = TExprNodeType::SLOT_REF;
+    pos_node.__set_slot_ref(TSlotRef());
+    pos_node.slot_ref.slot_id = 1;
+    context->column_slot_map["_pos"] = pos_node;
+    
+    // Add only 1 evaluator instead of required 2
+    context->column_evaluators.push_back(create_mock_column_evaluator());
+
+    auto provider = std::make_unique<IcebergDeleteSinkProvider>();
+    auto result = provider->create_chunk_sink(context, 0);
+    
+    // Should fail because not enough evaluators
+    ASSERT_FALSE(result.ok());
+    EXPECT_THAT(result.status().message(), testing::HasSubstr("Not enough column evaluators"));
+}
+
+// Test error condition: invalid tuple descriptor ID
+TEST_F(IcebergDeleteSinkTest, invalid_tuple_descriptor_id) {
+    auto context = std::make_shared<IcebergDeleteSinkContext>();
+    context->tuple_desc_id = 999; // Invalid ID
+    context->fragment_context = _fragment_context.get();
+    
+    // Setup required columns
+    TExprNode file_node;
+    file_node.node_type = TExprNodeType::SLOT_REF;
+    file_node.__set_slot_ref(TSlotRef());
+    file_node.slot_ref.slot_id = 0;
+    context->column_slot_map["_file"] = file_node;
+    
+    TExprNode pos_node;
+    pos_node.node_type = TExprNodeType::SLOT_REF;
+    pos_node.__set_slot_ref(TSlotRef());
+    pos_node.slot_ref.slot_id = 1;
+    context->column_slot_map["_pos"] = pos_node;
+    
+    // Add required evaluators
+    context->column_evaluators.push_back(create_mock_column_evaluator());
+    context->column_evaluators.push_back(create_mock_column_evaluator());
+
+    auto provider = std::make_unique<IcebergDeleteSinkProvider>();
+    auto result = provider->create_chunk_sink(context, 0);
+    
+    // Should fail because tuple descriptor ID is invalid
+    ASSERT_FALSE(result.ok());
+    EXPECT_THAT(result.status().message(), testing::HasSubstr("Failed to find tuple descriptor"));
+}
+
 } // namespace starrocks::connector

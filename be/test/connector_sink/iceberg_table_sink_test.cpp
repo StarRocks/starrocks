@@ -280,4 +280,53 @@ TEST_F(IcebergTableSinkTest, update_partition_expr_slot_refs_by_map_missing_slot
     EXPECT_TRUE(st.message().find("Could not find slot reference for partition column: dt") != std::string::npos);
 }
 
+// Test decompose_to_pipeline with ICEBERG_DELETE_SINK type
+TEST_F(IcebergTableSinkTest, decompose_to_pipeline_delete_sink) {
+    TDescriptorTableBuilder table_desc_builder;
+    TSlotDescriptorBuilder slot_desc_builder;
+    auto slot1 = slot_desc_builder.type(LogicalType::TYPE_VARCHAR).column_name("file_path").column_pos(0).nullable(true).build();
+    auto slot2 = slot_desc_builder.type(LogicalType::TYPE_BIGINT).column_name("pos").column_pos(1).nullable(true).build();
+    TTupleDescriptorBuilder tuple_desc_builder;
+    tuple_desc_builder.add_slot(slot1);
+    tuple_desc_builder.add_slot(slot2);
+    tuple_desc_builder.build(&table_desc_builder);
+    DescriptorTbl* tbl = nullptr;
+    EXPECT_OK(DescriptorTbl::create(_runtime_state, &_pool, table_desc_builder.desc_tbl(), &tbl,
+                                    config::vector_chunk_size));
+    _runtime_state->set_desc_tbl(tbl);
+
+    TIcebergTable t_iceberg_table;
+    TColumn t_column1, t_column2;
+    t_column1.__set_column_name("file_path");
+    t_column2.__set_column_name("pos");
+    t_iceberg_table.__set_columns({t_column1, t_column2});
+    
+    TTableDescriptor tdesc;
+    tdesc.__set_icebergTable(t_iceberg_table);
+
+    IcebergTableDescriptor* ice_table_desc = _pool.add(new IcebergTableDescriptor(tdesc, &_pool));
+    tbl->get_tuple_descriptor(0)->set_table_desc(ice_table_desc);
+    tbl->_tbl_desc_map[0] = ice_table_desc;
+
+    auto context = std::make_shared<pipeline::PipelineBuilderContext>(_fragment_context.get(), 1, 1, false);
+
+    TDataSink data_sink;
+    data_sink.__set_type(TDataSinkType::ICEBERG_DELETE_SINK); // Set to delete sink type
+    TIcebergTableSink iceberg_table_sink;
+    iceberg_table_sink.__set_target_table_id(0);
+    iceberg_table_sink.__set_tuple_id(0);
+    iceberg_table_sink.__set_data_location("s3://bucket/table/data/");
+    data_sink.iceberg_table_sink = iceberg_table_sink;
+
+    std::vector<TExpr> exprs;
+    // Add 2 expressions to match the slots
+    TExpr expr1, expr2;
+    exprs.push_back(expr1);
+    exprs.push_back(expr2);
+    IcebergTableSink sink(&_pool, exprs);
+    pipeline::OpFactories prev_operators{std::make_shared<pipeline::EmptySetOperatorFactory>(1, 1)};
+
+    EXPECT_OK(sink.decompose_to_pipeline(prev_operators, data_sink, context.get()));
+}
+
 } // namespace starrocks

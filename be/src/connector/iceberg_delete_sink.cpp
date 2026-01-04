@@ -44,12 +44,11 @@ IcebergDeleteSink::IcebergDeleteSink(std::vector<std::string> partition_columns,
                                      std::vector<std::unique_ptr<ColumnEvaluator>>&& partition_column_evaluators,
                                      std::unique_ptr<PartitionChunkWriterFactory> partition_chunk_writer_factory,
                                      RuntimeState* state,
-                                     const std::unordered_map<std::string, TExprNode>& column_slot_map)
+                                     std::unordered_map<std::string, TExprNode> column_slot_map)
         : ConnectorChunkSink(std::move(partition_columns), std::move(partition_column_evaluators),
                              std::move(partition_chunk_writer_factory), state, true),
           _transform_exprs(std::move(transform_exprs)),
-          _column_slot_map(column_slot_map),
-          _state(state) {}
+          _column_slot_map(std::move(column_slot_map)) {}
 
 // Callback for handling commit results
 void IcebergDeleteSink::callback_on_commit(const CommitResult& result) {
