@@ -43,8 +43,7 @@ IcebergDeleteSink::IcebergDeleteSink(std::vector<std::string> partition_columns,
                                      std::vector<std::string> transform_exprs,
                                      std::vector<std::unique_ptr<ColumnEvaluator>>&& partition_column_evaluators,
                                      std::unique_ptr<PartitionChunkWriterFactory> partition_chunk_writer_factory,
-                                     RuntimeState* state,
-                                     std::unordered_map<std::string, TExprNode> column_slot_map)
+                                     RuntimeState* state, std::unordered_map<std::string, TExprNode> column_slot_map)
         : ConnectorChunkSink(std::move(partition_columns), std::move(partition_column_evaluators),
                              std::move(partition_chunk_writer_factory), state, true),
           _transform_exprs(std::move(transform_exprs)),

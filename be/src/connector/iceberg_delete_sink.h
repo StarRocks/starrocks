@@ -84,7 +84,7 @@ public:
     IcebergDeleteSink(std::vector<std::string> partition_columns, std::vector<std::string> transform_exprs,
                       std::vector<std::unique_ptr<ColumnEvaluator>>&& partition_column_evaluators,
                       std::unique_ptr<PartitionChunkWriterFactory> partition_chunk_writer_factory, RuntimeState* state,
-                      const std::unordered_map<std::string, TExprNode>& column_slot_map);
+                      std::unordered_map<std::string, TExprNode> column_slot_map);
     ~IcebergDeleteSink() override = default;
 
     void callback_on_commit(const CommitResult& result) override;
