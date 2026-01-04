@@ -284,8 +284,13 @@ TEST_F(IcebergTableSinkTest, update_partition_expr_slot_refs_by_map_missing_slot
 TEST_F(IcebergTableSinkTest, decompose_to_pipeline_delete_sink) {
     TDescriptorTableBuilder table_desc_builder;
     TSlotDescriptorBuilder slot_desc_builder;
-    auto slot1 = slot_desc_builder.type(LogicalType::TYPE_VARCHAR).column_name("file_path").column_pos(0).nullable(true).build();
-    auto slot2 = slot_desc_builder.type(LogicalType::TYPE_BIGINT).column_name("pos").column_pos(1).nullable(true).build();
+    auto slot1 = slot_desc_builder.type(LogicalType::TYPE_VARCHAR)
+                         .column_name("file_path")
+                         .column_pos(0)
+                         .nullable(true)
+                         .build();
+    auto slot2 =
+            slot_desc_builder.type(LogicalType::TYPE_BIGINT).column_name("pos").column_pos(1).nullable(true).build();
     TTupleDescriptorBuilder tuple_desc_builder;
     tuple_desc_builder.add_slot(slot1);
     tuple_desc_builder.add_slot(slot2);
@@ -300,7 +305,7 @@ TEST_F(IcebergTableSinkTest, decompose_to_pipeline_delete_sink) {
     t_column1.__set_column_name("file_path");
     t_column2.__set_column_name("pos");
     t_iceberg_table.__set_columns({t_column1, t_column2});
-    
+
     TTableDescriptor tdesc;
     tdesc.__set_icebergTable(t_iceberg_table);
 

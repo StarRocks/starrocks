@@ -256,11 +256,11 @@ TEST_F(IcebergDeleteSinkTest, missing_file_column) {
     auto context = std::make_shared<IcebergDeleteSinkContext>();
     context->tuple_desc_id = 0;
     context->fragment_context = _fragment_context.get();
-    
+
     // Setup output expressions to match tuple descriptor (2 slots)
     TExpr file_expr, pos_expr;
     context->output_exprs = {file_expr, pos_expr};
-    
+
     // Only add _pos, not _file
     TExprNode pos_node;
     pos_node.node_type = TExprNodeType::SLOT_REF;
@@ -270,7 +270,7 @@ TEST_F(IcebergDeleteSinkTest, missing_file_column) {
 
     auto provider = std::make_unique<IcebergDeleteSinkProvider>();
     auto result = provider->create_chunk_sink(context, 0);
-    
+
     // Should fail because _file column is missing
     ASSERT_FALSE(result.ok());
     EXPECT_THAT(std::string(result.status().message()), testing::HasSubstr("Could not find _file column"));
@@ -281,11 +281,11 @@ TEST_F(IcebergDeleteSinkTest, missing_pos_column) {
     auto context = std::make_shared<IcebergDeleteSinkContext>();
     context->tuple_desc_id = 0;
     context->fragment_context = _fragment_context.get();
-    
+
     // Setup output expressions to match tuple descriptor (2 slots)
     TExpr file_expr, pos_expr;
     context->output_exprs = {file_expr, pos_expr};
-    
+
     // Only add _file, not _pos
     TExprNode file_node;
     file_node.node_type = TExprNodeType::SLOT_REF;
@@ -295,7 +295,7 @@ TEST_F(IcebergDeleteSinkTest, missing_pos_column) {
 
     auto provider = std::make_unique<IcebergDeleteSinkProvider>();
     auto result = provider->create_chunk_sink(context, 0);
-    
+
     // Should fail because _pos column is missing
     ASSERT_FALSE(result.ok());
     EXPECT_THAT(std::string(result.status().message()), testing::HasSubstr("Could not find _pos column"));
@@ -306,30 +306,30 @@ TEST_F(IcebergDeleteSinkTest, not_enough_evaluators) {
     auto context = std::make_shared<IcebergDeleteSinkContext>();
     context->tuple_desc_id = 0;
     context->fragment_context = _fragment_context.get();
-    
+
     // Setup output expressions to match tuple descriptor (2 slots)
     TExpr file_expr, pos_expr;
     context->output_exprs = {file_expr, pos_expr};
-    
+
     // Setup required columns
     TExprNode file_node;
     file_node.node_type = TExprNodeType::SLOT_REF;
     file_node.__set_slot_ref(TSlotRef());
     file_node.slot_ref.slot_id = 0;
     context->column_slot_map["_file"] = file_node;
-    
+
     TExprNode pos_node;
     pos_node.node_type = TExprNodeType::SLOT_REF;
     pos_node.__set_slot_ref(TSlotRef());
     pos_node.slot_ref.slot_id = 1;
     context->column_slot_map["_pos"] = pos_node;
-    
+
     // Add only 1 evaluator instead of required 2
     context->column_evaluators.push_back(create_mock_column_evaluator());
 
     auto provider = std::make_unique<IcebergDeleteSinkProvider>();
     auto result = provider->create_chunk_sink(context, 0);
-    
+
     // Should fail because not enough evaluators
     ASSERT_FALSE(result.ok());
     EXPECT_THAT(std::string(result.status().message()), testing::HasSubstr("Not enough column evaluators"));
@@ -340,31 +340,31 @@ TEST_F(IcebergDeleteSinkTest, invalid_tuple_descriptor_id) {
     auto context = std::make_shared<IcebergDeleteSinkContext>();
     context->tuple_desc_id = 999; // Invalid ID
     context->fragment_context = _fragment_context.get();
-    
+
     // Setup output expressions to match tuple descriptor (2 slots)
     TExpr file_expr, pos_expr;
     context->output_exprs = {file_expr, pos_expr};
-    
+
     // Setup required columns
     TExprNode file_node;
     file_node.node_type = TExprNodeType::SLOT_REF;
     file_node.__set_slot_ref(TSlotRef());
     file_node.slot_ref.slot_id = 0;
     context->column_slot_map["_file"] = file_node;
-    
+
     TExprNode pos_node;
     pos_node.node_type = TExprNodeType::SLOT_REF;
     pos_node.__set_slot_ref(TSlotRef());
     pos_node.slot_ref.slot_id = 1;
     context->column_slot_map["_pos"] = pos_node;
-    
+
     // Add required evaluators
     context->column_evaluators.push_back(create_mock_column_evaluator());
     context->column_evaluators.push_back(create_mock_column_evaluator());
 
     auto provider = std::make_unique<IcebergDeleteSinkProvider>();
     auto result = provider->create_chunk_sink(context, 0);
-    
+
     // Should fail because tuple descriptor ID is invalid
     ASSERT_FALSE(result.ok());
     EXPECT_THAT(std::string(result.status().message()), testing::HasSubstr("Failed to find tuple descriptor"));
