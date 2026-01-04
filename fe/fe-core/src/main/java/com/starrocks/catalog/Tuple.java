@@ -56,6 +56,11 @@ public class Tuple implements Comparable<Tuple> {
         return values.hashCode();
     }
 
+    @Override
+    public String toString() {
+        return values.toString();
+    }
+
     public static Tuple fromThrift(TTuple tTuple) {
         return new Tuple(tTuple.values.stream().map(v -> Variant.fromThrift(v)).collect(Collectors.toList()));
     }
