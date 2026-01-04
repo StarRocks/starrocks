@@ -2210,10 +2210,7 @@ ChunkIteratorPtr new_segment_iterator(const std::shared_ptr<Segment>& segment, c
     if (options.pred_tree.empty() || options.pred_tree.num_columns() >= schema.num_fields()) {
         return std::make_shared<SegmentIterator>(segment, schema, options);
     } else {
-        // CACHE SELECT disable late materialization
-        if (options.lake_io_opts.cache_file_only) {
-            return new_projection_iterator(schema, std::make_shared<SegmentIterator>(segment, schema, options));
-        }
+        // _check_low_cardinality_optimization() implementation counts on this schema reorder
         Schema ordered_schema = reorder_schema(schema, options.pred_tree);
         auto seg_iter = std::make_shared<SegmentIterator>(segment, ordered_schema, options);
         return new_projection_iterator(schema, seg_iter);
