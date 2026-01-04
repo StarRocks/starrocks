@@ -1234,7 +1234,6 @@ public class InsertPlanner {
         }
 
         // When partition metadata is unavailable (empty list or exception), fall back to statistics
-        // This is useful for new tables or when metadata cannot be accessed
         long statsEstimate = estimatePartitionCountFromStatistics(icebergTable, partitionNdv);
         if (statsEstimate > 0) {
             // Cap the statistics-based estimate to avoid overly aggressive partition counts
