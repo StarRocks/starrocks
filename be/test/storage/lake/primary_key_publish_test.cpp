@@ -89,6 +89,7 @@ public:
         CHECK_OK(fs::create_directories(lake::join_path(kTestGroupPath, lake::kMetadataDirectoryName)));
         CHECK_OK(fs::create_directories(lake::join_path(kTestGroupPath, lake::kTxnLogDirectoryName)));
         CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
+        ExecEnv::GetInstance()->parallel_compact_mgr()->TEST_set_tablet_mgr(_tablet_mgr.get());
     }
 
     void TearDown() override {
@@ -1749,6 +1750,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_cloud_native_index_minor_compact_because_
         GetParam().persistent_index_type != PersistentIndexTypePB::CLOUD_NATIVE) {
         GTEST_SKIP() << "this case only for cloud native index";
     }
+    ConfigResetGuard guard(&config::pk_index_memtable_max_count, 1);
     auto version = 1;
     auto tablet_id = _tablet_metadata->id();
     for (int i = 0; i <= config::cloud_native_pk_index_rebuild_files_threshold; i++) {

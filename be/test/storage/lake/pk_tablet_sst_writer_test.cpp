@@ -98,6 +98,7 @@ public:
 protected:
     void SetUp() override {
         clear_and_init_test_dir();
+        ExecEnv::GetInstance()->parallel_compact_mgr()->TEST_set_tablet_mgr(_tablet_mgr.get());
         CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
     }
 

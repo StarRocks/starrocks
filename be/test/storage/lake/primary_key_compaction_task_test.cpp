@@ -70,6 +70,7 @@ protected:
         CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
         // Turn it down so we don't need to generate too much rowset for test.
         config::lake_pk_compaction_min_input_segments = 2;
+        ExecEnv::GetInstance()->parallel_compact_mgr()->TEST_set_tablet_mgr(_tablet_mgr.get());
     }
 
     void TearDown() override {

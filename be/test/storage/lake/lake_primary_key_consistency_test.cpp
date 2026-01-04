@@ -261,6 +261,7 @@ public:
         CHECK_OK(fs::create_directories(lake::join_path(kTestGroupPath, lake::kMetadataDirectoryName)));
         CHECK_OK(fs::create_directories(lake::join_path(kTestGroupPath, lake::kTxnLogDirectoryName)));
         CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
+        ExecEnv::GetInstance()->parallel_compact_mgr()->TEST_set_tablet_mgr(_tablet_mgr.get());
         _old_l0_size = config::l0_max_mem_usage;
         config::l0_max_mem_usage = MaxNumber * (sizeof(int) + sizeof(uint64_t) * 2) / 10;
         _old_memtable_size = config::write_buffer_size;
