@@ -34,6 +34,7 @@
 #include "storage/tablet_schema_map.h"
 #include "storage/union_iterator.h"
 #include "types/logical_type.h"
+#include "util/trace.h"
 
 namespace starrocks::lake {
 
@@ -331,6 +332,7 @@ StatusOr<size_t> Rowset::get_read_iterator_num() {
 
 StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator(const Schema& schema, bool file_data_cache,
                                                                           OlapReaderStatistics* stats) {
+    TRACE_COUNTER_SCOPE_LATENCY_US("get_each_segment_us");
     std::vector<SegmentPtr> segments;
     RETURN_IF_ERROR(load_segments(&segments, file_data_cache));
     std::vector<ChunkIteratorPtr> seg_iterators;

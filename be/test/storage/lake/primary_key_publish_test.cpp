@@ -1862,7 +1862,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_individual_index_compaction) {
     // 2. multiple time delete, try to generate lots of small sst files
     int64_t old_config = config::l0_max_mem_usage;
     config::l0_max_mem_usage = 1;
-    for (int i = 0; i < 50; i++) {
+    for (int i = 0; i < 51; i++) {
         auto [chunk0, indexes] = gen_data_and_index(kChunkSize, 1, true, false);
         int64_t txn_id = next_id();
         ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
@@ -1886,9 +1886,9 @@ TEST_P(LakePrimaryKeyPublishTest, test_individual_index_compaction) {
     config::l0_max_mem_usage = old_config;
     ASSERT_EQ(kChunkSize, read_rows(tablet_id, version));
     ASSIGN_OR_ABORT(new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
-    EXPECT_EQ(new_tablet_metadata->rowsets_size(), 51);
+    EXPECT_EQ(new_tablet_metadata->rowsets_size(), 52);
     EXPECT_EQ(new_tablet_metadata->rowsets(0).num_dels(), 0);
-    EXPECT_TRUE(new_tablet_metadata->sstable_meta().sstables_size() > 10);
+    EXPECT_EQ(new_tablet_metadata->sstable_meta().sstables_size(), 51);
     EXPECT_TRUE(compaction_score(_tablet_mgr.get(), new_tablet_metadata) > 10);
     // 3. compaction without sst
     {
@@ -1910,8 +1910,8 @@ TEST_P(LakePrimaryKeyPublishTest, test_individual_index_compaction) {
     EXPECT_EQ(new_tablet_metadata->rowsets_size(), 1);
     EXPECT_EQ(new_tablet_metadata->rowsets(0).num_dels(), 0);
     size_t sst_cnt = new_tablet_metadata->sstable_meta().sstables_size();
-    EXPECT_TRUE(sst_cnt > 10);
-    EXPECT_TRUE(compaction_score(_tablet_mgr.get(), new_tablet_metadata) > 10);
+    EXPECT_EQ(sst_cnt, 51);
+    EXPECT_EQ(compaction_score(_tablet_mgr.get(), new_tablet_metadata), 76.5);
     // 4. compaction with sst
     {
         int64_t txn_id = next_id();
@@ -1924,10 +1924,10 @@ TEST_P(LakePrimaryKeyPublishTest, test_individual_index_compaction) {
     }
     ASSERT_EQ(kChunkSize, read_rows(tablet_id, version));
     ASSIGN_OR_ABORT(new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
-    EXPECT_TRUE(compaction_score(_tablet_mgr.get(), new_tablet_metadata) == 1);
+    EXPECT_EQ(compaction_score(_tablet_mgr.get(), new_tablet_metadata), 1.5);
     EXPECT_EQ(new_tablet_metadata->rowsets_size(), 1);
     EXPECT_EQ(new_tablet_metadata->rowsets(0).num_dels(), 0);
-    EXPECT_TRUE(new_tablet_metadata->sstable_meta().sstables_size() == 1);
+    EXPECT_EQ(new_tablet_metadata->sstable_meta().sstables_size(), 1);
     EXPECT_TRUE(new_tablet_metadata->orphan_files_size() >= (sst_cnt - 1));
 }
 
@@ -2102,6 +2102,49 @@ TEST_P(LakePrimaryKeyPublishTest, test_write_with_delvec_corrupt) {
     _tablet_mgr->prune_metacache();
     // read with delvec corrupt
     ASSERT_ERROR(read(tablet_id, version));
+}
+
+TEST_P(LakePrimaryKeyPublishTest, test_parallel_upsert_with_multiple_memtables) {
+    bool old_enable_pk_index_parallel_get = config::enable_pk_index_parallel_get;
+    int64_t old_pk_index_parallel_get_min_rows = config::pk_index_parallel_get_min_rows;
+    int64_t old_l0_max_mem_usage = config::l0_max_mem_usage;
+    int64_t old_pk_index_memtable_max_count = config::pk_index_memtable_max_count;
+    config::l0_max_mem_usage = 10;
+    config::enable_pk_index_parallel_get = true;
+    config::pk_index_parallel_get_min_rows = 4096;
+    config::pk_index_memtable_max_count = 3;
+    const int64_t chunk_size = 3 * 4096;
+    auto [chunk0, indexes] = gen_data_and_index(chunk_size, 0, true, true);
+    auto version = 1;
+    auto tablet_id = _tablet_metadata->id();
+    for (int i = 0; i < 3; i++) {
+        int64_t txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_profile(&_dummy_runtime_profile)
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(*chunk0, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        // Publish version
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        EXPECT_TRUE(_update_mgr->TEST_check_update_state_cache_absent(tablet_id, txn_id));
+        version++;
+    }
+    // update memory usage, should large than zero
+    EXPECT_TRUE(_update_mgr->mem_tracker()->consumption() > 0);
+    ASSERT_EQ(chunk_size, read_rows(tablet_id, version));
+    // reset configs
+    config::enable_pk_index_parallel_get = old_enable_pk_index_parallel_get;
+    config::pk_index_parallel_get_min_rows = old_pk_index_parallel_get_min_rows;
+    config::l0_max_mem_usage = old_l0_max_mem_usage;
+    config::pk_index_memtable_max_count = old_pk_index_memtable_max_count;
 }
 
 INSTANTIATE_TEST_SUITE_P(LakePrimaryKeyPublishTest, LakePrimaryKeyPublishTest,
