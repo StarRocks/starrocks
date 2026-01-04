@@ -659,9 +659,6 @@ StatusOr<TxnLogPtr> DeltaWriterImpl::finish_with_txnlog(DeltaWriterFinishMode mo
         file_meta->set_size(sst.size.value());
         file_meta->set_encryption_meta(sst.encryption_meta);
     }
-    for (auto& sst_range : _tablet_writer->sst_ranges()) {
-        op_write->add_sst_ranges()->CopyFrom(sst_range);
-    }
     op_write->mutable_rowset()->set_num_rows(_tablet_writer->num_rows());
     op_write->mutable_rowset()->set_data_size(_tablet_writer->data_size());
     op_write->mutable_rowset()->set_overlapped(op_write->rowset().segments_size() > 1);

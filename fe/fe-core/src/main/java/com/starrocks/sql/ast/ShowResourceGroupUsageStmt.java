@@ -41,15 +41,7 @@ public class ShowResourceGroupUsageStmt extends ShowStmt {
                     Pair.create(new Column("BEInUseMemBytes", TypeFactory.createVarcharType(64)),
                             item -> Long.toString(item.usage.getMemUsageBytes())),
                     Pair.create(new Column("BERunningQueries", TypeFactory.createVarcharType(64)),
-                            item -> Integer.toString(item.usage.getNumRunningQueries())),
-                    Pair.create(new Column("BEMemLimitBytes", TypeFactory.createVarcharType(64)),
-                            item -> Long.toString(item.usage.getMemLimitBytes())),
-                    Pair.create(new Column("BEMemPool", TypeFactory.createVarcharType(64)),
-                            item -> item.usage.getMemPool()),
-                    Pair.create(new Column("BEMemPoolInUseMemBytes", TypeFactory.createVarcharType(64)),
-                            item -> Long.toString(item.usage.getMemPoolMemUsageBytes())),
-                    Pair.create(new Column("BEMemPoolMemLimitBytes", TypeFactory.createVarcharType(64)),
-                            item -> Long.toString(item.usage.getMemPoolMemLimitBytes()))
+                            item -> Integer.toString(item.usage.getNumRunningQueries()))
             );
 
     private static final List<Function<ShowItem, String>> COLUMN_SUPPLIERS = META_DATA.stream()

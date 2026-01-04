@@ -218,15 +218,10 @@ void run_drop_tablet_task(const std::shared_ptr<DropTabletAgentTaskRequest>& age
 }
 
 void run_create_tablet_task(const std::shared_ptr<CreateTabletAgentTaskRequest>& agent_task_req, ExecEnv* exec_env) {
-    TCreateTabletReq create_tablet_req = agent_task_req->task_req;
+    const auto& create_tablet_req = agent_task_req->task_req;
     TFinishTaskRequest finish_task_request;
     TStatusCode::type status_code = TStatusCode::OK;
     std::vector<std::string> error_msgs;
-
-    Status preprocess_status = preprocess_default_expr_for_tcolumns(create_tablet_req.tablet_schema.columns);
-    if (!preprocess_status.ok()) {
-        LOG(WARNING) << "Failed to preprocess default_expr in CREATE TABLE: " << preprocess_status.to_string();
-    }
 
     auto tablet_type = create_tablet_req.tablet_type;
     Status create_status;
@@ -638,12 +633,6 @@ void run_update_schema_task(const std::shared_ptr<UpdateSchemaTaskRequest>& agen
     for (auto uid : tcolumn_param.sort_key_uid) {
         pcolumn_param.add_sort_key_uid(uid);
     }
-
-    Status preprocess_status = preprocess_default_expr_for_tcolumns(tcolumn_param.columns);
-    if (!preprocess_status.ok()) {
-        LOG(WARNING) << "Failed to preprocess default_expr in UPDATE_SCHEMA task: " << preprocess_status;
-    }
-
     Status st;
     for (auto& tcolumn : tcolumn_param.columns) {
         uint32_t col_unique_id = tcolumn.col_unique_id;

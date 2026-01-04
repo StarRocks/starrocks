@@ -1127,17 +1127,7 @@ public class SchemaChangeHandler extends AlterHandler {
             fastSchemaEvolution = false;
         }
 
-        if (newColumn.getDefaultExpr() != null && newColumn.getDefaultExpr().hasExprObject()) {
-            if (!fastSchemaEvolution) {
-                throw new DdlException(
-                        "Complex type (ARRAY/MAP/STRUCT) default values require fast schema evolution. " +
-                                "Table '" + olapTable.getName() + "' has fast_schema_evolution=false. " +
-                                "This property can only be set during table creation and cannot be modified later.");
-            }
-        }
-
-        if (newColumn.getDefaultValue() != null && newColumn.getDefaultExpr() != null
-                && newColumn.getDefaultExpr().getExpr() != null) {
+        if (newColumn.getDefaultValue() != null && newColumn.getDefaultExpr() != null) {
             fastSchemaEvolution = false;
         }
         if (newColumn.getDefaultExpr() != null && newColumn.getDefaultValueType() == Column.DefaultValueType.CONST) {

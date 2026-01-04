@@ -292,20 +292,20 @@ class MyTable(Base):
     __table_args__ = {
         'comment': 'table comment',
 
-        'starrocks_primary_key': 'id',
-        'starrocks_engine': 'OLAP',
-        'starrocks_partition_by': """RANGE (id) (
+        'starrocks_PRIMARY_KEY': 'id',
+        'starrocks_ENGINE': 'OLAP',
+        'starrocks_PARTITION_BY': """RANGE (id) (
                 PARTITION p1 VALUES LESS THAN ('100')
             )""",
-        'starrocks_distributed_by': 'HASH(id) BUCKETS 10',
-        'starrocks_properties': {
+        'starrocks_DISTRIBUTED_BY': 'HASH(id) BUCKETS 10',
+        'starrocks_PROPERTIES': {
             'storage_medium': 'SSD',
             'replication_num': '1'
         }
     }
 ```
 
-**Note**: All columns that appear in a StarRocks key (`starrocks_primary_key`, `starrocks_unique_key`, `starrocks_duplicate_key`, or `starrocks_aggregate_key`) must also be marked with `primary_key=True` in their `Column(...)` declarations.
+**Note**: All columns that appear in a StarRocks key (`starrocks_PRIMARY_KEY`, `starrocks_UNIQUE_KEY`, `starrocks_DUPLICATE_KEY`, or `starrocks_AGGREGATE_KEY`) must also be marked with `primary_key=True` in their `Column(...)` declarations.
 
 > In the above example, it the `id` column.
 
@@ -386,7 +386,7 @@ Follow the standard Alembic workflow:
 
 If there is some problems of the generated script (e.g., `versions/<revision_id>_...py`), or some problems of the `models.py`, you should delete the generated script file, and re-run the `--autogenerate` commond above, to re-generate a migration script.
 
-### View Autogenerate Details and Limitations
+### View Autogenerate Details and Limitations (Invalid for the moment)
 
 When you define `View` or `MaterializedView` objects in your model files (e.g., `models_view.py`), Alembic's autogenerate process will detect them and create the appropriate migration operations, which are similar with Tables.
 
@@ -438,13 +438,13 @@ class MyTable(Base):
     __table_args__ = {
         'comment': 'A modified table comment', # Modified comment
 
-        'starrocks_primary_key': 'id',
-        'starrocks_engine': 'OLAP',
-        'starrocks_partition_by': """RANGE (id) (
+        'starrocks_PRIMARY_KEY': 'id',
+        'starrocks_ENGINE': 'OLAP',
+        'starrocks_PARTITION_BY': """RANGE (id) (
                 PARTITION p1 VALUES LESS THAN ('100')
             )""",
-        'starrocks_distributed_by': 'HASH(id) BUCKETS 10',
-        'starrocks_properties': {
+        'starrocks_DISTRIBUTED_BY': 'HASH(id) BUCKETS 10',
+        'starrocks_PROPERTIES': {
             'storage_medium': 'SSD',
             'replication_num': '1'
         }

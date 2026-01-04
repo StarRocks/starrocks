@@ -804,17 +804,13 @@ public class ShowStmtMetaTest {
     public void testShowResourceGroupUsageStmt() {
         ShowResourceGroupUsageStmt stmt = new ShowResourceGroupUsageStmt("test_group", null);
         ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
-        Assertions.assertEquals(10, metaData.getColumnCount());
+        Assertions.assertEquals(6, metaData.getColumnCount());
         Assertions.assertEquals("Name", metaData.getColumn(0).getName());
         Assertions.assertEquals("Id", metaData.getColumn(1).getName());
         Assertions.assertEquals("Backend", metaData.getColumn(2).getName());
         Assertions.assertEquals("BEInUseCpuCores", metaData.getColumn(3).getName());
         Assertions.assertEquals("BEInUseMemBytes", metaData.getColumn(4).getName());
         Assertions.assertEquals("BERunningQueries", metaData.getColumn(5).getName());
-        Assertions.assertEquals("BEMemLimitBytes", metaData.getColumn(6).getName());
-        Assertions.assertEquals("BEMemPool", metaData.getColumn(7).getName());
-        Assertions.assertEquals("BEMemPoolInUseMemBytes", metaData.getColumn(8).getName());
-        Assertions.assertEquals("BEMemPoolMemLimitBytes", metaData.getColumn(9).getName());
     }
 
     @Test

@@ -64,15 +64,7 @@ Status Footer::DecodeFrom(Slice* input) {
     return result;
 }
 
-Status ReadBlock(RandomAccessFile* input_file, const ReadOptions& options, const BlockHandle& handle,
-                 BlockContents* result) {
-    RandomAccessFile* file = nullptr;
-    if (options.file != nullptr) {
-        // use specified file.
-        file = options.file;
-    } else {
-        file = input_file;
-    }
+Status ReadBlock(RandomAccessFile* file, const ReadOptions& options, const BlockHandle& handle, BlockContents* result) {
     result->data = Slice();
     result->cachable = false;
     result->heap_allocated = false;

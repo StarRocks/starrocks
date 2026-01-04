@@ -768,7 +768,7 @@ StatusOr<std::unique_ptr<ColumnIterator>> ColumnReader::_create_merge_struct_ite
                 const TypeInfoPtr& type_info = get_type_info(*sub_column);
                 auto default_value_iter = std::make_unique<DefaultValueColumnIterator>(
                         sub_column->has_default_value(), sub_column->default_value(), sub_column->is_nullable(),
-                        type_info, sub_column->length(), num_rows(), child_paths[i]);
+                        type_info, sub_column->length(), num_rows());
                 ColumnIteratorOptions iter_opts;
                 RETURN_IF_ERROR(default_value_iter->init(iter_opts));
                 field_iters.emplace_back(std::move(default_value_iter));

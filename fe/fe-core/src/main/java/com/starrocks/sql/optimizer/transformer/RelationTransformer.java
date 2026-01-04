@@ -647,7 +647,6 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
                         .setSelectPartitionNames(node.getPartitionNames() == null ? Collections.emptyList() :
                                 node.getPartitionNames().getPartitionNames())
                         .setSelectedIndexId(((OlapTable) node.getTable()).getBaseIndexMetaId())
-                        .setHintsTabletIds(node.getTabletIds())
                         .build();
             } else if (!isMVPlanner) {
                 scanOperator = LogicalOlapScanOperator.builder()

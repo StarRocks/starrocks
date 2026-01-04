@@ -175,7 +175,6 @@ public class RewriteSimpleAggToMetaScanRule extends TransformationRule {
                 .setTable(scanOperator.getTable())
                 .setSelectPartitionNames(selectedPartitionNames)
                 .setSelectedIndexId(scanOperator.getSelectedIndexId())
-                .setHintsTabletIds(scanOperator.getHintsTabletIds())
                 .setColRefToColumnMetaMap(newScanColumnRefs)
                 .setAggColumnIdToColumns(aggColumnIdToColumns).build();
         LogicalAggregationOperator newAggOperator = new LogicalAggregationOperator(aggregationOperator.getType(),

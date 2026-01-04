@@ -42,11 +42,11 @@
 #include "storage/chunk_helper.h"
 #include "storage/column_predicate_rewriter.h"
 #include "storage/index/vector/vector_search_option.h"
-#include "storage/metadata_util.h"
 #include "storage/predicate_parser.h"
 #include "storage/projection_iterator.h"
 #include "storage/runtime_range_pruner.hpp"
 #include "storage/storage_engine.h"
+#include "storage/tablet_index.h"
 #include "types/logical_type.h"
 #include "util/json.h"
 #include "util/runtime_profile.h"
@@ -635,13 +635,8 @@ Status OlapChunkSource::_init_olap_reader(RuntimeState* runtime_state) {
         if (_scan_node->thrift_olap_scan_node().__isset.columns_desc &&
             !_scan_node->thrift_olap_scan_node().columns_desc.empty() &&
             _scan_node->thrift_olap_scan_node().columns_desc[0].col_unique_id >= 0) {
-            auto columns_desc_copy = _scan_node->thrift_olap_scan_node().columns_desc;
-            Status preprocess_status = preprocess_default_expr_for_tcolumns(columns_desc_copy);
-            if (!preprocess_status.ok()) {
-                LOG(WARNING) << "Failed to preprocess default_expr in olap_chunk_source: "
-                             << preprocess_status.to_string();
-            }
-            _tablet_schema = TabletSchema::copy(*_tablet->tablet_schema(), columns_desc_copy);
+            _tablet_schema =
+                    TabletSchema::copy(*_tablet->tablet_schema(), _scan_node->thrift_olap_scan_node().columns_desc);
         } else {
             _tablet_schema = _tablet->tablet_schema();
         }

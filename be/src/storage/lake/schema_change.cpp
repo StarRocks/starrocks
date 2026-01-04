@@ -336,14 +336,7 @@ Status SchemaChangeHandler::do_process_alter_tablet(const TAlterTabletReqV2& req
 
     TabletSchemaCSPtr base_schema;
     if (!request.columns.empty() && request.columns[0].col_unique_id >= 0) {
-        auto columns_copy = request.columns;
-
-        Status preprocess_status = preprocess_default_expr_for_tcolumns(columns_copy);
-        if (!preprocess_status.ok()) {
-            LOG(WARNING) << "Failed to preprocess default_expr in Lake SchemaChange: " << preprocess_status.to_string();
-        }
-
-        base_schema = TabletSchema::copy(*(base_tablet.get_schema()), columns_copy);
+        base_schema = TabletSchema::copy(*(base_tablet.get_schema()), request.columns);
     } else {
         base_schema = base_tablet.get_schema();
     }

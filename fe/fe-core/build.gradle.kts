@@ -221,10 +221,6 @@ dependencies {
     implementation("org.apache.logging.log4j:log4j-slf4j-impl")
     implementation("org.apache.paimon:paimon-bundle") {
         exclude(group = "org.lz4", module = "lz4-java")
-        // https://avd.aquasec.com/nvd/cve-2024-7254
-        exclude(group = "com.google.protobuf", module = "protobuf-java")
-        // https://avd.aquasec.com/nvd/cve-2025-27820
-        exclude(group = "org.apache.httpcomponents.client5", module = "httpclient5")
     }
     implementation("org.apache.paimon:paimon-oss")
     implementation("org.apache.paimon:paimon-s3")

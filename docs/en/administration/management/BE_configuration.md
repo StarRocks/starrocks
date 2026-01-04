@@ -2284,13 +2284,13 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Description: Compaction score ratio for Primary Key index in a shared-data cluster. For example, if there are N filesets, the Compaction score will be `N * pk_index_compaction_score_ratio`.
 - Introduced in: -
 
-##### pk_index_early_sst_compaction_threshold
+##### pk_index_ingest_sst_compaction_threshold
 
 - Default: 5
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: early sst compaction threshold for primary key index in a shared-data cluster.
+- Description: Ingest SST Compaction threshold for Primary Key index in a shared-data cluster.
 - Introduced in: -
 
 ##### pk_index_memtable_flush_threadpool_max_threads
@@ -2304,25 +2304,16 @@ When this value is set to less than `0`, the system uses the product of its abso
 
 ##### pk_index_memtable_max_count
 
-- Default: 1
+- Default: 3
 - Type: Int
 - Unit: -
 - Is mutable: Yes
 - Description: The maximum number of MemTables for Primary Key index in a shared-data cluster.
 - Introduced in: -
 
-##### pk_index_memtable_max_wait_flush_timeout_ms
-
-- Default: 30000
-- Type: Int
-- Unit: Milliseconds
-- Is mutable: Yes
-- Description: The maximum timeout for waiting for Primary Key index MemTable flush completion in a shared-data cluster. When synchronously flushing all MemTables (for example, before an ingest SST operation), the system waits up to this timeout. The default is 30 seconds.
-- Introduced in: -
-
 ##### pk_index_parallel_compaction_task_split_threshold_bytes
 
-- Default: 33554432
+- Default: 104857600
 - Type: Int
 - Unit: Bytes
 - Is mutable: Yes
@@ -2381,15 +2372,6 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Unit: -
 - Is mutable: Yes
 - Description: The minimum level for Primary Key index size-tiered Compaction strategy.
-- Introduced in: -
-
-##### pk_index_sstable_sample_interval_bytes
-
-- Default: 16777216
-- Type: Int
-- Unit: Bytes
-- Is mutable: Yes
-- Description: The sampling interval size for SSTable files in a shared-data cluster. When the size of an SSTable file exceeds this threshold, the system samples keys from the SSTable at this interval to optimize the boundary partitioning of Compaction tasks. For SSTables smaller than this threshold, only the start key is used as the boundary key. The default is 16 MB.
 - Introduced in: -
 
 ##### pk_index_target_file_size

@@ -20,6 +20,4 @@ namespace starrocks {
 
 TypeInfoPtr get_struct_type_info(std::vector<TypeInfoPtr> field_types);
 
-const std::vector<TypeInfoPtr>& get_struct_field_types(const TypeInfo* type_info);
-
 } // namespace starrocks

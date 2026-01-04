@@ -106,7 +106,6 @@ TEST_F(LakePersistentIndexSizeTieredCompactionStrategyTest, test_two_filesets_sa
     std::vector<std::tuple<int64_t, int64_t, uint64_t>> sstables_info = {
             {1, 100000, 100}, // fileset 1: 100KB
             {2, 100000, 200}, // fileset 2: 100KB
-            {3, 500000, 300}, // active
     };
 
     auto metadata = create_tablet_metadata_with_sstables(sstables_info);
@@ -138,7 +137,6 @@ TEST_F(LakePersistentIndexSizeTieredCompactionStrategyTest, test_multiple_sstabl
             {1, 30000, 150},  // fileset 1
             {1, 20000, 200},  // fileset 1, total: 100KB
             {2, 100000, 300}, // fileset 2: 100KB
-            {3, 100000, 300}, // fileset 3: active
     };
 
     auto metadata = create_tablet_metadata_with_sstables(sstables_info);
@@ -164,7 +162,9 @@ TEST_F(LakePersistentIndexSizeTieredCompactionStrategyTest, test_multiple_sstabl
 // Test 5: Three filesets with similar sizes - all should be selected
 TEST_F(LakePersistentIndexSizeTieredCompactionStrategyTest, test_three_filesets_similar_size) {
     std::vector<std::tuple<int64_t, int64_t, uint64_t>> sstables_info = {
-            {1, 100000, 100}, {2, 110000, 200}, {3, 95000, 300}, {4, 500000, 400}, // active
+            {1, 100000, 100},
+            {2, 110000, 200},
+            {3, 95000, 300},
     };
 
     auto metadata = create_tablet_metadata_with_sstables(sstables_info);
@@ -183,7 +183,7 @@ TEST_F(LakePersistentIndexSizeTieredCompactionStrategyTest, test_different_size_
     // Level 1: 100KB, 110KB (similar size)
     // Level 2: 500KB (much larger)
     std::vector<std::tuple<int64_t, int64_t, uint64_t>> sstables_info = {
-            {3, 500000, 300}, {1, 100000, 100}, {2, 110000, 200}, {4, 110000, 200} // Much larger, different level
+            {3, 500000, 300}, {1, 100000, 100}, {2, 110000, 200}, // Much larger, different level
     };
 
     auto metadata = create_tablet_metadata_with_sstables(sstables_info);
@@ -205,7 +205,7 @@ TEST_F(LakePersistentIndexSizeTieredCompactionStrategyTest, test_multiple_levels
     // Level 1: 3 filesets of ~100KB each (high score due to many filesets)
     // Level 2: 2 filesets of ~500KB each
     std::vector<std::tuple<int64_t, int64_t, uint64_t>> sstables_info = {
-            {4, 500000, 400}, {5, 510000, 500}, {1, 100000, 100}, {2, 105000, 200}, {3, 98000, 300}, {6, 2600000, 600}};
+            {4, 500000, 400}, {5, 510000, 500}, {1, 100000, 100}, {2, 105000, 200}, {3, 98000, 300}};
 
     auto metadata = create_tablet_metadata_with_sstables(sstables_info);
 
@@ -226,7 +226,6 @@ TEST_F(LakePersistentIndexSizeTieredCompactionStrategyTest, test_base_level_not_
             {2, 100000, 200},  // Level 2: 100KB
             {3, 110000, 300},  // Level 2: 110KB
             {4, 105000, 400},  // Level 2: 105KB
-            {5, 105000, 400},  // active
     };
 
     auto metadata = create_tablet_metadata_with_sstables(sstables_info);
@@ -310,7 +309,6 @@ TEST_F(LakePersistentIndexSizeTieredCompactionStrategyTest, test_mixed_sizes) {
             {1, 10000, 100},    // 10KB
             {2, 15000, 200},    // 15KB
             {3, 12000, 300},    // 12KB
-            {5, 100000, 500},   // 100KB - active
     };
 
     auto metadata = create_tablet_metadata_with_sstables(sstables_info);
@@ -327,7 +325,9 @@ TEST_F(LakePersistentIndexSizeTieredCompactionStrategyTest, test_mixed_sizes) {
 // Test 13: Sequential fileset IDs vs non-sequential
 TEST_F(LakePersistentIndexSizeTieredCompactionStrategyTest, test_non_sequential_fileset_ids) {
     std::vector<std::tuple<int64_t, int64_t, uint64_t>> sstables_info = {
-            {100, 100000, 100}, {200, 100000, 200}, {300, 100000, 300}, {400, 500000, 400}, // active
+            {100, 100000, 100},
+            {200, 100000, 200},
+            {300, 100000, 300},
     };
 
     auto metadata = create_tablet_metadata_with_sstables(sstables_info);
@@ -368,7 +368,7 @@ TEST_F(LakePersistentIndexSizeTieredCompactionStrategyTest, test_max_rss_rowid_c
     std::vector<std::tuple<int64_t, int64_t, uint64_t>> sstables_info = {
             {1, 100000, 50},  {1, 100000, 999},  // Max in fileset 1
             {1, 100000, 100}, {2, 100000, 1500}, // Overall max
-            {2, 100000, 200}, {3, 100000, 300},  // Max in fileset 3
+            {2, 100000, 200},
     };
 
     auto metadata = create_tablet_metadata_with_sstables(sstables_info);
@@ -394,7 +394,6 @@ TEST_F(LakePersistentIndexSizeTieredCompactionStrategyTest, test_consecutive_lev
             {4, 520000, 400},
             // Level 3: ~2.5MB (500KB * 5)
             {5, 2500000, 500},
-            {6, 2600000, 600}, // active
     };
 
     auto metadata = create_tablet_metadata_with_sstables(sstables_info);
@@ -412,7 +411,7 @@ TEST_F(LakePersistentIndexSizeTieredCompactionStrategyTest, test_all_same_size) 
     std::vector<std::tuple<int64_t, int64_t, uint64_t>> sstables_info;
 
     // Create 5 filesets with exactly the same size
-    for (int i = 1; i <= 6; ++i) {
+    for (int i = 1; i <= 5; ++i) {
         sstables_info.emplace_back(i, 100000, i * 100);
     }
 
@@ -430,7 +429,8 @@ TEST_F(LakePersistentIndexSizeTieredCompactionStrategyTest, test_all_same_size) 
 // Test 18: Verify result is cleared on subsequent calls
 TEST_F(LakePersistentIndexSizeTieredCompactionStrategyTest, test_result_cleared) {
     std::vector<std::tuple<int64_t, int64_t, uint64_t>> sstables_info = {
-            {1, 100000, 100}, {2, 100000, 200}, {3, 100000, 300}, // active
+            {1, 100000, 100},
+            {2, 100000, 200},
     };
 
     auto metadata = create_tablet_metadata_with_sstables(sstables_info);
@@ -455,8 +455,8 @@ TEST_F(LakePersistentIndexSizeTieredCompactionStrategyTest, test_many_sstables_p
     auto metadata = std::make_shared<TabletMetadata>();
     auto* sstable_meta = metadata->mutable_sstable_meta();
 
-    // Create 3 filesets, each with 100 sstables
-    for (int fileset = 1; fileset <= 3; ++fileset) {
+    // Create 2 filesets, each with 100 sstables
+    for (int fileset = 1; fileset <= 2; ++fileset) {
         for (int i = 0; i < 100; ++i) {
             auto* sstable = sstable_meta->add_sstables();
             auto* fileset_id = sstable->mutable_fileset_id();

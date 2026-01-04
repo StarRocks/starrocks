@@ -92,8 +92,6 @@ public:
 
     void run() override;
 
-    void cancel() override;
-
     const std::vector<PersistentIndexSstablePB>& output_sstables() const { return _output_sstables; }
 
 private:
@@ -114,6 +112,7 @@ private:
     UniqueId _output_fileset_id;
     SeekRange _seek_range;
     AsyncCompactCB* _cb = nullptr;
+
     // output sstable pb
     std::vector<PersistentIndexSstablePB> _output_sstables;
 };
@@ -145,24 +144,12 @@ public:
                                         const TabletMetadataPtr& metadata, bool merge_base_level,
                                         std::vector<std::shared_ptr<LakePersistentIndexParallelCompactTask>>* tasks);
 
-    // For UT to test sample_keys_from_sstable.
-    Status TEST_sample_keys_from_sstable(const PersistentIndexSstablePB& sstable_pb, const TabletMetadataPtr& metadata,
-                                         std::vector<std::string>* sample_keys);
-
 private:
     // generate compaction tasks using candidate filesets.
     // The final task number will be decided by config pk_index_parallel_compaction_task_split_threshold_bytes
     void generate_compaction_tasks(const std::vector<std::vector<PersistentIndexSstablePB>>& candidates,
                                    const TabletMetadataPtr& metadata, bool merge_base_level,
                                    std::vector<std::shared_ptr<LakePersistentIndexParallelCompactTask>>* tasks);
-
-    Status sample_keys_from_sstable(const PersistentIndexSstablePB& sstable_pb, const TabletMetadataPtr& metadata,
-                                    std::vector<std::string>* sample_keys);
-
-    // For UT
-    void TEST_set_tablet_mgr(TabletManager* tablet_mgr) { _tablet_mgr = tablet_mgr; }
-
-private:
     // Check if two key ranges overlap
     // Returns true if [start1, end1) overlaps with [start2, end2)
     static bool key_ranges_overlap(const std::string& start1, const std::string& end1, const std::string& start2,

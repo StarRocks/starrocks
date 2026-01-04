@@ -29,8 +29,6 @@ struct CompactionCandidateResult {
     std::vector<std::vector<PersistentIndexSstablePB>> candidate_filesets;
     // Whether to merge base level during compaction
     bool merge_base_level = false;
-    // Max value of max_rss_rowid among all input sstables
-    uint64_t max_max_rss_rowid = 0;
 };
 
 struct SizeTieredLevel {

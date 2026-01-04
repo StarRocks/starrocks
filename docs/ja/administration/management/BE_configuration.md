@@ -1818,13 +1818,13 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 説明: 共有データモードでのプライマリキーインデックスのコンパクションスコア比率。たとえば、N 個のファイルセットがある場合、コンパクションスコアは N * pk_index_compaction_score_ratio になります。
 - 導入バージョン: -
 
-##### pk_index_early_sst_compaction_threshold
+##### pk_index_ingest_sst_compaction_threshold
 
 - デフォルト: 5
 - タイプ: Int
 - 単位: -
 - 可変: はい
-- 説明: 共有データモードでのプライマリキーインデックス early sst コンパクションの閾値。
+- 説明: 共有データモードでのプライマリキーインデックス Ingest SST コンパクションの閾値。
 - 導入バージョン: -
 
 ##### pk_index_memtable_flush_threadpool_max_threads
@@ -1838,29 +1838,20 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 
 ##### pk_index_memtable_max_count
 
-- デフォルト: 1
+- デフォルト: 3
 - タイプ: Int
 - 単位: -
 - 可変: はい
 - 説明: 共有データモードでのプライマリキーインデックスの最大 Memtable 数。
 - 導入バージョン: -
 
-##### pk_index_memtable_max_wait_flush_timeout_ms
-
-- デフォルト: 30000
-- タイプ: Int
-- 単位: ミリ秒
-- 可変: はい
-- 説明: ストレージ・コンピューティング分離クラスタにおける、プライマリキーインデックス MemTable のフラッシュ完了を待機する最大タイムアウト時間。すべての MemTable を同期的にフラッシュする必要がある場合（例：SST インジェスト操作の前）、システムは最大でこのタイムアウト時間まで待機します。デフォルトは 30 秒です。
-- 導入バージョン: -
-
 ##### pk_index_parallel_compaction_task_split_threshold_bytes
 
-- デフォルト: 33554432
+- デフォルト: 104857600
 - タイプ: Int
 - 単位: -
 - 可変: はい
-- 説明: プライマリキーインデックスコンパクションタスクの分割閾値。タスクに関連するファイルの合計サイズがこの閾値より小さい場合、タスクは分割されません。デフォルトは 32MB です。
+- 説明: プライマリキーインデックスコンパクションタスクの分割閾値。タスクに関連するファイルの合計サイズがこの閾値より小さい場合、タスクは分割されません。デフォルトは 100MB です。
 - 導入バージョン: -
 
 ##### pk_index_parallel_compaction_threadpool_max_threads
@@ -1915,15 +1906,6 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 単位: -
 - 可変: はい
 - 説明: プライマリキーインデックス Size-Tiered コンパクション戦略の最小レベルサイズパラメータ。
-- 導入バージョン: -
-
-##### pk_index_sstable_sample_interval_bytes
-
-- デフォルト: 16777216
-- タイプ: Int
-- 単位: Bytes
-- 可変: はい
-- 説明: ストレージ・コンピューティング分離クラスタにおける、プライマリキーインデックス SSTable ファイルのサンプリング間隔サイズ。SSTable ファイルのサイズがこの閾値を超える場合、システムはこの間隔で SSTable からキーをサンプリングし、コンパクションタスクの境界分割を最適化します。この閾値より小さい SSTable については、開始キーのみが境界キーとして使用されます。デフォルトは 16 MB です。
 - 導入バージョン: -
 
 ##### pk_index_target_file_size

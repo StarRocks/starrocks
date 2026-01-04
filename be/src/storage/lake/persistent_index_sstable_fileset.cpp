@@ -80,17 +80,17 @@ Status PersistentIndexSstableFileset::init(std::unique_ptr<PersistentIndexSstabl
     return Status::OK();
 }
 
-bool PersistentIndexSstableFileset::append(std::unique_ptr<PersistentIndexSstable>& sstable) {
+Status PersistentIndexSstableFileset::merge_from(std::unique_ptr<PersistentIndexSstable>& sstable) {
     const sstable::Comparator* comparator = sstable::BytewiseComparator();
     DCHECK(sstable->sstable_pb().has_range());
     // Make sure sstable is inorder via comparator
     if (!_sstable_map.empty()) {
         const auto& last_end_key = _sstable_map.rbegin()->first.second;
         if (comparator->Compare(Slice(last_end_key), Slice(sstable->sstable_pb().range().start_key())) >= 0) {
-            return false;
+            return Status::InternalError("sstables are not in order or have overlap key range");
         }
     } else {
-        return false;
+        return Status::InternalError("sstable fileset is not init yet");
     }
     // Extract keys before moving sstable to avoid undefined behavior
     std::string start_key = sstable->sstable_pb().range().start_key();
@@ -98,7 +98,7 @@ bool PersistentIndexSstableFileset::append(std::unique_ptr<PersistentIndexSstabl
     // This sstable belong to same fileset.
     sstable->set_fileset_id(_fileset_id);
     _sstable_map.emplace(std::make_pair(std::move(start_key), std::move(end_key)), std::move(sstable));
-    return true;
+    return Status::OK();
 }
 
 Status PersistentIndexSstableFileset::multi_get(const Slice* keys, const KeyIndexSet& key_indexes, int64_t version,

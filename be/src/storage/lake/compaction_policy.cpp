@@ -82,30 +82,14 @@ bool CompactionPolicy::is_real_time_compaction_strategy(const std::shared_ptr<co
     return metadata->has_compaction_strategy() && metadata->compaction_strategy() == CompactionStrategyPB::REAL_TIME;
 }
 
-// In this function, we only count the number of filesets, not the number of SSTables.
-// This is because the SSTables within a fileset are ordered, and during a query,
-// each key will only map to a single SSTable. Therefore, the amplification factor for
-// queries on a fileset is just 1.
-double sstable_score(const TabletMetadataPB& metadata) {
-    std::unordered_set<UniqueId> fileset_set;
-    for (const auto& sst_meta : metadata.sstable_meta().sstables()) {
-        if (sst_meta.has_fileset_id()) {
-            fileset_set.insert(UniqueId(sst_meta.fileset_id()));
-        } else {
-            fileset_set.insert(UniqueId::gen_uid());
-        }
-    }
-    return (double)fileset_set.size() * config::pk_index_compaction_score_ratio;
-}
-
-StatusOr<double> primary_compaction_score_by_policy(TabletManager* tablet_mgr,
-                                                    const std::shared_ptr<const TabletMetadataPB>& metadata) {
+StatusOr<uint32_t> primary_compaction_score_by_policy(TabletManager* tablet_mgr,
+                                                      const std::shared_ptr<const TabletMetadataPB>& metadata) {
     PrimaryCompactionPolicy policy(tablet_mgr, metadata, false /* force_base_compaction */);
     uint32_t update_compaction_delvec_file_io_amp_ratio =
             policy.is_real_time_compaction_strategy(metadata) ? 1 : config::update_compaction_delvec_file_io_amp_ratio;
     std::vector<bool> has_dels;
     ASSIGN_OR_RETURN(auto pick_rowset_indexes, policy.pick_rowset_indexes(metadata, &has_dels));
-    double segment_num_score = 0;
+    uint32_t segment_num_score = 0;
     for (int i = 0; i < pick_rowset_indexes.size(); i++) {
         const auto& pick_rowset = metadata->rowsets(pick_rowset_indexes[i]);
         const bool has_del = has_dels[i];
@@ -117,7 +101,7 @@ StatusOr<double> primary_compaction_score_by_policy(TabletManager* tablet_mgr,
         segment_num_score += current_score;
     }
     // Calculate the number of SSTables and use it as a score
-    const double sst_num_score = sstable_score(*metadata);
+    uint32_t sst_num_score = metadata->sstable_meta().sstables_size();
     // Return the maximum score between the segment number score and the SST number score
     return std::max(segment_num_score, sst_num_score);
 }

@@ -3582,19 +3582,3 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
         return {
             "success": True
         }
-
-    def set_first_tablet_id(self, table_name, partition_name=None):
-        """
-        Get the first tablet ID for a table (optionally from a specific partition)
-        and store it as self.tablet_id for use in subsequent SQL with ${tablet_id}
-        """
-        if partition_name:
-            sql = f"SHOW TABLETS FROM {table_name} PARTITION ({partition_name}) LIMIT 1"
-        else:
-            sql = f"SHOW TABLETS FROM {table_name} LIMIT 1"
-        result = self.execute_sql(sql, True)
-        if result and result.get("result") and len(result["result"]) > 0:
-            self.tablet_id = str(result["result"][0][0])  # First column is TabletId
-            log.info(f"Set tablet_id = {self.tablet_id}")
-        else:
-            raise Exception(f"Failed to get tablet ID for table {table_name}")

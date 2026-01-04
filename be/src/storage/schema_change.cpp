@@ -50,14 +50,15 @@
 #include "storage/convert_helper.h"
 #include "storage/memtable.h"
 #include "storage/memtable_rowset_writer_sink.h"
-#include "storage/metadata_util.h"
 #include "storage/rowset/rowset_factory.h"
+#include "storage/rowset/rowset_id_generator.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet.h"
 #include "storage/tablet_manager.h"
 #include "storage/tablet_meta_manager.h"
 #include "storage/tablet_updates.h"
 #include "util/failpoint/fail_point.h"
+#include "util/unaligned_access.h"
 
 namespace starrocks {
 
@@ -723,14 +724,7 @@ Status SchemaChangeHandler::_do_process_alter_tablet(const TAlterTabletReqV2& re
     // Create a new tablet schema, should merge with dropped columns in light schema change
     TabletSchemaCSPtr base_tablet_schema;
     if (!request.columns.empty() && request.columns[0].col_unique_id >= 0) {
-        auto columns_copy = request.columns;
-
-        Status preprocess_status = preprocess_default_expr_for_tcolumns(columns_copy);
-        if (!preprocess_status.ok()) {
-            LOG(WARNING) << "Failed to preprocess default_expr in SchemaChange: " << preprocess_status.to_string();
-        }
-
-        base_tablet_schema = TabletSchema::copy(*base_tablet->tablet_schema(), columns_copy);
+        base_tablet_schema = TabletSchema::copy(*base_tablet->tablet_schema(), request.columns);
     } else {
         base_tablet_schema = base_tablet->tablet_schema();
     }

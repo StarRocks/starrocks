@@ -76,7 +76,6 @@ import com.starrocks.sql.ast.LabelName;
 import com.starrocks.sql.ast.QualifiedName;
 import com.starrocks.sql.ast.RestoreStmt;
 import com.starrocks.sql.ast.TableRef;
-import com.starrocks.sql.common.AuditEncryptionChecker;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.task.DirMoveTask;
 import com.starrocks.task.DownloadTask;
@@ -838,12 +837,5 @@ public class BackupHandlerTest {
         restoreJob.setState(RestoreJob.RestoreJobState.FINISHED);
         result = handler.getRunningBackupRestoreCount();
         Assertions.assertEquals(Long.valueOf(0), result.get(0L));
-    }
-
-    @Test
-    public void testCreateRepositoryNeedEncrypt() {
-        CreateRepositoryStmt stmt = new CreateRepositoryStmt(false, "repo", "broker", "bos://location",
-                Maps.newHashMap());
-        Assertions.assertEquals(true, AuditEncryptionChecker.needEncrypt(stmt));
     }
 }

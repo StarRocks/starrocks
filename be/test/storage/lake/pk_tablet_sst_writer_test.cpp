@@ -173,8 +173,7 @@ TEST_F(PkTabletSSTWriterTest, test_pk_tablet_sst_writer_basic_operations) {
     ASSERT_OK(pk_sst_writer->append_sst_record(chunk2));
 
     // Test flush_sst_writer
-    ASSIGN_OR_ABORT(auto sst_ret, pk_sst_writer->flush_sst_writer());
-    auto [file_info, sst_range] = std::move(sst_ret);
+    ASSIGN_OR_ABORT(auto file_info, pk_sst_writer->flush_sst_writer());
 
     // Verify file info
     ASSERT_FALSE(file_info.path.empty());
@@ -201,8 +200,7 @@ TEST_F(PkTabletSSTWriterTest, test_pk_tablet_sst_writer_multiple_chunks) {
     }
 
     // Flush and get result
-    ASSIGN_OR_ABORT(auto sst_ret, pk_sst_writer->flush_sst_writer());
-    auto [file_info, sst_range] = std::move(sst_ret);
+    ASSIGN_OR_ABORT(auto file_info, pk_sst_writer->flush_sst_writer());
 
     // Verify results
     ASSERT_FALSE(file_info.path.empty());
@@ -227,8 +225,7 @@ TEST_F(PkTabletSSTWriterTest, test_pk_tablet_sst_writer_error_handling) {
 
     // Now operations should work
     ASSERT_OK(pk_sst_writer->append_sst_record(chunk));
-    ASSIGN_OR_ABORT(auto sst_ret, pk_sst_writer->flush_sst_writer());
-    auto [file_info, sst_range] = std::move(sst_ret);
+    ASSIGN_OR_ABORT(auto file_info, pk_sst_writer->flush_sst_writer());
     ASSERT_FALSE(file_info.path.empty());
 }
 
@@ -250,8 +247,7 @@ TEST_F(PkTabletSSTWriterTest, test_pk_tablet_sst_writer_empty_chunk) {
     ASSERT_OK(pk_sst_writer->append_sst_record(chunk));
 
     // Flush
-    ASSIGN_OR_ABORT(auto sst_ret, pk_sst_writer->flush_sst_writer());
-    auto [file_info, sst_range] = std::move(sst_ret);
+    ASSIGN_OR_ABORT(auto file_info, pk_sst_writer->flush_sst_writer());
     ASSERT_FALSE(file_info.path.empty());
     ASSERT_GT(file_info.size, 0);
 }
@@ -268,9 +264,8 @@ TEST_F(PkTabletSSTWriterTest, test_pk_tablet_sst_writer_reuse) {
     auto chunk1 = generate_data(30);
     ASSERT_OK(pk_sst_writer->append_sst_record(chunk1));
 
-    ASSIGN_OR_ABORT(auto sst_ret, pk_sst_writer->flush_sst_writer());
-    auto [file_info, sst_range] = std::move(sst_ret);
-    ASSERT_FALSE(file_info.path.empty());
+    ASSIGN_OR_ABORT(auto file_info1, pk_sst_writer->flush_sst_writer());
+    ASSERT_FALSE(file_info1.path.empty());
 
     // Reuse the writer for a second file
     ASSERT_OK(pk_sst_writer->reset_sst_writer(location_provider, _fs));
@@ -278,12 +273,11 @@ TEST_F(PkTabletSSTWriterTest, test_pk_tablet_sst_writer_reuse) {
     auto chunk2 = generate_data(40, 30);
     ASSERT_OK(pk_sst_writer->append_sst_record(chunk2));
 
-    ASSIGN_OR_ABORT(auto sst_ret2, pk_sst_writer->flush_sst_writer());
-    auto [file_info2, sst_range2] = std::move(sst_ret2);
+    ASSIGN_OR_ABORT(auto file_info2, pk_sst_writer->flush_sst_writer());
     ASSERT_FALSE(file_info2.path.empty());
 
     // The two files should be different
-    ASSERT_NE(file_info.path, file_info2.path);
+    ASSERT_NE(file_info1.path, file_info2.path);
 }
 
 TEST_F(PkTabletSSTWriterTest, test_publish_multi_segments_with_sst) {
@@ -645,126 +639,6 @@ TEST_F(PkTabletSSTWriterTest, test_parallel_execution_vs_serial_execution_result
     EXPECT_EQ(60, parallel_rows);          // Should have 60 unique rows
     EXPECT_EQ(60, serial_rows);            // Should have same 60 unique rows
     EXPECT_EQ(parallel_rows, serial_rows); // Both should produce same result
-}
-
-TEST_F(PkTabletSSTWriterTest, test_publish_with_parallel_index_get) {
-    int64_t chunk_size = 3 * 4096;
-    auto chunk0 = generate_data(chunk_size);
-    auto chunk1 = generate_data(chunk_size, 12);
-    auto chunk2 = generate_data(chunk_size, 24);
-    auto indexes = std::vector<uint32_t>(chunk0.num_rows());
-    for (uint32_t i = 0, n = chunk0.num_rows(); i < n; i++) {
-        indexes[i] = i;
-    }
-    auto version = 1;
-    auto tablet_id = _tablet_metadata->id();
-    ConfigResetGuard<int64_t> guard(&config::write_buffer_size, 1);
-    ConfigResetGuard<bool> guard2(&config::enable_pk_parallel_execution, true);
-    ConfigResetGuard<int64_t> guard3(&config::pk_parallel_execution_threshold_bytes, 1);
-    ConfigResetGuard<bool> guard4(&config::enable_pk_index_parallel_get, true);
-    ConfigResetGuard<int64_t> guard5(&config::pk_index_parallel_get_min_rows, 4096);
-    for (int i = 0; i < 5; i++) {
-        int64_t txn_id = next_id();
-        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
-                                                   .set_tablet_manager(_tablet_mgr.get())
-                                                   .set_tablet_id(tablet_id)
-                                                   .set_txn_id(txn_id)
-                                                   .set_partition_id(_partition_id)
-                                                   .set_mem_tracker(_mem_tracker.get())
-                                                   .set_schema_id(_tablet_schema->id())
-                                                   .set_profile(&_dummy_runtime_profile)
-                                                   .build());
-        ASSERT_OK(delta_writer->open());
-        ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
-        ASSERT_OK(delta_writer->write(chunk1, indexes.data(), indexes.size()));
-        ASSERT_OK(delta_writer->write(chunk2, indexes.data(), indexes.size()));
-        ASSERT_OK(delta_writer->finish_with_txnlog());
-        delta_writer->close();
-        // read txnlog
-        ASSIGN_OR_ABORT(auto txn_log, _tablet_mgr->get_txn_log(tablet_id, txn_id));
-        EXPECT_EQ(txn_log->op_write().ssts_size(), 1);
-        // Publish version
-        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
-        EXPECT_TRUE(_update_mgr->TEST_check_update_state_cache_absent(tablet_id, txn_id));
-        version++;
-    }
-    // Compaction
-    {
-        ConfigResetGuard<int64_t> guard(&config::lake_pk_compaction_min_input_segments, 1);
-        int64_t txn_id = next_id();
-        auto task_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, false, nullptr);
-        ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(task_context.get()));
-        ASSERT_OK(task->execute(CompactionTask::kNoCancelFn));
-        EXPECT_EQ(100, task_context->progress.value());
-        ASSIGN_OR_ABORT(auto txn_log, _tablet_mgr->get_txn_log(tablet_id, txn_id));
-        EXPECT_EQ(txn_log->op_compaction().input_rowsets_size(), 5);
-        EXPECT_EQ(txn_log->op_compaction().ssts_size(), 1);
-        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
-        version++;
-    }
-}
-
-TEST_F(PkTabletSSTWriterTest, test_publish_early_sst_compact) {
-    const int64_t tablet_id = _tablet_metadata->id();
-    // Configure to generate SST files during write phase:
-    // - Small write_buffer_size to generate multiple segments per write
-    // - Enable parallel execution to generate SST files
-    ConfigResetGuard<int64_t> guard1(&config::write_buffer_size, 1);
-    ConfigResetGuard<bool> guard2(&config::enable_pk_parallel_execution, true);
-    ConfigResetGuard<int64_t> guard3(&config::pk_parallel_execution_threshold_bytes, 1);
-    // Set a lower threshold to trigger early_sst_compact more easily
-    ConfigResetGuard<int32_t> guard4(&config::pk_index_early_sst_compaction_threshold, 3);
-
-    // Generate sufficient data to create multiple SST files
-    // Each chunk will generate one SST file when written
-    const int64_t chunk_size = 100;
-    auto chunk0 = generate_data(chunk_size, 0);
-    auto chunk1 = generate_data(chunk_size, chunk_size);
-    auto chunk2 = generate_data(chunk_size, chunk_size * 2);
-    auto indexes = std::vector<uint32_t>(chunk_size);
-    for (uint32_t i = 0; i < chunk_size; i++) {
-        indexes[i] = i;
-    }
-
-    int version = 1;
-    // Import multiple times, each import generates multiple SST files
-    // After enough SST files are accumulated, early_sst_compact should be triggered during publish
-    const int num_imports = 6;
-    for (int i = 0; i < num_imports; i++) {
-        int64_t txn_id = next_id();
-        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
-                                                   .set_tablet_manager(_tablet_mgr.get())
-                                                   .set_tablet_id(tablet_id)
-                                                   .set_txn_id(txn_id)
-                                                   .set_partition_id(_partition_id)
-                                                   .set_mem_tracker(_mem_tracker.get())
-                                                   .set_schema_id(_tablet_schema->id())
-                                                   .set_profile(&_dummy_runtime_profile)
-                                                   .build());
-
-        ASSERT_OK(delta_writer->open());
-        // Write multiple chunks to generate multiple segments with SST files
-        ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
-        ASSERT_OK(delta_writer->write(chunk1, indexes.data(), indexes.size()));
-        ASSERT_OK(delta_writer->write(chunk2, indexes.data(), indexes.size()));
-        ASSERT_OK(delta_writer->finish_with_txnlog());
-        delta_writer->close();
-
-        // Verify that SST files were generated during write phase
-        ASSIGN_OR_ABORT(auto txn_log, _tablet_mgr->get_txn_log(tablet_id, txn_id));
-        EXPECT_GT(txn_log->op_write().ssts_size(), 0) << "SST files should be generated during write phase";
-
-        // Publish version - this is where early_sst_compact should be triggered
-        // when the number of filesets exceeds pk_index_early_sst_compaction_threshold
-        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
-        EXPECT_TRUE(_update_mgr->TEST_check_update_state_cache_absent(tablet_id, txn_id));
-        version++;
-    }
-
-    // Verify data correctness after all imports and early_sst_compact
-    // Should have 300 unique rows (chunk0 + chunk1 + chunk2 = 100 + 100 + 100)
-    int64_t final_rows = read_rows(tablet_id, version);
-    EXPECT_EQ(300, final_rows) << "Data should be correct after early_sst_compact";
 }
 
 } // namespace starrocks::lake

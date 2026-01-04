@@ -13,7 +13,6 @@
 
 namespace starrocks {
 class Cache;
-class RandomAccessFile;
 
 namespace sstable {
 
@@ -141,9 +140,6 @@ struct ReadOptions {
 
     // Mark rows that have been deleted in this sst
     DelVectorPtr delvec = nullptr;
-
-    // Use for multi-thread read scenario, to avoid multiple threads read same file concurrently
-    RandomAccessFile* file = nullptr;
 };
 
 // Options that control write operations

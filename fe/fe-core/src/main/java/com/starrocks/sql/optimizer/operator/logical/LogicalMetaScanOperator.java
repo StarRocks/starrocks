@@ -32,7 +32,6 @@ public class LogicalMetaScanOperator extends LogicalScanOperator {
     // agg column id -> (agg_function_name, column)
     private Map<Integer, Pair<String, Column>> aggColumnIdToColumns = ImmutableMap.of();
     private List<String> selectPartitionNames = Collections.emptyList();
-    private List<Long> hintsTabletIds = Collections.emptyList();
 
     private LogicalMetaScanOperator() {
         super(OperatorType.LOGICAL_META_SCAN);
@@ -48,10 +47,6 @@ public class LogicalMetaScanOperator extends LogicalScanOperator {
 
     public long getSelectedIndexId() {
         return selectedIndexId;
-    }
-
-    public List<Long> getHintsTabletIds() {
-        return hintsTabletIds;
     }
 
     @Override
@@ -73,13 +68,12 @@ public class LogicalMetaScanOperator extends LogicalScanOperator {
         LogicalMetaScanOperator that = (LogicalMetaScanOperator) o;
         return Objects.equals(aggColumnIdToColumns, that.aggColumnIdToColumns) &&
                 Objects.equals(selectPartitionNames, that.selectPartitionNames) &&
-                Objects.equals(hintsTabletIds, that.hintsTabletIds) &&
                 selectedIndexId == that.selectedIndexId;
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(super.hashCode(), aggColumnIdToColumns, selectPartitionNames, hintsTabletIds, selectedIndexId);
+        return Objects.hash(super.hashCode(), aggColumnIdToColumns);
     }
 
     public static LogicalMetaScanOperator.Builder builder() {
@@ -99,7 +93,6 @@ public class LogicalMetaScanOperator extends LogicalScanOperator {
             super.withOperator(operator);
             builder.aggColumnIdToColumns = ImmutableMap.copyOf(operator.aggColumnIdToColumns);
             builder.selectPartitionNames = operator.selectPartitionNames;
-            builder.hintsTabletIds = operator.hintsTabletIds;
             builder.columnAccessPaths = ImmutableList.copyOf(operator.columnAccessPaths);
             return this;
         }
@@ -117,11 +110,6 @@ public class LogicalMetaScanOperator extends LogicalScanOperator {
 
         public LogicalMetaScanOperator.Builder setSelectedIndexId(long selectedIndexId) {
             builder.selectedIndexId = selectedIndexId;
-            return this;
-        }
-
-        public LogicalMetaScanOperator.Builder setHintsTabletIds(List<Long> hintsTabletIds) {
-            builder.hintsTabletIds = hintsTabletIds != null ? hintsTabletIds : Collections.emptyList();
             return this;
         }
     }

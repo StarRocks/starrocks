@@ -94,16 +94,6 @@ Status PersistentIndexSstable::multi_get(const Slice* keys, const KeyIndexSet& k
     sstable::ReadIOStat stat;
     sstable::ReadOptions options;
     options.stat = &stat;
-    std::unique_ptr<RandomAccessFile> rf;
-    if (config::enable_pk_index_parallel_get) {
-        RandomAccessFileOptions opts;
-        if (!_sstable_pb.encryption_meta().empty()) {
-            ASSIGN_OR_RETURN(auto info, KeyCache::instance().unwrap_encryption_meta(_sstable_pb.encryption_meta()));
-            opts.encryption_info = std::move(info);
-        }
-        ASSIGN_OR_RETURN(rf, fs::new_random_access_file(opts, _rf->filename()));
-    }
-    options.file = rf.get();
     // Currently, there is no need to set predicate for MultiGet of persistent index sstable. Because predicate
     // only used for sstable compaction to filter out some keys for tablet split purpose and such keys can not
     // be read by the persistent index by designed. So even we provide a predicate, all keys read by multi_get
@@ -163,27 +153,6 @@ Status PersistentIndexSstable::multi_get(const Slice* keys, const KeyIndexSet& k
 
 size_t PersistentIndexSstable::memory_usage() const {
     return (_sst != nullptr) ? _sst->memory_usage() : 0;
-}
-
-Status PersistentIndexSstable::sample_keys(std::vector<std::string>* keys, size_t sample_interval_bytes) const {
-    if (_sst == nullptr) {
-        return Status::InvalidArgument("SSTable is not initialized");
-    }
-    return _sst->sample_keys(keys, sample_interval_bytes);
-}
-
-StatusOr<PersistentIndexSstableUniquePtr> PersistentIndexSstable::new_sstable(
-        const PersistentIndexSstablePB& sstable_pb, const std::string& location, Cache* cache, bool need_filter,
-        const DelVectorPtr& delvec, const TabletMetadataPtr& metadata, TabletManager* tablet_mgr) {
-    auto sstable = std::make_unique<PersistentIndexSstable>();
-    RandomAccessFileOptions opts;
-    if (!sstable_pb.encryption_meta().empty()) {
-        ASSIGN_OR_RETURN(auto info, KeyCache::instance().unwrap_encryption_meta(sstable_pb.encryption_meta()));
-        opts.encryption_info = std::move(info);
-    }
-    ASSIGN_OR_RETURN(auto rf, fs::new_random_access_file(opts, location));
-    RETURN_IF_ERROR(sstable->init(std::move(rf), sstable_pb, cache, need_filter, delvec, metadata, tablet_mgr));
-    return std::move(sstable);
 }
 
 PersistentIndexSstableStreamBuilder::PersistentIndexSstableStreamBuilder(std::unique_ptr<WritableFile> wf,

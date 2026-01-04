@@ -190,15 +190,6 @@ public:
     int64_t num_total_queries() const { return _num_total_queries; }
     int64_t concurrency_overflow_count() const { return _concurrency_overflow_count; }
     int64_t bigquery_count() const { return _bigquery_count; }
-    std::optional<int64_t> parent_memory_limit_bytes() const {
-        return _mem_tracker != nullptr && _mem_tracker->parent() ? std::make_optional(_mem_tracker->parent()->limit())
-                                                                 : std::nullopt;
-    }
-    std::optional<int64_t> parent_memory_usage_bytes() const {
-        return _mem_tracker != nullptr && _mem_tracker->parent()
-                       ? std::make_optional(_mem_tracker->parent()->consumption())
-                       : std::nullopt;
-    }
 
     int64_t big_query_mem_limit() const { return _big_query_mem_limit; }
     bool use_big_query_mem_limit() const {

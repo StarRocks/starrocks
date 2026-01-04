@@ -189,7 +189,7 @@ public class PaimonMetadata implements ConnectorMetadata {
     }
 
     private boolean getPartitionLegacyName(org.apache.paimon.table.Table paimonTable) {
-        String partitionLegacyName = paimonTable.options().get(CoreOptions.PARTITION_GENERATE_LEGACY_NAME.key());
+        String partitionLegacyName = paimonTable.options().get(CoreOptions.PARTITION_GENERATE_LEGCY_NAME.key());
         //If the user does not explicitly set this option, the result is null,but its default value is true.
         return StringUtils.isEmpty(partitionLegacyName) || Boolean.parseBoolean(partitionLegacyName);
     }

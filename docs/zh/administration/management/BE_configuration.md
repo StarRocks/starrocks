@@ -1782,13 +1782,13 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 描述：存算分离集群中，主键索引的 Compaction 分数比率。例如，如果有 N 个文件集，Compaction 分数将为 `N * pk_index_compaction_score_ratio`。
 - 引入版本：-
 
-##### pk_index_early_sst_compaction_threshold
+##### pk_index_ingest_sst_compaction_threshold
 
 - 默认值：5
 - 类型：Int
 - 单位：-
 - 是否动态：是
-- 描述：存算分离集群中，主键索引 early SST Compaction 的阈值。
+- 描述：存算分离集群中，主键索引 Ingest SST Compaction 的阈值。
 - 引入版本：-
 
 ##### pk_index_memtable_flush_threadpool_max_threads
@@ -1802,29 +1802,20 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 
 ##### pk_index_memtable_max_count
 
-- 默认值：1
+- 默认值：3
 - 类型：Int
 - 单位：-
 - 是否动态：是
 - 描述：存算分离集群中，主键索引的最大 MemTable 数量。
 - 引入版本：-
 
-##### pk_index_memtable_max_wait_flush_timeout_ms
-
-- 默认值：30000
-- 类型：Int
-- 单位：毫秒
-- 是否动态：是
-- 描述：存算分离集群中，等待主键索引 MemTable 刷盘完成的最大超时时间。当需要同步刷盘所有 MemTable 时（例如在 ingest SST 操作之前），系统最多等待该时间。默认为 30 秒。
-- 引入版本：-
-
 ##### pk_index_parallel_compaction_task_split_threshold_bytes
 
-- 默认值：33554432
+- 默认值：104857600
 - 类型：Int
 - 单位：-
 - 是否动态：是
-- 描述：主键索引 Compaction 任务拆分的阈值。当任务涉及的文件总大小小于此阈值时，任务将不会被拆分。默认为 32MB。
+- 描述：主键索引 Compaction 任务拆分的阈值。当任务涉及的文件总大小小于此阈值时，任务将不会被拆分。默认为 100MB。
 - 引入版本：-
 
 ##### pk_index_parallel_compaction_threadpool_max_threads
@@ -1879,15 +1870,6 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 单位：-
 - 是否动态：是
 - 描述：主键索引 Size-Tiered Compaction 策略的最小层级大小参数。
-- 引入版本：-
-
-##### pk_index_sstable_sample_interval_bytes
-
-- 默认值：16777216
-- 类型：Int
-- 单位：Bytes
-- 是否动态：是
-- 描述：存算分离集群中,主键索引 SSTable 文件的采样间隔大小。当 SSTable 文件大小超过该阈值时,系统会按照此间隔对 SSTable 中的键进行采样,用于优化 Compaction 任务的边界划分;对于小于该阈值的 SSTable,仅使用起始键作为边界键。默认为 16 MB。
 - 引入版本：-
 
 ##### pk_index_target_file_size

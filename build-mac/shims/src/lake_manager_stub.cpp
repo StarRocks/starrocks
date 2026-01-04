@@ -111,7 +111,7 @@ Status ReplicationTxnManager::replicate_snapshot(const TReplicateSnapshotRequest
     return Status::NotSupported("Lake replication snapshot is disabled on macOS");
 }
 
-void SegmentPKIterator::close() {
+void SegmentPKEncodeResult::close() {
     pk_column.reset();
     _iter.reset();
     _begin_rowid_offsets.clear();
