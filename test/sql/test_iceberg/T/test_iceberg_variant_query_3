@@ -1,0 +1,400 @@
+-- name: test_iceberg_variant_query_3
+
+-- iceberg catalog on hive does not variant yet.
+
+create external catalog iceberg_sql_test_${uuid0}
+PROPERTIES ("type"="iceberg", "iceberg.catalog.type"="hadoop", "iceberg.catalog.warehouse"="oss://${oss_bucket}/test_iceberg_variant_query_3/${uuid0}/warehouse/");
+
+shell: ossutil64 mkdir oss://${oss_bucket}/test_iceberg_variant_query_3/${uuid0}/warehouse/iceberg_variant > /dev/null
+
+use iceberg_sql_test_${uuid0}.iceberg_variant;
+
+CREATE TABLE variant_fallback_paths_test (
+    test_id INT,
+    test_label STRING,
+    variant_col VARIANT,
+    test_path STRING,
+    expected_result STRING
+)
+properties(
+  'format-version' = '3'
+);
+
+CREATE TABLE variant_fallback_types_test (
+    test_id INT,
+    test_label STRING,
+    variant_col VARIANT,
+    variant_type STRING,
+    test_path STRING,
+    access_type STRING
+)
+properties(
+  'format-version' = '3'
+);
+
+CREATE TABLE variant_fallback_cast_test (
+    test_id INT,
+    test_label STRING,
+    variant_col VARIANT,
+    source_type STRING,
+    target_cast STRING,
+    expected_behavior STRING
+)
+properties(
+  'format-version' = '3'
+);
+
+
+shell: ossutil64 cp ./sql/test_iceberg/data/variant_fallback_paths_test/data/00000-815-c605c8e7-0413-452a-8f99-95c52ef6d100-0-00001.parquet oss://${oss_bucket}/test_iceberg_variant_query_3/${uuid0}/variant_fallback_paths_test/data/00000-815-c605c8e7-0413-452a-8f99-95c52ef6d100-0-00001.parquet > /dev/null
+shell: ossutil64 cp ./sql/test_iceberg/data/variant_fallback_types_test/data/00000-1426-c0238b40-6b97-4dd5-ada0-8bae19c48916-0-00001.parquet oss://${oss_bucket}/test_iceberg_variant_query_3/${uuid0}/variant_fallback_types_test/data/00000-1426-c0238b40-6b97-4dd5-ada0-8bae19c48916-0-00001.parquet > /dev/null
+shell: ossutil64 cp ./sql/test_iceberg/data/variant_fallback_cast_test/data/00000-2037-0c582833-4332-4914-b004-19d8840978bf-0-00001.parquet oss://${oss_bucket}/test_iceberg_variant_query_3/${uuid0}/variant_fallback_cast_test/data/00000-2037-0c582833-4332-4914-b004-19d8840978bf-0-00001.parquet > /dev/null
+
+alter table variant_fallback_paths_test execute add_files(location='oss://${oss_bucket}/test_iceberg_variant_query_3/${uuid0}/variant_fallback_paths_test/data/00000-815-c605c8e7-0413-452a-8f99-95c52ef6d100-0-00001.parquet', file_format='parquet');
+alter table variant_fallback_types_test execute add_files(location='oss://${oss_bucket}/test_iceberg_variant_query_3/${uuid0}/variant_fallback_types_test/data/00000-1426-c0238b40-6b97-4dd5-ada0-8bae19c48916-0-00001.parquet', file_format='parquet');
+alter table variant_fallback_cast_test execute add_files(location='oss://${oss_bucket}/test_iceberg_variant_query_3/${uuid0}/variant_fallback_cast_test/data/00000-2037-0c582833-4332-4914-b004-19d8840978bf-0-00001.parquet', file_format='parquet');
+
+-- ========================================
+-- P0 Fallback Handling Validation Queries
+-- ========================================
+
+-- ========================================
+-- Query 1: Invalid Path Returns NULL
+-- Test IDs: UNC-2.1.1, UNC-2.1.2, UNC-2.1.3
+-- ========================================
+SELECT 'Query 1: Validate that invalid paths return NULL' AS test_description;
+SELECT
+    test_id,
+    test_label,
+    test_path,
+    get_variant_string(variant_col, test_path) as extracted_value,
+    expected_result,
+    CASE
+        WHEN get_variant_string(variant_col, test_path) IS NULL AND expected_result = 'NULL' THEN 'PASS'
+        WHEN get_variant_string(variant_col, test_path) IS NOT NULL AND expected_result != 'NULL' THEN 'PASS'
+        ELSE 'FAIL'
+    END as test_result
+FROM variant_fallback_paths_test
+ORDER BY test_id;
+
+-- ========================================
+-- Query 2: Invalid Path with INT Accessor
+-- ========================================
+SELECT 'Query 2: Validate invalid paths with get_variant_int' AS test_description;
+SELECT
+    test_id,
+    test_label,
+    test_path,
+    get_variant_int(variant_col, test_path) as extracted_value,
+    CASE
+        WHEN get_variant_int(variant_col, test_path) IS NULL THEN 'PASS'
+        ELSE 'FAIL'
+    END as test_result
+FROM variant_fallback_paths_test
+WHERE test_id IN (1, 3, 5, 6, 10)
+ORDER BY test_id;
+
+-- ========================================
+-- Query 3: Type Mismatch - Array Access on Non-Arrays
+-- Test ID: UNC-2.2.1
+-- ========================================
+SELECT 'Query 3: Validate array access on non-array types returns NULL' AS test_description;
+SELECT
+    test_id,
+    test_label,
+    variant_type,
+    test_path,
+    get_variant_string(variant_col, test_path) as result_string,
+    get_variant_int(variant_col, test_path) as result_int,
+    CASE
+        WHEN get_variant_string(variant_col, test_path) IS NULL THEN 'PASS'
+        ELSE 'FAIL'
+    END as test_result
+FROM variant_fallback_types_test
+WHERE access_type = 'ARRAY_INDEX'
+ORDER BY test_id;
+
+-- ========================================
+-- Query 4: Type Mismatch - Object Field Access on Non-Objects
+-- Test ID: UNC-2.2.2
+-- ========================================
+SELECT 'Query 4: Validate object field access on non-object types returns NULL' AS test_description;
+SELECT
+    test_id,
+    test_label,
+    variant_type,
+    test_path,
+    get_variant_string(variant_col, test_path) as result_string,
+    get_variant_int(variant_col, test_path) as result_int,
+    CASE
+        WHEN get_variant_string(variant_col, test_path) IS NULL THEN 'PASS'
+        ELSE 'FAIL'
+    END as test_result
+FROM variant_fallback_types_test
+WHERE access_type = 'OBJECT_FIELD'
+ORDER BY test_id;
+
+-- ========================================
+-- Query 5: Type Mismatch - Nested Path on Scalar Values
+-- Test ID: UNC-2.2.3
+-- ========================================
+SELECT 'Query 5: Validate nested path on scalar values returns NULL' AS test_description;
+SELECT
+    test_id,
+    test_label,
+    variant_type,
+    test_path,
+    get_variant_string(variant_col, test_path) as result_string,
+    CASE
+        WHEN get_variant_string(variant_col, test_path) IS NULL THEN 'PASS'
+        ELSE 'FAIL'
+    END as test_result
+FROM variant_fallback_types_test
+WHERE access_type = 'NESTED_PATH'
+ORDER BY test_id;
+
+-- ========================================
+-- Query 6: Invalid CAST - String to Numeric
+-- Test ID: UNC-2.3.1
+-- ========================================
+SELECT 'Query 6: Validate CAST of non-numeric string to INT' AS test_description;
+SELECT
+    test_id,
+    test_label,
+    source_type,
+    target_cast,
+    CAST(variant_col AS INT) as cast_result,
+    CASE
+        WHEN expected_behavior = 'NULL_OR_ERROR' AND CAST(variant_col AS INT) IS NULL THEN 'PASS'
+        WHEN expected_behavior = 'SUCCESS' AND CAST(variant_col AS INT) IS NOT NULL THEN 'PASS'
+        ELSE 'FAIL'
+    END as test_result
+FROM variant_fallback_cast_test
+WHERE target_cast IN ('INT', 'BIGINT')
+ORDER BY test_id;
+
+-- ========================================
+-- Query 7: Numeric Overflow - SMALLINT
+-- Test ID: UNC-2.3.2
+-- ========================================
+SELECT 'Query 7: Validate numeric overflow handling for SMALLINT' AS test_description;
+SELECT
+    test_id,
+    test_label,
+    get_variant_int(variant_col, '$') as original_value,
+    CAST(variant_col AS SMALLINT) as cast_result,
+    expected_behavior,
+    CASE
+        WHEN expected_behavior = 'OVERFLOW' AND
+             (CAST(variant_col AS SMALLINT) IS NULL OR
+              CAST(variant_col AS SMALLINT) != get_variant_int(variant_col, '$'))
+        THEN 'PASS'
+        ELSE 'FAIL'
+    END as test_result
+FROM variant_fallback_cast_test
+WHERE target_cast = 'SMALLINT'
+ORDER BY test_id;
+
+-- ========================================
+-- Query 8: Invalid CAST - Complex Types to Primitives
+-- ========================================
+SELECT 'Query 8: Validate CAST of complex types to primitives fails gracefully' AS test_description;
+SELECT
+    test_id,
+    test_label,
+    source_type,
+    target_cast,
+    CAST(variant_col AS INT) as cast_result,
+    CASE
+        WHEN source_type IN ('ARRAY', 'OBJECT') AND CAST(variant_col AS INT) IS NULL THEN 'PASS'
+        ELSE 'FAIL'
+    END as test_result
+FROM variant_fallback_cast_test
+WHERE source_type IN ('ARRAY', 'OBJECT')
+ORDER BY test_id;
+
+-- ========================================
+-- Query 9: Variant Type Detection for Error Cases
+-- ========================================
+SELECT 'Query 9: Verify variant_typeof for various data types' AS test_description;
+SELECT
+    test_id,
+    test_label,
+    variant_type as expected_type,
+    variant_typeof(variant_query(variant_col, '$')) as detected_type,
+    CASE
+        WHEN variant_type = 'OBJECT' AND variant_typeof(variant_query(variant_col, '$')) = 'Object' THEN 'PASS'
+        WHEN variant_type = 'ARRAY' AND variant_typeof(variant_query(variant_col, '$')) = 'Array' THEN 'PASS'
+        WHEN variant_type = 'STRING' AND variant_typeof(variant_query(variant_col, '$')) = 'String' THEN 'PASS'
+        WHEN variant_type = 'NULL' AND variant_typeof(variant_query(variant_col, '$')) = 'Null' THEN 'PASS'
+        WHEN variant_type = 'INT' AND variant_typeof(variant_query(variant_col, '$')) IN ('Int8', 'Int16', 'Int32', 'Int64') THEN 'PASS'
+        WHEN variant_type = 'BOOLEAN' AND variant_typeof(variant_query(variant_col, '$')) IN ('Boolean(true)', 'Boolean(false)') THEN 'PASS'
+        ELSE 'FAIL'
+    END as test_result
+FROM variant_fallback_types_test
+ORDER BY test_id;
+
+-- ========================================
+-- Query 10: Combined Path and Type Error Handling
+-- ========================================
+SELECT 'Query 10: Combined error scenarios' AS test_description;
+SELECT
+    'path_error' as error_category,
+    COUNT(*) as total_tests,
+    SUM(CASE WHEN get_variant_string(variant_col, test_path) IS NULL THEN 1 ELSE 0 END) as null_results,
+    SUM(CASE WHEN get_variant_string(variant_col, test_path) IS NULL THEN 1 ELSE 0 END) * 100.0 / COUNT(*) as null_percentage
+FROM variant_fallback_paths_test
+
+UNION ALL
+
+SELECT
+    'type_error' as error_category,
+    COUNT(*) as total_tests,
+    SUM(CASE WHEN get_variant_string(variant_col, test_path) IS NULL THEN 1 ELSE 0 END) as null_results,
+    SUM(CASE WHEN get_variant_string(variant_col, test_path) IS NULL THEN 1 ELSE 0 END) * 100.0 / COUNT(*) as null_percentage
+FROM variant_fallback_types_test;
+
+
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_iceberg_variant_query_3/${uuid0}/ > /dev/null
+
+drop table variant_fallback_paths_test force;
+drop table variant_fallback_types_test force;
+drop table variant_fallback_cast_test force;
+set catalog default_catalog;
+drop catalog iceberg_sql_test_${uuid0};
+
+
+-- use spark to generate those data files
+
+-- -- ========================================
+-- -- P0 Fallback Handling Test Suite
+-- -- Covers: UNC-2.1.x (Invalid Paths), UNC-2.2.x (Type Mismatches), UNC-2.3.x (Invalid CASTs)
+-- -- ========================================
+-- -- This test suite validates VARIANT error handling for:
+-- -- - Non-existent fields and paths
+-- -- - Type mismatch access patterns
+-- -- - Invalid CAST operations
+-- -- ========================================
+
+-- use iceberg_glue2.zya;
+
+-- DROP TABLE IF EXISTS variant_fallback_paths_test;
+-- DROP TABLE IF EXISTS variant_fallback_types_test;
+-- DROP TABLE IF EXISTS variant_fallback_cast_test;
+
+-- -- ========================================
+-- -- Test 1: Invalid Path Handling
+-- -- Test IDs: UNC-2.1.1, UNC-2.1.2, UNC-2.1.3
+-- -- ========================================
+-- CREATE TABLE variant_fallback_paths_test (
+--     test_id INT,
+--     test_label STRING,
+--     variant_col VARIANT,
+--     test_path STRING,
+--     expected_result STRING
+-- ) USING iceberg
+-- TBLPROPERTIES (
+--     'format-version' = '3',
+--     'write.format.default' = 'parquet',
+--     'engine.hive.enabled' = 'false'
+-- );
+
+-- INSERT INTO variant_fallback_paths_test VALUES
+--     -- Non-existent top-level fields
+--     (1, 'missing_top_level_field', parse_json('{"a": 1, "b": 2}'), '$.c', 'NULL'),
+--     (2, 'missing_top_level_nested', parse_json('{"a": {"x": 1}}'), '$.b', 'NULL'),
+
+--     -- Non-existent nested fields
+--     (3, 'missing_nested_deep', parse_json('{"a": {"b": {"c": 1}}}'), '$.a.b.c.d.e', 'NULL'),
+--     (4, 'missing_in_chain', parse_json('{"a": {"b": 1}}'), '$.a.nonexistent.field', 'NULL'),
+
+--     -- Non-existent array indices
+--     (5, 'array_index_out_of_bounds', parse_json('[1, 2, 3]'), '$[999]', 'NULL'),
+--     (6, 'array_negative_index', parse_json('[1, 2, 3]'), '$[-5]', 'NULL'),
+--     (7, 'nested_array_out_of_bounds', parse_json('{"arr": [1, 2, 3]}'), '$.arr[10]', 'NULL'),
+
+--     -- Mixed scenarios
+--     (8, 'field_then_bad_index', parse_json('{"items": [1, 2]}'), '$.items[99]', 'NULL'),
+--     (9, 'missing_in_array_element', parse_json('[{"a": 1}, {"b": 2}]'), '$[1].c', 'NULL'),
+--     (10, 'completely_wrong_path', parse_json('{"x": 1}'), '$.a.b.c.d.e.f.g', 'NULL');
+
+-- -- ========================================
+-- -- Test 2: Type Mismatch Access
+-- -- Test IDs: UNC-2.2.1, UNC-2.2.2, UNC-2.2.3
+-- -- ========================================
+-- CREATE TABLE variant_fallback_types_test (
+--     test_id INT,
+--     test_label STRING,
+--     variant_col VARIANT,
+--     variant_type STRING,
+--     test_path STRING,
+--     access_type STRING
+-- ) USING iceberg
+-- TBLPROPERTIES (
+--     'format-version' = '3',
+--     'write.format.default' = 'parquet',
+--     'engine.hive.enabled' = 'false'
+-- );
+
+-- INSERT INTO variant_fallback_types_test VALUES
+--     -- Array access on non-array types
+--     (1, 'object_accessed_as_array', parse_json('{"name": "test"}'), 'OBJECT', '$[0]', 'ARRAY_INDEX'),
+--     (2, 'scalar_int_accessed_as_array', parse_json('42'), 'INT', '$[0]', 'ARRAY_INDEX'),
+--     (3, 'scalar_string_accessed_as_array', parse_json('"hello"'), 'STRING', '$[0]', 'ARRAY_INDEX'),
+--     (4, 'null_accessed_as_array', parse_json('null'), 'NULL', '$[0]', 'ARRAY_INDEX'),
+
+--     -- Object field access on non-object types
+--     (5, 'array_accessed_as_object', parse_json('[1, 2, 3]'), 'ARRAY', '$.field', 'OBJECT_FIELD'),
+--     (6, 'scalar_int_accessed_as_object', parse_json('42'), 'INT', '$.field', 'OBJECT_FIELD'),
+--     (7, 'scalar_string_accessed_as_object', parse_json('"hello"'), 'STRING', '$.name', 'OBJECT_FIELD'),
+--     (8, 'null_accessed_as_object', parse_json('null'), 'NULL', '$.field', 'OBJECT_FIELD'),
+
+--     -- Nested path on scalar values
+--     (9, 'scalar_nested_path', parse_json('42'), 'INT', '$.field.nested', 'NESTED_PATH'),
+--     (10, 'string_nested_path', parse_json('"text"'), 'STRING', '$.a.b.c', 'NESTED_PATH'),
+--     (11, 'boolean_nested_path', parse_json('true'), 'BOOLEAN', '$.x.y', 'NESTED_PATH');
+
+-- -- ========================================
+-- -- Test 3: Invalid CAST Operations
+-- -- Test IDs: UNC-2.3.1, UNC-2.3.2, UNC-2.3.3, UNC-2.3.4
+-- -- ========================================
+-- CREATE TABLE variant_fallback_cast_test (
+--     test_id INT,
+--     test_label STRING,
+--     variant_col VARIANT,
+--     source_type STRING,
+--     target_cast STRING,
+--     expected_behavior STRING
+-- ) USING iceberg
+-- TBLPROPERTIES (
+--     'format-version' = '3',
+--     'write.format.default' = 'parquet',
+--     'engine.hive.enabled' = 'false'
+-- );
+
+-- INSERT INTO variant_fallback_cast_test VALUES
+--     -- String to numeric casts (invalid)
+--     (1, 'non_numeric_string_to_int', parse_json('"hello"'), 'STRING', 'INT', 'NULL_OR_ERROR'),
+--     (2, 'non_numeric_string_to_bigint', parse_json('"world"'), 'STRING', 'BIGINT', 'NULL_OR_ERROR'),
+--     (3, 'non_numeric_string_to_double', parse_json('"abc123"'), 'STRING', 'DOUBLE', 'NULL_OR_ERROR'),
+
+--     -- Numeric overflow
+--     (4, 'large_int_to_smallint_overflow', parse_json('100000'), 'INT', 'SMALLINT', 'OVERFLOW'),
+--     (5, 'negative_overflow_to_smallint', parse_json('-50000'), 'INT', 'SMALLINT', 'OVERFLOW'),
+--     (6, 'bigint_max_to_int_overflow', parse_json('9223372036854775807'), 'BIGINT', 'INT', 'OVERFLOW'),
+
+--     -- Complex type casts
+--     (7, 'array_to_int', parse_json('[1, 2, 3]'), 'ARRAY', 'INT', 'NULL_OR_ERROR'),
+--     (8, 'object_to_int', parse_json('{"a": 1}'), 'OBJECT', 'INT', 'NULL_OR_ERROR'),
+
+--     -- Boolean casts from incompatible types
+--     (9, 'large_int_to_boolean', parse_json('42'), 'INT', 'BOOLEAN', 'DEFINE_BEHAVIOR'),
+--     (10, 'string_to_boolean', parse_json('"true"'), 'STRING', 'BOOLEAN', 'DEFINE_BEHAVIOR'),
+
+--     -- Valid numeric strings (should succeed)
+--     (11, 'valid_numeric_string_to_int', parse_json('"123"'), 'STRING', 'INT', 'SUCCESS'),
+--     (12, 'valid_negative_string_to_int', parse_json('"-456"'), 'STRING', 'INT', 'SUCCESS');
+
+-- -- Sanity checks
+-- SELECT 'variant_fallback_paths_test' AS table_name, COUNT(*) AS row_count FROM variant_fallback_paths_test;
+-- SELECT 'variant_fallback_types_test' AS table_name, COUNT(*) AS row_count FROM variant_fallback_types_test;
+-- SELECT 'variant_fallback_cast_test' AS table_name, COUNT(*) AS row_count FROM variant_fallback_cast_test;
