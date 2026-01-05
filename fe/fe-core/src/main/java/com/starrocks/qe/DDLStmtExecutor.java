@@ -776,7 +776,7 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitTruncateTableStatement(TruncateTableStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().getLocalMetastore().truncateTable(stmt, context);
+                context.getGlobalStateMgr().getMetadataMgr().truncateTable(context, stmt);
             });
             return null;
         }

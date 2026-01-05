@@ -16,6 +16,7 @@
 package com.starrocks.sql.analyzer;
 
 import com.starrocks.sql.ast.TruncateTableStmt;
+import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
@@ -23,6 +24,7 @@ import org.junit.jupiter.api.Test;
 
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
+import static com.starrocks.sql.analyzer.AnalyzeTestUtil.getStarRocksAssert;
 
 public class AnalyzeTruncateTableTest {
 
@@ -30,6 +32,11 @@ public class AnalyzeTruncateTableTest {
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         AnalyzeTestUtil.init();
+
+        StarRocksAssert starRocksAssert = getStarRocksAssert();
+        String createIcebergCatalogStmt = "create external catalog iceberg_catalog properties (\"type\"=\"iceberg\", " +
+                "\"hive.metastore.uris\"=\"thrift://hms:9083\", \"iceberg.catalog.type\"=\"hive\")";
+        starRocksAssert.withCatalog(createIcebergCatalogStmt);
     }
 
     @Test
@@ -54,5 +61,19 @@ public class AnalyzeTruncateTableTest {
     @Test
     public void failureTest() {
         analyzeFail("TRUNCATE TABLE tbl PARTITION();");
+    }
+
+    @Test
+    public void testTruncateExternalCatalogTable() {
+        TruncateTableStmt stmt = (TruncateTableStmt) analyzeSuccess(
+                "TRUNCATE TABLE iceberg_catalog.iceberg_db.iceberg_table");
+        Assertions.assertEquals("iceberg_catalog", stmt.getCatalogName());
+        Assertions.assertEquals("iceberg_db", stmt.getDbName());
+        Assertions.assertEquals("iceberg_table", stmt.getTblName());
+
+        stmt = (TruncateTableStmt) analyzeSuccess("TRUNCATE TABLE hive_catalog.hive_db.hive_table");
+        Assertions.assertEquals("hive_catalog", stmt.getCatalogName());
+        Assertions.assertEquals("hive_db", stmt.getDbName());
+        Assertions.assertEquals("hive_table", stmt.getTblName());
     }
 }

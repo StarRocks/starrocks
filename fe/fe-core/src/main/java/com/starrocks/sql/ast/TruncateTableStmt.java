@@ -48,6 +48,10 @@ public class TruncateTableStmt extends DdlStmt {
         return tblRef.getName().getTbl();
     }
 
+    public String getCatalogName() {
+        return tblRef.getName().getCatalog();
+    }
+
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitTruncateTableStatement(this, context);
