@@ -18,6 +18,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.RowPositionDescriptor;
+import com.google.common.collect.Sets;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.Column;
@@ -162,6 +163,7 @@ import com.starrocks.sql.optimizer.operator.ScanOperatorPredicates;
 import com.starrocks.sql.optimizer.operator.TopNType;
 import com.starrocks.sql.optimizer.operator.UKFKConstraints;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalAssertOneRowOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEAnchorOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEConsumeOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEProduceOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalConcatenateOperator;
@@ -464,6 +466,10 @@ public class PlanFragmentBuilder {
         private final List<Integer> collectExecStatsIds = Lists.newArrayList();
         private ExecGroup currentExecGroup = execGroups.newExecGroup();
 
+        private final Set<Integer> recursiveCteIds = Sets.newHashSet();
+        private int currentRecursiveCteId = -1;
+        private final Map<Integer, List<ExchangeNode>> recursiveCteConsumerNodeMap = Maps.newHashMap();
+
         public PhysicalPlanTranslator(ColumnRefFactory columnRefFactory) {
             this.columnRefFactory = columnRefFactory;
         }
@@ -497,6 +503,7 @@ public class PlanFragmentBuilder {
             for (PlanFragment child : fragment.getChildren()) {
                 computeFragmentCost(context, child);
             }
+
             OptExpression output = getOptExpressionFromPlanNode(context, fragment.getPlanRoot());
 
             // scan fragment
@@ -506,9 +513,12 @@ public class PlanFragmentBuilder {
             }
 
             List<OptExpression> inputs = fragment.getChildren().stream().map(PlanFragment::getPlanRoot)
-                    .map(p -> getOptExpressionFromPlanNode(context, p)).collect(Collectors.toList());
+                    .map(p -> getOptExpressionFromPlanNode(context, p)).toList();
 
-            double childCost = inputs.stream().map(OptExpression::getCost).reduce(Double::sum).orElse(0D);
+            double childCost = inputs.stream()
+                    .filter(Objects::nonNull)
+                    .map(OptExpression::getCost)
+                    .reduce(Double::sum).orElse(0D);
             fragment.setFragmentCost(output.getCost() - childCost);
         }
 
@@ -3672,24 +3682,42 @@ public class PlanFragmentBuilder {
             PhysicalCTEConsumeOperator consume = (PhysicalCTEConsumeOperator) optExpression.getOp();
             int cteId = consume.getCteId();
 
-            MultiCastPlanFragment cteFragment = (MultiCastPlanFragment) context.getCteProduceFragments().get(cteId);
-            ExchangeNode exchangeNode = new ExchangeNode(context.getNextNodeId(),
-                    cteFragment.getPlanRoot(), DistributionSpec.DistributionType.SHUFFLE);
-            this.currentExecGroup.add(exchangeNode, true);
-            exchangeNode.setReceiveColumns(consume.getCteOutputColumnRefMap().values().stream()
-                    .map(ColumnRefOperator::getId).distinct().collect(Collectors.toList()));
-            exchangeNode.setDataPartition(cteFragment.getDataPartition());
-            exchangeNode.forceCollectExecStats();
+            PlanFragment consumeFragment;
+            ExchangeNode exchangeNode;
+            if (currentRecursiveCteId == cteId) {
+                exchangeNode = new ExchangeNode(context.getNextNodeId(), DistributionSpec.DistributionType.SHUFFLE);
+                this.currentExecGroup.add(exchangeNode, true);
+                exchangeNode.setReceiveColumns(consume.getCteOutputColumnRefMap().values().stream()
+                        .map(ColumnRefOperator::getId).distinct().collect(Collectors.toList()));
+                exchangeNode.setDataPartition(DataPartition.RANDOM);
+                exchangeNode.forceCollectExecStats();
 
-            PlanFragment consumeFragment = new PlanFragment(context.getNextFragmentId(), exchangeNode,
-                    cteFragment.getDataPartition());
+                consumeFragment = new PlanFragment(context.getNextFragmentId(), exchangeNode, DataPartition.RANDOM);
+                recursiveCteConsumerNodeMap.computeIfAbsent(cteId, k -> Lists.newArrayList()).add(exchangeNode);
+            } else {
+                MultiCastPlanFragment cteFragment = (MultiCastPlanFragment) context.getCteProduceFragments().get(cteId);
+                exchangeNode = new ExchangeNode(context.getNextNodeId(),
+                        cteFragment.getPlanRoot(), DistributionSpec.DistributionType.SHUFFLE);
+                this.currentExecGroup.add(exchangeNode, true);
+                exchangeNode.setReceiveColumns(consume.getCteOutputColumnRefMap().values().stream()
+                        .map(ColumnRefOperator::getId).distinct().collect(Collectors.toList()));
+                exchangeNode.setDataPartition(cteFragment.getDataPartition());
+                exchangeNode.forceCollectExecStats();
+
+                consumeFragment = new PlanFragment(context.getNextFragmentId(), exchangeNode,
+                        cteFragment.getDataPartition());
+
+                consumeFragment.setQueryGlobalDicts(cteFragment.getQueryGlobalDicts());
+                consumeFragment.setQueryGlobalDictExprs(cteFragment.getQueryGlobalDictExprs());
+                consumeFragment.setLoadGlobalDicts(cteFragment.getLoadGlobalDicts());
+
+                cteFragment.getDestNodeList().add(exchangeNode);
+                consumeFragment.addChild(cteFragment);
+            }
 
             Map<ColumnRefOperator, ScalarOperator> projectMap = Maps.newHashMap();
             projectMap.putAll(consume.getCteOutputColumnRefMap());
             consumeFragment = buildProjectNode(optExpression, new Projection(projectMap), consumeFragment, context);
-            consumeFragment.setQueryGlobalDicts(cteFragment.getQueryGlobalDicts());
-            consumeFragment.setQueryGlobalDictExprs(cteFragment.getQueryGlobalDictExprs());
-            consumeFragment.setLoadGlobalDicts(cteFragment.getLoadGlobalDicts());
 
             // add filter node
             if (consume.getPredicate() != null) {
@@ -3717,33 +3745,47 @@ public class PlanFragmentBuilder {
                 }
             }
 
-            cteFragment.getDestNodeList().add(exchangeNode);
-            consumeFragment.addChild(cteFragment);
             context.getFragments().add(consumeFragment);
             return consumeFragment;
         }
 
         @Override
         public PlanFragment visitPhysicalCTEProduce(OptExpression optExpression, ExecPlan context) {
+            int cteId = ((PhysicalCTEProduceOperator) optExpression.getOp()).getCteId();
             PlanFragment child = visit(optExpression.inputAt(0), context);
             child.getPlanRoot().forceCollectExecStats();
-            int cteId = ((PhysicalCTEProduceOperator) optExpression.getOp()).getCteId();
-            context.getFragments().remove(child);
             MultiCastPlanFragment cteProduce = new MultiCastPlanFragment(child);
+            context.getFragments().remove(child);
 
             List<Expr> outputs = Lists.newArrayList();
             optExpression.getOutputColumns().getStream()
                     .forEach(i -> outputs.add(context.getColRefToExpr().get(columnRefFactory.getColumnRef(i))));
 
+            if (currentRecursiveCteId == cteId) {
+                for (ExchangeNode ex : recursiveCteConsumerNodeMap.get(cteId)) {
+                    cteProduce.addDestNode(ex);
+                    ex.setTupleIds(cteProduce.getPlanRoot().getTupleIds());
+                    ex.setNullableTupleIds(cteProduce.getPlanRoot().getNullableTupleIds());
+                }
+            }
+
             cteProduce.setOutputExprs(outputs);
             context.getCteProduceFragments().put(cteId, cteProduce);
             context.getFragments().add(cteProduce);
-            return child;
+            return cteProduce;
         }
 
         @Override
         public PlanFragment visitPhysicalCTEAnchor(OptExpression optExpression, ExecPlan context) {
+            PhysicalCTEAnchorOperator anchor = optExpression.getOp().cast();
+            if (anchor.isRecursive()) {
+                recursiveCteIds.add(anchor.getCteId());
+                currentRecursiveCteId = anchor.getCteId();
+            }
             visit(optExpression.inputAt(0), context);
+            if (anchor.isRecursive()) {
+                currentRecursiveCteId = -1;
+            }
             return visit(optExpression.inputAt(1), context);
         }
 

@@ -16,8 +16,10 @@
 package com.starrocks.sql.optimizer.transformer;
 
 import com.google.common.base.Preconditions;
+import com.starrocks.sql.optimizer.operator.logical.LogicalCTEConsumeOperator;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -31,7 +33,9 @@ public class CTETransformerContext {
     // When the node count of cte is 0, disable the force reuse optimization.
     // cte id -> node count
     private final Map<Integer, Integer> cteIdToNodeCount;
-    
+
+    private final Map<Integer, List<LogicalCTEConsumeOperator>> recursiveCteIdToSelfConsume;
+
     private final AtomicInteger uniqueId;
 
     private final int cteMaxLimit;
@@ -42,10 +46,15 @@ public class CTETransformerContext {
         this.cteIdToNodeCount = new HashMap<>();
         this.uniqueId = new AtomicInteger();
         this.cteMaxLimit = cteMaxLimit;
+        this.recursiveCteIdToSelfConsume = new HashMap<>();
     }
 
     public Map<Integer, ExpressionMapping> getCteExpressions() {
         return cteExpressions;
+    }
+
+    public Map<Integer, List<LogicalCTEConsumeOperator>> getRecursiveCteIdToSelfConsume() {
+        return recursiveCteIdToSelfConsume;
     }
 
     /*

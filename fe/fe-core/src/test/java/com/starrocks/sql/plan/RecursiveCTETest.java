@@ -36,7 +36,8 @@ public class RecursiveCTETest extends PlanTestBase {
         StatementBase statementBase = statements.get(0);
 
         connectContext.getSessionVariable().setEnableRecursiveCTE(true);
-        if (RecursiveCTEAstCheck.hasRecursiveCte(statementBase, connectContext)) {
+        RecursiveCTEAstCheck check = RecursiveCTEAstCheck.of(connectContext, statementBase);
+        if (check.hasRecursiveCte()) {
             RecursiveCTEExecutor executor = new RecursiveCTEExecutor(connectContext);
             StatementBase sb = executor.splitOuterStmt(statementBase);
             return executor.explainCTE(sb);
@@ -185,4 +186,34 @@ public class RecursiveCTETest extends PlanTestBase {
         assertContains(plan, "Outer Statement After Rewriting:\n"
                 + "WITH RECURSIVE `cte2`");
     }
+
+    @Test
+    public void testStreamingSimpleRecursiveCTE() throws Exception {
+        String sql = "with recursive cte as " +
+                "(select v1 from t0 union all select v1 + 1 from cte where v1 < 10) " +
+                "select * from cte";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "MultiCastDataSinks\n"
+                + "  STREAM DATA SINK\n"
+                + "    EXCHANGE ID: 03\n"
+                + "    RANDOM\n"
+                + "  STREAM DATA SINK\n"
+                + "    EXCHANGE ID: 08\n"
+                + "    RANDOM");
+    }
+
+    @Test
+    public void testStreamingSimpleRecursiveCTE2() throws Exception {
+        String sql = "with recursive t1 as (select 1 as l union select * from t1 where l < 10 ) "
+                + "select * from t1";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "MultiCastDataSinks\n"
+                + "  STREAM DATA SINK\n"
+                + "    EXCHANGE ID: 04\n"
+                + "    RANDOM\n"
+                + "  STREAM DATA SINK\n"
+                + "    EXCHANGE ID: 11\n"
+                + "    RANDOM");
+    }
+
 }

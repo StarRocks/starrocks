@@ -17,12 +17,14 @@ package com.starrocks.sql.optimizer;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 /*
  * Recorder CTE node info, contains:
@@ -52,7 +54,9 @@ public class CTEContext {
 
     private boolean enableCTE;
 
-    private final List<Integer> forceCTEList;
+    private final Set<Integer> recursiveCTEList;
+
+    private final Set<Integer> forceCTEList;
 
     private double inlineCTERatio = 2.0;
 
@@ -61,7 +65,8 @@ public class CTEContext {
     private int cteIdSequence = 0;
 
     public CTEContext() {
-        forceCTEList = Lists.newArrayList();
+        forceCTEList = Sets.newHashSet();
+        recursiveCTEList = Sets.newHashSet();
     }
 
     public void reset() {
@@ -197,6 +202,14 @@ public class CTEContext {
         }
 
         return false;
+    }
+
+    public void addRecursiveCTE(int cteId) {
+        this.recursiveCTEList.add(cteId);
+    }
+
+    public boolean isRecursiveCTE(int cteId) {
+        return this.recursiveCTEList.contains(cteId);
     }
 
     public void addForceCTE(int cteId) {

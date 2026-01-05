@@ -745,7 +745,8 @@ public class StmtExecutor {
                 context.setExplainLevel(null);
             }
 
-            if (RecursiveCTEAstCheck.hasRecursiveCte(parsedStmt, context)) {
+            RecursiveCTEAstCheck cteCheck = RecursiveCTEAstCheck.of(context, parsedStmt);
+            if (cteCheck.hasBlockRecursiveCte()) {
                 redirectStatus = RedirectStatus.FORWARD_WITH_SYNC;
                 if (isForwardToLeader()) {
                     context.setIsForward(true);
@@ -762,6 +763,14 @@ public class StmtExecutor {
                     return;
                 } else {
                     cteExecutor.prepareRecursiveCTE();
+                }
+            } else if (cteCheck.hasRecursiveCte()) {
+                // just warn
+                LOG.warn("The query contains recursive CTE, but the recursive CTE is not blocked. " +
+                        "Please check the system configuration 'recursive_cte_block_mode'.");
+                if (!context.getSessionVariable().isEnableRecursiveCTE()) {
+                    throw new SemanticException("Recursive CTE is disabled. " +
+                            "Please set 'enable_recursive_cte' to true to enable it.");
                 }
             }
 
