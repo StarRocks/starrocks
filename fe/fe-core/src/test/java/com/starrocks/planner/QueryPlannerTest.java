@@ -423,7 +423,7 @@ public class QueryPlannerTest {
 
             StmtExecutor stmtExecutor2 = new StmtExecutor(connectContext, sqlStmt);
             stmtExecutor2.execute();
-            Assertions.assertEquals("Access denied; This sql is in blacklist, please contact your admin. " +
+            Assertions.assertEquals("Access denied; This sql is in blacklist (id: 0), please contact your admin. " +
                             "Digest: 389d2ef8d98994a4290b5d2e1d5838aa",
                     connectContext.getState().getErrorMessage());
             connectContext.getState().setError("");
