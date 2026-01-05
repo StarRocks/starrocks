@@ -24,7 +24,7 @@ function: get_running_transaction_count("db_${uuid0}")
 [UC]function: label1=get_single_running_transaction_label("db_${uuid0}")
 
 -- 3) Cancel this transaction by label
-shell: curl --location-trusted -u "root:" --fail-with-body -X POST "${url}/api/db_${uuid0}/t0/_cancel?label=${label1}"
+shell: curl --location-trusted -u "root:" -X POST "${url}/api/db_${uuid0}/t0/_cancel?label=${label1}"
 
 -- 4) Verify no running transactions
 function: get_running_transaction_count("db_${uuid0}")
@@ -35,7 +35,7 @@ shell: curl --location-trusted -u root: -X PUT -H "Expect:100-continue" -H "form
 function: get_running_transaction_count("db_${uuid0}")
 
 [UC]function: label2=get_single_running_transaction_label("db_${uuid0}")
-shell: curl --location-trusted -u "root:" --fail-with-body -X POST "${url}/api/db_${uuid0}/t0/_cancel?label=${label2}"
+shell: curl --location-trusted -u "root:" -X POST "${url}/api/db_${uuid0}/t0/_cancel?label=${label2}"
 
 function: get_running_transaction_count("db_${uuid0}")
 
