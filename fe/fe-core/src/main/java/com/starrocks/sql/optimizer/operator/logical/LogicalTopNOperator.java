@@ -24,6 +24,7 @@ import com.starrocks.sql.optimizer.RowOutputInfo;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.Ordering;
 import com.starrocks.sql.optimizer.operator.ColumnOutputInfo;
+import com.starrocks.sql.optimizer.operator.OpRuleBit;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
@@ -147,6 +148,14 @@ public class LogicalTopNOperator extends LogicalOperator {
 
     public boolean isPerPipeline() {
         return perPipeline;
+    }
+
+    public boolean isTopNPushDownAgg() {
+        return isOpRuleBitSet(OpRuleBit.OP_PUSH_DOWN_TOPN_AGG);
+    }
+
+    public void setTopNPushDownAgg() {
+        setOpRuleBit(OpRuleBit.OP_PUSH_DOWN_TOPN_AGG);
     }
 
     @Override
@@ -302,6 +311,11 @@ public class LogicalTopNOperator extends LogicalOperator {
 
         public LogicalTopNOperator.Builder setPerPipeline(boolean perPipeline) {
             builder.perPipeline = perPipeline;
+            return this;
+        }
+
+        public LogicalTopNOperator.Builder setTopNPushDownAgg() {
+            builder.setTopNPushDownAgg();
             return this;
         }
     }
