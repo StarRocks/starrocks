@@ -14,11 +14,11 @@
 
 #include "util/utf8.h"
 
+#include <fmt/format.h>
 #include <unicode/ucasemap.h>
 
 #include <memory>
-
-#include "common/logging.h"
+#include <stdexcept>
 
 namespace starrocks {
 
@@ -34,7 +34,9 @@ static UCaseMap* get_case_map() {
     static std::unique_ptr<UCaseMap, UCaseMapDeleter> case_map = []() {
         UErrorCode err_code = U_ZERO_ERROR;
         UCaseMap* map = ucasemap_open("", U_FOLD_CASE_DEFAULT, &err_code);
-        DCHECK(U_SUCCESS(err_code)) << "Failed to open UCaseMap: " << u_errorName(err_code);
+        if (U_FAILURE(err_code)) {
+            throw std::runtime_error(fmt::format("Failed to open UCaseMap: {}", u_errorName(err_code)));
+        }
         return std::unique_ptr<UCaseMap, UCaseMapDeleter>(map);
     }();
     return case_map.get();
@@ -55,7 +57,9 @@ void utf8_tolower(const char* src, size_t src_len, std::string& dst) {
         result_len = ucasemap_utf8ToLower(case_map, dst.data(), dst.size(), src, src_len, &err_code);
     }
 
-    DCHECK(U_SUCCESS(err_code)) << "Failed to convert to lowercase: " << u_errorName(err_code);
+    if (U_FAILURE(err_code)) {
+        throw std::runtime_error(fmt::format("Failed to convert to lowercase: {}", u_errorName(err_code)));
+    }
     dst.resize(result_len);
 }
 
