@@ -439,6 +439,10 @@
                 },
                 {
                     "type": "doc",
+                    "id": "integrations/airflow"
+                },
+                {
+                    "type": "doc",
                     "id": "integrations/dbt"
                 },
                 {
