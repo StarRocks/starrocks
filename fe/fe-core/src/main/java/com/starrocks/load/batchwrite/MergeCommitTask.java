@@ -134,13 +134,13 @@ public class MergeCommitTask extends AbstractTxnStateChangeCallback implements R
      * <p>State transition diagram:</p>
      *
      * <pre>
-     *      +--------> ABORTED  <-------+-----------+------------+
-     *     /            ^               ^           ^            |
-     *    /             |               |           |            |
-     * PENDING    --> BEGIN_TXN --> PLANNING --> LOADING --> COMMITTING --> COMMITTED --> FINISHED
-     *    \             |               |           |
-     *     \            v               v           v
-     *      +--------> CANCELLED <------+-----------+
+     *      +--------> ABORTED  <-----    --+-----------+------------+
+     *     /            ^                   ^           ^            |
+     *    /             |                   |           |            |
+     * PENDING    --> BEGINNING_TXN --> PLANNING --> LOADING --> COMMITTING --> COMMITTED --> FINISHED
+     *    \             |                   |           |
+     *     \            v                   v           v
+     *      +--------> CANCELLED <----------+-----------+
      * </pre>
      *
      * <p>Notes:</p>
@@ -320,7 +320,7 @@ public class MergeCommitTask extends AbstractTxnStateChangeCallback implements R
             }
             VisibleStateWaiter waiter;
             try (ScopedTimer ignored = new ScopedTimer(loadTimeTrace.commitCostMs)) {
-                // Currently StreamLoadTask is stateless, so no need to persist attachment for replaying
+                // Currently task is not persisted, so no need to persist attachment for replaying
                 waiter = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().commitTransaction(
                                 dbId, localTxnId, loadResult.tabletCommitInfos, loadResult.tabletFailInfos, null);
             }
@@ -374,7 +374,7 @@ public class MergeCommitTask extends AbstractTxnStateChangeCallback implements R
             completionCallback.finish(this);
             updateMetrics();
             collectProfile(connectContext, loadPlanner, coordinator);
-            // close tracer after collection profile
+            // close tracer after profile collection
             Tracers.close();
             if (LOG.isDebugEnabled()) {
                 LOG.debug("Finish merge-commit load. db={}, table={}, label={}, loadId={}, txnId={}, parameters={}, {}",
@@ -679,27 +679,28 @@ public class MergeCommitTask extends AbstractTxnStateChangeCallback implements R
      */
     private void transitionToState(TaskState targetState, String targetStateMsg,
             TaskStateCancelHandler taskStateCancelHandler, Runnable afterStateChange) throws Exception {
+        TaskState prevTaskState;
         TaskStateCancelHandler prevTaskStateCancelHandler;
         StateTransitionObserver observer = stateTransitionObserver;
-        TaskState prevStateForObserver = null;
         try (AutoCloseable ignored = CloseableLock.lock(lock)) {
             EnumSet<TaskState> transition = TASK_STATE_TRANSITION.getOrDefault(taskState, EnumSet.noneOf(TaskState.class));
             if (!transition.contains(targetState)) {
                 throw new Exception(String.format("Cannot transition state from %s to %s", taskState, targetState));
             }
-            TaskState prevState = taskState;
+            prevTaskState = taskState;
+            prevTaskStateCancelHandler = this.taskStateCancelHandler;
             taskState = targetState;
             taskStateMessage = targetStateMsg;
-            prevTaskStateCancelHandler = this.taskStateCancelHandler;
             this.taskStateCancelHandler = taskStateCancelHandler;
-            afterStateChange.run();
-            prevStateForObserver = prevState;
+            if (afterStateChange != null) {
+                afterStateChange.run();
+            }
             LOG.debug("Transition state from {} to {}. db={}, table={}, taskId={}, label={}, loadId={}, txnId={}, stateMsg={}",
-                    prevState, targetState, tableRef.getDbName(), tableRef.getTableName(),
+                    prevTaskState, targetState, tableRef.getDbName(), tableRef.getTableName(),
                     taskId, label, DebugUtil.printId(loadId), txnId, targetStateMsg);
         }
-        if (observer != null && prevStateForObserver != null) {
-            observer.onTransition(prevStateForObserver, targetState, targetStateMsg, taskStateCancelHandler != null);
+        if (observer != null && prevTaskState != null) {
+            observer.onTransition(prevTaskState, targetState, targetStateMsg, taskStateCancelHandler != null);
         }
         if (targetState == TaskState.CANCELLED && prevTaskStateCancelHandler != null) {
             prevTaskStateCancelHandler.cancel(targetStateMsg);
