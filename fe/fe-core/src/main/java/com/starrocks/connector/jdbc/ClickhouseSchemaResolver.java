@@ -88,9 +88,58 @@ public class ClickhouseSchemaResolver extends JDBCSchemaResolver {
         return connection.getMetaData().getColumns(connection.getCatalog(), dbName, tblName, "%");
     }
 
+    /**
+     * Extracts the underlying data type from ClickHouse AggregateFunction and SimpleAggregateFunction types.
+     * Examples:
+     *   "SimpleAggregateFunction(sum, UInt64)" -> "UInt64"
+     *   "AggregateFunction(quantile(0.5), Float64)" -> "Float64"
+     *   "Nullable(SimpleAggregateFunction(sum, UInt64))" -> "Nullable(UInt64)"
+     *   "UInt64" -> "UInt64" (unchanged if not an aggregate function type)
+     */
+    private String extractUnderlyingType(String typeName) {
+        if (typeName == null) {
+            return typeName;
+        }
+        
+        // Handle Nullable wrapper first
+        boolean isNullable = false;
+        String workingTypeName = typeName;
+        if (typeName.startsWith("Nullable(") && typeName.endsWith(")")) {
+            isNullable = true;
+            workingTypeName = typeName.substring("Nullable(".length(), typeName.length() - 1);
+        }
+        
+        // Extract underlying type from SimpleAggregateFunction or AggregateFunction
+        if (workingTypeName.startsWith("SimpleAggregateFunction(") && workingTypeName.endsWith(")")) {
+            // Format: SimpleAggregateFunction(function_name, underlying_type)
+            String content = workingTypeName.substring("SimpleAggregateFunction(".length(), workingTypeName.length() - 1);
+            int lastComma = content.lastIndexOf(',');
+            if (lastComma != -1) {
+                workingTypeName = content.substring(lastComma + 1).trim();
+            }
+        } else if (workingTypeName.startsWith("AggregateFunction(") && workingTypeName.endsWith(")")) {
+            // Format: AggregateFunction(function_name, underlying_type) or AggregateFunction(function_name(params), underlying_type)
+            String content = workingTypeName.substring("AggregateFunction(".length(), workingTypeName.length() - 1);
+            int lastComma = content.lastIndexOf(',');
+            if (lastComma != -1) {
+                workingTypeName = content.substring(lastComma + 1).trim();
+            }
+        }
+        
+        // Restore Nullable wrapper if needed
+        if (isNullable && !workingTypeName.startsWith("Nullable(")) {
+            workingTypeName = "Nullable(" + workingTypeName + ")";
+        }
+        
+        return workingTypeName;
+    }
 
     @Override
     public Type convertColumnType(int dataType, String typeName, int columnSize, int digits) {
+        // Handle ClickHouse AggregateFunction and SimpleAggregateFunction types
+        // These types wrap the actual data type, e.g., "SimpleAggregateFunction(sum, UInt64)"
+        typeName = extractUnderlyingType(typeName);
+        
         PrimitiveType primitiveType;
         switch (dataType) {
             case Types.TINYINT:
@@ -143,11 +192,70 @@ public class ClickhouseSchemaResolver extends JDBCSchemaResolver {
                     int scale = Integer.parseInt(precisionAndScale[1]);
                     return TypeFactory.createUnifiedDecimalType(precision, scale);
                 }
+            case Types.OTHER:
+                // For Types.OTHER, we need to parse the type name to determine the actual type
+                // This handles cases where JDBC driver reports aggregate function types as OTHER
+                return parseTypeByName(typeName, columnSize, digits);
             default:
                 primitiveType = PrimitiveType.UNKNOWN_TYPE;
                 break;
         }
         return TypeFactory.createType(primitiveType);
+    }
+
+    /**
+     * Parse ClickHouse type by name when JDBC type code is not helpful (e.g., Types.OTHER).
+     * This method handles the extracted underlying types after aggregate function wrappers are removed.
+     */
+    private Type parseTypeByName(String typeName, int columnSize, int digits) {
+        if (typeName == null) {
+            return TypeFactory.createType(PrimitiveType.UNKNOWN_TYPE);
+        }
+        
+        // Remove Nullable wrapper for type parsing
+        String baseTypeName = typeName;
+        if (typeName.startsWith("Nullable(") && typeName.endsWith(")")) {
+            baseTypeName = typeName.substring("Nullable(".length(), typeName.length() - 1);
+        }
+        
+        // Handle standard ClickHouse types
+        if (baseTypeName.equals("Int8")) {
+            return TypeFactory.createType(PrimitiveType.TINYINT);
+        } else if (baseTypeName.equals("UInt8") || baseTypeName.equals("Int16")) {
+            return TypeFactory.createType(PrimitiveType.SMALLINT);
+        } else if (baseTypeName.equals("UInt16") || baseTypeName.equals("Int32")) {
+            return TypeFactory.createType(PrimitiveType.INT);
+        } else if (baseTypeName.equals("Int64") || baseTypeName.equals("UInt32")) {
+            return TypeFactory.createType(PrimitiveType.BIGINT);
+        } else if (baseTypeName.equals("UInt64") || baseTypeName.equals("Int128") || 
+                   baseTypeName.equals("UInt128") || baseTypeName.equals("Int256") || 
+                   baseTypeName.equals("UInt256")) {
+            return TypeFactory.createType(PrimitiveType.LARGEINT);
+        } else if (baseTypeName.equals("Float32")) {
+            return TypeFactory.createType(PrimitiveType.FLOAT);
+        } else if (baseTypeName.equals("Float64")) {
+            return TypeFactory.createType(PrimitiveType.DOUBLE);
+        } else if (baseTypeName.equals("Bool") || baseTypeName.equals("Boolean")) {
+            return TypeFactory.createType(PrimitiveType.BOOLEAN);
+        } else if (baseTypeName.equals("String")) {
+            return TypeFactory.createVarcharType(65533);
+        } else if (baseTypeName.equals("Date")) {
+            return TypeFactory.createType(PrimitiveType.DATE);
+        } else if (baseTypeName.equals("DateTime") || baseTypeName.startsWith("DateTime64")) {
+            return TypeFactory.createType(PrimitiveType.DATETIME);
+        } else if (baseTypeName.startsWith("Decimal")) {
+            // Parse Decimal(precision, scale)
+            String[] precisionAndScale = baseTypeName.replace("Decimal", "")
+                    .replace("(", "").replace(")", "").replace(" ", "").split(",");
+            if (precisionAndScale.length == 2) {
+                int precision = Integer.parseInt(precisionAndScale[0]);
+                int scale = Integer.parseInt(precisionAndScale[1]);
+                return TypeFactory.createUnifiedDecimalType(precision, scale);
+            }
+        }
+        
+        // If we can't determine the type, return UNKNOWN_TYPE
+        return TypeFactory.createType(PrimitiveType.UNKNOWN_TYPE);
     }
 
 

@@ -244,4 +244,80 @@ public class ClickhouseSchemaResolverTest {
         List<String> expectResult = Lists.newArrayList("clickhouse", "template1", "test");
         Assertions.assertEquals(expectResult, result);
     }
+
+    @Test
+    public void testAggregateFunctionTypes() throws SQLException {
+        // Test SimpleAggregateFunction and AggregateFunction type handling
+        MockResultSet aggColumnResult = new MockResultSet("columns");
+        aggColumnResult.addColumn("DATA_TYPE",
+                Arrays.asList(Types.OTHER, Types.OTHER, Types.OTHER, Types.OTHER, Types.OTHER, Types.OTHER));
+        aggColumnResult.addColumn("TYPE_NAME", Arrays.asList(
+                "SimpleAggregateFunction(sum, UInt64)",
+                "SimpleAggregateFunction(max, Float64)",
+                "AggregateFunction(quantile(0.5), Float64)",
+                "Nullable(SimpleAggregateFunction(sum, UInt64))",
+                "Nullable(AggregateFunction(uniq, String))",
+                "AggregateFunction(sumMap, Array(Tuple(String, Int64)))"
+        ));
+        aggColumnResult.addColumn("COLUMN_SIZE", Arrays.asList(0, 0, 0, 0, 0, 0));
+        aggColumnResult.addColumn("DECIMAL_DIGITS", Arrays.asList(null, null, null, null, null, null));
+        aggColumnResult.addColumn("COLUMN_NAME", Arrays.asList("val", "max_val", "median", "nullable_sum", "uniq_str", "sum_map"));
+        aggColumnResult.addColumn("IS_NULLABLE", Arrays.asList("NO", "NO", "NO", "YES", "YES", "NO"));
+
+        new Expectations() {
+            {
+                dataSource.getConnection();
+                result = connection;
+                minTimes = 0;
+
+                connection.getCatalog();
+                result = "t1";
+                minTimes = 0;
+
+                connection.getMetaData().getColumns("t1", "test", "agg_tbl", "%");
+                result = aggColumnResult;
+                minTimes = 0;
+            }
+        };
+
+        try {
+            JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
+            Table table = jdbcMetadata.getTable(new ConnectContext(), "test", "agg_tbl");
+            Assertions.assertTrue(table instanceof JDBCTable);
+            
+            ClickhouseSchemaResolver clickhouseSchemaResolver = new ClickhouseSchemaResolver(properties);
+            ResultSet columnSet = clickhouseSchemaResolver.getColumns(connection, "test", "agg_tbl");
+            List<Column> fullSchema = clickhouseSchemaResolver.convertToSRTable(columnSet);
+            
+            // Verify the columns were parsed correctly
+            Assertions.assertEquals(6, fullSchema.size());
+            
+            // SimpleAggregateFunction(sum, UInt64) -> LARGEINT
+            Assertions.assertEquals("val", fullSchema.get(0).getName());
+            Assertions.assertEquals(PrimitiveType.LARGEINT, fullSchema.get(0).getType().getPrimitiveType());
+            
+            // SimpleAggregateFunction(max, Float64) -> DOUBLE
+            Assertions.assertEquals("max_val", fullSchema.get(1).getName());
+            Assertions.assertEquals(PrimitiveType.DOUBLE, fullSchema.get(1).getType().getPrimitiveType());
+            
+            // AggregateFunction(quantile(0.5), Float64) -> DOUBLE
+            Assertions.assertEquals("median", fullSchema.get(2).getName());
+            Assertions.assertEquals(PrimitiveType.DOUBLE, fullSchema.get(2).getType().getPrimitiveType());
+            
+            // Nullable(SimpleAggregateFunction(sum, UInt64)) -> LARGEINT
+            Assertions.assertEquals("nullable_sum", fullSchema.get(3).getName());
+            Assertions.assertEquals(PrimitiveType.LARGEINT, fullSchema.get(3).getType().getPrimitiveType());
+            Assertions.assertTrue(fullSchema.get(3).isAllowNull());
+            
+            // Nullable(AggregateFunction(uniq, String)) -> VARCHAR
+            Assertions.assertEquals("uniq_str", fullSchema.get(4).getName());
+            Assertions.assertEquals(PrimitiveType.VARCHAR, fullSchema.get(4).getType().getPrimitiveType());
+            Assertions.assertTrue(fullSchema.get(4).isAllowNull());
+            
+        } catch (Exception e) {
+            System.out.println(e.getMessage());
+            e.printStackTrace();
+            Assertions.fail();
+        }
+    }
 }
