@@ -492,6 +492,7 @@ public:
     void runtime_report_action();
 
     std::string to_readable_string() const;
+    std::string get_raw_string_name() const;
 
     workgroup::WorkGroup* workgroup();
     const workgroup::WorkGroup* workgroup() const;
@@ -579,6 +580,9 @@ protected:
 
     // used in event scheduler
     void _update_global_rf_timer();
+
+    // Helper function to build readable string with option to use raw operator names
+    std::string _build_readable_string(bool use_raw_name) const;
 
     RuntimeState* _runtime_state = nullptr;
     PipelineObserver _observer;

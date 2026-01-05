@@ -114,6 +114,22 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
 
     _peak_driver_queue_size_counter = _runtime_profile->AddHighWaterMarkCounter(
             "PeakDriverQueueSize", TUnit::UNIT, RuntimeProfile::Counter::create_strategy(TUnit::UNIT));
+<<<<<<< HEAD
+=======
+}
+
+Status PipelineDriver::prepare(RuntimeState* runtime_state) {
+    DeferOp defer([&]() {
+        if (this->_state != DriverState::READY) {
+            LOG(WARNING) << get_raw_string_name() << " prepare failed";
+        }
+    });
+
+    _runtime_state = runtime_state;
+
+    auto* prepare_timer = ADD_TIMER_WITH_THRESHOLD(_runtime_profile, "DriverPrepareTime", 1_ms);
+    SCOPED_TIMER(prepare_timer);
+>>>>>>> 8ed765b2f4 ([BugFix] Fix SIGSEGV in PipelineDriver by adding get_raw_string_name() for safe error logging (#67391))
 
     DCHECK(_state == DriverState::NOT_READY);
 
@@ -768,7 +784,7 @@ void PipelineDriver::_update_global_rf_timer() {
     WARN_IF_ERROR(_fragment_ctx->pipeline_timer()->schedule(_global_rf_timer.get(), abstime), "schedule:");
 }
 
-std::string PipelineDriver::to_readable_string() const {
+std::string PipelineDriver::_build_readable_string(bool use_raw_name) const {
     std::stringstream ss;
     std::string block_reasons = "";
     if (_state == PRECONDITION_BLOCK) {
@@ -781,13 +797,21 @@ std::string PipelineDriver::to_readable_string() const {
        << block_reasons << ", operator-chain: [";
     for (size_t i = 0; i < _operators.size(); ++i) {
         if (i == 0) {
-            ss << _operators[i]->get_name();
+            ss << (use_raw_name ? _operators[i]->get_raw_name() : _operators[i]->get_name());
         } else {
-            ss << " -> " << _operators[i]->get_name();
+            ss << " -> " << (use_raw_name ? _operators[i]->get_raw_name() : _operators[i]->get_name());
         }
     }
     ss << "]";
     return ss.str();
+}
+
+std::string PipelineDriver::to_readable_string() const {
+    return _build_readable_string(false);
+}
+
+std::string PipelineDriver::get_raw_string_name() const {
+    return _build_readable_string(true);
 }
 
 workgroup::WorkGroup* PipelineDriver::workgroup() {
