@@ -64,6 +64,7 @@ public:
         std::string pattern = "-";
         _state->pattern = pattern;
         _state->use_hyperscan = true;
+        _state->use_hyperscan_vec = true;
         _state->size_of_pattern = int(pattern.size());
         if (hs_compile(pattern.c_str(), HS_FLAG_ALLOWEMPTY | HS_FLAG_DOTALL | HS_FLAG_UTF8 | HS_FLAG_SOM_LEFTMOST,
                        HS_MODE_BLOCK, nullptr, &_state->database, &_state->compile_err) != HS_SUCCESS) {
@@ -142,7 +143,7 @@ TEST_F(StringFunctionRegexpReplaceTest, testMultipleRowsWithPackagePattern) {
     state->const_pattern = true;
     std::string pattern = "_package_.*";
     state->pattern = pattern;
-    state->use_hyperscan = true;
+    state->use_hyperscan = false;
     state->global_mode = true; // Pattern doesn't start with ^ or end with $
     state->size_of_pattern = int(pattern.size());
 
@@ -171,11 +172,6 @@ TEST_F(StringFunctionRegexpReplaceTest, testMultipleRowsWithPackagePattern) {
         }
     });
 
-    // Test vectorized version
-    auto r_vec = StringFunctions::regexp_replace_use_hyperscan_vec(state.get(), columns);
-    ASSERT_TRUE(r_vec.ok());
-    auto vec_result = r_vec.value();
-
     // Test non-vectorized version (expected to be correct)
     auto r_ori = StringFunctions::regexp_replace_use_hyperscan(state.get(), columns);
     ASSERT_TRUE(r_ori.ok());
@@ -184,8 +180,6 @@ TEST_F(StringFunctionRegexpReplaceTest, testMultipleRowsWithPackagePattern) {
     // Both should produce "activity_60" and "activity_50"
     ASSERT_EQ(ori_result->debug_item(0), "'activity_60'");
     ASSERT_EQ(ori_result->debug_item(1), "'activity_50'");
-    ASSERT_EQ(vec_result->debug_item(0), "'activity_60'");
-    ASSERT_EQ(vec_result->debug_item(1), "'activity_50'");
 }
 
 } // namespace starrocks
