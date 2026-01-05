@@ -100,6 +100,7 @@ import com.starrocks.sql.optimizer.base.HashDistributionDesc;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.base.RoundRobinDistributionSpec;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
@@ -338,6 +339,11 @@ public class InsertPlanner {
 
         //5. Fill in the generated columns
         optExprBuilder = fillGeneratedColumns(columnRefFactory, insertStmt, outputColumns, optExprBuilder, session);
+
+        //5.5. Fill in the transform partition columns for Iceberg tables with partition transforms
+        // This adds computed columns for expressions like day(dt), month(dt), etc. to support
+        // global shuffle based on transformed partition values
+        optExprBuilder = fillTransformPartitionColumns(columnRefFactory, insertStmt, outputColumns, optExprBuilder, session);
 
         //6. Fill in the shadow column
         optExprBuilder = fillShadowColumns(columnRefFactory, insertStmt, outputColumns, optExprBuilder, session);
@@ -938,11 +944,33 @@ public class InsertPlanner {
             // For shuffle mode except NEVER, only apply shuffle to partitioned tables
             if (shuffleMode != ConnectorSinkShuffleMode.NEVER && !icebergTable.getPartitionColumns().isEmpty()) {
 
+                // Check if there are transform partition columns added by fillTransformPartitionColumns
+                // These columns have names starting with GENERATED_PARTITION_COLUMN_PREFIX
+                List<Integer> transformPartitionColumnIDs = new ArrayList<>();
+
+                for (int i = 0; i < outputColumns.size(); i++) {
+                    ColumnRefOperator col = outputColumns.get(i);
+                    if (col.getName().startsWith(FeConstants.GENERATED_PARTITION_COLUMN_PREFIX)) {
+                        transformPartitionColumnIDs.add(col.getId());
+                    }
+                }
+
+                // If transform columns exist, use them for shuffle; otherwise use original partition columns
+                List<Integer> partitionColumnIDs;
+                if (!transformPartitionColumnIDs.isEmpty()) {
+                    partitionColumnIDs = transformPartitionColumnIDs;
+                    if (LOG.isDebugEnabled()) {
+                        LOG.debug("Using transform partition columns for Iceberg table {} global shuffle: {}",
+                                icebergTable.getName(), partitionColumnIDs);
+                    }
+                } else {
+                    partitionColumnIDs = icebergTable.partitionColumnIndexes().stream()
+                            .map(x -> outputColumns.get(x).getId()).collect(Collectors.toList());
+                }
+
                 // Handle FORCE mode - always enable global shuffle
                 // We also handle the old session variable `enable_iceberg_sink_global_shuffle` for compatibility.
                 if (shuffleMode == ConnectorSinkShuffleMode.FORCE) {
-                    List<Integer> partitionColumnIDs = icebergTable.partitionColumnIndexes().stream()
-                            .map(x -> outputColumns.get(x).getId()).collect(Collectors.toList());
                     return createShufflePropertyFromPartitions(partitionColumnIDs);
                 }
 
@@ -951,8 +979,6 @@ public class InsertPlanner {
                     boolean shouldEnableGlobalShuffle = shouldEnableAdaptiveGlobalShuffle(
                             insertStmt, icebergTable, session);
                     if (shouldEnableGlobalShuffle) {
-                        List<Integer> partitionColumnIDs = icebergTable.partitionColumnIndexes().stream()
-                                .map(x -> outputColumns.get(x).getId()).collect(Collectors.toList());
                         return createShufflePropertyFromPartitions(partitionColumnIDs);
                     }
                 }
@@ -1344,6 +1370,153 @@ public class InsertPlanner {
             return PARTITION_ESTIMATE_CAP;
         }
         return base * factor;
+    }
+
+    /**
+     * Fill transform partition columns for Iceberg tables with partition transforms.
+     * This method adds computed columns for transform expressions like day(dt), month(dt), etc.
+     * These computed columns are used for global shuffle to ensure rows with the same
+     * transformed partition value go to the same BE.
+     *
+     * This implementation references analyzeMultiExprsPartition in CreateTableAnalyzer.
+     *
+     * For example, if table has partition day(event_time), this method adds a column
+     * with GENERATED_PARTITION_COLUMN_PREFIX prefix and __iceberg_transform_day function.
+     */
+    private OptExprBuilder fillTransformPartitionColumns(ColumnRefFactory columnRefFactory,
+                                                          InsertStmt insertStmt,
+                                                          List<ColumnRefOperator> outputColumns,
+                                                          OptExprBuilder root,
+                                                          ConnectContext session) {
+        Table targetTable = insertStmt.getTargetTable();
+        if (!(targetTable instanceof IcebergTable)) {
+            return root;
+        }
+
+        IcebergTable icebergTable = (IcebergTable) targetTable;
+        // Check if all partitions are identity (no transform)
+        if (icebergTable.isAllPartitionColumnsAlwaysIdentity()) {
+            return root;
+        }
+
+        LogicalProjectOperator projectOperator = (LogicalProjectOperator) root.getRoot().getOp();
+        Map<ColumnRefOperator, ScalarOperator> columnRefMap = projectOperator.getColumnRefMap();
+
+        // Get partition fields from Iceberg table
+        List<org.apache.iceberg.PartitionField> partitionFields = icebergTable.getNativeTable().spec().fields();
+        org.apache.iceberg.Schema schema = icebergTable.getNativeTable().schema();
+
+        int placeHolderSlotId = 0;
+        for (org.apache.iceberg.PartitionField partitionField : partitionFields) {
+            String transformStr = partitionField.transform().toString();
+            // Skip identity transforms - use original column
+            if ("identity".equals(transformStr)) {
+                continue;
+            }
+
+            // Get source column name and reference operator
+            String sourceColumnName = schema.findColumnName(partitionField.sourceId());
+            ColumnRefOperator sourceColumnRef = null;
+            for (ColumnRefOperator col : outputColumns) {
+                if (col.getName().equalsIgnoreCase(sourceColumnName)) {
+                    sourceColumnRef = col;
+                    break;
+                }
+            }
+
+            if (sourceColumnRef == null) {
+                LOG.warn("Source column {} not found in outputColumns for transform {}", sourceColumnName, transformStr);
+                continue;
+            }
+
+            // Create transform expression based on transform type
+            // Use ICEBERG_TRANSFORM_EXPRESSION_PREFIX as function name prefix (e.g., __iceberg_transform_day)
+            ScalarOperator transformExpr = createTransformExpression(sourceColumnRef, transformStr, partitionField);
+            if (transformExpr == null) {
+                LOG.warn("Unsupported transform type: {}, skipping", transformStr);
+                continue;
+            }
+
+            // Create new column ref using GENERATED_PARTITION_COLUMN_PREFIX
+            // This matches the pattern used in analyzeMultiExprsPartition
+            String transformColumnName = FeConstants.GENERATED_PARTITION_COLUMN_PREFIX + placeHolderSlotId++;
+            ColumnRefOperator transformColumnRef = columnRefFactory.create(
+                    transformColumnName,
+                    transformExpr.getType(),
+                    transformExpr.isNullable());
+
+            // Add to output columns and project map
+            outputColumns.add(transformColumnRef);
+            columnRefMap.put(transformColumnRef, transformExpr);
+        }
+
+        return root.withNewRoot(new LogicalProjectOperator(new HashMap<>(columnRefMap)));
+    }
+
+    /**
+     * Create a ScalarOperator expression for the given partition transform.
+     * This implementation references analyzeGeneratedColumnForIceberg and analyzeMultiExprsPartition.
+     *
+     * @param sourceColumnRef the source column reference
+     * @param transformStr the transform type string (e.g., "year", "month", "day", "hour", "bucket[N]", "truncate[N]")
+     * @param partitionField the Iceberg partition field
+     * @return the ScalarOperator expression, or null if unsupported
+     */
+    private ScalarOperator createTransformExpression(ColumnRefOperator sourceColumnRef, String transformStr,
+                                                      org.apache.iceberg.PartitionField partitionField) {
+        // Use ICEBERG_TRANSFORM_EXPRESSION_PREFIX as function name prefix
+        // This matches the pattern in analyzeMultiExprsPartition (line 588)
+        String fnName = FeConstants.ICEBERG_TRANSFORM_EXPRESSION_PREFIX + transformStr;
+
+        // Handle time-based transforms
+        // These functions are already implemented in BE via the iceberg transform functions
+        if ("year".equals(transformStr)) {
+            return new CallOperator(fnName, Type.DATE, Lists.newArrayList(sourceColumnRef));
+        } else if ("month".equals(transformStr)) {
+            return new CallOperator(fnName, Type.DATE, Lists.newArrayList(sourceColumnRef));
+        } else if ("day".equals(transformStr)) {
+            return new CallOperator(fnName, Type.DATE, Lists.newArrayList(sourceColumnRef));
+        } else if ("hour".equals(transformStr)) {
+            return new CallOperator(fnName, Type.DATETIME, Lists.newArrayList(sourceColumnRef));
+        } else if ("void".equals(transformStr)) {
+            // void transform means no partitioning, return null constant
+            return ConstantOperator.createNull(Type.NULL);
+        }
+
+        // For bucket[N] transforms
+        if (transformStr.startsWith("bucket")) {
+            // Parse bucket count: bucket[5] -> 5
+            int numBuckets = extractTransformParam(transformStr);
+            return new CallOperator(fnName, Type.INT, Lists.newArrayList(
+                    sourceColumnRef,
+                    ConstantOperator.createInt(numBuckets)));
+        }
+
+        // For truncate[N] transforms
+        if (transformStr.startsWith("truncate")) {
+            // Parse width: truncate[10] -> 10
+            int width = extractTransformParam(transformStr);
+            Type returnType = sourceColumnRef.getType().isBinaryType() ? Type.VARCHAR : sourceColumnRef.getType();
+            return new CallOperator(fnName, returnType, Lists.newArrayList(
+                    sourceColumnRef,
+                    ConstantOperator.createInt(width)));
+        }
+
+        LOG.warn("Unknown transform type: {}", transformStr);
+        return null;
+    }
+
+    /**
+     * Extract parameter from transform string.
+     * e.g., bucket[5] -> 5, truncate[10] -> 10
+     */
+    private int extractTransformParam(String transformStr) {
+        int start = transformStr.indexOf('[');
+        int end = transformStr.indexOf(']');
+        if (start > 0 && end > start) {
+            return Integer.parseInt(transformStr.substring(start + 1, end));
+        }
+        throw new IllegalArgumentException("Invalid transform string: " + transformStr);
     }
 
     /**

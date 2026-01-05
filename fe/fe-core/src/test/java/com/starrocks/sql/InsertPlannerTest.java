@@ -51,6 +51,8 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -494,5 +496,280 @@ public class InsertPlannerTest {
                 minTimes = 0;
             }
         };
+    }
+
+    // ========== Transform Partition Tests ==========
+
+    /**
+     * Test extractTransformParam for bucket transform
+     */
+    @Test
+    public void testExtractTransformParamForBucket() {
+        int param = Deencapsulation.invoke(insertPlanner, "extractTransformParam", "bucket[5]");
+        assertEquals(5, param);
+    }
+
+    /**
+     * Test extractTransformParam for truncate transform
+     */
+    @Test
+    public void testExtractTransformParamForTruncate() {
+        int param = Deencapsulation.invoke(insertPlanner, "extractTransformParam", "truncate[10]");
+        assertEquals(10, param);
+    }
+
+    /**
+     * Test extractTransformParam with large number
+     */
+    @Test
+    public void testExtractTransformParamWithLargeNumber() {
+        int param = Deencapsulation.invoke(insertPlanner, "extractTransformParam", "bucket[1000]");
+        assertEquals(1000, param);
+    }
+
+    /**
+     * Test extractTransformParam with invalid format throws exception
+     */
+    @Test
+    public void testExtractTransformParamWithInvalidFormat() {
+        try {
+            Deencapsulation.invoke(insertPlanner, "extractTransformParam", "bucket5");
+            throw new AssertionError("Expected IllegalArgumentException");
+        } catch (IllegalArgumentException e) {
+            assertTrue(e.getMessage().contains("Invalid transform string"));
+        }
+    }
+
+    /**
+     * Test createTransformExpression for year transform
+     */
+    @Test
+    public void testCreateTransformExpressionForYear(@Mocked ColumnRefOperator columnRef) {
+        new Expectations() {
+            {
+                columnRef.getType();
+                result = com.starrocks.type.Type.DATE;
+                minTimes = 0;
+
+                columnRef.isNullable();
+                result = true;
+                minTimes = 0;
+            }
+        };
+
+        org.apache.iceberg.PartitionField partitionField = mockPartitionField("year");
+
+        com.starrocks.sql.optimizer.operator.scalar.ScalarOperator expr = Deencapsulation.invoke(
+                insertPlanner, "createTransformExpression", columnRef, "year", partitionField);
+
+        assertNotNull(expr);
+        assertTrue(expr instanceof com.starrocks.sql.optimizer.operator.scalar.CallOperator);
+        com.starrocks.sql.optimizer.operator.scalar.CallOperator callOp =
+                (com.starrocks.sql.optimizer.operator.scalar.CallOperator) expr;
+        assertEquals("__iceberg_transform_year", callOp.getFnName());
+        assertEquals(com.starrocks.type.Type.DATE, callOp.getType());
+        assertEquals(1, callOp.getChildren().size());
+    }
+
+    /**
+     * Test createTransformExpression for day transform
+     */
+    @Test
+    public void testCreateTransformExpressionForDay(@Mocked ColumnRefOperator columnRef) {
+        new Expectations() {
+            {
+                columnRef.getType();
+                result = com.starrocks.type.Type.DATE;
+                minTimes = 0;
+
+                columnRef.isNullable();
+                result = true;
+                minTimes = 0;
+            }
+        };
+
+        org.apache.iceberg.PartitionField partitionField = mockPartitionField("day");
+
+        com.starrocks.sql.optimizer.operator.scalar.ScalarOperator expr = Deencapsulation.invoke(
+                insertPlanner, "createTransformExpression", columnRef, "day", partitionField);
+
+        assertNotNull(expr);
+        assertTrue(expr instanceof com.starrocks.sql.optimizer.operator.scalar.CallOperator);
+        com.starrocks.sql.optimizer.operator.scalar.CallOperator callOp =
+                (com.starrocks.sql.optimizer.operator.scalar.CallOperator) expr;
+        assertEquals("__iceberg_transform_day", callOp.getFnName());
+    }
+
+    /**
+     * Test createTransformExpression for hour transform
+     */
+    @Test
+    public void testCreateTransformExpressionForHour(@Mocked ColumnRefOperator columnRef) {
+        new Expectations() {
+            {
+                columnRef.getType();
+                result = com.starrocks.type.Type.DATETIME;
+                minTimes = 0;
+
+                columnRef.isNullable();
+                result = true;
+                minTimes = 0;
+            }
+        };
+
+        org.apache.iceberg.PartitionField partitionField = mockPartitionField("hour");
+
+        com.starrocks.sql.optimizer.operator.scalar.ScalarOperator expr = Deencapsulation.invoke(
+                insertPlanner, "createTransformExpression", columnRef, "hour", partitionField);
+
+        assertNotNull(expr);
+        assertTrue(expr instanceof com.starrocks.sql.optimizer.operator.scalar.CallOperator);
+        com.starrocks.sql.optimizer.operator.scalar.CallOperator callOp =
+                (com.starrocks.sql.optimizer.operator.scalar.CallOperator) expr;
+        assertEquals("__iceberg_transform_hour", callOp.getFnName());
+        assertEquals(com.starrocks.type.Type.DATETIME, callOp.getType());
+    }
+
+    /**
+     * Test createTransformExpression for void transform returns null constant
+     */
+    @Test
+    public void testCreateTransformExpressionForVoid(@Mocked ColumnRefOperator columnRef) {
+        org.apache.iceberg.PartitionField partitionField = mockPartitionField("void");
+
+        com.starrocks.sql.optimizer.operator.scalar.ScalarOperator expr = Deencapsulation.invoke(
+                insertPlanner, "createTransformExpression", columnRef, "void", partitionField);
+
+        assertNotNull(expr);
+        assertTrue(expr instanceof com.starrocks.sql.optimizer.operator.scalar.ConstantOperator);
+        com.starrocks.sql.optimizer.operator.scalar.ConstantOperator constOp =
+                (com.starrocks.sql.optimizer.operator.scalar.ConstantOperator) expr;
+        assertTrue(constOp.isNull());
+    }
+
+    /**
+     * Test createTransformExpression for bucket transform
+     */
+    @Test
+    public void testCreateTransformExpressionForBucket(@Mocked ColumnRefOperator columnRef) {
+        new Expectations() {
+            {
+                columnRef.isNullable();
+                result = true;
+                minTimes = 0;
+            }
+        };
+
+        org.apache.iceberg.PartitionField partitionField = mockPartitionField("bucket[5]");
+
+        com.starrocks.sql.optimizer.operator.scalar.ScalarOperator expr = Deencapsulation.invoke(
+                insertPlanner, "createTransformExpression", columnRef, "bucket[5]", partitionField);
+
+        assertNotNull(expr);
+        assertTrue(expr instanceof com.starrocks.sql.optimizer.operator.scalar.CallOperator);
+        com.starrocks.sql.optimizer.operator.scalar.CallOperator callOp =
+                (com.starrocks.sql.optimizer.operator.scalar.CallOperator) expr;
+        assertEquals("__iceberg_transform_bucket[5]", callOp.getFnName());
+        assertEquals(com.starrocks.type.Type.INT, callOp.getType());
+        assertEquals(2, callOp.getChildren().size()); // column + bucket count
+    }
+
+    /**
+     * Test createTransformExpression for truncate transform
+     */
+    @Test
+    public void testCreateTransformExpressionForTruncate(@Mocked ColumnRefOperator columnRef) {
+        new Expectations() {
+            {
+                columnRef.getType();
+                result = com.starrocks.type.Type.VARCHAR;
+                minTimes = 0;
+
+                columnRef.isNullable();
+                result = true;
+                minTimes = 0;
+            }
+        };
+
+        org.apache.iceberg.PartitionField partitionField = mockPartitionField("truncate[10]");
+
+        com.starrocks.sql.optimizer.operator.scalar.ScalarOperator expr = Deencapsulation.invoke(
+                insertPlanner, "createTransformExpression", columnRef, "truncate[10]", partitionField);
+
+        assertNotNull(expr);
+        assertTrue(expr instanceof com.starrocks.sql.optimizer.operator.scalar.CallOperator);
+        com.starrocks.sql.optimizer.operator.scalar.CallOperator callOp =
+                (com.starrocks.sql.optimizer.operator.scalar.CallOperator) expr;
+        assertEquals("__iceberg_transform_truncate[10]", callOp.getFnName());
+        assertEquals(2, callOp.getChildren().size()); // column + width
+    }
+
+    /**
+     * Test createTransformExpression for unknown transform returns null
+     */
+    @Test
+    public void testCreateTransformExpressionForUnknownTransform(@Mocked ColumnRefOperator columnRef) {
+        org.apache.iceberg.PartitionField partitionField = mockPartitionField("unknown");
+
+        com.starrocks.sql.optimizer.operator.scalar.ScalarOperator expr = Deencapsulation.invoke(
+                insertPlanner, "createTransformExpression", columnRef, "unknown", partitionField);
+
+        assertNull(expr);
+    }
+
+    // Helper method to create a mock PartitionField
+    private org.apache.iceberg.PartitionField mockPartitionField(String transformStr) {
+        return new org.apache.iceberg.PartitionField(1, 0, "test_field",
+                new org.apache.iceberg.transforms.Transform<Void>() {
+                    @Override
+                    public String toString() {
+                        return transformStr;
+                    }
+
+                    @Override
+                    public org.apache.iceberg.types.Type getResultType(org.apache.iceberg.types.Type sourceType) {
+                        return sourceType;
+                    }
+
+                    @Override
+                    public boolean equals(Object other) {
+                        return this == other;
+                    }
+
+                    @Override
+                    public int hashCode() {
+                        return System.identityHashCode(this);
+                    }
+
+                    @Override
+                    public boolean isVoid() {
+                        return "void".equals(transformStr);
+                    }
+
+                    @Override
+                    public boolean preservesOrder() {
+                        return true;
+                    }
+
+                    @Override
+                    public java.lang.Integer satisfySourceIds(org.apache.iceberg.schema.Schema schema) {
+                        return null;
+                    }
+
+                    @Override
+                    public org.apache.iceberg.transforms.Transform<Void> bind(org.apache.iceberg.types.Type type) {
+                        return this;
+                    }
+
+                    @Override
+                    public boolean isIdentity() {
+                        return "identity".equals(transformStr);
+                    }
+
+                    @Override
+                    public Void apply(Void value) {
+                        return null;
+                    }
+                });
     }
 }
