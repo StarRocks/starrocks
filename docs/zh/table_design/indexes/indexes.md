@@ -25,7 +25,7 @@ keywords: ['suoyin']
 
 ### ZoneMap 索引
 
-ZoneMap 索引存储了每块数据统计信息，统计信息包括 Min 最大值、Max 最小值、HasNull 空值、HasNotNull 不全为空的信息。在查询时，StarRocks 可以根据这些统计信息，快速判断这些数据块是否可以过滤掉，从而减少扫描数据量，提升查询速度。
+ZoneMap 索引存储了每块数据统计信息，统计信息包括 Min 最小值、Max 最大值、HasNull 空值、HasNotNull 不全为空的信息。在查询时，StarRocks 可以根据这些统计信息，快速判断这些数据块是否可以过滤掉，从而减少扫描数据量，提升查询速度。
 
 <details>
 
