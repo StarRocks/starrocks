@@ -8,10 +8,11 @@ Static Extensions are StarRocks FE’s extension modules that allow you to add n
 
 This example demonstrates how to develop a static extension.
 
-Prerequisites:
+**Prerequisites:**
+
 StarRocks FE development environment.
 
-```
+```xml
 <plugin>
     <groupId>org.apache.maven.plugins</groupId>
     <artifactId>maven-jar-plugin</artifactId>
@@ -50,8 +51,9 @@ StarRocks FE development environment.
 </plugin>
 ```
 
-Extension entry point:
-```
+**Extension entry point:**
+
+```java
 @SRModule(name = "extension_name")
 public class MultiWarehouseExtension implements StarRocksExtension {
     @Override
@@ -68,16 +70,14 @@ After building the extension, place the ${your_extension_name}-ext.jar file into
 
 Example FE log after startup:
 
-```
+```sh
 2025-12-26 12:47:46.047+08:00 INFO (main|1) [ExtensionManager.loadExtensionsFromDir():39] start to load extensions
 2025-12-26 12:47:46.152+08:00 INFO (main|1) [ExtensionManager.loadExtensions():63] Loaded extension: extension_name
 2025-12-26 12:47:46.152+08:00 INFO (main|1) [ExtensionManager.loadExtensionsFromDir():42] all extensions loaded finished
 ```
 
-Explanation:
+**Explanation:**
 
-start to load extensions: FE has started scanning the extension directory.
-
-Loaded extension: extension_name: The extension was successfully loaded.
-
-all extensions loaded finished: All extensions in the directory have been loaded.
+- `start to load extensions`: FE has started scanning the extension directory.
+- `Loaded extension: extension_name`: The extension was successfully loaded.
+- `all extensions loaded finished`: All extensions in the directory have been loaded.
