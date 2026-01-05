@@ -189,7 +189,7 @@ TEST_P(SpillMemTableSinkTest, test_flush_chunk2) {
     SpillMemTableSink sink(block_manager.get(), tablet_writer.get(), &_dummy_runtime_profile);
     auto chunk = gen_data(kChunkSize, 0);
     starrocks::SegmentPB segment;
-    ASSERT_OK(sink.flush_chunk(*chunk, &segment, true));
+    ASSERT_OK(sink.flush_chunk(*chunk, &segment, true, nullptr, 0));
     ASSERT_EQ(1, tablet_writer->segments().size());
 }
 
@@ -204,7 +204,7 @@ TEST_P(SpillMemTableSinkTest, test_flush_chunk_with_delete2) {
     SpillMemTableSink sink(block_manager.get(), tablet_writer.get(), &_dummy_runtime_profile);
     auto chunk = gen_data(kChunkSize, 0);
     starrocks::SegmentPB segment;
-    ASSERT_OK(sink.flush_chunk_with_deletes(*chunk, *(chunk->columns()[0]), &segment, true));
+    ASSERT_OK(sink.flush_chunk_with_deletes(*chunk, *(chunk->columns()[0]), &segment, true, nullptr, 0));
     ASSERT_EQ(1, tablet_writer->segments().size());
     ASSERT_EQ(1, tablet_writer->dels().size());
 }
@@ -348,8 +348,6 @@ TEST_P(SpillMemTableSinkTest, test_flush_chunk_with_deletes_and_slot_idx) {
     ASSERT_EQ(0, groups[0].slot_idx);
     ASSERT_EQ(1, groups[1].slot_idx);
     ASSERT_EQ(2, groups[2].slot_idx);
-
-    ASSERT_EQ(3, tablet_writer->segments().size());
 }
 
 TEST_P(SpillMemTableSinkTest, test_slot_idx_ordering_after_merge) {

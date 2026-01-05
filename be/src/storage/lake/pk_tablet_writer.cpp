@@ -84,7 +84,11 @@ Status HorizontalPkTabletWriter::flush_del_file(const Column& deletes) {
     RETURN_IF_ERROR(serde::ColumnArraySerde::serialize(deletes, content.data()));
     RETURN_IF_ERROR(of->append(Slice(content.data(), content.size())));
     RETURN_IF_ERROR(of->close());
-    _dels.emplace_back(FileInfo{std::move(name), content.size(), encryption_meta});
+    {
+        // Use _dels_mutex to protect _dels concurrenctly append by multiple threads.
+        std::lock_guard lg(_dels_mutex);
+        _dels.emplace_back(FileInfo{std::move(name), content.size(), encryption_meta});
+    }
     return Status::OK();
 }
 
