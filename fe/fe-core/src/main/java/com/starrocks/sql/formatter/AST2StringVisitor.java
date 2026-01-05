@@ -580,6 +580,9 @@ public class AST2StringVisitor implements AstVisitorEPack<String, Void> {
 
         if (queryRelation.hasWithClause()) {
             sqlBuilder.append("WITH ");
+            if (queryRelation.isHasRecursiveCTE()) {
+                sqlBuilder.append("RECURSIVE ");
+            }
             List<String> cteStrings =
                     queryRelation.getCteRelations().stream().map(this::visit).collect(Collectors.toList());
             sqlBuilder.append(Joiner.on(", ").join(cteStrings));
