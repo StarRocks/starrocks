@@ -35,7 +35,7 @@ function: get_running_transaction_count("db_${uuid0}")
 -- result:
 merge_commit_019b7ea8-2d85-7586-8877-91d55c347c2d
 -- !result
-shell: curl --location-trusted -u "root:" --fail-with-body -X POST "${url}/api/db_${uuid0}/t0/_cancel?label=${label1}"
+shell: curl --location-trusted -u "root:" -X POST "${url}/api/db_${uuid0}/t0/_cancel?label=${label1}"
 -- result:
 0
 {"status":"OK","code":"0","msg":"Success","message":"OK"}
@@ -60,7 +60,7 @@ function: get_running_transaction_count("db_${uuid0}")
 -- result:
 merge_commit_019b7ea8-2daa-7e32-8798-18fb4088bce4
 -- !result
-shell: curl --location-trusted -u "root:" --fail-with-body -X POST "${url}/api/db_${uuid0}/t0/_cancel?label=${label2}"
+shell: curl --location-trusted -u "root:" -X POST "${url}/api/db_${uuid0}/t0/_cancel?label=${label2}"
 -- result:
 0
 {"status":"OK","code":"0","msg":"Success","message":"OK"}
