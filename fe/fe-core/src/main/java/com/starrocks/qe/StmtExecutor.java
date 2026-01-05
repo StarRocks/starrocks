@@ -108,6 +108,7 @@ import com.starrocks.mysql.MysqlSerializer;
 import com.starrocks.persist.CreateInsertOverwriteJobLog;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.planner.FileScanNode;
+import com.starrocks.planner.HdfsScanNode;
 import com.starrocks.planner.HiveTableSink;
 import com.starrocks.planner.HudiScanNode;
 import com.starrocks.planner.IcebergScanNode;
@@ -3483,6 +3484,13 @@ public class StmtExecutor {
                 planMaxScanRows = Math.max(planMaxScanRows, scanNode.getCardinality());
                 planMaxScanPartitions = Math.max(
                         planMaxScanPartitions, scanNode.getSelectedPartitionNum());
+            }
+
+            if (scanNode instanceof HdfsScanNode) {
+                planMaxScanRows = Math.max(planMaxScanRows, scanNode.getCardinality());
+                planMaxScanPartitions = Math.max(
+                        planMaxScanPartitions, ((HdfsScanNode) scanNode).getScanNodePredicates()
+                                .getSelectedPartitionIds().size());
             }
         }
 
