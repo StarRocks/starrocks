@@ -1,4 +1,4 @@
--- name: test_agg_state_table_basic_with_mv
+-- name: test_agg_state_table_basic_with_mv @native
 CREATE TABLE t1 (
   id BIGINT NOT NULL,
   province VARCHAR(64),

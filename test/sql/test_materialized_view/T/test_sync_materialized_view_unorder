@@ -1,4 +1,4 @@
--- name: test_sync_materialized_view_unorder
+-- name: test_sync_materialized_view_unorder @native
 
 admin set frontend config('alter_scheduler_interval_millisecond' = '100');
 

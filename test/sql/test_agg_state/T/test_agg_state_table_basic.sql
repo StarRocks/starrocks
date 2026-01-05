@@ -1,4 +1,4 @@
--- name: test_agg_state_table_basic
+-- name: test_agg_state_table_basic @native
  CREATE TABLE `t1` ( 
     `k1`  date, 
     `k2`  datetime not null,
