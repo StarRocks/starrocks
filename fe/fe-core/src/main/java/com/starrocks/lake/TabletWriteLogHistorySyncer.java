@@ -99,6 +99,10 @@ public class TabletWriteLogHistorySyncer extends FrontendDaemon {
     }
 
     public void syncData() {
+        if (getInterval() != Config.tablet_write_log_history_syncer_interval_sec * 1000L) {
+            setInterval(Config.tablet_write_log_history_syncer_interval_sec * 1000L);
+        }
+
         if (!Config.tablet_write_log_history_syncer_enabled) {
             return;
         }

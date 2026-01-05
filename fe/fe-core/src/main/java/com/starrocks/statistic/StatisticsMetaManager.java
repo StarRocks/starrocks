@@ -576,6 +576,10 @@ public class StatisticsMetaManager extends FrontendDaemon {
 
     @Override
     protected void runAfterCatalogReady() {
+        if (getInterval() != Config.statistics_meta_manager_interval_sec * 1000L) {
+            setInterval(Config.statistics_meta_manager_interval_sec * 1000L);
+        }
+
         // To make UT pass, some UT will create database and table
         trySleep(Config.statistic_manager_sleep_time_sec * 1000);
         while (!checkDatabaseExist()) {
