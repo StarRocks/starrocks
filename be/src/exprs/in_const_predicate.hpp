@@ -14,6 +14,12 @@
 
 #pragma once
 
+#ifdef __AVX2__
+#include <immintrin.h>
+#elif defined(__ARM_NEON) && defined(__aarch64__)
+#include <arm_neon.h>
+#endif
+
 #include "base/simd/simd.h"
 #include "column/chunk.h"
 #include "column/column_builder.h"
@@ -198,7 +204,54 @@ public:
 
         if (!lhs->is_constant()) {
             if (filter) {
-                for (int row = 0; row < size; ++row) {
+                int row = 0;
+#ifdef __AVX2__
+                // SIMD batch filter check: process 32 elements at a time
+                const __m256i zero = _mm256_setzero_si256();
+                for (; row + 32 <= size; row += 32) {
+                    __m256i flt = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(filter + row));
+                    __m256i active = _mm256_cmpgt_epi8(flt, zero);
+                    int mask = _mm256_movemask_epi8(active);
+
+                    if (mask == 0) {
+                        // All 32 filtered out - result is 0
+                        memset(data3 + row, 0, 32);
+                        continue;
+                    }
+
+                    // Process only active elements
+                    memset(data3 + row, 0, 32);
+                    uint32_t bits = static_cast<uint32_t>(mask);
+                    while (bits) {
+                        int bit = __builtin_ctz(bits);
+                        data3[row + bit] = check_value_existence<use_array>(data[row + bit]);
+                        bits &= (bits - 1);
+                    }
+                }
+#elif defined(__ARM_NEON) && defined(__aarch64__)
+                // NEON batch filter check: process 16 elements at a time
+                const uint8x16_t zero = vdupq_n_u8(0);
+                for (; row + 16 <= size; row += 16) {
+                    uint8x16_t flt = vld1q_u8(reinterpret_cast<const uint8_t*>(filter + row));
+                    uint8x16_t active = vcgtq_u8(flt, zero);
+
+                    // Check if all are filtered
+                    uint64x2_t as64 = vreinterpretq_u64_u8(active);
+                    if (vgetq_lane_u64(as64, 0) == 0 && vgetq_lane_u64(as64, 1) == 0) {
+                        memset(data3 + row, 0, 16);
+                        continue;
+                    }
+
+                    // Process with mask
+                    uint8_t mask_arr[16];
+                    vst1q_u8(mask_arr, active);
+                    for (int j = 0; j < 16; j++) {
+                        data3[row + j] = mask_arr[j] ? check_value_existence<use_array>(data[row + j]) : 0;
+                    }
+                }
+#endif
+                // Scalar tail
+                for (; row < size; ++row) {
                     data3[row] = (filter[row] && check_value_existence<use_array>(data[row]));
                 }
             } else {
@@ -263,7 +316,51 @@ public:
 
         if (filter != nullptr) {
             memset(output, 0x0, size);
-            for (int row = 0; row < size; ++row) {
+            int row = 0;
+#ifdef __AVX2__
+            // SIMD batch filter check: process 32 elements at a time
+            const __m256i zero_vec = _mm256_setzero_si256();
+            for (; row + 32 <= static_cast<int>(size); row += 32) {
+                __m256i flt = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(filter + row));
+                __m256i active = _mm256_cmpgt_epi8(flt, zero_vec);
+                int mask = _mm256_movemask_epi8(active);
+
+                if (mask == 0) {
+                    // All 32 filtered out - output already 0
+                    continue;
+                }
+
+                // Process only active elements
+                uint32_t bits = static_cast<uint32_t>(mask);
+                while (bits) {
+                    int bit = __builtin_ctz(bits);
+                    update_row(row + bit);
+                    bits &= (bits - 1);
+                }
+            }
+#elif defined(__ARM_NEON) && defined(__aarch64__)
+            // NEON batch filter check: process 16 elements at a time
+            const uint8x16_t zero_vec = vdupq_n_u8(0);
+            for (; row + 16 <= static_cast<int>(size); row += 16) {
+                uint8x16_t flt = vld1q_u8(reinterpret_cast<const uint8_t*>(filter + row));
+                uint8x16_t active = vcgtq_u8(flt, zero_vec);
+
+                uint64x2_t as64 = vreinterpretq_u64_u8(active);
+                if (vgetq_lane_u64(as64, 0) == 0 && vgetq_lane_u64(as64, 1) == 0) {
+                    continue;
+                }
+
+                uint8_t mask_arr[16];
+                vst1q_u8(mask_arr, active);
+                for (int j = 0; j < 16; j++) {
+                    if (mask_arr[j]) {
+                        update_row(row + j);
+                    }
+                }
+            }
+#endif
+            // Scalar tail
+            for (; row < static_cast<int>(size); ++row) {
                 if (filter[row]) {
                     update_row(row);
                 }

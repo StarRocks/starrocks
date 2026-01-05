@@ -17,6 +17,14 @@
 #include "base/simd/simd.h"
 #include "types/logical_type_infra.h"
 
+#ifdef __AVX2__
+#include <immintrin.h>
+#endif
+
+#ifdef __ARM_NEON
+#include <arm_neon.h>
+#endif
+
 namespace starrocks {
 
 // ------------------------------------------------------------------------------------
@@ -372,15 +380,53 @@ void Bitset<LT>::contains_batch(uint8_t* __restrict selection, const CppType* __
     // of the value of `values[i]`.
     // Therefore, we need to temporarily set `selection[i]` to false and re-consider `is_nulls[i]` later, if NullIsTrue
     // and `is_nulls[i]` is true.
-    for (int i = from; i < to; i++) {
+
+    // SIMD optimization: selection &= (is_nulls == 0) is equivalent to selection &= ~is_nulls (ANDN)
+    size_t i = from;
+#ifdef __AVX2__
+    for (; i + 32 <= to; i += 32) {
+        __m256i sel_vec = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(selection + i));
+        __m256i null_vec = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(is_nulls + i));
+        // ANDN: sel & ~null (note: _mm256_andnot_si256(a, b) = ~a & b, so we pass (null, sel))
+        __m256i result = _mm256_andnot_si256(null_vec, sel_vec);
+        _mm256_storeu_si256(reinterpret_cast<__m256i*>(selection + i), result);
+    }
+#elif defined(__ARM_NEON) && defined(__aarch64__)
+    for (; i + 16 <= to; i += 16) {
+        uint8x16_t sel_vec = vld1q_u8(selection + i);
+        uint8x16_t null_vec = vld1q_u8(is_nulls + i);
+        // BIC: sel & ~null (bit clear)
+        uint8x16_t result = vbicq_u8(sel_vec, null_vec);
+        vst1q_u8(selection + i, result);
+    }
+#endif
+    for (; i < to; i++) {
         selection[i] &= is_nulls[i] == 0;
     }
-    for (int i = from; i < to; i++) {
-        selection[i] = contains<CheckRange>(values[i], selection[i]);
+
+    for (size_t j = from; j < to; j++) {
+        selection[j] = contains<CheckRange>(values[j], selection[j]);
     }
 
     if constexpr (NullIsTrue) {
-        for (int i = from; i < to; i++) {
+        // SIMD optimization: selection |= (is_nulls != 0) is equivalent to selection |= is_nulls (OR)
+        i = from;
+#ifdef __AVX2__
+        for (; i + 32 <= to; i += 32) {
+            __m256i sel_vec = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(selection + i));
+            __m256i null_vec = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(is_nulls + i));
+            __m256i result = _mm256_or_si256(sel_vec, null_vec);
+            _mm256_storeu_si256(reinterpret_cast<__m256i*>(selection + i), result);
+        }
+#elif defined(__ARM_NEON) && defined(__aarch64__)
+        for (; i + 16 <= to; i += 16) {
+            uint8x16_t sel_vec = vld1q_u8(selection + i);
+            uint8x16_t null_vec = vld1q_u8(is_nulls + i);
+            uint8x16_t result = vorrq_u8(sel_vec, null_vec);
+            vst1q_u8(selection + i, result);
+        }
+#endif
+        for (; i < to; i++) {
             selection[i] |= is_nulls[i] != 0;
         }
     }

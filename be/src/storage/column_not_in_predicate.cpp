@@ -15,6 +15,7 @@
 #include <utility>
 
 #include "base/simd/simd.h"
+#include "base/simd/string_length_filter.h"
 #include "base/string/string_parser.hpp"
 #include "column/column.h"
 #include "column/nullable_column.h"
@@ -197,9 +198,15 @@ class BinaryColumnNotInPredicate final : public ColumnPredicate {
 public:
     BinaryColumnNotInPredicate(const TypeInfoPtr& type_info, ColumnId id, std::vector<std::string> strings)
             : ColumnPredicate(type_info, id), _zero_padded_strs(std::move(strings)) {
+        _min_len = UINT32_MAX;
+        _max_len = 0;
         for (const std::string& s : _zero_padded_strs) {
             _slices.emplace(Slice(s));
+            uint32_t len = static_cast<uint32_t>(s.size());
+            _min_len = std::min(_min_len, len);
+            _max_len = std::max(_max_len, len);
         }
+        if (_min_len == UINT32_MAX) _min_len = 0;
     }
 
     ~BinaryColumnNotInPredicate() override = default;
@@ -215,14 +222,104 @@ public:
         } else {
             binary_column = down_cast<const BinaryColumn*>(column);
         }
+
+        const auto& offsets = binary_column->get_offset();
+
         if (!column->has_null()) {
-            for (size_t i = from; i < to; i++) {
+            size_t i = from;
+            constexpr int kSimdWidth = SIMD::kStringLenSimdWidth;
+            constexpr uint32_t kMask = SIMD::kStringLenSimdMask;
+
+            for (; i + kSimdWidth <= to; i += kSimdWidth) {
+                uint32_t mask = SIMD::length_in_range_mask(offsets.data(), i, _min_len, _max_len);
+
+                if (mask == 0) {
+                    // All lengths outside range - all are NOT IN set (result = 1)
+                    for (size_t j = i; j < i + kSimdWidth; j++) {
+                        sel[j] = Op::apply(sel[j], 1);
+                    }
+                    continue;
+                }
+
+                uint32_t in_range_mask = mask;
+                uint32_t out_of_range_mask = (~mask) & kMask;
+
+                // Strings with lengths in range need hash lookup
+                while (in_range_mask) {
+                    uint32_t bit = __builtin_ctz(in_range_mask);
+                    size_t idx = i + bit;
+                    sel[idx] = Op::apply(sel[idx], (uint8_t)(!(_slices.contains(binary_column->get_slice(idx)))));
+                    in_range_mask &= (in_range_mask - 1);
+                }
+                // Strings with lengths outside range are NOT IN (result = 1)
+                while (out_of_range_mask) {
+                    uint32_t bit = __builtin_ctz(out_of_range_mask);
+                    size_t idx = i + bit;
+                    sel[idx] = Op::apply(sel[idx], 1);
+                    out_of_range_mask &= (out_of_range_mask - 1);
+                }
+            }
+            // Scalar tail
+            for (; i < to; i++) {
                 sel[i] = Op::apply(sel[i], (uint8_t)(!(_slices.contains(binary_column->get_slice(i)))));
             }
         } else {
             /* must use uint8_t* to make vectorized effect */
             const uint8_t* null_data = down_cast<const NullableColumn*>(column)->immutable_null_column_data().data();
-            for (size_t i = from; i < to; i++) {
+            size_t i = from;
+
+            constexpr int kSimdWidth = SIMD::kStringLenSimdWidth;
+            constexpr uint32_t kMask = SIMD::kStringLenSimdMask;
+
+            for (; i + kSimdWidth <= to; i += kSimdWidth) {
+                uint32_t non_null_mask = 0;
+                for (int j = 0; j < kSimdWidth; j++) {
+                    if (null_data[i + j] == 0) {
+                        non_null_mask |= (1u << j);
+                    }
+                }
+
+                if (non_null_mask == 0) {
+                    // All are NULL - result is 0 for NOT IN
+                    for (size_t j = i; j < i + kSimdWidth; j++) {
+                        sel[j] = Op::apply(sel[j], 0);
+                    }
+                    continue;
+                }
+
+                uint32_t len_mask = SIMD::length_in_range_mask(offsets.data(), i, _min_len, _max_len);
+
+                // Non-null AND length in range -> need hash lookup
+                uint32_t need_lookup_mask = len_mask & non_null_mask;
+                // Non-null AND length out of range -> result is 1
+                uint32_t out_of_range_mask = (~len_mask) & non_null_mask & kMask;
+                // NULL -> result is 0
+                uint32_t null_mask = (~non_null_mask) & kMask;
+
+                // Process elements needing hash lookup
+                while (need_lookup_mask) {
+                    uint32_t bit = __builtin_ctz(need_lookup_mask);
+                    size_t idx = i + bit;
+                    sel[idx] = Op::apply(sel[idx], (uint8_t)(!(_slices.contains(binary_column->get_slice(idx)))));
+                    need_lookup_mask &= (need_lookup_mask - 1);
+                }
+                // Elements with length out of range (and non-null) are NOT IN
+                while (out_of_range_mask) {
+                    uint32_t bit = __builtin_ctz(out_of_range_mask);
+                    size_t idx = i + bit;
+                    sel[idx] = Op::apply(sel[idx], 1);
+                    out_of_range_mask &= (out_of_range_mask - 1);
+                }
+                // NULL elements get 0
+                while (null_mask) {
+                    uint32_t bit = __builtin_ctz(null_mask);
+                    size_t idx = i + bit;
+                    sel[idx] = Op::apply(sel[idx], 0);
+                    null_mask &= (null_mask - 1);
+                }
+            }
+            // Scalar tail
+            for (; i < to; i++) {
                 sel[i] =
                         Op::apply(sel[i], (uint8_t)(!null_data[i] && !(_slices.contains(binary_column->get_slice(i)))));
             }
@@ -323,17 +420,25 @@ public:
 
     bool padding_zeros(size_t len) override {
         _slices.clear();
+        _min_len = UINT32_MAX;
+        _max_len = 0;
         for (auto& str : _zero_padded_strs) {
             size_t old_sz = str.size();
             str.append(len > old_sz ? len - old_sz : 0, '\0');
             _slices.emplace(str.data(), old_sz);
+            uint32_t str_len = static_cast<uint32_t>(old_sz);
+            _min_len = std::min(_min_len, str_len);
+            _max_len = std::max(_max_len, str_len);
         }
+        if (_min_len == UINT32_MAX) _min_len = 0;
         return true;
     }
 
 private:
     std::vector<std::string> _zero_padded_strs;
     ItemHashSet<Slice> _slices;
+    uint32_t _min_len{0};
+    uint32_t _max_len{0};
 };
 
 ColumnPredicate* new_column_not_in_predicate(const TypeInfoPtr& type_info, ColumnId id,

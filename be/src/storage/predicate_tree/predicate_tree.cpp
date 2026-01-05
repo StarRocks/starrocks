@@ -17,6 +17,14 @@
 #include "base/simd/simd.h"
 #include "gutil/strings/substitute.h"
 
+#ifdef __AVX2__
+#include <immintrin.h>
+#endif
+
+#ifdef __ARM_NEON
+#include <arm_neon.h>
+#endif
+
 namespace starrocks {
 
 // ------------------------------------------------------------------------------------
@@ -246,7 +254,25 @@ Status PredicateCompoundNode<CompoundNodeType::AND>::evaluate_or(CompoundNodeCon
     auto* or_selection = selection_buffer.data();
 
     RETURN_IF_ERROR(evaluate(contexts, chunk, or_selection, from, to));
-    for (int i = from; i < to; i++) {
+
+    // SIMD optimization: batch OR merge
+    int i = from;
+#ifdef __AVX2__
+    for (; i + 32 <= to; i += 32) {
+        __m256i sel_vec = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(selection + i));
+        __m256i or_vec = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(or_selection + i));
+        __m256i result = _mm256_or_si256(sel_vec, or_vec);
+        _mm256_storeu_si256(reinterpret_cast<__m256i*>(selection + i), result);
+    }
+#elif defined(__ARM_NEON) && defined(__aarch64__)
+    for (; i + 16 <= to; i += 16) {
+        uint8x16_t sel_vec = vld1q_u8(selection + i);
+        uint8x16_t or_vec = vld1q_u8(or_selection + i);
+        uint8x16_t result = vorrq_u8(sel_vec, or_vec);
+        vst1q_u8(selection + i, result);
+    }
+#endif
+    for (; i < to; i++) {
         selection[i] |= or_selection[i];
     }
 
@@ -302,7 +328,25 @@ Status PredicateCompoundNode<CompoundNodeType::OR>::evaluate_and(CompoundNodeCon
     auto* and_selection = selection_buffer.data();
 
     RETURN_IF_ERROR(evaluate(contexts, chunk, and_selection, from, to));
-    for (int i = from; i < to; i++) {
+
+    // SIMD optimization: batch AND merge
+    int i = from;
+#ifdef __AVX2__
+    for (; i + 32 <= to; i += 32) {
+        __m256i sel_vec = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(selection + i));
+        __m256i and_vec = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(and_selection + i));
+        __m256i result = _mm256_and_si256(sel_vec, and_vec);
+        _mm256_storeu_si256(reinterpret_cast<__m256i*>(selection + i), result);
+    }
+#elif defined(__ARM_NEON) && defined(__aarch64__)
+    for (; i + 16 <= to; i += 16) {
+        uint8x16_t sel_vec = vld1q_u8(selection + i);
+        uint8x16_t and_vec = vld1q_u8(and_selection + i);
+        uint8x16_t result = vandq_u8(sel_vec, and_vec);
+        vst1q_u8(selection + i, result);
+    }
+#endif
+    for (; i < to; i++) {
         selection[i] &= and_selection[i];
     }
 

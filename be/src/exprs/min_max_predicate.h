@@ -21,6 +21,14 @@
 #include "exprs/expr.h"
 #include "runtime/runtime_filter.h"
 
+#ifdef __AVX2__
+#include <immintrin.h>
+#endif
+
+#ifdef __ARM_NEON
+#include <arm_neon.h>
+#endif
+
 namespace starrocks {
 template <LogicalType Type>
 class MinMaxPredicate : public Expr {
@@ -84,12 +92,47 @@ public:
         };
         auto merge_null = [](uint8_t* __restrict__ local_res, const uint8_t* __restrict__ local_null_data,
                              const size_t local_size, const bool local_has_null) {
+            size_t i = 0;
             if (local_has_null) {
-                for (int i = 0; i < local_size; i++) {
+                // When predicate has_null is true, null values should pass the filter (OR with null_data)
+#ifdef __AVX2__
+                for (; i + 32 <= local_size; i += 32) {
+                    __m256i res_vec = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(local_res + i));
+                    __m256i null_vec = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(local_null_data + i));
+                    __m256i result = _mm256_or_si256(res_vec, null_vec);
+                    _mm256_storeu_si256(reinterpret_cast<__m256i*>(local_res + i), result);
+                }
+#elif defined(__ARM_NEON) && defined(__aarch64__)
+                for (; i + 16 <= local_size; i += 16) {
+                    uint8x16_t res_vec = vld1q_u8(local_res + i);
+                    uint8x16_t null_vec = vld1q_u8(local_null_data + i);
+                    uint8x16_t result = vorrq_u8(res_vec, null_vec);
+                    vst1q_u8(local_res + i, result);
+                }
+#endif
+                for (; i < local_size; i++) {
                     local_res[i] = local_res[i] | local_null_data[i];
                 }
             } else {
-                for (int i = 0; i < local_size; i++) {
+                // When predicate has_null is false, null values should NOT pass the filter (AND with !null_data)
+#ifdef __AVX2__
+                for (; i + 32 <= local_size; i += 32) {
+                    __m256i res_vec = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(local_res + i));
+                    __m256i null_vec = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(local_null_data + i));
+                    // ANDN: res & ~null = ~null & res (operands reversed for _mm256_andnot_si256)
+                    __m256i result = _mm256_andnot_si256(null_vec, res_vec);
+                    _mm256_storeu_si256(reinterpret_cast<__m256i*>(local_res + i), result);
+                }
+#elif defined(__ARM_NEON) && defined(__aarch64__)
+                for (; i + 16 <= local_size; i += 16) {
+                    uint8x16_t res_vec = vld1q_u8(local_res + i);
+                    uint8x16_t null_vec = vld1q_u8(local_null_data + i);
+                    // BIC: res & ~null (bit clear)
+                    uint8x16_t result = vbicq_u8(res_vec, null_vec);
+                    vst1q_u8(local_res + i, result);
+                }
+#endif
+                for (; i < local_size; i++) {
                     local_res[i] = local_res[i] & !local_null_data[i];
                 }
             }

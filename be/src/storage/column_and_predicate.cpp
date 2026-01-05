@@ -14,6 +14,13 @@
 
 #include "storage/column_and_predicate.h"
 
+#ifdef __x86_64__
+#include <immintrin.h>
+#endif
+#if defined(__ARM_NEON) && defined(__aarch64__)
+#include <arm_neon.h>
+#endif
+
 namespace starrocks {
 Status ColumnAndPredicate::evaluate(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const {
     return _evaluate(column, selection, from, to);
@@ -30,7 +37,22 @@ Status ColumnAndPredicate::evaluate_or(const Column* column, uint8_t* selection,
     _buff.resize(column->size());
     RETURN_IF_ERROR(_evaluate(column, _buff.data(), from, to));
     const uint8_t* p = _buff.data();
-    for (uint16_t i = from; i < to; i++) {
+    // SIMD optimization for selection |= p
+    size_t i = from;
+#ifdef __AVX2__
+    for (; i + 32 <= to; i += 32) {
+        __m256i sel = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(selection + i));
+        __m256i pred = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(p + i));
+        _mm256_storeu_si256(reinterpret_cast<__m256i*>(selection + i), _mm256_or_si256(sel, pred));
+    }
+#elif defined(__ARM_NEON) && defined(__aarch64__)
+    for (; i + 16 <= to; i += 16) {
+        uint8x16_t sel = vld1q_u8(selection + i);
+        uint8x16_t pred = vld1q_u8(p + i);
+        vst1q_u8(selection + i, vorrq_u8(sel, pred));
+    }
+#endif
+    for (; i < to; i++) {
         selection[i] |= p[i];
     }
     return Status::OK();

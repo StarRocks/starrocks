@@ -14,6 +14,13 @@
 
 #include <cstring>
 
+#ifdef __x86_64__
+#include <immintrin.h>
+#endif
+#if defined(__ARM_NEON) && defined(__aarch64__)
+#include <arm_neon.h>
+#endif
+
 #include "column/column.h"
 #include "column/nullable_column.h"
 #include "common/bloom_filter.h"
@@ -39,9 +46,23 @@ public:
 
     Status evaluate_and(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const override {
         if (column->has_null()) {
-            /* must use const uint8_t* to make vectorized effect, vector<uint8_t> not work */
             const uint8_t* is_null = down_cast<const NullableColumn*>(column)->immutable_null_column_data().data();
-            for (uint16_t i = from; i < to; i++) {
+            // SIMD optimization for selection &= is_null
+            size_t i = from;
+#ifdef __AVX2__
+            for (; i + 32 <= to; i += 32) {
+                __m256i sel = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(selection + i));
+                __m256i null_vec = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(is_null + i));
+                _mm256_storeu_si256(reinterpret_cast<__m256i*>(selection + i), _mm256_and_si256(sel, null_vec));
+            }
+#elif defined(__ARM_NEON) && defined(__aarch64__)
+            for (; i + 16 <= to; i += 16) {
+                uint8x16_t sel = vld1q_u8(selection + i);
+                uint8x16_t null_vec = vld1q_u8(is_null + i);
+                vst1q_u8(selection + i, vandq_u8(sel, null_vec));
+            }
+#endif
+            for (; i < to; i++) {
                 selection[i] &= is_null[i];
             }
         } else {
@@ -52,9 +73,23 @@ public:
 
     Status evaluate_or(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const override {
         if (column->has_null()) {
-            /* must use const uint8_t* to make vectorized effect, vector<uint8_t> not work */
             const uint8_t* is_null = down_cast<const NullableColumn*>(column)->immutable_null_column_data().data();
-            for (uint16_t i = from; i < to; i++) {
+            // SIMD optimization for selection |= is_null
+            size_t i = from;
+#ifdef __AVX2__
+            for (; i + 32 <= to; i += 32) {
+                __m256i sel = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(selection + i));
+                __m256i null_vec = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(is_null + i));
+                _mm256_storeu_si256(reinterpret_cast<__m256i*>(selection + i), _mm256_or_si256(sel, null_vec));
+            }
+#elif defined(__ARM_NEON) && defined(__aarch64__)
+            for (; i + 16 <= to; i += 16) {
+                uint8x16_t sel = vld1q_u8(selection + i);
+                uint8x16_t null_vec = vld1q_u8(is_null + i);
+                vst1q_u8(selection + i, vorrq_u8(sel, null_vec));
+            }
+#endif
+            for (; i < to; i++) {
                 selection[i] |= is_null[i];
             }
         } else {
@@ -113,9 +148,23 @@ public:
 
     Status evaluate(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const override {
         if (column->has_null()) {
-            /* must use const uint8_t* to make vectorized effect, vector<uint8_t> not work */
             const uint8_t* is_null = down_cast<const NullableColumn*>(column)->immutable_null_column_data().data();
-            for (uint16_t i = from; i < to; i++) {
+            // SIMD optimization: selection[i] = is_null[i] ^ 1
+            size_t i = from;
+#ifdef __AVX2__
+            const __m256i ones = _mm256_set1_epi8(1);
+            for (; i + 32 <= to; i += 32) {
+                __m256i null_vec = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(is_null + i));
+                _mm256_storeu_si256(reinterpret_cast<__m256i*>(selection + i), _mm256_xor_si256(null_vec, ones));
+            }
+#elif defined(__ARM_NEON) && defined(__aarch64__)
+            const uint8x16_t ones = vdupq_n_u8(1);
+            for (; i + 16 <= to; i += 16) {
+                uint8x16_t null_vec = vld1q_u8(is_null + i);
+                vst1q_u8(selection + i, veorq_u8(null_vec, ones));
+            }
+#endif
+            for (; i < to; i++) {
                 selection[i] = !is_null[i];
             }
         } else {
@@ -126,9 +175,23 @@ public:
 
     Status evaluate_and(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const override {
         if (column->has_null()) {
-            /* must use const uint8_t* to make vectorized effect, vector<uint8_t> not work */
             const uint8_t* is_null = down_cast<const NullableColumn*>(column)->immutable_null_column_data().data();
-            for (uint16_t i = from; i < to; i++) {
+            // SIMD optimization: selection &= ~is_null (ANDN)
+            size_t i = from;
+#ifdef __AVX2__
+            for (; i + 32 <= to; i += 32) {
+                __m256i sel = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(selection + i));
+                __m256i null_vec = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(is_null + i));
+                _mm256_storeu_si256(reinterpret_cast<__m256i*>(selection + i), _mm256_andnot_si256(null_vec, sel));
+            }
+#elif defined(__ARM_NEON) && defined(__aarch64__)
+            for (; i + 16 <= to; i += 16) {
+                uint8x16_t sel = vld1q_u8(selection + i);
+                uint8x16_t null_vec = vld1q_u8(is_null + i);
+                vst1q_u8(selection + i, vbicq_u8(sel, null_vec));
+            }
+#endif
+            for (; i < to; i++) {
                 selection[i] &= !is_null[i];
             }
         } else {
@@ -139,9 +202,27 @@ public:
 
     Status evaluate_or(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const override {
         if (column->has_null()) {
-            /* must use const uint8_t* to make vectorized effect, vector<uint8_t> not work */
             const uint8_t* is_null = down_cast<const NullableColumn*>(column)->immutable_null_column_data().data();
-            for (uint16_t i = from; i < to; i++) {
+            // SIMD optimization: selection |= ~is_null (OR with NOT)
+            size_t i = from;
+#ifdef __AVX2__
+            const __m256i ones = _mm256_set1_epi8(1);
+            for (; i + 32 <= to; i += 32) {
+                __m256i sel = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(selection + i));
+                __m256i null_vec = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(is_null + i));
+                __m256i not_null = _mm256_xor_si256(null_vec, ones);
+                _mm256_storeu_si256(reinterpret_cast<__m256i*>(selection + i), _mm256_or_si256(sel, not_null));
+            }
+#elif defined(__ARM_NEON) && defined(__aarch64__)
+            const uint8x16_t ones = vdupq_n_u8(1);
+            for (; i + 16 <= to; i += 16) {
+                uint8x16_t sel = vld1q_u8(selection + i);
+                uint8x16_t null_vec = vld1q_u8(is_null + i);
+                uint8x16_t not_null = veorq_u8(null_vec, ones);
+                vst1q_u8(selection + i, vorrq_u8(sel, not_null));
+            }
+#endif
+            for (; i < to; i++) {
                 selection[i] |= !is_null[i];
             }
         } else {

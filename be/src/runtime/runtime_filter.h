@@ -17,6 +17,13 @@
 #include <numeric>
 #include <sstream>
 
+#ifdef __AVX2__
+#include <immintrin.h>
+#endif
+#if defined(__ARM_NEON) && defined(__aarch64__)
+#include <arm_neon.h>
+#endif
+
 #include "base/hash/hash_std.hpp"
 #include "column/chunk.h"
 #include "column/column_hash.h"
@@ -794,9 +801,41 @@ public:
             evaluate_min_max(input_data, selection, size);
             if (nullable_column->has_null() && evaluate_null) {
                 const uint8_t* null_data = nullable_column->immutable_null_column_data().data();
-                for (int i = 0; i < size; i++) {
+                const uint8_t has_null_val = _has_null ? 1 : 0;
+                int i = 0;
+
+#ifdef __AVX2__
+                // Process 32 bytes at a time using AVX2
+                const __m256i zero = _mm256_setzero_si256();
+                const __m256i has_null_vec = _mm256_set1_epi8(has_null_val);
+                for (; i + 32 <= size; i += 32) {
+                    __m256i null_vec = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(null_data + i));
+                    __m256i sel_vec = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(selection + i));
+                    // Create mask: 0xFF where null_data > 0, 0x00 otherwise
+                    __m256i null_mask = _mm256_cmpgt_epi8(null_vec, zero);
+                    // Blend: if null_mask, use has_null_val, else keep selection
+                    __m256i result = _mm256_blendv_epi8(sel_vec, has_null_vec, null_mask);
+                    _mm256_storeu_si256(reinterpret_cast<__m256i*>(selection + i), result);
+                }
+#elif defined(__ARM_NEON) && defined(__aarch64__)
+                // Process 16 bytes at a time using NEON
+                const uint8x16_t zero = vdupq_n_u8(0);
+                const uint8x16_t has_null_vec = vdupq_n_u8(has_null_val);
+                for (; i + 16 <= size; i += 16) {
+                    uint8x16_t null_vec = vld1q_u8(null_data + i);
+                    uint8x16_t sel_vec = vld1q_u8(selection + i);
+                    // Create mask: 0xFF where null_data != 0
+                    uint8x16_t null_mask = vcgtq_u8(null_vec, zero);
+                    // Blend: (sel & ~mask) | (has_null & mask)
+                    uint8x16_t result = vbslq_u8(null_mask, has_null_vec, sel_vec);
+                    vst1q_u8(selection + i, result);
+                }
+#endif
+
+                // Scalar fallback for remaining elements
+                for (; i < size; i++) {
                     if (null_data[i]) {
-                        selection[i] = _has_null;
+                        selection[i] = has_null_val;
                     }
                 }
             }
@@ -845,9 +884,37 @@ public:
             evaluate_min_max(data, selection, from, to);
             if (nullable_column->has_null()) {
                 const uint8_t* null_data = nullable_column->immutable_null_column_data().data();
-                for (int i = from; i < to; i++) {
+                const uint8_t has_null_val = _has_null ? 1 : 0;
+                int i = from;
+
+#ifdef __AVX2__
+                // Process 32 bytes at a time using AVX2
+                const __m256i zero = _mm256_setzero_si256();
+                const __m256i has_null_vec = _mm256_set1_epi8(has_null_val);
+                for (; i + 32 <= to; i += 32) {
+                    __m256i null_vec = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(null_data + i));
+                    __m256i sel_vec = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(selection + i));
+                    __m256i null_mask = _mm256_cmpgt_epi8(null_vec, zero);
+                    __m256i result = _mm256_blendv_epi8(sel_vec, has_null_vec, null_mask);
+                    _mm256_storeu_si256(reinterpret_cast<__m256i*>(selection + i), result);
+                }
+#elif defined(__ARM_NEON) && defined(__aarch64__)
+                // Process 16 bytes at a time using NEON
+                const uint8x16_t zero_v = vdupq_n_u8(0);
+                const uint8x16_t has_null_vec = vdupq_n_u8(has_null_val);
+                for (; i + 16 <= to; i += 16) {
+                    uint8x16_t null_vec = vld1q_u8(null_data + i);
+                    uint8x16_t sel_vec = vld1q_u8(selection + i);
+                    uint8x16_t null_mask = vcgtq_u8(null_vec, zero_v);
+                    uint8x16_t result = vbslq_u8(null_mask, has_null_vec, sel_vec);
+                    vst1q_u8(selection + i, result);
+                }
+#endif
+
+                // Scalar fallback for remaining elements
+                for (; i < to; i++) {
                     if (null_data[i]) {
-                        selection[i] = _has_null;
+                        selection[i] = has_null_val;
                     }
                 }
             }

@@ -21,6 +21,7 @@
 #include "column/column_viewer.h"
 #include "exprs/function_context.h"
 #include "exprs/string_functions.h"
+#include "gutil/strings/memutil.h"
 
 namespace starrocks {
 
@@ -35,7 +36,8 @@ static bool substring_with_index(const Slice& haystack, const Slice& delimiter, 
             int32_t num = 0;
             while (num < part_number) {
                 size_t n = haystack.size - offset - 1;
-                char* pos = reinterpret_cast<char*>(memchr(haystack.data + offset + 1, delimiter.data[0], n));
+                const char* pos =
+                        reinterpret_cast<const char*>(memchr(haystack.data + offset + 1, delimiter.data[0], n));
                 if (pos != nullptr) {
                     offset = pos - haystack.data;
                     num++;
@@ -57,7 +59,7 @@ static bool substring_with_index(const Slice& haystack, const Slice& delimiter, 
             int32_t num = 0;
             while (num < part_number) {
                 size_t n = haystack.size - offset - delimiter.size;
-                char* pos = reinterpret_cast<char*>(
+                const char* pos = reinterpret_cast<const char*>(
                         memmem(haystack.data + offset + delimiter.size, n, delimiter.data, delimiter.size));
                 if (pos != nullptr) {
                     offset = pos - haystack.data;
@@ -77,26 +79,47 @@ static bool substring_with_index(const Slice& haystack, const Slice& delimiter, 
         }
     } else {
         part_number = -part_number;
-        auto haystack_str = haystack.to_string();
         int32_t offset = haystack.size;
         int32_t pre_offset = offset;
         int32_t num = 0;
-        auto substr = haystack_str;
-        while (num <= part_number && offset >= 0) {
-            // TODO benchmarking rfind vs memrchr.
-            offset = (int)substr.rfind(delimiter, offset);
-            if (offset != -1) {
-                if (++num == part_number) {
+        if (delimiter.size == 1) {
+            while (num <= part_number && offset >= 0) {
+                // memrchr(s, c, n) scans the first n bytes ([0, n-1]); after a match at
+                // index k we want the next search to cover [0, k-1], i.e. n = k. So we
+                // keep `offset` at the match index and don't decrement — equivalent to
+                // the rfind path's `rfind(..., offset)` over a substr resized to length k.
+                const char* pos = memrchr(haystack.data, delimiter.data[0], offset);
+                if (pos != nullptr) {
+                    offset = static_cast<int32_t>(pos - haystack.data);
+                    if (++num == part_number) {
+                        break;
+                    }
+                    pre_offset = offset;
+                } else {
+                    offset = -1;
                     break;
                 }
-                pre_offset = offset;
-                offset = offset - 1;
-                substr = haystack_str.substr(0, pre_offset);
-            } else {
-                break;
             }
+            num = (offset == -1 && num != 0) ? num + 1 : num;
+        } else {
+            auto haystack_str = haystack.to_string();
+            auto substr = haystack_str;
+            while (num <= part_number && offset >= 0) {
+                // TODO benchmarking rfind vs memrchr.
+                offset = (int)substr.rfind(delimiter, offset);
+                if (offset != -1) {
+                    if (++num == part_number) {
+                        break;
+                    }
+                    pre_offset = offset;
+                    offset = offset - 1;
+                    substr = haystack_str.substr(0, pre_offset);
+                } else {
+                    break;
+                }
+            }
+            num = (offset == -1 && num != 0) ? num + 1 : num;
         }
-        num = (offset == -1 && num != 0) ? num + 1 : num;
         if (num == part_number) {
             if (offset == -1) {
                 res.data = haystack.data;

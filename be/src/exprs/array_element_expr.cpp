@@ -91,15 +91,11 @@ public:
 
         if (auto* nullable = dynamic_cast<const NullableColumn*>(arg0.get()); nullable != nullptr) {
             const auto& nulls = nullable->immutable_null_column_data();
-            for (size_t i = 0; i < num_rows; i++) {
-                null_flags[i] |= nulls[i];
-            }
+            ColumnHelper::or_two_filters(num_rows, null_flags.data(), nulls.data());
         }
         if (auto* nullable = dynamic_cast<const NullableColumn*>(arg1.get()); nullable != nullptr) {
             const auto& nulls = nullable->immutable_null_column_data();
-            for (size_t i = 0; i < num_rows; i++) {
-                null_flags[i] |= nulls[i];
-            }
+            ColumnHelper::or_two_filters(num_rows, null_flags.data(), nulls.data());
         }
 
         // construct selection list.

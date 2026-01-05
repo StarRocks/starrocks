@@ -16,6 +16,12 @@
 
 #include <cstring>
 
+#ifdef __AVX2__
+#include <immintrin.h>
+#elif defined(__ARM_NEON) && defined(__aarch64__)
+#include <arm_neon.h>
+#endif
+
 #include "base/simd/simd.h"
 #include "common/config_rowset_fwd.h"
 #include "gutil/strings/fastmem.h"
@@ -63,31 +69,85 @@ StatusOr<uint16_t> RuntimeFilterPredicate::evaluate(Chunk* chunk, uint16_t* sel,
 Status DictColumnRuntimeFilterPredicate::evaluate(Chunk* chunk, uint8_t* selection, uint16_t from, uint16_t to) {
     RETURN_IF_ERROR(prepare());
     auto column = chunk->get_column_by_id(_column_id).get();
+    const uint8_t* result_data = _result.data();
+    const uint8_t rf_has_null = _rf->has_null();
+
     if (column->is_nullable()) {
         const auto* nullable_column = down_cast<const NullableColumn*>(column);
         // dict code column must be int column
         const auto& data = GetContainer<TYPE_INT>::get_data(nullable_column->data_column());
+        const int32_t* dict_codes = data.data();
+
         if (nullable_column->has_null()) {
             const uint8_t* null_data = nullable_column->immutable_null_column_data().data();
-            for (uint16_t i = from; i < to; i++) {
+            uint16_t i = from;
+
+            // Batch: process 8 elements at a time
+            // Skip batches where all 8 are already filtered out
+            for (; i + 8 <= to; i += 8) {
+                uint64_t sel_byte;
+                memcpy(&sel_byte, selection + i, sizeof(sel_byte));
+                if (sel_byte == 0) continue; // All 8 already filtered
+
+                // Process each element (gather is unsafe for byte arrays)
+                for (int j = 0; j < 8; j++) {
+                    if (!selection[i + j]) continue;
+                    if (null_data[i + j]) {
+                        selection[i + j] = rf_has_null;
+                    } else {
+                        selection[i + j] = result_data[dict_codes[i + j]];
+                    }
+                }
+            }
+            // Scalar tail
+            for (; i < to; i++) {
                 if (!selection[i]) continue;
                 if (null_data[i]) {
-                    selection[i] = _rf->has_null();
+                    selection[i] = rf_has_null;
                 } else {
-                    selection[i] = _result[data[i]];
+                    selection[i] = result_data[dict_codes[i]];
                 }
             }
         } else {
-            for (uint16_t i = from; i < to; i++) {
+            uint16_t i = from;
+
+            // Skip batches where all 8 are already filtered out
+            for (; i + 8 <= to; i += 8) {
+                uint64_t sel_byte;
+                memcpy(&sel_byte, selection + i, sizeof(sel_byte));
+                if (sel_byte == 0) continue;
+
+                for (int j = 0; j < 8; j++) {
+                    if (selection[i + j]) {
+                        selection[i + j] = result_data[dict_codes[i + j]];
+                    }
+                }
+            }
+            for (; i < to; i++) {
                 if (!selection[i]) continue;
-                selection[i] = _result[data[i]];
+                selection[i] = result_data[dict_codes[i]];
             }
         }
     } else {
         const auto& data = GetContainer<TYPE_INT>::get_data(column);
-        for (uint16_t i = from; i < to; i++) {
+        const int32_t* dict_codes = data.data();
+        uint16_t i = from;
+
+        // Skip batches where all 8 are already filtered out
+        for (; i + 8 <= to; i += 8) {
+            uint64_t sel_byte;
+            memcpy(&sel_byte, selection + i, sizeof(sel_byte));
+            if (sel_byte == 0) continue;
+
+            for (int j = 0; j < 8; j++) {
+                if (selection[i + j]) {
+                    selection[i + j] = result_data[dict_codes[i + j]];
+                }
+            }
+        }
+        for (; i < to; i++) {
             if (!selection[i]) continue;
-            selection[i] = _result[data[i]];
+            selection[i] = result_data[dict_codes[i]];
         }
     }
     return Status::OK();

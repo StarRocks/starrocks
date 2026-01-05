@@ -14,6 +14,13 @@
 
 #include <type_traits>
 
+#ifdef __AVX2__
+#include <immintrin.h>
+#elif defined(__ARM_NEON) && defined(__aarch64__)
+#include <arm_neon.h>
+#endif
+
+#include "base/simd/string_length_filter.h"
 #include "column/column.h"
 #include "column/column_helper.h"
 #include "column/nullable_column.h"
@@ -54,7 +61,73 @@ public:
             }
         } else {
             const uint8_t* null_data = down_cast<const NullableColumn*>(column)->immutable_null_column_data().data();
-            for (size_t i = from; i < to; i++) {
+            size_t i = from;
+
+#ifdef __AVX2__
+            // SIMD batch null check: process 32 elements at a time
+            // Skip expensive hash lookups for batches where all elements are NULL
+            const __m256i zero = _mm256_setzero_si256();
+            for (; i + 32 <= to; i += 32) {
+                __m256i nulls = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(null_data + i));
+                __m256i non_null_mask = _mm256_cmpeq_epi8(nulls, zero);
+                int mask = _mm256_movemask_epi8(non_null_mask);
+
+                if (mask == 0) {
+                    // All 32 elements are NULL - apply Op with 0 for all
+                    for (size_t j = i; j < i + 32; j++) {
+                        sel[j] = Op::apply(sel[j], 0);
+                    }
+                    continue;
+                }
+
+                // Process only non-null elements
+                uint32_t bits = static_cast<uint32_t>(mask);
+                while (bits) {
+                    int bit = __builtin_ctz(bits);
+                    size_t idx = i + bit;
+                    sel[idx] = Op::apply(sel[idx], (uint8_t)(_values.contains(v[idx])));
+                    bits &= (bits - 1);
+                }
+                // NULL elements get Op::apply with 0
+                uint32_t null_bits = ~static_cast<uint32_t>(mask);
+                while (null_bits) {
+                    int bit = __builtin_ctz(null_bits);
+                    size_t idx = i + bit;
+                    sel[idx] = Op::apply(sel[idx], 0);
+                    null_bits &= (null_bits - 1);
+                }
+            }
+#elif defined(__ARM_NEON) && defined(__aarch64__)
+            // NEON batch null check: process 16 elements at a time
+            const uint8x16_t zero = vdupq_n_u8(0);
+            for (; i + 16 <= to; i += 16) {
+                uint8x16_t nulls = vld1q_u8(null_data + i);
+                uint8x16_t non_null_cmp = vceqq_u8(nulls, zero);
+
+                // Check if all are NULL
+                uint64x2_t as64 = vreinterpretq_u64_u8(non_null_cmp);
+                if (vgetq_lane_u64(as64, 0) == 0 && vgetq_lane_u64(as64, 1) == 0) {
+                    // All 16 elements are NULL
+                    for (size_t j = i; j < i + 16; j++) {
+                        sel[j] = Op::apply(sel[j], 0);
+                    }
+                    continue;
+                }
+
+                // Extract mask and process
+                uint8_t mask_arr[16];
+                vst1q_u8(mask_arr, non_null_cmp);
+                for (int j = 0; j < 16; j++) {
+                    if (mask_arr[j]) {
+                        sel[i + j] = Op::apply(sel[i + j], (uint8_t)(_values.contains(v[i + j])));
+                    } else {
+                        sel[i + j] = Op::apply(sel[i + j], 0);
+                    }
+                }
+            }
+#endif
+            // Scalar tail
+            for (; i < to; i++) {
                 sel[i] = Op::apply(sel[i], (uint8_t)(!null_data[i] && _values.contains(v[i])));
             }
         }
@@ -209,9 +282,15 @@ class BinaryColumnInPredicate final : public ColumnPredicate {
 public:
     BinaryColumnInPredicate(const TypeInfoPtr& type_info, ColumnId id, std::vector<std::string> strings)
             : ColumnPredicate(type_info, id), _zero_padded_strs(std::move(strings)) {
+        _min_len = UINT32_MAX;
+        _max_len = 0;
         for (const std::string& s : _zero_padded_strs) {
             _slices.emplace(Slice(s));
+            uint32_t len = static_cast<uint32_t>(s.size());
+            _min_len = std::min(_min_len, len);
+            _max_len = std::max(_max_len, len);
         }
+        if (_min_len == UINT32_MAX) _min_len = 0;
     }
 
     ~BinaryColumnInPredicate() override = default;
@@ -227,14 +306,98 @@ public:
         } else {
             binary_column = down_cast<const BinaryColumn*>(column);
         }
+
+        const auto& offsets = binary_column->get_offset();
+
         if (!column->has_null()) {
-            for (size_t i = from; i < to; i++) {
+            size_t i = from;
+            constexpr int kSimdWidth = SIMD::kStringLenSimdWidth;
+            constexpr uint32_t kMask = SIMD::kStringLenSimdMask;
+
+            for (; i + kSimdWidth <= to; i += kSimdWidth) {
+                uint32_t mask = SIMD::length_in_range_mask(offsets.data(), i, _min_len, _max_len);
+
+                if (mask == 0) {
+                    // All lengths outside range - skip hash lookups
+                    for (size_t j = i; j < i + kSimdWidth; j++) {
+                        sel[j] = Op::apply(sel[j], 0);
+                    }
+                    continue;
+                }
+
+                uint32_t invalid_mask = (~mask) & kMask;
+
+                // Process only strings with valid lengths
+                while (mask) {
+                    uint32_t bit = __builtin_ctz(mask);
+                    size_t idx = i + bit;
+                    sel[idx] = Op::apply(sel[idx], (uint8_t)(_slices.contains(binary_column->get_slice(idx))));
+                    mask &= (mask - 1);
+                }
+                // Strings with invalid lengths get 0
+                while (invalid_mask) {
+                    uint32_t bit = __builtin_ctz(invalid_mask);
+                    size_t idx = i + bit;
+                    sel[idx] = Op::apply(sel[idx], 0);
+                    invalid_mask &= (invalid_mask - 1);
+                }
+            }
+            // Scalar tail
+            for (; i < to; i++) {
                 sel[i] = Op::apply(sel[i], (uint8_t)(_slices.contains(binary_column->get_slice(i))));
             }
         } else {
             /* must use uint8_t* to make vectorized effect */
             const uint8_t* null_data = down_cast<const NullableColumn*>(column)->immutable_null_column_data().data();
-            for (size_t i = from; i < to; i++) {
+            size_t i = from;
+            constexpr int kSimdWidth = SIMD::kStringLenSimdWidth;
+            constexpr uint32_t kMask = SIMD::kStringLenSimdMask;
+
+            for (; i + kSimdWidth <= to; i += kSimdWidth) {
+                uint32_t non_null_mask = 0;
+                for (int j = 0; j < kSimdWidth; j++) {
+                    if (null_data[i + j] == 0) {
+                        non_null_mask |= (1u << j);
+                    }
+                }
+
+                if (non_null_mask == 0) {
+                    // All are NULL
+                    for (size_t j = i; j < i + kSimdWidth; j++) {
+                        sel[j] = Op::apply(sel[j], 0);
+                    }
+                    continue;
+                }
+
+                uint32_t len_mask = SIMD::length_in_range_mask(offsets.data(), i, _min_len, _max_len);
+                uint32_t valid_mask = len_mask & non_null_mask;
+
+                if (valid_mask == 0) {
+                    for (size_t j = i; j < i + kSimdWidth; j++) {
+                        sel[j] = Op::apply(sel[j], 0);
+                    }
+                    continue;
+                }
+
+                // Process valid elements
+                uint32_t bits = valid_mask;
+                while (bits) {
+                    uint32_t bit = __builtin_ctz(bits);
+                    size_t idx = i + bit;
+                    sel[idx] = Op::apply(sel[idx], (uint8_t)(_slices.contains(binary_column->get_slice(idx))));
+                    bits &= (bits - 1);
+                }
+                // Invalid elements get 0
+                uint32_t invalid_bits = (~valid_mask) & kMask;
+                while (invalid_bits) {
+                    uint32_t bit = __builtin_ctz(invalid_bits);
+                    size_t idx = i + bit;
+                    sel[idx] = Op::apply(sel[idx], 0);
+                    invalid_bits &= (invalid_bits - 1);
+                }
+            }
+            // Scalar tail
+            for (; i < to; i++) {
                 sel[i] = Op::apply(sel[i], (uint8_t)(!null_data[i] && _slices.contains(binary_column->get_slice(i))));
             }
         }
@@ -394,6 +557,8 @@ public:
 private:
     std::vector<std::string> _zero_padded_strs;
     ItemHashSet<Slice> _slices;
+    uint32_t _min_len{0};
+    uint32_t _max_len{0};
 };
 
 class DictionaryCodeInPredicate final : public ColumnPredicate {

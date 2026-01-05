@@ -15,8 +15,10 @@
 #pragma once
 
 #include <cstdint>
+#include <cstring>
 
 #include "base/simd/simd.h"
+#include "base/simd/string_length_filter.h"
 #include "column/column_helper.h"
 #include "column/const_column.h"
 #include "column/fixed_length_column.h"
@@ -150,6 +152,63 @@ public:
         const auto r1 = ColumnHelper::cast_to_raw<LType>(v1)->immutable_data();
         const auto r2 = ColumnHelper::cast_to_raw<RType>(v2)->immutable_data();
         r3[0] = OP::template apply<LCppType, RCppType, ResultCppType>(r1[0], r2[0]);
+
+        return result;
+    }
+};
+
+// SIMD-optimized string equality comparison for vector_const case.
+// Uses batch length filtering to skip strcmp for length mismatches.
+class StringEqVectorConst {
+public:
+    template <LogicalType LType>
+    static ColumnPtr evaluate(const ColumnPtr& v1, const ColumnPtr& v2) {
+        static_assert(lt_is_string<LType> || lt_is_binary<LType>, "Only for string types");
+
+        using ColumnType = RunTimeColumnType<LType>;
+        const auto* column = ColumnHelper::cast_to_raw<LType>(v1);
+        const Slice target = ColumnHelper::cast_to_raw<LType>(v2)->get_slice(0);
+
+        const int size = v1->size();
+        auto result = BooleanColumn::create();
+        result->resize_uninitialized(size);
+        auto* result_data = result->get_data().data();
+
+        const auto& offsets = column->get_offset();
+        const char* bytes = reinterpret_cast<const char*>(column->raw_bytes());
+        const uint32_t target_len = target.size;
+        const char* target_data = target.data;
+
+        // Initialize all results to 0 (false)
+        memset(result_data, 0, size);
+
+        int i = 0;
+        constexpr int kSimdWidth = SIMD::kStringLenSimdWidth;
+
+        for (; i + kSimdWidth <= size; i += kSimdWidth) {
+            uint32_t mask = SIMD::length_eq_mask(offsets.data(), i, target_len);
+
+            if (mask == 0) continue; // All lengths mismatch - skip!
+
+            // Only for length matches, do memcmp
+            while (mask) {
+                uint32_t bit = __builtin_ctz(mask);
+                int idx = i + bit;
+
+                const char* str_ptr = bytes + offsets[idx];
+                result_data[idx] = (memcmp(str_ptr, target_data, target_len) == 0) ? 1 : 0;
+
+                mask &= (mask - 1); // Clear lowest bit
+            }
+        }
+
+        // Scalar tail
+        for (; i < size; ++i) {
+            uint32_t len = offsets[i + 1] - offsets[i];
+            if (len == target_len) {
+                result_data[i] = (memcmp(bytes + offsets[i], target_data, target_len) == 0) ? 1 : 0;
+            }
+        }
 
         return result;
     }
