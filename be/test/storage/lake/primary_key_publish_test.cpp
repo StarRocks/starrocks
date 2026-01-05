@@ -1834,6 +1834,8 @@ TEST_P(LakePrimaryKeyPublishTest, test_individual_index_compaction) {
         GetParam().persistent_index_type != PersistentIndexTypePB::CLOUD_NATIVE) {
         GTEST_SKIP() << "this case only for cloud native index";
     }
+    ConfigResetGuard guard(&config::pk_index_memtable_max_count, 1);
+    ConfigResetGuard guard2(&config::enable_pk_index_parallel_execution, false);
     auto version = 1;
     auto tablet_id = _tablet_metadata->id();
     {
@@ -1926,10 +1928,10 @@ TEST_P(LakePrimaryKeyPublishTest, test_individual_index_compaction) {
     }
     ASSERT_EQ(kChunkSize, read_rows(tablet_id, version));
     ASSIGN_OR_ABORT(new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
-    EXPECT_EQ(compaction_score(_tablet_mgr.get(), new_tablet_metadata), 1.5);
+    EXPECT_EQ(compaction_score(_tablet_mgr.get(), new_tablet_metadata), 3);
     EXPECT_EQ(new_tablet_metadata->rowsets_size(), 1);
     EXPECT_EQ(new_tablet_metadata->rowsets(0).num_dels(), 0);
-    EXPECT_EQ(new_tablet_metadata->sstable_meta().sstables_size(), 1);
+    EXPECT_EQ(new_tablet_metadata->sstable_meta().sstables_size(), 2);
     EXPECT_TRUE(new_tablet_metadata->orphan_files_size() >= (sst_cnt - 1));
 }
 
