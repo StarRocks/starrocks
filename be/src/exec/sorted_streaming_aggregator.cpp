@@ -19,6 +19,7 @@
 #include <utility>
 #include <vector>
 
+#include "column/append_with_mask.h"
 #include "column/array_column.h"
 #include "column/column_visitor_adapter.h"
 #include "column/nullable_column.h"
@@ -185,6 +186,7 @@ private:
     const NullColumn::Container& _null_masks;
 };
 
+<<<<<<< HEAD
 // append the result by selector
 // selector[i] == 0 means selected
 //
@@ -290,6 +292,8 @@ private:
     size_t _selected_size;
 };
 
+=======
+>>>>>>> 3193a3c677 ([Enhancement] reading predicate column by late materialization and sort predicate column according to predicate selectivity (#64600))
 // batch allocate states
 // For streaming aggregates, the maximum number of aggregate states we can hold is chunk_size + 1
 // (the states for processing a batch of chunks and the last remaining state).
@@ -361,7 +365,7 @@ StatusOr<ChunkPtr> SortedStreamingAggregator::streaming_compute_agg_state(size_t
 
     // selector[i] == 0 means selected
     Filter selector(chunk_size);
-    size_t selected_size = _init_selector(selector, chunk_size);
+    _init_selector(selector, chunk_size);
 
     // finalize state
     // group[i] != group[i - 1] means we have add a new state for group[i], then we need call finalize for group[i - 1]
@@ -376,8 +380,14 @@ StatusOr<ChunkPtr> SortedStreamingAggregator::streaming_compute_agg_state(size_t
 
     // combine group by keys
     auto res_group_by_columns = _create_group_by_columns(chunk_size);
+<<<<<<< HEAD
     RETURN_IF_ERROR(_build_group_by_columns(chunk_size, selected_size, selector, res_group_by_columns));
     auto result_chunk = _build_output_chunk(res_group_by_columns, agg_result_columns, use_intermediate);
+=======
+    RETURN_IF_ERROR(_build_group_by_columns(chunk_size, selector, res_group_by_columns));
+    auto result_chunk =
+            _build_output_chunk(std::move(res_group_by_columns), std::move(agg_result_columns), use_intermediate);
+>>>>>>> 3193a3c677 ([Enhancement] reading predicate column by late materialization and sort predicate column according to predicate selectivity (#64600))
 
     // prepare for next
     for (size_t i = 0; i < _last_columns.size(); ++i) {
@@ -408,10 +418,15 @@ StatusOr<ChunkPtr> SortedStreamingAggregator::streaming_compute_distinct(size_t 
     RETURN_IF_ERROR(_compute_group_by(chunk_size));
     // selector[i] == 0 means selected
     Filter selector(chunk_size);
-    size_t selected_size = _init_selector(selector, chunk_size);
+    _init_selector(selector, chunk_size);
     auto res_group_by_columns = _create_group_by_columns(chunk_size);
+<<<<<<< HEAD
     RETURN_IF_ERROR(_build_group_by_columns(chunk_size, selected_size, selector, res_group_by_columns));
     auto result_chunk = _build_output_chunk(res_group_by_columns, {}, false);
+=======
+    RETURN_IF_ERROR(_build_group_by_columns(chunk_size, selector, res_group_by_columns));
+    auto result_chunk = _build_output_chunk(std::move(res_group_by_columns), {}, false);
+>>>>>>> 3193a3c677 ([Enhancement] reading predicate column by late materialization and sort predicate column according to predicate selectivity (#64600))
 
     // prepare for next
     for (size_t i = 0; i < _last_columns.size(); ++i) {
@@ -424,18 +439,13 @@ StatusOr<ChunkPtr> SortedStreamingAggregator::streaming_compute_distinct(size_t 
     return result_chunk;
 }
 
-size_t SortedStreamingAggregator::_init_selector(Filter& selector, size_t chunk_size) {
-    size_t selected_size = 0;
-    {
-        SCOPED_TIMER(_agg_stat->agg_compute_timer);
-        for (size_t i = 1; i < _cmp_vector.size(); ++i) {
-            selector[i - 1] = _cmp_vector[i] == 0;
-            selected_size += !selector[i - 1];
-        }
-        // we will never select the last rows
-        selector[chunk_size - 1] = 1;
+void SortedStreamingAggregator::_init_selector(Filter& selector, size_t chunk_size) {
+    SCOPED_TIMER(_agg_stat->agg_compute_timer);
+    for (size_t i = 1; i < _cmp_vector.size(); ++i) {
+        selector[i - 1] = _cmp_vector[i] == 0;
     }
-    return selected_size;
+    // we will never select the last rows
+    selector[chunk_size - 1] = 1;
 }
 
 Status SortedStreamingAggregator::_compute_group_by(size_t chunk_size) {
@@ -547,8 +557,13 @@ void SortedStreamingAggregator::_close_group_by(size_t chunk_size, const Filter&
     }
 }
 
+<<<<<<< HEAD
 Status SortedStreamingAggregator::_build_group_by_columns(size_t chunk_size, size_t selected_size,
                                                           const Filter& selector, Columns& agg_group_by_columns) {
+=======
+Status SortedStreamingAggregator::_build_group_by_columns(size_t chunk_size, const Filter& selector,
+                                                          MutableColumns& agg_group_by_columns) {
+>>>>>>> 3193a3c677 ([Enhancement] reading predicate column by late materialization and sort predicate column according to predicate selectivity (#64600))
     SCOPED_TIMER(_agg_stat->agg_append_timer);
     if (_cmp_vector[0] != 0 && !_last_columns.empty() && !_last_columns.back()->empty()) {
         for (size_t i = 0; i < agg_group_by_columns.size(); ++i) {
@@ -557,8 +572,14 @@ Status SortedStreamingAggregator::_build_group_by_columns(size_t chunk_size, siz
     }
 
     for (size_t i = 0; i < agg_group_by_columns.size(); ++i) {
+<<<<<<< HEAD
         AppendWithMask appender(_group_by_columns[i].get(), selector, selected_size);
         RETURN_IF_ERROR(agg_group_by_columns[i]->accept_mutable(&appender));
+=======
+        RETURN_IF_ERROR(append_with_mask</*PositiveSelect=*/false>(agg_group_by_columns[i]->as_mutable_raw_ptr(),
+                                                                   *_group_by_columns[i], selector.data(),
+                                                                   selector.size()));
+>>>>>>> 3193a3c677 ([Enhancement] reading predicate column by late materialization and sort predicate column according to predicate selectivity (#64600))
     }
     return Status::OK();
 }

@@ -149,7 +149,11 @@ ColumnPtr PushBrokerReader::_padding_char_column(const ColumnPtr& column, const 
     new_bytes.assign(num_rows * len, 0); // padding 0
 
     uint32_t from = 0;
+<<<<<<< HEAD
     const Bytes& bytes = binary->get_bytes();
+=======
+    auto bytes = binary->get_immutable_bytes();
+>>>>>>> 3193a3c677 ([Enhancement] reading predicate column by late materialization and sort predicate column according to predicate selectivity (#64600))
     for (size_t i = 0; i < num_rows; ++i) {
         uint32_t copy_data_len = std::min(len, offset[i + 1] - offset[i]);
         strings::memcpy_inlined(new_bytes.data() + from, bytes.data() + offset[i], copy_data_len);

@@ -238,6 +238,25 @@ public:
     }
 };
 
+class SliceContainerAdaptor {
+public:
+    using value_type = Slice;
+
+    SliceContainerAdaptor(const Slice* slices, size_t size) : _slices(slices), _size(size) {}
+
+    SliceContainerAdaptor(Slice* slices, size_t size) : _slices(slices), _size(size) {}
+
+    explicit SliceContainerAdaptor(const std::vector<Slice>& slices) : _slices(slices.data()), _size(slices.size()) {}
+
+    const Slice* data() const { return _slices; }
+
+    size_t size() const { return _size; }
+
+private:
+    const Slice* _slices;
+    size_t _size;
+};
+
 inline std::ostream& operator<<(std::ostream& os, const Slice& slice) {
     os << slice.to_string();
     return os;

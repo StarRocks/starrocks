@@ -391,8 +391,13 @@ Status LevelBuilder::_write_byte_array_column_chunk(const LevelBuilderContext& c
                                                     const CallbackFunction& write_leaf_callback) {
     const auto* data_col = down_cast<const RunTimeColumnType<lt>*>(ColumnHelper::get_data_column(col.get()));
     const auto* null_col = get_raw_null_column(col);
+<<<<<<< HEAD
     auto& vo = data_col->get_offset();
     auto& vb = data_col->get_bytes();
+=======
+    const auto& vo = data_col->get_offset();
+    auto vb = data_col->get_immutable_bytes();
+>>>>>>> 3193a3c677 ([Enhancement] reading predicate column by late materialization and sort predicate column according to predicate selectivity (#64600))
 
     // Use the rep_levels in the context from caller since node is primitive.
     auto& rep_levels = ctx._rep_levels;

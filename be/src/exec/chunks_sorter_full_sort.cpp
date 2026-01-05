@@ -73,7 +73,7 @@ static void reserve_memory(Column* dst_col, const std::vector<ChunkPtr>& src_chu
     for (const auto& src_chk : src_chunks) {
         const auto* src_data_col = ColumnHelper::get_data_column(src_chk->get_column_by_index(col_idx).get());
         const auto* src_binary_col = down_cast<const BinaryColumnType*>(src_data_col);
-        total_num_bytes += src_binary_col->get_bytes().size();
+        total_num_bytes += src_binary_col->get_immutable_bytes().size();
     }
     binary_dst_col->get_bytes().reserve(total_num_bytes);
 }

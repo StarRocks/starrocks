@@ -353,6 +353,22 @@ struct TQueryOptions {
 
   190: optional i64 column_view_concat_rows_limit;
   191: optional i64 column_view_concat_bytes_limit;
+<<<<<<< HEAD
+=======
+
+  200: optional bool enable_full_sort_use_german_string;
+
+  // Hash function version for exchange shuffle
+  // 0: fnv_hash (default, for backward compatibility)
+  // 1: xxh3_hash (faster)
+  201: optional i32 exchange_hash_function_version = 0;
+   // whether enable predicate column late materialization
+  202: optional bool enable_predicate_col_late_materialize;
+  
+  210: optional bool enable_global_late_materialization;
+  211: optional bool enable_schedule_log;
+
+>>>>>>> 3193a3c677 ([Enhancement] reading predicate column by late materialization and sort predicate column according to predicate selectivity (#64600))
 }
 
 // A scan range plus the parameters needed to execute that scan.

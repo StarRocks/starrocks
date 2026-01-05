@@ -26,8 +26,13 @@ namespace starrocks::csv {
 Status StringConverter::write_string(OutputStream* os, const Column& column, size_t row_num,
                                      const Options& options) const {
     auto* binary = down_cast<const BinaryColumn*>(&column);
+<<<<<<< HEAD
     auto& bytes = binary->get_bytes();
     auto& offsets = binary->get_offset();
+=======
+    auto bytes = binary->get_immutable_bytes();
+    const auto& offsets = binary->get_offset();
+>>>>>>> 3193a3c677 ([Enhancement] reading predicate column by late materialization and sort predicate column according to predicate selectivity (#64600))
 
     Slice s(&bytes[offsets[row_num]], offsets[row_num + 1] - offsets[row_num]);
     // TODO(zhuming): escape delimiter characters.
@@ -37,8 +42,13 @@ Status StringConverter::write_string(OutputStream* os, const Column& column, siz
 Status StringConverter::write_quoted_string(OutputStream* os, const Column& column, size_t row_num,
                                             const Options& options) const {
     auto* binary = down_cast<const BinaryColumn*>(&column);
+<<<<<<< HEAD
     auto& bytes = binary->get_bytes();
     auto& offsets = binary->get_offset();
+=======
+    auto bytes = binary->get_immutable_bytes();
+    const auto& offsets = binary->get_offset();
+>>>>>>> 3193a3c677 ([Enhancement] reading predicate column by late materialization and sort predicate column according to predicate selectivity (#64600))
 
     Slice s(&bytes[offsets[row_num]], offsets[row_num + 1] - offsets[row_num]);
     // TODO(zhuming): escape delimiter characters.

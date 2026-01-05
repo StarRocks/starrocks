@@ -431,7 +431,7 @@ ColumnPtr substr_const_not_null(const Columns& columns, const BinaryColumn* src,
 
     if (len > 0) {
         // the size of substr result never exceeds the counterpart of the source column.
-        size_t reserved = src->get_bytes().size();
+        size_t reserved = src->get_immutable_bytes().size();
         // when start pos is negative, the result of substr take last abs(pos) chars,
         // thus length of the result is less than abs(pos) and len.
         int min_len = len;
@@ -448,7 +448,7 @@ ColumnPtr substr_const_not_null(const Columns& columns, const BinaryColumn* src,
     raw::make_room(&offsets, size + 1);
     offsets[0] = 0;
 
-    auto& src_bytes = src->get_bytes();
+    auto src_bytes = src->get_immutable_bytes();
     auto is_ascii = validate_ascii_fast((const char*)src_bytes.data(), src_bytes.size());
     if (is_ascii) {
         if (off > 0) {
@@ -485,7 +485,11 @@ ColumnPtr right_const_not_null(const Columns& columns, const BinaryColumn* src, 
         return result;
     }
 
+<<<<<<< HEAD
     auto& src_bytes = src->get_bytes();
+=======
+    auto src_bytes = src->get_immutable_bytes();
+>>>>>>> 3193a3c677 ([Enhancement] reading predicate column by late materialization and sort predicate column according to predicate selectivity (#64600))
     const size_t src_bytes_size = src_bytes.size();
     auto reserved = src_bytes_size;
     if (INT_MAX / size > len) {
@@ -685,7 +689,11 @@ static inline ColumnPtr substr_not_const(FunctionContext* context, const starroc
     NullableBinaryColumnBuilder result;
     result.resize(rows_num, src->byte_size());
 
+<<<<<<< HEAD
     const Bytes& src_bytes = src->get_bytes();
+=======
+    auto src_bytes = src->get_immutable_bytes();
+>>>>>>> 3193a3c677 ([Enhancement] reading predicate column by late materialization and sort predicate column according to predicate selectivity (#64600))
     auto is_ascii = validate_ascii_fast((const char*)src_bytes.data(), src_bytes.size());
     if (is_ascii) {
         ascii_substr_not_const(rows_num, &str_viewer, &off_viewer, &len_viewer, &result);
@@ -705,7 +713,11 @@ static inline ColumnPtr right_not_const(FunctionContext* context, const starrock
 
     NullableBinaryColumnBuilder result;
 
+<<<<<<< HEAD
     const Bytes& src_bytes = src->get_bytes();
+=======
+    auto src_bytes = src->get_immutable_bytes();
+>>>>>>> 3193a3c677 ([Enhancement] reading predicate column by late materialization and sort predicate column according to predicate selectivity (#64600))
     auto is_ascii = validate_ascii_fast((const char*)src_bytes.data(), src_bytes.size());
     result.resize(rows_num, src->byte_size());
 
@@ -1600,7 +1612,11 @@ static inline ColumnPtr pad_const_not_null(const Columns& columns, const BinaryC
         SubstrState state = {.is_const = true, .pos = 1, .len = len};
         return substr_const_not_null(columns, src, &state);
     }
+<<<<<<< HEAD
     auto& src_bytes = src->get_bytes();
+=======
+    auto src_bytes = src->get_immutable_bytes();
+>>>>>>> 3193a3c677 ([Enhancement] reading predicate column by late materialization and sort predicate column according to predicate selectivity (#64600))
     auto src_is_utf8 = !validate_ascii_fast((const char*)src_bytes.data(), src_bytes.size());
     if (src_is_utf8 && pad_state->fill_is_utf8) {
         return pad_utf8_const<true, true, pad_type>(columns, src, (uint8_t*)fill.data, fill.size, len,
@@ -1758,7 +1774,11 @@ ColumnPtr pad_not_const(const Columns& columns, [[maybe_unused]] const PadState*
 template <bool pad_is_const, PadType pad_type>
 ColumnPtr pad_not_const_check_ascii(const Columns& columns, [[maybe_unused]] const PadState* state) {
     auto src = ColumnHelper::get_binary_column(columns[0].get());
+<<<<<<< HEAD
     auto& bytes = src->get_bytes();
+=======
+    auto bytes = src->get_immutable_bytes();
+>>>>>>> 3193a3c677 ([Enhancement] reading predicate column by late materialization and sort predicate column according to predicate selectivity (#64600))
     auto is_ascii = validate_ascii_fast((const char*)bytes.data(), bytes.size());
     if (is_ascii) {
         return pad_not_const<true, pad_is_const, pad_type>(columns, state);
@@ -1844,7 +1864,7 @@ StatusOr<ColumnPtr> StringFunctions::append_trailing_char_if_absent(FunctionCont
             dst = RunTimeColumnType<TYPE_VARCHAR>::create();
             binary_dst = ColumnHelper::as_raw_column<BinaryColumn>(dst);
         }
-        const auto& src_data = src->get_bytes();
+        auto src_data = src->get_immutable_bytes();
         const auto& src_offsets = src->get_offset();
 
         auto& dst_data = binary_dst->get_bytes();
@@ -1968,7 +1988,7 @@ static inline void vectorized_toggle_case(const Bytes* src, Bytes* dst) {
 }
 
 template <bool to_upper>
-void utf8_case_toggle(const Bytes& src_bytes, const Offsets& src_offsets, Bytes* dst_bytes, Offsets* dst_offsets) {
+void utf8_case_toggle(ImmBytes src_bytes, const Offsets& src_offsets, Bytes* dst_bytes, Offsets* dst_offsets) {
     UErrorCode err_code = U_ZERO_ERROR;
     UCaseMap* case_map = ucasemap_open("", U_FOLD_CASE_DEFAULT, &err_code);
     if (U_FAILURE(err_code)) {
@@ -2024,8 +2044,13 @@ template <bool to_upper>
 template <LogicalType Type, LogicalType ResultType>
 ColumnPtr StringCaseToggleFunction<to_upper>::evaluate(const ColumnPtr& v1) {
     const auto* src = down_cast<const BinaryColumn*>(v1.get());
+<<<<<<< HEAD
     const Bytes& src_bytes = src->get_bytes();
     const Offsets& src_offsets = src->get_offset();
+=======
+    auto src_bytes = src->get_immutable_bytes();
+    const auto& src_offsets = src->get_offset();
+>>>>>>> 3193a3c677 ([Enhancement] reading predicate column by late materialization and sort predicate column according to predicate selectivity (#64600))
     auto dst = RunTimeColumnType<TYPE_VARCHAR>::create();
     auto& dst_offsets = dst->get_offset();
     auto& dst_bytes = dst->get_bytes();
@@ -2050,8 +2075,13 @@ public:
     template <LogicalType Type, LogicalType ResultType>
     static ColumnPtr evaluate(const ColumnPtr& v1) {
         const auto* src = down_cast<const BinaryColumn*>(v1.get());
+<<<<<<< HEAD
         const Bytes& src_bytes = src->get_bytes();
         const Offsets& src_offsets = src->get_offset();
+=======
+        auto src_bytes = src->get_immutable_bytes();
+        const auto& src_offsets = src->get_offset();
+>>>>>>> 3193a3c677 ([Enhancement] reading predicate column by late materialization and sort predicate column according to predicate selectivity (#64600))
         auto dst = RunTimeColumnType<TYPE_VARCHAR>::create();
         auto& dst_offsets = dst->get_offset();
         auto& dst_bytes = dst->get_bytes();
@@ -2193,7 +2223,7 @@ struct ReverseFunction {
     template <LogicalType Type, LogicalType ResultType>
     static inline ColumnPtr evaluate(const ColumnPtr& column) {
         const auto* src = down_cast<const BinaryColumn*>(column.get());
-        const auto& src_bytes = src->get_bytes();
+        auto src_bytes = src->get_immutable_bytes();
         const auto& src_offsets = src->get_offset();
 
         auto result = BinaryColumn::create();
@@ -2372,7 +2402,7 @@ struct AdaptiveTrimFunction {
         const auto num_rows = src->size();
         raw::make_room(&dst_offsets, num_rows + 1);
         dst_offsets[0] = 0;
-        dst_bytes.reserve(src->get_bytes().size());
+        dst_bytes.reserve(src->get_immutable_bytes().size());
 
         size_t i = 0;
         const auto sample_num = std::min(num_rows, 100ul);
@@ -3849,8 +3879,14 @@ static StatusOr<ColumnPtr> hyperscan_vec_evaluate(const BinaryColumn* src, Strin
     MatchInfoChain match_info_chain;
     match_info_chain.info_chain.reserve(src->size());
 
+<<<<<<< HEAD
     auto src_value_size = src->get_bytes().size();
     const char* data = (src_value_size) ? reinterpret_cast<const char*>(src->get_bytes().data())
+=======
+    auto src_bytes = src->get_immutable_bytes();
+    auto src_value_size = src_bytes.size();
+    const char* data = (src_value_size) ? reinterpret_cast<const char*>(src_bytes.data())
+>>>>>>> 3193a3c677 ([Enhancement] reading predicate column by late materialization and sort predicate column according to predicate selectivity (#64600))
                                         : &StringFunctions::_DUMMY_STRING_FOR_EMPTY_PATTERN;
 
     auto st = hs_scan(

@@ -131,7 +131,27 @@ void Chunk::append_column(ColumnPtr column, const FieldPtr& field) {
     check_or_die();
 }
 
+<<<<<<< HEAD
 void Chunk::append_vector_column(ColumnPtr column, const FieldPtr& field, SlotId slot_id) {
+=======
+void Chunk::append_column(const ColumnPtr& column, ColumnId column_id, [[maybe_unused]] bool is_column_id) {
+    DCHECK(is_column_id);
+    DCHECK(!_cid_to_index.contains(column_id));
+    _cid_to_index[column_id] = _columns.size();
+    _append_column_checked(_columns.size(), column);
+    check_or_die();
+}
+
+void Chunk::append_column(const ColumnPtr& column, const FieldPtr& field) {
+    DCHECK(!_cid_to_index.contains(field->id()));
+    _cid_to_index[field->id()] = _columns.size();
+    _append_column_checked(_columns.size(), column);
+    _schema->append(field);
+    check_or_die();
+}
+
+void Chunk::append_vector_column(ColumnPtr&& column, const FieldPtr& field, SlotId slot_id) {
+>>>>>>> 3193a3c677 ([Enhancement] reading predicate column by late materialization and sort predicate column according to predicate selectivity (#64600))
     DCHECK(!_cid_to_index.contains(field->id()));
     _cid_to_index[field->id()] = _columns.size();
     _slot_id_to_index[slot_id] = _columns.size();

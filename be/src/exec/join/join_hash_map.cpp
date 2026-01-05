@@ -134,7 +134,7 @@ size_t JoinHashMapSelector::_get_binary_column_max_size(RuntimeState* state, con
     }
 
     const auto& offsets = binary_column->get_offset();
-    const auto& bytes = binary_column->get_bytes();
+    auto bytes = binary_column->get_immutable_bytes();
 
     bool has_tail_zero = false;
     for (size_t i = offsets.size() - 1; i > 0 && offsets[i] > 0; i--) {

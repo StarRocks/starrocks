@@ -354,9 +354,9 @@ StatusOr<ColumnPtr> LikePredicate::constant_substring_fn(FunctionContext* contex
         const Buffer<uint32_t>& offsets = haystack->get_offset();
         res->resize(haystack->size());
 
-        const char* begin = haystack->get_slice(0).data;
+        const char* begin = haystack->get_string_begin();
         const char* pos = begin;
-        const char* end = pos + haystack->get_bytes().size();
+        const char* end = haystack->get_string_end();
 
         /// Current index in the array of strings.
         size_t i = 0;

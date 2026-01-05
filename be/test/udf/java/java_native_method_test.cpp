@@ -53,7 +53,7 @@ TEST_F(JavaNativeMethodTest, get_addrs_int) {
         const auto* binary_column = down_cast<const BinaryColumn*>(data_column);
         ASSERT_EQ(results[0], (jlong)nullable_column->null_column_data().data());
         ASSERT_EQ(results[1], (jlong)binary_column->get_offset().data());
-        ASSERT_EQ(results[2], (jlong)binary_column->get_bytes().data());
+        ASSERT_EQ(results[2], (jlong)binary_column->get_immutable_bytes().data());
         env->DeleteLocalRef(arr);
     }
     // test array/map

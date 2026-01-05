@@ -18,6 +18,7 @@
 #include "column/nullable_column.h"
 #include "gutil/casts.h"
 #include "olap_type_infra.h"
+#include "simd/simd.h"
 #include "storage/column_predicate.h"
 #include "storage/in_predicate_utils.h"
 #include "storage/rowset/bitmap_index_reader.h"
@@ -436,6 +437,75 @@ ColumnPredicate* new_column_not_in_predicate_from_datum(const TypeInfoPtr& type_
                     return new ColumnNotInPredicate<LT>(type_info, id, std::move(value_set));
                 }
             });
+}
+
+Status compound_and_predicates_evaluate(const std::vector<const ColumnPredicate*>& predicates, const Column* col,
+                                        uint8_t* selection, uint16_t* selected_idx, uint16_t from, uint16_t to) {
+    const auto num_rows = to - from;
+    if (predicates.empty()) {
+        memset(selection + from, 1, num_rows);
+        return Status::OK();
+    }
+
+    std::vector<const ColumnPredicate*> vectorized_preds;
+    std::vector<const ColumnPredicate*> non_vectorized_preds;
+    vectorized_preds.reserve(predicates.size());
+    non_vectorized_preds.reserve(predicates.size());
+    for (const auto& pred : predicates) {
+        if (pred->can_vectorized()) {
+            vectorized_preds.emplace_back(pred);
+        } else {
+            non_vectorized_preds.emplace_back(pred);
+        }
+    }
+
+    // Evaluate vectorized predicates first.
+    bool first = true;
+    bool contains_true = true;
+
+    for (const auto& pred : vectorized_preds) {
+        if (first) {
+            first = false;
+            RETURN_IF_ERROR(pred->evaluate(col, selection, from, to));
+        } else {
+            RETURN_IF_ERROR(pred->evaluate_and(col, selection, from, to));
+        }
+
+        contains_true = SIMD::count_nonzero(selection + from, num_rows);
+        if (!contains_true) {
+            break;
+        }
+    }
+
+    if (contains_true && !non_vectorized_preds.empty()) {
+        uint16_t selected_size = 0;
+        if (first) {
+            // When there is no any vectorized predicate, should initialize selected_idx in a vectorized way.
+            selected_size = to - from;
+            for (uint16_t i = from, j = 0; i < to; ++i, ++j) {
+                selected_idx[j] = i;
+            }
+        } else {
+            for (uint16_t i = from; i < to; ++i) {
+                selected_idx[selected_size] = i;
+                selected_size += selection[i];
+            }
+        }
+
+        for (const auto& pred : non_vectorized_preds) {
+            ASSIGN_OR_RETURN(selected_size, pred->evaluate_branchless(col, selected_idx, selected_size));
+            if (selected_size == 0) {
+                break;
+            }
+        }
+
+        memset(&selection[from], 0, to - from);
+        for (uint16_t i = 0; i < selected_size; ++i) {
+            selection[selected_idx[i]] = 1;
+        }
+    }
+
+    return Status::OK();
 }
 
 } //namespace starrocks

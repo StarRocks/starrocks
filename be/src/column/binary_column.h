@@ -14,8 +14,11 @@
 
 #pragma once
 
+#include <memory>
+
 #include "column/bytes.h"
 #include "column/column.h"
+#include "column/container_resource.h"
 #include "column/datum.h"
 #include "column/vectorized_fwd.h"
 #include "common/statusor.h"
@@ -61,12 +64,26 @@ public:
         }
     }
 
+    explicit BinaryColumnBase(ContainerResource resource, Offsets offsets)
+            : _bytes(), _offsets(std::move(offsets)), _resource(std::move(resource)), _immuable_container(*this) {
+        if (_offsets.empty()) {
+            _offsets.emplace_back(0);
+        }
+        if (!config::enable_zero_copy_from_page_cache) {
+            _ensure_materialized();
+        }
+    }
+
     // NOTE: do *NOT* copy |_slices|
-    BinaryColumnBase(const BinaryColumnBase<T>& rhs) : _bytes(rhs._bytes), _offsets(rhs._offsets) {}
+    BinaryColumnBase(const BinaryColumnBase<T>& rhs)
+            : _bytes(rhs._bytes), _offsets(rhs._offsets), _resource(rhs._resource), _immuable_container(*this) {}
 
     // NOTE: do *NOT* copy |_slices|
     BinaryColumnBase(BinaryColumnBase<T>&& rhs) noexcept
-            : _bytes(std::move(rhs._bytes)), _offsets(std::move(rhs._offsets)) {}
+            : _bytes(std::move(rhs._bytes)),
+              _offsets(std::move(rhs._offsets)),
+              _resource(std::move(rhs._resource)),
+              _immuable_container(*this) {}
 
     BinaryColumnBase<T>& operator=(const BinaryColumnBase<T>& rhs) {
         BinaryColumnBase<T> tmp(rhs);
@@ -95,10 +112,14 @@ public:
             return;
         }
 #endif
-        if (!_offsets.empty()) {
-            DCHECK_EQ(_bytes.size(), _offsets.back());
-        } else {
-            DCHECK_EQ(_bytes.size(), 0);
+        // When we hold a view via _resource, _bytes is empty and data comes from external memory,
+        // so we should not check the consistency between _bytes and _offsets
+        if (_resource.empty()) {
+            if (!_offsets.empty()) {
+                DCHECK_EQ(_bytes.size(), _offsets.back());
+            } else {
+                DCHECK_EQ(_bytes.size(), 0);
+            }
         }
     }
 
@@ -125,7 +146,10 @@ public:
 
     size_t type_size() const override { return sizeof(Slice); }
 
-    size_t byte_size() const override { return _bytes.size() * sizeof(uint8_t) + _offsets.size() * sizeof(Offset); }
+    size_t byte_size() const override {
+        size_t data_size = _resource.empty() ? _bytes.size() : _offsets.back();
+        return data_size * sizeof(uint8_t) + _offsets.size() * sizeof(Offset);
+    }
 
     size_t byte_size(size_t from, size_t size) const override {
         DCHECK_LE(from + size, this->size()) << "Range error";
@@ -135,8 +159,13 @@ public:
     size_t byte_size(size_t idx) const override { return _offsets[idx + 1] - _offsets[idx] + sizeof(uint32_t); }
 
     Slice get_slice(size_t idx) const {
-        return Slice(_bytes.data() + _offsets[idx], _offsets[idx + 1] - _offsets[idx]);
+        const uint8_t* base = _data_base();
+        return Slice(base + _offsets[idx], _offsets[idx + 1] - _offsets[idx]);
     }
+
+    const char* get_string_begin() const { return reinterpret_cast<const char*>(_data_base()); }
+
+    const char* get_string_end() const { return reinterpret_cast<const char*>(_data_base() + _total_bytes()); }
 
     void check_or_die() const override;
 
@@ -232,9 +261,10 @@ public:
         // max size of one string is 2^32, so use uint32_t not T
         auto binary_size = static_cast<uint32_t>(_offsets[idx + 1] - _offsets[idx]);
         T offset = _offsets[idx];
+        const uint8_t* base = _data_base();
 
         strings::memcpy_inlined(pos, &binary_size, sizeof(uint32_t));
-        strings::memcpy_inlined(pos + sizeof(uint32_t), &_bytes[offset], binary_size);
+        strings::memcpy_inlined(pos + sizeof(uint32_t), base + offset, binary_size);
 
         return sizeof(uint32_t) + binary_size;
     }
@@ -268,7 +298,7 @@ public:
 
     MutableColumnPtr clone_empty() const override { return BinaryColumnBase<T>::create(); }
 
-    ColumnPtr cut(size_t start, size_t length) const;
+    MutableColumnPtr cut(size_t start, size_t length) const;
     size_t filter_range(const Filter& filter, size_t start, size_t to) override;
 
     int compare_at(size_t left, size_t right, const Column& rhs, int nan_direction_hint) const override;
@@ -311,11 +341,19 @@ public:
 
     const BinaryDataProxyContainer& get_proxy_data() const { return _immuable_container; }
 
-    Bytes& get_bytes() { return _bytes; }
+    Bytes& get_bytes() {
+        _ensure_materialized();
+        return _bytes;
+    }
 
-    const Bytes& get_bytes() const { return _bytes; }
+    ImmBytes get_immutable_bytes() const {
+        if (!_resource.empty()) {
+            return _resource.span<uint8_t>();
+        }
+        return ImmBytes(_bytes.data(), _bytes.size());
+    }
 
-    const uint8_t* continuous_data() const override { return reinterpret_cast<const uint8_t*>(_bytes.data()); }
+    const uint8_t* continuous_data() const override { return _data_base(); }
 
     Offsets& get_offset() { return _offsets; }
     const Offsets& get_offset() const { return _offsets; }
@@ -323,7 +361,8 @@ public:
     Datum get(size_t n) const override { return Datum(get_slice(n)); }
 
     size_t container_memory_usage() const override {
-        return _bytes.capacity() + _offsets.capacity() * sizeof(_offsets[0]) + _slices.capacity() * sizeof(_slices[0]);
+        size_t bytes_memory = _resource.empty() ? _bytes.capacity() : 0;
+        return bytes_memory + _offsets.capacity() * sizeof(_offsets[0]) + _slices.capacity() * sizeof(_slices[0]);
     }
 
     size_t reference_memory_usage(size_t from, size_t size) const override { return 0; }
@@ -336,6 +375,7 @@ public:
         swap(_offsets, r._offsets);
         swap(_slices, r._slices);
         swap(_slices_cache, r._slices_cache);
+        swap(_resource, r._resource);
     }
 
     void reset_column() override {
@@ -345,6 +385,7 @@ public:
         _offsets.resize(1, 0);
         _slices.clear();
         _slices_cache = false;
+        _resource.reset();
     }
 
     void invalidate_slice_cache() { _slices_cache = false; }
@@ -371,9 +412,19 @@ public:
 
 private:
     void _build_slices() const;
+<<<<<<< HEAD
+=======
+    void _build_german_strings() const;
+    void _ensure_materialized();
+    ALWAYS_INLINE const uint8_t* _data_base() const {
+        return _resource.empty() ? _bytes.data() : reinterpret_cast<const uint8_t*>(_resource.data());
+    }
+    size_t _total_bytes() const { return _offsets.empty() ? 0 : _offsets.back(); }
+>>>>>>> 3193a3c677 ([Enhancement] reading predicate column by late materialization and sort predicate column according to predicate selectivity (#64600))
 
     Bytes _bytes;
     Offsets _offsets;
+    ContainerResource _resource;
 
     mutable Container _slices;
     mutable bool _slices_cache = false;

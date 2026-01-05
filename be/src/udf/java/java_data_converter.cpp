@@ -113,6 +113,10 @@ private:
 
 Status JavaArrayConverter::do_visit(const BinaryColumn& column) {
     size_t num_rows = column.size();
+<<<<<<< HEAD
+=======
+    auto bytes = byte_buffer(column.get_immutable_bytes());
+>>>>>>> 3193a3c677 ([Enhancement] reading predicate column by late materialization and sort predicate column according to predicate selectivity (#64600))
     auto offsets = byte_buffer(column.get_offset());
     auto bytes = byte_buffer(column.get_bytes());
     const auto& method_map = _helper.method_map();
