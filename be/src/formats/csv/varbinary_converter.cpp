@@ -30,7 +30,7 @@ namespace starrocks::csv {
 Status VarBinaryConverter::write_string(OutputStream* os, const Column& column, size_t row_num,
                                         const Options& options) const {
     auto* binary = down_cast<const BinaryColumn*>(&column);
-    auto& bytes = binary->get_bytes();
+    auto& bytes = binary->get_immutable_bytes();
     auto& offsets = binary->get_offset();
     // TODO: support binary type config later
 

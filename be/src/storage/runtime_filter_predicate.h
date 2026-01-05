@@ -81,6 +81,8 @@ public:
     bool empty() const { return _rf_predicates.empty(); }
 
     Status evaluate(Chunk* chunk, uint8_t* selection, uint16_t from, uint16_t to);
+    std::vector<RuntimeFilterPredicate*> rf_predicates() const { return _rf_predicates; }
+    int32_t driver_sequence() const { return _driver_sequence; }
 
 private:
     template <bool is_sample>

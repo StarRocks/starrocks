@@ -960,7 +960,7 @@ public:
     using Base = BinaryColumnPredicateCmpBase<field_type, std::not_equal_to<ValueType>>;
 
     BinaryColumnNePredicate(const TypeInfoPtr& type_info, ColumnId id, ValueType value)
-            : Base(PredicateType::kNE, type_info, id, value) {}
+            : Base(PredicateType::kNE, type_info, id, value), _is_empty_string(value.empty()) {}
 
     bool zone_map_filter(const ZoneMapDetail& detail) const override { return true; }
 
@@ -983,6 +983,51 @@ public:
         return Status::OK();
 #endif
     }
+
+    // Optimized evaluate_branchless for empty string comparison
+    StatusOr<uint16_t> evaluate_branchless(const Column* column, uint16_t* sel, uint16_t sel_size) const override {
+        if (!_is_empty_string) {
+            // For non-empty string, use base class implementation
+            return Base::evaluate_branchless(column, sel, sel_size);
+        }
+
+        // Fast path for col != ''
+        // Only need to check if length > 0, no need to compare actual data
+        const BinaryColumn* binary_column;
+        if (column->is_nullable()) {
+            binary_column =
+                    down_cast<const BinaryColumn*>(down_cast<const NullableColumn*>(column)->data_column().get());
+        } else {
+            binary_column = down_cast<const BinaryColumn*>(column);
+        }
+
+        const auto& offsets = binary_column->get_offset();
+        const uint32_t* offset_data = offsets.data();
+        uint16_t new_size = 0;
+
+        if (!column->has_null()) {
+            // Non-nullable column: just check length != 0
+            for (uint16_t i = 0; i < sel_size; ++i) {
+                uint16_t data_idx = sel[i];
+                uint32_t len = offset_data[data_idx + 1] - offset_data[data_idx];
+                sel[new_size] = data_idx;
+                new_size += (len != 0); // Branchless: increment only if len > 0
+            }
+        } else {
+            // Nullable column: check not null AND length != 0
+            const uint8_t* is_null = down_cast<const NullableColumn*>(column)->immutable_null_column_data().data();
+            for (uint16_t i = 0; i < sel_size; ++i) {
+                uint16_t data_idx = sel[i];
+                uint32_t len = offset_data[data_idx + 1] - offset_data[data_idx];
+                sel[new_size] = data_idx;
+                new_size += (!is_null[data_idx]) & (len != 0); // Branchless
+            }
+        }
+        return new_size;
+    }
+
+private:
+    const bool _is_empty_string;
 };
 
 ColumnPredicate* new_column_ne_predicate(const TypeInfoPtr& type_info, ColumnId id, const Slice& operand) {

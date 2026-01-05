@@ -135,6 +135,7 @@ public:
     void append_column(const ColumnPtr& column, const FieldPtr& field);
     void append_column(const ColumnPtr& column, SlotId slot_id);
     void update_column(ColumnPtr& column, SlotId slot_id);
+    void append_column(const ColumnPtr& column, ColumnId column_id, [[maybe_unused]] bool is_column_id);
 
     void append_vector_column(ColumnPtr&& column, const FieldPtr& field, SlotId slot_id);
     void update_column_by_index(ColumnPtr&& column, size_t idx);

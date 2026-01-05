@@ -116,7 +116,7 @@ private:
 
 Status JavaArrayConverter::do_visit(const BinaryColumn& column) {
     size_t num_rows = column.size();
-    auto bytes = byte_buffer(column.get_bytes());
+    auto bytes = byte_buffer(column.get_immutable_bytes());
     auto offsets = byte_buffer(column.get_offset());
     const auto& method_map = _helper.method_map();
     if (auto iter = method_map.find(JNIPrimTypeId<Slice>::id); iter != method_map.end()) {

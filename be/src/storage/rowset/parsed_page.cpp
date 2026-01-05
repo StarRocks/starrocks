@@ -39,10 +39,12 @@
 #include <cstddef>
 #include <memory>
 
+#include "column/append_with_mask.h"
 #include "column/nullable_column.h"
 #include "common/status.h"
 #include "gutil/strings/substitute.h"
 #include "simd/simd.h"
+#include "storage/column_predicate.h"
 #include "storage/rowset/binary_dict_page.h"
 #include "storage/rowset/bitshuffle_page.h"
 #include "storage/rowset/encoding_info.h"
@@ -233,6 +235,50 @@ public:
         return count;
     }
 
+    Status read_by_rowids(Column* column, const rowid_t* rowids, size_t* count) override {
+        return Status::NotSupported("V1 version don't support read_by_rowds");
+    }
+
+    Status read_dict_codes_by_rowids(Column* column, const rowid_t* rowids, size_t* count) override {
+        return Status::NotSupported("V1 version don't support read_dict_codes_by_rowids");
+    }
+
+    // v1 can't support read_with_filter efficiently, so we read first and then filter
+    // since at least 80% rows is null, so it won't hurt performance much
+    Status read_with_filter(Column* column, const SparseRange<>& range,
+                            const std::vector<const ColumnPredicate*>& compound_and_predicates, uint8_t* selection,
+                            uint16_t* selected_idx) override {
+        DCHECK_LE(range.span_size(), remaining());
+
+        size_t original_col_size = column->size();
+        size_t num_rows = range.span_size();
+
+        // Clone a new column for reading data
+        auto temp_column = column->clone_empty();
+
+        // Read data to temp column (read will handle null flags automatically)
+        RETURN_IF_ERROR(read(temp_column.get(), range));
+
+        // Evaluate predicates on the temporary column
+        RETURN_IF_ERROR(compound_and_predicates_evaluate(compound_and_predicates, temp_column.get(), selection,
+                                                         selected_idx, 0, num_rows));
+
+        uint32_t selected_count = SIMD::count_nonzero(selection, num_rows);
+        if (selected_count == 0) {
+            return Status::OK();
+        }
+
+        RETURN_IF_ERROR(append_with_mask</*PositiveSelect=*/true>(column, *temp_column, selection, num_rows));
+
+        size_t added_col_size = column->size() - original_col_size;
+        if (selected_count != added_col_size) {
+            return Status::InternalError(
+                    fmt::format("Selected size:{}, does not match added col size:{}", selected_count, added_col_size));
+        }
+
+        return Status::OK();
+    }
+
 private:
     friend Status parse_page_v1(std::unique_ptr<ParsedPage>* result, PageHandle handle, const Slice& body,
                                 const DataPageFooterPB& footer, const EncodingInfo* encoding,
@@ -290,6 +336,58 @@ public:
         return Status::OK();
     }
 
+    Status read_with_filter(Column* column, const SparseRange<>& range,
+                            const std::vector<const ColumnPredicate*>& compound_and_predicates, uint8_t* selection,
+                            uint16_t* selected_idx) override {
+        DCHECK_EQ(_offset_in_page, range.begin());
+        DCHECK_EQ(_offset_in_page, _data_decoder->current_index());
+
+        size_t original_col_size = column->size();
+
+        if (_null_flags.size() == 0) {
+            RETURN_IF_ERROR(_data_decoder->next_batch_with_filter(column, range, compound_and_predicates, nullptr,
+                                                                  selection, selected_idx));
+        } else {
+            // For ParsedPageV2 with nulls: pass null flags to data_decoder
+            // The data_decoder will handle null predicates
+            auto nc = down_cast<NullableColumn*>(column);
+
+            // Pass the null flags starting from current offset
+            // The data_decoder will handle appending null flags to the column
+            const uint8_t* null_data = _null_flags.data() + _offset_in_page;
+            RETURN_IF_ERROR(_data_decoder->next_batch_with_filter(nc, range, compound_and_predicates, null_data,
+                                                                  selection, selected_idx));
+        }
+
+        size_t selected_size = SIMD::count_nonzero(selection, range.span_size());
+        size_t added_col_size = column->size() - original_col_size;
+        if (selected_size != added_col_size) {
+            return Status::InternalError(
+                    fmt::format("Selected size:{}, does not match added col size:{}", selected_size, added_col_size));
+        }
+        _offset_in_page = range.end();
+
+        return Status::OK();
+    }
+
+    Status read_by_rowids(Column* column, const rowid_t* rowids, size_t* count) override {
+        if (_null_flags.size() == 0) {
+            RETURN_IF_ERROR(_data_decoder->read_by_rowids(_first_ordinal, rowids, count, column));
+        } else {
+            auto nc = down_cast<NullableColumn*>(column);
+            RETURN_IF_ERROR(_data_decoder->read_by_rowids(_first_ordinal, rowids, count, nc->data_column_raw_ptr()));
+            std::vector<uint8_t> null_flags;
+            for (size_t i = 0; i < *count; i++) {
+                ordinal_t ord = rowids[i] - _first_ordinal;
+                DCHECK_LT(ord, _num_rows);
+                null_flags.emplace_back(_null_flags[ord]);
+            }
+            nc->null_column_raw_ptr()->append_numbers(null_flags.data(), null_flags.size());
+            nc->update_has_null();
+        }
+        return Status::OK();
+    }
+
     Status read_dict_codes(Column* column, size_t* count) override {
         if (_null_flags.size() == 0) {
             RETURN_IF_ERROR(_data_decoder->next_dict_codes(count, column));
@@ -300,6 +398,25 @@ public:
             nc->update_has_null();
         }
         _offset_in_page += *count;
+        return Status::OK();
+    }
+
+    Status read_dict_codes_by_rowids(Column* column, const rowid_t* rowids, size_t* count) override {
+        if (_null_flags.size() == 0) {
+            RETURN_IF_ERROR(_data_decoder->read_dict_codes_by_rowids(_first_ordinal, rowids, count, column));
+        } else {
+            auto nc = down_cast<NullableColumn*>(column);
+            RETURN_IF_ERROR(
+                    _data_decoder->read_dict_codes_by_rowids(_first_ordinal, rowids, count, nc->data_column_raw_ptr()));
+            std::vector<uint8_t> null_flags;
+            for (size_t i = 0; i < *count; i++) {
+                ordinal_t ord = rowids[i] - _first_ordinal;
+                DCHECK_LT(ord, _num_rows);
+                null_flags.emplace_back(_null_flags[ord]);
+            }
+            nc->null_column_raw_ptr()->append_numbers(null_flags.data(), null_flags.size());
+            nc->update_has_null();
+        }
         return Status::OK();
     }
 
@@ -351,6 +468,7 @@ Status parse_page_v1(std::unique_ptr<ParsedPage>* result, PageHandle handle, con
                      uint32_t page_index) {
     auto page = std::make_unique<ParsedPageV1>();
     page->_page_handle = std::move(handle);
+    page->_version = 1;
 
     auto null_size = footer.nullmap_size();
     page->_has_null = null_size > 0;
@@ -380,6 +498,7 @@ Status parse_page_v2(std::unique_ptr<ParsedPage>* result, PageHandle handle, con
                      uint32_t page_index) {
     auto page = std::make_unique<ParsedPageV2>();
     page->_page_handle = std::make_shared<PageHandle>(std::move(handle));
+    page->_version = 2;
 
     // TODO: port the nulls decode to null pages
     auto null_size = footer.nullmap_size();

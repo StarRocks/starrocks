@@ -71,6 +71,7 @@ public class AddIndexOnlyPredicateRule implements TreeRewriteRule {
                         BinaryPredicateOperator newIndexPredicate =
                                 BinaryPredicateOperator.ge(call, ConstantOperator.createDouble(0));
                         scan.setPredicate(CompoundPredicateOperator.and(scan.getPredicate(), newIndexPredicate));
+                        context.getOptimizerContext().getSessionVariable().setEnablePredicateColLateMaterialize(false);
                         return null;
                     }
                 }
