@@ -1056,7 +1056,7 @@ public class ConnectContext {
         }
 
         for (Map.Entry<String, String> entry : sessionVariables.entrySet()) {
-            if (entry.getKey().equals(warehouse)) {
+            if (entry.getKey().equalsIgnoreCase(warehouse)) {
                 continue;
             }
             SystemVariable variable = new SystemVariable(entry.getKey(), new StringLiteral(entry.getValue()));
