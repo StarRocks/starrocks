@@ -38,7 +38,22 @@ shell: ossutil64 cp ./sql/test_iceberg/data/variant_string_unicode_test/data/000
 0
 
 -- !result
-shell: ossutil64 cp ./sql/test_iceberg/data/variant_string_size_test/data/00000-10-a601df45-b46b-4423-89fa-c8ea083d2cbb-0-00001.parquet oss://${oss_bucket}/test_iceberg_variant_query_4/${uuid0}/variant_string_size_test/data/00000-10-a601df45-b46b-4423-89fa-c8ea083d2cbb-0-00001.parquet > /dev/null
+shell: ossutil64 cp ./sql/test_iceberg/data/variant_string_size_test/data/00000-10-c43c64d6-c3e1-4607-b065-7884504d3b70-0-00001.parquet oss://${oss_bucket}/test_iceberg_variant_query_4/${uuid0}/variant_string_size_test/data/00000-10-c43c64d6-c3e1-4607-b065-7884504d3b70-0-00001.parquet > /dev/null
+-- result:
+0
+
+-- !result
+shell: ossutil64 cp ./sql/test_iceberg/data/variant_string_size_test/data/00001-11-c43c64d6-c3e1-4607-b065-7884504d3b70-0-00001.parquet oss://${oss_bucket}/test_iceberg_variant_query_4/${uuid0}/variant_string_size_test/data/00001-11-c43c64d6-c3e1-4607-b065-7884504d3b70-0-00001.parquet > /dev/null
+-- result:
+0
+
+-- !result
+shell: ossutil64 cp ./sql/test_iceberg/data/variant_string_size_test/data/00002-12-c43c64d6-c3e1-4607-b065-7884504d3b70-0-00001.parquet oss://${oss_bucket}/test_iceberg_variant_query_4/${uuid0}/variant_string_size_test/data/00002-12-c43c64d6-c3e1-4607-b065-7884504d3b70-0-00001.parquet > /dev/null
+-- result:
+0
+
+-- !result
+shell: ossutil64 cp ./sql/test_iceberg/data/variant_string_size_test/data/00003-13-c43c64d6-c3e1-4607-b065-7884504d3b70-0-00001.parquet oss://${oss_bucket}/test_iceberg_variant_query_4/${uuid0}/variant_string_size_test/data/00003-13-c43c64d6-c3e1-4607-b065-7884504d3b70-0-00001.parquet > /dev/null
 -- result:
 0
 
@@ -46,7 +61,16 @@ shell: ossutil64 cp ./sql/test_iceberg/data/variant_string_size_test/data/00000-
 alter table variant_string_unicode_test execute add_files(location='oss://${oss_bucket}/test_iceberg_variant_query_4/${uuid0}/variant_string_unicode_test/data/00000-0-25ecb658-ed0c-4f1e-9886-eda14c03c061-0-00001.parquet', file_format='parquet');
 -- result:
 -- !result
-alter table variant_string_size_test execute add_files(location='oss://${oss_bucket}/test_iceberg_variant_query_4/${uuid0}/variant_string_size_test/data/00000-10-a601df45-b46b-4423-89fa-c8ea083d2cbb-0-00001.parquet', file_format='parquet');
+alter table variant_string_size_test execute add_files(location='oss://${oss_bucket}/test_iceberg_variant_query_4/${uuid0}/variant_string_size_test/data/00000-10-c43c64d6-c3e1-4607-b065-7884504d3b70-0-00001.parquet', file_format='parquet');
+-- result:
+-- !result
+alter table variant_string_size_test execute add_files(location='oss://${oss_bucket}/test_iceberg_variant_query_4/${uuid0}/variant_string_size_test/data/00001-11-c43c64d6-c3e1-4607-b065-7884504d3b70-0-00001.parquet', file_format='parquet');
+-- result:
+-- !result
+alter table variant_string_size_test execute add_files(location='oss://${oss_bucket}/test_iceberg_variant_query_4/${uuid0}/variant_string_size_test/data/00002-12-c43c64d6-c3e1-4607-b065-7884504d3b70-0-00001.parquet', file_format='parquet');
+-- result:
+-- !result
+alter table variant_string_size_test execute add_files(location='oss://${oss_bucket}/test_iceberg_variant_query_4/${uuid0}/variant_string_size_test/data/00003-13-c43c64d6-c3e1-4607-b065-7884504d3b70-0-00001.parquet', file_format='parquet');
 -- result:
 -- !result
 SELECT 'Query 1: Validate Unicode string extraction from VARIANT' AS test_description;
@@ -124,6 +148,9 @@ FROM variant_string_size_test
 ORDER BY test_id;
 -- result:
 1	1KB_string	1024	1024	PASS	String
+2	64KB_string	65536	65536	PASS	String
+3	1MB_string	1048576	1048576	PASS	String
+4	5MB_string	5242880	5242880	PASS	String
 -- !result
 SELECT 'Query 4: Verify large string content integrity' AS test_description;
 -- result:
@@ -155,6 +182,9 @@ FROM variant_string_size_test
 ORDER BY test_id;
 -- result:
 1	1KB_string	AAAAAAAAAA	AAAAAAAAAA	AAAAAAAAAA	PASS
+2	64KB_string	BBBBBBBBBB	BBBBBBBBBB	BBBBBBBBBB	PASS
+3	1MB_string	CCCCCCCCCC	CCCCCCCCCC	CCCCCCCCCC	PASS
+4	5MB_string	DDDDDDDDDD	DDDDDDDDDD	DDDDDDDDDD	PASS
 -- !result
 SELECT 'Query 5: CAST VARIANT strings to VARCHAR' AS test_description;
 -- result:

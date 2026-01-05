@@ -36,10 +36,16 @@ properties(
 
 
 shell: ossutil64 cp ./sql/test_iceberg/data/variant_string_unicode_test/data/00000-0-25ecb658-ed0c-4f1e-9886-eda14c03c061-0-00001.parquet oss://${oss_bucket}/test_iceberg_variant_query_4/${uuid0}/variant_string_unicode_test/data/00000-0-25ecb658-ed0c-4f1e-9886-eda14c03c061-0-00001.parquet > /dev/null
-shell: ossutil64 cp ./sql/test_iceberg/data/variant_string_size_test/data/00000-10-a601df45-b46b-4423-89fa-c8ea083d2cbb-0-00001.parquet oss://${oss_bucket}/test_iceberg_variant_query_4/${uuid0}/variant_string_size_test/data/00000-10-a601df45-b46b-4423-89fa-c8ea083d2cbb-0-00001.parquet > /dev/null
+shell: ossutil64 cp ./sql/test_iceberg/data/variant_string_size_test/data/00000-10-c43c64d6-c3e1-4607-b065-7884504d3b70-0-00001.parquet oss://${oss_bucket}/test_iceberg_variant_query_4/${uuid0}/variant_string_size_test/data/00000-10-c43c64d6-c3e1-4607-b065-7884504d3b70-0-00001.parquet > /dev/null
+shell: ossutil64 cp ./sql/test_iceberg/data/variant_string_size_test/data/00001-11-c43c64d6-c3e1-4607-b065-7884504d3b70-0-00001.parquet oss://${oss_bucket}/test_iceberg_variant_query_4/${uuid0}/variant_string_size_test/data/00001-11-c43c64d6-c3e1-4607-b065-7884504d3b70-0-00001.parquet > /dev/null
+shell: ossutil64 cp ./sql/test_iceberg/data/variant_string_size_test/data/00002-12-c43c64d6-c3e1-4607-b065-7884504d3b70-0-00001.parquet oss://${oss_bucket}/test_iceberg_variant_query_4/${uuid0}/variant_string_size_test/data/00002-12-c43c64d6-c3e1-4607-b065-7884504d3b70-0-00001.parquet > /dev/null
+shell: ossutil64 cp ./sql/test_iceberg/data/variant_string_size_test/data/00003-13-c43c64d6-c3e1-4607-b065-7884504d3b70-0-00001.parquet oss://${oss_bucket}/test_iceberg_variant_query_4/${uuid0}/variant_string_size_test/data/00003-13-c43c64d6-c3e1-4607-b065-7884504d3b70-0-00001.parquet > /dev/null
 
 alter table variant_string_unicode_test execute add_files(location='oss://${oss_bucket}/test_iceberg_variant_query_4/${uuid0}/variant_string_unicode_test/data/00000-0-25ecb658-ed0c-4f1e-9886-eda14c03c061-0-00001.parquet', file_format='parquet');
-alter table variant_string_size_test execute add_files(location='oss://${oss_bucket}/test_iceberg_variant_query_4/${uuid0}/variant_string_size_test/data/00000-10-a601df45-b46b-4423-89fa-c8ea083d2cbb-0-00001.parquet', file_format='parquet');
+alter table variant_string_size_test execute add_files(location='oss://${oss_bucket}/test_iceberg_variant_query_4/${uuid0}/variant_string_size_test/data/00000-10-c43c64d6-c3e1-4607-b065-7884504d3b70-0-00001.parquet', file_format='parquet');
+alter table variant_string_size_test execute add_files(location='oss://${oss_bucket}/test_iceberg_variant_query_4/${uuid0}/variant_string_size_test/data/00001-11-c43c64d6-c3e1-4607-b065-7884504d3b70-0-00001.parquet', file_format='parquet');
+alter table variant_string_size_test execute add_files(location='oss://${oss_bucket}/test_iceberg_variant_query_4/${uuid0}/variant_string_size_test/data/00002-12-c43c64d6-c3e1-4607-b065-7884504d3b70-0-00001.parquet', file_format='parquet');
+alter table variant_string_size_test execute add_files(location='oss://${oss_bucket}/test_iceberg_variant_query_4/${uuid0}/variant_string_size_test/data/00003-13-c43c64d6-c3e1-4607-b065-7884504d3b70-0-00001.parquet', file_format='parquet');
 
 
 -- ========================================
