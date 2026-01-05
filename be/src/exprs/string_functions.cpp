@@ -62,6 +62,8 @@
 namespace starrocks {
 // A regex to match any regex pattern is equivalent to a substring search.
 static const RE2 SUBSTRING_RE(R"((?:\.\*)*([^\.\^\{\[\(\|\)\]\}\+\*\?\$\\]+)(?:\.\*)*)", re2::RE2::Quiet);
+// A strict fixed literal regex contains only normal characters without any regex special characters.
+static const RE2 FIXED_LITERAL_RE(R"(^[^\.\^\{\[\(\|\)\]\}\+\*\?\$\\]+$)", re2::RE2::Quiet);
 
 #define THROW_RUNTIME_ERROR_IF_EXCEED_LIMIT(col, func_name)                        \
     if (UNLIKELY(!col->capacity_limit_reached().ok())) {                           \
@@ -3251,8 +3253,10 @@ Status StringFunctions::regexp_replace_prepare(FunctionContext* context, Functio
     state->pattern = pattern_str;
 
     std::string search_string;
+
     if (pattern_str.size() && RE2::FullMatch(pattern_str, SUBSTRING_RE, &search_string)) {
         state->use_hyperscan = true;
+        state->use_hyperscan_vec = RE2::FullMatch(pattern_str, FIXED_LITERAL_RE, &search_string);
         state->size_of_pattern = pattern.size;
         std::string re_pattern(pattern.data, pattern.size);
         RETURN_IF_ERROR(hs_compile_and_alloc_scratch(re_pattern, state, context, pattern));
@@ -3767,35 +3771,36 @@ static StatusOr<ColumnPtr> hyperscan_vec_evaluate(const BinaryColumn* src, Strin
     raw::make_room(&dst_offsets, num_rows + 1);
     dst_bytes.reserve(data_count());
 
-    // copy data
+    // copy data row by row with replacements applied
     char* cursor = reinterpret_cast<char*>(dst_bytes.data());
-    size_t last_to = 0;
-    for (const auto& info : match_info_chain_in_one_row.info_chain) {
-        strings::memcpy_inlined(cursor, data + last_to, info.from - last_to);
-        cursor += info.from - last_to;
-        strings::memcpy_inlined(cursor, rpl_value.data(), rpl_value.size());
-        cursor += rpl_value.size();
-        last_to = info.to;
-    }
-    strings::memcpy_inlined(cursor, data + last_to, src_value_size - last_to);
-
-    // split offset
     size_t match_index = 0;
-    dst_offsets[0] = 0;
     size_t match_size = match_info_chain_in_one_row.info_chain.size();
+    dst_offsets[0] = 0;
+
     for (size_t i = 0; i < num_rows; i++) {
-        size_t from = src_offsets[i];
-        size_t to = src_offsets[i + 1];
-        size_t dis = to - from;
-        DCHECK(match_index == match_size || match_info_chain_in_one_row.info_chain[match_index].to > from);
-        while (match_index < match_size && match_info_chain_in_one_row.info_chain[match_index].from >= from &&
-               match_info_chain_in_one_row.info_chain[match_index].to <= to) {
-            dis -= match_info_chain_in_one_row.info_chain[match_index].to -
-                   match_info_chain_in_one_row.info_chain[match_index].from;
-            dis += rpl_value.size();
+        size_t row_start = src_offsets[i];
+        size_t row_end = src_offsets[i + 1];
+        size_t last_to = row_start;
+
+        // Process all matches in this row
+        while (match_index < match_size && match_info_chain_in_one_row.info_chain[match_index].from >= row_start &&
+               match_info_chain_in_one_row.info_chain[match_index].to <= row_end) {
+            const auto& info = match_info_chain_in_one_row.info_chain[match_index];
+            // Copy data before the match
+            strings::memcpy_inlined(cursor, data + last_to, info.from - last_to);
+            cursor += info.from - last_to;
+            // Copy replacement
+            strings::memcpy_inlined(cursor, rpl_value.data(), rpl_value.size());
+            cursor += rpl_value.size();
+            last_to = info.to;
             match_index++;
         }
-        dst_offsets[i + 1] = dst_offsets[i] + dis;
+        // Copy remaining data in this row
+        strings::memcpy_inlined(cursor, data + last_to, row_end - last_to);
+        cursor += row_end - last_to;
+
+        // Calculate offset for this row
+        dst_offsets[i + 1] = cursor - reinterpret_cast<char*>(dst_bytes.data());
     }
     DCHECK(match_index == match_size);
     DCHECK(dst_offsets.back() == data_count());
@@ -3904,7 +3909,7 @@ StatusOr<ColumnPtr> StringFunctions::regexp_replace(FunctionContext* context, co
 
     if (state->const_pattern) {
         if (state->use_hyperscan) {
-            if (columns[2]->is_constant() && context->state()->enable_hyperscan_vec()) {
+            if (columns[2]->is_constant() && context->state()->enable_hyperscan_vec() && state->use_hyperscan_vec) {
                 return regexp_replace_use_hyperscan_vec(state, columns);
             } else {
                 return regexp_replace_use_hyperscan(state, columns);
