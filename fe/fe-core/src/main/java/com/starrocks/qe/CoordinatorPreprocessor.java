@@ -33,6 +33,7 @@ import com.starrocks.planner.ScanNode;
 import com.starrocks.planner.TableFunctionTableSink;
 import com.starrocks.qe.scheduler.DefaultWorkerProvider;
 import com.starrocks.qe.scheduler.LazyWorkerProvider;
+import com.starrocks.qe.scheduler.SkipBlacklistWorkerProvider;
 import com.starrocks.qe.scheduler.TFragmentInstanceFactory;
 import com.starrocks.qe.scheduler.WorkerProvider;
 import com.starrocks.qe.scheduler.assignment.FragmentAssignmentStrategyFactory;
@@ -149,10 +150,21 @@ public class CoordinatorPreprocessor {
     }
 
     private WorkerProvider.Factory newWorkerProviderFactory() {
+        SessionVariable sessionVariable = connectContext.getSessionVariable();
+        boolean skipBlackList = sessionVariable.isSkipBlackList();
+        
         if (RunMode.isSharedDataMode()) {
-            return new DefaultSharedDataWorkerProvider.Factory();
+            if (skipBlackList) {
+                return new com.starrocks.lake.qe.scheduler.SkipBlacklistSharedDataWorkerProvider.Factory();
+            } else {
+                return new DefaultSharedDataWorkerProvider.Factory();
+            }
         } else {
-            return new DefaultWorkerProvider.Factory();
+            if (skipBlackList) {
+                return new SkipBlacklistWorkerProvider.Factory();
+            } else {
+                return new DefaultWorkerProvider.Factory();
+            }
         }
     }
 
