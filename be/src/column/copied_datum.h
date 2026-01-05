@@ -57,10 +57,11 @@ public:
 private:
     void copy() {
         _datum.visit([this](const auto& variant) {
-            std::visit(overloaded{[](const int8_t& arg) {}, [](const uint8_t& arg) {}, [](const int16_t& arg) {},
-                                  [](const uint16_t& arg) {}, [](const uint24_t& arg) {}, [](const int32_t& arg) {},
-                                  [](const uint32_t& arg) {}, [](const int64_t& arg) {}, [](const uint64_t& arg) {},
-                                  [](const int96_t& arg) {}, [](const int128_t& arg) {}, [](const int256_t& arg) {},
+            std::visit(overloaded{[](const std::monostate& arg) {}, [](const int8_t& arg) {}, [](const uint8_t& arg) {},
+                                  [](const int16_t& arg) {}, [](const uint16_t& arg) {}, [](const uint24_t& arg) {},
+                                  [](const int32_t& arg) {}, [](const uint32_t& arg) {}, [](const int64_t& arg) {},
+                                  [](const uint64_t& arg) {}, [](const int96_t& arg) {}, [](const int128_t& arg) {},
+                                  [](const int256_t& arg) {},
                                   [this](const Slice& value) {
                                       if (value.empty()) {
                                           return;
@@ -78,10 +79,11 @@ private:
 
     void release() noexcept {
         _datum.visit([](const auto& variant) {
-            std::visit(overloaded{[](const int8_t& arg) {}, [](const uint8_t& arg) {}, [](const int16_t& arg) {},
-                                  [](const uint16_t& arg) {}, [](const uint24_t& arg) {}, [](const int32_t& arg) {},
-                                  [](const uint32_t& arg) {}, [](const int64_t& arg) {}, [](const uint64_t& arg) {},
-                                  [](const int96_t& arg) {}, [](const int128_t& arg) {}, [](const int256_t& arg) {},
+            std::visit(overloaded{[](const std::monostate& arg) {}, [](const int8_t& arg) {}, [](const uint8_t& arg) {},
+                                  [](const int16_t& arg) {}, [](const uint16_t& arg) {}, [](const uint24_t& arg) {},
+                                  [](const int32_t& arg) {}, [](const uint32_t& arg) {}, [](const int64_t& arg) {},
+                                  [](const uint64_t& arg) {}, [](const int96_t& arg) {}, [](const int128_t& arg) {},
+                                  [](const int256_t& arg) {},
                                   [](const Slice& value) {
                                       if (value.empty()) {
                                           return;
