@@ -20,11 +20,9 @@
 namespace starrocks {
 
 std::mutex udf_downloder::_download_mutex;
-std::unordered_map<std::string, std::shared_ptr<std::mutex>> udf_downloder::_path_mutexes;
 
 Status udf_downloder::download_remote_file_2_local(const std::string& remotePath, std::string& localPath, const FSOptions& options) {
-    auto mtx = get_mutex_for_path(localPath);
-    std::lock_guard<std::mutex> lock(*mtx);
+    std::lock_guard<std::mutex> lock(_download_mutex);
     udf_downloder downloader;
     RETURN_IF_ERROR(downloader.setup_local_file_path(localPath));
     LOG(INFO) << fmt::format("Downloading udf file from {}", remotePath);
@@ -35,6 +33,11 @@ Status udf_downloder::download_remote_file_2_local(const std::string& remotePath
 }
 
 Status udf_downloder::setup_local_file_path(const std::string& local_path) {
+    auto status = FileSystem::Default() -> path_exists(local_path);
+    if (status.ok()) {
+        LOG(INFO) << fmt::format("the {} file already exists", local_path);
+        return Status::AlreadyExist(fmt::format("the {} file already exists", local_path));
+    }
     std::string dir_path = local_path.substr(0, local_path.find_last_of('/'));
     RETURN_IF_ERROR(FileSystem::Default()->create_dir_recursive(dir_path));
     LOG(INFO) << "Successfully setup local file path";
@@ -56,15 +59,5 @@ Status udf_downloder::do_download(const std::string& remotePath, std::string& lo
     return Status::OK();
 }
 
-std::shared_ptr<std::mutex> udf_downloder::get_mutex_for_path(const std::string& localPath) {
-    std::lock_guard<std::mutex> map_lock(_download_mutex);
-    auto iter = _path_mutexes.find(localPath);
-    if (iter == _path_mutexes.end()) {
-        auto mtx = std::make_shared<std::mutex>();
-        _path_mutexes.emplace(localPath, mtx);
-        return mtx;
-    }
-    return iter->second;
-}
 
 }

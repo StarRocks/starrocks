@@ -114,9 +114,9 @@ Status DownloadUtil::get_real_url(const std::string& url,
 
 
 Status DownloadUtil::get_java_udf_url(const std::string& url, std::string* real_url, const FSOptions& options) {
-    std::string file_name;
-    std::size_t pos = url.find_last_of('/');
-    file_name = (pos == std::string::npos) ? url : url.substr(pos + 1);
+    std::string object_path;
+    std::size_t scheme_pos = url.find("://");
+    object_path = url.substr(scheme_pos + 3);
 
     const char* starrocks_home = std::getenv("STARROCKS_HOME");
     if (starrocks_home == nullptr) {
@@ -125,7 +125,7 @@ Status DownloadUtil::get_java_udf_url(const std::string& url, std::string* real_
     }
     std::string uniq_id = std::to_string(std::hash<std::string>{}(url));
     std::string target_path =
-            fmt::format("{}/plugins/java_udf/{}_{}", starrocks_home, uniq_id, file_name);
+            fmt::format("{}/plugins/java_udf/{}_{}", starrocks_home, uniq_id, object_path);
     std::string target_url = std::string("file://") + target_path;
     udf_downloder downloader;
     Status status = downloader.download_remote_file_2_local(url, target_path, options);
