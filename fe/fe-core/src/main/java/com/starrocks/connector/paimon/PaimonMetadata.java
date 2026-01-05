@@ -47,6 +47,11 @@ import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.KeyPartitionRef;
+import com.starrocks.sql.ast.TruncateTablePartitionStmt;
+import com.starrocks.sql.ast.TruncateTableStmt;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -73,6 +78,7 @@ import org.apache.paimon.reader.RecordReader;
 import org.apache.paimon.reader.RecordReaderIterator;
 import org.apache.paimon.stats.ColStats;
 import org.apache.paimon.table.DataTable;
+import org.apache.paimon.table.sink.BatchTableCommit;
 import org.apache.paimon.table.source.DataSplit;
 import org.apache.paimon.table.source.InnerTableScan;
 import org.apache.paimon.table.source.ReadBuilder;
@@ -798,6 +804,97 @@ public class PaimonMetadata implements ConnectorMetadata {
             lastCommitTime = System.currentTimeMillis();
         }
         return lastCommitTime;
+    }
+
+    @Override
+    public void truncateTable(TruncateTableStmt truncateTableStmt, ConnectContext context) {
+        String dbName = truncateTableStmt.getDbName();
+        String tableName = truncateTableStmt.getTblName();
+        Identifier identifier = new Identifier(dbName, tableName);
+
+        org.apache.paimon.table.Table paimonTable;
+        try {
+            paimonTable = paimonNativeCatalog.getTable(identifier);
+        } catch (Catalog.TableNotExistException e) {
+            throw new StarRocksConnectorException("Failed to truncate paimon table: %s.%s, table does not exist",
+                    dbName, tableName);
+        }
+
+        String user = context.getCurrentUserIdentity() != null
+                ? context.getCurrentUserIdentity().getUser() : "None";
+        String engineName = "StarRocks";
+        String engineVersion = "UNKNOWN";
+        try {
+            com.starrocks.system.Frontend myself = GlobalStateMgr.getCurrentState().getNodeMgr().getMySelf();
+            if (myself != null) {
+                engineVersion = myself.getFeVersion();
+            }
+        } catch (Exception e) {
+            LOG.debug("Failed to get FE version, using default", e);
+        }
+
+        LOG.info("Truncating paimon table: {}.{}, triggered by user: {}, engine: {}, version: {}",
+                dbName, tableName, user, engineName, engineVersion);
+
+        try {
+            BatchTableCommit commit = paimonTable.newBatchWriteBuilder().newCommit();
+
+            if (truncateTableStmt instanceof TruncateTablePartitionStmt partitionStmt) {
+                KeyPartitionRef partitionRef = partitionStmt.getKeyPartitionRef();
+                Map<String, String> partitionMap = buildPartitionMap(partitionRef);
+
+                if (partitionMap.isEmpty()) {
+                    throw new StarRocksConnectorException("Partition specification is empty for truncate operation");
+                }
+
+                commit.truncatePartitions(Collections.singletonList(partitionMap));
+                LOG.info("Successfully truncated partitions of paimon table: {}.{}, partitions: {}, " +
+                        "user: {}, engine: {}, version: {}",
+                        dbName, tableName, partitionMap, user, engineName, engineVersion);
+            } else {
+                commit.truncateTable();
+                LOG.info("Successfully truncated paimon table: {}.{}, user: {}, engine: {}, version: {}",
+                        dbName, tableName, user, engineName, engineVersion);
+            }
+
+            commit.close();
+        } catch (Exception e) {
+            LOG.error("Failed to truncate paimon table: {}.{}", dbName, tableName, e);
+            throw new StarRocksConnectorException("Failed to truncate paimon table: %s.%s, error: %s",
+                    dbName, tableName, e.getMessage());
+        }
+
+        Table table = tables.get(identifier);
+        if (table != null) {
+            refreshTable(dbName, table, null, true);
+        }
+    }
+
+    /**
+     * Convert KeyPartitionRef to Map<String, String> for Paimon truncatePartitions API
+     * @param partitionRef KeyPartitionRef containing partition column names and values
+     * @return Map where key is partition column name and value is partition value as string
+     */
+    private Map<String, String> buildPartitionMap(KeyPartitionRef partitionRef) {
+        Map<String, String> partitionMap = new HashMap<>();
+        List<String> partitionColNames = partitionRef.getPartitionColNames();
+        List<Expr> partitionColValues = partitionRef.getPartitionColValues();
+
+        for (int i = 0; i < partitionColNames.size(); i++) {
+            String colName = partitionColNames.get(i);
+            Expr valueExpr = partitionColValues.get(i);
+
+            if (!(valueExpr instanceof LiteralExpr)) {
+                throw new StarRocksConnectorException(
+                        "Partition value must be a literal expression, got: %s",
+                        valueExpr.getClass().getSimpleName());
+            }
+
+            String colValue = ((LiteralExpr) valueExpr).getStringValue();
+            partitionMap.put(colName, colValue);
+        }
+
+        return partitionMap;
     }
 
     @Override
