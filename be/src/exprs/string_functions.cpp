@@ -65,6 +65,8 @@
 namespace starrocks {
 // A regex to match any regex pattern is equivalent to a substring search.
 static const RE2 SUBSTRING_RE(R"((?:\.\*)*([^\.\^\{\[\(\|\)\]\}\+\*\?\$\\]+)(?:\.\*)*)", re2::RE2::Quiet);
+// A strict fixed literal regex contains only normal characters without any regex special characters.
+static const RE2 FIXED_LITERAL_RE(R"(^[^\.\^\{\[\(\|\)\]\}\+\*\?\$\\]+$)", re2::RE2::Quiet);
 
 #define THROW_RUNTIME_ERROR_IF_EXCEED_LIMIT(col, func_name)                        \
     if (UNLIKELY(!col->capacity_limit_reached().ok())) {                           \
@@ -3346,8 +3348,10 @@ Status StringFunctions::regexp_replace_prepare(FunctionContext* context, Functio
     state->pattern = pattern_str;
 
     std::string search_string;
+
     if (pattern_str.size() && RE2::FullMatch(pattern_str, SUBSTRING_RE, &search_string)) {
         state->use_hyperscan = true;
+        state->use_hyperscan_vec = RE2::FullMatch(pattern_str, FIXED_LITERAL_RE, &search_string);
         state->size_of_pattern = pattern.size;
         std::string re_pattern(pattern.data, pattern.size);
         RETURN_IF_ERROR(hs_compile_and_alloc_scratch(re_pattern, state, context, pattern));
@@ -4065,7 +4069,7 @@ StatusOr<ColumnPtr> StringFunctions::regexp_replace(FunctionContext* context, co
 
     if (state->const_pattern) {
         if (state->use_hyperscan) {
-            if (columns[2]->is_constant() && context->state()->enable_hyperscan_vec()) {
+            if (columns[2]->is_constant() && context->state()->enable_hyperscan_vec() && state->use_hyperscan_vec) {
                 return regexp_replace_use_hyperscan_vec(state, columns);
             } else {
                 return regexp_replace_use_hyperscan(state, columns);
