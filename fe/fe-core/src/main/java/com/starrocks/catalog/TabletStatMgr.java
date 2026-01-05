@@ -37,6 +37,8 @@ package com.starrocks.catalog;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.alter.reshard.TabletReshardUtils;
+import com.starrocks.catalog.DistributionInfo.DistributionInfoType;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorReportException;
@@ -56,6 +58,7 @@ import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
+import com.starrocks.sql.ast.SplitTabletClause;
 import com.starrocks.statistic.BasicStatsMeta;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
@@ -195,8 +198,20 @@ public class TabletStatMgr extends FrontendDaemon {
         lastWorkTimestamp = LocalDateTime.now();
     }
 
-    private void triggerTabletReshard(Database db, OlapTable table, long maxTabletSize) {
-        // TODO(TackY)
+    private static void triggerTabletReshard(Database db, OlapTable table, long maxTabletSize) {
+        if (table.isCloudNativeTableOrMaterializedView()
+                && table.getDefaultDistributionInfo().getType() == DistributionInfoType.RANGE
+                && TabletReshardUtils.needSplit(maxTabletSize)) {
+            try {
+                GlobalStateMgr.getCurrentState().getTabletReshardJobMgr().createTabletReshardJob(
+                        db, table, new SplitTabletClause());
+                LOG.info("Auto triggered split tablet job for table {}.{}, maxTabletSize {}",
+                        db.getFullName(), table.getName(), maxTabletSize);
+            } catch (Exception e) {
+                LOG.warn("Failed to create split tablet job for table {}.{}. ",
+                        db.getFullName(), table.getName(), e);
+            }
+        }
     }
 
     private void updateLocalTabletStat() {
