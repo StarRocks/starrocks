@@ -314,10 +314,12 @@ public class ClickhouseSchemaResolverTest {
             Assertions.assertEquals(PrimitiveType.VARCHAR, fullSchema.get(4).getType().getPrimitiveType());
             Assertions.assertTrue(fullSchema.get(4).isAllowNull());
             
+            // AggregateFunction(sumMap, Array(Tuple(String, Int64))) -> VARCHAR (complex type fallback)
+            Assertions.assertEquals("sum_map", fullSchema.get(5).getName());
+            Assertions.assertEquals(PrimitiveType.VARCHAR, fullSchema.get(5).getType().getPrimitiveType());
+            
         } catch (Exception e) {
-            System.out.println(e.getMessage());
-            e.printStackTrace();
-            Assertions.fail();
+            Assertions.fail("Test failed with exception: " + e.getMessage(), e);
         }
     }
 }

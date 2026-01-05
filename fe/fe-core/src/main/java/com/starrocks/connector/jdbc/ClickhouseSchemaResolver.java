@@ -94,6 +94,7 @@ public class ClickhouseSchemaResolver extends JDBCSchemaResolver {
      *   "SimpleAggregateFunction(sum, UInt64)" -> "UInt64"
      *   "AggregateFunction(quantile(0.5), Float64)" -> "Float64"
      *   "Nullable(SimpleAggregateFunction(sum, UInt64))" -> "Nullable(UInt64)"
+     *   "AggregateFunction(sumMap, Array(Tuple(String, Int64)))" -> "Array(Tuple(String, Int64))"
      *   "UInt64" -> "UInt64" (unchanged if not an aggregate function type)
      */
     private String extractUnderlyingType(String typeName) {
@@ -113,17 +114,11 @@ public class ClickhouseSchemaResolver extends JDBCSchemaResolver {
         if (workingTypeName.startsWith("SimpleAggregateFunction(") && workingTypeName.endsWith(")")) {
             // Format: SimpleAggregateFunction(function_name, underlying_type)
             String content = workingTypeName.substring("SimpleAggregateFunction(".length(), workingTypeName.length() - 1);
-            int lastComma = content.lastIndexOf(',');
-            if (lastComma != -1) {
-                workingTypeName = content.substring(lastComma + 1).trim();
-            }
+            workingTypeName = extractUnderlyingTypeFromContent(content);
         } else if (workingTypeName.startsWith("AggregateFunction(") && workingTypeName.endsWith(")")) {
             // Format: AggregateFunction(function_name, underlying_type) or AggregateFunction(function_name(params), underlying_type)
             String content = workingTypeName.substring("AggregateFunction(".length(), workingTypeName.length() - 1);
-            int lastComma = content.lastIndexOf(',');
-            if (lastComma != -1) {
-                workingTypeName = content.substring(lastComma + 1).trim();
-            }
+            workingTypeName = extractUnderlyingTypeFromContent(content);
         }
         
         // Restore Nullable wrapper if needed
@@ -132,6 +127,32 @@ public class ClickhouseSchemaResolver extends JDBCSchemaResolver {
         }
         
         return workingTypeName;
+    }
+
+    /**
+     * Extract the underlying type from aggregate function content by finding the last comma
+     * at the top level (outside of parentheses).
+     * For example: "sumMap, Array(Tuple(String, Int64))" -> "Array(Tuple(String, Int64))"
+     */
+    private String extractUnderlyingTypeFromContent(String content) {
+        int parenDepth = 0;
+        int lastTopLevelComma = -1;
+        
+        for (int i = 0; i < content.length(); i++) {
+            char c = content.charAt(i);
+            if (c == '(') {
+                parenDepth++;
+            } else if (c == ')') {
+                parenDepth--;
+            } else if (c == ',' && parenDepth == 0) {
+                lastTopLevelComma = i;
+            }
+        }
+        
+        if (lastTopLevelComma != -1) {
+            return content.substring(lastTopLevelComma + 1).trim();
+        }
+        return content.trim();
     }
 
     @Override
@@ -252,10 +273,16 @@ public class ClickhouseSchemaResolver extends JDBCSchemaResolver {
                 int scale = Integer.parseInt(precisionAndScale[1]);
                 return TypeFactory.createUnifiedDecimalType(precision, scale);
             }
+        } else if (baseTypeName.startsWith("Array(") || baseTypeName.startsWith("Tuple(") || 
+                   baseTypeName.startsWith("Map(")) {
+            // For complex types that we don't fully support, use VARCHAR as a safe fallback
+            // This allows queries to work even if the exact type semantics aren't preserved
+            return TypeFactory.createVarcharType(65533);
         }
         
-        // If we can't determine the type, return UNKNOWN_TYPE
-        return TypeFactory.createType(PrimitiveType.UNKNOWN_TYPE);
+        // If we can't determine the type, return VARCHAR as a safe fallback instead of UNKNOWN_TYPE
+        // This is better than failing queries with unsupported type errors
+        return TypeFactory.createVarcharType(65533);
     }
 
 
