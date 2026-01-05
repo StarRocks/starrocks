@@ -591,9 +591,14 @@ public:
         __m256i cur = _mm256_set1_epi64x((uint64_t)(_data.data + _offset));
         cur = _mm256_add_epi64(cur, offsets);
         for (; i + 4 <= count; i += 4) {
-            // mix two i64 to i128
-            __m256i lo = __builtin_shufflevector(cur, fixed_length, 0, 4, 1, 4);
-            __m256i hi = __builtin_shufflevector(cur, fixed_length, 2, 4, 3, 4);
+            // Interleave pointers with lengths to create Slices {ptr, len}
+            // cur = [ptr0, ptr1, ptr2, ptr3], fixed_length = [len, len, len, len]
+            __m256i unpacklo = _mm256_unpacklo_epi64(cur, fixed_length);  // [ptr0, len, ptr2, len]
+            __m256i unpackhi = _mm256_unpackhi_epi64(cur, fixed_length);  // [ptr1, len, ptr3, len]
+
+            // Rearrange to get consecutive Slices
+            __m256i lo = _mm256_permute2x128_si256(unpacklo, unpackhi, 0x20);  // [ptr0, len, ptr1, len]
+            __m256i hi = _mm256_permute2x128_si256(unpacklo, unpackhi, 0x31);  // [ptr2, len, ptr3, len]
 
             _mm256_storeu_si256(reinterpret_cast<__m256i*>(&slices[i]), lo);
             _mm256_storeu_si256(reinterpret_cast<__m256i*>(&slices[i + 2]), hi);
