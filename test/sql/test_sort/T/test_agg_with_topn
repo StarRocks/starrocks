@@ -1,0 +1,195 @@
+-- name: test_agg_with_topn
+
+CREATE TABLE lineitem (l_shipdate    DATE,
+                       l_orderkey    BIGINT,
+                       l_linenumber  INT,
+                       l_partkey     INT,
+                       l_suppkey     INT,
+                       l_quantity    DECIMAL(15, 2),
+                       l_extendedprice  DECIMAL(15, 2),
+                       l_discount    DECIMAL(15, 2),
+                       l_tax         DECIMAL(15, 2),
+                       l_returnflag  VARCHAR(1),
+                       l_linestatus  VARCHAR(1),
+                       l_commitdate  DATE,
+                       l_receiptdate DATE,
+                       l_shipinstruct VARCHAR(25),
+                       l_shipmode     VARCHAR(10),
+                       l_comment      VARCHAR(44)
+) ENGINE=OLAP
+DUPLICATE KEY(`l_shipdate`, `l_orderkey`, `l_linenumber`)
+COMMENT "OLAP"
+PARTITION BY RANGE(`l_shipdate`)
+(
+   START ("1992-01-01") END ("1999-01-01") EVERY (INTERVAL 1 year)
+)
+DISTRIBUTED BY HASH(`l_orderkey`) BUCKETS 96
+PROPERTIES (
+    "replication_num" = "1"
+);
+
+INSERT INTO lineitem (l_shipdate, l_orderkey, l_linenumber, l_partkey, l_suppkey, l_quantity, l_extendedprice, l_discount, l_tax, l_returnflag, l_linestatus, l_commitdate, l_receiptdate, l_shipinstruct, l_shipmode, l_comment) VALUES
+('1995-03-10', 100001, 1, 5501, 101, 12.00, 1560.00, 0.05, 0.08, 'N', 'O', '1995-03-10', '1995-03-20', 'DELIVER IN PERSON', 'TRUCK', 'First item of order'),
+('1995-03-10', 100001, 2, 7203, 203, 8.50, 892.50, 0.00, 0.08, 'N', 'O', '1995-03-10', '1995-03-18', 'TAKE BACK RETURN', 'AIR', 'Second item, fragile'),
+('1995-03-22', 100002, 1, 3345, 156, 24.00, 3120.00, 0.10, 0.07, 'R', 'F', '1996-08-18', '1996-08-25', 'COLLECT COD', 'SHIP', 'Bulk order item'),
+('1995-02-05', 100003, 1, 8890, 89, 3.00, 450.00, 0.02, 0.09, 'A', 'O', '1997-12-01', '1997-12-10', 'NONE', 'MAIL', 'Small quantity item'),
+('1995-05-30', 100004, 1, 4567, 305, 150.00, 22500.00, 0.15, 0.06, 'N', 'O', '1998-05-25', '1998-06-05', 'DELIVER IN PERSON', 'RAIL', 'Large bulk shipment');
+INSERT INTO lineitem (l_shipdate, l_orderkey, l_linenumber, l_partkey, l_suppkey, l_quantity, l_extendedprice, l_discount, l_tax, l_returnflag, l_linestatus, l_commitdate, l_receiptdate, l_shipinstruct, l_shipmode, l_comment) VALUES
+('1996-01-15', 100011, 1, 5501, 101, 12.00, 1560.00, 0.05, 0.08, 'N', 'O', '1995-03-10', '1995-03-20', 'DELIVER IN PERSON', 'TRUCK', 'First item of order'),
+('1996-02-15', 100011, 2, 7203, 203, 8.50, 892.50, 0.00, 0.08, 'N', 'O', '1995-03-10', '1995-03-18', 'TAKE BACK RETURN', 'AIR', 'Second item, fragile'),
+('1996-03-22', 100012, 1, 3345, 156, 24.00, 3120.00, 0.10, 0.07, 'R', 'F', '1996-08-18', '1996-08-25', 'COLLECT COD', 'SHIP', 'Bulk order item'),
+('1996-12-05', 100013, 1, 8890, 89, 3.00, 450.00, 0.02, 0.09, 'A', 'O', '1997-12-01', '1997-12-10', 'NONE', 'MAIL', 'Small quantity item'),
+('1996-04-30', 100014, 1, 4567, 305, 150.00, 22500.00, 0.15, 0.06, 'N', 'O', '1998-05-25', '1998-06-05', 'DELIVER IN PERSON', 'RAIL', 'Large bulk shipment');
+INSERT INTO lineitem (l_shipdate, l_orderkey, l_linenumber, l_partkey, l_suppkey, l_quantity, l_extendedprice, l_discount, l_tax, l_returnflag, l_linestatus, l_commitdate, l_receiptdate, l_shipinstruct, l_shipmode, l_comment) VALUES
+('1997-01-15', 100101, 1, 5501, 101, 12.00, 1560.00, 0.05, 0.08, 'N', 'O', '1995-03-10', '1995-03-20', 'DELIVER IN PERSON', 'TRUCK', 'First item of order'),
+('1997-02-15', 100101, 2, 7203, 203, 8.50, 892.50, 0.00, 0.08, 'N', 'O', '1995-03-10', '1995-03-18', 'TAKE BACK RETURN', 'AIR', 'Second item, fragile'),
+('1997-03-22', 100102, 1, 3345, 156, 24.00, 3120.00, 0.10, 0.07, 'R', 'F', '1996-08-18', '1996-08-25', 'COLLECT COD', 'SHIP', 'Bulk order item'),
+('1997-11-05', 100103, 1, 8890, 89, 3.00, 450.00, 0.02, 0.09, 'A', 'O', '1997-12-01', '1997-12-10', 'NONE', 'MAIL', 'Small quantity item'),
+('1997-04-30', 100104, 1, 4567, 305, 150.00, 22500.00, 0.15, 0.06, 'N', 'O', '1998-05-25', '1998-06-05', 'DELIVER IN PERSON', 'RAIL', 'Large bulk shipment');
+INSERT INTO lineitem (l_shipdate, l_orderkey, l_linenumber, l_partkey, l_suppkey, l_quantity, l_extendedprice, l_discount, l_tax, l_returnflag, l_linestatus, l_commitdate, l_receiptdate, l_shipinstruct, l_shipmode, l_comment) VALUES
+('1998-01-15', 101001, 1, 5501, 101, 12.00, 1560.00, 0.05, 0.08, 'N', 'O', '1995-03-10', '1995-03-20', 'DELIVER IN PERSON', 'TRUCK', 'First item of order'),
+('1998-02-15', 101001, 2, 7203, 203, 8.50, 892.50, 0.00, 0.08, 'N', 'O', '1995-03-10', '1995-03-18', 'TAKE BACK RETURN', 'AIR', 'Second item, fragile'),
+('1998-03-22', 101002, 1, 3345, 156, 24.00, 3120.00, 0.10, 0.07, 'R', 'F', '1996-08-18', '1996-08-25', 'COLLECT COD', 'SHIP', 'Bulk order item'),
+('1998-11-05', 101003, 1, 8890, 89, 3.00, 450.00, 0.02, 0.09, 'A', 'O', '1997-12-01', '1997-12-10', 'NONE', 'MAIL', 'Small quantity item'),
+('1998-04-30', 101004, 1, 4567, 305, 150.00, 22500.00, 0.15, 0.06, 'N', 'O', '1998-05-25', '1998-06-05', 'DELIVER IN PERSON', 'RAIL', 'Large bulk shipment');
+INSERT INTO lineitem (l_shipdate, l_orderkey, l_linenumber, l_partkey, l_suppkey, l_quantity, l_extendedprice, l_discount, l_tax, l_returnflag, l_linestatus, l_commitdate, l_receiptdate, l_shipinstruct, l_shipmode, l_comment) VALUES    
+('1995-01-16', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
+('1995-01-16', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
+
+set topn_push_down_agg_mode=2;
+set chunk_size=2;
+select l_shipdate, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipdate order by l_shipdate limit 1;
+select l_orderkey, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_orderkey order by l_orderkey limit 1;
+select l_partkey, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_partkey order by l_partkey limit 1;
+select l_suppkey, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_suppkey order by l_suppkey limit 1;
+select l_linenumber, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_linenumber order by l_linenumber limit 1;
+select l_returnflag, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_returnflag order by l_returnflag limit 1;
+select l_linestatus, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_linestatus order by l_linestatus limit 1;
+select l_commitdate, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_commitdate order by l_commitdate limit 1;
+select l_receiptdate, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_receiptdate order by l_receiptdate limit 1;
+select l_shipmode, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipmode order by l_shipmode limit 1;
+select l_comment, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_comment order by l_comment limit 1;
+
+select l_shipdate, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipdate order by l_shipdate limit 10;
+select l_orderkey, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_orderkey order by l_orderkey limit 10;
+select l_partkey, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_partkey order by l_partkey limit 10;
+select l_suppkey, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_suppkey order by l_suppkey limit 10;
+select l_linenumber, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_linenumber order by l_linenumber limit 10;
+select l_returnflag, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_returnflag order by l_returnflag limit 10;
+select l_linestatus, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_linestatus order by l_linestatus limit 10;
+select l_commitdate, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_commitdate order by l_commitdate limit 10;
+select l_receiptdate, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_receiptdate order by l_receiptdate limit 10;
+select l_shipinstruct, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipinstruct order by l_shipinstruct limit 10;
+select l_shipmode, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipmode order by l_shipmode limit 10;
+select l_comment, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_comment order by l_comment limit 10;
+
+select l_shipdate, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipdate order by l_shipdate limit 100;
+select l_orderkey, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_orderkey order by l_orderkey limit 100;
+select l_partkey, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_partkey order by l_partkey limit 100;
+select l_suppkey, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_suppkey order by l_suppkey limit 100;
+select l_linenumber, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_linenumber order by l_linenumber limit 100;
+select l_returnflag, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_returnflag order by l_returnflag limit 100;
+select l_linestatus, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_linestatus order by l_linestatus limit 100;
+select l_commitdate, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_commitdate order by l_commitdate limit 100;
+select l_receiptdate, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_receiptdate order by l_receiptdate limit 100;
+select l_shipinstruct, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipinstruct order by l_shipinstruct limit 100;
+select l_shipmode, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipmode order by l_shipmode limit 100;
+select l_comment, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_comment order by l_comment limit 100;
+
+select l_shipdate, l_orderkey, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipdate, l_orderkey order by l_shipdate, l_orderkey limit 10;
+select l_shipdate, l_partkey, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipdate, l_partkey order by l_shipdate, l_partkey limit 10;
+select l_shipdate, l_suppkey, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipdate, l_suppkey order by l_shipdate, l_suppkey limit 10;
+select l_shipdate, l_linenumber, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipdate, l_linenumber order by l_shipdate, l_linenumber limit 10;
+select l_shipdate, l_returnflag, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipdate, l_returnflag order by l_shipdate, l_returnflag limit 10;
+select l_shipdate, l_linestatus, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipdate, l_linestatus order by l_shipdate, l_linestatus limit 10;
+select l_shipdate, l_commitdate, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipdate, l_commitdate order by l_shipdate, l_commitdate limit 10;
+select l_shipdate, l_receiptdate, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipdate, l_receiptdate order by l_shipdate, l_receiptdate limit 10;
+select l_shipdate, l_shipinstruct, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipdate, l_shipinstruct order by l_shipdate, l_shipinstruct limit 10;
+select l_shipdate, l_shipmode, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipdate, l_shipmode order by l_shipdate, l_shipmode limit 10;
+select l_shipdate, l_comment, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipdate, l_comment order by l_shipdate, l_comment limit 10;
+
+select l_shipdate, l_orderkey, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipdate, l_orderkey order by l_shipdate, l_orderkey limit 100;
+select l_shipdate, l_partkey, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipdate, l_partkey order by l_shipdate, l_partkey limit 100;
+select l_shipdate, l_suppkey, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipdate, l_suppkey order by l_shipdate, l_suppkey limit 100;
+select l_shipdate, l_linenumber, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipdate, l_linenumber order by l_shipdate, l_linenumber limit 100;
+select l_shipdate, l_returnflag, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipdate, l_returnflag order by l_shipdate, l_returnflag limit 100;
+select l_shipdate, l_linestatus, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipdate, l_linestatus order by l_shipdate, l_linestatus limit 100;
+select l_shipdate, l_commitdate, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipdate, l_commitdate order by l_shipdate, l_commitdate limit 100
+select l_shipdate, l_receiptdate, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipdate, l_receiptdate order by l_shipdate, l_receiptdate limit 100;
+select l_shipdate, l_shipinstruct, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipdate, l_shipinstruct order by l_shipdate, l_shipinstruct limit 100;
+select l_shipdate, l_shipmode, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipdate, l_shipmode order by l_shipdate, l_shipmode limit 100;
+select l_shipdate, l_comment, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipdate, l_comment order by l_shipdate, l_comment limit 100;
+select l_shipdate, l_linestatus, l_receiptdate, l_shipmode, l_comment, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipdate, l_linestatus, l_receiptdate, l_shipmode, l_comment order by l_shipdate, l_linestatus, l_receiptdate, l_shipmode, l_comment limit 10;
+select l_shipdate, l_linestatus, l_receiptdate, l_shipmode, l_comment, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipdate, l_linestatus, l_receiptdate, l_shipmode, l_comment order by l_shipdate, l_linestatus, l_receiptdate, l_shipmode, l_comment limit 100;
+select l_shipdate, l_linestatus, l_receiptdate, l_shipmode, l_comment, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipdate, l_linestatus, l_receiptdate, l_shipmode, l_comment order by l_shipdate, l_linestatus, l_receiptdate, l_shipmode, l_comment limit 1000;
+select l_shipdate, l_partkey, l_linenumber, l_shipmode, l_comment, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipdate, l_partkey, l_linenumber, l_shipmode, l_comment order by l_shipdate, l_partkey, l_linenumber, l_shipmode, l_comment limit 10;
+select l_shipdate, l_partkey, l_linenumber, l_shipmode, l_comment, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipdate, l_partkey, l_linenumber, l_shipmode, l_comment order by l_shipdate, l_partkey, l_linenumber, l_shipmode, l_comment limit 100;
+select l_shipdate, l_partkey, l_linenumber, l_shipmode, l_comment, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipdate, l_partkey, l_linenumber, l_shipmode, l_comment order by l_shipdate, l_partkey, l_linenumber, l_shipmode, l_comment limit 1000;
+-- nulls last
+select l_shipdate, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipdate order by l_shipdate nulls last limit 1;
+select l_orderkey, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_orderkey order by l_orderkey nulls last limit 1;
+select l_partkey, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_partkey order by l_partkey nulls last limit 1;
+select l_suppkey, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_suppkey order by l_suppkey nulls last limit 1;
+select l_linenumber, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_linenumber order by l_linenumber nulls last limit 1;
+select l_returnflag, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_returnflag order by l_returnflag nulls last limit 1;
+select l_linestatus, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_linestatus order by l_linestatus nulls last limit 1;
+select l_commitdate, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_commitdate order by l_commitdate nulls last limit 1;
+select l_receiptdate, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_receiptdate order by l_receiptdate nulls last limit 1;
+select l_shipmode, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipmode order by l_shipmode nulls last limit 1;
+select l_comment, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_comment order by l_comment nulls last limit 1;
+
+select l_shipdate, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipdate order by l_shipdate nulls last limit 10;
+select l_orderkey, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_orderkey order by l_orderkey nulls last limit 10;
+select l_partkey, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_partkey order by l_partkey nulls last limit 10;
+select l_suppkey, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_suppkey order by l_suppkey nulls last limit 10;
+select l_linenumber, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_linenumber order by l_linenumber nulls last limit 10;
+select l_returnflag, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_returnflag order by l_returnflag nulls last limit 10;
+select l_linestatus, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_linestatus order by l_linestatus nulls last limit 10;
+select l_commitdate, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_commitdate order by l_commitdate nulls last limit 10;
+select l_receiptdate, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_receiptdate order by l_receiptdate nulls last limit 10;
+select l_shipinstruct, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipinstruct order by l_shipinstruct nulls last limit 10;
+select l_shipmode, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipmode order by l_shipmode nulls last limit 10;
+select l_comment, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_comment order by l_comment nulls last limit 10;
+
+select l_shipdate, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipdate order by l_shipdate nulls last limit 100;
+select l_orderkey, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_orderkey order by l_orderkey nulls last limit 100;
+select l_partkey, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_partkey order by l_partkey nulls last limit 100;
+select l_suppkey, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_suppkey order by l_suppkey nulls last limit 100;
+select l_linenumber, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_linenumber order by l_linenumber nulls last limit 100;
+select l_returnflag, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_returnflag order by l_returnflag nulls last limit 100;
+select l_linestatus, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_linestatus order by l_linestatus nulls last limit 100;
+select l_commitdate, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_commitdate order by l_commitdate nulls last limit 100;
+select l_receiptdate, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_receiptdate order by l_receiptdate nulls last limit 100;
+select l_shipinstruct, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipinstruct order by l_shipinstruct nulls last limit 100;
+select l_shipmode, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipmode order by l_shipmode nulls last limit 100;
+select l_comment, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_comment order by l_comment nulls last limit 100;
+
+select l_shipdate, l_orderkey, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipdate, l_orderkey order by l_shipdate, l_orderkey nulls last limit 10;
+select l_shipdate, l_partkey, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipdate, l_partkey order by l_shipdate, l_partkey nulls last limit 10;
+select l_shipdate, l_suppkey, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipdate, l_suppkey order by l_shipdate, l_suppkey nulls last limit 10;
+select l_shipdate, l_linenumber, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipdate, l_linenumber order by l_shipdate, l_linenumber nulls last limit 10;
+select l_shipdate, l_returnflag, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipdate, l_returnflag order by l_shipdate, l_returnflag nulls last limit 10;
+select l_shipdate, l_linestatus, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipdate, l_linestatus order by l_shipdate, l_linestatus nulls last limit 10;
+select l_shipdate, l_commitdate, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipdate, l_commitdate order by l_shipdate, l_commitdate nulls last limit 10;
+select l_shipdate, l_receiptdate, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipdate, l_receiptdate order by l_shipdate, l_receiptdate nulls last limit 10;
+select l_shipdate, l_shipinstruct, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipdate, l_shipinstruct order by l_shipdate, l_shipinstruct nulls last limit 10;
+select l_shipdate, l_shipmode, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipdate, l_shipmode order by l_shipdate, l_shipmode nulls last limit 10;
+select l_shipdate, l_comment, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipdate, l_comment order by l_shipdate, l_comment nulls last limit 10;
+
+select l_shipdate, l_orderkey, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipdate, l_orderkey order by l_shipdate, l_orderkey nulls last limit 100;
+select l_shipdate, l_partkey, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipdate, l_partkey order by l_shipdate, l_partkey nulls last limit 100;
+select l_shipdate, l_suppkey, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipdate, l_suppkey order by l_shipdate, l_suppkey nulls last limit 100;
+select l_shipdate, l_linenumber, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipdate, l_linenumber order by l_shipdate, l_linenumber nulls last limit 100;
+select l_shipdate, l_returnflag, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipdate, l_returnflag order by l_shipdate, l_returnflag nulls last limit 100;
+select l_shipdate, l_linestatus, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipdate, l_linestatus order by l_shipdate, l_linestatus nulls last limit 100;
+select l_shipdate, l_commitdate, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipdate, l_commitdate order by l_shipdate, l_commitdate nulls last limit 100
+select l_shipdate, l_receiptdate, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipdate, l_receiptdate order by l_shipdate, l_receiptdate nulls last limit 100;
+select l_shipdate, l_shipinstruct, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipdate, l_shipinstruct order by l_shipdate, l_shipinstruct nulls last limit 100;
+select l_shipdate, l_shipmode, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipdate, l_shipmode order by l_shipdate, l_shipmode nulls last limit 100;
+select l_shipdate, l_comment, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipdate, l_comment order by l_shipdate, l_comment nulls last limit 100;
+select l_shipdate, l_linestatus, l_receiptdate, l_shipmode, l_comment, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipdate, l_linestatus, l_receiptdate, l_shipmode, l_comment order by l_shipdate, l_linestatus, l_receiptdate, l_shipmode, l_comment nulls last limit 10;
+select l_shipdate, l_linestatus, l_receiptdate, l_shipmode, l_comment, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipdate, l_linestatus, l_receiptdate, l_shipmode, l_comment order by l_shipdate, l_linestatus, l_receiptdate, l_shipmode, l_comment nulls last limit 100;
+select l_shipdate, l_linestatus, l_receiptdate, l_shipmode, l_comment, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipdate, l_linestatus, l_receiptdate, l_shipmode, l_comment order by l_shipdate, l_linestatus, l_receiptdate, l_shipmode, l_comment nulls last limit 1000;
+select l_shipdate, l_partkey, l_linenumber, l_shipmode, l_comment, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipdate, l_partkey, l_linenumber, l_shipmode, l_comment order by l_shipdate, l_partkey, l_linenumber, l_shipmode, l_comment nulls last limit 10;
+select l_shipdate, l_partkey, l_linenumber, l_shipmode, l_comment, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipdate, l_partkey, l_linenumber, l_shipmode, l_comment order by l_shipdate, l_partkey, l_linenumber, l_shipmode, l_comment nulls last limit 100;
+select l_shipdate, l_partkey, l_linenumber, l_shipmode, l_comment, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipdate, l_partkey, l_linenumber, l_shipmode, l_comment order by l_shipdate, l_partkey, l_linenumber, l_shipmode, l_comment nulls last limit 1000;

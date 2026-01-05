@@ -176,6 +176,14 @@ public class RuntimeFilterDescription {
         return this.topn;
     }
 
+    public boolean isTopNSortAsc() {
+        return sortInfo != null && sortInfo.getIsAscOrder().get(exprOrder);
+    }
+
+    public boolean isTopNullsFirst() {
+        return sortInfo != null && sortInfo.getNullsFirst().get(exprOrder);
+    }
+
     public PlanNode getBuildPlanNode() {
         return buildPlanNode;
     }
@@ -640,6 +648,9 @@ public class RuntimeFilterDescription {
 
         if (runtimeFilterType().isTopNFilter()) {
             t.setFilter_type(TRuntimeFilterBuildType.TOPN_FILTER);
+            t.setIs_asc(isTopNSortAsc());
+            t.setIs_nulls_first(isTopNullsFirst());
+            t.setLimit(topn);
         } else if (runtimeFilterType().isAggInFilter()) {
             t.setFilter_type(TRuntimeFilterBuildType.AGG_FILTER);
         } else {

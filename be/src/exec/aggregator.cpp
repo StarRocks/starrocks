@@ -945,6 +945,25 @@ RuntimeFilter* Aggregator::build_in_filters(RuntimeState* state, RuntimeFilterBu
     return in_builder.build(this, state->obj_pool());
 }
 
+RuntimeFilter* Aggregator::build_topn_filters(RuntimeState* state, RuntimeFilterBuildDescriptor* desc) {
+    int expr_order = desc->build_expr_order();
+    const auto& group_type_type = _group_by_types[expr_order].result_type.type;
+    // only build when group by keys's size is less than limit
+    if (size() < desc->limit()) {
+        return nullptr;
+    }
+
+    if (_topn_runtime_filter_builder == nullptr) {
+        // for the first time to build the topn runtime filter
+        _topn_runtime_filter_builder = new AggTopNRuntimeFilterBuilder(desc, group_type_type);
+        _pool->add(_topn_runtime_filter_builder);
+
+        return _topn_runtime_filter_builder->build(this, state->obj_pool());
+    } else {
+        return _topn_runtime_filter_builder->runtime_filter();
+    }
+}
+
 Status Aggregator::_evaluate_const_columns(int i) {
     // used for const columns.
     Columns const_columns;
@@ -1626,6 +1645,22 @@ void Aggregator::build_hash_map_with_selection(size_t chunk_size) {
                                                          AllocateState<MapType>(this), &_tmp_agg_states,
                                                          &_streaming_selection);
     });
+}
+
+void Aggregator::build_hash_map_with_topn_runtime_filter(size_t chunk_size) {
+    _streaming_selection.resize(chunk_size);
+    _hash_map_variant.visit([&](auto& hash_map_with_key) {
+        using MapType = std::remove_reference_t<decltype(*hash_map_with_key)>;
+        hash_map_with_key->build_hash_map_with_selection_and_allocation(chunk_size, _group_by_columns, _mem_pool.get(),
+                                                                        AllocateState<MapType>(this), &_tmp_agg_states,
+                                                                        &_streaming_selection);
+    });
+    // if _streaming_selection is not all 0, means there are some group keys not found,
+    // we need to build the topn runtime filter
+    if (_topn_runtime_filter_builder != nullptr &&
+        SIMD::count_zero(_streaming_selection.data(), chunk_size) != chunk_size) {
+        _topn_runtime_filter_builder->update(_group_by_columns, _streaming_selection);
+    }
 }
 
 // When meets not found group keys, mark the first pos into `_streaming_selection` and insert into the hashmap

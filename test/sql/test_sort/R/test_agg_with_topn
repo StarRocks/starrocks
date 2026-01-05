@@ -1,0 +1,1585 @@
+-- name: test_agg_with_topn
+CREATE TABLE lineitem (l_shipdate    DATE,
+                       l_orderkey    BIGINT,
+                       l_linenumber  INT,
+                       l_partkey     INT,
+                       l_suppkey     INT,
+                       l_quantity    DECIMAL(15, 2),
+                       l_extendedprice  DECIMAL(15, 2),
+                       l_discount    DECIMAL(15, 2),
+                       l_tax         DECIMAL(15, 2),
+                       l_returnflag  VARCHAR(1),
+                       l_linestatus  VARCHAR(1),
+                       l_commitdate  DATE,
+                       l_receiptdate DATE,
+                       l_shipinstruct VARCHAR(25),
+                       l_shipmode     VARCHAR(10),
+                       l_comment      VARCHAR(44)
+) ENGINE=OLAP
+DUPLICATE KEY(`l_shipdate`, `l_orderkey`, `l_linenumber`)
+COMMENT "OLAP"
+PARTITION BY RANGE(`l_shipdate`)
+(
+   START ("1992-01-01") END ("1999-01-01") EVERY (INTERVAL 1 year)
+)
+DISTRIBUTED BY HASH(`l_orderkey`) BUCKETS 96
+PROPERTIES (
+    "replication_num" = "1"
+);
+-- result:
+-- !result
+INSERT INTO lineitem (l_shipdate, l_orderkey, l_linenumber, l_partkey, l_suppkey, l_quantity, l_extendedprice, l_discount, l_tax, l_returnflag, l_linestatus, l_commitdate, l_receiptdate, l_shipinstruct, l_shipmode, l_comment) VALUES
+('1995-03-10', 100001, 1, 5501, 101, 12.00, 1560.00, 0.05, 0.08, 'N', 'O', '1995-03-10', '1995-03-20', 'DELIVER IN PERSON', 'TRUCK', 'First item of order'),
+('1995-03-10', 100001, 2, 7203, 203, 8.50, 892.50, 0.00, 0.08, 'N', 'O', '1995-03-10', '1995-03-18', 'TAKE BACK RETURN', 'AIR', 'Second item, fragile'),
+('1995-03-22', 100002, 1, 3345, 156, 24.00, 3120.00, 0.10, 0.07, 'R', 'F', '1996-08-18', '1996-08-25', 'COLLECT COD', 'SHIP', 'Bulk order item'),
+('1995-02-05', 100003, 1, 8890, 89, 3.00, 450.00, 0.02, 0.09, 'A', 'O', '1997-12-01', '1997-12-10', 'NONE', 'MAIL', 'Small quantity item'),
+('1995-05-30', 100004, 1, 4567, 305, 150.00, 22500.00, 0.15, 0.06, 'N', 'O', '1998-05-25', '1998-06-05', 'DELIVER IN PERSON', 'RAIL', 'Large bulk shipment');
+-- result:
+-- !result
+INSERT INTO lineitem (l_shipdate, l_orderkey, l_linenumber, l_partkey, l_suppkey, l_quantity, l_extendedprice, l_discount, l_tax, l_returnflag, l_linestatus, l_commitdate, l_receiptdate, l_shipinstruct, l_shipmode, l_comment) VALUES
+('1996-01-15', 100011, 1, 5501, 101, 12.00, 1560.00, 0.05, 0.08, 'N', 'O', '1995-03-10', '1995-03-20', 'DELIVER IN PERSON', 'TRUCK', 'First item of order'),
+('1996-02-15', 100011, 2, 7203, 203, 8.50, 892.50, 0.00, 0.08, 'N', 'O', '1995-03-10', '1995-03-18', 'TAKE BACK RETURN', 'AIR', 'Second item, fragile'),
+('1996-03-22', 100012, 1, 3345, 156, 24.00, 3120.00, 0.10, 0.07, 'R', 'F', '1996-08-18', '1996-08-25', 'COLLECT COD', 'SHIP', 'Bulk order item'),
+('1996-12-05', 100013, 1, 8890, 89, 3.00, 450.00, 0.02, 0.09, 'A', 'O', '1997-12-01', '1997-12-10', 'NONE', 'MAIL', 'Small quantity item'),
+('1996-04-30', 100014, 1, 4567, 305, 150.00, 22500.00, 0.15, 0.06, 'N', 'O', '1998-05-25', '1998-06-05', 'DELIVER IN PERSON', 'RAIL', 'Large bulk shipment');
+-- result:
+-- !result
+INSERT INTO lineitem (l_shipdate, l_orderkey, l_linenumber, l_partkey, l_suppkey, l_quantity, l_extendedprice, l_discount, l_tax, l_returnflag, l_linestatus, l_commitdate, l_receiptdate, l_shipinstruct, l_shipmode, l_comment) VALUES
+('1997-01-15', 100101, 1, 5501, 101, 12.00, 1560.00, 0.05, 0.08, 'N', 'O', '1995-03-10', '1995-03-20', 'DELIVER IN PERSON', 'TRUCK', 'First item of order'),
+('1997-02-15', 100101, 2, 7203, 203, 8.50, 892.50, 0.00, 0.08, 'N', 'O', '1995-03-10', '1995-03-18', 'TAKE BACK RETURN', 'AIR', 'Second item, fragile'),
+('1997-03-22', 100102, 1, 3345, 156, 24.00, 3120.00, 0.10, 0.07, 'R', 'F', '1996-08-18', '1996-08-25', 'COLLECT COD', 'SHIP', 'Bulk order item'),
+('1997-11-05', 100103, 1, 8890, 89, 3.00, 450.00, 0.02, 0.09, 'A', 'O', '1997-12-01', '1997-12-10', 'NONE', 'MAIL', 'Small quantity item'),
+('1997-04-30', 100104, 1, 4567, 305, 150.00, 22500.00, 0.15, 0.06, 'N', 'O', '1998-05-25', '1998-06-05', 'DELIVER IN PERSON', 'RAIL', 'Large bulk shipment');
+-- result:
+-- !result
+INSERT INTO lineitem (l_shipdate, l_orderkey, l_linenumber, l_partkey, l_suppkey, l_quantity, l_extendedprice, l_discount, l_tax, l_returnflag, l_linestatus, l_commitdate, l_receiptdate, l_shipinstruct, l_shipmode, l_comment) VALUES
+('1998-01-15', 101001, 1, 5501, 101, 12.00, 1560.00, 0.05, 0.08, 'N', 'O', '1995-03-10', '1995-03-20', 'DELIVER IN PERSON', 'TRUCK', 'First item of order'),
+('1998-02-15', 101001, 2, 7203, 203, 8.50, 892.50, 0.00, 0.08, 'N', 'O', '1995-03-10', '1995-03-18', 'TAKE BACK RETURN', 'AIR', 'Second item, fragile'),
+('1998-03-22', 101002, 1, 3345, 156, 24.00, 3120.00, 0.10, 0.07, 'R', 'F', '1996-08-18', '1996-08-25', 'COLLECT COD', 'SHIP', 'Bulk order item'),
+('1998-11-05', 101003, 1, 8890, 89, 3.00, 450.00, 0.02, 0.09, 'A', 'O', '1997-12-01', '1997-12-10', 'NONE', 'MAIL', 'Small quantity item'),
+('1998-04-30', 101004, 1, 4567, 305, 150.00, 22500.00, 0.15, 0.06, 'N', 'O', '1998-05-25', '1998-06-05', 'DELIVER IN PERSON', 'RAIL', 'Large bulk shipment');
+-- result:
+-- !result
+INSERT INTO lineitem (l_shipdate, l_orderkey, l_linenumber, l_partkey, l_suppkey, l_quantity, l_extendedprice, l_discount, l_tax, l_returnflag, l_linestatus, l_commitdate, l_receiptdate, l_shipinstruct, l_shipmode, l_comment) VALUES    
+('1995-01-16', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
+('1995-01-16', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
+-- result:
+-- !result
+set topn_push_down_agg_mode=2;
+-- result:
+-- !result
+set chunk_size=2;
+-- result:
+-- !result
+select l_shipdate, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipdate order by l_shipdate limit 1;
+-- result:
+1995-01-16	None	None	None	0
+-- !result
+select l_orderkey, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_orderkey order by l_orderkey limit 1;
+-- result:
+None	None	None	None	0
+-- !result
+select l_partkey, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_partkey order by l_partkey limit 1;
+-- result:
+None	None	None	None	0
+-- !result
+select l_suppkey, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_suppkey order by l_suppkey limit 1;
+-- result:
+None	None	None	None	0
+-- !result
+select l_linenumber, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_linenumber order by l_linenumber limit 1;
+-- result:
+None	None	None	None	0
+-- !result
+select l_returnflag, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_returnflag order by l_returnflag limit 1;
+-- result:
+None	None	None	None	0
+-- !result
+select l_linestatus, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_linestatus order by l_linestatus limit 1;
+-- result:
+None	None	None	None	0
+-- !result
+select l_commitdate, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_commitdate order by l_commitdate limit 1;
+-- result:
+None	None	None	None	0
+-- !result
+select l_receiptdate, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_receiptdate order by l_receiptdate limit 1;
+-- result:
+None	None	None	None	0
+-- !result
+select l_shipmode, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipmode order by l_shipmode limit 1;
+-- result:
+None	None	None	None	0
+-- !result
+select l_comment, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_comment order by l_comment limit 1;
+-- result:
+None	None	None	None	0
+-- !result
+select l_shipdate, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipdate order by l_shipdate limit 10;
+-- result:
+1995-01-16	None	None	None	0
+1995-02-05	450.00000000	0.02000000	None	1
+1995-03-10	1226.25000000	0.02500000	None	2
+1995-03-22	3120.00000000	0.10000000	None	1
+1995-05-30	22500.00000000	0.15000000	None	1
+1996-01-15	1560.00000000	0.05000000	None	1
+1996-02-15	892.50000000	0E-8	None	1
+1996-03-22	3120.00000000	0.10000000	None	1
+1996-04-30	22500.00000000	0.15000000	None	1
+1996-12-05	450.00000000	0.02000000	None	1
+-- !result
+select l_orderkey, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_orderkey order by l_orderkey limit 10;
+-- result:
+None	None	None	None	0
+100001	1226.25000000	0.02500000	None	2
+100002	3120.00000000	0.10000000	None	1
+100003	450.00000000	0.02000000	None	1
+100004	22500.00000000	0.15000000	None	1
+100011	1226.25000000	0.02500000	None	2
+100012	3120.00000000	0.10000000	None	1
+100013	450.00000000	0.02000000	None	1
+100014	22500.00000000	0.15000000	None	1
+100101	1226.25000000	0.02500000	None	2
+-- !result
+select l_partkey, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_partkey order by l_partkey limit 10;
+-- result:
+None	None	None	None	0
+3345	3120.00000000	0.10000000	None	4
+4567	22500.00000000	0.15000000	None	4
+5501	1560.00000000	0.05000000	None	4
+7203	892.50000000	0E-8	None	4
+8890	450.00000000	0.02000000	None	4
+-- !result
+select l_suppkey, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_suppkey order by l_suppkey limit 10;
+-- result:
+None	None	None	None	0
+89	450.00000000	0.02000000	None	4
+101	1560.00000000	0.05000000	None	4
+156	3120.00000000	0.10000000	None	4
+203	892.50000000	0E-8	None	4
+305	22500.00000000	0.15000000	None	4
+-- !result
+select l_linenumber, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_linenumber order by l_linenumber limit 10;
+-- result:
+None	None	None	None	0
+1	6907.50000000	0.08000000	None	16
+2	892.50000000	0E-8	None	4
+-- !result
+select l_returnflag, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_returnflag order by l_returnflag limit 10;
+-- result:
+None	None	None	None	0
+A	450.00000000	0.02000000	None	4
+N	8317.50000000	0.06666667	None	12
+R	3120.00000000	0.10000000	None	4
+-- !result
+select l_linestatus, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_linestatus order by l_linestatus limit 10;
+-- result:
+None	None	None	None	0
+F	3120.00000000	0.10000000	None	4
+O	6350.62500000	0.05500000	None	16
+-- !result
+select l_commitdate, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_commitdate order by l_commitdate limit 10;
+-- result:
+None	None	None	None	0
+1995-03-10	1226.25000000	0.02500000	None	8
+1996-08-18	3120.00000000	0.10000000	None	4
+1997-12-01	450.00000000	0.02000000	None	4
+1998-05-25	22500.00000000	0.15000000	None	4
+-- !result
+select l_receiptdate, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_receiptdate order by l_receiptdate limit 10;
+-- result:
+None	None	None	None	0
+1995-03-18	892.50000000	0E-8	None	4
+1995-03-20	1560.00000000	0.05000000	None	4
+1996-08-25	3120.00000000	0.10000000	None	4
+1997-12-10	450.00000000	0.02000000	None	4
+1998-06-05	22500.00000000	0.15000000	None	4
+-- !result
+select l_shipinstruct, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipinstruct order by l_shipinstruct limit 10;
+-- result:
+None	None	None	None	0
+COLLECT COD	3120.00000000	0.10000000	None	4
+DELIVER IN PERSON	12030.00000000	0.10000000	None	8
+NONE	450.00000000	0.02000000	None	4
+TAKE BACK RETURN	892.50000000	0E-8	None	4
+-- !result
+select l_shipmode, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipmode order by l_shipmode limit 10;
+-- result:
+None	None	None	None	0
+AIR	892.50000000	0E-8	None	4
+MAIL	450.00000000	0.02000000	None	4
+RAIL	22500.00000000	0.15000000	None	4
+SHIP	3120.00000000	0.10000000	None	4
+TRUCK	1560.00000000	0.05000000	None	4
+-- !result
+select l_comment, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_comment order by l_comment limit 10;
+-- result:
+None	None	None	None	0
+Bulk order item	3120.00000000	0.10000000	None	4
+First item of order	1560.00000000	0.05000000	None	4
+Large bulk shipment	22500.00000000	0.15000000	None	4
+Second item, fragile	892.50000000	0E-8	None	4
+Small quantity item	450.00000000	0.02000000	None	4
+-- !result
+select l_shipdate, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipdate order by l_shipdate limit 100;
+-- result:
+1995-01-16	None	None	None	0
+1995-02-05	450.00000000	0.02000000	None	1
+1995-03-10	1226.25000000	0.02500000	None	2
+1995-03-22	3120.00000000	0.10000000	None	1
+1995-05-30	22500.00000000	0.15000000	None	1
+1996-01-15	1560.00000000	0.05000000	None	1
+1996-02-15	892.50000000	0E-8	None	1
+1996-03-22	3120.00000000	0.10000000	None	1
+1996-04-30	22500.00000000	0.15000000	None	1
+1996-12-05	450.00000000	0.02000000	None	1
+1997-01-15	1560.00000000	0.05000000	None	1
+1997-02-15	892.50000000	0E-8	None	1
+1997-03-22	3120.00000000	0.10000000	None	1
+1997-04-30	22500.00000000	0.15000000	None	1
+1997-11-05	450.00000000	0.02000000	None	1
+1998-01-15	1560.00000000	0.05000000	None	1
+1998-02-15	892.50000000	0E-8	None	1
+1998-03-22	3120.00000000	0.10000000	None	1
+1998-04-30	22500.00000000	0.15000000	None	1
+1998-11-05	450.00000000	0.02000000	None	1
+-- !result
+select l_orderkey, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_orderkey order by l_orderkey limit 100;
+-- result:
+None	None	None	None	0
+100001	1226.25000000	0.02500000	None	2
+100002	3120.00000000	0.10000000	None	1
+100003	450.00000000	0.02000000	None	1
+100004	22500.00000000	0.15000000	None	1
+100011	1226.25000000	0.02500000	None	2
+100012	3120.00000000	0.10000000	None	1
+100013	450.00000000	0.02000000	None	1
+100014	22500.00000000	0.15000000	None	1
+100101	1226.25000000	0.02500000	None	2
+100102	3120.00000000	0.10000000	None	1
+100103	450.00000000	0.02000000	None	1
+100104	22500.00000000	0.15000000	None	1
+101001	1226.25000000	0.02500000	None	2
+101002	3120.00000000	0.10000000	None	1
+101003	450.00000000	0.02000000	None	1
+101004	22500.00000000	0.15000000	None	1
+-- !result
+select l_partkey, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_partkey order by l_partkey limit 100;
+-- result:
+None	None	None	None	0
+3345	3120.00000000	0.10000000	None	4
+4567	22500.00000000	0.15000000	None	4
+5501	1560.00000000	0.05000000	None	4
+7203	892.50000000	0E-8	None	4
+8890	450.00000000	0.02000000	None	4
+-- !result
+select l_suppkey, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_suppkey order by l_suppkey limit 100;
+-- result:
+None	None	None	None	0
+89	450.00000000	0.02000000	None	4
+101	1560.00000000	0.05000000	None	4
+156	3120.00000000	0.10000000	None	4
+203	892.50000000	0E-8	None	4
+305	22500.00000000	0.15000000	None	4
+-- !result
+select l_linenumber, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_linenumber order by l_linenumber limit 100;
+-- result:
+None	None	None	None	0
+1	6907.50000000	0.08000000	None	16
+2	892.50000000	0E-8	None	4
+-- !result
+select l_returnflag, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_returnflag order by l_returnflag limit 100;
+-- result:
+None	None	None	None	0
+A	450.00000000	0.02000000	None	4
+N	8317.50000000	0.06666667	None	12
+R	3120.00000000	0.10000000	None	4
+-- !result
+select l_linestatus, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_linestatus order by l_linestatus limit 100;
+-- result:
+None	None	None	None	0
+F	3120.00000000	0.10000000	None	4
+O	6350.62500000	0.05500000	None	16
+-- !result
+select l_commitdate, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_commitdate order by l_commitdate limit 100;
+-- result:
+None	None	None	None	0
+1995-03-10	1226.25000000	0.02500000	None	8
+1996-08-18	3120.00000000	0.10000000	None	4
+1997-12-01	450.00000000	0.02000000	None	4
+1998-05-25	22500.00000000	0.15000000	None	4
+-- !result
+select l_receiptdate, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_receiptdate order by l_receiptdate limit 100;
+-- result:
+None	None	None	None	0
+1995-03-18	892.50000000	0E-8	None	4
+1995-03-20	1560.00000000	0.05000000	None	4
+1996-08-25	3120.00000000	0.10000000	None	4
+1997-12-10	450.00000000	0.02000000	None	4
+1998-06-05	22500.00000000	0.15000000	None	4
+-- !result
+select l_shipinstruct, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipinstruct order by l_shipinstruct limit 100;
+-- result:
+None	None	None	None	0
+COLLECT COD	3120.00000000	0.10000000	None	4
+DELIVER IN PERSON	12030.00000000	0.10000000	None	8
+NONE	450.00000000	0.02000000	None	4
+TAKE BACK RETURN	892.50000000	0E-8	None	4
+-- !result
+select l_shipmode, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipmode order by l_shipmode limit 100;
+-- result:
+None	None	None	None	0
+AIR	892.50000000	0E-8	None	4
+MAIL	450.00000000	0.02000000	None	4
+RAIL	22500.00000000	0.15000000	None	4
+SHIP	3120.00000000	0.10000000	None	4
+TRUCK	1560.00000000	0.05000000	None	4
+-- !result
+select l_comment, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_comment order by l_comment limit 100;
+-- result:
+None	None	None	None	0
+Bulk order item	3120.00000000	0.10000000	None	4
+First item of order	1560.00000000	0.05000000	None	4
+Large bulk shipment	22500.00000000	0.15000000	None	4
+Second item, fragile	892.50000000	0E-8	None	4
+Small quantity item	450.00000000	0.02000000	None	4
+-- !result
+select l_shipdate, l_orderkey, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipdate, l_orderkey order by l_shipdate, l_orderkey limit 10;
+-- result:
+1995-01-16	None	None	None	None	0
+1995-02-05	100003	450.00000000	0.02000000	None	1
+1995-03-10	100001	1226.25000000	0.02500000	None	2
+1995-03-22	100002	3120.00000000	0.10000000	None	1
+1995-05-30	100004	22500.00000000	0.15000000	None	1
+1996-01-15	100011	1560.00000000	0.05000000	None	1
+1996-02-15	100011	892.50000000	0E-8	None	1
+1996-03-22	100012	3120.00000000	0.10000000	None	1
+1996-04-30	100014	22500.00000000	0.15000000	None	1
+1996-12-05	100013	450.00000000	0.02000000	None	1
+-- !result
+select l_shipdate, l_partkey, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipdate, l_partkey order by l_shipdate, l_partkey limit 10;
+-- result:
+1995-01-16	None	None	None	None	0
+1995-02-05	8890	450.00000000	0.02000000	None	1
+1995-03-10	5501	1560.00000000	0.05000000	None	1
+1995-03-10	7203	892.50000000	0E-8	None	1
+1995-03-22	3345	3120.00000000	0.10000000	None	1
+1995-05-30	4567	22500.00000000	0.15000000	None	1
+1996-01-15	5501	1560.00000000	0.05000000	None	1
+1996-02-15	7203	892.50000000	0E-8	None	1
+1996-03-22	3345	3120.00000000	0.10000000	None	1
+1996-04-30	4567	22500.00000000	0.15000000	None	1
+-- !result
+select l_shipdate, l_suppkey, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipdate, l_suppkey order by l_shipdate, l_suppkey limit 10;
+-- result:
+1995-01-16	None	None	None	None	0
+1995-02-05	89	450.00000000	0.02000000	None	1
+1995-03-10	101	1560.00000000	0.05000000	None	1
+1995-03-10	203	892.50000000	0E-8	None	1
+1995-03-22	156	3120.00000000	0.10000000	None	1
+1995-05-30	305	22500.00000000	0.15000000	None	1
+1996-01-15	101	1560.00000000	0.05000000	None	1
+1996-02-15	203	892.50000000	0E-8	None	1
+1996-03-22	156	3120.00000000	0.10000000	None	1
+1996-04-30	305	22500.00000000	0.15000000	None	1
+-- !result
+select l_shipdate, l_linenumber, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipdate, l_linenumber order by l_shipdate, l_linenumber limit 10;
+-- result:
+1995-01-16	None	None	None	None	0
+1995-02-05	1	450.00000000	0.02000000	None	1
+1995-03-10	1	1560.00000000	0.05000000	None	1
+1995-03-10	2	892.50000000	0E-8	None	1
+1995-03-22	1	3120.00000000	0.10000000	None	1
+1995-05-30	1	22500.00000000	0.15000000	None	1
+1996-01-15	1	1560.00000000	0.05000000	None	1
+1996-02-15	2	892.50000000	0E-8	None	1
+1996-03-22	1	3120.00000000	0.10000000	None	1
+1996-04-30	1	22500.00000000	0.15000000	None	1
+-- !result
+select l_shipdate, l_returnflag, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipdate, l_returnflag order by l_shipdate, l_returnflag limit 10;
+-- result:
+1995-01-16	None	None	None	None	0
+1995-02-05	A	450.00000000	0.02000000	None	1
+1995-03-10	N	1226.25000000	0.02500000	None	2
+1995-03-22	R	3120.00000000	0.10000000	None	1
+1995-05-30	N	22500.00000000	0.15000000	None	1
+1996-01-15	N	1560.00000000	0.05000000	None	1
+1996-02-15	N	892.50000000	0E-8	None	1
+1996-03-22	R	3120.00000000	0.10000000	None	1
+1996-04-30	N	22500.00000000	0.15000000	None	1
+1996-12-05	A	450.00000000	0.02000000	None	1
+-- !result
+select l_shipdate, l_linestatus, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipdate, l_linestatus order by l_shipdate, l_linestatus limit 10;
+-- result:
+1995-01-16	None	None	None	None	0
+1995-02-05	O	450.00000000	0.02000000	None	1
+1995-03-10	O	1226.25000000	0.02500000	None	2
+1995-03-22	F	3120.00000000	0.10000000	None	1
+1995-05-30	O	22500.00000000	0.15000000	None	1
+1996-01-15	O	1560.00000000	0.05000000	None	1
+1996-02-15	O	892.50000000	0E-8	None	1
+1996-03-22	F	3120.00000000	0.10000000	None	1
+1996-04-30	O	22500.00000000	0.15000000	None	1
+1996-12-05	O	450.00000000	0.02000000	None	1
+-- !result
+select l_shipdate, l_commitdate, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipdate, l_commitdate order by l_shipdate, l_commitdate limit 10;
+-- result:
+1995-01-16	None	None	None	None	0
+1995-02-05	1997-12-01	450.00000000	0.02000000	None	1
+1995-03-10	1995-03-10	1226.25000000	0.02500000	None	2
+1995-03-22	1996-08-18	3120.00000000	0.10000000	None	1
+1995-05-30	1998-05-25	22500.00000000	0.15000000	None	1
+1996-01-15	1995-03-10	1560.00000000	0.05000000	None	1
+1996-02-15	1995-03-10	892.50000000	0E-8	None	1
+1996-03-22	1996-08-18	3120.00000000	0.10000000	None	1
+1996-04-30	1998-05-25	22500.00000000	0.15000000	None	1
+1996-12-05	1997-12-01	450.00000000	0.02000000	None	1
+-- !result
+select l_shipdate, l_receiptdate, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipdate, l_receiptdate order by l_shipdate, l_receiptdate limit 10;
+-- result:
+1995-01-16	None	None	None	None	0
+1995-02-05	1997-12-10	450.00000000	0.02000000	None	1
+1995-03-10	1995-03-18	892.50000000	0E-8	None	1
+1995-03-10	1995-03-20	1560.00000000	0.05000000	None	1
+1995-03-22	1996-08-25	3120.00000000	0.10000000	None	1
+1995-05-30	1998-06-05	22500.00000000	0.15000000	None	1
+1996-01-15	1995-03-20	1560.00000000	0.05000000	None	1
+1996-02-15	1995-03-18	892.50000000	0E-8	None	1
+1996-03-22	1996-08-25	3120.00000000	0.10000000	None	1
+1996-04-30	1998-06-05	22500.00000000	0.15000000	None	1
+-- !result
+select l_shipdate, l_shipinstruct, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipdate, l_shipinstruct order by l_shipdate, l_shipinstruct limit 10;
+-- result:
+1995-01-16	None	None	None	None	0
+1995-02-05	NONE	450.00000000	0.02000000	None	1
+1995-03-10	DELIVER IN PERSON	1560.00000000	0.05000000	None	1
+1995-03-10	TAKE BACK RETURN	892.50000000	0E-8	None	1
+1995-03-22	COLLECT COD	3120.00000000	0.10000000	None	1
+1995-05-30	DELIVER IN PERSON	22500.00000000	0.15000000	None	1
+1996-01-15	DELIVER IN PERSON	1560.00000000	0.05000000	None	1
+1996-02-15	TAKE BACK RETURN	892.50000000	0E-8	None	1
+1996-03-22	COLLECT COD	3120.00000000	0.10000000	None	1
+1996-04-30	DELIVER IN PERSON	22500.00000000	0.15000000	None	1
+-- !result
+select l_shipdate, l_shipmode, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipdate, l_shipmode order by l_shipdate, l_shipmode limit 10;
+-- result:
+1995-01-16	None	None	None	None	0
+1995-02-05	MAIL	450.00000000	0.02000000	None	1
+1995-03-10	AIR	892.50000000	0E-8	None	1
+1995-03-10	TRUCK	1560.00000000	0.05000000	None	1
+1995-03-22	SHIP	3120.00000000	0.10000000	None	1
+1995-05-30	RAIL	22500.00000000	0.15000000	None	1
+1996-01-15	TRUCK	1560.00000000	0.05000000	None	1
+1996-02-15	AIR	892.50000000	0E-8	None	1
+1996-03-22	SHIP	3120.00000000	0.10000000	None	1
+1996-04-30	RAIL	22500.00000000	0.15000000	None	1
+-- !result
+select l_shipdate, l_comment, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipdate, l_comment order by l_shipdate, l_comment limit 10;
+-- result:
+1995-01-16	None	None	None	None	0
+1995-02-05	Small quantity item	450.00000000	0.02000000	None	1
+1995-03-10	First item of order	1560.00000000	0.05000000	None	1
+1995-03-10	Second item, fragile	892.50000000	0E-8	None	1
+1995-03-22	Bulk order item	3120.00000000	0.10000000	None	1
+1995-05-30	Large bulk shipment	22500.00000000	0.15000000	None	1
+1996-01-15	First item of order	1560.00000000	0.05000000	None	1
+1996-02-15	Second item, fragile	892.50000000	0E-8	None	1
+1996-03-22	Bulk order item	3120.00000000	0.10000000	None	1
+1996-04-30	Large bulk shipment	22500.00000000	0.15000000	None	1
+-- !result
+select l_shipdate, l_orderkey, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipdate, l_orderkey order by l_shipdate, l_orderkey limit 100;
+-- result:
+1995-01-16	None	None	None	None	0
+1995-02-05	100003	450.00000000	0.02000000	None	1
+1995-03-10	100001	1226.25000000	0.02500000	None	2
+1995-03-22	100002	3120.00000000	0.10000000	None	1
+1995-05-30	100004	22500.00000000	0.15000000	None	1
+1996-01-15	100011	1560.00000000	0.05000000	None	1
+1996-02-15	100011	892.50000000	0E-8	None	1
+1996-03-22	100012	3120.00000000	0.10000000	None	1
+1996-04-30	100014	22500.00000000	0.15000000	None	1
+1996-12-05	100013	450.00000000	0.02000000	None	1
+1997-01-15	100101	1560.00000000	0.05000000	None	1
+1997-02-15	100101	892.50000000	0E-8	None	1
+1997-03-22	100102	3120.00000000	0.10000000	None	1
+1997-04-30	100104	22500.00000000	0.15000000	None	1
+1997-11-05	100103	450.00000000	0.02000000	None	1
+1998-01-15	101001	1560.00000000	0.05000000	None	1
+1998-02-15	101001	892.50000000	0E-8	None	1
+1998-03-22	101002	3120.00000000	0.10000000	None	1
+1998-04-30	101004	22500.00000000	0.15000000	None	1
+1998-11-05	101003	450.00000000	0.02000000	None	1
+-- !result
+select l_shipdate, l_partkey, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipdate, l_partkey order by l_shipdate, l_partkey limit 100;
+-- result:
+1995-01-16	None	None	None	None	0
+1995-02-05	8890	450.00000000	0.02000000	None	1
+1995-03-10	5501	1560.00000000	0.05000000	None	1
+1995-03-10	7203	892.50000000	0E-8	None	1
+1995-03-22	3345	3120.00000000	0.10000000	None	1
+1995-05-30	4567	22500.00000000	0.15000000	None	1
+1996-01-15	5501	1560.00000000	0.05000000	None	1
+1996-02-15	7203	892.50000000	0E-8	None	1
+1996-03-22	3345	3120.00000000	0.10000000	None	1
+1996-04-30	4567	22500.00000000	0.15000000	None	1
+1996-12-05	8890	450.00000000	0.02000000	None	1
+1997-01-15	5501	1560.00000000	0.05000000	None	1
+1997-02-15	7203	892.50000000	0E-8	None	1
+1997-03-22	3345	3120.00000000	0.10000000	None	1
+1997-04-30	4567	22500.00000000	0.15000000	None	1
+1997-11-05	8890	450.00000000	0.02000000	None	1
+1998-01-15	5501	1560.00000000	0.05000000	None	1
+1998-02-15	7203	892.50000000	0E-8	None	1
+1998-03-22	3345	3120.00000000	0.10000000	None	1
+1998-04-30	4567	22500.00000000	0.15000000	None	1
+1998-11-05	8890	450.00000000	0.02000000	None	1
+-- !result
+select l_shipdate, l_suppkey, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipdate, l_suppkey order by l_shipdate, l_suppkey limit 100;
+-- result:
+1995-01-16	None	None	None	None	0
+1995-02-05	89	450.00000000	0.02000000	None	1
+1995-03-10	101	1560.00000000	0.05000000	None	1
+1995-03-10	203	892.50000000	0E-8	None	1
+1995-03-22	156	3120.00000000	0.10000000	None	1
+1995-05-30	305	22500.00000000	0.15000000	None	1
+1996-01-15	101	1560.00000000	0.05000000	None	1
+1996-02-15	203	892.50000000	0E-8	None	1
+1996-03-22	156	3120.00000000	0.10000000	None	1
+1996-04-30	305	22500.00000000	0.15000000	None	1
+1996-12-05	89	450.00000000	0.02000000	None	1
+1997-01-15	101	1560.00000000	0.05000000	None	1
+1997-02-15	203	892.50000000	0E-8	None	1
+1997-03-22	156	3120.00000000	0.10000000	None	1
+1997-04-30	305	22500.00000000	0.15000000	None	1
+1997-11-05	89	450.00000000	0.02000000	None	1
+1998-01-15	101	1560.00000000	0.05000000	None	1
+1998-02-15	203	892.50000000	0E-8	None	1
+1998-03-22	156	3120.00000000	0.10000000	None	1
+1998-04-30	305	22500.00000000	0.15000000	None	1
+1998-11-05	89	450.00000000	0.02000000	None	1
+-- !result
+select l_shipdate, l_linenumber, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipdate, l_linenumber order by l_shipdate, l_linenumber limit 100;
+-- result:
+1995-01-16	None	None	None	None	0
+1995-02-05	1	450.00000000	0.02000000	None	1
+1995-03-10	1	1560.00000000	0.05000000	None	1
+1995-03-10	2	892.50000000	0E-8	None	1
+1995-03-22	1	3120.00000000	0.10000000	None	1
+1995-05-30	1	22500.00000000	0.15000000	None	1
+1996-01-15	1	1560.00000000	0.05000000	None	1
+1996-02-15	2	892.50000000	0E-8	None	1
+1996-03-22	1	3120.00000000	0.10000000	None	1
+1996-04-30	1	22500.00000000	0.15000000	None	1
+1996-12-05	1	450.00000000	0.02000000	None	1
+1997-01-15	1	1560.00000000	0.05000000	None	1
+1997-02-15	2	892.50000000	0E-8	None	1
+1997-03-22	1	3120.00000000	0.10000000	None	1
+1997-04-30	1	22500.00000000	0.15000000	None	1
+1997-11-05	1	450.00000000	0.02000000	None	1
+1998-01-15	1	1560.00000000	0.05000000	None	1
+1998-02-15	2	892.50000000	0E-8	None	1
+1998-03-22	1	3120.00000000	0.10000000	None	1
+1998-04-30	1	22500.00000000	0.15000000	None	1
+1998-11-05	1	450.00000000	0.02000000	None	1
+-- !result
+select l_shipdate, l_returnflag, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipdate, l_returnflag order by l_shipdate, l_returnflag limit 100;
+-- result:
+1995-01-16	None	None	None	None	0
+1995-02-05	A	450.00000000	0.02000000	None	1
+1995-03-10	N	1226.25000000	0.02500000	None	2
+1995-03-22	R	3120.00000000	0.10000000	None	1
+1995-05-30	N	22500.00000000	0.15000000	None	1
+1996-01-15	N	1560.00000000	0.05000000	None	1
+1996-02-15	N	892.50000000	0E-8	None	1
+1996-03-22	R	3120.00000000	0.10000000	None	1
+1996-04-30	N	22500.00000000	0.15000000	None	1
+1996-12-05	A	450.00000000	0.02000000	None	1
+1997-01-15	N	1560.00000000	0.05000000	None	1
+1997-02-15	N	892.50000000	0E-8	None	1
+1997-03-22	R	3120.00000000	0.10000000	None	1
+1997-04-30	N	22500.00000000	0.15000000	None	1
+1997-11-05	A	450.00000000	0.02000000	None	1
+1998-01-15	N	1560.00000000	0.05000000	None	1
+1998-02-15	N	892.50000000	0E-8	None	1
+1998-03-22	R	3120.00000000	0.10000000	None	1
+1998-04-30	N	22500.00000000	0.15000000	None	1
+1998-11-05	A	450.00000000	0.02000000	None	1
+-- !result
+select l_shipdate, l_linestatus, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipdate, l_linestatus order by l_shipdate, l_linestatus limit 100;
+-- result:
+1995-01-16	None	None	None	None	0
+1995-02-05	O	450.00000000	0.02000000	None	1
+1995-03-10	O	1226.25000000	0.02500000	None	2
+1995-03-22	F	3120.00000000	0.10000000	None	1
+1995-05-30	O	22500.00000000	0.15000000	None	1
+1996-01-15	O	1560.00000000	0.05000000	None	1
+1996-02-15	O	892.50000000	0E-8	None	1
+1996-03-22	F	3120.00000000	0.10000000	None	1
+1996-04-30	O	22500.00000000	0.15000000	None	1
+1996-12-05	O	450.00000000	0.02000000	None	1
+1997-01-15	O	1560.00000000	0.05000000	None	1
+1997-02-15	O	892.50000000	0E-8	None	1
+1997-03-22	F	3120.00000000	0.10000000	None	1
+1997-04-30	O	22500.00000000	0.15000000	None	1
+1997-11-05	O	450.00000000	0.02000000	None	1
+1998-01-15	O	1560.00000000	0.05000000	None	1
+1998-02-15	O	892.50000000	0E-8	None	1
+1998-03-22	F	3120.00000000	0.10000000	None	1
+1998-04-30	O	22500.00000000	0.15000000	None	1
+1998-11-05	O	450.00000000	0.02000000	None	1
+-- !result
+select l_shipdate, l_commitdate, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipdate, l_commitdate order by l_shipdate, l_commitdate limit 100
+select l_shipdate, l_receiptdate, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipdate, l_receiptdate order by l_shipdate, l_receiptdate limit 100;
+-- result:
+E: (1064, "Getting syntax error at line 2, column 0. Detail message: Unexpected input 'select', the most similar input is {<EOF>, ';'}.")
+-- !result
+select l_shipdate, l_shipinstruct, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipdate, l_shipinstruct order by l_shipdate, l_shipinstruct limit 100;
+-- result:
+1995-01-16	None	None	None	None	0
+1995-02-05	NONE	450.00000000	0.02000000	None	1
+1995-03-10	DELIVER IN PERSON	1560.00000000	0.05000000	None	1
+1995-03-10	TAKE BACK RETURN	892.50000000	0E-8	None	1
+1995-03-22	COLLECT COD	3120.00000000	0.10000000	None	1
+1995-05-30	DELIVER IN PERSON	22500.00000000	0.15000000	None	1
+1996-01-15	DELIVER IN PERSON	1560.00000000	0.05000000	None	1
+1996-02-15	TAKE BACK RETURN	892.50000000	0E-8	None	1
+1996-03-22	COLLECT COD	3120.00000000	0.10000000	None	1
+1996-04-30	DELIVER IN PERSON	22500.00000000	0.15000000	None	1
+1996-12-05	NONE	450.00000000	0.02000000	None	1
+1997-01-15	DELIVER IN PERSON	1560.00000000	0.05000000	None	1
+1997-02-15	TAKE BACK RETURN	892.50000000	0E-8	None	1
+1997-03-22	COLLECT COD	3120.00000000	0.10000000	None	1
+1997-04-30	DELIVER IN PERSON	22500.00000000	0.15000000	None	1
+1997-11-05	NONE	450.00000000	0.02000000	None	1
+1998-01-15	DELIVER IN PERSON	1560.00000000	0.05000000	None	1
+1998-02-15	TAKE BACK RETURN	892.50000000	0E-8	None	1
+1998-03-22	COLLECT COD	3120.00000000	0.10000000	None	1
+1998-04-30	DELIVER IN PERSON	22500.00000000	0.15000000	None	1
+1998-11-05	NONE	450.00000000	0.02000000	None	1
+-- !result
+select l_shipdate, l_shipmode, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipdate, l_shipmode order by l_shipdate, l_shipmode limit 100;
+-- result:
+1995-01-16	None	None	None	None	0
+1995-02-05	MAIL	450.00000000	0.02000000	None	1
+1995-03-10	AIR	892.50000000	0E-8	None	1
+1995-03-10	TRUCK	1560.00000000	0.05000000	None	1
+1995-03-22	SHIP	3120.00000000	0.10000000	None	1
+1995-05-30	RAIL	22500.00000000	0.15000000	None	1
+1996-01-15	TRUCK	1560.00000000	0.05000000	None	1
+1996-02-15	AIR	892.50000000	0E-8	None	1
+1996-03-22	SHIP	3120.00000000	0.10000000	None	1
+1996-04-30	RAIL	22500.00000000	0.15000000	None	1
+1996-12-05	MAIL	450.00000000	0.02000000	None	1
+1997-01-15	TRUCK	1560.00000000	0.05000000	None	1
+1997-02-15	AIR	892.50000000	0E-8	None	1
+1997-03-22	SHIP	3120.00000000	0.10000000	None	1
+1997-04-30	RAIL	22500.00000000	0.15000000	None	1
+1997-11-05	MAIL	450.00000000	0.02000000	None	1
+1998-01-15	TRUCK	1560.00000000	0.05000000	None	1
+1998-02-15	AIR	892.50000000	0E-8	None	1
+1998-03-22	SHIP	3120.00000000	0.10000000	None	1
+1998-04-30	RAIL	22500.00000000	0.15000000	None	1
+1998-11-05	MAIL	450.00000000	0.02000000	None	1
+-- !result
+select l_shipdate, l_comment, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipdate, l_comment order by l_shipdate, l_comment limit 100;
+-- result:
+1995-01-16	None	None	None	None	0
+1995-02-05	Small quantity item	450.00000000	0.02000000	None	1
+1995-03-10	First item of order	1560.00000000	0.05000000	None	1
+1995-03-10	Second item, fragile	892.50000000	0E-8	None	1
+1995-03-22	Bulk order item	3120.00000000	0.10000000	None	1
+1995-05-30	Large bulk shipment	22500.00000000	0.15000000	None	1
+1996-01-15	First item of order	1560.00000000	0.05000000	None	1
+1996-02-15	Second item, fragile	892.50000000	0E-8	None	1
+1996-03-22	Bulk order item	3120.00000000	0.10000000	None	1
+1996-04-30	Large bulk shipment	22500.00000000	0.15000000	None	1
+1996-12-05	Small quantity item	450.00000000	0.02000000	None	1
+1997-01-15	First item of order	1560.00000000	0.05000000	None	1
+1997-02-15	Second item, fragile	892.50000000	0E-8	None	1
+1997-03-22	Bulk order item	3120.00000000	0.10000000	None	1
+1997-04-30	Large bulk shipment	22500.00000000	0.15000000	None	1
+1997-11-05	Small quantity item	450.00000000	0.02000000	None	1
+1998-01-15	First item of order	1560.00000000	0.05000000	None	1
+1998-02-15	Second item, fragile	892.50000000	0E-8	None	1
+1998-03-22	Bulk order item	3120.00000000	0.10000000	None	1
+1998-04-30	Large bulk shipment	22500.00000000	0.15000000	None	1
+1998-11-05	Small quantity item	450.00000000	0.02000000	None	1
+-- !result
+select l_shipdate, l_linestatus, l_receiptdate, l_shipmode, l_comment, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipdate, l_linestatus, l_receiptdate, l_shipmode, l_comment order by l_shipdate, l_linestatus, l_receiptdate, l_shipmode, l_comment limit 10;
+-- result:
+1995-01-16	None	None	None	None	None	None	None	0
+1995-02-05	O	1997-12-10	MAIL	Small quantity item	450.00000000	0.02000000	None	1
+1995-03-10	O	1995-03-18	AIR	Second item, fragile	892.50000000	0E-8	None	1
+1995-03-10	O	1995-03-20	TRUCK	First item of order	1560.00000000	0.05000000	None	1
+1995-03-22	F	1996-08-25	SHIP	Bulk order item	3120.00000000	0.10000000	None	1
+1995-05-30	O	1998-06-05	RAIL	Large bulk shipment	22500.00000000	0.15000000	None	1
+1996-01-15	O	1995-03-20	TRUCK	First item of order	1560.00000000	0.05000000	None	1
+1996-02-15	O	1995-03-18	AIR	Second item, fragile	892.50000000	0E-8	None	1
+1996-03-22	F	1996-08-25	SHIP	Bulk order item	3120.00000000	0.10000000	None	1
+1996-04-30	O	1998-06-05	RAIL	Large bulk shipment	22500.00000000	0.15000000	None	1
+-- !result
+select l_shipdate, l_linestatus, l_receiptdate, l_shipmode, l_comment, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipdate, l_linestatus, l_receiptdate, l_shipmode, l_comment order by l_shipdate, l_linestatus, l_receiptdate, l_shipmode, l_comment limit 100;
+-- result:
+1995-01-16	None	None	None	None	None	None	None	0
+1995-02-05	O	1997-12-10	MAIL	Small quantity item	450.00000000	0.02000000	None	1
+1995-03-10	O	1995-03-18	AIR	Second item, fragile	892.50000000	0E-8	None	1
+1995-03-10	O	1995-03-20	TRUCK	First item of order	1560.00000000	0.05000000	None	1
+1995-03-22	F	1996-08-25	SHIP	Bulk order item	3120.00000000	0.10000000	None	1
+1995-05-30	O	1998-06-05	RAIL	Large bulk shipment	22500.00000000	0.15000000	None	1
+1996-01-15	O	1995-03-20	TRUCK	First item of order	1560.00000000	0.05000000	None	1
+1996-02-15	O	1995-03-18	AIR	Second item, fragile	892.50000000	0E-8	None	1
+1996-03-22	F	1996-08-25	SHIP	Bulk order item	3120.00000000	0.10000000	None	1
+1996-04-30	O	1998-06-05	RAIL	Large bulk shipment	22500.00000000	0.15000000	None	1
+1996-12-05	O	1997-12-10	MAIL	Small quantity item	450.00000000	0.02000000	None	1
+1997-01-15	O	1995-03-20	TRUCK	First item of order	1560.00000000	0.05000000	None	1
+1997-02-15	O	1995-03-18	AIR	Second item, fragile	892.50000000	0E-8	None	1
+1997-03-22	F	1996-08-25	SHIP	Bulk order item	3120.00000000	0.10000000	None	1
+1997-04-30	O	1998-06-05	RAIL	Large bulk shipment	22500.00000000	0.15000000	None	1
+1997-11-05	O	1997-12-10	MAIL	Small quantity item	450.00000000	0.02000000	None	1
+1998-01-15	O	1995-03-20	TRUCK	First item of order	1560.00000000	0.05000000	None	1
+1998-02-15	O	1995-03-18	AIR	Second item, fragile	892.50000000	0E-8	None	1
+1998-03-22	F	1996-08-25	SHIP	Bulk order item	3120.00000000	0.10000000	None	1
+1998-04-30	O	1998-06-05	RAIL	Large bulk shipment	22500.00000000	0.15000000	None	1
+1998-11-05	O	1997-12-10	MAIL	Small quantity item	450.00000000	0.02000000	None	1
+-- !result
+select l_shipdate, l_linestatus, l_receiptdate, l_shipmode, l_comment, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipdate, l_linestatus, l_receiptdate, l_shipmode, l_comment order by l_shipdate, l_linestatus, l_receiptdate, l_shipmode, l_comment limit 1000;
+-- result:
+1995-01-16	None	None	None	None	None	None	None	0
+1995-02-05	O	1997-12-10	MAIL	Small quantity item	450.00000000	0.02000000	None	1
+1995-03-10	O	1995-03-18	AIR	Second item, fragile	892.50000000	0E-8	None	1
+1995-03-10	O	1995-03-20	TRUCK	First item of order	1560.00000000	0.05000000	None	1
+1995-03-22	F	1996-08-25	SHIP	Bulk order item	3120.00000000	0.10000000	None	1
+1995-05-30	O	1998-06-05	RAIL	Large bulk shipment	22500.00000000	0.15000000	None	1
+1996-01-15	O	1995-03-20	TRUCK	First item of order	1560.00000000	0.05000000	None	1
+1996-02-15	O	1995-03-18	AIR	Second item, fragile	892.50000000	0E-8	None	1
+1996-03-22	F	1996-08-25	SHIP	Bulk order item	3120.00000000	0.10000000	None	1
+1996-04-30	O	1998-06-05	RAIL	Large bulk shipment	22500.00000000	0.15000000	None	1
+1996-12-05	O	1997-12-10	MAIL	Small quantity item	450.00000000	0.02000000	None	1
+1997-01-15	O	1995-03-20	TRUCK	First item of order	1560.00000000	0.05000000	None	1
+1997-02-15	O	1995-03-18	AIR	Second item, fragile	892.50000000	0E-8	None	1
+1997-03-22	F	1996-08-25	SHIP	Bulk order item	3120.00000000	0.10000000	None	1
+1997-04-30	O	1998-06-05	RAIL	Large bulk shipment	22500.00000000	0.15000000	None	1
+1997-11-05	O	1997-12-10	MAIL	Small quantity item	450.00000000	0.02000000	None	1
+1998-01-15	O	1995-03-20	TRUCK	First item of order	1560.00000000	0.05000000	None	1
+1998-02-15	O	1995-03-18	AIR	Second item, fragile	892.50000000	0E-8	None	1
+1998-03-22	F	1996-08-25	SHIP	Bulk order item	3120.00000000	0.10000000	None	1
+1998-04-30	O	1998-06-05	RAIL	Large bulk shipment	22500.00000000	0.15000000	None	1
+1998-11-05	O	1997-12-10	MAIL	Small quantity item	450.00000000	0.02000000	None	1
+-- !result
+select l_shipdate, l_partkey, l_linenumber, l_shipmode, l_comment, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipdate, l_partkey, l_linenumber, l_shipmode, l_comment order by l_shipdate, l_partkey, l_linenumber, l_shipmode, l_comment limit 10;
+-- result:
+1995-01-16	None	None	None	None	None	None	None	0
+1995-02-05	8890	1	MAIL	Small quantity item	450.00000000	0.02000000	None	1
+1995-03-10	5501	1	TRUCK	First item of order	1560.00000000	0.05000000	None	1
+1995-03-10	7203	2	AIR	Second item, fragile	892.50000000	0E-8	None	1
+1995-03-22	3345	1	SHIP	Bulk order item	3120.00000000	0.10000000	None	1
+1995-05-30	4567	1	RAIL	Large bulk shipment	22500.00000000	0.15000000	None	1
+1996-01-15	5501	1	TRUCK	First item of order	1560.00000000	0.05000000	None	1
+1996-02-15	7203	2	AIR	Second item, fragile	892.50000000	0E-8	None	1
+1996-03-22	3345	1	SHIP	Bulk order item	3120.00000000	0.10000000	None	1
+1996-04-30	4567	1	RAIL	Large bulk shipment	22500.00000000	0.15000000	None	1
+-- !result
+select l_shipdate, l_partkey, l_linenumber, l_shipmode, l_comment, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipdate, l_partkey, l_linenumber, l_shipmode, l_comment order by l_shipdate, l_partkey, l_linenumber, l_shipmode, l_comment limit 100;
+-- result:
+1995-01-16	None	None	None	None	None	None	None	0
+1995-02-05	8890	1	MAIL	Small quantity item	450.00000000	0.02000000	None	1
+1995-03-10	5501	1	TRUCK	First item of order	1560.00000000	0.05000000	None	1
+1995-03-10	7203	2	AIR	Second item, fragile	892.50000000	0E-8	None	1
+1995-03-22	3345	1	SHIP	Bulk order item	3120.00000000	0.10000000	None	1
+1995-05-30	4567	1	RAIL	Large bulk shipment	22500.00000000	0.15000000	None	1
+1996-01-15	5501	1	TRUCK	First item of order	1560.00000000	0.05000000	None	1
+1996-02-15	7203	2	AIR	Second item, fragile	892.50000000	0E-8	None	1
+1996-03-22	3345	1	SHIP	Bulk order item	3120.00000000	0.10000000	None	1
+1996-04-30	4567	1	RAIL	Large bulk shipment	22500.00000000	0.15000000	None	1
+1996-12-05	8890	1	MAIL	Small quantity item	450.00000000	0.02000000	None	1
+1997-01-15	5501	1	TRUCK	First item of order	1560.00000000	0.05000000	None	1
+1997-02-15	7203	2	AIR	Second item, fragile	892.50000000	0E-8	None	1
+1997-03-22	3345	1	SHIP	Bulk order item	3120.00000000	0.10000000	None	1
+1997-04-30	4567	1	RAIL	Large bulk shipment	22500.00000000	0.15000000	None	1
+1997-11-05	8890	1	MAIL	Small quantity item	450.00000000	0.02000000	None	1
+1998-01-15	5501	1	TRUCK	First item of order	1560.00000000	0.05000000	None	1
+1998-02-15	7203	2	AIR	Second item, fragile	892.50000000	0E-8	None	1
+1998-03-22	3345	1	SHIP	Bulk order item	3120.00000000	0.10000000	None	1
+1998-04-30	4567	1	RAIL	Large bulk shipment	22500.00000000	0.15000000	None	1
+1998-11-05	8890	1	MAIL	Small quantity item	450.00000000	0.02000000	None	1
+-- !result
+select l_shipdate, l_partkey, l_linenumber, l_shipmode, l_comment, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipdate, l_partkey, l_linenumber, l_shipmode, l_comment order by l_shipdate, l_partkey, l_linenumber, l_shipmode, l_comment limit 1000;
+-- result:
+1995-01-16	None	None	None	None	None	None	None	0
+1995-02-05	8890	1	MAIL	Small quantity item	450.00000000	0.02000000	None	1
+1995-03-10	5501	1	TRUCK	First item of order	1560.00000000	0.05000000	None	1
+1995-03-10	7203	2	AIR	Second item, fragile	892.50000000	0E-8	None	1
+1995-03-22	3345	1	SHIP	Bulk order item	3120.00000000	0.10000000	None	1
+1995-05-30	4567	1	RAIL	Large bulk shipment	22500.00000000	0.15000000	None	1
+1996-01-15	5501	1	TRUCK	First item of order	1560.00000000	0.05000000	None	1
+1996-02-15	7203	2	AIR	Second item, fragile	892.50000000	0E-8	None	1
+1996-03-22	3345	1	SHIP	Bulk order item	3120.00000000	0.10000000	None	1
+1996-04-30	4567	1	RAIL	Large bulk shipment	22500.00000000	0.15000000	None	1
+1996-12-05	8890	1	MAIL	Small quantity item	450.00000000	0.02000000	None	1
+1997-01-15	5501	1	TRUCK	First item of order	1560.00000000	0.05000000	None	1
+1997-02-15	7203	2	AIR	Second item, fragile	892.50000000	0E-8	None	1
+1997-03-22	3345	1	SHIP	Bulk order item	3120.00000000	0.10000000	None	1
+1997-04-30	4567	1	RAIL	Large bulk shipment	22500.00000000	0.15000000	None	1
+1997-11-05	8890	1	MAIL	Small quantity item	450.00000000	0.02000000	None	1
+1998-01-15	5501	1	TRUCK	First item of order	1560.00000000	0.05000000	None	1
+1998-02-15	7203	2	AIR	Second item, fragile	892.50000000	0E-8	None	1
+1998-03-22	3345	1	SHIP	Bulk order item	3120.00000000	0.10000000	None	1
+1998-04-30	4567	1	RAIL	Large bulk shipment	22500.00000000	0.15000000	None	1
+1998-11-05	8890	1	MAIL	Small quantity item	450.00000000	0.02000000	None	1
+-- !result
+select l_shipdate, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipdate order by l_shipdate nulls last limit 1;
+-- result:
+1995-01-16	None	None	None	0
+-- !result
+select l_orderkey, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_orderkey order by l_orderkey nulls last limit 1;
+-- result:
+100001	1226.25000000	0.02500000	None	2
+-- !result
+select l_partkey, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_partkey order by l_partkey nulls last limit 1;
+-- result:
+3345	3120.00000000	0.10000000	None	4
+-- !result
+select l_suppkey, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_suppkey order by l_suppkey nulls last limit 1;
+-- result:
+89	450.00000000	0.02000000	None	4
+-- !result
+select l_linenumber, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_linenumber order by l_linenumber nulls last limit 1;
+-- result:
+1	6907.50000000	0.08000000	None	16
+-- !result
+select l_returnflag, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_returnflag order by l_returnflag nulls last limit 1;
+-- result:
+A	450.00000000	0.02000000	None	4
+-- !result
+select l_linestatus, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_linestatus order by l_linestatus nulls last limit 1;
+-- result:
+F	3120.00000000	0.10000000	None	4
+-- !result
+select l_commitdate, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_commitdate order by l_commitdate nulls last limit 1;
+-- result:
+1995-03-10	1226.25000000	0.02500000	None	8
+-- !result
+select l_receiptdate, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_receiptdate order by l_receiptdate nulls last limit 1;
+-- result:
+1995-03-18	892.50000000	0E-8	None	4
+-- !result
+select l_shipmode, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipmode order by l_shipmode nulls last limit 1;
+-- result:
+AIR	892.50000000	0E-8	None	4
+-- !result
+select l_comment, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_comment order by l_comment nulls last limit 1;
+-- result:
+Bulk order item	3120.00000000	0.10000000	None	4
+-- !result
+select l_shipdate, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipdate order by l_shipdate nulls last limit 10;
+-- result:
+1995-01-16	None	None	None	0
+1995-02-05	450.00000000	0.02000000	None	1
+1995-03-10	1226.25000000	0.02500000	None	2
+1995-03-22	3120.00000000	0.10000000	None	1
+1995-05-30	22500.00000000	0.15000000	None	1
+1996-01-15	1560.00000000	0.05000000	None	1
+1996-02-15	892.50000000	0E-8	None	1
+1996-03-22	3120.00000000	0.10000000	None	1
+1996-04-30	22500.00000000	0.15000000	None	1
+1996-12-05	450.00000000	0.02000000	None	1
+-- !result
+select l_orderkey, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_orderkey order by l_orderkey nulls last limit 10;
+-- result:
+100001	1226.25000000	0.02500000	None	2
+100002	3120.00000000	0.10000000	None	1
+100003	450.00000000	0.02000000	None	1
+100004	22500.00000000	0.15000000	None	1
+100011	1226.25000000	0.02500000	None	2
+100012	3120.00000000	0.10000000	None	1
+100013	450.00000000	0.02000000	None	1
+100014	22500.00000000	0.15000000	None	1
+100101	1226.25000000	0.02500000	None	2
+100102	3120.00000000	0.10000000	None	1
+-- !result
+select l_partkey, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_partkey order by l_partkey nulls last limit 10;
+-- result:
+3345	3120.00000000	0.10000000	None	4
+4567	22500.00000000	0.15000000	None	4
+5501	1560.00000000	0.05000000	None	4
+7203	892.50000000	0E-8	None	4
+8890	450.00000000	0.02000000	None	4
+None	None	None	None	0
+-- !result
+select l_suppkey, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_suppkey order by l_suppkey nulls last limit 10;
+-- result:
+89	450.00000000	0.02000000	None	4
+101	1560.00000000	0.05000000	None	4
+156	3120.00000000	0.10000000	None	4
+203	892.50000000	0E-8	None	4
+305	22500.00000000	0.15000000	None	4
+None	None	None	None	0
+-- !result
+select l_linenumber, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_linenumber order by l_linenumber nulls last limit 10;
+-- result:
+1	6907.50000000	0.08000000	None	16
+2	892.50000000	0E-8	None	4
+None	None	None	None	0
+-- !result
+select l_returnflag, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_returnflag order by l_returnflag nulls last limit 10;
+-- result:
+A	450.00000000	0.02000000	None	4
+N	8317.50000000	0.06666667	None	12
+R	3120.00000000	0.10000000	None	4
+None	None	None	None	0
+-- !result
+select l_linestatus, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_linestatus order by l_linestatus nulls last limit 10;
+-- result:
+F	3120.00000000	0.10000000	None	4
+O	6350.62500000	0.05500000	None	16
+None	None	None	None	0
+-- !result
+select l_commitdate, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_commitdate order by l_commitdate nulls last limit 10;
+-- result:
+1995-03-10	1226.25000000	0.02500000	None	8
+1996-08-18	3120.00000000	0.10000000	None	4
+1997-12-01	450.00000000	0.02000000	None	4
+1998-05-25	22500.00000000	0.15000000	None	4
+None	None	None	None	0
+-- !result
+select l_receiptdate, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_receiptdate order by l_receiptdate nulls last limit 10;
+-- result:
+1995-03-18	892.50000000	0E-8	None	4
+1995-03-20	1560.00000000	0.05000000	None	4
+1996-08-25	3120.00000000	0.10000000	None	4
+1997-12-10	450.00000000	0.02000000	None	4
+1998-06-05	22500.00000000	0.15000000	None	4
+None	None	None	None	0
+-- !result
+select l_shipinstruct, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipinstruct order by l_shipinstruct nulls last limit 10;
+-- result:
+COLLECT COD	3120.00000000	0.10000000	None	4
+DELIVER IN PERSON	12030.00000000	0.10000000	None	8
+NONE	450.00000000	0.02000000	None	4
+TAKE BACK RETURN	892.50000000	0E-8	None	4
+None	None	None	None	0
+-- !result
+select l_shipmode, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipmode order by l_shipmode nulls last limit 10;
+-- result:
+AIR	892.50000000	0E-8	None	4
+MAIL	450.00000000	0.02000000	None	4
+RAIL	22500.00000000	0.15000000	None	4
+SHIP	3120.00000000	0.10000000	None	4
+TRUCK	1560.00000000	0.05000000	None	4
+None	None	None	None	0
+-- !result
+select l_comment, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_comment order by l_comment nulls last limit 10;
+-- result:
+Bulk order item	3120.00000000	0.10000000	None	4
+First item of order	1560.00000000	0.05000000	None	4
+Large bulk shipment	22500.00000000	0.15000000	None	4
+Second item, fragile	892.50000000	0E-8	None	4
+Small quantity item	450.00000000	0.02000000	None	4
+None	None	None	None	0
+-- !result
+select l_shipdate, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipdate order by l_shipdate nulls last limit 100;
+-- result:
+1995-01-16	None	None	None	0
+1995-02-05	450.00000000	0.02000000	None	1
+1995-03-10	1226.25000000	0.02500000	None	2
+1995-03-22	3120.00000000	0.10000000	None	1
+1995-05-30	22500.00000000	0.15000000	None	1
+1996-01-15	1560.00000000	0.05000000	None	1
+1996-02-15	892.50000000	0E-8	None	1
+1996-03-22	3120.00000000	0.10000000	None	1
+1996-04-30	22500.00000000	0.15000000	None	1
+1996-12-05	450.00000000	0.02000000	None	1
+1997-01-15	1560.00000000	0.05000000	None	1
+1997-02-15	892.50000000	0E-8	None	1
+1997-03-22	3120.00000000	0.10000000	None	1
+1997-04-30	22500.00000000	0.15000000	None	1
+1997-11-05	450.00000000	0.02000000	None	1
+1998-01-15	1560.00000000	0.05000000	None	1
+1998-02-15	892.50000000	0E-8	None	1
+1998-03-22	3120.00000000	0.10000000	None	1
+1998-04-30	22500.00000000	0.15000000	None	1
+1998-11-05	450.00000000	0.02000000	None	1
+-- !result
+select l_orderkey, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_orderkey order by l_orderkey nulls last limit 100;
+-- result:
+100001	1226.25000000	0.02500000	None	2
+100002	3120.00000000	0.10000000	None	1
+100003	450.00000000	0.02000000	None	1
+100004	22500.00000000	0.15000000	None	1
+100011	1226.25000000	0.02500000	None	2
+100012	3120.00000000	0.10000000	None	1
+100013	450.00000000	0.02000000	None	1
+100014	22500.00000000	0.15000000	None	1
+100101	1226.25000000	0.02500000	None	2
+100102	3120.00000000	0.10000000	None	1
+100103	450.00000000	0.02000000	None	1
+100104	22500.00000000	0.15000000	None	1
+101001	1226.25000000	0.02500000	None	2
+101002	3120.00000000	0.10000000	None	1
+101003	450.00000000	0.02000000	None	1
+101004	22500.00000000	0.15000000	None	1
+None	None	None	None	0
+-- !result
+select l_partkey, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_partkey order by l_partkey nulls last limit 100;
+-- result:
+3345	3120.00000000	0.10000000	None	4
+4567	22500.00000000	0.15000000	None	4
+5501	1560.00000000	0.05000000	None	4
+7203	892.50000000	0E-8	None	4
+8890	450.00000000	0.02000000	None	4
+None	None	None	None	0
+-- !result
+select l_suppkey, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_suppkey order by l_suppkey nulls last limit 100;
+-- result:
+89	450.00000000	0.02000000	None	4
+101	1560.00000000	0.05000000	None	4
+156	3120.00000000	0.10000000	None	4
+203	892.50000000	0E-8	None	4
+305	22500.00000000	0.15000000	None	4
+None	None	None	None	0
+-- !result
+select l_linenumber, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_linenumber order by l_linenumber nulls last limit 100;
+-- result:
+1	6907.50000000	0.08000000	None	16
+2	892.50000000	0E-8	None	4
+None	None	None	None	0
+-- !result
+select l_returnflag, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_returnflag order by l_returnflag nulls last limit 100;
+-- result:
+A	450.00000000	0.02000000	None	4
+N	8317.50000000	0.06666667	None	12
+R	3120.00000000	0.10000000	None	4
+None	None	None	None	0
+-- !result
+select l_linestatus, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_linestatus order by l_linestatus nulls last limit 100;
+-- result:
+F	3120.00000000	0.10000000	None	4
+O	6350.62500000	0.05500000	None	16
+None	None	None	None	0
+-- !result
+select l_commitdate, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_commitdate order by l_commitdate nulls last limit 100;
+-- result:
+1995-03-10	1226.25000000	0.02500000	None	8
+1996-08-18	3120.00000000	0.10000000	None	4
+1997-12-01	450.00000000	0.02000000	None	4
+1998-05-25	22500.00000000	0.15000000	None	4
+None	None	None	None	0
+-- !result
+select l_receiptdate, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_receiptdate order by l_receiptdate nulls last limit 100;
+-- result:
+1995-03-18	892.50000000	0E-8	None	4
+1995-03-20	1560.00000000	0.05000000	None	4
+1996-08-25	3120.00000000	0.10000000	None	4
+1997-12-10	450.00000000	0.02000000	None	4
+1998-06-05	22500.00000000	0.15000000	None	4
+None	None	None	None	0
+-- !result
+select l_shipinstruct, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipinstruct order by l_shipinstruct nulls last limit 100;
+-- result:
+COLLECT COD	3120.00000000	0.10000000	None	4
+DELIVER IN PERSON	12030.00000000	0.10000000	None	8
+NONE	450.00000000	0.02000000	None	4
+TAKE BACK RETURN	892.50000000	0E-8	None	4
+None	None	None	None	0
+-- !result
+select l_shipmode, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipmode order by l_shipmode nulls last limit 100;
+-- result:
+AIR	892.50000000	0E-8	None	4
+MAIL	450.00000000	0.02000000	None	4
+RAIL	22500.00000000	0.15000000	None	4
+SHIP	3120.00000000	0.10000000	None	4
+TRUCK	1560.00000000	0.05000000	None	4
+None	None	None	None	0
+-- !result
+select l_comment, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_comment order by l_comment nulls last limit 100;
+-- result:
+Bulk order item	3120.00000000	0.10000000	None	4
+First item of order	1560.00000000	0.05000000	None	4
+Large bulk shipment	22500.00000000	0.15000000	None	4
+Second item, fragile	892.50000000	0E-8	None	4
+Small quantity item	450.00000000	0.02000000	None	4
+None	None	None	None	0
+-- !result
+select l_shipdate, l_orderkey, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipdate, l_orderkey order by l_shipdate, l_orderkey nulls last limit 10;
+-- result:
+1995-01-16	None	None	None	None	0
+1995-02-05	100003	450.00000000	0.02000000	None	1
+1995-03-10	100001	1226.25000000	0.02500000	None	2
+1995-03-22	100002	3120.00000000	0.10000000	None	1
+1995-05-30	100004	22500.00000000	0.15000000	None	1
+1996-01-15	100011	1560.00000000	0.05000000	None	1
+1996-02-15	100011	892.50000000	0E-8	None	1
+1996-03-22	100012	3120.00000000	0.10000000	None	1
+1996-04-30	100014	22500.00000000	0.15000000	None	1
+1996-12-05	100013	450.00000000	0.02000000	None	1
+-- !result
+select l_shipdate, l_partkey, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipdate, l_partkey order by l_shipdate, l_partkey nulls last limit 10;
+-- result:
+1995-01-16	None	None	None	None	0
+1995-02-05	8890	450.00000000	0.02000000	None	1
+1995-03-10	5501	1560.00000000	0.05000000	None	1
+1995-03-10	7203	892.50000000	0E-8	None	1
+1995-03-22	3345	3120.00000000	0.10000000	None	1
+1995-05-30	4567	22500.00000000	0.15000000	None	1
+1996-01-15	5501	1560.00000000	0.05000000	None	1
+1996-02-15	7203	892.50000000	0E-8	None	1
+1996-03-22	3345	3120.00000000	0.10000000	None	1
+1996-04-30	4567	22500.00000000	0.15000000	None	1
+-- !result
+select l_shipdate, l_suppkey, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipdate, l_suppkey order by l_shipdate, l_suppkey nulls last limit 10;
+-- result:
+1995-01-16	None	None	None	None	0
+1995-02-05	89	450.00000000	0.02000000	None	1
+1995-03-10	101	1560.00000000	0.05000000	None	1
+1995-03-10	203	892.50000000	0E-8	None	1
+1995-03-22	156	3120.00000000	0.10000000	None	1
+1995-05-30	305	22500.00000000	0.15000000	None	1
+1996-01-15	101	1560.00000000	0.05000000	None	1
+1996-02-15	203	892.50000000	0E-8	None	1
+1996-03-22	156	3120.00000000	0.10000000	None	1
+1996-04-30	305	22500.00000000	0.15000000	None	1
+-- !result
+select l_shipdate, l_linenumber, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipdate, l_linenumber order by l_shipdate, l_linenumber nulls last limit 10;
+-- result:
+1995-01-16	None	None	None	None	0
+1995-02-05	1	450.00000000	0.02000000	None	1
+1995-03-10	1	1560.00000000	0.05000000	None	1
+1995-03-10	2	892.50000000	0E-8	None	1
+1995-03-22	1	3120.00000000	0.10000000	None	1
+1995-05-30	1	22500.00000000	0.15000000	None	1
+1996-01-15	1	1560.00000000	0.05000000	None	1
+1996-02-15	2	892.50000000	0E-8	None	1
+1996-03-22	1	3120.00000000	0.10000000	None	1
+1996-04-30	1	22500.00000000	0.15000000	None	1
+-- !result
+select l_shipdate, l_returnflag, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipdate, l_returnflag order by l_shipdate, l_returnflag nulls last limit 10;
+-- result:
+1995-01-16	None	None	None	None	0
+1995-02-05	A	450.00000000	0.02000000	None	1
+1995-03-10	N	1226.25000000	0.02500000	None	2
+1995-03-22	R	3120.00000000	0.10000000	None	1
+1995-05-30	N	22500.00000000	0.15000000	None	1
+1996-01-15	N	1560.00000000	0.05000000	None	1
+1996-02-15	N	892.50000000	0E-8	None	1
+1996-03-22	R	3120.00000000	0.10000000	None	1
+1996-04-30	N	22500.00000000	0.15000000	None	1
+1996-12-05	A	450.00000000	0.02000000	None	1
+-- !result
+select l_shipdate, l_linestatus, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipdate, l_linestatus order by l_shipdate, l_linestatus nulls last limit 10;
+-- result:
+1995-01-16	None	None	None	None	0
+1995-02-05	O	450.00000000	0.02000000	None	1
+1995-03-10	O	1226.25000000	0.02500000	None	2
+1995-03-22	F	3120.00000000	0.10000000	None	1
+1995-05-30	O	22500.00000000	0.15000000	None	1
+1996-01-15	O	1560.00000000	0.05000000	None	1
+1996-02-15	O	892.50000000	0E-8	None	1
+1996-03-22	F	3120.00000000	0.10000000	None	1
+1996-04-30	O	22500.00000000	0.15000000	None	1
+1996-12-05	O	450.00000000	0.02000000	None	1
+-- !result
+select l_shipdate, l_commitdate, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipdate, l_commitdate order by l_shipdate, l_commitdate nulls last limit 10;
+-- result:
+1995-01-16	None	None	None	None	0
+1995-02-05	1997-12-01	450.00000000	0.02000000	None	1
+1995-03-10	1995-03-10	1226.25000000	0.02500000	None	2
+1995-03-22	1996-08-18	3120.00000000	0.10000000	None	1
+1995-05-30	1998-05-25	22500.00000000	0.15000000	None	1
+1996-01-15	1995-03-10	1560.00000000	0.05000000	None	1
+1996-02-15	1995-03-10	892.50000000	0E-8	None	1
+1996-03-22	1996-08-18	3120.00000000	0.10000000	None	1
+1996-04-30	1998-05-25	22500.00000000	0.15000000	None	1
+1996-12-05	1997-12-01	450.00000000	0.02000000	None	1
+-- !result
+select l_shipdate, l_receiptdate, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipdate, l_receiptdate order by l_shipdate, l_receiptdate nulls last limit 10;
+-- result:
+1995-01-16	None	None	None	None	0
+1995-02-05	1997-12-10	450.00000000	0.02000000	None	1
+1995-03-10	1995-03-18	892.50000000	0E-8	None	1
+1995-03-10	1995-03-20	1560.00000000	0.05000000	None	1
+1995-03-22	1996-08-25	3120.00000000	0.10000000	None	1
+1995-05-30	1998-06-05	22500.00000000	0.15000000	None	1
+1996-01-15	1995-03-20	1560.00000000	0.05000000	None	1
+1996-02-15	1995-03-18	892.50000000	0E-8	None	1
+1996-03-22	1996-08-25	3120.00000000	0.10000000	None	1
+1996-04-30	1998-06-05	22500.00000000	0.15000000	None	1
+-- !result
+select l_shipdate, l_shipinstruct, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipdate, l_shipinstruct order by l_shipdate, l_shipinstruct nulls last limit 10;
+-- result:
+1995-01-16	None	None	None	None	0
+1995-02-05	NONE	450.00000000	0.02000000	None	1
+1995-03-10	DELIVER IN PERSON	1560.00000000	0.05000000	None	1
+1995-03-10	TAKE BACK RETURN	892.50000000	0E-8	None	1
+1995-03-22	COLLECT COD	3120.00000000	0.10000000	None	1
+1995-05-30	DELIVER IN PERSON	22500.00000000	0.15000000	None	1
+1996-01-15	DELIVER IN PERSON	1560.00000000	0.05000000	None	1
+1996-02-15	TAKE BACK RETURN	892.50000000	0E-8	None	1
+1996-03-22	COLLECT COD	3120.00000000	0.10000000	None	1
+1996-04-30	DELIVER IN PERSON	22500.00000000	0.15000000	None	1
+-- !result
+select l_shipdate, l_shipmode, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipdate, l_shipmode order by l_shipdate, l_shipmode nulls last limit 10;
+-- result:
+1995-01-16	None	None	None	None	0
+1995-02-05	MAIL	450.00000000	0.02000000	None	1
+1995-03-10	AIR	892.50000000	0E-8	None	1
+1995-03-10	TRUCK	1560.00000000	0.05000000	None	1
+1995-03-22	SHIP	3120.00000000	0.10000000	None	1
+1995-05-30	RAIL	22500.00000000	0.15000000	None	1
+1996-01-15	TRUCK	1560.00000000	0.05000000	None	1
+1996-02-15	AIR	892.50000000	0E-8	None	1
+1996-03-22	SHIP	3120.00000000	0.10000000	None	1
+1996-04-30	RAIL	22500.00000000	0.15000000	None	1
+-- !result
+select l_shipdate, l_comment, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipdate, l_comment order by l_shipdate, l_comment nulls last limit 10;
+-- result:
+1995-01-16	None	None	None	None	0
+1995-02-05	Small quantity item	450.00000000	0.02000000	None	1
+1995-03-10	First item of order	1560.00000000	0.05000000	None	1
+1995-03-10	Second item, fragile	892.50000000	0E-8	None	1
+1995-03-22	Bulk order item	3120.00000000	0.10000000	None	1
+1995-05-30	Large bulk shipment	22500.00000000	0.15000000	None	1
+1996-01-15	First item of order	1560.00000000	0.05000000	None	1
+1996-02-15	Second item, fragile	892.50000000	0E-8	None	1
+1996-03-22	Bulk order item	3120.00000000	0.10000000	None	1
+1996-04-30	Large bulk shipment	22500.00000000	0.15000000	None	1
+-- !result
+select l_shipdate, l_orderkey, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipdate, l_orderkey order by l_shipdate, l_orderkey nulls last limit 100;
+-- result:
+1995-01-16	None	None	None	None	0
+1995-02-05	100003	450.00000000	0.02000000	None	1
+1995-03-10	100001	1226.25000000	0.02500000	None	2
+1995-03-22	100002	3120.00000000	0.10000000	None	1
+1995-05-30	100004	22500.00000000	0.15000000	None	1
+1996-01-15	100011	1560.00000000	0.05000000	None	1
+1996-02-15	100011	892.50000000	0E-8	None	1
+1996-03-22	100012	3120.00000000	0.10000000	None	1
+1996-04-30	100014	22500.00000000	0.15000000	None	1
+1996-12-05	100013	450.00000000	0.02000000	None	1
+1997-01-15	100101	1560.00000000	0.05000000	None	1
+1997-02-15	100101	892.50000000	0E-8	None	1
+1997-03-22	100102	3120.00000000	0.10000000	None	1
+1997-04-30	100104	22500.00000000	0.15000000	None	1
+1997-11-05	100103	450.00000000	0.02000000	None	1
+1998-01-15	101001	1560.00000000	0.05000000	None	1
+1998-02-15	101001	892.50000000	0E-8	None	1
+1998-03-22	101002	3120.00000000	0.10000000	None	1
+1998-04-30	101004	22500.00000000	0.15000000	None	1
+1998-11-05	101003	450.00000000	0.02000000	None	1
+-- !result
+select l_shipdate, l_partkey, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipdate, l_partkey order by l_shipdate, l_partkey nulls last limit 100;
+-- result:
+1995-01-16	None	None	None	None	0
+1995-02-05	8890	450.00000000	0.02000000	None	1
+1995-03-10	5501	1560.00000000	0.05000000	None	1
+1995-03-10	7203	892.50000000	0E-8	None	1
+1995-03-22	3345	3120.00000000	0.10000000	None	1
+1995-05-30	4567	22500.00000000	0.15000000	None	1
+1996-01-15	5501	1560.00000000	0.05000000	None	1
+1996-02-15	7203	892.50000000	0E-8	None	1
+1996-03-22	3345	3120.00000000	0.10000000	None	1
+1996-04-30	4567	22500.00000000	0.15000000	None	1
+1996-12-05	8890	450.00000000	0.02000000	None	1
+1997-01-15	5501	1560.00000000	0.05000000	None	1
+1997-02-15	7203	892.50000000	0E-8	None	1
+1997-03-22	3345	3120.00000000	0.10000000	None	1
+1997-04-30	4567	22500.00000000	0.15000000	None	1
+1997-11-05	8890	450.00000000	0.02000000	None	1
+1998-01-15	5501	1560.00000000	0.05000000	None	1
+1998-02-15	7203	892.50000000	0E-8	None	1
+1998-03-22	3345	3120.00000000	0.10000000	None	1
+1998-04-30	4567	22500.00000000	0.15000000	None	1
+1998-11-05	8890	450.00000000	0.02000000	None	1
+-- !result
+select l_shipdate, l_suppkey, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipdate, l_suppkey order by l_shipdate, l_suppkey nulls last limit 100;
+-- result:
+1995-01-16	None	None	None	None	0
+1995-02-05	89	450.00000000	0.02000000	None	1
+1995-03-10	101	1560.00000000	0.05000000	None	1
+1995-03-10	203	892.50000000	0E-8	None	1
+1995-03-22	156	3120.00000000	0.10000000	None	1
+1995-05-30	305	22500.00000000	0.15000000	None	1
+1996-01-15	101	1560.00000000	0.05000000	None	1
+1996-02-15	203	892.50000000	0E-8	None	1
+1996-03-22	156	3120.00000000	0.10000000	None	1
+1996-04-30	305	22500.00000000	0.15000000	None	1
+1996-12-05	89	450.00000000	0.02000000	None	1
+1997-01-15	101	1560.00000000	0.05000000	None	1
+1997-02-15	203	892.50000000	0E-8	None	1
+1997-03-22	156	3120.00000000	0.10000000	None	1
+1997-04-30	305	22500.00000000	0.15000000	None	1
+1997-11-05	89	450.00000000	0.02000000	None	1
+1998-01-15	101	1560.00000000	0.05000000	None	1
+1998-02-15	203	892.50000000	0E-8	None	1
+1998-03-22	156	3120.00000000	0.10000000	None	1
+1998-04-30	305	22500.00000000	0.15000000	None	1
+1998-11-05	89	450.00000000	0.02000000	None	1
+-- !result
+select l_shipdate, l_linenumber, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipdate, l_linenumber order by l_shipdate, l_linenumber nulls last limit 100;
+-- result:
+1995-01-16	None	None	None	None	0
+1995-02-05	1	450.00000000	0.02000000	None	1
+1995-03-10	1	1560.00000000	0.05000000	None	1
+1995-03-10	2	892.50000000	0E-8	None	1
+1995-03-22	1	3120.00000000	0.10000000	None	1
+1995-05-30	1	22500.00000000	0.15000000	None	1
+1996-01-15	1	1560.00000000	0.05000000	None	1
+1996-02-15	2	892.50000000	0E-8	None	1
+1996-03-22	1	3120.00000000	0.10000000	None	1
+1996-04-30	1	22500.00000000	0.15000000	None	1
+1996-12-05	1	450.00000000	0.02000000	None	1
+1997-01-15	1	1560.00000000	0.05000000	None	1
+1997-02-15	2	892.50000000	0E-8	None	1
+1997-03-22	1	3120.00000000	0.10000000	None	1
+1997-04-30	1	22500.00000000	0.15000000	None	1
+1997-11-05	1	450.00000000	0.02000000	None	1
+1998-01-15	1	1560.00000000	0.05000000	None	1
+1998-02-15	2	892.50000000	0E-8	None	1
+1998-03-22	1	3120.00000000	0.10000000	None	1
+1998-04-30	1	22500.00000000	0.15000000	None	1
+1998-11-05	1	450.00000000	0.02000000	None	1
+-- !result
+select l_shipdate, l_returnflag, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipdate, l_returnflag order by l_shipdate, l_returnflag nulls last limit 100;
+-- result:
+1995-01-16	None	None	None	None	0
+1995-02-05	A	450.00000000	0.02000000	None	1
+1995-03-10	N	1226.25000000	0.02500000	None	2
+1995-03-22	R	3120.00000000	0.10000000	None	1
+1995-05-30	N	22500.00000000	0.15000000	None	1
+1996-01-15	N	1560.00000000	0.05000000	None	1
+1996-02-15	N	892.50000000	0E-8	None	1
+1996-03-22	R	3120.00000000	0.10000000	None	1
+1996-04-30	N	22500.00000000	0.15000000	None	1
+1996-12-05	A	450.00000000	0.02000000	None	1
+1997-01-15	N	1560.00000000	0.05000000	None	1
+1997-02-15	N	892.50000000	0E-8	None	1
+1997-03-22	R	3120.00000000	0.10000000	None	1
+1997-04-30	N	22500.00000000	0.15000000	None	1
+1997-11-05	A	450.00000000	0.02000000	None	1
+1998-01-15	N	1560.00000000	0.05000000	None	1
+1998-02-15	N	892.50000000	0E-8	None	1
+1998-03-22	R	3120.00000000	0.10000000	None	1
+1998-04-30	N	22500.00000000	0.15000000	None	1
+1998-11-05	A	450.00000000	0.02000000	None	1
+-- !result
+select l_shipdate, l_linestatus, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipdate, l_linestatus order by l_shipdate, l_linestatus nulls last limit 100;
+-- result:
+1995-01-16	None	None	None	None	0
+1995-02-05	O	450.00000000	0.02000000	None	1
+1995-03-10	O	1226.25000000	0.02500000	None	2
+1995-03-22	F	3120.00000000	0.10000000	None	1
+1995-05-30	O	22500.00000000	0.15000000	None	1
+1996-01-15	O	1560.00000000	0.05000000	None	1
+1996-02-15	O	892.50000000	0E-8	None	1
+1996-03-22	F	3120.00000000	0.10000000	None	1
+1996-04-30	O	22500.00000000	0.15000000	None	1
+1996-12-05	O	450.00000000	0.02000000	None	1
+1997-01-15	O	1560.00000000	0.05000000	None	1
+1997-02-15	O	892.50000000	0E-8	None	1
+1997-03-22	F	3120.00000000	0.10000000	None	1
+1997-04-30	O	22500.00000000	0.15000000	None	1
+1997-11-05	O	450.00000000	0.02000000	None	1
+1998-01-15	O	1560.00000000	0.05000000	None	1
+1998-02-15	O	892.50000000	0E-8	None	1
+1998-03-22	F	3120.00000000	0.10000000	None	1
+1998-04-30	O	22500.00000000	0.15000000	None	1
+1998-11-05	O	450.00000000	0.02000000	None	1
+-- !result
+select l_shipdate, l_commitdate, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipdate, l_commitdate order by l_shipdate, l_commitdate nulls last limit 100
+select l_shipdate, l_receiptdate, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipdate, l_receiptdate order by l_shipdate, l_receiptdate nulls last limit 100;
+-- result:
+E: (1064, "Getting syntax error at line 2, column 0. Detail message: Unexpected input 'select', the most similar input is {<EOF>, ';'}.")
+-- !result
+select l_shipdate, l_shipinstruct, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipdate, l_shipinstruct order by l_shipdate, l_shipinstruct nulls last limit 100;
+-- result:
+1995-01-16	None	None	None	None	0
+1995-02-05	NONE	450.00000000	0.02000000	None	1
+1995-03-10	DELIVER IN PERSON	1560.00000000	0.05000000	None	1
+1995-03-10	TAKE BACK RETURN	892.50000000	0E-8	None	1
+1995-03-22	COLLECT COD	3120.00000000	0.10000000	None	1
+1995-05-30	DELIVER IN PERSON	22500.00000000	0.15000000	None	1
+1996-01-15	DELIVER IN PERSON	1560.00000000	0.05000000	None	1
+1996-02-15	TAKE BACK RETURN	892.50000000	0E-8	None	1
+1996-03-22	COLLECT COD	3120.00000000	0.10000000	None	1
+1996-04-30	DELIVER IN PERSON	22500.00000000	0.15000000	None	1
+1996-12-05	NONE	450.00000000	0.02000000	None	1
+1997-01-15	DELIVER IN PERSON	1560.00000000	0.05000000	None	1
+1997-02-15	TAKE BACK RETURN	892.50000000	0E-8	None	1
+1997-03-22	COLLECT COD	3120.00000000	0.10000000	None	1
+1997-04-30	DELIVER IN PERSON	22500.00000000	0.15000000	None	1
+1997-11-05	NONE	450.00000000	0.02000000	None	1
+1998-01-15	DELIVER IN PERSON	1560.00000000	0.05000000	None	1
+1998-02-15	TAKE BACK RETURN	892.50000000	0E-8	None	1
+1998-03-22	COLLECT COD	3120.00000000	0.10000000	None	1
+1998-04-30	DELIVER IN PERSON	22500.00000000	0.15000000	None	1
+1998-11-05	NONE	450.00000000	0.02000000	None	1
+-- !result
+select l_shipdate, l_shipmode, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipdate, l_shipmode order by l_shipdate, l_shipmode nulls last limit 100;
+-- result:
+1995-01-16	None	None	None	None	0
+1995-02-05	MAIL	450.00000000	0.02000000	None	1
+1995-03-10	AIR	892.50000000	0E-8	None	1
+1995-03-10	TRUCK	1560.00000000	0.05000000	None	1
+1995-03-22	SHIP	3120.00000000	0.10000000	None	1
+1995-05-30	RAIL	22500.00000000	0.15000000	None	1
+1996-01-15	TRUCK	1560.00000000	0.05000000	None	1
+1996-02-15	AIR	892.50000000	0E-8	None	1
+1996-03-22	SHIP	3120.00000000	0.10000000	None	1
+1996-04-30	RAIL	22500.00000000	0.15000000	None	1
+1996-12-05	MAIL	450.00000000	0.02000000	None	1
+1997-01-15	TRUCK	1560.00000000	0.05000000	None	1
+1997-02-15	AIR	892.50000000	0E-8	None	1
+1997-03-22	SHIP	3120.00000000	0.10000000	None	1
+1997-04-30	RAIL	22500.00000000	0.15000000	None	1
+1997-11-05	MAIL	450.00000000	0.02000000	None	1
+1998-01-15	TRUCK	1560.00000000	0.05000000	None	1
+1998-02-15	AIR	892.50000000	0E-8	None	1
+1998-03-22	SHIP	3120.00000000	0.10000000	None	1
+1998-04-30	RAIL	22500.00000000	0.15000000	None	1
+1998-11-05	MAIL	450.00000000	0.02000000	None	1
+-- !result
+select l_shipdate, l_comment, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipdate, l_comment order by l_shipdate, l_comment nulls last limit 100;
+-- result:
+1995-01-16	None	None	None	None	0
+1995-02-05	Small quantity item	450.00000000	0.02000000	None	1
+1995-03-10	First item of order	1560.00000000	0.05000000	None	1
+1995-03-10	Second item, fragile	892.50000000	0E-8	None	1
+1995-03-22	Bulk order item	3120.00000000	0.10000000	None	1
+1995-05-30	Large bulk shipment	22500.00000000	0.15000000	None	1
+1996-01-15	First item of order	1560.00000000	0.05000000	None	1
+1996-02-15	Second item, fragile	892.50000000	0E-8	None	1
+1996-03-22	Bulk order item	3120.00000000	0.10000000	None	1
+1996-04-30	Large bulk shipment	22500.00000000	0.15000000	None	1
+1996-12-05	Small quantity item	450.00000000	0.02000000	None	1
+1997-01-15	First item of order	1560.00000000	0.05000000	None	1
+1997-02-15	Second item, fragile	892.50000000	0E-8	None	1
+1997-03-22	Bulk order item	3120.00000000	0.10000000	None	1
+1997-04-30	Large bulk shipment	22500.00000000	0.15000000	None	1
+1997-11-05	Small quantity item	450.00000000	0.02000000	None	1
+1998-01-15	First item of order	1560.00000000	0.05000000	None	1
+1998-02-15	Second item, fragile	892.50000000	0E-8	None	1
+1998-03-22	Bulk order item	3120.00000000	0.10000000	None	1
+1998-04-30	Large bulk shipment	22500.00000000	0.15000000	None	1
+1998-11-05	Small quantity item	450.00000000	0.02000000	None	1
+-- !result
+select l_shipdate, l_linestatus, l_receiptdate, l_shipmode, l_comment, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipdate, l_linestatus, l_receiptdate, l_shipmode, l_comment order by l_shipdate, l_linestatus, l_receiptdate, l_shipmode, l_comment nulls last limit 10;
+-- result:
+1995-01-16	None	None	None	None	None	None	None	0
+1995-02-05	O	1997-12-10	MAIL	Small quantity item	450.00000000	0.02000000	None	1
+1995-03-10	O	1995-03-18	AIR	Second item, fragile	892.50000000	0E-8	None	1
+1995-03-10	O	1995-03-20	TRUCK	First item of order	1560.00000000	0.05000000	None	1
+1995-03-22	F	1996-08-25	SHIP	Bulk order item	3120.00000000	0.10000000	None	1
+1995-05-30	O	1998-06-05	RAIL	Large bulk shipment	22500.00000000	0.15000000	None	1
+1996-01-15	O	1995-03-20	TRUCK	First item of order	1560.00000000	0.05000000	None	1
+1996-02-15	O	1995-03-18	AIR	Second item, fragile	892.50000000	0E-8	None	1
+1996-03-22	F	1996-08-25	SHIP	Bulk order item	3120.00000000	0.10000000	None	1
+1996-04-30	O	1998-06-05	RAIL	Large bulk shipment	22500.00000000	0.15000000	None	1
+-- !result
+select l_shipdate, l_linestatus, l_receiptdate, l_shipmode, l_comment, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipdate, l_linestatus, l_receiptdate, l_shipmode, l_comment order by l_shipdate, l_linestatus, l_receiptdate, l_shipmode, l_comment nulls last limit 100;
+-- result:
+1995-01-16	None	None	None	None	None	None	None	0
+1995-02-05	O	1997-12-10	MAIL	Small quantity item	450.00000000	0.02000000	None	1
+1995-03-10	O	1995-03-18	AIR	Second item, fragile	892.50000000	0E-8	None	1
+1995-03-10	O	1995-03-20	TRUCK	First item of order	1560.00000000	0.05000000	None	1
+1995-03-22	F	1996-08-25	SHIP	Bulk order item	3120.00000000	0.10000000	None	1
+1995-05-30	O	1998-06-05	RAIL	Large bulk shipment	22500.00000000	0.15000000	None	1
+1996-01-15	O	1995-03-20	TRUCK	First item of order	1560.00000000	0.05000000	None	1
+1996-02-15	O	1995-03-18	AIR	Second item, fragile	892.50000000	0E-8	None	1
+1996-03-22	F	1996-08-25	SHIP	Bulk order item	3120.00000000	0.10000000	None	1
+1996-04-30	O	1998-06-05	RAIL	Large bulk shipment	22500.00000000	0.15000000	None	1
+1996-12-05	O	1997-12-10	MAIL	Small quantity item	450.00000000	0.02000000	None	1
+1997-01-15	O	1995-03-20	TRUCK	First item of order	1560.00000000	0.05000000	None	1
+1997-02-15	O	1995-03-18	AIR	Second item, fragile	892.50000000	0E-8	None	1
+1997-03-22	F	1996-08-25	SHIP	Bulk order item	3120.00000000	0.10000000	None	1
+1997-04-30	O	1998-06-05	RAIL	Large bulk shipment	22500.00000000	0.15000000	None	1
+1997-11-05	O	1997-12-10	MAIL	Small quantity item	450.00000000	0.02000000	None	1
+1998-01-15	O	1995-03-20	TRUCK	First item of order	1560.00000000	0.05000000	None	1
+1998-02-15	O	1995-03-18	AIR	Second item, fragile	892.50000000	0E-8	None	1
+1998-03-22	F	1996-08-25	SHIP	Bulk order item	3120.00000000	0.10000000	None	1
+1998-04-30	O	1998-06-05	RAIL	Large bulk shipment	22500.00000000	0.15000000	None	1
+1998-11-05	O	1997-12-10	MAIL	Small quantity item	450.00000000	0.02000000	None	1
+-- !result
+select l_shipdate, l_linestatus, l_receiptdate, l_shipmode, l_comment, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipdate, l_linestatus, l_receiptdate, l_shipmode, l_comment order by l_shipdate, l_linestatus, l_receiptdate, l_shipmode, l_comment nulls last limit 1000;
+-- result:
+1995-01-16	None	None	None	None	None	None	None	0
+1995-02-05	O	1997-12-10	MAIL	Small quantity item	450.00000000	0.02000000	None	1
+1995-03-10	O	1995-03-18	AIR	Second item, fragile	892.50000000	0E-8	None	1
+1995-03-10	O	1995-03-20	TRUCK	First item of order	1560.00000000	0.05000000	None	1
+1995-03-22	F	1996-08-25	SHIP	Bulk order item	3120.00000000	0.10000000	None	1
+1995-05-30	O	1998-06-05	RAIL	Large bulk shipment	22500.00000000	0.15000000	None	1
+1996-01-15	O	1995-03-20	TRUCK	First item of order	1560.00000000	0.05000000	None	1
+1996-02-15	O	1995-03-18	AIR	Second item, fragile	892.50000000	0E-8	None	1
+1996-03-22	F	1996-08-25	SHIP	Bulk order item	3120.00000000	0.10000000	None	1
+1996-04-30	O	1998-06-05	RAIL	Large bulk shipment	22500.00000000	0.15000000	None	1
+1996-12-05	O	1997-12-10	MAIL	Small quantity item	450.00000000	0.02000000	None	1
+1997-01-15	O	1995-03-20	TRUCK	First item of order	1560.00000000	0.05000000	None	1
+1997-02-15	O	1995-03-18	AIR	Second item, fragile	892.50000000	0E-8	None	1
+1997-03-22	F	1996-08-25	SHIP	Bulk order item	3120.00000000	0.10000000	None	1
+1997-04-30	O	1998-06-05	RAIL	Large bulk shipment	22500.00000000	0.15000000	None	1
+1997-11-05	O	1997-12-10	MAIL	Small quantity item	450.00000000	0.02000000	None	1
+1998-01-15	O	1995-03-20	TRUCK	First item of order	1560.00000000	0.05000000	None	1
+1998-02-15	O	1995-03-18	AIR	Second item, fragile	892.50000000	0E-8	None	1
+1998-03-22	F	1996-08-25	SHIP	Bulk order item	3120.00000000	0.10000000	None	1
+1998-04-30	O	1998-06-05	RAIL	Large bulk shipment	22500.00000000	0.15000000	None	1
+1998-11-05	O	1997-12-10	MAIL	Small quantity item	450.00000000	0.02000000	None	1
+-- !result
+select l_shipdate, l_partkey, l_linenumber, l_shipmode, l_comment, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipdate, l_partkey, l_linenumber, l_shipmode, l_comment order by l_shipdate, l_partkey, l_linenumber, l_shipmode, l_comment nulls last limit 10;
+-- result:
+1995-01-16	None	None	None	None	None	None	None	0
+1995-02-05	8890	1	MAIL	Small quantity item	450.00000000	0.02000000	None	1
+1995-03-10	5501	1	TRUCK	First item of order	1560.00000000	0.05000000	None	1
+1995-03-10	7203	2	AIR	Second item, fragile	892.50000000	0E-8	None	1
+1995-03-22	3345	1	SHIP	Bulk order item	3120.00000000	0.10000000	None	1
+1995-05-30	4567	1	RAIL	Large bulk shipment	22500.00000000	0.15000000	None	1
+1996-01-15	5501	1	TRUCK	First item of order	1560.00000000	0.05000000	None	1
+1996-02-15	7203	2	AIR	Second item, fragile	892.50000000	0E-8	None	1
+1996-03-22	3345	1	SHIP	Bulk order item	3120.00000000	0.10000000	None	1
+1996-04-30	4567	1	RAIL	Large bulk shipment	22500.00000000	0.15000000	None	1
+-- !result
+select l_shipdate, l_partkey, l_linenumber, l_shipmode, l_comment, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipdate, l_partkey, l_linenumber, l_shipmode, l_comment order by l_shipdate, l_partkey, l_linenumber, l_shipmode, l_comment nulls last limit 100;
+-- result:
+1995-01-16	None	None	None	None	None	None	None	0
+1995-02-05	8890	1	MAIL	Small quantity item	450.00000000	0.02000000	None	1
+1995-03-10	5501	1	TRUCK	First item of order	1560.00000000	0.05000000	None	1
+1995-03-10	7203	2	AIR	Second item, fragile	892.50000000	0E-8	None	1
+1995-03-22	3345	1	SHIP	Bulk order item	3120.00000000	0.10000000	None	1
+1995-05-30	4567	1	RAIL	Large bulk shipment	22500.00000000	0.15000000	None	1
+1996-01-15	5501	1	TRUCK	First item of order	1560.00000000	0.05000000	None	1
+1996-02-15	7203	2	AIR	Second item, fragile	892.50000000	0E-8	None	1
+1996-03-22	3345	1	SHIP	Bulk order item	3120.00000000	0.10000000	None	1
+1996-04-30	4567	1	RAIL	Large bulk shipment	22500.00000000	0.15000000	None	1
+1996-12-05	8890	1	MAIL	Small quantity item	450.00000000	0.02000000	None	1
+1997-01-15	5501	1	TRUCK	First item of order	1560.00000000	0.05000000	None	1
+1997-02-15	7203	2	AIR	Second item, fragile	892.50000000	0E-8	None	1
+1997-03-22	3345	1	SHIP	Bulk order item	3120.00000000	0.10000000	None	1
+1997-04-30	4567	1	RAIL	Large bulk shipment	22500.00000000	0.15000000	None	1
+1997-11-05	8890	1	MAIL	Small quantity item	450.00000000	0.02000000	None	1
+1998-01-15	5501	1	TRUCK	First item of order	1560.00000000	0.05000000	None	1
+1998-02-15	7203	2	AIR	Second item, fragile	892.50000000	0E-8	None	1
+1998-03-22	3345	1	SHIP	Bulk order item	3120.00000000	0.10000000	None	1
+1998-04-30	4567	1	RAIL	Large bulk shipment	22500.00000000	0.15000000	None	1
+1998-11-05	8890	1	MAIL	Small quantity item	450.00000000	0.02000000	None	1
+-- !result
+select l_shipdate, l_partkey, l_linenumber, l_shipmode, l_comment, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipdate, l_partkey, l_linenumber, l_shipmode, l_comment order by l_shipdate, l_partkey, l_linenumber, l_shipmode, l_comment nulls last limit 1000;
+-- result:
+1995-01-16	None	None	None	None	None	None	None	0
+1995-02-05	8890	1	MAIL	Small quantity item	450.00000000	0.02000000	None	1
+1995-03-10	5501	1	TRUCK	First item of order	1560.00000000	0.05000000	None	1
+1995-03-10	7203	2	AIR	Second item, fragile	892.50000000	0E-8	None	1
+1995-03-22	3345	1	SHIP	Bulk order item	3120.00000000	0.10000000	None	1
+1995-05-30	4567	1	RAIL	Large bulk shipment	22500.00000000	0.15000000	None	1
+1996-01-15	5501	1	TRUCK	First item of order	1560.00000000	0.05000000	None	1
+1996-02-15	7203	2	AIR	Second item, fragile	892.50000000	0E-8	None	1
+1996-03-22	3345	1	SHIP	Bulk order item	3120.00000000	0.10000000	None	1
+1996-04-30	4567	1	RAIL	Large bulk shipment	22500.00000000	0.15000000	None	1
+1996-12-05	8890	1	MAIL	Small quantity item	450.00000000	0.02000000	None	1
+1997-01-15	5501	1	TRUCK	First item of order	1560.00000000	0.05000000	None	1
+1997-02-15	7203	2	AIR	Second item, fragile	892.50000000	0E-8	None	1
+1997-03-22	3345	1	SHIP	Bulk order item	3120.00000000	0.10000000	None	1
+1997-04-30	4567	1	RAIL	Large bulk shipment	22500.00000000	0.15000000	None	1
+1997-11-05	8890	1	MAIL	Small quantity item	450.00000000	0.02000000	None	1
+1998-01-15	5501	1	TRUCK	First item of order	1560.00000000	0.05000000	None	1
+1998-02-15	7203	2	AIR	Second item, fragile	892.50000000	0E-8	None	1
+1998-03-22	3345	1	SHIP	Bulk order item	3120.00000000	0.10000000	None	1
+1998-04-30	4567	1	RAIL	Large bulk shipment	22500.00000000	0.15000000	None	1
+1998-11-05	8890	1	MAIL	Small quantity item	450.00000000	0.02000000	None	1
+-- !result
