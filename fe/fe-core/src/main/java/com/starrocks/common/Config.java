@@ -2212,6 +2212,18 @@ public class Config extends ConfigBase {
     public static long statistic_manager_sleep_time_sec = 60; // 60s
 
     /**
+     * The interval of StatisticsMetaManager to run background tasks
+     */
+    @ConfField(mutable = true)
+    public static long statistic_manager_run_interval_sec = 60;
+
+    /**
+     * The interval of TabletWriteLogHistorySyncer to sync tablet write log history.
+     */
+    @ConfField(mutable = true)
+    public static long tablet_write_log_history_sync_interval_sec = 60;
+
+    /**
      * Analyze status keep time in catalog
      */
     @ConfField(mutable = true)
