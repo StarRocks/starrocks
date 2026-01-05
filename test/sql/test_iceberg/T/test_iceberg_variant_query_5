@@ -48,12 +48,12 @@ properties(
 shell: ossutil64 cp ./sql/test_iceberg/data/variant_analytics_users/data/00000-4481-6663e105-7590-4b0d-a12e-532e70997c54-0-00001.parquet oss://${oss_bucket}/test_iceberg_variant_query_5/${uuid0}/variant_analytics_users/data/00000-4481-6663e105-7590-4b0d-a12e-532e70997c54-0-00001.parquet > /dev/null
 shell: ossutil64 cp ./sql/test_iceberg/data/variant_analytics_orders/data/00000-5092-2040b2d3-ece5-4a3e-921d-5c6fe199d84e-0-00001.parquet oss://${oss_bucket}/test_iceberg_variant_query_5/${uuid0}/variant_analytics_orders/data/00000-5092-2040b2d3-ece5-4a3e-921d-5c6fe199d84e-0-00001.parquet > /dev/null
 shell: ossutil64 cp ./sql/test_iceberg/data/variant_analytics_logs/data/00000-5703-3b3d8f17-3283-4bfe-9b15-c5e709543218-0-00001.parquet oss://${oss_bucket}/test_iceberg_variant_query_5/${uuid0}/variant_analytics_logs/data/00000-5703-3b3d8f17-3283-4bfe-9b15-c5e709543218-0-00001.parquet > /dev/null
-shell: ossutil64 cp ./sql/test_iceberg/data/variant_analytics_events/data/00000-30-65c022f3-14e7-4029-aee2-8faa2f5379e8-0-00001.parquet oss://${oss_bucket}/test_iceberg_variant_query_5/${uuid0}/variant_analytics_events/data/00000-30-65c022f3-14e7-4029-aee2-8faa2f5379e8-0-00001.parquet > /dev/null
+shell: ossutil64 cp ./sql/test_iceberg/data/variant_analytics_events/data/00000-6314-35dbd646-4270-4820-8218-51aaf402590d-0-00001.parquet oss://${oss_bucket}/test_iceberg_variant_query_5/${uuid0}/variant_analytics_events/data/00000-6314-35dbd646-4270-4820-8218-51aaf402590d-0-00001.parquet > /dev/null
 
 alter table variant_analytics_users execute add_files(location='oss://${oss_bucket}/test_iceberg_variant_query_5/${uuid0}/variant_analytics_users/data/00000-4481-6663e105-7590-4b0d-a12e-532e70997c54-0-00001.parquet', file_format='parquet');
 alter table variant_analytics_orders execute add_files(location='oss://${oss_bucket}/test_iceberg_variant_query_5/${uuid0}/variant_analytics_orders/data/00000-5092-2040b2d3-ece5-4a3e-921d-5c6fe199d84e-0-00001.parquet', file_format='parquet');
 alter table variant_analytics_logs execute add_files(location='oss://${oss_bucket}/test_iceberg_variant_query_5/${uuid0}/variant_analytics_logs/data/00000-5703-3b3d8f17-3283-4bfe-9b15-c5e709543218-0-00001.parquet', file_format='parquet');
-alter table variant_analytics_events execute add_files(location='oss://${oss_bucket}/test_iceberg_variant_query_5/${uuid0}/variant_analytics_events/data/00000-30-65c022f3-14e7-4029-aee2-8faa2f5379e8-0-00001.parquet', file_format='parquet');
+alter table variant_analytics_events execute add_files(location='oss://${oss_bucket}/test_iceberg_variant_query_5/${uuid0}/variant_analytics_events/data/00000-6314-35dbd646-4270-4820-8218-51aaf402590d-0-00001.parquet', file_format='parquet');
 
 
 -- ========================================

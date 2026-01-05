@@ -62,7 +62,7 @@ shell: ossutil64 cp ./sql/test_iceberg/data/variant_analytics_logs/data/00000-57
 0
 
 -- !result
-shell: ossutil64 cp ./sql/test_iceberg/data/variant_analytics_events/data/00000-30-65c022f3-14e7-4029-aee2-8faa2f5379e8-0-00001.parquet oss://${oss_bucket}/test_iceberg_variant_query_5/${uuid0}/variant_analytics_events/data/00000-30-65c022f3-14e7-4029-aee2-8faa2f5379e8-0-00001.parquet > /dev/null
+shell: ossutil64 cp ./sql/test_iceberg/data/variant_analytics_events/data/00000-6314-35dbd646-4270-4820-8218-51aaf402590d-0-00001.parquet oss://${oss_bucket}/test_iceberg_variant_query_5/${uuid0}/variant_analytics_events/data/00000-6314-35dbd646-4270-4820-8218-51aaf402590d-0-00001.parquet > /dev/null
 -- result:
 0
 
@@ -76,7 +76,7 @@ alter table variant_analytics_orders execute add_files(location='oss://${oss_buc
 alter table variant_analytics_logs execute add_files(location='oss://${oss_bucket}/test_iceberg_variant_query_5/${uuid0}/variant_analytics_logs/data/00000-5703-3b3d8f17-3283-4bfe-9b15-c5e709543218-0-00001.parquet', file_format='parquet');
 -- result:
 -- !result
-alter table variant_analytics_events execute add_files(location='oss://${oss_bucket}/test_iceberg_variant_query_5/${uuid0}/variant_analytics_events/data/00000-30-65c022f3-14e7-4029-aee2-8faa2f5379e8-0-00001.parquet', file_format='parquet');
+alter table variant_analytics_events execute add_files(location='oss://${oss_bucket}/test_iceberg_variant_query_5/${uuid0}/variant_analytics_events/data/00000-6314-35dbd646-4270-4820-8218-51aaf402590d-0-00001.parquet', file_format='parquet');
 -- result:
 -- !result
 SELECT 'Query 1: Filter by VARIANT string field equality' AS test_description;
@@ -380,7 +380,7 @@ SELECT
           NULLIF(COUNT(DISTINCT CASE WHEN event_type = 'add_to_cart' THEN user_id END), 0), 2) as purchase_conversion_rate
 FROM events;
 -- result:
-1	0	0	0.00	None
+6	4	3	66.67	75.00
 -- !result
 SELECT 'Query 17: Aggregate revenue by product category' AS test_description;
 -- result:
@@ -446,7 +446,9 @@ FROM variant_analytics_events
 GROUP BY get_variant_string(variant_event, '$.event_type')
 ORDER BY event_count DESC;
 -- result:
-page_view	1	1	1705820000	1705820000
+page_view	8	6	1705820000	1705820780
+add_to_cart	5	4	1705820060	1705820840
+purchase	3	3	1705820120	1705820900
 -- !result
 SELECT 'Query 20: Complex filtering with GROUP BY and HAVING' AS test_description;
 -- result:
