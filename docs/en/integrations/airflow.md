@@ -38,6 +38,7 @@ Create a StarRocks connection in the Airflow UI or via environment variable. The
 1. Navigate to Admin > Connections
 2. Click the + button to add a new connection
 3. Configure the connection: 
+
   - Connection Id: `starrocks_default`
   - Connection Type: MySQL
   - Host: `your-starrocks-host.com`
@@ -47,6 +48,7 @@ Create a StarRocks connection in the Airflow UI or via environment variable. The
   - Port: `9030`
 
 #### Via Airflow CLI
+
 ```sh
 airflow connections add 'starrocks_default' \
     --conn-type 'mysql' \
@@ -58,6 +60,7 @@ airflow connections add 'starrocks_default' \
 ```
 
 ## Usage Examples
+
 These examples demonstrate common patterns for integrating StarRocks with Airflow. Each example builds on core concepts while showcasing different approaches to data loading, transformation, and workflow orchestration.
 
 **What You'll Learn:**
@@ -69,7 +72,9 @@ These examples demonstrate common patterns for integrating StarRocks with Airflo
 All examples use the crash data tables described in the [quickstart guide](../quick_start/shared-nothing.md).
 
 ### Data Loading
+
 #### Stream Data Loading 
+
 Load large CSV files efficiently using StarRocks Stream Load API. Stream Load is the recommended approach for: 
 - High-throughput data loading (supports parallel loads)
 - Loading data with column transformations and filtering
@@ -169,6 +174,7 @@ starrocks_stream_load_example()
 ```
 
 #### Insert From Files
+
 Use StarRocks' [FILES()](https://docs.starrocks.io/docs/sql-reference/sql-functions/table-functions/files/) table function to load data directly from files. This approach is ideal for: 
 - Loading data from S3, HDFS, Google Cloud Storage
 - One-step data ingestion with transformations applied during load
@@ -235,10 +241,12 @@ crashdata_files()
 ```
 
 ### Data Transformation
+
 Execute SQL queries against StarRocks for table creation and data insertion. This is useful for: 
 - Setting up database schema 
 - Loading small datasets
 - Running ad-hoc queries
+
 ```py
 from airflow.sdk import dag, chain
 from airflow.providers.common.sql.operators.sql import SQLExecuteQueryOperator
@@ -306,7 +314,9 @@ def crashdata_basic_pipeline():
 
 crashdata_basic_pipeline()
 ```
+
 #### More complex operations with MySqlHook 
+
 Use MySqlHook for advanced data analysis and processing within Python tasks. This approach is useful for: 
 - Running analytical queries and processing results in Python
 - Combining StarRocks queries with Python libraries (pandas, numpy, etc.)
@@ -391,8 +401,11 @@ crashdata_python_pipeline()
 ```
 
 ### Advanced Patterns
-#### Incremental Data Loading 
-Load data incrementally to avoid reprocessing existing records. Incremental loading is essential for: 
+
+#### Incremental Data Loading
+
+Load data incrementally to avoid reprocessing existing records. Incremental loading is essential for:
+
 - Efficiently updating tables with new data only
 - Reducing processing time and resource usage
 - Managing large datasets that grow over time
@@ -474,7 +487,8 @@ def crashdata_incremental_pipeline():
 crashdata_incremental_pipeline()
 ```
 
-#### Asynchronous large-scale jobs with SUBMIT TASK 
+#### Asynchronous large-scale jobs with `SUBMIT TASK`
+
 Use `SUBMIT TASK` for long-running queries that shouldn't block the Airflow task. This pattern is beneficial for: 
 - Complex analytical queries that take minutes or hours
 - Large-scale data transformations (table copies, aggregations)
@@ -588,12 +602,14 @@ def crashdata_submit_task_pipeline():
 
 crashdata_submit_task_pipeline()
 ```
-Note that the task name is unique in StarRocks, so future runs may need a qualifier (such as uuid). 
 
-#### Materialized Views 
+Note that the task name is unique in StarRocks, so future runs may need a qualifier (such as uuid).
+
+#### Materialized Views
+
 Create and manage materialized views for accelerated query performance. Materialized views are ideal for: 
 - Pre-computing complex aggregations for dashboards
-- Accelerating frequently-run analytical queries 
+- Accelerating frequently run analytical queries 
 - Maintaining summary tables that update automatically 
 - Reducing compute costs by avoiding repeated calculations 
 - Serving real-time analytics from pre-aggregated data  
@@ -694,8 +710,10 @@ def starrocks_materialized_view_example():
 starrocks_materialized_view_example()
 ```
 
-#### Error Handling 
-Implement robust error handling for production reliability. Proper error handling is critical for: 
+#### Error Handling
+
+Implement robust error handling for production reliability. Proper error handling is critical for:
+
 - Automatically recovering from transient failures (network issues, timeouts) 
 - Preventing data pipeline disruptions from temporary problems
 - Providing visibility into failure patterns  
@@ -729,6 +747,7 @@ starrocks_resilient_pipeline()
 ```
 
 ### Troubleshooting
+
 - Verify that port 9030 is accessible from within the Airflow instance
 - Test the connection (if enabled) from the Airflow UI
 - If using localhost, use 127.0.0.1 instead
