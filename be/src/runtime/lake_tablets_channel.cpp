@@ -994,12 +994,13 @@ void LakeTabletsChannel::_update_tablet_profile(const DeltaWriter* writer, Runti
 
     const FlushStatistic* flush_stat = writer->get_flush_stats();
     ADD_AND_SET_COUNTER(profile, "MemtableFlushedCount", TUnit::UNIT,
-                        DEFAULT_IF_NULL(flush_stat, flush_stat->flush_count, 0));
+                        DEFAULT_IF_NULL(flush_stat, flush_stat->flush_count.load(), 0));
     ADD_AND_SET_COUNTER(profile, "MemtableFlushingCount", TUnit::UNIT,
-                        DEFAULT_IF_NULL(flush_stat, flush_stat->cur_flush_count, 0));
+                        DEFAULT_IF_NULL(flush_stat, flush_stat->cur_flush_count.load(), 0));
     ADD_AND_SET_COUNTER(profile, "MemtableQueueCount", TUnit::UNIT,
                         DEFAULT_IF_NULL(flush_stat, flush_stat->queueing_memtable_num.load(), 0));
-    ADD_AND_SET_TIMER(profile, "FlushTaskPendingTime", DEFAULT_IF_NULL(flush_stat, flush_stat->pending_time_ns, 0));
+    ADD_AND_SET_TIMER(profile, "FlushTaskPendingTime",
+                      DEFAULT_IF_NULL(flush_stat, flush_stat->pending_time_ns.load(), 0));
     ADD_AND_SET_COUNTER(profile, "MemtableInsertCount", TUnit::UNIT,
                         DEFAULT_IF_NULL(flush_stat, flush_stat->memtable_stats.insert_count.load(), 0));
     ADD_AND_SET_TIMER(profile, "MemtableInsertTime",

@@ -29,6 +29,7 @@
 #include "storage/lake/general_tablet_writer.h"
 #include "storage/lake/pk_tablet_writer.h"
 #include "storage/lake/tablet_metadata.h"
+#include "storage/lake/tablet_writer.h"
 #include "storage/lake/test_util.h"
 #include "storage/load_spill_block_manager.h"
 #include "storage/tablet_schema.h"
@@ -292,6 +293,131 @@ TEST_P(SpillMemTableSinkTest, test_out_of_disk_space) {
     ASSERT_OK(sink.flush_chunk(*chunk, &segment1, true));
     ASSERT_OK(sink.merge_blocks_to_segments());
     ASSERT_EQ(config::enable_load_spill_parallel_merge ? 2 : 1, tablet_writer->segments().size());
+}
+
+TEST_P(SpillMemTableSinkTest, test_flush_chunk_with_slot_idx) {
+    int64_t tablet_id = 1;
+    int64_t txn_id = 1;
+    std::unique_ptr<LoadSpillBlockManager> block_manager = std::make_unique<LoadSpillBlockManager>(
+            TUniqueId(), UniqueId(tablet_id, txn_id).to_thrift(), kTestDir, nullptr);
+    ASSERT_OK(block_manager->init());
+    std::unique_ptr<TabletWriter> tablet_writer = std::make_unique<HorizontalGeneralTabletWriter>(
+            _tablet_mgr.get(), tablet_id, _tablet_schema, txn_id, false);
+    SpillMemTableSink sink(block_manager.get(), tablet_writer.get(), &_dummy_runtime_profile);
+
+    // Flush chunks with different slot_idx
+    for (int i = 0; i < 3; i++) {
+        auto chunk = gen_data(kChunkSize, i);
+        starrocks::SegmentPB segment;
+        // Pass slot_idx to flush_chunk
+        ASSERT_OK(sink.flush_chunk(*chunk, &segment, false, nullptr, i));
+    }
+
+    // Verify block groups were created with correct slot_idx
+    auto& groups = block_manager->block_container()->block_groups();
+    ASSERT_EQ(3, groups.size());
+    ASSERT_EQ(0, groups[0].slot_idx);
+    ASSERT_EQ(1, groups[1].slot_idx);
+    ASSERT_EQ(2, groups[2].slot_idx);
+
+    ASSERT_OK(sink.merge_blocks_to_segments());
+    ASSERT_EQ(config::enable_load_spill_parallel_merge ? 3 : 1, tablet_writer->segments().size());
+}
+
+TEST_P(SpillMemTableSinkTest, test_flush_chunk_with_deletes_and_slot_idx) {
+    int64_t tablet_id = 1;
+    int64_t txn_id = 1;
+    std::unique_ptr<LoadSpillBlockManager> block_manager = std::make_unique<LoadSpillBlockManager>(
+            TUniqueId(), UniqueId(tablet_id, txn_id).to_thrift(), kTestDir, nullptr);
+    ASSERT_OK(block_manager->init());
+    std::unique_ptr<TabletWriter> tablet_writer = std::make_unique<HorizontalPkTabletWriter>(
+            _tablet_mgr.get(), tablet_id, _tablet_schema, txn_id, nullptr, false);
+    SpillMemTableSink sink(block_manager.get(), tablet_writer.get(), &_dummy_runtime_profile);
+
+    // Flush chunks with deletes and different slot_idx
+    for (int i = 0; i < 3; i++) {
+        auto chunk = gen_data(kChunkSize, i);
+        starrocks::SegmentPB segment;
+        // Pass slot_idx to flush_chunk_with_deletes
+        ASSERT_OK(sink.flush_chunk_with_deletes(*chunk, *(chunk->columns()[0]), &segment, false, nullptr, i));
+    }
+
+    // Verify block groups were created with correct slot_idx
+    auto& groups = block_manager->block_container()->block_groups();
+    ASSERT_EQ(3, groups.size());
+    ASSERT_EQ(0, groups[0].slot_idx);
+    ASSERT_EQ(1, groups[1].slot_idx);
+    ASSERT_EQ(2, groups[2].slot_idx);
+
+    ASSERT_EQ(3, tablet_writer->segments().size());
+}
+
+TEST_P(SpillMemTableSinkTest, test_slot_idx_ordering_after_merge) {
+    int64_t tablet_id = 1;
+    int64_t txn_id = 1;
+    std::unique_ptr<LoadSpillBlockManager> block_manager = std::make_unique<LoadSpillBlockManager>(
+            TUniqueId(), UniqueId(tablet_id, txn_id).to_thrift(), kTestDir, nullptr);
+    ASSERT_OK(block_manager->init());
+    std::unique_ptr<TabletWriter> tablet_writer = std::make_unique<HorizontalGeneralTabletWriter>(
+            _tablet_mgr.get(), tablet_id, _tablet_schema, txn_id, false);
+    SpillMemTableSink sink(block_manager.get(), tablet_writer.get(), &_dummy_runtime_profile);
+
+    // Flush chunks in non-sequential slot_idx order
+    auto chunk0 = gen_data(kChunkSize, 0);
+    auto chunk1 = gen_data(kChunkSize, 1);
+    auto chunk2 = gen_data(kChunkSize, 2);
+    auto chunk3 = gen_data(kChunkSize, 3);
+
+    starrocks::SegmentPB segment;
+    ASSERT_OK(sink.flush_chunk(*chunk0, &segment, false, nullptr, 5));
+    ASSERT_OK(sink.flush_chunk(*chunk1, &segment, false, nullptr, 2));
+    ASSERT_OK(sink.flush_chunk(*chunk2, &segment, false, nullptr, 8));
+    ASSERT_OK(sink.flush_chunk(*chunk3, &segment, false, nullptr, 1));
+
+    // Before merge, groups are in insertion order
+    auto& groups = block_manager->block_container()->block_groups();
+    ASSERT_EQ(4, groups.size());
+    ASSERT_EQ(5, groups[0].slot_idx);
+    ASSERT_EQ(2, groups[1].slot_idx);
+    ASSERT_EQ(8, groups[2].slot_idx);
+    ASSERT_EQ(1, groups[3].slot_idx);
+
+    // Merge blocks to segments - this should sort by slot_idx
+    ASSERT_OK(sink.merge_blocks_to_segments());
+
+    // After merge, groups should be sorted by slot_idx
+    ASSERT_EQ(1, groups[0].slot_idx);
+    ASSERT_EQ(2, groups[1].slot_idx);
+    ASSERT_EQ(5, groups[2].slot_idx);
+    ASSERT_EQ(8, groups[3].slot_idx);
+
+    ASSERT_EQ(config::enable_load_spill_parallel_merge ? 4 : 1, tablet_writer->segments().size());
+}
+
+TEST_P(SpillMemTableSinkTest, test_flush_data_size_with_slot_idx) {
+    int64_t tablet_id = 1;
+    int64_t txn_id = 1;
+    std::unique_ptr<LoadSpillBlockManager> block_manager = std::make_unique<LoadSpillBlockManager>(
+            TUniqueId(), UniqueId(tablet_id, txn_id).to_thrift(), kTestDir, nullptr);
+    ASSERT_OK(block_manager->init());
+    std::unique_ptr<TabletWriter> tablet_writer = std::make_unique<HorizontalGeneralTabletWriter>(
+            _tablet_mgr.get(), tablet_id, _tablet_schema, txn_id, false);
+    SpillMemTableSink sink(block_manager.get(), tablet_writer.get(), &_dummy_runtime_profile);
+
+    auto chunk = gen_data(kChunkSize, 0);
+    starrocks::SegmentPB segment;
+    int64_t flush_data_size = 0;
+
+    // Test with slot_idx and flush_data_size parameter
+    ASSERT_OK(sink.flush_chunk(*chunk, &segment, false, &flush_data_size, 10));
+
+    // Verify flush_data_size was set
+    ASSERT_GT(flush_data_size, 0);
+
+    // Verify block group was created with correct slot_idx
+    auto& groups = block_manager->block_container()->block_groups();
+    ASSERT_EQ(1, groups.size());
+    ASSERT_EQ(10, groups[0].slot_idx);
 }
 
 INSTANTIATE_TEST_SUITE_P(SpillMemTableSinkTest, SpillMemTableSinkTest,
