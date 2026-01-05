@@ -21,6 +21,8 @@
 #include <string>
 #include <unordered_map>
 
+#include "column/column_helper.h"
+#include "common/config.h"
 #include "common/object_pool.h"
 #include "fs/fs_memory.h"
 #include "gen_cpp/tablet_schema.pb.h"
@@ -35,6 +37,7 @@
 #include "storage/rowset/segment.h"
 #include "storage/rowset/segment_options.h"
 #include "storage/rowset/segment_writer.h"
+#include "storage/runtime_filter_predicate.h"
 #include "storage/tablet_schema_helper.h"
 #include "testutil/assert.h"
 #include "types/logical_type.h"
@@ -158,7 +161,6 @@ struct VecSchemaBuilder {
 private:
     Schema vec_schema;
 };
-
 } // namespace test
 
 // This case is only triggered by dictionary inconsistencies.
@@ -358,6 +360,145 @@ TEST_F(SegmentIteratorTest, TestGlobalDictNoLocalDictWithUnusedColumn) {
 
     ASSERT_OK(chunk_iter->get_next(res_chunk.get()));
     res_chunk->reset();
+}
+
+// Verify predicate late materialization keeps non-predicate columns correct.
+TEST_F(SegmentIteratorTest, TestPredicateLateMaterializationMaterializesRestColumns) {
+    using namespace starrocks::test;
+
+    // Force late materialization always on for determinism.
+    auto prev_ratio = config::late_materialization_ratio;
+    config::late_materialization_ratio = 1000;
+    DeferOp reset_ratio([&]() { config::late_materialization_ratio = prev_ratio; });
+
+    std::string file_name = kSegmentDir + "/predicate_late_materialize_all";
+    ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(file_name));
+
+    TabletSchemaBuilder builder;
+    std::shared_ptr<TabletSchema> tablet_schema = builder.create(1, false, TYPE_INT, true)
+                                                          .create(2, false, TYPE_INT, false)
+                                                          .create(3, false, TYPE_INT, false)
+                                                          .build();
+
+    SegmentWriterOptions opts;
+    opts.num_rows_per_block = 32;
+    SegmentWriter writer(std::move(wfile), 0, tablet_schema, opts);
+
+    const int32_t chunk_size = 64;
+    const size_t num_rows = 50;
+
+    auto c0_provider = [](int32_t i) { return i; };
+    auto c1_provider = [](int32_t i) { return i % 10; };   // predicate column
+    auto c2_provider = [](int32_t i) { return 1000 + i; }; // late materialized column
+
+    TabletDataBuilder data_builder(writer, tablet_schema, chunk_size, num_rows);
+    ASSERT_OK(data_builder.append(0, c0_provider));
+    ASSERT_OK(data_builder.append(1, c1_provider));
+    ASSERT_OK(data_builder.append(2, c2_provider));
+    ASSERT_OK(data_builder.finalize_footer());
+
+    auto segment = *Segment::open(_fs, FileInfo{file_name}, 0, tablet_schema);
+    ASSERT_EQ(segment->num_rows(), num_rows);
+
+    VecSchemaBuilder schema_builder;
+    // ids must be ordinal, keep contiguous from 0
+    schema_builder.add(0, "c0", TYPE_INT).add(1, "c1", TYPE_INT).add(2, "c2", TYPE_INT);
+    auto vec_schema = schema_builder.build();
+
+    std::unique_ptr<ColumnPredicate> predicate(new_column_eq_predicate(get_type_info(TYPE_INT), 1, "5"));
+    PredicateAndNode pred_root;
+    pred_root.add_child(PredicateColumnNode{predicate.get()});
+
+    SegmentReadOptions seg_opts;
+    OlapReaderStatistics stats;
+    seg_opts.fs = _fs;
+    seg_opts.stats = &stats;
+    seg_opts.tablet_schema = tablet_schema;
+    seg_opts.enable_predicate_col_late_materialize = true;
+    seg_opts.pred_tree = PredicateTree::create(std::move(pred_root));
+
+    auto chunk_iter = new_segment_iterator(segment, vec_schema, seg_opts);
+    ASSERT_OK(chunk_iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS));
+    ASSERT_OK(chunk_iter->init_output_schema(std::unordered_set<uint32_t>()));
+
+    auto res_chunk = ChunkHelper::new_chunk(chunk_iter->output_schema(), config::vector_chunk_size);
+    ASSERT_OK(chunk_iter->get_next(res_chunk.get()));
+    ASSERT_EQ(res_chunk->num_rows(), 5); // rows where c1 == 5
+
+    auto c0_col = ColumnHelper::cast_to_raw<TYPE_INT>(res_chunk->get_column_by_index(0));
+    auto c1_col = ColumnHelper::cast_to_raw<TYPE_INT>(res_chunk->get_column_by_index(1));
+    auto c2_col = ColumnHelper::cast_to_raw<TYPE_INT>(res_chunk->get_column_by_index(2));
+    for (size_t i = 0; i < res_chunk->num_rows(); ++i) {
+        ASSERT_EQ(c1_col->get_data()[i], 5);
+        ASSERT_EQ(c2_col->get_data()[i] - c0_col->get_data()[i], 1000);
+    }
+
+    res_chunk->reset();
+    ASSERT_TRUE(chunk_iter->get_next(res_chunk.get()).is_end_of_file());
+}
+
+// Verify `_only_output_one_predicate_col_with_filter_push_down` fast path.
+TEST_F(SegmentIteratorTest, TestPredicateLateMaterializationSingleColumnPushdown) {
+    using namespace starrocks::test;
+
+    std::string file_name = kSegmentDir + "/predicate_late_materialize_pushdown";
+    ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(file_name));
+
+    TabletSchemaBuilder builder;
+    std::shared_ptr<TabletSchema> tablet_schema = builder.create(1, false, TYPE_VARCHAR, true).set_length(16).build();
+
+    SegmentWriterOptions opts;
+    opts.num_rows_per_block = 32;
+    SegmentWriter writer(std::move(wfile), 0, tablet_schema, opts);
+
+    const int32_t chunk_size = 64;
+    const size_t num_rows = 100;
+    std::string keep = "keep";
+    std::string drop = "drop";
+    auto val_provider = [&](int32_t i) { return Slice(i < 50 ? keep : drop); };
+
+    TabletDataBuilder data_builder(writer, tablet_schema, chunk_size, num_rows);
+    ASSERT_OK(data_builder.append(0, val_provider));
+    ASSERT_OK(data_builder.finalize_footer());
+
+    auto segment = *Segment::open(_fs, FileInfo{file_name}, 0, tablet_schema);
+    ASSERT_EQ(segment->num_rows(), num_rows);
+
+    VecSchemaBuilder schema_builder;
+    schema_builder.add(0, "c0", TYPE_VARCHAR);
+    auto vec_schema = schema_builder.build();
+
+    std::unique_ptr<ColumnPredicate> predicate(new_column_eq_predicate(get_type_info(TYPE_VARCHAR), 0, keep.c_str()));
+    PredicateAndNode pred_root;
+    pred_root.add_child(PredicateColumnNode{predicate.get()});
+
+    SegmentReadOptions seg_opts;
+    OlapReaderStatistics stats;
+    seg_opts.fs = _fs;
+    seg_opts.stats = &stats;
+    seg_opts.tablet_schema = tablet_schema;
+    seg_opts.enable_predicate_col_late_materialize = true;
+    seg_opts.pred_tree = PredicateTree::create(std::move(pred_root));
+
+    auto chunk_iter = new_segment_iterator(segment, vec_schema, seg_opts);
+    ASSERT_OK(chunk_iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS));
+    ASSERT_OK(chunk_iter->init_output_schema(std::unordered_set<uint32_t>()));
+
+    auto res_chunk = ChunkHelper::new_chunk(chunk_iter->output_schema(), config::vector_chunk_size);
+    size_t total = 0;
+    while (true) {
+        res_chunk->reset();
+        auto st = chunk_iter->get_next(res_chunk.get());
+        if (st.is_end_of_file()) break;
+        ASSERT_OK(st);
+        total += res_chunk->num_rows();
+        auto col = ColumnHelper::cast_to_raw<TYPE_VARCHAR>(res_chunk->get_column_by_index(0));
+        for (size_t i = 0; i < res_chunk->num_rows(); ++i) {
+            ASSERT_EQ(col->get_slice(i), Slice(keep));
+        }
+    }
+    ASSERT_EQ(total, 50);
+    ASSERT_GE(stats.rows_vec_cond_filtered, 50);
 }
 
 // NOLINTNEXTLINE

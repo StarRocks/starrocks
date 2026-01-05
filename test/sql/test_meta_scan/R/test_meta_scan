@@ -571,3 +571,49 @@ SELECT count(*), max(k13), min(k13), count(k13) FROM update_table_with_null_part
 -- result:
 12	51.000000000	40.000000000	11
 -- !result
+
+-- name: test_meta_scan_with_tablet_hint
+CREATE TABLE t_tablet_hint (
+    k1 date,
+    k2 int
+)
+DUPLICATE KEY(k1)
+PARTITION BY date_trunc('month', k1)
+DISTRIBUTED BY HASH(k1) BUCKETS 3
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO t_tablet_hint VALUES ("2019-12-01", 10), ("2020-01-15", 20), ("2020-02-15", 30);
+-- result:
+-- !result
+-- Test: Invalid tablet hint should return empty result (no matching tablets)
+SELECT min(k2), max(k2) FROM t_tablet_hint TABLET(99999) [_META_];
+-- result:
+None	None
+-- !result
+-- Test: Multiple invalid tablet hints should return empty result
+SELECT min(k2), max(k2) FROM t_tablet_hint TABLET(11111, 22222) [_META_];
+-- result:
+None	None
+-- !result
+-- Test: Invalid tablet hint with partition should return empty result (partition name is auto-generated like p201912)
+SELECT min(k2), max(k2) FROM t_tablet_hint PARTITION(p201912) TABLET(99999) [_META_];
+-- result:
+None	None
+-- !result
+-- Test: Valid tablet hint should work correctly with EXPLAIN verification
+function: set_first_tablet_id("t_tablet_hint")
+-- result:
+-- !result
+EXPLAIN SELECT count(*) FROM t_tablet_hint TABLET(${tablet_id}) [_META_];
+-- result:
+[REGEX][\s\S]*MetaScan[\s\S]*TabletIds: \[\d+\][\s\S]*
+-- !result
+-- Test: Valid partition and tablet hint together
+function: set_first_tablet_id("t_tablet_hint", "p201912")
+-- result:
+-- !result
+EXPLAIN SELECT min(k2), max(k2) FROM t_tablet_hint PARTITION(p201912) TABLET(${tablet_id}) [_META_];
+-- result:
+[REGEX][\s\S]*MetaScan[\s\S]*Partitions: \[p201912\][\s\S]*TabletIds: \[\d+\][\s\S]*
+-- !result

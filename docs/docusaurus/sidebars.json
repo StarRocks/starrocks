@@ -443,6 +443,10 @@
                 {
                     "type": "doc",
                     "id": "integrations/dbt"
+                },
+                {
+                    "type": "doc",
+                    "id": "integrations/smt/starrocks_sqlalchemy"
                 }
             ]
         },

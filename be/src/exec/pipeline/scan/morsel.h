@@ -21,12 +21,12 @@
 #include "gen_cpp/InternalService_types.h"
 #include "runtime/mem_pool.h"
 #include "storage/olap_common.h"
+#include "storage/olap_tuple.h"
 #include "storage/range.h"
 #include "storage/rowset/segment_group.h"
 #include "storage/seek_range.h"
 #include "storage/tablet.h"
 #include "storage/tablet_reader_params.h"
-#include "storage/tuple.h"
 
 namespace starrocks {
 

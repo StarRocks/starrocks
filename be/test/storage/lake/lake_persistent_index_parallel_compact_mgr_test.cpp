@@ -23,6 +23,7 @@
 #include "storage/lake/join_path.h"
 #include "storage/lake/persistent_index_sstable.h"
 #include "storage/persistent_index.h"
+#include "storage/sstable/comparator.h"
 #include "storage/sstable/options.h"
 #include "storage/sstable/table_builder.h"
 #include "test_util.h"
@@ -814,6 +815,168 @@ TEST_F(LakePersistentIndexParallelCompactMgrTest, test_concurrent_compaction_tas
     }
 
     config::pk_index_parallel_compaction_task_split_threshold_bytes = old_threshold;
+}
+
+// ============================================================================
+// Tests for sample_keys_from_sstable
+// ============================================================================
+
+TEST_F(LakePersistentIndexParallelCompactMgrTest, test_sample_keys_from_small_sstable) {
+    auto mgr = std::make_unique<LakePersistentIndexParallelCompactMgr>(_tablet_mgr.get());
+    ASSERT_OK(mgr->init());
+
+    // Create a small sstable (should be less than pk_index_sstable_sample_interval_bytes)
+    PersistentIndexSstablePB sst1;
+    ASSERT_OK(create_test_sstable("test_sample_small.sst", 0, 100, &sst1));
+
+    // Verify the sstable size is small
+    ASSERT_LE(sst1.filesize(), config::pk_index_sstable_sample_interval_bytes);
+
+    std::vector<std::string> sample_keys;
+    ASSERT_OK(mgr->TEST_sample_keys_from_sstable(sst1, _tablet_metadata, &sample_keys));
+
+    // For small sstables, should return only the start key
+    ASSERT_EQ(sample_keys.size(), 1);
+    ASSERT_EQ(sample_keys[0], sst1.range().start_key());
+}
+
+TEST_F(LakePersistentIndexParallelCompactMgrTest, test_sample_keys_from_large_sstable) {
+    auto mgr = std::make_unique<LakePersistentIndexParallelCompactMgr>(_tablet_mgr.get());
+    ASSERT_OK(mgr->init());
+
+    // Adjust the threshold to make a smaller sstable qualify as "large"
+    auto old_interval = config::pk_index_sstable_sample_interval_bytes;
+    config::pk_index_sstable_sample_interval_bytes = 10; // 10B
+    const sstable::Comparator* comparator = sstable::BytewiseComparator();
+
+    // Create a sstable that exceeds the reduced threshold
+    PersistentIndexSstablePB sst1;
+    ASSERT_OK(create_test_sstable("test_sample_large.sst", 0, 1000, &sst1));
+
+    // Verify the sstable size is large relative to the adjusted threshold
+    ASSERT_GT(sst1.filesize(), config::pk_index_sstable_sample_interval_bytes);
+
+    std::vector<std::string> sample_keys;
+    ASSERT_OK(mgr->TEST_sample_keys_from_sstable(sst1, _tablet_metadata, &sample_keys));
+
+    // For large sstables, should return multiple sample keys based on the sampling interval
+    ASSERT_GT(sample_keys.size(), 1);
+
+    // Verify sample keys are sorted
+    for (size_t i = 1; i < sample_keys.size(); i++) {
+        ASSERT_TRUE(comparator->Compare(sample_keys[i - 1], sample_keys[i]) < 0);
+    }
+
+    // Verify sample keys are within the sstable range
+    ASSERT_TRUE(comparator->Compare(sample_keys[0], sst1.range().start_key()) > 0);
+    ASSERT_TRUE(comparator->Compare(sample_keys[sample_keys.size() - 1], sst1.range().end_key()) < 0);
+
+    // Restore original config
+    config::pk_index_sstable_sample_interval_bytes = old_interval;
+}
+
+TEST_F(LakePersistentIndexParallelCompactMgrTest, test_sample_keys_from_empty_sstable) {
+    auto mgr = std::make_unique<LakePersistentIndexParallelCompactMgr>(_tablet_mgr.get());
+    ASSERT_OK(mgr->init());
+
+    // Create an empty sstable
+    PersistentIndexSstablePB sst1;
+    ASSERT_OK(create_test_sstable("test_sample_empty.sst", 0, 0, &sst1));
+
+    std::vector<std::string> sample_keys;
+    // Empty sstable has no range, so it should handle this case
+    if (sst1.has_range() && !sst1.range().start_key().empty()) {
+        ASSERT_OK(mgr->TEST_sample_keys_from_sstable(sst1, _tablet_metadata, &sample_keys));
+        ASSERT_EQ(sample_keys.size(), 1);
+    }
+}
+
+TEST_F(LakePersistentIndexParallelCompactMgrTest, test_sample_keys_boundary_case) {
+    auto mgr = std::make_unique<LakePersistentIndexParallelCompactMgr>(_tablet_mgr.get());
+    ASSERT_OK(mgr->init());
+
+    // Adjust the threshold to a small value for testing
+    auto old_interval = config::pk_index_sstable_sample_interval_bytes;
+    config::pk_index_sstable_sample_interval_bytes = 5000; // 5KB
+
+    // Create an sstable with size close to the threshold
+    PersistentIndexSstablePB sst1;
+    ASSERT_OK(create_test_sstable("test_sample_boundary.sst", 0, 100, &sst1));
+
+    std::vector<std::string> sample_keys;
+    ASSERT_OK(mgr->TEST_sample_keys_from_sstable(sst1, _tablet_metadata, &sample_keys));
+
+    // Should return at least one sample key
+    ASSERT_GE(sample_keys.size(), 1);
+
+    if (sst1.filesize() <= config::pk_index_sstable_sample_interval_bytes) {
+        // Small sstable case: should return only start key
+        ASSERT_EQ(sample_keys.size(), 1);
+        ASSERT_EQ(sample_keys[0], sst1.range().start_key());
+    } else {
+        // Large sstable case: should return multiple sample keys
+        ASSERT_GT(sample_keys.size(), 1);
+    }
+
+    // Restore original config
+    config::pk_index_sstable_sample_interval_bytes = old_interval;
+}
+
+TEST_F(LakePersistentIndexParallelCompactMgrTest, test_sample_keys_multiple_calls_consistent) {
+    auto mgr = std::make_unique<LakePersistentIndexParallelCompactMgr>(_tablet_mgr.get());
+    ASSERT_OK(mgr->init());
+
+    // Adjust the threshold to make a smaller sstable qualify as "large"
+    auto old_interval = config::pk_index_sstable_sample_interval_bytes;
+    config::pk_index_sstable_sample_interval_bytes = 1024; // 1KB
+
+    PersistentIndexSstablePB sst1;
+    ASSERT_OK(create_test_sstable("test_sample_consistent.sst", 0, 1000, &sst1));
+
+    // Call TEST_sample_keys_from_sstable multiple times and verify consistency
+    std::vector<std::string> sample_keys1;
+    ASSERT_OK(mgr->TEST_sample_keys_from_sstable(sst1, _tablet_metadata, &sample_keys1));
+
+    std::vector<std::string> sample_keys2;
+    ASSERT_OK(mgr->TEST_sample_keys_from_sstable(sst1, _tablet_metadata, &sample_keys2));
+
+    // The results should be consistent
+    ASSERT_EQ(sample_keys1.size(), sample_keys2.size());
+    for (size_t i = 0; i < sample_keys1.size(); i++) {
+        ASSERT_EQ(sample_keys1[i], sample_keys2[i]);
+    }
+
+    // Restore original config
+    config::pk_index_sstable_sample_interval_bytes = old_interval;
+}
+
+TEST_F(LakePersistentIndexParallelCompactMgrTest, test_sample_keys_with_different_intervals) {
+    auto mgr = std::make_unique<LakePersistentIndexParallelCompactMgr>(_tablet_mgr.get());
+    ASSERT_OK(mgr->init());
+
+    // Create a sstable with moderate size
+    PersistentIndexSstablePB sst1;
+    ASSERT_OK(create_test_sstable("test_sample_intervals.sst", 0, 1000, &sst1));
+
+    // Test with a specific interval
+    auto old_interval = config::pk_index_sstable_sample_interval_bytes;
+    config::pk_index_sstable_sample_interval_bytes = 2048; // 2KB
+
+    std::vector<std::string> sample_keys_default;
+    ASSERT_OK(mgr->TEST_sample_keys_from_sstable(sst1, _tablet_metadata, &sample_keys_default));
+    size_t default_sample_count = sample_keys_default.size();
+
+    // Test with smaller interval - should get more samples
+    config::pk_index_sstable_sample_interval_bytes = 1024; // 1KB
+
+    std::vector<std::string> sample_keys_smaller;
+    ASSERT_OK(mgr->TEST_sample_keys_from_sstable(sst1, _tablet_metadata, &sample_keys_smaller));
+
+    // With smaller interval, should get more (or equal) sample keys
+    ASSERT_GE(sample_keys_smaller.size(), default_sample_count);
+
+    // Restore original config
+    config::pk_index_sstable_sample_interval_bytes = old_interval;
 }
 
 } // namespace starrocks::lake

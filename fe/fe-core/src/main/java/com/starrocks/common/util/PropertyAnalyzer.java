@@ -1357,6 +1357,7 @@ public class PropertyAnalyzer {
         if (properties != null && properties.containsKey(PROPERTIES_UNIQUE_CONSTRAINT)) {
             String constraintDescs = properties.get(PROPERTIES_UNIQUE_CONSTRAINT);
             if (Strings.isNullOrEmpty(constraintDescs)) {
+                properties.remove(PROPERTIES_UNIQUE_CONSTRAINT);
                 return uniqueConstraints;
             }
 
@@ -1490,6 +1491,7 @@ public class PropertyAnalyzer {
         if (properties != null && properties.containsKey(PROPERTIES_FOREIGN_KEY_CONSTRAINT)) {
             String foreignKeyConstraintsDesc = properties.get(PROPERTIES_FOREIGN_KEY_CONSTRAINT);
             if (Strings.isNullOrEmpty(foreignKeyConstraintsDesc)) {
+                properties.remove(PROPERTIES_FOREIGN_KEY_CONSTRAINT);
                 return foreignKeyConstraints;
             }
 

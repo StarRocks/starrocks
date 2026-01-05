@@ -23,10 +23,10 @@
 #include "runtime/global_dict/types.h"
 #include "storage/chunk_iterator.h"
 #include "storage/olap_common.h"
+#include "storage/olap_tuple.h"
 #include "storage/predicate_tree/predicate_tree.hpp"
 #include "storage/runtime_filter_predicate.h"
 #include "storage/runtime_range_pruner.h"
-#include "storage/tuple.h"
 
 namespace starrocks {
 
@@ -107,6 +107,7 @@ struct TabletReaderParams {
 
     TTableSampleOptions sample_options;
     bool enable_join_runtime_filter_pushdown = false;
+    bool enable_predicate_col_late_materialize = false;
 
 public:
     std::string to_string() const;
