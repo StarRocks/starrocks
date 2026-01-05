@@ -126,12 +126,9 @@ struct AggTopRuntimeFilterBuilderImpl {
     std::pair<RuntimeFilter*, HeapBuilder*> build(ObjectPool* pool, Aggregator* aggregator, size_t build_expr_order,
                                                   size_t limit, bool asc, bool is_nulls_first) {
         using CppType = RunTimeCppType<ltype>;
-        // build the runtime filter for the topn runtime filter
         RuntimeFilter* runtime_filter = MinMaxRuntimeFilter<ltype>::create_full_range_with_null(pool);
-        // build the heap builder for the topn runtime filter
         auto* heap_builder = new THeapBuilder<ltype, Comp>(Comp());
         pool->add(heap_builder);
-
         auto& hash_map_variant = aggregator->hash_map_variant();
         hash_map_variant.visit([&](auto& variant_value) {
             auto& hash_map_with_key = *variant_value;
@@ -230,7 +227,7 @@ struct AggTopNRuntimeFilterUpdaterImpl {
             const auto& column_data = GetContainer<ltype>::get_data(nullable->data_column());
             size_t num_rows = column->size();
             for (size_t i = 0; i < num_rows; ++i) {
-                if (selection[i] == 0 || null_data[i]) {
+                if (null_data[i] || selection[i] == 0) {
                     continue;
                 }
                 auto val = column_data[i];
@@ -269,8 +266,9 @@ RuntimeFilter* AggTopNRuntimeFilterBuilder::build(Aggregator* aggretator, Object
 }
 
 void AggTopNRuntimeFilterBuilder::update(const Columns& group_by_columns, const Filter& selection) {
-    DCHECK(_heap_builder != nullptr) << "Heap builder is not built";
-    DCHECK(_runtime_filter != nullptr) << "Runtime filter is not built";
+    if (_heap_builder == nullptr || _runtime_filter == nullptr) {
+        return;
+    }
     type_dispatch_predicate<void>(_type, false, AggTopNRuntimeFilterUpdaterImpl(), _heap_builder, _runtime_filter,
                                   group_by_columns, selection, _build_desc->build_expr_order(), _build_desc->limit(),
                                   _build_desc->is_asc(), _build_desc->is_nulls_first());

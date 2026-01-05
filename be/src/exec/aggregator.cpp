@@ -957,7 +957,6 @@ RuntimeFilter* Aggregator::build_topn_filters(RuntimeState* state, RuntimeFilter
         // for the first time to build the topn runtime filter
         _topn_runtime_filter_builder = new AggTopNRuntimeFilterBuilder(desc, group_type_type);
         _pool->add(_topn_runtime_filter_builder);
-
         return _topn_runtime_filter_builder->build(this, state->obj_pool());
     } else {
         return _topn_runtime_filter_builder->runtime_filter();
@@ -1655,7 +1654,7 @@ void Aggregator::build_hash_map_with_topn_runtime_filter(size_t chunk_size) {
                                                                         AllocateState<MapType>(this), &_tmp_agg_states,
                                                                         &_streaming_selection);
     });
-    // if _streaming_selection is not all 0, means there are some group keys not found,
+    // if _streaming_selection is not all 0, means there are new group by keys,
     // we need to build the topn runtime filter
     if (_topn_runtime_filter_builder != nullptr &&
         SIMD::count_zero(_streaming_selection.data(), chunk_size) != chunk_size) {
