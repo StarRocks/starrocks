@@ -18,6 +18,7 @@
 #include "exprs/agg/avg.h"
 #include "exprs/agg/factory/aggregate_factory.hpp"
 #include "exprs/agg/factory/aggregate_resolver.hpp"
+#include "exprs/agg/sum_map.h"
 #include "types/logical_type.h"
 
 namespace starrocks {
@@ -127,6 +128,49 @@ struct MapAggDispatcher {
     }
 };
 
+// SumMapDispatcher - nested dispatcher for both key and value types
+template <LogicalType kt>
+struct SumMapValueTypeDispatcher {
+    template <LogicalType vt>
+    void operator()(AggregateFuncResolver* resolver) {
+        // Only register for numeric value types
+        if constexpr (lt_is_numeric<vt>) {
+            using KeyCppType = RunTimeCppType<kt>;
+            if constexpr (lt_is_largeint<kt>) {
+                using MyHashMap = phmap::flat_hash_map<KeyCppType, size_t, Hash128WithSeed<PhmapSeed1>>;
+                auto func = new SumMapAggregateFunction<kt, vt, MyHashMap>();
+                resolver->add_aggregate_mapping_notnull<kt, vt>("sum_map", false, func);
+            } else if constexpr (lt_is_fixedlength<kt>) {
+                using MyHashMap = phmap::flat_hash_map<KeyCppType, size_t, StdHash<KeyCppType>>;
+                auto func = new SumMapAggregateFunction<kt, vt, MyHashMap>();
+                resolver->add_aggregate_mapping_notnull<kt, vt>("sum_map", false, func);
+            } else if constexpr (lt_is_string<kt>) {
+                using MyHashMap =
+                        phmap::flat_hash_map<SliceWithHash, size_t, HashOnSliceWithHash, EqualOnSliceWithHash>;
+                auto func = new SumMapAggregateFunction<kt, vt, MyHashMap>();
+                resolver->add_aggregate_mapping_notnull<kt, vt>("sum_map", false, func);
+            }
+        }
+    }
+};
+
+struct SumMapDispatcher {
+    template <LogicalType kt>
+    void operator()(AggregateFuncResolver* resolver) {
+        if constexpr (lt_is_aggregate<kt>) {
+            // For each key type, try all numeric value types
+            type_dispatch_all(TYPE_BOOLEAN, SumMapValueTypeDispatcher<kt>(), resolver);
+            type_dispatch_all(TYPE_TINYINT, SumMapValueTypeDispatcher<kt>(), resolver);
+            type_dispatch_all(TYPE_SMALLINT, SumMapValueTypeDispatcher<kt>(), resolver);
+            type_dispatch_all(TYPE_INT, SumMapValueTypeDispatcher<kt>(), resolver);
+            type_dispatch_all(TYPE_BIGINT, SumMapValueTypeDispatcher<kt>(), resolver);
+            type_dispatch_all(TYPE_LARGEINT, SumMapValueTypeDispatcher<kt>(), resolver);
+            type_dispatch_all(TYPE_FLOAT, SumMapValueTypeDispatcher<kt>(), resolver);
+            type_dispatch_all(TYPE_DOUBLE, SumMapValueTypeDispatcher<kt>(), resolver);
+        }
+    }
+};
+
 void AggregateFuncResolver::register_avg() {
     for (auto type : aggregate_types()) {
         type_dispatch_all(type, AvgDispatcher(), this);
@@ -135,6 +179,7 @@ void AggregateFuncResolver::register_avg() {
             type_dispatch_all(type, ArrayAggDistinctDispatcher(), this);
             type_dispatch_all(type, ArrayUniqueAggDispatcher(), this);
             type_dispatch_all(type, MapAggDispatcher(), this);
+            type_dispatch_all(type, SumMapDispatcher(), this);
         }
     }
     type_dispatch_all(TYPE_JSON, ArrayAggDispatcher(), this);
