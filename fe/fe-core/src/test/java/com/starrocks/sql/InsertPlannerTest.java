@@ -19,7 +19,6 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.connector.ConnectorMetadatRequestContext;
-import com.starrocks.persist.ClusterInfo;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
@@ -35,6 +34,7 @@ import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.InPredicate;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.StringLiteral;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.StatisticStorage;
 import com.starrocks.system.SystemInfoService;
@@ -45,6 +45,7 @@ import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -548,7 +549,7 @@ public class InsertPlannerTest {
         new Expectations() {
             {
                 columnRef.getType();
-                result = com.starrocks.type.Type.DATE;
+                result = com.starrocks.type.DateType.DATE;
                 minTimes = 0;
 
                 columnRef.isNullable();
@@ -567,7 +568,7 @@ public class InsertPlannerTest {
         com.starrocks.sql.optimizer.operator.scalar.CallOperator callOp =
                 (com.starrocks.sql.optimizer.operator.scalar.CallOperator) expr;
         assertEquals("__iceberg_transform_year", callOp.getFnName());
-        assertEquals(com.starrocks.type.Type.DATE, callOp.getType());
+        assertEquals(com.starrocks.type.DateType.DATE, callOp.getType());
         assertEquals(1, callOp.getChildren().size());
     }
 
@@ -579,7 +580,7 @@ public class InsertPlannerTest {
         new Expectations() {
             {
                 columnRef.getType();
-                result = com.starrocks.type.Type.DATE;
+                result = com.starrocks.type.DateType.DATE;
                 minTimes = 0;
 
                 columnRef.isNullable();
@@ -608,7 +609,7 @@ public class InsertPlannerTest {
         new Expectations() {
             {
                 columnRef.getType();
-                result = com.starrocks.type.Type.DATETIME;
+                result = com.starrocks.type.DateType.DATETIME;
                 minTimes = 0;
 
                 columnRef.isNullable();
@@ -627,7 +628,7 @@ public class InsertPlannerTest {
         com.starrocks.sql.optimizer.operator.scalar.CallOperator callOp =
                 (com.starrocks.sql.optimizer.operator.scalar.CallOperator) expr;
         assertEquals("__iceberg_transform_hour", callOp.getFnName());
-        assertEquals(com.starrocks.type.Type.DATETIME, callOp.getType());
+        assertEquals(com.starrocks.type.DateType.DATETIME, callOp.getType());
     }
 
     /**
@@ -670,7 +671,7 @@ public class InsertPlannerTest {
         com.starrocks.sql.optimizer.operator.scalar.CallOperator callOp =
                 (com.starrocks.sql.optimizer.operator.scalar.CallOperator) expr;
         assertEquals("__iceberg_transform_bucket[5]", callOp.getFnName());
-        assertEquals(com.starrocks.type.Type.INT, callOp.getType());
+        assertEquals(com.starrocks.type.IntegerType.INT, callOp.getType());
         assertEquals(2, callOp.getChildren().size()); // column + bucket count
     }
 
@@ -682,7 +683,7 @@ public class InsertPlannerTest {
         new Expectations() {
             {
                 columnRef.getType();
-                result = com.starrocks.type.Type.VARCHAR;
+                result = com.starrocks.type.VarcharType.VARCHAR;
                 minTimes = 0;
 
                 columnRef.isNullable();
@@ -717,14 +718,32 @@ public class InsertPlannerTest {
         assertNull(expr);
     }
 
-    // Helper method to create a mock PartitionField
     private org.apache.iceberg.PartitionField mockPartitionField(String transformStr) {
+        org.apache.iceberg.PartitionField pf = Mockito.mock(org.apache.iceberg.PartitionField.class);
+        org.apache.iceberg.transforms.Transform tf = Mockito.mock(org.apache.iceberg.transforms.Transform.class);
+
+        Mockito.when(tf.toString()).thenReturn(transformStr);
+        Mockito.when(tf.isIdentity()).thenReturn("identity".equals(transformStr));
+        Mockito.when(pf.transform()).thenReturn(tf);
+        Mockito.when(pf.sourceId()).thenReturn(1);
+        Mockito.when(pf.name()).thenReturn("test_field"); // 如果需要
+
+        return pf;
+    }
+
+    // Helper method to create a mock PartitionField
+    /*
+    private org.apache.iceberg.PartitionField mockPartitionField(String transformStr) {
+        //return null;
         return new org.apache.iceberg.PartitionField(1, 0, "test_field",
                 new org.apache.iceberg.transforms.Transform<Void>() {
                     @Override
                     public String toString() {
                         return transformStr;
                     }
+
+                    @Override
+                    public boolean canTransform(Type var1) { return true; }
 
                     @Override
                     public org.apache.iceberg.types.Type getResultType(org.apache.iceberg.types.Type sourceType) {
@@ -772,4 +791,5 @@ public class InsertPlannerTest {
                     }
                 });
     }
+     */
 }

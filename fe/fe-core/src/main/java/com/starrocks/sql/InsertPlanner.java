@@ -34,6 +34,7 @@ import com.starrocks.catalog.TableName;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.profile.Timer;
@@ -120,8 +121,11 @@ import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanFragmentBuilder;
 import com.starrocks.thrift.TPartialUpdateMode;
 import com.starrocks.thrift.TResultSinkType;
+import com.starrocks.type.DateType;
+import com.starrocks.type.IntegerType;
 import com.starrocks.type.NullType;
 import com.starrocks.type.Type;
+import com.starrocks.type.VarcharType;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.logging.log4j.LogManager;
@@ -340,19 +344,19 @@ public class InsertPlanner {
         //5. Fill in the generated columns
         optExprBuilder = fillGeneratedColumns(columnRefFactory, insertStmt, outputColumns, optExprBuilder, session);
 
-        //5.5. Fill in the transform partition columns for Iceberg tables with partition transforms
+        //6. Fill in the transform partition columns for Iceberg tables with partition transforms
         // This adds computed columns for expressions like day(dt), month(dt), etc. to support
         // global shuffle based on transformed partition values
         optExprBuilder = fillTransformPartitionColumns(columnRefFactory, insertStmt, outputColumns, optExprBuilder, session);
 
-        //6. Fill in the shadow column
+        //7. Fill in the shadow column
         optExprBuilder = fillShadowColumns(columnRefFactory, insertStmt, outputColumns, optExprBuilder, session);
 
-        //7. Cast output columns type to target type
+        //8. Cast output columns type to target type
         optExprBuilder =
                 castOutputColumnsTypeToTargetColumns(columnRefFactory, insertStmt, outputColumns, optExprBuilder);
 
-        //8. Optimize logical plan and build physical plan
+        //9. Optimize logical plan and build physical plan
         logicalPlan = new LogicalPlan(optExprBuilder, outputColumns, logicalPlan.getCorrelation());
 
         // TODO: remove forceDisablePipeline when all the operators support pipeline engine.
@@ -1471,23 +1475,23 @@ public class InsertPlanner {
         // Handle time-based transforms
         // These functions are already implemented in BE via the iceberg transform functions
         if ("year".equals(transformStr)) {
-            return new CallOperator(fnName, Type.DATE, Lists.newArrayList(sourceColumnRef));
+            return new CallOperator(fnName, DateType.DATE, Lists.newArrayList(sourceColumnRef));
         } else if ("month".equals(transformStr)) {
-            return new CallOperator(fnName, Type.DATE, Lists.newArrayList(sourceColumnRef));
+            return new CallOperator(fnName, DateType.DATE, Lists.newArrayList(sourceColumnRef));
         } else if ("day".equals(transformStr)) {
-            return new CallOperator(fnName, Type.DATE, Lists.newArrayList(sourceColumnRef));
+            return new CallOperator(fnName, DateType.DATE, Lists.newArrayList(sourceColumnRef));
         } else if ("hour".equals(transformStr)) {
-            return new CallOperator(fnName, Type.DATETIME, Lists.newArrayList(sourceColumnRef));
+            return new CallOperator(fnName, DateType.DATETIME, Lists.newArrayList(sourceColumnRef));
         } else if ("void".equals(transformStr)) {
             // void transform means no partitioning, return null constant
-            return ConstantOperator.createNull(Type.NULL);
+            return ConstantOperator.createNull(NullType.NULL);
         }
 
         // For bucket[N] transforms
         if (transformStr.startsWith("bucket")) {
             // Parse bucket count: bucket[5] -> 5
             int numBuckets = extractTransformParam(transformStr);
-            return new CallOperator(fnName, Type.INT, Lists.newArrayList(
+            return new CallOperator(fnName, IntegerType.INT, Lists.newArrayList(
                     sourceColumnRef,
                     ConstantOperator.createInt(numBuckets)));
         }
@@ -1496,7 +1500,7 @@ public class InsertPlanner {
         if (transformStr.startsWith("truncate")) {
             // Parse width: truncate[10] -> 10
             int width = extractTransformParam(transformStr);
-            Type returnType = sourceColumnRef.getType().isBinaryType() ? Type.VARCHAR : sourceColumnRef.getType();
+            Type returnType = sourceColumnRef.getType().isBinaryType() ? VarcharType.VARCHAR : sourceColumnRef.getType();
             return new CallOperator(fnName, returnType, Lists.newArrayList(
                     sourceColumnRef,
                     ConstantOperator.createInt(width)));
