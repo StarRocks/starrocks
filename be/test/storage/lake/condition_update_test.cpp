@@ -97,7 +97,6 @@ public:
         auto c1 = Int32Column::create();
         auto c2 = Int32Column::create();
         c0->append_strings(key_col.data(), key_col.size());
-        c0->append_numbers(v0.data(), v0.size() * sizeof(int));
         c1->append_numbers(v1.data(), v1.size() * sizeof(int));
         c2->append_numbers(v2.data(), v2.size() * sizeof(int));
 
