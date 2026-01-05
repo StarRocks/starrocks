@@ -260,7 +260,7 @@ std::pair<bool, JoinHashMapMethodUnaryType> JoinHashMapSelector::_try_use_range_
         RuntimeState* state, JoinHashTableItems* table_items) {
     bool is_asof_join_type = is_asof_join(table_items->join_type);
 
-    if (!state->enable_hash_join_range_direct_mapping_opt()) {
+    if (!state->enable_hash_join_range_direct_mapping_opt() || table_items->row_count == 0) {
         return _get_fallback_method<LT>(is_asof_join_type);
     }
 
