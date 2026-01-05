@@ -70,6 +70,7 @@ protected:
         CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
         // Turn it down so we don't need to generate too much rowset for test.
         config::lake_pk_compaction_min_input_segments = 2;
+        ExecEnv::GetInstance()->parallel_compact_mgr()->TEST_set_tablet_mgr(_tablet_mgr.get());
     }
 
     void TearDown() override {
@@ -1466,7 +1467,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_major_compaction) {
     std::vector<Chunk> chunks;
     int N = 10;
     for (int i = 0; i < N; i++) {
-        chunks.push_back(generate_data(kChunkSize, i));
+        chunks.push_back(generate_data(kChunkSize, N - i - 1));
     }
     auto indexes = std::vector<uint32_t>(kChunkSize);
     for (int i = 0; i < kChunkSize; i++) {
@@ -1514,7 +1515,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_major_compaction) {
     version++;
     ASSERT_EQ(kChunkSize * N, read(version));
     ASSIGN_OR_ABORT(new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
-    EXPECT_EQ(N, new_tablet_metadata->orphan_files_size());
+    EXPECT_EQ(8, new_tablet_metadata->orphan_files_size());
 
     config::l0_max_mem_usage = l0_max_mem_usage;
 }
@@ -1602,7 +1603,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_major_compaction_thread_safe) {
     config::l0_max_mem_usage = l0_max_mem_usage;
 }
 
-TEST_P(LakePrimaryKeyCompactionTest, test_should_enable_pk_parallel_execution) {
+TEST_P(LakePrimaryKeyCompactionTest, test_should_enable_pk_index_eager_build) {
     // Prepare data for writing
     auto chunk0 = generate_data(kChunkSize, 0);
     auto indexes = std::vector<uint32_t>(kChunkSize);
@@ -1635,17 +1636,17 @@ TEST_P(LakePrimaryKeyCompactionTest, test_should_enable_pk_parallel_execution) {
     auto txn_id = next_id();
     auto task_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, false, nullptr);
     ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(task_context.get()));
-    // check should_enable_pk_parallel_execution
+    // check should_enable_pk_index_eager_build
     if (!GetParam().enable_persistent_index || GetParam().persistent_index_type == PersistentIndexTypePB::LOCAL) {
-        EXPECT_FALSE(task->should_enable_pk_parallel_execution(0));
-        EXPECT_FALSE(task->should_enable_pk_parallel_execution(config::pk_parallel_execution_threshold_bytes - 1));
-        EXPECT_FALSE(task->should_enable_pk_parallel_execution(config::pk_parallel_execution_threshold_bytes));
-        EXPECT_FALSE(task->should_enable_pk_parallel_execution(config::pk_parallel_execution_threshold_bytes + 1));
+        EXPECT_FALSE(task->should_enable_pk_index_eager_build(0));
+        EXPECT_FALSE(task->should_enable_pk_index_eager_build(config::pk_index_eager_build_threshold_bytes - 1));
+        EXPECT_FALSE(task->should_enable_pk_index_eager_build(config::pk_index_eager_build_threshold_bytes));
+        EXPECT_FALSE(task->should_enable_pk_index_eager_build(config::pk_index_eager_build_threshold_bytes + 1));
     } else {
-        EXPECT_FALSE(task->should_enable_pk_parallel_execution(0));
-        EXPECT_FALSE(task->should_enable_pk_parallel_execution(config::pk_parallel_execution_threshold_bytes - 1));
-        EXPECT_TRUE(task->should_enable_pk_parallel_execution(config::pk_parallel_execution_threshold_bytes));
-        EXPECT_TRUE(task->should_enable_pk_parallel_execution(config::pk_parallel_execution_threshold_bytes + 1));
+        EXPECT_FALSE(task->should_enable_pk_index_eager_build(0));
+        EXPECT_FALSE(task->should_enable_pk_index_eager_build(config::pk_index_eager_build_threshold_bytes - 1));
+        EXPECT_TRUE(task->should_enable_pk_index_eager_build(config::pk_index_eager_build_threshold_bytes));
+        EXPECT_TRUE(task->should_enable_pk_index_eager_build(config::pk_index_eager_build_threshold_bytes + 1));
     }
 }
 

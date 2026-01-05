@@ -92,7 +92,7 @@ Status HorizontalPkTabletWriter::reset_segment_writer(bool eos) {
     RETURN_IF_ERROR(HorizontalGeneralTabletWriter::reset_segment_writer(eos));
     // reset sst file writer
     if (_pk_sst_writer == nullptr) {
-        if (enable_pk_parallel_execution()) {
+        if (enable_pk_index_eager_build()) {
             _pk_sst_writer = std::make_unique<PkTabletSSTWriter>(tablet_schema(), _tablet_mgr, _tablet_id);
         } else {
             _pk_sst_writer = std::make_unique<DefaultSSTWriter>();
@@ -157,8 +157,8 @@ StatusOr<std::unique_ptr<TabletWriter>> HorizontalPkTabletWriter::clone() const 
                                                              _is_compaction, _bundle_file_context,
                                                              const_cast<GlobalDictByNameMaps*>(_global_dicts));
     RETURN_IF_ERROR(writer->open());
-    if (enable_pk_parallel_execution()) {
-        writer->force_set_enable_pk_parallel_execution();
+    if (enable_pk_index_eager_build()) {
+        writer->force_set_enable_pk_index_eager_build();
     }
     writer->set_auto_flush(auto_flush());
     return writer;
@@ -187,7 +187,7 @@ Status VerticalPkTabletWriter::write_columns(const Chunk& data, const std::vecto
     RETURN_IF_ERROR(VerticalGeneralTabletWriter::write_columns(data, column_indexes, is_key));
     if (_pk_sst_writers.size() <= _current_writer_index) {
         std::unique_ptr<DefaultSSTWriter> sst_writer;
-        if (enable_pk_parallel_execution()) {
+        if (enable_pk_index_eager_build()) {
             sst_writer = std::make_unique<PkTabletSSTWriter>(tablet_schema(), _tablet_mgr, _tablet_id);
         } else {
             sst_writer = std::make_unique<DefaultSSTWriter>();

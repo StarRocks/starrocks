@@ -130,6 +130,8 @@ public:
 
     Status update_max_threads(int max_threads);
 
+    int32_t calc_max_threads() const;
+
     StatusOr<AsyncCompactCBPtr> async_compact(
             const std::vector<std::vector<PersistentIndexSstablePB>>& candidates, const TabletMetadataPtr& metadata,
             bool merge_base_level, const std::function<Status(const std::vector<PersistentIndexSstablePB>&)>& callback);
@@ -149,6 +151,9 @@ public:
     Status TEST_sample_keys_from_sstable(const PersistentIndexSstablePB& sstable_pb, const TabletMetadataPtr& metadata,
                                          std::vector<std::string>* sample_keys);
 
+    // For UT
+    void TEST_set_tablet_mgr(TabletManager* tablet_mgr) { _tablet_mgr = tablet_mgr; }
+
 private:
     // generate compaction tasks using candidate filesets.
     // The final task number will be decided by config pk_index_parallel_compaction_task_split_threshold_bytes
@@ -158,9 +163,6 @@ private:
 
     Status sample_keys_from_sstable(const PersistentIndexSstablePB& sstable_pb, const TabletMetadataPtr& metadata,
                                     std::vector<std::string>* sample_keys);
-
-    // For UT
-    void TEST_set_tablet_mgr(TabletManager* tablet_mgr) { _tablet_mgr = tablet_mgr; }
 
 private:
     // Check if two key ranges overlap
