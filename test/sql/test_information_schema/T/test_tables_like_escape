@@ -7,7 +7,6 @@ CREATE TABLE `a_a` (
 ) DISTRIBUTED BY HASH(`k1`) BUCKETS 1
 PROPERTIES ("replication_num" = "1");
 
-set enable_evaluate_schema_scan_rule=true;
 select table_name from information_schema.tables
 where table_schema='db_${uuid0}' and table_name like 'a\\_a';
 

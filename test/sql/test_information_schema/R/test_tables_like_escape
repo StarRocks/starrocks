@@ -11,9 +11,6 @@ CREATE TABLE `a_a` (
 PROPERTIES ("replication_num" = "1");
 -- result:
 -- !result
-set enable_evaluate_schema_scan_rule=true;
--- result:
--- !result
 select table_name from information_schema.tables
 where table_schema='db_${uuid0}' and table_name like 'a\\_a';
 -- result:
