@@ -1817,7 +1817,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 
 ##### enable_query_queue_v2
 
-- Default: false
+- Default: true
 - Type: boolean
 - Unit: -
 - Is mutable: No
