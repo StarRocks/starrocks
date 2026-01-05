@@ -14,8 +14,10 @@
 
 package com.starrocks.common.udf;
 
-public interface StorageHandler {
+public interface StorageHandler extends AutoCloseable {
 
     void getObject(String remotePath, String localPath) throws Exception;
 
+    @Override
+    void close();
 }

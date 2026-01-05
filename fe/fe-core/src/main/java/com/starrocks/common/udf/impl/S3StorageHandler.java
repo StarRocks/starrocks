@@ -68,4 +68,9 @@ public class S3StorageHandler implements StorageHandler {
             throw exception;
         }
     }
+
+    @Override
+    public void close() {
+        s3Client.close();
+    }
 }

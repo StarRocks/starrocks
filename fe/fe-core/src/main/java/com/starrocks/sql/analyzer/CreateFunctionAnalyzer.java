@@ -154,7 +154,7 @@ public class CreateFunctionAnalyzer {
             ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
                     String.format("STARROCKS_HOME not found. Please set it first."));
         }
-        String fileName = url.substring(url.lastIndexOf("/") + 1);
+        String objectPath = url.substring(url.indexOf("://") + 3);
         StorageVolumeMgr storageVolumeMgr = GlobalStateMgr.getCurrentState().getStorageVolumeMgr();
         if (storageVolumeMgr == null) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
@@ -165,7 +165,7 @@ public class CreateFunctionAnalyzer {
             ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
                     String.format("Storage volume '%s' not found. Please create it first.", this.storageVolumeName));
         }
-        String targetPath = String.format("%s/%s", STARROCKS_HOME_DIR + "/plugins/java_udf", fileName);
+        String targetPath = String.format("%s/%s", STARROCKS_HOME_DIR + "/plugins/java_udf", objectPath);
         String targetUrl = String.format("file://%s", targetPath);
         UDFDownloader.download2Local(sv, url, targetPath);
         return targetUrl;

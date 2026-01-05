@@ -25,16 +25,19 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.Collections;
+import java.util.Map;
+import java.util.WeakHashMap;
 
 public class UDFDownloader {
 
     private static final Logger LOG = LogManager.getLogger(UDFDownloader.class);
 
-    private static final ConcurrentHashMap<String, Object> LOCK = new ConcurrentHashMap<>();
+    private static final Map<String, Object> LOCKS =
+            Collections.synchronizedMap(new WeakHashMap<>());
 
     private static Object getLockForPath(String path) {
-        return LOCK.computeIfAbsent(path, k -> new Object());
+        return LOCKS.computeIfAbsent(path, k -> new Object());
     }
 
     public static void download2Local(StorageVolume sv, String remotePath, String localPath) throws IOException {
@@ -54,22 +57,21 @@ public class UDFDownloader {
             Files.createDirectories(parentDir);
         }
         File localFile = new File(localPath);
-        if (localFile.exists() && !localFile.delete()) {
-            String errMsg = String.format("Failed to delete existing local file %s", localFile);
+        if (localFile.exists()) {
+            String errMsg = String.format("the %s already exists", localFile);
             throw new RuntimeException(errMsg);
         }
     }
 
     private static Status doDownload(StorageVolume sv, String remotePath, String localPath) {
-        try {
-            StorageHandler handler = StorageHandlerFactory.create(sv);
+        try (StorageHandler handler = StorageHandlerFactory.create(sv)) {
             handler.getObject(remotePath, localPath);
-            return Status.OK;
         } catch (UnsupportedOperationException e) {
             return new Status(new Status(TStatusCode.RUNTIME_ERROR, e.getMessage()));
         } catch (Exception e) {
             String errMsg = String.format("Failed to download remote file from %s as %s", remotePath, e.getMessage());
             return new Status(new Status(TStatusCode.RUNTIME_ERROR, errMsg));
         }
+        return Status.OK;
     }
 }
