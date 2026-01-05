@@ -95,7 +95,7 @@ Status PersistentIndexSstable::multi_get(const Slice* keys, const KeyIndexSet& k
     sstable::ReadOptions options;
     options.stat = &stat;
     std::unique_ptr<RandomAccessFile> rf;
-    if (config::enable_pk_index_parallel_get) {
+    if (config::enable_pk_index_parallel_execution) {
         RandomAccessFileOptions opts;
         if (!_sstable_pb.encryption_meta().empty()) {
             ASSIGN_OR_RETURN(auto info, KeyCache::instance().unwrap_encryption_meta(_sstable_pb.encryption_meta()));

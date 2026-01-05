@@ -227,6 +227,7 @@ Status LakePersistentIndex::sync_flush_all_memtables(int64_t wait_timeout_us) {
 // - If too many pending flushes, switches to synchronous flush to avoid unbounded memory growth
 Status LakePersistentIndex::flush_memtable(bool force) {
     if (!_memtable->empty() && (force || is_memtable_full())) {
+        TRACE_COUNTER_INCREMENT("flush_times", 1);
         TRACE_COUNTER_SCOPE_LATENCY_US("flush_memtable_us");
         // 1. check whether previous flush task finish.
         int finish_point = -1;

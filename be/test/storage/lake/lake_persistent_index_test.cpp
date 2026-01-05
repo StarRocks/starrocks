@@ -526,6 +526,7 @@ TEST_F(LakePersistentIndexTest, test_major_compaction_with_predicate) {
         ASSERT_OK(index->upsert(N, key_slices.data(), values.data(), upsert_old_values.data()));
         // generate sst files.
         index->flush_memtable(true);
+        ASSERT_OK(index->sync_flush_all_memtables(60 * 1000 * 1000)); // Wait up to 60s
     }
     ASSERT_TRUE(index->memory_usage() > 0);
 

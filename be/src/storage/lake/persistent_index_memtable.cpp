@@ -236,7 +236,6 @@ Status PersistentIndexMemtable::flush() {
     RETURN_IF_ERROR(sstable->init(std::move(rf), sstable_pb, block_cache->cache()));
     std::lock_guard<std::mutex> lg(_flush_mutex);
     _sstable = std::move(sstable);
-    TRACE_COUNTER_INCREMENT("flush_times", 1);
     return Status::OK();
 }
 

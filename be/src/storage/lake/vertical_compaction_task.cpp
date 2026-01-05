@@ -62,8 +62,8 @@ Status VerticalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flush
     RETURN_IF_ERROR(writer->open());
     DeferOp defer([&]() { writer->close(); });
 
-    if (should_enable_pk_parallel_execution(input_bytes)) {
-        writer->try_enable_pk_parallel_execution();
+    if (should_enable_pk_index_eager_build(input_bytes)) {
+        writer->try_enable_pk_index_eager_build();
     }
 
     std::vector<std::vector<uint32_t>> column_groups;

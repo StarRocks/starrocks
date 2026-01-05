@@ -1476,29 +1476,29 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 
 ##### enable_pk_index_parallel_compaction
 
-- 默认值：false
+- 默认值：true
 - 类型：Boolean
 - 单位：-
 - 是否动态：是
 - 描述：是否启用存算分离集群中主键索引的并行 Compaction。
 - 引入版本：-
 
-##### enable_pk_index_parallel_get
-
-- 默认值：false
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：是否启用存算分离集群中主键索引的并行读取。
-- 引入版本：-
-
-##### enable_pk_parallel_execution
+##### enable_pk_index_parallel_execution
 
 - 默认值：true
 - 类型：Boolean
 - 单位：-
 - 是否动态：是
-- 描述：是否为 Primary Key 表并行执行策略。当并行执行策略开启时，Primary Key 索引文件会在导入和compaction阶段生成。
+- 描述：是否启用存算分离集群中主键索引操作的并行执行。开启后，系统会在发布操作期间使用线程池并发处理分段，显著提升大表的性能。
+- 引入版本：-
+
+##### enable_pk_index_eager_build
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：是否在导入和 Compaction 阶段即时构建 Primary Key 索引文件。开启后，系统会在数据写入时直接生成持久化的主键索引文件，提升后续查询性能。
 - 引入版本：-
 
 ##### enable_pk_size_tiered_compaction_strategy
@@ -1793,16 +1793,16 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 
 ##### pk_index_memtable_flush_threadpool_max_threads
 
-- 默认值：4
+- 默认值：0
 - 类型：Int
 - 单位：-
 - 是否动态：是
-- 描述：存算分离集群中，主键索引 MemTable 刷盘的线程池最大线程数。
+- 描述：存算分离集群中，主键索引 MemTable 刷盘的线程池最大线程数。0 表示自动设置为 CPU 核数的一半。
 - 引入版本：-
 
 ##### pk_index_memtable_max_count
 
-- 默认值：1
+- 默认值：2
 - 类型：Int
 - 单位：-
 - 是否动态：是
@@ -1829,29 +1829,29 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 
 ##### pk_index_parallel_compaction_threadpool_max_threads
 
-- 默认值：4
+- 默认值：0
 - 类型：Int
 - 单位：-
 - 是否动态：是
-- 描述：存算分离集群中，主键索引并行 Compaction 的线程池最大线程数。
+- 描述：存算分离集群中，主键索引并行 Compaction 的线程池最大线程数。0 表示自动设置为 CPU 核数的一半。
 - 引入版本：-
 
-##### pk_index_parallel_get_min_rows
+##### pk_index_parallel_execution_min_rows
 
 - 默认值：16384
 - 类型：Int
 - 单位：-
 - 是否动态：是
-- 描述：存算分离集群中，启用主键索引并行读取的最小行数阈值。
+- 描述：存算分离集群中，启用主键索引并行执行的最小行数阈值。
 - 引入版本：-
 
-##### pk_index_parallel_get_threadpool_max_threads
+##### pk_index_parallel_execution_threadpool_max_threads
 
 - 默认值：0
 - 类型：Int
 - 单位：-
 - 是否动态：是
-- 描述：存算分离集群中，主键索引并行读取的线程池最大线程数。0 表示自动配置。
+- 描述：存算分离集群中，主键索引并行执行的线程池最大线程数。0 表示自动设置为 CPU 核数的一半。
 - 引入版本：-
 
 ##### pk_index_size_tiered_level_multiplier
@@ -1899,13 +1899,13 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 描述：存算分离集群中，主键索引的目标文件大小。
 - 引入版本：-
 
-##### pk_parallel_execution_threshold_bytes
+##### pk_index_eager_build_threshold_bytes
 
 - 默认值：104857600
 - 类型：Int
 - 单位：Bytes
 - 是否动态：是
-- 描述：当 `enable_pk_parallel_execution` 设置为 `true` 后，导入或者 Compaction 生成的数据大于该阈值时，主键表并行执行策略将被启用。
+- 描述：当 `enable_pk_index_eager_build` 设置为 `true` 后，导入或 Compaction 生成的数据大于该阈值时，系统才会即时构建主键索引文件。默认为 100MB。
 - 引入版本：-
 
 ##### primary_key_limit_size
