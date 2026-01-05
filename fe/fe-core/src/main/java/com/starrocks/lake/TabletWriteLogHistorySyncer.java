@@ -15,6 +15,7 @@
 package com.starrocks.lake;
 
 import com.starrocks.catalog.CatalogUtils;
+import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.qe.SimpleExecutor;
@@ -28,35 +29,33 @@ public class TabletWriteLogHistorySyncer extends FrontendDaemon {
     public static final String DB_NAME = "_statistics_";
     public static final String TABLE_NAME = "tablet_write_log_history";
 
-    // Default retention days: 7
-    private static final int RETAINED_DAYS = 7;
-
-    private static final String TABLE_CREATE =
-            String.format("CREATE TABLE IF NOT EXISTS %s (" +
-                            "be_id bigint NOT NULL, " +
-                            "begin_time datetime NOT NULL, " +
-                            "finish_time datetime NOT NULL, " +
-                            "txn_id bigint, " +
-                            "tablet_id bigint, " +
-                            "table_id bigint, " +
-                            "partition_id bigint, " +
-                            "log_type varchar(64), " +
-                            "input_rows bigint, " +
-                            "input_bytes bigint, " +
-                            "output_rows bigint, " +
-                            "output_bytes bigint, " +
-                            "input_segments int, " +
-                            "output_segments int, " +
-                            "label varchar(1024), " +
-                            "compaction_score bigint, " +
-                            "compaction_type varchar(64)" +
-                            ") " +
-                            "PARTITION BY date_trunc('DAY', finish_time) " +
-                            "DISTRIBUTED BY HASH(tablet_id) BUCKETS 3 " +
-                            "PROPERTIES( " +
-                            "'partition_live_number' = '" + RETAINED_DAYS + "'" +
-                            ")",
-                    TABLE_NAME);
+    private static String buildTableCreateSql() {
+        return String.format("CREATE TABLE IF NOT EXISTS %s (" +
+                        "be_id bigint NOT NULL, " +
+                        "begin_time datetime NOT NULL, " +
+                        "finish_time datetime NOT NULL, " +
+                        "txn_id bigint, " +
+                        "tablet_id bigint, " +
+                        "table_id bigint, " +
+                        "partition_id bigint, " +
+                        "log_type varchar(64), " +
+                        "input_rows bigint, " +
+                        "input_bytes bigint, " +
+                        "output_rows bigint, " +
+                        "output_bytes bigint, " +
+                        "input_segments int, " +
+                        "output_segments int, " +
+                        "label varchar(1024), " +
+                        "compaction_score bigint, " +
+                        "compaction_type varchar(64)" +
+                        ") " +
+                        "PARTITION BY date_trunc('DAY', finish_time) " +
+                        "DISTRIBUTED BY HASH(tablet_id) BUCKETS 3 " +
+                        "PROPERTIES( " +
+                        "'partition_live_number' = '" + Config.tablet_write_log_history_retained_days + "'" +
+                        ")",
+                TABLE_NAME);
+    }
 
     private static final String SYNC_SQL =
             "INSERT INTO %s " +
@@ -71,14 +70,15 @@ public class TabletWriteLogHistorySyncer extends FrontendDaemon {
     private boolean firstSync = true;
 
     private static final TableKeeper KEEPER =
-            new TableKeeper(DB_NAME, TABLE_NAME, TABLE_CREATE, () -> RETAINED_DAYS);
+            new TableKeeper(DB_NAME, TABLE_NAME, buildTableCreateSql(),
+                    () -> Config.tablet_write_log_history_retained_days);
 
     public static TableKeeper createKeeper() {
         return KEEPER;
     }
 
     public TabletWriteLogHistorySyncer() {
-        super("TabletWriteLogHistorySyncer", 60 * 1000L); // 60s interval
+        super("TabletWriteLogHistorySyncer", Config.tablet_write_log_history_syncer_interval_sec * 1000L);
     }
 
     @Override
@@ -99,7 +99,9 @@ public class TabletWriteLogHistorySyncer extends FrontendDaemon {
     }
 
     public void syncData() {
-        // TODO: Can add a switch to control whether to enable synchronization
+        if (!Config.tablet_write_log_history_syncer_enabled) {
+            return;
+        }
         try {
             SimpleExecutor.getRepoExecutor().executeDML(SQLBuilder.buildSyncSql());
         } catch (Exception e) {

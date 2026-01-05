@@ -2259,6 +2259,31 @@ public class Config extends ConfigBase {
     public static int statistic_analyze_task_pool_size = 3;
 
     /**
+     * Enable tablet write log history syncer.
+     * When disabled, the background task will not sync write log data to the history table.
+     */
+    @ConfField(mutable = true)
+    public static boolean tablet_write_log_history_syncer_enabled = true;
+
+    /**
+     * The interval in seconds for the tablet write log history syncer background task
+     */
+    @ConfField(mutable = true)
+    public static long tablet_write_log_history_syncer_interval_sec = 60; // 60s
+
+    /**
+     * Number of days to retain tablet write log history data
+     */
+    @ConfField(mutable = true)
+    public static int tablet_write_log_history_retained_days = 7;
+
+    /**
+     * The interval in seconds for the statistics meta manager background task
+     */
+    @ConfField(mutable = true)
+    public static long statistics_meta_manager_interval_sec = 60; // 60s
+
+    /**
      * statistic collect query timeout (in seconds)
      * This is the total timeout for the entire analyze job, not for individual SQL tasks.
      * Each SQL task within the job will use the remaining time based on the job start time.
