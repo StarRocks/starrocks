@@ -76,7 +76,11 @@ public class ProductFeature {
                 "Support creating multiple CN groups under the same warehouse.",
                 ""
         ));
-
+        features.add(new ProductFeature(
+                "ArrowFlightSQL",
+                "high-performance columnar data transfer using Apache Arrow.",
+                "https://docs.starrocks.io/docs/unloading/arrow_flight/"
+        ));
         FEATURES = ImmutableList.copyOf(features);
     }
 

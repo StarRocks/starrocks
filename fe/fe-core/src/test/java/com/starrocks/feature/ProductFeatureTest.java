@@ -24,7 +24,18 @@ public class ProductFeatureTest {
     @Test
     public void testProductFeature() {
         List<ProductFeature> features = ProductFeature.getFeatures();
-        Assertions.assertEquals(5, features.size());
+        Assertions.assertEquals(6, features.size());
         Assertions.assertEquals("multi-cngroup", features.get(4).getName());
+    }
+
+    @Test
+    public void testFeatureNames() {
+        List<ProductFeature> features = ProductFeature.getFeatures();
+        Assertions.assertTrue(features.stream().anyMatch(feature -> feature.getName().equals("RBAC")));
+        Assertions.assertTrue(features.stream().anyMatch(feature -> feature.getName().equals("multi-warehouse")));
+        Assertions.assertTrue(features.stream().anyMatch(feature -> feature.getName().equals("warehouse-query-queue")));
+        Assertions.assertTrue(features.stream().anyMatch(feature -> feature.getName().equals("license")));
+        Assertions.assertTrue(features.stream().anyMatch(feature -> feature.getName().equals("multi-cngroup")));
+        Assertions.assertTrue(features.stream().anyMatch(feature -> feature.getName().equals("ArrowFlightSQL")));
     }
 }
