@@ -115,10 +115,7 @@ bool DateValue::from_string(const char* date_str, size_t len) {
         return false;
     }
 
-    if (!date::check(year, month, day)) {
-        return false;
-    }
-
+    // Validation is already performed in from_string_to_date
     from_date(year, month, day);
     return true;
 }
