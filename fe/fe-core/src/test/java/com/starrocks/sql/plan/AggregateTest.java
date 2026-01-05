@@ -2262,6 +2262,7 @@ public class AggregateTest extends PlanTestBase {
         assertContains(plan, "  1:AGGREGATE (update finalize)\n" +
                 "  |  aggregate: sum[([2: t1b, SMALLINT, true]); args: SMALLINT; result: BIGINT; args nullable: true; result nullable: true], count[([2: t1b, SMALLINT, true]); args: SMALLINT; result: BIGINT; args nullable: true; result nullable: true]\n" +
                 "  |  cardinality: 1");
+
     }
 
     @Test
