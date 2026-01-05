@@ -1282,9 +1282,9 @@ class StarRocksDialect(MySQLDialect_pymysql):
         # some test parameters
         # self.test_replication_num: Optional[int] = None
 
-    def create_connect_args(self, url):
+    def create_connect_args(self, url, _translate_args: Optional[Dict[str, Any]] = None):
         # Allow the superclass to create the base connect arguments
-        connect_args = super(StarRocksDialect, self).create_connect_args(url)[1]
+        _, connect_args = super(StarRocksDialect, self).create_connect_args(url, _translate_args)
         logger.debug("connect_args: %s", connect_args)
 
         # Handle the test-specific replication_num parameter
