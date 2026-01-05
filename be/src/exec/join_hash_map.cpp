@@ -102,6 +102,26 @@ void SerializedJoinBuildFunc::construct_hash_table(RuntimeState* state, JoinHash
         } else {
             data_columns.emplace_back(table_items->key_columns[i]);
         }
+<<<<<<< HEAD:be/src/exec/join_hash_map.cpp
+=======
+    });
+}
+
+template <LogicalType LT>
+std::pair<bool, JoinHashMapMethodUnaryType> JoinHashMapSelector::_get_fallback_method(bool is_asof_join_type) {
+    return {false, is_asof_join_type
+                           ? JoinHashMapMethodTypeTraits<JoinHashMapMethodType::LINEAR_CHAINED_ASOF, LT>::unary_type
+                           : JoinHashMapMethodTypeTraits<JoinHashMapMethodType::BUCKET_CHAINED, LT>::unary_type};
+}
+
+template <LogicalType LT>
+std::pair<bool, JoinHashMapMethodUnaryType> JoinHashMapSelector::_try_use_range_direct_mapping(
+        RuntimeState* state, JoinHashTableItems* table_items) {
+    bool is_asof_join_type = is_asof_join(table_items->join_type);
+
+    if (!state->enable_hash_join_range_direct_mapping_opt() || table_items->row_count == 0) {
+        return _get_fallback_method<LT>(is_asof_join_type);
+>>>>>>> 1fd326569a ([BugFix] Fix read heap-buffer-overflow on partition join (#67435)):be/src/exec/join/join_hash_table.cpp
     }
 
     // calc serialize size
