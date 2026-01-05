@@ -1,6 +1,6 @@
-# Airflow
+# Apache Airflow
 
-Apache Airflow。Airflow 通过使用 DAG（有向无环图）和 SQL 操作符来实现与 StarRocks 的数据工作流编排和调度。使用 Airflow 进行数据导入和转换时，可以使用 `SQLExecuteQueryOperator` 和 `MySQLHook`，无需任何实现或复杂配置。
+通过使用 DAG（有向无环图）和 SQL 操作符来实现与 StarRocks 的数据工作流编排和调度。使用 Airflow 进行数据导入和转换时，可以使用 `SQLExecuteQueryOperator` 和 `MySQLHook`，无需任何实现或复杂配置。
 [Apache Airflow GitHub 仓库](https://github.com/apache/airflow)。
 
 ## 支持的功能
