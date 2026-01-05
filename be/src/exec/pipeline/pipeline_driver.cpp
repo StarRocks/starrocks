@@ -78,7 +78,7 @@ void PipelineDriver::check_operator_close_states(const std::string& func_name) {
 Status PipelineDriver::prepare(RuntimeState* runtime_state) {
     DeferOp defer([&]() {
         if (this->_state != DriverState::READY) {
-            LOG(WARNING) << to_readable_string() << " prepare failed";
+            LOG(WARNING) << get_raw_string_name() << " prepare failed";
         }
     });
 
@@ -114,22 +114,6 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
 
     _peak_driver_queue_size_counter = _runtime_profile->AddHighWaterMarkCounter(
             "PeakDriverQueueSize", TUnit::UNIT, RuntimeProfile::Counter::create_strategy(TUnit::UNIT));
-<<<<<<< HEAD
-=======
-}
-
-Status PipelineDriver::prepare(RuntimeState* runtime_state) {
-    DeferOp defer([&]() {
-        if (this->_state != DriverState::READY) {
-            LOG(WARNING) << get_raw_string_name() << " prepare failed";
-        }
-    });
-
-    _runtime_state = runtime_state;
-
-    auto* prepare_timer = ADD_TIMER_WITH_THRESHOLD(_runtime_profile, "DriverPrepareTime", 1_ms);
-    SCOPED_TIMER(prepare_timer);
->>>>>>> 8ed765b2f4 ([BugFix] Fix SIGSEGV in PipelineDriver by adding get_raw_string_name() for safe error logging (#67391))
 
     DCHECK(_state == DriverState::NOT_READY);
 
