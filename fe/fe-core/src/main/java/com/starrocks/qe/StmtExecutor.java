@@ -805,6 +805,8 @@ public class StmtExecutor {
                 LOG.debug("no need to transfer to Leader. stmt: {}", context.getStmtId());
             }
 
+            collectAndCheckPlanScanLimits(execPlan, context);
+
             if (parsedStmt instanceof QueryStatement) {
                 final boolean isStatisticsJob = AnalyzerUtils.isStatisticsJob(context, parsedStmt);
                 context.setStatisticsJob(isStatisticsJob);
@@ -1536,31 +1538,6 @@ public class StmtExecutor {
 
         List<PlanFragment> fragments = execPlan.getFragments();
         List<ScanNode> scanNodes = execPlan.getScanNodes();
-        long planMaxScanRows = -1;
-        long planMaxScanPartitions = -1;
-        long planMaxScanTablets = -1;
-        for (ScanNode scanNode : scanNodes) {
-            if (scanNode instanceof OlapScanNode) {
-                planMaxScanRows = Math.max(planMaxScanRows, scanNode.getCardinality());
-                planMaxScanPartitions = Math.max(planMaxScanPartitions, scanNode.getSelectedPartitionNum());
-                planMaxScanTablets = Math.max(planMaxScanTablets, ((OlapScanNode) scanNode).getScanTabletIds().size());
-            }
-
-            if  (scanNode instanceof PaimonScanNode || scanNode instanceof HudiScanNode) {
-                planMaxScanRows = Math.max(planMaxScanRows, scanNode.getCardinality());
-                planMaxScanPartitions = Math.max(planMaxScanPartitions, scanNode.getSelectedPartitionNum());
-            }
-        }
-        context.getAuditEventBuilder()
-                .setPlanMaxScanRows(planMaxScanRows)
-                .setPlanMaxScanPartitions(planMaxScanPartitions)
-                .setPlanMaxScanTablets(planMaxScanTablets);
-
-        checkPlanScanLimits(context,
-                planMaxScanRows,
-                planMaxScanPartitions,
-                planMaxScanTablets);
-
         TDescriptorTable descTable = execPlan.getDescTbl().toThrift();
         List<String> colNames = execPlan.getColNames();
         List<Expr> outputExprs = execPlan.getOutputExprs();
@@ -3485,6 +3462,42 @@ public class StmtExecutor {
         }
         return ConnectContext.get().getSessionVariable().getInsertMaxFilterRatio();
     }
+
+    private void collectAndCheckPlanScanLimits(ExecPlan execPlan, ConnectContext context) throws DdlException {
+        long planMaxScanRows = -1;
+        long planMaxScanPartitions = -1;
+        long planMaxScanTablets = -1;
+
+        for (ScanNode scanNode : execPlan.getScanNodes()) {
+            if (scanNode instanceof OlapScanNode) {
+                planMaxScanRows = Math.max(planMaxScanRows, scanNode.getCardinality());
+                planMaxScanPartitions = Math.max(
+                        planMaxScanPartitions, scanNode.getSelectedPartitionNum());
+                planMaxScanTablets = Math.max(
+                        planMaxScanTablets,
+                        ((OlapScanNode) scanNode).getScanTabletIds().size());
+                continue;
+            }
+
+            if (scanNode instanceof PaimonScanNode || scanNode instanceof HudiScanNode) {
+                planMaxScanRows = Math.max(planMaxScanRows, scanNode.getCardinality());
+                planMaxScanPartitions = Math.max(
+                        planMaxScanPartitions, scanNode.getSelectedPartitionNum());
+            }
+        }
+
+        context.getAuditEventBuilder()
+                .setPlanMaxScanRows(planMaxScanRows)
+                .setPlanMaxScanPartitions(planMaxScanPartitions)
+                .setPlanMaxScanTablets(planMaxScanTablets);
+
+        checkPlanScanLimits(
+                context,
+                planMaxScanRows,
+                planMaxScanPartitions,
+                planMaxScanTablets);
+    }
+
 
     private void checkScanLimit(long scannedValue,
                                 long scanLimit,
