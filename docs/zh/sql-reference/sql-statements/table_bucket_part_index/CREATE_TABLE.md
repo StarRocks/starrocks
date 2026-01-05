@@ -212,8 +212,82 @@ col_name col_type [agg_type] [NULL | NOT NULL] [DEFAULT "default_value"] [AUTO_I
 **DEFAULT "default_value"**：列的默认值。当您将数据导入 StarRocks 时，如果映射到该列的源字段为空，StarRocks 会自动在该列中填充默认值。您可以通过以下方式之一指定默认值：
 
 - **DEFAULT current_timestamp**：使用当前时间作为默认值。有关更多信息，请参见 [current_timestamp()](../../sql-functions/date-time-functions/current_timestamp.md)。
-- **DEFAULT `<default_value>`**：使用列数据类型的给定值作为默认值。例如，如果列的数据类型为 VARCHAR，您可以指定一个 VARCHAR 字符串，例如 beijing，作为默认值，如 `DEFAULT "beijing"` 所示。请注意，默认值不能是以下类型之一：ARRAY、BITMAP、JSON、HLL 和 BOOLEAN。
-- **DEFAULT (\<expr\>)**：使用给定函数返回的结果作为默认值。仅支持 [uuid()](../../sql-functions/utility-functions/uuid.md) 和 [uuid_numeric()](../../sql-functions/utility-functions/uuid_numeric.md) 表达式。
+- **DEFAULT (\<expr\>)**：使用给定表达式或函数返回的结果作为默认值。支持以下表达式：
+  - [uuid()](../../sql-functions/utility-functions/uuid.md) 和 [uuid_numeric()](../../sql-functions/utility-functions/uuid_numeric.md)：生成唯一标识符。
+  - ARRAY 字面量表达式（如 `[1, 2, 3]`）：用于 ARRAY 类型列。
+  - MAP 表达式（如 `map{key: value}`）：用于 MAP 类型列。
+  - row() 函数（如 `row(val1, val2)`）：用于 STRUCT 类型列。
+- **DEFAULT `<default_value>`**：使用列数据类型的给定值作为默认值。StarRocks 支持为不同类型指定默认值：
+  
+  **基础类型**：使用字符串字面量指定默认值。
+  
+  ```sql
+  -- 数值类型
+  age INT DEFAULT '18'
+  price DECIMAL(10,2) DEFAULT '99.99'
+  
+  -- 字符串类型
+  name VARCHAR(50) DEFAULT 'Anonymous'
+  
+  -- 日期时间类型
+  created_at DATETIME DEFAULT '2024-01-01 00:00:00'
+  
+  -- 布尔类型
+  is_active BOOLEAN DEFAULT 'true'  -- 支持 'true'/'false'/'1'/'0'
+  ```
+  
+  **JSON 类型**：使用 JSON 格式字符串指定默认值。
+  
+  ```sql
+  metadata JSON DEFAULT '{"status": "active"}'
+  tags JSON DEFAULT '[1, 2, 3]'
+  ```
+  
+  **VARBINARY 类型**：仅支持空字符串作为默认值。
+  
+  ```sql
+  binary_data VARBINARY DEFAULT ''
+  ```
+  
+  **BITMAP 和 HLL 类型**：仅支持空字符串作为默认值，仅用于 AGGREGATE KEY 表。
+  
+  ```sql
+  -- AGGREGATE KEY 表中
+  bm BITMAP BITMAP_UNION DEFAULT ''
+  h HLL HLL_UNION DEFAULT ''
+  ```
+  
+  **复杂类型（ARRAY/MAP/STRUCT）**：使用表达式语法指定默认值，仅支持 OLAP 表。
+  
+  :::note
+  复杂类型的默认值**仅在 `fast_schema_evolution = true` 时支持**。如果表的 `fast_schema_evolution` 属性显式设置为 `false`，为复杂类型添加默认值会报错。
+  :::
+  
+  ```sql
+  -- ARRAY 类型
+  tags ARRAY<VARCHAR(20)> DEFAULT ['tag1', 'tag2']
+  scores ARRAY<INT> DEFAULT [90, 85, 92]
+  
+  -- MAP 类型
+  attrs MAP<VARCHAR(20), INT> DEFAULT map{'age': 25, 'score': 100}
+  
+  -- STRUCT 类型
+  person STRUCT<name VARCHAR(20), age INT> DEFAULT row('John', 30)
+  
+  -- 复杂嵌套：STRUCT 嵌套 STRUCT，包含 ARRAY 和 MAP
+  user_profile STRUCT<
+    id INT, 
+    name VARCHAR(50), 
+    contact STRUCT<email VARCHAR(100), phone VARCHAR(20)>,
+    tags ARRAY<VARCHAR(20)>,
+    attributes MAP<VARCHAR(20), VARCHAR(50)>
+  > DEFAULT row(1, 'Alice', row('alice@example.com', '123-456-7890'), ['admin', 'user'], map{'level': 'premium', 'status': 'active'})
+  ```
+
+  **限制**：
+  
+  - TIME 和 VARIANT 类型暂不支持默认值。
+  - 复杂类型（ARRAY/MAP/STRUCT）的默认值仅支持 OLAP 表，且需要表开启 `fast_schema_evolution` 属性。
 
 **AUTO_INCREMENT**：指定一个 `AUTO_INCREMENT` 列。`AUTO_INCREMENT` 列的数据类型必须为 BIGINT。自增 ID 从 1 开始，步长为 1。有关 `AUTO_INCREMENT` 列的更多信息，请参见 [AUTO_INCREMENT](auto_increment.md)。自 v3.0 起，StarRocks 支持 `AUTO_INCREMENT` 列。
 

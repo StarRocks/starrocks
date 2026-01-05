@@ -211,8 +211,82 @@ col_name col_type [agg_type] [NULL | NOT NULL] [DEFAULT "default_value"] [AUTO_I
 **DEFAULT "default_value"**: 列のデフォルト値。StarRocks にデータをロードする際、列にマッピングされたソースフィールドが空の場合、StarRocks は自動的にデフォルト値を列に埋めます。次のいずれかの方法でデフォルト値を指定できます：
 
 - **DEFAULT current_timestamp**: 現在の時刻をデフォルト値として使用します。詳細については、[current_timestamp()](../../sql-functions/date-time-functions/current_timestamp.md) を参照してください。
-- **DEFAULT `<default_value>`**: 列のデータタイプの与えられた値をデフォルト値として使用します。たとえば、列のデータタイプが VARCHAR の場合、`DEFAULT "beijing"` のように、デフォルト値として beijing という VARCHAR 文字列を指定できます。デフォルト値は ARRAY、BITMAP、JSON、HLL、および BOOLEAN タイプにはできません。
-- **DEFAULT (\<expr\>)**: 与えられた関数の結果をデフォルト値として使用します。サポートされているのは [uuid()](../../sql-functions/utility-functions/uuid.md) および [uuid_numeric()](../../sql-functions/utility-functions/uuid_numeric.md) 式のみです。
+- **DEFAULT (\<expr\>)**: 与えられた式または関数の結果をデフォルト値として使用します。次の式がサポートされています：
+  - [uuid()](../../sql-functions/utility-functions/uuid.md) および [uuid_numeric()](../../sql-functions/utility-functions/uuid_numeric.md)：一意の識別子を生成します。
+  - ARRAY リテラル式（例：`[1, 2, 3]`）：ARRAY 型の列用。
+  - MAP 式（例：`map{key: value}`）：MAP 型の列用。
+  - row() 関数（例：`row(val1, val2)`）：STRUCT 型の列用。
+- **DEFAULT `<default_value>`**: 列のデータタイプの与えられた値をデフォルト値として使用します。StarRocks はさまざまなタイプのデフォルト値の指定をサポートしています：
+  
+  **基本タイプ**: 文字列リテラルを使用してデフォルト値を指定します。
+  
+  ```sql
+  -- 数値型
+  age INT DEFAULT '18'
+  price DECIMAL(10,2) DEFAULT '99.99'
+  
+  -- 文字列型
+  name VARCHAR(50) DEFAULT 'Anonymous'
+  
+  -- 日付/時刻型
+  created_at DATETIME DEFAULT '2024-01-01 00:00:00'
+  
+  -- ブール型
+  is_active BOOLEAN DEFAULT 'true'  -- 'true'/'false'/'1'/'0' をサポート
+  ```
+  
+  **JSON 型**: JSON 形式の文字列を使用してデフォルト値を指定します。
+  
+  ```sql
+  metadata JSON DEFAULT '{"status": "active"}'
+  tags JSON DEFAULT '[1, 2, 3]'
+  ```
+  
+  **VARBINARY 型**: デフォルト値として空文字列のみサポートされます。
+  
+  ```sql
+  binary_data VARBINARY DEFAULT ''
+  ```
+  
+  **BITMAP および HLL 型**: デフォルト値として空文字列のみサポートされます。AGGREGATE KEY テーブル専用です。
+  
+  ```sql
+  -- AGGREGATE KEY テーブル内
+  bm BITMAP BITMAP_UNION DEFAULT ''
+  h HLL HLL_UNION DEFAULT ''
+  ```
+  
+  **複合型 (ARRAY/MAP/STRUCT)**: 式構文を使用してデフォルト値を指定します。OLAP テーブルのみサポートされます。
+  
+  :::note
+  複合型のデフォルト値は **`fast_schema_evolution = true` の場合にのみサポート**されます。テーブルの `fast_schema_evolution` プロパティが明示的に `false` に設定されている場合、複合型のデフォルト値を追加するとエラーが発生します。
+  :::
+  
+  ```sql
+  -- ARRAY 型
+  tags ARRAY<VARCHAR(20)> DEFAULT ['tag1', 'tag2']
+  scores ARRAY<INT> DEFAULT [90, 85, 92]
+  
+  -- MAP 型
+  attrs MAP<VARCHAR(20), INT> DEFAULT map{'age': 25, 'score': 100}
+  
+  -- STRUCT 型
+  person STRUCT<name VARCHAR(20), age INT> DEFAULT row('John', 30)
+  
+  -- 複雑なネスト：STRUCT、ARRAY、MAP を含むネストされた STRUCT
+  user_profile STRUCT<
+    id INT, 
+    name VARCHAR(50), 
+    contact STRUCT<email VARCHAR(100), phone VARCHAR(20)>,
+    tags ARRAY<VARCHAR(20)>,
+    attributes MAP<VARCHAR(20), VARCHAR(50)>
+  > DEFAULT row(1, 'Alice', row('alice@example.com', '123-456-7890'), ['admin', 'user'], map{'level': 'premium', 'status': 'active'})
+  ```
+
+  **制限事項**:
+  
+  - TIME および VARIANT 型はまだデフォルト値をサポートしていません。
+  - 複合型 (ARRAY/MAP/STRUCT) のデフォルト値は OLAP テーブルのみでサポートされ、`fast_schema_evolution` プロパティを有効にする必要があります。
 
 **AUTO_INCREMENT**: `AUTO_INCREMENT` 列を指定します。`AUTO_INCREMENT` 列のデータタイプは BIGINT でなければなりません。自動インクリメントされた ID は 1 から始まり、1 のステップで増加します。`AUTO_INCREMENT` 列の詳細については、[AUTO_INCREMENT](auto_increment.md) を参照してください。v3.0 以降、StarRocks は `AUTO_INCREMENT` 列をサポートしています。
 
