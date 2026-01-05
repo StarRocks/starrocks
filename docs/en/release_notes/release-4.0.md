@@ -6,21 +6,20 @@ displayed_sidebar: docs
 
 :::warning
 
-After upgrading StarRocks to v4.0, DO NOT downgrade it directly to v3.5.0 & v3.5.1, otherwise it will cause metadata incompatibility and FE crash. You must downgrade the cluster to v3.5.2 or later to prevent these issues.
+**Downgrade Notes**
+
+- After upgrading StarRocks to v4.0, DO NOT downgrade it directly to v3.5.0 & v3.5.1, otherwise it will cause metadata incompatibility and FE crash. You must downgrade the cluster to v3.5.2 or later to prevent these issues.
+- Before downgrading clusters from v4.0.3 to v3.5.2~v3.5.10, execute the following statement:
+
+  ```SQL
+  SET GLOBAL enable_rewrite_simple_agg_to_meta_scan=false;
+  ```
 
 :::
 
 ## 4.0.3
 
 Release Date: December 25, 2025
-
-### Downgrade Notes
-
-Before downgrading clusters from v4.0.3 to v3.5.0~v3.5.10, execute the following statement:
-
-```SQL
-SET GLOBAL enable_rewrite_simple_agg_to_meta_scan=false;
-```
 
 ### Improvements
 

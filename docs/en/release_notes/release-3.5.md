@@ -6,6 +6,21 @@ displayed_sidebar: docs
 
 :::warning
 
+**Upgrade Notes**
+
+- JDK 17 or later is required from StarRocks v3.5.0 onwards.
+  - To upgrade a cluster from v3.4 or earlier, you must upgrade the version of JDK that StarRocks depends, and remove the options that are incompatible with JDK 17 in the configuration item `JAVA_OPTS` in the FE configuration file **fe.conf**, for example, options that involve CMS and GC. The default value of `JAVA_OPTS` in the v3.5 configuration file is recommended.
+  - For clusters using external catalogs, you need to add `--add-opens=java.base/java.util=ALL-UNNAMED` to the `JAVA_OPTS` configuration item in the BE configuration file **be.conf**.
+  - For clusters using Java UDFs, you need to add `--add-opens=java.base/java.nio=ALL-UNNAMED --add-opens=java.base/sun.nio.ch=ALL-UNNAMED` to the `JAVA_OPTS` configuration item in the BE configuration file **be.conf**.
+  - In addition, as of v3.5.0, StarRocks no longer provides JVM configurations for specific JDK versions. All versions of JDK use `JAVA_OPTS`.
+- It is recommended to upgrade the cluster to v3.4.10 or later before upgrading it to v3.5. Otherwise, you must manually disable low cardinality optimization during the gray-scale upgrade by executing the following statement:
+
+  ```SQL
+  SET GLOBAL cbo_enable_low_cardinality_optimize=false;
+  ```
+
+**Downgrade Notes**
+
 - After upgrading StarRocks to v3.5, DO NOT downgrade it directly to v3.4.0 ～ v3.4.5, otherwise it will cause metadata incompatibility. You must downgrade the cluster to v3.4.6 or later to prevent the issue.
 - After upgrading StarRocks to v3.5.2 or later, DO NOT downgrade it to v3.5.0 & v3.5.1, otherwise it will cause FE crash.
 
@@ -486,14 +501,6 @@ Fixed the following issues:
 ## 3.5.0
 
 Release Date: June 13, 2025
-
-### Upgrade Notes
-
-- JDK 17 or later is required from StarRocks v3.5.0 onwards.
-  - To upgrade a cluster from v3.4 or earlier, you must upgrade the version of JDK that StarRocks depends, and remove the options that are incompatible with JDK 17 in the configuration item `JAVA_OPTS` in the FE configuration file **fe.conf**, for example, options that involve CMS and GC. The default value of `JAVA_OPTS` in the v3.5 configuration file is recommended.
-  - For clusters using external catalogs, you need to add `--add-opens=java.base/java.util=ALL-UNNAMED` to the `JAVA_OPTS` configuration item in the BE configuration file **be.conf**.
-  - For clusters using Java UDFs, you need to add `--add-opens=java.base/java.nio=ALL-UNNAMED --add-opens=java.base/sun.nio.ch=ALL-UNNAMED` to the `JAVA_OPTS` configuration item in the BE configuration file **be.conf**.
-  - In addition, as of v3.5.0, StarRocks no longer provides JVM configurations for specific JDK versions. All versions of JDK use `JAVA_OPTS`.
 
 ### Shared-data Enhancement
 
