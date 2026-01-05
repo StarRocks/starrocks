@@ -16,8 +16,10 @@ package com.starrocks.catalog;
 
 import com.google.common.base.Preconditions;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.proto.InfinityTypePB;
 import com.starrocks.proto.VariantPB;
 import com.starrocks.sql.common.TypeManager;
+import com.starrocks.thrift.TInfinityType;
 import com.starrocks.thrift.TVariant;
 import com.starrocks.type.Type;
 import com.starrocks.type.TypeDeserializer;
@@ -55,6 +57,25 @@ public abstract class Variant implements Comparable<Variant> {
 
     // public abstract VariantPB toProto();
 
+    @Override
+    public int compareTo(Variant other) {
+        if (this instanceof MinVariant) {
+            return (other instanceof MinVariant) ? 0 : -1;
+        }
+        if (other instanceof MinVariant) {
+            return 1;
+        }
+        if (this instanceof MaxVariant) {
+            return (other instanceof MaxVariant) ? 0 : 1;
+        }
+        if (other instanceof MaxVariant) {
+            return -1;
+        }
+        return compareToImpl(other);
+    }
+
+    protected abstract int compareToImpl(Variant other);
+
     public static Variant of(Type type, String value) {
         Preconditions.checkArgument(type.isValid());
         switch (type.getPrimitiveType()) {
@@ -83,11 +104,27 @@ public abstract class Variant implements Comparable<Variant> {
     }
 
     public static Variant fromThrift(TVariant tVariant) {
-        return Variant.of(TypeDeserializer.fromThrift(tVariant.type), tVariant.getValue());
+        Type type = TypeDeserializer.fromThrift(tVariant.type);
+        if (tVariant.isSetInfinity_type()) {
+            if (tVariant.getInfinity_type() == TInfinityType.MIN) {
+                return new MinVariant(type);
+            } else if (tVariant.getInfinity_type() == TInfinityType.MAX) {
+                return new MaxVariant(type);
+            }
+        }
+        return Variant.of(type, tVariant.getValue());
     }
 
     public static Variant fromProto(VariantPB variantPB) {
-        return Variant.of(TypeDeserializer.fromProtobuf(variantPB.type), variantPB.value);
+        Type type = TypeDeserializer.fromProtobuf(variantPB.type);
+        if (variantPB.infinityType != null) {
+            if (variantPB.infinityType == InfinityTypePB.MIN) {
+                return new MinVariant(type);
+            } else if (variantPB.infinityType == InfinityTypePB.MAX) {
+                return new MaxVariant(type);
+            }
+        }
+        return Variant.of(type, variantPB.value);
     }
 
     public static int compatibleCompare(Variant key1, Variant key2) {
@@ -121,4 +158,13 @@ public abstract class Variant implements Comparable<Variant> {
         return Integer.compare(key1Length, key2Length);
     }
 
+    public static Variant minVariant(Type type) {
+        Preconditions.checkArgument(type.isValid(), "Invalid type for Variant.minVariant");
+        return new MinVariant(type);
+    }
+
+    public static Variant maxVariant(Type type) {
+        Preconditions.checkArgument(type.isValid(), "Invalid type for Variant.maxVariant");
+        return new MaxVariant(type);
+    }
 }
