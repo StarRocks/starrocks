@@ -301,4 +301,30 @@ public class ExpressionAnalyzerTest extends PlanTestBase {
         String plan = getFragmentPlan("select current_warehouse()");
         assertContains(plan, currentWarehouseName);
     }
+
+    @Test
+    public void testCastComplexToJson() {
+        ConnectContext session = new ConnectContext();
+        ExpressionAnalyzer analyzer = new ExpressionAnalyzer(session);
+        AnalyzeState analyzeState = new AnalyzeState();
+        Scope scope = new Scope(RelationId.anonymous(), new RelationFields());
+
+        String sqlArray = "CAST([1, 2, 3] AS JSON)";
+        Expr exprArray = SqlParser.parseSqlToExpr(sqlArray, session.getSessionVariable().getSqlMode());
+        try {
+            analyzer.analyze(exprArray, analyzeState, scope);
+            Assertions.assertTrue(exprArray.getType().isJsonType());
+        } catch (SemanticException e) {
+            Assertions.fail("CAST(ARRAY AS JSON) should be allowed: " + e.getMessage());
+        }
+
+        String sqlMap = "CAST(map(1, 2) AS JSON)";
+        Expr exprMap = SqlParser.parseSqlToExpr(sqlMap, session.getSessionVariable().getSqlMode());
+        try {
+            analyzer.analyze(exprMap, analyzeState, scope);
+            Assertions.assertTrue(exprMap.getType().isJsonType());
+        } catch (SemanticException e) {
+            Assertions.fail("CAST(MAP AS JSON) should be allowed: " + e.getMessage());
+        }
+    }
 }

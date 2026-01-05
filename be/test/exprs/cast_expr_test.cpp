@@ -2549,4 +2549,131 @@ TEST_F(VectorizedCastExprTest, json_to_map) {
               cast_json_to_map(TYPE_INT, TYPE_INT, R"({"1":1, "k2":2, "3":"v3", "k4":"v4"})"));
 }
 
+// Test Complex Types (Array/Map/Struct) casting to JSON
+TEST_F(VectorizedCastExprTest, ComplexToJson) {
+    // Helper lambda to verify cast result
+    auto verify_cast = [&](const ColumnPtr& col, const TTypeDesc& type_desc, const std::string& expected_json) {
+        TExprNode cast_expr_node;
+        cast_expr_node.opcode = TExprOpcode::CAST;
+        cast_expr_node.node_type = TExprNodeType::CAST_EXPR;
+        cast_expr_node.num_children = 1;
+        cast_expr_node.__isset.opcode = true;
+        cast_expr_node.__isset.child_type = true;
+        cast_expr_node.__isset.child_type_desc = true;
+
+        cast_expr_node.child_type = type_desc.types[0].scalar_type.type;
+        cast_expr_node.child_type_desc = type_desc;
+
+        cast_expr_node.type = gen_type_desc(TPrimitiveType::JSON);
+
+        ObjectPool pool;
+        std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(&pool, cast_expr_node));
+        ASSERT_TRUE(expr != nullptr);
+
+        std::unique_ptr<MockExpr> child = std::make_unique<MockExpr>(cast_expr_node, col);
+        expr->_children.push_back(child.get());
+
+        ColumnPtr result = expr->evaluate(nullptr, nullptr);
+        ASSERT_TRUE(result != nullptr);
+        ASSERT_TRUE(result->is_json());
+
+        if (expected_json == "NULL") {
+            ASSERT_TRUE(result->is_null(0));
+        } else {
+            const JsonValue* json = result->get(0).get_json();
+            auto json_str = json->to_string();
+            ASSERT_TRUE(json_str.ok());
+            ASSERT_EQ(expected_json, json_str.value());
+        }
+    };
+
+    // 1. Test ARRAY<INT> -> JSON
+    {
+        auto data = Int32Column::create();
+        data->append(1);
+        data->append(2);
+        data->append(3);
+        auto offsets = UInt32Column::create();
+        offsets->append(0);
+        offsets->append(3);
+        auto array_col = ArrayColumn::create(data, offsets);
+
+        verify_cast(array_col, gen_array_type_desc(TPrimitiveType::INT), "[1,2,3]");
+    }
+
+    // 2. Test ARRAY<VARCHAR> with NULLs -> JSON
+    {
+        auto data = BinaryColumn::create();
+        data->append("a");
+        data->append_default();
+        data->append("b");
+        auto nulls = NullColumn::create();
+        nulls->append(0);
+        nulls->append(1);
+        nulls->append(0);
+        auto nullable_data = NullableColumn::create(data, nulls);
+
+        auto offsets = UInt32Column::create();
+        offsets->append(0);
+        offsets->append(3);
+        auto array_col = ArrayColumn::create(nullable_data, offsets);
+
+        verify_cast(array_col, gen_array_type_desc(TPrimitiveType::VARCHAR), R"(["a",null,"b"])");
+    }
+
+    // 3. Test MAP<INT, INT> -> JSON
+    {
+        auto keys = Int32Column::create();
+        keys->append(1);
+        keys->append(2);
+
+        auto values = Int32Column::create();
+        values->append(10);
+        values->append(20);
+
+        auto offsets = UInt32Column::create();
+        offsets->append(0);
+        offsets->append(2);
+
+        auto map_col = MapColumn::create(keys, values, offsets);
+
+        verify_cast(map_col, gen_map_type_desc(TPrimitiveType::INT, TPrimitiveType::INT), R"({"1":10,"2":20})");
+    }
+
+    // 4. Test STRUCT<col1:INT, col2:VARCHAR> -> JSON
+    {
+        auto f1 = Int32Column::create();
+        f1->append(1);
+
+        auto f2 = BinaryColumn::create();
+        f2->append("starrocks");
+
+        auto struct_col = StructColumn::create(Columns{f1, f2}, std::vector<std::string>{"id", "name"});
+
+        TTypeDesc type_desc;
+        std::vector<TTypeNode> nodes;
+        TTypeNode struct_node;
+        struct_node.type = TTypeNodeType::STRUCT;
+        struct_node.struct_fields.push_back(TStructField());
+        struct_node.struct_fields.back().name = "id";
+        struct_node.struct_fields.push_back(TStructField());
+        struct_node.struct_fields.back().name = "name";
+        nodes.push_back(struct_node);
+
+        TTypeNode int_node;
+        int_node.type = TTypeNodeType::SCALAR;
+        int_node.scalar_type.type = TPrimitiveType::INT;
+        nodes.push_back(int_node);
+
+        TTypeNode str_node;
+        str_node.type = TTypeNodeType::SCALAR;
+        str_node.scalar_type.type = TPrimitiveType::VARCHAR;
+        nodes.push_back(str_node);
+
+        type_desc.__set_types(nodes);
+
+        verify_cast(struct_col, type_desc, R"({"id":1,"name":"starrocks"})");
+    }
+}
+
 } // namespace starrocks
