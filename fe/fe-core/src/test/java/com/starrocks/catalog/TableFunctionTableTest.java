@@ -299,7 +299,7 @@ public class TableFunctionTableTest {
     @Test
     public void testCSVDelimiterConverterForUnload() {
         Map<String, String> properties = new HashMap<>();
-        properties.put("path", "file://test_dir");
+        properties.put("path", "file:///test_dir");
         properties.put("format", "csv");
 
         {
@@ -366,7 +366,7 @@ public class TableFunctionTableTest {
     @Test
     public void testCSVIncludeHeaderForUnload() {
         Map<String, String> properties = new HashMap<>();
-        properties.put("path", "file://test_dir");
+        properties.put("path", "file:///test_dir");
         properties.put("format", "csv");
 
         // default: csv.include_header is false

@@ -71,19 +71,35 @@ Status CSVFileWriter::init() {
                                                                   : _writer_options->mapkey_delim.front();
     }
 
-    // Write header row if include_header is enabled
-    if (_writer_options->include_header && !_column_names.empty()) {
-        for (size_t i = 0; i < _column_names.size(); i++) {
-            // Escape column names that contain special characters (delimiter, quotes, newlines)
-            std::string escaped_name = csv::escape_csv_field(_column_names[i], _writer_options->column_terminated_by);
-            RETURN_IF_ERROR(_output_stream->write(escaped_name));
-            if (i + 1 != _column_names.size()) {
-                RETURN_IF_ERROR(_output_stream->write(_writer_options->column_terminated_by));
-            }
-        }
-        RETURN_IF_ERROR(_output_stream->write(_writer_options->line_terminated_by));
+    return Status::OK();
+}
+
+Status CSVFileWriter::_write_header() {
+    if (_header_written) {
+        return Status::OK();
     }
 
+    // Write header row if include_header is enabled
+    if (_writer_options->include_header) {
+        if (_column_names.empty()) {
+            LOG(WARNING)
+                    << "include_header is enabled but column_names is empty, this may indicate an upstream logic issue";
+        } else {
+            for (size_t i = 0; i < _column_names.size(); i++) {
+                // Escape column names that contain special characters (delimiter, quotes, newlines)
+                std::string escaped_name =
+                        csv::escape_csv_field(_column_names[i], _writer_options->column_terminated_by);
+                RETURN_IF_ERROR(_output_stream->write(escaped_name));
+                if (i + 1 != _column_names.size()) {
+                    RETURN_IF_ERROR(_output_stream->write(_writer_options->column_terminated_by));
+                }
+            }
+            RETURN_IF_ERROR(_output_stream->write(_writer_options->line_terminated_by));
+        }
+    }
+
+    // Mark header as written only after all operations succeed
+    _header_written = true;
     return Status::OK();
 }
 
@@ -100,6 +116,9 @@ int64_t CSVFileWriter::get_flush_batch_size() {
 }
 
 Status CSVFileWriter::write(Chunk* chunk) {
+    // Write header on first write
+    RETURN_IF_ERROR(_write_header());
+
     _num_rows += chunk->num_rows();
 
     auto columns = Columns();
@@ -130,6 +149,11 @@ Status CSVFileWriter::write(Chunk* chunk) {
 FileWriter::CommitResult CSVFileWriter::commit() {
     FileWriter::CommitResult result{
             .io_status = Status::OK(), .format = CSV, .location = _location, .rollback_action = _rollback_action};
+
+    // Ensure header is written even if no data was written
+    if (auto st = _write_header(); !st.ok()) {
+        result.io_status.update(st);
+    }
 
     if (auto st = _output_stream->finalize(); !st.ok()) {
         result.io_status.update(st);

@@ -48,15 +48,20 @@ Status PlainTextBuilder::init() {
     }
 
     // Write header row if enabled
-    if (_options.with_header && !_options.column_names.empty()) {
-        auto* os = _output_stream.get();
-        const size_t num_cols = _options.column_names.size();
-        for (size_t i = 0; i < num_cols; i++) {
-            // Escape column names that contain special characters (delimiter, quotes, newlines)
-            std::string escaped_name = csv::escape_csv_field(_options.column_names[i], _options.column_terminated_by);
-            RETURN_IF_ERROR(os->write(escaped_name));
-            RETURN_IF_ERROR(
-                    os->write((i == num_cols - 1) ? _options.line_terminated_by : _options.column_terminated_by));
+    if (_options.with_header) {
+        if (_options.column_names.empty()) {
+            LOG(WARNING)
+                    << "with_header is enabled but column_names is empty, this may indicate an upstream logic issue";
+        } else {
+            const size_t num_cols = _options.column_names.size();
+            for (size_t i = 0; i < num_cols; i++) {
+                // Escape column names that contain special characters (delimiter, quotes, newlines)
+                std::string escaped_name =
+                        csv::escape_csv_field(_options.column_names[i], _options.column_terminated_by);
+                RETURN_IF_ERROR(_output_stream->write(escaped_name));
+                RETURN_IF_ERROR(_output_stream->write((i == num_cols - 1) ? _options.line_terminated_by
+                                                                          : _options.column_terminated_by));
+            }
         }
     }
 
