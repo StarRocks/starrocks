@@ -32,6 +32,9 @@ import java.util.Set;
 
 public class ClickhouseSchemaResolver extends JDBCSchemaResolver {
     Map<String, String> properties;
+    
+    // Default VARCHAR length for ClickHouse string types and unsupported complex types
+    private static final int DEFAULT_VARCHAR_LENGTH = 65533;
 
     public static final Set<String> SUPPORTED_TABLE_TYPES = new HashSet<>(
             Arrays.asList("LOG TABLE", "MEMORY TABLE", "TEMPORARY TABLE", "VIEW", "DICTIONARY", "SYSTEM TABLE",
@@ -90,6 +93,9 @@ public class ClickhouseSchemaResolver extends JDBCSchemaResolver {
 
     /**
      * Extracts the underlying data type from ClickHouse AggregateFunction and SimpleAggregateFunction types.
+     * This method handles Nullable wrappers properly - if the input type is Nullable, the output will also
+     * be Nullable with the extracted underlying type.
+     * 
      * Examples:
      *   "SimpleAggregateFunction(sum, UInt64)" -> "UInt64"
      *   "AggregateFunction(quantile(0.5), Float64)" -> "Float64"
@@ -188,7 +194,7 @@ public class ClickhouseSchemaResolver extends JDBCSchemaResolver {
                 primitiveType = PrimitiveType.BOOLEAN;
                 break;
             case Types.VARCHAR:
-                return TypeFactory.createVarcharType(65533);
+                return TypeFactory.createVarcharType(DEFAULT_VARCHAR_LENGTH);
             case Types.DATE:
                 primitiveType = PrimitiveType.DATE;
                 break;
@@ -259,30 +265,34 @@ public class ClickhouseSchemaResolver extends JDBCSchemaResolver {
         } else if (baseTypeName.equals("Bool") || baseTypeName.equals("Boolean")) {
             return TypeFactory.createType(PrimitiveType.BOOLEAN);
         } else if (baseTypeName.equals("String")) {
-            return TypeFactory.createVarcharType(65533);
+            return TypeFactory.createVarcharType(DEFAULT_VARCHAR_LENGTH);
         } else if (baseTypeName.equals("Date")) {
             return TypeFactory.createType(PrimitiveType.DATE);
         } else if (baseTypeName.equals("DateTime") || baseTypeName.startsWith("DateTime64")) {
             return TypeFactory.createType(PrimitiveType.DATETIME);
         } else if (baseTypeName.startsWith("Decimal")) {
             // Parse Decimal(precision, scale)
-            String[] precisionAndScale = baseTypeName.replace("Decimal", "")
-                    .replace("(", "").replace(")", "").replace(" ", "").split(",");
-            if (precisionAndScale.length == 2) {
-                int precision = Integer.parseInt(precisionAndScale[0]);
-                int scale = Integer.parseInt(precisionAndScale[1]);
-                return TypeFactory.createUnifiedDecimalType(precision, scale);
+            try {
+                String[] precisionAndScale = baseTypeName.replace("Decimal", "")
+                        .replace("(", "").replace(")", "").replace(" ", "").split(",");
+                if (precisionAndScale.length == 2) {
+                    int precision = Integer.parseInt(precisionAndScale[0]);
+                    int scale = Integer.parseInt(precisionAndScale[1]);
+                    return TypeFactory.createUnifiedDecimalType(precision, scale);
+                }
+            } catch (NumberFormatException e) {
+                // If we can't parse the decimal precision/scale, fall through to VARCHAR fallback
             }
         } else if (baseTypeName.startsWith("Array(") || baseTypeName.startsWith("Tuple(") || 
                    baseTypeName.startsWith("Map(")) {
             // For complex types that we don't fully support, use VARCHAR as a safe fallback
             // This allows queries to work even if the exact type semantics aren't preserved
-            return TypeFactory.createVarcharType(65533);
+            return TypeFactory.createVarcharType(DEFAULT_VARCHAR_LENGTH);
         }
         
         // If we can't determine the type, return VARCHAR as a safe fallback instead of UNKNOWN_TYPE
         // This is better than failing queries with unsupported type errors
-        return TypeFactory.createVarcharType(65533);
+        return TypeFactory.createVarcharType(DEFAULT_VARCHAR_LENGTH);
     }
 
 
