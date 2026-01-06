@@ -122,8 +122,8 @@ TEST_F(HttpRequestFunctionsTest, prepareCloseTest) {
     ASSERT_NE(nullptr, state);
 
     // Verify default values
-    // ssl_verify_required is false by default (admin can enable via Config)
-    ASSERT_FALSE(state->ssl_verify_required);
+    // ssl_verify_required is true by default (secure-by-default)
+    ASSERT_TRUE(state->ssl_verify_required);
 
     // Test http_request_close
     ASSERT_OK(HttpRequestFunctions::http_request_close(_ctx.get(), scope));
@@ -264,6 +264,37 @@ TEST_F(HttpRequestFunctionsTest, checkIpAllowlistTest) {
     // Non-matching IP should fail
     ASSERT_FALSE(check_ip_allowlist("172.16.0.1", state));
     ASSERT_FALSE(check_ip_allowlist("127.0.0.1", state));
+}
+
+// Test check_ip_allowlist with IPv6 addresses
+TEST_F(HttpRequestFunctionsTest, checkIpAllowlistIPv6Test) {
+    HttpRequestFunctionState state;
+    state.ip_allowlist = {"::1", "2001:db8::1", "fe80::1"};
+
+    // Exact IPv6 match should pass
+    ASSERT_TRUE(check_ip_allowlist("::1", state));
+    ASSERT_TRUE(check_ip_allowlist("2001:db8::1", state));
+    ASSERT_TRUE(check_ip_allowlist("fe80::1", state));
+
+    // Non-matching IPv6 should fail
+    ASSERT_FALSE(check_ip_allowlist("::2", state));
+    ASSERT_FALSE(check_ip_allowlist("2001:db8::2", state));
+    ASSERT_FALSE(check_ip_allowlist("fc00::1", state));
+}
+
+// Test check_ip_allowlist with mixed IPv4 and IPv6 addresses
+TEST_F(HttpRequestFunctionsTest, checkIpAllowlistMixedTest) {
+    HttpRequestFunctionState state;
+    state.ip_allowlist = {"192.168.1.1", "::1", "2001:db8::1"};
+
+    // Both IPv4 and IPv6 matches should pass
+    ASSERT_TRUE(check_ip_allowlist("192.168.1.1", state));
+    ASSERT_TRUE(check_ip_allowlist("::1", state));
+    ASSERT_TRUE(check_ip_allowlist("2001:db8::1", state));
+
+    // Non-matching should fail
+    ASSERT_FALSE(check_ip_allowlist("192.168.1.2", state));
+    ASSERT_FALSE(check_ip_allowlist("::2", state));
 }
 
 // Test check_host_regex with regex patterns for hostname matching
@@ -484,6 +515,46 @@ TEST_F(HttpRequestFunctionsTest, securityLevel3PrivateIPBlockedWithoutFlagTest) 
 
     auto status2 = validate_host_security("http://192.168.1.1/api", state);
     ASSERT_FALSE(status2.ok());
+}
+
+// Test validate_host_security with IPv6 addresses in allowlist
+TEST_F(HttpRequestFunctionsTest, securityLevel3IPv6AllowlistTest) {
+    HttpRequestFunctionState state;
+    state.security_level = 3;  // RESTRICTED
+    state.ip_allowlist = {"::1", "fe80::1", "2001:db8::1"};
+    state.allow_private_in_allowlist = true;  // Enable for private IPv6
+
+    // Private IPv6 loopback in allowlist should be allowed
+    ASSERT_TRUE(validate_host_security("http://[::1]/api", state).ok());
+
+    // Private IPv6 link-local in allowlist should be allowed
+    ASSERT_TRUE(validate_host_security("http://[fe80::1]/api", state).ok());
+
+    // Public IPv6 in allowlist should be allowed
+    ASSERT_TRUE(validate_host_security("http://[2001:db8::1]/api", state).ok());
+
+    // IPv6 NOT in allowlist should be blocked
+    auto status = validate_host_security("http://[2001:db8::2]/api", state);
+    ASSERT_FALSE(status.ok());
+}
+
+// Test validate_host_security with mixed IPv4 and IPv6 in allowlist
+TEST_F(HttpRequestFunctionsTest, securityLevel3MixedIPAllowlistTest) {
+    HttpRequestFunctionState state;
+    state.security_level = 3;  // RESTRICTED
+    state.ip_allowlist = {"192.168.1.1", "::1", "2001:db8::1"};
+    state.allow_private_in_allowlist = true;
+
+    // IPv4 in allowlist should be allowed
+    ASSERT_TRUE(validate_host_security("http://192.168.1.1/api", state).ok());
+
+    // IPv6 in allowlist should be allowed
+    ASSERT_TRUE(validate_host_security("http://[::1]/api", state).ok());
+    ASSERT_TRUE(validate_host_security("http://[2001:db8::1]/api", state).ok());
+
+    // IPs NOT in allowlist should be blocked
+    ASSERT_FALSE(validate_host_security("http://192.168.1.2/api", state).ok());
+    ASSERT_FALSE(validate_host_security("http://[::2]/api", state).ok());
 }
 
 // Test validate_host_security at Level 4 (PARANOID) - blocks ALL requests

@@ -92,6 +92,12 @@ PARALLEL_TEST(NetworkUtilTest, IsPrivateIP_IPv4_PublicAddresses) {
 // is_private_ip() Tests - IPv6
 //=============================================================================
 
+PARALLEL_TEST(NetworkUtilTest, IsPrivateIP_IPv6_Unspecified) {
+    // :: - Unspecified address (all zeros) - should be blocked for SSRF prevention
+    EXPECT_TRUE(is_private_ip("::"));
+    EXPECT_TRUE(is_private_ip("0:0:0:0:0:0:0:0"));
+}
+
 PARALLEL_TEST(NetworkUtilTest, IsPrivateIP_IPv6_Loopback) {
     // ::1 - Loopback
     EXPECT_TRUE(is_private_ip("::1"));

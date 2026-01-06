@@ -368,7 +368,9 @@ public:
     }
 
     bool http_request_ssl_verification_required() const {
-        return _query_options.__isset.http_request_ssl_verification_required &&
+        // Default to true (secure by default) when thrift field is not set
+        // This ensures SSL verification is enabled during FE/BE version mismatch
+        return !_query_options.__isset.http_request_ssl_verification_required ||
                _query_options.http_request_ssl_verification_required;
     }
 

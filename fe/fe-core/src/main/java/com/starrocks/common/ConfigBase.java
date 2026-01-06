@@ -36,6 +36,7 @@ package com.starrocks.common;
 
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
+import com.google.common.net.InetAddresses;
 import com.starrocks.authentication.SecurityIntegration;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.Util;
@@ -270,12 +271,9 @@ public class ConfigBase {
                 }
                 break;
             case "http_request_ip_allowlist":
-                // Validate comma-separated IPv4 address list
-                // Valid: "192.168.1.1" or "10.0.0.1, 172.16.0.1"
-                // IPv4 pattern: each octet must be 0-255
+                // Validate comma-separated IP address list (IPv4 and IPv6)
+                // Valid: "192.168.1.1" or "10.0.0.1,::1,2001:db8::1"
                 if (!confVal.isEmpty()) {
-                    Pattern ipv4Pattern = Pattern.compile(
-                            "^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$");
                     String[] ips = confVal.split(",");
                     for (String ip : ips) {
                         String trimmed = ip.trim();
@@ -284,10 +282,10 @@ public class ConfigBase {
                                     "Invalid 'http_request_ip_allowlist': empty value between commas. " +
                                             "Current value: '" + confVal + "'");
                         }
-                        if (!ipv4Pattern.matcher(trimmed).matches()) {
+                        if (!InetAddresses.isInetAddress(trimmed)) {
                             throw new InvalidConfException(
-                                    "Invalid 'http_request_ip_allowlist': '" + trimmed + "' is not a valid IPv4 address. " +
-                                            "Each octet must be 0-255. Expected format: '192.168.1.1' or '10.0.0.1,172.16.0.1'");
+                                    "Invalid 'http_request_ip_allowlist': '" + trimmed + "' is not a valid IP address. " +
+                                            "Expected IPv4 (e.g., '192.168.1.1') or IPv6 (e.g., '::1', '2001:db8::1')");
                         }
                     }
                 }

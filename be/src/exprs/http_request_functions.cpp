@@ -382,8 +382,11 @@ Status validate_host_security(const std::string& url, const HttpRequestFunctionS
                 auto resolved = resolve_hostname_all_ips(host);
                 if (resolved.ok()) {
                     *out_resolved_ips = resolved.value();
+                } else {
+                    // Log warning when DNS resolution fails - potential security concern
+                    LOG(WARNING) << "DNS resolution failed in TRUSTED mode for host: " << host
+                                 << ". Continuing without DNS pinning protection.";
                 }
-                // If DNS resolution fails in TRUSTED mode, continue without pinning
             }
         }
         return Status::OK();
@@ -635,7 +638,7 @@ Status HttpRequestFunctions::http_request_prepare(FunctionContext* context, Func
         // SSRF protection settings
         init_security_state(state, runtime_state);
     } else {
-        state->ssl_verify_required = false;
+        state->ssl_verify_required = true;
         state->security_level = 3; // Default: RESTRICTED
     }
 

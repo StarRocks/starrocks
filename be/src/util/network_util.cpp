@@ -220,6 +220,10 @@ static bool is_private_ipv4(uint32_t ip) {
 
 // Check if IPv6 address is in a private range
 static bool is_private_ipv6(const unsigned char* ip) {
+    // :: - Unspecified address (all zeros) - block to prevent SSRF bypass
+    static const unsigned char unspecified[16] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+    if (memcmp(ip, unspecified, 16) == 0) return true;
+
     // ::1 - Loopback
     static const unsigned char loopback[16] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1};
     if (memcmp(ip, loopback, 16) == 0) return true;

@@ -786,15 +786,10 @@ public class FunctionAnalyzer {
         }
 
         // validate argument types
-        // First check argument count - if mismatched, return null to allow fallback
-        // to named arguments handling in ExpressionAnalyzer
+        // If argument count is insufficient for non-varargs function, return null.
+        // For named-arg functions: ExpressionAnalyzer will handle reordering
+        // For regular functions: triggers "No matching function" error
         if (argumentTypes.length < fn.getNumArgs() && !fn.hasVarArgs()) {
-            // If function supports named args, let ExpressionAnalyzer handle it
-            if (fn.hasNamedArg()) {
-                return null;
-            }
-            // For non-varargs, non-named-args functions, argument count must match exactly
-            // Return null to trigger "No matching function" error
             return null;
         }
         int numArgsToValidate = Math.min(argumentTypes.length, fn.getNumArgs());

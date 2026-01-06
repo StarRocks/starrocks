@@ -4128,8 +4128,8 @@ public class Config extends ConfigBase {
             "3=RESTRICTED (require allowlist, default), 4=PARANOID (block all requests)")
     public static int http_request_security_level = 3;
 
-    @ConfField(mutable = true, comment = "Comma-separated list of allowed IPv4 addresses for http_request function. " +
-            "Example: '192.168.1.1' or '10.0.0.1,172.16.0.1'")
+    @ConfField(mutable = true, comment = "Comma-separated list of allowed IPs (IPv4/IPv6) for http_request. " +
+            "Example: '192.168.1.1' or '10.0.0.1,::1,2001:db8::1'")
     public static String http_request_ip_allowlist = "";
 
     @ConfField(mutable = true, comment = "Comma-separated list of regex patterns for allowed hostnames in http_request function")

@@ -250,6 +250,18 @@ public class ConfigTest {
         Config.setMutableConfig("http_request_ip_allowlist", "10.0.0.1, 172.16.0.1", false, "");
         Assertions.assertEquals("10.0.0.1, 172.16.0.1", Config.http_request_ip_allowlist);
 
+        // Valid: IPv6 loopback
+        Config.setMutableConfig("http_request_ip_allowlist", "::1", false, "");
+        Assertions.assertEquals("::1", Config.http_request_ip_allowlist);
+
+        // Valid: IPv6 full address
+        Config.setMutableConfig("http_request_ip_allowlist", "2001:db8::1", false, "");
+        Assertions.assertEquals("2001:db8::1", Config.http_request_ip_allowlist);
+
+        // Valid: mixed IPv4 and IPv6
+        Config.setMutableConfig("http_request_ip_allowlist", "192.168.1.1, ::1, 2001:db8::1", false, "");
+        Assertions.assertEquals("192.168.1.1, ::1, 2001:db8::1", Config.http_request_ip_allowlist);
+
         // Valid: empty string (clears the list)
         Config.setMutableConfig("http_request_ip_allowlist", "", false, "");
         Assertions.assertEquals("", Config.http_request_ip_allowlist);
@@ -265,6 +277,14 @@ public class ConfigTest {
         // Invalid: hostname instead of IP
         Assertions.assertThrows(DdlException.class, () ->
                 Config.setMutableConfig("http_request_ip_allowlist", "example.com", false, ""));
+
+        // Invalid: malformed IPv6 (too many colons)
+        Assertions.assertThrows(DdlException.class, () ->
+                Config.setMutableConfig("http_request_ip_allowlist", ":::1", false, ""));
+
+        // Invalid: malformed IPv6 (invalid characters)
+        Assertions.assertThrows(DdlException.class, () ->
+                Config.setMutableConfig("http_request_ip_allowlist", "2001:db8::gggg", false, ""));
     }
 
     @Test
