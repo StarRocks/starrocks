@@ -570,16 +570,18 @@ public class OlapTable extends Table {
         return this.sessionId != null;
     }
 
-    public void checkAndSetName(String newName, boolean onlyCheck) throws DdlException {
+    public void checkNameConflict(String newName) throws DdlException {
         // check if rollup has same name
         for (String idxName : getIndexNameToMetaId().keySet()) {
             if (idxName.equals(newName)) {
                 throw new DdlException("New name conflicts with rollup index name: " + idxName);
             }
         }
-        if (!onlyCheck) {
-            setName(newName);
-        }
+    }
+
+    public void checkAndSetName(String newName) throws DdlException {
+        checkNameConflict(newName);
+        setName(newName);
     }
 
     public void setName(String newName) {
@@ -820,7 +822,6 @@ public class OlapTable extends Table {
 
     public void renameColumn(String oldName, String newName) {
         Column column = this.nameToColumn.remove(oldName);
-        Preconditions.checkState(column != null, "column of name: " + oldName + " does not exist");
         column.setName(newName);
         this.nameToColumn.put(newName, column);
     }
@@ -1866,7 +1867,7 @@ public class OlapTable extends Table {
                 listPartitionInfo.addPartition(idToColumn, newPartition.getId(), dataProperty, replicationNum,
                         dataCacheInfo, values, multiValues);
             } catch (AnalysisException ex) {
-                LOG.warn("failed to add list partition", ex);
+                LOG.warn("failed to add list partition, should not happen", ex);
                 throw new SemanticException(ex.getMessage());
             }
         } else {

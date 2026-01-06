@@ -969,7 +969,7 @@ public class SchemaChangeHandler extends AlterHandler {
         return fastSchemaEvolution;
     }
 
-    private void processModifyColumnComment(ModifyColumnCommentClause alterClause, Database db, OlapTable olapTable,
+    protected void processModifyColumnComment(ModifyColumnCommentClause alterClause, Database db, OlapTable olapTable,
                                         Map<Long, LinkedList<Column>> indexSchemaMap) throws DdlException {
         String modifyColumnName = alterClause.getColumnName();
         String comment = alterClause.getComment();
@@ -984,9 +984,10 @@ public class SchemaChangeHandler extends AlterHandler {
         if (!oneCol.isPresent()) {
             throw new DdlException("Column[" + modifyColumnName + "] does not exists");
         } else {
-            oneCol.get().setComment(comment);
             ModifyColumnCommentLog log = new ModifyColumnCommentLog(db.getId(), olapTable.getId(), modifyColumnName, comment);
-            GlobalStateMgr.getCurrentState().getEditLog().logModifyColumnComment(log);
+            GlobalStateMgr.getCurrentState().getEditLog().logModifyColumnComment(log, wal -> {
+                oneCol.get().setComment(comment);
+            });
         }
     }
 
