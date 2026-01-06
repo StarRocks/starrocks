@@ -18,6 +18,7 @@
 #include <map>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "exec/file_builder.h"
 
@@ -34,13 +35,15 @@ class FileWriter;
 struct PlainTextBuilderOptions {
     std::string column_terminated_by;
     std::string line_terminated_by;
+    bool with_header = false;
+    std::vector<std::string> column_names;
 };
 
 class PlainTextBuilder final : public FileBuilder {
 public:
     PlainTextBuilder(PlainTextBuilderOptions options, std::unique_ptr<WritableFile> writable_file,
                      const std::vector<ExprContext*>& output_expr_ctxs);
-    ~PlainTextBuilder() override = default;
+    ~PlainTextBuilder() override;
 
     Status add_chunk(Chunk* chunk) override;
 

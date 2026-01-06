@@ -144,6 +144,22 @@ public class ExportRelativeStmtTest {
                 "(\"load_mem_limit\"=\"2147483648\", \"timeout\" = \"7200\", \"include_query_id\" = \"false\") WITH " +
                 "BROKER \"broker\" (\"username\"=\"test\", \"password\"=\"test\");";
         analyzeFail(originStmt);
+
+        // test with_header property
+        originStmt = "EXPORT TABLE tp TO \"hdfs://hdfs_host:port/a/b/c/\" PROPERTIES " +
+                "(\"with_header\" = \"true\") WITH BROKER \"broker\" (\"username\"=\"test\", \"password\"=\"test\");";
+        stmt = (ExportStmt) analyzeSuccess(originStmt);
+        Assertions.assertTrue(stmt.isWithHeader());
+
+        originStmt = "EXPORT TABLE tp TO \"hdfs://hdfs_host:port/a/b/c/\" PROPERTIES " +
+                "(\"with_header\" = \"false\") WITH BROKER \"broker\" (\"username\"=\"test\", \"password\"=\"test\");";
+        stmt = (ExportStmt) analyzeSuccess(originStmt);
+        Assertions.assertFalse(stmt.isWithHeader());
+
+        // bad with_header value
+        originStmt = "EXPORT TABLE tp TO \"hdfs://hdfs_host:port/a/b/c/\" PROPERTIES " +
+                "(\"with_header\" = \"invalid\") WITH BROKER \"broker\" (\"username\"=\"test\", \"password\"=\"test\");";
+        analyzeFail(originStmt);
         originStmt = "EXPORT TABLE tp (,) TO \"hdfs://hdfs_host:port/a/b/c/\" PROPERTIES " +
                 "(\"load_mem_limit\"=\"2147483648\", \"timeout\" = \"7200\", \"include_query_id\" = \"false\") WITH " +
                 "BROKER \"broker\" (\"username\"=\"test\", \"password\"=\"test\");";
