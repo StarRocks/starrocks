@@ -177,8 +177,9 @@ public class TabletReshardJobMgr extends FrontendDaemon implements GsonPostProce
 
             // Job is done, remove expired job
             if (job.isExpired()) {
-                iterator.remove();
-                GlobalStateMgr.getCurrentState().getEditLog().logRemoveTabletReshardJob(job.getJobId());
+                GlobalStateMgr.getCurrentState().getEditLog().logRemoveTabletReshardJob(job.getJobId(), wal -> {
+                    iterator.remove();
+                });
                 LOG.info("Removed expired tablet reshard job. {}", job);
             }
         }

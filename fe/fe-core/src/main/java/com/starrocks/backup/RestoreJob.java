@@ -500,8 +500,8 @@ public class RestoreJob extends AbstractJob {
                         "Failed to restore external catalog, errmsg: " + e.getMessage());
                 return;
             }
-            state = RestoreJobState.COMMITTING;
-            globalStateMgr.getEditLog().logRestoreJob(this);
+
+            persistStateChange(RestoreJobState.COMMITTING);
             return;
         }
 
@@ -1559,9 +1559,8 @@ public class RestoreJob extends AbstractJob {
     private void waitingAllSnapshotsFinished() {
         if (unfinishedSignatureToId.isEmpty()) {
             snapshotFinishedTime = System.currentTimeMillis();
-            state = RestoreJobState.DOWNLOAD;
 
-            globalStateMgr.getEditLog().logRestoreJob(this);
+            persistStateChange(RestoreJobState.DOWNLOAD);
             for (ColocatePersistInfo colocatePersistInfo : colocatePersistInfos) {
                 globalStateMgr.getEditLog().logColocateAddTable(colocatePersistInfo);
             }
@@ -1571,7 +1570,6 @@ public class RestoreJob extends AbstractJob {
 
         LOG.info("waiting {} replicas to make snapshot: [{}]. {}",
                 unfinishedSignatureToId.size(), unfinishedSignatureToId, this);
-        return;
     }
 
     private void downloadSnapshots() {
@@ -1650,9 +1648,7 @@ public class RestoreJob extends AbstractJob {
     protected void waitingAllDownloadFinished() {
         if (unfinishedSignatureToId.isEmpty()) {
             downloadFinishedTime = System.currentTimeMillis();
-            state = RestoreJobState.COMMIT;
-
-            globalStateMgr.getEditLog().logRestoreJob(this);
+            persistStateChange(RestoreJobState.COMMIT);
             LOG.info("finished to download. {}", this);
         }
 
@@ -1819,9 +1815,7 @@ public class RestoreJob extends AbstractJob {
         if (backupMeta != null && !backupMeta.getCatalogs().isEmpty()) {
             if (!isReplay) {
                 finishedTime = System.currentTimeMillis();
-                state = RestoreJobState.FINISHED;
-
-                globalStateMgr.getEditLog().logRestoreJob(this);
+                persistStateChange(RestoreJobState.FINISHED);
             }
             LOG.info("job is finished. is replay: {}. {}", isReplay, this);
             return Status.OK;
@@ -1879,9 +1873,7 @@ public class RestoreJob extends AbstractJob {
             snapshotInfos.clear();
 
             finishedTime = System.currentTimeMillis();
-            state = RestoreJobState.FINISHED;
-
-            globalStateMgr.getEditLog().logRestoreJob(this);
+            persistStateChange(RestoreJobState.FINISHED);
 
             locker.lockDatabase(db.getId(), LockType.READ);
             try {
@@ -2159,9 +2151,7 @@ public class RestoreJob extends AbstractJob {
             snapshotInfos.clear();
             RestoreJobState curState = state;
             finishedTime = System.currentTimeMillis();
-            state = RestoreJobState.CANCELLED;
-            // log
-            globalStateMgr.getEditLog().logRestoreJob(this);
+            persistStateChange(RestoreJobState.CANCELLED);
 
             LOG.info("finished to cancel restore job. current state: {}. is replay: {}. {}",
                     curState.name(), isReplay, this);
@@ -2361,6 +2351,50 @@ public class RestoreJob extends AbstractJob {
         intersect.retainAll(anotherTbl.getPartitionNames());
         intersectPartNames.addAll(intersect);
         return Status.OK;
+    }
+
+    public RestoreJob copyForPersist() {
+        RestoreJob copy = new RestoreJob();
+
+        // Copy fields from AbstractJob
+        copy.type = this.type;
+        copy.repoId = this.repoId;
+        copy.jobId = this.jobId;
+        copy.label = this.label;
+        copy.dbId = this.dbId;
+        copy.dbName = this.dbName;
+        copy.status = this.status;
+        copy.createTime = this.createTime;
+        copy.finishedTime = this.finishedTime;
+        copy.timeoutMs = this.timeoutMs;
+        copy.taskErrMsg = this.taskErrMsg;
+
+        // Copy fields from RestoreJob
+        copy.backupTimestamp = this.backupTimestamp;
+        copy.jobInfo = this.jobInfo;
+        copy.allowLoad = this.allowLoad;
+        copy.state = this.state;
+        copy.backupMeta = this.backupMeta;
+        copy.fileMapping = this.fileMapping;
+        copy.metaPreparedTime = this.metaPreparedTime;
+        copy.snapshotFinishedTime = this.snapshotFinishedTime;
+        copy.downloadFinishedTime = this.downloadFinishedTime;
+        copy.restoreReplicationNum = this.restoreReplicationNum;
+        copy.restoredPartitions = this.restoredPartitions;
+        copy.restoredTbls = this.restoredTbls;
+        copy.restoredVersionInfo = this.restoredVersionInfo;
+        copy.snapshotInfos = this.snapshotInfos;
+        copy.colocatePersistInfos = this.colocatePersistInfos;
+
+        return copy;
+    }
+
+    private void persistStateChange(RestoreJobState newState) {
+        RestoreJob persistJob = this.copyForPersist();
+        persistJob.state = newState;
+        globalStateMgr.getEditLog().logRestoreJob(persistJob, wal -> {
+            this.state = newState;
+        });
     }
 
     @Override

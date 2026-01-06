@@ -53,6 +53,11 @@ public abstract class LakeTableSchemaChangeJobBase extends AlterJobV2 {
         super(jobType);
     }
 
+    protected void copySchemaChangeBaseFields(LakeTableSchemaChangeJobBase copy) {
+        copy.watershedTxnId = this.watershedTxnId;
+        copy.watershedGtid = this.watershedGtid;
+    }
+
     @Nullable
     protected ReadLockedDatabase getReadLockedDatabase(long dbId) {
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);

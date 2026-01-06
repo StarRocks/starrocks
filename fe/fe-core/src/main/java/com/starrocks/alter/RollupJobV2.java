@@ -399,12 +399,11 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
 
         this.watershedTxnId =
                 GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getTransactionIDGenerator().getNextTransactionId();
-        this.jobState = JobState.WAITING_TXN;
         span.setAttribute("watershedTxnId", this.watershedTxnId);
         span.addEvent("setWaitingTxn");
 
         // write edit log
-        GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(this);
+        persistStateChange(this, JobState.WAITING_TXN);
         LOG.info("transfer rollup job {} state to {}, watershed txn_id: {}", jobId, this.jobState, watershedTxnId);
     }
 
@@ -731,10 +730,9 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
             onFinished(tbl);
         }
 
-        this.jobState = JobState.FINISHED;
         this.finishedTimeMs = System.currentTimeMillis();
 
-        GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(this);
+        persistStateChange(this, JobState.FINISHED);
         LOG.info("rollup job finished: {}", jobId);
         this.span.end();
     }
@@ -790,11 +788,10 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
         }
         cancelInternal();
 
-        jobState = JobState.CANCELLED;
         this.errMsg = errMsg;
         this.finishedTimeMs = System.currentTimeMillis();
         LOG.info("cancel {} job {}, err: {}", this.type, jobId, errMsg);
-        GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(this);
+        persistStateChange(this, JobState.CANCELLED);
         span.setStatus(StatusCode.ERROR, errMsg);
         span.end();
         return true;
@@ -1038,6 +1035,45 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
             whereClause = columnNameToDefineExpr.get(CreateMaterializedViewStmt.WHERE_PREDICATE_COLUMN_NAME);
         }
         setColumnsDefineExpr(columnNameToDefineExpr);
+    }
+
+    @Override
+    public AlterJobV2 copyForPersist() {
+        RollupJobV2 copy = new RollupJobV2();
+        copyBaseFields(copy);
+        if (this.physicalPartitionIdToBaseRollupTabletIdMap != null) {
+            copy.physicalPartitionIdToBaseRollupTabletIdMap = Maps.newHashMap();
+            for (Map.Entry<Long, Map<Long, Long>> entry : this.physicalPartitionIdToBaseRollupTabletIdMap.entrySet()) {
+                Map<Long, Long> tabletIdMap = Maps.newHashMap();
+                if (entry.getValue() != null) {
+                    tabletIdMap.putAll(entry.getValue());
+                }
+                copy.physicalPartitionIdToBaseRollupTabletIdMap.put(entry.getKey(), tabletIdMap);
+            }
+        } else {
+            copy.physicalPartitionIdToBaseRollupTabletIdMap = null;
+        }
+        if (this.physicalPartitionIdToRollupIndex != null) {
+            copy.physicalPartitionIdToRollupIndex = Maps.newHashMap();
+            copy.physicalPartitionIdToRollupIndex.putAll(this.physicalPartitionIdToRollupIndex);
+        } else {
+            copy.physicalPartitionIdToRollupIndex = null;
+        }
+        copy.baseIndexId = this.baseIndexId;
+        copy.rollupIndexId = this.rollupIndexId;
+        copy.baseIndexName = this.baseIndexName;
+        copy.rollupIndexName = this.rollupIndexName;
+        copy.rollupSchema = this.rollupSchema == null ? null : new ArrayList<>(this.rollupSchema);
+        copy.rollupSchemaVersion = this.rollupSchemaVersion;
+        copy.baseSchemaHash = this.baseSchemaHash;
+        copy.rollupSchemaHash = this.rollupSchemaHash;
+        copy.rollupKeysType = this.rollupKeysType;
+        copy.rollupShortKeyColumnCount = this.rollupShortKeyColumnCount;
+        copy.origStmt = this.origStmt;
+        copy.watershedTxnId = this.watershedTxnId;
+        copy.viewDefineSql = this.viewDefineSql;
+        copy.isColocateMVIndex = this.isColocateMVIndex;
+        return copy;
     }
 
     @Override

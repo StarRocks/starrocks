@@ -105,8 +105,8 @@ public class FakeEditLog extends MockUp<EditLog> {
     }
 
     @Mock
-    public void logAlterJob(AlterJobV2 alterJob) {
-
+    public void logAlterJob(AlterJobV2 alterJob, WALApplier applier) {
+        applier.apply(alterJob);
     }
 
     @Mock

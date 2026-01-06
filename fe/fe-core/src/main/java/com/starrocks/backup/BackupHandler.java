@@ -539,10 +539,10 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
         backupJob.setBackupCatalogs(backupCatalogs);
 
         // write log
-        globalStateMgr.getEditLog().logBackupJob(backupJob);
-
-        // must put to dbIdToBackupOrRestoreJob after edit log, otherwise the state of job may be changed.
-        dbIdToBackupOrRestoreJob.put(dbId, backupJob);
+        globalStateMgr.getEditLog().logBackupJob(backupJob, wal -> {
+            // must put to dbIdToBackupOrRestoreJob after edit log, otherwise the state of job may be changed.
+            dbIdToBackupOrRestoreJob.put(dbId, backupJob);
+        });
 
         LOG.info("finished to submit backup job: {}", backupJob);
     }
@@ -582,8 +582,6 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
             checkAndFilterRestoreCatalogsInBackupMeta(stmt, backupMeta);
         }
 
-        // Create a restore job
-        RestoreJob restoreJob = null;
         if (backupMeta != null) {
             for (BackupTableInfo tblInfo : jobInfo.tables.values()) {
                 Table remoteTbl = backupMeta.getTable(tblInfo.name);
@@ -605,13 +603,15 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
             replicationNum = Integer.parseInt(replicationNumProp);
         }
 
-        restoreJob = new RestoreJob(stmt.getLabel(), stmt.getBackupTimestamp(),
+        // Create a restore job
+        RestoreJob  restoreJob = new RestoreJob(stmt.getLabel(), stmt.getBackupTimestamp(),
                 dbId, dbName, jobInfo, stmt.allowLoad(), replicationNum,
                 stmt.getTimeoutMs(), globalStateMgr, repository.getId(), backupMeta, mvRestoreContext);
-        globalStateMgr.getEditLog().logRestoreJob(restoreJob);
+        globalStateMgr.getEditLog().logRestoreJob(restoreJob, wal -> {
+            // must put to dbIdToBackupOrRestoreJob after edit log, otherwise the state of job may be changed.
+            dbIdToBackupOrRestoreJob.put(dbId, restoreJob);
+        });
 
-        // must put to dbIdToBackupOrRestoreJob after edit log, otherwise the state of job may be changed.
-        dbIdToBackupOrRestoreJob.put(dbId, restoreJob);
 
         LOG.info("finished to submit restore job: {}", restoreJob);
     }

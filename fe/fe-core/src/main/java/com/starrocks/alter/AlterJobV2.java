@@ -218,6 +218,45 @@ public abstract class AlterJobV2 implements Writable {
         return warehouseId;
     }
 
+    public abstract AlterJobV2 copyForPersist();
+
+    protected void copyBaseFields(AlterJobV2 copy) {
+        copy.type = this.type;
+        copy.jobId = this.jobId;
+        copy.jobState = this.jobState;
+        copy.dbId = this.dbId;
+        copy.tableId = this.tableId;
+        copy.tableName = this.tableName;
+        copy.errMsg = this.errMsg;
+        copy.createTimeMs = this.createTimeMs;
+        copy.finishedTimeMs = this.finishedTimeMs;
+        copy.timeoutMs = this.timeoutMs;
+        copy.warehouseId = this.warehouseId;
+        copy.computeResource = this.computeResource;
+    }
+
+    public static void persistStateChange(AlterJobV2 job, JobState newState) {
+        persistStateChange(job, newState, false, null);
+    }
+
+    public static void persistStateChange(AlterJobV2 job, JobState newState, Runnable applier) {
+        persistStateChange(job, newState, false, applier);
+    }
+
+    public static void persistStateChange(AlterJobV2 job, JobState newState, boolean pruneMeta, Runnable applier) {
+        AlterJobV2 persistJob = job.copyForPersist();
+        persistJob.setJobState(newState);
+        if (pruneMeta && persistJob instanceof SchemaChangeJobV2) {
+            ((SchemaChangeJobV2) persistJob).pruneMeta();
+        }
+        GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(persistJob, wal -> {
+            if (applier != null) {
+                applier.run();
+            }
+            job.jobState = newState;
+        });
+    }
+
     /**
      * The keyword 'synchronized' only protects 2 methods:
      * run() and cancel()

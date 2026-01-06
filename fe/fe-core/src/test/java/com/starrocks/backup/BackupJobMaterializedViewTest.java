@@ -43,7 +43,6 @@ import com.starrocks.thrift.TFinishTaskRequest;
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TTaskType;
-import mockit.Delegate;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -179,18 +178,6 @@ public class BackupJobMaterializedViewTest {
                 globalStateMgr.getLocalMetastore().getTable("testDb", "unknown_tbl");
                 minTimes = 0;
                 result = null;
-            }
-        };
-
-        new Expectations() {
-            {
-                editLog.logBackupJob((BackupJob) any);
-                minTimes = 0;
-                result = new Delegate() {
-                    public void logBackupJob(BackupJob job) {
-                        System.out.println("log backup job: " + job);
-                    }
-                };
             }
         };
 

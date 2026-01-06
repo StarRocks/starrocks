@@ -391,13 +391,12 @@ public class MergePartitionJob extends AlterJobV2 implements GsonPostProcessable
         // wait previous transactions finished
         this.watershedTxnId =
                     GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getTransactionIDGenerator().getNextTransactionId();
-        this.jobState = JobState.WAITING_TXN;
         span.setAttribute("createPartitionElapse", createPartitionElapse);
         span.setAttribute("watershedTxnId", this.watershedTxnId);
         span.addEvent("setWaitingTxn");
 
         // write edit log
-        GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(this);
+        persistStateChange(this, JobState.WAITING_TXN);
         LOG.info("transfer merge partition job {} state to {}, watershed txn_id: {}", jobId, this.jobState, watershedTxnId);
     }
 
@@ -614,10 +613,9 @@ public class MergePartitionJob extends AlterJobV2 implements GsonPostProcessable
         }
 
         this.progress = 100;
-        this.jobState = JobState.FINISHED;
         this.finishedTimeMs = System.currentTimeMillis();
 
-        GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(this);
+        persistStateChange(this, JobState.FINISHED);
         LOG.info("optimize job finished: {}", jobId);
         this.span.end();
     }
@@ -776,14 +774,36 @@ public class MergePartitionJob extends AlterJobV2 implements GsonPostProcessable
         }
         cancelInternal();
 
-        jobState = JobState.CANCELLED;
         this.errMsg = errMsg;
         this.finishedTimeMs = System.currentTimeMillis();
         LOG.info("cancel {} job {}, err: {}", this.type, jobId, errMsg);
-        GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(this);
+        persistStateChange(this, JobState.CANCELLED);
         span.setStatus(StatusCode.ERROR, errMsg);
         span.end();
         return true;
+    }
+
+    @Override
+    public AlterJobV2 copyForPersist() {
+        MergePartitionJob copy = new MergePartitionJob();
+        copyBaseFields(copy);
+        copy.watershedTxnId = this.watershedTxnId;
+        if (this.tempPartitionIdToSourcePartitionIds != null) {
+            copy.tempPartitionIdToSourcePartitionIds = ArrayListMultimap.create();
+            copy.tempPartitionIdToSourcePartitionIds.putAll(this.tempPartitionIdToSourcePartitionIds);
+        } else {
+            copy.tempPartitionIdToSourcePartitionIds = null;
+        }
+        if (this.tempPartitionNameToSourcePartitionNames != null) {
+            copy.tempPartitionNameToSourcePartitionNames = ArrayListMultimap.create();
+            copy.tempPartitionNameToSourcePartitionNames.putAll(this.tempPartitionNameToSourcePartitionNames);
+        } else {
+            copy.tempPartitionNameToSourcePartitionNames = null;
+        }
+        copy.rewriteTasks = this.rewriteTasks == null ? null : Lists.newArrayList(this.rewriteTasks);
+        copy.distributionInfo = this.distributionInfo;
+        copy.optimizeOperation = this.optimizeOperation;
+        return copy;
     }
 
     private void cancelInternal() {

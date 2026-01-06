@@ -274,13 +274,12 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
                     "concurrent transaction detected while adding shadow index, please re-run the alter table command");
         }
 
-        jobState = JobState.WAITING_TXN;
         if (span != null) {
             span.setAttribute("watershedTxnId", this.watershedTxnId);
             span.addEvent("setWaitingTxn");
         }
 
-        writeEditLog(this);
+        persistStateChange(this, JobState.WAITING_TXN);
 
         LOG.info("transfer roll up job {} state to {}, watershed txn_id: {}", jobId, this.jobState,
                 watershedTxnId);
@@ -396,10 +395,9 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
                 commitVersionMap.put(physicalPartitionId, commitVersion);
                 LOG.debug("commit version of partition {} is {}. jobId={}", physicalPartitionId, commitVersion, jobId);
             }
-            this.jobState = JobState.FINISHED_REWRITING;
             this.finishedTimeMs = System.currentTimeMillis();
 
-            writeEditLog(this);
+            persistStateChange(this, JobState.FINISHED_REWRITING);
 
             // NOTE: !!! below this point, this roll up job must success unless the database or table been dropped. !!!
             updateNextVersion(table);
@@ -433,13 +431,12 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
 
             visualiseRollupIndex(table);
 
-            this.jobState = JobState.FINISHED;
             this.finishedTimeMs = System.currentTimeMillis();
             // There is no need to set the table state to normal,
             // because it will be set in MaterializedViewHandler `onJobDone`
         }
 
-        writeEditLog(this);
+        persistStateChange(this, JobState.FINISHED);
         if (span != null) {
             span.end();
         }
@@ -468,7 +465,6 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
             }
         }
 
-        this.jobState = JobState.CANCELLED;
         this.errMsg = errMsg;
         this.finishedTimeMs = System.currentTimeMillis();
         if (span != null) {
@@ -476,7 +472,7 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
             span.end();
         }
 
-        writeEditLog(this);
+        persistStateChange(this, JobState.CANCELLED);
         LOG.info("Lake Rollup job canceled, jobId: {}, error: {}", jobId, errMsg);
 
         return true;
@@ -595,11 +591,6 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
             }
             throw new AlterCancelException("Create tablet failed. Error: " + errMsg);
         }
-    }
-
-    @VisibleForTesting
-    public static void writeEditLog(LakeRollupJob job) {
-        GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(job);
     }
 
     @VisibleForTesting
@@ -795,6 +786,51 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
         Map<Long, Long> tabletIdMap =
                 physicalPartitionIdToBaseRollupTabletIdMap.computeIfAbsent(partitionId, k -> Maps.newHashMap());
         tabletIdMap.put(rollupTabletId, baseTabletId);
+    }
+
+    @Override
+    public AlterJobV2 copyForPersist() {
+        LakeRollupJob copy = new LakeRollupJob();
+        copyBaseFields(copy);
+        copySchemaChangeBaseFields(copy);
+        if (this.commitVersionMap != null) {
+            copy.commitVersionMap = Maps.newHashMap();
+            copy.commitVersionMap.putAll(this.commitVersionMap);
+        } else {
+            copy.commitVersionMap = null;
+        }
+        if (this.physicalPartitionIdToBaseRollupTabletIdMap != null) {
+            copy.physicalPartitionIdToBaseRollupTabletIdMap = Maps.newHashMap();
+            for (Map.Entry<Long, Map<Long, Long>> entry : this.physicalPartitionIdToBaseRollupTabletIdMap.entrySet()) {
+                Map<Long, Long> tabletIdMap = Maps.newHashMap();
+                if (entry.getValue() != null) {
+                    tabletIdMap.putAll(entry.getValue());
+                }
+                copy.physicalPartitionIdToBaseRollupTabletIdMap.put(entry.getKey(), tabletIdMap);
+            }
+        } else {
+            copy.physicalPartitionIdToBaseRollupTabletIdMap = null;
+        }
+        if (this.physicalPartitionIdToRollupIndex != null) {
+            copy.physicalPartitionIdToRollupIndex = Maps.newHashMap();
+            copy.physicalPartitionIdToRollupIndex.putAll(this.physicalPartitionIdToRollupIndex);
+        } else {
+            copy.physicalPartitionIdToRollupIndex = null;
+        }
+        copy.baseIndexId = this.baseIndexId;
+        copy.rollupIndexId = this.rollupIndexId;
+        copy.baseIndexName = this.baseIndexName;
+        copy.rollupIndexName = this.rollupIndexName;
+        copy.rollupSchema = this.rollupSchema == null ? null : new ArrayList<>(this.rollupSchema);
+        copy.rollupSchemaVersion = this.rollupSchemaVersion;
+        copy.baseSchemaHash = this.baseSchemaHash;
+        copy.rollupSchemaHash = this.rollupSchemaHash;
+        copy.rollupKeysType = this.rollupKeysType;
+        copy.rollupShortKeyColumnCount = this.rollupShortKeyColumnCount;
+        copy.origStmt = this.origStmt;
+        copy.viewDefineSql = this.viewDefineSql;
+        copy.isColocateMVIndex = this.isColocateMVIndex;
+        return copy;
     }
 
     public String getRollupIndexName() {

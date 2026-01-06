@@ -1710,8 +1710,8 @@ public class EditLog {
         logJsonObject(OperationType.OP_UPSERT_TRANSACTION_STATE_BATCH, stateBatch);
     }
 
-    public void logBackupJob(BackupJob job) {
-        logJsonObject(OperationType.OP_BACKUP_JOB_V2, job);
+    public void logBackupJob(BackupJob job, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_BACKUP_JOB_V2, job, walApplier);
     }
 
     public void logCreateRepository(Repository repo) {
@@ -1722,8 +1722,8 @@ public class EditLog {
         logJsonObject(OperationType.OP_DROP_REPOSITORY_V2, new DropRepositoryLog(repoName));
     }
 
-    public void logRestoreJob(RestoreJob job) {
-        logJsonObject(OperationType.OP_RESTORE_JOB_V2, job);
+    public void logRestoreJob(RestoreJob job, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_RESTORE_JOB_V2, job, walApplier);
     }
 
     public void logTruncateTable(TruncateTableInfo info) {
@@ -1794,12 +1794,12 @@ public class EditLog {
         logJsonObject(OperationType.OP_CREATE_LOAD_JOB_V2, loadJob, walApplier);
     }
 
-    public void logEndLoadJob(LoadJobFinalOperation loadJobFinalOperation) {
-        logJsonObject(OperationType.OP_END_LOAD_JOB_V2, loadJobFinalOperation);
+    public void logEndLoadJob(LoadJobFinalOperation loadJobFinalOperation, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_END_LOAD_JOB_V2, loadJobFinalOperation, walApplier);
     }
 
-    public void logUpdateLoadJob(LoadJobStateUpdateInfo info) {
-        logJsonObject(OperationType.OP_UPDATE_LOAD_JOB, info);
+    public void logUpdateLoadJob(LoadJobStateUpdateInfo info, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_UPDATE_LOAD_JOB, info, walApplier);
     }
 
     public void logCreateResource(Resource resource, WALApplier walApplier) {
@@ -1822,8 +1822,8 @@ public class EditLog {
         logJsonObject(OperationType.OP_DROP_SMALL_FILE_V2, log, walApplier);
     }
 
-    public void logAlterJob(AlterJobV2 alterJob) {
-        logJsonObject(OperationType.OP_ALTER_JOB_V2, alterJob);
+    public void logAlterJob(AlterJobV2 alterJob, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_ALTER_JOB_V2, alterJob, walApplier);
     }
 
     public JournalTask logAlterJobNoWait(AlterJobV2 alterJob) {
@@ -1835,8 +1835,8 @@ public class EditLog {
         }, -1);
     }
 
-    public void logBatchAlterJob(BatchAlterJobPersistInfo batchAlterJobV2) {
-        logJsonObject(OperationType.OP_BATCH_ADD_ROLLUP_V2, batchAlterJobV2);
+    public void logBatchAlterJob(BatchAlterJobPersistInfo batchAlterJobV2, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_BATCH_ADD_ROLLUP_V2, batchAlterJobV2, walApplier);
     }
 
     public void logModifyDistributionType(TableInfo tableInfo) {
@@ -2023,8 +2023,8 @@ public class EditLog {
         logJsonObject(OperationType.OP_CREATE_INSERT_OVERWRITE, info);
     }
 
-    public void logInsertOverwriteStateChange(InsertOverwriteStateChangeInfo info) {
-        logJsonObject(OperationType.OP_INSERT_OVERWRITE_STATE_CHANGE, info);
+    public void logInsertOverwriteStateChange(InsertOverwriteStateChangeInfo info, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_INSERT_OVERWRITE_STATE_CHANGE, info, walApplier);
     }
 
     public void logAlterMvStatus(AlterMaterializedViewStatusLog log) {
@@ -2176,9 +2176,9 @@ public class EditLog {
         logJsonObject(OperationType.OP_REPLICATION_JOB, replicationJobLog);
     }
 
-    public void logDeleteReplicationJob(ReplicationJob replicationJob) {
+    public void logDeleteReplicationJob(ReplicationJob replicationJob, WALApplier walApplier) {
         ReplicationJobLog replicationJobLog = new ReplicationJobLog(replicationJob);
-        logJsonObject(OperationType.OP_DELETE_REPLICATION_JOB, replicationJobLog);
+        logJsonObject(OperationType.OP_DELETE_REPLICATION_JOB, replicationJobLog, walApplier);
     }
 
     public void logColumnRename(ColumnRenameInfo columnRenameInfo) {
@@ -2237,8 +2237,8 @@ public class EditLog {
         logJsonObject(OperationType.OP_UPDATE_TABLET_RESHARD_JOB_LOG, job);
     }
 
-    public void logRemoveTabletReshardJob(long jobId) {
-        logJsonObject(OperationType.OP_REMOVE_TABLET_RESHARD_JOB_LOG, new RemoveTabletReshardJobLog(jobId));
+    public void logRemoveTabletReshardJob(long jobId, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_REMOVE_TABLET_RESHARD_JOB_LOG, new RemoveTabletReshardJobLog(jobId), walApplier);
     }
 
     public void logCreateGroupProvider(GroupProviderLog provider, WALApplier walApplier) {

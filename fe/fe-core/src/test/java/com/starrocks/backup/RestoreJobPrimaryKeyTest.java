@@ -183,18 +183,6 @@ public class RestoreJobPrimaryKeyTest {
 
         new Expectations() {
             {
-                editLog.logBackupJob((BackupJob) any);
-                minTimes = 0;
-                result = new Delegate() {
-                    public void logBackupJob(BackupJob job) {
-                        System.out.println("log backup job: " + job);
-                    }
-                };
-            }
-        };
-
-        new Expectations() {
-            {
                 repo.upload(anyString, anyString);
                 result = Status.OK;
                 minTimes = 0;

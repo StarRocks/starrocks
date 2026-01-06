@@ -584,10 +584,9 @@ public class BackupJob extends AbstractJob {
     protected void waitingAllSnapshotsFinished() {
         if (unfinishedTaskIds.isEmpty()) {
             snapshotFinishedTime = System.currentTimeMillis();
-            state = BackupJobState.UPLOAD_SNAPSHOT;
 
             // log
-            globalStateMgr.getEditLog().logBackupJob(this);
+            persistStateChange(BackupJobState.UPLOAD_SNAPSHOT);
             LOG.info("finished to make snapshots. {}", this);
             return;
         }
@@ -682,10 +681,9 @@ public class BackupJob extends AbstractJob {
     protected void waitingAllUploadingFinished() {
         if (unfinishedTaskIds.isEmpty()) {
             snapshotUploadFinishedTime = System.currentTimeMillis();
-            state = BackupJobState.SAVE_META;
 
             // log
-            globalStateMgr.getEditLog().logBackupJob(this);
+            persistStateChange(BackupJobState.SAVE_META);
             LOG.info("finished uploading snapshots. {}", this);
             return;
         }
@@ -747,8 +745,6 @@ public class BackupJob extends AbstractJob {
             return;
         }
 
-        state = BackupJobState.UPLOAD_INFO;
-
         // meta info and job info has been saved to local file, this can be cleaned to reduce log size
         backupMeta = null;
         jobInfo = null;
@@ -759,7 +755,7 @@ public class BackupJob extends AbstractJob {
         snapshotInfos.clear();
 
         // log
-        globalStateMgr.getEditLog().logBackupJob(this);
+        persistStateChange(BackupJobState.UPLOAD_INFO);
         LOG.info("finished to save meta the backup job info file to local.[{}], [{}] {}",
                 localMetaInfoFilePath, localJobInfoFilePath, this);
     }
@@ -793,10 +789,9 @@ public class BackupJob extends AbstractJob {
         }
 
         finishedTime = System.currentTimeMillis();
-        state = BackupJobState.FINISHED;
 
         // log
-        globalStateMgr.getEditLog().logBackupJob(this);
+        persistStateChange(BackupJobState.FINISHED);
         LOG.info("job is finished. {}", this);
 
         MetricRepo.COUNTER_UNFINISHED_BACKUP_JOB.increase(-1L);
@@ -884,12 +879,19 @@ public class BackupJob extends AbstractJob {
 
         BackupJobState curState = state;
         finishedTime = System.currentTimeMillis();
-        state = BackupJobState.CANCELLED;
 
         // log
-        globalStateMgr.getEditLog().logBackupJob(this);
+        persistStateChange(BackupJobState.CANCELLED);
         WarehouseIdleChecker.updateJobLastFinishTime(WarehouseManager.DEFAULT_WAREHOUSE_ID);
         LOG.info("finished to cancel backup job. current state: {}. {}", curState.name(), this);
+    }
+
+    private void persistStateChange(BackupJobState newState) {
+        BackupJob persist = this.copyForPersist();
+        persist.setState(newState);
+        globalStateMgr.getEditLog().logBackupJob(persist, wal -> {
+            state = newState;
+        });
     }
 
     public List<String> getInfo() {
@@ -929,5 +931,35 @@ public class BackupJob extends AbstractJob {
         sb.append(", state: ").append(state.name());
         return sb.toString();
     }
-}
 
+    public BackupJob copyForPersist() {
+        BackupJob copy = new BackupJob();
+
+        // Copy fields from AbstractJob
+        copy.type = this.type;
+        copy.repoId = this.repoId;
+        copy.jobId = this.jobId;
+        copy.label = this.label;
+        copy.dbId = this.dbId;
+        copy.dbName = this.dbName;
+        copy.status = this.status;
+        copy.createTime = this.createTime;
+        copy.finishedTime = this.finishedTime;
+        copy.timeoutMs = this.timeoutMs;
+        copy.taskErrMsg = this.taskErrMsg;
+
+        // Copy fields from BackupJob
+        copy.tableRefs = this.tableRefs;
+        copy.state = this.state;
+        copy.snapshotFinishedTime = this.snapshotFinishedTime;
+        copy.snapshotUploadFinishedTime = this.snapshotUploadFinishedTime;
+        copy.snapshotInfos = this.snapshotInfos;
+        copy.backupMeta = this.backupMeta;
+        copy.localMetaInfoFilePath = this.localMetaInfoFilePath;
+        copy.localJobInfoFilePath = this.localJobInfoFilePath;
+        copy.backupFunctions = this.backupFunctions;
+        copy.backupCatalogs = this.backupCatalogs;
+
+        return copy;
+    }
+}

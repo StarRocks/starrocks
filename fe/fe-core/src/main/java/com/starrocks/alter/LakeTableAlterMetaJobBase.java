@@ -83,6 +83,13 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
         super(jobId, jobType, dbId, tableId, tableName, timeoutMs);
     }
 
+    protected void copyAlterMetaBaseFields(LakeTableAlterMetaJobBase copy) {
+        copy.watershedTxnId = this.watershedTxnId;
+        copy.watershedGtid = this.watershedGtid;
+        copy.physicalPartitionIndexMap = this.physicalPartitionIndexMap;
+        copy.commitVersionMap = this.commitVersionMap;
+    }
+
     @Override
     protected void runPendingJob() throws AlterCancelException {
         // send task to be
@@ -111,7 +118,7 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
             this.watershedTxnId = globalStateMgr.getGlobalTransactionMgr().getTransactionIDGenerator()
                     .getNextTransactionId();
             this.watershedGtid = globalStateMgr.getGtidGenerator().nextGtid();
-            GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(this);
+            persistStateChange(this, this.jobState);
         }
 
         try {
@@ -168,10 +175,9 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
                         commitVersion, jobId);
             }
 
-            this.jobState = JobState.FINISHED_REWRITING;
             this.finishedTimeMs = System.currentTimeMillis();
 
-            GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(this);
+            persistStateChange(this, JobState.FINISHED_REWRITING);
 
             // NOTE: !!! below this point, this update meta job must success unless the database or table been dropped. !!!
             updateNextVersion(table);
@@ -212,9 +218,8 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE);
         try {
             updateCatalog(db, table, false);
-            this.jobState = JobState.FINISHED;
             this.finishedTimeMs = System.currentTimeMillis();
-            GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(this);
+            persistStateChange(this, JobState.FINISHED);
             // set visible version
             updateVisibleVersion(table);
             table.setState(OlapTable.OlapTableState.NORMAL);
@@ -469,10 +474,9 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
             span.setStatus(StatusCode.ERROR, errMsg);
             span.end();
         }
-        this.jobState = JobState.CANCELLED;
         this.errMsg = errMsg;
         this.finishedTimeMs = System.currentTimeMillis();
-        GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(this);
+        persistStateChange(this, JobState.CANCELLED);
         return true;
     }
 
