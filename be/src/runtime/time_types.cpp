@@ -519,8 +519,8 @@ std::pair<bool, bool> date::from_string_to_datetime(const char* date_str, size_t
         minute = (time_ptr[3] - '0') * 10 + (time_ptr[4] - '0');
         second = (time_ptr[6] - '0') * 10 + (time_ptr[7] - '0');
 
-        // Validate time ranges
-        bool time_valid = (hour < 24 && minute < 60 && second < 60);
+        // Validate time ranges (consistent with generic parser at line 319)
+        bool time_valid = !(hour > 23 || minute > 59 || second > 59);
 
         // If time validation failed, fall back to generic parser
         if (!time_valid) {
