@@ -71,30 +71,28 @@ public class DistinctAggregationOverWindowTest extends PlanTestBase {
                 "from t0;";
 
         String plan = getFragmentPlan(sql);
-        assertCContains(plan, "  10:HASH JOIN\n" +
+        assertCContains(plan, "  7:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BUCKET_SHUFFLE(S))\n" +
                 "  |  colocate: false, reason: \n" +
-                "  |  equal join conjunct: 1: v1 <=> 5: v1\n" +
-                "  |  equal join conjunct: 2: v2 <=> 6: v2\n" +
+                "  |  equal join conjunct: 1: v1 <=> 8: v1\n" +
+                "  |  equal join conjunct: 2: v2 <=> 9: v2\n" +
                 "  |  \n" +
-                "  |----9:AGGREGATE (update finalize)\n" +
-                "  |    |  output: count(7: v3)\n" +
-                "  |    |  group by: 5: v1, 6: v2\n" +
+                "  |----6:AGGREGATE (update finalize)\n" +
+                "  |    |  output: count(10: v3)\n" +
+                "  |    |  group by: 8: v1, 9: v2\n" +
                 "  |    |  \n" +
-                "  |    8:AGGREGATE (merge serialize)\n" +
-                "  |    |  group by: 5: v1, 6: v2, 7: v3\n" +
+                "  |    5:AGGREGATE (merge serialize)\n" +
+                "  |    |  group by: 8: v1, 9: v2, 10: v3\n" +
                 "  |    |  \n" +
-                "  |    7:EXCHANGE\n");
+                "  |    4:EXCHANGE\n" +
+                "  |    \n" +
+                "  1:EXCHANGE");
 
-        assertCContains(plan, "  MultiCastDataSinks\n" +
-                "  STREAM DATA SINK\n" +
-                "    EXCHANGE ID: 01\n" +
-                "    RANDOM\n" +
-                "  STREAM DATA SINK\n" +
-                "    EXCHANGE ID: 04\n" +
-                "    RANDOM\n" +
-                "\n" +
-                "  0:OlapScanNode\n" +
+        assertCContains(plan, "  3:AGGREGATE (update serialize)\n" +
+                "  |  STREAMING\n" +
+                "  |  group by: 8: v1, 9: v2, 10: v3\n" +
+                "  |  \n" +
+                "  2:OlapScanNode\n" +
                 "     TABLE: t0");
     }
 
@@ -109,7 +107,7 @@ public class DistinctAggregationOverWindowTest extends PlanTestBase {
                 "from t0";
 
         String plan = getFragmentPlan(sql);
-        assertCContains(plan, "  11:Project\n" +
+        assertCContains(plan, "  8:Project\n" +
                 "  |  <slot 1> : 1: v1\n" +
                 "  |  <slot 2> : 2: v2\n" +
                 "  |  <slot 3> : 3: v3\n" +
@@ -117,18 +115,20 @@ public class DistinctAggregationOverWindowTest extends PlanTestBase {
                 "  |  <slot 5> : 5: sum(distinct 3: v3)\n" +
                 "  |  <slot 6> : 6: avg(distinct 3: v3)\n" +
                 "  |  \n" +
-                "  10:HASH JOIN\n" +
+                "  7:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BUCKET_SHUFFLE(S))\n" +
                 "  |  colocate: false, reason: \n" +
-                "  |  equal join conjunct: 7: v1 <=> 1: v1\n" +
-                "  |  equal join conjunct: 8: v2 <=> 2: v2");
+                "  |  equal join conjunct: 10: v1 <=> 1: v1\n" +
+                "  |  equal join conjunct: 11: v2 <=> 2: v2");
 
-        assertCContains(plan, "  6:AGGREGATE (update finalize)\n" +
-                "  |  output: count(9: v3), sum(9: v3), avg(9: v3)\n" +
-                "  |  group by: 7: v1, 8: v2\n" +
+        assertCContains(plan, "  4:AGGREGATE (update finalize)\n" +
+                "  |  output: count(12: v3), sum(12: v3), avg(12: v3)\n" +
+                "  |  group by: 10: v1, 11: v2\n" +
                 "  |  \n" +
-                "  5:AGGREGATE (merge serialize)\n" +
-                "  |  group by: 7: v1, 8: v2, 9: v3");
+                "  3:AGGREGATE (merge serialize)\n" +
+                "  |  group by: 10: v1, 11: v2, 12: v3\n" +
+                "  |  \n" +
+                "  2:EXCHANGE");
     }
 
     @Test
@@ -144,39 +144,22 @@ public class DistinctAggregationOverWindowTest extends PlanTestBase {
                 "rank() over(partition by v1, v2) r\n" +
                 "from t0;";
         String plan = getFragmentPlan(sql);
-        assertCContains(plan, "  13:ANALYTIC\n" +
-                "  |  functions: [, rank(), ]\n" +
-                "  |  partition by: 1: v1, 2: v2\n" +
-                "  |  \n" +
-                "  12:SORT\n" +
-                "  |  order by: <slot 1> 1: v1 ASC, <slot 2> 2: v2 ASC\n" +
-                "  |  analytic partition by: 1: v1, 2: v2\n" +
-                "  |  offset: 0\n" +
-                "  |  \n" +
-                "  11:Project\n" +
+        assertCContains(plan, "  3:Project\n" +
                 "  |  <slot 1> : 1: v1\n" +
                 "  |  <slot 2> : 2: v2\n" +
                 "  |  <slot 3> : 3: v3\n" +
-                "  |  <slot 4> : 4: count(distinct 3: v3)\n" +
-                "  |  <slot 5> : 5: sum(distinct 3: v3)\n" +
-                "  |  <slot 6> : 6: avg(distinct 3: v3)\n" +
+                "  |  <slot 4> : 11: fused_multi_distinct_count_sum_avg.count[false]\n" +
+                "  |  <slot 5> : 11: fused_multi_distinct_count_sum_avg.sum[false]\n" +
+                "  |  <slot 6> : 11: fused_multi_distinct_count_sum_avg.avg[false]\n" +
                 "  |  <slot 7> : 7: count(3: v3)\n" +
                 "  |  <slot 8> : 8: sum(3: v3)\n" +
                 "  |  <slot 9> : 9: avg(3: v3)\n" +
+                "  |  <slot 10> : 10: rank()\n" +
                 "  |  \n" +
-                "  10:HASH JOIN\n" +
-                "  |  join op: INNER JOIN (BUCKET_SHUFFLE(S))\n" +
-                "  |  colocate: false, reason: \n" +
-                "  |  equal join conjunct: 11: v1 <=> 1: v1\n" +
-                "  |  equal join conjunct: 12: v2 <=> 2: v2");
-        assertCContains(plan, "  6:AGGREGATE (update finalize)\n" +
-                "  |  output: count(13: v3), sum(13: v3), avg(13: v3), count(7: count(3: v3)), " +
-                "sum(8: sum(3: v3)), avg(9: avg(3: v3))\n" +
-                "  |  group by: 11: v1, 12: v2\n" +
-                "  |  \n" +
-                "  5:AGGREGATE (merge serialize)\n" +
-                "  |  output: count(7: count(3: v3)), sum(8: sum(3: v3)), avg(9: avg(3: v3))\n" +
-                "  |  group by: 11: v1, 12: v2, 13: v3");
+                "  2:ANALYTIC\n" +
+                "  |  functions: [, count(3: v3), ], [, sum(3: v3), ], [, avg(3: v3), ], [, rank(), ], " +
+                "[, fused_multi_distinct_count_sum_avg(3: v3), ]\n" +
+                "  |  partition by: 1: v1, 2: v2\n");
     }
 
     @Test
@@ -193,36 +176,32 @@ public class DistinctAggregationOverWindowTest extends PlanTestBase {
                 "from t0;";
         String plan = getFragmentPlan(sql);
         long numJoins = Arrays.stream(plan.split("\n")).filter(ln -> ln.contains("HASH JOIN")).count();
-        Assertions.assertEquals(3, numJoins);
+        Assertions.assertEquals(2, numJoins);
         long numAnalytics = Arrays.stream(plan.split("\n")).filter(ln -> ln.contains("ANALYTIC")).count();
         Assertions.assertEquals(1, numAnalytics);
 
-        assertCContains(plan, "  34:HASH JOIN\n" +
+        assertCContains(plan, "  24:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BROADCAST)\n" +
                 "  |  colocate: false, reason: \n" +
-                "  |  equal join conjunct: 3: v3 <=> 22: v3\n" +
-                "  |  equal join conjunct: 2: v2 <=> 21: v2");
+                "  |  equal join conjunct: 3: v3 <=> 56: v3\n" +
+                "  |  equal join conjunct: 2: v2 <=> 55: v2");
 
-        assertCContains(plan, "  23:HASH JOIN\n" +
+        assertCContains(plan, "  13:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BUCKET_SHUFFLE(S))\n" +
                 "  |  colocate: false, reason: \n" +
-                "  |  equal join conjunct: 1: v1 <=> 14: v1\n" +
-                "  |  equal join conjunct: 3: v3 <=> 16: v3\n" +
+                "  |  equal join conjunct: 33: v1 <=> 39: v1\n" +
+                "  |  equal join conjunct: 35: v3 <=> 41: v3");
+        assertCContains(plan, "  3:Project\n" +
+                "  |  <slot 26> : 26: v1\n" +
+                "  |  <slot 27> : 27: v2\n" +
+                "  |  <slot 28> : 28: v3\n" +
+                "  |  <slot 30> : 30: avg(3: v3)\n" +
+                "  |  <slot 31> : 31: rank()\n" +
+                "  |  <slot 32> : 29: fused_multi_distinct_count.count[false]\n" +
                 "  |  \n" +
-                "  |----22:AGGREGATE (update finalize)\n" +
-                "  |    |  output: sum(15: v2), sum(8: sum(2: v2))\n" +
-                "  |    |  group by: 14: v1, 16: v3");
-        assertCContains(plan, "  10:HASH JOIN\n" +
-                "  |  join op: INNER JOIN (BUCKET_SHUFFLE(S))\n" +
-                "  |  colocate: false, reason: \n" +
-                "  |  equal join conjunct: 11: v1 <=> 1: v1\n" +
-                "  |  equal join conjunct: 12: v2 <=> 2: v2\n" +
-                "  |  \n" +
-                "  |----9:EXCHANGE\n" +
-                "  |    \n" +
-                "  6:AGGREGATE (update finalize)\n" +
-                "  |  output: count(13: v3), avg(5: avg(3: v3))\n" +
-                "  |  group by: 11: v1, 12: v2");
+                "  2:ANALYTIC\n" +
+                "  |  functions: [, fused_multi_distinct_count(28: v3), ], [, avg(28: v3), ], [, rank(), ]\n" +
+                "  |  partition by: 26: v1, 27: v2");
     }
 
     @Test
@@ -234,14 +213,18 @@ public class DistinctAggregationOverWindowTest extends PlanTestBase {
                 "from t0;";
 
         String plan = getFragmentPlan(sql);
-        assertCContains(plan, "  12:NESTLOOP JOIN\n" +
-                "  |  join op: CROSS JOIN");
-        assertCContains(plan, "  8:AGGREGATE (update serialize)\n" +
-                "  |  output: count(7: v3)\n" +
+        assertCContains(plan, "  9:NESTLOOP JOIN\n" +
+                "  |  join op: CROSS JOIN\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  \n" +
+                "  |----8:EXCHANGE\n" +
+                "  |    \n" +
+                "  0:OlapScanNod");
+        assertCContains(plan, "  7:AGGREGATE (merge finalize)\n" +
+                "  |  output: count(4: count(distinct 3: v3))\n" +
                 "  |  group by: \n" +
                 "  |  \n" +
-                "  7:AGGREGATE (merge serialize)\n" +
-                "  |  group by: 7: v3");
+                "  6:EXCHANGE");
     }
 
     @Test
@@ -255,9 +238,9 @@ public class DistinctAggregationOverWindowTest extends PlanTestBase {
                 "from t0";
 
         String plan = getFragmentPlan(sql);
-        assertCContains(plan, "  12:NESTLOOP JOIN\n" +
+        assertCContains(plan, "  9:NESTLOOP JOIN\n" +
                 "  |  join op: CROSS JOIN");
-        assertCContains(plan, "  10:AGGREGATE (merge finalize)\n" +
+        assertCContains(plan, "  7:AGGREGATE (merge finalize)\n" +
                 "  |  output: count(4: count(distinct 3: v3)), " +
                 "sum(5: sum(distinct 3: v3)), " +
                 "avg(6: avg(distinct 3: v3))\n" +
@@ -277,19 +260,23 @@ public class DistinctAggregationOverWindowTest extends PlanTestBase {
                 "rank() over() r \n" +
                 "from t0";
         String plan = getFragmentPlan(sql);
-        assertCContains(plan, "  13:ANALYTIC\n" +
-                "  |  functions: [, rank(), ]\n" +
+        assertCContains(plan, "  3:Project\n" +
+                "  |  <slot 1> : 1: v1\n" +
+                "  |  <slot 2> : 2: v2\n" +
+                "  |  <slot 3> : 3: v3\n" +
+                "  |  <slot 4> : 11: fused_multi_distinct_count_sum_avg.count[false]\n" +
+                "  |  <slot 5> : 11: fused_multi_distinct_count_sum_avg.sum[false]\n" +
+                "  |  <slot 6> : 11: fused_multi_distinct_count_sum_avg.avg[false]\n" +
+                "  |  <slot 7> : 7: count(3: v3)\n" +
+                "  |  <slot 8> : 8: sum(3: v3)\n" +
+                "  |  <slot 9> : 9: avg(3: v3)\n" +
+                "  |  <slot 10> : 10: rank()\n" +
                 "  |  \n" +
-                "  12:NESTLOOP JOIN\n" +
-                "  |  join op: CROSS JOIN\n" +
-                "  |  colocate: false, reason: \n" +
+                "  2:ANALYTIC\n" +
+                "  |  functions: [, count(3: v3), ], [, sum(3: v3), ], [, avg(3: v3), ], [, rank(), ], " +
+                "[, fused_multi_distinct_count_sum_avg(3: v3), ]\n" +
                 "  |  \n" +
-                "  |----11:EXCHANGE\n" +
-                "  |    \n" +
-                "  8:AGGREGATE (merge finalize)\n" +
-                "  |  output: count(4: count(distinct 3: v3)), sum(5: sum(distinct 3: v3)), " +
-                "avg(6: avg(distinct 3: v3)), count(7: count(3: v3)), sum(8: sum(3: v3)), avg(9: avg(3: v3))\n" +
-                "  |  group by: \n");
+                "  1:EXCHANGE");
     }
 
     @Test
@@ -300,22 +287,22 @@ public class DistinctAggregationOverWindowTest extends PlanTestBase {
                 "order by cnt\n" +
                 "limit 10;";
         String plan = getFragmentPlan(sql);
-        assertCContains(plan, "  12:TOP-N\n" +
+        assertCContains(plan, "  9:TOP-N\n" +
                 "  |  order by: <slot 4> 4: count(distinct 3: v3) ASC\n" +
                 "  |  offset: 0\n" +
                 "  |  limit: 10\n" +
                 "  |  \n" +
-                "  11:Project\n" +
+                "  8:Project\n" +
                 "  |  <slot 1> : 1: v1\n" +
                 "  |  <slot 2> : 2: v2\n" +
                 "  |  <slot 3> : 3: v3\n" +
                 "  |  <slot 4> : 4: count(distinct 3: v3)\n" +
                 "  |  \n" +
-                "  10:HASH JOIN\n" +
+                "  7:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BUCKET_SHUFFLE(S))\n" +
                 "  |  colocate: false, reason: \n" +
-                "  |  equal join conjunct: 1: v1 <=> 5: v1\n" +
-                "  |  equal join conjunct: 2: v2 <=> 6: v2");
+                "  |  equal join conjunct: 1: v1 <=> 8: v1\n" +
+                "  |  equal join conjunct: 2: v2 <=> 9: v2\n");
     }
 
     @Test
@@ -329,11 +316,11 @@ public class DistinctAggregationOverWindowTest extends PlanTestBase {
                 "avg(distinct v3) over(partition by v1,v2) avg\n" +
                 "from t0) as t;";
         String plan = getFragmentPlan(sql);
-        assertCContains(plan, "  12:AGGREGATE (update serialize)\n" +
+        assertCContains(plan, "  9:AGGREGATE (update serialize)\n" +
                 "  |  output: sum(7: expr)\n" +
                 "  |  group by: \n" +
                 "  |  \n" +
-                "  11:Project\n" +
+                "  8:Project\n" +
                 "  |  <slot 7> : CAST(murmur_hash3_32(CAST(ifnull(1: v1, 0) AS VARCHAR)) AS BIGINT) + " +
                 "CAST(murmur_hash3_32(CAST(ifnull(2: v2, 0) AS VARCHAR)) AS BIGINT) + " +
                 "CAST(murmur_hash3_32(CAST(ifnull(3: v3, 0) AS VARCHAR)) AS BIGINT) + " +
@@ -341,11 +328,11 @@ public class DistinctAggregationOverWindowTest extends PlanTestBase {
                 "CAST(murmur_hash3_32(CAST(ifnull(5: sum(distinct 3: v3), 0) AS VARCHAR)) AS BIGINT) + " +
                 "CAST(murmur_hash3_32(CAST(ifnull(6: avg(distinct 3: v3), 0.0) AS VARCHAR)) AS BIGINT)\n" +
                 "  |  \n" +
-                "  10:HASH JOIN\n" +
+                "  7:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BUCKET_SHUFFLE(S))\n" +
                 "  |  colocate: false, reason: \n" +
-                "  |  equal join conjunct: 9: v1 <=> 1: v1\n" +
-                "  |  equal join conjunct: 10: v2 <=> 2: v2");
+                "  |  equal join conjunct: 12: v1 <=> 1: v1\n" +
+                "  |  equal join conjunct: 13: v2 <=> 2: v2");
     }
 
     @Test
