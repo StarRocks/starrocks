@@ -80,7 +80,7 @@ public class StatisticsMetaManager extends FrontendDaemon {
     private static final Logger LOG = LogManager.getLogger(StatisticsMetaManager.class);
 
     public StatisticsMetaManager() {
-        super("statistics-meta-manager", Config.statistic_manager_run_interval_sec * 1000L);
+        super("statistics-meta-manager", Config.statistic_manager_sleep_time_sec * 1000L);
     }
 
     private boolean checkDatabaseExist() {
