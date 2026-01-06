@@ -34,8 +34,8 @@ public class CreateReplicatedTableJobTest {
 
         new MockUp<ThreadPoolExecutor>() {
             @Mock
-            public void execute(FailoverGroupJob job) {
-                job.execute();
+            public void execute(Runnable command) {
+                command.run();
             }
         };
     }

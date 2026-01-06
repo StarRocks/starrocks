@@ -2,7 +2,11 @@
 
 package com.starrocks.epack.failover.job;
 
+import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.common.io.DeepCopy;
 import com.starrocks.epack.failover.FailoverGroup;
 import com.starrocks.epack.failover.ReplicatedObjectMeta;
 import com.starrocks.epack.failover.ReplicatedObjectMeta.TableMeta;
@@ -41,8 +45,8 @@ public class CheckReplicatedTableJobTest {
 
         new MockUp<ThreadPoolExecutor>() {
             @Mock
-            public void execute(FailoverGroupJob job) {
-                job.execute();
+            public void execute(Runnable command) {
+                command.run();
             }
         };
     }
@@ -66,6 +70,100 @@ public class CheckReplicatedTableJobTest {
                 (OlapTable) tableMeta.getTable(), tableMeta.getDatabase(), true);
         job.execute();
 
+        Assert.assertTrue(!failoverGroup.getJobExecutor().hasFailedJobs());
+    }
+
+    @Test
+    public void testSkipDefaultPhysicalPartitionById() throws Exception {
+        String sql = "create table testSkipDefaultPhysicalPartitionById (key1 int not null)\n" +
+                "partition by range(key1)(\n" +
+                "partition p1 values [(\"1\"), (\"2\")))\n" +
+                "distributed by hash(key1) buckets 1\n" +
+                "properties('replication_num' = '1'); ";
+        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql,
+                AnalyzeTestUtil.getConnectContext());
+        Assert.assertTrue(GlobalStateMgr.getCurrentState().getLocalMetastore().createTable(createTableStmt));
+
+        CreatePrimaryFailoverGroupStmt stmt = (CreatePrimaryFailoverGroupStmt) analyzeSuccess(
+                "CREATE FAILOVER GROUP testSkipDefaultPhysicalPartitionByIdGroup " +
+                        "INCLUDE_TABLES = test.testSkipDefaultPhysicalPartitionById " +
+                        "MEMBERS = " +
+                        "'az1:SELF'," +
+                        "'az2:192.168.0.1:9090'" +
+                        "SCHEDULE = '1h'");
+
+        FailoverGroup failoverGroup = new FailoverGroup(1, stmt);
+        ReplicatedObjectMeta objectMeta = failoverGroup.getIncludeMgr().toObjectMeta("test_token");
+        TableMeta tableMeta = objectMeta.getTableMetas().values().iterator().next();
+
+        OlapTable localTable = (OlapTable) tableMeta.getTable();
+        OlapTable remoteTable = DeepCopy.copyWithGson(localTable, OlapTable.class);
+        Partition remotePartition = remoteTable.getPartition("p1");
+        PhysicalPartition remoteDefaultPartition = remotePartition.getDefaultPhysicalPartition();
+
+        remotePartition.removeSubPartition(remoteDefaultPartition.getId());
+        remoteTable.removePhysicalPartition(remoteDefaultPartition);
+        remoteDefaultPartition.setName(remoteDefaultPartition.getName() + "_remote");
+        remotePartition.addSubPartition(remoteDefaultPartition);
+        remoteTable.addPhysicalPartition(remoteDefaultPartition);
+
+        Partition localPartition = localTable.getPartition("p1");
+        int localPhysicalPartitionCount = localPartition.getSubPartitions().size();
+
+        CheckReplicatedTableJob job = new CheckReplicatedTableJob(failoverGroup, tableMeta.getDatabase(),
+                remoteTable, tableMeta.getDatabase(), true);
+        job.execute();
+
+        Assert.assertEquals(localPhysicalPartitionCount, localPartition.getSubPartitions().size());
+        Assert.assertTrue(!failoverGroup.getJobExecutor().hasFailedJobs());
+    }
+
+    @Test
+    public void testCreatePhysicalPartitionWithSuffix() throws Exception {
+        String sql = "create table testCreatePhysicalPartitionWithSuffix (key1 int not null)\n" +
+                "partition by range(key1)(\n" +
+                "partition p1 values [(\"1\"), (\"2\")))\n" +
+                "distributed by random\n" +
+                "properties('replication_num' = '1'); ";
+        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql,
+                AnalyzeTestUtil.getConnectContext());
+        Assert.assertTrue(GlobalStateMgr.getCurrentState().getLocalMetastore().createTable(createTableStmt));
+
+        CreatePrimaryFailoverGroupStmt stmt = (CreatePrimaryFailoverGroupStmt) analyzeSuccess(
+                "CREATE FAILOVER GROUP testCreatePhysicalPartitionWithSuffixGroup " +
+                        "INCLUDE_TABLES = test.testCreatePhysicalPartitionWithSuffix " +
+                        "MEMBERS = " +
+                        "'az1:SELF'," +
+                        "'az2:192.168.0.1:9090'" +
+                        "SCHEDULE = '1h'");
+
+        FailoverGroup failoverGroup = new FailoverGroup(2, stmt);
+        ReplicatedObjectMeta objectMeta = failoverGroup.getIncludeMgr().toObjectMeta("test_token");
+        TableMeta tableMeta = objectMeta.getTableMetas().values().iterator().next();
+
+        OlapTable localTable = (OlapTable) tableMeta.getTable();
+        OlapTable remoteTable = DeepCopy.copyWithGson(localTable, OlapTable.class);
+        Partition remotePartition = remoteTable.getPartition("p1");
+        long newPhysicalPartitionId = GlobalStateMgr.getCurrentState().getNextId();
+        MaterializedIndex baseIndexCopy = DeepCopy.copyWithGson(
+                remotePartition.getDefaultPhysicalPartition().getBaseIndex(), MaterializedIndex.class);
+        PhysicalPartition extraPartition = new PhysicalPartition(newPhysicalPartitionId,
+                remotePartition.generatePhysicalPartitionName(newPhysicalPartitionId),
+                remotePartition.getId(), baseIndexCopy);
+        extraPartition.setBucketNum(remotePartition.getDistributionInfo().getBucketNum());
+        remotePartition.addSubPartition(extraPartition);
+        remoteTable.addPhysicalPartition(extraPartition);
+
+        CheckReplicatedTableJob job = new CheckReplicatedTableJob(failoverGroup, tableMeta.getDatabase(),
+                remoteTable, tableMeta.getDatabase(), true);
+        Partition localPartition = localTable.getPartition("p1");
+        int initialCount = localPartition.getSubPartitions().size();
+        job.execute();
+
+        Assert.assertEquals(initialCount + 1, localPartition.getSubPartitions().size());
+
+        job.execute();
+        Assert.assertEquals(initialCount + 1, localPartition.getSubPartitions().size());
         Assert.assertTrue(!failoverGroup.getJobExecutor().hasFailedJobs());
     }
 }

@@ -186,29 +186,46 @@ public class CheckReplicatedTableJob extends FailoverGroupJob {
             return null;
         }
 
-        for (PhysicalPartition remotePhysicalPartition : remotePartition.getSubPartitions()) {
-            PhysicalPartition locaPhysicalPartition = checkPhysicalPartition(localTable, localPartition,
-                    remotePhysicalPartition);
-            if (locaPhysicalPartition == null) {
-                return null;
-            }
+        if (!checkPhysicalPartitions(localTable, localPartition, remotePartition)) {
+            return null;
         }
 
         return localPartition;
     }
 
-    private PhysicalPartition checkPhysicalPartition(OlapTable localTable, Partition localPartition,
-            PhysicalPartition remotePhysicalPartition) {
-        PhysicalPartition localPhysicalPartition = localPartition.getSubPartition(remotePhysicalPartition.getName());
-        if (localPhysicalPartition == null) {
-            CreateReplicatedPhysicalPartitionJob job = new CreateReplicatedPhysicalPartitionJob(failoverGroup,
-                    remoteDatabase, remoteTable, remotePhysicalPartition, localDatabase, localTable,
-                    localPartition, isIncludeObject);
-            job.start();
-            return null;
-        }
+    private boolean checkPhysicalPartitions(OlapTable localTable, Partition localPartition,
+            Partition remotePartition) {
+        List<PhysicalPartition> remotePhysicalPartitions = getOrderedPhysicalPartitions(remotePartition);
+        List<PhysicalPartition> localPhysicalPartitions = getOrderedPhysicalPartitions(localPartition);
+        for (int i = 0; i < remotePhysicalPartitions.size(); i++) {
+            PhysicalPartition remotePhysicalPartition = remotePhysicalPartitions.get(i);
+            if (i >= localPhysicalPartitions.size()) {
+                CreateReplicatedPhysicalPartitionJob job = new CreateReplicatedPhysicalPartitionJob(failoverGroup,
+                        remoteDatabase, remoteTable, remotePhysicalPartition, localDatabase, localTable,
+                        localPartition, isIncludeObject);
+                job.start();
+                return false;
+            }
 
-        return localPhysicalPartition;
+            PhysicalPartition localPhysicalPartition = localPhysicalPartitions.get(i);
+            if (!checkPhysicalPartition(localTable, localPartition, remotePhysicalPartition, localPhysicalPartition)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private boolean checkPhysicalPartition(OlapTable localTable, Partition localPartition,
+            PhysicalPartition remotePhysicalPartition, PhysicalPartition localPhysicalPartition) {
+        // Do not support rollup index now, so only check base index
+        return remotePhysicalPartition.getBaseIndex().getTablets().size() == localPhysicalPartition.getBaseIndex()
+                .getTablets().size();
+    }
+
+    private List<PhysicalPartition> getOrderedPhysicalPartitions(Partition partition) {
+        return partition.getSubPartitions().stream()
+                .sorted((left, right) -> Long.compare(left.getId(), right.getId()))
+                .collect(java.util.stream.Collectors.toList());
     }
 
     private boolean checkTableConsistency(OlapTable localTable) {
