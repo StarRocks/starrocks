@@ -59,6 +59,7 @@ import org.apache.logging.log4j.Logger;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -715,6 +716,21 @@ public class StarOSAgent {
         try {
             ShardInfo shardInfo = getShardInfo(shardId, workerGroupId);
             return getAllNodeIdsByShard(shardInfo);
+        } catch (StarClientException e) {
+            throw new StarRocksException(e);
+        }
+    }
+
+    public Map<Long, List<Long>> getAllNodeIdsByShards(List<Long> shardIds, long workerGroupId)
+            throws StarRocksException {
+        try {
+            List<ShardInfo> shardInfos = getShardInfo(shardIds, workerGroupId);
+            Map<Long, List<Long>> result = new HashMap<>();
+            for (ShardInfo shardInfo : shardInfos) {
+                List<Long> nodeIds = getAllNodeIdsByShard(shardInfo);
+                result.put(shardInfo.getShardId(), nodeIds);
+            }
+            return result;
         } catch (StarClientException e) {
             throw new StarRocksException(e);
         }
