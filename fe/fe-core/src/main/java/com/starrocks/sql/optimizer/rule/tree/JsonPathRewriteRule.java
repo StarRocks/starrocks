@@ -463,9 +463,9 @@ public class JsonPathRewriteRule extends TransformationRule {
                     "ColumnRefOperator %s must be attached to a table when creating column access expression",
                     jsonColumn);
 
-            // Build full path: columnName.field1.field2
+            // Build full path: columnId.field1.field2
             List<String> fullPath = Lists.newArrayList();
-            fullPath.add(tableAndColumn.second.getName());
+            fullPath.add(tableAndColumn.second.getColumnId().getId());
             fullPath.addAll(fields);
 
             ColumnAccessPath accessPath = ColumnAccessPath.createLinearPath(fullPath, resultType);
