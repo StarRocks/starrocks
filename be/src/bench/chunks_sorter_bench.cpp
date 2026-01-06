@@ -219,9 +219,8 @@ static void do_bench(benchmark::State& state, SortAlgorithm sorter_algo, Logical
         sort_exprs.push_back(sort_expr);
         asc_arr.push_back(true);
         null_first.push_back(true);
-        map[i] = i;
     }
-    auto chunk = std::make_shared<Chunk>(columns, map);
+    auto chunk = std::make_shared<Chunk>(columns, Chunk::SlotHashMap{});
 
     RuntimeState* runtime_state = suite._runtime_state.get();
     int64_t item_processed = 0;
@@ -334,9 +333,8 @@ static void do_heap_merge(benchmark::State& state, int num_runs, bool use_merger
 
         asc_arr.push_back(true);
         null_first.push_back(true);
-        map[i] = i;
     }
-    ChunkPtr base_chunk = std::make_shared<Chunk>(columns, map);
+    ChunkPtr base_chunk = std::make_shared<Chunk>(columns, Chunk::SlotHashMap{});
 
     int64_t num_rows = 0;
     for (auto _ : state) {
@@ -418,10 +416,9 @@ static void do_merge_columnwise(benchmark::State& state, int num_runs, bool null
         sort_exprs.push_back(sort_expr);
         asc_arr.push_back(true);
         null_first.push_back(true);
-        map[i] = i;
     }
-    ChunkPtr chunk1 = std::make_shared<Chunk>(columns, map);
-    ChunkPtr chunk2 = std::make_shared<Chunk>(columns, map);
+    ChunkPtr chunk1 = std::make_shared<Chunk>(columns, Chunk::SlotHashMap{});
+    ChunkPtr chunk2 = std::make_shared<Chunk>(columns, Chunk::SlotHashMap{});
 
     int64_t num_rows = 0;
     SortDescs sort_desc(std::vector<int>{1, 1, 1}, std::vector<int>{-1, -1, -1});
@@ -468,9 +465,8 @@ static void do_bench_materialize(benchmark::State& state, LogicalType data_type,
     for (int i = 0; i < num_columns; i++) {
         auto [column, expr] = suite.build_column(type_desc, i, false, nullable);
         columns.push_back(column);
-        map[i] = i;
     }
-    auto template_chunk = std::make_shared<Chunk>(columns, map);
+    auto template_chunk = std::make_shared<Chunk>(columns, Chunk::SlotHashMap{});
 
     std::vector<ChunkPtr> chunks;
     std::vector<PermutationItem> perm;
