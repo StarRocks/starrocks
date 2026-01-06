@@ -355,7 +355,7 @@ public class InformationSchemaDataSource {
             public String dbName;
             public long dbId;
             public Table table;
-        };
+        }
         long startTableIdOffset = request.isSetStart_table_id_offset() ? request.getStart_table_id_offset() : 0;
         TreeSet<Element> sortedElements = new TreeSet<>(Comparator.comparing(Element::getTableId));
         for (String dbName : result.authorizedDbs) {
@@ -515,6 +515,16 @@ public class InformationSchemaDataSource {
         context.setCurrentUserIdentity(result.currentUser);
         context.setCurrentRoleIds(result.currentUser);
 
+        PatternMatcher matcher = null;
+        boolean caseSensitive = CaseSensibility.DATABASE.getCaseSensibility();
+        if (request.isSetTable_name()) {
+            try {
+                matcher = PatternMatcher.createMysqlPattern(request.getTable_name(), caseSensitive);
+            } catch (SemanticException e) {
+                throw new TException("Pattern is in bad format: " + request.getTable_name());
+            }
+        }
+
         String catalogName = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
         if (authInfo.isSetCatalog_name()) {
             catalogName = authInfo.getCatalog_name();
@@ -531,10 +541,9 @@ public class InformationSchemaDataSource {
             List<BasicTable> tables = new ArrayList<>();
             List<String> tableNames = metadataMgr.listTableNames(context, catalogName, dbName);
             for (String tableName : tableNames) {
-                if (request.isSetTable_name()) {
-                    if (!tableName.equals(request.getTable_name())) {
-                        continue;
-                    }
+                if (request.isSetTable_name() &&
+                        !PatternMatcher.matchPattern(request.getTable_name(), tableName, matcher, caseSensitive)) {
+                    continue;
                 }
 
                 BasicTable table = null;
@@ -748,7 +757,6 @@ public class InformationSchemaDataSource {
         response.setTables_infos(tableInfos);
         return response;
     }
-
 
     public static TTableInfo genNormalTableInfo(BasicTable table, TTableInfo info) {
 
