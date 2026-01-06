@@ -392,7 +392,7 @@ public class EditLog {
                 }
                 case OperationType.OP_BATCH_DROP_ROLLUP: {
                     BatchDropInfo batchDropInfo = (BatchDropInfo) journal.data();
-                    for (long indexId : batchDropInfo.getIndexIdSet()) {
+                    for (long indexId : batchDropInfo.getIndexMetaIdSet()) {
                         globalStateMgr.getRollupHandler().replayDropRollup(
                                 new DropInfo(batchDropInfo.getDbId(), batchDropInfo.getTableId(), indexId, false),
                                 globalStateMgr);

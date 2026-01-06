@@ -44,14 +44,16 @@ public class OlapTableRollupJobBuilder extends AlterJobV2Builder {
 
     @Override
     public AlterJobV2 build() throws StarRocksException {
-        int baseSchemaHash = olapTable.getSchemaHashByIndexMetaId(baseIndexId);
+        int baseSchemaHash = olapTable.getSchemaHashByIndexMetaId(baseIndexMetaId);
         // mvSchemaVersion will keep same with the src MaterializedIndex
-        int mvSchemaVersion = olapTable.getIndexMetaByIndexId(baseIndexId).getSchemaVersion();
+        int mvSchemaVersion = olapTable.getIndexMetaByMetaId(baseIndexMetaId).getSchemaVersion();
         int mvSchemaHash = Util.schemaHash(0 /* init schema version */, rollupColumns, olapTable.getBfColumnNames(),
                 olapTable.getBfFpp());
+        // initially, index id and index meta id are the same
+        long rollupIndexId = rollupIndexMetaId;
 
         AlterJobV2 mvJob = new RollupJobV2(jobId, dbId, olapTable.getId(), olapTable.getName(), timeoutMs,
-                baseIndexId, rollupIndexId, baseIndexName, rollupIndexName, mvSchemaVersion,
+                baseIndexMetaId, rollupIndexMetaId, baseIndexName, rollupIndexName, mvSchemaVersion,
                 rollupColumns, whereClause, baseSchemaHash, mvSchemaHash,
                 rollupKeysType, rollupShortKeyColumnCount, origStmt, viewDefineSql, isColocateMVIndex);
 
@@ -66,9 +68,8 @@ public class OlapTableRollupJobBuilder extends AlterJobV2Builder {
                 long physicalPartitionId = physicalPartition.getId();
                 // index state is SHADOW
                 MaterializedIndex mvIndex = new MaterializedIndex(rollupIndexId, MaterializedIndex.IndexState.SHADOW);
-                MaterializedIndex baseIndex = physicalPartition.getIndex(baseIndexId);
-                TabletMeta mvTabletMeta = new TabletMeta(dbId, olapTable.getId(),
-                        physicalPartitionId, rollupIndexId, medium);
+                MaterializedIndex baseIndex = physicalPartition.getIndex(baseIndexMetaId);
+                TabletMeta mvTabletMeta = new TabletMeta(dbId, olapTable.getId(), physicalPartitionId, rollupIndexId, medium);
                 for (Tablet baseTablet : baseIndex.getTablets()) {
                     long baseTabletId = baseTablet.getId();
                     long mvTabletId = globalStateMgr.getNextId();
@@ -126,7 +127,7 @@ public class OlapTableRollupJobBuilder extends AlterJobV2Builder {
                 mvJob.addMVIndex(physicalPartitionId, mvIndex);
 
                 LOG.debug("create materialized view index {} based on index {} in partition {}:{}",
-                        rollupIndexId, baseIndexId, partitionId, physicalPartitionId);
+                        rollupIndexMetaId, baseIndexMetaId, partitionId, physicalPartitionId);
             }
         } // end for partitions
         return mvJob;

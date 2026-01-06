@@ -842,7 +842,7 @@ public class TabletScheduler extends FrontendDaemon {
             tabletCtx.setTabletKeysType(tbl.getKeysType());
             tabletCtx.setVersionInfo(physicalPartition.getVisibleVersion(), physicalPartition.getCommittedVersion(),
                     physicalPartition.getVisibleTxnId(), physicalPartition.getVisibleVersionTime());
-            tabletCtx.setSchemaHash(tbl.getSchemaHashByIndexMetaId(idx.getId()));
+            tabletCtx.setSchemaHash(tbl.getSchemaHashByIndexMetaId(idx.getMetaId()));
             tabletCtx.setStorageMedium(dataProperty.getStorageMedium());
             if (!Objects.equals(oldStatus, statusPair.first)) {
                 LOG.info("change TabletSchedCtx status from {} to {}, partition visible version: {}," +

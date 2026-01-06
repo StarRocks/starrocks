@@ -236,7 +236,7 @@ public class TabletTaskExecutor {
         boolean isCloudNativeTable = table.isCloudNativeTableOrMaterializedView();
         boolean createSchemaFile = true;
         List<CreateReplicaTask> tasks = new ArrayList<>((int) index.getReplicaCount());
-        MaterializedIndexMeta indexMeta = table.getIndexMetaByIndexId(index.getId());
+        MaterializedIndexMeta indexMeta = table.getIndexMetaByMetaId(index.getMetaId());
         TTabletType tabletType = isCloudNativeTable ? TTabletType.TABLET_TYPE_LAKE : TTabletType.TABLET_TYPE_DISK;
         TStorageMedium storageMedium =
                 table.getPartitionInfo().getDataProperty(physicalPartition.getParentId()).getStorageMedium();
@@ -456,8 +456,7 @@ public class TabletTaskExecutor {
                 List<MaterializedIndex> allIndices = physicalPartition
                         .getMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
                 for (MaterializedIndex materializedIndex : allIndices) {
-                    long indexId = materializedIndex.getId();
-                    int schemaHash = olapTable.getSchemaHashByIndexMetaId(indexId);
+                    int schemaHash = olapTable.getSchemaHashByIndexMetaId(materializedIndex.getMetaId());
                     for (Tablet tablet : materializedIndex.getTablets()) {
                         long tabletId = tablet.getId();
                         List<Replica> replicas = ((LocalTablet) tablet).getImmutableReplicas();

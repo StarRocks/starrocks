@@ -242,8 +242,8 @@ public class RestoreJobPrimaryKeyTest {
                     .getMaterializedIndices(IndexExtState.VISIBLE)) {
                 BackupIndexInfo idxInfo = new BackupIndexInfo();
                 idxInfo.id = index.getId();
-                idxInfo.name = expectedRestoreTbl.getIndexNameByMetaId(index.getId());
-                idxInfo.schemaHash = expectedRestoreTbl.getSchemaHashByIndexMetaId(index.getId());
+                idxInfo.name = expectedRestoreTbl.getIndexNameByMetaId(index.getMetaId());
+                idxInfo.schemaHash = expectedRestoreTbl.getSchemaHashByIndexMetaId(index.getMetaId());
                 partInfo.indexes.put(idxInfo.name, idxInfo);
 
                 for (Tablet tablet : index.getTablets()) {

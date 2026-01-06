@@ -48,7 +48,7 @@ public class LakeTableAlterJobV2Builder extends AlterJobV2Builder {
 
     @Override
     public AlterJobV2 build() throws StarRocksException {
-        if (newIndexSchema.isEmpty() && !hasIndexChanged) {
+        if (newIndexMetaIdToSchema.isEmpty() && !hasIndexChanged) {
             throw new DdlException("Nothing is changed. please check your alter stmt.");
         }
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
@@ -62,18 +62,20 @@ public class LakeTableAlterJobV2Builder extends AlterJobV2Builder {
         schemaChangeJob.setComputeResource(computeResource);
         schemaChangeJob.setSortKeyIdxes(sortKeyIdxes);
         schemaChangeJob.setSortKeyUniqueIds(sortKeyUniqueIds);
-        for (Map.Entry<Long, List<Column>> entry : newIndexSchema.entrySet()) {
-            long originIndexId = entry.getKey();
+        for (Map.Entry<Long, List<Column>> entry : newIndexMetaIdToSchema.entrySet()) {
+            long originIndexMetaId = entry.getKey();
             // 1. get new schema version/schema version hash, short key column count
-            String newIndexName = SchemaChangeHandler.SHADOW_NAME_PREFIX + table.getIndexNameByMetaId(originIndexId);
-            short newShortKeyColumnCount = newIndexShortKeyCount.get(originIndexId);
-            long shadowIndexId = globalStateMgr.getNextId();
+            String newIndexName = SchemaChangeHandler.SHADOW_NAME_PREFIX + table.getIndexNameByMetaId(originIndexMetaId);
+            short newShortKeyColumnCount = newIndexMetaIdToShortKeyCount.get(originIndexMetaId);
+            long shadowIndexMetaId = globalStateMgr.getNextId();
+            // initially, index id and index meta id are the same
+            long shadowIndexId = shadowIndexMetaId;
 
             // create SHADOW index for each physicalPartition
             for (PhysicalPartition physicalPartition : table.getPhysicalPartitions()) {
                 long partitionId = physicalPartition.getParentId();
                 long physicalPartitionId = physicalPartition.getId();
-                MaterializedIndex originIndex = physicalPartition.getIndex(originIndexId);
+                MaterializedIndex originIndex = physicalPartition.getIndex(originIndexMetaId);
                 long shardGroupId = originIndex.getShardGroupId();
 
                 List<Tablet> originTablets = originIndex.getTablets();
@@ -100,12 +102,12 @@ public class LakeTableAlterJobV2Builder extends AlterJobV2Builder {
                     Tablet shadowTablet = new LakeTablet(shadowTabletIds.get(i));
                     shadowIndex.addTablet(shadowTablet, shadowTabletMeta);
                     schemaChangeJob
-                            .addTabletIdMap(physicalPartitionId, shadowIndexId, shadowTablet.getId(), originTablet.getId());
+                            .addTabletIdMap(physicalPartitionId, shadowIndexMetaId, shadowTablet.getId(), originTablet.getId());
                 }
 
-                schemaChangeJob.addPartitionShadowIndex(physicalPartitionId, shadowIndexId, shadowIndex);
+                schemaChangeJob.addPartitionShadowIndex(physicalPartitionId, shadowIndexMetaId, shadowIndex);
             } // end for physicalPartition
-            schemaChangeJob.addIndexSchema(shadowIndexId, originIndexId, newIndexName, newShortKeyColumnCount,
+            schemaChangeJob.addIndexSchema(shadowIndexMetaId, originIndexMetaId, newIndexName, newShortKeyColumnCount,
                     entry.getValue());
         } // end for index
         return schemaChangeJob;
