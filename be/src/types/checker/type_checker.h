@@ -81,8 +81,8 @@ public:
 class ConfigurableTypeChecker : public TypeChecker {
 public:
     struct TypeRule {
-        LogicalType allowed_type;    // Input type that's allowed
-        LogicalType return_type;      // What to return when this type is matched
+        LogicalType allowed_type; // Input type that's allowed
+        LogicalType return_type;  // What to return when this type is matched
     };
 
     ConfigurableTypeChecker(const std::string& display_name, const std::vector<TypeRule>& rules)

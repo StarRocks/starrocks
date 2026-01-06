@@ -24,10 +24,8 @@ namespace starrocks {
 
 TypeCheckerManager::TypeCheckerManager() : _use_xml_config(false) {
     // Default checker for unknown types
-    _default_checker = std::make_unique<ConfigurableTypeChecker>("Default",
-        std::vector<ConfigurableTypeChecker::TypeRule>{
-            {TYPE_VARCHAR, TYPE_VARCHAR}
-        });
+    _default_checker = std::make_unique<ConfigurableTypeChecker>(
+            "Default", std::vector<ConfigurableTypeChecker::TypeRule>{{TYPE_VARCHAR, TYPE_VARCHAR}});
 
     // Load type checkers from XML configuration file
     // Location: conf/type_checker_config.xml (relative to BE home)

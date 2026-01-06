@@ -20,16 +20,16 @@ namespace starrocks {
 
 // ConfigurableTypeChecker implementation
 StatusOr<LogicalType> ConfigurableTypeChecker::check(const std::string& java_class,
-                                                      const SlotDescriptor* slot_desc) const {
+                                                     const SlotDescriptor* slot_desc) const {
     auto type = slot_desc->type().type;
-    
+
     // Check if the slot type matches any of our configured rules
     for (const auto& rule : _rules) {
         if (type == rule.allowed_type) {
             return rule.return_type;
         }
     }
-    
+
     // No matching rule found - generate error message
     return Status::NotSupported(
             fmt::format("Type mismatches on column[{}], JDBC result type is {}, check configuration for allowed types",

@@ -50,7 +50,7 @@ public:
         std::string java_class;
         std::string display_name;
         std::vector<ConfigurableTypeChecker::TypeRule> rules;
-        bool is_configurable;  // Always true now
+        bool is_configurable; // Always true now
     };
 
     /**
@@ -60,7 +60,7 @@ public:
      * @return StatusOr containing a vector of TypeMapping on success, or error Status on failure
      */
     static StatusOr<std::vector<TypeMapping>> load_from_xml(const std::string& xml_file_path);
-    
+
     /**
      * Create a type checker instance from a type mapping.
      * All type checkers are now ConfigurableTypeChecker instances.

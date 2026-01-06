@@ -12,12 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "types/checker/type_checker_xml_loader.h"
+
 #include <gtest/gtest.h>
 
 #include <filesystem>
 #include <fstream>
-
-#include "types/checker/type_checker_xml_loader.h"
 
 namespace starrocks {
 
@@ -178,11 +178,7 @@ TEST_F(TypeCheckerXMLLoaderTest, CreateCheckerFromMapping) {
     mapping.display_name = "Integer";
     mapping.is_configurable = true;
     mapping.rules = {
-        {TYPE_TINYINT, TYPE_INT},
-        {TYPE_SMALLINT, TYPE_INT},
-        {TYPE_INT, TYPE_INT},
-        {TYPE_BIGINT, TYPE_INT}
-    };
+            {TYPE_TINYINT, TYPE_INT}, {TYPE_SMALLINT, TYPE_INT}, {TYPE_INT, TYPE_INT}, {TYPE_BIGINT, TYPE_INT}};
 
     auto checker = TypeCheckerXMLLoader::create_checker_from_mapping(mapping);
     ASSERT_NE(checker, nullptr);
@@ -194,11 +190,7 @@ TEST_F(TypeCheckerXMLLoaderTest, CreateCheckerWithMultipleRules) {
     mapping.java_class = "com.clickhouse.data.value.UnsignedByte";
     mapping.display_name = "UnsignedByte";
     mapping.is_configurable = true;
-    mapping.rules = {
-        {TYPE_SMALLINT, TYPE_SMALLINT},
-        {TYPE_INT, TYPE_SMALLINT},
-        {TYPE_BIGINT, TYPE_SMALLINT}
-    };
+    mapping.rules = {{TYPE_SMALLINT, TYPE_SMALLINT}, {TYPE_INT, TYPE_SMALLINT}, {TYPE_BIGINT, TYPE_SMALLINT}};
 
     auto checker = TypeCheckerXMLLoader::create_checker_from_mapping(mapping);
     ASSERT_NE(checker, nullptr);
@@ -263,7 +255,7 @@ TEST_F(TypeCheckerXMLLoaderTest, LoadComprehensiveXML) {
 
     const auto& mappings = result.value();
     ASSERT_EQ(mappings.size(), 13);
-    
+
     // Verify the configurable mapping
     bool found_clickhouse = false;
     for (const auto& mapping : mappings) {

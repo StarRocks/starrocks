@@ -557,16 +557,11 @@ TEST_F(TypeCheckerManagerConfigTest, BackwardCompatibility) {
     };
 
     std::vector<TypeTest> tests = {
-            {"java.lang.Byte", TYPE_TINYINT, TYPE_TINYINT},
-            {"java.lang.Short", TYPE_SMALLINT, TYPE_SMALLINT},
-            {"java.lang.Integer", TYPE_INT, TYPE_INT},
-            {"java.lang.Long", TYPE_BIGINT, TYPE_BIGINT},
-            {"java.lang.Boolean", TYPE_BOOLEAN, TYPE_BOOLEAN},
-            {"java.lang.Float", TYPE_FLOAT, TYPE_FLOAT},
-            {"java.lang.Double", TYPE_DOUBLE, TYPE_DOUBLE},
-            {"java.lang.String", TYPE_VARCHAR, TYPE_VARCHAR},
-            {"java.sql.Time", TYPE_TIME, TYPE_TIME},
-            {"byte[]", TYPE_VARBINARY, TYPE_VARBINARY},
+            {"java.lang.Byte", TYPE_TINYINT, TYPE_TINYINT},    {"java.lang.Short", TYPE_SMALLINT, TYPE_SMALLINT},
+            {"java.lang.Integer", TYPE_INT, TYPE_INT},         {"java.lang.Long", TYPE_BIGINT, TYPE_BIGINT},
+            {"java.lang.Boolean", TYPE_BOOLEAN, TYPE_BOOLEAN}, {"java.lang.Float", TYPE_FLOAT, TYPE_FLOAT},
+            {"java.lang.Double", TYPE_DOUBLE, TYPE_DOUBLE},    {"java.lang.String", TYPE_VARCHAR, TYPE_VARCHAR},
+            {"java.sql.Time", TYPE_TIME, TYPE_TIME},           {"byte[]", TYPE_VARBINARY, TYPE_VARBINARY},
     };
 
     for (const auto& test : tests) {

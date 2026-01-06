@@ -16,6 +16,7 @@
 
 #include <libxml/parser.h>
 #include <libxml/tree.h>
+
 #include <unordered_map>
 
 namespace starrocks {
@@ -24,14 +25,14 @@ StatusOr<std::vector<TypeCheckerXMLLoader::TypeMapping>> TypeCheckerXMLLoader::l
         const std::string& xml_file_path) {
     // Initialize libxml2
     xmlInitParser();
-    
+
     // Parse the XML file
     xmlDocPtr doc = xmlReadFile(xml_file_path.c_str(), nullptr, 0);
     if (doc == nullptr) {
         xmlCleanupParser();
         return Status::NotFound(strings::Substitute("Failed to parse XML configuration file: $0", xml_file_path));
     }
-    
+
     // Get root element
     xmlNode* root = xmlDocGetRootElement(doc);
     if (root == nullptr || xmlStrcmp(root->name, BAD_CAST "type-checkers") != 0) {
@@ -39,15 +40,15 @@ StatusOr<std::vector<TypeCheckerXMLLoader::TypeMapping>> TypeCheckerXMLLoader::l
         xmlCleanupParser();
         return Status::InvalidArgument("Invalid XML: root element must be <type-checkers>");
     }
-    
+
     std::vector<TypeMapping> mappings;
-    
+
     // Iterate through type-mapping elements
     for (xmlNode* node = root->children; node != nullptr; node = node->next) {
         if (node->type != XML_ELEMENT_NODE || xmlStrcmp(node->name, BAD_CAST "type-mapping") != 0) {
             continue;
         }
-        
+
         // Get java_class attribute
         xmlChar* java_class_attr = xmlGetProp(node, BAD_CAST "java_class");
         if (java_class_attr == nullptr) {
@@ -57,7 +58,7 @@ StatusOr<std::vector<TypeCheckerXMLLoader::TypeMapping>> TypeCheckerXMLLoader::l
         }
         std::string java_class = reinterpret_cast<const char*>(java_class_attr);
         xmlFree(java_class_attr);
-        
+
         // Get display_name attribute
         xmlChar* display_name_attr = xmlGetProp(node, BAD_CAST "display_name");
         if (display_name_attr == nullptr) {
@@ -68,18 +69,18 @@ StatusOr<std::vector<TypeCheckerXMLLoader::TypeMapping>> TypeCheckerXMLLoader::l
         }
         std::string display_name = reinterpret_cast<const char*>(display_name_attr);
         xmlFree(display_name_attr);
-        
+
         TypeMapping mapping;
         mapping.java_class = java_class;
         mapping.display_name = display_name;
         mapping.is_configurable = true;
-        
+
         // Parse type-rule children
         for (xmlNode* rule_node = node->children; rule_node != nullptr; rule_node = rule_node->next) {
             if (rule_node->type != XML_ELEMENT_NODE || xmlStrcmp(rule_node->name, BAD_CAST "type-rule") != 0) {
                 continue;
             }
-            
+
             // Get allowed_type attribute
             xmlChar* allowed_type_attr = xmlGetProp(rule_node, BAD_CAST "allowed_type");
             if (allowed_type_attr == nullptr) {
@@ -89,7 +90,7 @@ StatusOr<std::vector<TypeCheckerXMLLoader::TypeMapping>> TypeCheckerXMLLoader::l
             }
             std::string allowed_type_str = reinterpret_cast<const char*>(allowed_type_attr);
             xmlFree(allowed_type_attr);
-            
+
             // Get return_type attribute
             xmlChar* return_type_attr = xmlGetProp(rule_node, BAD_CAST "return_type");
             if (return_type_attr == nullptr) {
@@ -99,43 +100,42 @@ StatusOr<std::vector<TypeCheckerXMLLoader::TypeMapping>> TypeCheckerXMLLoader::l
             }
             std::string return_type_str = reinterpret_cast<const char*>(return_type_attr);
             xmlFree(return_type_attr);
-            
+
             // Parse LogicalType values
             LogicalType allowed_type = parse_logical_type(allowed_type_str);
             LogicalType return_type = parse_logical_type(return_type_str);
-            
+
             if (allowed_type == TYPE_UNKNOWN || return_type == TYPE_UNKNOWN) {
                 xmlFreeDoc(doc);
                 xmlCleanupParser();
-                return Status::InvalidArgument(
-                        strings::Substitute("Invalid logical type in type-rule: allowed=$0, return=$1",
-                                          allowed_type_str, return_type_str));
+                return Status::InvalidArgument(strings::Substitute(
+                        "Invalid logical type in type-rule: allowed=$0, return=$1", allowed_type_str, return_type_str));
             }
-            
+
             ConfigurableTypeChecker::TypeRule rule;
             rule.allowed_type = allowed_type;
             rule.return_type = return_type;
             mapping.rules.push_back(rule);
         }
-        
+
         if (mapping.rules.empty()) {
             xmlFreeDoc(doc);
             xmlCleanupParser();
             return Status::InvalidArgument(
                     strings::Substitute("type-mapping for $0 has no type-rule children", java_class));
         }
-        
+
         mappings.push_back(mapping);
     }
-    
+
     // Clean up
     xmlFreeDoc(doc);
     xmlCleanupParser();
-    
+
     if (mappings.empty()) {
         return Status::InvalidArgument("No valid type mappings found in XML configuration");
     }
-    
+
     return mappings;
 }
 
