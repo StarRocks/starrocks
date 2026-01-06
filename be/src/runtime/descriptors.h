@@ -260,6 +260,8 @@ public:
 
     Status set_partition_desc_map(const TIcebergTable& thrift_table, ObjectPool* pool);
 
+    const std::vector<std::string>& partition_source_column_names() { return _source_column_names; }
+
 private:
     TIcebergSchema _t_iceberg_schema;
     std::vector<std::string> _source_column_names; // partition transform column's source column name

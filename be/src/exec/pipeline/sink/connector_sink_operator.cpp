@@ -84,7 +84,6 @@ bool ConnectorSinkOperator::is_finished() const {
         LOG(WARNING) << "cancel fragment: " << status;
         _fragment_context->cancel(status);
     }
-
     bool ret = finished && _connector_chunk_sink->is_finished();
     return ret;
 }
