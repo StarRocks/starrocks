@@ -2260,7 +2260,9 @@ public class AggregateTest extends PlanTestBase {
         sql = "select sum(cast(t1b as int) + cast('1.1' as int)) from test_all_type";
         plan = getVerboseExplain(sql);
         assertContains(plan, "  1:AGGREGATE (update finalize)\n" +
-                "  |  aggregate: sum[([2: t1b, SMALLINT, true]); args: SMALLINT; result: BIGINT; args nullable: true; result nullable: true], count[([2: t1b, SMALLINT, true]); args: SMALLINT; result: BIGINT; args nullable: true; result nullable: true]"
+                "  |  aggregate: sum[([2: t1b, SMALLINT, true]); args: SMALLINT; result: BIGINT; args nullable: true;" +
+                " result nullable: true], count[([2: t1b, SMALLINT, true]); args: SMALLINT; result: BIGINT;" +
+                " args nullable: true; result nullable: true]"
         );
 
     }
