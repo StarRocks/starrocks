@@ -130,13 +130,14 @@ public class InsertLoadJob extends LoadJob {
 
     public void setLoadFinishOrCancel(String failMsg, String trackingUrl) {
         writeLock();
+        JobState finalState;
         try {
             this.finishTimestamp = System.currentTimeMillis();
             if (Strings.isNullOrEmpty(failMsg)) {
-                this.state = JobState.FINISHED;
+                finalState = JobState.FINISHED;
                 this.progress = 100;
             } else {
-                this.state = JobState.CANCELLED;
+                finalState = JobState.CANCELLED;
                 this.failMsg = new FailMsg(CancelType.LOAD_RUN_FAIL, failMsg);
                 this.progress = 0;
             }
@@ -149,7 +150,10 @@ public class InsertLoadJob extends LoadJob {
         // persistent
         GlobalStateMgr.getCurrentState().getEditLog().logEndLoadJob(
                 new LoadJobFinalOperation(this.id, this.loadingStatus, this.progress, 
-                this.loadStartTimestamp, this.finishTimestamp, this.state, this.failMsg));
+                this.loadStartTimestamp, this.finishTimestamp, finalState, this.failMsg),
+                wal -> {
+                    this.state = finalState;
+                });
     }
 
     @Override
