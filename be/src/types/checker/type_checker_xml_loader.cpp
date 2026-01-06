@@ -17,8 +17,6 @@
 #include <libxml/parser.h>
 #include <libxml/tree.h>
 
-#include <unordered_map>
-
 namespace starrocks {
 
 StatusOr<std::vector<TypeCheckerXMLLoader::TypeMapping>> TypeCheckerXMLLoader::load_from_xml(
