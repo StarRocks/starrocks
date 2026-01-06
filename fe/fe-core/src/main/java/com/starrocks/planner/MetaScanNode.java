@@ -51,11 +51,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.Collection;
 import java.util.Collections;
-<<<<<<< HEAD
-=======
 import java.util.HashMap;
-import java.util.HashSet;
->>>>>>> 7161bc2468 ([Enhancement] batch retrieve LakeTablet location info during physical planning (#67325))
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -92,11 +88,6 @@ public class MetaScanNode extends AbstractOlapTableScanNode {
                 return olapTable.getPartition(name, true);
             }).map(Partition::getSubPartitions).flatMap(Collection::stream).collect(Collectors.toList());
         }
-<<<<<<< HEAD
-=======
-        // Build tablet hint set for filtering
-        Set<Long> hintTabletSet = hintsTabletIds.isEmpty() ?
-                Collections.emptySet() : new HashSet<>(hintsTabletIds);
 
         // Batch retrieve all tablets' location info in shared-data mode
         Map<Long, List<Long>> tabletLocationInfo = new HashMap<>();
@@ -116,7 +107,6 @@ public class MetaScanNode extends AbstractOlapTableScanNode {
             }
         }
 
->>>>>>> 7161bc2468 ([Enhancement] batch retrieve LakeTablet location info during physical planning (#67325))
         for (PhysicalPartition partition : partitions) {
             MaterializedIndex index = partition.getBaseIndex();
             int schemaHash = olapTable.getSchemaHashByIndexId(index.getId());

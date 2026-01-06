@@ -18,6 +18,8 @@ import com.google.common.collect.Maps;
 import com.staros.client.StarClient;
 import com.staros.client.StarClientException;
 import com.staros.proto.ShardInfo;
+import com.starrocks.analysis.TupleDescriptor;
+import com.starrocks.analysis.TupleId;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -73,12 +75,12 @@ public class ScanNodeComputeScanRangeTest {
         desc.setTable(table);
         OlapTable olapTable = (OlapTable) table;
         OlapScanNode scanNode =
-                new OlapScanNode(new PlanNodeId(1), desc, "OlapScanNode", olapTable.getBaseIndexMetaId());
+                new OlapScanNode(new PlanNodeId(1), desc, "OlapScanNode", olapTable.getBaseIndexId());
         Assertions.assertEquals(1L, olapTable.getAllPartitionIds().size());
         long partitionId = olapTable.getAllPartitionIds().get(0);
         Partition partition = olapTable.getPartition(partitionId);
         PhysicalPartition physicalPartition = partition.getDefaultPhysicalPartition();
-        MaterializedIndex selectedIndex = physicalPartition.getIndex(olapTable.getBaseIndexMetaId());
+        MaterializedIndex selectedIndex = physicalPartition.getIndex(olapTable.getBaseIndexId());
         AtomicInteger invokeCounter = new AtomicInteger(0);
 
         new MockUp<StarClient>() {
@@ -102,10 +104,10 @@ public class ScanNodeComputeScanRangeTest {
         Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable("test", "t1");
         Assertions.assertNotNull(table);
         Assertions.assertInstanceOf(OlapTable.class, table);
-        desc.setTable(table);
+        desc.setTable(table);g
         OlapTable olapTable = (OlapTable) table;
         MetaScanNode metaScanNode = new MetaScanNode(new PlanNodeId(1), desc, olapTable, Maps.newHashMap(), List.of(),
-                null, olapTable.getBaseIndexMetaId(), null);
+                olapTable.getBaseIndexId(), null);
         Assertions.assertEquals(1L, olapTable.getAllPartitionIds().size());
         AtomicInteger invokeCounter = new AtomicInteger(0);
 
