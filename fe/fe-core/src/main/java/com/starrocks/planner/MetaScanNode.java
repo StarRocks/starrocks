@@ -28,6 +28,7 @@ import com.starrocks.catalog.Tablet;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.statistics.CacheDictManager;
 import com.starrocks.system.ComputeNode;
@@ -49,6 +50,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -94,6 +96,24 @@ public class MetaScanNode extends AbstractOlapTableScanNode {
         Set<Long> hintTabletSet = hintsTabletIds.isEmpty() ?
                 Collections.emptySet() : new HashSet<>(hintsTabletIds);
 
+        // Batch retrieve all tablets' location info in shared-data mode
+        Map<Long, List<Long>> tabletLocationInfo = new HashMap<>();
+        if (RunMode.isSharedDataMode()) {
+            List<Long> allTabletIds = Lists.newArrayList();
+            for (PhysicalPartition partition : partitions) {
+                List<Tablet> tablets = partition.getBaseIndex().getTablets();
+                for (Tablet tablet : tablets) {
+                    allTabletIds.add(tablet.getId());
+                }
+            }
+            WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+            // partial results are ok and can be handled by the fallback mechanism.
+            Map<Long, List<Long>> locations = warehouseManager.getAllComputeNodeIdsAssignToTablets(computeResource, allTabletIds);
+            if (locations != null) {
+                tabletLocationInfo = locations;
+            }
+        }
+
         for (PhysicalPartition partition : partitions) {
             MaterializedIndex index = partition.getBaseIndex();
             int schemaHash = olapTable.getSchemaHashByIndexMetaId(index.getMetaId());
@@ -123,7 +143,7 @@ public class MetaScanNode extends AbstractOlapTableScanNode {
                 List<Replica> allQueryableReplicas = Lists.newArrayList();
                 if (RunMode.isSharedDataMode()) {
                     tablet.getQueryableReplicas(allQueryableReplicas, Collections.emptyList(),
-                            visibleVersion, -1, schemaHash, computeResource);
+                            visibleVersion, -1, schemaHash, computeResource, tabletLocationInfo.get(tabletId));
                 } else {
                     tablet.getQueryableReplicas(allQueryableReplicas, Collections.emptyList(),
                             visibleVersion, -1, schemaHash);
