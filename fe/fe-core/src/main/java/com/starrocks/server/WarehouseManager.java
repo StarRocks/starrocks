@@ -206,7 +206,32 @@ public class WarehouseManager implements Writable {
         }
     }
 
+<<<<<<< HEAD
     public List<Long> getAllComputeNodeIdsAssignToTablet(Long warehouseId, LakeTablet tablet) {
+=======
+    public Map<Long, List<Long>> getAllComputeNodeIdsAssignToTablets(ComputeResource computeResource,
+                                                                    List<Long> tabletIds) {
+        // check warehouse exists
+        if (!warehouseExists(computeResource.getWarehouseId())) {
+            throw ErrorReportException.report(ErrorCode.ERR_UNKNOWN_WAREHOUSE,
+                    String.format("id: %d", computeResource.getWarehouseId()));
+        }
+        try {
+            return GlobalStateMgr.getCurrentState().getStarOSAgent()
+                    .getAllNodeIdsByShards(tabletIds, computeResource.getWorkerGroupId());
+        } catch (StarRocksException e) {
+            LOG.warn("get all compute node ids assign to tablets {} fail {}.", tabletIds, e.getMessage());
+            return null;
+        }
+    }
+
+    public List<Long> getAllComputeNodeIdsAssignToTablet(ComputeResource computeResource, long tabletId) {
+        // check warehouse exists
+        if (!warehouseExists(computeResource.getWarehouseId())) {
+            throw ErrorReportException.report(ErrorCode.ERR_UNKNOWN_WAREHOUSE,
+                    String.format("id: %d", computeResource.getWarehouseId()));
+        }
+>>>>>>> 7161bc2468 ([Enhancement] batch retrieve LakeTablet location info during physical planning (#67325))
         try {
             long workerGroupId = selectWorkerGroupInternal(warehouseId).orElse(StarOSAgent.DEFAULT_WORKER_GROUP_ID);
             return GlobalStateMgr.getCurrentState().getStarOSAgent()

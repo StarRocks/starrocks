@@ -140,7 +140,11 @@ public class LakeTablet extends Tablet {
     public List<Replica> getAllReplicas() {
         List<Replica> replicas = Lists.newArrayList();
         getQueryableReplicas(replicas, null, 0, -1, 0,
+<<<<<<< HEAD
                 WarehouseManager.DEFAULT_WAREHOUSE_ID);
+=======
+                WarehouseManager.DEFAULT_RESOURCE, null);
+>>>>>>> 7161bc2468 ([Enhancement] batch retrieve LakeTablet location info during physical planning (#67325))
         return replicas;
     }
 
@@ -149,14 +153,28 @@ public class LakeTablet extends Tablet {
     public void getQueryableReplicas(List<Replica> allQuerableReplicas, List<Replica> localReplicas,
                                      long visibleVersion, long localBeId, int schemaHash) {
         getQueryableReplicas(allQuerableReplicas, localReplicas, visibleVersion, localBeId,
+<<<<<<< HEAD
                 schemaHash, WarehouseManager.DEFAULT_WAREHOUSE_ID);
+=======
+                schemaHash, WarehouseManager.DEFAULT_RESOURCE, null);
+>>>>>>> 7161bc2468 ([Enhancement] batch retrieve LakeTablet location info during physical planning (#67325))
     }
 
     @Override
     public void getQueryableReplicas(List<Replica> allQuerableReplicas, List<Replica> localReplicas,
+<<<<<<< HEAD
                                      long visibleVersion, long localBeId, int schemaHash, long warehouseId) {
         List<Long> computeNodeIds = GlobalStateMgr.getCurrentState().getWarehouseMgr()
                 .getAllComputeNodeIdsAssignToTablet(warehouseId, this);
+=======
+                                     long visibleVersion, long localBeId, int schemaHash,
+                                     ComputeResource computeResource, List<Long> locations) {
+        List<Long> computeNodeIds = locations;
+        if (computeNodeIds == null) { // initial location hint is null, grab the info from warehouse manager.
+            final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+            computeNodeIds = warehouseManager.getAllComputeNodeIdsAssignToTablet(computeResource, getId());
+        }
+>>>>>>> 7161bc2468 ([Enhancement] batch retrieve LakeTablet location info during physical planning (#67325))
         if (computeNodeIds == null) {
             return;
         }

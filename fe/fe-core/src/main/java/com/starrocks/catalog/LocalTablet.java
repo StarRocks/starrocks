@@ -324,7 +324,12 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
 
     @Override
     public void getQueryableReplicas(List<Replica> allQueryableReplicas, List<Replica> localReplicas,
+<<<<<<< HEAD
                                      long visibleVersion, long localBeId, int schemaHash, long warehouseId) {
+=======
+                                     long visibleVersion, long localBeId, int schemaHash,
+                                     ComputeResource computeResource, List<Long> locations) {
+>>>>>>> 7161bc2468 ([Enhancement] batch retrieve LakeTablet location info during physical planning (#67325))
         throw new SemanticException("not implemented");
     }
 

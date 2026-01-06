@@ -54,7 +54,12 @@ public abstract class Tablet extends MetaObject implements Writable {
                                               long visibleVersion, long localBeId, int schemaHash);
 
     public abstract void getQueryableReplicas(List<Replica> allQuerableReplicas, List<Replica> localReplicas,
+<<<<<<< HEAD
                                               long visibleVersion, long localBeId, int schemaHash, long warehouseId);
+=======
+                                              long visibleVersion, long localBeId, int schemaHash,
+                                              ComputeResource computeResource, List<Long> locations);
+>>>>>>> 7161bc2468 ([Enhancement] batch retrieve LakeTablet location info during physical planning (#67325))
 
     @Override
     public String toString() {
