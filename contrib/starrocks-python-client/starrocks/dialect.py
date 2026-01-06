@@ -1509,14 +1509,21 @@ class StarRocksDialect(MySQLDialect_pymysql):
                 f"Multiple tables found with name {table_name} in schema {schema}"
             )
         # logger.debug("reflected table row for table: %s, info: %s", table_name, dict(table_rows[0]))
-
-        table_config_rows: List[_DecodingRow] = self._read_from_information_schema(
-            connection=connection,
-            inf_sch_table="tables_config",
-            charset=charset,
-            table_schema=schema,
-            table_name=table_name,
-        )
+        try:
+            table_config_rows: List[_DecodingRow] = self._read_from_information_schema(
+                connection=connection,
+                inf_sch_table="tables_config",
+                charset=charset,
+                table_schema=schema,
+                table_name=table_name,
+            )
+        except Exception as e:
+            if 'Unknown table \'information_schema.tables_config\'' in str(e):
+                table_config_rows = [{
+                    'TABLE_ENGINE': table_rows[0].get('ENGINE'),
+                }]
+            else:
+                raise
         if table_config_rows:
             if len(table_config_rows) > 1:
                 raise exc.InvalidRequestError(
@@ -1747,6 +1754,8 @@ class StarRocksDialect(MySQLDialect_pymysql):
             return super().has_table(connection, table_name, schema, **kwargs)
         except exc.DBAPIError as e:
             if self._extract_error_code(e.orig) in (5501, 5502):
+                return False
+            if 'not exists' in str(e.orig).lower():
                 return False
             raise
 
