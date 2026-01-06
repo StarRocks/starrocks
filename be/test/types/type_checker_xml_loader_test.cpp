@@ -90,7 +90,9 @@ TEST_F(TypeCheckerXMLLoaderTest, LoadXMLWithComments) {
     <type-rule allowed_type="TYPE_VARCHAR" return_type="TYPE_VARCHAR"/>
   </type-mapping>
   <!-- Yet another comment -->
-  <type-mapping java_class="java.lang.Integer" checker="IntegerTypeChecker"/>
+  <type-mapping java_class="java.lang.Integer" display_name="Integer">
+    <type-rule allowed_type="TYPE_INT" return_type="TYPE_INT"/>
+  </type-mapping>
 </type-checkers>)";
 
     std::string xml_file = "/tmp/type_checker_test/with_comments.xml";
@@ -107,9 +109,15 @@ TEST_F(TypeCheckerXMLLoaderTest, LoadXMLWithComments) {
 TEST_F(TypeCheckerXMLLoaderTest, LoadXMLWithWhitespace) {
     std::string xml_content = R"(<?xml version="1.0" encoding="UTF-8"?>
 <type-checkers>
-    <type-mapping java_class="java.lang.String"     checker="StringTypeChecker"   />
-  <type-mapping   java_class="java.lang.Integer"   checker="IntegerTypeChecker"/>
-<type-mapping java_class="java.lang.Boolean" checker="BooleanTypeChecker" />
+    <type-mapping java_class="java.lang.String"     display_name="String">
+      <type-rule allowed_type="TYPE_VARCHAR" return_type="TYPE_VARCHAR"/>
+    </type-mapping>
+  <type-mapping   java_class="java.lang.Integer"   display_name="Integer">
+    <type-rule allowed_type="TYPE_INT" return_type="TYPE_INT"/>
+  </type-mapping>
+<type-mapping java_class="java.lang.Boolean" display_name="Boolean">
+  <type-rule allowed_type="TYPE_BOOLEAN" return_type="TYPE_BOOLEAN"/>
+</type-mapping>
 </type-checkers>)";
 
     std::string xml_file = "/tmp/type_checker_test/whitespace.xml";
@@ -133,8 +141,12 @@ TEST_F(TypeCheckerXMLLoaderTest, LoadNonExistentFile) {
 TEST_F(TypeCheckerXMLLoaderTest, LoadMalformedXMLMissingAttributes) {
     std::string xml_content = R"(<?xml version="1.0" encoding="UTF-8"?>
 <type-checkers>
-  <type-mapping java_class="java.lang.String"/>
-  <type-mapping checker="IntegerTypeChecker"/>
+  <type-mapping java_class="java.lang.String">
+    <type-rule allowed_type="TYPE_VARCHAR" return_type="TYPE_VARCHAR"/>
+  </type-mapping>
+  <type-mapping display_name="Integer">
+    <type-rule allowed_type="TYPE_INT" return_type="TYPE_INT"/>
+  </type-mapping>
 </type-checkers>)";
 
     std::string xml_file = "/tmp/type_checker_test/malformed_attrs.xml";
@@ -159,70 +171,84 @@ TEST_F(TypeCheckerXMLLoaderTest, LoadEmptyXML) {
     EXPECT_TRUE(result.status().is_invalid_argument());
 }
 
-// Test creating checker instances
-TEST_F(TypeCheckerXMLLoaderTest, CreateCheckerInstances) {
-    auto byte_checker = TypeCheckerXMLLoader::create_checker("ByteTypeChecker");
-    ASSERT_NE(byte_checker, nullptr);
-
-    auto string_checker = TypeCheckerXMLLoader::create_checker("StringTypeChecker");
-    ASSERT_NE(string_checker, nullptr);
-
-    auto integer_checker = TypeCheckerXMLLoader::create_checker("IntegerTypeChecker");
-    ASSERT_NE(integer_checker, nullptr);
-
-    auto boolean_checker = TypeCheckerXMLLoader::create_checker("BooleanTypeChecker");
-    ASSERT_NE(boolean_checker, nullptr);
-
-    auto unknown_checker = TypeCheckerXMLLoader::create_checker("UnknownTypeChecker");
-    ASSERT_EQ(unknown_checker, nullptr);
-}
-
-// Test all supported checker types
-TEST_F(TypeCheckerXMLLoaderTest, CreateAllSupportedCheckers) {
-    std::vector<std::string> checker_names = {
-            "ByteTypeChecker",
-            "ShortTypeChecker",
-            "IntegerTypeChecker",
-            "StringTypeChecker",
-            "LongTypeChecker",
-            "BigIntegerTypeChecker",
-            "BooleanTypeChecker",
-            "FloatTypeChecker",
-            "DoubleTypeChecker",
-            "TimestampTypeChecker",
-            "DateTypeChecker",
-            "TimeTypeChecker",
-            "LocalDateTimeTypeChecker",
-            "LocalDateTypeChecker",
-            "BigDecimalTypeChecker",
-            "OracleTimestampClassTypeChecker",
-            "SqlServerDateTimeOffsetTypeChecker",
-            "ByteArrayTypeChecker",
-            "DefaultTypeChecker",
+// Test creating checker from mapping
+TEST_F(TypeCheckerXMLLoaderTest, CreateCheckerFromMapping) {
+    TypeCheckerXMLLoader::TypeMapping mapping;
+    mapping.java_class = "java.lang.Integer";
+    mapping.display_name = "Integer";
+    mapping.is_configurable = true;
+    mapping.rules = {
+        {TYPE_TINYINT, TYPE_INT},
+        {TYPE_SMALLINT, TYPE_INT},
+        {TYPE_INT, TYPE_INT},
+        {TYPE_BIGINT, TYPE_INT}
     };
 
-    for (const auto& name : checker_names) {
-        auto checker = TypeCheckerXMLLoader::create_checker(name);
-        ASSERT_NE(checker, nullptr) << "Failed to create checker: " << name;
-    }
+    auto checker = TypeCheckerXMLLoader::create_checker_from_mapping(mapping);
+    ASSERT_NE(checker, nullptr);
+}
+
+// Test creating checker from mapping with multiple rules
+TEST_F(TypeCheckerXMLLoaderTest, CreateCheckerWithMultipleRules) {
+    TypeCheckerXMLLoader::TypeMapping mapping;
+    mapping.java_class = "com.clickhouse.data.value.UnsignedByte";
+    mapping.display_name = "UnsignedByte";
+    mapping.is_configurable = true;
+    mapping.rules = {
+        {TYPE_SMALLINT, TYPE_SMALLINT},
+        {TYPE_INT, TYPE_SMALLINT},
+        {TYPE_BIGINT, TYPE_SMALLINT}
+    };
+
+    auto checker = TypeCheckerXMLLoader::create_checker_from_mapping(mapping);
+    ASSERT_NE(checker, nullptr);
 }
 
 // Test loading comprehensive XML with all type mappings
 TEST_F(TypeCheckerXMLLoaderTest, LoadComprehensiveXML) {
     std::string xml_content = R"(<?xml version="1.0" encoding="UTF-8"?>
 <type-checkers>
-  <type-mapping java_class="java.lang.Byte" checker="ByteTypeChecker"/>
-  <type-mapping java_class="java.lang.Short" checker="ShortTypeChecker"/>
-  <type-mapping java_class="java.lang.Integer" checker="IntegerTypeChecker"/>
-  <type-mapping java_class="java.lang.Long" checker="LongTypeChecker"/>
-  <type-mapping java_class="java.lang.Boolean" checker="BooleanTypeChecker"/>
-  <type-mapping java_class="java.lang.Float" checker="FloatTypeChecker"/>
-  <type-mapping java_class="java.lang.Double" checker="DoubleTypeChecker"/>
-  <type-mapping java_class="java.lang.String" checker="StringTypeChecker"/>
-  <type-mapping java_class="java.sql.Timestamp" checker="TimestampTypeChecker"/>
-  <type-mapping java_class="java.sql.Date" checker="DateTypeChecker"/>
-  <type-mapping java_class="java.sql.Time" checker="TimeTypeChecker"/>
-  <type-mapping java_class="byte[]" checker="ByteArrayTypeChecker"/>
+  <type-mapping java_class="java.lang.Byte" display_name="Byte">
+    <type-rule allowed_type="TYPE_TINYINT" return_type="TYPE_TINYINT"/>
+    <type-rule allowed_type="TYPE_BOOLEAN" return_type="TYPE_TINYINT"/>
+  </type-mapping>
+  <type-mapping java_class="java.lang.Short" display_name="Short">
+    <type-rule allowed_type="TYPE_TINYINT" return_type="TYPE_SMALLINT"/>
+    <type-rule allowed_type="TYPE_SMALLINT" return_type="TYPE_SMALLINT"/>
+  </type-mapping>
+  <type-mapping java_class="java.lang.Integer" display_name="Integer">
+    <type-rule allowed_type="TYPE_TINYINT" return_type="TYPE_INT"/>
+    <type-rule allowed_type="TYPE_SMALLINT" return_type="TYPE_INT"/>
+    <type-rule allowed_type="TYPE_INT" return_type="TYPE_INT"/>
+  </type-mapping>
+  <type-mapping java_class="java.lang.Long" display_name="Long">
+    <type-rule allowed_type="TYPE_BIGINT" return_type="TYPE_BIGINT"/>
+  </type-mapping>
+  <type-mapping java_class="java.lang.Boolean" display_name="Boolean">
+    <type-rule allowed_type="TYPE_BOOLEAN" return_type="TYPE_BOOLEAN"/>
+  </type-mapping>
+  <type-mapping java_class="java.lang.Float" display_name="Float">
+    <type-rule allowed_type="TYPE_FLOAT" return_type="TYPE_FLOAT"/>
+  </type-mapping>
+  <type-mapping java_class="java.lang.Double" display_name="Double">
+    <type-rule allowed_type="TYPE_DOUBLE" return_type="TYPE_DOUBLE"/>
+  </type-mapping>
+  <type-mapping java_class="java.lang.String" display_name="String">
+    <type-rule allowed_type="TYPE_CHAR" return_type="TYPE_VARCHAR"/>
+    <type-rule allowed_type="TYPE_VARCHAR" return_type="TYPE_VARCHAR"/>
+  </type-mapping>
+  <type-mapping java_class="java.sql.Timestamp" display_name="Timestamp">
+    <type-rule allowed_type="TYPE_DATETIME" return_type="TYPE_DATETIME"/>
+  </type-mapping>
+  <type-mapping java_class="java.sql.Date" display_name="Date">
+    <type-rule allowed_type="TYPE_DATE" return_type="TYPE_DATE"/>
+  </type-mapping>
+  <type-mapping java_class="java.sql.Time" display_name="Time">
+    <type-rule allowed_type="TYPE_TIME" return_type="TYPE_TIME"/>
+  </type-mapping>
+  <type-mapping java_class="byte[]" display_name="ByteArray">
+    <type-rule allowed_type="TYPE_VARBINARY" return_type="TYPE_VARBINARY"/>
+  </type-mapping>
   <type-mapping java_class="com.clickhouse.data.value.UnsignedByte" display_name="UnsignedByte">
     <type-rule allowed_type="TYPE_SMALLINT" return_type="TYPE_SMALLINT"/>
     <type-rule allowed_type="TYPE_INT" return_type="TYPE_SMALLINT"/>
@@ -255,9 +281,15 @@ TEST_F(TypeCheckerXMLLoaderTest, LoadComprehensiveXML) {
 TEST_F(TypeCheckerXMLLoaderTest, LoadXMLWithSpecialCharacters) {
     std::string xml_content = R"(<?xml version="1.0" encoding="UTF-8"?>
 <type-checkers>
-  <type-mapping java_class="[B" checker="ByteArrayTypeChecker"/>
-  <type-mapping java_class="byte[]" checker="ByteArrayTypeChecker"/>
-  <type-mapping java_class="oracle.jdbc.OracleBlob" checker="ByteArrayTypeChecker"/>
+  <type-mapping java_class="[B" display_name="ByteArray">
+    <type-rule allowed_type="TYPE_VARBINARY" return_type="TYPE_VARBINARY"/>
+  </type-mapping>
+  <type-mapping java_class="byte[]" display_name="ByteArray">
+    <type-rule allowed_type="TYPE_VARBINARY" return_type="TYPE_VARBINARY"/>
+  </type-mapping>
+  <type-mapping java_class="oracle.jdbc.OracleBlob" display_name="OracleBlob">
+    <type-rule allowed_type="TYPE_VARBINARY" return_type="TYPE_VARBINARY"/>
+  </type-mapping>
 </type-checkers>)";
 
     std::string xml_file = "/tmp/type_checker_test/special_chars.xml";
@@ -271,6 +303,86 @@ TEST_F(TypeCheckerXMLLoaderTest, LoadXMLWithSpecialCharacters) {
 
     EXPECT_EQ(mappings[0].java_class, "[B");
     EXPECT_EQ(mappings[1].java_class, "byte[]");
+}
+
+// Test XML with missing type-rule elements
+TEST_F(TypeCheckerXMLLoaderTest, LoadXMLMissingTypeRules) {
+    std::string xml_content = R"(<?xml version="1.0" encoding="UTF-8"?>
+<type-checkers>
+  <type-mapping java_class="java.lang.String" display_name="String">
+  </type-mapping>
+</type-checkers>)";
+
+    std::string xml_file = "/tmp/type_checker_test/missing_rules.xml";
+    create_test_xml(xml_file, xml_content);
+
+    auto result = TypeCheckerXMLLoader::load_from_xml(xml_file);
+    ASSERT_FALSE(result.ok());
+    EXPECT_TRUE(result.status().is_invalid_argument());
+}
+
+// Test XML with invalid type names
+TEST_F(TypeCheckerXMLLoaderTest, LoadXMLInvalidTypeNames) {
+    std::string xml_content = R"(<?xml version="1.0" encoding="UTF-8"?>
+<type-checkers>
+  <type-mapping java_class="java.lang.String" display_name="String">
+    <type-rule allowed_type="TYPE_INVALID" return_type="TYPE_VARCHAR"/>
+  </type-mapping>
+</type-checkers>)";
+
+    std::string xml_file = "/tmp/type_checker_test/invalid_types.xml";
+    create_test_xml(xml_file, xml_content);
+
+    auto result = TypeCheckerXMLLoader::load_from_xml(xml_file);
+    ASSERT_FALSE(result.ok());
+    EXPECT_TRUE(result.status().is_invalid_argument());
+}
+
+// Test XML with malformed structure
+TEST_F(TypeCheckerXMLLoaderTest, LoadMalformedXMLStructure) {
+    std::string xml_content = R"(<?xml version="1.0" encoding="UTF-8"?>
+<type-checkers>
+  <type-mapping java_class="java.lang.String" display_name="String">
+    <type-rule allowed_type="TYPE_VARCHAR" return_type="TYPE_VARCHAR"/>
+  </type-mapping>
+  <invalid-element/>
+</type-checkers>)";
+
+    std::string xml_file = "/tmp/type_checker_test/malformed_structure.xml";
+    create_test_xml(xml_file, xml_content);
+
+    auto result = TypeCheckerXMLLoader::load_from_xml(xml_file);
+    // Should still succeed, ignoring unknown elements
+    ASSERT_TRUE(result.ok());
+    const auto& mappings = result.value();
+    ASSERT_EQ(mappings.size(), 1);
+}
+
+// Test loading XML with all mappings being configurable
+TEST_F(TypeCheckerXMLLoaderTest, AllMappingsAreConfigurable) {
+    std::string xml_content = R"(<?xml version="1.0" encoding="UTF-8"?>
+<type-checkers>
+  <type-mapping java_class="java.lang.Integer" display_name="Integer">
+    <type-rule allowed_type="TYPE_INT" return_type="TYPE_INT"/>
+  </type-mapping>
+  <type-mapping java_class="java.lang.String" display_name="String">
+    <type-rule allowed_type="TYPE_VARCHAR" return_type="TYPE_VARCHAR"/>
+  </type-mapping>
+</type-checkers>)";
+
+    std::string xml_file = "/tmp/type_checker_test/all_configurable.xml";
+    create_test_xml(xml_file, xml_content);
+
+    auto result = TypeCheckerXMLLoader::load_from_xml(xml_file);
+    ASSERT_TRUE(result.ok());
+
+    const auto& mappings = result.value();
+    // All mappings should be marked as configurable
+    for (const auto& mapping : mappings) {
+        EXPECT_TRUE(mapping.is_configurable);
+        EXPECT_FALSE(mapping.display_name.empty());
+        EXPECT_GT(mapping.rules.size(), 0);
+    }
 }
 
 } // namespace starrocks
