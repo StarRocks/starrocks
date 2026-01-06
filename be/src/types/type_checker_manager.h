@@ -25,7 +25,23 @@ class TypeCheckerManager {
 private:
     std::unordered_map<std::string, std::unique_ptr<TypeChecker>> _checkers;
     std::unique_ptr<TypeChecker> _default_checker;
+    bool _use_xml_config;
     TypeCheckerManager();
+
+    /**
+     * Initialize type checkers using hardcoded configuration (legacy approach).
+     * This method maintains backward compatibility.
+     */
+    void init_hardcoded_checkers();
+
+    /**
+     * Attempt to load type checkers from XML configuration.
+     * Falls back to hardcoded configuration if XML loading fails.
+     * 
+     * @param xml_file_path Path to the XML configuration file
+     * @return true if XML was successfully loaded, false otherwise
+     */
+    bool try_load_from_xml(const std::string& xml_file_path);
 
 public:
     TypeCheckerManager(const TypeCheckerManager&) = delete;
@@ -35,6 +51,13 @@ public:
 
     void registerChecker(const std::string& java_class, std::unique_ptr<TypeChecker> checker);
     StatusOr<LogicalType> checkType(const std::string& java_class, const SlotDescriptor* slot_desc);
+
+    /**
+     * Check if the manager is using XML-based configuration.
+     * 
+     * @return true if XML configuration is active, false if using hardcoded config
+     */
+    bool is_using_xml_config() const { return _use_xml_config; }
 };
 
 } // namespace starrocks

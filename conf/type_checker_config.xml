@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- 
+  Type Checker Configuration
+  
+  This XML file defines mappings between Java class names and type checker implementations.
+  Each <type-mapping> element specifies:
+  - java_class: The fully qualified Java class name
+  - checker: The internal checker class name to use
+  
+  Supported checkers:
+  - ByteTypeChecker, ShortTypeChecker, IntegerTypeChecker, LongTypeChecker
+  - BigIntegerTypeChecker, BooleanTypeChecker, FloatTypeChecker, DoubleTypeChecker
+  - StringTypeChecker, TimestampTypeChecker, DateTypeChecker, TimeTypeChecker
+  - LocalDateTimeTypeChecker, LocalDateTypeChecker, BigDecimalTypeChecker
+  - OracleTimestampClassTypeChecker, SqlServerDateTimeOffsetTypeChecker
+  - ByteArrayTypeChecker, ClickHouseUnsignedByteTypeChecker
+  - ClickHouseUnsignedShortTypeChecker, ClickHouseUnsignedIntegerTypeChecker
+  - ClickHouseUnsignedLongTypeChecker, DefaultTypeChecker
+-->
+<type-checkers>
+  <type-mapping java_class="java.lang.Byte" checker="ByteTypeChecker"/>
+  <type-mapping java_class="com.clickhouse.data.value.UnsignedByte" checker="ClickHouseUnsignedByteTypeChecker"/>
+  <type-mapping java_class="java.lang.Short" checker="ShortTypeChecker"/>
+  <type-mapping java_class="com.clickhouse.data.value.UnsignedShort" checker="ClickHouseUnsignedShortTypeChecker"/>
+  <type-mapping java_class="java.lang.Integer" checker="IntegerTypeChecker"/>
+  <type-mapping java_class="java.lang.String" checker="StringTypeChecker"/>
+  <type-mapping java_class="com.clickhouse.data.value.UnsignedInteger" checker="ClickHouseUnsignedIntegerTypeChecker"/>
+  <type-mapping java_class="java.lang.Long" checker="LongTypeChecker"/>
+  <type-mapping java_class="java.math.BigInteger" checker="BigIntegerTypeChecker"/>
+  <type-mapping java_class="com.clickhouse.data.value.UnsignedLong" checker="ClickHouseUnsignedLongTypeChecker"/>
+  <type-mapping java_class="java.lang.Boolean" checker="BooleanTypeChecker"/>
+  <type-mapping java_class="java.lang.Float" checker="FloatTypeChecker"/>
+  <type-mapping java_class="java.lang.Double" checker="DoubleTypeChecker"/>
+  <type-mapping java_class="java.sql.Timestamp" checker="TimestampTypeChecker"/>
+  <type-mapping java_class="java.sql.Date" checker="DateTypeChecker"/>
+  <type-mapping java_class="java.sql.Time" checker="TimeTypeChecker"/>
+  <type-mapping java_class="java.time.LocalDateTime" checker="LocalDateTimeTypeChecker"/>
+  <type-mapping java_class="java.time.LocalDate" checker="LocalDateTypeChecker"/>
+  <type-mapping java_class="java.math.BigDecimal" checker="BigDecimalTypeChecker"/>
+  <type-mapping java_class="oracle.sql.TIMESTAMP" checker="OracleTimestampClassTypeChecker"/>
+  <type-mapping java_class="oracle.sql.TIMESTAMPLTZ" checker="OracleTimestampClassTypeChecker"/>
+  <type-mapping java_class="oracle.sql.TIMESTAMPTZ" checker="OracleTimestampClassTypeChecker"/>
+  <type-mapping java_class="microsoft.sql.DateTimeOffset" checker="SqlServerDateTimeOffsetTypeChecker"/>
+  <type-mapping java_class="byte[]" checker="ByteArrayTypeChecker"/>
+  <type-mapping java_class="oracle.jdbc.OracleBlob" checker="ByteArrayTypeChecker"/>
+  <type-mapping java_class="[B" checker="ByteArrayTypeChecker"/>
+  <type-mapping java_class="java.util.UUID" checker="ByteArrayTypeChecker"/>
+</type-checkers>

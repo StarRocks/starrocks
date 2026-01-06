@@ -14,12 +14,47 @@
 
 #include "types/type_checker_manager.h"
 
+#include <cstdlib>
+
 #include "checker/type_checker.h"
+#include "checker/type_checker_xml_loader.h"
+#include "common/logging.h"
 
 namespace starrocks {
 
-TypeCheckerManager::TypeCheckerManager() {
+TypeCheckerManager::TypeCheckerManager() : _use_xml_config(false) {
     _default_checker = std::make_unique<DefaultTypeChecker>();
+
+    // Attempt to load from XML configuration file
+    // Priority order:
+    // 1. Environment variable STARROCKS_TYPE_CHECKER_CONFIG
+    // 2. Default location: conf/type_checker_config.xml (relative to BE home)
+    // 3. Fallback to hardcoded configuration
+    const char* xml_path_env = std::getenv("STARROCKS_TYPE_CHECKER_CONFIG");
+    std::string xml_path;
+
+    if (xml_path_env != nullptr) {
+        xml_path = xml_path_env;
+    } else {
+        // Try default location relative to BE home
+        const char* be_home = std::getenv("STARROCKS_HOME");
+        if (be_home != nullptr) {
+            xml_path = std::string(be_home) + "/conf/type_checker_config.xml";
+        }
+    }
+
+    // Try to load from XML if a path was found
+    if (!xml_path.empty() && try_load_from_xml(xml_path)) {
+        LOG(INFO) << "TypeCheckerManager initialized from XML configuration: " << xml_path;
+        return;
+    }
+
+    // Fallback to hardcoded configuration
+    LOG(INFO) << "TypeCheckerManager using hardcoded configuration";
+    init_hardcoded_checkers();
+}
+
+void TypeCheckerManager::init_hardcoded_checkers() {
     registerChecker("java.lang.Byte", std::make_unique<ByteTypeChecker>());
     registerChecker("com.clickhouse.data.value.UnsignedByte", std::make_unique<ClickHouseUnsignedByteTypeChecker>());
     registerChecker("java.lang.Short", std::make_unique<ShortTypeChecker>());
@@ -48,6 +83,32 @@ TypeCheckerManager::TypeCheckerManager() {
     registerChecker("oracle.jdbc.OracleBlob", std::make_unique<ByteArrayTypeChecker>());
     registerChecker("[B", std::make_unique<ByteArrayTypeChecker>());
     registerChecker("java.util.UUID", std::make_unique<ByteArrayTypeChecker>());
+}
+
+bool TypeCheckerManager::try_load_from_xml(const std::string& xml_file_path) {
+    auto mappings_or = TypeCheckerXMLLoader::load_from_xml(xml_file_path);
+    if (!mappings_or.ok()) {
+        LOG(WARNING) << "Failed to load type checker configuration from XML: " << mappings_or.status().message();
+        return false;
+    }
+
+    const auto& mappings = mappings_or.value();
+    for (const auto& mapping : mappings) {
+        auto checker = TypeCheckerXMLLoader::create_checker(mapping.checker_name);
+        if (checker == nullptr) {
+            LOG(WARNING) << "Unknown checker type in XML configuration: " << mapping.checker_name;
+            continue;
+        }
+        registerChecker(mapping.java_class, std::move(checker));
+    }
+
+    if (_checkers.empty()) {
+        LOG(WARNING) << "No valid type checkers were loaded from XML configuration";
+        return false;
+    }
+
+    _use_xml_config = true;
+    return true;
 }
 
 TypeCheckerManager& TypeCheckerManager::getInstance() {

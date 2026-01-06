@@ -12,6 +12,42 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+/**
+ * Type Checker Framework
+ * 
+ * This file defines the type checker interface and concrete implementations for validating
+ * and converting Java types to StarRocks logical types. The framework supports both:
+ * 
+ * 1. XML Configuration-based Type Mapping (Recommended)
+ *    - Type mappings can be defined in XML configuration files
+ *    - Location specified via STARROCKS_TYPE_CHECKER_CONFIG environment variable
+ *    - Default location: $STARROCKS_HOME/conf/type_checker_config.xml
+ *    - Provides dynamic type registration without recompilation
+ *    - See type_checker_xml_loader.h for XML format details
+ * 
+ * 2. Hardcoded Type Mapping (Backward Compatible)
+ *    - Falls back to hardcoded type checkers if XML is unavailable
+ *    - Ensures backward compatibility with existing deployments
+ *    - No configuration required
+ * 
+ * Usage Example:
+ *   TypeCheckerManager& manager = TypeCheckerManager::getInstance();
+ *   StatusOr<LogicalType> result = manager.checkType("java.lang.Integer", slot_desc);
+ * 
+ * Type Checker Responsibilities:
+ *   - Validate compatibility between Java class types and StarRocks slot types
+ *   - Return the appropriate StarRocks LogicalType for the conversion
+ *   - Provide clear error messages when type mismatches occur
+ * 
+ * Supported Java Types:
+ *   - Primitive types: Byte, Short, Integer, Long, Boolean, Float, Double
+ *   - String types: String
+ *   - Temporal types: Date, Time, Timestamp, LocalDate, LocalDateTime
+ *   - Numeric types: BigInteger, BigDecimal
+ *   - Binary types: byte[], ByteArray
+ *   - Database-specific types: Oracle, ClickHouse, SQL Server extensions
+ */
+
 #pragma once
 #include <string>
 
