@@ -29,14 +29,8 @@ private:
     TypeCheckerManager();
 
     /**
-     * Initialize type checkers using hardcoded configuration (legacy approach).
-     * This method maintains backward compatibility.
-     */
-    void init_hardcoded_checkers();
-
-    /**
      * Attempt to load type checkers from XML configuration.
-     * Falls back to hardcoded configuration if XML loading fails.
+     * All type checkers must be defined in XML.
      * 
      * @param xml_file_path Path to the XML configuration file
      * @return true if XML was successfully loaded, false otherwise
@@ -55,7 +49,7 @@ public:
     /**
      * Check if the manager is using XML-based configuration.
      * 
-     * @return true if XML configuration is active, false if using hardcoded config
+     * @return true if XML configuration is active, false otherwise
      */
     bool is_using_xml_config() const { return _use_xml_config; }
 };
