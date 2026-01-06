@@ -141,13 +141,17 @@ container quickstart-minio_mc-1 exited (0)
 
 ---
 
-## Examine MinIO credentials
+## MinIO
+
+This quick start uses MinIO for shared storage.
+
+### Examine MinIO credentials
 
 To use MinIO for Object Storage with StarRocks, StarRocks needs a MinIO access key. The access key was generated during the startup of the Docker services. To help you better understand the way that StarRocks connects to MinIO you should verify that the key exists.
 
-### Open the MinIO web UI
+### Verify the MinIO credentials
 
-Browse to http://localhost:9001/access-keys The username and password are specified in the Docker compose file, and are `miniouser` and `miniopassword`. You should see that there is one access key. The Key is `AAAAAAAAAAAAAAAAAAAA`, you cannot see the secret in the MinIO Console, but it is in the Docker compose file and is `BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB`:
+Browse to [http://localhost:9001/access-keys](http://localhost:9001/access-keys) The username and password are specified in the Docker compose file, and are `miniouser` and `miniopassword`. You should see that there is one access key. The Key is `AAAAAAAAAAAAAAAAAAAA`, you cannot see the secret in the MinIO Console, but it is in the Docker compose file and is `BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB`:
 
 ![View the MinIO access key](../_assets/quick-start/MinIO-view-key.png)
 
@@ -165,6 +169,16 @@ docker compose run minio_mc
 ```
 :::
 
+### Create a bucket for your data
+
+When you create a storage volume in StarRocks you will specify the `LOCATION` for the data:
+
+```sh
+    LOCATIONS = ("s3://my-starrocks-bucket/")
+```
+
+Open [http://localhost:9001/buckets](http://localhost:9001/buckets) and add a bucket for the storage volume. Name the bucket `my-starrocks-bucket`.
+
 ---
 
 ## SQL Clients
@@ -176,33 +190,14 @@ docker compose run minio_mc
 
 ## StarRocks configuration for shared-data
 
-At this point you have StarRocks running, and you have MinIO running. The MinIO access key is used to connect StarRocks and Minio. When StarRocks started up it established the connection with MinIO and created the default storage volume in MinIO.
+At this point you have StarRocks running, and you have MinIO running. The MinIO access key is used to connect StarRocks and Minio.
 
-This is the configuration used to set the default storage volume to use MinIO (this is also in the Docker compose file). The configuration will be described in detail at the end of this guide, for now just note that the `aws_s3_access_key` is set to the string that you saw in the MinIO Console and that the `run_mode` is set to `shared_data`:
+This is the part of the `FE` configuration that specifies that the StarRocks deployment will use shared data. This was added to the file `fe.conf` when Docker Compose created the deployment.
 
-```plaintext
-#highlight-start
-# enable shared data, set storage type, set endpoint
+```sh
+# enable the shared data run mode
 run_mode = shared_data
-#highlight-end
 cloud_native_storage_type = S3
-aws_s3_endpoint = minio:9000
-
-# set the path in MinIO
-aws_s3_path = starrocks
-
-#highlight-start
-# credentials for MinIO object read/write
-aws_s3_access_key = AAAAAAAAAAAAAAAAAAAA
-aws_s3_secret_key = BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
-#highlight-end
-aws_s3_use_instance_profile = false
-aws_s3_use_aws_sdk_default_behavior = false
-
-# Set this to false if you do not want default
-# storage created in the object storage using
-# the details provided above
-enable_load_volume_from_conf = true
 ```
 
 ### Connect to StarRocks with a SQL client
@@ -211,7 +206,7 @@ enable_load_volume_from_conf = true
 
 Run this command from the directory containing the `docker-compose.yml` file.
 
-If you are using a client other than the mysql CLI, open that now.
+If you are using a client other than the MySQL Command-Line Client, open that now.
 :::
 
 ```sql
@@ -219,23 +214,93 @@ docker compose exec starrocks-fe \
 mysql -P9030 -h127.0.0.1 -uroot --prompt="StarRocks > "
 ```
 
-#### Examine the storage volume
+#### Examine the storage volumes
+
 
 ```sql
 SHOW STORAGE VOLUMES;
 ```
 
-```plaintext
-+------------------------+
-| Storage Volume         |
-+------------------------+
-| builtin_storage_volume |
-+------------------------+
-1 row in set (0.00 sec)
+:::tip
+There should be no storage volumes, you will create one next.
+:::
+
+```sh
+Empty set (0.04 sec)
 ```
 
+#### Create a shared-data storage volume
+
+Earlier you created a bucket in MinIO named `my-starrocks-volume`, and you verified that MinIO has an access key named `AAAAAAAAAAAAAAAAAAAA`. The following SQL will create a storage volume in the MionIO bucket using the access key and secret.
+
 ```sql
-DESC STORAGE VOLUME builtin_storage_volume\G
+CREATE STORAGE VOLUME s3_volume
+    TYPE = S3
+    LOCATIONS = ("s3://my-starrocks-bucket/")
+    PROPERTIES
+    (
+         "enabled" = "true",
+         "aws.s3.endpoint" = "minio:9000",
+         "aws.s3.access_key" = "AAAAAAAAAAAAAAAAAAAA",
+         "aws.s3.secret_key" = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+         "aws.s3.use_instance_profile" = "false",
+         "aws.s3.use_aws_sdk_default_behavior" = "false"
+     );
+```
+
+Now you should see a storage volume listed, earlier it was an empty set:
+
+```
+SHOW STORAGE VOLUMES;
+```
+
+```
++----------------+
+| Storage Volume |
++----------------+
+| s3_volume      |
++----------------+
+1 row in set (0.02 sec)
+```
+
+```
+DESC STORAGE VOLUME s3_volume\G
+```
+
+```sh
+*************************** 1. row ***************************
+     Name: s3_volume
+     Type: S3
+# highlight-next-line
+IsDefault: false
+ Location: s3://my-starrocks-bucket/
+   Params: {"aws.s3.access_key":"******","aws.s3.secret_key":"******","aws.s3.endpoint":"minio:9000","aws.s3.region":"us-east-1","aws.s3.use_instance_profile":"false","aws.s3.use_web_identity_token_file":"false","aws.s3.use_aws_sdk_default_behavior":"false"}
+  Enabled: true
+  Comment:
+1 row in set (0.02 sec)
+```
+
+## Set the default storage volume
+
+```
+SET s3_volume AS DEFAULT STORAGE VOLUME;
+```
+
+```
+DESC STORAGE VOLUME s3_volume\G
+```
+
+```sh
+*************************** 1. row ***************************
+     Name: s3_volume
+     Type: S3
+# highlight-next-line
+IsDefault: false
+ Location: s3://my-starrocks-bucket/
+   Params: {"aws.s3.access_key":"******","aws.s3.secret_key":"******","aws.s3.endpoint":"minio:9000","aws.s3.region":"us-east-1","aws.s3.use_instance_profile":"false","aws.s3.use_web_identity_token_file":"false","aws.s3.use_aws_sdk_default_behavior":"false"}
+  Enabled: true
+  Comment:
+1 row in set (0.02 sec)
 ```
 
 :::tip
@@ -245,25 +310,25 @@ of a semicolon. The `\G` causes the mysql CLI to render the query results vertic
 Many SQL clients do not interpret vertical formatting output, so you should replace `\G` with `;`.
 :::
 
-```plaintext
-*************************** 1. row ***************************
-     Name: builtin_storage_volume
-     Type: S3
-IsDefault: true
-#highlight-start
- Location: s3://starrocks
-   Params: {"aws.s3.access_key":"******","aws.s3.secret_key":"******","aws.s3.endpoint":"minio:9000","aws.s3.region":"","aws.s3.use_instance_profile":"false","aws.s3.use_aws_sdk_default_behavior":"false"}
-#highlight-end
-  Enabled: true
-  Comment:
-1 row in set (0.03 sec)
+## Create a database
+
+```
+CREATE DATABASE IF NOT EXISTS quickstart;
 ```
 
-Verify that the parameters match the configuration.
+Verify that the database `quickstart` is using the storage volume `s3_volume`:
 
-:::note
-The folder `builtin_storage_volume` will not be visible in the MinIO object list until data is written to the bucket.
-:::
+```
+SHOW CREATE DATABASE quickstart \G
+```
+
+```sh
+*************************** 1. row ***************************
+       Database: quickstart
+Create Database: CREATE DATABASE `quickstart`
+# highlight-next-line
+PROPERTIES ("storage_volume" = "s3_volume")
+```
 
 ---
 
