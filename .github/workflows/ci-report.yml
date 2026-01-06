@@ -69,7 +69,7 @@ jobs:
           REPO: ${{ github.repository }}
         run: |
           PR_NUMBER=`echo ${PR_NUMBER}`
-          pr_info=`gh pr view ${PR_NUMBER} -R ${REPO} --json baseRefName,state,title`
+          pr_info=`gh pr view ${PR_NUMBER} -R ${REPO} --json baseRefName,headRefName,state,title`
           base_ref=$(echo ${pr_info} | jq -r .baseRefName)
           head_ref=$(echo ${pr_info} | jq -r .headRefName)
           pr_state=$(echo ${pr_info} | jq -r .state)
@@ -206,6 +206,7 @@ jobs:
             java -jar cover-checker-console/target/cover-checker-console-1.4.0-jar-with-dependencies.jar \
               --cover ${{ github.workspace }}/result/ --github-token ${{ secrets.GITHUB_TOKEN }} \
               --repo ${{ github.repository }} --threshold 80 --github-url api.github.com --pr ${PR_NUMBER} -type jacoco
+            echo "fe_incremental_check=FAILURE" >> $GITHUB_OUTPUT
           fi
           rm -rf coverchecker
           rm -rf ci-tools
