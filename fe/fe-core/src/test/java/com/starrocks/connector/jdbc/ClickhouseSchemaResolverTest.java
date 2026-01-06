@@ -249,8 +249,10 @@ public class ClickhouseSchemaResolverTest {
     public void testAggregateFunctionTypes() throws SQLException {
         // Test SimpleAggregateFunction and AggregateFunction type handling
         MockResultSet aggColumnResult = new MockResultSet("columns");
+        // SimpleAggregateFunction types come through as Types.VARCHAR in real ClickHouse JDBC driver
+        // AggregateFunction types come through as Types.OTHER
         aggColumnResult.addColumn("DATA_TYPE",
-                Arrays.asList(Types.OTHER, Types.OTHER, Types.OTHER, Types.OTHER, Types.OTHER, Types.OTHER));
+                Arrays.asList(Types.VARCHAR, Types.VARCHAR, Types.OTHER, Types.VARCHAR, Types.OTHER, Types.OTHER));
         aggColumnResult.addColumn("TYPE_NAME", Arrays.asList(
                 "SimpleAggregateFunction(sum, UInt64)",
                 "SimpleAggregateFunction(max, Float64)",
@@ -292,24 +294,24 @@ public class ClickhouseSchemaResolverTest {
             // Verify the columns were parsed correctly
             Assertions.assertEquals(6, fullSchema.size());
             
-            // SimpleAggregateFunction(sum, UInt64) -> LARGEINT
+            // SimpleAggregateFunction(sum, UInt64) -> VARCHAR (SimpleAggregateFunction always maps to VARCHAR)
             Assertions.assertEquals("val", fullSchema.get(0).getName());
-            Assertions.assertEquals(PrimitiveType.LARGEINT, fullSchema.get(0).getType().getPrimitiveType());
+            Assertions.assertEquals(PrimitiveType.VARCHAR, fullSchema.get(0).getType().getPrimitiveType());
             
-            // SimpleAggregateFunction(max, Float64) -> DOUBLE
+            // SimpleAggregateFunction(max, Float64) -> VARCHAR
             Assertions.assertEquals("max_val", fullSchema.get(1).getName());
-            Assertions.assertEquals(PrimitiveType.DOUBLE, fullSchema.get(1).getType().getPrimitiveType());
+            Assertions.assertEquals(PrimitiveType.VARCHAR, fullSchema.get(1).getType().getPrimitiveType());
             
-            // AggregateFunction(quantile(0.5), Float64) -> DOUBLE
+            // AggregateFunction(quantile(0.5), Float64) -> DOUBLE (extracts underlying type)
             Assertions.assertEquals("median", fullSchema.get(2).getName());
             Assertions.assertEquals(PrimitiveType.DOUBLE, fullSchema.get(2).getType().getPrimitiveType());
             
-            // Nullable(SimpleAggregateFunction(sum, UInt64)) -> LARGEINT
+            // Nullable(SimpleAggregateFunction(sum, UInt64)) -> VARCHAR (SimpleAggregateFunction always maps to VARCHAR)
             Assertions.assertEquals("nullable_sum", fullSchema.get(3).getName());
-            Assertions.assertEquals(PrimitiveType.LARGEINT, fullSchema.get(3).getType().getPrimitiveType());
+            Assertions.assertEquals(PrimitiveType.VARCHAR, fullSchema.get(3).getType().getPrimitiveType());
             Assertions.assertTrue(fullSchema.get(3).isAllowNull());
             
-            // Nullable(AggregateFunction(uniq, String)) -> VARCHAR
+            // Nullable(AggregateFunction(uniq, String)) -> VARCHAR (extracts underlying String type)
             Assertions.assertEquals("uniq_str", fullSchema.get(4).getName());
             Assertions.assertEquals(PrimitiveType.VARCHAR, fullSchema.get(4).getType().getPrimitiveType());
             Assertions.assertTrue(fullSchema.get(4).isAllowNull());

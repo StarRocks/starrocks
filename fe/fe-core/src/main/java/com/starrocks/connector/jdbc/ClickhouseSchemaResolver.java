@@ -92,16 +92,17 @@ public class ClickhouseSchemaResolver extends JDBCSchemaResolver {
     }
 
     /**
-     * Extracts the underlying data type from ClickHouse AggregateFunction and SimpleAggregateFunction types.
+     * Extracts the underlying data type from ClickHouse AggregateFunction types.
+     * Note: SimpleAggregateFunction types are NOT processed here - they are mapped directly to VARCHAR.
      * This method handles Nullable wrappers properly - if the input type is Nullable, the output will also
      * be Nullable with the extracted underlying type.
      * 
      * Examples:
-     *   "SimpleAggregateFunction(sum, UInt64)" -> "UInt64"
      *   "AggregateFunction(quantile(0.5), Float64)" -> "Float64"
-     *   "Nullable(SimpleAggregateFunction(sum, UInt64))" -> "Nullable(UInt64)"
+     *   "Nullable(AggregateFunction(uniq, String))" -> "Nullable(String)"
      *   "AggregateFunction(sumMap, Array(Tuple(String, Int64)))" -> "Array(Tuple(String, Int64))"
      *   "UInt64" -> "UInt64" (unchanged if not an aggregate function type)
+     *   "SimpleAggregateFunction(sum, UInt64)" -> "SimpleAggregateFunction(sum, UInt64)" (unchanged, handled separately)
      */
     private String extractUnderlyingType(String typeName) {
         if (typeName == null) {
@@ -116,16 +117,13 @@ public class ClickhouseSchemaResolver extends JDBCSchemaResolver {
             workingTypeName = typeName.substring("Nullable(".length(), typeName.length() - 1);
         }
         
-        // Extract underlying type from SimpleAggregateFunction or AggregateFunction
-        if (workingTypeName.startsWith("SimpleAggregateFunction(") && workingTypeName.endsWith(")")) {
-            // Format: SimpleAggregateFunction(function_name, underlying_type)
-            String content = workingTypeName.substring("SimpleAggregateFunction(".length(), workingTypeName.length() - 1);
-            workingTypeName = extractUnderlyingTypeFromContent(content);
-        } else if (workingTypeName.startsWith("AggregateFunction(") && workingTypeName.endsWith(")")) {
+        // Extract underlying type from AggregateFunction only (NOT SimpleAggregateFunction)
+        if (workingTypeName.startsWith("AggregateFunction(") && workingTypeName.endsWith(")")) {
             // Format: AggregateFunction(function_name, underlying_type) or AggregateFunction(function_name(params), underlying_type)
             String content = workingTypeName.substring("AggregateFunction(".length(), workingTypeName.length() - 1);
             workingTypeName = extractUnderlyingTypeFromContent(content);
         }
+        // Note: SimpleAggregateFunction is NOT extracted here - it's handled separately and mapped to VARCHAR
         
         // Restore Nullable wrapper if needed
         if (isNullable && !workingTypeName.startsWith("Nullable(")) {
@@ -163,8 +161,14 @@ public class ClickhouseSchemaResolver extends JDBCSchemaResolver {
 
     @Override
     public Type convertColumnType(int dataType, String typeName, int columnSize, int digits) {
-        // Handle ClickHouse AggregateFunction and SimpleAggregateFunction types
-        // These types wrap the actual data type, e.g., "SimpleAggregateFunction(sum, UInt64)"
+        // Check if this is a SimpleAggregateFunction type - these should always map to VARCHAR
+        // regardless of the underlying type, as they store pre-aggregated values
+        if (typeName != null && isSimpleAggregateFunction(typeName)) {
+            return TypeFactory.createVarcharType(DEFAULT_VARCHAR_LENGTH);
+        }
+        
+        // Handle ClickHouse AggregateFunction types (but not SimpleAggregateFunction)
+        // These types wrap the actual data type, e.g., "AggregateFunction(quantile(0.5), Float64)"
         typeName = extractUnderlyingType(typeName);
         
         PrimitiveType primitiveType;
@@ -228,6 +232,23 @@ public class ClickhouseSchemaResolver extends JDBCSchemaResolver {
                 break;
         }
         return TypeFactory.createType(primitiveType);
+    }
+    
+    /**
+     * Check if the type name is a SimpleAggregateFunction.
+     * Handles both plain and Nullable-wrapped SimpleAggregateFunction types.
+     */
+    private boolean isSimpleAggregateFunction(String typeName) {
+        if (typeName == null) {
+            return false;
+        }
+        
+        String unwrapped = typeName;
+        if (typeName.startsWith("Nullable(") && typeName.endsWith(")")) {
+            unwrapped = typeName.substring("Nullable(".length(), typeName.length() - 1);
+        }
+        
+        return unwrapped.startsWith("SimpleAggregateFunction(");
     }
 
     /**
