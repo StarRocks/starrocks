@@ -533,16 +533,14 @@ public class InformationSchemaDataSource {
             }
 
             List<BasicTable> tables = new ArrayList<>();
-<<<<<<< HEAD
             Locker locker = new Locker();
             try {
                 locker.lockDatabase(db.getId(), LockType.READ);
                 List<String> tableNames = metadataMgr.listTableNames(context, catalogName, dbName);
                 for (String tableName : tableNames) {
-                    if (request.isSetTable_name()) {
-                        if (!tableName.equals(request.getTable_name())) {
-                            continue;
-                        }
+                    if (request.isSetTable_name() &&
+                            !PatternMatcher.matchPattern(request.getTable_name(), tableName, matcher, caseSensitive)) {
+                        continue;
                     }
 
                     BasicTable table = null;
@@ -554,14 +552,6 @@ public class InformationSchemaDataSource {
                     if (table == null) {
                         continue;
                     }
-=======
-            List<String> tableNames = metadataMgr.listTableNames(context, catalogName, dbName);
-            for (String tableName : tableNames) {
-                if (request.isSetTable_name() &&
-                        !PatternMatcher.matchPattern(request.getTable_name(), tableName, matcher, caseSensitive)) {
-                    continue;
-                }
->>>>>>> 8411bd3776 ([BugFix] fix get tables from information schema does not respect pattern (#67457))
 
                     try {
                         Authorizer.checkAnyActionOnTableLikeObject(context, dbName, table);
