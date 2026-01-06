@@ -104,7 +104,7 @@ public class ScanNodeComputeScanRangeTest {
         Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable("test", "t1");
         Assertions.assertNotNull(table);
         Assertions.assertInstanceOf(OlapTable.class, table);
-        desc.setTable(table);g
+        desc.setTable(table);
         OlapTable olapTable = (OlapTable) table;
         MetaScanNode metaScanNode = new MetaScanNode(new PlanNodeId(1), desc, olapTable, Maps.newHashMap(), List.of(),
                 olapTable.getBaseIndexId(), null);
