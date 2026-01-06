@@ -321,8 +321,9 @@ public class MergeCommitTask extends AbstractTxnStateChangeCallback implements R
             VisibleStateWaiter waiter;
             try (ScopedTimer ignored = new ScopedTimer(loadTimeTrace.commitCostMs)) {
                 // Currently task is not persisted, so no need to persist attachment for replaying
-                waiter = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().commitTransaction(
-                                dbId, localTxnId, loadResult.tabletCommitInfos, loadResult.tabletFailInfos, null);
+                waiter = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().retryCommitOnRateLimitExceeded(
+                        database, localTxnId, loadResult.tabletCommitInfos, loadResult.tabletFailInfos,
+                        null, timeoutWatcher.getLeftTimeoutMillis());
             }
 
             // 6) wait for publish/visibility.
