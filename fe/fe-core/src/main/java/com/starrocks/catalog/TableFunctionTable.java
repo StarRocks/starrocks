@@ -123,6 +123,7 @@ public class TableFunctionTable extends Table {
     public static final String PROPERTY_PARTITION_BY = "partition_by";
 
     public static final String PROPERTY_COLUMNS_FROM_PATH = "columns_from_path";
+    public static final String PROPERTY_PATH_COLUMN = "path_column";
     private static final String PROPERTY_STRICT_MODE = LoadStmt.STRICT_MODE;
 
     public static final String PROPERTY_AUTO_DETECT_SAMPLE_FILES = "auto_detect_sample_files";
@@ -179,6 +180,7 @@ public class TableFunctionTable extends Table {
     private int autoDetectSampleRows = DEFAULT_AUTO_DETECT_SAMPLE_ROWS;
 
     private List<String> columnsFromPath = new ArrayList<>();
+    private String pathColumnName = null;
     private boolean strictMode = false;
     private final Map<String, String> properties;
 
@@ -262,6 +264,11 @@ public class TableFunctionTable extends Table {
 
         // get columns from path
         columns.addAll(getSchemaFromPath());
+
+        // add path column if specified
+        if (pathColumnName != null) {
+            columns.add(new Column(pathColumnName, StringType.DEFAULT_STRING, true));
+        }
 
         // check duplicate columns
         checkDuplicateColumns(columns);
@@ -467,6 +474,11 @@ public class TableFunctionTable extends Table {
             for (String col : colsFromPath) {
                 columnsFromPath.add(col.trim());
             }
+        }
+
+        String pathColumnProp = properties.get(PROPERTY_PATH_COLUMN);
+        if (!Strings.isNullOrEmpty(pathColumnProp)) {
+            pathColumnName = pathColumnProp.trim();
         }
 
         if (properties.containsKey(PROPERTY_STRICT_MODE)) {
@@ -722,6 +734,14 @@ public class TableFunctionTable extends Table {
 
     public List<String> getColumnsFromPath() {
         return columnsFromPath;
+    }
+
+    public String getPathColumnName() {
+        return pathColumnName;
+    }
+
+    public boolean hasPathColumn() {
+        return pathColumnName != null;
     }
 
     public boolean isStrictMode() {

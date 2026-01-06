@@ -54,7 +54,9 @@ Status AvroCppScanner::open() {
         if (rng.num_of_columns_from_file != first_range.num_of_columns_from_file) {
             return Status::InvalidArgument("Column count from file of range mismatch");
         }
-        if (rng.num_of_columns_from_file + rng.columns_from_path.size() != _src_slot_descriptors.size()) {
+        int path_column_count = (rng.__isset.include_file_path_column && rng.include_file_path_column) ? 1 : 0;
+        if (rng.num_of_columns_from_file + rng.columns_from_path.size() + path_column_count !=
+            _src_slot_descriptors.size()) {
             return Status::InvalidArgument("Slot descriptor and column count mismatch");
         }
     }
@@ -115,8 +117,12 @@ StatusOr<ChunkPtr> AvroCppScanner::get_next() {
         }
     }
 
-    fill_columns_from_path(src_chunk, _num_of_columns_from_file, _scan_range.ranges[_next_range - 1].columns_from_path,
-                           src_chunk->num_rows());
+    const auto& range = _scan_range.ranges[_next_range - 1];
+    fill_columns_from_path(src_chunk, _num_of_columns_from_file, range.columns_from_path, src_chunk->num_rows());
+    if (range.__isset.include_file_path_column && range.include_file_path_column) {
+        int path_column_slot = _num_of_columns_from_file + range.columns_from_path.size();
+        fill_file_path_column(src_chunk, path_column_slot, range.path, src_chunk->num_rows());
+    }
 
     return materialize(src_chunk, src_chunk);
 }
