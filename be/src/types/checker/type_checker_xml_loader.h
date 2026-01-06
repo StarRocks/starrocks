@@ -28,52 +28,42 @@
 namespace starrocks {
 
 /**
- * TypeCheckerXMLLoader - Loads type checker configurations from XML files.
+ * TypeCheckerXMLLoader - Loads type checker configurations from XML files using libxml2.
  * 
  * This class provides functionality to parse XML configuration files that define
- * mappings between Java class names and their corresponding type checker implementations.
+ * type validation rules for Java-to-StarRocks type mappings.
  * 
  * XML Format:
  * <?xml version="1.0" encoding="UTF-8"?>
  * <type-checkers>
- *   <type-mapping java_class="java.lang.String" checker="StringTypeChecker"/>
- *   ...
+ *   <type-mapping java_class="java.lang.String" display_name="String">
+ *     <type-rule allowed_type="TYPE_VARCHAR" return_type="TYPE_VARCHAR"/>
+ *   </type-mapping>
  * </type-checkers>
  * 
- * The loader supports:
- * - Dynamic type checker registration from XML
- * - Fallback to hardcoded configurations if XML is unavailable
- * - Validation of XML structure and content
- * - Error reporting for malformed XML or missing files
+ * All type checkers are now defined via XML with configurable type rules.
+ * The loader uses libxml2 for robust XML parsing.
  */
 class TypeCheckerXMLLoader {
 public:
     struct TypeMapping {
         std::string java_class;
-        std::string checker_name;  // For predefined checkers
-        std::string display_name;  // For configurable checkers
-        std::vector<ConfigurableTypeChecker::TypeRule> rules;  // Type rules for configurable checkers
-        bool is_configurable;  // True if this uses type rules instead of predefined checker
+        std::string display_name;
+        std::vector<ConfigurableTypeChecker::TypeRule> rules;
+        bool is_configurable;  // Always true now
     };
 
     /**
-     * Load type checker mappings from an XML file.
+     * Load type checker mappings from an XML file using libxml2.
      * 
      * @param xml_file_path Path to the XML configuration file
      * @return StatusOr containing a vector of TypeMapping on success, or error Status on failure
      */
     static StatusOr<std::vector<TypeMapping>> load_from_xml(const std::string& xml_file_path);
-
-    /**
-     * Create a type checker instance based on the checker name.
-     * 
-     * @param checker_name Name of the checker class (e.g., "ByteTypeChecker")
-     * @return Unique pointer to TypeChecker instance, or nullptr if checker name is unknown
-     */
-    static std::unique_ptr<TypeChecker> create_checker(const std::string& checker_name);
     
     /**
      * Create a type checker instance from a type mapping.
+     * All type checkers are now ConfigurableTypeChecker instances.
      * 
      * @param mapping The type mapping configuration
      * @return Unique pointer to TypeChecker instance
@@ -81,31 +71,6 @@ public:
     static std::unique_ptr<TypeChecker> create_checker_from_mapping(const TypeMapping& mapping);
 
 private:
-    /**
-     * Parse XML content and extract type mappings.
-     * 
-     * @param xml_content The XML content as a string
-     * @return StatusOr containing a vector of TypeMapping on success, or error Status on failure
-     */
-    static StatusOr<std::vector<TypeMapping>> parse_xml_content(const std::string& xml_content);
-
-    /**
-     * Extract attribute value from an XML tag.
-     * 
-     * @param line The XML line containing the tag
-     * @param attr_name The attribute name to extract
-     * @return The attribute value, or empty string if not found
-     */
-    static std::string extract_attribute(const std::string& line, const std::string& attr_name);
-
-    /**
-     * Trim whitespace from both ends of a string.
-     * 
-     * @param str The string to trim
-     * @return Trimmed string
-     */
-    static std::string trim(const std::string& str);
-    
     /**
      * Parse LogicalType from string.
      * 

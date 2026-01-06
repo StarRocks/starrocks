@@ -47,9 +47,15 @@ protected:
 TEST_F(TypeCheckerXMLLoaderTest, LoadValidXML) {
     std::string xml_content = R"(<?xml version="1.0" encoding="UTF-8"?>
 <type-checkers>
-  <type-mapping java_class="java.lang.String" checker="StringTypeChecker"/>
-  <type-mapping java_class="java.lang.Integer" checker="IntegerTypeChecker"/>
-  <type-mapping java_class="java.lang.Boolean" checker="BooleanTypeChecker"/>
+  <type-mapping java_class="java.lang.String" display_name="String">
+    <type-rule allowed_type="TYPE_VARCHAR" return_type="TYPE_VARCHAR"/>
+  </type-mapping>
+  <type-mapping java_class="java.lang.Integer" display_name="Integer">
+    <type-rule allowed_type="TYPE_INT" return_type="TYPE_INT"/>
+  </type-mapping>
+  <type-mapping java_class="java.lang.Boolean" display_name="Boolean">
+    <type-rule allowed_type="TYPE_BOOLEAN" return_type="TYPE_BOOLEAN"/>
+  </type-mapping>
 </type-checkers>)";
 
     std::string xml_file = "/tmp/type_checker_test/valid.xml";
@@ -62,13 +68,16 @@ TEST_F(TypeCheckerXMLLoaderTest, LoadValidXML) {
     ASSERT_EQ(mappings.size(), 3);
 
     EXPECT_EQ(mappings[0].java_class, "java.lang.String");
-    EXPECT_EQ(mappings[0].checker_name, "StringTypeChecker");
+    EXPECT_EQ(mappings[0].display_name, "String");
+    EXPECT_EQ(mappings[0].rules.size(), 1);
 
     EXPECT_EQ(mappings[1].java_class, "java.lang.Integer");
-    EXPECT_EQ(mappings[1].checker_name, "IntegerTypeChecker");
+    EXPECT_EQ(mappings[1].display_name, "Integer");
+    EXPECT_EQ(mappings[1].rules.size(), 1);
 
     EXPECT_EQ(mappings[2].java_class, "java.lang.Boolean");
-    EXPECT_EQ(mappings[2].checker_name, "BooleanTypeChecker");
+    EXPECT_EQ(mappings[2].display_name, "Boolean");
+    EXPECT_EQ(mappings[2].rules.size(), 1);
 }
 
 // Test loading XML with comments
@@ -77,7 +86,9 @@ TEST_F(TypeCheckerXMLLoaderTest, LoadXMLWithComments) {
 <!-- This is a comment -->
 <type-checkers>
   <!-- Another comment -->
-  <type-mapping java_class="java.lang.String" checker="StringTypeChecker"/>
+  <type-mapping java_class="java.lang.String" display_name="String">
+    <type-rule allowed_type="TYPE_VARCHAR" return_type="TYPE_VARCHAR"/>
+  </type-mapping>
   <!-- Yet another comment -->
   <type-mapping java_class="java.lang.Integer" checker="IntegerTypeChecker"/>
 </type-checkers>)";
