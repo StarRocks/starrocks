@@ -40,6 +40,19 @@ public class ClickhouseSchemaResolver extends JDBCSchemaResolver {
             Arrays.asList("LOG TABLE", "MEMORY TABLE", "TEMPORARY TABLE", "VIEW", "DICTIONARY", "SYSTEM TABLE",
                     "REMOTE TABLE", "TABLE"));
 
+    /**
+     * Helper class to hold the result of unwrapping a Nullable type.
+     */
+    private static class NullableUnwrapResult {
+        final boolean isNullable;
+        final String typeName;
+        
+        NullableUnwrapResult(boolean isNullable, String typeName) {
+            this.isNullable = isNullable;
+            this.typeName = typeName;
+        }
+    }
+
     public ClickhouseSchemaResolver(Map<String, String> properties) {
         this.properties = properties;
     }
@@ -93,14 +106,13 @@ public class ClickhouseSchemaResolver extends JDBCSchemaResolver {
 
     /**
      * Unwrap a Nullable(...) wrapper from a ClickHouse type name.
-     * Returns a pair where the first element indicates if the type was nullable,
-     * and the second element is the unwrapped type name.
+     * Returns a NullableUnwrapResult containing whether the type was nullable and the unwrapped type name.
      */
-    private String[] unwrapNullable(String typeName) {
+    private NullableUnwrapResult unwrapNullable(String typeName) {
         if (typeName != null && typeName.startsWith("Nullable(") && typeName.endsWith(")")) {
-            return new String[]{"true", typeName.substring("Nullable(".length(), typeName.length() - 1)};
+            return new NullableUnwrapResult(true, typeName.substring("Nullable(".length(), typeName.length() - 1));
         }
-        return new String[]{"false", typeName};
+        return new NullableUnwrapResult(false, typeName);
     }
 
     /**
@@ -122,9 +134,8 @@ public class ClickhouseSchemaResolver extends JDBCSchemaResolver {
         }
         
         // Handle Nullable wrapper first
-        String[] unwrapped = unwrapNullable(typeName);
-        boolean isNullable = unwrapped[0].equals("true");
-        String workingTypeName = unwrapped[1];
+        NullableUnwrapResult unwrapped = unwrapNullable(typeName);
+        String workingTypeName = unwrapped.typeName;
         
         // Extract underlying type from AggregateFunction only (NOT SimpleAggregateFunction)
         if (workingTypeName.startsWith("AggregateFunction(") && workingTypeName.endsWith(")")) {
@@ -135,7 +146,7 @@ public class ClickhouseSchemaResolver extends JDBCSchemaResolver {
         // Note: SimpleAggregateFunction is NOT extracted here - it's handled separately and mapped to VARCHAR
         
         // Restore Nullable wrapper if needed
-        if (isNullable && !workingTypeName.startsWith("Nullable(")) {
+        if (unwrapped.isNullable && !workingTypeName.startsWith("Nullable(")) {
             workingTypeName = "Nullable(" + workingTypeName + ")";
         }
         
@@ -252,8 +263,8 @@ public class ClickhouseSchemaResolver extends JDBCSchemaResolver {
             return false;
         }
         
-        String[] unwrapped = unwrapNullable(typeName);
-        return unwrapped[1].startsWith("SimpleAggregateFunction(");
+        NullableUnwrapResult unwrapped = unwrapNullable(typeName);
+        return unwrapped.typeName.startsWith("SimpleAggregateFunction(");
     }
 
     /**
@@ -266,8 +277,8 @@ public class ClickhouseSchemaResolver extends JDBCSchemaResolver {
         }
         
         // Remove Nullable wrapper for type parsing
-        String[] unwrapped = unwrapNullable(typeName);
-        String baseTypeName = unwrapped[1];
+        NullableUnwrapResult unwrapped = unwrapNullable(typeName);
+        String baseTypeName = unwrapped.typeName;
         
         // Handle standard ClickHouse types
         if (baseTypeName.equals("Int8")) {
