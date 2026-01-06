@@ -92,6 +92,18 @@ public class ClickhouseSchemaResolver extends JDBCSchemaResolver {
     }
 
     /**
+     * Unwrap a Nullable(...) wrapper from a ClickHouse type name.
+     * Returns a pair where the first element indicates if the type was nullable,
+     * and the second element is the unwrapped type name.
+     */
+    private String[] unwrapNullable(String typeName) {
+        if (typeName != null && typeName.startsWith("Nullable(") && typeName.endsWith(")")) {
+            return new String[]{"true", typeName.substring("Nullable(".length(), typeName.length() - 1)};
+        }
+        return new String[]{"false", typeName};
+    }
+
+    /**
      * Extracts the underlying data type from ClickHouse AggregateFunction types.
      * Note: SimpleAggregateFunction types are NOT processed here - they are mapped directly to VARCHAR.
      * This method handles Nullable wrappers properly - if the input type is Nullable, the output will also
@@ -110,12 +122,9 @@ public class ClickhouseSchemaResolver extends JDBCSchemaResolver {
         }
         
         // Handle Nullable wrapper first
-        boolean isNullable = false;
-        String workingTypeName = typeName;
-        if (typeName.startsWith("Nullable(") && typeName.endsWith(")")) {
-            isNullable = true;
-            workingTypeName = typeName.substring("Nullable(".length(), typeName.length() - 1);
-        }
+        String[] unwrapped = unwrapNullable(typeName);
+        boolean isNullable = unwrapped[0].equals("true");
+        String workingTypeName = unwrapped[1];
         
         // Extract underlying type from AggregateFunction only (NOT SimpleAggregateFunction)
         if (workingTypeName.startsWith("AggregateFunction(") && workingTypeName.endsWith(")")) {
@@ -243,12 +252,8 @@ public class ClickhouseSchemaResolver extends JDBCSchemaResolver {
             return false;
         }
         
-        String unwrapped = typeName;
-        if (typeName.startsWith("Nullable(") && typeName.endsWith(")")) {
-            unwrapped = typeName.substring("Nullable(".length(), typeName.length() - 1);
-        }
-        
-        return unwrapped.startsWith("SimpleAggregateFunction(");
+        String[] unwrapped = unwrapNullable(typeName);
+        return unwrapped[1].startsWith("SimpleAggregateFunction(");
     }
 
     /**
@@ -261,10 +266,8 @@ public class ClickhouseSchemaResolver extends JDBCSchemaResolver {
         }
         
         // Remove Nullable wrapper for type parsing
-        String baseTypeName = typeName;
-        if (typeName.startsWith("Nullable(") && typeName.endsWith(")")) {
-            baseTypeName = typeName.substring("Nullable(".length(), typeName.length() - 1);
-        }
+        String[] unwrapped = unwrapNullable(typeName);
+        String baseTypeName = unwrapped[1];
         
         // Handle standard ClickHouse types
         if (baseTypeName.equals("Int8")) {
