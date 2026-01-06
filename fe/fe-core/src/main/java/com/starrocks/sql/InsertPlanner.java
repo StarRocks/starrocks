@@ -22,6 +22,7 @@ import com.starrocks.alter.SchemaChangeHandler;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.Function;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.MaterializedIndexMeta;
@@ -80,6 +81,7 @@ import com.starrocks.sql.ast.expression.CastExpr;
 import com.starrocks.sql.ast.expression.CompoundPredicate;
 import com.starrocks.sql.ast.expression.DefaultValueExpr;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.InPredicate;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.NullLiteral;
@@ -121,7 +123,6 @@ import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanFragmentBuilder;
 import com.starrocks.thrift.TPartialUpdateMode;
 import com.starrocks.thrift.TResultSinkType;
-import com.starrocks.type.DateType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.NullType;
 import com.starrocks.type.Type;
@@ -344,13 +345,13 @@ public class InsertPlanner {
         //5. Fill in the generated columns
         optExprBuilder = fillGeneratedColumns(columnRefFactory, insertStmt, outputColumns, optExprBuilder, session);
 
+        //7. Fill in the shadow column
+        optExprBuilder = fillShadowColumns(columnRefFactory, insertStmt, outputColumns, optExprBuilder, session);
+
         //6. Fill in the transform partition columns for Iceberg tables with partition transforms
         // This adds computed columns for expressions like day(dt), month(dt), etc. to support
         // global shuffle based on transformed partition values
         optExprBuilder = fillTransformPartitionColumns(columnRefFactory, insertStmt, outputColumns, optExprBuilder, session);
-
-        //7. Fill in the shadow column
-        optExprBuilder = fillShadowColumns(columnRefFactory, insertStmt, outputColumns, optExprBuilder, session);
 
         //8. Cast output columns type to target type
         optExprBuilder =
@@ -906,6 +907,10 @@ public class InsertPlanner {
                                                                 InsertStmt insertStatement,
                                                                 List<ColumnRefOperator> outputColumns,
                                                                 OptExprBuilder root) {
+        // Get the current project map to preserve transform columns
+        LogicalProjectOperator currentProject = (LogicalProjectOperator) root.getRoot().getOp();
+        Map<ColumnRefOperator, ScalarOperator> currentProjectMap = currentProject.getColumnRefMap();
+
         Map<ColumnRefOperator, ScalarOperator> columnRefMap = new HashMap<>();
         ScalarOperatorRewriter rewriter = new ScalarOperatorRewriter();
         List<ScalarOperatorRewriteRule> rewriteRules = Arrays.asList(new FoldConstantsRule());
@@ -921,6 +926,18 @@ public class InsertPlanner {
                 columnRefMap.put(outputColumns.get(columnIdx), outputColumns.get(columnIdx));
             }
         }
+
+        // Preserve transform partition columns that were added by fillTransformPartitionColumns
+        // These columns have names starting with GENERATED_PARTITION_COLUMN_PREFIX and are not in outputFullSchema
+        for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : currentProjectMap.entrySet()) {
+            ColumnRefOperator col = entry.getKey();
+            if (col.getName() != null && col.getName().startsWith(FeConstants.GENERATED_PARTITION_COLUMN_PREFIX)) {
+                if (!columnRefMap.containsKey(col)) {
+                    columnRefMap.put(col, entry.getValue());
+                }
+            }
+        }
+
         return root.withNewRoot(new LogicalProjectOperator(new HashMap<>(columnRefMap)));
     }
 
@@ -1410,6 +1427,8 @@ public class InsertPlanner {
         List<org.apache.iceberg.PartitionField> partitionFields = icebergTable.getNativeTable().spec().fields();
         org.apache.iceberg.Schema schema = icebergTable.getNativeTable().schema();
 
+        Map<ScalarOperator, ColumnRefOperator> generated = new HashMap<>();
+
         int placeHolderSlotId = 0;
         for (org.apache.iceberg.PartitionField partitionField : partitionFields) {
             String transformStr = partitionField.transform().toString();
@@ -1452,7 +1471,12 @@ public class InsertPlanner {
             // Add to output columns and project map
             outputColumns.add(transformColumnRef);
             columnRefMap.put(transformColumnRef, transformExpr);
+            // root.getExpressionMapping().put(transformExpr, transformColumnRef);
+
+            generated.put(transformExpr, transformColumnRef);
         }
+
+        root.getExpressionMapping().addGeneratedColumnExprOpToColumnRef(generated);
 
         return root.withNewRoot(new LogicalProjectOperator(new HashMap<>(columnRefMap)));
     }
@@ -1475,13 +1499,13 @@ public class InsertPlanner {
         // Handle time-based transforms
         // These functions are already implemented in BE via the iceberg transform functions
         if ("year".equals(transformStr)) {
-            return new CallOperator(fnName, DateType.DATE, Lists.newArrayList(sourceColumnRef));
+            return createCallOperatorWithFunction(fnName, IntegerType.BIGINT, Lists.newArrayList(sourceColumnRef));
         } else if ("month".equals(transformStr)) {
-            return new CallOperator(fnName, DateType.DATE, Lists.newArrayList(sourceColumnRef));
+            return createCallOperatorWithFunction(fnName, IntegerType.BIGINT, Lists.newArrayList(sourceColumnRef));
         } else if ("day".equals(transformStr)) {
-            return new CallOperator(fnName, DateType.DATE, Lists.newArrayList(sourceColumnRef));
+            return createCallOperatorWithFunction(fnName, IntegerType.BIGINT, Lists.newArrayList(sourceColumnRef));
         } else if ("hour".equals(transformStr)) {
-            return new CallOperator(fnName, DateType.DATETIME, Lists.newArrayList(sourceColumnRef));
+            return createCallOperatorWithFunction(fnName, IntegerType.BIGINT, Lists.newArrayList(sourceColumnRef));
         } else if ("void".equals(transformStr)) {
             // void transform means no partitioning, return null constant
             return ConstantOperator.createNull(NullType.NULL);
@@ -1491,7 +1515,7 @@ public class InsertPlanner {
         if (transformStr.startsWith("bucket")) {
             // Parse bucket count: bucket[5] -> 5
             int numBuckets = extractTransformParam(transformStr);
-            return new CallOperator(fnName, IntegerType.INT, Lists.newArrayList(
+            return createCallOperatorWithFunction(fnName, IntegerType.INT, Lists.newArrayList(
                     sourceColumnRef,
                     ConstantOperator.createInt(numBuckets)));
         }
@@ -1501,13 +1525,37 @@ public class InsertPlanner {
             // Parse width: truncate[10] -> 10
             int width = extractTransformParam(transformStr);
             Type returnType = sourceColumnRef.getType().isBinaryType() ? VarcharType.VARCHAR : sourceColumnRef.getType();
-            return new CallOperator(fnName, returnType, Lists.newArrayList(
+            return createCallOperatorWithFunction(fnName, returnType, Lists.newArrayList(
                     sourceColumnRef,
                     ConstantOperator.createInt(width)));
         }
 
         LOG.warn("Unknown transform type: {}", transformStr);
         return null;
+    }
+
+    /**
+     * Create a CallOperator with Function object properly set.
+     * This is required for transform functions to work with ScalarOperatorToExpr.
+     */
+    private ScalarOperator createCallOperatorWithFunction(String fnName, Type returnType,
+                                                            List<ScalarOperator> arguments) {
+        CallOperator callOperator = new CallOperator(fnName, returnType, arguments);
+
+        // Build argument types for function lookup
+        Type[] argTypes = arguments.stream().map(ScalarOperator::getType).toArray(Type[]::new);
+
+        // Get the builtin function from registry
+        // This references IcebergTable.java line 446-449
+        Function builtinFunction = ExprUtils.getBuiltinFunction(fnName, argTypes, Function.CompareMode.IS_IDENTICAL);
+
+        if (builtinFunction != null) {
+            callOperator.setFunction(builtinFunction);
+        } else {
+            LOG.warn("Cannot find builtin function: {} with arg types: {}", fnName, argTypes);
+        }
+
+        return callOperator;
     }
 
     /**
