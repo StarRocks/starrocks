@@ -1013,6 +1013,16 @@ public class ConnectContext {
     }
 
     public void setCurrentWarehouse(String currentWarehouse) {
+        final SessionVariable old = this.sessionVariable;
+        try {
+            tryToSetCurrentWarehouse(currentWarehouse);
+        } catch (Exception e) {
+            this.sessionVariable = old;
+            throw e;
+        }
+    }
+
+    private void tryToSetCurrentWarehouse(String currentWarehouse) {
         final VariableMgr variableMgr = GlobalStateMgr.getCurrentState().getVariableMgr();
         this.sessionVariable = variableMgr.newSessionVariable();
         this.sessionVariable.setWarehouseName(currentWarehouse);

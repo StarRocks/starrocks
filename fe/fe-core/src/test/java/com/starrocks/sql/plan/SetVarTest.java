@@ -211,6 +211,8 @@ public class SetVarTest extends PlanTestBase {
 
     @Test
     public void testMissingWarehouse() throws Exception {
+        Config.run_mode = RunMode.SHARED_DATA.getName();
+        RunMode.detectRunMode();
         // Simulate that after setting the warehouse, this warehouse is deleted.
         starRocksAssert.getCtx().getSessionVariable().setWarehouseName("no_exist_warehouse");
 
