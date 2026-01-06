@@ -42,6 +42,11 @@ public abstract class Variant implements Comparable<Variant> {
         return type;
     }
 
+    @Override
+    public String toString() {
+        return getStringValue();
+    }
+
     public abstract String getStringValue();
 
     public abstract long getLongValue();
