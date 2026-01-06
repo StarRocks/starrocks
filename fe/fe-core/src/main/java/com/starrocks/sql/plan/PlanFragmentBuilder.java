@@ -507,6 +507,51 @@ public class PlanFragmentBuilder {
             return context.getOptExpression(node.getId().asInt());
         }
 
+<<<<<<< HEAD
+=======
+        private boolean containsHeavyExpr(ScalarOperator expr) {
+            Predicate<ScalarOperator> isHeavyExpr = e -> {
+                if (e.getChildren().isEmpty() || !(e instanceof CallOperator)) {
+                    return false;
+                }
+                CallOperator call = (CallOperator) e;
+                return call.getFnName().toLowerCase().contains("regexp");
+            };
+            return ScalarOperatorUtil.getStream(expr).anyMatch(isHeavyExpr);
+        }
+
+        public Map<ColumnRefOperator, ScalarOperator> extractHeavyExprs(Projection projection) {
+            Map<ColumnRefOperator, ScalarOperator> commonSubExprs =
+                    Optional.ofNullable(projection.getCommonSubOperatorMap())
+                            .orElse(Collections.emptyMap());
+
+            Map<ColumnRefOperator, ScalarOperator> heavyCommonSubExprs =
+                    commonSubExprs.entrySet().stream().filter(e -> containsHeavyExpr(e.getValue()))
+                            .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+
+            Map<ColumnRefOperator, ScalarOperator> exprs =
+                    Optional.ofNullable(projection.getColumnRefMap()).orElse(Collections.emptyMap());
+
+            Map<ColumnRefOperator, ScalarOperator> heavyExprs =
+                    exprs.entrySet().stream().filter(e -> containsHeavyExpr(e.getValue()))
+                            .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+
+            if (heavyCommonSubExprs.isEmpty() && heavyExprs.isEmpty()) {
+                return Collections.emptyMap();
+            }
+
+            // Heavy exprs should be removed from ProjectNode's commonSubExprs to avoid trivial mapping from
+            // slotId to itself in commonSubExprs.
+            heavyCommonSubExprs.forEach((k, v) -> commonSubExprs.remove(k));
+
+            ReplaceColumnRefRewriter columnRefReplacer = new ReplaceColumnRefRewriter(commonSubExprs);
+            heavyExprs.replaceAll((k, v) -> columnRefReplacer.rewrite(v));
+            exprs.replaceAll((k, v) -> heavyExprs.containsKey(k) ? k : v);
+            heavyExprs.putAll(heavyCommonSubExprs);
+            return heavyExprs;
+        }
+
+>>>>>>> 194bf3a5e8 ([BugFix] Fix Push down heavy exprs introducing duplicate slot_ids (#67477))
         @Override
         public PlanFragment visit(OptExpression optExpression, ExecPlan context) {
             canUseLocalShuffleAgg &= optExpression.arity() <= 1;
