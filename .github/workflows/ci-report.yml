@@ -246,8 +246,6 @@ jobs:
       PR_NUMBER: ${{ needs.INFO.outputs.PR_NUMBER }}
       BRANCH: ${{ needs.INFO.outputs.BASE_REF }}
       HEAD_REF: ${{ needs.INFO.outputs.HEAD_REF }}
-      bucket_prefix: ${{ needs.INFO.outputs.BUCKET_PREFIX }}
-      SKIP_COV: ${{ needs.INFO.outputs.SKIP_COV }}
     steps:
       - uses: actions/checkout@v4
         id: checkout_code
