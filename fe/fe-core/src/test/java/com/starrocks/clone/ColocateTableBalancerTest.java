@@ -123,6 +123,12 @@ public class ColocateTableBalancerTest {
                 // the interval is 0, so skip log printing to prevent too many logs
             }
         };
+        new MockUp<TabletChecker>() {
+            @Mock
+            protected void runAfterCatalogReady() {
+                System.out.println("Mocked TabletChecker.runAfterCatalogReady() called");
+            }
+        };
 
         UtFrameUtils.createMinStarRocksCluster();
         GlobalStateMgr.getCurrentState().getAlterJobMgr().stop();
