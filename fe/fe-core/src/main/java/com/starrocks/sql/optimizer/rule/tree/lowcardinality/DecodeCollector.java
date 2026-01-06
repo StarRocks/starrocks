@@ -657,9 +657,9 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
 
     // complex type may be support prune subfield, doesn't read data
     private boolean checkComplexTypeInvalid(PhysicalOlapScanOperator scan, ColumnRefOperator column) {
-        String colName = scan.getColRefToColumnMetaMap().get(column).getName();
+        String colId = scan.getColRefToColumnMetaMap().get(column).getColumnId().getId();
         for (ColumnAccessPath path : scan.getColumnAccessPaths()) {
-            if (!StringUtils.equalsIgnoreCase(colName, path.getPath()) || path.getType() != TAccessPathType.ROOT) {
+            if (!StringUtils.equalsIgnoreCase(colId, path.getPath()) || path.getType() != TAccessPathType.ROOT) {
                 continue;
             }
             // check the read path
@@ -670,6 +670,29 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
         return true;
     }
 
+<<<<<<< HEAD
+=======
+    /**
+     * Check if the column is an extended string column, if so, it can be used for global dict optimization.
+     */
+    private boolean checkExtendedColumn(PhysicalOlapScanOperator scan, ColumnRefOperator column) {
+        if (!sessionVariable.isEnableJSONV2DictOpt()) {
+            return false;
+        }
+        String colId = scan.getColRefToColumnMetaMap().get(column).getColumnId().getId();
+        for (ColumnAccessPath path : scan.getColumnAccessPaths()) {
+            if (path.isExtended() &&
+                    path.getLinearPath().equals(colId) &&
+                    path.getType() == TAccessPathType.ROOT &&
+                    path.getValueType().isStringType()) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+>>>>>>> da92db53f8 ([BugFix] Fix the wrong access path after column rename (#67533))
     private void collectPredicate(Operator operator, DecodeInfo info) {
         if (operator.getPredicate() == null) {
             return;
