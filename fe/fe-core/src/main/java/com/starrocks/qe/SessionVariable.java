@@ -470,6 +470,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String CHOOSE_EXECUTE_INSTANCES_MODE = "choose_execute_instances_mode";
 
+    public static final String ENABLE_RECURSIVE_CTE = "enable_recursive_cte";
+    public static final String RECURSIVE_CTE_MAX_DEPTH = "recursive_cte_max_depth";
+    public static final String RECURSIVE_CTE_THROW_LIMIT_EXCEPTION = "recursive_cte_throw_limit_exception";
+    public static final String RECURSIVE_CTE_FINALIZE_TEMPORAL_TABLE = "recursive_cte_finalize_temporal_table";
+
     // --------  New planner session variables end --------
 
     // Type of compression of transmitted data
@@ -1029,6 +1034,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_FULL_SORT_USE_GERMAN_STRING = "enable_full_sort_use_german_string";
 
     public static final String ENABLE_INSERT_SELECT_EXTERNAL_AUTO_REFRESH = "enable_insert_select_external_auto_refresh";
+    public static final String ENABLE_PREDICATE_COL_LATE_MATERIALIZE = "enable_predicate_col_late_materialize";
 
     public static final String PUSH_DOWN_HEAVY_EXPRS = "push_down_heavy_exprs";
 
@@ -2110,6 +2116,42 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_DROP_TABLE_CHECK_MV_DEPENDENCY)
     public boolean enableDropTableCheckMvDependency = false;
 
+    @VarAttr(name = ENABLE_RECURSIVE_CTE)
+    private boolean enableRecursiveCTE = false;
+
+    @VarAttr(name = RECURSIVE_CTE_MAX_DEPTH)
+    private int recursiveCteMaxDepth = 5;
+
+    @VarAttr(name = RECURSIVE_CTE_FINALIZE_TEMPORAL_TABLE, flag = VariableMgr.INVISIBLE)
+    private boolean recursiveCteFinalizeTemporalTable = true;
+
+    @VarAttr(name = RECURSIVE_CTE_THROW_LIMIT_EXCEPTION)
+    private boolean recursiveCteThrowLimitException = true;
+
+    public boolean isEnableRecursiveCTE() {
+        return enableRecursiveCTE;
+    }
+
+    public void setEnableRecursiveCTE(boolean enableRecursiveCTE) {
+        this.enableRecursiveCTE = enableRecursiveCTE;
+    }
+
+    public boolean isRecursiveCteFinalizeTemporalTable() {
+        return recursiveCteFinalizeTemporalTable;
+    }
+
+    public boolean isRecursiveCteThrowLimitException() {
+        return recursiveCteThrowLimitException;
+    }
+
+    public int getRecursiveCteMaxDepth() {
+        return recursiveCteMaxDepth;
+    }
+
+    public void setRecursiveCteMaxDepth(int recursiveCteMaxDepth) {
+        this.recursiveCteMaxDepth = recursiveCteMaxDepth;
+    }
+
     public boolean isEnableSplitTopNAgg() {
         return enableSplitTopNAgg;
     }
@@ -2147,6 +2189,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_INSERT_SELECT_EXTERNAL_AUTO_REFRESH)
     private boolean enableInsertSelectExternalAutoRefresh = true;
+    
+    @VarAttr(name = ENABLE_PREDICATE_COL_LATE_MATERIALIZE)
+    private boolean enablePredicateColLateMaterialize = true;
 
     @VarAttr(name = PUSH_DOWN_HEAVY_EXPRS)
     private boolean pushDownHeavyExprs = true;
@@ -5692,6 +5737,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public void setEnableInsertSelectExternalAutoRefresh(boolean enableInsertSelectExternalAutoRefresh) {
         this.enableInsertSelectExternalAutoRefresh = enableInsertSelectExternalAutoRefresh;
     }
+    
+    public void setEnablePredicateColLateMaterialize(boolean enablePredicateColLateMaterialize) {
+        this.enablePredicateColLateMaterialize = enablePredicateColLateMaterialize;
+    }
+
+    public boolean isEnablePredicateColLateMaterialize() {
+        return enablePredicateColLateMaterialize;
+    }
 
     public void setPushDownHeavyExprs(boolean flag) {
         this.pushDownHeavyExprs = flag;
@@ -5817,6 +5870,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         tResult.setGroup_concat_max_len(groupConcatMaxLen);
         tResult.setRpc_http_min_size(rpcHttpMinSize);
         tResult.setInterleaving_group_size(interleavingGroupSize);
+        tResult.setEnable_predicate_col_late_materialize(enablePredicateColLateMaterialize);
 
         TCompressionType loadCompressionType =
                 CompressionUtils.findTCompressionByName(loadTransmissionCompressionType);

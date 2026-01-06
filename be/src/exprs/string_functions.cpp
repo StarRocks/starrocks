@@ -65,6 +65,8 @@
 namespace starrocks {
 // A regex to match any regex pattern is equivalent to a substring search.
 static const RE2 SUBSTRING_RE(R"((?:\.\*)*([^\.\^\{\[\(\|\)\]\}\+\*\?\$\\]+)(?:\.\*)*)", re2::RE2::Quiet);
+// A strict fixed literal regex contains only normal characters without any regex special characters.
+static const RE2 FIXED_LITERAL_RE(R"(^[^\.\^\{\[\(\|\)\]\}\+\*\?\$\\]+$)", re2::RE2::Quiet);
 
 #define THROW_RUNTIME_ERROR_IF_EXCEED_LIMIT(col, func_name)                        \
     if (UNLIKELY(!col->capacity_limit_reached().ok())) {                           \
@@ -434,7 +436,7 @@ ColumnPtr substr_const_not_null(const Columns& columns, const BinaryColumn* src,
 
     if (len > 0) {
         // the size of substr result never exceeds the counterpart of the source column.
-        size_t reserved = src->get_bytes().size();
+        size_t reserved = src->get_immutable_bytes().size();
         // when start pos is negative, the result of substr take last abs(pos) chars,
         // thus length of the result is less than abs(pos) and len.
         int min_len = len;
@@ -451,7 +453,7 @@ ColumnPtr substr_const_not_null(const Columns& columns, const BinaryColumn* src,
     raw::make_room(&offsets, size + 1);
     offsets[0] = 0;
 
-    auto& src_bytes = src->get_bytes();
+    auto src_bytes = src->get_immutable_bytes();
     auto is_ascii = validate_ascii_fast((const char*)src_bytes.data(), src_bytes.size());
     if (is_ascii) {
         if (off > 0) {
@@ -488,7 +490,7 @@ ColumnPtr right_const_not_null(const Columns& columns, const BinaryColumn* src, 
         return result;
     }
 
-    const auto& src_bytes = src->get_bytes();
+    auto src_bytes = src->get_immutable_bytes();
     const size_t src_bytes_size = src_bytes.size();
     auto reserved = src_bytes_size;
     if (INT_MAX / size > len) {
@@ -689,7 +691,7 @@ static inline ColumnPtr substr_not_const(FunctionContext* context, const starroc
     NullableBinaryColumnBuilder result;
     result.resize(rows_num, src->byte_size());
 
-    const auto& src_bytes = src->get_bytes();
+    auto src_bytes = src->get_immutable_bytes();
     auto is_ascii = validate_ascii_fast((const char*)src_bytes.data(), src_bytes.size());
     if (is_ascii) {
         ascii_substr_not_const(rows_num, &str_viewer, &off_viewer, &len_viewer, &result);
@@ -709,7 +711,7 @@ static inline ColumnPtr right_not_const(FunctionContext* context, const starrock
 
     NullableBinaryColumnBuilder result;
 
-    const auto& src_bytes = src->get_bytes();
+    auto src_bytes = src->get_immutable_bytes();
     auto is_ascii = validate_ascii_fast((const char*)src_bytes.data(), src_bytes.size());
     result.resize(rows_num, src->byte_size());
 
@@ -1604,7 +1606,7 @@ static inline ColumnPtr pad_const_not_null(const Columns& columns, const BinaryC
         SubstrState state = {.is_const = true, .pos = 1, .len = len};
         return substr_const_not_null(columns, src, &state);
     }
-    const auto& src_bytes = src->get_bytes();
+    auto src_bytes = src->get_immutable_bytes();
     auto src_is_utf8 = !validate_ascii_fast((const char*)src_bytes.data(), src_bytes.size());
     if (src_is_utf8 && pad_state->fill_is_utf8) {
         return pad_utf8_const<true, true, pad_type>(columns, src, (uint8_t*)fill.data, fill.size, len,
@@ -1762,7 +1764,7 @@ ColumnPtr pad_not_const(const Columns& columns, [[maybe_unused]] const PadState*
 template <bool pad_is_const, PadType pad_type>
 ColumnPtr pad_not_const_check_ascii(const Columns& columns, [[maybe_unused]] const PadState* state) {
     auto src = ColumnHelper::get_binary_column(columns[0].get());
-    const auto& bytes = src->get_bytes();
+    auto bytes = src->get_immutable_bytes();
     auto is_ascii = validate_ascii_fast((const char*)bytes.data(), bytes.size());
     if (is_ascii) {
         return pad_not_const<true, pad_is_const, pad_type>(columns, state);
@@ -1849,7 +1851,7 @@ StatusOr<ColumnPtr> StringFunctions::append_trailing_char_if_absent(FunctionCont
             binary_dst = ColumnHelper::as_raw_column<BinaryColumn>(data.get());
             dst = std::move(data);
         }
-        const auto& src_data = src->get_bytes();
+        auto src_data = src->get_immutable_bytes();
         const auto& src_offsets = src->get_offset();
 
         auto& dst_data = binary_dst->get_bytes();
@@ -1973,7 +1975,7 @@ static inline void vectorized_toggle_case(const ImmBytes src, Bytes* dst) {
 }
 
 template <bool to_upper>
-void utf8_case_toggle(const Bytes& src_bytes, const Offsets& src_offsets, Bytes* dst_bytes, Offsets* dst_offsets) {
+void utf8_case_toggle(ImmBytes src_bytes, const Offsets& src_offsets, Bytes* dst_bytes, Offsets* dst_offsets) {
     UErrorCode err_code = U_ZERO_ERROR;
     UCaseMap* case_map = ucasemap_open("", U_FOLD_CASE_DEFAULT, &err_code);
     if (U_FAILURE(err_code)) {
@@ -2029,7 +2031,7 @@ template <bool to_upper>
 template <LogicalType Type, LogicalType ResultType>
 ColumnPtr StringCaseToggleFunction<to_upper>::evaluate(const ColumnPtr& v1) {
     const auto* src = down_cast<const BinaryColumn*>(v1.get());
-    const auto& src_bytes = src->get_bytes();
+    auto src_bytes = src->get_immutable_bytes();
     const auto& src_offsets = src->get_offset();
     auto dst = RunTimeColumnType<TYPE_VARCHAR>::create();
     auto& dst_offsets = dst->get_offset();
@@ -2055,7 +2057,7 @@ public:
     template <LogicalType Type, LogicalType ResultType>
     static ColumnPtr evaluate(const ColumnPtr& v1) {
         const auto* src = down_cast<const BinaryColumn*>(v1.get());
-        const auto& src_bytes = src->get_bytes();
+        auto src_bytes = src->get_immutable_bytes();
         const auto& src_offsets = src->get_offset();
         auto dst = RunTimeColumnType<TYPE_VARCHAR>::create();
         auto& dst_offsets = dst->get_offset();
@@ -2198,7 +2200,7 @@ struct ReverseFunction {
     template <LogicalType Type, LogicalType ResultType>
     static inline ColumnPtr evaluate(const ColumnPtr& column) {
         const auto* src = down_cast<const BinaryColumn*>(column.get());
-        const auto& src_bytes = src->get_bytes();
+        auto src_bytes = src->get_immutable_bytes();
         const auto& src_offsets = src->get_offset();
 
         auto result = BinaryColumn::create();
@@ -2377,7 +2379,7 @@ struct AdaptiveTrimFunction {
         const auto num_rows = src->size();
         raw::make_room(&dst_offsets, num_rows + 1);
         dst_offsets[0] = 0;
-        dst_bytes.reserve(src->get_bytes().size());
+        dst_bytes.reserve(src->get_immutable_bytes().size());
 
         size_t i = 0;
         const auto sample_num = std::min(num_rows, 100ul);
@@ -3346,8 +3348,10 @@ Status StringFunctions::regexp_replace_prepare(FunctionContext* context, Functio
     state->pattern = pattern_str;
 
     std::string search_string;
+
     if (pattern_str.size() && RE2::FullMatch(pattern_str, SUBSTRING_RE, &search_string)) {
         state->use_hyperscan = true;
+        state->use_hyperscan_vec = RE2::FullMatch(pattern_str, FIXED_LITERAL_RE, &search_string);
         state->size_of_pattern = pattern.size;
         std::string re_pattern(pattern.data, pattern.size);
         RETURN_IF_ERROR(hs_compile_and_alloc_scratch(re_pattern, state, context, pattern));
@@ -3865,7 +3869,7 @@ static StatusOr<ColumnPtr> hyperscan_vec_evaluate(const BinaryColumn* src, Strin
     MatchInfoChain match_info_chain;
     match_info_chain.info_chain.reserve(src->size());
 
-    const auto& src_bytes = src->get_bytes();
+    auto src_bytes = src->get_immutable_bytes();
     auto src_value_size = src_bytes.size();
     const char* data = (src_value_size) ? reinterpret_cast<const char*>(src_bytes.data())
                                         : &StringFunctions::_DUMMY_STRING_FOR_EMPTY_PATTERN;
@@ -3926,35 +3930,36 @@ static StatusOr<ColumnPtr> hyperscan_vec_evaluate(const BinaryColumn* src, Strin
     raw::make_room(&dst_offsets, num_rows + 1);
     dst_bytes.reserve(data_count());
 
-    // copy data
+    // copy data row by row with replacements applied
     char* cursor = reinterpret_cast<char*>(dst_bytes.data());
-    size_t last_to = 0;
-    for (const auto& info : match_info_chain_in_one_row.info_chain) {
-        strings::memcpy_inlined(cursor, data + last_to, info.from - last_to);
-        cursor += info.from - last_to;
-        strings::memcpy_inlined(cursor, rpl_value.data(), rpl_value.size());
-        cursor += rpl_value.size();
-        last_to = info.to;
-    }
-    strings::memcpy_inlined(cursor, data + last_to, src_value_size - last_to);
-
-    // split offset
     size_t match_index = 0;
-    dst_offsets[0] = 0;
     size_t match_size = match_info_chain_in_one_row.info_chain.size();
+    dst_offsets[0] = 0;
+
     for (size_t i = 0; i < num_rows; i++) {
-        size_t from = src_offsets[i];
-        size_t to = src_offsets[i + 1];
-        size_t dis = to - from;
-        DCHECK(match_index == match_size || match_info_chain_in_one_row.info_chain[match_index].to > from);
-        while (match_index < match_size && match_info_chain_in_one_row.info_chain[match_index].from >= from &&
-               match_info_chain_in_one_row.info_chain[match_index].to <= to) {
-            dis -= match_info_chain_in_one_row.info_chain[match_index].to -
-                   match_info_chain_in_one_row.info_chain[match_index].from;
-            dis += rpl_value.size();
+        size_t row_start = src_offsets[i];
+        size_t row_end = src_offsets[i + 1];
+        size_t last_to = row_start;
+
+        // Process all matches in this row
+        while (match_index < match_size && match_info_chain_in_one_row.info_chain[match_index].from >= row_start &&
+               match_info_chain_in_one_row.info_chain[match_index].to <= row_end) {
+            const auto& info = match_info_chain_in_one_row.info_chain[match_index];
+            // Copy data before the match
+            strings::memcpy_inlined(cursor, data + last_to, info.from - last_to);
+            cursor += info.from - last_to;
+            // Copy replacement
+            strings::memcpy_inlined(cursor, rpl_value.data(), rpl_value.size());
+            cursor += rpl_value.size();
+            last_to = info.to;
             match_index++;
         }
-        dst_offsets[i + 1] = dst_offsets[i] + dis;
+        // Copy remaining data in this row
+        strings::memcpy_inlined(cursor, data + last_to, row_end - last_to);
+        cursor += row_end - last_to;
+
+        // Calculate offset for this row
+        dst_offsets[i + 1] = cursor - reinterpret_cast<char*>(dst_bytes.data());
     }
     DCHECK(match_index == match_size);
     DCHECK(dst_offsets.back() == data_count());
@@ -4064,7 +4069,7 @@ StatusOr<ColumnPtr> StringFunctions::regexp_replace(FunctionContext* context, co
 
     if (state->const_pattern) {
         if (state->use_hyperscan) {
-            if (columns[2]->is_constant() && context->state()->enable_hyperscan_vec()) {
+            if (columns[2]->is_constant() && context->state()->enable_hyperscan_vec() && state->use_hyperscan_vec) {
                 return regexp_replace_use_hyperscan_vec(state, columns);
             } else {
                 return regexp_replace_use_hyperscan(state, columns);

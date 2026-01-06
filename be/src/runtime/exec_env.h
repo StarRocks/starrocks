@@ -362,7 +362,7 @@ public:
 
     lake::LakePersistentIndexParallelCompactMgr* parallel_compact_mgr() { return _parallel_compact_mgr.get(); }
 
-    ThreadPool* pk_index_get_thread_pool() { return _pk_index_get_thread_pool.get(); }
+    ThreadPool* pk_index_execution_thread_pool() { return _pk_index_execution_thread_pool.get(); }
 
     ThreadPool* pk_index_memtable_flush_thread_pool() { return _pk_index_memtable_flush_thread_pool.get(); }
 
@@ -438,7 +438,7 @@ private:
     lake::ReplicationTxnManager* _lake_replication_txn_manager = nullptr;
     std::unique_ptr<ThreadPool> _put_aggregate_metadata_thread_pool = nullptr;
     std::unique_ptr<lake::LakePersistentIndexParallelCompactMgr> _parallel_compact_mgr;
-    std::unique_ptr<ThreadPool> _pk_index_get_thread_pool = nullptr;
+    std::unique_ptr<ThreadPool> _pk_index_execution_thread_pool = nullptr;
     std::unique_ptr<ThreadPool> _pk_index_memtable_flush_thread_pool = nullptr;
 
     AgentServer* _agent_server = nullptr;

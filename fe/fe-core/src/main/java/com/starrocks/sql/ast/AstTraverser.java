@@ -174,6 +174,10 @@ public class AstTraverser<R, C> implements AstVisitorExtendInterface<R, C> {
 
     @Override
     public R visitCTE(CTERelation node, C context) {
+        if (node.isRecursive() && !node.isAnchor()) {
+            // For recursive CTE, only traverse the non-recursive part (anchor member)
+            return null;
+        }
         return visit(node.getCteQueryStatement(), context);
     }
 

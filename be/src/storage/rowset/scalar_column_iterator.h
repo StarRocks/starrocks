@@ -61,6 +61,11 @@ public:
 
     Status next_batch(const SparseRange<>& range, Column* dst) override;
 
+    Status next_batch_with_filter(const SparseRange<>& range, Column* dst,
+                                  const std::vector<const ColumnPredicate*>& compound_and_predicates,
+                                  Buffer<uint8_t>* selection, Buffer<uint16_t>* selected_idx,
+                                  size_t* processed_rows) override;
+
     ordinal_t get_current_ordinal() const override { return _current_ordinal; }
 
     ordinal_t num_rows() const override { return _reader->num_rows(); }
@@ -111,6 +116,16 @@ public:
 
     std::string name() const override { return "ScalarColumnIterator"; }
 
+    void reserve_col(size_t n, Column* column) override {
+        if (_page != nullptr) {
+            _page->reserve_col(n, column);
+        } else {
+            column->reserve(n);
+        }
+    }
+
+    bool support_push_down_predicate(const std::vector<const ColumnPredicate*>& compound_and_predicates) override;
+
 private:
     static Status _seek_to_pos_in_page(ParsedPage* page, ordinal_t offset_in_page);
     Status _load_next_page(bool* eos);
@@ -134,13 +149,17 @@ private:
     template <LogicalType Type>
     Status _fetch_all_dict_words(std::vector<Slice>* words) const;
 
-    template <typename ParseFunc>
-    Status _fetch_by_rowid(const rowid_t* rowids, size_t size, Column* values, ParseFunc&& page_parse);
+    template <typename RowidReaderFunc, typename RangeReaderFunc>
+    Status _fetch_by_rowid_helper(const rowid_t* rowids, size_t size, Column* values, RowidReaderFunc&& rowid_reader,
+                                  RangeReaderFunc&& range_reader);
 
     template <LogicalType Type>
     Status _load_dict_page();
 
     bool _contains_deleted_row(uint32_t page_index) const;
+
+    template <typename ReadFunc>
+    Status _next_batch_template(const SparseRange<>& range, Column* dst, ReadFunc&& read_func);
 
     ColumnReader* _reader;
 

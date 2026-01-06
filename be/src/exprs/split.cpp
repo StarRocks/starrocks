@@ -114,7 +114,7 @@ StatusOr<ColumnPtr> StringFunctions::split(FunctionContext* context, const starr
     auto state = reinterpret_cast<SplitState*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
     if (context->is_notnull_constant_column(0) && context->is_notnull_constant_column(1)) {
         std::vector<std::string> split_string = state->const_split_strings;
-        array_binary_column->reserve(row_nums * split_string.size(), haystack_columns->get_bytes().size());
+        array_binary_column->reserve(row_nums * split_string.size(), haystack_columns->get_immutable_bytes().size());
 
         for (int row = 0; row < row_nums; ++row) {
             array_offsets->append(offset);
@@ -134,7 +134,7 @@ StatusOr<ColumnPtr> StringFunctions::split(FunctionContext* context, const starr
         if (delimiter.size == 0) { // split each character
             std::vector<Slice> v;
             v.reserve(haystack_columns->byte_size());
-            array_binary_column->reserve(haystack_columns->byte_size(), haystack_columns->get_bytes().size());
+            array_binary_column->reserve(haystack_columns->byte_size(), haystack_columns->get_immutable_bytes().size());
 
             for (int row = 0; row < row_nums; ++row) {
                 array_offsets->append(offset);
@@ -152,7 +152,7 @@ StatusOr<ColumnPtr> StringFunctions::split(FunctionContext* context, const starr
             array_binary_column->append_continuous_strings(v.data(), v.size());
         } else {
             //row_nums * 5 is an estimated value, because the true value cannot be obtained for the time being here
-            array_binary_column->reserve(row_nums * 5, haystack_columns->get_bytes().size());
+            array_binary_column->reserve(row_nums * 5, haystack_columns->get_immutable_bytes().size());
             for (int row = 0; row < row_nums; ++row) {
                 array_offsets->append(offset);
                 if (string_viewer.is_null(row)) {
@@ -193,7 +193,7 @@ StatusOr<ColumnPtr> StringFunctions::split(FunctionContext* context, const starr
                     NullColumn::create(*ColumnHelper::as_raw_column<NullableColumn>(columns[0])->null_column()));
         }
     } else {
-        array_binary_column->reserve(row_nums * 5, haystack_columns->get_bytes().size() * sizeof(uint8_t));
+        array_binary_column->reserve(row_nums * 5, haystack_columns->get_immutable_bytes().size() * sizeof(uint8_t));
 
         auto result_array = ArrayColumn::create(NullableColumn::create(BinaryColumn::create(), NullColumn::create()),
                                                 UInt32Column::create());

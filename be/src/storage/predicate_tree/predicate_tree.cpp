@@ -472,6 +472,11 @@ bool PredicateTree::empty() const {
     return is_empty(_root);
 }
 
+bool PredicateTree::has_or_predicate() const {
+    // if only has AND predicates, there is only one compound And predicate node
+    return _compound_node_contexts.size() > 1;
+}
+
 PredicateAndNode PredicateTree::release_root() {
     return std::move(_root);
 }
