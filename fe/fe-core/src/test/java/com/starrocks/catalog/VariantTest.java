@@ -969,26 +969,26 @@ public class VariantTest {
         Variant minDate = Variant.minVariant(DateType.DATE);
         TVariant tMin = minDate.toThrift();
         Assertions.assertTrue(tMin.isSetInfinity_type());
-        Assertions.assertEquals(com.starrocks.thrift.TInfinityType.MIN, tMin.getInfinity_type());
+        Assertions.assertEquals(com.starrocks.thrift.TInfinityType.MINIMUM, tMin.getInfinity_type());
 
         Variant maxDate = Variant.maxVariant(DateType.DATE);
         TVariant tMax = maxDate.toThrift();
         Assertions.assertTrue(tMax.isSetInfinity_type());
-        Assertions.assertEquals(com.starrocks.thrift.TInfinityType.MAX, tMax.getInfinity_type());
+        Assertions.assertEquals(com.starrocks.thrift.TInfinityType.MAXIMUM, tMax.getInfinity_type());
     }
 
     @Test
     public void testMinMaxVariantFromThrift() {
         TVariant tMin = new TVariant();
         tMin.setType(TypeSerializer.toThrift(DateType.DATE));
-        tMin.setInfinity_type(com.starrocks.thrift.TInfinityType.MIN);
+        tMin.setInfinity_type(com.starrocks.thrift.TInfinityType.MINIMUM);
         Variant minVariant = Variant.fromThrift(tMin);
         Assertions.assertTrue(minVariant instanceof MinVariant);
         Assertions.assertEquals(DateType.DATE, minVariant.getType());
 
         TVariant tMax = new TVariant();
         tMax.setType(TypeSerializer.toThrift(DateType.DATE));
-        tMax.setInfinity_type(com.starrocks.thrift.TInfinityType.MAX);
+        tMax.setInfinity_type(com.starrocks.thrift.TInfinityType.MAXIMUM);
         Variant maxVariant = Variant.fromThrift(tMax);
         Assertions.assertTrue(maxVariant instanceof MaxVariant);
         Assertions.assertEquals(DateType.DATE, maxVariant.getType());
@@ -1008,14 +1008,14 @@ public class VariantTest {
 
         VariantPB pbMin = new VariantPB();
         pbMin.type = typeDesc;
-        pbMin.infinityType = InfinityTypePB.MIN;
+        pbMin.infinityType = InfinityTypePB.MINIMUM;
         Variant minVariant = Variant.fromProto(pbMin);
         Assertions.assertTrue(minVariant instanceof MinVariant);
         Assertions.assertEquals(DateType.DATE, minVariant.getType());
 
         VariantPB pbMax = new VariantPB();
         pbMax.type = typeDesc;
-        pbMax.infinityType = InfinityTypePB.MAX;
+        pbMax.infinityType = InfinityTypePB.MAXIMUM;
         Variant maxVariant = Variant.fromProto(pbMax);
         Assertions.assertTrue(maxVariant instanceof MaxVariant);
         Assertions.assertEquals(DateType.DATE, maxVariant.getType());

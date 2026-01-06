@@ -106,9 +106,9 @@ public abstract class Variant implements Comparable<Variant> {
     public static Variant fromThrift(TVariant tVariant) {
         Type type = TypeDeserializer.fromThrift(tVariant.type);
         if (tVariant.isSetInfinity_type()) {
-            if (tVariant.getInfinity_type() == TInfinityType.MIN) {
+            if (tVariant.getInfinity_type() == TInfinityType.MINIMUM) {
                 return new MinVariant(type);
-            } else if (tVariant.getInfinity_type() == TInfinityType.MAX) {
+            } else if (tVariant.getInfinity_type() == TInfinityType.MAXIMUM) {
                 return new MaxVariant(type);
             }
         }
@@ -118,9 +118,9 @@ public abstract class Variant implements Comparable<Variant> {
     public static Variant fromProto(VariantPB variantPB) {
         Type type = TypeDeserializer.fromProtobuf(variantPB.type);
         if (variantPB.infinityType != null) {
-            if (variantPB.infinityType == InfinityTypePB.MIN) {
+            if (variantPB.infinityType == InfinityTypePB.MINIMUM) {
                 return new MinVariant(type);
-            } else if (variantPB.infinityType == InfinityTypePB.MAX) {
+            } else if (variantPB.infinityType == InfinityTypePB.MAXIMUM) {
                 return new MaxVariant(type);
             }
         }

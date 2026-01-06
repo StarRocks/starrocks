@@ -37,7 +37,7 @@ public class MinVariant extends Variant {
     public TVariant toThrift() {
         TVariant variant = new TVariant();
         variant.setType(com.starrocks.type.TypeSerializer.toThrift(type));
-        variant.setInfinity_type(TInfinityType.MIN);
+        variant.setInfinity_type(TInfinityType.MINIMUM);
         return variant;
     }
 

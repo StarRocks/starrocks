@@ -37,7 +37,7 @@ public class MaxVariant extends Variant {
     public TVariant toThrift() {
         TVariant variant = new TVariant();
         variant.setType(com.starrocks.type.TypeSerializer.toThrift(type));
-        variant.setInfinity_type(TInfinityType.MAX);
+        variant.setInfinity_type(TInfinityType.MAXIMUM);
         return variant;
     }
 

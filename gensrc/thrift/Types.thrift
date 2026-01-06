@@ -633,8 +633,8 @@ struct TParquetOptions {
 
 enum TInfinityType {
     NONE_INFINITY = 0,
-    MIN = 1,
-    MAX = 2,
+    MINIMUM = 1,
+    MAXIMUM = 2,
 }
 
 struct TVariant {
