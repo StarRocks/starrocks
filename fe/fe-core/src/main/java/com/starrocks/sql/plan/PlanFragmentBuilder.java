@@ -550,7 +550,9 @@ public class PlanFragmentBuilder {
                 return Collections.emptyMap();
             }
 
-            commonSubExprs.replaceAll((k, v) -> heavyCommonSubExprs.containsKey(k) ? k : v);
+            // Heavy exprs should be removed from ProjectNode's commonSubExprs to avoid trivial mapping from
+            // slotId to itself in commonSubExprs.
+            heavyCommonSubExprs.forEach((k, v) -> commonSubExprs.remove(k));
 
             ReplaceColumnRefRewriter columnRefReplacer = new ReplaceColumnRefRewriter(commonSubExprs);
             heavyExprs.replaceAll((k, v) -> columnRefReplacer.rewrite(v));
