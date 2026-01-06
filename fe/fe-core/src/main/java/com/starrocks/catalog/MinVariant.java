@@ -14,49 +14,38 @@
 
 package com.starrocks.catalog;
 
-import com.google.gson.annotations.SerializedName;
-import com.starrocks.common.util.StringUtils;
 import com.starrocks.thrift.TInfinityType;
 import com.starrocks.thrift.TVariant;
 import com.starrocks.type.Type;
-import com.starrocks.type.TypeSerializer;
 
-/*
- * StringVariant is for type CHAR, VARCHAR, BINARY, VARBINARY and HLL
- */
-public class StringVariant extends Variant {
+import java.util.Objects;
 
-    @SerializedName(value = "value")
-    protected final String value;
-
-    public StringVariant(Type type, String value) {
+public class MinVariant extends Variant {
+    public MinVariant(Type type) {
         super(type);
-        this.value = value;
-    }
-
-    @Override
-    public long getLongValue() {
-        return IntVariant.parseLong(value);
     }
 
     @Override
     public String getStringValue() {
-        return value;
+        return "MIN";
+    }
+
+    @Override
+    public long getLongValue() {
+        return Long.MIN_VALUE;
     }
 
     @Override
     public TVariant toThrift() {
         TVariant variant = new TVariant();
-        variant.setType(TypeSerializer.toThrift(type));
-        variant.setValue(getStringValue());
-        variant.setInfinity_type(TInfinityType.NONE_INFINITY);
+        variant.setType(com.starrocks.type.TypeSerializer.toThrift(type));
+        variant.setInfinity_type(TInfinityType.MINIMUM);
         return variant;
     }
 
     @Override
     protected int compareToImpl(Variant other) {
-        // compare string with utf-8 byte array, same with DM,BE,StorageEngine
-        return StringUtils.compareStringWithUTF8ByteArray(value, other.getStringValue());
+        throw new IllegalStateException("Should not reach here");
     }
 
     @Override
@@ -64,15 +53,16 @@ public class StringVariant extends Variant {
         if (this == object) {
             return true;
         }
-        if (object == null || !(object instanceof StringVariant)) {
+        if (!(object instanceof MinVariant)) {
             return false;
         }
-        StringVariant other = (StringVariant) object;
-        return this.value.equals(other.value);
+        MinVariant other = (MinVariant) object;
+        return Objects.equals(this.type, other.type);
     }
 
     @Override
     public int hashCode() {
-        return value.hashCode();
+        return Objects.hash(MinVariant.class, type);
     }
 }
+

@@ -26,10 +26,9 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
-import com.starrocks.common.AnalysisException;
-import com.starrocks.planner.DistributionPruner;
 import com.starrocks.planner.HashDistributionPruner;
 import com.starrocks.planner.PartitionColumnFilter;
+import com.starrocks.planner.RangeDistributionPruner;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.optimizer.operator.ColumnFilterConverter;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
@@ -62,25 +61,29 @@ public class OptDistributionPruner {
 
     private static Collection<Long> distributionPrune(MaterializedIndex index, DistributionInfo distributionInfo,
                                                       LogicalOlapScanOperator operator, Map<ColumnId, Column> idToColumn) {
-        try {
-            DistributionPruner distributionPruner;
+        if (distributionInfo.getType() == DistributionInfo.DistributionInfoType.HASH ||
+                distributionInfo.getType() == DistributionInfo.DistributionInfoType.RANGE) {
+            Map<String, PartitionColumnFilter> filters = Maps.newHashMap();
+            Table table = operator.getTable();
+            if (table.isExprPartitionTable()) {
+                // Bucketing needs to use the original predicate for hashing
+                ColumnFilterConverter.convertColumnFilterWithoutExpr(operator.getPredicate(), filters, table);
+            } else {
+                filters = operator.getColumnFilters();
+            }
+
             if (distributionInfo.getType() == DistributionInfo.DistributionInfoType.HASH) {
                 HashDistributionInfo info = (HashDistributionInfo) distributionInfo;
-                Map<String, PartitionColumnFilter> filters = Maps.newHashMap();
-                Table table = operator.getTable();
-                if (table.isExprPartitionTable()) {
-                    // Bucketing needs to use the original predicate for hashing
-                    ColumnFilterConverter.convertColumnFilterWithoutExpr(operator.getPredicate(), filters, table);
-                } else {
-                    filters = operator.getColumnFilters();
-                }
-                distributionPruner = new HashDistributionPruner(index.getTabletIdsInOrder(),
+                HashDistributionPruner pruner = new HashDistributionPruner(index.getTabletIdsInOrder(),
                         MetaUtils.getColumnsByColumnIds(idToColumn, info.getDistributionColumns()),
                         filters);
-                return distributionPruner.prune();
+                return pruner.prune();
+            } else {
+                RangeDistributionPruner pruner = new RangeDistributionPruner(index.getTablets(),
+                        MetaUtils.getRangeDistributionColumns((OlapTable) operator.getTable()),
+                        filters);
+                return pruner.prune();
             }
-        } catch (AnalysisException e) {
-            LOG.warn("distribution prune failed. ", e);
         }
 
         return index.getTabletIdsInOrder();

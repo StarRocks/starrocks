@@ -14,7 +14,14 @@
 
 package com.starrocks.catalog;
 
+import com.starrocks.proto.InfinityTypePB;
+import com.starrocks.proto.PScalarType;
+import com.starrocks.proto.PTypeDesc;
+import com.starrocks.proto.PTypeNode;
+import com.starrocks.proto.VariantPB;
+import com.starrocks.thrift.TPrimitiveType;
 import com.starrocks.thrift.TTuple;
+import com.starrocks.thrift.TTypeNodeType;
 import com.starrocks.thrift.TVariant;
 import com.starrocks.type.BooleanType;
 import com.starrocks.type.CharType;
@@ -29,6 +36,7 @@ import org.junit.jupiter.api.Test;
 
 import java.math.BigInteger;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
@@ -518,6 +526,32 @@ public class VariantTest {
         Assertions.assertEquals(0, Variant.compatibleCompare(empty, empty));
     }
 
+    @Test
+    public void testVariantMinMaxHelpersForBooleanAndInt() {
+        Variant boolMin = Variant.minVariant(BooleanType.BOOLEAN);
+        Variant boolMax = Variant.maxVariant(BooleanType.BOOLEAN);
+        Assertions.assertTrue(boolMin instanceof MinVariant);
+        Assertions.assertTrue(boolMax instanceof MaxVariant);
+
+        Variant intMin = Variant.minVariant(IntegerType.INT);
+        Variant intMax = Variant.maxVariant(IntegerType.INT);
+        Assertions.assertTrue(intMin instanceof MinVariant);
+        Assertions.assertTrue(intMax instanceof MaxVariant);
+    }
+
+    @Test
+    public void testVariantMinMaxHelpersForDate() {
+        Variant minDate = Variant.minVariant(DateType.DATE);
+        Variant maxDate = Variant.maxVariant(DateType.DATE);
+        Variant middleDate = Variant.of(DateType.DATE, "2024-01-01");
+
+        Assertions.assertTrue(minDate instanceof MinVariant);
+        Assertions.assertTrue(maxDate instanceof MaxVariant);
+        Assertions.assertTrue(Variant.compatibleCompare(minDate, middleDate) <= 0);
+        Assertions.assertTrue(Variant.compatibleCompare(middleDate, maxDate) <= 0);
+        Assertions.assertTrue(Variant.compatibleCompare(minDate, maxDate) < 0);
+    }
+
     // ==================== Cross-type Comparison Tests ====================
 
     @Test
@@ -930,6 +964,63 @@ public class VariantTest {
         Assertions.assertEquals(v1.hashCode(), v2.hashCode());
     }
 
+    @Test
+    public void testMinMaxVariantToThrift() {
+        Variant minDate = Variant.minVariant(DateType.DATE);
+        TVariant tMin = minDate.toThrift();
+        Assertions.assertTrue(tMin.isSetInfinity_type());
+        Assertions.assertEquals(com.starrocks.thrift.TInfinityType.MINIMUM, tMin.getInfinity_type());
+
+        Variant maxDate = Variant.maxVariant(DateType.DATE);
+        TVariant tMax = maxDate.toThrift();
+        Assertions.assertTrue(tMax.isSetInfinity_type());
+        Assertions.assertEquals(com.starrocks.thrift.TInfinityType.MAXIMUM, tMax.getInfinity_type());
+    }
+
+    @Test
+    public void testMinMaxVariantFromThrift() {
+        TVariant tMin = new TVariant();
+        tMin.setType(TypeSerializer.toThrift(DateType.DATE));
+        tMin.setInfinity_type(com.starrocks.thrift.TInfinityType.MINIMUM);
+        Variant minVariant = Variant.fromThrift(tMin);
+        Assertions.assertTrue(minVariant instanceof MinVariant);
+        Assertions.assertEquals(DateType.DATE, minVariant.getType());
+
+        TVariant tMax = new TVariant();
+        tMax.setType(TypeSerializer.toThrift(DateType.DATE));
+        tMax.setInfinity_type(com.starrocks.thrift.TInfinityType.MAXIMUM);
+        Variant maxVariant = Variant.fromThrift(tMax);
+        Assertions.assertTrue(maxVariant instanceof MaxVariant);
+        Assertions.assertEquals(DateType.DATE, maxVariant.getType());
+    }
+
+    @Test
+    public void testMinMaxVariantFromProto() {
+        // Build a simple scalar PTypeDesc for DATE, consistent with TypeDeserializer.fromProtobuf.
+        PTypeDesc typeDesc = new PTypeDesc();
+        typeDesc.types = new ArrayList<>();
+
+        PTypeNode node = new PTypeNode();
+        node.type = TTypeNodeType.SCALAR.getValue();
+        node.scalarType = new PScalarType();
+        node.scalarType.type = TPrimitiveType.DATE.getValue();
+        typeDesc.types.add(node);
+
+        VariantPB pbMin = new VariantPB();
+        pbMin.type = typeDesc;
+        pbMin.infinityType = InfinityTypePB.MINIMUM;
+        Variant minVariant = Variant.fromProto(pbMin);
+        Assertions.assertTrue(minVariant instanceof MinVariant);
+        Assertions.assertEquals(DateType.DATE, minVariant.getType());
+
+        VariantPB pbMax = new VariantPB();
+        pbMax.type = typeDesc;
+        pbMax.infinityType = InfinityTypePB.MAXIMUM;
+        Variant maxVariant = Variant.fromProto(pbMax);
+        Assertions.assertTrue(maxVariant instanceof MaxVariant);
+        Assertions.assertEquals(DateType.DATE, maxVariant.getType());
+    }
+
     // ==================== Cross-Variant equals() Tests ====================
 
     @Test
@@ -946,5 +1037,54 @@ public class VariantTest {
         Assertions.assertFalse(intVar.equals(largeIntVar));
         Assertions.assertFalse(intVar.equals(stringVar));
         Assertions.assertFalse(largeIntVar.equals(stringVar));
+    }
+
+    @Test
+    public void testVariantOfMinMax() {
+        // Min/Max sentinels should only be created via dedicated helpers, not via Variant.of("MIN"/"MAX").
+        Variant maxInt = Variant.maxVariant(IntegerType.INT);
+        Variant minInt = Variant.minVariant(IntegerType.INT);
+        Assertions.assertTrue(maxInt instanceof MaxVariant);
+        Assertions.assertTrue(minInt instanceof MinVariant);
+        Assertions.assertEquals(IntegerType.INT, maxInt.getType());
+        Assertions.assertEquals(IntegerType.INT, minInt.getType());
+
+        // String type: "MAX"/"MIN" should be treated as normal string values.
+        Variant strMaxLiteral = Variant.of(VarcharType.VARCHAR, "MAX");
+        Variant strMinLiteral = Variant.of(VarcharType.VARCHAR, "MIN");
+        Assertions.assertTrue(strMaxLiteral instanceof StringVariant);
+        Assertions.assertTrue(strMinLiteral instanceof StringVariant);
+
+        // Min/Max sentinels for string types are only created explicitly.
+        Variant maxStrSentinel = Variant.maxVariant(VarcharType.VARCHAR);
+        Variant minStrSentinel = Variant.minVariant(VarcharType.VARCHAR);
+        Assertions.assertTrue(maxStrSentinel instanceof MaxVariant);
+        Assertions.assertTrue(minStrSentinel instanceof MinVariant);
+
+        // Ensure sentinels are different from literal string variants.
+        Assertions.assertNotEquals(maxStrSentinel, strMaxLiteral);
+        Assertions.assertNotEquals(minStrSentinel, strMinLiteral);
+    }
+
+    @Test
+    public void testMinMaxVariantEqualsHashCode() {
+        Variant min1 = Variant.minVariant(IntegerType.INT);
+        Variant min2 = Variant.minVariant(IntegerType.BIGINT);
+        Variant max1 = Variant.maxVariant(IntegerType.INT);
+        Variant max2 = Variant.maxVariant(IntegerType.BIGINT);
+
+        // equals and hashCode are type-sensitive
+        Assertions.assertNotEquals(min1, min2);
+        Assertions.assertNotEquals(min1.hashCode(), min2.hashCode());
+        Assertions.assertNotEquals(max1, max2);
+        Assertions.assertNotEquals(max1.hashCode(), max2.hashCode());
+
+        // compareTo is type-insensitive (assumes callers handle type compatibility)
+        Assertions.assertEquals(0, min1.compareTo(min2));
+        Assertions.assertEquals(0, max1.compareTo(max2));
+
+        // In-equality between Min and Max
+        Assertions.assertNotEquals(min1, max1);
+        Assertions.assertTrue(min1.compareTo(max1) < 0);
     }
 }

@@ -232,9 +232,16 @@ message TransactionStatePB {
     optional string reason = 3;
 }
 
+enum InfinityTypePB {
+    NONE_INFINITY = 0;
+    MINIMUM = 1;
+    MAXIMUM = 2;
+}
+
 message VariantPB {
     optional PTypeDesc type = 1;
     optional string value = 2;
+    optional InfinityTypePB infinity_type = 3;
 }
 
 message TuplePB {
