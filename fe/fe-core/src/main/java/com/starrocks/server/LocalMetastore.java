@@ -3709,6 +3709,10 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         Map<String, Object> results = validateToBeModifiedProps(properties, db, table);
 
         TableProperty tableProperty = table.getTableProperty();
+        if (tableProperty == null) {
+            tableProperty = new TableProperty(new HashMap<>());
+            table.setTableProperty(tableProperty);
+        }
         for (String key : results.keySet()) {
             if (propertiesToPersist.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER)) {
                 int partitionLiveNumber = (int) results.get(key);
@@ -3816,6 +3820,13 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                         ImmutableMap.of(key, propertiesToPersist.get(key)));
                 GlobalStateMgr.getCurrentState().getEditLog().logAlterTableProperties(info);
             }
+            if (propertiesToPersist.containsKey(PropertyAnalyzer.PROPERTIES_TABLE_QUERY_TIMEOUT)) {
+                int tableQueryTimeout = (int) results.get(key);
+                table.setTableQueryTimeout(tableQueryTimeout);
+                ModifyTablePropertyOperationLog info = new ModifyTablePropertyOperationLog(db.getId(), table.getId(),
+                        ImmutableMap.of(key, propertiesToPersist.get(key)));
+                GlobalStateMgr.getCurrentState().getEditLog().logAlterTableProperties(info);
+            }
         }
     }
 
@@ -3904,6 +3915,17 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_CLOUD_NATIVE_FAST_SCHEMA_EVOLUTION_V2)) {
             boolean value = PropertyAnalyzer.analyzeCloudNativeFastSchemaEvolutionV2(table.getType(), properties, true);
             results.put(PropertyAnalyzer.PROPERTIES_CLOUD_NATIVE_FAST_SCHEMA_EVOLUTION_V2, value);
+        }
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_TABLE_QUERY_TIMEOUT)) {
+            try {
+                int clusterQueryTimeout = GlobalStateMgr.getCurrentState().getVariableMgr()
+                        .getDefaultSessionVariable().getQueryTimeoutS();
+                int tableQueryTimeout = PropertyAnalyzer.analyzeTableQueryTimeout(properties, clusterQueryTimeout);
+                results.put(PropertyAnalyzer.PROPERTIES_TABLE_QUERY_TIMEOUT, tableQueryTimeout);
+                properties.remove(PropertyAnalyzer.PROPERTIES_TABLE_QUERY_TIMEOUT);
+            } catch (AnalysisException ex) {
+                throw new DdlException(ex.getMessage());
+            }
         }
         if (!properties.isEmpty()) {
             throw new DdlException("Modify failed because unknown properties: " + properties);

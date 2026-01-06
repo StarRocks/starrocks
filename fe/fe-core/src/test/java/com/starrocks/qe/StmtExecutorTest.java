@@ -15,6 +15,7 @@
 package com.starrocks.qe;
 
 import com.starrocks.common.Config;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.ProfileManager;
 import com.starrocks.common.util.RuntimeProfile;
@@ -24,6 +25,7 @@ import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.parser.AstBuilder;
 import com.starrocks.sql.parser.SqlParser;
+import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import mockit.Expectations;
@@ -184,6 +186,139 @@ public class StmtExecutorTest {
                     SqlModeHelper.MODE_DEFAULT);
             StmtExecutor executor = new StmtExecutor(new ConnectContext(), stmt);
             Assertions.assertEquals(ctx.getSessionVariable().getInsertTimeoutS(), executor.getExecTimeout());
+        }
+    }
+
+    @Test
+    public void testExecTimeoutWithTableQueryTimeout() throws Exception {
+        FeConstants.runningUnitTest = true;
+        UtFrameUtils.createMinStarRocksCluster();
+        ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+        StarRocksAssert starRocksAssert = new StarRocksAssert(ctx);
+
+        // Create test database
+        String dbName = "test_table_timeout_db";
+        starRocksAssert.withDatabase(dbName).useDatabase(dbName);
+
+        // Create table without table_query_timeout
+        String createTableStmt1 = "CREATE TABLE `t1` (\n" +
+                "  `k1` int NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`k1`)\n" +
+                "DISTRIBUTED BY HASH(`k1`) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");";
+        starRocksAssert.withTable(createTableStmt1);
+
+        // Create table with table_query_timeout = 120
+        String createTableStmt2 = "CREATE TABLE `t2` (\n" +
+                "  `k1` int NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`k1`)\n" +
+                "DISTRIBUTED BY HASH(`k1`) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"table_query_timeout\" = \"120\"\n" +
+                ");";
+        starRocksAssert.withTable(createTableStmt2);
+
+        // Create table with table_query_timeout = 600 (greater than cluster timeout 300)
+        String createTableStmt3 = "CREATE TABLE `t3` (\n" +
+                "  `k1` int NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`k1`)\n" +
+                "DISTRIBUTED BY HASH(`k1`) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"table_query_timeout\" = \"600\"\n" +
+                ");";
+        starRocksAssert.withTable(createTableStmt3);
+
+        // Create table with table_query_timeout = 60
+        String createTableStmt4 = "CREATE TABLE `t4` (\n" +
+                "  `k1` int NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`k1`)\n" +
+                "DISTRIBUTED BY HASH(`k1`) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"table_query_timeout\" = \"60\"\n" +
+                ");";
+        starRocksAssert.withTable(createTableStmt4);
+
+        // Test 1: User not explicitly set session timeout, table has no table_query_timeout
+        // Should use cluster timeout (default 300)
+        {
+            ConnectContext testCtx = UtFrameUtils.createDefaultCtx();
+            testCtx.setDatabase(dbName);
+            StatementBase stmt = SqlParser.parseSingleStatement("select * from t1", SqlModeHelper.MODE_DEFAULT);
+            StmtExecutor executor = new StmtExecutor(testCtx, stmt);
+            int defaultTimeout = testCtx.getSessionVariable().getQueryTimeoutS();
+            Assertions.assertEquals(defaultTimeout, executor.getExecTimeout());
+        }
+
+        // Test 2: User not explicitly set session timeout, table has table_query_timeout = 120
+        // Should use table_query_timeout (120)
+        {
+            ConnectContext testCtx = UtFrameUtils.createDefaultCtx();
+            testCtx.setDatabase(dbName);
+            StatementBase stmt = SqlParser.parseSingleStatement("select * from t2", SqlModeHelper.MODE_DEFAULT);
+            StmtExecutor executor = new StmtExecutor(testCtx, stmt);
+            Assertions.assertEquals(120, executor.getExecTimeout());
+            // Verify table timeout info
+            Assertions.assertNotNull(executor.getTableQueryTimeoutInfo());
+            Assertions.assertEquals("t2", executor.getTableQueryTimeoutInfo().first);
+            Assertions.assertEquals(120, executor.getTableQueryTimeoutInfo().second.intValue());
+        }
+
+        // Test 3: User not explicitly set session timeout, table has table_query_timeout = 600 (greater than cluster timeout)
+        // Should use table_query_timeout (600) - this is the new behavior
+        {
+            ConnectContext testCtx = UtFrameUtils.createDefaultCtx();
+            testCtx.setDatabase(dbName);
+            StatementBase stmt = SqlParser.parseSingleStatement("select * from t3", SqlModeHelper.MODE_DEFAULT);
+            StmtExecutor executor = new StmtExecutor(testCtx, stmt);
+            Assertions.assertEquals(600, executor.getExecTimeout());
+            // Verify table timeout info
+            Assertions.assertNotNull(executor.getTableQueryTimeoutInfo());
+            Assertions.assertEquals("t3", executor.getTableQueryTimeoutInfo().first);
+            Assertions.assertEquals(600, executor.getTableQueryTimeoutInfo().second.intValue());
+        }
+
+        // Test 4: User explicitly set session timeout = 200, table has table_query_timeout = 120
+        // Should use session timeout (200) - session timeout has higher priority
+        {
+            ConnectContext testCtx = UtFrameUtils.createDefaultCtx();
+            testCtx.setDatabase(dbName);
+            testCtx.getSessionVariable().setQueryTimeoutS(200);
+            StatementBase stmt = SqlParser.parseSingleStatement("select * from t2", SqlModeHelper.MODE_DEFAULT);
+            StmtExecutor executor = new StmtExecutor(testCtx, stmt);
+            Assertions.assertEquals(200, executor.getExecTimeout());
+        }
+
+        // Test 5: User explicitly set session timeout = 100, table has table_query_timeout = 600
+        // Should use session timeout (100) - session timeout has higher priority
+        {
+            ConnectContext testCtx = UtFrameUtils.createDefaultCtx();
+            testCtx.setDatabase(dbName);
+            testCtx.getSessionVariable().setQueryTimeoutS(100);
+            StatementBase stmt = SqlParser.parseSingleStatement("select * from t3", SqlModeHelper.MODE_DEFAULT);
+            StmtExecutor executor = new StmtExecutor(testCtx, stmt);
+            Assertions.assertEquals(100, executor.getExecTimeout());
+        }
+
+        // Test 6: Multiple tables with different table_query_timeout, should use minimum
+        // t2 has 120, t4 has 60, should use 60
+        {
+            ConnectContext testCtx = UtFrameUtils.createDefaultCtx();
+            testCtx.setDatabase(dbName);
+            StatementBase stmt = SqlParser.parseSingleStatement("select * from t2, t4", SqlModeHelper.MODE_DEFAULT);
+            StmtExecutor executor = new StmtExecutor(testCtx, stmt);
+            Assertions.assertEquals(60, executor.getExecTimeout());
+            // Verify table timeout info points to the table with minimum timeout
+            Assertions.assertNotNull(executor.getTableQueryTimeoutInfo());
+            Assertions.assertEquals(60, executor.getTableQueryTimeoutInfo().second.intValue());
         }
     }
 }

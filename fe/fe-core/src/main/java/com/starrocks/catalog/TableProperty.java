@@ -331,6 +331,11 @@ public class TableProperty implements Writable, GsonPostProcessable {
     @SerializedName(value = "enableStatisticCollectOnFirstLoad")
     private boolean enableStatisticCollectOnFirstLoad = true;
 
+    // table level query timeout in seconds
+    // default value -1 means use cluster query_timeout
+    @SerializedName(value = "tableQueryTimeout")
+    private int tableQueryTimeout = -1;
+
     /**
      * Whether to enable the v2 implementation of fast schema evolution for cloud-native tables.
      * This version is more lightweight, modifying only FE metadata instead of both FE and tablet metadata.
@@ -426,6 +431,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
                 buildStorageCoolDownTTL();
                 buildEnableStatisticCollectOnFirstLoad();
                 buildCloudNativeFastSchemaEvolutionV2();
+                buildTableQueryTimeout();
                 break;
             case OperationType.OP_MODIFY_TABLE_CONSTRAINT_PROPERTY:
                 buildConstraint();
@@ -1261,6 +1267,27 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return cloudNativeFastSchemaEvolutionV2;
     }
 
+    public TableProperty buildTableQueryTimeout() {
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_TABLE_QUERY_TIMEOUT)) {
+            String timeoutStr = properties.get(PropertyAnalyzer.PROPERTIES_TABLE_QUERY_TIMEOUT);
+            try {
+                tableQueryTimeout = Integer.parseInt(timeoutStr);
+                if (tableQueryTimeout <= 0) {
+                    throw new IllegalArgumentException("table_query_timeout must be greater than 0");
+                }
+            } catch (NumberFormatException e) {
+                throw new IllegalArgumentException("table_query_timeout must be a valid integer: " + timeoutStr);
+            }
+        } else {
+            tableQueryTimeout = -1;
+        }
+        return this;
+    }
+
+    public int getTableQueryTimeout() {
+        return tableQueryTimeout;
+    }
+
     @Override
     public void gsonPostProcess() throws IOException {
         try {
@@ -1297,5 +1324,6 @@ public class TableProperty implements Writable, GsonPostProcessable {
         buildMutableBucketNum();
         buildCompactionStrategy();
         buildEnableStatisticCollectOnFirstLoad();
+        buildTableQueryTimeout();
     }
 }

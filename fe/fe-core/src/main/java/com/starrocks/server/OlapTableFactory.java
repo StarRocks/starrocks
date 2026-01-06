@@ -755,6 +755,18 @@ public class OlapTableFactory implements AbstractTableFactory {
                 table.getTableProperty().setTimeDriftConstraintSpec(timeDriftConstraintSpec);
             }
 
+            // analyze table_query_timeout
+            if (properties != null && properties.containsKey(PropertyAnalyzer.PROPERTIES_TABLE_QUERY_TIMEOUT)) {
+                try {
+                    int clusterQueryTimeout = GlobalStateMgr.getCurrentState().getVariableMgr()
+                            .getDefaultSessionVariable().getQueryTimeoutS();
+                    int tableQueryTimeout = PropertyAnalyzer.analyzeTableQueryTimeout(properties, clusterQueryTimeout);
+                    table.setTableQueryTimeout(tableQueryTimeout);
+                } catch (AnalysisException ex) {
+                    throw new DdlException(ex.getMessage());
+                }
+            }
+
             try {
                 processConstraint(db, table, properties);
             } catch (AnalysisException e) {

@@ -212,6 +212,9 @@ public class PropertyAnalyzer {
     public static final String PROPERTIES_PARTITION_RETENTION_CONDITION = "partition_retention_condition";
     public static final String PROPERTIES_TIME_DRIFT_CONSTRAINT = "time_drift_constraint";
 
+    // default: same as cluster query_timeout
+    public static final String PROPERTIES_TABLE_QUERY_TIMEOUT = "table_query_timeout";
+
     public static final String PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT = "auto_refresh_partitions_limit";
     public static final String PROPERTIES_PARTITION_REFRESH_STRATEGY = "partition_refresh_strategy";
     public static final String PROPERTIES_PARTITION_REFRESH_NUMBER = "partition_refresh_number";
@@ -1341,6 +1344,34 @@ public class PropertyAnalyzer {
             properties.remove(PROPERTIES_PRIMARY_INDEX_CACHE_EXPIRE_SEC);
         }
         return val;
+    }
+
+    /**
+     * Analyze table_query_timeout property.
+     * @param properties table properties
+     * @param clusterQueryTimeout cluster(default session) query timeout in seconds
+     * @return table query timeout in seconds, -1 means use cluster query_timeout
+     * @throws AnalysisException if the value is invalid
+     */
+    public static int analyzeTableQueryTimeout(Map<String, String> properties, int clusterQueryTimeout)
+            throws AnalysisException {
+        if (properties == null || !properties.containsKey(PROPERTIES_TABLE_QUERY_TIMEOUT)) {
+            return -1;
+        }
+        String tableQueryTimeoutStr = properties.get(PROPERTIES_TABLE_QUERY_TIMEOUT);
+        properties.remove(PROPERTIES_TABLE_QUERY_TIMEOUT);
+        int tableQueryTimeout;
+        try {
+            tableQueryTimeout = Integer.parseInt(tableQueryTimeoutStr);
+            if (tableQueryTimeout <= 0) {
+                throw new AnalysisException("Property " + PROPERTIES_TABLE_QUERY_TIMEOUT
+                        + " must be greater than 0, got: " + tableQueryTimeoutStr);
+            }
+        } catch (NumberFormatException e) {
+            throw new AnalysisException("Property " + PROPERTIES_TABLE_QUERY_TIMEOUT
+                    + " must be a valid integer, got: " + tableQueryTimeoutStr);
+        }
+        return tableQueryTimeout;
     }
 
     public static List<UniqueConstraint> analyzeUniqueConstraint(Map<String, String> properties, Database db, Table table) {

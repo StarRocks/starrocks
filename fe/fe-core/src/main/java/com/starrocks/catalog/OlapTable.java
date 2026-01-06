@@ -2313,6 +2313,21 @@ public class OlapTable extends Table {
         tableProperty.buildEnableStatisticCollectOnFirstLoad();
     }
 
+    public int getTableQueryTimeout() {
+        if (tableProperty != null) {
+            return tableProperty.getTableQueryTimeout();
+        }
+        return -1;
+    }
+
+    public void setTableQueryTimeout(int tableQueryTimeout) {
+        if (tableProperty == null) {
+            tableProperty = new TableProperty(new HashMap<>());
+        }
+        tableProperty.modifyTableProperties(PropertyAnalyzer.PROPERTIES_TABLE_QUERY_TIMEOUT, String.valueOf(tableQueryTimeout));
+        tableProperty.buildTableQueryTimeout();
+    }
+
     public boolean allowBucketSizeSetting() {
         return (defaultDistributionInfo instanceof RandomDistributionInfo) && Config.enable_automatic_bucket;
     }
@@ -3167,6 +3182,20 @@ public class OlapTable extends Table {
         }
 
         Map<String, String> tableProperties = tableProperty != null ? tableProperty.getProperties() : Maps.newLinkedHashMap();
+        
+        // table query timeout (only show if explicitly set, not default)
+        String tableQueryTimeoutStr = tableProperties.get(PropertyAnalyzer.PROPERTIES_TABLE_QUERY_TIMEOUT);
+        if (tableQueryTimeoutStr != null) {
+            try {
+                int timeout = Integer.parseInt(tableQueryTimeoutStr);
+                if (timeout > 0) {
+                    properties.put(PropertyAnalyzer.PROPERTIES_TABLE_QUERY_TIMEOUT, tableQueryTimeoutStr);
+                }
+            } catch (NumberFormatException e) {
+                LOG.warn("fail to parse table query_timeout.", e);
+            }
+        }
+        
         // partition live number
         String partitionLiveNumber = tableProperties.get(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER);
         if (partitionLiveNumber != null) {
