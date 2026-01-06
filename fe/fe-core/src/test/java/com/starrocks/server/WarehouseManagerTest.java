@@ -571,6 +571,15 @@ public class WarehouseManagerTest {
         Assertions.assertTrue(aliveWarehouseIds.contains(3L));
     }
 
+    @Test
+    public void testWarehouseMgrAetAllComputeNodeIdsAssignToTabletsExcepted() {
+        WarehouseManager warehouseManager = new WarehouseManager();
+        ComputeResource computeResource = WarehouseComputeResource.of(10086L);
+        ErrorReportException exception = Assertions.assertThrows(ErrorReportException.class, () ->
+                warehouseManager.getAllComputeNodeIdsAssignToTablets(computeResource, Lists.newArrayList()));
+        Assertions.assertEquals(ErrorCode.ERR_UNKNOWN_WAREHOUSE, exception.getErrorCode());
+    }
+
     private static class MockedWarehouse extends DefaultWarehouse {
         private final boolean isAvailable;
 
