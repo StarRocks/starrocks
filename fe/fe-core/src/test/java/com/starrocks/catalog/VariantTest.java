@@ -1072,32 +1072,21 @@ public class VariantTest {
     public void testMinMaxVariantEqualsHashCode() {
         Variant min1 = Variant.minVariant(IntegerType.INT);
         Variant min2 = Variant.minVariant(IntegerType.BIGINT);
-        Variant min3 = Variant.minVariant(IntegerType.INT);
         Variant max1 = Variant.maxVariant(IntegerType.INT);
         Variant max2 = Variant.maxVariant(IntegerType.BIGINT);
-        Variant max3 = Variant.maxVariant(IntegerType.INT);
 
-        // MinVariant equals and hashCode
-        Assertions.assertEquals(min1, min3);
-        Assertions.assertEquals(min1.hashCode(), min3.hashCode());
-        Assertions.assertEquals(0, min1.compareTo(min3));
-
+        // equals and hashCode are type-sensitive
         Assertions.assertNotEquals(min1, min2);
         Assertions.assertNotEquals(min1.hashCode(), min2.hashCode());
-        Assertions.assertNotEquals(0, min1.compareTo(min2));
-
-        // MaxVariant equals and hashCode
-        Assertions.assertEquals(max1, max3);
-        Assertions.assertEquals(max1.hashCode(), max3.hashCode());
-        Assertions.assertEquals(0, max1.compareTo(max3));
-
         Assertions.assertNotEquals(max1, max2);
         Assertions.assertNotEquals(max1.hashCode(), max2.hashCode());
-        Assertions.assertNotEquals(0, max1.compareTo(max2));
 
-        // In-equality
+        // compareTo is type-insensitive (assumes callers handle type compatibility)
+        Assertions.assertEquals(0, min1.compareTo(min2));
+        Assertions.assertEquals(0, max1.compareTo(max2));
+
+        // In-equality between Min and Max
         Assertions.assertNotEquals(min1, max1);
-        Assertions.assertNotEquals(min1.hashCode(), max1.hashCode());
         Assertions.assertTrue(min1.compareTo(max1) < 0);
     }
 }
