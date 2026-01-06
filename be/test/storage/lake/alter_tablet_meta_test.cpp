@@ -564,9 +564,14 @@ TEST_F(AlterTabletMetaTest, test_alter_persistent_index_type) {
     ASSIGN_OR_ABORT(auto tablet_meta3, _tablet_mgr->get_tablet_metadata(_tablet_metadata->id(), version - 1));
     ASSERT_TRUE(tablet_meta3->sstable_meta().sstables_size() > 0);
 
+    ASSIGN_OR_ABORT(auto tablet_meta_d1, _tablet_mgr->get_tablet_metadata(_tablet_metadata->id(), version - 1));
+
     // 4. rebuild pindex
     { write_data_fn(true); }
+    write_data_fn(false);
     config::l0_max_mem_usage = old_val;
+
+    ASSIGN_OR_ABORT(auto tablet_meta_d2, _tablet_mgr->get_tablet_metadata(_tablet_metadata->id(), version - 1));
 
     // 5. change back to local
     change_index_fn(true, TPersistentIndexType::LOCAL);

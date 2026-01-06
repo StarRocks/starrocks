@@ -6,21 +6,20 @@ displayed_sidebar: docs
 
 :::warning
 
-升级至 v4.0 后，请勿直接将集群降级至 v3.5.0 和 v3.5.1，否则会导致元数据不兼容和 FE Crash。您必须降级到 v3.5.2 或更高版本以避免出现此问题。
+**降级说明**
+
+- 升级至 v4.0 后，请勿直接将集群降级至 v3.5.0 和 v3.5.1，否则会导致元数据不兼容和 FE Crash。您必须降级到 v3.5.2 或更高版本以避免出现此问题。
+- 在将集群从 v4.0.3 降级到 v3.5.2~v3.5.10 之前，请先执行以下语句：
+
+  ```SQL
+  SET GLOBAL enable_rewrite_simple_agg_to_meta_scan=false;
+  ```
 
 :::
 
 ## 4.0.3
 
 发布日期：2025 年 12 月 25 日
-
-### 降级说明
-
-在将集群从 v4.0.3 降级到 v3.5.0~v3.5.10 之前，请先执行以下语句：
-
-```SQL
-SET GLOBAL enable_rewrite_simple_agg_to_meta_scan=false;
-```
 
 ### 功能优化
 
