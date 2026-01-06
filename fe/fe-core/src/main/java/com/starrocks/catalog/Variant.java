@@ -78,11 +78,6 @@ public abstract class Variant implements Comparable<Variant> {
 
     public static Variant of(Type type, String value) {
         Preconditions.checkArgument(type.isValid());
-        if (value.equals("MAX")) {
-            return maxVariant(type);
-        } else if (value.equals("MIN")) {
-            return minVariant(type);
-        }
         switch (type.getPrimitiveType()) {
             case BOOLEAN:
                 return new BoolVariant(value);
@@ -134,6 +129,15 @@ public abstract class Variant implements Comparable<Variant> {
 
     public static int compatibleCompare(Variant key1, Variant key2) {
         if (key1.getClass() == key2.getClass()) {
+            return key1.compareTo(key2);
+        }
+
+        // If any side is an infinity sentinel (MIN/MAX), rely directly on Variant.compareTo().
+        // The compareTo implementation already encodes global ordering for MinVariant/MaxVariant
+        // across all underlying types, so we must NOT route them through Variant.of(...) again,
+        // otherwise their string representation ("MIN"/"MAX") would be parsed as normal values.
+        if (key1 instanceof MinVariant || key1 instanceof MaxVariant
+                || key2 instanceof MinVariant || key2 instanceof MaxVariant) {
             return key1.compareTo(key2);
         }
 

@@ -1041,31 +1041,29 @@ public class VariantTest {
 
     @Test
     public void testVariantOfMinMax() {
-        // Test numeric type with "MAX"/"MIN"
-        Variant maxInt = Variant.of(IntegerType.INT, "MAX");
-        Variant minInt = Variant.of(IntegerType.INT, "MIN");
+        // Min/Max sentinels should only be created via dedicated helpers, not via Variant.of("MIN"/"MAX").
+        Variant maxInt = Variant.maxVariant(IntegerType.INT);
+        Variant minInt = Variant.minVariant(IntegerType.INT);
         Assertions.assertTrue(maxInt instanceof MaxVariant);
         Assertions.assertTrue(minInt instanceof MinVariant);
         Assertions.assertEquals(IntegerType.INT, maxInt.getType());
         Assertions.assertEquals(IntegerType.INT, minInt.getType());
 
-        // Test string type with "MAX"/"MIN"
-        Variant maxStr = Variant.of(VarcharType.VARCHAR, "MAX");
-        Variant minStr = Variant.of(VarcharType.VARCHAR, "MIN");
-        Assertions.assertTrue(maxStr instanceof MaxVariant);
-        Assertions.assertTrue(minStr instanceof MinVariant);
+        // String type: "MAX"/"MIN" should be treated as normal string values.
+        Variant strMaxLiteral = Variant.of(VarcharType.VARCHAR, "MAX");
+        Variant strMinLiteral = Variant.of(VarcharType.VARCHAR, "MIN");
+        Assertions.assertTrue(strMaxLiteral instanceof StringVariant);
+        Assertions.assertTrue(strMinLiteral instanceof StringVariant);
 
-        // Test equality with direct factory methods
-        Assertions.assertEquals(Variant.maxVariant(IntegerType.INT), maxInt);
-        Assertions.assertEquals(Variant.minVariant(IntegerType.INT), minInt);
-        Assertions.assertEquals(Variant.maxVariant(IntegerType.INT).hashCode(), maxInt.hashCode());
-        Assertions.assertEquals(Variant.minVariant(IntegerType.INT).hashCode(), minInt.hashCode());
+        // Min/Max sentinels for string types are only created explicitly.
+        Variant maxStrSentinel = Variant.maxVariant(VarcharType.VARCHAR);
+        Variant minStrSentinel = Variant.minVariant(VarcharType.VARCHAR);
+        Assertions.assertTrue(maxStrSentinel instanceof MaxVariant);
+        Assertions.assertTrue(minStrSentinel instanceof MinVariant);
 
-        // Test that it's different from actual string "MAX" if it were a StringVariant
-        // Note: With your change, we can no longer create a StringVariant with value "MAX" via Variant.of
-        Variant normalStr = Variant.of(VarcharType.VARCHAR, "MAX_VALUE");
-        Assertions.assertTrue(normalStr instanceof StringVariant);
-        Assertions.assertNotEquals(maxStr, normalStr);
+        // Ensure sentinels are different from literal string variants.
+        Assertions.assertNotEquals(maxStrSentinel, strMaxLiteral);
+        Assertions.assertNotEquals(minStrSentinel, strMinLiteral);
     }
 
     @Test
