@@ -14,6 +14,7 @@
 
 #include <gtest/gtest.h>
 
+#include <filesystem>
 #include <fstream>
 
 #include "types/checker/type_checker_xml_loader.h"
@@ -24,12 +25,13 @@ class TypeCheckerXMLLoaderTest : public ::testing::Test {
 protected:
     void SetUp() override {
         // Create test directory for temporary XML files
-        system("mkdir -p /tmp/type_checker_test");
+        test_dir_ = "/tmp/type_checker_test";
+        std::filesystem::create_directories(test_dir_);
     }
 
     void TearDown() override {
         // Clean up test files
-        system("rm -rf /tmp/type_checker_test");
+        std::filesystem::remove_all(test_dir_);
     }
 
     void create_test_xml(const std::string& filename, const std::string& content) {
@@ -37,6 +39,8 @@ protected:
         file << content;
         file.close();
     }
+
+    std::string test_dir_;
 };
 
 // Test loading valid XML configuration

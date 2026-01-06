@@ -14,6 +14,8 @@
 
 #include <gtest/gtest.h>
 
+#include <filesystem>
+
 #include "types/type_checker_manager.h"
 
 namespace starrocks {
@@ -508,15 +510,18 @@ class TypeCheckerManagerConfigTest : public ::testing::Test {
 protected:
     void SetUp() override {
         // Create test directory
-        system("mkdir -p /tmp/type_checker_manager_test");
+        test_dir_ = "/tmp/type_checker_manager_test";
+        std::filesystem::create_directories(test_dir_);
     }
 
     void TearDown() override {
         // Clean up
-        system("rm -rf /tmp/type_checker_manager_test");
+        std::filesystem::remove_all(test_dir_);
         unsetenv("STARROCKS_TYPE_CHECKER_CONFIG");
         unsetenv("STARROCKS_HOME");
     }
+
+    std::string test_dir_;
 };
 
 // Test that TypeCheckerManager uses hardcoded config by default
