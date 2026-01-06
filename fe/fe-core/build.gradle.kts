@@ -188,7 +188,10 @@ dependencies {
         exclude(group = "ch.qos.reload4j", module = "reload4j")
         exclude(group = "javax.ws.rs", module = "jsr311-api")
     }
-    implementation("org.apache.hadoop:hadoop-hdfs")
+    implementation("org.apache.hadoop:hadoop-hdfs") {
+        exclude(group = "org.slf4j", module = "slf4j-reload4j")
+        exclude(group = "ch.qos.reload4j", module = "reload4j")
+    }
     implementation("org.apache.httpcomponents.client5:httpclient5")
     implementation("org.apache.hudi:hudi-common") {
         exclude(group = "io.netty", module = "*")
