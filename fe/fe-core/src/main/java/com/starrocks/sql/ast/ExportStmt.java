@@ -55,6 +55,7 @@ import java.util.Set;
 public class ExportStmt extends StatementBase {
 
     private static final String INCLUDE_QUERY_ID_PROP = "include_query_id";
+    private static final String WITH_HEADER_PROP = "with_header";
 
     private static final String DEFAULT_COLUMN_SEPARATOR = "\t";
     private static final String DEFAULT_LINE_DELIMITER = "\n";
@@ -74,6 +75,7 @@ public class ExportStmt extends StatementBase {
     private String columnSeparator;
     private String rowDelimiter;
     private boolean includeQueryId = true;
+    private boolean withHeader = false;
 
     private long exportStartTime;
     private boolean sync;
@@ -178,6 +180,10 @@ public class ExportStmt extends StatementBase {
 
     public boolean isIncludeQueryId() {
         return includeQueryId;
+    }
+
+    public boolean isWithHeader() {
+        return withHeader;
     }
 
     public void checkTable(GlobalStateMgr globalStateMgr) {
@@ -302,6 +308,16 @@ public class ExportStmt extends StatementBase {
                 throw new AnalysisException("Invalid include query id value: " + includeQueryIdStr);
             }
             includeQueryId = Boolean.parseBoolean(properties.get(INCLUDE_QUERY_ID_PROP));
+        }
+
+        // with header
+        if (properties.containsKey(WITH_HEADER_PROP)) {
+            String withHeaderStr = properties.get(WITH_HEADER_PROP);
+            if (!withHeaderStr.equalsIgnoreCase("true")
+                    && !withHeaderStr.equalsIgnoreCase("false")) {
+                throw new AnalysisException("Invalid with_header value: " + withHeaderStr);
+            }
+            withHeader = Boolean.parseBoolean(properties.get(WITH_HEADER_PROP));
         }
     }
 

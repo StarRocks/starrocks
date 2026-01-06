@@ -759,4 +759,227 @@ TEST_F(CSVFileWriterTest, TestFactory) {
     ASSERT_OK(maybe_writer.status());
 }
 
+// Test factory with all CSV options including header
+TEST_F(CSVFileWriterTest, TestFactoryWithOptions) {
+    auto type_int = TypeDescriptor::from_logical_type(TYPE_INT);
+    std::vector<TypeDescriptor> type_descs{type_int};
+
+    std::vector<std::string> column_names = {"id"};
+    auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
+    auto fs = std::make_shared<MemoryFileSystem>();
+
+    // Set all CSV options
+    std::map<std::string, std::string> options;
+    options[formats::CSVWriterOptions::COLUMN_TERMINATED_BY] = "\t";
+    options[formats::CSVWriterOptions::LINE_TERMINATED_BY] = "\r\n";
+    options[formats::CSVWriterOptions::INCLUDE_HEADER] = "true";
+
+    auto factory = formats::CSVFileWriterFactory(fs, TCompressionType::NO_COMPRESSION, options, column_names,
+                                                 std::move(column_evaluators), nullptr, nullptr);
+    ASSERT_OK(factory.init());
+    auto maybe_writer = factory.create("/test_with_options.csv");
+    ASSERT_OK(maybe_writer.status());
+}
+
+// Test header row output with include_header option
+TEST_F(CSVFileWriterTest, TestWriteWithHeader) {
+    std::vector<TypeDescriptor> type_descs{
+            TypeDescriptor::from_logical_type(TYPE_INT),
+            TypeDescriptor::from_logical_type(TYPE_VARCHAR),
+    };
+    std::vector<std::string> column_names = {"id", "name"};
+    auto maybe_output_file = _fs.new_writable_file(_file_path);
+    EXPECT_OK(maybe_output_file.status());
+    auto output_file = std::move(maybe_output_file.value());
+    auto output_stream = std::make_unique<csv::OutputStreamFile>(std::move(output_file), 1024);
+    auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
+    auto writer_options = std::make_shared<formats::CSVWriterOptions>();
+    writer_options->include_header = true;
+    auto writer = std::make_unique<formats::CSVFileWriter>(_file_path, std::move(output_stream), column_names,
+                                                           type_descs, std::move(column_evaluators),
+                                                           TCompressionType::NO_COMPRESSION, writer_options, []() {});
+    ASSERT_OK(writer->init());
+
+    auto chunk = std::make_shared<Chunk>();
+    {
+        auto col0 = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_INT), true);
+        std::vector<int32_t> int_nums{1, 2};
+        col0->append_numbers(int_nums.data(), size(int_nums) * sizeof(int32_t));
+        chunk->append_column(std::move(col0), chunk->num_columns());
+
+        auto data_column = BinaryColumn::create();
+        data_column->append("Alice");
+        data_column->append("Bob");
+        auto null_column = UInt8Column::create();
+        null_column->append_numbers(std::vector<uint8_t>{0, 0}.data(), 2);
+        auto nullable_column = NullableColumn::create(std::move(data_column), std::move(null_column));
+        chunk->append_column(std::move(nullable_column), chunk->num_columns());
+    }
+
+    ASSERT_OK(writer->write(chunk.get()));
+    auto result = writer->commit();
+    ASSERT_OK(result.io_status);
+
+    std::string content;
+    ASSERT_OK(_fs.read_file(_file_path, &content));
+    std::string expect = "id,name\n1,Alice\n2,Bob\n";
+    ASSERT_EQ(content, expect);
+}
+
+// Test header without data
+TEST_F(CSVFileWriterTest, TestWriteHeaderOnly) {
+    std::vector<TypeDescriptor> type_descs{
+            TypeDescriptor::from_logical_type(TYPE_INT),
+            TypeDescriptor::from_logical_type(TYPE_VARCHAR),
+    };
+    std::vector<std::string> column_names = {"col_a", "col_b"};
+    auto maybe_output_file = _fs.new_writable_file(_file_path);
+    EXPECT_OK(maybe_output_file.status());
+    auto output_file = std::move(maybe_output_file.value());
+    auto output_stream = std::make_unique<csv::OutputStreamFile>(std::move(output_file), 1024);
+    auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
+    auto writer_options = std::make_shared<formats::CSVWriterOptions>();
+    writer_options->include_header = true;
+    auto writer = std::make_unique<formats::CSVFileWriter>(_file_path, std::move(output_stream), column_names,
+                                                           type_descs, std::move(column_evaluators),
+                                                           TCompressionType::NO_COMPRESSION, writer_options, []() {});
+    ASSERT_OK(writer->init());
+
+    // Commit without writing any data
+    auto result = writer->commit();
+    ASSERT_OK(result.io_status);
+
+    std::string content;
+    ASSERT_OK(_fs.read_file(_file_path, &content));
+    std::string expect = "col_a,col_b\n";
+    ASSERT_EQ(content, expect);
+}
+
+// Test header with special characters that need escaping
+TEST_F(CSVFileWriterTest, TestWriteHeaderWithSpecialChars) {
+    std::vector<TypeDescriptor> type_descs{
+            TypeDescriptor::from_logical_type(TYPE_INT),
+            TypeDescriptor::from_logical_type(TYPE_VARCHAR),
+            TypeDescriptor::from_logical_type(TYPE_VARCHAR),
+    };
+    // Column names with comma, quotes, and newline
+    std::vector<std::string> column_names = {"user,id", "user\"name", "user\ninfo"};
+    auto maybe_output_file = _fs.new_writable_file(_file_path);
+    EXPECT_OK(maybe_output_file.status());
+    auto output_file = std::move(maybe_output_file.value());
+    auto output_stream = std::make_unique<csv::OutputStreamFile>(std::move(output_file), 1024);
+    auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
+    auto writer_options = std::make_shared<formats::CSVWriterOptions>();
+    writer_options->include_header = true;
+    auto writer = std::make_unique<formats::CSVFileWriter>(_file_path, std::move(output_stream), column_names,
+                                                           type_descs, std::move(column_evaluators),
+                                                           TCompressionType::NO_COMPRESSION, writer_options, []() {});
+    ASSERT_OK(writer->init());
+
+    auto result = writer->commit();
+    ASSERT_OK(result.io_status);
+
+    std::string content;
+    ASSERT_OK(_fs.read_file(_file_path, &content));
+    // Expected: fields with special chars are quoted, internal quotes are doubled
+    std::string expect = "\"user,id\",\"user\"\"name\",\"user\ninfo\"\n";
+    ASSERT_EQ(content, expect);
+}
+
+// Test header with custom delimiter
+TEST_F(CSVFileWriterTest, TestWriteHeaderWithCustomDelimiter) {
+    std::vector<TypeDescriptor> type_descs{
+            TypeDescriptor::from_logical_type(TYPE_INT),
+            TypeDescriptor::from_logical_type(TYPE_VARCHAR),
+    };
+    std::vector<std::string> column_names = {"id", "name"};
+    auto maybe_output_file = _fs.new_writable_file(_file_path);
+    EXPECT_OK(maybe_output_file.status());
+    auto output_file = std::move(maybe_output_file.value());
+    auto output_stream = std::make_unique<csv::OutputStreamFile>(std::move(output_file), 1024);
+    auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
+    auto writer_options = std::make_shared<formats::CSVWriterOptions>();
+    writer_options->include_header = true;
+    writer_options->column_terminated_by = "\t";
+    writer_options->line_terminated_by = "\r\n";
+    auto writer = std::make_unique<formats::CSVFileWriter>(_file_path, std::move(output_stream), column_names,
+                                                           type_descs, std::move(column_evaluators),
+                                                           TCompressionType::NO_COMPRESSION, writer_options, []() {});
+    ASSERT_OK(writer->init());
+
+    auto result = writer->commit();
+    ASSERT_OK(result.io_status);
+
+    std::string content;
+    ASSERT_OK(_fs.read_file(_file_path, &content));
+    std::string expect = "id\tname\r\n";
+    ASSERT_EQ(content, expect);
+}
+
+// Test header escaping when column name contains the custom delimiter
+TEST_F(CSVFileWriterTest, TestWriteHeaderEscapeCustomDelimiter) {
+    std::vector<TypeDescriptor> type_descs{
+            TypeDescriptor::from_logical_type(TYPE_INT),
+            TypeDescriptor::from_logical_type(TYPE_VARCHAR),
+    };
+    // Column name contains the tab delimiter
+    std::vector<std::string> column_names = {"user\tid", "name"};
+    auto maybe_output_file = _fs.new_writable_file(_file_path);
+    EXPECT_OK(maybe_output_file.status());
+    auto output_file = std::move(maybe_output_file.value());
+    auto output_stream = std::make_unique<csv::OutputStreamFile>(std::move(output_file), 1024);
+    auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
+    auto writer_options = std::make_shared<formats::CSVWriterOptions>();
+    writer_options->include_header = true;
+    writer_options->column_terminated_by = "\t";
+    auto writer = std::make_unique<formats::CSVFileWriter>(_file_path, std::move(output_stream), column_names,
+                                                           type_descs, std::move(column_evaluators),
+                                                           TCompressionType::NO_COMPRESSION, writer_options, []() {});
+    ASSERT_OK(writer->init());
+
+    auto result = writer->commit();
+    ASSERT_OK(result.io_status);
+
+    std::string content;
+    ASSERT_OK(_fs.read_file(_file_path, &content));
+    // The column name "user\tid" should be quoted because it contains the delimiter
+    std::string expect = "\"user\tid\"\tname\n";
+    ASSERT_EQ(content, expect);
+}
+
+// Test no header when include_header is false (default)
+TEST_F(CSVFileWriterTest, TestWriteWithoutHeader) {
+    std::vector<TypeDescriptor> type_descs{TypeDescriptor::from_logical_type(TYPE_INT)};
+    std::vector<std::string> column_names = {"id"};
+    auto maybe_output_file = _fs.new_writable_file(_file_path);
+    EXPECT_OK(maybe_output_file.status());
+    auto output_file = std::move(maybe_output_file.value());
+    auto output_stream = std::make_unique<csv::OutputStreamFile>(std::move(output_file), 1024);
+    auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
+    auto writer_options = std::make_shared<formats::CSVWriterOptions>();
+    writer_options->include_header = false; // explicitly false
+    auto writer = std::make_unique<formats::CSVFileWriter>(_file_path, std::move(output_stream), column_names,
+                                                           type_descs, std::move(column_evaluators),
+                                                           TCompressionType::NO_COMPRESSION, writer_options, []() {});
+    ASSERT_OK(writer->init());
+
+    auto chunk = std::make_shared<Chunk>();
+    {
+        auto col0 = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_INT), true);
+        std::vector<int32_t> int_nums{1, 2};
+        col0->append_numbers(int_nums.data(), size(int_nums) * sizeof(int32_t));
+        chunk->append_column(std::move(col0), chunk->num_columns());
+    }
+
+    ASSERT_OK(writer->write(chunk.get()));
+    auto result = writer->commit();
+    ASSERT_OK(result.io_status);
+
+    std::string content;
+    ASSERT_OK(_fs.read_file(_file_path, &content));
+    // No header row, only data
+    std::string expect = "1\n2\n";
+    ASSERT_EQ(content, expect);
+}
+
 } // namespace starrocks::formats
