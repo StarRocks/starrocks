@@ -16,6 +16,8 @@
 
 #include <algorithm>
 #include <cctype>
+#include <sstream>
+#include <unordered_map>
 
 namespace starrocks {
 
@@ -34,12 +36,40 @@ StatusOr<std::vector<TypeCheckerXMLLoader::TypeMapping>> TypeCheckerXMLLoader::l
     return parse_xml_content(xml_content);
 }
 
+LogicalType TypeCheckerXMLLoader::parse_logical_type(const std::string& type_str) {
+    static const std::unordered_map<std::string, LogicalType> type_map = {
+            {"TYPE_BOOLEAN", TYPE_BOOLEAN},
+            {"TYPE_TINYINT", TYPE_TINYINT},
+            {"TYPE_SMALLINT", TYPE_SMALLINT},
+            {"TYPE_INT", TYPE_INT},
+            {"TYPE_BIGINT", TYPE_BIGINT},
+            {"TYPE_LARGEINT", TYPE_LARGEINT},
+            {"TYPE_FLOAT", TYPE_FLOAT},
+            {"TYPE_DOUBLE", TYPE_DOUBLE},
+            {"TYPE_VARCHAR", TYPE_VARCHAR},
+            {"TYPE_CHAR", TYPE_CHAR},
+            {"TYPE_VARBINARY", TYPE_VARBINARY},
+            {"TYPE_BINARY", TYPE_BINARY},
+            {"TYPE_DATE", TYPE_DATE},
+            {"TYPE_DATETIME", TYPE_DATETIME},
+            {"TYPE_TIME", TYPE_TIME},
+            {"TYPE_DECIMAL32", TYPE_DECIMAL32},
+            {"TYPE_DECIMAL64", TYPE_DECIMAL64},
+            {"TYPE_DECIMAL128", TYPE_DECIMAL128},
+            {"TYPE_DECIMAL256", TYPE_DECIMAL256},
+    };
+
+    auto it = type_map.find(type_str);
+    return (it != type_map.end()) ? it->second : TYPE_UNKNOWN;
+}
+
 StatusOr<std::vector<TypeCheckerXMLLoader::TypeMapping>> TypeCheckerXMLLoader::parse_xml_content(
         const std::string& xml_content) {
     std::vector<TypeMapping> mappings;
     std::istringstream stream(xml_content);
     std::string line;
     bool in_type_checkers = false;
+    TypeMapping* current_mapping = nullptr;
 
     while (std::getline(stream, line)) {
         std::string trimmed_line = trim(line);
@@ -66,13 +96,69 @@ StatusOr<std::vector<TypeCheckerXMLLoader::TypeMapping>> TypeCheckerXMLLoader::p
         if (in_type_checkers && trimmed_line.find("<type-mapping") != std::string::npos) {
             std::string java_class = extract_attribute(trimmed_line, "java_class");
             std::string checker = extract_attribute(trimmed_line, "checker");
+            std::string display_name = extract_attribute(trimmed_line, "display_name");
 
-            if (java_class.empty() || checker.empty()) {
+            if (java_class.empty()) {
                 return Status::InvalidArgument(
                         strings::Substitute("Invalid type-mapping element: $0", trimmed_line));
             }
 
-            mappings.push_back({java_class, checker});
+            TypeMapping mapping;
+            mapping.java_class = java_class;
+            
+            // Check if this is a self-closing tag (ends with />)
+            if (trimmed_line.find("/>") != std::string::npos) {
+                // Simple mapping with predefined checker
+                if (checker.empty()) {
+                    return Status::InvalidArgument(
+                            strings::Substitute("type-mapping must have either checker attribute or type-rule children: $0", 
+                                              trimmed_line));
+                }
+                mapping.checker_name = checker;
+                mapping.is_configurable = false;
+                mappings.push_back(mapping);
+            } else {
+                // Complex mapping with type rules
+                if (display_name.empty()) {
+                    return Status::InvalidArgument(
+                            strings::Substitute("Configurable type-mapping must have display_name attribute: $0",
+                                              trimmed_line));
+                }
+                mapping.display_name = display_name;
+                mapping.is_configurable = true;
+                mappings.push_back(mapping);
+                current_mapping = &mappings.back();
+            }
+        }
+
+        // Parse type-rule elements
+        if (current_mapping != nullptr && trimmed_line.find("<type-rule") != std::string::npos) {
+            std::string allowed_type_str = extract_attribute(trimmed_line, "allowed_type");
+            std::string return_type_str = extract_attribute(trimmed_line, "return_type");
+
+            if (allowed_type_str.empty() || return_type_str.empty()) {
+                return Status::InvalidArgument(
+                        strings::Substitute("type-rule must have both allowed_type and return_type attributes: $0",
+                                          trimmed_line));
+            }
+
+            LogicalType allowed_type = parse_logical_type(allowed_type_str);
+            LogicalType return_type = parse_logical_type(return_type_str);
+
+            if (allowed_type == TYPE_UNKNOWN || return_type == TYPE_UNKNOWN) {
+                return Status::InvalidArgument(
+                        strings::Substitute("Invalid logical type in type-rule: $0", trimmed_line));
+            }
+
+            ConfigurableTypeChecker::TypeRule rule;
+            rule.allowed_type = allowed_type;
+            rule.return_type = return_type;
+            current_mapping->rules.push_back(rule);
+        }
+
+        // Check for closing type-mapping tag
+        if (trimmed_line.find("</type-mapping>") != std::string::npos) {
+            current_mapping = nullptr;
         }
     }
 
@@ -112,24 +198,16 @@ std::unique_ptr<TypeChecker> TypeCheckerXMLLoader::create_checker(const std::str
     // to use a static map<string, factory_function> pattern.
     if (checker_name == "ByteTypeChecker") {
         return std::make_unique<ByteTypeChecker>();
-    } else if (checker_name == "ClickHouseUnsignedByteTypeChecker") {
-        return std::make_unique<ClickHouseUnsignedByteTypeChecker>();
     } else if (checker_name == "ShortTypeChecker") {
         return std::make_unique<ShortTypeChecker>();
-    } else if (checker_name == "ClickHouseUnsignedShortTypeChecker") {
-        return std::make_unique<ClickHouseUnsignedShortTypeChecker>();
     } else if (checker_name == "IntegerTypeChecker") {
         return std::make_unique<IntegerTypeChecker>();
     } else if (checker_name == "StringTypeChecker") {
         return std::make_unique<StringTypeChecker>();
-    } else if (checker_name == "ClickHouseUnsignedIntegerTypeChecker") {
-        return std::make_unique<ClickHouseUnsignedIntegerTypeChecker>();
     } else if (checker_name == "LongTypeChecker") {
         return std::make_unique<LongTypeChecker>();
     } else if (checker_name == "BigIntegerTypeChecker") {
         return std::make_unique<BigIntegerTypeChecker>();
-    } else if (checker_name == "ClickHouseUnsignedLongTypeChecker") {
-        return std::make_unique<ClickHouseUnsignedLongTypeChecker>();
     } else if (checker_name == "BooleanTypeChecker") {
         return std::make_unique<BooleanTypeChecker>();
     } else if (checker_name == "FloatTypeChecker") {
@@ -159,6 +237,16 @@ std::unique_ptr<TypeChecker> TypeCheckerXMLLoader::create_checker(const std::str
     }
 
     return nullptr;
+}
+
+std::unique_ptr<TypeChecker> TypeCheckerXMLLoader::create_checker_from_mapping(const TypeMapping& mapping) {
+    if (mapping.is_configurable) {
+        // Create ConfigurableTypeChecker with the parsed rules
+        return std::make_unique<ConfigurableTypeChecker>(mapping.display_name, mapping.rules);
+    } else {
+        // Create predefined checker
+        return create_checker(mapping.checker_name);
+    }
 }
 
 } // namespace starrocks

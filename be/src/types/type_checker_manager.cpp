@@ -56,16 +56,11 @@ TypeCheckerManager::TypeCheckerManager() : _use_xml_config(false) {
 
 void TypeCheckerManager::init_hardcoded_checkers() {
     registerChecker("java.lang.Byte", std::make_unique<ByteTypeChecker>());
-    registerChecker("com.clickhouse.data.value.UnsignedByte", std::make_unique<ClickHouseUnsignedByteTypeChecker>());
     registerChecker("java.lang.Short", std::make_unique<ShortTypeChecker>());
-    registerChecker("com.clickhouse.data.value.UnsignedShort", std::make_unique<ClickHouseUnsignedShortTypeChecker>());
     registerChecker("java.lang.Integer", std::make_unique<IntegerTypeChecker>());
     registerChecker("java.lang.String", std::make_unique<StringTypeChecker>());
-    registerChecker("com.clickhouse.data.value.UnsignedInteger",
-                    std::make_unique<ClickHouseUnsignedIntegerTypeChecker>());
     registerChecker("java.lang.Long", std::make_unique<LongTypeChecker>());
     registerChecker("java.math.BigInteger", std::make_unique<BigIntegerTypeChecker>());
-    registerChecker("com.clickhouse.data.value.UnsignedLong", std::make_unique<ClickHouseUnsignedLongTypeChecker>());
     registerChecker("java.lang.Boolean", std::make_unique<BooleanTypeChecker>());
     registerChecker("java.lang.Float", std::make_unique<FloatTypeChecker>());
     registerChecker("java.lang.Double", std::make_unique<DoubleTypeChecker>());
@@ -83,6 +78,34 @@ void TypeCheckerManager::init_hardcoded_checkers() {
     registerChecker("oracle.jdbc.OracleBlob", std::make_unique<ByteArrayTypeChecker>());
     registerChecker("[B", std::make_unique<ByteArrayTypeChecker>());
     registerChecker("java.util.UUID", std::make_unique<ByteArrayTypeChecker>());
+    
+    // ClickHouse unsigned types - use configurable checkers with hardcoded rules
+    std::vector<ConfigurableTypeChecker::TypeRule> unsigned_byte_rules = {
+            {TYPE_SMALLINT, TYPE_SMALLINT},
+            {TYPE_INT, TYPE_SMALLINT},
+            {TYPE_BIGINT, TYPE_SMALLINT}
+    };
+    registerChecker("com.clickhouse.data.value.UnsignedByte", 
+                    std::make_unique<ConfigurableTypeChecker>("UnsignedByte", unsigned_byte_rules));
+    
+    std::vector<ConfigurableTypeChecker::TypeRule> unsigned_short_rules = {
+            {TYPE_INT, TYPE_INT},
+            {TYPE_BIGINT, TYPE_INT}
+    };
+    registerChecker("com.clickhouse.data.value.UnsignedShort",
+                    std::make_unique<ConfigurableTypeChecker>("UnsignedShort", unsigned_short_rules));
+    
+    std::vector<ConfigurableTypeChecker::TypeRule> unsigned_int_rules = {
+            {TYPE_BIGINT, TYPE_BIGINT}
+    };
+    registerChecker("com.clickhouse.data.value.UnsignedInteger",
+                    std::make_unique<ConfigurableTypeChecker>("UnsignedInteger", unsigned_int_rules));
+    
+    std::vector<ConfigurableTypeChecker::TypeRule> unsigned_long_rules = {
+            {TYPE_LARGEINT, TYPE_VARCHAR}
+    };
+    registerChecker("com.clickhouse.data.value.UnsignedLong",
+                    std::make_unique<ConfigurableTypeChecker>("UnsignedLong", unsigned_long_rules));
 }
 
 bool TypeCheckerManager::try_load_from_xml(const std::string& xml_file_path) {
@@ -95,9 +118,9 @@ bool TypeCheckerManager::try_load_from_xml(const std::string& xml_file_path) {
     const auto& mappings = mappings_or.value();
     size_t loaded_count = 0;
     for (const auto& mapping : mappings) {
-        auto checker = TypeCheckerXMLLoader::create_checker(mapping.checker_name);
+        auto checker = TypeCheckerXMLLoader::create_checker_from_mapping(mapping);
         if (checker == nullptr) {
-            LOG(WARNING) << "Unknown checker type in XML configuration: " << mapping.checker_name;
+            LOG(WARNING) << "Failed to create checker for: " << mapping.java_class;
             continue;
         }
         registerChecker(mapping.java_class, std::move(checker));

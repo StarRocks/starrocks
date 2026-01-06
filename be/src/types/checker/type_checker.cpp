@@ -17,6 +17,31 @@
 #include <fmt/format.h>
 
 namespace starrocks {
+
+// ConfigurableTypeChecker implementation
+StatusOr<LogicalType> ConfigurableTypeChecker::check(const std::string& java_class,
+                                                      const SlotDescriptor* slot_desc) const {
+    auto type = slot_desc->type().type;
+    
+    // Check if the slot type matches any of our configured rules
+    for (const auto& rule : _rules) {
+        if (type == rule.allowed_type) {
+            return rule.return_type;
+        }
+    }
+    
+    // No matching rule found - generate error message with allowed types
+    std::vector<std::string> allowed_types;
+    for (const auto& rule : _rules) {
+        // Convert LogicalType enum to string for error message
+        allowed_types.push_back(std::to_string(static_cast<int>(rule.allowed_type)));
+    }
+    
+    return Status::NotSupported(
+            fmt::format("Type mismatches on column[{}], JDBC result type is {}, check configuration for allowed types",
+                        slot_desc->col_name(), _display_name));
+}
+
 StatusOr<LogicalType> ByteTypeChecker::check(const std::string& java_class, const SlotDescriptor* slot_desc) const {
     auto type = slot_desc->type().type;
     switch (type) {
@@ -35,22 +60,6 @@ StatusOr<LogicalType> ByteTypeChecker::check(const std::string& java_class, cons
     }
 }
 
-StatusOr<LogicalType> ClickHouseUnsignedByteTypeChecker::check(const std::string& java_class,
-                                                               const SlotDescriptor* slot_desc) const {
-    auto type = slot_desc->type().type;
-    switch (type) {
-    case TYPE_SMALLINT:
-    case TYPE_INT:
-    case TYPE_BIGINT:
-        return TYPE_SMALLINT;
-    default:
-        return Status::NotSupported(
-                fmt::format("Type mismatches on column[{}], JDBC result type is UnsignedByte, please set the type to "
-                            "one of smallint,int,bigint",
-                            slot_desc->col_name()));
-    }
-}
-
 StatusOr<LogicalType> ShortTypeChecker::check(const std::string& java_class, const SlotDescriptor* slot_desc) const {
     auto type = slot_desc->type().type;
     switch (type) {
@@ -63,21 +72,6 @@ StatusOr<LogicalType> ShortTypeChecker::check(const std::string& java_class, con
         return Status::NotSupported(
                 fmt::format("Type mismatches on column[{}], JDBC result type is Short, please set the type to "
                             "one of tinyint,smallint,int,bigint",
-                            slot_desc->col_name()));
-    }
-}
-
-StatusOr<LogicalType> ClickHouseUnsignedShortTypeChecker::check(const std::string& java_class,
-                                                                const SlotDescriptor* slot_desc) const {
-    auto type = slot_desc->type().type;
-    switch (type) {
-    case TYPE_INT:
-    case TYPE_BIGINT:
-        return TYPE_INT;
-    default:
-        return Status::NotSupported(
-                fmt::format("Type mismatches on column[{}], JDBC result type is UnsignedShort, please set the type to "
-                            "one of int,bigint",
                             slot_desc->col_name()));
     }
 }
@@ -112,17 +106,6 @@ StatusOr<LogicalType> StringTypeChecker::check(const std::string& java_class, co
     }
 }
 
-StatusOr<LogicalType> ClickHouseUnsignedIntegerTypeChecker::check(const std::string& java_class,
-                                                                  const SlotDescriptor* slot_desc) const {
-    auto type = slot_desc->type().type;
-    if (type != TYPE_BIGINT) {
-        return Status::NotSupported(fmt::format(
-                "Type mismatches on column[{}], JDBC result type is UnsignedInteger, please set the type to bigint",
-                slot_desc->col_name()));
-    }
-    return TYPE_BIGINT;
-}
-
 StatusOr<LogicalType> LongTypeChecker::check(const std::string& java_class, const SlotDescriptor* slot_desc) const {
     auto type = slot_desc->type().type;
     if (type != TYPE_BIGINT) {
@@ -145,17 +128,6 @@ StatusOr<LogicalType> BigIntegerTypeChecker::check(const std::string& java_class
                 "Type mismatches on column[{}], JDBC result type is BigInteger, please set the type to largeint",
                 slot_desc->col_name()));
     }
-}
-
-StatusOr<LogicalType> ClickHouseUnsignedLongTypeChecker::check(const std::string& java_class,
-                                                               const SlotDescriptor* slot_desc) const {
-    auto type = slot_desc->type().type;
-    if (type != TYPE_LARGEINT) {
-        return Status::NotSupported(fmt::format(
-                "Type mismatches on column[{}], JDBC result type is UnsignedLong, please set the type to largeint",
-                slot_desc->col_name()));
-    }
-    return TYPE_VARCHAR;
 }
 
 StatusOr<LogicalType> BooleanTypeChecker::check(const std::string& java_class, const SlotDescriptor* slot_desc) const {

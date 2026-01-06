@@ -57,6 +57,7 @@
 #include "types/logical_type.h"
 
 namespace starrocks {
+
 class TypeChecker {
 public:
     virtual ~TypeChecker() = default;
@@ -72,14 +73,8 @@ public:
 // Define type checker for java.lang.Byte
 DEFINE_TYPE_CHECKER(ByteTypeChecker)
 
-// Define type checker for com.clickhouse.data.value.UnsignedByte
-DEFINE_TYPE_CHECKER(ClickHouseUnsignedByteTypeChecker)
-
 // Define type checker for java.lang.Short
 DEFINE_TYPE_CHECKER(ShortTypeChecker)
-
-// Define type checker for com.clickhouse.data.value.UnsignedShort
-DEFINE_TYPE_CHECKER(ClickHouseUnsignedShortTypeChecker)
 
 // Define type checker for java.lang.Integer
 DEFINE_TYPE_CHECKER(IntegerTypeChecker)
@@ -87,17 +82,11 @@ DEFINE_TYPE_CHECKER(IntegerTypeChecker)
 // Define type checker for java.lang.String
 DEFINE_TYPE_CHECKER(StringTypeChecker)
 
-// Define type checker for com.clickhouse.data.value.UnsignedInteger
-DEFINE_TYPE_CHECKER(ClickHouseUnsignedIntegerTypeChecker)
-
 // Define type checker for java.lang.Long
 DEFINE_TYPE_CHECKER(LongTypeChecker)
 
 // Define type checker for java.math.BigInteger
 DEFINE_TYPE_CHECKER(BigIntegerTypeChecker)
-
-// Define type checker for com.clickhouse.data.value.UnsignedLong
-DEFINE_TYPE_CHECKER(ClickHouseUnsignedLongTypeChecker)
 
 // Define type checker for java.lang.Boolean
 DEFINE_TYPE_CHECKER(BooleanTypeChecker)
@@ -137,5 +126,33 @@ DEFINE_TYPE_CHECKER(ByteArrayTypeChecker)
 
 // Define default type checker for unspecified types
 DEFINE_TYPE_CHECKER(DefaultTypeChecker)
+
+/**
+ * ConfigurableTypeChecker - XML-configurable type checker
+ * 
+ * This checker allows type validation rules to be specified in XML configuration
+ * instead of requiring separate C++ classes for each type variant.
+ * 
+ * Type checking rules specify:
+ * - Allowed input types (what StarRocks types can accept this Java type)
+ * - Return type mapping (what LogicalType to return for each allowed type)
+ * - Display name for error messages
+ */
+class ConfigurableTypeChecker : public TypeChecker {
+public:
+    struct TypeRule {
+        LogicalType allowed_type;    // Input type that's allowed
+        LogicalType return_type;      // What to return when this type is matched
+    };
+
+    ConfigurableTypeChecker(const std::string& display_name, const std::vector<TypeRule>& rules)
+            : _display_name(display_name), _rules(rules) {}
+
+    StatusOr<LogicalType> check(const std::string& java_class, const SlotDescriptor* slot_desc) const override;
+
+private:
+    std::string _display_name;
+    std::vector<TypeRule> _rules;
+};
 
 } // namespace starrocks

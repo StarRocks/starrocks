@@ -3,34 +3,40 @@
   Type Checker Configuration
   
   This XML file defines mappings between Java class names and type checker implementations.
-  Each <type-mapping> element specifies:
-  - java_class: The fully qualified Java class name
-  - checker: The internal checker class name to use
   
-  Supported checkers:
+  Each <type-mapping> element can specify either:
+  1. A predefined checker class (checker attribute)
+  2. Configurable type rules (with <type-rule> child elements)
+  
+  For predefined checkers:
+    <type-mapping java_class="java.lang.Integer" checker="IntegerTypeChecker"/>
+  
+  For configurable type rules:
+    <type-mapping java_class="com.clickhouse.data.value.UnsignedByte" display_name="UnsignedByte">
+      <type-rule allowed_type="TYPE_SMALLINT" return_type="TYPE_SMALLINT"/>
+      <type-rule allowed_type="TYPE_INT" return_type="TYPE_SMALLINT"/>
+      <type-rule allowed_type="TYPE_BIGINT" return_type="TYPE_SMALLINT"/>
+    </type-mapping>
+  
+  Supported predefined checkers:
   - ByteTypeChecker, ShortTypeChecker, IntegerTypeChecker, LongTypeChecker
   - BigIntegerTypeChecker, BooleanTypeChecker, FloatTypeChecker, DoubleTypeChecker
   - StringTypeChecker, TimestampTypeChecker, DateTypeChecker, TimeTypeChecker
   - LocalDateTimeTypeChecker, LocalDateTypeChecker, BigDecimalTypeChecker
   - OracleTimestampClassTypeChecker, SqlServerDateTimeOffsetTypeChecker
-  - ByteArrayTypeChecker, ClickHouseUnsignedByteTypeChecker
-  - ClickHouseUnsignedShortTypeChecker, ClickHouseUnsignedIntegerTypeChecker
-  - ClickHouseUnsignedLongTypeChecker, DefaultTypeChecker
+  - ByteArrayTypeChecker, DefaultTypeChecker
 -->
 <type-checkers>
+  <!-- Standard Java types -->
   <type-mapping java_class="java.lang.Byte" checker="ByteTypeChecker"/>
-  <type-mapping java_class="com.clickhouse.data.value.UnsignedByte" checker="ClickHouseUnsignedByteTypeChecker"/>
   <type-mapping java_class="java.lang.Short" checker="ShortTypeChecker"/>
-  <type-mapping java_class="com.clickhouse.data.value.UnsignedShort" checker="ClickHouseUnsignedShortTypeChecker"/>
   <type-mapping java_class="java.lang.Integer" checker="IntegerTypeChecker"/>
-  <type-mapping java_class="java.lang.String" checker="StringTypeChecker"/>
-  <type-mapping java_class="com.clickhouse.data.value.UnsignedInteger" checker="ClickHouseUnsignedIntegerTypeChecker"/>
   <type-mapping java_class="java.lang.Long" checker="LongTypeChecker"/>
   <type-mapping java_class="java.math.BigInteger" checker="BigIntegerTypeChecker"/>
-  <type-mapping java_class="com.clickhouse.data.value.UnsignedLong" checker="ClickHouseUnsignedLongTypeChecker"/>
   <type-mapping java_class="java.lang.Boolean" checker="BooleanTypeChecker"/>
   <type-mapping java_class="java.lang.Float" checker="FloatTypeChecker"/>
   <type-mapping java_class="java.lang.Double" checker="DoubleTypeChecker"/>
+  <type-mapping java_class="java.lang.String" checker="StringTypeChecker"/>
   <type-mapping java_class="java.sql.Timestamp" checker="TimestampTypeChecker"/>
   <type-mapping java_class="java.sql.Date" checker="DateTypeChecker"/>
   <type-mapping java_class="java.sql.Time" checker="TimeTypeChecker"/>
@@ -48,4 +54,24 @@
   <type-mapping java_class="[B" checker="ByteArrayTypeChecker"/>
   <!-- UUID is stored as byte array in StarRocks for efficient storage and comparison -->
   <type-mapping java_class="java.util.UUID" checker="ByteArrayTypeChecker"/>
+  
+  <!-- ClickHouse unsigned types with configurable type rules -->
+  <type-mapping java_class="com.clickhouse.data.value.UnsignedByte" display_name="UnsignedByte">
+    <type-rule allowed_type="TYPE_SMALLINT" return_type="TYPE_SMALLINT"/>
+    <type-rule allowed_type="TYPE_INT" return_type="TYPE_SMALLINT"/>
+    <type-rule allowed_type="TYPE_BIGINT" return_type="TYPE_SMALLINT"/>
+  </type-mapping>
+  
+  <type-mapping java_class="com.clickhouse.data.value.UnsignedShort" display_name="UnsignedShort">
+    <type-rule allowed_type="TYPE_INT" return_type="TYPE_INT"/>
+    <type-rule allowed_type="TYPE_BIGINT" return_type="TYPE_INT"/>
+  </type-mapping>
+  
+  <type-mapping java_class="com.clickhouse.data.value.UnsignedInteger" display_name="UnsignedInteger">
+    <type-rule allowed_type="TYPE_BIGINT" return_type="TYPE_BIGINT"/>
+  </type-mapping>
+  
+  <type-mapping java_class="com.clickhouse.data.value.UnsignedLong" display_name="UnsignedLong">
+    <type-rule allowed_type="TYPE_LARGEINT" return_type="TYPE_VARCHAR"/>
+  </type-mapping>
 </type-checkers>

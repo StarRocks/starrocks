@@ -170,15 +170,11 @@ TEST_F(TypeCheckerXMLLoaderTest, CreateCheckerInstances) {
 TEST_F(TypeCheckerXMLLoaderTest, CreateAllSupportedCheckers) {
     std::vector<std::string> checker_names = {
             "ByteTypeChecker",
-            "ClickHouseUnsignedByteTypeChecker",
             "ShortTypeChecker",
-            "ClickHouseUnsignedShortTypeChecker",
             "IntegerTypeChecker",
             "StringTypeChecker",
-            "ClickHouseUnsignedIntegerTypeChecker",
             "LongTypeChecker",
             "BigIntegerTypeChecker",
-            "ClickHouseUnsignedLongTypeChecker",
             "BooleanTypeChecker",
             "FloatTypeChecker",
             "DoubleTypeChecker",
@@ -205,7 +201,6 @@ TEST_F(TypeCheckerXMLLoaderTest, LoadComprehensiveXML) {
     std::string xml_content = R"(<?xml version="1.0" encoding="UTF-8"?>
 <type-checkers>
   <type-mapping java_class="java.lang.Byte" checker="ByteTypeChecker"/>
-  <type-mapping java_class="com.clickhouse.data.value.UnsignedByte" checker="ClickHouseUnsignedByteTypeChecker"/>
   <type-mapping java_class="java.lang.Short" checker="ShortTypeChecker"/>
   <type-mapping java_class="java.lang.Integer" checker="IntegerTypeChecker"/>
   <type-mapping java_class="java.lang.Long" checker="LongTypeChecker"/>
@@ -217,6 +212,10 @@ TEST_F(TypeCheckerXMLLoaderTest, LoadComprehensiveXML) {
   <type-mapping java_class="java.sql.Date" checker="DateTypeChecker"/>
   <type-mapping java_class="java.sql.Time" checker="TimeTypeChecker"/>
   <type-mapping java_class="byte[]" checker="ByteArrayTypeChecker"/>
+  <type-mapping java_class="com.clickhouse.data.value.UnsignedByte" display_name="UnsignedByte">
+    <type-rule allowed_type="TYPE_SMALLINT" return_type="TYPE_SMALLINT"/>
+    <type-rule allowed_type="TYPE_INT" return_type="TYPE_SMALLINT"/>
+  </type-mapping>
 </type-checkers>)";
 
     std::string xml_file = "/tmp/type_checker_test/comprehensive.xml";
@@ -227,6 +226,18 @@ TEST_F(TypeCheckerXMLLoaderTest, LoadComprehensiveXML) {
 
     const auto& mappings = result.value();
     ASSERT_EQ(mappings.size(), 13);
+    
+    // Verify the configurable mapping
+    bool found_clickhouse = false;
+    for (const auto& mapping : mappings) {
+        if (mapping.java_class == "com.clickhouse.data.value.UnsignedByte") {
+            found_clickhouse = true;
+            ASSERT_TRUE(mapping.is_configurable);
+            ASSERT_EQ(mapping.display_name, "UnsignedByte");
+            ASSERT_EQ(mapping.rules.size(), 2);
+        }
+    }
+    ASSERT_TRUE(found_clickhouse);
 }
 
 // Test XML with special characters in class names

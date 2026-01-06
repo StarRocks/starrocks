@@ -50,7 +50,10 @@ class TypeCheckerXMLLoader {
 public:
     struct TypeMapping {
         std::string java_class;
-        std::string checker_name;
+        std::string checker_name;  // For predefined checkers
+        std::string display_name;  // For configurable checkers
+        std::vector<ConfigurableTypeChecker::TypeRule> rules;  // Type rules for configurable checkers
+        bool is_configurable;  // True if this uses type rules instead of predefined checker
     };
 
     /**
@@ -68,6 +71,14 @@ public:
      * @return Unique pointer to TypeChecker instance, or nullptr if checker name is unknown
      */
     static std::unique_ptr<TypeChecker> create_checker(const std::string& checker_name);
+    
+    /**
+     * Create a type checker instance from a type mapping.
+     * 
+     * @param mapping The type mapping configuration
+     * @return Unique pointer to TypeChecker instance
+     */
+    static std::unique_ptr<TypeChecker> create_checker_from_mapping(const TypeMapping& mapping);
 
 private:
     /**
@@ -94,6 +105,14 @@ private:
      * @return Trimmed string
      */
     static std::string trim(const std::string& str);
+    
+    /**
+     * Parse LogicalType from string.
+     * 
+     * @param type_str String representation of LogicalType (e.g., "TYPE_INT")
+     * @return LogicalType enum value, or TYPE_UNKNOWN if invalid
+     */
+    static LogicalType parse_logical_type(const std::string& type_str);
 };
 
 } // namespace starrocks
