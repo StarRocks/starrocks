@@ -93,6 +93,7 @@ bool TypeCheckerManager::try_load_from_xml(const std::string& xml_file_path) {
     }
 
     const auto& mappings = mappings_or.value();
+    size_t loaded_count = 0;
     for (const auto& mapping : mappings) {
         auto checker = TypeCheckerXMLLoader::create_checker(mapping.checker_name);
         if (checker == nullptr) {
@@ -100,9 +101,10 @@ bool TypeCheckerManager::try_load_from_xml(const std::string& xml_file_path) {
             continue;
         }
         registerChecker(mapping.java_class, std::move(checker));
+        loaded_count++;
     }
 
-    if (_checkers.empty()) {
+    if (loaded_count == 0) {
         LOG(WARNING) << "No valid type checkers were loaded from XML configuration";
         return false;
     }

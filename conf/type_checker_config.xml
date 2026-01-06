@@ -41,8 +41,11 @@
   <type-mapping java_class="oracle.sql.TIMESTAMPLTZ" checker="OracleTimestampClassTypeChecker"/>
   <type-mapping java_class="oracle.sql.TIMESTAMPTZ" checker="OracleTimestampClassTypeChecker"/>
   <type-mapping java_class="microsoft.sql.DateTimeOffset" checker="SqlServerDateTimeOffsetTypeChecker"/>
+  
+  <!-- Binary types: byte arrays and BLOBs map to VARBINARY -->
   <type-mapping java_class="byte[]" checker="ByteArrayTypeChecker"/>
   <type-mapping java_class="oracle.jdbc.OracleBlob" checker="ByteArrayTypeChecker"/>
   <type-mapping java_class="[B" checker="ByteArrayTypeChecker"/>
+  <!-- UUID is stored as byte array in StarRocks for efficient storage and comparison -->
   <type-mapping java_class="java.util.UUID" checker="ByteArrayTypeChecker"/>
 </type-checkers>

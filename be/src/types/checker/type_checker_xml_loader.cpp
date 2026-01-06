@@ -106,6 +106,10 @@ std::string TypeCheckerXMLLoader::trim(const std::string& str) {
 }
 
 std::unique_ptr<TypeChecker> TypeCheckerXMLLoader::create_checker(const std::string& checker_name) {
+    // Factory method to create type checker instances based on checker name.
+    // Note: This uses an if-else chain for simplicity and clarity.
+    // If the number of checker types grows significantly, consider refactoring
+    // to use a static map<string, factory_function> pattern.
     if (checker_name == "ByteTypeChecker") {
         return std::make_unique<ByteTypeChecker>();
     } else if (checker_name == "ClickHouseUnsignedByteTypeChecker") {
