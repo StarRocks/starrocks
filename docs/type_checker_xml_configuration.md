@@ -15,22 +15,17 @@ The StarRocks Type Checker system uses **mandatory** XML-based configuration for
 
 ## Configuration File Location
 
-The type checker configuration is loaded from one of the following locations (in priority order):
+The type checker configuration is loaded from the following location:
 
-1. **Environment Variable**: `STARROCKS_TYPE_CHECKER_CONFIG`
-   ```bash
-   export STARROCKS_TYPE_CHECKER_CONFIG=/path/to/custom/type_checker_config.xml
-   ```
-
-2. **Default Location**: `$STARROCKS_HOME/conf/type_checker_config.xml`
+1. **Default Location**: `$STARROCKS_HOME/conf/type_checker_config.xml`
    ```bash
    export STARROCKS_HOME=/opt/starrocks
    # Configuration will be loaded from /opt/starrocks/conf/type_checker_config.xml
    ```
 
-3. **Relative Fallback**: `conf/type_checker_config.xml`
+2. **Relative Fallback**: `conf/type_checker_config.xml` (if `STARROCKS_HOME` is not set)
 
-**IMPORTANT**: XML configuration is **mandatory**. If the configuration file is not found or fails to parse, the system will log errors and continue with an empty checker map (default checker handles unknown types).
+**IMPORTANT**: XML configuration is **mandatory**. The configuration file must exist at one of the above locations. If the file is not found or fails to parse, the system will log errors and continue with an empty checker map (default checker handles unknown types).
 
 ## XML Configuration Format
 
@@ -144,14 +139,12 @@ See `conf/type_checker_config.xml` for the complete configuration.
 
 2. **Custom Configuration**
    ```bash
-   # Create custom configuration file
+   # Edit the configuration file
+   vim $STARROCKS_HOME/conf/type_checker_config.xml
+   
+   # Or copy to a different location and symlink
    cp conf/type_checker_config.xml /path/to/custom_config.xml
-   
-   # Edit the custom configuration
-   vim /path/to/custom_config.xml
-   
-   # Set environment variable
-   export STARROCKS_TYPE_CHECKER_CONFIG=/path/to/custom_config.xml
+   ln -s /path/to/custom_config.xml $STARROCKS_HOME/conf/type_checker_config.xml
    
    # Start StarRocks BE
    ./bin/start_be.sh
@@ -251,9 +244,12 @@ Run the type checker tests:
 </type-checkers>
 ```
 
-2. Set environment variable and verify loading:
+2. Verify loading:
 ```bash
-export STARROCKS_TYPE_CHECKER_CONFIG=/tmp/test_config.xml
+# Place your test XML at the default location
+cp /tmp/test_config.xml $STARROCKS_HOME/conf/type_checker_config.xml
+# Or without STARROCKS_HOME
+cp /tmp/test_config.xml conf/type_checker_config.xml
 # Start BE and check logs
 ```
 
@@ -287,15 +283,16 @@ To add a new type mapping:
 
 ### Configuration Not Loading
 
-1. Check environment variables:
+1. Check environment variable:
    ```bash
-   echo $STARROCKS_TYPE_CHECKER_CONFIG
    echo $STARROCKS_HOME
    ```
 
-2. Verify file permissions:
+2. Verify file exists and has correct permissions:
    ```bash
    ls -la $STARROCKS_HOME/conf/type_checker_config.xml
+   # Or if STARROCKS_HOME is not set
+   ls -la conf/type_checker_config.xml
    ```
 
 3. Check BE logs for error messages

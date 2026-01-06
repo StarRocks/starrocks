@@ -30,23 +30,14 @@ TypeCheckerManager::TypeCheckerManager() : _use_xml_config(false) {
         });
 
     // Load type checkers from XML configuration file
-    // Priority order:
-    // 1. Environment variable STARROCKS_TYPE_CHECKER_CONFIG
-    // 2. Default location: conf/type_checker_config.xml (relative to BE home)
-    const char* xml_path_env = std::getenv("STARROCKS_TYPE_CHECKER_CONFIG");
+    // Location: conf/type_checker_config.xml (relative to BE home)
     std::string xml_path;
-
-    if (xml_path_env != nullptr) {
-        xml_path = xml_path_env;
+    const char* be_home = std::getenv("STARROCKS_HOME");
+    if (be_home != nullptr) {
+        xml_path = std::string(be_home) + "/conf/type_checker_config.xml";
     } else {
-        // Try default location relative to BE home
-        const char* be_home = std::getenv("STARROCKS_HOME");
-        if (be_home != nullptr) {
-            xml_path = std::string(be_home) + "/conf/type_checker_config.xml";
-        } else {
-            // Use relative path as last resort
-            xml_path = "conf/type_checker_config.xml";
-        }
+        // Use relative path as fallback
+        xml_path = "conf/type_checker_config.xml";
     }
 
     // Load from XML configuration - this is now mandatory
