@@ -1503,19 +1503,21 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             if (isTempPartition) {
                 olapTable.dropTempPartition(partitionName, true);
             } else {
+                Range<PartitionKey> partitionRange = null;
                 Partition partition = olapTable.getPartition(partitionName);
-                olapTable.dropPartition(db.getId(), partitionName, isForceDrop);
                 if (partition != null) {
                     GlobalStateMgr.getCurrentState().getAnalyzeMgr().recordDropPartition(partition.getId());
-                    if (partitionInfo instanceof RangePartitionInfo && (olapTable instanceof MaterializedView mv)) {
-                        Range<PartitionKey> partitionRange =
-                                ((RangePartitionInfo) partitionInfo).getRange(partition.getId());
-                        try {
-                            SyncPartitionUtils.dropBaseVersionMeta(mv, partitionName, partitionRange);
-                        } catch (Exception e) {
-                            LOG.warn("failed to drop base version meta for mv {}, partition {}",
-                                    mv.getName(), partitionName, e);
-                        }
+                    if (partitionInfo instanceof RangePartitionInfo) {
+                        partitionRange = ((RangePartitionInfo) partitionInfo).getRange(partition.getId());
+                    }
+                }
+                olapTable.dropPartition(db.getId(), partitionName, isForceDrop);
+                if (olapTable instanceof MaterializedView mv) {
+                    try {
+                        SyncPartitionUtils.dropBaseVersionMeta(mv, partitionName, partitionRange);
+                    } catch (Exception e) {
+                        LOG.warn("failed to drop base version meta for mv {}, partition {}",
+                                mv.getName(), partitionName, e);
                     }
                 }
             }

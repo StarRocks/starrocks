@@ -262,8 +262,8 @@ public class HiveTable extends Table {
     }
 
     public void modifyTableSchema(String dbName, String tableName, HiveTable updatedTable) {
-        ImmutableList.Builder<Column> fullSchemaTemp = ImmutableList.builder();
-        ImmutableList.Builder<String> dataColumnNamesTemp = ImmutableList.builder();
+        ImmutableList.Builder<Column> fullSchemaTempBuilder = ImmutableList.builder();
+        ImmutableList.Builder<String> dataColumnNamesTempBuilder = ImmutableList.builder();
 
         updatedTable.nameToColumn.forEach((colName, column) -> {
             Column baseColumn = nameToColumn.get(colName);
@@ -272,24 +272,26 @@ public class HiveTable extends Table {
             }
         });
 
-        fullSchemaTemp.addAll(updatedTable.fullSchema);
-        dataColumnNamesTemp.addAll(updatedTable.dataColumnNames);
+        fullSchemaTempBuilder.addAll(updatedTable.fullSchema);
+        dataColumnNamesTempBuilder.addAll(updatedTable.dataColumnNames);
 
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
         if (db == null) {
             throw new StarRocksConnectorException("Not found database " + dbName);
         }
+        ImmutableList<Column> fullSchemaTemp = fullSchemaTempBuilder.build();
+        ImmutableList<String> dataColumnNamesTemp = dataColumnNamesTempBuilder.build();
         Locker locker = new Locker();
         locker.lockDatabase(db.getId(), LockType.WRITE);
         try {
             if (GlobalStateMgr.getCurrentState().isLeader()) {
                 ModifyTableColumnOperationLog log =
-                        new ModifyTableColumnOperationLog(dbName, tableName, new ArrayList<>(fullSchemaTemp.build()));
+                        new ModifyTableColumnOperationLog(dbName, tableName, new ArrayList<>(fullSchemaTemp));
                 GlobalStateMgr.getCurrentState().getEditLog().logModifyTableColumn(log, wal -> {
-                    modifyTableSchemaInternal(fullSchemaTemp.build(), dataColumnNamesTemp.build());
+                    modifyTableSchemaInternal(fullSchemaTemp, dataColumnNamesTemp);
                 });
             } else {
-                modifyTableSchemaInternal(fullSchemaTemp.build(), dataColumnNamesTemp.build());
+                modifyTableSchemaInternal(fullSchemaTemp, dataColumnNamesTemp);
             }
         } finally {
             locker.unLockDatabase(db.getId(), LockType.WRITE);
