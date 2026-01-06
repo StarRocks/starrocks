@@ -116,7 +116,7 @@ public class PruneSubfieldRule extends TransformationRule {
             if (!normalizer.hasPath(ref)) {
                 continue;
             }
-            String columnName = scan.getColRefToColumnMetaMap().get(ref).getName();
+            String columnName = scan.getColRefToColumnMetaMap().get(ref).getColumnId().getId();
             ColumnAccessPath p = normalizer.normalizePath(ref, columnName);
 
             if (p.hasChildPath()) {

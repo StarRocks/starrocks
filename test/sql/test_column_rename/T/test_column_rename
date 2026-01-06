@@ -140,3 +140,27 @@ insert into t_rename_column_unused_output_column_name values(2, 2, 2, 2, 2, ["1"
 SELECT a, e FROM t_rename_column_unused_output_column_name WHERE t_rename_column_unused_output_column_name.new_d IS NOT NULL LIMIT 9;
 
 drop table t_rename_column_unused_output_column_name force;
+
+-- name: test_wrong_access_path_after_column_rename
+CREATE TABLE `t_wrong_access_path_after_column_rename` (
+  `k` STRING NOT NULL COMMENT "",
+  `v` int,
+  `JOB_NAME` array<Varchar(2)>,
+  `JOB_NAME_NEW` array<Varchar(2)>
+) ENGINE=OLAP 
+PRIMARY KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 1
+PROPERTIES (
+"compression" = "LZ4",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "true",
+"replication_num" = "1"
+);
+
+insert into t_wrong_access_path_after_column_rename values (1,2,["aa", "bb"], null);
+
+alter table t_wrong_access_path_after_column_rename rename column JOB_NAME to JOB_NAME_OLD;
+alter table t_wrong_access_path_after_column_rename rename column JOB_NAME_NEW to JOB_NAME;
+
+select * from t_wrong_access_path_after_column_rename;
+select JOB_NAME_OLD from t_wrong_access_path_after_column_rename where JOB_NAME is NULL;
