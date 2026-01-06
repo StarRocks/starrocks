@@ -1431,7 +1431,7 @@ ORDER BY (column_name [sort_direction] [nulls_order], ...)
 
 ###### compression_codec
 
-説明: Iceberg テーブルに使用される圧縮アルゴリズム。サポートされている圧縮アルゴリズムは SNAPPY、GZIP、ZSTD、および LZ4 です。デフォルト値: `gzip`。このプロパティは v3.2.3 で非推奨となり、それ以降のバージョンでは Iceberg テーブルにデータをシンクするために使用される圧縮アルゴリズムはセッション変数 [connector_sink_compression_codec](../../../sql-reference/System_variable.md#connector_sink_compression_codec) によって一元的に制御されます。
+説明: Iceberg テーブルに使用される圧縮アルゴリズム。サポートされている圧縮アルゴリズムは SNAPPY、GZIP、ZSTD、および LZ4 です。デフォルト値: `zstd`。
 
 ---
 
