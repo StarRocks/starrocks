@@ -2,13 +2,15 @@
 
 ## Overview
 
-The StarRocks Type Checker system now supports XML-based configuration for defining Java type to StarRocks logical type mappings. This provides a flexible, maintainable way to manage type conversions without requiring code changes and recompilation.
+The StarRocks Type Checker system uses **mandatory** XML-based configuration for defining Java type to StarRocks logical type mappings. All type checkers are now defined via XML with configurable type rules, providing maximum flexibility and maintainability without requiring code changes or recompilation.
 
 ## Features
 
-- **Dynamic Configuration**: Type mappings can be updated via XML without recompiling
-- **Backward Compatible**: Falls back to hardcoded configuration if XML is unavailable
-- **Extensible**: Easy to add new type mappings or modify existing ones
+- **Fully XML-Configurable**: All type mappings defined in XML with explicit type validation rules
+- **Industry-Standard Parser**: Uses libxml2 for robust, standards-compliant XML parsing
+- **No Hardcoded Fallback**: XML configuration is mandatory - ensures all type mappings are explicitly defined
+- **Flexible Type Rules**: Each type can have multiple type-rule mappings for different StarRocks types
+- **Extensible**: Easy to add new type mappings or modify existing ones via XML
 - **Validated**: Comprehensive error checking for malformed XML or invalid configurations
 
 ## Configuration File Location
@@ -26,89 +28,110 @@ The type checker configuration is loaded from one of the following locations (in
    # Configuration will be loaded from /opt/starrocks/conf/type_checker_config.xml
    ```
 
-3. **Fallback**: Hardcoded configuration (no XML required)
+3. **Relative Fallback**: `conf/type_checker_config.xml`
+
+**IMPORTANT**: XML configuration is **mandatory**. If the configuration file is not found or fails to parse, the system will log errors and continue with an empty checker map (default checker handles unknown types).
 
 ## XML Configuration Format
 
-### Basic Structure
+### Structure with Type Rules
+
+All type checkers now use a configurable format with explicit type-rule elements:
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
 <type-checkers>
-  <type-mapping java_class="<java-class-name>" checker="<checker-class-name>"/>
+  <type-mapping java_class="<java-class-name>" display_name="<display-name>">
+    <type-rule allowed_type="<starrocks-type>" return_type="<return-type>"/>
+    <!-- Additional type rules -->
+  </type-mapping>
   <!-- Additional type mappings -->
 </type-checkers>
 ```
+
+### XML Elements
+
+- **`<type-checkers>`**: Root element containing all type mappings
+- **`<type-mapping>`**: Defines a mapping for a specific Java class
+  - `java_class` attribute: Fully qualified Java class name (e.g., `java.lang.Integer`)
+  - `display_name` attribute: Human-readable name used in error messages
+- **`<type-rule>`**: Defines an allowed type conversion rule
+  - `allowed_type` attribute: StarRocks type that can accept this Java type (e.g., `TYPE_INT`)
+  - `return_type` attribute: StarRocks type to return for this conversion
 
 ### Example Configuration
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
 <type-checkers>
-  <!-- Basic Java types -->
-  <type-mapping java_class="java.lang.Byte" checker="ByteTypeChecker"/>
-  <type-mapping java_class="java.lang.Short" checker="ShortTypeChecker"/>
-  <type-mapping java_class="java.lang.Integer" checker="IntegerTypeChecker"/>
-  <type-mapping java_class="java.lang.Long" checker="LongTypeChecker"/>
-  <type-mapping java_class="java.lang.Boolean" checker="BooleanTypeChecker"/>
-  <type-mapping java_class="java.lang.Float" checker="FloatTypeChecker"/>
-  <type-mapping java_class="java.lang.Double" checker="DoubleTypeChecker"/>
+  <!-- Java Integer type -->
+  <type-mapping java_class="java.lang.Integer" display_name="Integer">
+    <type-rule allowed_type="TYPE_TINYINT" return_type="TYPE_INT"/>
+    <type-rule allowed_type="TYPE_SMALLINT" return_type="TYPE_INT"/>
+    <type-rule allowed_type="TYPE_INT" return_type="TYPE_INT"/>
+    <type-rule allowed_type="TYPE_BIGINT" return_type="TYPE_INT"/>
+  </type-mapping>
   
-  <!-- String types -->
-  <type-mapping java_class="java.lang.String" checker="StringTypeChecker"/>
+  <!-- Java String type -->
+  <type-mapping java_class="java.lang.String" display_name="String">
+    <type-rule allowed_type="TYPE_CHAR" return_type="TYPE_VARCHAR"/>
+    <type-rule allowed_type="TYPE_VARCHAR" return_type="TYPE_VARCHAR"/>
+  </type-mapping>
   
-  <!-- Temporal types -->
-  <type-mapping java_class="java.sql.Date" checker="DateTypeChecker"/>
-  <type-mapping java_class="java.sql.Time" checker="TimeTypeChecker"/>
-  <type-mapping java_class="java.sql.Timestamp" checker="TimestampTypeChecker"/>
-  <type-mapping java_class="java.time.LocalDate" checker="LocalDateTypeChecker"/>
-  <type-mapping java_class="java.time.LocalDateTime" checker="LocalDateTimeTypeChecker"/>
+  <!-- Java Boolean type -->
+  <type-mapping java_class="java.lang.Boolean" display_name="Boolean">
+    <type-rule allowed_type="TYPE_BOOLEAN" return_type="TYPE_BOOLEAN"/>
+    <type-rule allowed_type="TYPE_SMALLINT" return_type="TYPE_BOOLEAN"/>
+    <type-rule allowed_type="TYPE_INT" return_type="TYPE_BOOLEAN"/>
+    <type-rule allowed_type="TYPE_BIGINT" return_type="TYPE_BOOLEAN"/>
+  </type-mapping>
   
-  <!-- Numeric types -->
-  <type-mapping java_class="java.math.BigInteger" checker="BigIntegerTypeChecker"/>
-  <type-mapping java_class="java.math.BigDecimal" checker="BigDecimalTypeChecker"/>
-  
-  <!-- Binary types -->
-  <type-mapping java_class="byte[]" checker="ByteArrayTypeChecker"/>
-  <type-mapping java_class="[B" checker="ByteArrayTypeChecker"/>
-  
-  <!-- Database-specific types -->
-  <type-mapping java_class="oracle.sql.TIMESTAMP" checker="OracleTimestampClassTypeChecker"/>
-  <type-mapping java_class="oracle.jdbc.OracleBlob" checker="ByteArrayTypeChecker"/>
-  <type-mapping java_class="com.clickhouse.data.value.UnsignedByte" checker="ClickHouseUnsignedByteTypeChecker"/>
-  <type-mapping java_class="microsoft.sql.DateTimeOffset" checker="SqlServerDateTimeOffsetTypeChecker"/>
+  <!-- ClickHouse UnsignedByte type -->
+  <type-mapping java_class="com.clickhouse.data.value.UnsignedByte" display_name="UnsignedByte">
+    <type-rule allowed_type="TYPE_SMALLINT" return_type="TYPE_SMALLINT"/>
+    <type-rule allowed_type="TYPE_INT" return_type="TYPE_SMALLINT"/>
+    <type-rule allowed_type="TYPE_BIGINT" return_type="TYPE_SMALLINT"/>
+  </type-mapping>
 </type-checkers>
 ```
 
-## Supported Type Checkers
+## Supported StarRocks Types
 
-The following type checker implementations are available:
+The following StarRocks logical types can be used in type rules:
 
-| Checker Name | Description | Target Type |
-|-------------|-------------|-------------|
-| `ByteTypeChecker` | Java Byte type | TINYINT/BOOLEAN |
-| `ShortTypeChecker` | Java Short type | SMALLINT |
-| `IntegerTypeChecker` | Java Integer type | INT |
-| `LongTypeChecker` | Java Long type | BIGINT |
-| `BigIntegerTypeChecker` | Java BigInteger type | LARGEINT/VARCHAR |
-| `BooleanTypeChecker` | Java Boolean type | BOOLEAN |
-| `FloatTypeChecker` | Java Float type | FLOAT |
-| `DoubleTypeChecker` | Java Double type | DOUBLE |
-| `StringTypeChecker` | Java String type | VARCHAR |
-| `DateTypeChecker` | java.sql.Date | DATE |
-| `TimeTypeChecker` | java.sql.Time | TIME |
-| `TimestampTypeChecker` | java.sql.Timestamp | DATETIME/VARCHAR |
-| `LocalDateTypeChecker` | java.time.LocalDate | DATE |
-| `LocalDateTimeTypeChecker` | java.time.LocalDateTime | DATETIME |
-| `BigDecimalTypeChecker` | java.math.BigDecimal | DECIMAL/VARCHAR |
-| `ByteArrayTypeChecker` | byte[] and similar | VARBINARY |
-| `OracleTimestampClassTypeChecker` | Oracle timestamp types | VARCHAR |
-| `SqlServerDateTimeOffsetTypeChecker` | SQL Server DateTimeOffset | VARCHAR |
-| `ClickHouseUnsignedByteTypeChecker` | ClickHouse UnsignedByte | SMALLINT |
-| `ClickHouseUnsignedShortTypeChecker` | ClickHouse UnsignedShort | INT |
-| `ClickHouseUnsignedIntegerTypeChecker` | ClickHouse UnsignedInteger | BIGINT |
-| `ClickHouseUnsignedLongTypeChecker` | ClickHouse UnsignedLong | LARGEINT |
-| `DefaultTypeChecker` | Fallback for unknown types | VARCHAR |
+| Type Name | Description |
+|-----------|-------------|
+| `TYPE_BOOLEAN` | Boolean type |
+| `TYPE_TINYINT` | 8-bit signed integer |
+| `TYPE_SMALLINT` | 16-bit signed integer |
+| `TYPE_INT` | 32-bit signed integer |
+| `TYPE_BIGINT` | 64-bit signed integer |
+| `TYPE_LARGEINT` | 128-bit signed integer |
+| `TYPE_FLOAT` | 32-bit floating point |
+| `TYPE_DOUBLE` | 64-bit floating point |
+| `TYPE_VARCHAR` | Variable-length string |
+| `TYPE_CHAR` | Fixed-length string |
+| `TYPE_BINARY` | Fixed-length binary |
+| `TYPE_VARBINARY` | Variable-length binary |
+| `TYPE_DATE` | Date type |
+| `TYPE_DATETIME` | Datetime type |
+| `TYPE_TIME` | Time type |
+| `TYPE_DECIMAL32` | 32-bit decimal |
+| `TYPE_DECIMAL64` | 64-bit decimal |
+| `TYPE_DECIMAL128` | 128-bit decimal |
+| `TYPE_DECIMAL256` | 256-bit decimal |
+
+## Default Type Mappings
+
+The default `conf/type_checker_config.xml` includes mappings for:
+
+- **Java Primitives**: Byte, Short, Integer, Long, Boolean, Float, Double
+- **Java Objects**: String, BigInteger, BigDecimal
+- **Temporal Types**: java.sql.Date, java.sql.Time, java.sql.Timestamp, java.time.LocalDate, java.time.LocalDateTime
+- **Binary Types**: byte[], [B, java.util.UUID
+- **Database-Specific**: Oracle (TIMESTAMP, TIMESTAMPLTZ, TIMESTAMPTZ, OracleBlob), SQL Server (DateTimeOffset), ClickHouse (UnsignedByte, UnsignedShort, UnsignedInteger, UnsignedLong)
+
+See `conf/type_checker_config.xml` for the complete configuration.
 
 ## Usage
 
@@ -116,6 +139,7 @@ The following type checker implementations are available:
 
 1. **Using Default Configuration**
    - The default configuration is provided at `conf/type_checker_config.xml`
+   - Ensure this file exists before starting StarRocks BE
    - No additional setup required if using standard type mappings
 
 2. **Custom Configuration**
@@ -138,9 +162,10 @@ The following type checker implementations are available:
    ```
    INFO: TypeCheckerManager initialized from XML configuration: /path/to/config.xml
    ```
-   - Or for fallback:
+   - Or for errors:
    ```
-   INFO: TypeCheckerManager using hardcoded configuration
+   ERROR: Failed to load type checker configuration from XML: /path/to/config.xml
+   ERROR: All type checkers must be defined in XML. Please ensure the configuration file exists.
    ```
 
 ### For Developers
@@ -169,28 +194,36 @@ The XML loader provides detailed error messages for common issues:
 ### Missing Configuration File
 ```
 Status: NotFound
-Message: XML configuration file not found: /path/to/config.xml
-Behavior: Falls back to hardcoded configuration
+Message: Failed to parse XML configuration file: /path/to/config.xml
+Behavior: System logs ERROR and continues with empty checker map
 ```
 
 ### Malformed XML
 ```
 Status: InvalidArgument  
-Message: Invalid type-mapping element: <malformed line>
-Behavior: Initialization fails, falls back to hardcoded configuration
+Message: Invalid XML: root element must be <type-checkers>
+Behavior: XML loading fails, system logs ERROR
+```
+
+### Missing Attributes
+```
+Status: InvalidArgument
+Message: type-mapping element missing java_class attribute
+Behavior: XML loading fails with detailed error message
+```
+
+### Invalid Type Names
+```
+Status: InvalidArgument
+Message: Invalid logical type in type-rule: allowed=TYPE_UNKNOWN, return=TYPE_INVALID
+Behavior: XML loading fails with detailed error message
 ```
 
 ### Empty Configuration
 ```
 Status: InvalidArgument
 Message: No valid type mappings found in XML configuration
-Behavior: Falls back to hardcoded configuration
-```
-
-### Unknown Checker Type
-```
-Warning: Unknown checker type in XML configuration: UnknownChecker
-Behavior: Mapping is skipped, processing continues with other mappings
+Behavior: XML loading fails, system logs ERROR
 ```
 
 ## Testing
@@ -212,7 +245,9 @@ Run the type checker tests:
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
 <type-checkers>
-  <type-mapping java_class="java.lang.String" checker="StringTypeChecker"/>
+  <type-mapping java_class="java.lang.String" display_name="String">
+    <type-rule allowed_type="TYPE_VARCHAR" return_type="TYPE_VARCHAR"/>
+  </type-mapping>
 </type-checkers>
 ```
 
@@ -222,37 +257,31 @@ export STARROCKS_TYPE_CHECKER_CONFIG=/tmp/test_config.xml
 # Start BE and check logs
 ```
 
-## Migration Guide
-
-### From Hardcoded to XML Configuration
-
-If you're currently using the hardcoded configuration:
-
-1. **No Changes Required**: The system automatically uses hardcoded configuration as fallback
-2. **Optional Migration**: To use XML configuration:
-   - Copy the default `conf/type_checker_config.xml`
-   - Customize as needed
-   - Set `STARROCKS_TYPE_CHECKER_CONFIG` or place at default location
-   - Restart BE
-
-### Adding Custom Type Mappings
+## Adding Custom Type Mappings
 
 To add a new type mapping:
 
-1. Implement a new type checker class (if needed) following the existing pattern
-2. Add the checker to `TypeCheckerXMLLoader::create_checker()`
-3. Add the mapping to your XML configuration:
+1. Edit your XML configuration file (or `conf/type_checker_config.xml`)
+2. Add a new `<type-mapping>` element with appropriate type rules:
    ```xml
-   <type-mapping java_class="com.example.CustomType" checker="CustomTypeChecker"/>
+   <type-mapping java_class="com.example.CustomType" display_name="CustomType">
+     <type-rule allowed_type="TYPE_VARCHAR" return_type="TYPE_VARCHAR"/>
+     <!-- Add more type rules as needed -->
+   </type-mapping>
    ```
+3. Restart StarRocks BE
+4. Verify loading in BE logs
+
+**No C++ code changes required** - all type checking logic is in the XML configuration!
 
 ## Best Practices
 
 1. **Version Control**: Keep your XML configuration in version control
-2. **Validation**: Validate XML changes before deployment
+2. **Validation**: Validate XML changes before deployment using XML validators
 3. **Comments**: Use XML comments to document custom type mappings
 4. **Testing**: Test configuration changes in a non-production environment first
 5. **Backup**: Keep a backup of working configuration before making changes
+6. **Documentation**: Document any custom type rules and their rationale
 
 ## Troubleshooting
 
@@ -271,16 +300,64 @@ To add a new type mapping:
 
 3. Check BE logs for error messages
 
+4. Validate XML syntax:
+   ```bash
+   xmllint --noout conf/type_checker_config.xml
+   ```
+
 ### Type Checker Not Working
 
-1. Verify the Java class name is correct in XML
-2. Ensure the checker name matches exactly (case-sensitive)
-3. Check that the checker is supported (see Supported Type Checkers table)
-4. Review BE logs for warnings about unknown checkers
+1. Verify the Java class name is correct in XML (case-sensitive, fully qualified)
+2. Ensure the `display_name` attribute is present
+3. Check that at least one `<type-rule>` element is defined
+4. Verify type names match exactly (e.g., `TYPE_INT` not `int`)
+5. Review BE logs for warnings about failed checker creation
+
+### XML Parsing Errors
+
+1. Ensure XML is well-formed (matching open/close tags)
+2. Verify all attributes are properly quoted
+3. Check for special characters that need escaping
+4. Use XML validator: `xmllint conf/type_checker_config.xml`
+
+## Migration from Previous Versions
+
+If you're upgrading from a version with hardcoded type checkers:
+
+1. **XML Configuration is Now Mandatory**: Ensure `conf/type_checker_config.xml` exists
+2. **No Hardcoded Fallback**: The system will not fall back to hardcoded configuration
+3. **New XML Format**: Update any custom XML to use `<type-rule>` elements instead of `checker` attribute
+4. **Verify Configuration**: Test your XML configuration before deployment
+
+### Old Format (No Longer Supported)
+```xml
+<!-- Old format - NOT SUPPORTED -->
+<type-mapping java_class="java.lang.Integer" checker="IntegerTypeChecker"/>
+```
+
+### New Format (Required)
+```xml
+<!-- New format - REQUIRED -->
+<type-mapping java_class="java.lang.Integer" display_name="Integer">
+  <type-rule allowed_type="TYPE_INT" return_type="TYPE_INT"/>
+</type-mapping>
+```
+
+## Architecture
+
+The type checker system consists of:
+
+- **`ConfigurableTypeChecker`**: Single type checker class that validates based on configured rules
+- **`TypeCheckerXMLLoader`**: Parses XML using libxml2 and creates ConfigurableTypeChecker instances
+- **`TypeCheckerManager`**: Manages type checker registry and routes type checking requests
+
+All type validation logic is now data-driven via XML configuration, eliminating the need for specialized type checker classes.
 
 ## See Also
 
 - Type Checker Implementation: `be/src/types/checker/type_checker.h`
 - XML Loader: `be/src/types/checker/type_checker_xml_loader.h`
 - Type Checker Manager: `be/src/types/type_checker_manager.h`
+- Default Configuration: `conf/type_checker_config.xml`
 - Unit Tests: `be/test/types/type_checker_test.cpp`, `be/test/types/type_checker_xml_loader_test.cpp`
+
