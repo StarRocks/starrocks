@@ -78,6 +78,11 @@ public abstract class Variant implements Comparable<Variant> {
 
     public static Variant of(Type type, String value) {
         Preconditions.checkArgument(type.isValid());
+        if (value.equals("MAX")) {
+            return maxVariant(type);
+        } else if (value.equals("MIN")) {
+            return minVariant(type);
+        }
         switch (type.getPrimitiveType()) {
             case BOOLEAN:
                 return new BoolVariant(value);

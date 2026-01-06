@@ -1038,4 +1038,66 @@ public class VariantTest {
         Assertions.assertFalse(intVar.equals(stringVar));
         Assertions.assertFalse(largeIntVar.equals(stringVar));
     }
+
+    @Test
+    public void testVariantOfMinMax() {
+        // Test numeric type with "MAX"/"MIN"
+        Variant maxInt = Variant.of(IntegerType.INT, "MAX");
+        Variant minInt = Variant.of(IntegerType.INT, "MIN");
+        Assertions.assertTrue(maxInt instanceof MaxVariant);
+        Assertions.assertTrue(minInt instanceof MinVariant);
+        Assertions.assertEquals(IntegerType.INT, maxInt.getType());
+        Assertions.assertEquals(IntegerType.INT, minInt.getType());
+
+        // Test string type with "MAX"/"MIN"
+        Variant maxStr = Variant.of(VarcharType.VARCHAR, "MAX");
+        Variant minStr = Variant.of(VarcharType.VARCHAR, "MIN");
+        Assertions.assertTrue(maxStr instanceof MaxVariant);
+        Assertions.assertTrue(minStr instanceof MinVariant);
+
+        // Test equality with direct factory methods
+        Assertions.assertEquals(Variant.maxVariant(IntegerType.INT), maxInt);
+        Assertions.assertEquals(Variant.minVariant(IntegerType.INT), minInt);
+        Assertions.assertEquals(Variant.maxVariant(IntegerType.INT).hashCode(), maxInt.hashCode());
+        Assertions.assertEquals(Variant.minVariant(IntegerType.INT).hashCode(), minInt.hashCode());
+
+        // Test that it's different from actual string "MAX" if it were a StringVariant
+        // Note: With your change, we can no longer create a StringVariant with value "MAX" via Variant.of
+        Variant normalStr = Variant.of(VarcharType.VARCHAR, "MAX_VALUE");
+        Assertions.assertTrue(normalStr instanceof StringVariant);
+        Assertions.assertNotEquals(maxStr, normalStr);
+    }
+
+    @Test
+    public void testMinMaxVariantEqualsHashCode() {
+        Variant min1 = Variant.minVariant(IntegerType.INT);
+        Variant min2 = Variant.minVariant(IntegerType.BIGINT);
+        Variant min3 = Variant.minVariant(IntegerType.INT);
+        Variant max1 = Variant.maxVariant(IntegerType.INT);
+        Variant max2 = Variant.maxVariant(IntegerType.BIGINT);
+        Variant max3 = Variant.maxVariant(IntegerType.INT);
+
+        // MinVariant equals and hashCode
+        Assertions.assertEquals(min1, min3);
+        Assertions.assertEquals(min1.hashCode(), min3.hashCode());
+        Assertions.assertEquals(0, min1.compareTo(min3));
+
+        Assertions.assertNotEquals(min1, min2);
+        Assertions.assertNotEquals(min1.hashCode(), min2.hashCode());
+        Assertions.assertNotEquals(0, min1.compareTo(min2));
+
+        // MaxVariant equals and hashCode
+        Assertions.assertEquals(max1, max3);
+        Assertions.assertEquals(max1.hashCode(), max3.hashCode());
+        Assertions.assertEquals(0, max1.compareTo(max3));
+
+        Assertions.assertNotEquals(max1, max2);
+        Assertions.assertNotEquals(max1.hashCode(), max2.hashCode());
+        Assertions.assertNotEquals(0, max1.compareTo(max2));
+
+        // In-equality
+        Assertions.assertNotEquals(min1, max1);
+        Assertions.assertNotEquals(min1.hashCode(), max1.hashCode());
+        Assertions.assertTrue(min1.compareTo(max1) < 0);
+    }
 }

@@ -18,6 +18,8 @@ import com.starrocks.thrift.TInfinityType;
 import com.starrocks.thrift.TVariant;
 import com.starrocks.type.Type;
 
+import java.util.Objects;
+
 public class MaxVariant extends Variant {
     public MaxVariant(Type type) {
         super(type);
@@ -44,6 +46,23 @@ public class MaxVariant extends Variant {
     @Override
     protected int compareToImpl(Variant other) {
         throw new IllegalStateException("Should not reach here");
+    }
+
+    @Override
+    public boolean equals(Object object) {
+        if (this == object) {
+            return true;
+        }
+        if (!(object instanceof MaxVariant)) {
+            return false;
+        }
+        MaxVariant other = (MaxVariant) object;
+        return Objects.equals(this.type, other.type);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(MaxVariant.class, type);
     }
 }
 
