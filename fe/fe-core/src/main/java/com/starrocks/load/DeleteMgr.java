@@ -296,7 +296,7 @@ public class DeleteMgr implements Writable, MemoryTrackable {
             TableSchemaKeyPB schemaKey = new TableSchemaKeyPB();
             schemaKey.setDbId(db.getId());
             schemaKey.setTableId(olapTable.getId());
-            schemaKey.setSchemaId(olapTable.getIndexMetaByIndexId(olapTable.getBaseIndexMetaId()).getSchemaId());
+            schemaKey.setSchemaId(olapTable.getIndexMetaByMetaId(olapTable.getBaseIndexMetaId()).getSchemaId());
             deleteJob = new LakeDeleteJob(jobId, transactionId, label, schemaKey, deleteInfo, computeResource);
         } else {
             deleteJob = new OlapDeleteJob(jobId, transactionId, label, partitionReplicaNum, deleteInfo);

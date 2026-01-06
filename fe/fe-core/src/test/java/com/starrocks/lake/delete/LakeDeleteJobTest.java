@@ -170,11 +170,11 @@ public class LakeDeleteJobTest {
         Assertions.assertNotNull(db);
         Table table = starRocksAssert.getTable(tblName.getDb(), tblName.getTbl());
         Assertions.assertNotNull(table);
-        Assertions.assertTrue(table instanceof OlapTable);
+        Assertions.assertInstanceOf(OlapTable.class, table);
         OlapTable olapTable = (OlapTable) table;
         long expectedDbId = db.getId();
         long expectedTableId = olapTable.getId();
-        long expectedSchemaId = olapTable.getIndexMetaByIndexId(olapTable.getBaseIndexMetaId()).getSchemaId();
+        long expectedSchemaId = olapTable.getIndexMetaByMetaId(olapTable.getBaseIndexMetaId()).getSchemaId();
 
         // Execute DELETE statement
         String deleteSql = "DELETE FROM " + tblName + " WHERE id = 1;";
