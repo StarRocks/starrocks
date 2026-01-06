@@ -841,11 +841,6 @@ void ExecEnv::destroy() {
     SAFE_DELETE(_backend_client_cache);
     SAFE_DELETE(_result_queue_mgr);
     SAFE_DELETE(_result_mgr);
-<<<<<<< HEAD
-    SAFE_DELETE(_stream_mgr);
-=======
-    SAFE_DELETE(_lookup_dispatcher_mgr);
->>>>>>> 44fcefb197 ([BugFix] Change deallocation order in exec_env->destroy to prevent Use-After-Free in MemTracker::~MemTracker (#67027))
     SAFE_DELETE(_batch_write_mgr);
     SAFE_DELETE(_external_scan_context_mgr);
     SAFE_DELETE(_lake_tablet_manager);
