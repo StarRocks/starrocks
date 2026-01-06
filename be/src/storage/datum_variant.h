@@ -48,8 +48,10 @@ private:
 inline void DatumVariant::to_proto(VariantPB* variant_pb) const {
     *variant_pb->mutable_type() = TypeDescriptor::from_storage_type_info(_type.get()).to_protobuf();
     if (_value.get().is_null()) {
+        variant_pb->set_variant_type(VariantTypePB::NULL_VALUE);
         return;
     }
+    variant_pb->set_variant_type(VariantTypePB::NORMAL_VALUE);
     *variant_pb->mutable_value() = datum_to_string(_type.get(), _value.get());
 }
 
@@ -59,10 +61,12 @@ inline Status DatumVariant::from_proto(const VariantPB& variant_pb) {
     }
     _type = get_type_info(TypeDescriptor::from_protobuf(variant_pb.type()));
     Datum datum;
-    if (!variant_pb.has_value()) {
+    if (variant_pb.variant_type() == VariantTypePB::NULL_VALUE) {
         datum.set_null();
-    } else {
+    } else if (variant_pb.variant_type() == VariantTypePB::NORMAL_VALUE && variant_pb.has_value()) {
         RETURN_IF_ERROR(datum_from_string(_type.get(), &datum, variant_pb.value(), nullptr));
+    } else {
+        return Status::InvalidArgument("Invalid variant value");
     }
     _value.set(datum);
     return Status::OK();
