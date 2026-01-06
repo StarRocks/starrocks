@@ -49,6 +49,11 @@ set(EXEC_FILES
         ./fs/output_stream_wrapper_test.cpp
         ./fs/poco_http_client_test.cpp
         ./exec/column_value_range_test.cpp
+<<<<<<< HEAD
+=======
+        ./exec/range_router_test.cpp
+        ./exec/plain_text_builder_test.cpp
+>>>>>>> fd58add77b ([Enhancement] Support CSV header row for EXPORT and INSERT INTO FILES (#66654))
         ./exec/es/es_query_builder_test.cpp
         ./exec/es/es_scan_reader_test.cpp
         ./exec/es/es_scroll_parser_test.cpp

@@ -14,9 +14,15 @@
 
 #include "csv_file_writer.h"
 
+#include <boost/algorithm/string.hpp>
 #include <utility>
 
+<<<<<<< HEAD
 #include "common/http/content_type.h"
+=======
+#include "csv_escape.h"
+#include "exec/hdfs_scanner/hdfs_scanner_text.h"
+>>>>>>> fd58add77b ([Enhancement] Support CSV header row for EXPORT and INSERT INTO FILES (#66654))
 #include "formats/utils.h"
 #include "output_stream_file.h"
 #include "runtime/current_thread.h"
@@ -57,6 +63,50 @@ Status CSVFileWriter::init() {
         }
         _column_converters.emplace_back(std::move(nullable_conv), csv::get_converter(type, false));
     }
+<<<<<<< HEAD
+=======
+    _converter_options = std::make_shared<csv::Converter::Options>();
+    if (_writer_options->is_hive) {
+        _converter_options->is_hive = true;
+        _converter_options->array_format_type = csv::ArrayFormatType::kHive;
+        _converter_options->array_hive_collection_delimiter = _writer_options->collection_delim.empty()
+                                                                      ? DEFAULT_COLLECTION_DELIM.front()
+                                                                      : _writer_options->collection_delim.front();
+        _converter_options->array_hive_mapkey_delimiter = _writer_options->mapkey_delim.empty()
+                                                                  ? DEFAULT_MAPKEY_DELIM.front()
+                                                                  : _writer_options->mapkey_delim.front();
+    }
+
+    return Status::OK();
+}
+
+Status CSVFileWriter::_write_header() {
+    if (_header_written) {
+        return Status::OK();
+    }
+
+    // Write header row if include_header is enabled
+    if (_writer_options->include_header) {
+        if (_column_names.empty()) {
+            LOG(WARNING)
+                    << "include_header is enabled but column_names is empty, this may indicate an upstream logic issue";
+        } else {
+            for (size_t i = 0; i < _column_names.size(); i++) {
+                // Escape column names that contain special characters (delimiter, quotes, newlines)
+                std::string escaped_name =
+                        csv::escape_csv_field(_column_names[i], _writer_options->column_terminated_by);
+                RETURN_IF_ERROR(_output_stream->write(escaped_name));
+                if (i + 1 != _column_names.size()) {
+                    RETURN_IF_ERROR(_output_stream->write(_writer_options->column_terminated_by));
+                }
+            }
+            RETURN_IF_ERROR(_output_stream->write(_writer_options->line_terminated_by));
+        }
+    }
+
+    // Mark header as written only after all operations succeed
+    _header_written = true;
+>>>>>>> fd58add77b ([Enhancement] Support CSV header row for EXPORT and INSERT INTO FILES (#66654))
     return Status::OK();
 }
 
@@ -69,6 +119,9 @@ int64_t CSVFileWriter::get_allocated_bytes() {
 }
 
 Status CSVFileWriter::write(Chunk* chunk) {
+    // Write header on first write
+    RETURN_IF_ERROR(_write_header());
+
     _num_rows += chunk->num_rows();
 
     auto columns = Columns();
@@ -99,6 +152,11 @@ Status CSVFileWriter::write(Chunk* chunk) {
 FileWriter::CommitResult CSVFileWriter::commit() {
     FileWriter::CommitResult result{
             .io_status = Status::OK(), .format = CSV, .location = _location, .rollback_action = _rollback_action};
+
+    // Ensure header is written even if no data was written
+    if (auto st = _write_header(); !st.ok()) {
+        result.io_status.update(st);
+    }
 
     if (auto st = _output_stream->finalize(); !st.ok()) {
         result.io_status.update(st);
@@ -136,6 +194,21 @@ Status CSVFileWriterFactory::init() {
     if (_options.contains(CSVWriterOptions::LINE_TERMINATED_BY)) {
         _parsed_options->line_terminated_by = _options[CSVWriterOptions::LINE_TERMINATED_BY];
     }
+<<<<<<< HEAD
+=======
+    if (_options.contains(CSVWriterOptions::COLLECTION_DELIM)) {
+        _parsed_options->collection_delim = _options[CSVWriterOptions::COLLECTION_DELIM];
+    }
+    if (_options.contains(CSVWriterOptions::MAPKEY_DELIM)) {
+        _parsed_options->mapkey_delim = _options[CSVWriterOptions::MAPKEY_DELIM];
+    }
+    if (_options.contains(CSVWriterOptions::IS_HIVE)) {
+        _parsed_options->is_hive = _options[CSVWriterOptions::IS_HIVE] == "true";
+    }
+    if (_options.contains(CSVWriterOptions::INCLUDE_HEADER)) {
+        _parsed_options->include_header = boost::iequals(_options[CSVWriterOptions::INCLUDE_HEADER], "true");
+    }
+>>>>>>> fd58add77b ([Enhancement] Support CSV header row for EXPORT and INSERT INTO FILES (#66654))
     return Status::OK();
 }
 
