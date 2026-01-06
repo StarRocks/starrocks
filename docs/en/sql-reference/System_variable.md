@@ -350,9 +350,9 @@ Used for MySQL client compatibility. No practical usage.
 ### connector_sink_compression_codec
 
 * **Description**: Specifies the compression algorithm used for writing data into Hive tables or Iceberg tables, or exporting data with Files(). This parameter only takes effect in the following situations:
-  * The `compression_codec` property is not exist in the Hive tables.
-  * The `compression_codec` and `write.parquet.compression-codec` property are not exist in the Iceberg tables.
-  * The `compression` property is not set when `INSERT INTO FILES`.
+  * The `compression_codec` property does not exist in the Hive tables.
+  * The `compression_codec` and `write.parquet.compression-codec` properties do not exist in the Iceberg tables.
+  * The `compression` property is not set for `INSERT INTO FILES`.
 * **Valid values**: `uncompressed`, `snappy`, `lz4`, `zstd`, and `gzip`.
 * **Default**: uncompressed
 * **Data type**: String
