@@ -325,6 +325,59 @@ public class QueryPlannerTest {
     }
 
     @Test
+<<<<<<< HEAD
+=======
+    public void testSqlDigestBlackList() throws Exception {
+        String setEnableSqlBlacklist = "admin set frontend config (\"enable_sql_blacklist\" = \"true\")";
+        StatementBase statement = SqlParser.parseSingleStatement(setEnableSqlBlacklist,
+                connectContext.getSessionVariable().getSqlMode());
+
+        StmtExecutor stmtExecutor0 = new StmtExecutor(connectContext, statement);
+        stmtExecutor0.execute();
+
+        String setEnableDigest = "admin set frontend config (\"enable_sql_digest\" = \"true\")";
+        statement = SqlParser.parseSingleStatement(setEnableDigest,
+                connectContext.getSessionVariable().getSqlMode());
+
+        stmtExecutor0 = new StmtExecutor(connectContext, statement);
+        stmtExecutor0.execute();
+
+        String sql = "select k1 from test.baseall";
+        StatementBase sqlStmt = SqlParser.parseSingleStatement(sql, connectContext.getSessionVariable().getSqlMode());
+        String digest = "389d2ef8d98994a4290b5d2e1d5838aa";
+        String addBlackListSql = "add sql digest blacklist " + digest;
+        statement = SqlParser.parseSingleStatement(addBlackListSql,
+                connectContext.getSessionVariable().getSqlMode());
+        StmtExecutor stmtExecutor1 = new StmtExecutor(connectContext, statement);
+        stmtExecutor1.execute();
+
+        Assertions.assertEquals(1,
+                GlobalStateMgr.getCurrentState().getSqlDigestBlackList().getDigests().size());
+        for (String d : GlobalStateMgr.getCurrentState().getSqlDigestBlackList().getDigests()) {
+            Assertions.assertEquals(digest, d);
+        }
+        try (MockedStatic<ConnectProcessor> digestMethod = Mockito.mockStatic(ConnectProcessor.class)) {
+            digestMethod.when(() -> ConnectProcessor.computeStatementDigest(Mockito.any())).thenReturn(digest);
+
+            StmtExecutor stmtExecutor2 = new StmtExecutor(connectContext, sqlStmt);
+            stmtExecutor2.execute();
+            Assertions.assertEquals("Access denied; This sql is in blacklist (id: -1), please contact your admin. " +
+                            "Digest: 389d2ef8d98994a4290b5d2e1d5838aa",
+                    connectContext.getState().getErrorMessage());
+            connectContext.getState().setError("");
+        }
+
+        String deleteBlackListSql = "delete sql digest blacklist " + digest;
+        statement = SqlParser.parseSingleStatement(deleteBlackListSql,
+                connectContext.getSessionVariable().getSqlMode());
+        StmtExecutor stmtExecutor3 = new StmtExecutor(connectContext, statement);
+        stmtExecutor3.execute();
+        Assertions.assertEquals(0,
+                GlobalStateMgr.getCurrentState().getSqlDigestBlackList().getDigests().size());
+    }
+
+    @Test
+>>>>>>> 8411bd3776 ([BugFix] fix get tables from information schema does not respect pattern (#67457))
     public void testFollowerProxyQuery() throws Exception {
         new MockUp<GlobalStateMgr>() {
             @Mock
