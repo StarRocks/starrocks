@@ -35,7 +35,6 @@ public class HudiScanNode extends ScanNode {
     private HudiConnectorScanRangeSource scanRangeSource = null;
 
     private final HudiTable hudiTable;
-    private final HDFSScanNodePredicates scanNodePredicates = new HDFSScanNodePredicates();
     private CloudConfiguration cloudConfiguration = null;
 
     private DescriptorTable descTbl;
@@ -44,10 +43,6 @@ public class HudiScanNode extends ScanNode {
         super(id, desc, planNodeName);
         this.hudiTable = (HudiTable) desc.getTable();
         setupCloudCredential();
-    }
-
-    public HDFSScanNodePredicates getScanNodePredicates() {
-        return scanNodePredicates;
     }
 
     public HudiTable getHudiTable() {
@@ -148,9 +143,9 @@ public class HudiScanNode extends ScanNode {
 
         HdfsScanNode.setScanOptimizeOptionToThrift(tHdfsScanNode, this);
         HdfsScanNode.setCloudConfigurationToThrift(tHdfsScanNode, cloudConfiguration);
-        HdfsScanNode.setNonEvalPartitionConjunctsToThrift(tHdfsScanNode, this, this.getScanNodePredicates());
-        HdfsScanNode.setMinMaxConjunctsToThrift(tHdfsScanNode, this, this.getScanNodePredicates());
-        HdfsScanNode.setNonPartitionConjunctsToThrift(msg, this, this.getScanNodePredicates());
+        HdfsScanNode.setNonEvalPartitionConjunctsToThrift(tHdfsScanNode, this, scanNodePredicates);
+        HdfsScanNode.setMinMaxConjunctsToThrift(tHdfsScanNode, this, scanNodePredicates);
+        HdfsScanNode.setNonPartitionConjunctsToThrift(msg, this, scanNodePredicates);
         HdfsScanNode.setDataCacheOptionsToThrift(tHdfsScanNode, dataCacheOptions);
     }
 

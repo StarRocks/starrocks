@@ -3465,6 +3465,10 @@ public class StmtExecutor {
     }
 
     private void collectAndCheckPlanScanLimits(ExecPlan execPlan, ConnectContext context) throws DdlException {
+        if (execPlan == null || execPlan.getScanNodes().isEmpty()) {
+            return;
+        }
+
         long planMaxScanRows = -1;
         long planMaxScanPartitions = -1;
         long planMaxScanTablets = -1;
@@ -3489,7 +3493,7 @@ public class StmtExecutor {
             if (scanNode instanceof HdfsScanNode || scanNode instanceof HudiScanNode) {
                 planMaxScanRows = Math.max(planMaxScanRows, scanNode.getCardinality());
                 planMaxScanPartitions = Math.max(
-                        planMaxScanPartitions, ((HdfsScanNode) scanNode).getScanNodePredicates()
+                        planMaxScanPartitions, scanNode.getScanNodePredicates()
                                 .getSelectedPartitionIds().size());
             }
         }

@@ -32,7 +32,6 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-import com.starrocks.sql.plan.HDFSScanNodePredicates;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.THdfsFileFormat;
 import com.starrocks.thrift.THdfsScanNode;
@@ -72,7 +71,6 @@ public class PaimonScanNode extends ScanNode {
     private static final Logger LOG = LogManager.getLogger(PaimonScanNode.class);
     private final AtomicLong partitionIdGen = new AtomicLong(0L);
     private final PaimonTable paimonTable;
-    private final HDFSScanNodePredicates scanNodePredicates = new HDFSScanNodePredicates();
     private final List<TScanRangeLocations> scanRangeLocationsList = new ArrayList<>();
     private CloudConfiguration cloudConfiguration = null;
 
@@ -80,10 +78,6 @@ public class PaimonScanNode extends ScanNode {
         super(id, desc, planNodeName);
         this.paimonTable = (PaimonTable) desc.getTable();
         setupCloudCredential();
-    }
-
-    public HDFSScanNodePredicates getScanNodePredicates() {
-        return scanNodePredicates;
     }
 
     public PaimonTable getPaimonTable() {
@@ -416,9 +410,9 @@ public class PaimonScanNode extends ScanNode {
 
         HdfsScanNode.setScanOptimizeOptionToThrift(tHdfsScanNode, this);
         HdfsScanNode.setCloudConfigurationToThrift(tHdfsScanNode, cloudConfiguration);
-        HdfsScanNode.setNonEvalPartitionConjunctsToThrift(tHdfsScanNode, this, this.getScanNodePredicates());
-        HdfsScanNode.setMinMaxConjunctsToThrift(tHdfsScanNode, this, this.getScanNodePredicates());
-        HdfsScanNode.setNonPartitionConjunctsToThrift(msg, this, this.getScanNodePredicates());
+        HdfsScanNode.setNonEvalPartitionConjunctsToThrift(tHdfsScanNode, this, scanNodePredicates);
+        HdfsScanNode.setMinMaxConjunctsToThrift(tHdfsScanNode, this, scanNodePredicates);
+        HdfsScanNode.setNonPartitionConjunctsToThrift(msg, this, scanNodePredicates);
         HdfsScanNode.setDataCacheOptionsToThrift(tHdfsScanNode, dataCacheOptions);
     }
 

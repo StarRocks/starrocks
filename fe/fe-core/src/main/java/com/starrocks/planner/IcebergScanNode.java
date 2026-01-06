@@ -37,7 +37,6 @@ import com.starrocks.connector.iceberg.cost.IcebergMetricsReporter;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-import com.starrocks.sql.plan.HDFSScanNodePredicates;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.THdfsScanNode;
 import com.starrocks.thrift.TPlanNode;
@@ -62,7 +61,6 @@ public class IcebergScanNode extends ScanNode {
     private static final Logger LOG = LogManager.getLogger(IcebergScanNode.class);
 
     protected final IcebergTable icebergTable;
-    private final HDFSScanNodePredicates scanNodePredicates = new HDFSScanNodePredicates();
     private ScalarOperator icebergJobPlanningPredicate = null;
     private CloudConfiguration cloudConfiguration = null;
     private IcebergConnectorScanRangeSource scanRangeSource = null;
@@ -229,9 +227,6 @@ public class IcebergScanNode extends ScanNode {
         return tableFullMORParams;
     }
 
-    public HDFSScanNodePredicates getScanNodePredicates() {
-        return scanNodePredicates;
-    }
 
     public void setBucketProperties(List<BucketProperty> bucketProperties) {
         this.bucketProperties = Optional.of(bucketProperties);
@@ -370,7 +365,6 @@ public class IcebergScanNode extends ScanNode {
         msg.hdfs_scan_node.setTable_name(icebergTable.getName());
         HdfsScanNode.setScanOptimizeOptionToThrift(tHdfsScanNode, this);
         HdfsScanNode.setCloudConfigurationToThrift(tHdfsScanNode, cloudConfiguration);
-        HdfsScanNode.setMinMaxConjunctsToThrift(tHdfsScanNode, this, this.getScanNodePredicates());
         HdfsScanNode.setDataCacheOptionsToThrift(tHdfsScanNode, dataCacheOptions);
         bucketProperties.ifPresent(properties -> HdfsScanNode.setBucketProperties(tHdfsScanNode, properties));
     }
