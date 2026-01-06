@@ -1211,6 +1211,8 @@ public class OlapTable extends Table {
         Set<String> distributionColumnNames = Sets.newHashSet();
         if (defaultDistributionInfo instanceof RandomDistributionInfo) {
             return distributionColumnNames;
+        } else if (defaultDistributionInfo instanceof RangeDistributionInfo) {
+            return MetaUtils.getRangeDistributionColumnNames(this).stream().collect(Collectors.toSet());
         }
         HashDistributionInfo hashDistributionInfo = (HashDistributionInfo) defaultDistributionInfo;
         List<Column> partitionColumns = MetaUtils.getColumnsByColumnIds(
