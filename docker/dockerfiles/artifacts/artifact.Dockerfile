@@ -48,8 +48,13 @@ FROM ubuntu:22.04 as downloader
 
 RUN apt-get update -y && apt-get install -y --no-install-recommends wget tar xz-utils
 
-# download the latest dd-java-agent
-ADD 'https://dtdg.co/latest-java-tracer' /datadog/dd-java-agent.jar
+ARG DD_AGENT_VERSION
+ARG GITHUB_URL=${DD_AGENT_VERSION:+https://github.com/DataDog/dd-trace-java/releases/download/v${DD_AGENT_VERSION}/dd-java-agent-${DD_AGENT_VERSION}.jar}
+# default to latest if DD_AGENT_VERSION is not set
+ARG FINAL_DOWNLOAD_URL=${GITHUB_URL:-'https://dtdg.co/latest-java-tracer'}
+
+# download the dd-java-agent
+ADD ${FINAL_DOWNLOAD_URL} /datadog/dd-java-agent.jar
 
 # download the latest arthas
 ADD 'https://arthas.aliyun.com/arthas-boot.jar' /arthas/arthas-boot.jar
