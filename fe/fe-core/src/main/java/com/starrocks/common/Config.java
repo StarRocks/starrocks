@@ -372,6 +372,9 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static boolean plugin_enable = true;
 
+    @ConfField
+    public static String ext_dir = System.getenv("STARROCKS_HOME") + "/lib";
+
     /**
      * Labels of finished or cancelled load jobs will be removed
      * 1. after *label_keep_max_second*

@@ -62,6 +62,7 @@ import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Replica.ReplicaState;
 import com.starrocks.catalog.SchemaInfo;
+import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.clone.TabletChecker;
@@ -1081,7 +1082,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
         } // end for dbs
     }
 
-    private static void deleteFromMeta(ListMultimap<Long, Long> tabletDeleteFromMeta, long backendId,
+    protected static void deleteFromMeta(ListMultimap<Long, Long> tabletDeleteFromMeta, long backendId,
                                        long backendReportVersion) {
         AgentBatchTask createReplicaBatchTask = new AgentBatchTask();
         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
@@ -1092,7 +1093,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
             hashToDiskInfo.put(diskInfo.getPathHash(), diskInfo);
         }
         final long MAX_DB_WLOCK_HOLDING_TIME_MS = 1000L;
-        List<Long> deleteTablets = new ArrayList<>();
+        List<LocalTablet> deleteTablets = new ArrayList<>();
         List<ReplicaPersistInfo> replicaPersistInfoList = new ArrayList<>();
         DB_TRAVERSE:
         for (Long dbId : tabletDeleteFromMeta.keySet()) {
@@ -1252,20 +1253,27 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                                     createReplicaBatchTask.addTask(task);
                                 } else {
                                     // just set this replica as bad
-                                    if (replica.setBad(true)) {
-                                        LOG.warn("tablet {} has only one replica {} on backend {}"
-                                                        + " and it is lost, set it as bad",
-                                                tabletId, replica.getId(), backendId);
+                                    if (!replica.isBad()) {
                                         BackendTabletsInfo tabletsInfo = new BackendTabletsInfo(backendId);
                                         tabletsInfo.setBad(true);
+                                        // Use partition.getParentId() instead of partitionId (physicalPartitionId)
+                                        // because replayBackendTabletsInfo expects parent partition id
                                         ReplicaPersistInfo replicaPersistInfo = ReplicaPersistInfo.createForReport(
-                                                dbId, tableId, partitionId, indexId, tabletId, backendId,
+                                                dbId, tableId, partition.getParentId(), indexId, tabletId, backendId,
                                                 replica.getId());
                                         tabletsInfo.addReplicaInfo(replicaPersistInfo);
-                                        GlobalStateMgr.getCurrentState().getEditLog()
-                                                .logBackendTabletsInfo(tabletsInfo);
+                                        GlobalStateMgr.getCurrentState().getEditLog().logBackendTabletsInfo(
+                                                tabletsInfo,
+                                                wal -> {
+                                                    replica.setBad(true);
+                                                    LOG.warn("tablet {} has only one replica {} on backend {}"
+                                                                    + " and it is lost, set it as bad",
+                                                            tabletId, replica.getId(), backendId);
+                                                });
                                     }
                                 }
+                            } else {
+                                LOG.error("invalid situation. tablet[{}] is empty", tabletId);
                             }
                             continue;
                         }
@@ -1275,26 +1283,16 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                         if (replica.getDeferReplicaDeleteToNextReport()) {
                             replica.setDeferReplicaDeleteToNextReport(false);
                             continue;
-                        } else {
-                            tablet.deleteReplicaByBackendId(backendId);
-                            ++deleteCounter;
                         }
 
-                        // remove replica related tasks
-                        AgentTaskQueue.removeReplicaRelatedTasks(backendId, tabletId);
-                        deleteTablets.add(tabletId);
-                        replicaPersistInfoList.add(ReplicaPersistInfo
-                                .createForDelete(dbId, tableId, partitionId, indexId, tabletId, backendId));
+                        deleteCounter++;
+                        deleteTablets.add(tablet);
+                        replicaPersistInfoList.add(ReplicaPersistInfo.createForDelete(
+                                dbId, tableId, partitionId, indexId, tabletId, backendId));
                         LOG.warn("delete replica[{}] with state[{}] in tablet[{}] from meta. backend[{}]," +
                                         " report version: {}, current report version: {}",
                                 replica.getId(), replica.getState().name(), tabletId, backendId, backendReportVersion,
                                 currentBackendReportVersion);
-
-                        // check for clone
-                        replicas = tablet.getImmutableReplicas();
-                        if (replicas.size() == 0) {
-                            LOG.error("invalid situation. tablet[{}] is empty", tabletId);
-                        }
                     }
                 } // end for tabletMetas
                 LOG.info("delete {} replica(s) from globalStateMgr in db[{}]", deleteCounter, dbId);
@@ -1303,10 +1301,18 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
             }
         } // end for dbs
 
-        if (deleteTablets.size() > 0) {
+        if (!deleteTablets.isEmpty()) {
             // no need to be protected by db lock, if the related meta is dropped, the replay code will ignore that tablet
-            GlobalStateMgr.getCurrentState().getEditLog()
-                    .logBatchDeleteReplica(new BatchDeleteReplicaInfo(backendId, deleteTablets, replicaPersistInfoList));
+            List<Long> tabletIds = deleteTablets.stream().map(Tablet::getId).toList();
+            GlobalStateMgr.getCurrentState().getEditLog().logBatchDeleteReplica(
+                    new BatchDeleteReplicaInfo(backendId, tabletIds, replicaPersistInfoList),
+                    wal -> {
+                        for (LocalTablet tablet : deleteTablets) {
+                            tablet.deleteReplicaByBackendId(backendId);
+                            // remove replica related tasks
+                            AgentTaskQueue.removeReplicaRelatedTasks(backendId, tablet.getId());
+                        }
+                    });
         }
 
         if (Config.recover_with_empty_tablet && createReplicaBatchTask.getTaskNum() > 0) {
@@ -1584,7 +1590,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
         AgentTaskExecutor.submit(batchTask);
     }
 
-    private static void handleRecoverTablet(ListMultimap<Long, Long> tabletRecoveryMap,
+    protected static void handleRecoverTablet(ListMultimap<Long, Long> tabletRecoveryMap,
                                             Map<Long, TTablet> backendTablets, long backendId) {
         if (tabletRecoveryMap.isEmpty()) {
             return;
@@ -1597,6 +1603,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
         BackendTabletsInfo backendTabletsInfo = new BackendTabletsInfo(backendId);
         backendTabletsInfo.setBad(true);
+        List<Replica> badReplicas = new ArrayList<>();
         for (Long dbId : tabletRecoveryMap.keySet()) {
             Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
             if (db == null) {
@@ -1632,8 +1639,6 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                         continue;
                     }
 
-                    int schemaHash = olapTable.getSchemaHashByIndexMetaId(indexId);
-
                     LocalTablet tablet = (LocalTablet) index.getTablet(tabletId);
                     if (tablet == null) {
                         continue;
@@ -1644,11 +1649,12 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                         continue;
                     }
 
-                    if (replica.setBad(true)) {
-                        LOG.warn("set bad for replica {} of tablet {} on backend {}",
-                                replica.getId(), tabletId, backendId);
+                    if (!replica.isBad()) {
+                        badReplicas.add(replica);
+                        // Use partition.getParentId() instead of partitionId (physicalPartitionId)
+                        // because replayBackendTabletsInfo expects parent partition id
                         ReplicaPersistInfo replicaPersistInfo = ReplicaPersistInfo.createForReport(
-                                dbId, tableId, partitionId, indexId, tabletId, backendId, replica.getId());
+                                dbId, tableId, partition.getParentId(), indexId, tabletId, backendId, replica.getId());
                         backendTabletsInfo.addReplicaInfo(replicaPersistInfo);
                     }
                 }
@@ -1657,9 +1663,17 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
             }
         } // end for recovery map
 
-        if (!backendTabletsInfo.isEmpty()) {
+        if (!badReplicas.isEmpty()) {
             // need to write edit log the sync the bad info to other FEs
-            GlobalStateMgr.getCurrentState().getEditLog().logBackendTabletsInfo(backendTabletsInfo);
+            GlobalStateMgr.getCurrentState().getEditLog().logBackendTabletsInfo(backendTabletsInfo, wal -> {
+                for (int i = 0; i < badReplicas.size(); i++) {
+                    Replica replica = badReplicas.get(i);
+                    replica.setBad(true);
+                    long tabletId = backendTabletsInfo.getReplicaPersistInfos().get(i).getTabletId();
+                    LOG.warn("set bad for replica {} of tablet {} on backend {}",
+                            replica.getId(), tabletId, backendId);
+                }
+            });
         }
     }
 

@@ -107,13 +107,14 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
         if (GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), newMvName) != null) {
             throw new SemanticException("Materialized view [" + newMvName + "] is already used");
         }
-        table.setName(newMvName);
-        db.dropTable(oldMvName);
-        db.registerTableUnlocked(table);
         final RenameMaterializedViewLog renameMaterializedViewLog =
                 new RenameMaterializedViewLog(table.getId(), db.getId(), newMvName);
-        updateTaskDefinition((MaterializedView) table);
-        GlobalStateMgr.getCurrentState().getEditLog().logMvRename(renameMaterializedViewLog);
+        GlobalStateMgr.getCurrentState().getEditLog().logMvRename(renameMaterializedViewLog, wal -> {
+            table.setName(newMvName);
+            db.dropTable(oldMvName);
+            db.registerTableUnlocked(table);
+            updateTaskDefinition((MaterializedView) table);
+        });
         LOG.info("rename materialized view[{}] to {}, id: {}", oldMvName, newMvName, table.getId());
         return null;
     }

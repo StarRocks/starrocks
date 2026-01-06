@@ -26,6 +26,72 @@ displayed_sidebar: docs
 
 :::
 
+## 3.5.11
+
+**发布日期**：2026 年 1 月 5 日
+
+### 功能改进
+
+- 支持在节点不可访问的情况下通过 Arrow Flight 拉取数据。[#66348](https://github.com/StarRocks/starrocks/pull/66348)
+- 在 SIGTERM 处理器中记录终止原因（包括触发的进程信息）。[#66737](https://github.com/StarRocks/starrocks/pull/66737)
+- 新增 FE 配置项 `enable_statistic_collect_on_update`，用于控制 UPDATE 语句是否可以触发自动统计信息收集。[#66794](https://github.com/StarRocks/starrocks/pull/66794)
+- 支持配置 `networkaddress.cache.ttl`。[#66723](https://github.com/StarRocks/starrocks/pull/66723)
+- 改进 “no rows imported” 错误提示信息。[#66624](https://github.com/StarRocks/starrocks/pull/66624) [#66535](https://github.com/StarRocks/starrocks/pull/66535)
+- 针对大分区表，通过延迟计算优化 `deltaRows`。[#66381](https://github.com/StarRocks/starrocks/pull/66381)
+- 优化物化视图重写性能。[#66623](https://github.com/StarRocks/starrocks/pull/66623)
+- 在 Shared-Data 集群中支持单 Tablet 的 `ResultSink` 优化。[#66517](https://github.com/StarRocks/starrocks/pull/66517)
+- 默认启用 `rewrite_simple_agg_to_meta_scan`。[#64698](https://github.com/StarRocks/starrocks/pull/64698)
+- 支持 GROUP BY 表达式下推以及基于 GROUP BY 的物化视图重写。[#66507](https://github.com/StarRocks/starrocks/pull/66507)
+- 新增重载的 `newMessage` 方法，以改进物化视图相关日志。[#66367](https://github.com/StarRocks/starrocks/pull/66367)
+
+### 问题修复
+
+已修复以下问题：
+
+- 当输入 Rowset 不存在时，Publish Compaction 可能发生崩溃。[#67154](https://github.com/StarRocks/starrocks/pull/67154)
+- 在查询包含大量列的表时，反复调用 `update_segment_cache_size` 导致 CPU 开销过大和锁竞争严重。[#66714](https://github.com/StarRocks/starrocks/pull/66714)
+- `MulticastSinkOperator` 卡在 `OUTPUT_FULL` 状态。[#67153](https://github.com/StarRocks/starrocks/pull/67153)
+- Skew Join Hint 中出现 “column not found”。[#66929](https://github.com/StarRocks/starrocks/pull/66929)
+- Tablet 数量持续增长，且 pending 与 running tablet 之和不等于总 Tablet 数。[#66718](https://github.com/StarRocks/starrocks/pull/66718)
+- Leader 启动期间构建的 Compaction Map 中的事务无法被 CompactionScheduler 访问，且无法被清理。[#66533](https://github.com/StarRocks/starrocks/pull/66533)
+- Delta Lake 表刷新不生效。[#67156](https://github.com/StarRocks/starrocks/pull/67156)
+- 在对非分区 Iceberg 表使用 DATE 谓词查询时，CN 发生崩溃。[#66864](https://github.com/StarRocks/starrocks/pull/66864)
+- 提交多个 SQL 语句时，Profile 中语句无法正确显示。[#67097](https://github.com/StarRocks/starrocks/pull/67097)
+- 由于 Meta Reader 不支持读取 Delta 列组文件，导致统计信息收集时缺失字典信息。[#66995](https://github.com/StarRocks/starrocks/pull/66995)
+- Java UDAF 中潜在的 Java Heap OOM 问题。[#67025](https://github.com/StarRocks/starrocks/pull/67025)
+- 在未指定 PARTITION BY 和 ORDER BY 的情况下，Ranking Window 优化逻辑错误导致 BE 崩溃。[#67081](https://github.com/StarRocks/starrocks/pull/67081)
+- 时区缓存未命中时日志级别不正确。[#66817](https://github.com/StarRocks/starrocks/pull/66817)
+- 在合并 Runtime Filter 时，`can_use_bf` 校验逻辑错误导致崩溃和结果错误。[#67021](https://github.com/StarRocks/starrocks/pull/67021)
+- Runtime Bitset Filter 与其他 OR 谓词一起下推时。[#66996](https://github.com/StarRocks/starrocks/pull/66996)
+- 合入 lz4 的关键补丁修复。[#67053](https://github.com/StarRocks/starrocks/pull/67053)
+- AsyncTaskQueue 死锁问题。[#66791](https://github.com/StarRocks/starrocks/pull/66791)
+- ObjectColumn 中的缓存不一致。[#66957](https://github.com/StarRocks/starrocks/pull/66957)
+- RewriteUnnestBitmapRule 导致输出列类型错误。[#66855](https://github.com/StarRocks/starrocks/pull/66855)
+- Delta Writer 中，在 FINISH 任务之后仍存在 WRITE 或 FLUSH 任务时，可能导致数据竞争和数据丢失。[#66943](https://github.com/StarRocks/starrocks/pull/66943)
+- 重新打开已中止的导入通道导致 Load Channel 无效并产生误导性内部错误。[#66793](https://github.com/StarRocks/starrocks/pull/66793)
+- Arrow Flight SQL 的相关问题。[#65889](https://github.com/StarRocks/starrocks/pull/65889)
+- 使用 MetaScan 查询已重命名列时。[#66819](https://github.com/StarRocks/starrocks/pull/66819)
+- 在关闭倾斜消除的分区级可溢出聚合中，Flush Chunk 前未移除 Hash 列。[#66839](https://github.com/StarRocks/starrocks/pull/66839)
+- BOOLEAN 类型以字符串字面量存储时，默认值处理不正确。[#66818](https://github.com/StarRocks/starrocks/pull/66818)
+- `decimal2decimal` Cast 直接返回输入列作为结果的异常行为。[#66773](https://github.com/StarRocks/starrocks/pull/66773)
+- Schema Change 过程中 Query Planning 阶段出现 NPE。[#66811](https://github.com/StarRocks/starrocks/pull/66811)
+- LocalTabletsChannel 与 LakeTabletsChannel 之间的死锁问题。[#66748](https://github.com/StarRocks/starrocks/pull/66748)
+- 新版 FE 中 `publish_version` 日志显示空的 `txn_ids`。[#66732](https://github.com/StarRocks/starrocks/pull/66732)
+- FE 配置项 `statistic_collect_query_timeout` 行为不正确。[#66363](https://github.com/StarRocks/starrocks/pull/66363)
+- UPDATE 语句不支持统计信息收集。[#66443](https://github.com/StarRocks/starrocks/pull/66443)
+- 低基数场景下 CASE 重写相关错误。[#66724](https://github.com/StarRocks/starrocks/pull/66724)
+- 当列列表为空时，统计信息查询失败。[#66138](https://github.com/StarRocks/starrocks/pull/66138)
+- 通过 Hint 切换 Warehouse 时，使用量与记录不一致。[#66677](https://github.com/StarRocks/starrocks/pull/66677)
+- `ANALYZE TABLE` 语句缺少 ExecTimeout。[#66361](https://github.com/StarRocks/starrocks/pull/66361)
+- `array_map` 在常量一元表达式场景下返回错误结果。[#66514](https://github.com/StarRocks/starrocks/pull/66514)
+- FE 重启后外键约束丢失。[#66474](https://github.com/StarRocks/starrocks/pull/66474)
+- 在空表上执行 `max(not null string)` 时抛出 `std::length_error`。[#66554](https://github.com/StarRocks/starrocks/pull/66554)
+- 主键索引 Compaction 与 Apply 之间的并发问题。[#66282](https://github.com/StarRocks/starrocks/pull/66282)
+- `EXPLAIN <query>` 行为不正确。[#66542](https://github.com/StarRocks/starrocks/pull/66542)
+- 将 DECIMAL128 写入 Iceberg 表列时。[#66071](https://github.com/StarRocks/starrocks/pull/66071)
+- JSON → CHAR/VARCHAR 转换时，当目标长度等于最小长度时的长度校验问题。[#66628](https://github.com/StarRocks/starrocks/pull/66628)
+- 表达式子节点数量错误。[#66511](https://github.com/StarRocks/starrocks/pull/66511)
+
 ## 3.5.10
 
 发布日期：2025 年 12 月 15 日
