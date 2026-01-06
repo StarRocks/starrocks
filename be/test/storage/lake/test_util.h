@@ -35,6 +35,7 @@
 #include "storage/tablet_meta_manager.h"
 #include "testutil/assert.h"
 #include "testutil/id_generator.h"
+#include "util/failpoint/fail_point.h"
 
 namespace starrocks::lake {
 
@@ -64,6 +65,13 @@ std::vector<TScanRangeParams> create_scan_ranges_cloud(std::vector<TabletMetadat
 class TestBase : public ::testing::Test {
 public:
     ~TestBase() override {
+        PFailPointTriggerMode trigger_mode;
+        trigger_mode.set_mode(FailPointTriggerModeType::DISABLE);
+        auto fp = starrocks::failpoint::FailPointRegistry::GetInstance()->get(
+                "table_schema_service_disable_remote_schema_for_load");
+        if (fp != nullptr) {
+            fp->setMode(trigger_mode);
+        }
         // Wait for all vacuum tasks finished processing before destroying
         // _tablet_mgr.
         ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
@@ -77,7 +85,15 @@ protected:
               _mem_tracker(std::make_unique<MemTracker>(10 * 1024 * 1024, "", _parent_tracker.get())),
               _lp(std::make_shared<FixedLocationProvider>(_test_dir)),
               _update_mgr(std::make_unique<UpdateManager>(_lp, _mem_tracker.get())),
-              _tablet_mgr(std::make_unique<TabletManager>(_lp, _update_mgr.get(), cache_limit)) {}
+              _tablet_mgr(std::make_unique<TabletManager>(_lp, _update_mgr.get(), cache_limit)) {
+        PFailPointTriggerMode trigger_mode;
+        trigger_mode.set_mode(FailPointTriggerModeType::ENABLE);
+        auto fp = starrocks::failpoint::FailPointRegistry::GetInstance()->get(
+                "table_schema_service_disable_remote_schema_for_load");
+        if (fp != nullptr) {
+            fp->setMode(trigger_mode);
+        }
+    }
 
     void remove_test_dir_or_die() { ASSERT_OK(fs::remove_all(_test_dir)); }
 

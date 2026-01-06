@@ -60,6 +60,8 @@ public:
     // to the share-nothing mode.
     Status parse_runtime_filters(RuntimeState* state) override { return Status::OK(); }
 
+    TabletSchemaCSPtr TEST_tablet_schema() const { return _tablet_schema; }
+
 private:
     Status get_tablet(const TInternalScanRange& scan_range);
     Status init_global_dicts(TabletReaderParams* params);

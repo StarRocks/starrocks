@@ -2253,6 +2253,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 描述: 存算分离集群下，是否将写入到对象存储的文件打上对象存储 Tag，方便自定义管理文件。
 - 引入版本: v3.5.3
 
+##### table_schema_service_max_retries
+
+- 默认值：3
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：Table Schema Service 请求的最大重试次数。
+- 引入版本：v4.1
+
 ### 数据湖
 
 ##### datacache_block_buffer_enable

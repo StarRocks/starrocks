@@ -805,6 +805,7 @@ Status LakeTabletsChannel::_create_delta_writers(const PTabletWriterOpenRequest&
                                               .set_slot_descriptors(slots)
                                               .set_merge_condition(params.merge_condition())
                                               .set_miss_auto_increment_column(params.miss_auto_increment_column())
+                                              .set_db_id(_schema->db_id())
                                               .set_table_id(params.table_id())
                                               .set_immutable_tablet_size(params.immutable_tablet_size())
                                               .set_mem_tracker(_mem_tracker)

@@ -37,7 +37,7 @@ import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.thrift.TGetTableSchemaRequest;
 import com.starrocks.thrift.TGetTableSchemaResponse;
 import com.starrocks.thrift.TStatusCode;
-import com.starrocks.thrift.TTableSchemaMeta;
+import com.starrocks.thrift.TTableSchemaKey;
 import com.starrocks.thrift.TTableSchemaRequestSource;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.GlobalTransactionMgr;
@@ -129,17 +129,17 @@ public class TableSchemaServiceTest extends StarRocksTestBase {
         return coordinator;
     }
 
-    private static TTableSchemaMeta createSchemaMeta(long schemaId, long dbId, long tableId) {
-        TTableSchemaMeta schemaMeta = new TTableSchemaMeta();
-        schemaMeta.setSchema_id(schemaId);
-        schemaMeta.setDb_id(dbId);
-        schemaMeta.setTable_id(tableId);
-        return schemaMeta;
+    private static TTableSchemaKey createSchemaKey(long schemaId, long dbId, long tableId) {
+        TTableSchemaKey schemaKey = new TTableSchemaKey();
+        schemaKey.setSchema_id(schemaId);
+        schemaKey.setDb_id(dbId);
+        schemaKey.setTable_id(tableId);
+        return schemaKey;
     }
 
     private static TGetTableSchemaRequest createScanRequest(long schemaId, long dbId, long tableId, TUniqueId queryId) {
         TGetTableSchemaRequest request = new TGetTableSchemaRequest();
-        request.setSchema_meta(createSchemaMeta(schemaId, dbId, tableId));
+        request.setSchema_key(createSchemaKey(schemaId, dbId, tableId));
         request.setSource(TTableSchemaRequestSource.SCAN);
         request.setQuery_id(queryId);
         return request;
@@ -147,7 +147,7 @@ public class TableSchemaServiceTest extends StarRocksTestBase {
 
     private static TGetTableSchemaRequest createLoadRequest(long schemaId, long dbId, long tableId, long txnId) {
         TGetTableSchemaRequest request = new TGetTableSchemaRequest();
-        request.setSchema_meta(createSchemaMeta(schemaId, dbId, tableId));
+        request.setSchema_key(createSchemaKey(schemaId, dbId, tableId));
         request.setSource(TTableSchemaRequestSource.LOAD);
         request.setTxn_id(txnId);
         return request;
@@ -168,27 +168,27 @@ public class TableSchemaServiceTest extends StarRocksTestBase {
 
     private static Stream<Arguments> parameterValidationTestCases() {
         return Stream.of(
-                Arguments.of("MissingSchemaMeta",
+                Arguments.of("MissingSchemaKey",
                         (Consumer<TGetTableSchemaRequest>) request -> {
                             request.setSource(TTableSchemaRequestSource.SCAN);
                             request.setQuery_id(new TUniqueId(1, 1));
                         },
-                        "schema meta not set"),
+                        "schema key not set"),
                 Arguments.of("MissingRequestSource",
                         (Consumer<TGetTableSchemaRequest>) request -> {
-                            request.setSchema_meta(createSchemaMeta(1L, 1L, 1L));
+                            request.setSchema_key(createSchemaKey(1L, 1L, 1L));
                             request.setQuery_id(new TUniqueId(1, 1));
                         },
                         "request source not set"),
                 Arguments.of("ScanWithoutQueryId",
                         (Consumer<TGetTableSchemaRequest>) request -> {
-                            request.setSchema_meta(createSchemaMeta(1L, 1L, 1L));
+                            request.setSchema_key(createSchemaKey(1L, 1L, 1L));
                             request.setSource(TTableSchemaRequestSource.SCAN);
                         },
                         "query id not set for scan"),
                 Arguments.of("LoadWithoutTxnId",
                         (Consumer<TGetTableSchemaRequest>) request -> {
-                            request.setSchema_meta(createSchemaMeta(1L, 1L, 1L));
+                            request.setSchema_key(createSchemaKey(1L, 1L, 1L));
                             request.setSource(TTableSchemaRequestSource.LOAD);
                         },
                         "txn id not set for load")

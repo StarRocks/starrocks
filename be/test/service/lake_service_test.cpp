@@ -2161,6 +2161,7 @@ TEST_F(LakeServiceTest, test_abort_txn2) {
         auto index = request.mutable_schema()->add_indexes();
         index->set_id(index_id);
         index->set_schema_hash(0);
+        index->set_schema_id(metadata->schema().id());
         for (int i = 0, sz = metadata->schema().column_size(); i < sz; i++) {
             const auto& column = metadata->schema().column(i);
             auto slot = request.mutable_schema()->add_slot_descs();

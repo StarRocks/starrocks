@@ -107,3 +107,10 @@ message TabletIndexPB {
     optional string index_properties = 5; // index meta
 }
 
+// Key for identifying a table schema version.
+// TabletSchemaPB is the physical representation of a specific table schema.
+message TableSchemaKeyPB {
+  optional int64 db_id = 1;
+  optional int64 table_id = 2;
+  optional int64 schema_id = 3;
+}

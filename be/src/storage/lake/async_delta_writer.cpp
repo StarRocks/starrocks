@@ -409,6 +409,7 @@ StatusOr<AsyncDeltaWriterBuilder::AsyncDeltaWriterPtr> AsyncDeltaWriterBuilder::
                                           .set_tablet_manager(_tablet_mgr)
                                           .set_txn_id(_txn_id)
                                           .set_tablet_id(_tablet_id)
+                                          .set_db_id(_db_id)
                                           .set_table_id(_table_id)
                                           .set_partition_id(_partition_id)
                                           .set_slot_descriptors(_slots)

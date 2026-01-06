@@ -2883,6 +2883,15 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Description: In a shared-data cluster, whether to tag files written to object storage with object storage tags for convenient custom file management.
 - Introduced in: v3.5.3
 
+##### table_schema_service_max_retries
+
+- Default: 3
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum number of retries for Table Schema Service requests.
+- Introduced in: v4.1
+
 ### Data Lake
 
 ##### datacache_block_buffer_enable

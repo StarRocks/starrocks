@@ -53,10 +53,12 @@ class CompactionScheduler;
 class Metacache;
 class TabletWarmupManager;
 class VersionedTablet;
+class TableSchemaService;
 
 class TabletManager {
     friend class Tablet;
     friend class MetaFileBuilder;
+    friend class TableSchemaService;
 
 public:
     // Does NOT take the ownership of |location_provider| and |location_provider| must outlive
@@ -217,6 +219,8 @@ public:
 
     void update_metacache_limit(size_t limit);
 
+    TableSchemaService* table_schema_service() { return _table_schema_service.get(); }
+
     // The return value will never be null.
     Metacache* metacache() { return _metacache.get(); }
 
@@ -266,6 +270,13 @@ public:
 
     static void enable_tablet_warmup_listener();
 
+    // Cache the schema into the metadata cache.
+    void cache_schema(const TabletSchemaPtr& schema);
+
+    // Get the schema from the metadata cache.
+    // Return nullptr if not found.
+    TabletSchemaPtr get_cached_schema(int64_t schema_id);
+
 private:
     static std::string global_schema_cache_key(int64_t index_id);
     static std::string tablet_schema_cache_key(int64_t tablet_id);
@@ -295,6 +306,8 @@ private:
 #ifdef USE_STAROS
     std::unique_ptr<TabletWarmupManager> _tablet_warmup_manager;
 #endif
+
+    std::unique_ptr<TableSchemaService> _table_schema_service;
 
     std::shared_mutex _meta_lock;
     std::unordered_map<int64_t, int64_t> _tablet_in_writing_size;

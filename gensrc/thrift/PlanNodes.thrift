@@ -657,12 +657,6 @@ struct TJDBCScanNode {
   5: optional i64 limit
 }
 
-struct TTableSchemaMeta {
-  1: optional i64 db_id
-  2: optional i64 table_id
-  3: optional i64 schema_id
-}
-
 // If you find yourself changing this struct, see also TOlapScanNode
 struct TLakeScanNode {
   1: required Types.TTupleId tuple_id
@@ -694,7 +688,7 @@ struct TLakeScanNode {
   41: optional i64 back_pressure_throttle_time_upper_bound
   42: optional i64 back_pressure_num_rows
 
-  43: optional TTableSchemaMeta schema_meta
+  43: optional Descriptors.TTableSchemaKey schema_key
 }
 
 struct TEqJoinCondition {

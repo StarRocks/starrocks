@@ -33,7 +33,7 @@ import com.starrocks.thrift.TGetTableSchemaRequest;
 import com.starrocks.thrift.TGetTableSchemaResponse;
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
-import com.starrocks.thrift.TTableSchemaMeta;
+import com.starrocks.thrift.TTableSchemaKey;
 import com.starrocks.thrift.TTableSchemaRequestSource;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.TransactionState;
@@ -78,9 +78,9 @@ public class TableSchemaService {
             return response;
         }
 
-        long schemaId = request.getSchema_meta().getSchema_id();
-        long dbId = request.getSchema_meta().getDb_id();
-        long tableId = request.getSchema_meta().getTable_id();
+        long schemaId = request.getSchema_key().getSchema_id();
+        long dbId = request.getSchema_key().getDb_id();
+        long tableId = request.getSchema_key().getTable_id();
         TTableSchemaRequestSource requestSource = request.getSource();
 
         try {
@@ -231,11 +231,11 @@ public class TableSchemaService {
      */
     private static Status validateParameters(TGetTableSchemaRequest request) {
         try {
-            Preconditions.checkArgument(request.isSetSchema_meta(), "schema meta not set");
-            TTableSchemaMeta schemaMeta = request.getSchema_meta();
-            Preconditions.checkArgument(schemaMeta.isSetSchema_id(), "schema id not set");
-            Preconditions.checkArgument(schemaMeta.isSetDb_id(), "db id not set");
-            Preconditions.checkArgument(schemaMeta.isSetTable_id(), "table id meta not set");
+            Preconditions.checkArgument(request.isSetSchema_key(), "schema key not set");
+            TTableSchemaKey schemaKey = request.getSchema_key();
+            Preconditions.checkArgument(schemaKey.isSetSchema_id(), "schema id not set");
+            Preconditions.checkArgument(schemaKey.isSetDb_id(), "db id not set");
+            Preconditions.checkArgument(schemaKey.isSetTable_id(), "table id meta not set");
             Preconditions.checkArgument(request.isSetSource(), "request source not set");
             TTableSchemaRequestSource requestSource = request.getSource();
             switch (requestSource) {
@@ -261,12 +261,12 @@ public class TableSchemaService {
             // only log OK if debug enabled
             return response;
         }
-        TTableSchemaMeta schemaMeta = request.getSchema_meta();
+        TTableSchemaKey schemaKey = request.getSchema_key();
         StringBuilder sb = new StringBuilder();
         sb.append("table schema retrieval");
-        sb.append(", db: ").append(schemaMeta.getDb_id());
-        sb.append(", table: ").append(schemaMeta.getTable_id());
-        sb.append(", schema: ").append(schemaMeta.getSchema_id());
+        sb.append(", db: ").append(schemaKey.getDb_id());
+        sb.append(", table: ").append(schemaKey.getTable_id());
+        sb.append(", schema: ").append(schemaKey.getSchema_id());
         sb.append(", tablet: ").append(request.getTablet_id());
         if (request.getSource() == TTableSchemaRequestSource.SCAN) {
             sb.append(", query: ").append(DebugUtil.printId(request.getQuery_id()));
