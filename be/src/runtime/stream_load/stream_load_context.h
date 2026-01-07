@@ -186,6 +186,16 @@ public:
 
     static void release(StreamLoadContext* context);
 
+    int32_t calc_put_and_commit_rpc_timeout_ms() {
+        int32_t rpc_timeout_ms = config::txn_commit_rpc_timeout_ms;
+        if (timeout_second != -1) {
+            int32_t timeout_ms = timeout_second * 1000;
+            rpc_timeout_ms = std::min(timeout_ms / 2, rpc_timeout_ms);
+            rpc_timeout_ms = std::max(timeout_ms / 4, rpc_timeout_ms);
+        }
+        return rpc_timeout_ms;
+    }
+
     // ========================== transaction stream load ==========================
     // try to get the lock when receiving http requests.
     // Return Status::OK if success, otherwise return the fail reason
