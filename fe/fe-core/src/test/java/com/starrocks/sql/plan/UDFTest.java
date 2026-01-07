@@ -159,7 +159,7 @@ public class UDFTest extends PlanTestBase {
     }
 
     @Test
-    public void testViewFunction() throws Exception {
+    public void testViewFunction1() throws Exception {
         try {
             String viewDef = "CREATE FUNCTION view_func(x string, y string) RETURNS concat(upper(x), lower(y));";
             Config.enable_udf = true;
@@ -182,6 +182,36 @@ public class UDFTest extends PlanTestBase {
 
             Assertions.assertThrows(SemanticException.class, () -> {
                 String sql = "select view_func(c_0_3, c_0_7) from tab0;";
+                getFragmentPlan(sql, dropViewFunc);
+            });
+            Config.enable_udf = false;
+        }
+    }
+
+    @Test
+    public void testViewFunction2() throws Exception {
+        try {
+            String viewDef = "CREATE FUNCTION view_func(y string) RETURNS concat('Name_', lower(y));";
+            Config.enable_udf = true;
+            CreateFunctionStmt createFunctionStmt =
+                    (CreateFunctionStmt) UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(viewDef, connectContext);
+            CreateFunctionAnalyzer analyzer = new CreateFunctionAnalyzer();
+            analyzer.analyze(createFunctionStmt, connectContext);
+            DDLStmtExecutor.execute(createFunctionStmt, connectContext);
+
+            String sql = "select view_func(c_0_7) from tab0;";
+            String plan = getFragmentPlan(sql, viewDef);
+
+            assertContains(plan, "concat('Name_', lower(CAST(8: c_0_7 AS VARCHAR)))");
+        } finally {
+            String dropViewFunc = "DROP FUNCTION IF EXISTS view_func(string);";
+            DropFunctionStmt dropFunctionStmt =
+                    (DropFunctionStmt) UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(dropViewFunc, connectContext);
+            DropStmtAnalyzer.analyze(dropFunctionStmt, connectContext);
+            DDLStmtExecutor.execute(dropFunctionStmt, connectContext);
+
+            Assertions.assertThrows(SemanticException.class, () -> {
+                String sql = "select view_func(c_0_7) from tab0;";
                 getFragmentPlan(sql, dropViewFunc);
             });
             Config.enable_udf = false;
