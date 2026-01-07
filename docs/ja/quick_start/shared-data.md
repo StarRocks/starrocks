@@ -89,7 +89,7 @@ Docker 環境で提供される SQL クライアントを使用するか、シ�
 
 このガイドでは、GNU Affero General Public License の下で提供される S3 互換オブジェクトストレージである MinIO を使用します。
 
-### ラボファイルを保存するディレクトリを作成します：
+### ラボファイルを保存するディレクトリを作成します
 
 ```bash
 mkdir quickstart

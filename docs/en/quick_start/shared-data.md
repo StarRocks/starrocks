@@ -90,7 +90,7 @@ There are three files to download:
 
 This guide uses MinIO, which is S3 compatible Object Storage provided under the GNU Affero General Public License.
 
-### Create a directory to store the lab files:
+### Create a directory to store the lab files
 
 ```bash
 mkdir quickstart

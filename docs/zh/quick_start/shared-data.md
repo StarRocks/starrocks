@@ -89,7 +89,7 @@ import Curl from '../_assets/quick-start/_curl.mdx'
 
 本指南使用 MinIO，这是在 GNU Affero 通用公共许可证下提供的兼容 S3 的对象存储。
 
-### 创建一个目录来存储实验文件：
+### 创建一个目录来存储实验文件
 
 ```bash
 mkdir quickstart
