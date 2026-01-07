@@ -498,8 +498,8 @@ public class GlobalStateMgr {
 
     private LockManager lockManager;
 
-    private final ResourceUsageMonitor resourceUsageMonitor = ExtensionManager.getCompoment(ResourceUsageMonitor.class);
-    private final BaseSlotManager slotManager = ExtensionManager.getCompoment(BaseSlotManager.class);
+    private final ResourceUsageMonitor resourceUsageMonitor = ExtensionManager.getComponent(ResourceUsageMonitor.class);
+    private final BaseSlotManager slotManager = ExtensionManager.getComponent(BaseSlotManager.class);
     private final GlobalSlotProvider globalSlotProvider = new GlobalSlotProvider();
     private final SlotProvider localSlotProvider = new LocalSlotProvider();
     private final GlobalLoadJobListenerBus operationListenerBus = new GlobalLoadJobListenerBus();
@@ -762,7 +762,7 @@ public class GlobalStateMgr {
         this.analyzeMgr = new AnalyzeMgr();
         this.localMetastore = new LocalMetastore(this, recycleBin, colocateTableIndex);
         this.temporaryTableMgr = new TemporaryTableMgr();
-        this.warehouseMgr = ExtensionManager.getCompoment(WarehouseManager.class);
+        this.warehouseMgr = ExtensionManager.getComponent(WarehouseManager.class);
         this.historicalNodeMgr = new HistoricalNodeMgr();
         this.connectorMgr = new ConnectorMgr();
         this.connectorTblMetaInfoMgr = new ConnectorTblMetaInfoMgr();
