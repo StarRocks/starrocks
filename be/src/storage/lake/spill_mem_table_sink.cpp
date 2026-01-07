@@ -94,7 +94,7 @@ Status SpillMemTableSink::merge_blocks_to_segments_parallel(bool do_agg, const S
     for (size_t i = 0; i < spill_block_iterator_tasks.iterators.size(); ++i) {
         tasks.push_back(std::make_shared<TabletInternalParallelMergeTask>(
                 writers[i].get(), spill_block_iterator_tasks.iterators[i].get(), _merge_mem_tracker.get(), schema.get(),
-                i, &quit_flag));
+                i, &quit_flag, get_spiller()->metrics().write_io_timer));
     }
     // 4. Submit all tasks to thread pool
     for (size_t i = 0; i < spill_block_iterator_tasks.iterators.size(); ++i) {
@@ -119,18 +119,22 @@ Status SpillMemTableSink::merge_blocks_to_segments_parallel(bool do_agg, const S
                    spill_block_iterator_tasks.total_block_bytes);
     COUNTER_UPDATE(ADD_COUNTER(_load_chunk_spiller->profile(), "SpillMergeCount", TUnit::UNIT),
                    spill_block_iterator_tasks.iterators.size());
-    COUNTER_UPDATE(ADD_COUNTER(_load_chunk_spiller->profile(), "SpillMergeDurationNs", TUnit::TIME_NS),
-                   timer.elapsed_time());
+    COUNTER_SET(ADD_TIMER(_load_chunk_spiller->profile(), "SpillMergeTime"), timer.elapsed_time());
     return Status::OK();
 }
 
 Status SpillMemTableSink::merge_blocks_to_segments_serial(bool do_agg, const SchemaPtr& schema) {
     auto char_field_indexes = ChunkHelper::get_char_field_indexes(*schema);
     auto write_func = [&char_field_indexes, schema, this](Chunk* chunk) {
+        auto* spiller = get_spiller();
+        SCOPED_TIMER(spiller->metrics().write_io_timer);
         ChunkHelper::padding_char_columns(char_field_indexes, *schema, _writer->tablet_schema(), chunk);
         return _writer->write(*chunk, nullptr);
     };
-    auto flush_func = [this]() { return _writer->flush(); };
+    auto flush_func = [this]() {
+        SCOPED_TIMER(spiller->metrics().write_io_timer);
+        return _writer->flush();
+    };
 
     Status st = _load_chunk_spiller->merge_write(config::load_spill_max_merge_bytes,
                                                  config::load_spill_memory_usage_per_merge, true /* do_sort */, do_agg,

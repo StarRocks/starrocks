@@ -34,7 +34,8 @@ struct QuitFlag {
 class TabletInternalParallelMergeTask : public Runnable {
 public:
     TabletInternalParallelMergeTask(TabletWriter* writer, ChunkIterator* block_iterator, MemTracker* merge_mem_tracker,
-                                    Schema* schema, int32_t task_index, QuitFlag* quit_flag);
+                                    Schema* schema, int32_t task_index, QuitFlag* quit_flag,
+                                    RuntimeProfile::Counter* write_io_timer);
 
     ~TabletInternalParallelMergeTask();
 
@@ -54,6 +55,7 @@ private:
     int32_t _task_index = 0;
     Status _status;
     QuitFlag* _quit_flag = nullptr;
+    RuntimeProfile::Counter* _write_io_timer = nullptr;
 };
 
 } // namespace lake
