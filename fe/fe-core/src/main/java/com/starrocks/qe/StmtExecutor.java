@@ -3484,13 +3484,13 @@ public class StmtExecutor {
                 continue;
             }
 
-            if (scanNode instanceof PaimonScanNode) {
+            if (scanNode instanceof PaimonScanNode || scanNode instanceof HudiScanNode) {
                 planMaxScanRows = Math.max(planMaxScanRows, scanNode.getCardinality());
                 planMaxScanPartitions = Math.max(
                         planMaxScanPartitions, scanNode.getSelectedPartitionNum());
             }
 
-            if (scanNode instanceof HdfsScanNode || scanNode instanceof HudiScanNode) {
+            if (scanNode instanceof HdfsScanNode) {
                 planMaxScanRows = Math.max(planMaxScanRows, scanNode.getCardinality());
                 planMaxScanPartitions = Math.max(
                         planMaxScanPartitions, scanNode.getScanNodePredicates()
