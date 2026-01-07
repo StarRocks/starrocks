@@ -1223,6 +1223,7 @@ IndexChannel::~IndexChannel() {
 }
 
 Status IndexChannel::init(RuntimeState* state, const std::vector<PTabletWithPartition>& tablets, bool is_incremental) {
+    std::lock_guard<std::mutex> l(_as_mutex);
     for (const auto& tablet : tablets) {
         auto* location = _parent->_location->find_tablet(tablet.tablet_id());
         if (location == nullptr) {

@@ -15,6 +15,7 @@
 #pragma once
 
 #include <memory>
+#include <mutex>
 #include <queue>
 #include <set>
 #include <string>
@@ -285,12 +286,14 @@ public:
     Status init(RuntimeState* state, const std::vector<PTabletWithPartition>& tablets, bool is_incremental);
 
     void for_each_node_channel(const std::function<void(NodeChannel*)>& func) {
+        std::lock_guard<std::mutex> l(_as_mutex);
         for (auto& it : _node_channels) {
             func(it.second.get());
         }
     }
 
     void for_each_initial_node_channel(const std::function<void(NodeChannel*)>& func) {
+        std::lock_guard<std::mutex> l(_as_mutex);
         for (auto& it : _node_channels) {
             if (!it.second->is_incremental()) {
                 func(it.second.get());
@@ -299,6 +302,7 @@ public:
     }
 
     void for_each_incremental_node_channel(const std::function<void(NodeChannel*)>& func) {
+        std::lock_guard<std::mutex> l(_as_mutex);
         for (auto& it : _node_channels) {
             if (it.second->is_incremental()) {
                 func(it.second.get());
@@ -335,6 +339,7 @@ private:
     ExprContext* _where_clause = nullptr;
 
     bool _has_intolerable_failure = false;
+    std::mutex _as_mutex;
 };
 
 } // namespace starrocks
