@@ -218,6 +218,7 @@ You can configure the sampling rule using the following parameters:
 
 - `auto_detect_sample_files`: the number of random data files to sample in each batch. By default, the first and last files are selected. Range: `[0, + ∞]`. Default: `2`.
 - `auto_detect_sample_rows`: the number of data rows to scan in each sampled data file. Range: `[0, + ∞]`. Default: `500`.
+- `auto_detect_types`: (valid for CSV only) - whether to guess the data types of sampled columns, or just assume String. `{true | false}`. Default: `true`.
 
 After the sampling, StarRocks unionizes the columns from all the data files according to these rules:
 
@@ -227,6 +228,7 @@ After the sampling, StarRocks unionizes the columns from all the data files acco
   - Integer columns together with `FLOAT` type columns will be unionized as the DECIMAL type.
   - String types are used for unionizing other types.
 - Generally, the `STRING` type can be used to unionize all data types.
+- If type auto-detection is turned off, all columns will return as `STRING`
 
 You can refer to Example 5.
 

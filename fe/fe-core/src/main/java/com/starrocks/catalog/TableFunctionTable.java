@@ -127,6 +127,7 @@ public class TableFunctionTable extends Table {
 
     public static final String PROPERTY_AUTO_DETECT_SAMPLE_FILES = "auto_detect_sample_files";
     public static final String PROPERTY_AUTO_DETECT_SAMPLE_ROWS = "auto_detect_sample_rows";
+    public static final String PROPERTY_AUTO_DETECT_TYPES = "auto_detect_types";
 
     private static final String PROPERTY_FILL_MISMATCH_COLUMN_WITH = "fill_mismatch_column_with";
 
@@ -178,6 +179,7 @@ public class TableFunctionTable extends Table {
     // for load/query data
     private int autoDetectSampleFiles = DEFAULT_AUTO_DETECT_SAMPLE_FILES;
     private int autoDetectSampleRows = DEFAULT_AUTO_DETECT_SAMPLE_ROWS;
+    private boolean autoDetectTypes = true;
 
     private List<String> columnsFromPath = new ArrayList<>();
     private boolean strictMode = false;
@@ -507,6 +509,21 @@ public class TableFunctionTable extends Table {
             }
         }
 
+        if (properties.containsKey(PROPERTY_AUTO_DETECT_TYPES)) {
+            String property = properties.get(PROPERTY_AUTO_DETECT_TYPES);
+            if (property.equalsIgnoreCase("true")) {
+                autoDetectTypes = true;
+            } else if (property.equalsIgnoreCase("false")) {
+                autoDetectTypes = false;
+            } else {
+                throw new DdlException(
+                    String.format(
+                        "Illegal value of %s: %s, only true/false allowed", PROPERTY_AUTO_DETECT_TYPES, property
+                    )
+                );
+            }
+        }
+
         if (properties.containsKey(PROPERTY_CSV_COLUMN_SEPARATOR)) {
             csvColumnSeparator = Delimiter.convertDelimiter(properties.get(PROPERTY_CSV_COLUMN_SEPARATOR));
             int len = csvColumnSeparator.getBytes(StandardCharsets.UTF_8).length;
@@ -607,6 +624,7 @@ public class TableFunctionTable extends Table {
         params.setProperties(properties);
         params.setSchema_sample_file_count(autoDetectSampleFiles);
         params.setSchema_sample_file_row_count(autoDetectSampleRows);
+        params.setSchema_sample_types(autoDetectTypes);
         params.setEnclose(csvEnclose);
         params.setEscape(csvEscape);
         params.setSkip_header(csvSkipHeader);
