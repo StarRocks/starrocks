@@ -15,6 +15,7 @@
 package com.starrocks.lake;
 
 import com.starrocks.catalog.CatalogUtils;
+import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.qe.SimpleExecutor;
@@ -78,7 +79,7 @@ public class TabletWriteLogHistorySyncer extends FrontendDaemon {
     }
 
     public TabletWriteLogHistorySyncer() {
-        super("TabletWriteLogHistorySyncer", 60 * 1000L); // 60s interval
+        super("TabletWriteLogHistorySyncer", Config.tablet_write_log_history_sync_interval_sec * 1000L);
     }
 
     @Override
