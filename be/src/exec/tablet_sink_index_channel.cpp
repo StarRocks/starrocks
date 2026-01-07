@@ -1223,6 +1223,10 @@ IndexChannel::~IndexChannel() {
 }
 
 Status IndexChannel::init(RuntimeState* state, const std::vector<PTabletWithPartition>& tablets, bool is_incremental) {
+    // Acquire exclusive lock to protect _node_channels from concurrent read access
+    // during incremental open (automatic partition creation)
+    std::unique_lock<std::shared_mutex> lock(_node_channels_mutex);
+
     for (const auto& tablet : tablets) {
         auto* location = _parent->_location->find_tablet(tablet.tablet_id());
         if (location == nullptr) {

@@ -420,11 +420,7 @@ Status OlapTableSink::open_wait() {
 }
 
 bool OlapTableSink::is_full() {
-    // Check _is_automatic_partition_running first to avoid accessing _tablet_sink_sender
-    // while _incremental_open_node_channel() is modifying IndexChannel::_node_channels
-    // in the automatic partition thread. This prevents a race condition that could cause
-    // use-after-free when iterating over NodeChannel objects.
-    return _is_automatic_partition_running.load(std::memory_order_acquire) || _tablet_sink_sender->is_full();
+    return _tablet_sink_sender->is_full() || _is_automatic_partition_running.load(std::memory_order_acquire);
 }
 
 Status OlapTableSink::_automatic_create_partition() {

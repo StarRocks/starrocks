@@ -17,6 +17,7 @@
 #include <memory>
 #include <queue>
 #include <set>
+#include <shared_mutex>
 #include <string>
 #include <thread>
 #include <unordered_map>
@@ -285,12 +286,14 @@ public:
     Status init(RuntimeState* state, const std::vector<PTabletWithPartition>& tablets, bool is_incremental);
 
     void for_each_node_channel(const std::function<void(NodeChannel*)>& func) {
+        std::shared_lock<std::shared_mutex> lock(_node_channels_mutex);
         for (auto& it : _node_channels) {
             func(it.second.get());
         }
     }
 
     void for_each_initial_node_channel(const std::function<void(NodeChannel*)>& func) {
+        std::shared_lock<std::shared_mutex> lock(_node_channels_mutex);
         for (auto& it : _node_channels) {
             if (!it.second->is_incremental()) {
                 func(it.second.get());
@@ -299,6 +302,7 @@ public:
     }
 
     void for_each_incremental_node_channel(const std::function<void(NodeChannel*)>& func) {
+        std::shared_lock<std::shared_mutex> lock(_node_channels_mutex);
         for (auto& it : _node_channels) {
             if (it.second->is_incremental()) {
                 func(it.second.get());
@@ -324,6 +328,8 @@ private:
 
     // BeId -> channel
     std::unordered_map<int64_t, std::unique_ptr<NodeChannel>> _node_channels;
+    // Mutex to protect _node_channels from concurrent access during incremental open
+    mutable std::shared_mutex _node_channels_mutex;
     // map be_id to tablet num
     std::unordered_map<int64_t, int64_t> _be_to_tablet_num;
     // BeId
