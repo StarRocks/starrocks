@@ -26,7 +26,7 @@ Once you have Docker installed, save the yaml below into a file named docker-com
 services:
 
   starrocks-fe:
-    image: starrocks/fe-ubuntu:3.3.5
+    image: starrocks/fe-ubuntu:4.0-latest
     hostname: starrocks-fe
     container_name: starrocks-fe
     user: root
@@ -49,7 +49,7 @@ services:
       retries: 3
 
   starrocks-be:
-    image: starrocks/be-ubuntu:3.3.5
+    image: starrocks/be-ubuntu:4.0-latest
     command:
       - /bin/bash
       - -c
