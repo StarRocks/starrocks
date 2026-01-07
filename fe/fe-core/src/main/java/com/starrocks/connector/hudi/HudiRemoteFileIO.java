@@ -17,6 +17,7 @@ package com.starrocks.connector.hudi;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
+import com.starrocks.common.Config;
 import com.starrocks.connector.RemoteFileDesc;
 import com.starrocks.connector.RemoteFileIO;
 import com.starrocks.connector.RemotePathKey;
@@ -68,7 +69,8 @@ public class HudiRemoteFileIO implements RemoteFileIO {
             ctx.usedCount++;
             if (ctx.usedCount == 1) {
                 HoodieLocalEngineContext engineContext = new HoodieLocalEngineContext(configuration);
-                HoodieMetadataConfig metadataConfig = HoodieMetadataConfig.newBuilder().enable(true).build();
+                HoodieMetadataConfig metadataConfig = HoodieMetadataConfig.newBuilder()
+                        .enable(Config.enable_hudi_lib_internal_metadata_table).build();
                 HoodieTableMetaClient metaClient =
                         HoodieTableMetaClient.builder().setConf(configuration).setBasePath(hudiTableLocation).build();
                 // metaClient.reloadActiveTimeline();
