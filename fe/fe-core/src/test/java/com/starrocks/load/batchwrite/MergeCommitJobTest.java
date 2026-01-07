@@ -233,6 +233,42 @@ public class MergeCommitJobTest extends BatchWriteTestBase {
         assertEquals(0, load.numRunningLoads());
     }
 
+    @Test
+    public void testDatabaseDoesNotExist() throws Exception {
+        List<ComputeNode> nodes = allNodes.subList(0, parallel);
+        new Expectations() {
+            {
+                assigner.getBackends(1);
+                result = Optional.of(nodes);
+            }
+        };
+
+        // Create a MergeCommitJob with a non-existent database name
+        Map<String, String> map = new HashMap<>();
+        map.put(StreamLoadHttpHeader.HTTP_FORMAT, "json");
+        map.put(StreamLoadHttpHeader.HTTP_ENABLE_BATCH_WRITE, "true");
+        map.put(StreamLoadHttpHeader.HTTP_BATCH_WRITE_ASYNC, "false");
+        StreamLoadKvParams params = new StreamLoadKvParams(map);
+        StreamLoadInfo streamLoadInfo =
+                StreamLoadInfo.fromHttpStreamLoadRequest(null, -1, Optional.empty(), params);
+
+        MergeCommitJob mergeCommitJob = new MergeCommitJob(
+                1,
+                new TableId("non_existent_db", TABLE_NAME_1_1),
+                WarehouseManager.DEFAULT_WAREHOUSE_NAME,
+                streamLoadInfo,
+                1000,
+                parallel,
+                params,
+                assigner,
+                executor,
+                txnStateDispatcher);
+        RequestLoadResult result = mergeCommitJob.requestLoad(nodes.get(0).getId(), nodes.get(0).getHost());
+        assertFalse(result.isOk());
+        assertEquals(TStatusCode.INTERNAL_ERROR, result.getStatus().getStatus_code());
+        assertTrue(result.getStatus().getError_msgs().get(0).contains("Database 'non_existent_db' does not exist"));
+    }
+
     private class TestThreadPoolExecutor implements Executor {
 
         private final Set<Runnable> pendingRunnable;

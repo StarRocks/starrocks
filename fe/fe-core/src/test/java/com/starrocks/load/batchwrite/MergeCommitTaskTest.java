@@ -100,6 +100,7 @@ public class MergeCommitTaskTest extends BatchWriteTestBase {
         Set<Long> backendIds = new HashSet<>(Arrays.asList(10002L, 10003L));
         MergeCommitTask task = new MergeCommitTask(
                 taskId,
+                DATABASE_1.getId(),
                 new TableId(DB_NAME_1, TABLE_NAME_1_1),
                 label,
                 loadId,
@@ -131,6 +132,7 @@ public class MergeCommitTaskTest extends BatchWriteTestBase {
     public void testLoadSuccess() {
         MergeCommitTask task = new MergeCommitTask(
                 GlobalStateMgr.getCurrentState().getNextId(),
+                DATABASE_1.getId(),
                 new TableId(DB_NAME_1, TABLE_NAME_1_1),
                 label,
                 loadId,
@@ -160,6 +162,7 @@ public class MergeCommitTaskTest extends BatchWriteTestBase {
     public void testExecuteFailWhenStatusNotOk() {
         MergeCommitTask task = new MergeCommitTask(
                 GlobalStateMgr.getCurrentState().getNextId(),
+                DATABASE_1.getId(),
                 new TableId(DB_NAME_1, TABLE_NAME_1_1),
                 label,
                 loadId,
@@ -185,6 +188,7 @@ public class MergeCommitTaskTest extends BatchWriteTestBase {
     public void testExecuteTimeout() {
         MergeCommitTask task = new MergeCommitTask(
                 GlobalStateMgr.getCurrentState().getNextId(),
+                DATABASE_1.getId(),
                 new TableId(DB_NAME_1, TABLE_NAME_1_1),
                 label,
                 loadId,
@@ -215,6 +219,7 @@ public class MergeCommitTaskTest extends BatchWriteTestBase {
         String fakeTableName = TABLE_NAME_1_1 + "_fake";
         MergeCommitTask task = new MergeCommitTask(
                 GlobalStateMgr.getCurrentState().getNextId(),
+                DATABASE_1.getId(),
                 new TableId(DB_NAME_1, fakeTableName),
                 label,
                 loadId,
@@ -237,6 +242,7 @@ public class MergeCommitTaskTest extends BatchWriteTestBase {
     public void testDatabaseDoesNotExist() {
         MergeCommitTask task = new MergeCommitTask(
                 GlobalStateMgr.getCurrentState().getNextId(),
+                -1,
                 new TableId("merge_commit_db_not_exist", TABLE_NAME_1_1),
                 label,
                 loadId,
@@ -259,6 +265,7 @@ public class MergeCommitTaskTest extends BatchWriteTestBase {
     public void testMaxFilterRatioThrowsDataQualityException() {
         MergeCommitTask task = new MergeCommitTask(
                 GlobalStateMgr.getCurrentState().getNextId(),
+                DATABASE_1.getId(),
                 new TableId(DB_NAME_1, TABLE_NAME_1_1),
                 label,
                 loadId,
@@ -289,6 +296,7 @@ public class MergeCommitTaskTest extends BatchWriteTestBase {
         int mergeCommitIntervalMs = 200;
         MergeCommitTask task = new MergeCommitTask(
                 GlobalStateMgr.getCurrentState().getNextId(),
+                DATABASE_1.getId(),
                 new TableId(DB_NAME_1, TABLE_NAME_1_1),
                 label,
                 loadId,
@@ -335,6 +343,7 @@ public class MergeCommitTaskTest extends BatchWriteTestBase {
         Coordinator.Factory factory = Mockito.mock(Coordinator.Factory.class);
         MergeCommitTask task = new MergeCommitTask(
                 GlobalStateMgr.getCurrentState().getNextId(),
+                DATABASE_1.getId(),
                 new TableId(DB_NAME_1, TABLE_NAME_1_1),
                 label,
                 loadId,
@@ -359,6 +368,7 @@ public class MergeCommitTaskTest extends BatchWriteTestBase {
     public void testCancelAfterFinish() {
         MergeCommitTask task = new MergeCommitTask(
                 GlobalStateMgr.getCurrentState().getNextId(),
+                DATABASE_1.getId(),
                 new TableId(DB_NAME_1, TABLE_NAME_1_1),
                 label,
                 loadId,
@@ -386,6 +396,7 @@ public class MergeCommitTaskTest extends BatchWriteTestBase {
     public void testAbortTransactionTriggersCancel() throws Exception {
         MergeCommitTask task = new MergeCommitTask(
                 GlobalStateMgr.getCurrentState().getNextId(),
+                DATABASE_1.getId(),
                 new TableId(DB_NAME_1, TABLE_NAME_1_1),
                 label,
                 loadId,
@@ -448,6 +459,7 @@ public class MergeCommitTaskTest extends BatchWriteTestBase {
         try {
             MergeCommitTask task = new MergeCommitTask(
                     GlobalStateMgr.getCurrentState().getNextId(),
+                    DATABASE_1.getId(),
                     new TableId(DB_NAME_1, TABLE_NAME_1_1),
                     label,
                     loadId,
@@ -477,6 +489,7 @@ public class MergeCommitTaskTest extends BatchWriteTestBase {
     public void testCancelDuringLoadingTriggersCoordinatorCancel() throws Exception {
         MergeCommitTask task = new MergeCommitTask(
                 GlobalStateMgr.getCurrentState().getNextId(),
+                DATABASE_1.getId(),
                 new TableId(DB_NAME_1, TABLE_NAME_1_1),
                 label,
                 loadId,
@@ -521,6 +534,7 @@ public class MergeCommitTaskTest extends BatchWriteTestBase {
     public void testStateMachineTransitionsOnSuccess() {
         MergeCommitTask task = new MergeCommitTask(
                 GlobalStateMgr.getCurrentState().getNextId(),
+                DATABASE_1.getId(),
                 new TableId(DB_NAME_1, TABLE_NAME_1_1),
                 label,
                 loadId,
@@ -561,6 +575,7 @@ public class MergeCommitTaskTest extends BatchWriteTestBase {
     public void testStateMachineTransitionsOnExecuteFail() {
         MergeCommitTask task = new MergeCommitTask(
                 GlobalStateMgr.getCurrentState().getNextId(),
+                DATABASE_1.getId(),
                 new TableId(DB_NAME_1, TABLE_NAME_1_1),
                 label,
                 loadId,
@@ -591,6 +606,7 @@ public class MergeCommitTaskTest extends BatchWriteTestBase {
     public void testStateMachineTransitionsOnCancelDuringLoading() throws Exception {
         MergeCommitTask task = new MergeCommitTask(
                 GlobalStateMgr.getCurrentState().getNextId(),
+                DATABASE_1.getId(),
                 new TableId(DB_NAME_1, TABLE_NAME_1_1),
                 label,
                 loadId,
@@ -635,6 +651,7 @@ public class MergeCommitTaskTest extends BatchWriteTestBase {
     public void testStateMachineTransitionsOnPublishTimeout() throws Exception {
         MergeCommitTask task = new MergeCommitTask(
                 GlobalStateMgr.getCurrentState().getNextId(),
+                DATABASE_1.getId(),
                 new TableId(DB_NAME_1, TABLE_NAME_1_1),
                 label,
                 loadId,
