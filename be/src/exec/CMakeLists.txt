@@ -110,8 +110,7 @@ set(EXEC_FILES
     dictionary_cache_writer.cpp
     arrow_flight_batch_reader.cpp
     range_router.cpp
-    iceberg/iceberg_delete_builder.cpp
-    iceberg/iceberg_delete_file_iterator.cpp
+    iceberg/iceberg_delete_builder.cpp    
     paimon/paimon_delete_file_builder.cpp
     hdfs_scanner/cache_select_scanner.cpp
     hdfs_scanner/hdfs_scanner_text.cpp

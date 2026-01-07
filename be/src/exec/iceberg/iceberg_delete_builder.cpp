@@ -17,7 +17,6 @@
 #include <storage/chunk_helper.h>
 
 #include "column/vectorized_fwd.h"
-#include "exec/iceberg/iceberg_delete_file_iterator.h"
 #include "formats/orc/orc_chunk_reader.h"
 #include "formats/orc/orc_input_stream.h"
 #include "formats/parquet/file_reader.h"
