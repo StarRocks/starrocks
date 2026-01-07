@@ -15,6 +15,7 @@
 #include "formats/parquet/utils.h"
 
 #include <glog/logging.h>
+#include <parquet/metadata.h>
 
 #include <cstring>
 
@@ -95,6 +96,21 @@ int ParquetUtils::decimal_precision_to_byte_count(int precision) {
     };
 
     return table[precision];
+}
+
+std::vector<int64_t> ParquetUtils::collect_split_offsets(const ::parquet::FileMetaData& meta_data) {
+    std::vector<int64_t> split_offsets;
+    split_offsets.reserve(meta_data.num_row_groups());
+    for (int i = 0; i < meta_data.num_row_groups(); i++) {
+        auto first_column_meta = meta_data.RowGroup(i)->ColumnChunk(0);
+        int64_t dict_page_offset = first_column_meta->dictionary_page_offset();
+        int64_t first_data_page_offset = first_column_meta->data_page_offset();
+        int64_t split_offset = dict_page_offset > 0 && dict_page_offset < first_data_page_offset
+                                       ? dict_page_offset
+                                       : first_data_page_offset;
+        split_offsets.emplace_back(split_offset);
+    }
+    return split_offsets;
 }
 
 int64_t ParquetUtils::get_column_start_offset(const tparquet::ColumnMetaData& column) {

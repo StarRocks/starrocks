@@ -131,6 +131,11 @@ struct ParquetBuilderOptions {
     int64_t row_group_max_size = 128 * 1024 * 1024;
 };
 
+struct ParquetSchemaOptions {
+    bool use_legacy_decimal_encoding = false;
+    bool use_int96_timestamp_encoding = false;
+};
+
 class ParquetBuildHelper {
 public:
     static arrow::Result<std::shared_ptr<::parquet::schema::GroupNode>> make_schema(
@@ -141,16 +146,16 @@ public:
             const std::vector<std::string>& file_column_names, const std::vector<TypeDescriptor>& type_descs,
             const std::vector<FileColumnId>& file_column_ids);
 
+    static arrow::Result<::parquet::schema::NodePtr> make_schema_node(const std::string& name,
+                                                                      const TypeDescriptor& type_desc,
+                                                                      ::parquet::Repetition::type rep_type,
+                                                                      FileColumnId file_column_id = FileColumnId(),
+                                                                      const ParquetSchemaOptions& options = {});
+
     static StatusOr<std::shared_ptr<::parquet::WriterProperties>> make_properties(const ParquetBuilderOptions& options);
 
     static StatusOr<::parquet::Compression::type> convert_compression_type(
             const TCompressionType::type& compression_type);
-
-private:
-    static arrow::Result<::parquet::schema::NodePtr> _make_schema_node(const std::string& name,
-                                                                       const TypeDescriptor& type_desc,
-                                                                       ::parquet::Repetition::type rep_type,
-                                                                       FileColumnId file_column_ids = FileColumnId());
 };
 
 class FileWriterBase {
