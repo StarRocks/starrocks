@@ -25,7 +25,6 @@ class TypeCheckerManager {
 private:
     std::unordered_map<std::string, std::unique_ptr<TypeChecker>> _checkers;
     std::unique_ptr<TypeChecker> _default_checker;
-    bool _use_xml_config;
     TypeCheckerManager();
 
     /**
@@ -43,15 +42,10 @@ public:
 
     static TypeCheckerManager& getInstance();
 
+    void init();
+
     void registerChecker(const std::string& java_class, std::unique_ptr<TypeChecker> checker);
     StatusOr<LogicalType> checkType(const std::string& java_class, const SlotDescriptor* slot_desc);
-
-    /**
-     * Check if the manager is using XML-based configuration.
-     * 
-     * @return true if XML configuration is active, false otherwise
-     */
-    bool is_using_xml_config() const { return _use_xml_config; }
 };
 
 } // namespace starrocks

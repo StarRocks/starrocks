@@ -22,30 +22,8 @@
 
 namespace starrocks {
 
-TypeCheckerManager::TypeCheckerManager() : _use_xml_config(false) {
-    // Default checker for unknown types
-    _default_checker = std::make_unique<ConfigurableTypeChecker>(
-            "Default", std::vector<ConfigurableTypeChecker::TypeRule>{{TYPE_VARCHAR, TYPE_VARCHAR}});
-
-    // Load type checkers from XML configuration file
-    // Location: conf/type_checker_config.xml (relative to BE home)
-    std::string xml_path;
-    const char* be_home = std::getenv("STARROCKS_HOME");
-    if (be_home != nullptr) {
-        xml_path = std::string(be_home) + "/conf/type_checker_config.xml";
-    } else {
-        // Use relative path as fallback
-        xml_path = "conf/type_checker_config.xml";
-    }
-
-    // Load from XML configuration - this is now mandatory
-    if (try_load_from_xml(xml_path)) {
-        LOG(INFO) << "TypeCheckerManager initialized from XML configuration: " << xml_path;
-    } else {
-        LOG(ERROR) << "Failed to load type checker configuration from XML: " << xml_path;
-        LOG(ERROR) << "All type checkers must be defined in XML. Please ensure the configuration file exists.";
-        // Continue with empty checkers - default checker will handle unknown types
-    }
+TypeCheckerManager::TypeCheckerManager() {
+    init();
 }
 
 bool TypeCheckerManager::try_load_from_xml(const std::string& xml_file_path) {
@@ -63,6 +41,10 @@ bool TypeCheckerManager::try_load_from_xml(const std::string& xml_file_path) {
             LOG(WARNING) << "Failed to create checker for: " << mapping.java_class;
             continue;
         }
+        if (mapping.java_class == "*") {
+            _default_checker = std::move(checker);
+            continue;
+        }
         registerChecker(mapping.java_class, std::move(checker));
         loaded_count++;
     }
@@ -72,13 +54,33 @@ bool TypeCheckerManager::try_load_from_xml(const std::string& xml_file_path) {
         return false;
     }
 
-    _use_xml_config = true;
     return true;
 }
 
 TypeCheckerManager& TypeCheckerManager::getInstance() {
     static TypeCheckerManager instance;
     return instance;
+}
+
+void TypeCheckerManager::init() {
+    // Load type checkers from XML configuration file
+    // Location: conf/type_checker_config.xml (relative to BE home)
+    std::string xml_path;
+
+    const char* be_home = std::getenv("STARROCKS_HOME");
+    if (be_home != nullptr) {
+        xml_path = std::string(be_home) + "/conf/type_checker_config.xml";
+    } else {
+        // Use relative path as fallback
+        xml_path = "conf/type_checker_config.xml";
+    }
+
+    // Load from XML configuration - this is now mandatory
+    if (try_load_from_xml(xml_path)) {
+        LOG(INFO) << "TypeCheckerManager initialized from XML configuration: " << xml_path;
+    } else {
+        LOG(ERROR) << "Failed to load type checker configuration from XML: " << xml_path;
+    }
 }
 
 void TypeCheckerManager::registerChecker(const std::string& java_class, std::unique_ptr<TypeChecker> checker) {
@@ -90,7 +92,10 @@ StatusOr<LogicalType> TypeCheckerManager::checkType(const std::string& java_clas
     if (it != _checkers.end()) {
         return it->second->check(java_class, slot_desc);
     }
-    return _default_checker->check(java_class, slot_desc);
+    if (_default_checker != nullptr) {
+        return _default_checker->check(java_class, slot_desc);
+    }
+    return Status::NotFound("No type checker found for Java class: " + java_class);
 }
 
 } // namespace starrocks

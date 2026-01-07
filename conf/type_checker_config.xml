@@ -175,5 +175,7 @@
   <!-- Default fallback for unknown types -->
   <type-mapping java_class="*" display_name="Default">
     <type-rule allowed_type="TYPE_VARCHAR" return_type="TYPE_VARCHAR"/>
+    <type-rule allowed_type="TYPE_BINARY" return_type="TYPE_VARCHAR"/>
+    <type-rule allowed_type="TYPE_VARBINARY" return_type="TYPE_VARCHAR"/>
   </type-mapping>
 </type-checkers>
