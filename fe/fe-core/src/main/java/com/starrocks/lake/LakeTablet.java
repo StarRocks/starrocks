@@ -19,6 +19,7 @@ import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Tablet;
+import com.starrocks.catalog.TabletRange;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.warehouse.cngroup.ComputeResource;
@@ -66,6 +67,10 @@ public class LakeTablet extends Tablet {
 
     public LakeTablet(long id) {
         super(id);
+    }
+
+    public LakeTablet(long id, TabletRange range) {
+        super(id, range);
     }
 
     public long getShardId() {

@@ -284,8 +284,10 @@ public class SplitTabletJobFactory implements TabletReshardJobFactory {
                 oldIndex.getShardGroupId());
 
         for (ReshardingTablet reshardingTablet : reshardingTablets) {
+            Tablet oldTablet = oldIndex.getTablet(reshardingTablet.getFirstOldTabletId());
+            Preconditions.checkNotNull(oldTablet, "Not found tablet " + reshardingTablet.getFirstOldTabletId());
             for (long tabletId : reshardingTablet.getNewTabletIds()) {
-                Tablet tablet = new LakeTablet(tabletId);
+                Tablet tablet = new LakeTablet(tabletId, oldTablet.getRange());
                 newIndex.addTablet(tablet, null, false);
             }
         }

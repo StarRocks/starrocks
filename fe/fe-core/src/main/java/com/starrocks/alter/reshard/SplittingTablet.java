@@ -14,6 +14,7 @@
 
 package com.starrocks.alter.reshard;
 
+import com.google.common.base.Preconditions;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.proto.ReshardingTabletInfoPB;
 import com.starrocks.proto.SplittingTabletInfoPB;
@@ -38,7 +39,7 @@ public class SplittingTablet implements ReshardingTablet {
 
     @Override
     public SplittingTablet getSplittingTablet() {
-        return this;
+        return isIdenticalTablet() ? null : this;
     }
 
     @Override
@@ -48,7 +49,7 @@ public class SplittingTablet implements ReshardingTablet {
 
     @Override
     public IdenticalTablet getIdenticalTablet() {
-        return null;
+        return isIdenticalTablet() ? new IdenticalTablet(oldTabletId, newTabletIds.get(0)) : null;
     }
 
     public long getOldTabletId() {
@@ -82,5 +83,14 @@ public class SplittingTablet implements ReshardingTablet {
         reshardingTabletInfoPB.splittingTabletInfo.oldTabletId = oldTabletId;
         reshardingTabletInfoPB.splittingTabletInfo.newTabletIds = newTabletIds;
         return reshardingTabletInfoPB;
+    }
+
+    public void fallbackToIdenticalTablet() {
+        Preconditions.checkState(!newTabletIds.isEmpty());
+        newTabletIds.subList(1, newTabletIds.size()).clear();
+    }
+
+    public boolean isIdenticalTablet() {
+        return newTabletIds.size() == 1;
     }
 }
