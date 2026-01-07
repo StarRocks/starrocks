@@ -48,6 +48,13 @@ CONF_Int32(brpc_port, "8060");
 
 // The number of bthreads for brpc, the default value is set to -1, which means the number of bthreads is #cpu-cores.
 CONF_Int32(brpc_num_threads, "-1");
+
+// Idle timeout for brpc connections in seconds.
+// A connection will be closed if there is no read/write operations within this time.
+// Set to -1 to disable idle timeout (connections never time out due to inactivity).
+// Default is -1 (disabled) to maintain backward compatibility.
+CONF_Int32(brpc_idle_timeout_sec, "-1");
+
 // https enable flag
 CONF_Bool(enable_https, "false");
 // path of certificate

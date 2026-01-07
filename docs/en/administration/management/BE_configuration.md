@@ -239,6 +239,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Description: The number of bthreads of a bRPC. The value `-1` indicates the same number with the CPU threads.
 - Introduced in: -
 
+##### brpc_idle_timeout_sec
+
+- Default: -1
+- Type: Int
+- Unit: Seconds
+- Is mutable: No
+- Description: The idle timeout for bRPC connections in seconds. A connection will be closed if there is no read/write operations within this time. The value `-1` disables the idle timeout, meaning connections will never time out due to inactivity.
+- Introduced in: -
+
 ##### brpc_port
 
 - Default: 8060

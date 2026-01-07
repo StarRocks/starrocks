@@ -201,6 +201,7 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     if (config::brpc_num_threads != -1) {
         options.num_threads = config::brpc_num_threads;
     }
+    options.idle_timeout_sec = config::brpc_idle_timeout_sec;
     if (config::enable_https) {
         auto sslOptions = options.mutable_ssl_options();
         sslOptions->default_cert.certificate = config::ssl_certificate_path;
