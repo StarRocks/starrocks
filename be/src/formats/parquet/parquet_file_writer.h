@@ -81,10 +81,7 @@ class ParquetOutputStream;
 
 namespace starrocks::formats {
 
-struct FileColumnId {
-    int32_t field_id = -1;
-    std::vector<FileColumnId> children;
-};
+using FileColumnId = ::starrocks::parquet::FileColumnId;
 
 struct ParquetWriterOptions : FileWriterOptions {
     int64_t dictionary_pagesize = 1024 * 1024; // 1MB
@@ -125,16 +122,9 @@ public:
     CommitResult commit() override;
 
 private:
-    static StatusOr<::parquet::Compression::type> _convert_compression_type(TCompressionType::type type);
-
     arrow::Result<std::shared_ptr<::parquet::schema::GroupNode>> _make_schema(
             const std::vector<std::string>& file_column_names, const std::vector<TypeDescriptor>& type_descs,
             const std::vector<FileColumnId>& file_column_ids);
-
-    arrow::Result<::parquet::schema::NodePtr> _make_schema_node(const std::string& name,
-                                                                const TypeDescriptor& type_desc,
-                                                                ::parquet::Repetition::type rep_type,
-                                                                FileColumnId file_column_id);
 
     static FileStatistics _statistics(const ::parquet::FileMetaData* meta_data, bool has_field_id);
 
