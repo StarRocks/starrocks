@@ -286,27 +286,46 @@ public:
     Status init(RuntimeState* state, const std::vector<PTabletWithPartition>& tablets, bool is_incremental);
 
     void for_each_node_channel(const std::function<void(NodeChannel*)>& func) {
-        std::shared_lock<std::shared_mutex> lock(_node_channels_mutex);
-        for (auto& it : _node_channels) {
-            func(it.second.get());
+        std::vector<NodeChannel*> channels;
+        {
+            std::shared_lock<std::shared_mutex> lock(_node_channels_mutex);
+            channels.reserve(_node_channels.size());
+            for (auto& it : _node_channels) {
+                channels.push_back(it.second.get());
+            }
+        }
+        for (auto* ch : channels) {
+            func(ch);
         }
     }
 
     void for_each_initial_node_channel(const std::function<void(NodeChannel*)>& func) {
-        std::shared_lock<std::shared_mutex> lock(_node_channels_mutex);
-        for (auto& it : _node_channels) {
-            if (!it.second->is_incremental()) {
-                func(it.second.get());
+        std::vector<NodeChannel*> channels;
+        {
+            std::shared_lock<std::shared_mutex> lock(_node_channels_mutex);
+            for (auto& it : _node_channels) {
+                if (!it.second->is_incremental()) {
+                    channels.push_back(it.second.get());
+                }
             }
+        }
+        for (auto* ch : channels) {
+            func(ch);
         }
     }
 
     void for_each_incremental_node_channel(const std::function<void(NodeChannel*)>& func) {
-        std::shared_lock<std::shared_mutex> lock(_node_channels_mutex);
-        for (auto& it : _node_channels) {
-            if (it.second->is_incremental()) {
-                func(it.second.get());
+        std::vector<NodeChannel*> channels;
+        {
+            std::shared_lock<std::shared_mutex> lock(_node_channels_mutex);
+            for (auto& it : _node_channels) {
+                if (it.second->is_incremental()) {
+                    channels.push_back(it.second.get());
+                }
             }
+        }
+        for (auto* ch : channels) {
+            func(ch);
         }
     }
 
