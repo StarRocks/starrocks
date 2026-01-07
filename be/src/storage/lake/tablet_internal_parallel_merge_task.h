@@ -22,6 +22,7 @@ namespace starrocks {
 class ChunkIterator;
 class MemTracker;
 class Schema;
+class RuntimeProfile::Counter;
 
 namespace lake {
 

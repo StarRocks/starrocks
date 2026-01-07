@@ -309,7 +309,6 @@ Status LoadChunkSpiller::merge_write(size_t target_size, size_t memory_usage_per
     COUNTER_UPDATE(ADD_COUNTER(_profile, "SpillMergeInputBytes", TUnit::BYTES),
                    spill_block_iterator_tasks.total_block_bytes);
     COUNTER_UPDATE(ADD_COUNTER(_profile, "SpillMergeCount", TUnit::UNIT), total_merges);
-    COUNTER_SET(ADD_TIMER(_profile, "SpillMergeTime"), duration_ms * 1000000);
     return Status::OK();
 }
 
