@@ -25,8 +25,7 @@ public class PublishTabletsInfoTest {
         PublishTabletsInfo publishTabletsInfo = new PublishTabletsInfo();
 
         Assertions.assertTrue(publishTabletsInfo.getTabletIds().isEmpty());
-        Assertions.assertTrue(publishTabletsInfo.isReshardingTabletsEmpty());
-        Assertions.assertTrue(publishTabletsInfo.getReshardingTablets() == null);
+        Assertions.assertTrue(publishTabletsInfo.getReshardingTablets().isEmpty());
         Assertions.assertTrue(publishTabletsInfo.getOldTabletIds().isEmpty());
 
         publishTabletsInfo.addTabletId(1);
@@ -35,8 +34,7 @@ public class PublishTabletsInfoTest {
         publishTabletsInfo.addReshardingTablet(new IdenticalTablet(4, 4));
 
         Assertions.assertFalse(publishTabletsInfo.getTabletIds().isEmpty());
-        Assertions.assertFalse(publishTabletsInfo.isReshardingTabletsEmpty());
-        Assertions.assertTrue(publishTabletsInfo.getReshardingTablets() != null);
+        Assertions.assertFalse(publishTabletsInfo.getReshardingTablets().isEmpty());
         Assertions.assertFalse(publishTabletsInfo.getOldTabletIds().isEmpty());
     }
 }

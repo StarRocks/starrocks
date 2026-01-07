@@ -74,7 +74,9 @@ import com.starrocks.alter.SchemaChangeJobV2;
 import com.starrocks.alter.reshard.IdenticalTablet;
 import com.starrocks.alter.reshard.MergingTablet;
 import com.starrocks.alter.reshard.ReshardingTablet;
+import com.starrocks.alter.reshard.SplitTabletJob;
 import com.starrocks.alter.reshard.SplittingTablet;
+import com.starrocks.alter.reshard.TabletReshardJob;
 import com.starrocks.authentication.FileGroupProvider;
 import com.starrocks.authentication.GroupProvider;
 import com.starrocks.authentication.JWTSecurityIntegration;
@@ -480,7 +482,11 @@ public class GsonUtils {
                     .registerSubtype(WarehouseComputeResource.class, "WarehouseComputeResource")
                     .registerSubtype(CNGroupResource.class, "CNGroupResource", true);
 
-    public static final RuntimeTypeAdapterFactory<ReshardingTablet> TABLET_RESHARD_RUNTIME_TYPE_ADAPTER_FACTORY =
+    public static final RuntimeTypeAdapterFactory<TabletReshardJob> TABLET_RESHARD_JOB_RUNTIME_TYPE_ADAPTER_FACTORY =
+            RuntimeTypeAdapterFactory.of(TabletReshardJob.class, "clazz")
+                    .registerSubtype(SplitTabletJob.class, "SplitTabletJob");
+
+    public static final RuntimeTypeAdapterFactory<ReshardingTablet> RESHARDING_TABLET_RUNTIME_TYPE_ADAPTER_FACTORY =
             RuntimeTypeAdapterFactory.of(ReshardingTablet.class, "clazz")
                     .registerSubtype(SplittingTablet.class, "SplittingTablet")
                     .registerSubtype(MergingTablet.class, "MergingTablet")
@@ -584,7 +590,8 @@ public class GsonUtils {
                 .registerTypeAdapterFactory(ANALYZE_STATUS_RUNTIME_TYPE_ADAPTER_FACTORY)
                 .registerTypeAdapterFactory(ANALYZE_JOB_RUNTIME_TYPE_ADAPTER_FACTORY)
                 .registerTypeAdapterFactory(COMPUTE_RESOURCE_RUNTIME_TYPE_ADAPTER_FACTORY)
-                .registerTypeAdapterFactory(TABLET_RESHARD_RUNTIME_TYPE_ADAPTER_FACTORY)
+                .registerTypeAdapterFactory(TABLET_RESHARD_JOB_RUNTIME_TYPE_ADAPTER_FACTORY)
+                .registerTypeAdapterFactory(RESHARDING_TABLET_RUNTIME_TYPE_ADAPTER_FACTORY)
                 .registerTypeAdapterFactory(CLUSTER_SNAPSHOT_RUNTIME_TYPE_ADAPTER_FACTORY)
                 .registerTypeAdapterFactory(CLUSTER_SNAPSHOT_JOB_RUNTIME_TYPE_ADAPTER_FACTORY)
                 .registerTypeAdapterFactory(TVR_DELTA_RUNTIME_TYPE_ADAPTER_FACTORY)

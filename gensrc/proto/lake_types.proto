@@ -340,8 +340,8 @@ message IdenticalTabletInfoPB {
     optional int64 new_tablet_id = 2;
 }
 
-message ReshardingTabletsInfoPB {
-    repeated SplittingTabletInfoPB splitting_tablet_infos = 1;
-    repeated MergingTabletInfoPB merging_tablet_infos = 2;
-    repeated IdenticalTabletInfoPB identical_tablet_infos = 3;
+message ReshardingTabletInfoPB {
+    optional SplittingTabletInfoPB splitting_tablet_info = 1;
+    optional MergingTabletInfoPB merging_tablet_info = 2;
+    optional IdenticalTabletInfoPB identical_tablet_info = 3;
 }

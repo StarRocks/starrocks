@@ -15,6 +15,10 @@
 package com.starrocks.alter.reshard;
 
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.proto.IdenticalTabletInfoPB;
+import com.starrocks.proto.ReshardingTabletInfoPB;
+
+import java.util.List;
 
 /*
  * IdenticalTablet saves the old tablet id and the new tablet for a tablet that is not split or merged
@@ -30,14 +34,6 @@ public class IdenticalTablet implements ReshardingTablet {
     public IdenticalTablet(long oldTabletId, long newTabletId) {
         this.oldTabletId = oldTabletId;
         this.newTabletId = newTabletId;
-    }
-
-    public long getOldTabletId() {
-        return oldTabletId;
-    }
-
-    public long getNewTabletId() {
-        return newTabletId;
     }
 
     @Override
@@ -60,8 +56,35 @@ public class IdenticalTablet implements ReshardingTablet {
         return oldTabletId;
     }
 
+    public long getOldTabletId() {
+        return oldTabletId;
+    }
+
+    @Override
+    public List<Long> getOldTabletIds() {
+        return List.of(oldTabletId);
+    }
+
+    public long getNewTabletId() {
+        return newTabletId;
+    }
+
+    @Override
+    public List<Long> getNewTabletIds() {
+        return List.of(newTabletId);
+    }
+
     @Override
     public long getParallelTablets() {
         return 0;
+    }
+
+    @Override
+    public ReshardingTabletInfoPB toProto() {
+        ReshardingTabletInfoPB reshardingTabletInfoPB = new ReshardingTabletInfoPB();
+        reshardingTabletInfoPB.identicalTabletInfo = new IdenticalTabletInfoPB();
+        reshardingTabletInfoPB.identicalTabletInfo.oldTabletId = oldTabletId;
+        reshardingTabletInfoPB.identicalTabletInfo.newTabletId = newTabletId;
+        return reshardingTabletInfoPB;
     }
 }

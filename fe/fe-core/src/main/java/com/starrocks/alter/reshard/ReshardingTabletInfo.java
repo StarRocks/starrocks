@@ -15,9 +15,9 @@
 package com.starrocks.alter.reshard;
 
 /*
- * ReshardingTabletContext saves the context during tablet splitting or merging for a tablet
+ * ReshardingTabletInfo saves the info during tablet splitting or merging for a tablet
  */
-public class ReshardingTabletContext {
+public class ReshardingTabletInfo {
 
     protected final ReshardingTablet reshardingTablet;
 
@@ -26,7 +26,7 @@ public class ReshardingTabletContext {
     // This field is used to check which versions need cross publish.
     protected final long visibleVersion;
 
-    public ReshardingTabletContext(ReshardingTablet reshardingTablet, long visibleVersion) {
+    public ReshardingTabletInfo(ReshardingTablet reshardingTablet, long visibleVersion) {
         this.reshardingTablet = reshardingTablet;
         this.visibleVersion = visibleVersion;
     }
