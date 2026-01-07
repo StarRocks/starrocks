@@ -38,7 +38,9 @@ StatusOr<FileInfo> LakePrimaryKeyCompactionConflictResolver::filename() const {
         // get_size() HEAD request to S3/HDFS. This optimization is critical when processing
         // hundreds of mapper files in parallel execution scenarios.
         ASSIGN_OR_RETURN(info.path, lake_rows_mapper_filename(_tablet_mgr, _rowset->tablet_id(), _lcrm_file.name()));
-        info.size = _lcrm_file.size();
+        if (_lcrm_file.size() > 0) {
+            info.size = _lcrm_file.size();
+        }
     } else {
         // WHY: .crm files are stored on local disk for single-node execution
         // TRADEOFF: 10-100x faster I/O (1-5ms vs 50-200ms) but limited to single node

@@ -67,11 +67,15 @@ Status RowsMapperBuilder::finalize() {
 
 FileInfo RowsMapperBuilder::file_info() const {
     FileInfo info;
-    info.path = file_name(_filename);
     // WHY: Include file size to optimize remote storage access. For S3/HDFS, avoiding
     // a separate get_size() call saves ~10-50ms per file, significant during parallel pk execution
     // where hundreds of mapper files may be accessed concurrently.
-    info.size = _wfile->size();
+    if (_wfile) {
+        info.path = file_name(_filename);
+        info.size = _wfile->size();
+    } else {
+        info.path = "";
+    }
     return info;
 }
 

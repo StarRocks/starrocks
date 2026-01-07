@@ -104,7 +104,9 @@ Status CompactionTask::fill_compaction_segment_info(TxnLogPB_OpCompaction* op_co
             auto* file_meta = op_compaction->mutable_lcrm_file();
             const auto& lcrm_file = writer->lcrm_file();
             file_meta->set_name(lcrm_file.path);
-            file_meta->set_size(lcrm_file.size.value());
+            if (lcrm_file.size.has_value()) {
+                file_meta->set_size(lcrm_file.size.value());
+            }
         }
     }
     return Status::OK();
