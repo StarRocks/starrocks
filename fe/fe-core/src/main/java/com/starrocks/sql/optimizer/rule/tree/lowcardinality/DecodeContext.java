@@ -299,6 +299,7 @@ class DecodeContext {
                     ColumnRefOperator fieldStringRef = fieldsStringRefMap.get(fieldName);
                     Preconditions.checkNotNull(fieldStringRef);
                     ColumnRefOperator fieldDictRef = stringRefToDictRefMap.get(fieldStringRef);
+                    Preconditions.checkNotNull(fieldDictRef);
                     newFields.add(new DictMappingOperator(
                             fieldOriginalType,
                             fieldDictRef,
