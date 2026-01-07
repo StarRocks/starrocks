@@ -1438,7 +1438,8 @@ void TabletUpdatesTest::test_horizontal_compaction_with_rows_mapper(bool enable_
     }
     ASSERT_TRUE(output_rs != nullptr);
     RowsMapperIterator iterator;
-    ASSERT_OK(iterator.open(local_rows_mapper_filename(best_tablet.get(), output_rs->rowset_id_str())));
+    ASSERT_OK(
+            iterator.open(FileInfo{.path = local_rows_mapper_filename(best_tablet.get(), output_rs->rowset_id_str())}));
     for (uint32_t i = 0; i < 100; i += 20) {
         std::vector<uint64_t> rows_mapper;
         ASSERT_OK(iterator.next_values(20, &rows_mapper));
@@ -1777,7 +1778,8 @@ void TabletUpdatesTest::test_vertical_compaction_with_rows_mapper(bool enable_pe
     }
     ASSERT_TRUE(output_rs != nullptr);
     RowsMapperIterator iterator;
-    ASSERT_OK(iterator.open(local_rows_mapper_filename(best_tablet.get(), output_rs->rowset_id_str())));
+    ASSERT_OK(
+            iterator.open(FileInfo{.path = local_rows_mapper_filename(best_tablet.get(), output_rs->rowset_id_str())}));
     for (uint32_t i = 0; i < 100; i += 20) {
         std::vector<uint64_t> rows_mapper;
         ASSERT_OK(iterator.next_values(20, &rows_mapper));

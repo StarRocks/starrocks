@@ -93,6 +93,19 @@ Status CompactionTask::fill_compaction_segment_info(TxnLogPB_OpCompaction* op_co
         for (auto& sst_range : writer->sst_ranges()) {
             op_compaction->add_sst_ranges()->CopyFrom(sst_range);
         }
+        // Record lcrm file metadata in transaction log if it exists
+        // WHY: During parallel pk index execution, mapper files are stored on remote storage
+        // (.lcrm extension). Recording metadata in txn log enables:
+        // 1. Light publish optimization - skip re-reading compaction data during publish
+        // 2. Performance - file size avoids expensive S3/HDFS get_size() calls
+        // 3. Lifecycle management - metadata tracked for proper GC cleanup
+        // CONSTRAINT: Only applies to remote storage files (.lcrm), not local files (.crm)
+        if (is_lcrm(writer->lcrm_file().path)) {
+            auto* file_meta = op_compaction->mutable_lcrm_file();
+            const auto& lcrm_file = writer->lcrm_file();
+            file_meta->set_name(lcrm_file.path);
+            file_meta->set_size(lcrm_file.size.value());
+        }
     }
     return Status::OK();
 }

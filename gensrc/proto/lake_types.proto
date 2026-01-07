@@ -272,6 +272,13 @@ message TxnLogPB {
         repeated PersistentIndexSstableRangePB sst_ranges = 9;
         // Pk index compaction may generate multi sstables in latest impl.
         repeated PersistentIndexSstablePB output_sstables = 10;
+        // Lake Compaction Rows Mapper file metadata (.lcrm on remote storage)
+        // WHY: Store mapper file metadata in txn log to enable light publish optimization
+        // during parallel pk index execution. The file maps input rowset rows to output
+        // rowset rows, allowing quick conflict resolution without re-reading all data.
+        // DESIGN: FileMetaPB includes both name and size to avoid expensive get_size()
+        // calls to S3/HDFS during publish phase (~10-50ms saved per file access).
+        optional FileMetaPB lcrm_file = 11;
     }
 
     message OpSchemaChange {
