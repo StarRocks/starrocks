@@ -196,8 +196,9 @@ run_mode = shared_data
 cloud_native_storage_type = S3
 ```
 
-:::information
+:::info
 您可以通过从 `quickstart` 目录运行此命令并查看文件末尾来验证这些设置：
+:::
 
 ```sh
 docker compose exec starrocks-fe \
