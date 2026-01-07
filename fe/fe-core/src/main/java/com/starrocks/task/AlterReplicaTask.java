@@ -62,13 +62,13 @@ import com.starrocks.thrift.TColumn;
 import com.starrocks.thrift.TDescriptorTable;
 import com.starrocks.thrift.TQueryGlobals;
 import com.starrocks.thrift.TQueryOptions;
+import com.starrocks.thrift.TTabletSchema;
 import com.starrocks.thrift.TTabletType;
 import com.starrocks.thrift.TTaskType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.text.SimpleDateFormat;
-import java.util.Collections;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
@@ -94,7 +94,10 @@ public class AlterReplicaTask extends AgentTask implements Runnable {
     private final TTabletType tabletType;
     private final long txnId;
     private final TAlterTabletMaterializedColumnReq generatedColumnReq;
+    // baseSchemaColumns is used for shared-nothing in fast schema evolution 
     private List<TColumn> baseSchemaColumns;
+    // baseTabletReadSchema is used for shared-data in Fast Schema Evolution v2
+    private TTabletSchema baseTabletReadSchema;
     private RollupJobV2Params rollupJobV2Params;
 
     public static class RollupJobV2Params {
@@ -140,14 +143,6 @@ public class AlterReplicaTask extends AgentTask implements Runnable {
                 TTabletType.TABLET_TYPE_DISK, 0, generatedColumnReq, baseSchemaColumns, null);
     }
 
-    public static AlterReplicaTask alterLakeTablet(long backendId, long dbId, long tableId, long partitionId, long rollupIndexId,
-                                                   long rollupTabletId, long baseTabletId, long version, long jobId, long txnId,
-                                                   TAlterTabletMaterializedColumnReq generatedColumnReq) {
-        return new AlterReplicaTask(backendId, dbId, tableId, partitionId, rollupIndexId, rollupTabletId,
-                baseTabletId, -1, -1, -1, version, jobId, AlterJobV2.JobType.SCHEMA_CHANGE,
-                TTabletType.TABLET_TYPE_LAKE, txnId, generatedColumnReq, Collections.emptyList(), null);
-    }
-
     public static AlterReplicaTask rollupLocalTablet(long backendId, long dbId, long tableId, long partitionId,
                                                      long rollupIndexId, long rollupTabletId, long baseTabletId,
                                                      long newReplicaId, int newSchemaHash, int baseSchemaHash, long version,
@@ -159,14 +154,20 @@ public class AlterReplicaTask extends AgentTask implements Runnable {
                 baseSchemaColumns, rollupJobV2Params);
     }
 
+    public static AlterReplicaTask alterLakeTablet(long backendId, long dbId, long tableId, long partitionId, long rollupIndexId,
+                                                   long rollupTabletId, long baseTabletId, long version, long jobId, long txnId,
+                                                   TAlterTabletMaterializedColumnReq generatedColumnReq,
+                                                   TTabletSchema baseTabletReadSchema) {
+        return new AlterReplicaTask(backendId, dbId, tableId, partitionId, rollupIndexId, rollupTabletId, baseTabletId,
+                version, jobId, AlterJobV2.JobType.SCHEMA_CHANGE, txnId, generatedColumnReq, baseTabletReadSchema, null);
+    }
+
     public static AlterReplicaTask rollupLakeTablet(long backendId, long dbId, long tableId, long partitionId,
                                                      long rollupIndexId, long rollupTabletId, long baseTabletId,
                                                      long version, long jobId, RollupJobV2Params rollupJobV2Params,
-                                                    List<TColumn> baseSchemaColumns, long txnId) {
+                                                     TTabletSchema baseTabletReadSchema, long txnId) {
         return new AlterReplicaTask(backendId, dbId, tableId, partitionId, rollupIndexId, rollupTabletId,
-                baseTabletId, -1, -1, -1, version, jobId, AlterJobV2.JobType.ROLLUP,
-                TTabletType.TABLET_TYPE_LAKE, txnId, null,
-                baseSchemaColumns, rollupJobV2Params);
+                baseTabletId, version, jobId, AlterJobV2.JobType.ROLLUP, txnId, null, baseTabletReadSchema, rollupJobV2Params);
     }
 
     private AlterReplicaTask(long backendId, long dbId, long tableId, long partitionId, long rollupIndexId, long rollupTabletId,
@@ -191,6 +192,33 @@ public class AlterReplicaTask extends AgentTask implements Runnable {
 
         this.generatedColumnReq = generatedColumnReq;
         this.baseSchemaColumns = baseSchemaColumns;
+
+        this.rollupJobV2Params = rollupJobV2Params;
+    }
+
+    // This constructor is for LakeTablet
+    private AlterReplicaTask(long backendId, long dbId, long tableId, long partitionId, long rollupIndexId, long rollupTabletId,
+                             long baseTabletId, long version, long jobId, AlterJobV2.JobType jobType, long txnId,
+                             TAlterTabletMaterializedColumnReq generatedColumnReq, TTabletSchema baseTabletReadSchema,
+                             RollupJobV2Params rollupJobV2Params) {
+        super(null, backendId, TTaskType.ALTER, dbId, tableId, partitionId, rollupIndexId, rollupTabletId);
+
+        this.baseTabletId = baseTabletId;
+        this.newReplicaId = -1;
+
+        this.newSchemaHash = -1;
+        this.baseSchemaHash = -1;
+
+        this.version = version;
+        this.jobId = jobId;
+
+        this.jobType = jobType;
+        this.tabletType = TTabletType.TABLET_TYPE_LAKE;
+        this.txnId = txnId;
+
+        this.generatedColumnReq = generatedColumnReq;
+        this.baseTabletReadSchema =
+                Preconditions.checkNotNull(baseTabletReadSchema, "altering lake tablet must set read schema");
 
         this.rollupJobV2Params = rollupJobV2Params;
     }
@@ -281,6 +309,9 @@ public class AlterReplicaTask extends AgentTask implements Runnable {
 
         if (baseSchemaColumns != null) {
             req.setColumns(baseSchemaColumns);
+        }
+        if (baseTabletReadSchema != null) {
+            req.setBase_tablet_read_schema(baseTabletReadSchema);
         }
         return req;
     }
