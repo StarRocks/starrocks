@@ -32,8 +32,8 @@ StatusOr<LogicalType> ConfigurableTypeChecker::check(const std::string& java_cla
 
     // No matching rule found - generate error message
     return Status::NotSupported(
-            fmt::format("Type mismatches on column[{}], JDBC result type is {}, check configuration for allowed types",
-                        slot_desc->col_name(), _display_name));
+            fmt::format("Type mismatches on column[{}], JDBC result type is {} (Java class: {}), check configuration for allowed types",
+                        slot_desc->col_name(), _display_name, java_class));
 }
 
 } // namespace starrocks
