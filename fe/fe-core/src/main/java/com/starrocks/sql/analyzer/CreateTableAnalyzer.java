@@ -493,9 +493,20 @@ public class CreateTableAnalyzer {
                     keyColIdxes.add(idx);
                 }
 
-                boolean res = new HashSet<>(keyColIdxes).equals(new HashSet<>(sortKeyIdxes));
+                boolean res;
+                if (keysType == KeysType.PRIMARY_KEYS) {
+                    res = keyColIdxes.equals(sortKeyIdxes);
+                } else {
+                    res = new HashSet<>(keyColIdxes).equals(new HashSet<>(sortKeyIdxes));
+                }
+
                 if (!res) {
-                    throw new SemanticException("The sort columns must be same with key columns");
+                    if (keysType == KeysType.PRIMARY_KEYS) {
+                        throw new SemanticException("The sort columns must be same with primary key columns " +
+                                "and the order must be consistent");
+                    } else {
+                        throw new SemanticException("The sort columns must be same with key columns");
+                    }
                 }
             }
         } else {

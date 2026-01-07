@@ -481,4 +481,60 @@ public class CreateTableAnalyzerTest {
 
         analyzeFail(sql, "Complex type (ARRAY/MAP/STRUCT) default values require fast schema evolution");
     }
+
+    @Test
+    public void testPkTableSortKeyOrder() {
+        boolean oldEnableRangeDistribution = Config.enable_range_distribution;
+        Config.enable_range_distribution = true;
+        try {
+            // PK columns: (v1, v2), Sort keys: (v2, v1) -> Should fail
+            String sql1 = "CREATE TABLE test_create_table_db.pk_table_wrong_order\n" +
+                    "(\n" +
+                    "    v1 int not null,\n" +
+                    "    v2 int not null,\n" +
+                    "    v3 int\n" +
+                    ") PRIMARY KEY(v1, v2)\n" +
+                    "DISTRIBUTED BY HASH(v1)\n" +
+                    "ORDER BY(v2, v1)\n" +
+                    "PROPERTIES (\"replication_num\" = \"1\");";
+            Throwable exception1 = assertThrows(SemanticException.class, () -> {
+                CreateTableStmt createTableStmt = (CreateTableStmt) com.starrocks.sql.parser.SqlParser
+                        .parse(sql1, connectContext.getSessionVariable().getSqlMode()).get(0);
+                CreateTableAnalyzer.analyze(createTableStmt, connectContext);
+            });
+            assertThat(exception1.getMessage(),
+                    containsString("The sort columns must be same with primary key columns and the order must be consistent"));
+
+            // PK columns: (v1, v2), Sort keys: (v1, v2) -> Should pass
+            String sql2 = "CREATE TABLE test_create_table_db.pk_table_correct_order\n" +
+                    "(\n" +
+                    "    v1 int not null,\n" +
+                    "    v2 int not null,\n" +
+                    "    v3 int\n" +
+                    ") PRIMARY KEY(v1, v2)\n" +
+                    "DISTRIBUTED BY HASH(v1)\n" +
+                    "ORDER BY(v1, v2)\n" +
+                    "PROPERTIES (\"replication_num\" = \"1\");";
+            CreateTableStmt createTableStmt2 = (CreateTableStmt) com.starrocks.sql.parser.SqlParser
+                    .parse(sql2, connectContext.getSessionVariable().getSqlMode()).get(0);
+            CreateTableAnalyzer.analyze(createTableStmt2, connectContext);
+
+            // enable_range_distribution = false -> Should pass even if order is different
+            Config.enable_range_distribution = false;
+            String sql3 = "CREATE TABLE test_create_table_db.pk_table_diff_order_range_off\n" +
+                    "(\n" +
+                    "    v1 int not null,\n" +
+                    "    v2 int not null,\n" +
+                    "    v3 int\n" +
+                    ") PRIMARY KEY(v1, v2)\n" +
+                    "DISTRIBUTED BY HASH(v1)\n" +
+                    "ORDER BY(v2, v1)\n" +
+                    "PROPERTIES (\"replication_num\" = \"1\");";
+            CreateTableStmt createTableStmt3 = (CreateTableStmt) com.starrocks.sql.parser.SqlParser
+                    .parse(sql3, connectContext.getSessionVariable().getSqlMode()).get(0);
+            CreateTableAnalyzer.analyze(createTableStmt3, connectContext);
+        } finally {
+            Config.enable_range_distribution = oldEnableRangeDistribution;
+        }
+    }
 }
