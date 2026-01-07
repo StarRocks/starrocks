@@ -166,6 +166,7 @@ void update_staros_starcache();
 Status batch_update_tablet_replica_info(const std::vector<uint64_t>& tablet_ids);
 Status staros_need_warmup_tablet(int64_t tablet_id);
 staros::WarmupLevel staros_worker_warmup_level();
+void set_starlet_in_shutdown();
 
 } // namespace starrocks
 #endif // USE_STAROS

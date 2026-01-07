@@ -625,5 +625,12 @@ staros::WarmupLevel staros_worker_warmup_level() {
     return g_worker->worker_group_property().warmup_level();
 }
 
+void set_starlet_in_shutdown() {
+    auto* starlet = g_starlet.get();
+    if (starlet) {
+        starlet->on_shutdown();
+    }
+}
+
 } // namespace starrocks
 #endif // USE_STAROS
