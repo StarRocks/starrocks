@@ -965,9 +965,9 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
 
     // complex type may be support prune subfield, doesn't read data
     private boolean checkComplexTypeInvalid(PhysicalOlapScanOperator scan, ColumnRefOperator column) {
-        String colName = scan.getColRefToColumnMetaMap().get(column).getName();
+        String colId = scan.getColRefToColumnMetaMap().get(column).getColumnId().getId();
         for (ColumnAccessPath path : scan.getColumnAccessPaths()) {
-            if (!StringUtils.equalsIgnoreCase(colName, path.getPath()) || path.getType() != TAccessPathType.ROOT) {
+            if (!StringUtils.equalsIgnoreCase(colId, path.getPath()) || path.getType() != TAccessPathType.ROOT) {
                 continue;
             }
             // check the read path
