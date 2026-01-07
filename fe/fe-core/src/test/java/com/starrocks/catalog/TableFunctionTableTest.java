@@ -39,6 +39,7 @@ import org.apache.hadoop.fs.FileStatus;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -358,4 +359,105 @@ public class TableFunctionTableTest {
                 "Invalid parquet.version: '2.0'. Expected values should be 2.4, 2.6, 1.0",
                 () -> new TableFunctionTable(new ArrayList<>(), properties, new SessionVariable()));
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testCSVIncludeHeaderForUnload() {
+        Map<String, String> properties = new HashMap<>();
+        properties.put("path", "file:///test_dir");
+        properties.put("format", "csv");
+
+        // default: csv.include_header is false
+        {
+            TableFunctionTable table = new TableFunctionTable(new ArrayList<>(), properties, new SessionVariable());
+            Assertions.assertFalse((Boolean) Deencapsulation.getField(table, "csvIncludeHeader"));
+            // verify toTTableFunctionTable also sets this field
+            Assertions.assertFalse(table.toTTableFunctionTable().isCsv_include_header());
+        }
+
+        // csv.include_header = true
+        {
+            properties.put("csv.include_header", "true");
+            TableFunctionTable table = new TableFunctionTable(new ArrayList<>(), properties, new SessionVariable());
+            Assertions.assertTrue((Boolean) Deencapsulation.getField(table, "csvIncludeHeader"));
+            Assertions.assertTrue(table.toTTableFunctionTable().isCsv_include_header());
+        }
+
+        // csv.include_header = false (explicit)
+        {
+            properties.put("csv.include_header", "false");
+            TableFunctionTable table = new TableFunctionTable(new ArrayList<>(), properties, new SessionVariable());
+            Assertions.assertFalse((Boolean) Deencapsulation.getField(table, "csvIncludeHeader"));
+            Assertions.assertFalse(table.toTTableFunctionTable().isCsv_include_header());
+        }
+
+        // csv.include_header = TRUE (case insensitive)
+        {
+            properties.put("csv.include_header", "TRUE");
+            TableFunctionTable table = new TableFunctionTable(new ArrayList<>(), properties, new SessionVariable());
+            Assertions.assertTrue((Boolean) Deencapsulation.getField(table, "csvIncludeHeader"));
+        }
+
+        // csv.include_header = FALSE (case insensitive)
+        {
+            properties.put("csv.include_header", "FALSE");
+            TableFunctionTable table = new TableFunctionTable(new ArrayList<>(), properties, new SessionVariable());
+            Assertions.assertFalse((Boolean) Deencapsulation.getField(table, "csvIncludeHeader"));
+        }
+
+        // abnormal: invalid value
+        {
+            properties.put("csv.include_header", "invalid");
+            ExceptionChecker.expectThrowsWithMsg(SemanticException.class,
+                    "got invalid parameter \"csv.include_header\" = \"invalid\", expect a boolean value (true or false).",
+                    () -> new TableFunctionTable(new ArrayList<>(), properties, new SessionVariable()));
+        }
+    }
+
+    @Test
+    public void testAutoDetectTypes() throws NoSuchFieldException {
+        Map<String, String> properties = new HashMap<>();
+        properties.put(TableFunctionTable.PROPERTY_PATH, "fake://test/path");
+        properties.put(TableFunctionTable.PROPERTY_FORMAT, "csv");
+
+        Field field = TableFunctionTable.class.getDeclaredField("autoDetectTypes");
+        field.setAccessible(true);
+
+        {
+            // Case 1: default
+            Assertions.assertDoesNotThrow(() -> {
+                TableFunctionTable table = new TableFunctionTable(properties);
+                Assertions.assertTrue((Boolean) field.get(table));
+            });
+        }
+
+        {
+            // Case 2: auto_detect_types = false
+            properties.put(TableFunctionTable.PROPERTY_AUTO_DETECT_TYPES, "false");
+            Assertions.assertDoesNotThrow(() -> {
+                TableFunctionTable table = new TableFunctionTable(properties);
+                Assertions.assertFalse((Boolean) field.get(table));
+            });
+        }
+
+        {
+            // Case 3: auto_detect_types = true
+            properties.put(TableFunctionTable.PROPERTY_AUTO_DETECT_TYPES, "true");
+            Assertions.assertDoesNotThrow(() -> {
+                TableFunctionTable table = new TableFunctionTable(properties);
+                Assertions.assertTrue((Boolean) field.get(table));
+            });
+        }
+
+        {
+            // abnormal
+            properties.put(TableFunctionTable.PROPERTY_AUTO_DETECT_TYPES, "notaboolean");
+            ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                    "Illegal value of auto_detect_types: notaboolean, only true/false allowed",
+                    () -> new TableFunctionTable(properties)
+            );
+        }
+    }
+>>>>>>> 84373a8057 ([Enhancement] Allow disable type auto-detection on CSV Files (#66519))
 }
