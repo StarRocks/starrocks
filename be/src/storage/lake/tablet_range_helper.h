@@ -53,6 +53,9 @@ public:
 private:
     static Status _parse_string_to_datum(const TypeDescriptor& type_desc, const std::string& value_str, Datum* datum,
                                          MemPool* mem_pool);
+
+    // check if the tablet range is closedOpen
+    static Status _validate_tablet_range(const TabletRangePB& tablet_range_pb);
 };
 
 } // namespace starrocks::lake

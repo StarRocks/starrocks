@@ -37,10 +37,37 @@ Status TabletRangeHelper::_parse_string_to_datum(const TypeDescriptor& type_desc
     return datum_from_string(type_info.get(), datum, value_str, mem_pool);
 }
 
+Status TabletRangeHelper::_validate_tablet_range(const TabletRangePB& tablet_range_pb) {
+    if (!tablet_range_pb.has_lower_bound() && !tablet_range_pb.has_upper_bound()) {
+        return Status::OK();
+    }
+
+    if (tablet_range_pb.has_upper_bound()) {
+        if (!tablet_range_pb.has_upper_bound_included()) {
+            return Status::Corruption("upper_bound_included is required");
+        }
+        if (tablet_range_pb.upper_bound_included()) {
+            return Status::Corruption("Upper bound is inclusive");
+        }
+    }
+
+    if (tablet_range_pb.has_lower_bound()) {
+        if (!tablet_range_pb.has_lower_bound_included()) {
+            return Status::Corruption("lower_bound_included is required");
+        }
+        if (!tablet_range_pb.lower_bound_included()) {
+            return Status::Corruption("Lower bound is exclusive");
+        }
+    }
+
+    return Status::OK();
+}
+
 StatusOr<SeekRange> TabletRangeHelper::create_seek_range_from(const TabletRangePB& tablet_range_pb,
                                                               const TabletSchemaCSPtr& tablet_schema,
                                                               MemPool* mem_pool) {
     SeekRange tablet_range;
+    RETURN_IF_ERROR(_validate_tablet_range(tablet_range_pb));
     if (!tablet_range_pb.has_lower_bound() && !tablet_range_pb.has_upper_bound()) {
         // (-inf, +inf)
         return tablet_range;
@@ -99,6 +126,7 @@ StatusOr<SeekRange> TabletRangeHelper::create_seek_range_from(const TabletRangeP
 StatusOr<SstSeekRange> TabletRangeHelper::create_sst_seek_range_from(const TabletRangePB& tablet_range_pb,
                                                                      const TabletSchemaCSPtr& tablet_schema) {
     SstSeekRange sst_seek_range;
+    RETURN_IF_ERROR(_validate_tablet_range(tablet_range_pb));
     if (!tablet_range_pb.has_lower_bound() && !tablet_range_pb.has_upper_bound()) {
         // (-inf, +inf)
         return sst_seek_range;
