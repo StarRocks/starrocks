@@ -44,6 +44,7 @@
 #include "util/system_metrics.h"
 #ifdef USE_STAROS
 #include "fslib/star_cache_handler.h"
+#include "service/staros_worker.h"
 #endif
 #include "fs/encrypt_file.h"
 #include "gutil/cpu.h"
@@ -297,6 +298,9 @@ void sigterm_handler(int signo, siginfo_t* info, void* context) {
         StarRocksMetrics::instance()->system_metrics()->update_memory_metrics();
         LOG(ERROR) << dump_memory_tracker();
     }
+#ifdef USE_STAROS
+    set_starlet_in_shutdown();
+#endif
     set_process_exit();
 }
 
