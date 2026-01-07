@@ -218,7 +218,6 @@ public class JoinHelper {
                                                                          ColumnRefSet leftColumns,
                                                                          ColumnRefSet rightColumns) {
         List<ScalarOperator> candidates = new ArrayList<>();
-
         for (ScalarOperator predicate : otherJoin) {
             if (isValidAsofTemporalPredicate(predicate, leftColumns, rightColumns)) {
                 candidates.add(predicate);
@@ -228,7 +227,6 @@ public class JoinHelper {
         if (candidates.isEmpty()) {
             throw new IllegalStateException("ASOF JOIN requires exactly one temporal inequality condition. found: 0");
         }
-
         if (candidates.size() > 1) {
             throw new IllegalStateException(String.format(
                     "ASOF JOIN requires exactly one temporal inequality condition, found %d: %s",
@@ -259,18 +257,15 @@ public class JoinHelper {
         if (!(predicate instanceof BinaryPredicateOperator binaryPredicate)) {
             return false;
         }
-
         if (!binaryPredicate.getBinaryType().isRange()) {
             return false;
         }
 
         ColumnRefSet leftOperandColumns = binaryPredicate.getChild(0).getUsedColumns();
         ColumnRefSet rightOperandColumns = binaryPredicate.getChild(1).getUsedColumns();
-
         if (leftOperandColumns.isIntersect(leftColumns) && leftOperandColumns.isIntersect(rightColumns)) {
             return false;
         }
-
         if (rightOperandColumns.isIntersect(leftColumns) && rightOperandColumns.isIntersect(rightColumns)) {
             return false;
         }
@@ -278,9 +273,7 @@ public class JoinHelper {
         return true;
     }
 
-
-
-        public static List<BinaryPredicateOperator> getEqualsPredicate(ColumnRefSet leftColumns, ColumnRefSet rightColumns,
+    public static List<BinaryPredicateOperator> getEqualsPredicate(ColumnRefSet leftColumns, ColumnRefSet rightColumns,
                                                                    List<ScalarOperator> conjunctList) {
         List<BinaryPredicateOperator> eqConjuncts = Lists.newArrayList();
         for (ScalarOperator predicate : conjunctList) {
