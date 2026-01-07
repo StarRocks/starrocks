@@ -791,7 +791,7 @@ public class PlanFragmentBuilder {
                 return scan.getColumnAccessPaths();
             }
 
-            Set<String> checkNames = scan.getColRefToColumnMetaMap().keySet().stream().map(ColumnRefOperator::getName)
+            Set<String> checkNames = scan.getColRefToColumnMetaMap().values().stream().map(col -> col.getColumnId().getId())
                     .collect(Collectors.toSet());
             if (scan.getPredicate() == null) {
                 // remove path which has pruned
@@ -812,7 +812,7 @@ public class PlanFragmentBuilder {
                     continue;
                 }
 
-                String name = scan.getColRefToColumnMetaMap().get(key).getName();
+                String name = scan.getColRefToColumnMetaMap().get(key).getColumnId().getId();
                 ColumnAccessPath path = normalizer.normalizePath(key, name);
                 if (path.onlyRoot()) {
                     continue;
