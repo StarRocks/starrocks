@@ -3586,4 +3586,23 @@ public class Config extends ConfigBase {
      */
     @ConfField
     public static int deploy_serialization_queue_size = -1;
+<<<<<<< HEAD
+=======
+
+    @ConfField(comment = "Enable case-insensitive catalog/database/table names. " +
+            "Only configurable during cluster initialization, immutable once set.")
+    public static boolean enable_table_name_case_insensitive = false;
+
+    @ConfField(mutable = true, comment = "Enable desensitize sql in query dump")
+    public static boolean enable_desensitize_query_dump = false;
+
+    @ConfField(mutable = true, comment = "The threshold to flatten compound predicate from deep tree to a balanced tree to " +
+            "avoid stack over flow")
+    public static int compound_predicate_flatten_threshold = 512;
+
+    @ConfField public static int ui_queries_sql_statement_max_length = 128;
+
+    @ConfField(mutable = true)
+    public static boolean enable_hudi_lib_internal_metadata_table = true;
+>>>>>>> 727fb59cdf ([Enhancement] Add one config for hudi lib internal metadata table (#67540))
 }
