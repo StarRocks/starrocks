@@ -113,7 +113,7 @@ jobs:
           TEAM: feature-reviewer
           PRE_COMMENT: ${{ steps.branch_access_check.outputs.comment }}
         run: |
-          cd ci-tool
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull >/dev/null
           ./scripts/check-approve.sh
 
   be-checker:
