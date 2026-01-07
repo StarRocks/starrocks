@@ -177,6 +177,8 @@ public class MergeCommitTask extends AbstractTxnStateChangeCallback implements R
 
     /** Unique identifier of this merge-commit task. */
     private final long taskId;
+    /** Target database id. */
+    private final long dbId;
     /** Target table identifier (database name + table name). */
     private final TableId tableRef;
     /** Load label used for transaction bookkeeping and visibility. */
@@ -223,6 +225,7 @@ public class MergeCommitTask extends AbstractTxnStateChangeCallback implements R
      * Creates a new merge-commit task.
      *
      * @param taskId unique task identifier
+     * @param dbId target database id
      * @param tableRef target table identifier
      * @param label load label used for transaction bookkeeping
      * @param loadId query/load identifier
@@ -236,6 +239,7 @@ public class MergeCommitTask extends AbstractTxnStateChangeCallback implements R
      */
     public MergeCommitTask(
             long taskId,
+            long dbId,
             TableId tableRef,
             String label,
             TUniqueId loadId,
@@ -247,6 +251,7 @@ public class MergeCommitTask extends AbstractTxnStateChangeCallback implements R
             Coordinator.Factory coordinatorFactory,
             MergeCommitTaskCallback completionCallback) {
         this.taskId = taskId;
+        this.dbId = dbId;
         this.tableRef = tableRef;
         this.label = label;
         this.loadId = loadId;
@@ -272,7 +277,6 @@ public class MergeCommitTask extends AbstractTxnStateChangeCallback implements R
     public void run() {
         loadTimeTrace.pendingCostMs.set(System.currentTimeMillis() - loadTimeTrace.createTimeMs);
         TimeoutWatcher timeoutWatcher = new TimeoutWatcher(streamLoadInfo.getTimeout() * 1000L);
-        long dbId = -1;
         long localTxnId = -1;
         ConnectContext connectContext = null;
         LoadPlanner loadPlanner = null;
@@ -282,7 +286,6 @@ public class MergeCommitTask extends AbstractTxnStateChangeCallback implements R
             transitionToState(TaskState.BEGINNING_TXN, "", null, () -> {});
             final Database database = getDatabase();
             final OlapTable table = getOlapTable(database);
-            dbId = database.getId();
             GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getCallbackFactory().addCallback(this);
             localTxnId = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().beginTransaction(
                     dbId, Lists.newArrayList(table.getId()), label, null,
@@ -296,7 +299,7 @@ public class MergeCommitTask extends AbstractTxnStateChangeCallback implements R
                 this.txnId = finalTxnId;
             });
             connectContext = createConnectContext(table);
-            // Use tracer to get profile for planner/scheduler
+            // use tracer to get profile for planner/scheduler
             Tracers.register(connectContext);
             Tracers.init(connectContext, "TIMER", null);
             loadPlanner = createLoadPlan(database, table, connectContext, timeoutWatcher.getLeftTimeoutMillis());
@@ -370,7 +373,6 @@ public class MergeCommitTask extends AbstractTxnStateChangeCallback implements R
                         tableRef.getDbName(), tableRef.getTableName(), label, localTxnId, abortReason);
             }
         } finally {
-            loadTimeTrace.endTimeMs.set(System.currentTimeMillis());
             GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getCallbackFactory().removeCallback(taskId);
             completionCallback.finish(this);
             updateMetrics();
@@ -386,14 +388,14 @@ public class MergeCommitTask extends AbstractTxnStateChangeCallback implements R
     }
 
     /**
-     * Resolves the target database from {@link #tableRef}.
+     * Resolves the target database.
      *
      * @return the resolved {@link Database}
      * @throws LoadException if the database does not exist
      */
     private Database getDatabase() throws LoadException {
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
-        Database db = globalStateMgr.getLocalMetastore().getDb(tableRef.getDbName());
+        Database db = globalStateMgr.getLocalMetastore().getDb(dbId);
         if (db == null) {
             throw new LoadException(String.format("Database '%s' does not exist", tableRef.getDbName()));
         }
@@ -699,6 +701,9 @@ public class MergeCommitTask extends AbstractTxnStateChangeCallback implements R
             LOG.debug("Transition state from {} to {}. db={}, table={}, taskId={}, label={}, loadId={}, txnId={}, stateMsg={}",
                     prevTaskState, targetState, tableRef.getDbName(), tableRef.getTableName(),
                     taskId, label, DebugUtil.printId(loadId), txnId, targetStateMsg);
+        }
+        if (targetState.isFinalState()) {
+            loadTimeTrace.endTimeMs.set(System.currentTimeMillis());
         }
         if (observer != null && prevTaskState != null) {
             observer.onTransition(prevTaskState, targetState, targetStateMsg, taskStateCancelHandler != null);

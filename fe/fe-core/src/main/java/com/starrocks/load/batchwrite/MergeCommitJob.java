@@ -14,6 +14,7 @@
 
 package com.starrocks.load.batchwrite;
 
+import com.starrocks.catalog.Database;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.UUIDUtil;
@@ -227,11 +228,18 @@ public class MergeCommitJob implements MergeCommitTaskCallback {
                 backendIds.add(backendId);
             }
 
+            Optional<Long> dbId = getDbId();
+            if (dbId.isEmpty()) {
+                status.setStatus_code(TStatusCode.INTERNAL_ERROR);
+                status.setError_msgs(Collections.singletonList(
+                        String.format("Database '%s' does not exist", tableId.getDbName())));
+                return new RequestLoadResult(status, null);
+            }
             TUniqueId loadId = UUIDUtil.genTUniqueId();
             String label = LABEL_PREFIX + DebugUtil.printId(loadId);
             MergeCommitTask mergeCommitTask = new MergeCommitTask(
                     GlobalStateMgr.getCurrentState().getNextId(),
-                    tableId, label, loadId, streamLoadInfo, batchWriteIntervalMs, loadParameters,
+                    dbId.get(), tableId, label, loadId, streamLoadInfo, batchWriteIntervalMs, loadParameters,
                     warehouseName, backendIds, queryCoordinatorFactory, this);
             mergeCommitTasks.put(label, mergeCommitTask);
             try {
@@ -282,6 +290,17 @@ public class MergeCommitJob implements MergeCommitTaskCallback {
                 }
             }
         }
+    }
+
+    /**
+     * Resolves the database ID from the database name in {@link #tableId}.
+     *
+     * @return the database ID if the database exists, otherwise an empty Optional
+     */
+    private Optional<Long> getDbId() {
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        Database db = globalStateMgr.getLocalMetastore().getDb(tableId.getDbName());
+        return db == null ? Optional.empty() : Optional.of(db.getId());
     }
 
     @VisibleForTesting
