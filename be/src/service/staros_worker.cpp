@@ -555,5 +555,12 @@ void update_staros_starcache() {
     }
 }
 
+void set_starlet_in_shutdown() {
+    auto* starlet = g_starlet.get();
+    if (starlet) {
+        starlet->on_shutdown();
+    }
+}
+
 } // namespace starrocks
 #endif // USE_STAROS
