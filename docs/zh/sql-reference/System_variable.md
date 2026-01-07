@@ -183,7 +183,7 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 ### array_low_cardinality_optimize
 
 * **作用域**: Session
-* **描述**: 控制优化器是否将 array&lt;varchar&gt; 列纳入低基数（基于字典）的解码及相关优化的考虑范围。启用时，优化器的低基数规则（例如 `DecodeCollector`）可能会定义字典列，并将字典解码应用于类型为 `varchar` 或 `array&lt;varchar&gt;` 的表达式。禁用时，仅标量 `varchar` 列有资格参与，`array&lt;varchar&gt;` 类型会被这些低基数优化忽略。该变量由 `DecodeCollector.supportAndEnabledLowCardinality(...)` 读取以控制对数组的支持，并通过 `SessionVariable` 的 getter/setter 方法暴露。
+* **描述**: 控制优化器是否将 ARRAY&lt;VARCHAR&gt; 列纳入低基数（基于字典）的解码及相关优化的考虑范围。启用时，优化器的低基数规则（例如 `DecodeCollector`）可能会定义字典列，并将字典解码应用于类型为 VARCHAR 或 ARRAY&lt;VARCHAR&gt; 的表达式。禁用时，仅标量 VARCHAR 列有资格参与，ARRAY&lt;VARCHAR&gt; 类型会被这些低基数优化忽略。该变量由 `DecodeCollector.supportAndEnabledLowCardinality(...)` 读取以控制对数组的支持，并通过 `SessionVariable` 的 getter/setter 方法暴露。
 * **默认值**: `true`
 * **数据类型**: boolean
 * **引入版本**: v3.3.0, v3.4.0, v3.5.0
@@ -259,16 +259,16 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 
 ### cbo_max_reorder_node_use_dp
 
-* **描述**: 会话级限制，用于控制成本基准优化器（CBO）何时包含 DP（dynamic programming，动态规划）连接重排序算法。优化器将连接输入数量（MultiJoinNode.atoms.size()）与此值比较，只有在 `multiJoinNode.getAtoms().size() <= cbo_max_reorder_node_use_dp` 且启用了 `cbo_enable_dp_join_reorder` 时才运行或添加 DP 重排序。用于 JoinReorderFactory.createJoinReorderAdaptive（将 JoinReorderDP 添加到候选算法）以及 ReorderJoinRule.transform/rewrite（在将计划复制到 memo 时决定是否执行 JoinReorderDP）。默认值 10 反映了一个实际性能的截止点（代码注释："10 table join reorder takes more than 100ms"）。可通过调优该值在优化器运行时长（DP 开销较大）与对更大多表连接查询潜在计划质量之间进行权衡。该设置与 `cbo_enable_dp_join_reorder` 和贪心阈值 `cbo_max_reorder_node_use_greedy` 交互。比较为包含等号（`<=`）。
-* **范围**: 会话
+* **描述**: 会话级限制，用于控制 CBO 何时包含 DP（dynamic programming，动态规划）连接重排序算法。优化器将连接输入数量（MultiJoinNode.atoms.size()）与此值比较，只有在 `multiJoinNode.getAtoms().size()` 小于等于 `cbo_max_reorder_node_use_dp` 且启用了 `cbo_enable_dp_join_reorder` 时才运行或添加 DP 重排序。用于 将 JoinReorderDP 添加到候选算法以及在将计划复制到 memo 时决定是否执行 JoinReorderDP。默认值 10 反映了一个实际性能的截止点。可通过调优该值在优化器运行时长（DP 开销较大）与对更大多表连接查询潜在计划质量之间进行权衡。该设置与 `cbo_enable_dp_join_reorder` 和贪心阈值 `cbo_max_reorder_node_use_greedy` 交互。比较为包含等号（`<=`）。
+* **范围**: Session
 * **默认值**: `10`
 * **数据类型**: long
-* **引入版本**: `v3.2.0`
+* **引入版本**: v3.2.0
 
 ### cbo_max_reorder_node_use_exhaustive
 
-* **范围**: 会话
-* **描述**: 控制 CBO 中连接重排序算法选择的阈值。优化器会统计查询中的内/交叉连接节点数量；当该计数大于此值时，planner 会走基于变换（更激进）的重排序路径：强制收集 CTE 统计信息并调用 ReorderJoinRule.transform 及相关的交换律规则。 当计数小于或等于此值时，planner 应用开销较小的连接变换规则（并且在某些半/反连接情况下可能会添加 INNER_JOIN_LEFT_ASSCOM_RULE）。优化器（`SPMOptimizer`, `QueryOptimizer`）会读取此会话变量，并且可以通过 `setMaxTransformReorderJoins` 在会话级别设置。
+* **范围**: Session
+* **描述**: 控制 CBO 中 Join 重排序算法选择的阈值。优化器会统计查询中的内/交叉连接节点数量；当该计数大于此值时，planner 会走基于变换（更激进）的重排序路径：强制收集 CTE 统计信息并调用 ReorderJoinRule.transform 及相关的交换律规则。 当计数小于或等于此值时，planner 应用开销较小的连接变换规则（并且在某些半/反连接情况下可能会添加 INNER_JOIN_LEFT_ASSCOM_RULE）。优化器（`SPMOptimizer`, `QueryOptimizer`）会读取此会话变量，并且可以通过 `setMaxTransformReorderJoins` 在会话级别设置。
 * **默认值**: `4`
 * **数据类型**: int
 * **引入版本**: v3.2.0
@@ -398,8 +398,8 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 
 ### disable_spill_to_local_disk
 
-* **描述**: 当会话中设置为 `true` 时，FE 将指示 BE 禁用本地磁盘溢写（spilling to local disk），并改为依赖远程存储溢写（如果配置了远程溢写）。该标志仅在 `enable_spill` = `true`、`enable_spill_to_remote_storage` = `true` 且 FE 提供并找到有效的 `spill_storage_volume` 时才有意义。该值会以 `disable_spill_to_local_disk` 的字段序列化到 TSpillToRemoteStorageOptions（发送给 BE）。如果未配置远程溢写或无法解析所命名的存储卷，则此设置无效。谨慎使用：禁用本地磁盘溢写可能会增加网络 I/O 和延迟，并要求远程存储具有可靠性和良好性能。
-* **范围**: 会话
+* **描述**: 当会话中设置为 `true` 时，FE 将指示 BE 禁用本地磁盘落盘（spilling to local disk），并改为依赖远程存储落盘（如果配置了远程溢写）。该标志仅在 `enable_spill` 为 `true`、`enable_spill_to_remote_storage` 为 `true` 且 FE 提供并找到有效的 `spill_storage_volume` 时才有意义。如果未配置远程溢写或无法解析所命名的存储卷，则此设置无效。谨慎使用：禁用本地磁盘落盘可能会增加网络 I/O 和延迟，并要求远程存储具有可靠性和良好性能。
+* **范围**: Session
 * **默认值**: `false`
 * **数据类型**: boolean
 * **引入版本**: v3.3.0, v3.4.0, v3.5.0
@@ -536,8 +536,8 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 
 ### enable_incremental_mv
 
-* **描述**: 会话标志，用于控制服务器是否会为使用增量刷新（incremental refresh）的物化视图规划并保留内存中的计划。当启用时，`MaterializedViewAnalyzer.planMVQuery` 会对刷新方案为 `IncrementalRefreshSchemeDesc` 的 create-MV 语句继续执行：它会为视图查询构建逻辑和物理计划并设置会话的 `enableMVPlanner` 标志（`setMVPlanner(true)`）。禁用时，增量刷新 MV 的规划将被跳过。可通过 `SessionVariable` 中的 `isEnableIncrementalRefreshMV()` 和 `setEnableIncrementalRefreshMv(boolean)` 访问。
-* **范围**: 会话（每连接）
+* **描述**: 会话变量，用于控制服务器是否会为使用增量刷新（incremental refresh）的物化视图规划并保留内存中的计划。当启用时，对于刷新方案为增量刷新的物化视图创建语句，系统会为视图查询构建逻辑和物理计划并设置会话的 `enableMVPlanner` 标志（`setMVPlanner(true)`）。禁用时，增量刷新物化视图的规划将被跳过。
+* **范围**: Session（每连接）
 * **默认值**: `false`
 * **数据类型**: boolean
 * **引入版本**: v3.2.0
@@ -574,7 +574,7 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
   - 允许在单 backend+compute-node 集群中将 Scan 与 Global Agg 之间的 SHUFFLE exchange 替换为本地 shuffle + 单阶段聚合（参见 `PruneShuffleDistributionNodeRule` 和 `EnforceAndCostTask`），
   - 在该单节点场景下让成本模型忽略 SHUFFLE 的网络成本以偏好单阶段计划（`CostModel`）。
   仅在 `enable_pipeline_engine` 启用且集群为单个 backend+compute 节点时考虑替换。规划器在不安全的情况下仍会拒绝本地 shuffle 转换（例如 DISTINCT 聚合、检测到的数据倾斜、缺失/未知的列统计、多输入算子如 joins 或其他语义限制）。某些代码路径（INSERT/UPDATE/DELETE 的 planner 和 MaterializedViewOptimizer）会临时禁用该会话标志，因为非查询的 sink 或某些重写需要按 driver 分配扫描，而本地 shuffle 无法使用这种分配。
-* **范围**: 会话
+* **范围**: Session
 * **默认值**: `true`
 * **数据类型**: boolean
 * **引入版本**: v3.2.0
@@ -1016,7 +1016,7 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 ### low_cardinality_optimize_v2
 
 * **作用域**: Session
-* **描述**: 会话级布尔值，用于选择优化器应用哪种低基数（low-cardinality）优化重写。为 `true` 时，优化器将尝试由 `LowCardinalityRewriteRule` 实现的新版 V2 重写（使用 `DecodeCollector` / `DecodeRewriter` 对低基数 VARCHAR 列进行编码/解码）。为 `false` 时，优化器回退到由 `AddDecodeNodeForDictStringRule` 实现的旧版重写。执行任一重写还需要 `enableLowCardinalityOptimize` 被启用；如果 `enableLowCardinalityOptimize` 被禁用，则不执行任何低基数重写。该变量在优化器的树重写路径中被检查以选择合适的转换。
+* **描述**: 会话级变量，用于选择优化器应用哪种低基数（low-cardinality）优化重写。为 `true` 时，优化器将尝试由 `LowCardinalityRewriteRule` 实现的新版 Skew Join V2 重写（使用 `DecodeCollector` / `DecodeRewriter` 对低基数 VARCHAR 列进行编码/解码）。为 `false` 时，优化器回退到由 `AddDecodeNodeForDictStringRule` 实现的旧版重写。执行任一重写还需要 `enableLowCardinalityOptimize` 被启用；如果 `enableLowCardinalityOptimize` 被禁用，则不执行任何低基数重写。该变量在优化器的树重写路径中被检查以选择合适的转换。
 * **默认值**: `true`
 * **数据类型**: boolean
 * **引入版本**: v3.3.0, v3.4.0, v3.5.0
@@ -1050,7 +1050,7 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 
 ### max_pipeline_dop
 
-* **范围**: 会话
+* **范围**: Session
 * **描述**: 每会话的 pipeline 引擎并行度（DOP）上限。行为：
   * 仅在 `enable_pipeline_engine` 启用且未显式设置 `pipeline_dop`（大于 0）时生效。如果 `pipeline_dop` 大于 0 则忽略此变量并直接使用 `pipeline_dop`。
   * 当 `pipeline_dop` 小于或等于 0（自适应/默认模式）时，执行的实际 DOP 计算为 min(`max_pipeline_dop`, BackendResourceStat 返回的后端默认 DOP)。对于 pipeline sinks，同样的逻辑使用 sink 的默认 DOP。
@@ -1458,7 +1458,7 @@ set sql_mode = 'PIPES_AS_CONCAT,ERROR_IF_OVERFLOW,GROUP_CONCAT_LEGACY';
 
 ### tx_visible_wait_timeout
 
-* **描述**: 会话范围的超时时间（秒），控制服务器在提交事务后等待该事务变为可见（published）再继续处理的最长时间。该值乘以 1000 用于计算 StmtExecutor 和 TransactionStmtExecutor 的提交流程中以毫秒为单位的 publish 等待时间。如果可见等待超时，事务将被视为已 COMMITTED 但尚未 VISIBLE。物化视图刷新逻辑（`MVTaskRunProcessor`）会临时将此变量设置为 `Long.MAX_VALUE / 1000` 以有效地无限期等待可见性，并在刷新后恢复原值。当启用 `enable_sync_publish` 时，该变量被忽略，因为 publish 等待时间将由作业截止时间推导。
+* **描述**: 会话范围的超时时间（秒），控制服务器在提交事务后等待该事务变为可见（published）再继续处理的最长时间。如果可见等待超时，事务将被视为已 COMMITTED 但尚未 VISIBLE。物化视图刷新逻辑（`MVTaskRunProcessor`）会临时将此变量设置为 `Long.MAX_VALUE / 1000` 以有效地无限期等待可见性，并在刷新后恢复原值。当启用 `enable_sync_publish` 时，该变量被忽略，因为 publish 等待时间将由作业截止时间推导。
 * **范围**: Session
 * **默认值**: `10`
 * **类型**: long
