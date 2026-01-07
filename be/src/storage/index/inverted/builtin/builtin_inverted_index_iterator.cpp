@@ -62,6 +62,9 @@ Status BuiltinInvertedIndexIterator::_wildcard_query(const Slice* search_query, 
     if (wildcard_pos == search_query->get_size() - 1 && search_query->get_size() == 1) {
         // It means all the rows are matched.
         bitmap->addRange(0, _segment_rows);
+        roaring::Roaring null_map;
+        _bitmap_itr->read_null_bitmap(&null_map);
+        *bitmap -= null_map;
         return Status::OK();
     }
 
@@ -178,7 +181,7 @@ Status BuiltinInvertedIndexIterator::_wildcard_query(const Slice* search_query, 
         SCOPED_RAW_TIMER(&_stats->gin_predicate_filter_dict_ns);
         auto predicate = [&keywords](const Slice* dict) -> bool {
             // just need to make sure keywords is in order.
-            size_t last_pos = 0;
+            int64_t last_pos = 0;
             for (const auto& [keyword, next_array] : keywords) {
                 last_pos = dict->find(keyword, next_array, last_pos);
                 if (last_pos == -1) {
