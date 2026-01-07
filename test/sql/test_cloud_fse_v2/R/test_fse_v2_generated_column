@@ -1,0 +1,72 @@
+-- name: test_fse_v2_generated_column @cloud
+create database test_gen_col_${uuid0};
+-- result:
+-- !result
+use test_gen_col_${uuid0};
+-- result:
+-- !result
+CREATE TABLE `t_gen` (
+    k1 int,
+    v0 int,
+    v1 int
+)
+DUPLICATE KEY(`k1`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 3
+PROPERTIES('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO t_gen VALUES (1, 1, 1);
+-- result:
+-- !result
+ALTER TABLE t_gen DROP COLUMN v0;
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+ALTER TABLE t_gen ADD COLUMN v0 int default '10';
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+SELECT * FROM t_gen ORDER BY k1;
+-- result:
+1	1	10
+-- !result
+ALTER TABLE t_gen ADD COLUMN v2 bigint AS v0+v1;
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+SELECT k1, v0, v1, v2 FROM t_gen ORDER BY k1;
+-- result:
+1	10	1	11
+-- !result
+INSERT INTO t_gen (k1, v1) VALUES (2, 2);
+-- result:
+-- !result
+SELECT k1, v0, v1, v2 FROM t_gen ORDER BY k1;
+-- result:
+1	10	1	11
+2	10	2	12
+-- !result
+INSERT INTO t_gen (k1, v0, v1) VALUES (3, 20, 3);
+-- result:
+-- !result
+SELECT k1, v0, v1, v2 FROM t_gen ORDER BY k1;
+-- result:
+1	10	1	11
+2	10	2	12
+3	20	3	23
+-- !result
+SELECT k1, v0, v1, v2, (v0 + v1) as expected_v2 FROM t_gen ORDER BY k1;
+-- result:
+1	10	1	11	11
+2	10	2	12	12
+3	20	3	23	23
+-- !result

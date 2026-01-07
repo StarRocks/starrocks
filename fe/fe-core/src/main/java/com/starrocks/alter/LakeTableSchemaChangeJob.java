@@ -511,6 +511,7 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
         try (ReadLockedDatabase db = getReadLockedDatabase(dbId)) {
             OlapTable table = getTableOrThrow(db, tableId);
             Preconditions.checkState(table.getState() == OlapTable.OlapTableState.SCHEMA_CHANGE);
+            Map<Long, TTabletSchema> indexToBaseTabletReadSchema = new HashMap<>();
             for (long partitionId : physicalPartitionIndexMap.rowKeySet()) {
                 PhysicalPartition partition = table.getPhysicalPartition(partitionId);
                 Preconditions.checkNotNull(partition, partitionId);
@@ -644,6 +645,13 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
                         generatedColumnReq.setMc_exprs(mcExprs);
                     }
 
+                    TTabletSchema baseTabletReadSchema = indexToBaseTabletReadSchema.get(originIndexId);
+                    if (baseTabletReadSchema == null) {
+                        baseTabletReadSchema = SchemaInfo.fromMaterializedIndex(
+                                table, originIndexId, table.getIndexMetaByIndexId(originIndexId)).toTabletSchema();
+                        indexToBaseTabletReadSchema.put(originIndexId, baseTabletReadSchema);
+                    }
+
                     for (Tablet shadowTablet : shadowIdx.getTablets()) {
                         ComputeNode computeNode = warehouseManager.getComputeNodeAssignedToTablet(computeResource,
                                 shadowTablet.getId());
@@ -657,7 +665,7 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
                         AlterReplicaTask alterTask =
                                 AlterReplicaTask.alterLakeTablet(computeNode.getId(), dbId, tableId, partitionId,
                                         shadowIdxId, shadowTabletId, originTabletId, visibleVersion, jobId,
-                                        watershedTxnId, generatedColumnReq);
+                                        watershedTxnId, generatedColumnReq, baseTabletReadSchema);
                         getOrCreateSchemaChangeBatchTask().addTask(alterTask);
                     }
                 }
