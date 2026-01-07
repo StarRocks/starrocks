@@ -25,13 +25,11 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.FeConstants;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryState;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.ast.AnalyzeStmt;
 import com.starrocks.sql.ast.DropHistogramStmt;
@@ -306,7 +304,7 @@ public class StatisticsExecutorTest extends PlanTestBase {
         ConnectContext statsContext = StatisticUtils.buildConnectContext();
         Assertions.assertEquals(1, statsContext.getSessionVariable().getParallelExecInstanceNum());
     }
-    
+
     @Test
     public void testDropHistogramWithEmptyColumnNames() {
         // Test that dropHistogram and dropExternalHistogram methods handle empty column lists
