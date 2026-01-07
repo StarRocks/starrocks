@@ -98,6 +98,41 @@ public class AnalyzeJoinTest {
                 "USING column 'v2' has incompatible types: bigint(20) and array<int(11)>");
         analyzeFail("select * from t1 full outer join test_using using(v4)",
                 "Type (nested) percentile/hll/bitmap/json not support join");
+
+        // Test that both left and right table qualifiers work after USING join
+        analyzeSuccess("select a.v1 from t0 a join tnotnull b using(v1)");
+        analyzeSuccess("select b.v1 from t0 a join tnotnull b using(v1)");
+        analyzeSuccess("select v1 from t0 a join tnotnull b using(v1)");
+
+        // Test qualified references in subsequent joins after USING - reproduces bug #67548
+        analyzeSuccess("select * from t0 a join tnotnull b using(v1) join t1 c on b.v1 = c.v4");
+        analyzeSuccess("select * from t0 a join tnotnull b using(v1) join t1 c on a.v1 = c.v4");
+        analyzeSuccess("select * from t0 a join tnotnull b using(v1) join t1 c on v1 = c.v4");
+
+        // Test with LEFT OUTER JOIN
+        analyzeSuccess("select b.v1 from t0 a left join tnotnull b using(v1)");
+        analyzeSuccess("select * from t0 a left join tnotnull b using(v1) join t1 c on b.v1 = c.v4");
+
+        // Test with RIGHT OUTER JOIN
+        analyzeSuccess("select a.v1 from t0 a right join tnotnull b using(v1)");
+        analyzeSuccess("select * from t0 a right join tnotnull b using(v1) join t1 c on a.v1 = c.v4");
+
+        // Test with FULL OUTER JOIN
+        analyzeSuccess("select a.v1 from t0 a full outer join tnotnull b using(v1)");
+        analyzeSuccess("select b.v1 from t0 a full outer join tnotnull b using(v1)");
+        analyzeSuccess("select * from t0 a full outer join tnotnull b using(v1) join t1 c on a.v1 = c.v4");
+        analyzeSuccess("select * from t0 a full outer join tnotnull b using(v1) join t1 c on b.v1 = c.v4");
+
+        // Test chained USING joins (edge case for duplicate field handling)
+        analyzeSuccess("select * from t0 a join tnotnull b using(v1) join t0 c using(v1)");
+        analyzeSuccess("select a.v1, b.v1, c.v1 from t0 a join tnotnull b using(v1) join t0 c using(v1)");
+
+        // Test USING with aggregations
+        analyzeSuccess("select count(a.v1), count(b.v1) from t0 a join tnotnull b using(v1)");
+        analyzeSuccess("select a.v1, count(*) from t0 a join tnotnull b using(v1) group by a.v1");
+
+        // Test USING with expressions
+        analyzeSuccess("select a.v1 + b.v1 from t0 a join tnotnull b using(v1)");
     }
 
     @Test

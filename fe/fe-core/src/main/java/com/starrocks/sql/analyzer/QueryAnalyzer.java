@@ -1175,46 +1175,68 @@ public class QueryAnalyzer {
             
             for (String colName : join.getUsingColNames()) {
                 String lowerColName = colName.toLowerCase();
+                // Only collect qualified fields (with table aliases) to avoid duplicating unqualified fields
+                // from previous USING joins in the chain
                 List<Field> leftFields = leftAllFields.stream()
                         .filter(f -> f.getName() != null && f.getName().toLowerCase().equals(lowerColName))
+                        .filter(f -> f.getRelationAlias() != null)  // Only qualified fields
                         .collect(Collectors.toList());
                 List<Field> rightFields = rightAllFields.stream()
                         .filter(f -> f.getName() != null && f.getName().toLowerCase().equals(lowerColName))
+                        .filter(f -> f.getRelationAlias() != null)  // Only qualified fields
                         .collect(Collectors.toList());
-                
+
                 if (leftFields.isEmpty() || rightFields.isEmpty()) {
                     throw new SemanticException("USING column '%s' not found in both tables", colName);
                 }
-                
+
                 Field usingField;
                 if (joinOp.isFullOuterJoin()) {
-                    // For FULL OUTER JOIN, create unqualified field with common type
+                    // For FULL OUTER JOIN, create unqualified field with COALESCE expression
                     Type leftType = computeCompatibleType(leftFields);
                     Type rightType = computeCompatibleType(rightFields);
                     Type commonType = leftType.matchesType(rightType) ? leftType :
                             TypeManager.getCompatibleTypeForBinary(false, leftType, rightType);
 
-                    Expr leftExpr = leftFields.get(0).getOriginExpression() != null 
-                            ? leftFields.get(0).getOriginExpression() 
+                    Expr leftExpr = leftFields.get(0).getOriginExpression() != null
+                            ? leftFields.get(0).getOriginExpression()
                             : new SlotRef(leftFields.get(0).getRelationAlias(), colName);
-                    Expr rightExpr = rightFields.get(0).getOriginExpression() != null 
-                            ? rightFields.get(0).getOriginExpression() 
+                    Expr rightExpr = rightFields.get(0).getOriginExpression() != null
+                            ? rightFields.get(0).getOriginExpression()
                             : new SlotRef(rightFields.get(0).getRelationAlias(), colName);
-                    
+
                     FunctionCallExpr coalesceExpr = new FunctionCallExpr(FunctionSet.COALESCE,
                             Lists.newArrayList(leftExpr, rightExpr));
                     coalesceExpr.setType(commonType);
-                    
-                    usingField = new Field(colName, commonType, null, coalesceExpr, true);
+
+                    usingField = new Field(colName, commonType, null, coalesceExpr, true, true);
                 } else if (joinOp.isRightOuterJoin()) {
-                    // For RIGHT OUTER JOIN, keep right-side field
-                    usingField = rightFields.get(0);
+                    // For RIGHT OUTER JOIN, create unqualified field and keep both qualified fields as hidden
+                    usingField = new Field(colName, rightFields.get(0).getType(), null,
+                            rightFields.get(0).getOriginExpression(), true, rightFields.get(0).isNullable());
                 } else {
-                    // For LEFT OUTER JOIN and INNER JOIN, keep left-side field
-                    usingField = leftFields.get(0);
+                    // For LEFT OUTER JOIN and INNER JOIN, create unqualified field and keep both qualified fields as hidden
+                    usingField = new Field(colName, leftFields.get(0).getType(), null,
+                            leftFields.get(0).getOriginExpression(), true, leftFields.get(0).isNullable());
                 }
-                
+
+                // Add the unqualified field (visible in SELECT *)
                 outputFields.add(usingField);
+
+                // Add hidden qualified fields for both left and right tables so they can still be referenced
+                // with table qualifiers (e.g., A.col_name or B.col_name)
+                for (Field leftField : leftFields) {
+                    Field hiddenLeftField = new Field(leftField.getName(), leftField.getType(),
+                            leftField.getRelationAlias(), leftField.getOriginExpression(),
+                            false, leftField.isNullable());
+                    outputFields.add(hiddenLeftField);
+                }
+                for (Field rightField : rightFields) {
+                    Field hiddenRightField = new Field(rightField.getName(), rightField.getType(),
+                            rightField.getRelationAlias(), rightField.getOriginExpression(),
+                            false, rightField.isNullable());
+                    outputFields.add(hiddenRightField);
+                }
             }
             
             for (Field field : joinedFields.getAllFields()) {
@@ -1223,10 +1245,11 @@ public class QueryAnalyzer {
                 }
             }
             
-            // Mark FULL OUTER JOIN USING to handle ambiguity in subsequent joins
-            boolean markFromFullOuterJoinUsing = joinOp.isFullOuterJoin()
-                    || leftScope.getRelationFields().isFromFullOuterJoinUsing();
-            return new RelationFields(outputFields, markFromFullOuterJoinUsing);
+            // Mark any JOIN with USING clause to handle ambiguity properly
+            // This flag tells RelationFields to prefer unqualified fields when resolving
+            // unqualified column references, avoiding ambiguity with the hidden qualified fields
+            boolean markFromUsingJoin = true;  // Any USING join needs this flag
+            return new RelationFields(outputFields, markFromUsingJoin);
         }
 
         private Type computeCompatibleType(List<Field> fields) {

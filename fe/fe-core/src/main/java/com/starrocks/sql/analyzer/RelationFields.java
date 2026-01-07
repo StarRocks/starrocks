@@ -34,8 +34,9 @@ public class RelationFields {
     private final Multimap<String, Field> names;
     private final boolean resolveStruct;
     
-    // Track if this RelationFields comes from FULL OUTER JOIN USING
+    // Track if this RelationFields comes from any JOIN with USING clause
     // Used to handle unqualified USING columns specially in resolveFields
+    // When true, unqualified column references prefer unqualified fields over qualified ones
     private final boolean fromFullOuterJoinUsing;
 
     public RelationFields(Field... fields) {
