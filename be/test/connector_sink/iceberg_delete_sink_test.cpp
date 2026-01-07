@@ -232,18 +232,18 @@ TEST_F(IcebergDeleteSinkTest, callback_on_commit_empty) {
 
     // Call the callback function with empty result
     CommitResult result_obj;
-    result_obj.location = "/test/path/delete_file.parquet";  // Provide a valid location to avoid PathUtils failure
-    
+    result_obj.location = "/test/path/delete_file.parquet"; // Provide a valid location to avoid PathUtils failure
+
     // Get the runtime state before the callback to check sink commit info
     auto runtime_state = _fragment_context->runtime_state_ptr();
     size_t initial_sink_commit_info_count = runtime_state->sink_commit_infos().size();
-    
+
     delete_sink->callback_on_commit(result_obj);
-    
+
     // Should not crash and should handle empty result gracefully
     // Since io_status is OK by default, it should add a commit info
     ASSERT_EQ(runtime_state->sink_commit_infos().size(), initial_sink_commit_info_count + 1);
-    
+
     // Verify the last added sink commit info
     const auto& last_commit_info = runtime_state->sink_commit_infos().back();
     ASSERT_TRUE(last_commit_info.__isset.iceberg_data_file);
@@ -290,7 +290,7 @@ TEST_F(IcebergDeleteSinkTest, callback_on_commit_with_delete_file) {
     // Verify that the sink processed the commit result correctly
     // The callback should have updated the runtime state with sink commit info
     ASSERT_EQ(runtime_state->sink_commit_infos().size(), initial_sink_commit_info_count + 1);
-    
+
     // Verify the last added sink commit info has the expected iceberg data file
     const auto& last_commit_info = runtime_state->sink_commit_infos().back();
     ASSERT_TRUE(last_commit_info.__isset.iceberg_data_file);
@@ -319,14 +319,14 @@ TEST_F(IcebergDeleteSinkTest, callback_on_commit_io_failure) {
     CommitResult result_obj;
     result_obj.io_status = Status::IOError("Write failed");
     result_obj.location = "/test/path/delete_file.parquet";
-    
+
     // Get the runtime state before the callback to check sink commit info
     auto runtime_state = _fragment_context->runtime_state_ptr();
     size_t initial_sink_commit_info_count = runtime_state->sink_commit_infos().size();
 
     // Call the callback function - it should handle the failure gracefully
     delete_sink->callback_on_commit(result_obj);
-    
+
     // Should not crash even with IO failure
     // Since io_status is not OK, no commit info should be added
     ASSERT_EQ(runtime_state->sink_commit_infos().size(), initial_sink_commit_info_count);
@@ -354,17 +354,17 @@ TEST_F(IcebergDeleteSinkTest, callback_on_commit_partial_stats) {
     result_obj.file_statistics.value_counts = std::map<int, int64_t>{{1, 50}};
     result_obj.file_statistics.null_value_counts = std::map<int, int64_t>{{1, 5}};
     // Lower and upper bounds not set
-    
+
     // Get the runtime state before the callback to check sink commit info
     auto runtime_state = _fragment_context->runtime_state_ptr();
     size_t initial_sink_commit_info_count = runtime_state->sink_commit_infos().size();
 
     // Call the callback function
     delete_sink->callback_on_commit(result_obj);
-    
+
     // Should handle partial statistics correctly
     ASSERT_EQ(runtime_state->sink_commit_infos().size(), initial_sink_commit_info_count + 1);
-    
+
     // Verify the last added sink commit info has the expected iceberg data file
     const auto& last_commit_info = runtime_state->sink_commit_infos().back();
     ASSERT_TRUE(last_commit_info.__isset.iceberg_data_file);
