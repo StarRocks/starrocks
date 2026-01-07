@@ -25,11 +25,15 @@ import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.DistributionCol;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalJoinOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalNestLoopJoinOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.stream.PhysicalStreamJoinOperator;
+import com.starrocks.type.Type;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -146,7 +150,137 @@ public class JoinHelper {
                 HintNode.HINT_JOIN_BUCKET.equals(hint) || HintNode.HINT_JOIN_SKEW.equals(hint);
     }
 
-    public static List<BinaryPredicateOperator> getEqualsPredicate(ColumnRefSet leftColumns, ColumnRefSet rightColumns,
+    /**
+     * Split join on predicate into equal predicates, other on predicates and asof temporal predicate.
+     */
+    public record JoinOnSplitPredicates(ScalarOperator eqOnPredicate,
+                                        ScalarOperator otherOnPredicate,
+                                        ScalarOperator asofTemporalPredicate) {
+    }
+
+    /**
+     * Split join on predicate into equal predicates and residual predicates
+     */
+    public static JoinOnSplitPredicates splitJoinOnPredicate(JoinOperator joinType,
+                                                             ScalarOperator onPredicate,
+                                                             ColumnRefSet leftChildColumns,
+                                                             ColumnRefSet rightChildColumns) {
+        List<ScalarOperator> onPredicates = Utils.extractConjuncts(onPredicate);
+        List<BinaryPredicateOperator> eqOnPredicates = JoinHelper.getEqualsPredicate(
+                leftChildColumns, rightChildColumns, onPredicates);
+        eqOnPredicates = eqOnPredicates.stream().filter(p -> !p.isCorrelated()).toList();
+        for (BinaryPredicateOperator s : eqOnPredicates) {
+            if (!leftChildColumns.containsAll(s.getChild(0).getUsedColumns())) {
+                s.swap();
+            }
+        }
+
+        onPredicates.removeAll(eqOnPredicates);
+
+        // asof join temporal predicate extraction
+        ScalarOperator asofJoinPredicate = null;
+        if (joinType.isAsofJoin()) {
+            asofJoinPredicate = extractAndValidateAsofTemporalPredicate(onPredicates,
+                    leftChildColumns, rightChildColumns);
+            onPredicates.remove(asofJoinPredicate);
+        }
+
+        ScalarOperator newOnPredicate = Utils.compoundAnd(eqOnPredicates);
+        ScalarOperator residualPredicate = Utils.compoundAnd(onPredicates);
+
+        return new JoinOnSplitPredicates(newOnPredicate, residualPredicate, asofJoinPredicate);
+    }
+
+    public static boolean canTreatOnPredicateAsPredicate(OptExpression input) {
+        if (input == null || input.getOp() == null) {
+            return false;
+        }
+        if (input.getOp() instanceof PhysicalHashJoinOperator) {
+            PhysicalHashJoinOperator join = (PhysicalHashJoinOperator) input.getOp();
+            // for inner join, we can split the onPredicate to join keys and residual predicate since the non-equal-predicates
+            // can be pushed down to below operators safely.
+            // but for outer join, we need to distinguish on-predicates and non-equal-predicates carefully.
+            if (join.getJoinType().isInnerJoin() && join.getOnPredicate() != null && join.getPredicate() == null) {
+                return true;
+            }
+        } else if (input.getOp() instanceof PhysicalNestLoopJoinOperator) {
+            PhysicalNestLoopJoinOperator join = (PhysicalNestLoopJoinOperator) input.getOp();
+            // for nest loop join, we can split the onPredicate to join keys and residual predicate
+            // since the non-equal-predicates can be pushed down to below operators safely.
+            if (join.getJoinType().isInnerJoin() && join.getOnPredicate() != null && join.getPredicate() == null) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public static ScalarOperator extractAndValidateAsofTemporalPredicate(List<ScalarOperator> otherJoin,
+                                                                         ColumnRefSet leftColumns,
+                                                                         ColumnRefSet rightColumns) {
+        List<ScalarOperator> candidates = new ArrayList<>();
+
+        for (ScalarOperator predicate : otherJoin) {
+            if (isValidAsofTemporalPredicate(predicate, leftColumns, rightColumns)) {
+                candidates.add(predicate);
+            }
+        }
+
+        if (candidates.isEmpty()) {
+            throw new IllegalStateException("ASOF JOIN requires exactly one temporal inequality condition. found: 0");
+        }
+
+        if (candidates.size() > 1) {
+            throw new IllegalStateException(String.format(
+                    "ASOF JOIN requires exactly one temporal inequality condition, found %d: %s",
+                    candidates.size(), candidates));
+        }
+
+        ScalarOperator temporalPredicate = candidates.get(0);
+        for (ScalarOperator child : temporalPredicate.getChildren()) {
+            if (!child.isColumnRef()) {
+                throw new IllegalStateException(String.format(
+                        "ASOF JOIN temporal condition operands must be column references, found: %s", child));
+            }
+
+            Type operandType = child.getType();
+            if (!operandType.isBigint() && !operandType.isDate() && !operandType.isDatetime()) {
+                throw new IllegalStateException(String.format(
+                        "ASOF JOIN temporal condition operand must be BIGINT, DATE, or DATETIME in join ON clause, " +
+                                "found: %s. Predicate: %s", operandType, temporalPredicate));
+            }
+        }
+
+        return candidates.get(0);
+    }
+
+    private static boolean isValidAsofTemporalPredicate(ScalarOperator predicate,
+                                                        ColumnRefSet leftColumns,
+                                                        ColumnRefSet rightColumns) {
+        if (!(predicate instanceof BinaryPredicateOperator binaryPredicate)) {
+            return false;
+        }
+
+        if (!binaryPredicate.getBinaryType().isRange()) {
+            return false;
+        }
+
+        ColumnRefSet leftOperandColumns = binaryPredicate.getChild(0).getUsedColumns();
+        ColumnRefSet rightOperandColumns = binaryPredicate.getChild(1).getUsedColumns();
+
+        if (leftOperandColumns.isIntersect(leftColumns) && leftOperandColumns.isIntersect(rightColumns)) {
+            return false;
+        }
+
+        if (rightOperandColumns.isIntersect(leftColumns) && rightOperandColumns.isIntersect(rightColumns)) {
+            return false;
+        }
+
+        return true;
+    }
+
+
+
+        public static List<BinaryPredicateOperator> getEqualsPredicate(ColumnRefSet leftColumns, ColumnRefSet rightColumns,
                                                                    List<ScalarOperator> conjunctList) {
         List<BinaryPredicateOperator> eqConjuncts = Lists.newArrayList();
         for (ScalarOperator predicate : conjunctList) {

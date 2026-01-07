@@ -3791,7 +3791,6 @@ public class PlanFragmentBuilder {
         }
 
         private JoinExprInfo buildJoinExpr(OptExpression optExpr, ExecPlan context) {
-            ScalarOperator predicate = optExpr.getOp().getPredicate();
             ScalarOperator onPredicate;
             JoinOperator joinType;
             if (optExpr.getOp() instanceof PhysicalJoinOperator op) {
@@ -3803,54 +3802,28 @@ public class PlanFragmentBuilder {
             } else {
                 throw new IllegalStateException("not supported join " + optExpr.getOp());
             }
-            List<ScalarOperator> onPredicates = Utils.extractConjuncts(onPredicate);
 
             ColumnRefSet leftChildColumns = optExpr.inputAt(0).getOutputColumns();
             ColumnRefSet rightChildColumns = optExpr.inputAt(1).getOutputColumns();
 
-            List<BinaryPredicateOperator> eqOnPredicates = JoinHelper.getEqualsPredicate(
-                    leftChildColumns, rightChildColumns, onPredicates);
-            eqOnPredicates = eqOnPredicates.stream().filter(p -> !p.isCorrelated()).toList();
+            JoinHelper.JoinOnSplitPredicates joinOnSplitPredicates =
+                    JoinHelper.splitJoinOnPredicate(joinType, onPredicate, leftChildColumns, rightChildColumns);
+            List<ScalarOperator> eqOnPredicates = Utils.extractConjuncts(joinOnSplitPredicates.eqOnPredicate());
             Preconditions.checkState(!eqOnPredicates.isEmpty(), "must be eq-join");
 
-            for (BinaryPredicateOperator s : eqOnPredicates) {
-                if (!optExpr.inputAt(0).getLogicalProperty().getOutputColumns()
-                        .containsAll(s.getChild(0).getUsedColumns())) {
-                    s.swap();
-                }
-            }
-
+            // eq join predicates
             List<Expr> eqJoinConjuncts =
                     eqOnPredicates.stream().map(e -> ScalarOperatorToExpr.buildExecExpression(e,
                                     new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
                             .collect(Collectors.toList());
-
             for (Expr expr : eqJoinConjuncts) {
                 if (expr.isConstant()) {
                     throw unsupportedException("Support join on constant predicate later");
                 }
             }
 
-            List<ScalarOperator> otherJoin = Utils.extractConjuncts(onPredicate);
-            otherJoin.removeAll(eqOnPredicates);
-
-            Expr asofJoinConjunct = null;
-            if (joinType.isAsofJoin()) {
-                if (eqJoinConjuncts.isEmpty()) {
-                    throw new IllegalStateException("ASOF JOIN requires at least one equality condition");
-                }
-
-                ColumnRefSet leftColumns = optExpr.inputAt(0).getLogicalProperty().getOutputColumns();
-                ColumnRefSet rightColumns = optExpr.inputAt(1).getLogicalProperty().getOutputColumns();
-
-                ScalarOperator asofJoinPredicate = extractAndValidateAsofTemporalPredicate(otherJoin, leftColumns, rightColumns);
-                ScalarOperator transformedAsofPredicate = JoinHelper.applyCommutativeToPredicates(
-                        asofJoinPredicate, leftColumns, rightColumns);
-                asofJoinConjunct = ScalarOperatorToExpr.buildExecExpression(transformedAsofPredicate,
-                        new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr()));
-                otherJoin.remove(asofJoinPredicate);
-            }
-
+            // other join predicates
+            List<ScalarOperator> otherJoin = Utils.extractConjuncts(joinOnSplitPredicates.otherOnPredicate());
             List<Expr> otherJoinConjuncts = otherJoin.stream().map(e -> ScalarOperatorToExpr.buildExecExpression(e,
                             new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
                     .collect(Collectors.toList());
@@ -3860,10 +3833,22 @@ public class PlanFragmentBuilder {
                 commonSubExprMap = buildCommonSubExprMap(joinOperator.getPredicateCommonOperators(), context);
             }
 
+            // other predicates
+            ScalarOperator predicate = optExpr.getOp().getPredicate();
             List<ScalarOperator> predicates = Utils.extractConjuncts(predicate);
             List<Expr> conjuncts = predicates.stream().map(e -> ScalarOperatorToExpr.buildExecExpression(e,
                             new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
                     .collect(Collectors.toList());
+
+            // asof join conjunct
+            Expr asofJoinConjunct = null;
+            if (joinType.isAsofJoin()) {
+                ScalarOperator asofJoinPredicate = joinOnSplitPredicates.asofTemporalPredicate();
+                ScalarOperator transformedAsofPredicate = JoinHelper.applyCommutativeToPredicates(
+                        asofJoinPredicate, leftChildColumns, rightChildColumns);
+                asofJoinConjunct = ScalarOperatorToExpr.buildExecExpression(transformedAsofPredicate,
+                        new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr()));
+            }
 
             return new JoinExprInfo(eqJoinConjuncts, otherJoinConjuncts, conjuncts, asofJoinConjunct, commonSubExprMap);
         }
@@ -4367,70 +4352,6 @@ public class PlanFragmentBuilder {
                 parentFragment.mergeQueryGlobalDicts(fragment.getQueryGlobalDicts());
                 parentFragment.mergeQueryDictExprs(fragment.getQueryGlobalDictExprs());
             }
-        }
-
-        private ScalarOperator extractAndValidateAsofTemporalPredicate(List<ScalarOperator> otherJoin,
-                                                                       ColumnRefSet leftColumns,
-                                                                       ColumnRefSet rightColumns) {
-            List<ScalarOperator> candidates = new ArrayList<>();
-
-            for (ScalarOperator predicate : otherJoin) {
-                if (isValidAsofTemporalPredicate(predicate, leftColumns, rightColumns)) {
-                    candidates.add(predicate);
-                }
-            }
-
-            if (candidates.isEmpty()) {
-                throw new IllegalStateException("ASOF JOIN requires exactly one temporal inequality condition. found: 0");
-            }
-
-            if (candidates.size() > 1) {
-                throw new IllegalStateException(String.format(
-                        "ASOF JOIN requires exactly one temporal inequality condition, found %d: %s",
-                        candidates.size(), candidates));
-            }
-
-            ScalarOperator temporalPredicate = candidates.get(0);
-            for (ScalarOperator child : temporalPredicate.getChildren()) {
-                if (!child.isColumnRef()) {
-                    throw new IllegalStateException(String.format(
-                            "ASOF JOIN temporal condition operands must be column references, found: %s", child));
-                }
-
-                Type operandType = child.getType();
-                if (!operandType.isBigint() && !operandType.isDate() && !operandType.isDatetime()) {
-                    throw new IllegalStateException(String.format(
-                            "ASOF JOIN temporal condition operand must be BIGINT, DATE, or DATETIME in join ON clause, " +
-                                    "found: %s. Predicate: %s", operandType, temporalPredicate));
-                }
-            }
-
-            return candidates.get(0);
-        }
-
-        private boolean isValidAsofTemporalPredicate(ScalarOperator predicate,
-                                                     ColumnRefSet leftColumns,
-                                                     ColumnRefSet rightColumns) {
-            if (!(predicate instanceof BinaryPredicateOperator binaryPredicate)) {
-                return false;
-            }
-
-            if (!binaryPredicate.getBinaryType().isRange()) {
-                return false;
-            }
-
-            ColumnRefSet leftOperandColumns = binaryPredicate.getChild(0).getUsedColumns();
-            ColumnRefSet rightOperandColumns = binaryPredicate.getChild(1).getUsedColumns();
-
-            if (leftOperandColumns.isIntersect(leftColumns) && leftOperandColumns.isIntersect(rightColumns)) {
-                return false;
-            }
-
-            if (rightOperandColumns.isIntersect(leftColumns) && rightOperandColumns.isIntersect(rightColumns)) {
-                return false;
-            }
-
-            return true;
         }
 
         @Override
