@@ -252,7 +252,8 @@ public class ReorderJoinRule extends Rule {
                     continue;
                 }
 
-                if (multiJoinNode.getAtoms().size() <= context.getSessionVariable().getCboMaxReorderNodeUseDP()
+                if (multiJoinNode.getAtoms().size() <= 62
+                        && multiJoinNode.getAtoms().size() <= context.getSessionVariable().getCboMaxReorderNodeUseDP()
                         && context.getSessionVariable().isCboEnableDPJoinReorder()) {
                     // 10 table join reorder takes more than 100ms,
                     // so the join reorder using dp is currently controlled below 10.
@@ -370,15 +371,19 @@ public class ReorderJoinRule extends Rule {
                 optExpression.setStatistics(expressionContext.getStatistics());
             }
             Preconditions.checkState(optExpression.getStatistics() != null);
-            Statistics newStats = Statistics.buildFrom(optExpression.getStatistics()).build();
-            Iterator<Map.Entry<ColumnRefOperator, ColumnStatistic>>
-                    iterator = newStats.getColumnStatistics().entrySet().iterator();
-            while (iterator.hasNext()) {
-                Map.Entry<ColumnRefOperator, ColumnStatistic> columnStatistic = iterator.next();
-                if (!newCols.contains(columnStatistic.getKey())) {
-                    iterator.remove();
+            // Statistics is immutable. Build a pruned statistics object instead of mutating the column stats map.
+            Statistics oldStats = optExpression.getStatistics();
+            Statistics.Builder newStatsBuilder = Statistics.builder()
+                    .setOutputRowCount(oldStats.getOutputRowCount())
+                    .setTableRowCountMayInaccurate(oldStats.isTableRowCountMayInaccurate())
+                    .setShadowColumns(oldStats.getShadowColumns())
+                    .addMultiColumnStatistics(oldStats.getMultiColumnCombinedStats());
+            oldStats.getColumnStatistics().forEach((col, stat) -> {
+                if (newCols.contains(col)) {
+                    newStatsBuilder.addColumnStatistic(col, stat);
                 }
-            }
+            });
+            Statistics newStats = newStatsBuilder.build();
 
             Operator.Builder builder = OperatorBuilderFactory.build(operator);
             Operator newOp = builder.withOperator(operator)

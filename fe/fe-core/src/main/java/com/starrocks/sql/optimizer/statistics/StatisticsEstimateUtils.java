@@ -67,16 +67,36 @@ public class StatisticsEstimateUtils {
     }
 
     public static Statistics adjustStatisticsByRowCount(Statistics statistics, double rowCount) {
-        // Do not compute predicate statistics if column statistics is unknown or table row count may inaccurate
-        if (statistics.getColumnStatistics().values().stream().anyMatch(ColumnStatistic::isUnknown) ||
-                statistics.isTableRowCountMayInaccurate()) {
-            return statistics;
+        // Always preserve the updated row count (even if we skip column adjustments).
+        Statistics updated = statistics.withOutputRowCount(rowCount);
+
+        // Do not compute predicate statistics if column statistics is unknown or table row count may inaccurate.
+        if (updated.isTableRowCountMayInaccurate()) {
+            return updated;
         }
-        Statistics.Builder builder = Statistics.buildFrom(statistics);
-        builder.setOutputRowCount(rowCount);
-        // use row count to adjust column statistics distinct values
-        double distinctValues = Math.max(1, rowCount);
-        statistics.getColumnStatistics().forEach((column, columnStatistic) -> {
+        for (ColumnStatistic cs : updated.getColumnStatistics().values()) {
+            if (cs.isUnknown()) {
+                return updated;
+            }
+        }
+
+        // Use the clamped row count to adjust column statistics distinct values.
+        double distinctValues = Math.max(1, updated.getOutputRowCount());
+        boolean needAdjust = false;
+        for (ColumnStatistic cs : updated.getColumnStatistics().values()) {
+            if (cs.getDistinctValuesCount() > distinctValues) {
+                needAdjust = true;
+                break;
+            }
+        }
+        if (!needAdjust) {
+            return updated;
+        }
+
+        Statistics.Builder builder = Statistics.buildFrom(updated);
+        // output row count already set on `updated`
+        builder.setOutputRowCount(updated.getOutputRowCount());
+        updated.getColumnStatistics().forEach((column, columnStatistic) -> {
             if (columnStatistic.getDistinctValuesCount() > distinctValues) {
                 builder.addColumnStatistic(column,
                         ColumnStatistic.buildFrom(columnStatistic).setDistinctValuesCount(distinctValues).build());

@@ -439,13 +439,11 @@ public abstract class JoinOrder {
         double ukNormalizedRows = ukExprInfo.rowCount;
         double ukTypeSize = ukRowOutputInfo.getColumnOutputInfo().stream()
                 .map(ColumnOutputInfo::getColumnRef)
-                .map(ColumnRefOperator::getType)
-                .map(Type::getTypeSize)
+                .map(c -> c.getType().getTypeSize())
                 .reduce(1, Integer::sum);
         double fkTypeSize = fkRowOutputInfo.getColumnOutputInfo().stream()
                 .map(ColumnOutputInfo::getColumnRef)
-                .map(ColumnRefOperator::getType)
-                .map(Type::getTypeSize)
+                .map(c -> c.getType().getTypeSize())
                 .reduce(1, Integer::sum);
         double fkNormalizedRows = fkExprInfo.rowCount * fkTypeSize / ukTypeSize;
 
@@ -523,7 +521,13 @@ public abstract class JoinOrder {
     }
 
     private boolean contains(BitSet left, BitSet right) {
-        return right.stream().allMatch(left::get);
+        // Avoid BitSet.stream() and lambda allocations in hot paths.
+        for (int i = right.nextSetBit(0); i >= 0; i = right.nextSetBit(i + 1)) {
+            if (!left.get(i)) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private boolean existsEqOnPredicate(OptExpression optExpression) {

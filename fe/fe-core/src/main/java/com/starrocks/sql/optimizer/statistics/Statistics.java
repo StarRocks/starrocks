@@ -20,9 +20,11 @@ import com.starrocks.common.Pair;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
+import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
@@ -43,10 +45,50 @@ public class Statistics {
 
     private Statistics(Builder builder) {
         this.outputRowCount = builder.outputRowCount;
-        this.columnStatistics = builder.columnStatistics;
+        // Treat Statistics as immutable: prevent external mutation of internal maps/collections.
+        // This is important for performance optimizations (e.g. withOutputRowCount) that reuse map instances.
+        this.columnStatistics = Collections.unmodifiableMap(builder.columnStatistics);
         this.tableRowCountMayInaccurate = builder.tableRowCountMayInaccurate;
-        this.shadowColumns = builder.shadowColumns;
-        this.multiColumnCombinedStats = builder.multiColumnCombinedStats;
+        this.shadowColumns = Collections.unmodifiableCollection(builder.shadowColumns);
+        this.multiColumnCombinedStats = Collections.unmodifiableMap(builder.multiColumnCombinedStats);
+    }
+
+    // A lightweight constructor used when only output row count changes.
+    // This avoids copying column statistics maps, which is a major hotspot in join reordering.
+    private Statistics(double outputRowCount,
+                       Map<ColumnRefOperator, ColumnStatistic> columnStatistics,
+                       boolean tableRowCountMayInaccurate,
+                       Collection<ColumnRefOperator> shadowColumns,
+                       Map<Set<ColumnRefOperator>, MultiColumnCombinedStats> multiColumnCombinedStats) {
+        this.outputRowCount = outputRowCount;
+        this.columnStatistics = columnStatistics;
+        this.tableRowCountMayInaccurate = tableRowCountMayInaccurate;
+        this.shadowColumns = shadowColumns;
+        this.multiColumnCombinedStats = multiColumnCombinedStats;
+    }
+
+    private static double clampOutputRowCount(double outputRowCount) {
+        // Keep behavior aligned with Builder.setOutputRowCount().
+        if (outputRowCount < 1D) {
+            return 1D;
+        } else if (outputRowCount > StatisticsEstimateCoefficient.MAXIMUM_ROW_COUNT) {
+            return StatisticsEstimateCoefficient.MAXIMUM_ROW_COUNT;
+        } else {
+            return outputRowCount;
+        }
+    }
+
+    /**
+     * Return a new Statistics with updated output row count, reusing existing column/multi-column statistics maps.
+     * This is safe because Statistics is treated as immutable after creation and avoids heavy HashMap copies.
+     */
+    public Statistics withOutputRowCount(double newOutputRowCount) {
+        double rc = clampOutputRowCount(newOutputRowCount);
+        if (Double.compare(rc, this.outputRowCount) == 0) {
+            return this;
+        }
+        return new Statistics(rc, this.columnStatistics, this.tableRowCountMayInaccurate,
+                this.shadowColumns, this.multiColumnCombinedStats);
     }
 
     public double getOutputRowCount() {
@@ -113,6 +155,10 @@ public class Statistics {
         return multiColumnCombinedStats;
     }
 
+    public Collection<ColumnRefOperator> getShadowColumns() {
+        return shadowColumns;
+    }
+
     public Map<ColumnRefOperator, ColumnStatistic> getOutputColumnsStatistics(ColumnRefSet outputColumns) {
         Map<ColumnRefOperator, ColumnStatistic> outputColumnsStatistics = Maps.newHashMap();
         for (Map.Entry<ColumnRefOperator, ColumnStatistic> entry : columnStatistics.entrySet()) {
@@ -128,9 +174,14 @@ public class Statistics {
     }
 
     public ColumnRefSet getUsedColumns() {
+        // Hot path: avoid per-column ColumnRefSet allocation and RoaringBitmap OR (ColumnRefSet.union(ColumnRefSet)).
+        // Keep behavior aligned with ColumnRefOperator.getUsedColumns(): skip lambda arguments.
         ColumnRefSet usedColumns = new ColumnRefSet();
-        for (Map.Entry<ColumnRefOperator, ColumnStatistic> entry : columnStatistics.entrySet()) {
-            usedColumns.union(entry.getKey().getUsedColumns());
+        for (ColumnRefOperator col : columnStatistics.keySet()) {
+            if (OperatorType.LAMBDA_ARGUMENT.equals(col.getOpType())) {
+                continue;
+            }
+            usedColumns.union(col.getId());
         }
         return usedColumns;
     }
@@ -219,23 +270,20 @@ public class Statistics {
         }
 
         private Builder(double outputRowCount, Map<ColumnRefOperator, ColumnStatistic> columnStatistics,
-                        boolean tableRowCountMayInaccurate, Collection<ColumnRefOperator> shadowColumns) {
-            this(outputRowCount, columnStatistics, tableRowCountMayInaccurate, shadowColumns, new HashMap<>());
-        }
-
-        private Builder(double outputRowCount, Map<ColumnRefOperator, ColumnStatistic> columnStatistics,
                         boolean tableRowCountMayInaccurate, Collection<ColumnRefOperator> shadowColumns,
                         Map<Set<ColumnRefOperator>, MultiColumnCombinedStats> multiColumnCombinedStats) {
             this.outputRowCount = outputRowCount;
             this.columnStatistics = new HashMap<>(columnStatistics);
             this.tableRowCountMayInaccurate = tableRowCountMayInaccurate;
             this.shadowColumns = shadowColumns;
-            this.multiColumnCombinedStats = new HashMap<>(multiColumnCombinedStats);
+            // Hot path: avoid iterating/copying when there is no multi-column stats.
+            this.multiColumnCombinedStats = multiColumnCombinedStats.isEmpty() ?
+                    new HashMap<>() : new HashMap<>(multiColumnCombinedStats);
         }
 
         private Builder(double outputRowCount, Map<ColumnRefOperator, ColumnStatistic> columnStatistics,
                         boolean tableRowCountMayInaccurate) {
-            this(outputRowCount, columnStatistics, tableRowCountMayInaccurate, Lists.newArrayList());
+            this(outputRowCount, columnStatistics, tableRowCountMayInaccurate, Lists.newArrayList(), new HashMap<>());
         }
 
         public Builder setOutputRowCount(double outputRowCount) {

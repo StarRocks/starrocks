@@ -49,7 +49,11 @@ public interface JoinReorderFactory {
             algorithms.add(new JoinReorderLeftDeep(context));
 
             SessionVariable sv = context.getSessionVariable();
-            if (sv.isCboEnableDPJoinReorder() && multiJoinNode.getAtoms().size() <= sv.getCboMaxReorderNodeUseDP()) {
+            // Hard cap DP join reorder to avoid pathological cases.
+            // DP enumerates bipartitions (exponential); also the subset enumeration uses a long mask.
+            if (sv.isCboEnableDPJoinReorder()
+                    && multiJoinNode.getAtoms().size() <= 62
+                    && multiJoinNode.getAtoms().size() <= sv.getCboMaxReorderNodeUseDP()) {
                 algorithms.add(new JoinReorderDP(context));
             }
 
