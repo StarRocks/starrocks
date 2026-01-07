@@ -26,8 +26,8 @@
 #include "column/map_column.h"
 #include "column/nullable_column.h"
 #include "column/struct_column.h"
-#include "column/variant_column.h"
 #include "column/type_traits.h"
+#include "column/variant_column.h"
 #include "common/compiler_util.h"
 #include "gutil/casts.h"
 #include "types/date_value.h"
@@ -680,8 +680,7 @@ Status LevelBuilder::_write_variant_column_chunk(const LevelBuilderContext& ctx,
         return Status::NotSupported("Variant parquet schema requires 'metadata' and 'value' fields");
     }
 
-    auto write_binary_leaf = [&](const ::parquet::schema::NodePtr& child_node,
-                                 bool write_metadata) -> Status {
+    auto write_binary_leaf = [&](const ::parquet::schema::NodePtr& child_node, bool write_metadata) -> Status {
         auto child_def_levels = _make_def_levels(derived_ctx, child_node, null_col, col->size());
         auto null_bitset = _make_null_bitset(derived_ctx, null_col, col->size());
 

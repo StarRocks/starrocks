@@ -376,9 +376,9 @@ arrow::Result<::parquet::schema::NodePtr> ParquetBuildHelper::make_schema_node(c
         auto metadata = ::parquet::schema::PrimitiveNode::Make(
                 "metadata", ::parquet::Repetition::REQUIRED, ::parquet::LogicalType::None(),
                 ::parquet::Type::BYTE_ARRAY, -1, file_column_id.children[0].field_id);
-        auto value = ::parquet::schema::PrimitiveNode::Make(
-                "value", ::parquet::Repetition::REQUIRED, ::parquet::LogicalType::None(),
-                ::parquet::Type::BYTE_ARRAY, -1, file_column_id.children[1].field_id);
+        auto value = ::parquet::schema::PrimitiveNode::Make("value", ::parquet::Repetition::REQUIRED,
+                                                            ::parquet::LogicalType::None(), ::parquet::Type::BYTE_ARRAY,
+                                                            -1, file_column_id.children[1].field_id);
         fields.push_back(std::move(metadata));
         fields.push_back(std::move(value));
         return ::parquet::schema::GroupNode::Make(name, rep_type, fields, ::parquet::ConvertedType::NONE,
