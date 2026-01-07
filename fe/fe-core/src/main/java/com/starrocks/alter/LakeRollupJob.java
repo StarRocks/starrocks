@@ -53,7 +53,6 @@ import com.starrocks.task.AgentTaskExecutor;
 import com.starrocks.task.AgentTaskQueue;
 import com.starrocks.task.AlterReplicaTask;
 import com.starrocks.task.CreateReplicaTask;
-import com.starrocks.thrift.TColumn;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletSchema;
@@ -68,7 +67,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
-import java.util.stream.Collectors;
 import javax.validation.constraints.NotNull;
 
 public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
@@ -298,7 +296,13 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
 
         LOG.info("previous transactions are all finished, begin to send rollup tasks. job: {}", jobId);
 
+<<<<<<< HEAD
         Map<Long, List<TColumn>> indexToThriftColumns = new HashMap<>();
+=======
+        // initially, rollup index id and rollup index meta id are the same
+        long rollupIndexId = rollupIndexMetaId;
+        Map<Long, TTabletSchema> indexToBaseTabletReadSchema = new HashMap<>();
+>>>>>>> fd186c0a6b ([BugFix] Support Fast Schema Evolution v2 for sync mv and traditional schema change in shared-data (#67443))
         final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
         try (ReadLockedDatabase db = getReadLockedDatabase(dbId)) {
             OlapTable tbl = getTableOrThrow(db, tableId);
@@ -330,6 +334,7 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
                         //todo: fix the error message.
                         throw new AlterCancelException("No alive compute node");
                     }
+<<<<<<< HEAD
 
                     TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
                     long baseIndexId = invertedIndex.getTabletMeta(baseTabletId).getIndexId();
@@ -340,11 +345,17 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
                                 .map(Column::toThrift)
                                 .collect(Collectors.toList());
                         indexToThriftColumns.put(baseIndexId, baseTColumn);
+=======
+                    TTabletSchema baseTabletReadSchema = indexToBaseTabletReadSchema.get(baseIndexMetaId);
+                    if (baseTabletReadSchema == null) {
+                        baseTabletReadSchema = SchemaInfo.fromMaterializedIndex(
+                                tbl, baseIndexMetaId, tbl.getIndexMetaByMetaId(baseIndexMetaId)).toTabletSchema();
+                        indexToBaseTabletReadSchema.put(baseIndexMetaId, baseTabletReadSchema);
+>>>>>>> fd186c0a6b ([BugFix] Support Fast Schema Evolution v2 for sync mv and traditional schema change in shared-data (#67443))
                     }
                     AlterReplicaTask rollupTask = AlterReplicaTask.rollupLakeTablet(
                             computeNode.getId(), dbId, tableId, partitionId, rollupIndexId, rollupTabletId,
-                            baseTabletId, visibleVersion, jobId,
-                            rollupJobV2Params, baseTColumn, watershedTxnId);
+                            baseTabletId, visibleVersion, jobId, rollupJobV2Params, baseTabletReadSchema, watershedTxnId);
                     rollupBatchTask.addTask(rollupTask);
                 }
                 partition.setMinRetainVersion(visibleVersion);
