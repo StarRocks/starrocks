@@ -891,6 +891,9 @@ public class Function implements Writable {
                 } else {
                     row.add("NULL");
                 }
+            } else if (this instanceof ViewFunction) {
+                row.add("View");
+                row.add("NULL");
             } else {
                 TableFunction tableFunc = (TableFunction) this;
                 row.add("Table");
