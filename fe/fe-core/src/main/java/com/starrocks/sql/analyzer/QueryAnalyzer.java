@@ -1198,9 +1198,27 @@ public class QueryAnalyzer {
                     Type commonType = leftType.matchesType(rightType) ? leftType :
                             TypeManager.getCompatibleTypeForBinary(false, leftType, rightType);
 
-                    Expr leftExpr = leftFields.get(0).getOriginExpression() != null
-                            ? leftFields.get(0).getOriginExpression()
-                            : new SlotRef(leftFields.get(0).getRelationAlias(), colName);
+                    // For chained FULL OUTER JOIN USING, check if left side has an existing COALESCE
+                    // from a previous FULL OUTER JOIN USING. If so, use it to preserve semantics:
+                    // (a FULL JOIN b USING(c)) FULL JOIN d USING(c) should create
+                    // COALESCE(COALESCE(a.c, b.c), d.c) not COALESCE(a.c, d.c)
+                    Optional<Field> existingCoalesce = leftAllFields.stream()
+                            .filter(f -> f.getName() != null && f.getName().toLowerCase().equals(lowerColName))
+                            .filter(f -> f.getRelationAlias() == null)  // Unqualified field
+                            .filter(f -> f.getOriginExpression() instanceof FunctionCallExpr)
+                            .findFirst();
+
+                    Expr leftExpr;
+                    if (existingCoalesce.isPresent()) {
+                        // Use existing COALESCE from previous FULL OUTER JOIN USING
+                        leftExpr = existingCoalesce.get().getOriginExpression();
+                    } else {
+                        // First FULL OUTER JOIN USING for this column
+                        leftExpr = leftFields.get(0).getOriginExpression() != null
+                                ? leftFields.get(0).getOriginExpression()
+                                : new SlotRef(leftFields.get(0).getRelationAlias(), colName);
+                    }
+
                     Expr rightExpr = rightFields.get(0).getOriginExpression() != null
                             ? rightFields.get(0).getOriginExpression()
                             : new SlotRef(rightFields.get(0).getRelationAlias(), colName);
@@ -1211,13 +1229,37 @@ public class QueryAnalyzer {
 
                     usingField = new Field(colName, commonType, null, coalesceExpr, true, true);
                 } else if (joinOp.isRightOuterJoin()) {
-                    // For RIGHT OUTER JOIN, create unqualified field and keep both qualified fields as hidden
-                    usingField = new Field(colName, rightFields.get(0).getType(), null,
-                            rightFields.get(0).getOriginExpression(), true, rightFields.get(0).isNullable());
+                    // For RIGHT OUTER JOIN, create unqualified field
+                    // Check if right side has an existing unqualified field (e.g., from previous FULL OUTER JOIN USING)
+                    Optional<Field> existingField = rightAllFields.stream()
+                            .filter(f -> f.getName() != null && f.getName().toLowerCase().equals(lowerColName))
+                            .filter(f -> f.getRelationAlias() == null)
+                            .findFirst();
+
+                    if (existingField.isPresent()) {
+                        // Preserve existing field's expression (e.g., COALESCE from previous FULL OUTER JOIN)
+                        usingField = new Field(colName, existingField.get().getType(), null,
+                                existingField.get().getOriginExpression(), true, existingField.get().isNullable());
+                    } else {
+                        usingField = new Field(colName, rightFields.get(0).getType(), null,
+                                rightFields.get(0).getOriginExpression(), true, rightFields.get(0).isNullable());
+                    }
                 } else {
-                    // For LEFT OUTER JOIN and INNER JOIN, create unqualified field and keep both qualified fields as hidden
-                    usingField = new Field(colName, leftFields.get(0).getType(), null,
-                            leftFields.get(0).getOriginExpression(), true, leftFields.get(0).isNullable());
+                    // For LEFT OUTER JOIN and INNER JOIN, create unqualified field
+                    // Check if left side has an existing unqualified field (e.g., from previous FULL OUTER JOIN USING)
+                    Optional<Field> existingField = leftAllFields.stream()
+                            .filter(f -> f.getName() != null && f.getName().toLowerCase().equals(lowerColName))
+                            .filter(f -> f.getRelationAlias() == null)
+                            .findFirst();
+
+                    if (existingField.isPresent()) {
+                        // Preserve existing field's expression (e.g., COALESCE from previous FULL OUTER JOIN)
+                        usingField = new Field(colName, existingField.get().getType(), null,
+                                existingField.get().getOriginExpression(), true, existingField.get().isNullable());
+                    } else {
+                        usingField = new Field(colName, leftFields.get(0).getType(), null,
+                                leftFields.get(0).getOriginExpression(), true, leftFields.get(0).isNullable());
+                    }
                 }
 
                 // Add the unqualified field (visible in SELECT *)

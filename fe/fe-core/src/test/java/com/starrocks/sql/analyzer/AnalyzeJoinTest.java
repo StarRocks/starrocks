@@ -127,6 +127,15 @@ public class AnalyzeJoinTest {
         analyzeSuccess("select * from t0 a join tnotnull b using(v1) join t0 c using(v1)");
         analyzeSuccess("select a.v1, b.v1, c.v1 from t0 a join tnotnull b using(v1) join t0 c using(v1)");
 
+        // Test chained FULL OUTER JOIN USING (preserves COALESCE semantics)
+        analyzeSuccess("select * from t0 a full join tnotnull b using(v1) full join t0 c using(v1)");
+        analyzeSuccess("select a.v1, b.v1, c.v1 from t0 a full join tnotnull b using(v1) full join t0 c using(v1)");
+
+        // Test mixed join types after FULL OUTER JOIN USING (preserves unqualified field expression)
+        analyzeSuccess("select * from t0 a full join tnotnull b using(v1) inner join t0 c using(v1)");
+        analyzeSuccess("select * from t0 a full join tnotnull b using(v1) left join t0 c using(v1)");
+        analyzeSuccess("select * from t0 a full join tnotnull b using(v1) right join t0 c using(v1)");
+
         // Test USING with aggregations
         analyzeSuccess("select count(a.v1), count(b.v1) from t0 a join tnotnull b using(v1)");
         analyzeSuccess("select a.v1, count(*) from t0 a join tnotnull b using(v1) group by a.v1");
