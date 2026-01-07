@@ -1143,11 +1143,11 @@ public class QueryAnalyzer {
          * - id → COALESCE(CAST(t1.id AS BIGINT), t2.id)
          * - name → COALESCE(t1.name, t2.name)
          * </pre>
-         * 
-         * Special Handling for FULL OUTER JOIN USING:
-         * Sets {@code fromFullOuterJoinUsing} flag to true, which affects downstream resolution:
+         *
+         * Special Handling for JOIN USING:
+         * Sets {@code fromJoinUsing} flag to true, which affects downstream resolution:
          * - Prevents ambiguity errors when unqualified USING columns are referenced in subsequent joins
-         * - The flag is propagated through join chains (e.g., t1 FULL JOIN t2 ... LEFT JOIN t3)
+         * - The flag is propagated through join chains (e.g., t1 JOIN t2 USING(col) ... LEFT JOIN t3)
          * 
          * @param joinedFields Combined fields from left.joinWith(right), containing potential duplicates for USING columns
          * @param join The JOIN relation, may or may not have USING clause
