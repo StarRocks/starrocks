@@ -56,10 +56,10 @@ TEST_F(SliceTest, testFindCharEdgeCases) {
     // Find with offset
     std::string muilti_char_text("AAABBBAAA");
     Slice multi_char(muilti_char_text);
-    EXPECT_EQ(0, multi_char.find('A', 0));  // First A
-    EXPECT_EQ(1, multi_char.find('A', 1));  // Second A
-    EXPECT_EQ(2, multi_char.find('A', 2));  // Third A
-    EXPECT_EQ(3, multi_char.find('B', 3));  // First B
+    EXPECT_EQ(0, multi_char.find('A', 0));   // First A
+    EXPECT_EQ(1, multi_char.find('A', 1));   // Second A
+    EXPECT_EQ(2, multi_char.find('A', 2));   // Third A
+    EXPECT_EQ(3, multi_char.find('B', 3));   // First B
     EXPECT_EQ(-1, multi_char.find('A', 10)); // Offset beyond size
     EXPECT_EQ(-1, multi_char.find('X'));     // Character not present
 
@@ -168,7 +168,7 @@ TEST_F(SliceTest, testFindSliceEdgeCases) {
     EXPECT_EQ(0, text4.find(pattern4, next4, 0));  // First occurrence
     EXPECT_EQ(2, text4.find(pattern4, next4, 1));  // Second occurrence
     EXPECT_EQ(4, text4.find(pattern4, next4, 3));  // Third occurrence
-    EXPECT_EQ(-1, text4.find(pattern4, next4, 5));  // Fourth occurrence
+    EXPECT_EQ(-1, text4.find(pattern4, next4, 5)); // Fourth occurrence
 
     // Invalid offset
     std::string s_text5("ABCDEF");
@@ -176,8 +176,8 @@ TEST_F(SliceTest, testFindSliceEdgeCases) {
     std::string s_pattern5("CDE");
     Slice pattern5(s_pattern5);
     auto next5 = pattern5.build_next();
-    EXPECT_EQ(-1, text5.find(pattern5, next5, -1));   // Negative offset
-    EXPECT_EQ(-1, text5.find(pattern5, next5, 100));  // Offset too large
+    EXPECT_EQ(-1, text5.find(pattern5, next5, -1));  // Negative offset
+    EXPECT_EQ(-1, text5.find(pattern5, next5, 100)); // Offset too large
 
     // Invalid next array size
     std::string s_text6("ABCDEF");
@@ -248,4 +248,4 @@ TEST_F(SliceTest, testFindSliceAdditionalCases) {
     EXPECT_EQ(-1, text6.find(pattern6, next6));
 }
 
-}
+} // namespace starrocks
