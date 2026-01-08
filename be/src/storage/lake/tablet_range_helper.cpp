@@ -122,7 +122,7 @@ StatusOr<SeekRange> TabletRangeHelper::create_seek_range_from(const TabletRangeP
     return tablet_range;
 }
 
-// TabletRangePB is always should be [lower_bound, upper_bound) which is consistent with the SstSeekRange.
+// TabletRangePB should always be [lower_bound, upper_bound) which is consistent with the SstSeekRange.
 StatusOr<SstSeekRange> TabletRangeHelper::create_sst_seek_range_from(const TabletRangePB& tablet_range_pb,
                                                                      const TabletSchemaCSPtr& tablet_schema) {
     SstSeekRange sst_seek_range;

@@ -152,6 +152,7 @@ Status LakePersistentIndexParallelCompactTask::do_run() {
 
     // adjust sst seek range by tablet range
     if (contain_shared_sstables) {
+        RETURN_IF(!_metadata->has_range(), Status::InternalError("Tablet range is not set"));
         auto tablet_schema = TabletSchema::create(_metadata->schema());
         ASSIGN_OR_RETURN(auto tablet_range,
                          TabletRangeHelper::create_sst_seek_range_from(_metadata->range(), tablet_schema));

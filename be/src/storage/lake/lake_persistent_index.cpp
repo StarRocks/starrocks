@@ -535,6 +535,7 @@ StatusOr<std::vector<KeyValueMerger::KeyValueMergerOutput>> LakePersistentIndex:
     SstSeekRange seek_range;
     // adjust sst seek range by tablet range
     if (contain_shared_sstables) {
+        RETURN_IF(!metadata->has_range(), Status::InternalError("Tablet range is not set"));
         auto tablet_schema = TabletSchema::create(metadata->schema());
         ASSIGN_OR_RETURN(seek_range, TabletRangeHelper::create_sst_seek_range_from(metadata->range(), tablet_schema));
         if (!seek_range.seek_key.empty()) {
