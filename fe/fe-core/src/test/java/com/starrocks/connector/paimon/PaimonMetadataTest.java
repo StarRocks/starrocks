@@ -1496,6 +1496,45 @@ public class PaimonMetadataTest {
         Files.delete(tmpDir);
     }
 
+    @Test
+    public void testTruncatePartitionOnUnpartitionedTable() throws Exception {
+        // Test truncate partition on unpartitioned table should throw error
+        java.nio.file.Path tmpDir = Files.createTempDirectory("paimon_truncate_unpartitioned_test");
+        Catalog catalog = CatalogFactory.createCatalog(CatalogContext.create(new Path(tmpDir.toString())));
+
+        catalog.createDatabase("test_db", true);
+        Schema schema = Schema.newBuilder()
+                .column("id", org.apache.paimon.types.DataTypes.STRING())
+                .column("name", org.apache.paimon.types.DataTypes.STRING())
+                .build();
+
+        Identifier identifier = Identifier.create("test_db", "test_table");
+        catalog.createTable(identifier, schema, true);
+
+        HdfsEnvironment environment = new HdfsEnvironment();
+        ConnectorProperties properties = new ConnectorProperties(ConnectorType.PAIMON);
+        PaimonMetadata metadata = new PaimonMetadata("paimon", environment, catalog, properties);
+
+        // Try to truncate partition on unpartitioned table
+        KeyPartitionRef keyPartitionRef = new KeyPartitionRef(
+                Lists.newArrayList("dt"),
+                Lists.newArrayList(new StringLiteral("2023-11-20")),
+                NodePosition.ZERO);
+        TableRef tableRef = new TableRef(
+                QualifiedName.of(List.of("paimon", "test_db", "test_table")),
+                null,
+                NodePosition.ZERO);
+        TruncateTablePartitionStmt truncateTableStmt = new TruncateTablePartitionStmt(tableRef, keyPartitionRef);
+
+        ExceptionChecker.expectThrowsWithMsg(StarRocksConnectorException.class,
+                "Table [test_db.test_table] is not partitioned, cannot truncate partitions",
+                () -> metadata.truncateTable(truncateTableStmt, new ConnectContext()));
+
+        catalog.dropTable(identifier, true);
+        catalog.dropDatabase("test_db", true, true);
+        Files.delete(tmpDir);
+    }
+
     private long getRowCountFromTable(org.apache.paimon.table.Table table) throws Exception {
         List<org.apache.paimon.table.source.Split> splits = table.newReadBuilder().newScan().plan().splits();
         return PaimonMetadata.getRowCount(splits);

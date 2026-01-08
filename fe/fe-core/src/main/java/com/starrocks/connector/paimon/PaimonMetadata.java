@@ -836,10 +836,14 @@ public class PaimonMetadata implements ConnectorMetadata {
         LOG.info("Truncating paimon table: {}.{}, triggered by user: {}, engine: {}, version: {}",
                 dbName, tableName, user, engineName, engineVersion);
 
-        try {
-            BatchTableCommit commit = paimonTable.newBatchWriteBuilder().newCommit();
-
+        try (BatchTableCommit commit = paimonTable.newBatchWriteBuilder().newCommit()) {
             if (truncateTableStmt instanceof TruncateTablePartitionStmt partitionStmt) {
+                // Validate that the table is actually partitioned before attempting partition operations
+                if (paimonTable.partitionKeys().isEmpty()) {
+                    throw new StarRocksConnectorException("Table [%s.%s] is not partitioned, " +
+                            "cannot truncate partitions", dbName, tableName);
+                }
+
                 KeyPartitionRef partitionRef = partitionStmt.getKeyPartitionRef();
                 Map<String, String> partitionMap = buildPartitionMap(partitionRef);
 
@@ -856,8 +860,6 @@ public class PaimonMetadata implements ConnectorMetadata {
                 LOG.info("Successfully truncated paimon table: {}.{}, user: {}, engine: {}, version: {}",
                         dbName, tableName, user, engineName, engineVersion);
             }
-
-            commit.close();
         } catch (Exception e) {
             LOG.error("Failed to truncate paimon table: {}.{}", dbName, tableName, e);
             throw new StarRocksConnectorException("Failed to truncate paimon table: %s.%s, error: %s",
