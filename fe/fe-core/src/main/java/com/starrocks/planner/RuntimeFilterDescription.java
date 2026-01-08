@@ -268,6 +268,7 @@ public class RuntimeFilterDescription {
 
     // return true if Node could accept the Filter
     public boolean canAcceptFilter(PlanNode node, RuntimeFilterPushDownContext rfPushCtx) {
+        // TODO: Support TopN runtime filter for other nodes
         if (runtimeFilterType().isTopNFilter() || runtimeFilterType().isAggInFilter()) {
             if (node instanceof ScanNode) {
                 ScanNode scanNode = (ScanNode) node;

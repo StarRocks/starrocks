@@ -193,3 +193,99 @@ select l_shipdate, l_linestatus, l_receiptdate, l_shipmode, l_comment, avg(l_ext
 select l_shipdate, l_partkey, l_linenumber, l_shipmode, l_comment, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipdate, l_partkey, l_linenumber, l_shipmode, l_comment order by l_shipdate, l_partkey, l_linenumber, l_shipmode, l_comment nulls last limit 10;
 select l_shipdate, l_partkey, l_linenumber, l_shipmode, l_comment, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipdate, l_partkey, l_linenumber, l_shipmode, l_comment order by l_shipdate, l_partkey, l_linenumber, l_shipmode, l_comment nulls last limit 100;
 select l_shipdate, l_partkey, l_linenumber, l_shipmode, l_comment, avg(l_extendedprice), avg(l_discount), sum(l_returnflag), count(l_receiptdate) from lineitem group by l_shipdate, l_partkey, l_linenumber, l_shipmode, l_comment order by l_shipdate, l_partkey, l_linenumber, l_shipmode, l_comment nulls last limit 1000;
+drop table if exists lineitem;
+
+CREATE TABLE `t0` (
+  `c0` int(11) NULL COMMENT "",
+  `c1` varchar(20) NULL COMMENT "",
+  `c2` varchar(200) NULL COMMENT "",
+  `c3` int(11) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`c0`, `c1`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`c0`, `c1`) BUCKETS 48
+PROPERTIES (
+"colocate_with" = "${uuid0}",
+"replication_num" = "1",
+"in_memory" = "false",
+"storage_format" = "DEFAULT",
+"enable_persistent_index" = "true",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+
+CREATE TABLE `t1` (
+  `c0` int(11) NULL COMMENT "",
+  `c1` varchar(20) NULL COMMENT "",
+  `c2` varchar(200) NULL COMMENT "",
+  `c3` int(11) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`c0`, `c1`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`c0`, `c1`) BUCKETS 48
+PROPERTIES (
+"colocate_with" = "${uuid0}",
+"replication_num" = "1",
+"in_memory" = "false",
+"storage_format" = "DEFAULT",
+"enable_persistent_index" = "true",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+
+CREATE TABLE `t2` (
+  `c0` int(11) NULL COMMENT "",
+  `c1` varchar(20) NULL COMMENT "",
+  `c2` varchar(200) NULL COMMENT "",
+  `c3` int(11) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`c0`, `c1`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`c0`, `c1`) BUCKETS 48
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"storage_format" = "DEFAULT",
+"enable_persistent_index" = "true",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+insert into t0 SELECT generate_series, generate_series, generate_series, generate_series FROM TABLE(generate_series(1,  40960));
+insert into t0 values (null,null,null,null);
+insert into t1 SELECT * FROM t0;
+insert into t2 SELECT * FROM t0;
+
+select l.c0, count(l.c0), avg(l.c0), count(l.c1), count(l.c0), count(r.c1) from t0 l join t1 r on l.c0 = r.c0 and l.c1 = r.c1 group by l.c0 order by l.c0 limit 1;
+select l.c0, l.c1, count(l.c0), avg(l.c0), count(l.c1), count(l.c0), count(r.c1) from t0 l join [broadcast] t1 r on l.c0 = r.c0 and l.c1 = r.c1 group by l.c0, l.c1 order by l.c0, l.c1 limit 1;
+select l.c0, l.c1, r.c1, count(l.c0), avg(l.c0), count(l.c1), count(l.c0), count(r.c1) from t0 l join [shuffle] t1 r on l.c0 = r.c0 and l.c1 = r.c1 group by l.c0, l.c1,r.c1 order by l.c0, l.c1, r.c1 limit 1;
+
+select l.c0, count(l.c0), avg(l.c0), count(l.c1), count(l.c0), count(r.c1) from t0 l join t1 r on l.c0 = r.c0 and l.c1 = r.c1 group by l.c0 order by l.c0 nulls last limit 1;
+select l.c0, l.c1, count(l.c0), avg(l.c0), count(l.c1), count(l.c0), count(r.c1) from t0 l join [broadcast] t1 r on l.c0 = r.c0 and l.c1 = r.c1 group by l.c0, l.c1 order by l.c0, l.c1 nulls last limit 1;
+select l.c0, l.c1, r.c1, count(l.c0), avg(l.c0), count(l.c1), count(l.c0), count(r.c1) from t0 l join [shuffle] t1 r on l.c0 = r.c0 and l.c1 = r.c1 group by l.c0, l.c1, r.c1 order by l.c0, l.c1, r.c1 nulls last limit 1;
+
+select l.c0, count(l.c0), avg(l.c0), count(l.c1), count(l.c0), count(r.c1) from t0 l join t1 r on l.c0 = r.c0 and l.c1 = r.c1 group by l.c0 order by l.c0 limit 10;
+select l.c0, l.c1, count(l.c0), avg(l.c0), count(l.c1), count(l.c0), count(r.c1) from t0 l join [broadcast] t1 r on l.c0 = r.c0 and l.c1 = r.c1 group by l.c0, l.c1 order by l.c0, l.c1 limit 10;
+select l.c0, l.c1, r.c1, count(l.c0), avg(l.c0), count(l.c1), count(l.c0), count(r.c1) from t0 l join [shuffle] t1 r on l.c0 = r.c0 and l.c1 = r.c1 group by l.c0, l.c1, r.c1 order by l.c0, l.c1, r.c1 limit 10;
+
+select l.c0, count(l.c0), avg(l.c0), count(l.c1), count(l.c0), count(r.c1) from t0 l join t1 r on l.c0 = r.c0 and l.c1 = r.c1 group by l.c0 order by l.c0 nulls last limit 10;
+select l.c0, l.c1, count(l.c0), avg(l.c0), count(l.c1), count(l.c0), count(r.c1) from t0 l join [broadcast] t1 r on l.c0 = r.c0 and l.c1 = r.c1 group by l.c0, l.c1 order by l.c0, l.c1 nulls last limit 10;
+select l.c0, l.c1, r.c1, count(l.c0), avg(l.c0), count(l.c1), count(l.c0), count(r.c1) from t0 l join [shuffle] t1 r on l.c0 = r.c0 and l.c1 = r.c1 group by l.c0, l.c1, r.c1 order by l.c0, l.c1, r.c1 nulls last limit 10;
+
+select l.c0, count(l.c0), avg(l.c0), count(l.c1), count(l.c0), count(r.c1) from t0 l join t2 r on l.c0 = r.c0 and l.c1 = r.c1 group by l.c0 order by l.c0 limit 1;
+select l.c0, l.c1, count(l.c0), avg(l.c0), count(l.c1), count(l.c0), count(r.c1) from t0 l join [broadcast] t2 r on l.c0 = r.c0 and l.c1 = r.c1 group by l.c0, l.c1 order by l.c0, l.c1 limit 1;
+select l.c0, l.c1, r.c1, count(l.c0), avg(l.c0), count(l.c1), count(l.c0), count(r.c1) from t0 l join [shuffle] t2 r on l.c0 = r.c0 and l.c1 = r.c1 group by l.c0, l.c1, r.c1 order by l.c0, l.c1, r.c1 limit 1;
+
+select l.c0, count(l.c0), avg(l.c0), count(l.c1), count(l.c0), count(r.c1) from t0 l join t2 r on l.c0 = r.c0 and l.c1 = r.c1 group by l.c0 order by l.c0 nulls last limit 1;
+select l.c0, l.c1, count(l.c0), avg(l.c0), count(l.c1), count(l.c0), count(r.c1) from t0 l join [broadcast] t2 r on l.c0 = r.c0 and l.c1 = r.c1 group by l.c0, l.c1 order by l.c0, l.c1 nulls last limit 1;
+select l.c0, l.c1, r.c1, count(l.c0), avg(l.c0), count(l.c1), count(l.c0), count(r.c1) from t0 l join [shuffle] t2 r on l.c0 = r.c0 and l.c1 = r.c1 group by l.c0, l.c1, r.c1 order by l.c0, l.c1, r.c1 nulls last limit 1;
+
+select l.c0, count(l.c0), avg(l.c0), count(l.c1), count(l.c0), count(r.c1) from t0 l join t2 r on l.c0 = r.c0 and l.c1 = r.c1 group by l.c0 order by l.c0 limit 10;
+select l.c0, l.c1, count(l.c0), avg(l.c0), count(l.c1), count(l.c0), count(r.c1) from t0 l join [broadcast] t2 r on l.c0 = r.c0 and l.c1 = r.c1 group by l.c0, l.c1 order by l.c0, l.c1 limit 10;
+select l.c0, l.c1, r.c1, count(l.c0), avg(l.c0), count(l.c1), count(l.c0), count(r.c1) from t0 l join [shuffle] t2 r on l.c0 = r.c0 and l.c1 = r.c1 group by l.c0, l.c1, r.c1 order by l.c0, l.c1, r.c1 limit 10;
+
+select l.c0, count(l.c0), avg(l.c0), count(l.c1), count(l.c0), count(r.c1) from t0 l join t2 r on l.c0 = r.c0 and l.c1 = r.c1 group by l.c0 order by l.c0 nulls last limit 10;
+select l.c0, l.c1, count(l.c0), avg(l.c0), count(l.c1), count(l.c0), count(r.c1) from t0 l join [broadcast] t2 r on l.c0 = r.c0 and l.c1 = r.c1 group by l.c0, l.c1 order by l.c0, l.c1 nulls last limit 10;
+select l.c0, l.c1, r.c1, count(l.c0), avg(l.c0), count(l.c1), count(l.c0), count(r.c1) from t0 l join [shuffle] t2 r on l.c0 = r.c0 and l.c1 = r.c1 group by l.c0, l.c1, r.c1 order by l.c0, l.c1, r.c1 nulls last limit 10;
+
+drop table if exists t0;
+drop table if exists t1;

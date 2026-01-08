@@ -232,7 +232,9 @@ struct AggTopNRuntimeFilterUpdaterImpl {
                     continue;
                 }
                 auto val = column_data[i];
-                if (Comp()(val, heap_builder->top())) {
+                if (heap_builder->size() < limit) {
+                    heap_builder->push(std::move(val));
+                } else if (Comp()(val, heap_builder->top())) {
                     heap_builder->replace_top(std::move(val));
                 }
             }
@@ -244,7 +246,9 @@ struct AggTopNRuntimeFilterUpdaterImpl {
                     continue;
                 }
                 auto val = column_data[i];
-                if (Comp()(val, heap_builder->top())) {
+                if (heap_builder->size() < limit) {
+                    heap_builder->push(std::move(val));
+                } else if (Comp()(val, heap_builder->top())) {
                     heap_builder->replace_top(std::move(val));
                 }
             }

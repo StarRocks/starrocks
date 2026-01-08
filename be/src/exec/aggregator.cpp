@@ -939,6 +939,9 @@ Status Aggregator::compute_batch_agg_states_with_selection(Chunk* chunk, size_t 
 }
 
 RuntimeFilter* Aggregator::build_in_filters(RuntimeState* state, RuntimeFilterBuildDescriptor* desc) {
+    if (desc->type() != TRuntimeFilterBuildType::AGG_FILTER) {
+        return nullptr;
+    }
     int expr_order = desc->build_expr_order();
     const auto& group_type_type = _group_by_types[expr_order].result_type.type;
     AggInRuntimeFilterBuilder in_builder(desc, group_type_type);
@@ -946,6 +949,9 @@ RuntimeFilter* Aggregator::build_in_filters(RuntimeState* state, RuntimeFilterBu
 }
 
 RuntimeFilter* Aggregator::build_topn_filters(RuntimeState* state, RuntimeFilterBuildDescriptor* desc) {
+    if (desc->type() != TRuntimeFilterBuildType::TOPN_FILTER) {
+        return nullptr;
+    }
     int expr_order = desc->build_expr_order();
     const auto& group_type_type = _group_by_types[expr_order].result_type.type;
     // only build when group by keys's size is less than limit
