@@ -1397,8 +1397,9 @@ public class IcebergMetadata implements ConnectorMetadata {
         }
 
         // Validate from snapshot if table has current snapshot
-        if (nativeTbl.currentSnapshot() != null) {
-            rowDelta.validateFromSnapshot(nativeTbl.currentSnapshot().snapshotId());
+        Snapshot currentSnapshot = nativeTbl.currentSnapshot();
+        if (currentSnapshot != null) {
+            rowDelta.validateFromSnapshot(currentSnapshot.snapshotId());
         }
 
         // Validate that referenced data files exist and haven't been deleted
