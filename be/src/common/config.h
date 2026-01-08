@@ -1731,4 +1731,10 @@ CONF_mInt64(split_exchanger_buffer_chunk_num, "1000");
 
 // when to split hashmap/hashset into two level hashmap/hashset, negative number means use default value
 CONF_mInt64(two_level_memory_threshold, "-1");
+
+// Enable cow optimization for column operations, used to avoid the overhead of reference counting when accessing columns.
+CONF_mBool(enable_cow_optimization, "true");
+// The diagnose level for cow optimization, 0 means no diagnose, 1 means diagnose when use_count > 1, 2 means diagnose when use_count > 2.
+CONF_Int32(cow_optimization_diagnose_level, "0");
+
 } // namespace starrocks::config
