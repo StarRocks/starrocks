@@ -421,6 +421,10 @@ The following table describes the parameter you need to configure in `MetastoreP
   - Required: No
   - Description: The password for the database.
 
+- `iceberg.catalog.jdbc.init-catalog-tables`
+  - Required: No
+  - Description: Whether to create the tables `iceberg_namespace_properties` and `iceberg_tables` for storing metadata in the database specified by `iceberg.catalog.uri`. The default value is `false`. Specify `true` if these two tables have not yet been created in the database specified by `iceberg.catalog.uri`.
+
 The following example creates an Iceberg catalog named `iceberg_jdbc` and uses JDBC as metastore:
 
 ```SQL
@@ -429,12 +433,16 @@ PROPERTIES
 (
     "type" = "iceberg",
     "iceberg.catalog.type" = "jdbc",
-    "iceberg.catalog.warehouse" = "hdfs:///jdbc_iceberg/warehouse/ ",
+    "iceberg.catalog.warehouse" = "s3://my_bucket/warehouse_location",
     "iceberg.catalog.uri" = "jdbc:mysql://ip:port/db_name",
     "iceberg.catalog.jdbc.user" = "username",
-    "iceberg.catalog.jdbc.password" = "password"
+    "iceberg.catalog.jdbc.password" = "password",
+    "aws.s3.endpoint" = "<s3_endpoint>",
+    "aws.s3.access_key" = "<iam_user_access_key>",
+    "aws.s3.secret_key" = "<iam_user_secret_key>"
 );
 ```
+If using MySQL or other custom JDBC drivers, the corresponding JAR files need to be placed in the `fe/lib` and `be/lib/jni-packages` directories.
 
 </TabItem>
 
