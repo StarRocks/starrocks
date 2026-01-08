@@ -304,6 +304,29 @@ public class VariableMgr {
             }
         }
     }
+    public void applySessionVariable(Map<String, String> modifiedVariables, SessionVariable sv) throws DdlException {
+        for (Map.Entry<String, String> entry : modifiedVariables.entrySet()) {
+            if (entry.getKey().equalsIgnoreCase(SessionVariable.WAREHOUSE_NAME)) {
+                continue;
+            }
+            SystemVariable variable = new SystemVariable(entry.getKey(), new StringLiteral(entry.getValue()));
+            setSystemVariable(sv, variable, true);
+        }
+    }
+    public void applyModifiedVariable(Map<String, SystemVariable> modifiedVariables, SessionVariable sv) {
+        // apply modified session variable
+        try {
+            for (Map.Entry<String, SystemVariable> entry : modifiedVariables.entrySet()) {
+                if (entry.getKey().equalsIgnoreCase(SessionVariable.WAREHOUSE_NAME)) {
+                    continue;
+                }
+                setSystemVariable(sv, entry.getValue(), true);
+            }
+        } catch (Exception e) {
+            LOG.warn("failed to apply user session variable", e);
+        }
+    }
+
 
     private Map<String, String> getWarehouseVariables(String warehouseName) {
         final Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseName);
@@ -346,8 +369,8 @@ public class VariableMgr {
     // Input:
     //      sessionVariable: the variable of current session
     //      setVar: variable information that needs to be set
-    public void setSystemVariable(SessionVariable sessionVariable, SystemVariable setVar, boolean onlySetSessionVar,
-                                  ConnectContext connectContext) throws DdlException {
+    public void setSystemVariable(SessionVariable sessionVariable, SystemVariable setVar, boolean onlySetSessionVar)
+            throws DdlException {
         if (SessionVariable.DEPRECATED_VARIABLES.stream().anyMatch(c -> c.equalsIgnoreCase(setVar.getVariable()))) {
             return;
         }
@@ -381,16 +404,9 @@ public class VariableMgr {
         }
 
         // set session variable
-        if (SessionVariable.WAREHOUSE_NAME.equalsIgnoreCase(attr.name()) && connectContext != null) {
-            handleSetWarehouse(connectContext, sessionVariable, ctx.getField(), parsedVal);
-        } else {
+        if (!SessionVariable.WAREHOUSE_NAME.equalsIgnoreCase(attr.name())) {
             setParsedValue(sessionVariable, ctx.getField(), parsedVal);
         }
-    }
-
-    public void setSystemVariable(SessionVariable sessionVariable, SystemVariable setVar, boolean onlySetSessionVar)
-            throws DdlException {
-        setSystemVariable(sessionVariable, setVar, onlySetSessionVar, null);
     }
 
     private void setGlobalVariableAndWriteEditLog(VarContext ctx, String name, Object parsedVal) throws DdlException {

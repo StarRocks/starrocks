@@ -1015,20 +1015,19 @@ public class ConnectContext {
     public void setCurrentWarehouse(String currentWarehouse) {
         final SessionVariable old = this.sessionVariable;
         try {
-            tryToSetCurrentWarehouse(currentWarehouse);
+            final VariableMgr variableMgr = GlobalStateMgr.getCurrentState().getVariableMgr();
+            this.sessionVariable = variableMgr.newSessionVariable();
+            applyWarehouseSessionVariable(currentWarehouse, this.sessionVariable);
         } catch (Exception e) {
             this.sessionVariable = old;
             throw e;
         }
     }
 
-    private void tryToSetCurrentWarehouse(String currentWarehouse) {
+    public void applyWarehouseSessionVariable(String warehouse, SessionVariable sv) {
         final VariableMgr variableMgr = GlobalStateMgr.getCurrentState().getVariableMgr();
-        this.sessionVariable = variableMgr.newSessionVariable();
-        this.sessionVariable.setWarehouseName(currentWarehouse);
-        // apply warehouse variable
-        variableMgr.applyWarehouseVariable(this.sessionVariable);
-        this.resetComputeResource();
+        sv.setWarehouseName(warehouse);
+        variableMgr.applyWarehouseVariable(sv);
         // apply user property variable
         try {
             String user = getQualifiedUser();
@@ -1036,7 +1035,7 @@ public class ConnectContext {
             if (user != null) {
                 final UserProperty userProperty = authMgr.getUserProperty(getQualifiedUser());
                 if (!userProperty.getSessionVariables().isEmpty()) {
-                    this.updateUserPropertySessionVariable(userProperty.getSessionVariables(), true);
+                    variableMgr.applySessionVariable(userProperty.getSessionVariables(), sv);
                 }
             }
         } catch (Exception e) {
@@ -1045,33 +1044,11 @@ public class ConnectContext {
 
         // apply modified session variable
         try {
-            for (Map.Entry<String, SystemVariable> entry : modifiedSessionVariables.entrySet()) {
-                if (entry.getKey().equalsIgnoreCase("warehouse")) {
-                    continue;
-                }
-                variableMgr.setSystemVariable(sessionVariable, entry.getValue(), true);
-            }
+            variableMgr.applyModifiedVariable(modifiedSessionVariables, sv);
         } catch (Exception e) {
             LOG.warn("failed to apply user session variable", e);
         }
-
-    }
-
-    // Note: Map sessionVariables should be CASE_INSENSITIVE
-    private void updateUserPropertySessionVariable(Map<String, String> sessionVariables, boolean ignoreWarehouse)
-            throws DdlException {
-        String warehouse = "warehouse";
-        if (!ignoreWarehouse && sessionVariables.containsKey(warehouse)) {
-            setCurrentWarehouse(sessionVariables.get(warehouse));
-        }
-
-        for (Map.Entry<String, String> entry : sessionVariables.entrySet()) {
-            if (entry.getKey().equalsIgnoreCase(warehouse)) {
-                continue;
-            }
-            SystemVariable variable = new SystemVariable(entry.getKey(), new StringLiteral(entry.getValue()));
-            globalStateMgr.getVariableMgr().setSystemVariable(sessionVariable, variable, true);
-        }
+        this.resetComputeResource();
     }
 
     public void setCurrentWarehouseId(long warehouseId) {
@@ -1597,9 +1574,13 @@ public class ConnectContext {
     // to execute SQL.
     public void updateByUserProperty(UserProperty userProperty) {
         try {
-            // set session variables
-            updateUserPropertySessionVariable(userProperty.getSessionVariables(), false);
-
+            final VariableMgr variableMgr = globalStateMgr.getVariableMgr();
+            final Map<String, String> userPropertySvs = userProperty.getSessionVariables();
+            if (userPropertySvs.containsKey(SessionVariable.WAREHOUSE_NAME)) {
+                setCurrentWarehouse(userPropertySvs.get(SessionVariable.WAREHOUSE_NAME));
+            } else {
+                variableMgr.applySessionVariable(userPropertySvs, sessionVariable);
+            }
             // set catalog and database
             String catalog = userProperty.getCatalog();
             String database = userProperty.getDatabase();
