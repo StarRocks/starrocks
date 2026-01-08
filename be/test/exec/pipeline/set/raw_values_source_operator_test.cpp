@@ -86,11 +86,9 @@ TEST_F(RawValuesSourceOperatorTest, test_set_finished_with_long_values) {
     // Call set_finished
     ASSERT_OK(op->set_finished(&_runtime_state));
     
-    // After set_finished, the operator should still report consistent state
-    // Note: set_finished doesn't change the logical state for this simple operator
-    // It's primarily for cleanup and signaling
-    EXPECT_TRUE(op->has_output());
-    EXPECT_FALSE(op->is_finished());
+    // After set_finished, the operator should report as finished
+    EXPECT_FALSE(op->has_output());
+    EXPECT_TRUE(op->is_finished());
     
     // Clean up
     op->close(&_runtime_state);
@@ -121,9 +119,9 @@ TEST_F(RawValuesSourceOperatorTest, test_set_finished_with_string_values) {
     // Call set_finished
     ASSERT_OK(op->set_finished(&_runtime_state));
     
-    // Verify state consistency
-    EXPECT_TRUE(op->has_output());
-    EXPECT_FALSE(op->is_finished());
+    // After set_finished, the operator should report as finished
+    EXPECT_FALSE(op->has_output());
+    EXPECT_TRUE(op->is_finished());
     
     // Clean up
     op->close(&_runtime_state);
@@ -195,9 +193,11 @@ TEST_F(RawValuesSourceOperatorTest, test_set_finished_with_multiple_drivers) {
     // Call set_finished on each operator
     for (auto& op : operators) {
         EXPECT_TRUE(op->has_output());
+        EXPECT_FALSE(op->is_finished());
         ASSERT_OK(op->set_finished(&_runtime_state));
-        // State should remain consistent
-        EXPECT_TRUE(op->has_output());
+        // After set_finished, operator should be finished
+        EXPECT_FALSE(op->has_output());
+        EXPECT_TRUE(op->is_finished());
     }
     
     // Clean up all operators
@@ -225,13 +225,16 @@ TEST_F(RawValuesSourceOperatorTest, test_set_finished_idempotent) {
     
     // Call set_finished multiple times
     ASSERT_OK(op->set_finished(&_runtime_state));
-    ASSERT_OK(op->set_finished(&_runtime_state));
-    ASSERT_OK(op->set_finished(&_runtime_state));
+    EXPECT_FALSE(op->has_output());
+    EXPECT_TRUE(op->is_finished());
     
-    // Should still be able to pull chunks
-    EXPECT_TRUE(op->has_output());
-    auto chunk_or = op->pull_chunk(&_runtime_state);
-    ASSERT_OK(chunk_or.status());
+    ASSERT_OK(op->set_finished(&_runtime_state));
+    EXPECT_FALSE(op->has_output());
+    EXPECT_TRUE(op->is_finished());
+    
+    ASSERT_OK(op->set_finished(&_runtime_state));
+    EXPECT_FALSE(op->has_output());
+    EXPECT_TRUE(op->is_finished());
     
     // Clean up
     op->close(&_runtime_state);
