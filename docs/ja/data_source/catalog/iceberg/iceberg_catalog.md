@@ -421,6 +421,10 @@ SHOW DATABASES FROM r2;
   - 必須：いいえ
   - 説明：データベースのパスワード。
 
+- `iceberg.catalog.jdbc.init-catalog-tables`
+  - 必須：いいえ
+  - 説明：`iceberg.catalog.uri` で指定されたデータベースにメタデータを格納するためのテーブル `iceberg_namespace_properties` および `iceberg_tables` を作成するかどうか。デフォルト値は `false` です。`iceberg.catalog.uri` で指定されたデータベースにこれらの 2 つのテーブルがまだ作成されていない場合は `true` を指定してください。
+
 次の例は、Iceberg catalog `iceberg_jdbc` を作成し、メタストアとして JDBC を使用します。
 
 ```SQL
@@ -429,12 +433,17 @@ PROPERTIES
 (
     "type" = "iceberg",
     "iceberg.catalog.type" = "jdbc",
-    "iceberg.catalog.warehouse" = "hdfs:///jdbc_iceberg/warehouse/ ",
+    "iceberg.catalog.warehouse" = "s3://my_bucket/warehouse_location",
     "iceberg.catalog.uri" = "jdbc:mysql://ip:port/db_name",
     "iceberg.catalog.jdbc.user" = "username",
-    "iceberg.catalog.jdbc.password" = "password"
+    "iceberg.catalog.jdbc.password" = "password",
+    "aws.s3.endpoint" = "<s3_endpoint>",
+    "aws.s3.access_key" = "<iam_user_access_key>",
+    "aws.s3.secret_key" = "<iam_user_secret_key>"
 );
 ```
+
+MySQL やその他のカスタム JDBC ドライバを使用する場合、対応する JAR ファイルを `fe/lib` ディレクトリおよび `be/lib/jni-packages` ディレクトリに配置する必要があります。
 
 </TabItem>
 
