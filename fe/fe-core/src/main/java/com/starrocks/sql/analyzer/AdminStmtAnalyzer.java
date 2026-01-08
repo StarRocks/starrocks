@@ -18,6 +18,8 @@ import com.google.common.base.Enums;
 import com.google.common.base.Strings;
 import com.starrocks.catalog.CatalogUtils;
 import com.starrocks.catalog.Replica;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReport;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AdminCancelRepairTableStmt;
@@ -38,6 +40,8 @@ import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.parser.NodePosition;
+
+import java.util.Map;
 
 import static com.starrocks.sql.parser.ErrorMsgProxy.PARSER_ERROR_MSG;
 
@@ -158,6 +162,21 @@ public class AdminStmtAnalyzer {
                 if (partitionRef.isTemp()) {
                     throw new SemanticException(PARSER_ERROR_MSG.unsupportedOpWithInfo("temp partitions"),
                             partitionRef.getPos());
+                }
+            }
+
+            Map<String, String> properties = adminRepairTableStmt.getProperties();
+            if (!properties.isEmpty()) {
+                boolean enforceConsistentVersion = PropertyAnalyzer.analyzeBooleanProp(
+                        properties, PropertyAnalyzer.PROPERTIES_ENFORCE_CONSISTENT_VERSION, true);
+                adminRepairTableStmt.setEnforceConsistentVersion(enforceConsistentVersion);
+
+                boolean allowEmptyTabletRecovery = PropertyAnalyzer.analyzeBooleanProp(
+                        properties, PropertyAnalyzer.PROPERTIES_ALLOW_EMPTY_TABLET_RECOVERY, false);
+                adminRepairTableStmt.setAllowEmptyTabletRecovery(allowEmptyTabletRecovery);
+
+                if (!properties.isEmpty()) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_UNKNOWN_PROPERTY, properties);
                 }
             }
             return null;
