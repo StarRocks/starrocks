@@ -214,6 +214,7 @@ const config = {
           "diff",
           "json",
           "scss",
+          "scala",
         ],
       },
       algolia: {
