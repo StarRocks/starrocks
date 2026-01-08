@@ -92,6 +92,10 @@ sidebar_label: "能力边界"
 | DeltaLake          | <ul><li>非分区表：v3.2+</li><li>分区表：待支持</li><li>多级分区：待支持</li></ul>                | 不稳定                                        |
 | JDBC               | <ul><li>非分区表：v3.0+</li><li>分区表：MySQL RangeColumn Partition v3.1.4</li></ul>    | 不稳定                                        |
 
+:::note
+外表物化视图不支持**由基表数据变更触发的**自动刷新。仅支持**异步定时**刷新和手动刷新。
+:::
+
 ## 查询改写
 
 | 特性                                | 描述                                                          | 支持版本     |
