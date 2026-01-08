@@ -46,6 +46,8 @@ public:
 
     bool is_finished() const override { return !has_output(); }
 
+    Status set_finished(RuntimeState* state) override { return Status::OK(); }
+
     StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
 
 private:

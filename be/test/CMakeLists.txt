@@ -83,6 +83,7 @@ set(EXEC_FILES
         ./exec/pipeline/local_bucket_shuffle_test.cpp
         ./exec/pipeline/mem_limited_chunk_queue_test.cpp
         ./exec/pipeline/exec_group_test.cpp
+        ./exec/pipeline/set/raw_values_source_operator_test.cpp
         ./exec/query_spill_manager_test.cpp
         ./exec/query_cache/query_cache_test.cpp
         ./exec/query_cache/transform_operator.cpp
