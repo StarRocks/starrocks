@@ -34,6 +34,7 @@ import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
 import com.starrocks.sql.ast.AlterCatalogStmt;
 import com.starrocks.sql.ast.AlterDatabaseQuotaStmt;
 import com.starrocks.sql.ast.AlterDatabaseRenameStatement;
+import com.starrocks.sql.ast.AlterDatabaseSetStmt;
 import com.starrocks.sql.ast.AlterLoadStmt;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AlterResourceGroupStmt;
@@ -1068,6 +1069,12 @@ public class RedirectStatusTest {
     @Test
     public void testAlterDatabaseQuotaStmt() {
         AlterDatabaseQuotaStmt stmt = new AlterDatabaseQuotaStmt("test_db", null, null, NodePosition.ZERO);
+        Assertions.assertEquals(RedirectStatus.FORWARD_WITH_SYNC, RedirectStatus.getRedirectStatus(stmt));
+    }
+
+    @Test
+    public void testAlterDatabaseSetStmt() {
+        AlterDatabaseSetStmt stmt = new AlterDatabaseSetStmt("test_db", new HashMap<>(), NodePosition.ZERO);
         Assertions.assertEquals(RedirectStatus.FORWARD_WITH_SYNC, RedirectStatus.getRedirectStatus(stmt));
     }
 

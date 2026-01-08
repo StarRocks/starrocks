@@ -68,6 +68,7 @@ import com.starrocks.sql.ast.AlterCatalogStmt;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterDatabaseQuotaStmt;
 import com.starrocks.sql.ast.AlterDatabaseRenameStatement;
+import com.starrocks.sql.ast.AlterDatabaseSetStmt;
 import com.starrocks.sql.ast.AlterLoadStmt;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AlterResourceGroupStmt;
@@ -638,6 +639,20 @@ public class AuthorizerStmtVisitor implements AstVisitorExtendInterface<Void, Co
                     statement.getCatalogName(),
                     context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                     PrivilegeType.DROP.name(), ObjectType.DATABASE.name(), statement.getDbName());
+        }
+        return null;
+    }
+
+    @Override
+    public Void visitAlterDatabaseSetStatement(AlterDatabaseSetStmt statement, ConnectContext context) {
+        try {
+            Authorizer.checkDbAction(context,
+                    statement.getCatalogName(), statement.getDbName(), PrivilegeType.ALTER);
+        } catch (AccessDeniedException e) {
+            AccessDeniedException.reportAccessDenied(
+                    statement.getCatalogName(),
+                    context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    PrivilegeType.ALTER.name(), ObjectType.DATABASE.name(), statement.getDbName());
         }
         return null;
     }

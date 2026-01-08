@@ -711,4 +711,14 @@ class ParserTest {
         }
     }
 
+    @Test
+    void testAlterDatabaseSet() {
+        String sql = "ALTER DATABASE db1 SET (\"storage_volume\" = \"sv1\");";
+        StatementBase stmt = SqlParser.parse(sql, new SessionVariable()).get(0);
+        Assertions.assertTrue(stmt instanceof com.starrocks.sql.ast.AlterDatabaseSetStmt);
+        com.starrocks.sql.ast.AlterDatabaseSetStmt setStmt = (com.starrocks.sql.ast.AlterDatabaseSetStmt) stmt;
+        Assertions.assertEquals("db1", setStmt.getDbName());
+        Assertions.assertEquals("sv1", setStmt.getProperties().get("storage_volume"));
+    }
+
 }
