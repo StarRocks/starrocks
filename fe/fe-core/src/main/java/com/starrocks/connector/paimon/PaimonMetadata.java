@@ -716,7 +716,9 @@ public class PaimonMetadata implements ConnectorMetadata {
                 builder.setNullsFraction(0);
             }
 
-            builder.setAverageRowSize(colStats.nullCount().isPresent() ? colStats.nullCount().getAsLong() : 1);
+            double averageRowSize = colStats.avgLen().isPresent() ?
+                    colStats.avgLen().getAsLong() : column.getType().getTypeSize();
+            builder.setAverageRowSize(Math.max(averageRowSize, 1.0));
 
             if (colStats.distinctCount().isPresent()) {
                 builder.setDistinctValuesCount(colStats.distinctCount().getAsLong());
