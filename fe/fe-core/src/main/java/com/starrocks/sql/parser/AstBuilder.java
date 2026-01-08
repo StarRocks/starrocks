@@ -1196,6 +1196,9 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
                 String functionName = defaultDescContext.qualifiedName().getText().toLowerCase();
                 defaultValueDef = new ColumnDef.DefaultValueDef(true,
                         new FunctionCallExpr(functionName, new ArrayList<>()));
+            } else if (defaultDescContext.expression() != null) {
+                Expr defaultExpr = (Expr) visit(defaultDescContext.expression());
+                defaultValueDef = new ColumnDef.DefaultValueDef(true, defaultExpr);
             }
         }
         final com.starrocks.sql.parser.StarRocksParser.GeneratedColumnDescContext generatedColumnDescContext =
@@ -5710,10 +5713,13 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
     @Override
     public ParseNode visitQueryRelation(com.starrocks.sql.parser.StarRocksParser.QueryRelationContext context) {
         List<CTERelation> withQuery = new ArrayList<>();
+        boolean hasRecursiveCTE = false;
         if (context.withClause() != null) {
             withQuery = visit(context.withClause().commonTableExpression(), CTERelation.class);
+            hasRecursiveCTE = context.withClause().RECURSIVE() != null;
         }
         QueryRelation queryRelation = (QueryRelation) visit(context.queryNoWith());
+        queryRelation.setHasRecursiveCTE(hasRecursiveCTE);
         withQuery.forEach(queryRelation::addCTERelation);
         return queryRelation;
     }
@@ -5727,6 +5733,8 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
                 normalizeName(((Identifier) visit(context.name)).getValue()),
                 getColumnNames(context.columnAliases()),
                 new QueryStatement(queryRelation),
+                false,
+                true,
                 queryRelation.getPos());
     }
 

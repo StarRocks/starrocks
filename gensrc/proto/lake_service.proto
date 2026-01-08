@@ -366,20 +366,28 @@ message GetTabletMetadatasRequest {
     optional int64 max_version = 2;
     // included
     optional int64 min_version = 3;
+    // whether check missing files, like segment, delete vector, pk index sst, cols file
+    optional bool check_missing_files = 4;
 }
 
-message TabletMetadatas {
+message TabletMetadataEntry {
+    optional TabletMetadataPB metadata = 1;
+    // segment, delete vector, cols, pk index sst file
+    repeated string missing_files = 2;
+}
+
+message TabletResult {
     optional int64 tablet_id = 1;
     // tablet-level status
     optional StatusPB status = 2;
-    // version -> tablet metadata
-    map<int64, TabletMetadataPB> version_metadatas = 3;
+    // multi-version tablet metadatas
+    repeated TabletMetadataEntry metadata_entries = 3;
 }
 
 message GetTabletMetadatasResponse {
     // rpc-level status
     optional StatusPB status = 1;
-    repeated TabletMetadatas tablet_metadatas = 2;
+    repeated TabletResult tablet_results = 2;
 }
 
 message RepairTabletMetadataRequest {

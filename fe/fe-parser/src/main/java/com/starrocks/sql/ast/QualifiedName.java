@@ -34,6 +34,10 @@ public class QualifiedName implements ParseNode {
 
     private final NodePosition pos;
 
+    public static QualifiedName of(String... originalParts) {
+        return of(List.of(originalParts), NodePosition.ZERO);
+    }
+
     public static QualifiedName of(Iterable<String> originalParts) {
         return of(originalParts, NodePosition.ZERO);
     }

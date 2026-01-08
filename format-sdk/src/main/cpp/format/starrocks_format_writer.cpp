@@ -123,15 +123,16 @@ private:
         txn_log->set_tablet_id(_tablet_id);
         txn_log->set_txn_id(_txn_id);
         auto op_write = txn_log->mutable_op_write();
-        for (auto& f : _tablet_writer->files()) {
-            if (is_segment(f.path)) {
-                op_write->mutable_rowset()->add_segments(std::move(f.path));
-                op_write->mutable_rowset()->add_segment_size(f.size.value());
-            } else if (is_del(f.path)) {
-                op_write->add_dels(std::move(f.path));
-            } else {
-                return Status::InternalError(fmt::format("Unknown file {}", f.path));
-            }
+        for (const auto& f : _tablet_writer->segments()) {
+            op_write->mutable_rowset()->add_segments(f.path);
+            op_write->mutable_rowset()->add_segment_size(f.size.value());
+            auto* segment_meta = op_write->mutable_rowset()->add_segment_metas();
+            f.sort_key_min.to_proto(segment_meta->mutable_sort_key_min());
+            f.sort_key_max.to_proto(segment_meta->mutable_sort_key_max());
+            segment_meta->set_num_rows(f.num_rows);
+        }
+        for (const auto& f : _tablet_writer->dels()) {
+            op_write->add_dels(f.path);
         }
         op_write->mutable_rowset()->set_num_rows(_tablet_writer->num_rows());
         op_write->mutable_rowset()->set_data_size(_tablet_writer->data_size());

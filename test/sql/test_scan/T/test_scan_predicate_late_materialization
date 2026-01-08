@@ -1,0 +1,197 @@
+-- name: test_predicate_late_materialization 
+drop table if exists predicate_lm_v1_sparse;
+drop table if exists predicate_lm_v2_low_full;
+drop table if exists predicate_lm_v2_low_half_null;
+drop table if exists predicate_lm_v2_high_half_null;
+drop table if exists predicate_lm_v2_high_full;
+
+-- Build deterministic tables to cover parsed-page v1/v2 plus various cardinality/null distributions.
+create table predicate_lm_v1_sparse (
+    id int,
+    col_string string,
+    col_int int
+)
+duplicate key(id)
+distributed by hash(id)
+properties(
+    "replication_num" = "1"
+);
+
+create table predicate_lm_v2_low_full (
+    id int,
+    col_string string not null,
+    col_int int
+)
+duplicate key(id)
+distributed by hash(id)
+properties(
+    "replication_num" = "1"
+);
+
+create table predicate_lm_v2_low_half_null (
+    id int,
+    col_string string,
+    col_int int
+)
+duplicate key(id)
+distributed by hash(id)
+properties(
+    "replication_num" = "1"
+);
+
+create table predicate_lm_v2_high_half_null (
+    id int,
+    col_string string,
+    col_int int
+)
+duplicate key(id)
+distributed by hash(id)
+properties(
+    "replication_num" = "1"
+);
+
+create table predicate_lm_v2_high_full (
+    id int,
+    col_string string not null,
+    col_int int
+)
+duplicate key(id)
+distributed by hash(id)
+properties(
+    "replication_num" = "1"
+);
+
+-- More than 80% NULL rows to emulate parsed page v1.
+insert into predicate_lm_v1_sparse
+select id,
+       if(id <= 5900, NULL, if(id % 2 = 0, 'xxx', 'abc')),
+       id
+from table(generate_series(1, 6000)) gen(id);
+
+-- Low cardinality string column without NULL values.
+insert into predicate_lm_v2_low_full
+select id,
+       if(id % 4 = 0, 'abc', 'xxx'),
+       id
+from table(generate_series(1, 8000)) gen(id);
+
+-- Half NULL, low cardinality strings.
+insert into predicate_lm_v2_low_half_null
+select id,
+       case
+           when id % 2 then NULL
+           when id % 5 = 0 then 'abc'
+           else 'xxx'
+       end,
+       id
+from table(generate_series(1, 8000)) gen(id);
+
+-- High cardinality strings with 50% NULL coverage.
+insert into predicate_lm_v2_high_half_null
+select id,
+       case
+           when id % 2  then NULL
+           when id % 177 then 'xxx'
+           else concat('value_', id)
+       end,
+       id
+from table(generate_series(1, 12000)) gen(id);
+
+-- High cardinality strings without NULL values.
+insert into predicate_lm_v2_high_full
+select id,
+       case
+           when id % 177 then 'xxx'
+           else concat('value_', id)
+       end,
+       id
+from table(generate_series(1, 9000)) gen(id);
+
+sync;
+
+-- Scenario 1: parse v1 format, >80% NULL, low cardinality column
+set enable_predicate_col_late_materialize = true;
+select count(*) from predicate_lm_v1_sparse where col_string like 'xxx';
+select count(*) from predicate_lm_v2_high_full where col_string like 'xxx' and col_int % 2 = 0;
+set enable_predicate_col_late_materialize = false;
+select count(*) from predicate_lm_v1_sparse where col_string like 'xxx';
+select count(*) from predicate_lm_v2_high_full where col_string like 'xxx' and col_int % 2 = 0;
+
+-- Scenario 2: parse v2 format, low cardinality column, no NULL values
+set enable_predicate_col_late_materialize = true;
+select count(*) from predicate_lm_v2_low_full where col_string like 'xxx';
+select count(*) from predicate_lm_v2_high_full where col_string like 'xxx' and col_int % 2 = 0;
+set enable_predicate_col_late_materialize = false;
+select count(*) from predicate_lm_v2_low_full where col_string like 'xxx';
+select count(*) from predicate_lm_v2_high_full where col_string like 'xxx' and col_int % 2 = 0;
+
+
+-- Scenario 3: parse v2 format, low cardinality column, half NULL values
+set enable_predicate_col_late_materialize = true;
+select count(*) from predicate_lm_v2_low_half_null where col_string like 'xxx';
+select count(*) from predicate_lm_v2_high_full where col_string like 'xxx' and col_int % 2 = 0;
+
+set enable_predicate_col_late_materialize = false;
+select count(*) from predicate_lm_v2_low_half_null where col_string like 'xxx';
+select count(*) from predicate_lm_v2_high_full where col_string like 'xxx' and col_int % 2 = 0;
+
+
+-- Scenario 4: parse v2 format, disable low cardinality optimization manually
+set cbo_enable_low_cardinality_optimize = false;
+set enable_predicate_col_late_materialize = true;
+select count(*) from predicate_lm_v2_low_half_null where col_string like 'xxx';
+select count(*) from predicate_lm_v2_high_full where col_string like 'xxx' and col_int % 2 = 0;
+
+set enable_predicate_col_late_materialize = false;
+select count(*) from predicate_lm_v2_low_half_null where col_string like 'xxx';
+select count(*) from predicate_lm_v2_high_full where col_string like 'xxx' and col_int % 2 = 0;
+
+-- Scenario 5: parse v2 format, high cardinality column, half NULL values
+set enable_predicate_col_late_materialize = true;
+select count(*) from predicate_lm_v2_high_half_null where col_string like 'xxx';
+select count(*) from predicate_lm_v2_high_full where col_string like 'xxx' and col_int % 2 = 0;
+select count(*) from predicate_lm_v2_high_full where col_string != '' and col_int % 2 = 0;
+
+set enable_predicate_col_late_materialize = false;
+select count(*) from predicate_lm_v2_high_half_null where col_string like 'xxx';
+select count(*) from predicate_lm_v2_high_full where col_string like 'xxx' and col_int % 2 = 0;
+select count(*) from predicate_lm_v2_high_full where col_string != '' and col_int % 2 = 0;
+
+
+-- Scenario 6: parse v2 format, high cardinality column, no NULL values
+set enable_predicate_col_late_materialize = true;
+select count(*) from predicate_lm_v2_high_full where col_string like 'xxx';
+select count(*) from predicate_lm_v2_high_full where col_string like 'xxx' and col_int % 2 = 0;
+select count(*) from predicate_lm_v2_high_full where col_string != '' and col_int % 2 = 0;
+
+
+set enable_predicate_col_late_materialize = false;
+select count(*) from predicate_lm_v2_high_full where col_string like 'xxx';
+select count(*) from predicate_lm_v2_high_full where col_string like 'xxx' and col_int % 2 = 0;
+select count(*) from predicate_lm_v2_high_full where col_string != '' and col_int % 2 = 0;
+
+
+set enable_predicate_col_late_materialize = true;
+-- Scenario 7: low cardinality column, predicate order col_int then col_string
+set enable_predicate_col_late_materialize = true;
+select count(*) from predicate_lm_v2_low_full where col_int > 0 and col_string = 'abc';
+
+-- Scenario 8: join, col_string and col_int in ON clause, predicate order col_int then col_string
+select count(*) 
+from predicate_lm_v2_low_full t1 
+join predicate_lm_v2_low_full t2 on t1.col_int = t2.col_int and t1.col_string = t2.col_string 
+where t1.col_int > 0 and t1.col_string = 'abc';
+
+set enable_predicate_col_late_materialize = false;
+select count(*) from predicate_lm_v2_low_full where col_int > 0 and col_string = 'abc';
+select count(*) 
+from predicate_lm_v2_low_full t1 
+join predicate_lm_v2_low_full t2 on t1.col_int = t2.col_int and t1.col_string = t2.col_string 
+where t1.col_int > 0 and t1.col_string = 'abc';
+
+
+drop table if exists predicate_lm_v1_sparse;
+drop table if exists predicate_lm_v2_low_full;
+drop table if exists predicate_lm_v2_low_half_null;
+drop table if exists predicate_lm_v2_high_half_null;
+drop table if exists predicate_lm_v2_high_full;

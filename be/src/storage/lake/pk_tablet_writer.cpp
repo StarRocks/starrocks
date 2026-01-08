@@ -84,7 +84,7 @@ Status HorizontalPkTabletWriter::flush_del_file(const Column& deletes) {
     RETURN_IF_ERROR(serde::ColumnArraySerde::serialize(deletes, content.data()));
     RETURN_IF_ERROR(of->append(Slice(content.data(), content.size())));
     RETURN_IF_ERROR(of->close());
-    _files.emplace_back(FileInfo{std::move(name), content.size(), encryption_meta});
+    _dels.emplace_back(FileInfo{std::move(name), content.size(), encryption_meta});
     return Status::OK();
 }
 
@@ -112,14 +112,18 @@ Status HorizontalPkTabletWriter::flush_segment_writer(SegmentPB* segment) {
         auto* partial_rowset_footer = _rowset_txn_meta->add_partial_rowset_footers();
         partial_rowset_footer->set_position(footer_position);
         partial_rowset_footer->set_size(segment_size - footer_position);
+        SegmentFileInfo& segment_file_info = _segments.emplace_back();
         const std::string& segment_path = _seg_writer->segment_path();
-        std::string segment_name = std::string(basename(segment_path));
-        auto file_info = FileInfo{segment_name, segment_size, _seg_writer->encryption_meta()};
+        segment_file_info.path = std::string(basename(segment_path));
+        segment_file_info.size = segment_size;
+        segment_file_info.encryption_meta = _seg_writer->encryption_meta();
         if (_seg_writer->bundle_file_offset() >= 0) {
             // This is a shared data file.
-            file_info.bundle_file_offset = _seg_writer->bundle_file_offset();
+            segment_file_info.bundle_file_offset = _seg_writer->bundle_file_offset();
         }
-        _files.emplace_back(file_info);
+        segment_file_info.sort_key_min = _seg_writer->get_sort_key_min();
+        segment_file_info.sort_key_max = _seg_writer->get_sort_key_max();
+        segment_file_info.num_rows = _seg_writer->num_rows();
         _data_size += segment_size;
         collect_writer_stats(_stats, _seg_writer.get());
         _stats.segment_count++;
@@ -133,8 +137,10 @@ Status HorizontalPkTabletWriter::flush_segment_writer(SegmentPB* segment) {
         _seg_writer.reset();
     }
     if (_pk_sst_writer && _pk_sst_writer->has_file_info()) {
-        ASSIGN_OR_RETURN(auto sst_file_info, _pk_sst_writer->flush_sst_writer());
+        ASSIGN_OR_RETURN(auto sst_ret, _pk_sst_writer->flush_sst_writer());
+        auto [sst_file_info, sst_range] = std::move(sst_ret);
         _ssts.emplace_back(sst_file_info);
+        _sst_ranges.emplace_back(sst_range);
     }
     return Status::OK();
 }
@@ -199,8 +205,10 @@ Status VerticalPkTabletWriter::write_columns(const Chunk& data, const std::vecto
 Status VerticalPkTabletWriter::finish(SegmentPB* segment) {
     for (auto& sst_writer : _pk_sst_writers) {
         if (sst_writer->has_file_info()) {
-            ASSIGN_OR_RETURN(auto sst_file_info, sst_writer->flush_sst_writer());
+            ASSIGN_OR_RETURN(auto sst_ret, sst_writer->flush_sst_writer());
+            auto [sst_file_info, sst_range] = std::move(sst_ret);
             _ssts.emplace_back(sst_file_info);
+            _sst_ranges.emplace_back(sst_range);
         }
     }
     _pk_sst_writers.clear();
