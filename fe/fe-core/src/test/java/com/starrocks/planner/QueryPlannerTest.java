@@ -106,6 +106,7 @@ public class QueryPlannerTest {
         // Make each case independent so running the whole class/suite doesn't leak state between cases.
         clearSqlBlackList();
         clearSqlDigestBlackList();
+        connectContext.getState().setError("");
     }
 
     @AfterEach
@@ -115,6 +116,7 @@ public class QueryPlannerTest {
         // Reset configs to avoid affecting other test classes in the same JVM.
         setFrontendConfig("enable_sql_blacklist", "false");
         setFrontendConfig("enable_sql_digest", "false");
+        connectContext.getState().setError("");
     }
 
     private static void clearSqlBlackList() {
