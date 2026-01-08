@@ -65,7 +65,10 @@ public:
     DISALLOW_COPY_AND_MOVE(TabletWriterSink);
 
     // Write chunk directly to segment
-    // NOTE: slot_idx is not used here as serial flush ensures correct ordering
+    // @param slot_idx: slot index for tracking flush order in parallel flush scenarios.
+    //                  Default -1 means slot tracking is not needed (slot_idx is ignored here).
+    //                  In TabletWriterSink, serial flush mode is used, so data is written to
+    //                  segments in order and slot_idx tracking is unnecessary.
     Status flush_chunk(const Chunk& chunk, starrocks::SegmentPB* segment = nullptr, bool eos = false,
                        int64_t* flush_data_size = nullptr, int64_t slot_idx = -1) override {
         RETURN_IF_ERROR(_writer->write(chunk, segment, eos));
@@ -73,7 +76,10 @@ public:
     }
 
     // Write chunk with deletes directly to segment
-    // NOTE: slot_idx is not used here as serial flush ensures correct ordering
+    // @param slot_idx: slot index for tracking flush order in parallel flush scenarios.
+    //                  Default -1 means slot tracking is not needed (slot_idx is ignored here).
+    //                  In TabletWriterSink, serial flush mode is used, so data is written to
+    //                  segments in order and slot_idx tracking is unnecessary.
     Status flush_chunk_with_deletes(const Chunk& upserts, const Column& deletes,
                                     starrocks::SegmentPB* segment = nullptr, bool eos = false,
                                     int64_t* flush_data_size = nullptr, int64_t slot_idx = -1) override {
@@ -366,7 +372,8 @@ Status DeltaWriterImpl::build_schema_and_writer() {
                     ThreadPool::ExecutionMode::SERIAL);
         }
         if (_flush_token == nullptr) {
-            return Status::InternalError("fail to create flush token");
+            return Status::InternalError(fmt::format(
+                    "Failed to create flush token for delta writer, tablet_id={}, txn_id={}", _tablet_id, _txn_id));
         }
         _write_schema_for_mem_table = MemTable::convert_schema(_write_schema, _slots);
 
@@ -472,7 +479,7 @@ inline Status DeltaWriterImpl::flush() {
                                                                                     NANOSECS_PER_USEC);
     });
     if (_flush_token == nullptr) {
-        // This will happen will flush happen before write.
+        // This will happen when flush is invoked before any write.
         return Status::OK();
     }
     return _flush_token->wait();
