@@ -86,8 +86,18 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
     protected void copyAlterMetaBaseFields(LakeTableAlterMetaJobBase copy) {
         copy.watershedTxnId = this.watershedTxnId;
         copy.watershedGtid = this.watershedGtid;
-        copy.physicalPartitionIndexMap = this.physicalPartitionIndexMap;
-        copy.commitVersionMap = this.commitVersionMap;
+        if (this.physicalPartitionIndexMap != null) {
+            copy.physicalPartitionIndexMap = HashBasedTable.create();
+            copy.physicalPartitionIndexMap.putAll(this.physicalPartitionIndexMap);
+        } else {
+            copy.physicalPartitionIndexMap = null;
+        }
+        if (this.commitVersionMap != null) {
+            copy.commitVersionMap = new HashMap<>();
+            copy.commitVersionMap.putAll(this.commitVersionMap);
+        } else {
+            copy.commitVersionMap = null;
+        }
     }
 
     @Override

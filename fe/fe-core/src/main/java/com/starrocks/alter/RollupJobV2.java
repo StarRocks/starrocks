@@ -394,16 +394,15 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
         Preconditions.checkState(tbl.getState() == OlapTableState.ROLLUP);
         try (AutoCloseableLock ignore =
                 new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(tbl.getId()), LockType.WRITE)) {
-            addRollupIndexToCatalog(tbl);
+            this.watershedTxnId =
+                    GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getTransactionIDGenerator().getNextTransactionId();
+            final OlapTable finalTbl = tbl;
+            persistStateChange(this, JobState.WAITING_TXN, () -> addRollupIndexToCatalog(finalTbl));
         }
 
-        this.watershedTxnId =
-                GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getTransactionIDGenerator().getNextTransactionId();
         span.setAttribute("watershedTxnId", this.watershedTxnId);
         span.addEvent("setWaitingTxn");
 
-        // write edit log
-        persistStateChange(this, JobState.WAITING_TXN);
         LOG.info("transfer rollup job {} state to {}, watershed txn_id: {}", jobId, this.jobState, watershedTxnId);
     }
 
@@ -727,13 +726,12 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
                 } // end for tablets
             } // end for partitions
 
-            onFinished(tbl);
+            this.finishedTimeMs = System.currentTimeMillis();
+            persistStateChange(this, JobState.FINISHED, () -> onFinished(tbl));
         }
 
-        this.finishedTimeMs = System.currentTimeMillis();
-
-        persistStateChange(this, JobState.FINISHED);
         LOG.info("rollup job finished: {}", jobId);
+
         this.span.end();
     }
 
@@ -786,12 +784,12 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
         if (jobState.isFinalState()) {
             return false;
         }
-        cancelInternal();
 
         this.errMsg = errMsg;
         this.finishedTimeMs = System.currentTimeMillis();
+        persistStateChange(this, JobState.CANCELLED, this::cancelInternal);
+
         LOG.info("cancel {} job {}, err: {}", this.type, jobId, errMsg);
-        persistStateChange(this, JobState.CANCELLED);
         span.setStatus(StatusCode.ERROR, errMsg);
         span.end();
         return true;

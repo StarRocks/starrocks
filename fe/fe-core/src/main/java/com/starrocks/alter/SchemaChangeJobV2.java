@@ -108,6 +108,7 @@ import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletSchema;
 import com.starrocks.thrift.TTabletType;
 import com.starrocks.thrift.TTaskType;
+import io.opentelemetry.api.trace.StatusCode;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -311,7 +312,8 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
      * clear some date structure in this job to save memory
      * these data structures must not used in getInfo method
      */
-    protected void pruneMeta() {
+    @Override
+    public void pruneMeta() {
         physicalPartitionIndexTabletMap.clear();
         physicalPartitionIndexMap.clear();
         indexSchemaMap.clear();
@@ -827,6 +829,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                 }
             } // end for partitions
 
+            this.finishedTimeMs = System.currentTimeMillis();
             // all partitions are good
             persistStateChange(this, JobState.FINISHED, true, () -> onFinished(tbl));
 
@@ -835,7 +838,6 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
 
             pruneMeta();
             tbl.onReload();
-            this.finishedTimeMs = System.currentTimeMillis();
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.WRITE);
         }
@@ -1010,6 +1012,8 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
 
         pruneMeta();
         LOG.info("cancel {} job {}, err: {}", this.type, jobId, errMsg);
+        span.setStatus(StatusCode.ERROR, errMsg);
+        span.end();
         return true;
     }
 

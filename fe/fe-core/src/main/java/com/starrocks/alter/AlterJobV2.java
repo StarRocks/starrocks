@@ -246,8 +246,8 @@ public abstract class AlterJobV2 implements Writable {
     public static void persistStateChange(AlterJobV2 job, JobState newState, boolean pruneMeta, Runnable applier) {
         AlterJobV2 persistJob = job.copyForPersist();
         persistJob.setJobState(newState);
-        if (pruneMeta && persistJob instanceof SchemaChangeJobV2) {
-            ((SchemaChangeJobV2) persistJob).pruneMeta();
+        if (pruneMeta) {
+            persistJob.pruneMeta();
         }
         GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(persistJob, wal -> {
             if (applier != null) {
@@ -457,5 +457,8 @@ public abstract class AlterJobV2 implements Writable {
 
     public Map<Long, MaterializedIndex> getPartitionIdToRollupIndex() {
         return Collections.emptyMap();
+    }
+
+    public void pruneMeta() {
     }
 }

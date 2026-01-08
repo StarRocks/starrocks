@@ -602,12 +602,12 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
         if (jobState.isFinalState()) {
             return false;
         }
-        cancelInternal();
 
         this.errMsg = errMsg;
         this.finishedTimeMs = System.currentTimeMillis();
+        persistStateChange(this, JobState.CANCELLED, this::cancelInternal);
+
         LOG.info("cancel {} job {}, err: {}", this.type, jobId, errMsg);
-        persistStateChange(this, JobState.CANCELLED);
         span.setStatus(StatusCode.ERROR, errMsg);
         span.end();
         return true;

@@ -1826,15 +1826,6 @@ public class EditLog {
         logJsonObject(OperationType.OP_ALTER_JOB_V2, alterJob, walApplier);
     }
 
-    public JournalTask logAlterJobNoWait(AlterJobV2 alterJob) {
-        return submitLog(OperationType.OP_ALTER_JOB_V2, new Writable() {
-            @Override
-            public void write(DataOutput out) throws IOException {
-                Text.writeString(out, GsonUtils.GSON.toJson(alterJob));
-            }
-        }, -1);
-    }
-
     public void logBatchAlterJob(BatchAlterJobPersistInfo batchAlterJobV2, WALApplier walApplier) {
         logJsonObject(OperationType.OP_BATCH_ADD_ROLLUP_V2, batchAlterJobV2, walApplier);
     }
