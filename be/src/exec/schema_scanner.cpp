@@ -246,6 +246,8 @@ std::unique_ptr<SchemaScanner> SchemaScanner::create(TSchemaTableType::type type
         return std::make_unique<WarehouseMetricsScanner>();
     case TSchemaTableType::SCH_WAREHOUSE_QUERIES:
         return std::make_unique<WarehouseQueriesScanner>();
+    case TSchemaTableType::SCH_TABLET_RESHARD_JOBS:
+        return std::make_unique<SchemaTabletReshardJobsScanner>();
     default:
         return std::make_unique<SchemaDummyScanner>();
     }
