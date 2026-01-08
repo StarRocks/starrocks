@@ -406,12 +406,9 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
     }
 
     public MaterializedIndex getLatestBaseIndex() {
-        Preconditions.checkState(indexMetaIdToIndexIds.containsKey(baseIndexMetaId),
-                String.format("base index meta id %d not exist", baseIndexMetaId));
-
         List<Long> indexIds = indexMetaIdToIndexIds.get(baseIndexMetaId);
-        Preconditions.checkState(!indexIds.isEmpty(), String.format("base index list is empty. meta id: %d", baseIndexMetaId));
-
+        Preconditions.checkState(indexIds != null && !indexIds.isEmpty(),
+                String.format("base index meta id %d not exist or index list is empty", baseIndexMetaId));
         return idToVisibleIndex.get(indexIds.get(indexIds.size() - 1));
     }
 
@@ -455,13 +452,15 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
         List<Long> indexIds = indexMetaIdToIndexIds.remove(indexMetaId);
         if (indexIds != null) {
             for (long indexId : indexIds) {
-                if (idToVisibleIndex.containsKey(indexId)) {
-                    indices.add(idToVisibleIndex.remove(indexId));
-                } else {
-                    MaterializedIndex index = idToShadowIndex.remove(indexId);
-                    if (index != null) {
-                        indices.add(index);
-                    }
+                MaterializedIndex index = idToVisibleIndex.remove(indexId);
+                if (index != null) {
+                    indices.add(index);
+                    continue;
+                }
+
+                index = idToShadowIndex.remove(indexId);
+                if (index != null) {
+                    indices.add(index);
                 }
             }
         }
@@ -538,26 +537,17 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
     }
 
     public MaterializedIndex getLatestIndex(long indexMetaId) {
-        if (!indexMetaIdToIndexIds.containsKey(indexMetaId)) {
-            return null;
-        }
-
         List<Long> indexIds = indexMetaIdToIndexIds.get(indexMetaId);
-        if (indexIds.isEmpty()) {
+        if (indexIds == null || indexIds.isEmpty()) {
             return null;
         }
-
-        long indexId = indexIds.get(indexIds.size() - 1);
-        if (idToVisibleIndex.containsKey(indexId)) {
-            return idToVisibleIndex.get(indexId);
-        } else {
-            return idToShadowIndex.get(indexId);
-        }
+        return getIndex(indexIds.get(indexIds.size() - 1));
     }
 
     public MaterializedIndex getIndex(long indexId) {
-        if (idToVisibleIndex.containsKey(indexId)) {
-            return idToVisibleIndex.get(indexId);
+        MaterializedIndex index = idToVisibleIndex.get(indexId);
+        if (index != null) {
+            return index;
         } else {
             return idToShadowIndex.get(indexId);
         }
@@ -734,10 +724,8 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
             }
             for (Entry<Long, MaterializedIndex> entry : idToVisibleIndex.entrySet()) {
                 long key = entry.getKey();
-                if (!partition.idToVisibleIndex.containsKey(key)) {
-                    return false;
-                }
-                if (!entry.getValue().equals(partition.idToVisibleIndex.get(key))) {
+                MaterializedIndex index = partition.idToVisibleIndex.get(key);
+                if (index == null || !entry.getValue().equals(index)) {
                     return false;
                 }
             }
@@ -754,8 +742,9 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
             List<Long> indexIds = entry.getValue();
             List<MaterializedIndex> indices = indexMetaId == baseIndexMetaId ? baseIndices : rollupIndices;
             for (Long indexId : indexIds) {
-                if (idToVisibleIndex.containsKey(indexId)) {
-                    indices.add(idToVisibleIndex.get(indexId));
+                MaterializedIndex index = idToVisibleIndex.get(indexId);
+                if (index != null) {
+                    indices.add(index);
                 }
             }
         }
