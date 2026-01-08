@@ -19,7 +19,13 @@
 #include <type_traits>
 #include <vector>
 
+<<<<<<< HEAD
+=======
+#include "common/config.h"
+#include "gutil/casts.h"
+>>>>>>> d1e3fe003c ([BugFix] Cherry pick some cow bugfix (backport #66805) (#67574))
 #include "logging.h"
+#include "util/stack_util.h"
 
 namespace starrocks {
 
@@ -255,7 +261,18 @@ public:
 
     // cast the data as mutable ptr if it's mutable no matter it's mutable or immutable.
     // NOTE:  ptr's use_count will be added by 1, and this is not safe because the data may be shared with others.
-    MutablePtr as_mutable_ptr() const { return const_cast<Cow*>(this)->get_ptr(); }
+    MutablePtr as_mutable_ptr() const {
+        if (config::cow_optimization_diagnose_level > 0) {
+            auto ref_count = this->use_count();
+            if (ref_count > config::cow_optimization_diagnose_level) {
+                LOG(WARNING) << "[Cow] as_mutable_ptr() called on heavily shared object (use_count=" << ref_count
+                             << "). This may be unsafe! Consider using try_mutate() for proper COW semantics.\n"
+                             << ": stack = \n"
+                             << starrocks::get_stack_trace();
+            }
+        }
+        return const_cast<Cow*>(this)->get_ptr();
+    }
 
 private:
     AtomicCounter _use_count;
