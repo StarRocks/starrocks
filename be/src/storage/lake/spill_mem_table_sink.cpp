@@ -190,6 +190,7 @@ Status SpillMemTableSink::flush_chunk_with_deletes(const Chunk& upserts, const C
     return Status::OK();
 }
 
+<<<<<<< HEAD
 class BlockGroupIterator : public ChunkIterator {
 public:
     BlockGroupIterator(Schema schema, spill::Serde& serde, const std::vector<spill::BlockPtr>& blocks)
@@ -216,9 +217,40 @@ public:
             } else {
                 return st.status();
             }
+=======
+Status SpillMemTableSink::merge_blocks_to_segments_parallel(bool do_agg, const SchemaPtr& schema) {
+    auto token =
+            StorageEngine::instance()->load_spill_block_merge_executor()->create_tablet_internal_parallel_merge_token();
+    // 1. Get all spill block iterators
+    ASSIGN_OR_RETURN(auto spill_block_iterator_tasks,
+                     _load_chunk_spiller->generate_spill_block_input_tasks(config::load_spill_max_merge_bytes,
+                                                                           config::load_spill_memory_usage_per_merge,
+                                                                           true /* do_sort */, do_agg));
+    // 2. Prepare all tablet writers
+    std::vector<std::unique_ptr<TabletWriter>> writers;
+    for (size_t i = 0; i < spill_block_iterator_tasks.iterators.size(); ++i) {
+        ASSIGN_OR_RETURN(auto writer, _writer->clone());
+        writers.push_back(std::move(writer));
+    }
+    // 3. Prepare all parallel merge tasks
+    QuitFlag quit_flag;
+    std::vector<std::shared_ptr<TabletInternalParallelMergeTask>> tasks;
+    for (size_t i = 0; i < spill_block_iterator_tasks.iterators.size(); ++i) {
+        tasks.push_back(std::make_shared<TabletInternalParallelMergeTask>(
+                writers[i].get(), spill_block_iterator_tasks.iterators[i].get(), _merge_mem_tracker.get(), schema.get(),
+                i, &quit_flag, get_spiller()->metrics().write_io_timer));
+    }
+    // 4. Submit all tasks to thread pool
+    for (size_t i = 0; i < spill_block_iterator_tasks.iterators.size(); ++i) {
+        auto submit_st = token->submit(tasks[i]);
+        if (!submit_st.ok()) {
+            tasks[i]->update_status(submit_st);
+            break;
+>>>>>>> 3a42d1171e ([Enhancement] Improve the collection and display of load spill metrics in the load profile (#67527))
         }
         return Status::EndOfFile("End of block group");
     }
+<<<<<<< HEAD
 
     void close() override {}
 
@@ -230,6 +262,46 @@ private:
     const std::vector<spill::BlockPtr>& _blocks;
     size_t _block_idx = 0;
 };
+=======
+    token->wait();
+    // 5. check all task status
+    for (const auto& task : tasks) {
+        RETURN_IF_ERROR(task->status());
+    }
+    // 6. merge all writers' result
+    RETURN_IF_ERROR(_writer->merge_other_writers(writers));
+
+    COUNTER_UPDATE(ADD_COUNTER(_load_chunk_spiller->profile(), "SpillMergeInputGroups", TUnit::UNIT),
+                   spill_block_iterator_tasks.group_count);
+    COUNTER_UPDATE(ADD_COUNTER(_load_chunk_spiller->profile(), "SpillMergeInputBytes", TUnit::BYTES),
+                   spill_block_iterator_tasks.total_block_bytes);
+    COUNTER_UPDATE(ADD_COUNTER(_load_chunk_spiller->profile(), "SpillMergeCount", TUnit::UNIT),
+                   spill_block_iterator_tasks.iterators.size());
+    return Status::OK();
+}
+
+Status SpillMemTableSink::merge_blocks_to_segments_serial(bool do_agg, const SchemaPtr& schema) {
+    auto char_field_indexes = ChunkHelper::get_char_field_indexes(*schema);
+    auto* spiller = get_spiller();
+    auto write_func = [&char_field_indexes, schema, spiller, this](Chunk* chunk) {
+        SCOPED_TIMER(spiller->metrics().write_io_timer);
+        ChunkHelper::padding_char_columns(char_field_indexes, *schema, _writer->tablet_schema(), chunk);
+        return _writer->write(*chunk, nullptr);
+    };
+    auto flush_func = [spiller, this]() {
+        SCOPED_TIMER(spiller->metrics().write_io_timer);
+        return _writer->flush();
+    };
+
+    Status st = _load_chunk_spiller->merge_write(config::load_spill_max_merge_bytes,
+                                                 config::load_spill_memory_usage_per_merge, true /* do_sort */, do_agg,
+                                                 write_func, flush_func);
+    LOG_IF(WARNING, !st.ok()) << fmt::format(
+            "SpillMemTableSink merge blocks to segment failed, txn:{} tablet:{} msg:{}", _writer->txn_id(),
+            _writer->tablet_id(), st.message());
+    return st;
+}
+>>>>>>> 3a42d1171e ([Enhancement] Improve the collection and display of load spill metrics in the load profile (#67527))
 
 Status SpillMemTableSink::merge_blocks_to_segments() {
     TEST_SYNC_POINT_CALLBACK("SpillMemTableSink::merge_blocks_to_segments", this);
@@ -296,8 +368,17 @@ Status SpillMemTableSink::merge_blocks_to_segments() {
         total_block_bytes += group.data_size();
         total_blocks += group.blocks().size();
     }
+<<<<<<< HEAD
     if (merge_inputs.size() > 0) {
         RETURN_IF_ERROR(merge_func());
+=======
+
+    SCOPED_TIMER(ADD_TIMER(_load_chunk_spiller->profile(), "SpillMergeTime"));
+    if (config::enable_load_spill_parallel_merge) {
+        return merge_blocks_to_segments_parallel(do_agg, schema);
+    } else {
+        return merge_blocks_to_segments_serial(do_agg, schema);
+>>>>>>> 3a42d1171e ([Enhancement] Improve the collection and display of load spill metrics in the load profile (#67527))
     }
     timer.stop();
     auto duration_ms = timer.elapsed_time() / 1000000;
