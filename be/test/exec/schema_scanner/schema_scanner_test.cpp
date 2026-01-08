@@ -43,4 +43,3 @@ TEST_F(SchemaScannerTest, test_create) {
 }
 
 } // namespace starrocks
-
