@@ -3586,4 +3586,7 @@ public class Config extends ConfigBase {
      */
     @ConfField
     public static int deploy_serialization_queue_size = -1;
+
+    @ConfField(mutable = true)
+    public static boolean enable_hudi_lib_internal_metadata_table = true;
 }
