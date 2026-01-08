@@ -2506,4 +2506,44 @@ public class LowCardinalityTest2 extends PlanTestBase {
                 "  |      [9: cast, VARCHAR, false]\n" +
                 "  |      [11: c_user, VARCHAR(50), true]", plan);
     }
+
+
+    @Test
+    public void testUnionWithProjection() throws Exception {
+        String sql = """
+                WITH TB1 AS (
+                    (
+                        SELECT
+                            C_USER
+                        FROM
+                            low_card_t1
+                    )
+                    UNION ALL
+                    (
+                        SELECT
+                            C_USER
+                        FROM
+                            low_card_t1
+                    )
+                )
+                SELECT
+                    NULL
+                FROM
+                    TB1
+                """;
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "  5:Project\n" +
+                "  |  output columns:\n" +
+                "  |  24 <-> NULL\n" +
+                "  |  cardinality: 2\n" +
+                "  |  \n" +
+                "  0:UNION\n" +
+                "  |  output exprs:\n" +
+                "  |      [27, INT, true]\n" +
+                "  |  child exprs:\n" +
+                "  |      [25: c_user, INT, true]\n" +
+                "  |      [26: c_user, INT, true]\n" +
+                "  |  pass-through-operands: all\n" +
+                "  |  cardinality: 2", plan);
+    }
 }
