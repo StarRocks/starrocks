@@ -157,7 +157,11 @@ public class DecodeRewriter extends OptExpressionVisitor<OptExpression, ColumnRe
         }
         // Decoding structs by decoding their fields first and then reconstructing them using a PhysicalProjectOperator
         Map<ColumnRefOperator, ColumnRefOperator> dictRefToStructRefMap = structRefs.stream()
-                .map(k -> new Pair<>(context.stringRefToDictRefMap.get(k), k))
+                .map(k -> {
+                    ColumnRefOperator dictRef = context.stringRefToDictRefMap.get(k);
+                    Preconditions.checkNotNull(dictRef);
+                    return new Pair<>(dictRef, k);
+                })
                 .collect(Collectors.toMap(k -> k.first, k -> k.second));
         Map<ColumnRefOperator, ScalarOperator> projections = Maps.newHashMap();
         for (ColumnRefOperator columnRef : child.getLogicalProperty().getOutputColumns().getColumnRefOperators(factory)) {

@@ -176,7 +176,6 @@ public class LowCardinalityStructTest extends PlanTestBase {
                 ORDER BY VARCHAR_COL
                 """;
         String plan = getVerboseExplain(sql);
-        System.out.println(plan);
         String expected = "5 <-> named_struct[('c1', DictDecode([6: VARCHAR_COL, INT, true], [<place-holder>], " +
                 "[8: named_struct, struct<c1 int(11), c2 array<int(11)>, c3 int(11)>, true].c1[true]), 'c2', " +
                 "DictDecode([7: ARRAY_VARCHAR_COL, ARRAY<INT>, true], [<place-holder>], [8: named_struct, " +
