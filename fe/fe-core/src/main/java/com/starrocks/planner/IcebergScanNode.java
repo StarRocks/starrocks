@@ -206,6 +206,10 @@ public class IcebergScanNode extends ScanNode {
         this.icebergJobPlanningPredicate = predicate;
     }
 
+    public IcebergTable getIcebergTable() {
+        return icebergTable;
+    }
+
     // for unit tests
     public ScalarOperator getIcebergJobPlanningPredicate() {
         return icebergJobPlanningPredicate;
