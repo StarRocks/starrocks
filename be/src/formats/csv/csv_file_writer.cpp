@@ -16,6 +16,12 @@
 
 #include <utility>
 
+<<<<<<< HEAD
+=======
+#include "common/http/content_type.h"
+#include "csv_escape.h"
+#include "exec/hdfs_scanner/hdfs_scanner_text.h"
+>>>>>>> 65972a07f4 ([BugFix] Fix incorrect ContentType metadata for S3 exports (#67553))
 #include "formats/utils.h"
 #include "output_stream_file.h"
 #include "runtime/current_thread.h"
@@ -143,7 +149,9 @@ Status CSVFileWriterFactory::init() {
 }
 
 StatusOr<WriterAndStream> CSVFileWriterFactory::create(const std::string& path) const {
-    ASSIGN_OR_RETURN(auto file, _fs->new_writable_file(WritableFileOptions{.direct_write = true}, path));
+    ASSIGN_OR_RETURN(auto file,
+                     _fs->new_writable_file(
+                             WritableFileOptions{.direct_write = true, .content_type = http::ContentType::CSV}, path));
     auto rollback_action = [fs = _fs, path = path]() {
         WARN_IF_ERROR(ignore_not_found(fs->delete_file(path)), "fail to delete file");
     };
