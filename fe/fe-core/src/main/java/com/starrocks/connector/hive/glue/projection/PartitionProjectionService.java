@@ -278,8 +278,13 @@ public class PartitionProjectionService {
         Map<String, Optional<Object>> filters = new HashMap<>();
         for (int i = 0; i < partitionColumnNames.size(); i++) {
             String columnName = partitionColumnNames.get(i);
-            if (i < partitionValues.size() && partitionValues.get(i).isPresent()) {
-                filters.put(columnName, Optional.of(partitionValues.get(i).get()));
+            if (i < partitionValues.size()) {
+                Optional<String> optValue = partitionValues.get(i);
+                if (optValue.isPresent()) {
+                    filters.put(columnName, Optional.of(optValue.get()));
+                } else {
+                    filters.put(columnName, Optional.empty());
+                }
             } else {
                 filters.put(columnName, Optional.empty());
             }
