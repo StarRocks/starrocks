@@ -42,7 +42,7 @@ public:
         DCHECK((_long_values != nullptr) ^ (_string_values != nullptr));
     }
 
-    bool has_output() const override { return !_is_finished && _next_processed_row_index < _rows_total; }
+    bool has_output() const override { return !is_finished(); }
 
     bool is_finished() const override { return _is_finished || _next_processed_row_index >= _rows_total; }
 
