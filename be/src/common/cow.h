@@ -19,11 +19,8 @@
 #include <type_traits>
 #include <vector>
 
-<<<<<<< HEAD
-=======
 #include "common/config.h"
 #include "gutil/casts.h"
->>>>>>> d1e3fe003c ([BugFix] Cherry pick some cow bugfix (backport #66805) (#67574))
 #include "logging.h"
 #include "util/stack_util.h"
 
