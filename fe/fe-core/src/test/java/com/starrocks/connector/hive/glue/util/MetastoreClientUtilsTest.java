@@ -17,17 +17,14 @@ package com.starrocks.connector.hive.glue.util;
 import com.starrocks.connector.hive.glue.metastore.DefaultAWSGlueMetastore;
 import com.starrocks.connector.hive.glue.metastore.GlueMetastoreClientDelegate;
 import com.starrocks.connector.share.credential.CloudConfigurationConstants;
-import mockit.Expectations;
 import mockit.Mocked;
 import org.apache.hadoop.conf.Configuration;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import software.amazon.awssdk.services.glue.model.StorageDescriptor;
 
-import java.util.ArrayList;
 import java.util.Map;
 
-import static org.mockito.Mockito.mock;
 
 public class MetastoreClientUtilsTest {
 
@@ -59,46 +56,13 @@ public class MetastoreClientUtilsTest {
                         "Projection.enable", "TRUE",
                         "projection.year.type", "integer",
                         "projection.year.range", "2014,2016"));
-        new Expectations(metastore) {
-            {
-                try {
-                    metastore.getPartitions("test_db", "test_table", null, 1);
-                    result = new ArrayList<software.amazon.awssdk.services.glue.model.Partition>();
-                    minTimes = 0;
-                } catch (Exception e) {
-                    throw new RuntimeException(e);
-                }
-            }
-        };
-        IllegalArgumentException exception = Assertions.assertThrows(
-                IllegalArgumentException.class,
-                () ->
-                MetastoreClientUtils.validateGlueTable(tableBuilder.build(),  metastore)
-        );
-        Assertions.assertEquals(
-                "Partition projection table may not readable",
-                exception.getMessage()); 
-
-        software.amazon.awssdk.services.glue.model.Partition partition = 
-                mock(software.amazon.awssdk.services.glue.model.Partition.class);
-        ArrayList<software.amazon.awssdk.services.glue.model.Partition> partitions = new ArrayList<>();
-        partitions.add(partition);
-        new Expectations(metastore) {
-            {
-                try {
-                    metastore.getPartitions("test_db", "test_table2", null, 1);
-                    result = partitions;
-                } catch (Exception e) {
-                    throw new RuntimeException(e);
-                }
-            }
-        };
-
-        tableBuilder.name("test_table2");
+        // Partition projection is now supported - validation should pass without throwing exception
+        // even when metastore partitions are empty, because PartitionProjectionService will
+        // dynamically generate partitions based on table properties
         try {
             MetastoreClientUtils.validateGlueTable(tableBuilder.build(), metastore);
         } catch (Exception e) {
-            Assertions.fail(e.getMessage());
+            Assertions.fail("Partition projection table should be valid: " + e.getMessage());
         }
     }
 }
