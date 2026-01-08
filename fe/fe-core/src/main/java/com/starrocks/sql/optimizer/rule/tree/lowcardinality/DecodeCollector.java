@@ -1297,8 +1297,8 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
 
     private static boolean supportLowCardinality(Type type) {
         return type.isVarchar()
-                || (type.isArrayType() && ((ArrayType) type).getItemType().isVarchar()
-                || type.isStructType());
+                || (type.isArrayType() && ((ArrayType) type).getItemType().isVarchar())
+                || type.isStructType();
     }
 
     private boolean supportAndEnabledLowCardinalityForScanOperator(Type type) {
