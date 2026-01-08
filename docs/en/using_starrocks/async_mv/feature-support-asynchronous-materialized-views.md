@@ -93,6 +93,10 @@ This document outlines the boundaries of competence for asynchronous materialize
 | DeltaLake                    | <ul><li>Non-partitioned table: v3.2+</li><li>Partitioned table: To be supported</li><li>Multi-level partitioning: To be supported</li></ul> | Not Stable                                    |
 | JDBC                         | <ul><li>Non-partitioned table: v3.0+</li><li>Partitioned table: MySQL RangeColumn Partition v3.1.4</li></ul> | Not Stable                                    |
 
+:::note
+External table materialized views do not support automatic refresh triggered by base table data changes.
+:::
+
 ## Query Rewrite
 
 | Feature                         | Description                                              | Supported Version(s)        |

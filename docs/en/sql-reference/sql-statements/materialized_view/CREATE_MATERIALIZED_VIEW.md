@@ -242,7 +242,8 @@ The refresh moment of the materialized view. Default value: `IMMEDIATE`. Valid v
 
 > **NOTE**
 >
-> While creating an asynchronous materialized view, you must specify either `distribution_desc` or `refresh_scheme`, or both.
+> - While creating an asynchronous materialized view, you must specify either `distribution_desc` or `refresh_scheme`, or both.
+> - External table materialized views do not support automatic refresh triggered by base table data changes.
 
 The refresh strategy of the asynchronous materialized view. Valid values:
 
