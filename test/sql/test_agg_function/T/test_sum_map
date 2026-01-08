@@ -53,12 +53,16 @@ set streaming_preaggregation_mode=force_streaming;
 select sum_map(c2)[1], sum_map(c2)[2], sum_map(c2)[3], sum_map(c2)[4], sum_map(c2)[5] from t1;
 select sum_map(c3)["a"], sum_map(c3)["b"], sum_map(c3)["c"] from t1;
 select sum_map(c4)[1], sum_map(c4)[2], sum_map(c4)[3] from t1;
+select c1, sum_map(c2)[1], sum_map(c2)[2], sum_map(c2)[3], sum_map(c2)[4], sum_map(c2)[5] from t1 group by c1 order by c1;
 
 -- Test with pre-aggregation mode
 set streaming_preaggregation_mode=force_preaggregation;
 select sum_map(c2)[1], sum_map(c2)[2], sum_map(c2)[3], sum_map(c2)[4], sum_map(c2)[5] from t1;
 select sum_map(c3)["a"], sum_map(c3)["b"], sum_map(c3)["c"] from t1;
 select sum_map(c4)[1], sum_map(c4)[2], sum_map(c4)[3] from t1;
+select c1, sum_map(c2)[1], sum_map(c2)[2], sum_map(c2)[3], sum_map(c2)[4], sum_map(c2)[5] from t1 group by c1 order by c1;
+
+set streaming_preaggregation_mode=auto;
 
 -- ===========================================================================
 -- Test 2: All numeric value types coverage (TINYINT, SMALLINT, INT, BIGINT, LARGEINT, FLOAT, DOUBLE)

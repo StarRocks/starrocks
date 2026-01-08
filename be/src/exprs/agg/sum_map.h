@@ -144,10 +144,7 @@ public:
 
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
                 size_t row_num) const override {
-        // Handle null maps
-        if ((columns[0]->is_nullable() && columns[0]->is_null(row_num)) || columns[0]->only_null()) {
-            return;
-        }
+        DCHECK(!columns[0]->is_nullable());
 
         const auto* map_column = down_cast<const MapColumn*>(ColumnHelper::get_data_column(columns[0]));
         auto& offsets = map_column->offsets().immutable_data();
@@ -163,6 +160,7 @@ public:
     }
 
     void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
+        DCHECK(!column->is_nullable());
         const auto* map_column = down_cast<const MapColumn*>(ColumnHelper::get_data_column(column));
         auto& offsets = map_column->offsets().immutable_data();
 
@@ -176,6 +174,7 @@ public:
     }
 
     void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
+        DCHECK(!to->is_nullable());
         auto& state_impl = this->data(state);
         auto* map_column = down_cast<MapColumn*>(ColumnHelper::get_data_column(to));
 
@@ -239,10 +238,6 @@ private:
         // Update map offsets
         auto* offsets_col = map_column->offsets_column_raw_ptr();
         offsets_col->append(offsets_col->immutable_data().back() + total_entries);
-
-        if (to->is_nullable()) {
-            down_cast<NullableColumn*>(to)->null_column_data().emplace_back(0);
-        }
     }
 
 public:
@@ -252,8 +247,25 @@ public:
 
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
                                      MutableColumnPtr& dst) const override {
-        // For sumMap, the input is already a map, so we can just copy it
-        dst->append(*src[0], 0, chunk_size);
+        DCHECK(!src[0]->is_nullable());
+        DCHECK(!dst->is_nullable());
+
+        const auto* src_map_column = down_cast<const MapColumn*>(ColumnHelper::get_data_column(src[0]));
+        const auto* dst_map_column = down_cast<MapColumn*>(ColumnHelper::get_data_column(dst.get()));
+        ColumnViewer<VT> value_viewer(src_map_column->values_column());
+
+        dst_map_column->keys_column()->as_mutable_raw_ptr()->append(*src_map_column->keys_column(), 0, chunk_size);
+        DCHECK(dst_map_column->values_column()->is_nullable());
+        NullableColumn* nullable_dst_values_column =
+                down_cast<NullableColumn*>(dst_map_column->values_column()->as_mutable_raw_ptr());
+        auto& null_data = nullable_dst_values_column->null_column_data();
+        ValueResultColumnType* dst_values_column =
+                down_cast<ValueResultColumnType*>(nullable_dst_values_column->data_column()->as_mutable_raw_ptr());
+        auto& dst_value_data = dst_values_column->get_data();
+        for (size_t i = 0; i < chunk_size; ++i) {
+            null_data.push_back(value_viewer.is_null(i) ? 1 : 0);
+            dst_value_data.push_back(value_viewer.value(i));
+        }
     }
 
     std::string get_name() const override { return "sum_map"; }

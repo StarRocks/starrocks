@@ -87,6 +87,14 @@ select sum_map(c4)[1], sum_map(c4)[2], sum_map(c4)[3] from t1;
 -- result:
 2.0	3.5	5.5
 -- !result
+select c1, sum_map(c2)[1], sum_map(c2)[2], sum_map(c2)[3], sum_map(c2)[4], sum_map(c2)[5] from t1 group by c1 order by c1;
+-- result:
+1	10	20	30	None	None
+2	5	15	None	40	None
+3	None	25	35	None	50
+4	None	None	None	None	None
+5	None	None	None	None	None
+-- !result
 set streaming_preaggregation_mode=force_preaggregation;
 -- result:
 -- !result
@@ -101,6 +109,17 @@ select sum_map(c3)["a"], sum_map(c3)["b"], sum_map(c3)["c"] from t1;
 select sum_map(c4)[1], sum_map(c4)[2], sum_map(c4)[3] from t1;
 -- result:
 2.0	3.5	5.5
+-- !result
+select c1, sum_map(c2)[1], sum_map(c2)[2], sum_map(c2)[3], sum_map(c2)[4], sum_map(c2)[5] from t1 group by c1 order by c1;
+-- result:
+1	10	20	30	None	None
+2	5	15	None	40	None
+3	None	25	35	None	50
+4	None	None	None	None	None
+5	None	None	None	None	None
+-- !result
+set streaming_preaggregation_mode=auto;
+-- result:
 -- !result
 CREATE TABLE t2 (
     id int,
@@ -199,7 +218,7 @@ select sum_map(m_key_varchar)["a"], sum_map(m_key_varchar)["b"], sum_map(m_key_v
 -- !result
 select sum_map(NULL);
 -- result:
-{}
+None
 -- !result
 select sum_map(m)[1], sum_map(m)[2], sum_map(m)[3] from (
     select map{1:10, 2:20} as m
@@ -219,7 +238,7 @@ select sum_map(m) from (
     select NULL as m
 ) t;
 -- result:
-{}
+None
 -- !result
 CREATE TABLE t5 (
     id int,
