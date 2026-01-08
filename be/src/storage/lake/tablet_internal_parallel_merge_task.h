@@ -15,6 +15,7 @@
 #pragma once
 
 #include "common/status.h"
+#include "util/runtime_profile.h"
 #include "util/threadpool.h"
 
 namespace starrocks {
@@ -22,7 +23,6 @@ namespace starrocks {
 class ChunkIterator;
 class MemTracker;
 class Schema;
-class RuntimeProfile::Counter;
 
 namespace lake {
 
