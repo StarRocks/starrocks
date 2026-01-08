@@ -155,7 +155,7 @@ $.config[\"key\"]        -- Map 风格访问
 
 ## 限制和注意事项
 
-- VARIANT 类型目前仅支持从带有 variant 编码的 Parquet 格式的 Iceberg 表中读取数据。
+- VARIANT 类型支持从带有 variant 编码的 Parquet 格式 Iceberg 表中读取数据，并支持通过 StarRocks 文件写入器写出 Parquet 文件（未分片的 variant 编码）。
 - VARIANT 值的大小限制为 16 MB。
-- 当前仅支持读取未分片的 variant 值。
+- 当前仅支持读写未分片的 variant 值。
 - 嵌套结构的最大深度取决于底层 Parquet 文件结构。

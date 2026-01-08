@@ -27,6 +27,7 @@
 #include "column/nullable_column.h"
 #include "column/struct_column.h"
 #include "column/type_traits.h"
+#include "column/variant_column.h"
 #include "common/compiler_util.h"
 #include "gutil/casts.h"
 #include "types/date_value.h"
@@ -153,6 +154,9 @@ Status LevelBuilder::_write_column_chunk(const LevelBuilderContext& ctx, const T
     }
     case TYPE_JSON: {
         return _write_json_column_chunk(ctx, type_desc, node, col, write_leaf_callback);
+    }
+    case TYPE_VARIANT: {
+        return _write_variant_column_chunk(ctx, type_desc, node, col, write_leaf_callback);
     }
     default: {
         return Status::NotSupported(fmt::format("Doesn't support to write {} type data", type_desc.debug_string()));
@@ -641,6 +645,67 @@ Status LevelBuilder::_write_json_column_chunk(const LevelBuilderContext& ctx, co
             .null_bitset = null_bitset ? null_bitset->data() : nullptr,
     });
 
+    return Status::OK();
+}
+
+Status LevelBuilder::_write_variant_column_chunk(const LevelBuilderContext& ctx, const TypeDescriptor& type_desc,
+                                                 const ::parquet::schema::NodePtr& node, const ColumnPtr& col,
+                                                 const CallbackFunction& write_leaf_callback) {
+    DCHECK(type_desc.type == TYPE_VARIANT);
+
+    auto variant_node = std::static_pointer_cast<::parquet::schema::GroupNode>(node);
+    auto* null_col = get_raw_null_column(col);
+    auto* data_col = ColumnHelper::get_data_column(col.get());
+    auto* variant_col = down_cast<const VariantColumn*>(data_col);
+
+    auto rep_levels = ctx._rep_levels;
+    auto def_levels = _make_def_levels(ctx, node, null_col, col->size());
+
+    LevelBuilderContext derived_ctx(def_levels->size(), def_levels, rep_levels,
+                                    ctx._max_def_level + node->is_optional(), ctx._max_rep_level,
+                                    ctx._repeated_ancestor_def_level);
+
+    int metadata_index = -1;
+    int value_index = -1;
+    for (int i = 0; i < variant_node->field_count(); ++i) {
+        const auto& child = variant_node->field(i);
+        if (child->name() == "metadata") {
+            metadata_index = i;
+        } else if (child->name() == "value") {
+            value_index = i;
+        }
+    }
+
+    if (metadata_index < 0 || value_index < 0) {
+        return Status::NotSupported("Variant parquet schema requires 'metadata' and 'value' fields");
+    }
+
+    auto write_binary_leaf = [&](const ::parquet::schema::NodePtr& child_node, bool write_metadata) -> Status {
+        auto child_def_levels = _make_def_levels(derived_ctx, child_node, null_col, col->size());
+        auto null_bitset = _make_null_bitset(derived_ctx, null_col, col->size());
+
+        auto values = new ::parquet::ByteArray[col->size()];
+        DeferOp defer([&] { delete[] values; });
+
+        for (size_t i = 0; i < col->size(); ++i) {
+            const VariantRowValue* variant = variant_col->get_object(i);
+            std::string_view slice = write_metadata ? variant->get_metadata().raw() : variant->get_value().raw();
+            values[i].len = static_cast<uint32_t>(slice.size());
+            values[i].ptr = reinterpret_cast<const uint8_t*>(slice.data());
+        }
+
+        write_leaf_callback(LevelBuilderResult{
+                .num_levels = derived_ctx._num_levels,
+                .def_levels = child_def_levels ? child_def_levels->data() : nullptr,
+                .rep_levels = derived_ctx._rep_levels ? derived_ctx._rep_levels->data() : nullptr,
+                .values = reinterpret_cast<uint8_t*>(values),
+                .null_bitset = null_bitset ? null_bitset->data() : nullptr,
+        });
+        return Status::OK();
+    };
+
+    RETURN_IF_ERROR(write_binary_leaf(variant_node->field(metadata_index), true));
+    RETURN_IF_ERROR(write_binary_leaf(variant_node->field(value_index), false));
     return Status::OK();
 }
 
