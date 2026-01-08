@@ -20,6 +20,8 @@ import com.starrocks.type.VarcharType;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.Year;
+import java.time.YearMonth;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
@@ -244,18 +246,31 @@ public class DateProjection implements ColumnProjection {
         }
 
         // Absolute date - parse with the configured format
+        // Try different temporal types based on format pattern
         try {
-            // Try parsing as LocalDateTime first
+            // Try parsing as LocalDateTime first (full date + time)
             LocalDateTime dateTime = LocalDateTime.parse(dateStr, dateFormat);
             return dateTime.atZone(ZoneId.systemDefault()).toInstant();
         } catch (DateTimeParseException e1) {
             try {
-                // Try parsing as LocalDate
+                // Try parsing as LocalDate (year-month-day)
                 LocalDate date = LocalDate.parse(dateStr, dateFormat);
                 return date.atStartOfDay(ZoneId.systemDefault()).toInstant();
             } catch (DateTimeParseException e2) {
-                throw new IllegalArgumentException(
-                        "Cannot parse date '" + dateStr + "' with format '" + formatPattern + "'", e2);
+                try {
+                    // Try parsing as YearMonth (year-month only, e.g., '2024-01')
+                    YearMonth yearMonth = YearMonth.parse(dateStr, dateFormat);
+                    return yearMonth.atDay(1).atStartOfDay(ZoneId.systemDefault()).toInstant();
+                } catch (DateTimeParseException e3) {
+                    try {
+                        // Try parsing as Year (year only, e.g., '2024')
+                        Year year = Year.parse(dateStr, dateFormat);
+                        return year.atDay(1).atStartOfDay(ZoneId.systemDefault()).toInstant();
+                    } catch (DateTimeParseException e4) {
+                        throw new IllegalArgumentException(
+                                "Cannot parse date '" + dateStr + "' with format '" + formatPattern + "'", e4);
+                    }
+                }
             }
         }
     }
