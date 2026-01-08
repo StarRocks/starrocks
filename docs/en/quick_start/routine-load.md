@@ -164,6 +164,7 @@ Open [http://localhost:9001/buckets](http://localhost:9001/buckets) and add a bu
 ## SQL Clients
 
 <Clients />
+
 ---
 
 ## StarRocks configuration for shared-data
@@ -639,6 +640,7 @@ When using MinIO an access key is used, and so instance profiles are not used wi
 #### `aws_s3_use_aws_sdk_default_behavior=false`
 
 When using MinIO this parameter is always set to false.
+
 ---
 
 ## Notes on the Routine Load command

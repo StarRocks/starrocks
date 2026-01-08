@@ -162,6 +162,7 @@ StarRocks でストレージボリュームを作成する際に、データの 
 ## SQL Clients
 
 <Clients />
+
 ---
 
 ## StarRocks configuration for shared-data
@@ -636,6 +637,7 @@ MinIO を使用する場合、アクセスキーが使用されるため、イ�
 #### `aws_s3_use_aws_sdk_default_behavior=false`
 
 MinIO を使用する場合、このパラメータは常に false に設定されます。
+
 ---
 
 ## Notes on the Routine Load command

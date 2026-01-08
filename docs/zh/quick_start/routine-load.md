@@ -162,6 +162,7 @@ container routineload-minio_mc-1 exited (0)
 ## SQL 客户端
 
 <Clients />
+
 ---
 
 ## StarRocks 的 shared-data 配置
@@ -635,6 +636,7 @@ MinIO 访问密钥密钥。
 #### `aws_s3_use_aws_sdk_default_behavior=false`
 
 使用 MinIO 时，此参数始终设置为 false。
+
 ---
 
 ## 关于 Routine Load 命令的说明
