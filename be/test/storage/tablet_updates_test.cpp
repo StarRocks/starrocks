@@ -791,6 +791,8 @@ void TabletUpdatesTest::test_remove_expired_versions(bool enable_persistent_inde
     ASSERT_TRUE(_tablet->rowset_commit(4, create_rowset(_tablet, keys)).ok());
     ASSERT_EQ(4, _tablet->updates()->version_history_count());
     ASSERT_EQ(4, _tablet->updates()->max_version());
+    ASSERT_EQ(1, _tablet->updates()->min_readable_version());
+    ASSERT_EQ(1, _tablet->min_readable_version());
 
     // Read from the latest version, this can ensure that all versions are applied.
     ASSERT_EQ(N, read_tablet(_tablet, 4));
@@ -813,6 +815,8 @@ void TabletUpdatesTest::test_remove_expired_versions(bool enable_persistent_inde
     _tablet->updates()->remove_expired_versions(time(nullptr));
     ASSERT_EQ(1, _tablet->updates()->version_history_count());
     ASSERT_EQ(4, _tablet->updates()->max_version());
+    ASSERT_EQ(4, _tablet->updates()->min_readable_version());
+    ASSERT_EQ(4, _tablet->min_readable_version());
 
     EXPECT_EQ(N, read_tablet(_tablet, 4));
     EXPECT_EQ(N, read_until_eof(iter_v4));

@@ -510,6 +510,11 @@ int64_t TabletUpdates::max_version() const {
     return _edit_version_infos.empty() ? 0 : _edit_version_infos.back()->version.major_number();
 }
 
+int64_t TabletUpdates::min_readable_version() const {
+    std::lock_guard rl(_lock);
+    return _edit_version_infos.empty() ? 0 : _edit_version_infos.front()->version.major_number();
+}
+
 int64_t TabletUpdates::max_readable_version() const {
     std::lock_guard rl(_lock);
     return _edit_version_infos.empty() ? 0 : _edit_version_infos[_apply_version_idx]->version.major_number();
