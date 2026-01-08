@@ -188,6 +188,7 @@ import com.starrocks.sql.ast.AdminSetReplicaStatusStmt;
 import com.starrocks.sql.ast.AlterDatabaseQuotaStmt;
 import com.starrocks.sql.ast.AlterDatabaseQuotaStmt.QuotaType;
 import com.starrocks.sql.ast.AlterDatabaseRenameStatement;
+import com.starrocks.sql.ast.AlterDatabaseSetStmt;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AlterTableCommentClause;
 import com.starrocks.sql.ast.AlterTableStmt;
@@ -246,6 +247,7 @@ import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.util.EitherOr;
+import com.starrocks.storagevolume.StorageVolume;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.TabletTaskExecutor;
@@ -273,6 +275,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -715,8 +718,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         }
 
         Preconditions.checkArgument(stmt.getQuota() >= 0, "Quota must be non-negative");
-
-        DatabaseInfo dbInfo = new DatabaseInfo(db.getFullName(), "", stmt.getQuota(), stmt.getQuotaType());
+        DatabaseInfo dbInfo = DatabaseInfo.newQuotaUpdateInfo(db.getFullName(), stmt.getQuota(), stmt.getQuotaType());
         Locker locker = new Locker();
         locker.lockDatabase(db.getId(), LockType.WRITE);
         try {
@@ -732,18 +734,105 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         }
     }
 
-    public void replayAlterDatabaseQuota(DatabaseInfo dbInfo) {
+    public void alterDatabaseSet(AlterDatabaseSetStmt stmt) throws DdlException {
+        String dbName = stmt.getDbName();
+        Database db = getDb(dbName);
+        if (db == null) {
+            ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
+        }
+
+        Map<String, String> properties = stmt.getProperties();
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME)) {
+            if (!RunMode.isSharedDataMode()) {
+                throw new DdlException("Storage volume can be set only in shared-data deployment");
+            }
+            String storageVolumeName = properties.get(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME);
+            properties.remove(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME);
+
+            StorageVolumeMgr svMgr = GlobalStateMgr.getCurrentState().getStorageVolumeMgr();
+            StorageVolume newSv = svMgr.getStorageVolumeByName(storageVolumeName);
+            if (newSv == null) {
+                throw new DdlException("Storage volume " + storageVolumeName + " does not exist");
+            }
+            if (!newSv.getEnabled()) {
+                throw new DdlException("Storage volume " + storageVolumeName + " is disabled");
+            }
+            String oldSvId = svMgr.getStorageVolumeIdOfDb(db.getId());
+            StorageVolume oldSv = null;
+            if (oldSvId == null) {
+                LOG.error("Failed to find storage volume attached to the database {}, should not happen.", dbName);
+                // Take the chance to fix the inconsistency by this set operation.
+            } else {
+                oldSv = svMgr.getStorageVolume(oldSvId);
+                if (oldSv == null) {
+                    throw new DdlException(
+                            "Fail to retrieve the existing storage volume info attached to database " + dbName +
+                                    ", please try again!");
+                }
+            }
+
+            DatabaseInfo dbInfo = DatabaseInfo.newStorageVolumeUpdateInfo(db.getFullName(), newSv.getId());
+            Locker locker = new Locker();
+            locker.lockDatabase(db.getId(), LockType.WRITE);
+            try {
+                // Double check again under lock
+                String currentSvId = svMgr.getStorageVolumeIdOfDb(db.getId());
+                if (!Objects.equals(oldSvId, currentSvId)) {
+                    throw new DdlException(String.format(
+                            "Conflict operation detected. Database %s storage volume has changed, please retry again",
+                            dbName));
+                }
+                if (newSv.getId().equals(currentSvId)) { // do nothing
+                    return;
+                }
+                // It is not possible to do this in logApplier because it could fail and the editLog can't be rolled back.
+                // So we do it here before writing the log, and roll it back if writing log failed.
+                if (!GlobalStateMgr.getCurrentState().getStorageVolumeMgr()
+                        .bindDbToStorageVolume(storageVolumeName, db.getId())) {
+                    throw new DdlException(String.format("Storage volume %s does not exist", storageVolumeName));
+                }
+                try {
+                    GlobalStateMgr.getCurrentState().getEditLog().logAlterDb(dbInfo, wal -> {});
+                } catch (Throwable e) {
+                    if (oldSv != null) {
+                        // rollback to its original storage volume
+                        svMgr.bindDbToStorageVolume(oldSv.getName(), db.getId());
+                    } else {
+                        // unbind the storage volume
+                        svMgr.unbindDbToStorageVolume(db.getId());
+                    }
+                    throw e;
+                }
+            } finally {
+                locker.unLockDatabase(db.getId(), LockType.WRITE);
+            }
+            LOG.info("alter database[{}] storage volume to {}", dbName, storageVolumeName);
+        }
+        if (!properties.isEmpty()) {
+            throw new DdlException("Unknown properties: " + String.join(",", properties.keySet()));
+        }
+    }
+
+    public void replayAlterDatabase(DatabaseInfo dbInfo) {
         String dbName = dbInfo.getDbName();
         LOG.info("Begin to unprotect alter db info {}", dbName);
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+        if (db == null) {
+            LOG.warn("Database {} does not exist when replaying alter database operation", dbName);
+            return;
+        }
         QuotaType quotaType = dbInfo.getQuotaType();
         long quota = dbInfo.getQuota();
-
-        Preconditions.checkNotNull(db);
         if (quotaType == QuotaType.DATA) {
             db.setDataQuota(quota);
         } else if (quotaType == QuotaType.REPLICA) {
             db.setReplicaQuota(quota);
+        } else {
+            // Process set ("storage_volume" = "volume_name") operation during replay
+            if (!Strings.isNullOrEmpty(dbInfo.getStorageVolumeId())) {
+                GlobalStateMgr.getCurrentState().getStorageVolumeMgr()
+                        .replayBindDbToStorageVolume(dbInfo.getStorageVolumeId(), db.getId());
+            }
         }
     }
 
@@ -771,8 +860,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                 throw new DdlException("Database name[" + newFullDbName + "] is already used");
             }
 
-            DatabaseInfo dbInfo =
-                    new DatabaseInfo(fullDbName, newFullDbName, -1L, AlterDatabaseQuotaStmt.QuotaType.NONE);
+            DatabaseInfo dbInfo = DatabaseInfo.newRenameInfo(fullDbName, newFullDbName);
             Locker locker = new Locker();
             locker.lockDatabase(db.getId(), LockType.WRITE);
             try {
