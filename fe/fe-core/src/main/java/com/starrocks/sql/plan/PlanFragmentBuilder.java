@@ -161,6 +161,7 @@ import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.ScanOperatorPredicates;
 import com.starrocks.sql.optimizer.operator.TopNType;
 import com.starrocks.sql.optimizer.operator.UKFKConstraints;
+import com.starrocks.sql.optimizer.operator.logical.LogicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalAssertOneRowOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEConsumeOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEProduceOperator;
@@ -2424,6 +2425,34 @@ public class PlanFragmentBuilder {
                 aggregationNode.setIdenticallyDistributed(true);
             }
 
+            if (node.isTopNLocalAgg() && node.getTopNSortInfo() != null) {
+                LogicalTopNOperator.TopNSortInfo topNSortInfo = node.getTopNSortInfo();
+                TupleDescriptor sortTuple = context.getDescTbl().createTupleDescriptor();
+                List<Expr> sortExprs = new ArrayList<>();
+                OrderSpec orderSpec = new OrderSpec(topNSortInfo.orderByElements());
+                for (Ordering ordering : orderSpec.getOrderDescs()) {
+                    Expr sortExpr = ScalarOperatorToExpr.buildExecExpression(ordering.getColumnRef(),
+                            new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr()));
+
+                    SlotDescriptor slotDesc =
+                            context.getDescTbl().addSlotDescriptor(sortTuple, new SlotId(ordering.getColumnRef().getId()));
+                    slotDesc.initFromExpr(sortExpr);
+                    slotDesc.setIsMaterialized(true);
+                    slotDesc.setIsNullable(sortExpr.isNullable());
+                    slotDesc.setType(sortExpr.getType());
+
+                    context.getColRefToExpr()
+                            .put(ordering.getColumnRef(), new SlotRef(ordering.getColumnRef().toString(), slotDesc));
+                    sortExprs.add(new SlotRef(slotDesc));
+                }
+
+                SortInfo sortInfo = new SortInfo(Lists.newArrayList(), -1, sortExprs,
+                        orderSpec.getOrderDescs().stream().map(Ordering::isAscending).collect(Collectors.toList()),
+                        orderSpec.getOrderDescs().stream().map(Ordering::isNullsFirst).collect(Collectors.toList()));
+                aggregationNode.setTopNSortInfo(sortInfo);
+                aggregationNode.setTopNLimit(topNSortInfo.limit());
+            }
+
             aggregationNode.getAggInfo().setIntermediateAggrExprs(intermediateAggrExprs);
             // enable group execution for:
             // any aggregate stage
@@ -2701,7 +2730,6 @@ public class PlanFragmentBuilder {
                     slotDesc.setType(preAggFunction.getType());
                     context.getColRefToExpr().put(entry.getKey(), new SlotRef(entry.getKey().toString(), slotDesc));
 
-                    //                    resolvedTupleExprs.add(preAggFunction);
                     outputColumnRefSet.except(List.of(entry.getKey()));
 
                     preAggOutputColumnIds.add(outputColumnId);
