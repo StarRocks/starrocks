@@ -126,6 +126,7 @@ struct AggTopRuntimeFilterBuilderImpl {
     std::pair<RuntimeFilter*, HeapBuilder*> build(ObjectPool* pool, Aggregator* aggregator, size_t build_expr_order,
                                                   size_t limit, bool asc, bool is_nulls_first) {
         using CppType = RunTimeCppType<ltype>;
+        // TODO: we can use is_nulls_first to determine whether to create the runtime filter with null or not later.
         RuntimeFilter* runtime_filter = MinMaxRuntimeFilter<ltype>::create_full_range_with_null(pool);
         auto* heap_builder = new THeapBuilder<ltype, Comp>(Comp());
         pool->add(heap_builder);

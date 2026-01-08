@@ -102,7 +102,10 @@ Status AggregateStreamingSinkOperator::push_chunk(RuntimeState* state, const Chu
 
 Status AggregateStreamingSinkOperator::_build_topn_runtime_filter(RuntimeState* state) {
     const auto& rf_build_descs = factory()->build_runtime_filters();
-    if (rf_build_descs.empty()) {
+    // all runtime filter should be topn_filter and limit > 0
+    if (rf_build_descs.empty() || !std::all_of(rf_build_descs.begin(), rf_build_descs.end(), [](auto* desc) {
+            return desc->type() == TRuntimeFilterBuildType::TOPN_FILTER && desc->limit() > 0;
+        })) {
         return Status::OK();
     }
     auto& rf_build_desc = rf_build_descs[0];
