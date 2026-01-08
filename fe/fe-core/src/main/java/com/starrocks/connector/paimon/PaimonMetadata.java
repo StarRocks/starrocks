@@ -822,29 +822,25 @@ public class PaimonMetadata implements ConnectorMetadata {
 
         String user = context.getCurrentUserIdentity() != null
                 ? context.getCurrentUserIdentity().getUser() : "None";
-        String engineName = "StarRocks";
-        String engineVersion = "UNKNOWN";
-        try {
-            com.starrocks.system.Frontend myself = GlobalStateMgr.getCurrentState().getNodeMgr().getMySelf();
-            if (myself != null) {
-                engineVersion = myself.getFeVersion();
-            }
-        } catch (Exception e) {
-            LOG.debug("Failed to get FE version, using default", e);
-        }
 
-        LOG.info("Truncating paimon table: {}.{}, triggered by user: {}, engine: {}, version: {}",
-                dbName, tableName, user, engineName, engineVersion);
+        LOG.info("Truncating paimon table: {}.{}, triggered by user: {}", dbName, tableName, user);
 
         try (BatchTableCommit commit = paimonTable.newBatchWriteBuilder().newCommit()) {
             if (truncateTableStmt instanceof TruncateTablePartitionStmt partitionStmt) {
-                // Validate that the table is actually partitioned before attempting partition operations
                 if (paimonTable.partitionKeys().isEmpty()) {
                     throw new StarRocksConnectorException("Table [%s.%s] is not partitioned, " +
                             "cannot truncate partitions", dbName, tableName);
                 }
 
                 KeyPartitionRef partitionRef = partitionStmt.getKeyPartitionRef();
+                List<String> partitionColNames = partitionRef.getPartitionColNames();
+                List<String> tablePartitionKeys = paimonTable.partitionKeys();
+                
+                if (partitionColNames.stream().anyMatch(p -> !tablePartitionKeys.contains(p))) {
+                    throw new StarRocksConnectorException("Partition names in partition spec do not match " +
+                            "table partition columns for table [%s.%s]", dbName, tableName);
+                }
+
                 Map<String, String> partitionMap = buildPartitionMap(partitionRef);
 
                 if (partitionMap.isEmpty()) {
@@ -852,13 +848,11 @@ public class PaimonMetadata implements ConnectorMetadata {
                 }
 
                 commit.truncatePartitions(Collections.singletonList(partitionMap));
-                LOG.info("Successfully truncated partitions of paimon table: {}.{}, partitions: {}, " +
-                        "user: {}, engine: {}, version: {}",
-                        dbName, tableName, partitionMap, user, engineName, engineVersion);
+                LOG.info("Successfully truncated partitions of paimon table: {}.{}, partitions: {}, user: {}",
+                        dbName, tableName, partitionMap, user);
             } else {
                 commit.truncateTable();
-                LOG.info("Successfully truncated paimon table: {}.{}, user: {}, engine: {}, version: {}",
-                        dbName, tableName, user, engineName, engineVersion);
+                LOG.info("Successfully truncated paimon table: {}.{}, user: {}", dbName, tableName, user);
             }
         } catch (Exception e) {
             LOG.error("Failed to truncate paimon table: {}.{}", dbName, tableName, e);
@@ -872,11 +866,6 @@ public class PaimonMetadata implements ConnectorMetadata {
         }
     }
 
-    /**
-     * Convert KeyPartitionRef to Map<String, String> for Paimon truncatePartitions API
-     * @param partitionRef KeyPartitionRef containing partition column names and values
-     * @return Map where key is partition column name and value is partition value as string
-     */
     private Map<String, String> buildPartitionMap(KeyPartitionRef partitionRef) {
         Map<String, String> partitionMap = new HashMap<>();
         List<String> partitionColNames = partitionRef.getPartitionColNames();

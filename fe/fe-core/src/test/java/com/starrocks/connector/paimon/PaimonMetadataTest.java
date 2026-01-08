@@ -1535,6 +1535,116 @@ public class PaimonMetadataTest {
         Files.delete(tmpDir);
     }
 
+    @Test
+    public void testTruncatePartitionWithInvalidColumnName() throws Exception {
+        // Test truncate partition with invalid partition column name
+        java.nio.file.Path tmpDir = Files.createTempDirectory("paimon_truncate_invalid_column_test");
+        Catalog catalog = CatalogFactory.createCatalog(CatalogContext.create(new Path(tmpDir.toString())));
+
+        catalog.createDatabase("test_db", true);
+        Schema schema = Schema.newBuilder()
+                .column("id", org.apache.paimon.types.DataTypes.STRING())
+                .column("dt", org.apache.paimon.types.DataTypes.STRING())
+                .column("name", org.apache.paimon.types.DataTypes.STRING())
+                .partitionKeys("dt")
+                .build();
+
+        Identifier identifier = Identifier.create("test_db", "test_table");
+        catalog.createTable(identifier, schema, true);
+
+        HdfsEnvironment environment = new HdfsEnvironment();
+        ConnectorProperties properties = new ConnectorProperties(ConnectorType.PAIMON);
+        PaimonMetadata metadata = new PaimonMetadata("paimon", environment, catalog, properties);
+
+        // Try to truncate partition with invalid column name (invalid_col instead of dt)
+        KeyPartitionRef keyPartitionRef = new KeyPartitionRef(
+                Lists.newArrayList("invalid_col"),
+                Lists.newArrayList(new StringLiteral("2023-11-20")),
+                NodePosition.ZERO);
+        TableRef tableRef = new TableRef(
+                QualifiedName.of(List.of("paimon", "test_db", "test_table")),
+                null,
+                NodePosition.ZERO);
+        TruncateTablePartitionStmt truncateTableStmt = new TruncateTablePartitionStmt(tableRef, keyPartitionRef);
+
+        ExceptionChecker.expectThrowsWithMsg(StarRocksConnectorException.class,
+                "Partition names in partition spec do not match table partition columns for table [test_db.test_table]",
+                () -> metadata.truncateTable(truncateTableStmt, new ConnectContext()));
+
+        catalog.dropTable(identifier, true);
+        catalog.dropDatabase("test_db", true, true);
+        Files.delete(tmpDir);
+    }
+
+    @Test
+    public void testPaimonTruncatePartitionsDirectBehavior() throws Exception {
+        // Test Paimon's truncatePartitions API behavior directly when partition doesn't exist
+        // This test bypasses StarRocks validation to see what Paimon API does
+        java.nio.file.Path tmpDir = Files.createTempDirectory("paimon_direct_truncate_test");
+        Catalog catalog = CatalogFactory.createCatalog(CatalogContext.create(new Path(tmpDir.toString())));
+
+        catalog.createDatabase("test_db", true);
+        Schema schema = Schema.newBuilder()
+                .column("id", org.apache.paimon.types.DataTypes.STRING())
+                .column("dt", org.apache.paimon.types.DataTypes.STRING())
+                .column("name", org.apache.paimon.types.DataTypes.STRING())
+                .partitionKeys("dt")
+                .build();
+
+        Identifier identifier = Identifier.create("test_db", "test_table");
+        catalog.createTable(identifier, schema, true);
+
+        // Insert data only for partition dt='2023-11-20'
+        org.apache.paimon.table.Table nativeTable = catalog.getTable(identifier);
+        BatchWriteBuilder writeBuilder = nativeTable.newBatchWriteBuilder();
+        BatchTableWrite write = writeBuilder.newWrite();
+        BatchTableCommit commit = writeBuilder.newCommit();
+
+        GenericRow record1 = GenericRow.of(
+                BinaryString.fromString("1"),
+                BinaryString.fromString("2023-11-20"),
+                BinaryString.fromString("test1"));
+        write.write(record1);
+        List<CommitMessage> messages = write.prepareCommit();
+        commit.commit(messages);
+        commit.close();
+
+        // Verify data exists
+        long rowCountBefore = getRowCountFromTable(nativeTable);
+        assertEquals(1, rowCountBefore);
+
+        // Directly call Paimon's truncatePartitions API with non-existent partition
+        // This bypasses StarRocks validation to see Paimon's actual behavior
+        BatchTableCommit truncateCommit = nativeTable.newBatchWriteBuilder().newCommit();
+        Map<String, String> nonExistentPartition = new HashMap<>();
+        nonExistentPartition.put("dt", "2023-12-31"); // This partition doesn't exist
+
+        try {
+            // Call Paimon API directly - this will show us what Paimon does
+            truncateCommit.truncatePartitions(Collections.singletonList(nonExistentPartition));
+            truncateCommit.close();
+
+            // Check if Paimon silently did nothing (no-op) or threw an exception
+            // If we reach here, Paimon did not throw an exception
+            long rowCountAfter = getRowCountFromTable(nativeTable);
+            assertEquals(1, rowCountAfter); // Data should still exist if Paimon did nothing
+
+            // Log the behavior for documentation
+            System.out.println("Paimon truncatePartitions with non-existent partition: " +
+                    "No exception thrown, operation appears to be a no-op");
+        } catch (Exception e) {
+            // If Paimon throws an exception, log it
+            System.out.println("Paimon truncatePartitions with non-existent partition threw exception: " +
+                    e.getClass().getSimpleName() + ": " + e.getMessage());
+            truncateCommit.close();
+            throw e; // Re-throw to see what exception Paimon throws
+        }
+
+        catalog.dropTable(identifier, true);
+        catalog.dropDatabase("test_db", true, true);
+        Files.delete(tmpDir);
+    }
+
     private long getRowCountFromTable(org.apache.paimon.table.Table table) throws Exception {
         List<org.apache.paimon.table.source.Split> splits = table.newReadBuilder().newScan().plan().splits();
         return PaimonMetadata.getRowCount(splits);
