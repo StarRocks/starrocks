@@ -749,8 +749,7 @@ TEST_F(LakeRowsetTest, test_get_each_segment_iterator_with_delvec_respects_table
             std::make_shared<lake::Rowset>(_tablet_mgr.get(), _tablet_metadata, 0, 0 /* compaction_segment_limit */);
     OlapReaderStatistics stats;
     auto input_schema = ChunkHelper::convert_schema(_tablet_schema, std::vector<ColumnId>{0});
-    ASSIGN_OR_ABORT(auto seg_iters,
-                    rowset->get_each_segment_iterator_with_delvec(input_schema, 1, nullptr, &stats));
+    ASSIGN_OR_ABORT(auto seg_iters, rowset->get_each_segment_iterator_with_delvec(input_schema, 1, nullptr, &stats));
 
     ASSERT_EQ(count_rows_from_iters(seg_iters), 3 * 3);
 }
