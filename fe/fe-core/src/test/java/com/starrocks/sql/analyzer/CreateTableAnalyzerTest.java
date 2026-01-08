@@ -497,13 +497,7 @@ public class CreateTableAnalyzerTest {
                     "DISTRIBUTED BY HASH(v1)\n" +
                     "ORDER BY(v2, v1)\n" +
                     "PROPERTIES (\"replication_num\" = \"1\");";
-            Throwable exception1 = assertThrows(SemanticException.class, () -> {
-                CreateTableStmt createTableStmt = (CreateTableStmt) com.starrocks.sql.parser.SqlParser
-                        .parse(sql1, connectContext.getSessionVariable().getSqlMode()).get(0);
-                CreateTableAnalyzer.analyze(createTableStmt, connectContext);
-            });
-            assertThat(exception1.getMessage(),
-                    containsString("The sort columns must be same with primary key columns and the order must be consistent"));
+            analyzeFail(sql1, "The sort columns must be same with primary key columns and the order must be consistent");
 
             // PK columns: (v1, v2), Sort keys: (v1, v2) -> Should pass
             String sql2 = "CREATE TABLE test_create_table_db.pk_table_correct_order\n" +
@@ -515,9 +509,7 @@ public class CreateTableAnalyzerTest {
                     "DISTRIBUTED BY HASH(v1)\n" +
                     "ORDER BY(v1, v2)\n" +
                     "PROPERTIES (\"replication_num\" = \"1\");";
-            CreateTableStmt createTableStmt2 = (CreateTableStmt) com.starrocks.sql.parser.SqlParser
-                    .parse(sql2, connectContext.getSessionVariable().getSqlMode()).get(0);
-            CreateTableAnalyzer.analyze(createTableStmt2, connectContext);
+            analyzeSuccess(sql2);
 
             // enable_range_distribution = false -> Should pass even if order is different
             Config.enable_range_distribution = false;
@@ -530,9 +522,7 @@ public class CreateTableAnalyzerTest {
                     "DISTRIBUTED BY HASH(v1)\n" +
                     "ORDER BY(v2, v1)\n" +
                     "PROPERTIES (\"replication_num\" = \"1\");";
-            CreateTableStmt createTableStmt3 = (CreateTableStmt) com.starrocks.sql.parser.SqlParser
-                    .parse(sql3, connectContext.getSessionVariable().getSqlMode()).get(0);
-            CreateTableAnalyzer.analyze(createTableStmt3, connectContext);
+            analyzeSuccess(sql3);
         } finally {
             Config.enable_range_distribution = oldEnableRangeDistribution;
         }

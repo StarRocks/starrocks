@@ -315,7 +315,7 @@ TEST_F(LakePersistentIndexTest, test_major_compaction_with_tablet_range) {
     index->prepare(EditVersion(0, 0), 0);
     std::vector<IndexValue> upsert_old_values(keys.size());
     ASSERT_OK(index->upsert(N, key_slices.data(), values.data(), upsert_old_values.data()));
-    index->minor_compact();
+    ASSERT_OK(index->flush_memtable(true));
     ASSERT_TRUE(index->memory_usage() > 0);
 
     // Build tablet metadata with a tablet range so that major_compact will honor it.
