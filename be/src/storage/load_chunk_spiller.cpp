@@ -174,6 +174,14 @@ public:
             if (!_reader) {
                 _reader = _blocks[_block_idx]->get_reader(_options);
                 RETURN_IF_UNLIKELY(!_reader, Status::InternalError("Failed to get reader"));
+                // Update block count metric
+                auto& metrics = _serde.parent()->metrics();
+                COUNTER_UPDATE(metrics.block_count, 1);
+                if (_blocks[_block_idx]->is_remote()) {
+                    COUNTER_UPDATE(metrics.remote_block_count, 1);
+                } else {
+                    COUNTER_UPDATE(metrics.local_block_count, 1);
+                }
             }
             auto st = _serde.deserialize(_ctx, _reader.get());
             if (st.ok()) {
@@ -266,12 +274,22 @@ Status LoadChunkSpiller::merge_write(size_t target_size, bool do_sort, bool do_a
             "LoadChunkSpiller merge finished, load_id:{} fragment_instance_id:{} blockgroups:{} blocks:{} "
             "input_bytes:{} merges:{} rows:{} chunks:{} duration:{}ms",
             (std::ostringstream() << _block_manager->load_id()).str(),
+<<<<<<< HEAD
             (std::ostringstream() << _block_manager->fragment_instance_id()).str(), groups.size(), total_blocks,
             total_block_bytes, total_merges, total_rows, total_chunk, duration_ms);
     ADD_COUNTER(_profile, "SpillMergeInputGroups", TUnit::UNIT)->update(groups.size());
     ADD_COUNTER(_profile, "SpillMergeInputBytes", TUnit::BYTES)->update(total_block_bytes);
     ADD_COUNTER(_profile, "SpillMergeCount", TUnit::UNIT)->update(total_merges);
     ADD_COUNTER(_profile, "SpillMergeDurationNs", TUnit::TIME_NS)->update(duration_ms * 1000000);
+=======
+            (std::ostringstream() << _block_manager->fragment_instance_id()).str(), groups.size(),
+            spill_block_iterator_tasks.total_blocks, spill_block_iterator_tasks.total_block_bytes, total_merges,
+            total_rows, total_chunk, duration_ms);
+    COUNTER_UPDATE(ADD_COUNTER(_profile, "SpillMergeInputGroups", TUnit::UNIT), spill_block_iterator_tasks.group_count);
+    COUNTER_UPDATE(ADD_COUNTER(_profile, "SpillMergeInputBytes", TUnit::BYTES),
+                   spill_block_iterator_tasks.total_block_bytes);
+    COUNTER_UPDATE(ADD_COUNTER(_profile, "SpillMergeCount", TUnit::UNIT), total_merges);
+>>>>>>> 3a42d1171e ([Enhancement] Improve the collection and display of load spill metrics in the load profile (#67527))
     return Status::OK();
 }
 
