@@ -434,10 +434,14 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
         Assertions.assertTrue(replayPair.second.contains("  22:NESTLOOP JOIN\n" +
                 "  |  join op: INNER JOIN\n" +
                 "  |  colocate: false, reason: \n" +
-                "  |  other join predicates: if(19: c_0_0 != 1: c_0_0, 4: c_0_3, 20: c_0_3) = '1969-12-28', " +
-                "if(((1: c_0_0 IS NULL) AND (NOT ((21: countRows IS NULL) OR (21: countRows = 0)))) OR " +
-                "((22: countNotNulls < 21: countRows) AND (((NOT ((21: countRows IS NULL) OR (21: countRows = 0))) " +
-                "AND (1: c_0_0 IS NOT NULL)) AND (16: c_0_0 IS NULL))), TRUE, FALSE)\n"), replayPair.second);
+                "  |  other predicates: if(19: c_0_0 != 1: c_0_0, 4: c_0_3, 20: c_0_3) = '1969-12-28', " +
+                "if(((1: c_0_0 IS NULL) AND (27: expr)) OR ((22: countNotNulls < 21: countRows) " +
+                "AND (((27: expr) AND (1: c_0_0 IS NOT NULL)) AND (16: c_0_0 IS NULL))), TRUE, FALSE)\n" +
+                "  |    common sub expr:\n" +
+                "  |    <slot 24> : 21: countRows IS NULL\n" +
+                "  |    <slot 25> : 21: countRows = 0\n" +
+                "  |    <slot 26> : (24: expr) OR (25: expr)\n" +
+                "  |    <slot 27> : NOT (26: expr)"), replayPair.second);
         Assertions.assertTrue(replayPair.second.contains("  20:HASH JOIN\n" +
                 "  |  join op: LEFT OUTER JOIN (PARTITIONED)\n" +
                 "  |  colocate: false, reason: \n" +
