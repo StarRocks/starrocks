@@ -239,7 +239,8 @@ AS
 **refresh_scheme**（选填）
 
 :::note
-创建异步物化视图时必须至少指定 `distribution_desc` 和 `refresh_scheme` 其中之一。
+- 创建异步物化视图时必须至少指定 `distribution_desc` 和 `refresh_scheme` 其中之一。
+- 外表物化视图不支持**由基表数据变更触发的**自动刷新。仅支持**异步定时**刷新和手动刷新。
 :::
 
 物化视图的刷新方式。该参数支持如下值：
@@ -846,7 +847,7 @@ from lineorder
 group by lo_orderkey, lo_orderdate, lo_custkey;
 ```
 
-# 使用 date_trunc 函数将 `dt` 列截断至以月为单位进行分区。
+使用 date_trunc 函数将 `dt` 列截断至以月为单位进行分区
 CREATE MATERIALIZED VIEW order_mv1
 PARTITION BY date_trunc('month', `dt`)
 DISTRIBUTED BY HASH(`order_id`)
