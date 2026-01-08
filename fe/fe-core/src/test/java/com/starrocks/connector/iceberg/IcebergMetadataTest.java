@@ -106,6 +106,7 @@ import com.starrocks.statistic.ExternalAnalyzeJob;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.thrift.TIcebergColumnStats;
 import com.starrocks.thrift.TIcebergDataFile;
+import com.starrocks.thrift.TIcebergFileContent;
 import com.starrocks.thrift.TIcebergTable;
 import com.starrocks.thrift.TResultSinkType;
 import com.starrocks.thrift.TSinkCommitInfo;
@@ -125,6 +126,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.iceberg.BaseTable;
 import org.apache.iceberg.DataFile;
 import org.apache.iceberg.DataFiles;
+import org.apache.iceberg.DeleteFile;
 import org.apache.iceberg.FileScanTask;
 import org.apache.iceberg.MetricsModes;
 import org.apache.iceberg.NullOrder;
@@ -149,6 +151,7 @@ import org.junit.jupiter.api.Test;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -2251,5 +2254,127 @@ public class IcebergMetadataTest extends TableTestBase {
         Map<String, String> result = metadata.getCatalogProperties();
 
         Assertions.assertTrue(result.isEmpty());
+    }
+
+    @Test
+    public void testDeleteOperationCommit() throws Exception {
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
+
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(), DEFAULT_CATALOG_PROPERTIES);
+        mockedNativeTableA.newFastAppend().appendFile(FILE_A).commit();
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name", "iceberg_db",
+                "iceberg_table", "", Lists.newArrayList(), mockedNativeTableA, Maps.newHashMap());
+
+        new Expectations(metadata) {
+            {
+                metadata.getTable((ConnectContext) any, anyString, anyString);
+                result = icebergTable;
+                minTimes = 0;
+            }
+        };
+
+        // Create a delete file with POSITION_DELETES content
+        TIcebergDataFile deleteFile = new TIcebergDataFile();
+        String deleteFilePath = mockedNativeTableA.location() + "/data/data_bucket=1/delete_file.parquet";
+        deleteFile.setPath(deleteFilePath);
+        deleteFile.setFormat("parquet");
+        deleteFile.setRecord_count(10);
+        deleteFile.setFile_size_in_bytes(1024);
+        deleteFile.setPartition_path(mockedNativeTableA.location() + "/data/data_bucket=1/");
+        deleteFile.setPartition_null_fingerprint("0");
+        deleteFile.setFile_content(TIcebergFileContent.POSITION_DELETES);
+        // Set referenced data file
+        deleteFile.setReferenced_data_file(FILE_A.path().toString());
+
+        TIcebergColumnStats columnStats = new TIcebergColumnStats();
+        columnStats.setColumn_sizes(Map.of(1, 1000L, 2, 2000L));
+        columnStats.setValue_counts(Map.of(1, 10L, 2, 10L));
+        columnStats.setNull_value_counts(Map.of(1, 0L, 2, 0L));
+        columnStats.setLower_bounds(Map.of(1, ByteBuffer.wrap("min_val".getBytes()),
+                2, ByteBuffer.wrap("min_val2".getBytes())));
+
+        columnStats.setUpper_bounds(Map.of(1, ByteBuffer.wrap("max_val".getBytes()),
+                2, ByteBuffer.wrap("max_val2".getBytes())));
+        deleteFile.setColumn_stats(columnStats);
+
+        TSinkCommitInfo commitInfo = new TSinkCommitInfo();
+        commitInfo.setIceberg_data_file(deleteFile);
+
+        // Test commit with delete operation
+        metadata.finishSink("iceberg_db", "iceberg_table", Lists.newArrayList(commitInfo), null);
+
+        // Verify the delete file was committed
+        mockedNativeTableA.refresh();
+        List<FileScanTask> fileScanTasks = Lists.newArrayList(mockedNativeTableA.newScan().planFiles());
+        // We should have delete files in the scan
+        boolean foundDelete = false;
+        for (FileScanTask task : fileScanTasks) {
+            if (!task.deletes().isEmpty()) {
+                foundDelete = true;
+                DeleteFile delete = task.deletes().get(0);
+                Assertions.assertEquals(deleteFilePath, delete.path().toString());
+                Assertions.assertEquals(10, delete.recordCount());
+            }
+        }
+        Assertions.assertTrue(foundDelete, "Delete file should be committed");
+    }
+
+    @Test
+    public void testDeleteOperationWithConflictDetection() throws Exception {
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
+
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(), DEFAULT_CATALOG_PROPERTIES);
+        mockedNativeTableA.newFastAppend().appendFile(FILE_A).commit();
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name", "iceberg_db",
+                "iceberg_table", "", Lists.newArrayList(), mockedNativeTableA, Maps.newHashMap());
+
+        new Expectations(metadata) {
+            {
+                metadata.getTable((ConnectContext) any, anyString, anyString);
+                result = icebergTable;
+                minTimes = 0;
+            }
+        };
+
+        // Create a delete file
+        TIcebergDataFile deleteFile = new TIcebergDataFile();
+        deleteFile.setPath(mockedNativeTableA.location() + "/data/delete_file.parquet");
+        deleteFile.setFormat("parquet");
+        deleteFile.setRecord_count(5);
+        deleteFile.setFile_size_in_bytes(512);
+        deleteFile.setPartition_path(mockedNativeTableA.location() + "/data/data_bucket=1/");
+        deleteFile.setPartition_null_fingerprint("0");
+        deleteFile.setFile_content(TIcebergFileContent.POSITION_DELETES);
+        deleteFile.setReferenced_data_file(FILE_A.path().toString());
+
+        TIcebergColumnStats columnStats = new TIcebergColumnStats();
+        columnStats.setColumn_sizes(Map.of(1, 1000L, 2, 2000L));
+        columnStats.setValue_counts(Map.of(1, 10L, 2, 10L));
+        columnStats.setNull_value_counts(Map.of(1, 0L, 2, 0L));
+        columnStats.setLower_bounds(Map.of(1, ByteBuffer.wrap("min_val".getBytes()),
+                2, ByteBuffer.wrap("min_val2".getBytes())));
+
+        columnStats.setUpper_bounds(Map.of(1, ByteBuffer.wrap("max_val".getBytes()),
+                2, ByteBuffer.wrap("max_val2".getBytes())));
+        deleteFile.setColumn_stats(columnStats);
+
+        TSinkCommitInfo commitInfo = new TSinkCommitInfo();
+        commitInfo.setIceberg_data_file(deleteFile);
+
+        // Create IcebergSinkExtra with conflict detection filter
+        IcebergMetadata.IcebergSinkExtra extra = new IcebergMetadata.IcebergSinkExtra();
+        // Set a simple conflict detection filter (id > 100)
+        org.apache.iceberg.expressions.Expression filter = org.apache.iceberg.expressions.Expressions.greaterThan("id", 100);
+        extra.setConflictDetectionFilter(filter);
+
+        // Test commit with conflict detection
+        metadata.finishSink("iceberg_db", "iceberg_table", Lists.newArrayList(commitInfo), null, extra);
+
+        // Verify commit succeeded
+        mockedNativeTableA.refresh();
+        List<FileScanTask> fileScanTasks = Lists.newArrayList(mockedNativeTableA.newScan().planFiles());
+        Assertions.assertFalse(fileScanTasks.isEmpty());
     }
 }

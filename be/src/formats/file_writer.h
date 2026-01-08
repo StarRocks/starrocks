@@ -50,8 +50,13 @@ public:
         std::string location;
         std::function<void()> rollback_action;
         std::string extra_data;
+        std::string referenced_data_file;
         CommitResult& set_extra_data(std::string extra_data) {
             this->extra_data = std::move(extra_data);
+            return *this;
+        }
+        CommitResult& set_referenced_data_file(std::string referenced_data_file) {
+            this->referenced_data_file = std::move(referenced_data_file);
             return *this;
         }
     };

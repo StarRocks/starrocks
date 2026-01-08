@@ -219,8 +219,8 @@ TEST_F(IcebergDeleteSinkTest, context_required_fields) {
     EXPECT_NE(context->column_slot_map.find("_pos"), context->column_slot_map.end());
 }
 
-// Test callback_on_commit function
-TEST_F(IcebergDeleteSinkTest, callback_on_commit) {
+// Test callback_on_commit function with empty result
+TEST_F(IcebergDeleteSinkTest, callback_on_commit_empty) {
     auto context = create_delete_sink_context();
     auto provider = std::make_unique<IcebergDeleteSinkProvider>();
     auto result = provider->create_chunk_sink(context, 0);
@@ -230,10 +230,167 @@ TEST_F(IcebergDeleteSinkTest, callback_on_commit) {
     auto delete_sink = dynamic_cast<IcebergDeleteSink*>(sink.get());
     ASSERT_NE(delete_sink, nullptr);
 
-    // Call the callback function - it should not crash
+    // Call the callback function with empty result
     CommitResult result_obj;
+    result_obj.location = "/test/path/delete_file.parquet"; // Provide a valid location to avoid PathUtils failure
+
+    // Get the runtime state before the callback to check sink commit info
+    auto runtime_state = _fragment_context->runtime_state_ptr();
+    size_t initial_sink_commit_info_count = runtime_state->sink_commit_infos().size();
+
     delete_sink->callback_on_commit(result_obj);
-    // Callback is currently empty (TODO), but should not crash
+
+    // Should not crash and should handle empty result gracefully
+    // Since io_status is OK by default, it should add a commit info
+    ASSERT_EQ(runtime_state->sink_commit_infos().size(), initial_sink_commit_info_count + 1);
+
+    // Verify the last added sink commit info
+    const auto& last_commit_info = runtime_state->sink_commit_infos().back();
+    ASSERT_TRUE(last_commit_info.__isset.iceberg_data_file);
+    const auto& iceberg_data_file = last_commit_info.iceberg_data_file;
+    EXPECT_EQ(iceberg_data_file.path, result_obj.location);
+    EXPECT_EQ(iceberg_data_file.file_content, TIcebergFileContent::POSITION_DELETES);
+}
+
+// Test callback_on_commit function with complete delete file information
+TEST_F(IcebergDeleteSinkTest, callback_on_commit_with_delete_file) {
+    auto context = create_delete_sink_context();
+    auto provider = std::make_unique<IcebergDeleteSinkProvider>();
+    auto result = provider->create_chunk_sink(context, 0);
+    ASSERT_TRUE(result.ok());
+
+    auto sink = std::move(result).value();
+    auto delete_sink = dynamic_cast<IcebergDeleteSink*>(sink.get());
+    ASSERT_NE(delete_sink, nullptr);
+
+    // Prepare a complete CommitResult with delete file information
+    CommitResult result_obj;
+    result_obj.io_status = Status::OK();
+    result_obj.location = "/test/path/delete_file.parquet";
+    result_obj.format = "parquet";
+    result_obj.file_statistics.record_count = 100;
+    result_obj.file_statistics.file_size = 1024 * 1024;
+    result_obj.extra_data = "partition_null_fingerprint";
+    result_obj.referenced_data_file = "s3://test-bucket/test-table/data/data_file.parquet";
+
+    // Set column statistics
+    result_obj.file_statistics.column_sizes = {{1, 1000}, {2, 2000}};
+    result_obj.file_statistics.value_counts = {{1, 100}, {2, 100}};
+    result_obj.file_statistics.null_value_counts = {{1, 0}, {2, 10}};
+    result_obj.file_statistics.lower_bounds = {{1, "min_val"}, {2, "min_val2"}};
+    result_obj.file_statistics.upper_bounds = {{1, "max_val"}, {2, "max_val2"}};
+
+    // Get the runtime state before the callback to check sink commit info
+    auto runtime_state = _fragment_context->runtime_state_ptr();
+    size_t initial_sink_commit_info_count = runtime_state->sink_commit_infos().size();
+
+    // Call the callback function
+    delete_sink->callback_on_commit(result_obj);
+
+    // Verify that the sink processed the commit result correctly
+    // The callback should have updated the runtime state with sink commit info
+    ASSERT_EQ(runtime_state->sink_commit_infos().size(), initial_sink_commit_info_count + 1);
+
+    // Verify the last added sink commit info has the expected iceberg data file
+    const auto& last_commit_info = runtime_state->sink_commit_infos().back();
+    ASSERT_TRUE(last_commit_info.__isset.iceberg_data_file);
+    const auto& iceberg_data_file = last_commit_info.iceberg_data_file;
+    EXPECT_EQ(iceberg_data_file.path, result_obj.location);
+    EXPECT_EQ(iceberg_data_file.format, result_obj.format);
+    EXPECT_EQ(iceberg_data_file.record_count, result_obj.file_statistics.record_count);
+    EXPECT_EQ(iceberg_data_file.file_size_in_bytes, result_obj.file_statistics.file_size);
+    EXPECT_EQ(iceberg_data_file.partition_null_fingerprint, result_obj.extra_data);
+    EXPECT_EQ(iceberg_data_file.referenced_data_file, result_obj.referenced_data_file);
+    EXPECT_EQ(iceberg_data_file.file_content, TIcebergFileContent::POSITION_DELETES);
+}
+
+// Test callback_on_commit function with IO failure
+TEST_F(IcebergDeleteSinkTest, callback_on_commit_io_failure) {
+    auto context = create_delete_sink_context();
+    auto provider = std::make_unique<IcebergDeleteSinkProvider>();
+    auto result = provider->create_chunk_sink(context, 0);
+    ASSERT_TRUE(result.ok());
+
+    auto sink = std::move(result).value();
+    auto delete_sink = dynamic_cast<IcebergDeleteSink*>(sink.get());
+    ASSERT_NE(delete_sink, nullptr);
+
+    // Prepare a CommitResult with IO failure
+    CommitResult result_obj;
+    result_obj.io_status = Status::IOError("Write failed");
+    result_obj.location = "/test/path/delete_file.parquet";
+
+    // Get the runtime state before the callback to check sink commit info
+    auto runtime_state = _fragment_context->runtime_state_ptr();
+    size_t initial_sink_commit_info_count = runtime_state->sink_commit_infos().size();
+
+    // Call the callback function - it should handle the failure gracefully
+    delete_sink->callback_on_commit(result_obj);
+
+    // Should not crash even with IO failure
+    // Since io_status is not OK, no commit info should be added
+    ASSERT_EQ(runtime_state->sink_commit_infos().size(), initial_sink_commit_info_count);
+}
+
+// Test callback_on_commit function with partial statistics
+TEST_F(IcebergDeleteSinkTest, callback_on_commit_partial_stats) {
+    auto context = create_delete_sink_context();
+    auto provider = std::make_unique<IcebergDeleteSinkProvider>();
+    auto result = provider->create_chunk_sink(context, 0);
+    ASSERT_TRUE(result.ok());
+
+    auto sink = std::move(result).value();
+    auto delete_sink = dynamic_cast<IcebergDeleteSink*>(sink.get());
+    ASSERT_NE(delete_sink, nullptr);
+
+    // Prepare a CommitResult with partial statistics
+    CommitResult result_obj;
+    result_obj.io_status = Status::OK();
+    result_obj.location = "/test/path/delete_file.parquet";
+    result_obj.format = "parquet";
+    result_obj.file_statistics.record_count = 50;
+    result_obj.file_statistics.file_size = 512 * 1024;
+    // Only set some statistics, not all
+    result_obj.file_statistics.value_counts = std::map<int, int64_t>{{1, 50}};
+    result_obj.file_statistics.null_value_counts = std::map<int, int64_t>{{1, 5}};
+    // Lower and upper bounds not set
+
+    // Get the runtime state before the callback to check sink commit info
+    auto runtime_state = _fragment_context->runtime_state_ptr();
+    size_t initial_sink_commit_info_count = runtime_state->sink_commit_infos().size();
+
+    // Call the callback function
+    delete_sink->callback_on_commit(result_obj);
+
+    // Should handle partial statistics correctly
+    ASSERT_EQ(runtime_state->sink_commit_infos().size(), initial_sink_commit_info_count + 1);
+
+    // Verify the last added sink commit info has the expected iceberg data file
+    const auto& last_commit_info = runtime_state->sink_commit_infos().back();
+    ASSERT_TRUE(last_commit_info.__isset.iceberg_data_file);
+    const auto& iceberg_data_file = last_commit_info.iceberg_data_file;
+    EXPECT_EQ(iceberg_data_file.path, result_obj.location);
+    EXPECT_EQ(iceberg_data_file.format, result_obj.format);
+    EXPECT_EQ(iceberg_data_file.record_count, result_obj.file_statistics.record_count);
+    EXPECT_EQ(iceberg_data_file.file_size_in_bytes, result_obj.file_statistics.file_size);
+    EXPECT_EQ(iceberg_data_file.file_content, TIcebergFileContent::POSITION_DELETES);
+}
+
+// Test CommitResult set_referenced_data_file method
+TEST_F(IcebergDeleteSinkTest, commit_result_set_referenced_data_file) {
+    CommitResult result_obj;
+
+    // Test setting referenced data file
+    std::string referenced_file = "s3://test-bucket/test-table/data/data_file_001.parquet";
+    result_obj.set_referenced_data_file(referenced_file);
+
+    EXPECT_EQ(result_obj.referenced_data_file, referenced_file);
+
+    // Test chaining
+    std::string referenced_file2 = "s3://test-bucket/test-table/data/data_file_002.parquet";
+    auto& result_ref = result_obj.set_referenced_data_file(referenced_file2);
+    EXPECT_EQ(&result_ref, &result_obj); // Should return self reference
+    EXPECT_EQ(result_obj.referenced_data_file, referenced_file2);
 }
 
 // Test IcebergDeleteSink::finish function
