@@ -115,7 +115,6 @@ import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TDataCacheMetrics;
 import com.starrocks.thrift.TDataCacheStatus;
-import com.starrocks.thrift.TStorageType;
 import com.starrocks.type.FloatType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.VarcharType;
@@ -226,10 +225,6 @@ public class ShowExecutorSimpleTest {
                 table.getIndexMetaIdByName(anyString);
                 minTimes = 0;
                 result = 0L;
-
-                table.getStorageTypeByIndexMetaId(0L);
-                minTimes = 0;
-                result = TStorageType.COLUMN;
 
                 table.getPartition(anyLong);
                 minTimes = 0;

@@ -621,7 +621,7 @@ public class AlterTest {
         alterTableWithNewParser(stmt, false);
 
         Assertions.assertTrue(tbl.getTableProperty().getDynamicPartitionProperty().isEnabled());
-        Assertions.assertEquals(4, tbl.getIndexIdToSchema().size());
+        Assertions.assertEquals(4, tbl.getIndexMetaIdToSchema().size());
 
         // add partition when dynamic partition is enable
         stmt = "alter table test.tbl1 add partition p3 values less than('2020-04-01') " +

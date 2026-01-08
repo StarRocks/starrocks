@@ -231,6 +231,11 @@ public:
         __builtin_unreachable();
     }
 
+    virtual std::unique_ptr<ConnectorChunkSinkProvider> create_delete_sink_provider() const {
+        CHECK(false) << connector_type() << " connector does not implement chunk sink yet";
+        __builtin_unreachable();
+    }
+
     virtual ConnectorType connector_type() const = 0;
 };
 

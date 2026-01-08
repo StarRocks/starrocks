@@ -204,3 +204,23 @@ select cast(column_0 as datetime) from (values ("2020-01-01T01:02:03z")) as tmp;
 select cast(column_0 as datetime) from (values ("2020-01-01T01:02:03Zextra")) as tmp;
 select cast(column_0 as datetime) from (values ("2020-01-01T01:02:03.Z")) as tmp;
 select cast(column_0 as datetime) from (values ("2020-01-01T01:02:03.1234567Z")) as tmp;
+
+-- Test invalid time components (hour, minute, second out of range):
+select cast(column_0 as datetime) from (values ("2024-01-01 01:60:00")) as tmp;
+select cast(column_0 as datetime) from (values ("2024-01-01 01:61:00")) as tmp;
+select cast(column_0 as datetime) from (values ("2024-01-01 01:99:00")) as tmp;
+select cast(column_0 as datetime) from (values ("2024-01-01 01:30:60")) as tmp;
+select cast(column_0 as datetime) from (values ("2024-01-01 01:30:61")) as tmp;
+select cast(column_0 as datetime) from (values ("2024-01-01 24:00:00")) as tmp;
+select cast(column_0 as datetime) from (values ("2024-01-01 25:00:00")) as tmp;
+
+-- Test valid edge cases (should work):
+select cast(column_0 as datetime) from (values ("2024-01-01 23:59:59")) as tmp;
+select cast(column_0 as datetime) from (values ("2024-01-01 00:00:00")) as tmp;
+select cast(column_0 as datetime) from (values ("2024-01-01 01:59:00")) as tmp;
+select cast(column_0 as datetime) from (values ("2024-01-01 01:30:59")) as tmp;
+
+-- Test invalid time in ISO 8601 format:
+select cast(column_0 as datetime) from (values ("2024-01-01T01:61:00")) as tmp;
+select cast(column_0 as datetime) from (values ("2024-01-01T01:61:00Z")) as tmp;
+select cast(column_0 as datetime) from (values ("2024-01-01T24:00:00")) as tmp;

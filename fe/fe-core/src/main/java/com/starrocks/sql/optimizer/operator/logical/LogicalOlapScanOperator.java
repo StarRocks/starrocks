@@ -37,7 +37,7 @@ import java.util.Objects;
 
 public final class LogicalOlapScanOperator extends LogicalScanOperator {
     private DistributionSpec distributionSpec;
-    private long selectedIndexId;
+    private long selectedIndexMetaId;
     private List<Long> selectedPartitionId;
     private PartitionNames partitionNames;
     private boolean hasTableHints;
@@ -86,7 +86,7 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
             DistributionSpec distributionSpec,
             long limit,
             ScalarOperator predicate,
-            long selectedIndexId,
+            long selectedIndexMetaId,
             List<Long> selectedPartitionId,
             PartitionNames partitionNames,
             boolean hasTableHints,
@@ -99,7 +99,7 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
 
         Preconditions.checkState(table instanceof OlapTable);
         this.distributionSpec = distributionSpec;
-        this.selectedIndexId = selectedIndexId;
+        this.selectedIndexMetaId = selectedIndexMetaId;
         this.selectedPartitionId = selectedPartitionId;
         this.partitionNames = partitionNames;
         this.hasTableHints = hasTableHints;
@@ -119,8 +119,8 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
         return distributionSpec;
     }
 
-    public long getSelectedIndexId() {
-        return selectedIndexId;
+    public long getSelectedIndexMetaId() {
+        return selectedIndexMetaId;
     }
 
     public List<Long> getSelectedPartitionId() {
@@ -205,7 +205,7 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
         }
 
         LogicalOlapScanOperator that = (LogicalOlapScanOperator) o;
-        return selectedIndexId == that.selectedIndexId &&
+        return selectedIndexMetaId == that.selectedIndexMetaId &&
                 gtid == that.gtid &&
                 Objects.equals(distributionSpec, that.distributionSpec) &&
                 Objects.equals(selectedPartitionId, that.selectedPartitionId) &&
@@ -218,7 +218,7 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
 
     @Override
     public int hashCode() {
-        return Objects.hash(super.hashCode(), selectedIndexId, gtid, selectedPartitionId,
+        return Objects.hash(super.hashCode(), selectedIndexMetaId, gtid, selectedPartitionId,
                 selectedTabletId, hintsTabletIds, hintsReplicaIds, sample);
     }
 
@@ -238,7 +238,7 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
             super.withOperator(scanOperator);
 
             builder.distributionSpec = scanOperator.distributionSpec;
-            builder.selectedIndexId = scanOperator.selectedIndexId;
+            builder.selectedIndexMetaId = scanOperator.selectedIndexMetaId;
             builder.gtid = scanOperator.gtid;
             builder.selectedPartitionId = scanOperator.selectedPartitionId;
             builder.partitionNames = scanOperator.partitionNames;
@@ -255,7 +255,7 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
         }
 
         public Builder setSelectedIndexId(long selectedIndexId) {
-            builder.selectedIndexId = selectedIndexId;
+            builder.selectedIndexMetaId = selectedIndexId;
             return this;
         }
 
