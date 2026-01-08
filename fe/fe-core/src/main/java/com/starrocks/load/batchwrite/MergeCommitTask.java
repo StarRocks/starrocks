@@ -26,6 +26,7 @@ import com.starrocks.common.CloseableLock;
 import com.starrocks.common.Config;
 import com.starrocks.common.DataQualityException;
 import com.starrocks.common.LoadException;
+import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.Status;
 import com.starrocks.common.TimeoutWatcher;
@@ -348,9 +349,10 @@ public class MergeCommitTask extends AbstractTxnStateChangeCallback implements R
             // 7) Mark finished.
             transitionToState(TaskState.FINISHED, publishFailMsg, null, () -> {});
         } catch (Exception e) {
-            final boolean cancelled = taskState == TaskState.CANCELLED;
+            final Pair<TaskState, String> currentState = getTaskState();
+            final boolean cancelled = currentState.first == TaskState.CANCELLED;
             String exceptionMsg = e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage();
-            String abortReason = cancelled ? taskStateMessage : exceptionMsg;
+            String abortReason = cancelled ? currentState.second : exceptionMsg;
             try {
                 if (localTxnId != -1) {
                     // remove callback before abortTransaction(), so that the afterAborted() callback will not be called again
@@ -710,6 +712,15 @@ public class MergeCommitTask extends AbstractTxnStateChangeCallback implements R
         }
         if (targetState == TaskState.CANCELLED && prevTaskStateCancelHandler != null) {
             prevTaskStateCancelHandler.cancel(targetStateMsg);
+        }
+    }
+
+    private Pair<TaskState, String> getTaskState() {
+        this.lock.lock();
+        try {
+            return new Pair<>(taskState, taskStateMessage);
+        } finally {
+            this.lock.unlock();
         }
     }
 
