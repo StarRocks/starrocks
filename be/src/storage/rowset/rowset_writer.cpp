@@ -256,9 +256,8 @@ StatusOr<RowsetSharedPtr> RowsetWriter::build() {
 
     auto rowset_meta = std::make_shared<RowsetMeta>(_rowset_meta_pb);
     RowsetSharedPtr rowset;
-    TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(_context.tablet_id);
     RETURN_IF_ERROR(RowsetFactory::create_rowset(_context.tablet_schema, _context.rowset_path_prefix, rowset_meta,
-                                                 &rowset, tablet ? tablet->data_dir()->get_meta() : nullptr));
+                                                 &rowset, nullptr));
     if (_rows_mapper_builder != nullptr) {
         RETURN_IF_ERROR(_rows_mapper_builder->finalize());
     }

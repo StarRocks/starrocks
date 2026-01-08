@@ -34,6 +34,7 @@
 
 #include "storage/rowset/rowset_factory.h"
 
+#include <filesystem>
 #include <memory>
 
 #include "gen_cpp/olap_file.pb.h"
@@ -41,11 +42,23 @@
 #include "runtime/exec_env.h"
 #include "storage/rowset/horizontal_update_rowset_writer.h"
 #include "storage/rowset/rowset_writer.h"
+#include "storage/storage_engine.h"
 
 namespace starrocks {
 
 Status RowsetFactory::create_rowset(const TabletSchemaCSPtr& schema, const std::string& rowset_path,
                                     const RowsetMetaSharedPtr& rowset_meta, RowsetSharedPtr* rowset, KVStore* kvstore) {
+    if (kvstore == nullptr) {
+        std::filesystem::path schema_hash_path(rowset_path);
+        std::filesystem::path data_dir_path = schema_hash_path.parent_path().parent_path().parent_path().parent_path();
+        std::string data_dir_string = data_dir_path.string();
+        DataDir* data_dir = StorageEngine::instance()->get_store(data_dir_string);
+        if (data_dir != nullptr) {
+            kvstore = data_dir->get_meta();
+        } else {
+            return Status::InternalError(fmt::format("DataDir not found for path: {}", data_dir_string));
+        }
+    }
     *rowset = Rowset::create(schema, rowset_path, rowset_meta, kvstore);
     RETURN_IF_ERROR((*rowset)->init());
     return Status::OK();
