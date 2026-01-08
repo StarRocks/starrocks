@@ -587,7 +587,7 @@ public class RestoreJobTest {
         job.run();
         Assertions.assertEquals(Status.OK, job.getStatus());
         Assertions.assertEquals(RestoreJobState.SNAPSHOTING, job.getState());
-        Assertions.assertEquals(4, AgentTaskQueue.getTaskNum());
+        Assertions.assertEquals(24, AgentTaskQueue.getTaskNum());
 
         // 3. snapshot finished
         List<AgentTask> agentTasks = Lists.newArrayList();
@@ -595,7 +595,7 @@ public class RestoreJobTest {
         agentTasks.addAll(AgentTaskQueue.getDiffTasks(CatalogMocker.BACKEND1_ID, runningTasks));
         agentTasks.addAll(AgentTaskQueue.getDiffTasks(CatalogMocker.BACKEND2_ID, runningTasks));
         agentTasks.addAll(AgentTaskQueue.getDiffTasks(CatalogMocker.BACKEND3_ID, runningTasks));
-        Assertions.assertEquals(4, agentTasks.size());
+        Assertions.assertEquals(24, agentTasks.size());
 
         for (AgentTask agentTask : agentTasks) {
             if (agentTask.getTaskType() != TTaskType.MAKE_SNAPSHOT) {
@@ -763,7 +763,7 @@ public class RestoreJobTest {
         job.run();
         Assertions.assertEquals(Status.OK, job.getStatus());
         Assertions.assertEquals(RestoreJobState.SNAPSHOTING, job.getState());
-        Assertions.assertEquals(4, AgentTaskQueue.getTaskNum());
+        Assertions.assertEquals(6, AgentTaskQueue.getTaskNum());
 
         // 3. snapshot finished
         List<AgentTask> agentTasks = Lists.newArrayList();
@@ -771,7 +771,7 @@ public class RestoreJobTest {
         agentTasks.addAll(AgentTaskQueue.getDiffTasks(CatalogMocker.BACKEND1_ID, runningTasks));
         agentTasks.addAll(AgentTaskQueue.getDiffTasks(CatalogMocker.BACKEND2_ID, runningTasks));
         agentTasks.addAll(AgentTaskQueue.getDiffTasks(CatalogMocker.BACKEND3_ID, runningTasks));
-        Assertions.assertEquals(4, agentTasks.size());
+        Assertions.assertEquals(6, agentTasks.size());
 
         for (AgentTask agentTask : agentTasks) {
             if (agentTask.getTaskType() != TTaskType.MAKE_SNAPSHOT) {

@@ -1340,10 +1340,14 @@ public class RestoreJob extends AbstractJob {
             MaterializedIndex remoteIdx = remotePart.getDefaultPhysicalPartition().getLatestIndex(remoteIdxMetaId);
             long localIdxMetaId = localIdxNameToMetaId.get(localIdxName);
             remoteIdx.setIdForRestore(localIdxMetaId);
+            // delete old base and rollup index
+            remotePart.getDefaultPhysicalPartition().deleteMaterializedIndexByMetaId(remoteIdxMetaId);
             if (localIdxMetaId != localTbl.getBaseIndexMetaId()) {
-                // not base table, reset
-                remotePart.getDefaultPhysicalPartition().deleteMaterializedIndexByMetaId(remoteIdxMetaId);
+                // reset rollup
                 remotePart.getDefaultPhysicalPartition().createRollupIndex(remoteIdx);
+            } else {
+                // reset base index
+                remotePart.getDefaultPhysicalPartition().setBaseIndex(remoteIdx);
             }
         }
 
