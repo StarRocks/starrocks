@@ -46,7 +46,7 @@ public class PublishVersionTaskTest {
         Assertions.assertEquals(baseVersion, replica.getVersion());
         Assertions.assertEquals(0, replica.getMinReadableVersion());
 
-        PublishVersionTask task = new PublishVersionTask(backendId, 1L, 1L, dbId, 0L,
+        PublishVersionTask task = new PublishVersionTask(backendId, 1L, dbId, 0L,
                 Collections.emptyList(), null, null, 0L, null, false, TransactionType.TXN_REPLICATION);
 
         TTabletVersionPair tabletVersionPair = new TTabletVersionPair();
