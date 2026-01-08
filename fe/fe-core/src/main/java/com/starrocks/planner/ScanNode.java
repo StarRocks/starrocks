@@ -47,6 +47,7 @@ import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprCastFunction;
 import com.starrocks.sql.optimizer.ScanOptimizeOption;
+import com.starrocks.sql.plan.HDFSScanNodePredicates;
 import com.starrocks.thrift.TColumnAccessPath;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.warehouse.cngroup.ComputeResource;
@@ -82,6 +83,10 @@ public abstract class ScanNode extends PlanNode {
     protected TvrVersionRange tvrVersionRange;
 
     private Map<SlotId, Expr> heavyExprs = Maps.newHashMap();
+
+    protected long selectedPartitionNum = -1;
+
+    protected final HDFSScanNodePredicates scanNodePredicates = new HDFSScanNodePredicates();
 
     public ScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName) {
         super(id, desc.getId().asList(), planNodeName);
@@ -268,5 +273,13 @@ public abstract class ScanNode extends PlanNode {
 
     public Map<SlotId, Expr> getHeavyExprs() {
         return heavyExprs;
+    }
+
+    public long getSelectedPartitionNum() {
+        return selectedPartitionNum;
+    }
+
+    public HDFSScanNodePredicates getScanNodePredicates() {
+        return scanNodePredicates;
     }
 }

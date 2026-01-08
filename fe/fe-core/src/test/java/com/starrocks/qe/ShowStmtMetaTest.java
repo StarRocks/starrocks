@@ -1008,7 +1008,7 @@ public class ShowStmtMetaTest {
     public void testShowResourceGroupStmt() {
         ShowResourceGroupStmt stmt = new ShowResourceGroupStmt("test_group", false, false, NodePosition.ZERO);
         ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
-        Assertions.assertEquals(12, metaData.getColumnCount());
+        Assertions.assertEquals(15, metaData.getColumnCount());
         Assertions.assertEquals("name", metaData.getColumn(0).getName());
         Assertions.assertEquals("id", metaData.getColumn(1).getName());
         Assertions.assertEquals("cpu_weight_percent", metaData.getColumn(2).getName());

@@ -137,11 +137,14 @@ public class ResourceGroupBuilder {
                 changedProperties.getBigQueryMemLimit() == null &&
                 changedProperties.getBigQueryScanRowsLimit() == null &&
                 changedProperties.getSpillMemLimitThreshold() == null &&
-                changedProperties.getWarehouses() == null) {
+                changedProperties.getWarehouses() == null &&
+                changedProperties.getPlanScanPartitionsLimit() == null &&
+                changedProperties.getPlanScanRowsLimit() == null &&
+                changedProperties.getPlanScanTabletsLimit() == null) {
             throw new SemanticException("At least one of ('cpu_weight','cpu_weight_percent','exclusive_cpu_cores'," +
                     "'exclusive_cpu_percent','mem_limit','max_cpu_cores','concurrency_limit','big_query_mem_limit', " +
-                    "'big_query_scan_rows_limit','big_query_cpu_second_limit','spill_mem_limit_threshold','warehouses') " +
-                    "should be specified");
+                    "'big_query_scan_rows_limit','big_query_cpu_second_limit','spill_mem_limit_threshold','warehouses', " +
+                    "'plan_scan_partitions_limit','plan_scan_rows_limit', 'plan_scan_tablets_limit' should be specified");
         }
 
         return changedProperties;

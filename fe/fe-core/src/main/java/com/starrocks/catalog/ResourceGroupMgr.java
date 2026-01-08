@@ -581,6 +581,21 @@ public class ResourceGroupMgr implements Writable {
                     alterResourceGroupLog.setWarehouses(warehouses);
                 }
 
+                Long planScanPartitionsLimit = changedProperties.getPlanScanPartitionsLimit();
+                if (planScanPartitionsLimit != null) {
+                    alterResourceGroupLog.setPlanScanPartitionsLimit(planScanPartitionsLimit);
+                }
+
+                Long planScanRowsLimit = changedProperties.getPlanScanRowsLimit();
+                if (planScanRowsLimit != null) {
+                    alterResourceGroupLog.setPlanScanRowsLimit(planScanRowsLimit);
+                }
+
+                Long planScanTabletsLimit = changedProperties.getPlanScanTabletsLimit();
+                if (planScanTabletsLimit != null) {
+                    alterResourceGroupLog.setPlanScanTabletsLimit(planScanTabletsLimit);
+                }
+
                 // Type is guaranteed to be immutable during the analyzer phase.
                 TWorkGroupType workGroupType = changedProperties.getResourceGroupType();
                 Preconditions.checkState(workGroupType == null);
@@ -660,6 +675,18 @@ public class ResourceGroupMgr implements Writable {
         }
         if (log.getVersion() != 0) {
             wg.setVersion(log.getVersion());
+        }
+
+        if (log.getPlanScanPartitionsLimit() != null) {
+            wg.setPlanScanPartitionsLimit(log.getPlanScanPartitionsLimit());
+        }
+
+        if (log.getPlanScanRowsLimit() != null) {
+            wg.setPlanScanRowsLimit(log.getPlanScanRowsLimit());
+        }
+
+        if (log.getPlanScanTabletsLimit() != null) {
+            wg.setPlanScanTabletsLimit(log.getPlanScanTabletsLimit());
         }
     }
 

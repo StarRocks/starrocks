@@ -108,10 +108,13 @@ import com.starrocks.mysql.MysqlSerializer;
 import com.starrocks.persist.CreateInsertOverwriteJobLog;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.planner.FileScanNode;
+import com.starrocks.planner.HdfsScanNode;
 import com.starrocks.planner.HiveTableSink;
+import com.starrocks.planner.HudiScanNode;
 import com.starrocks.planner.IcebergScanNode;
 import com.starrocks.planner.IcebergTableSink;
 import com.starrocks.planner.OlapScanNode;
+import com.starrocks.planner.PaimonScanNode;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.PlanNodeId;
 import com.starrocks.planner.ScanNode;
@@ -825,6 +828,8 @@ public class StmtExecutor {
             } else {
                 LOG.debug("no need to transfer to Leader. stmt: {}", context.getStmtId());
             }
+
+            collectAndCheckPlanScanLimits(execPlan, context);
 
             if (parsedStmt instanceof QueryStatement) {
                 final boolean isStatisticsJob = AnalyzerUtils.isStatisticsJob(context, parsedStmt);
@@ -2631,7 +2636,7 @@ public class StmtExecutor {
         Database db =
                 GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(context, tableRef.getCatalogName(), tableRef.getDbName());
         if (db == null) {
-            String catalogAndDb = tableRef.getCatalogName() != null ? 
+            String catalogAndDb = tableRef.getCatalogName() != null ?
                     tableRef.getCatalogName() + "." + tableRef.getDbName() : tableRef.getDbName();
             throw new SemanticException("Database %s is not found", catalogAndDb);
         }
@@ -2817,6 +2822,9 @@ public class StmtExecutor {
         long loadedBytes = 0;
         long jobId = -1;
         long estimateScanRows = -1;
+        long planMaxScanRows = -1;
+        long planMaxScanPartitions = -1;
+        long planMaxScanTablets = -1;
         int estimateFileNum = 0;
         long estimateScanFileSize = 0;
         TransactionStatus txnStatus = TransactionStatus.ABORTED;
@@ -2839,7 +2847,6 @@ public class StmtExecutor {
                     needQuery = true;
                 }
             }
-
             if (needQuery) {
                 coord.setLoadJobType(TLoadJobType.INSERT_QUERY);
             } else {
@@ -3482,4 +3489,102 @@ public class StmtExecutor {
         }
         return ConnectContext.get().getSessionVariable().getInsertMaxFilterRatio();
     }
+
+    private void collectAndCheckPlanScanLimits(ExecPlan execPlan, ConnectContext context) throws DdlException {
+        if (execPlan == null || execPlan.getScanNodes().isEmpty()) {
+            return;
+        }
+
+        long planMaxScanRows = -1;
+        long planMaxScanPartitions = -1;
+        long planMaxScanTablets = -1;
+
+        for (ScanNode scanNode : execPlan.getScanNodes()) {
+            if (scanNode instanceof OlapScanNode) {
+                planMaxScanRows = Math.max(planMaxScanRows, scanNode.getCardinality());
+                planMaxScanPartitions = Math.max(
+                        planMaxScanPartitions, scanNode.getSelectedPartitionNum());
+                planMaxScanTablets = Math.max(
+                        planMaxScanTablets,
+                        ((OlapScanNode) scanNode).getScanTabletIds().size());
+                continue;
+            }
+
+            if (scanNode instanceof PaimonScanNode || scanNode instanceof HudiScanNode) {
+                planMaxScanRows = Math.max(planMaxScanRows, scanNode.getCardinality());
+                planMaxScanPartitions = Math.max(
+                        planMaxScanPartitions, scanNode.getSelectedPartitionNum());
+            }
+
+            if (scanNode instanceof HdfsScanNode) {
+                planMaxScanRows = Math.max(planMaxScanRows, scanNode.getCardinality());
+                planMaxScanPartitions = Math.max(
+                        planMaxScanPartitions, scanNode.getScanNodePredicates()
+                                .getSelectedPartitionIds().size());
+            }
+        }
+
+        context.getAuditEventBuilder()
+                .setPlanMaxScanRows(planMaxScanRows)
+                .setPlanMaxScanPartitions(planMaxScanPartitions)
+                .setPlanMaxScanTablets(planMaxScanTablets);
+
+        checkPlanScanLimits(
+                context,
+                planMaxScanRows,
+                planMaxScanPartitions,
+                planMaxScanTablets);
+    }
+
+
+    private void checkScanLimit(long scannedValue,
+                                long scanLimit,
+                                String ruleName)
+            throws DdlException {
+
+        if (scanLimit <= 0 || scannedValue <= scanLimit) {
+            return;
+        }
+
+        String errorMsg = String.format(
+                "%s %d over %d",
+                ruleName,
+                scannedValue,
+                scanLimit);
+
+        ErrorReport.reportDdlException(
+                ErrorCode.ERR_PERFORM_QUERY_ERROR,
+                errorMsg
+        );
+    }
+
+    private void checkPlanScanLimits(ConnectContext context,
+                                     long planMaxScanRows,
+                                     long planMaxScanPartitions,
+                                     long planMaxScanTablets)
+            throws DdlException {
+
+        TWorkGroup resourceGroup = CoordinatorPreprocessor
+                .prepareResourceGroup(context, ResourceGroupClassifier.QueryType.SELECT);
+
+        if (resourceGroup == null) {
+            return;
+        }
+
+        checkScanLimit(
+                planMaxScanRows,
+                resourceGroup.getPlan_scan_rows_limit(),
+                "scan rows");
+
+        checkScanLimit(
+                planMaxScanPartitions,
+                resourceGroup.getPlan_scan_partitions_limit(),
+                "scan partitions");
+
+        checkScanLimit(
+                planMaxScanTablets,
+                resourceGroup.getPlan_scan_tablets_limit(),
+                "scan tablets");
+    }
+
 }
