@@ -94,7 +94,7 @@ This document outlines the boundaries of competence for asynchronous materialize
 | JDBC                         | <ul><li>Non-partitioned table: v3.0+</li><li>Partitioned table: MySQL RangeColumn Partition v3.1.4</li></ul> | Not Stable                                    |
 
 :::note
-External table materialized views do not support automatic refresh triggered by base table data changes.
+External table materialized views do not support automatic refresh **triggered by base table data changes**. They only support asynchronous **fixed-interval** refresh and manual refresh.
 :::
 
 ## Query Rewrite

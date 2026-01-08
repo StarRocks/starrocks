@@ -91,6 +91,10 @@ StarRocks 支持基于 External Catalog，如 Hive Catalog、Iceberg Catalog、H
 
 在 External Catalog 中的表上创建物化视图与在 StarRocks 本地表上创建物化视图类似。您只需根据正在使用的数据源设置合适的刷新策略，并手动启用 External Catalog 物化视图的查询改写功能。
 
+:::note
+外表物化视图不支持**由基表数据变更触发的**自动刷新。仅支持**异步定时**刷新和手动刷新。
+:::
+
 ### 选择合适的刷新策略
 
 目前，StarRocks 无法检测 Hudi Catalog 中的分区级别数据更改。因此，一旦触发刷新任务，将执行全量刷新。
