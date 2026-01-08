@@ -138,6 +138,7 @@ public:
 
     // get latest version's version
     int64_t max_version() const;
+    int64_t min_readable_version() const;
 
     int64_t max_readable_version() const;
 
