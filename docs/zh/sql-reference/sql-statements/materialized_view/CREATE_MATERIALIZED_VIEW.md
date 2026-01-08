@@ -808,7 +808,9 @@ from lineorder
 group by lo_orderkey, lo_orderdate, lo_custkey;
 ```
 
-# 使用 date_trunc 函数将 `dt` 列截断至以月为单位进行分区。
+# 使用 date_trunc 函数将 `dt` 列截断至以月为单位进行分区
+
+```sql
 CREATE MATERIALIZED VIEW order_mv1
 PARTITION BY date_trunc('month', `dt`)
 DISTRIBUTED BY HASH(`order_id`)
