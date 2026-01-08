@@ -205,26 +205,30 @@ public class PartitionProjectionService {
         PartitionProjection projection = createProjection(table);
         List<String> partitionColumnNames = table.getPartitionColumnNames();
 
-        // Extract filter values from partition keys
-        Map<String, Optional<Object>> partitionFilters = new HashMap<>();
-
-        if (!partitionKeys.isEmpty()) {
-            // Use the first partition key to extract filter values
-            // This assumes all partition keys have the same column structure
-            PartitionKey firstKey = partitionKeys.get(0);
-            for (int i = 0; i < partitionColumnNames.size() && i < firstKey.getKeys().size(); i++) {
-                String columnName = partitionColumnNames.get(i);
-                String value = firstKey.getKeys().get(i).getStringValue();
-                partitionFilters.put(columnName, Optional.ofNullable(value));
-            }
-        } else {
-            // No filter values - use empty optionals
+        if (partitionKeys.isEmpty()) {
+            // No filter values - use empty optionals for all columns
+            Map<String, Optional<Object>> emptyFilters = new HashMap<>();
             for (String columnName : partitionColumnNames) {
-                partitionFilters.put(columnName, Optional.empty());
+                emptyFilters.put(columnName, Optional.empty());
             }
+            return projection.getProjectedPartitions(emptyFilters);
         }
 
-        Map<String, Partition> result = projection.getProjectedPartitions(partitionFilters);
+        // Process ALL partition keys, not just the first one
+        // This handles cases like WHERE year IN (2023, 2024) correctly
+        Map<String, Partition> result = new HashMap<>();
+        for (PartitionKey partitionKey : partitionKeys) {
+            Map<String, Optional<Object>> partitionFilters = new HashMap<>();
+            for (int i = 0; i < partitionColumnNames.size() && i < partitionKey.getKeys().size(); i++) {
+                String columnName = partitionColumnNames.get(i);
+                String value = partitionKey.getKeys().get(i).getStringValue();
+                partitionFilters.put(columnName, Optional.ofNullable(value));
+            }
+            // Merge partitions from this key into the result
+            Map<String, Partition> partitions = projection.getProjectedPartitions(partitionFilters);
+            result.putAll(partitions);
+        }
+
         return result;
     }
 
@@ -245,10 +249,33 @@ public class PartitionProjectionService {
      * Gets all projected partition names for a table.
      * This is used to list all possible partitions based on projection configuration.
      *
+     * Note: Tables with INJECTED projection columns cannot enumerate all partitions
+     * because INJECTED columns require explicit filter values in the WHERE clause.
+     *
      * @param table the Hive table with projection enabled
      * @return list of partition names in the format "col1=val1/col2=val2"
+     * @throws IllegalArgumentException if the table has INJECTED projection columns
      */
     public List<String> getProjectedPartitionNames(HiveTable table) {
+        Map<String, String> properties = table.getProperties();
+        PartitionProjectionProperties projProps = PartitionProjectionProperties.parse(properties);
+
+        // Check for INJECTED columns before attempting to enumerate partitions
+        List<String> injectedColumns = new ArrayList<>();
+        for (String columnName : table.getPartitionColumnNames()) {
+            PartitionProjectionProperties.ColumnProjectionConfig config = projProps.getColumnConfig(columnName);
+            if (config != null && config.getType() == PartitionProjectionProperties.ProjectionType.INJECTED) {
+                injectedColumns.add(columnName);
+            }
+        }
+
+        if (!injectedColumns.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "Cannot enumerate all partitions for table with INJECTED projection columns: " +
+                    injectedColumns + ". INJECTED columns require explicit filter values in the WHERE clause. " +
+                    "Use getProjectedPartitions() with specific filter values instead.");
+        }
+
         PartitionProjection projection = createProjection(table);
 
         // Get all projected partitions without any filter
@@ -305,20 +332,20 @@ public class PartitionProjectionService {
      */
     public Map<String, Partition> getProjectedPartitionsFromNames(HiveTable table,
                                                                    List<String> partitionNames) {
-        // Directly create partitions without going through full projection logic
-        // This is more efficient when we have specific partition names
         String baseLocation = table.getTableLocation();
         RemoteFileInputFormat inputFormat = getInputFormat(table);
         TextFileFormatDesc textFileFormatDesc = getTextFileFormatDesc(table);
 
+        // Get storage location template if defined
+        Map<String, String> properties = table.getProperties();
+        PartitionProjectionProperties projProps = PartitionProjectionProperties.parse(properties);
+        Optional<String> storageLocationTemplate = projProps.getStorageLocationTemplate();
+        List<String> partitionColumnNames = table.getPartitionColumnNames();
+
         Map<String, Partition> result = new HashMap<>();
         for (String partitionName : partitionNames) {
-            // Build partition location directly from partition name
-            String partitionLocation = baseLocation;
-            if (!partitionLocation.endsWith("/")) {
-                partitionLocation += "/";
-            }
-            partitionLocation += partitionName;
+            String partitionLocation = buildPartitionLocation(
+                    baseLocation, partitionName, storageLocationTemplate, partitionColumnNames);
 
             // Create partition object
             Map<String, String> parameters = new HashMap<>();
@@ -335,6 +362,57 @@ public class PartitionProjectionService {
             result.put(partitionName, partition);
         }
 
+        return result;
+    }
+
+    /**
+     * Builds partition location using storage location template if available.
+     */
+    private String buildPartitionLocation(String baseLocation, String partitionName,
+                                          Optional<String> storageLocationTemplate,
+                                          List<String> partitionColumnNames) {
+        if (storageLocationTemplate.isPresent()) {
+            // Parse partition values from partition name (format: col1=val1/col2=val2)
+            Map<String, String> partitionValues = parsePartitionName(partitionName);
+            return expandTemplate(storageLocationTemplate.get(), partitionValues);
+        }
+
+        // Default: baseLocation/partitionName
+        String location = baseLocation;
+        if (!location.endsWith("/")) {
+            location += "/";
+        }
+        return location + partitionName;
+    }
+
+    /**
+     * Parses partition name into column-value map.
+     * Input: "region=us/year=2024"
+     * Output: {region=us, year=2024}
+     */
+    private Map<String, String> parsePartitionName(String partitionName) {
+        Map<String, String> result = new HashMap<>();
+        String[] parts = partitionName.split("/");
+        for (String part : parts) {
+            int eqIndex = part.indexOf('=');
+            if (eqIndex > 0) {
+                String columnName = part.substring(0, eqIndex);
+                String value = part.substring(eqIndex + 1);
+                result.put(columnName, value);
+            }
+        }
+        return result;
+    }
+
+    /**
+     * Expands storage location template with partition values.
+     * Template format: s3://bucket/data/${region}/${year}/
+     */
+    private String expandTemplate(String template, Map<String, String> partitionValues) {
+        String result = template;
+        for (Map.Entry<String, String> entry : partitionValues.entrySet()) {
+            result = result.replace("${" + entry.getKey() + "}", entry.getValue());
+        }
         return result;
     }
 }
