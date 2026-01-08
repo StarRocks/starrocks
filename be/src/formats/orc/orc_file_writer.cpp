@@ -21,6 +21,7 @@
 #include "column/array_column.h"
 #include "column/column_helper.h"
 #include "column/map_column.h"
+#include "common/http/content_type.h"
 #include "formats/orc/orc_memory_pool.h"
 #include "formats/orc/utils.h"
 #include "formats/utils.h"
@@ -493,7 +494,9 @@ Status ORCFileWriterFactory::init() {
 }
 
 StatusOr<WriterAndStream> ORCFileWriterFactory::create(const string& path) const {
-    ASSIGN_OR_RETURN(auto file, _fs->new_writable_file(WritableFileOptions{.direct_write = true}, path));
+    ASSIGN_OR_RETURN(auto file,
+                     _fs->new_writable_file(
+                             WritableFileOptions{.direct_write = true, .content_type = http::ContentType::ORC}, path));
     auto rollback_action = [fs = _fs, path = path]() {
         WARN_IF_ERROR(ignore_not_found(fs->delete_file(path)), "fail to delete file");
     };

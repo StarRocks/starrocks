@@ -21,11 +21,13 @@
 #include <aws/s3/model/CreateBucketRequest.h>
 #include <aws/s3/model/DeleteBucketRequest.h>
 #include <aws/s3/model/DeleteObjectRequest.h>
+#include <aws/s3/model/HeadObjectRequest.h>
 #include <gtest/gtest.h>
 
 #include "common/config.h"
 #include "common/logging.h"
 #include "fs/fs_s3.h"
+#include "io/direct_s3_output_stream.h"
 #include "io/s3_input_stream.h"
 #include "testutil/assert.h"
 
@@ -111,6 +113,17 @@ void delete_object(const std::string& object) {
     }
 }
 
+std::string get_object_content_type(const std::string& object) {
+    Aws::S3::Model::HeadObjectRequest request;
+    request.SetBucket(kBucketName);
+    request.SetKey(object);
+    Aws::S3::Model::HeadObjectOutcome outcome = g_s3client->HeadObject(request);
+    if (outcome.IsSuccess()) {
+        return outcome.GetResult().GetContentType();
+    }
+    return "";
+}
+
 TEST_F(S3OutputStreamTest, test_singlepart_upload) {
     char buff[128];
     const char* kObjectName = "test_singlepart_upload";
@@ -187,6 +200,152 @@ TEST_F(S3OutputStreamTest, test_get_direct_buffer_and_advance) {
 
     ASSIGN_OR_ABORT(auto length, is.read(buff, sizeof(buff)));
     ASSERT_EQ("abcxyz", std::string_view(buff, length));
+
+    delete_object(kObjectName);
+}
+
+TEST_F(S3OutputStreamTest, test_singlepart_upload_with_content_type) {
+    const char* kObjectName = "test_singlepart_upload_with_content_type";
+    delete_object(kObjectName);
+
+    // Test with custom content type for CSV
+    S3OutputStream os(g_s3client, kBucketName, kObjectName, 1024, 1024, "text/csv");
+    std::string content("col1,col2\nval1,val2\n");
+    ASSERT_OK(os.write(content.data(), content.size()));
+    ASSERT_OK(os.close());
+
+    // Verify the content type was set correctly
+    std::string actual_content_type = get_object_content_type(kObjectName);
+    ASSERT_EQ("text/csv", actual_content_type);
+
+    delete_object(kObjectName);
+}
+
+TEST_F(S3OutputStreamTest, test_singlepart_upload_with_parquet_content_type) {
+    const char* kObjectName = "test_singlepart_upload_with_parquet_content_type";
+    delete_object(kObjectName);
+
+    // Test with custom content type for Parquet
+    S3OutputStream os(g_s3client, kBucketName, kObjectName, 1024, 1024, "application/parquet");
+    std::string content("dummy parquet content");
+    ASSERT_OK(os.write(content.data(), content.size()));
+    ASSERT_OK(os.close());
+
+    // Verify the content type was set correctly
+    std::string actual_content_type = get_object_content_type(kObjectName);
+    ASSERT_EQ("application/parquet", actual_content_type);
+
+    delete_object(kObjectName);
+}
+
+TEST_F(S3OutputStreamTest, test_singlepart_upload_with_default_content_type) {
+    const char* kObjectName = "test_singlepart_upload_with_default_content_type";
+    delete_object(kObjectName);
+
+    // Test with default content type (application/octet-stream)
+    S3OutputStream os(g_s3client, kBucketName, kObjectName, 1024, 1024);
+    std::string content("binary content");
+    ASSERT_OK(os.write(content.data(), content.size()));
+    ASSERT_OK(os.close());
+
+    // Verify the default content type was set
+    std::string actual_content_type = get_object_content_type(kObjectName);
+    ASSERT_EQ("application/octet-stream", actual_content_type);
+
+    delete_object(kObjectName);
+}
+
+TEST_F(S3OutputStreamTest, test_multipart_upload_with_content_type) {
+    const char* kObjectName = "test_multipart_upload_with_content_type";
+    delete_object(kObjectName);
+
+    // Use small max_single_part_size to trigger multipart upload
+    S3OutputStream os(g_s3client, kBucketName, kObjectName, 12, /*5MB=*/5 * 1024 * 1024, "text/csv");
+
+    std::string s1("first line of multipart upload\n");
+    std::string s2("second line of multipart upload\n");
+    ASSERT_OK(os.write(s1.data(), s1.size()));
+    ASSERT_OK(os.write(s2.data(), s2.size()));
+    ASSERT_OK(os.close());
+
+    // Verify the content type was set correctly for multipart upload
+    std::string actual_content_type = get_object_content_type(kObjectName);
+    ASSERT_EQ("text/csv", actual_content_type);
+
+    delete_object(kObjectName);
+}
+
+TEST_F(S3OutputStreamTest, test_multipart_upload_with_orc_content_type) {
+    const char* kObjectName = "test_multipart_upload_with_orc_content_type";
+    delete_object(kObjectName);
+
+    // Use small max_single_part_size to trigger multipart upload
+    S3OutputStream os(g_s3client, kBucketName, kObjectName, 12, /*5MB=*/5 * 1024 * 1024, "application/x-orc");
+
+    std::string s1("first line of multipart upload\n");
+    std::string s2("second line of multipart upload\n");
+    ASSERT_OK(os.write(s1.data(), s1.size()));
+    ASSERT_OK(os.write(s2.data(), s2.size()));
+    ASSERT_OK(os.close());
+
+    // Verify the content type was set correctly for multipart upload
+    std::string actual_content_type = get_object_content_type(kObjectName);
+    ASSERT_EQ("application/x-orc", actual_content_type);
+
+    delete_object(kObjectName);
+}
+
+// Tests for DirectS3OutputStream
+TEST_F(S3OutputStreamTest, test_direct_s3_output_stream_with_content_type) {
+    const char* kObjectName = "test_direct_s3_output_stream_with_content_type";
+    delete_object(kObjectName);
+
+    // DirectS3OutputStream always uses multipart upload
+    DirectS3OutputStream os(g_s3client, kBucketName, kObjectName, "text/csv");
+
+    // Write enough data to complete the upload (minimum 5MB for each part in real S3)
+    std::string content("col1,col2\nval1,val2\n");
+    ASSERT_OK(os.write(content.data(), content.size()));
+    ASSERT_OK(os.close());
+
+    // Verify the content type was set correctly
+    std::string actual_content_type = get_object_content_type(kObjectName);
+    ASSERT_EQ("text/csv", actual_content_type);
+
+    delete_object(kObjectName);
+}
+
+TEST_F(S3OutputStreamTest, test_direct_s3_output_stream_with_parquet_content_type) {
+    const char* kObjectName = "test_direct_s3_output_stream_with_parquet_content_type";
+    delete_object(kObjectName);
+
+    DirectS3OutputStream os(g_s3client, kBucketName, kObjectName, "application/parquet");
+
+    std::string content("dummy parquet content");
+    ASSERT_OK(os.write(content.data(), content.size()));
+    ASSERT_OK(os.close());
+
+    // Verify the content type was set correctly
+    std::string actual_content_type = get_object_content_type(kObjectName);
+    ASSERT_EQ("application/parquet", actual_content_type);
+
+    delete_object(kObjectName);
+}
+
+TEST_F(S3OutputStreamTest, test_direct_s3_output_stream_with_default_content_type) {
+    const char* kObjectName = "test_direct_s3_output_stream_with_default_content_type";
+    delete_object(kObjectName);
+
+    // Test with default content type
+    DirectS3OutputStream os(g_s3client, kBucketName, kObjectName);
+
+    std::string content("binary content");
+    ASSERT_OK(os.write(content.data(), content.size()));
+    ASSERT_OK(os.close());
+
+    // Verify the default content type was set
+    std::string actual_content_type = get_object_content_type(kObjectName);
+    ASSERT_EQ("application/octet-stream", actual_content_type);
 
     delete_object(kObjectName);
 }

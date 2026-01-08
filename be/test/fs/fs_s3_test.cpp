@@ -15,6 +15,8 @@
 #include "fs/fs_s3.h"
 
 #include <aws/core/Aws.h>
+#include <aws/s3/S3Client.h>
+#include <aws/s3/model/HeadObjectRequest.h>
 #include <fmt/format.h>
 #include <gtest/gtest.h>
 
@@ -612,6 +614,122 @@ TEST_F(S3FileSystemTest, test_new_S3_client_with_rename_operation) {
     ASSERT_TRUE(S3ClientFactory::instance().find_client_cache_keys_by_config_TEST(config, &cloud_config));
     config::object_storage_rename_file_request_timeout_ms = default_value;
     config::object_storage_request_timeout_ms = old_object_storage_request_timeout_ms;
+}
+
+// Helper function to get object content type via HeadObject
+static std::string get_object_content_type(const std::string& uri) {
+    S3URI s3_uri;
+    if (!s3_uri.parse(uri)) {
+        return "";
+    }
+    // Build ClientConfiguration from S3URI and config
+    Aws::Client::ClientConfiguration config = S3ClientFactory::getClientConfig();
+    if (!s3_uri.endpoint().empty()) {
+        config.endpointOverride = s3_uri.endpoint();
+    } else if (!config::object_storage_endpoint.empty()) {
+        config.endpointOverride = config::object_storage_endpoint;
+    }
+    if (!config::object_storage_region.empty()) {
+        config.region = config::object_storage_region;
+    }
+    auto client = S3ClientFactory::instance().new_client(config, FSOptions());
+    if (!client) {
+        return "";
+    }
+    Aws::S3::Model::HeadObjectRequest request;
+    request.SetBucket(s3_uri.bucket());
+    request.SetKey(s3_uri.key());
+    auto outcome = client->HeadObject(request);
+    if (outcome.IsSuccess()) {
+        return outcome.GetResult().GetContentType();
+    }
+    return "";
+}
+
+TEST_F(S3FileSystemTest, test_write_with_csv_content_type) {
+    auto uri = S3Path("/dir/test-csv.csv");
+    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateUniqueFromString(uri));
+
+    WritableFileOptions opts;
+    opts.content_type = "text/csv";
+    ASSIGN_OR_ABORT(auto wf, fs->new_writable_file(opts, uri));
+    EXPECT_OK(wf->append("col1,col2\nval1,val2\n"));
+    EXPECT_OK(wf->close());
+
+    // Verify the content type was set correctly
+    std::string actual_content_type = get_object_content_type(uri);
+    EXPECT_EQ("text/csv", actual_content_type);
+
+    EXPECT_OK(fs->delete_file(uri));
+}
+
+TEST_F(S3FileSystemTest, test_write_with_parquet_content_type) {
+    auto uri = S3Path("/dir/test-parquet.parquet");
+    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateUniqueFromString(uri));
+
+    WritableFileOptions opts;
+    opts.content_type = "application/parquet";
+    ASSIGN_OR_ABORT(auto wf, fs->new_writable_file(opts, uri));
+    EXPECT_OK(wf->append("dummy parquet content"));
+    EXPECT_OK(wf->close());
+
+    // Verify the content type was set correctly
+    std::string actual_content_type = get_object_content_type(uri);
+    EXPECT_EQ("application/parquet", actual_content_type);
+
+    EXPECT_OK(fs->delete_file(uri));
+}
+
+TEST_F(S3FileSystemTest, test_write_with_orc_content_type) {
+    auto uri = S3Path("/dir/test-orc.orc");
+    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateUniqueFromString(uri));
+
+    WritableFileOptions opts;
+    opts.content_type = "application/x-orc";
+    ASSIGN_OR_ABORT(auto wf, fs->new_writable_file(opts, uri));
+    EXPECT_OK(wf->append("dummy orc content"));
+    EXPECT_OK(wf->close());
+
+    // Verify the content type was set correctly
+    std::string actual_content_type = get_object_content_type(uri);
+    EXPECT_EQ("application/x-orc", actual_content_type);
+
+    EXPECT_OK(fs->delete_file(uri));
+}
+
+TEST_F(S3FileSystemTest, test_write_with_default_content_type) {
+    auto uri = S3Path("/dir/test-binary.bin");
+    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateUniqueFromString(uri));
+
+    // Without specifying content_type, default should be application/octet-stream
+    WritableFileOptions opts;
+    ASSIGN_OR_ABORT(auto wf, fs->new_writable_file(opts, uri));
+    EXPECT_OK(wf->append("binary content"));
+    EXPECT_OK(wf->close());
+
+    // Verify the default content type was set
+    std::string actual_content_type = get_object_content_type(uri);
+    EXPECT_EQ("application/octet-stream", actual_content_type);
+
+    EXPECT_OK(fs->delete_file(uri));
+}
+
+TEST_F(S3FileSystemTest, test_write_with_direct_write_and_content_type) {
+    auto uri = S3Path("/dir/test-direct-csv.csv");
+    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateUniqueFromString(uri));
+
+    WritableFileOptions opts;
+    opts.direct_write = true;
+    opts.content_type = "text/csv";
+    ASSIGN_OR_ABORT(auto wf, fs->new_writable_file(opts, uri));
+    EXPECT_OK(wf->append("col1,col2\nval1,val2\n"));
+    EXPECT_OK(wf->close());
+
+    // Verify the content type was set correctly with direct_write
+    std::string actual_content_type = get_object_content_type(uri);
+    EXPECT_EQ("text/csv", actual_content_type);
+
+    EXPECT_OK(fs->delete_file(uri));
 }
 
 } // namespace starrocks
