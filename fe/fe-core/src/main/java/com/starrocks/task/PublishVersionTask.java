@@ -206,7 +206,10 @@ public class PublishVersionTask extends AgentTask {
                 if (replica == null) {
                     continue;
                 }
-                replica.updateVersion(tabletVersion.version);
+                long reportedVersion = tabletVersion.version;
+                long minReadableVersion = tabletVersion.isSetMin_readable_version() ?
+                        tabletVersion.getMin_readable_version() : replica.getMinReadableVersion();
+                replica.updateRowCount(reportedVersion, minReadableVersion, replica.getDataSize(), replica.getRowCount());
             }
         } finally {
             locker.unLockDatabase(db, LockType.WRITE);
