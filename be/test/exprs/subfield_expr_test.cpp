@@ -267,8 +267,10 @@ TEST_F(SubfieldExprTest, get_subfields_with_nested_expr_test) {
     std::vector<std::vector<std::string>> subfields;
     int count = subfield_expr->get_subfields(&subfields);
     
-    // Should return 1 (for the subfield itself) + 0 (FakeConstExpr has no subfields) = 1
-    // But the fix changes it to properly call parent's implementation
+    // After the fix, this correctly returns 1 (for the subfield itself) + 0 (FakeConstExpr 
+    // has no subfields from calling parent's Expr::get_subfields) = 1
+    // The fix ensures that when nested expressions like Cast are children, their subfields
+    // are properly counted via the recursive parent call
     EXPECT_EQ(1, count);
     EXPECT_EQ(1, subfields.size());
     EXPECT_EQ(std::vector<std::string>({"id"}), subfields[0]);
