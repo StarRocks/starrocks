@@ -1527,6 +1527,37 @@ ORDER BY (column_name [sort_direction] [nulls_order], ...)
    )
    PARTITION BY bucket(id, 10), year(dt);
    ```
+
+---
+
+### 分区演进（ADD/DROP PARTITION COLUMN）
+
+StarRocks 支持使用 `ALTER TABLE ... ADD|DROP PARTITION COLUMN` 为 Iceberg 表演进分区规范（包括转换表达式）。
+
+#### 语法
+
+```SQL
+ALTER TABLE [catalog.][database.]table_name
+ADD PARTITION COLUMN partition_expr [, partition_expr ...];
+
+ALTER TABLE [catalog.][database.]table_name
+DROP PARTITION COLUMN partition_expr [, partition_expr ...];
+```
+
+`partition_expr` 可以是列名（identity 变换）或以下转换表达式之一：`year`、`month`、`day`、`hour`、`truncate`、`bucket`。
+
+#### 示例
+
+```SQL
+ALTER TABLE test_part_evo
+ADD PARTITION COLUMN dt, truncate(value, 10), bucket(id, 10);
+
+ALTER TABLE test_part_evo
+DROP PARTITION COLUMN dt;
+
+ALTER TABLE test_part_evo
+ADD PARTITION COLUMN month(dt);
+```
 ---
 
 ### 将数据下沉到 Iceberg 表

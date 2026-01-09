@@ -1487,6 +1487,37 @@ Description: The compression algorithm used for the Iceberg table. The supported
   )
   PARTITION BY bucket(id, 10), year(dt);
 ```
+
+---
+
+### Evolve partition spec (ADD/DROP PARTITION COLUMN)
+
+StarRocks supports evolving an Iceberg table's partition spec by adding or dropping partition columns (including transform expressions) with `ALTER TABLE ... ADD|DROP PARTITION COLUMN`.
+
+#### Syntax
+
+```SQL
+ALTER TABLE [catalog.][database.]table_name
+ADD PARTITION COLUMN partition_expr [, partition_expr ...];
+
+ALTER TABLE [catalog.][database.]table_name
+DROP PARTITION COLUMN partition_expr [, partition_expr ...];
+```
+
+`partition_expr` can be a column name (identity transform) or one of the supported transform expressions, such as `year`, `month`, `day`, `hour`, `truncate`, and `bucket`.
+
+#### Examples
+
+```SQL
+ALTER TABLE test_part_evo
+ADD PARTITION COLUMN dt, truncate(value, 10), bucket(id, 10);
+
+ALTER TABLE test_part_evo
+DROP PARTITION COLUMN dt;
+
+ALTER TABLE test_part_evo
+ADD PARTITION COLUMN month(dt);
+```
 ---
 
 ### Sink data to an Iceberg table
