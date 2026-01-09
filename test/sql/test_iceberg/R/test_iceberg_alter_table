@@ -86,7 +86,7 @@ insert into test_part_evo values (3, 'data3', '2023-01-03', 300);
 insert into test_part_evo values (4, 'data4', '2023-01-04', 400);
 -- result:
 -- !result
-function: assert_query_contains("show create table test_part_evo", "PARTITION BY (`dt`, truncate(`value`, 10), bucket(`id`, 10))")
+function: assert_query_contains("show create table test_part_evo", "PARTITION BY `dt`, truncate(`value`, 10), bucket(`id`, 10)")
 -- result:
 None
 -- !result
@@ -99,7 +99,7 @@ alter table test_part_evo add partition column month(dt);
 insert into test_part_evo values (5, 'data5', '2023-01-05', 500);
 -- result:
 -- !result
-function: assert_query_contains("show create table test_part_evo", "PARTITION BY (truncate(`value`, 10), bucket(`id`, 10), month(`dt`))")
+function: assert_query_contains("show create table test_part_evo", "PARTITION BY truncate(`value`, 10), bucket(`id`, 10), month(`dt`)")
 -- result:
 None
 -- !result
@@ -114,7 +114,7 @@ select * from test_part_evo order by id;
 alter table test_part_evo drop partition column truncate(value, 10), bucket(id, 10);
 -- result:
 -- !result
-function: assert_query_contains("show create table test_part_evo", "PARTITION BY (month(`dt`))")
+function: assert_query_contains("show create table test_part_evo", "PARTITION BY month(`dt`)")
 -- result:
 None
 -- !result
