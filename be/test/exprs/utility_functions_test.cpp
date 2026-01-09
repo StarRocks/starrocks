@@ -18,6 +18,8 @@
 #include <glog/logging.h>
 #include <gtest/gtest.h>
 
+#include <thread>
+
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
 #include "common/statusor.h"

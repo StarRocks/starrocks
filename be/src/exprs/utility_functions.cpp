@@ -258,6 +258,9 @@ StatusOr<ColumnPtr> UtilityFunctions::uuid_v7(FunctionContext* ctx, const Column
 }
 
 // UUID v7 numeric version - converts the UUID v7 to a 128-bit integer
+// Note: The byte order of the numeric representation depends on the system's endianness.
+// This is consistent with other numeric UUID conversions in the codebase and provides
+// a stable representation for comparison and storage purposes.
 StatusOr<ColumnPtr> UtilityFunctions::uuid_v7_numeric(FunctionContext*, const Columns& columns) {
     int32_t num_rows = ColumnHelper::get_const_value<TYPE_INT>(columns.back());
     auto result = Int128Column::create(num_rows);
@@ -266,6 +269,7 @@ StatusOr<ColumnPtr> UtilityFunctions::uuid_v7_numeric(FunctionContext*, const Co
     for (int i = 0; i < num_rows; ++i) {
         auto uuid = ThreadLocalUUIDGenerator::next_uuid_v7();
         // Convert UUID bytes to int128_t
+        // Direct memcpy is used for consistency with existing uuid_numeric implementation
         int128_t value;
         memcpy(&value, uuid.data, 16);
         data[i] = value;
