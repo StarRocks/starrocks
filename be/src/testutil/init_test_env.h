@@ -113,11 +113,11 @@ int init_test_env(int argc, char** argv) {
     int r = RUN_ALL_TESTS();
 
     // clear some trash objects kept in tablet_manager so mem_tracker checks will not fail
-    CHECK(StorageEngine::instance()->tablet_manager()->start_trash_sweep().ok());
+    CHECK(engine->tablet_manager()->start_trash_sweep().ok());
     (void)butil::DeleteFile(storage_root, true);
     exec_env->wait_for_finish();
     // delete engine
-    StorageEngine::instance()->stop();
+    engine->stop();
     // destroy exec env
     tls_thread_status.set_mem_tracker(nullptr);
     exec_env->stop();
@@ -126,6 +126,7 @@ int init_test_env(int argc, char** argv) {
         exec_env->lake_tablet_manager()->stop();
     }
 #endif
+    delete engine;
     exec_env->destroy();
     cache_env->destroy();
     global_env->stop();
