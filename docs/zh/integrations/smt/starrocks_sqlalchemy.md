@@ -1,7 +1,7 @@
 ---
 displayed_sidebar: docs
-description: "架构管理与迁移"
-sidebar_label: "架构管理与迁移"
+description: "Schema 管理与迁移"
+sidebar_label: "Schema 管理与迁移"
 ---
 
 # 使用 SQLAlchemy 和 Alembic 进行 Schema 管理和迁移
