@@ -14,37 +14,15 @@
 
 package com.starrocks.sql;
 
-import com.starrocks.common.FeConstants;
-import com.starrocks.catalog.Column;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.TableFunctionTable;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.FeConstants;
 import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.sql.analyzer.Analyzer;
-import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.PlannerMetaLocker;
-import com.starrocks.sql.analyzer.QueryAnalyzer;
-import com.starrocks.sql.ast.CTERelation;
-import com.starrocks.sql.ast.FileTableFunctionRelation;
 import com.starrocks.sql.ast.InsertStmt;
-import com.starrocks.sql.ast.JoinRelation;
-import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
-import com.starrocks.sql.ast.Relation;
-import com.starrocks.sql.ast.SelectRelation;
-import com.starrocks.sql.ast.SetOperationRelation;
 import com.starrocks.sql.ast.StatementBase;
-import com.starrocks.sql.plan.PlanTestBase;
-import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Test;
-
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import com.starrocks.sql.ast.SubqueryRelation;
-import com.starrocks.sql.ast.ValuesRelation;
-import com.starrocks.sql.ast.SubqueryRelation;
-import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanFragmentBuilder;
 import com.starrocks.sql.plan.PlanTestBase;
@@ -56,17 +34,12 @@ import org.junit.Test;
 import org.mockito.MockedStatic;
 import org.mockito.Mockito;
 
-import java.util.List;
 import java.util.Set;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.function.Consumer;
-import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -254,9 +227,4 @@ public class StatementPlannerTest extends PlanTestBase {
             }
         }
     }
-<<<<<<< HEAD
->>>>>>> 14827a423f ([BugFix] Fix NPE in query planning during schema change (backport #66811) (#66828))
 }
-=======
-}
->>>>>>> 6d4986a14f9 (fix bugs)
