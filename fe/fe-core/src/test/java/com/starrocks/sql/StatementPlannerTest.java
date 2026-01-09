@@ -19,12 +19,9 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.TableFunctionTable;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.FeConstants;
-<<<<<<< HEAD
-=======
 import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.sql.analyzer.Analyzer;
->>>>>>> 14827a423f ([BugFix] Fix NPE in query planning during schema change (backport #66811) (#66828))
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.PlannerMetaLocker;
 import com.starrocks.sql.analyzer.QueryAnalyzer;
@@ -39,11 +36,9 @@ import com.starrocks.sql.ast.SetOperationRelation;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.ValuesRelation;
-<<<<<<< HEAD
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Test;
-=======
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanFragmentBuilder;
 import com.starrocks.sql.plan.PlanTestBase;
@@ -53,7 +48,6 @@ import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Test;
 import org.mockito.MockedStatic;
 import org.mockito.Mockito;
->>>>>>> 14827a423f ([BugFix] Fix NPE in query planning during schema change (backport #66811) (#66828))
 
 import java.util.List;
 import java.util.Set;
@@ -65,11 +59,8 @@ import java.util.stream.Collectors;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-<<<<<<< HEAD
-=======
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
->>>>>>> 14827a423f ([BugFix] Fix NPE in query planning during schema change (backport #66811) (#66828))
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
@@ -316,9 +307,6 @@ public class StatementPlannerTest extends PlanTestBase {
             FeConstants.runningUnitTest = originalRunningUnitTest;
         }
     }
-<<<<<<< HEAD
-}
-=======
 
     @Test
     public void testFilesOnlyVisitorProcessesCteQueries() throws Exception {
@@ -509,4 +497,3 @@ public class StatementPlannerTest extends PlanTestBase {
         }
     }
 }
->>>>>>> 14827a423f ([BugFix] Fix NPE in query planning during schema change (backport #66811) (#66828))
