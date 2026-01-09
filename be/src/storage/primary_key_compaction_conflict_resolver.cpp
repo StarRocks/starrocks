@@ -26,15 +26,15 @@
 namespace starrocks {
 
 Status PrimaryKeyCompactionConflictResolver::execute() {
+    // Note: RowsMapperIterator deletes the file in its destructor
+    ASSIGN_OR_RETURN(auto fn, filename());
+    RowsMapperIterator mapper_iter;
+    RETURN_IF_ERROR(mapper_iter.open(fn));
+
     Schema pkey_schema = generate_pkey_schema();
 
     MutableColumnPtr pk_column;
     RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column, true));
-
-    // init rows mapper iter
-    ASSIGN_OR_RETURN(auto filename, filename());
-    RowsMapperIterator mapper_iter;
-    RETURN_IF_ERROR(mapper_iter.open(filename));
 
     // iterate all segment in output rowset
     RETURN_IF_ERROR(segment_iterator(
@@ -123,10 +123,10 @@ Status PrimaryKeyCompactionConflictResolver::execute() {
 }
 
 Status PrimaryKeyCompactionConflictResolver::execute_without_update_index() {
-    // init rows mapper iter
-    ASSIGN_OR_RETURN(auto filename, filename());
+    // Note: RowsMapperIterator deletes the file in its destructor
+    ASSIGN_OR_RETURN(auto fn, filename());
     RowsMapperIterator mapper_iter;
-    RETURN_IF_ERROR(mapper_iter.open(filename));
+    RETURN_IF_ERROR(mapper_iter.open(fn));
 
     // 1. iterate all segment in output rowset
     RETURN_IF_ERROR(segment_iterator(

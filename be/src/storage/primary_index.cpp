@@ -70,6 +70,14 @@ public:
 
     virtual Status try_replace(uint32_t rssid, uint32_t rowid_start, const Column& pks, const uint32_t max_src_rssid,
                                uint32_t idx_begin, uint32_t idx_end, vector<uint32_t>* failed) = 0;
+
+    // try_replace with replace_indexes: only try to replace keys at specified indexes
+    // Similar to replace() but with max_src_rssid conflict detection like try_replace()
+    // |replace_indexes| The index of the |pks| array that need to try replace.
+    // |failed| rowids of output segment's rows that failed to replace (concurrent update or delete)
+    virtual Status try_replace(uint32_t rssid, uint32_t rowid_start, const std::vector<uint32_t>& replace_indexes,
+                               const Column& pks, const uint32_t max_src_rssid, vector<uint32_t>* failed) = 0;
+
     // batch erase a range [idx_begin, idx_end) of keys
     virtual Status erase(const Column& pks, uint32_t idx_begin, uint32_t idx_end, DeletesMap* deletes) = 0;
 
@@ -211,6 +219,25 @@ public:
         for (uint32_t i = idx_begin; i < idx_end; i++) {
             uint32_t prefetch_i = i + PREFETCHN;
             if (LIKELY(prefetch_i < idx_end)) _map.prefetch(keys[prefetch_i]);
+            auto p = _map.find(keys[i]);
+            if (p != _map.end() && (uint32_t)(p->second.value >> 32) <= max_src_rssid) {
+                p->second = RowIdPack4(base + i);
+            } else {
+                failed->push_back(rowid_start + i);
+            }
+        }
+        return Status::OK();
+    }
+
+    Status try_replace(uint32_t rssid, uint32_t rowid_start, const std::vector<uint32_t>& replace_indexes,
+                       const Column& pks, const uint32_t max_src_rssid, vector<uint32_t>* failed) override {
+        CHECK_MEM_LIMIT("HashIndexImpl::try_replace");
+        auto* keys = reinterpret_cast<const Key*>(pks.raw_data());
+        uint64_t base = (((uint64_t)rssid) << 32) + rowid_start;
+        for (uint32_t idx = 0; idx < replace_indexes.size(); idx++) {
+            const uint32_t i = replace_indexes[idx];
+            uint32_t prefetch_idx = idx + PREFETCHN;
+            if (LIKELY(prefetch_idx < replace_indexes.size())) _map.prefetch(keys[replace_indexes[prefetch_idx]]);
             auto p = _map.find(keys[i]);
             if (p != _map.end() && (uint32_t)(p->second.value >> 32) <= max_src_rssid) {
                 p->second = RowIdPack4(base + i);
@@ -509,6 +536,25 @@ public:
         return Status::OK();
     }
 
+    Status try_replace(uint32_t rssid, uint32_t rowid_start, const std::vector<uint32_t>& replace_indexes,
+                       const Column& pks, const uint32_t max_src_rssid, vector<uint32_t>* failed) override {
+        CHECK_MEM_LIMIT("FixSliceHashIndex::try_replace");
+        const auto* keys = reinterpret_cast<const Slice*>(pks.raw_data());
+        uint64_t base = (((uint64_t)rssid) << 32) + rowid_start;
+        for (uint32_t idx = 0; idx < replace_indexes.size(); idx++) {
+            const uint32_t i = replace_indexes[idx];
+            auto p = _map.find(FixSlice<S>(keys[i]));
+            if (p != _map.end() && (uint32_t)(p->second.value >> 32) <= max_src_rssid) {
+                // matched, can replace
+                p->second.value = base + i;
+            } else {
+                // not match, mark failed
+                failed->push_back(rowid_start + i);
+            }
+        }
+        return Status::OK();
+    }
+
     Status erase(const Column& pks, uint32_t idx_begin, uint32_t idx_end, DeletesMap* deletes) override {
         CHECK_MEM_LIMIT("FixSliceHashIndex::erase");
         const auto* keys = reinterpret_cast<const Slice*>(pks.raw_data());
@@ -708,6 +754,25 @@ public:
         auto* keys = reinterpret_cast<const Slice*>(pks.raw_data());
         uint64_t base = (((uint64_t)rssid) << 32) + rowid_start;
         for (uint32_t i = idx_begin; i < idx_end; i++) {
+            auto p = _map.find(keys[i].to_string());
+            if (p != _map.end() && (uint32_t)(p->second >> 32) <= max_src_rssid) {
+                // matched, can replace
+                p->second = base + i;
+            } else {
+                // not match, mark failed
+                failed->push_back(rowid_start + i);
+            }
+        }
+        return Status::OK();
+    }
+
+    Status try_replace(uint32_t rssid, uint32_t rowid_start, const std::vector<uint32_t>& replace_indexes,
+                       const Column& pks, const uint32_t max_src_rssid, vector<uint32_t>* failed) override {
+        CHECK_MEM_LIMIT("SliceHashIndex::try_replace");
+        auto* keys = reinterpret_cast<const Slice*>(pks.raw_data());
+        uint64_t base = (((uint64_t)rssid) << 32) + rowid_start;
+        for (uint32_t idx = 0; idx < replace_indexes.size(); idx++) {
+            const uint32_t i = replace_indexes[idx];
             auto p = _map.find(keys[i].to_string());
             if (p != _map.end() && (uint32_t)(p->second >> 32) <= max_src_rssid) {
                 // matched, can replace
@@ -943,6 +1008,27 @@ public:
             }
             RETURN_IF_ERROR(get_index_by_length(keys[idx_begin].size)
                                     ->try_replace(rssid, rowid_start, pks, max_src_rssid, idx_begin, idx_end, failed));
+        }
+        return Status::OK();
+    }
+
+    Status try_replace(uint32_t rssid, uint32_t rowid_start, const std::vector<uint32_t>& replace_indexes,
+                       const Column& pks, const uint32_t max_src_rssid, vector<uint32_t>* failed) override {
+        if (!replace_indexes.empty()) {
+            auto* keys = reinterpret_cast<const Slice*>(pks.raw_data());
+            // Group consecutive indexes by key length and delegate to sub-indexes
+            uint32_t batch_begin = 0;
+            for (uint32_t idx = 1; idx < replace_indexes.size(); idx++) {
+                if (keys[replace_indexes[idx]].size != keys[replace_indexes[batch_begin]].size) {
+                    std::vector<uint32_t> batch(replace_indexes.begin() + batch_begin, replace_indexes.begin() + idx);
+                    RETURN_IF_ERROR(get_index_by_length(keys[replace_indexes[batch_begin]].size)
+                                            ->try_replace(rssid, rowid_start, batch, pks, max_src_rssid, failed));
+                    batch_begin = idx;
+                }
+            }
+            std::vector<uint32_t> batch(replace_indexes.begin() + batch_begin, replace_indexes.end());
+            RETURN_IF_ERROR(get_index_by_length(keys[replace_indexes[batch_begin]].size)
+                                    ->try_replace(rssid, rowid_start, batch, pks, max_src_rssid, failed));
         }
         return Status::OK();
     }
@@ -1499,6 +1585,45 @@ Status PrimaryIndex::_replace_persistent_index_by_indexes(uint32_t rssid, uint32
     return st;
 }
 
+Status PrimaryIndex::_try_replace_persistent_index_by_indexes(uint32_t rssid, uint32_t rowid_start,
+                                                              const std::vector<uint32_t>& replace_indexes,
+                                                              const Column& pks, const uint32_t max_src_rssid,
+                                                              vector<uint32_t>* failed) {
+    auto scope = IOProfiler::scope(IOProfiler::TAG_PKINDEX, _tablet_id);
+    std::vector<Slice> keys;
+    std::vector<uint64_t> values;
+    values.reserve(pks.size());
+    RETURN_IF_ERROR(_build_persistent_values(rssid, rowid_start, 0, pks.size(), &values));
+    const Slice* vkeys = build_persistent_keys(pks, _key_size, 0, pks.size(), &keys);
+
+    // Get current values from persistent index to check for conflicts
+    std::vector<IndexValue> found_values(pks.size());
+    RETURN_IF_ERROR(_persistent_index->get(pks.size(), vkeys, found_values.data()));
+
+    // Filter replace_indexes to only include non-conflicting entries
+    std::vector<uint32_t> actual_replace_indexes;
+    for (uint32_t idx : replace_indexes) {
+        auto found_value = found_values[idx].get_value();
+        if (found_value != NullIndexValue && ((uint32_t)(found_value >> 32)) <= max_src_rssid) {
+            actual_replace_indexes.push_back(idx);
+        } else {
+            // Conflict: concurrent update (rssid > max_src_rssid) or delete (not found)
+            failed->push_back(rowid_start + idx);
+        }
+    }
+
+    // Replace only the non-conflicting entries
+    if (!actual_replace_indexes.empty()) {
+        Status st = _persistent_index->replace(pks.size(), vkeys, reinterpret_cast<IndexValue*>(values.data()),
+                                               actual_replace_indexes);
+        if (!st.ok()) {
+            LOG(WARNING) << "try replace persistent index failed";
+            return st;
+        }
+    }
+    return Status::OK();
+}
+
 Status PrimaryIndex::replace(uint32_t rssid, uint32_t rowid_start, const std::vector<uint32_t>& replace_indexes,
                              const Column& pks) {
     DCHECK(_status.ok() && (_pkey_to_rssid_rowid || _persistent_index));
@@ -1530,6 +1655,19 @@ Status PrimaryIndex::try_replace(uint32_t rssid, uint32_t rowid_start, const Col
         return _replace_persistent_index(rssid, rowid_start, pks, max_src_rssid, deletes);
     } else {
         auto st = _pkey_to_rssid_rowid->try_replace(rssid, rowid_start, pks, max_src_rssid, 0, pks.size(), deletes);
+        _calc_memory_usage();
+        return st;
+    }
+}
+
+Status PrimaryIndex::try_replace(uint32_t rssid, uint32_t rowid_start, const std::vector<uint32_t>& replace_indexes,
+                                 const Column& pks, const uint32_t max_src_rssid, vector<uint32_t>* failed) {
+    DCHECK(_status.ok() && (_pkey_to_rssid_rowid || _persistent_index));
+    if (_persistent_index != nullptr) {
+        return _try_replace_persistent_index_by_indexes(rssid, rowid_start, replace_indexes, pks, max_src_rssid,
+                                                        failed);
+    } else {
+        auto st = _pkey_to_rssid_rowid->try_replace(rssid, rowid_start, replace_indexes, pks, max_src_rssid, failed);
         _calc_memory_usage();
         return st;
     }

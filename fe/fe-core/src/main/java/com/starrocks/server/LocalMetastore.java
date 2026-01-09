@@ -3876,6 +3876,29 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         });
     }
 
+    private void alterLakeCompactionMaxParallel(OlapTable table,
+                                                Map<String, String> properties,
+                                                List<Runnable> appliers) throws DdlException {
+        if (!table.isCloudNativeTableOrMaterializedView()) {
+            throw new DdlException("Property " + PropertyAnalyzer.PROPERTIES_LAKE_COMPACTION_MAX_PARALLEL +
+                    " can only be set for cloud native tables");
+        }
+        String value = properties.remove(PropertyAnalyzer.PROPERTIES_LAKE_COMPACTION_MAX_PARALLEL);
+        try {
+            int maxParallel = Integer.parseInt(value);
+            if (maxParallel < 0) {
+                throw new DdlException("Invalid lake_compaction_max_parallel value: " + value +
+                        ". Value must be non-negative.");
+            }
+            appliers.add(() -> {
+                table.setLakeCompactionMaxParallel(maxParallel);
+            });
+        } catch (NumberFormatException e) {
+            throw new DdlException("Invalid lake_compaction_max_parallel value: " + value +
+                    ". Value must be an integer.");
+        }
+    }
+
     public void alterTableProperties(Database db, OlapTable table, Map<String, String> properties)
             throws DdlException {
         Map<String, String> propertiesToPersist = new HashMap<>(properties);
@@ -3909,6 +3932,9 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         }
         if (propertiesToPersist.containsKey(PropertyAnalyzer.PROPERTIES_CLOUD_NATIVE_FAST_SCHEMA_EVOLUTION_V2)) {
             alterCloudNativeFastSchemaEvolutionV2(table, properties, appliers);
+        }
+        if (propertiesToPersist.containsKey(PropertyAnalyzer.PROPERTIES_LAKE_COMPACTION_MAX_PARALLEL)) {
+            alterLakeCompactionMaxParallel(table, properties, appliers);
         }
         if (!properties.isEmpty()) {
             throw new DdlException("Modify failed because unknown properties: " + properties);

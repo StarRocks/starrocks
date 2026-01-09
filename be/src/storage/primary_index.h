@@ -123,6 +123,19 @@ public:
     Status try_replace(uint32_t rssid, uint32_t rowid_start, const Column& pks, const uint32_t max_src_rssid,
                        vector<uint32_t>* failed);
 
+    // try_replace with replace_indexes: only try to replace keys at specified indexes
+    // Similar to replace() but with max_src_rssid conflict detection like try_replace()
+    // |rssid| output segment's rssid
+    // |rowid_start| row id left open interval
+    // |replace_indexes| The index of the |pks| array that need to try replace.
+    // |pks| each output segment row's *encoded* primary key
+    // |max_src_rssid| maximum source rssid for conflict detection
+    // |failed| rowids of output segment's rows that failed to replace (concurrent update or delete)
+    //
+    // [not thread-safe]
+    Status try_replace(uint32_t rssid, uint32_t rowid_start, const std::vector<uint32_t>& replace_indexes,
+                       const Column& pks, const uint32_t max_src_rssid, vector<uint32_t>* failed);
+
     // |key_col| contains the *encoded* primary keys to be deleted from this index.
     // The position of deleted keys will be appended into |new_deletes|.
     //
@@ -209,6 +222,10 @@ private:
 
     Status _replace_persistent_index_by_indexes(uint32_t rssid, uint32_t rowid_start,
                                                 const std::vector<uint32_t>& replace_indexes, const Column& pks);
+
+    Status _try_replace_persistent_index_by_indexes(uint32_t rssid, uint32_t rowid_start,
+                                                    const std::vector<uint32_t>& replace_indexes, const Column& pks,
+                                                    const uint32_t max_src_rssid, vector<uint32_t>* failed);
 
     void _calc_memory_usage();
 

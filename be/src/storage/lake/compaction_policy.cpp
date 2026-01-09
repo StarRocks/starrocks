@@ -14,7 +14,11 @@
 
 #include "storage/lake/compaction_policy.h"
 
+#include <algorithm>
+#include <unordered_map>
+
 #include "common/config.h"
+#include "common/logging.h"
 #include "gutil/strings/join.h"
 #include "runtime/exec_env.h"
 #include "storage/lake/meta_file.h"
@@ -24,6 +28,75 @@
 #include "storage/tablet_schema.h"
 
 namespace starrocks::lake {
+
+// Calculate segment count for overlapped rowset, skipping large segments.
+// Large non-overlapped rowsets (>= lake_compaction_max_rowset_size) are already well-compacted
+// and don't contribute to the compaction score (return 0).
+inline int64_t calc_effective_segment_count(const RowsetMetadataPB& rowset) {
+    // For non-overlapped rowsets, check if they're large enough to skip
+    if (!rowset.overlapped()) {
+        // Large non-overlapped rowsets are already well-compacted, return 0 to skip
+        if (rowset.data_size() >= config::lake_compaction_max_rowset_size) {
+            return 0;
+        }
+        return 1;
+    }
+    int segments_size = rowset.segments_size();
+    if (segments_size == 0) {
+        return 1;
+    }
+    // If no segment_size info is available, fall back to counting all segments
+    if (rowset.segment_size_size() == 0) {
+        return segments_size;
+    }
+    // Count only segments smaller than the large segment threshold
+    int64_t large_segment_threshold = config::lake_compaction_max_rowset_size;
+    int64_t effective_count = 0;
+    for (int i = 0; i < rowset.segment_size_size(); i++) {
+        if (static_cast<int64_t>(rowset.segment_size(i)) < large_segment_threshold) {
+            effective_count++;
+        }
+    }
+    // Return at least 1 to avoid returning 0 for a non-empty overlapped rowset
+    return std::max<int64_t>(1, effective_count);
+}
+
+// Calculate effective segment count starting from a given offset.
+// This is used by partial compaction to correctly count remaining uncompacted segments,
+// avoiding the semantic mismatch between calc_effective_segment_count (which counts all effective segments)
+// and next_compaction_offset (which is an actual segment index).
+inline int64_t calc_effective_segment_count_from_offset(const RowsetMetadataPB& rowset, uint32_t start_offset) {
+    if (!rowset.overlapped()) {
+        if (start_offset > 0) {
+            return 0;
+        }
+        // Large non-overlapped rowsets are already well-compacted
+        if (rowset.data_size() >= config::lake_compaction_max_rowset_size) {
+            return 0;
+        }
+        return 1;
+    }
+    // Use size_t for proper unsigned comparisons to avoid overflow when start_offset > INT_MAX
+    size_t segments_size = static_cast<size_t>(rowset.segments_size());
+    if (segments_size == 0 || static_cast<size_t>(start_offset) >= segments_size) {
+        return 0;
+    }
+    // If no segment_size info is available, fall back to counting all remaining segments
+    if (rowset.segment_size_size() == 0) {
+        return static_cast<int64_t>(segments_size - start_offset);
+    }
+    // Count only segments smaller than the large segment threshold
+    int64_t large_segment_threshold = config::lake_compaction_max_rowset_size;
+    int64_t effective_count = 0;
+    size_t segment_size_count = static_cast<size_t>(rowset.segment_size_size());
+    size_t end_index = std::min(segment_size_count, segments_size);
+    for (size_t i = static_cast<size_t>(start_offset); i < end_index; i++) {
+        if (static_cast<int64_t>(rowset.segment_size(static_cast<int>(i))) < large_segment_threshold) {
+            effective_count++;
+        }
+    }
+    return effective_count;
+}
 
 class BaseAndCumulativeCompactionPolicy : public CompactionPolicy {
 public:
@@ -109,7 +182,7 @@ StatusOr<double> primary_compaction_score_by_policy(TabletManager* tablet_mgr,
     for (int i = 0; i < pick_rowset_indexes.size(); i++) {
         const auto& pick_rowset = metadata->rowsets(pick_rowset_indexes[i]);
         const bool has_del = has_dels[i];
-        auto current_score = pick_rowset.overlapped() ? pick_rowset.segments_size() : 1;
+        auto current_score = calc_effective_segment_count(pick_rowset);
         if (has_del) {
             // if delvec file exist, expand score by config.
             current_score *= update_compaction_delvec_file_io_amp_ratio;
@@ -152,7 +225,7 @@ StatusOr<std::vector<RowsetPtr>> BaseAndCumulativeCompactionPolicy::pick_cumulat
         input_rowsets.emplace_back(
                 std::make_shared<Rowset>(_tablet_mgr, _tablet_metadata, i, 0 /* compaction_segment_limit */));
 
-        segment_num_score += rowset.overlapped() ? rowset.segments_size() : 1;
+        segment_num_score += calc_effective_segment_count(rowset);
         if (segment_num_score >= config::max_cumulative_compaction_num_singleton_deltas) {
             break;
         }
@@ -218,7 +291,7 @@ double cumulative_compaction_score(const std::shared_ptr<const TabletMetadataPB>
     uint32_t segment_num_score = 0;
     for (uint32_t i = metadata->cumulative_point(), size = metadata->rowsets_size(); i < size; ++i) {
         const auto& rowset = metadata->rowsets(i);
-        segment_num_score += rowset.overlapped() ? rowset.segments_size() : 1;
+        segment_num_score += calc_effective_segment_count(rowset);
     }
     VLOG(2) << "Tablet: " << metadata->id() << ", cumulative compaction score: " << segment_num_score;
     return segment_num_score;
@@ -379,7 +452,7 @@ StatusOr<std::unique_ptr<SizeTieredLevel>> SizeTieredCompactionPolicy::pick_max_
             total_size = 0;
         }
 
-        segment_num += rowset.overlapped() ? rowset.segments_size() : 1;
+        segment_num += calc_effective_segment_count(rowset);
         total_size += rowset_size;
         transient_rowsets.emplace_back(i);
     }
@@ -427,8 +500,12 @@ StatusOr<std::vector<RowsetPtr>> SizeTieredCompactionPolicy::pick_rowsets() {
         for (auto i : selected_level->rowsets) {
             DCHECK_LT(i, _tablet_metadata->rowsets_size());
             const auto& rowset = _tablet_metadata->rowsets(i);
-            size_t cur_segment_score = rowset.overlapped() ? rowset.segments_size() : 1;
-            size_t uncompacted_segments = cur_segment_score - rowset.next_compaction_offset();
+            int64_t cur_segment_score = calc_effective_segment_count(rowset);
+            // Calculate uncompacted segments by counting effective segments from next_compaction_offset.
+            // This correctly handles rowsets with large segments that were partially compacted,
+            // avoiding the semantic mismatch between effective count and actual segment index.
+            int64_t uncompacted_segments =
+                    calc_effective_segment_count_from_offset(rowset, rowset.next_compaction_offset());
             if (partial_compaction && uncompacted_segments > max_segments) {
                 size_t compaction_segment_limit = max_segments;
                 // this optimization can not be applied to multiple rowsets,

@@ -137,6 +137,14 @@ StatusOr<std::string> lake_rows_mapper_filename(int64_t tablet_id, int64_t txn_i
     return data_dir->get_tmp_path() + "/" + fmt::format("{:016X}_{:016X}.crm", tablet_id, txn_id);
 }
 
+StatusOr<std::string> lake_rows_mapper_filename(int64_t tablet_id, int64_t txn_id, int32_t subtask_id) {
+    auto data_dir = StorageEngine::instance()->get_persistent_index_store(tablet_id);
+    if (data_dir == nullptr) {
+        return Status::NotFound(fmt::format("Not local disk found. tablet id: {}", tablet_id));
+    }
+    return data_dir->get_tmp_path() + "/" + fmt::format("{:016X}_{:016X}_{}.crm", tablet_id, txn_id, subtask_id);
+}
+
 std::string local_rows_mapper_filename(Tablet* tablet, const std::string& rowset_id) {
     return tablet->data_dir()->get_tmp_path() + "/" + fmt::format("{:016X}_{}.crm", tablet->tablet_id(), rowset_id);
 }

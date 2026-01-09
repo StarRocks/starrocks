@@ -76,6 +76,9 @@ private:
 // rows mapper file's name for lake table
 StatusOr<std::string> lake_rows_mapper_filename(int64_t tablet_id, int64_t txn_id);
 
+// rows mapper file's name for lake table with subtask_id (for parallel compaction)
+StatusOr<std::string> lake_rows_mapper_filename(int64_t tablet_id, int64_t txn_id, int32_t subtask_id);
+
 // rows mapper file's name for local table
 std::string local_rows_mapper_filename(Tablet* tablet, const std::string& rowset_id);
 

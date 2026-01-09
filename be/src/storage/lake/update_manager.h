@@ -142,6 +142,13 @@ public:
                                             const TabletMetadata& metadata, const Tablet& tablet,
                                             IndexEntry* index_entry, MetaFileBuilder* builder, int64_t base_version);
 
+    // Publish compaction with multiple independent outputs (new format for parallel compaction)
+    // Each subtask's output rowset replaces its corresponding input rowsets
+    Status publish_primary_compaction_multi_output(const TxnLogPB_OpCompaction& op_compaction, int64_t txn_id,
+                                                   MutableTabletMetadataPtr& metadata, const Tablet& tablet,
+                                                   IndexEntry* index_entry, MetaFileBuilder* builder,
+                                                   int64_t base_version);
+
     bool try_remove_primary_index_cache(uint32_t tablet_id);
 
     void unload_primary_index(int64_t tablet_id);
@@ -249,6 +256,17 @@ private:
 
     // decide whether use light publish compaction stategy or not
     bool _use_light_publish_primary_compaction(int64_t tablet_id, int64_t txn_id);
+
+    // Check if light publish can be used for a single subtask in multi-output mode
+    bool _use_light_publish_for_subtask(int64_t tablet_id, int64_t txn_id, int32_t subtask_id);
+
+    // Perform light publish for a single subtask in multi-output mode
+    // Returns the delvecs and segment_id_to_add_dels for the subtask's output rowset
+    Status _light_publish_subtask(const TabletMetadata& metadata, const Tablet& tablet, int64_t txn_id,
+                                  int32_t subtask_id, Rowset& output_rowset, uint32_t rowset_id, uint32_t max_src_rssid,
+                                  int64_t base_version, LakePrimaryIndex& index, IndexEntry* index_entry,
+                                  std::vector<std::pair<uint32_t, DelVectorPtr>>* delvecs,
+                                  std::map<uint32_t, size_t>* segment_id_to_add_dels, MetaFileBuilder* builder);
 
     static const size_t kPrintMemoryStatsInterval = 300; // 5min
 private:

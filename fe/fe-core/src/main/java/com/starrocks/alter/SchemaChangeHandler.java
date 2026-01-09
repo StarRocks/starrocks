@@ -2234,6 +2234,21 @@ public class SchemaChangeHandler extends AlterHandler {
                 compactionStrategy = properties.getOrDefault(PropertyAnalyzer.PROPERTIES_COMPACTION_STRATEGY,
                         TableProperty.DEFAULT_COMPACTION_STRATEGY);
                 metaType = TTabletMetaType.COMPACTION_STRATEGY;
+            } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_LAKE_COMPACTION_MAX_PARALLEL)) {
+                // lake_compaction_max_parallel is a pure FE property, only needs to update TableProperty
+                // It will be read when FE sends compaction requests to BE
+                String value = properties.get(PropertyAnalyzer.PROPERTIES_LAKE_COMPACTION_MAX_PARALLEL);
+                int maxParallel = Integer.parseInt(value);
+                int oldMaxParallel = olapTable.getLakeCompactionMaxParallel();
+                if (maxParallel == oldMaxParallel) {
+                    LOG.info("table: {} lake_compaction_max_parallel is {}, nothing need to do",
+                            olapTable.getName(), maxParallel);
+                    return null;
+                }
+                GlobalStateMgr.getCurrentState().getLocalMetastore().alterTableProperties(db, olapTable, properties);
+                LOG.info("updated table: {} lake_compaction_max_parallel from {} to {}",
+                        olapTable.getName(), oldMaxParallel, maxParallel);
+                return null;
             } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_CLOUD_NATIVE_FAST_SCHEMA_EVOLUTION_V2)) {
                 return processAlterCloudNativeFastSchemaEvolutionV2Property(db, olapTable, properties).orElse(null);
             } else {

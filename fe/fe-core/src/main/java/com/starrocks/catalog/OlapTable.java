@@ -2179,6 +2179,16 @@ public class OlapTable extends Table {
         tableProperty.buildCompactionStrategy();
     }
 
+    public int getLakeCompactionMaxParallel() {
+        return tableProperty.getLakeCompactionMaxParallel();
+    }
+
+    public void setLakeCompactionMaxParallel(int maxParallel) {
+        tableProperty.modifyTableProperties(PropertyAnalyzer.PROPERTIES_LAKE_COMPACTION_MAX_PARALLEL,
+                String.valueOf(maxParallel));
+        tableProperty.buildLakeCompactionMaxParallel();
+    }
+
     public Multimap<String, String> getLocation() {
         return tableProperty.getLocation();
     }

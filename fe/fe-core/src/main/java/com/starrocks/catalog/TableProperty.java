@@ -328,6 +328,12 @@ public class TableProperty implements Writable, GsonPostProcessable {
 
     private TCompactionStrategy compactionStrategy = TCompactionStrategy.DEFAULT;
 
+    // Maximum number of parallel compaction subtasks per tablet
+    // 0 means disable parallel compaction, positive value enables it
+    // Default: 3
+    @SerializedName(value = "lakeCompactionMaxParallel")
+    private int lakeCompactionMaxParallel = 3;
+
     @SerializedName(value = "enableStatisticCollectOnFirstLoad")
     private boolean enableStatisticCollectOnFirstLoad = true;
 
@@ -426,6 +432,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
                 buildStorageCoolDownTTL();
                 buildEnableStatisticCollectOnFirstLoad();
                 buildCloudNativeFastSchemaEvolutionV2();
+                buildLakeCompactionMaxParallel();
                 break;
             case OperationType.OP_MODIFY_TABLE_CONSTRAINT_PROPERTY:
                 buildConstraint();
@@ -923,6 +930,19 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return this;
     }
 
+    public TableProperty buildLakeCompactionMaxParallel() {
+        String value = properties.get(PropertyAnalyzer.PROPERTIES_LAKE_COMPACTION_MAX_PARALLEL);
+        if (value != null) {
+            try {
+                lakeCompactionMaxParallel = Integer.parseInt(value);
+            } catch (NumberFormatException e) {
+                LOG.warn("Invalid lake_compaction_max_parallel value: {}", value);
+                lakeCompactionMaxParallel = 0;
+            }
+        }
+        return this;
+    }
+
     public static String compactionStrategyToString(TCompactionStrategy strategy) {
         switch (strategy) {
             case DEFAULT:
@@ -1129,6 +1149,10 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return compactionStrategy;
     }
 
+    public int getLakeCompactionMaxParallel() {
+        return lakeCompactionMaxParallel;
+    }
+
     public Multimap<String, String> getLocation() {
         return location;
     }
@@ -1310,6 +1334,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
         buildFileBundling();
         buildMutableBucketNum();
         buildCompactionStrategy();
+        buildLakeCompactionMaxParallel();
         buildEnableStatisticCollectOnFirstLoad();
     }
 }

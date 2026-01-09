@@ -38,20 +38,33 @@ HorizontalPkTabletWriter::HorizontalPkTabletWriter(TabletManager* tablet_mgr, in
         : HorizontalGeneralTabletWriter(tablet_mgr, tablet_id, std::move(schema), txn_id, is_compaction, flush_pool,
                                         bundle_file_context, global_dicts),
           _rowset_txn_meta(std::make_unique<RowsetTxnMetaPB>()) {
-    if (is_compaction) {
-        auto rows_mapper_filename = lake_rows_mapper_filename(tablet_id, txn_id);
+    // Note: rows_mapper_builder initialization is deferred to _init_rows_mapper_builder()
+    // to support subtask_id for parallel compaction
+}
+
+HorizontalPkTabletWriter::~HorizontalPkTabletWriter() = default;
+
+void HorizontalPkTabletWriter::_init_rows_mapper_builder() {
+    if (_is_compaction && _rows_mapper_builder == nullptr && !_rows_mapper_init_attempted) {
+        _rows_mapper_init_attempted = true;
+        StatusOr<std::string> rows_mapper_filename;
+        if (_subtask_id >= 0) {
+            // Parallel compaction: use subtask-specific filename
+            rows_mapper_filename = lake_rows_mapper_filename(_tablet_id, _txn_id, _subtask_id);
+        } else {
+            rows_mapper_filename = lake_rows_mapper_filename(_tablet_id, _txn_id);
+        }
         if (rows_mapper_filename.ok()) {
             _rows_mapper_builder = std::make_unique<RowsMapperBuilder>(rows_mapper_filename.value());
         }
     }
 }
 
-HorizontalPkTabletWriter::~HorizontalPkTabletWriter() = default;
-
 Status HorizontalPkTabletWriter::write(const Chunk& data, const std::vector<uint64_t>& rssid_rowids,
                                        SegmentPB* segment) {
     RETURN_IF_ERROR(HorizontalGeneralTabletWriter::write(data, segment));
     RETURN_IF_ERROR(_pk_sst_writer->append_sst_record(data));
+    _init_rows_mapper_builder();
     if (_rows_mapper_builder != nullptr) {
         RETURN_IF_ERROR(_rows_mapper_builder->append(rssid_rowids));
     }
@@ -170,15 +183,27 @@ VerticalPkTabletWriter::VerticalPkTabletWriter(TabletManager* tablet_mgr, int64_
                                                bool is_compaction)
         : VerticalGeneralTabletWriter(tablet_mgr, tablet_id, std::move(schema), txn_id, max_rows_per_segment,
                                       is_compaction, flush_pool) {
-    if (is_compaction) {
-        auto rows_mapper_filename = lake_rows_mapper_filename(tablet_id, txn_id);
+    // Note: rows_mapper_builder initialization is deferred to _init_rows_mapper_builder()
+    // to support subtask_id for parallel compaction
+}
+
+VerticalPkTabletWriter::~VerticalPkTabletWriter() = default;
+
+void VerticalPkTabletWriter::_init_rows_mapper_builder() {
+    if (_is_compaction && _rows_mapper_builder == nullptr && !_rows_mapper_init_attempted) {
+        _rows_mapper_init_attempted = true;
+        StatusOr<std::string> rows_mapper_filename;
+        if (_subtask_id >= 0) {
+            // Parallel compaction: use subtask-specific filename
+            rows_mapper_filename = lake_rows_mapper_filename(_tablet_id, _txn_id, _subtask_id);
+        } else {
+            rows_mapper_filename = lake_rows_mapper_filename(_tablet_id, _txn_id);
+        }
         if (rows_mapper_filename.ok()) {
             _rows_mapper_builder = std::make_unique<RowsMapperBuilder>(rows_mapper_filename.value());
         }
     }
 }
-
-VerticalPkTabletWriter::~VerticalPkTabletWriter() = default;
 
 Status VerticalPkTabletWriter::write_columns(const Chunk& data, const std::vector<uint32_t>& column_indexes,
                                              bool is_key, const std::vector<uint64_t>& rssid_rowids) {
@@ -196,6 +221,7 @@ Status VerticalPkTabletWriter::write_columns(const Chunk& data, const std::vecto
         _pk_sst_writers.emplace_back(std::move(sst_writer));
     }
     RETURN_IF_ERROR(_pk_sst_writers[_current_writer_index]->append_sst_record(data));
+    _init_rows_mapper_builder();
     if (_rows_mapper_builder != nullptr) {
         RETURN_IF_ERROR(_rows_mapper_builder->append(rssid_rowids));
     }
