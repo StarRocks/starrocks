@@ -599,12 +599,14 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
             ArrowFlightSqlConnectProcessor processor = new ArrowFlightSqlConnectProcessor(ctx, query);
             ArrowFlightSqlResultDescriptor result = processor.execute();
 
-            // FE task will return FE as endpoint.
+            // FE task will return FE (or proxy) as endpoint.
             if (!result.isBackendResultDescriptor()) {
                 final ByteString handle = buildFETicket(ctx);
                 FlightSql.TicketStatementQuery ticketStatement =
                         FlightSql.TicketStatementQuery.newBuilder().setStatementHandle(handle).build();
-                return buildFlightInfoFromFE(ticketStatement, descriptor, result.getSchema());
+                SessionVariable sv = ctx.getSessionVariable();
+                Location endpoint = getFEEndpoint(sv);
+                return buildFlightInfo(ticketStatement, descriptor, result.getSchema(), endpoint);
             }
 
             // Query task will wait until deployment to BE is finished and return BE as endpoint.
@@ -616,9 +618,9 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
             ComputeNode worker = clusterInfoService.getBackendOrComputeNode(workerId);
 
             SessionVariable sv = ctx.getSessionVariable();
-            Pair<Location, ByteString> parsedEndpoint = parseEndpoint(sv, ctx.getExecutionId(), worker, rootFragmentInstanceId);
-            Location endpoint = parsedEndpoint.first;
-            ByteString handle = parsedEndpoint.second;
+            Pair<Location, ByteString> beEndpoint = getBEEndpoint(sv, ctx.getExecutionId(), worker, rootFragmentInstanceId);
+            Location endpoint = beEndpoint.first;
+            ByteString handle = beEndpoint.second;
 
             FlightSql.TicketStatementQuery ticketStatement =
                     FlightSql.TicketStatementQuery.newBuilder().setStatementHandle(handle).build();
@@ -712,21 +714,43 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
         }
     }
 
-    protected Pair<Location, ByteString> parseEndpoint(SessionVariable sv, TUniqueId queryId,
+    /**
+     * Validates and parses proxy string into Location.
+     */
+    private Location getProxyLocation(String arrowFlightProxy) throws InvalidConfException {
+        validateProxyFormat(arrowFlightProxy);
+        String[] split = arrowFlightProxy.split(":");
+        return Location.forGrpcInsecure(split[0], Integer.parseInt(split[1]));
+    }
+
+    /**
+     * Gets endpoint for FE-handled queries, respecting proxy settings.
+     */
+    protected Location getFEEndpoint(SessionVariable sv) throws InvalidConfException {
+        if (sv.isArrowFlightProxyEnabled()) {
+            String arrowFlightProxy = sv.getArrowFlightProxy();
+            if (!arrowFlightProxy.isEmpty()) {
+                return getProxyLocation(arrowFlightProxy);
+            }
+        }
+        return feEndpoint;
+    }
+
+    /**
+     * Gets endpoint and ticket for BE-handled queries, respecting proxy settings.
+     */
+    protected Pair<Location, ByteString> getBEEndpoint(SessionVariable sv, TUniqueId queryId,
                                                   ComputeNode worker, TUniqueId rootFragmentInstanceId)
                                                   throws InvalidConfException {
         ByteString handle;
         Location endpoint;
         if (sv.isArrowFlightProxyEnabled()) {
             String arrowFlightProxy = sv.getArrowFlightProxy();
-            validateProxyFormat(arrowFlightProxy);
-
             handle = buildFEProxyTicket(queryId, rootFragmentInstanceId, worker);
             if (arrowFlightProxy.isEmpty()) { // route to FE
                 endpoint = feEndpoint;
             } else { // route to defined proxy
-                String[] split = arrowFlightProxy.split(":");
-                endpoint = Location.forGrpcInsecure(split[0], Integer.parseInt(split[1]));
+                endpoint = getProxyLocation(arrowFlightProxy);
             }
         } else { // route directly to BE
             handle = buildBETicket(queryId, rootFragmentInstanceId);
