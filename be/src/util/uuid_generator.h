@@ -101,7 +101,15 @@ public:
 
 private:
     static inline thread_local boost::uuids::basic_random_generator<boost::mt19937> s_tls_gen;
-    static inline thread_local std::mt19937 s_tls_rng{std::random_device{}()};
+    
+    // Thread-local random number generator with efficient seeding
+    // Combines thread ID and high-resolution clock for better seed distribution
+    static inline thread_local std::mt19937 s_tls_rng{
+        static_cast<unsigned int>(
+            std::hash<std::thread::id>{}(std::this_thread::get_id()) ^
+            std::chrono::high_resolution_clock::now().time_since_epoch().count()
+        )
+    };
 };
 
 } // namespace starrocks

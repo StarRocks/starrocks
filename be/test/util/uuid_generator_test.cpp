@@ -18,6 +18,7 @@
 
 #include <algorithm>
 #include <boost/uuid/uuid_io.hpp>
+#include <chrono>
 #include <cstring>
 #include <thread>
 #include <unordered_set>
@@ -28,6 +29,7 @@ class ThreadLocalUUIDGeneratorTest : public testing::Test {
 public:
     ThreadLocalUUIDGeneratorTest() = default;
     ~ThreadLocalUUIDGeneratorTest() override = default;
+};
 };
 
 // Test that UUIDs are unique
