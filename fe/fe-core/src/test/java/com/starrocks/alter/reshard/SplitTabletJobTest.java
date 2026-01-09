@@ -80,7 +80,7 @@ public class SplitTabletJobTest {
         };
     }
 
-    //@Test
+    @Test
     public void testRunTabletReshardJob() throws Exception {
         new MockUp<MockLakeService>() {
             @Mock
@@ -158,7 +158,7 @@ public class SplitTabletJobTest {
         Assertions.assertTrue(newMaterializedIndex.getTablets().size() > materializedIndex.getTablets().size());
     }
 
-    //@Test
+    @Test
     public void testFallbackToIdenticalTablet() throws Exception {
         new MockUp<MockLakeService>() {
             @Mock
@@ -234,7 +234,7 @@ public class SplitTabletJobTest {
         Assertions.assertTrue(newMaterializedIndex.getTablets().size() == materializedIndex.getTablets().size());
     }
 
-    //@Test
+    @Test
     public void testReplayTabletReshardJob() throws Exception {
         PhysicalPartition physicalPartition = table.getAllPhysicalPartitions().iterator().next();
         MaterializedIndex materializedIndex = physicalPartition.getLatestBaseIndex();
@@ -269,7 +269,7 @@ public class SplitTabletJobTest {
         Assertions.assertTrue(newMaterializedIndex.getTablets().size() > materializedIndex.getTablets().size());
     }
 
-    //@Test
+    @Test
     public void testAbortTabletReshardJob() throws Exception {
         TabletReshardJob tabletReshardJob = createTabletReshardJob();
         Assertions.assertNotNull(tabletReshardJob);
