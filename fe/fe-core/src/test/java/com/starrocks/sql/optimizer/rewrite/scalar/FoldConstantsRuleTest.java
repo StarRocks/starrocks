@@ -168,6 +168,8 @@ public class FoldConstantsRuleTest {
         // cast('123.4' as int) -> 123
         CastOperator cast9 = new CastOperator(IntegerType.INT, ConstantOperator.createVarchar("123.4"));
         assertEquals(ConstantOperator.createInt(123), rule.apply(cast9, null));
+        CastOperator cast10 = new CastOperator(IntegerType.INT, ConstantOperator.createChar("123.4"));
+        assertEquals(ConstantOperator.createInt(123), rule.apply(cast10, null));
     }
 
     @Test
