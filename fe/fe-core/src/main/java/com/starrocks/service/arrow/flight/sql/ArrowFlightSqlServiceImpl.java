@@ -311,7 +311,7 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
     @Override
     public FlightInfo getFlightInfoSqlInfo(FlightSql.CommandGetSqlInfo command, CallContext context,
                                            FlightDescriptor descriptor) {
-        return buildFlightInfoFromFE(command, descriptor, Schemas.GET_SQL_INFO_SCHEMA);
+        return buildFlightInfoFromFE(command, descriptor, Schemas.GET_SQL_INFO_SCHEMA, context);
     }
 
     @Override
@@ -322,19 +322,19 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
     @Override
     public FlightInfo getFlightInfoTypeInfo(FlightSql.CommandGetXdbcTypeInfo command, CallContext context,
                                             FlightDescriptor descriptor) {
-        return buildFlightInfoFromFE(command, descriptor, Schemas.GET_TYPE_INFO_SCHEMA);
+        return buildFlightInfoFromFE(command, descriptor, Schemas.GET_TYPE_INFO_SCHEMA, context);
     }
 
     @Override
     public FlightInfo getFlightInfoCatalogs(FlightSql.CommandGetCatalogs command, CallContext context,
                                             FlightDescriptor descriptor) {
-        return buildFlightInfoFromFE(command, descriptor, Schemas.GET_CATALOGS_SCHEMA);
+        return buildFlightInfoFromFE(command, descriptor, Schemas.GET_CATALOGS_SCHEMA, context);
     }
 
     @Override
     public FlightInfo getFlightInfoSchemas(FlightSql.CommandGetDbSchemas command, CallContext context,
                                            FlightDescriptor descriptor) {
-        return buildFlightInfoFromFE(command, descriptor, Schemas.GET_SCHEMAS_SCHEMA);
+        return buildFlightInfoFromFE(command, descriptor, Schemas.GET_SCHEMAS_SCHEMA, context);
     }
 
     @Override
@@ -343,37 +343,37 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
         if (!command.getIncludeSchema()) {
             schemaToUse = Schemas.GET_TABLES_SCHEMA_NO_SCHEMA;
         }
-        return buildFlightInfoFromFE(command, descriptor, schemaToUse);
+        return buildFlightInfoFromFE(command, descriptor, schemaToUse, context);
     }
 
     @Override
     public FlightInfo getFlightInfoTableTypes(FlightSql.CommandGetTableTypes command, CallContext context,
                                               FlightDescriptor descriptor) {
-        return buildFlightInfoFromFE(command, descriptor, Schemas.GET_TABLE_TYPES_SCHEMA);
+        return buildFlightInfoFromFE(command, descriptor, Schemas.GET_TABLE_TYPES_SCHEMA, context);
     }
 
     @Override
     public FlightInfo getFlightInfoExportedKeys(FlightSql.CommandGetExportedKeys command, CallContext context,
                                                 FlightDescriptor descriptor) {
-        return buildFlightInfoFromFE(command, descriptor, Schemas.GET_EXPORTED_KEYS_SCHEMA);
+        return buildFlightInfoFromFE(command, descriptor, Schemas.GET_EXPORTED_KEYS_SCHEMA, context);
     }
 
     @Override
     public FlightInfo getFlightInfoImportedKeys(FlightSql.CommandGetImportedKeys command, CallContext context,
                                                 FlightDescriptor descriptor) {
-        return buildFlightInfoFromFE(command, descriptor, Schemas.GET_IMPORTED_KEYS_SCHEMA);
+        return buildFlightInfoFromFE(command, descriptor, Schemas.GET_IMPORTED_KEYS_SCHEMA, context);
     }
 
     @Override
     public FlightInfo getFlightInfoCrossReference(FlightSql.CommandGetCrossReference command, CallContext context,
                                                   FlightDescriptor descriptor) {
-        return buildFlightInfoFromFE(command, descriptor, Schemas.GET_CROSS_REFERENCE_SCHEMA);
+        return buildFlightInfoFromFE(command, descriptor, Schemas.GET_CROSS_REFERENCE_SCHEMA, context);
     }
 
     @Override
     public FlightInfo getFlightInfoPrimaryKeys(FlightSql.CommandGetPrimaryKeys command, CallContext context,
                                                FlightDescriptor descriptor) {
-        return buildFlightInfoFromFE(command, descriptor, Schemas.GET_PRIMARY_KEYS_SCHEMA);
+        return buildFlightInfoFromFE(command, descriptor, Schemas.GET_PRIMARY_KEYS_SCHEMA, context);
     }
 
     @Override
@@ -654,8 +654,14 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
     }
 
     private <T extends Message> FlightInfo buildFlightInfoFromFE(T request, FlightDescriptor descriptor,
-                                                                 Schema schema) {
-        return buildFlightInfo(request, descriptor, schema, feEndpoint);
+                                                                 Schema schema, CallContext context) {
+        try {
+            ArrowFlightSqlConnectContext ctx = sessionManager.validateAndGetConnectContext(context.peerIdentity());
+            Location endpoint = getFEEndpoint(ctx.getSessionVariable());
+            return buildFlightInfo(request, descriptor, schema, endpoint);
+        } catch (InvalidConfException e) {
+            throw CallStatus.INVALID_ARGUMENT.withDescription(e.getMessage()).toRuntimeException();
+        }
     }
 
     protected <T extends Message> FlightInfo buildFlightInfo(T request, FlightDescriptor descriptor,

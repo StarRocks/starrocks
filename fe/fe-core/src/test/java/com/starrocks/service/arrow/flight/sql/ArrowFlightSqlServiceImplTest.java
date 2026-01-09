@@ -192,6 +192,23 @@ public class ArrowFlightSqlServiceImplTest {
     }
 
     @Test
+    public void testGetFlightInfoCatalogsWithProxy() {
+        // Configure proxy enabled with proxy endpoint
+        SessionVariable mockSv = mock(SessionVariable.class);
+        when(mockContext.getSessionVariable()).thenReturn(mockSv);
+        when(mockSv.isArrowFlightProxyEnabled()).thenReturn(true);
+        when(mockSv.getArrowFlightProxy()).thenReturn("proxy.example.com:9408");
+
+        FlightSql.CommandGetCatalogs command = FlightSql.CommandGetCatalogs.newBuilder().build();
+        FlightInfo info = service.getFlightInfoCatalogs(command, mockCallContext, FlightDescriptor.command("".getBytes()));
+
+        assertNotNull(info);
+        assertEquals(1, info.getEndpoints().size());
+        assertEquals(Location.forGrpcInsecure("proxy.example.com", 9408),
+                info.getEndpoints().get(0).getLocations().get(0));
+    }
+
+    @Test
     public void testGetFlightInfoSchemas() {
         FlightSql.CommandGetDbSchemas command = FlightSql.CommandGetDbSchemas.newBuilder().build();
         FlightInfo info = service.getFlightInfoSchemas(command, mockCallContext, FlightDescriptor.command("".getBytes()));
