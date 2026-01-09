@@ -160,7 +160,7 @@ public:
         bool expect_false = false;
         if (_is_marked_del.compare_exchange_strong(expect_false, true)) {
             _vacuum_ttl = duration_cast<vacuum_time_precision>(steady_clock::now().time_since_epoch() + expiration_time)
-                            .count();
+                                  .count();
         }
     }
     // no drivers shall be added to this workgroup
