@@ -1424,8 +1424,10 @@ public class IcebergMetadata implements ConnectorMetadata {
         commitWithCleanup(() -> {
             rowDelta.commit();
             transaction.commitTransaction();
+        }, () -> {
+            invalidateCacheAfterCommit(dbName, tableName);
             asyncRefreshOthersFeMetadataCache(dbName, tableName);
-        }, () -> invalidateCacheAfterCommit(dbName, tableName), dataFiles, dbName, tableName);
+        }, dataFiles, dbName, tableName);
     }
 
     private void commitDataOperation(Transaction transaction, org.apache.iceberg.Table nativeTbl,
@@ -1474,8 +1476,10 @@ public class IcebergMetadata implements ConnectorMetadata {
         commitWithCleanup(() -> {
             batchWrite.commit();
             transaction.commitTransaction();
+        }, () -> {
+            invalidateCacheAfterCommit(dbName, tableName);
             asyncRefreshOthersFeMetadataCache(dbName, tableName);
-        }, () -> invalidateCacheAfterCommit(dbName, tableName), dataFiles, dbName, tableName);
+        }, dataFiles, dbName, tableName);
     }
 
     private void asyncRefreshOthersFeMetadataCache(String dbName, String tableName) {
@@ -1484,11 +1488,12 @@ public class IcebergMetadata implements ConnectorMetadata {
             try {
                 GlobalStateMgr.getCurrentState().refreshOthersFeTable(
                         new TableName(catalogName, dbName, tableName), new ArrayList<>(), false);
+                LOG.info("Finish to refresh others fe iceberg metadata cache on {}.{}.{}", catalogName, dbName, tableName);
             } catch (DdlException e) {
                 LOG.error("Failed to refresh others fe iceberg metadata cache {}.{}.{}", catalogName, dbName, tableName, e);
-                throw new StarRocksConnectorException(e.getMessage());
+                // Do not throw exception here - the commit has already succeeded
+                // Failure to refresh other FE instances should not cause data loss
             }
-            LOG.info("Finish to refresh others fe iceberg metadata cache on {}.{}.{}", catalogName, dbName, tableName);
         });
     }
 
