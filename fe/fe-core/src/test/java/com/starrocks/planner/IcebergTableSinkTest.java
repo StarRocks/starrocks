@@ -16,6 +16,8 @@
 package com.starrocks.planner;
 
 import com.google.common.collect.Maps;
+import com.starrocks.analysis.TupleDescriptor;
+import com.starrocks.analysis.TupleId;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.connector.CatalogConnector;
 import com.starrocks.connector.ConnectorMgr;
