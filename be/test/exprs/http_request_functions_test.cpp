@@ -812,8 +812,9 @@ PARALLEL_TEST(RuntimeStateHttpOptionsTest, sslVerificationRequiredGetterDefault)
     TQueryGlobals query_globals;
     RuntimeState state(TUniqueId(), query_options, query_globals, nullptr);
 
-    // Default should be false
-    EXPECT_FALSE(state.http_request_ssl_verification_required());
+    // Default should be true (secure by default)
+    // When thrift field is not set, SSL verification is enabled for security
+    EXPECT_TRUE(state.http_request_ssl_verification_required());
 }
 
 } // namespace starrocks

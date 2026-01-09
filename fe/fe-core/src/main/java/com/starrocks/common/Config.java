@@ -4138,5 +4138,4 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, comment = "Allow private IPs (127.x, 10.x, 192.168.x, 172.16-31.x) if in allowlist. " +
             "Default false for security. Set true to allow internal service calls.")
     public static boolean http_request_allow_private_in_allowlist = false;
->>>>>>> fcdb4e8944 ([Feature] Add http_request() function for SQL-based HTTP requests)
 }

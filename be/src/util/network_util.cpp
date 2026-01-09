@@ -414,7 +414,11 @@ int extract_port_from_url(const std::string& url) {
                 if (port_end == std::string::npos) port_end = url.size();
                 std::string port_str = url.substr(port_start, port_end - port_start);
                 try {
-                    return std::stoi(port_str);
+                    int port = std::stoi(port_str);
+                    if (port <= 0 || port > 65535) {
+                        return 0;  // Invalid port range
+                    }
+                    return port;
                 } catch (...) {
                     return 0;
                 }
