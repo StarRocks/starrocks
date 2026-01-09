@@ -354,12 +354,17 @@ public class IcebergMetadataTest extends TableTestBase {
         new MockUp<IcebergTable>() {
             @Mock
             public boolean isUnPartitioned() {
-                return true;
+                return false;
             }
 
             @Mock
             public List<Integer> getSortKeyIndexes() {
                 return ImmutableList.of(0, 1);
+            }
+
+            @Mock
+            public List<String> getPartitionColumnNamesWithTransform() {
+                return ImmutableList.of("hour(`c1`)");
             }
         };
 
@@ -392,6 +397,7 @@ public class IcebergMetadataTest extends TableTestBase {
                         "  `c1` int(11) DEFAULT NULL,\n" +
                         "  `c2` varchar(1048576) DEFAULT NULL\n" +
                         ")\n" +
+                        "PARTITION BY hour(`c1`)\n" +
                         "ORDER BY (c1 ASC NULLS FIRST,c2 DESC NULLS LAST);",
                 createSql);
     }
