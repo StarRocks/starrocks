@@ -119,20 +119,40 @@ TEST_F(TimeTypesTest, from_string_to_datetime_standard_format) {
 TEST_F(TimeTypesTest, from_string_to_datetime_edge_cases) {
     date::ToDatetimeResult res;
 
-    // Test string with date part but insufficient time part chars
+    // Test string with date part but partial time (just hour)
     {
         const char* date_str = "2023-12-25 12";
         auto [is_valid, is_only_date] = date::from_string_to_datetime(date_str, strlen(date_str), &res);
-        // Generic parser should handle this
         EXPECT_TRUE(is_valid);
+        EXPECT_FALSE(is_only_date);
+        EXPECT_EQ(2023, res.year);
+        EXPECT_EQ(12, res.month);
+        EXPECT_EQ(25, res.day);
+        EXPECT_EQ(12, res.hour);
+        EXPECT_EQ(0, res.minute);  // Should default to 0
+        EXPECT_EQ(0, res.second);  // Should default to 0
     }
 
-    // Test string with no separator after date
+    // Test string with date part and partial time (hour and minute)
+    {
+        const char* date_str = "2023-12-25 12:34";
+        auto [is_valid, is_only_date] = date::from_string_to_datetime(date_str, strlen(date_str), &res);
+        EXPECT_TRUE(is_valid);
+        EXPECT_FALSE(is_only_date);
+        EXPECT_EQ(2023, res.year);
+        EXPECT_EQ(12, res.month);
+        EXPECT_EQ(25, res.day);
+        EXPECT_EQ(12, res.hour);
+        EXPECT_EQ(34, res.minute);
+        EXPECT_EQ(0, res.second);  // Should default to 0
+    }
+
+    // Test string with no separator after date - should be rejected or parsed by generic parser
     {
         const char* date_str = "2023-12-25X";
         auto [is_valid, is_only_date] = date::from_string_to_datetime(date_str, strlen(date_str), &res);
-        // Should fallback to generic parser
-        // Generic parser might reject this, but at least we tried
+        // This should likely be invalid, but we tried the generic parser
+        // The behavior depends on what the generic parser does with this input
     }
 }
 
