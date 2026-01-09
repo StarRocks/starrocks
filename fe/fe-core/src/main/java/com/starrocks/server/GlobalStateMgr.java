@@ -2441,6 +2441,10 @@ public class GlobalStateMgr {
         return functionSet.getFunction(desc, mode);
     }
 
+    public boolean isAggregateFunction(String functionName) {
+        return functionSet.isAggregateFunction(functionName);
+    }
+
     public List<Function> getBuiltinFunctions() {
         return functionSet.getBuiltinFunctions();
     }
