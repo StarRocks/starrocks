@@ -10,7 +10,7 @@ import Clients from '../_assets/quick-start/_clientsCompose.mdx'
 import SQL from '../_assets/quick-start/_SQL.mdx'
 import Curl from '../_assets/quick-start/_curl.mdx'
 
-在存算分离的系统中，数据存储在低成本且可靠的远端存储系统中，如 Amazon S3、Google Cloud Storage、Azure Blob Storage 和其他兼容 S3 的存储如 MinIO。热数据会被本地缓存，当缓存命中时，查询性能可与存算耦合架构相媲美。计算节点（CN）可以根据需求在几秒钟内添加或移除。这种架构降低了存储成本，确保了更好的资源隔离，并提供了弹性和可扩展性。
+在存算分离的系统中，数据存储在低成本且可靠的远端存储系统中，如 Amazon S3、Google Cloud Storage、Azure Blob Storage 和其他兼容 S3 的存储如 MinIO。热数据会被本地缓存，当缓存命中时，查询性能可与存算一体架构相媲美。计算节点（CN）可以根据需求在几秒钟内添加或移除。这种架构降低了存储成本，确保了更好的资源隔离，并提供了弹性和可扩展性。
 
 本教程涵盖：
 
