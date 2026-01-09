@@ -28,12 +28,16 @@
 #include <stdexcept>
 #include <type_traits>
 #include <utility>
+#include <variant>
 
+#include "column/array_column.h"
 #include "column/column_builder.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
 #include "column/json_column.h"
+#include "column/map_column.h"
 #include "column/nullable_column.h"
+#include "column/struct_column.h"
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "common/object_pool.h"
@@ -46,6 +50,7 @@
 #include "gutil/casts.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/datetime_value.h"
+#include "runtime/decimalv3.h"
 #include "runtime/exception.h"
 #include "runtime/runtime_state.h"
 #include "runtime/types.h"
@@ -204,6 +209,8 @@ static ColumnPtr cast_to_json_fn(ColumnPtr& column) {
                     overflow = true;
                 }
             }
+        } else if constexpr (FromType == TYPE_ARRAY || FromType == TYPE_MAP || FromType == TYPE_STRUCT) {
+            overflow = true;
         } else {
             if constexpr (AllowThrowException) {
                 THROW_RUNTIME_ERROR_WITH_TYPE(FromType);
@@ -215,6 +222,8 @@ static ColumnPtr cast_to_json_fn(ColumnPtr& column) {
                 if constexpr (FromType == TYPE_LARGEINT) {
                     THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(FromType, ToType,
                                                              LargeIntValue::to_string(viewer.value(row)));
+                } else if constexpr (FromType == TYPE_ARRAY || FromType == TYPE_MAP || FromType == TYPE_STRUCT) {
+                    THROW_RUNTIME_ERROR_WITH_TYPE(FromType);
                 } else {
                     THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(FromType, ToType, viewer.value(row));
                 }
@@ -1112,6 +1121,201 @@ static ColumnPtr cast_from_string_to_time_fn(ColumnPtr& column) {
 }
 CUSTOMIZE_FN_CAST(TYPE_VARCHAR, TYPE_TIME, cast_from_string_to_time_fn);
 
+// Helper to convert Map Key Datum to String
+static Status map_key_to_string(const Datum& datum, const TypeDescriptor& type, std::string* out) {
+    if (datum.is_null()) {
+        *out = "null";
+        return Status::OK();
+    }
+
+    switch (type.type) {
+    case TYPE_BOOLEAN:
+        *out = (datum.get_int8() != 0) ? "true" : "false";
+        break;
+    case TYPE_TINYINT:
+        *out = std::to_string(static_cast<int16_t>(datum.get_int8()));
+        break;
+    case TYPE_SMALLINT:
+        *out = std::to_string(datum.get_int16());
+        break;
+    case TYPE_INT:
+        *out = std::to_string(datum.get_int32());
+        break;
+    case TYPE_BIGINT:
+        *out = std::to_string(datum.get_int64());
+        break;
+    case TYPE_LARGEINT:
+        *out = LargeIntValue::to_string(datum.get_int128());
+        break;
+    case TYPE_FLOAT:
+        *out = std::to_string(datum.get_float());
+        break;
+    case TYPE_DOUBLE:
+        *out = std::to_string(datum.get_double());
+        break;
+    case TYPE_DECIMALV2:
+        *out = datum.get_decimal().to_string();
+        break;
+    case TYPE_DECIMAL32:
+        *out = DecimalV3Cast::to_string<int32_t>(datum.get_int32(), type.precision, type.scale);
+        break;
+    case TYPE_DECIMAL64:
+        *out = DecimalV3Cast::to_string<int64_t>(datum.get_int64(), type.precision, type.scale);
+        break;
+    case TYPE_DECIMAL128:
+        *out = DecimalV3Cast::to_string<int128_t>(datum.get_int128(), type.precision, type.scale);
+        break;
+    case TYPE_DATE:
+        *out = datum.get_date().to_string();
+        break;
+    case TYPE_DATETIME:
+        *out = datum.get_timestamp().to_string();
+        break;
+    case TYPE_VARCHAR:
+    case TYPE_CHAR: {
+        const Slice& s = datum.get_slice();
+        *out = std::string(s.data, s.size);
+        break;
+    }
+    default:
+        return Status::NotSupported(strings::Substitute("Unsupported Map Key Type: $0", type.debug_string()));
+    }
+    return Status::OK();
+}
+
+// Helper to convert Datum to JsonValue recursively
+static Status datum_to_json(const Datum& datum, const TypeDescriptor& type, vpack::Builder* builder) {
+    if (datum.is_null()) {
+        builder->add(vpack::Value(vpack::ValueType::Null));
+        return Status::OK();
+    }
+
+    switch (type.type) {
+    case TYPE_BOOLEAN:
+        builder->add(vpack::Value(datum.get_int8() != 0));
+        break;
+    case TYPE_TINYINT:
+        builder->add(vpack::Value(static_cast<int64_t>(datum.get_int8())));
+        break;
+    case TYPE_SMALLINT:
+        builder->add(vpack::Value(static_cast<int64_t>(datum.get_int16())));
+        break;
+    case TYPE_INT:
+        builder->add(vpack::Value(static_cast<int64_t>(datum.get_int32())));
+        break;
+    case TYPE_BIGINT:
+        builder->add(vpack::Value(datum.get_int64()));
+        break;
+    case TYPE_LARGEINT: {
+        std::string s = LargeIntValue::to_string(datum.get_int128());
+        builder->add(vpack::Value(s));
+        break;
+    }
+    case TYPE_FLOAT:
+        builder->add(vpack::Value(datum.get_float()));
+        break;
+    case TYPE_DOUBLE:
+        builder->add(vpack::Value(datum.get_double()));
+        break;
+    case TYPE_DECIMALV2: {
+        builder->add(vpack::Value(datum.get_decimal().to_string()));
+        break;
+    }
+    case TYPE_DECIMAL32: {
+        std::string s = DecimalV3Cast::to_string<int32_t>(datum.get_int32(), type.precision, type.scale);
+        builder->add(vpack::Value(s));
+        break;
+    }
+    case TYPE_DECIMAL64: {
+        std::string s = DecimalV3Cast::to_string<int64_t>(datum.get_int64(), type.precision, type.scale);
+        builder->add(vpack::Value(s));
+        break;
+    }
+    case TYPE_DECIMAL128: {
+        std::string s = DecimalV3Cast::to_string<int128_t>(datum.get_int128(), type.precision, type.scale);
+        builder->add(vpack::Value(s));
+        break;
+    }
+    case TYPE_DATE: {
+        builder->add(vpack::Value(datum.get_date().to_string()));
+        break;
+    }
+    case TYPE_DATETIME: {
+        builder->add(vpack::Value(datum.get_timestamp().to_string()));
+        break;
+    }
+    case TYPE_TIME: {
+        builder->add(vpack::Value(std::to_string(datum.get_double())));
+        break;
+    }
+    case TYPE_VARCHAR:
+    case TYPE_CHAR:
+    case TYPE_HLL:
+    case TYPE_OBJECT: {
+        const Slice& s = datum.get_slice();
+        builder->add(vpack::Value(std::string(s.data, s.size)));
+        break;
+    }
+    case TYPE_JSON: {
+        const JsonValue* json = datum.get_json();
+        if (json) {
+            builder->add(json->to_vslice());
+        } else {
+            builder->add(vpack::Value(vpack::ValueType::Null));
+        }
+        break;
+    }
+    case TYPE_VARIANT: {
+        // Nested VARIANT casting is not fully supported in this context yet.
+        return Status::NotSupported("Casting nested VARIANT to JSON is not fully implemented yet");
+    }
+    case TYPE_ARRAY: {
+        builder->openArray();
+        const auto& arr = datum.get_array();
+        const auto& child_type = type.children[0];
+        for (const auto& item : arr) {
+            RETURN_IF_ERROR(datum_to_json(item, child_type, builder));
+        }
+        builder->close();
+        break;
+    }
+    case TYPE_MAP: {
+        builder->openObject();
+        const auto& map_data = datum.get_map();
+        const auto& key_type = type.children[0];
+        const auto& value_type = type.children[1];
+
+        for (const auto& entry : map_data) {
+            std::string key_str;
+            RETURN_IF_ERROR(map_key_to_string(entry.first, key_type, &key_str));
+            builder->add(vpack::Value(key_str));
+            RETURN_IF_ERROR(datum_to_json(entry.second, value_type, builder));
+        }
+        builder->close();
+        break;
+    }
+    case TYPE_STRUCT: {
+        builder->openObject();
+        const auto& struct_data = datum.get_struct();
+        for (size_t i = 0; i < struct_data.size(); ++i) {
+            std::string field_name =
+                    (i < type.field_names.size()) ? type.field_names[i] : "col" + std::to_string(i + 1);
+            builder->add(vpack::Value(field_name));
+            if (i < type.children.size()) {
+                RETURN_IF_ERROR(datum_to_json(struct_data[i], type.children[i], builder));
+            } else {
+                builder->add(vpack::Value(vpack::ValueType::Null));
+            }
+        }
+        builder->close();
+        break;
+    }
+    default:
+        return Status::NotSupported(strings::Substitute("Type $0 not supported for JSON cast", type.debug_string()));
+    }
+    return Status::OK();
+}
+
 // clang-format off
 #define DEFINE_CAST_CONSTRUCT(CLASS)             \
     CLASS(const TExprNode& node) : Expr(node) {} \
@@ -1132,23 +1336,51 @@ public:
         }
         const TypeDescriptor& to_type = this->type();
 
-        ColumnPtr result_column;
+        MutableColumnPtr result_column;
         // NOTE
         // For json type, it could not be converted from decimal directly, as a workaround we convert decimal
         // to double at first, then convert double to JSON
         if constexpr (FromType == TYPE_JSON || ToType == TYPE_JSON) {
-            if constexpr (lt_is_decimal<FromType>) {
-                ColumnPtr double_column;
-                if (context != nullptr && context->error_if_overflow()) {
-                    double_column = VectorizedUnaryFunction<DecimalTo<OverflowMode::REPORT_ERROR>>::evaluate<
-                            FromType, TYPE_DOUBLE>(column);
-                } else {
-                    double_column = VectorizedUnaryFunction<DecimalTo<OverflowMode::OUTPUT_NULL>>::evaluate<
-                            FromType, TYPE_DOUBLE>(column);
+            // Handle Complex Type to JSON
+            if constexpr (FromType == TYPE_ARRAY || FromType == TYPE_MAP || FromType == TYPE_STRUCT) {
+                if constexpr (ToType == TYPE_JSON) {
+                    ColumnBuilder<TYPE_JSON> json_builder(col_size);
+                    for (size_t i = 0; i < col_size; ++i) {
+                        Datum datum = column->get(i);
+                        if (datum.is_null()) {
+                            json_builder.append_null();
+                        } else {
+                            vpack::Builder vb;
+                            Status st = datum_to_json(datum, _children[0]->type(), &vb);
+                            if (!st.ok()) {
+                                if constexpr (AllowThrowException) {
+                                    throw RuntimeException(st.to_string());
+                                }
+                                json_builder.append_null();
+                            } else {
+                                json_builder.append(JsonValue(vb.slice()));
+                            }
+                        }
+                    }
+                    return json_builder.build(column->is_constant());
                 }
-                result_column = CastFn<TYPE_DOUBLE, TYPE_JSON, AllowThrowException>::cast_fn(std::move(double_column));
             } else {
-                result_column = CastFn<FromType, ToType, AllowThrowException>::cast_fn(std::move(column));
+                if constexpr (lt_is_decimal<FromType>) {
+                    ColumnPtr double_column;
+                    if (context != nullptr && context->error_if_overflow()) {
+                        double_column = VectorizedUnaryFunction<DecimalTo<OverflowMode::REPORT_ERROR>>::evaluate<
+                                FromType, TYPE_DOUBLE>(column);
+                    } else {
+                        double_column = VectorizedUnaryFunction<DecimalTo<OverflowMode::OUTPUT_NULL>>::evaluate<
+                                FromType, TYPE_DOUBLE>(column);
+                    }
+                    result_column =
+                            CastFn<TYPE_DOUBLE, TYPE_JSON, AllowThrowException>::cast_fn(std::move(double_column))
+                                    ->as_mutable_ptr();
+                } else {
+                    result_column =
+                            CastFn<FromType, ToType, AllowThrowException>::cast_fn(std::move(column))->as_mutable_ptr();
+                }
             }
         } else if constexpr (FromType == TYPE_VARIANT || ToType == TYPE_VARIANT) {
             if constexpr (lt_is_decimal<ToType>) {
@@ -1191,7 +1423,7 @@ public:
         } else if constexpr (lt_is_string<FromType> && lt_is_binary<ToType>) {
             result_column = Column::mutate(std::move(column));
         } else {
-            result_column = CastFn<FromType, ToType, AllowThrowException>::cast_fn(std::move(column));
+            result_column = CastFn<FromType, ToType, AllowThrowException>::cast_fn(std::move(column))->as_mutable_ptr();
         }
         DCHECK(result_column.get() != nullptr);
         if (result_column->is_constant()) {
@@ -1399,6 +1631,9 @@ CUSTOMIZE_FN_CAST(TYPE_TIME, TYPE_JSON, cast_to_json_fn);
 CUSTOMIZE_FN_CAST(TYPE_DATETIME, TYPE_JSON, cast_to_json_fn);
 CUSTOMIZE_FN_CAST(TYPE_DATE, TYPE_JSON, cast_to_json_fn);
 CUSTOMIZE_FN_CAST(TYPE_VARIANT, TYPE_JSON, cast_to_json_fn);
+CUSTOMIZE_FN_CAST(TYPE_ARRAY, TYPE_JSON, cast_to_json_fn);
+CUSTOMIZE_FN_CAST(TYPE_MAP, TYPE_JSON, cast_to_json_fn);
+CUSTOMIZE_FN_CAST(TYPE_STRUCT, TYPE_JSON, cast_to_json_fn);
 
 // Cast SQL type to VARIANT
 SELF_CAST(TYPE_VARIANT);
@@ -1985,6 +2220,9 @@ Expr* VectorizedCastExprFactory::create_primitive_cast(ObjectPool* pool, const T
                 CASE_TO_JSON(TYPE_DATE, allow_throw_exception);
                 CASE_TO_JSON(TYPE_TIME, allow_throw_exception);
                 CASE_TO_JSON(TYPE_DATETIME, allow_throw_exception);
+                CASE_TO_JSON(TYPE_ARRAY, allow_throw_exception);
+                CASE_TO_JSON(TYPE_MAP, allow_throw_exception);
+                CASE_TO_JSON(TYPE_STRUCT, allow_throw_exception);
             default:
                 LOG(WARNING) << "Not support cast " << type_to_string(from_type) << " to " << type_to_string(to_type);
                 return nullptr;
