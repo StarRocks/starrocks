@@ -17,7 +17,7 @@ properties
     "user"="${external_mysql_user}",
     "password"="${external_mysql_password}",
     "jdbc_uri"="jdbc:mysql://${external_mysql_ip}:${external_mysql_port}",
-    "driver_url"="http://starrocks-thirdparty.oss-cn-zhangjiakou.aliyuncs.com/starrocks-jdbc/mysql-connector-java-8.0.28.jar",
+    "driver_url"="${jdbc_url}",
     "driver_class"="com.mysql.cj.jdbc.Driver"
 );
 
