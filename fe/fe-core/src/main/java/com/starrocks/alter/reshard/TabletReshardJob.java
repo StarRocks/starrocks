@@ -457,7 +457,7 @@ public class TabletReshardJob implements Writable {
             txnInfo.txnType = TxnTypePB.TXN_TABLET_RESHARD;
             txnInfo.gtid = watershedGtid;
 
-            Utils.publishVersion(tablets, txnInfo, commitVersion - 1, commitVersion, null, distributionColumns,
+            Utils.publishVersion(tablets, txnInfo, commitVersion - 1, commitVersion, null,
                     WarehouseManager.DEFAULT_RESOURCE, null, useAggregatePublish);
 
             return true;

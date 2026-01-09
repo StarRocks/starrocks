@@ -119,18 +119,6 @@ public class Utils {
                                            ComputeResource computeResource,
                                            Map<Long, Long> tabletRowNum)
             throws NoAliveBackendException, RpcException {
-        publishVersionBatch(tablets, txnInfos, baseVersion, newVersion, compactionScores, null, nodeToTablets,
-                computeResource, tabletRowNum);
-    }
-
-    public static void publishVersionBatch(@NotNull List<Tablet> tablets, List<TxnInfoPB> txnInfos,
-                                           long baseVersion, long newVersion,
-                                           Map<Long, Double> compactionScores,
-                                           List<String> distributionColumns,
-                                           Map<ComputeNode, List<Long>> nodeToTablets,
-                                           ComputeResource computeResource,
-                                           Map<Long, Long> tabletRowNum)
-            throws NoAliveBackendException, RpcException {
         WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
         if (!warehouseManager.isResourceAvailable(computeResource)) {
             LOG.warn("publish version operation should be successful even if the warehouse is not exist, " +
@@ -157,8 +145,6 @@ public class Utils {
             if (!rebuildPindexTabletIds.isEmpty()) {
                 request.rebuildPindexTabletIds = rebuildPindexTabletIds;
             }
-            request.distributionColumns = distributionColumns;
-            request.reshardingTabletsInfo = publishTabletInfo.getReshardingTablets();
 
             LakeService lakeService = BrpcProxy.getLakeService(node.getHost(), node.getBrpcPort());
             Future<PublishVersionResponse> future = lakeService.publishVersion(request);
@@ -194,25 +180,16 @@ public class Utils {
 
     public static void publishVersion(@NotNull List<Tablet> tablets, TxnInfoPB txnInfo, long baseVersion,
                                       long newVersion, Map<Long, Double> compactionScores,
-                                      ComputeResource computeResource, Map<Long, Long> tabletRowNums,
-                                      boolean useAggregatePublish)
-            throws NoAliveBackendException, RpcException {
-        publishVersion(tablets, txnInfo, baseVersion, newVersion, compactionScores,
-                null, computeResource, tabletRowNums, useAggregatePublish);
-    }
-
-    public static void publishVersion(@NotNull List<Tablet> tablets, TxnInfoPB txnInfo, long baseVersion,
-                                      long newVersion, Map<Long, Double> compactionScores,
-                                      List<String> distributionColumns, ComputeResource computeResource,
+                                      ComputeResource computeResource,
                                       Map<Long, Long> tabletRowNums, boolean useAggregatePublish)
             throws NoAliveBackendException, RpcException {
         List<TxnInfoPB> txnInfos = Lists.newArrayList(txnInfo);
         if (!useAggregatePublish) {
             publishVersionBatch(tablets, txnInfos, baseVersion, newVersion,
-                    compactionScores, distributionColumns, null, computeResource, tabletRowNums);
+                    compactionScores, null, computeResource, tabletRowNums);
         } else {
             aggregatePublishVersion(tablets, txnInfos, baseVersion, newVersion, compactionScores, 
-                    distributionColumns, null, computeResource, tabletRowNums);
+                    null, computeResource, tabletRowNums);
         }
     }
 
@@ -267,17 +244,6 @@ public class Utils {
                                                            ComputeResource computeResource,
                                                            AggregatePublishVersionRequest request)
             throws NoAliveBackendException, RpcException {
-        createSubRequestForAggregatePublish(tablets, txnInfos, baseVersion, newVersion, null, nodeToTablets,
-                computeResource, request);
-    }
-
-    public static void createSubRequestForAggregatePublish(@NotNull List<Tablet> tablets, List<TxnInfoPB> txnInfos,
-                                                           long baseVersion, long newVersion,
-                                                           List<String> distributionColumns,
-                                                           Map<ComputeNode, List<Long>> nodeToTablets,
-                                                           ComputeResource computeResource,
-                                                           AggregatePublishVersionRequest request)
-            throws NoAliveBackendException, RpcException {
         WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
         if (!warehouseManager.isResourceAvailable(computeResource)) {
             LOG.warn("publish version operation should be successful even if the warehouse is not exist, " +
@@ -306,9 +272,6 @@ public class Utils {
             if (!rebuildPindexTabletIds.isEmpty()) {
                 singleReq.setRebuildPindexTabletIds(rebuildPindexTabletIds);
             }
-
-            singleReq.setDistributionColumns(distributionColumns);
-            singleReq.setReshardingTabletsInfo(publishTabletInfo.getReshardingTablets());
     
             ComputeNodePB computeNodePB = new ComputeNodePB();
             computeNodePB.setHost(entry.getKey().getHost());
@@ -392,22 +355,10 @@ public class Utils {
                                                ComputeResource computeResource,
                                                Map<Long, Long> tabletRowNum)
             throws NoAliveBackendException, RpcException {
-        aggregatePublishVersion(tablets, txnInfos, baseVersion, newVersion, compactionScores,
-                null, nodeToTablets, computeResource, tabletRowNum);
-    }
-
-    public static void aggregatePublishVersion(@NotNull List<Tablet> tablets, List<TxnInfoPB> txnInfos,
-                                               long baseVersion, long newVersion,
-                                               Map<Long, Double> compactionScores,
-                                               List<String> distributionColumns,
-                                               Map<ComputeNode, List<Long>> nodeToTablets,
-                                               ComputeResource computeResource,
-                                               Map<Long, Long> tabletRowNum)
-            throws NoAliveBackendException, RpcException {
         AggregatePublishVersionRequest request = new AggregatePublishVersionRequest();
         try {
             createSubRequestForAggregatePublish(tablets, txnInfos, baseVersion, newVersion,
-                    distributionColumns, nodeToTablets, computeResource, request);
+                    nodeToTablets, computeResource, request);
             sendAggregatePublishVersionRequest(request, baseVersion, computeResource, compactionScores,
                                                tabletRowNum);
         } catch (Exception e) {
