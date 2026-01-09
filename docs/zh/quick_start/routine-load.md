@@ -3,7 +3,7 @@ description: Kafka Routine Load 使用共享数据存储
 displayed_sidebar: docs
 ---
 
-# Kafka routine load StarRocks using shared-data storage
+# 通过 Routine Load 向 StarRocks 存算分离集群 导入 Kafka 数据
 
 import Clients from '../_assets/quick-start/_clientsCompose.mdx'
 import SQL from '../_assets/quick-start/_SQL.mdx'
@@ -12,9 +12,9 @@ import SQL from '../_assets/quick-start/_SQL.mdx'
 
 Routine load 是一种使用 Apache Kafka 或在本实验中使用 Redpanda，将数据持续流式传输到 StarRocks 的方法。数据被流式传输到 Kafka 主题中，然后由 Routine Load 作业将数据导入到 StarRocks。更多关于 Routine Load 的详细信息将在实验结束时提供。
 
-## 关于 shared-data
+## 关于存算分离
 
-在存储与计算分离的系统中，数据存储在低成本可靠的远端存储系统中，如 Amazon S3、Google Cloud Storage、Azure Blob Storage 和其他兼容 S3 的存储如 MinIO。热数据会被本地缓存，当缓存命中时，查询性能与存储计算耦合架构相当。计算节点（CN）可以在几秒钟内按需添加或移除。这种架构降低了存储成本，确保了更好的资源隔离，并提供了弹性和可扩展性。
+在存算分离系统中，数据存储在低成本可靠的远端存储系统中，如 Amazon S3、Google Cloud Storage、Azure Blob Storage 和其他兼容 S3 的存储如 MinIO。热数据会被本地缓存，当缓存命中时，查询性能与存算一体架构相当。计算节点（CN）可以在几秒钟内按需添加或移除。这种架构降低了存储成本，确保了更好的资源隔离，并提供了弹性和可扩展性。
 
 本教程涵盖：
 
