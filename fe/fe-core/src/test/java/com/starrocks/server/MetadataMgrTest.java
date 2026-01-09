@@ -33,6 +33,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.ast.CreateTableLikeStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
+import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
@@ -479,5 +480,18 @@ public class MetadataMgrTest {
         Assertions.assertFalse(MetadataTableName.isMetadataTable("table$"));
         Assertions.assertFalse(MetadataTableName.isMetadataTable("table$unknown_type"));
         Assertions.assertTrue(MetadataTableName.isMetadataTable("table$logical_iceberg_metadata"));
+    }
+
+    @Test
+    public void testTruncateTableOnExternalCatalog() throws Exception {
+        ConnectContext connectContext = AnalyzeTestUtil.getConnectContext();
+        MetadataMgr metadataMgr = connectContext.getGlobalStateMgr().getMetadataMgr();
+
+        String truncateHiveSql = "TRUNCATE TABLE hive_catalog.hive_db.hive_table";
+        TruncateTableStmt truncateHiveTableStmt = (TruncateTableStmt) AnalyzeTestUtil.analyzeSuccess(truncateHiveSql);
+
+        ExceptionChecker.expectThrowsWithMsg(StarRocksConnectorException.class,
+                "This connector doesn't support truncating tables",
+                () -> metadataMgr.truncateTable(connectContext, truncateHiveTableStmt));
     }
 }
