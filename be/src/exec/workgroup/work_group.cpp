@@ -424,16 +424,9 @@ void WorkGroupManager::add_metrics_unlocked(const WorkGroupPtr& wg, UniqueLockTy
 namespace {
 double _calculate_ratio(const int64_t curr_value, const int64_t sum_value) {
     if (sum_value <= 0) {
-        return 0.0;
+        return 0;
     }
     return static_cast<double>(curr_value) / sum_value;
-}
-
-double _calculate_ratio(const std::optional<int64_t>& usage, const std::optional<int64_t>& total_usage) {
-    if (!usage.has_value() || !total_usage.has_value()) {
-        return 0.0;
-    }
-    return _calculate_ratio(*usage, *total_usage);
 }
 } // namespace
 
@@ -470,7 +463,7 @@ void WorkGroupManager::update_metrics_unlocked() {
             double connector_scan_use_ratio = _calculate_ratio(wg->connector_scan_sched_entity()->growth_runtime_ns(),
                                                                sum_connector_scan_runtime_ns);
             double mem_pool_use_ratio =
-                    _calculate_ratio(wg->parent_memory_usage_bytes(), wg->parent_memory_limit_bytes());
+                    _calculate_ratio(wg->mem_consumption_bytes(), wg->parent_memory_limit_bytes().value_or(0));
 
             wg_metrics->cpu_limit->set_value(cpu_expected_use_ratio);
             wg_metrics->inuse_cpu_ratio->set_value(cpu_use_ratio);
