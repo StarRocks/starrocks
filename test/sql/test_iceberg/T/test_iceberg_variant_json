@@ -1,0 +1,141 @@
+-- name: test_iceberg_variant_json
+
+-- iceberg catalog on hive does not variant yet.
+
+create external catalog iceberg_sql_test_${uuid0}
+PROPERTIES ("type"="iceberg", "iceberg.catalog.type"="hadoop", "iceberg.catalog.warehouse"="oss://${oss_bucket}/test_iceberg_variant_json/${uuid0}/warehouse/");
+
+shell: ossutil64 mkdir oss://${oss_bucket}/test_iceberg_variant_json/${uuid0}/warehouse/iceberg_variant_json > /dev/null
+
+use iceberg_sql_test_${uuid0}.iceberg_variant_json;
+
+CREATE TABLE variant_json_roundtrip (
+    id INT,
+    json_str STRING,
+    variant_from_json VARIANT
+)
+properties(
+  'format-version' = '3'
+);
+
+insert into variant_json_roundtrip
+select
+    1 as id,
+    '{"id":1,"name":"alpha","scores":[1.5,2.5,3.5],"flags":{"active":true,"skip":null},"paths":{"first":"$.scores[0]"},"keys":{"key.with.dot":{"leaf":7},"key-with-dash":false}}' as json_str,
+    cast(parse_json('{"id":1,"name":"alpha","scores":[1.5,2.5,3.5],"flags":{"active":true,"skip":null},"paths":{"first":"$.scores[0]"},"keys":{"key.with.dot":{"leaf":7},"key-with-dash":false}}') as variant) as variant_from_json
+union all
+select
+    2 as id,
+    '{"id":-7,"name":"beta","scores":[-0.5,null,0.5],"flags":{"active":false,"skip":null},"paths":{"first":"$.scores[2]"},"keys":{"key.with.dot":{"leaf":-3},"key-with-dash":true}}' as json_str,
+    cast(parse_json('{"id":-7,"name":"beta","scores":[-0.5,null,0.5],"flags":{"active":false,"skip":null},"paths":{"first":"$.scores[2]"},"keys":{"key.with.dot":{"leaf":-3},"key-with-dash":true}}') as variant) as variant_from_json
+union all
+select
+    3 as id,
+    '{"id":2048,"name":"","scores":[0.0,1.0,2.0],"flags":{"active":true,"skip":false},"paths":{"first":"$.scores[1]"},"keys":{"key.with.dot":{"leaf":123},"key-with-dash":false},"deep":{"matrix":[[{"val":11},{"val":22}],[{"val":33},{"val":44}]],"layers":[{"name":"edge","segments":[{"path":"/edge/**","status":"ok"}]},{"name":"core","segments":[{"path":"/core/**","status":"warn","steps":[{"id":"prep","ok":true},{"id":"dispatch","ok":false}]}]}]}}' as json_str,
+    cast(parse_json('{"id":2048,"name":"","scores":[0.0,1.0,2.0],"flags":{"active":true,"skip":false},"paths":{"first":"$.scores[1]"},"keys":{"key.with.dot":{"leaf":123},"key-with-dash":false},"deep":{"matrix":[[{"val":11},{"val":22}],[{"val":33},{"val":44}]],"layers":[{"name":"edge","segments":[{"path":"/edge/**","status":"ok"}]},{"name":"core","segments":[{"path":"/core/**","status":"warn","steps":[{"id":"prep","ok":true},{"id":"dispatch","ok":false}]}]}]}}') as variant) as variant_from_json;
+
+select 'variant json roundtrip: scalar fields' as test_name;
+
+select
+    id,
+    case
+        when cast(variant_query(variant_from_json, '$.id') as INT) <=> cast(json_query(cast(variant_from_json as json), '$.id') as INT)
+         and get_variant_string(variant_from_json, '$.name') <=> cast(json_query(cast(variant_from_json as json), '$.name') as STRING)
+        then 'PASS' else 'FAIL' end as status,
+    cast(variant_query(variant_from_json, '$.id') as INT) as v_id,
+    cast(json_query(cast(variant_from_json as json), '$.id') as INT) as j_id,
+    get_variant_string(variant_from_json, '$.name') as v_name,
+    cast(json_query(cast(variant_from_json as json), '$.name') as STRING) as j_name
+from variant_json_roundtrip
+order by id;
+
+select 'variant json roundtrip: array fields' as test_name;
+
+select
+    id,
+    case
+        when get_variant_double(variant_from_json, '$.scores[0]') <=> cast(json_query(cast(variant_from_json as json), '$.scores[0]') as DOUBLE)
+         and get_variant_double(variant_from_json, '$.scores[1]') <=> cast(json_query(cast(variant_from_json as json), '$.scores[1]') as DOUBLE)
+        then 'PASS' else 'FAIL' end as status,
+    get_variant_double(variant_from_json, '$.scores[0]') as v_score0,
+    cast(json_query(cast(variant_from_json as json), '$.scores[0]') as DOUBLE) as j_score0,
+    get_variant_double(variant_from_json, '$.scores[1]') as v_score1,
+    cast(json_query(cast(variant_from_json as json), '$.scores[1]') as DOUBLE) as j_score1
+from variant_json_roundtrip
+order by id;
+
+select 'variant json roundtrip: boolean and dotted keys' as test_name;
+
+select
+    id,
+    case
+        when cast(variant_query(variant_from_json, '$.flags.active') as BOOLEAN) <=> cast(json_query(cast(variant_from_json as json), '$.flags.active') as BOOLEAN)
+         and cast(variant_query(variant_from_json, '$.keys["key.with.dot"].leaf') as INT) <=> cast(json_query(cast(variant_from_json as json), '$.keys."key.with.dot".leaf') as INT)
+         and cast(variant_query(variant_from_json, '$.keys["key-with-dash"]') as BOOLEAN) <=> cast(json_query(cast(variant_from_json as json), '$.keys."key-with-dash"') as BOOLEAN)
+        then 'PASS' else 'FAIL' end as status,
+    cast(variant_query(variant_from_json, '$.flags.active') as BOOLEAN) as v_active,
+    cast(json_query(cast(variant_from_json as json), '$.flags.active') as BOOLEAN) as j_active,
+    cast(variant_query(variant_from_json, '$.keys["key.with.dot"].leaf') as INT) as v_leaf,
+    cast(json_query(cast(variant_from_json as json), '$.keys."key.with.dot".leaf') as INT) as j_leaf,
+    cast(variant_query(variant_from_json, '$.keys["key-with-dash"]') as BOOLEAN) as v_dash,
+    cast(json_query(cast(variant_from_json as json), '$.keys."key-with-dash"') as BOOLEAN) as j_dash
+from variant_json_roundtrip
+order by id;
+
+select 'variant json roundtrip: deep nested fields' as test_name;
+
+select
+    id,
+    case
+        when cast(variant_query(variant_from_json, '$.deep.matrix[1][0].val') as INT) <=> cast(json_query(cast(variant_from_json as json), '$.deep.matrix[1][0].val') as INT)
+         and cast(variant_query(variant_from_json, '$.deep.layers[1].segments[0].steps[1].id') as STRING) <=> cast(json_query(cast(variant_from_json as json), '$.deep.layers[1].segments[0].steps[1].id') as STRING)
+         and cast(variant_query(variant_from_json, '$.deep.layers[1].segments[0].steps[1].ok') as BOOLEAN) <=> cast(json_query(cast(variant_from_json as json), '$.deep.layers[1].segments[0].steps[1].ok') as BOOLEAN)
+        then 'PASS' else 'FAIL' end as status,
+    cast(variant_query(variant_from_json, '$.deep.matrix[1][0].val') as INT) as v_matrix_val,
+    cast(json_query(cast(variant_from_json as json), '$.deep.matrix[1][0].val') as INT) as j_matrix_val,
+    cast(variant_query(variant_from_json, '$.deep.layers[1].segments[0].steps[1].id') as STRING) as v_step_id,
+    cast(json_query(cast(variant_from_json as json), '$.deep.layers[1].segments[0].steps[1].id') as STRING) as j_step_id,
+    cast(variant_query(variant_from_json, '$.deep.layers[1].segments[0].steps[1].ok') as BOOLEAN) as v_step_ok,
+    cast(json_query(cast(variant_from_json as json), '$.deep.layers[1].segments[0].steps[1].ok') as BOOLEAN) as j_step_ok
+from variant_json_roundtrip
+where id = 3
+order by id;
+
+CREATE TABLE variant_json_write (
+    id INT,
+    json_str STRING,
+    variant_from_json VARIANT
+)
+properties(
+  'format-version' = '3'
+);
+
+insert into variant_json_write
+select
+    id,
+    json_str,
+    variant_from_json
+from variant_json_roundtrip;
+
+select 'variant json write roundtrip' as test_name;
+
+select
+    id,
+    case
+        when cast(variant_query(variant_from_json, '$.id') as INT) <=> cast(json_query(cast(variant_from_json as json), '$.id') as INT)
+         and get_variant_string(variant_from_json, '$.name') <=> cast(json_query(cast(variant_from_json as json), '$.name') as STRING)
+         and get_variant_double(variant_from_json, '$.scores[0]') <=> cast(json_query(cast(variant_from_json as json), '$.scores[0]') as DOUBLE)
+        then 'PASS' else 'FAIL' end as status,
+    cast(variant_query(variant_from_json, '$.id') as INT) as v_id,
+    cast(json_query(cast(variant_from_json as json), '$.id') as INT) as j_id,
+    get_variant_string(variant_from_json, '$.name') as v_name,
+    cast(json_query(cast(variant_from_json as json), '$.name') as STRING) as j_name
+from variant_json_write
+order by id;
+
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_iceberg_variant_json/${uuid0}/ > /dev/null
+
+drop table variant_json_roundtrip force;
+drop table variant_json_write force;
+set catalog default_catalog;
+drop catalog iceberg_sql_test_${uuid0};

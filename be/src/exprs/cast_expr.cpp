@@ -32,7 +32,6 @@
 #include "column/column_builder.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
-#include "column/json_column.h"
 #include "column/nullable_column.h"
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
@@ -44,7 +43,6 @@
 #include "exprs/decimal_cast_expr.h"
 #include "exprs/unary_function.h"
 #include "gutil/casts.h"
-#include "gutil/strings/substitute.h"
 #include "runtime/datetime_value.h"
 #include "runtime/exception.h"
 #include "runtime/runtime_state.h"
@@ -58,6 +56,7 @@
 #include "util/mysql_global.h"
 #include "util/numeric_types.h"
 #include "util/variant_converter.h"
+#include "util/variant_encoder.h"
 
 #ifdef STARROCKS_JIT_ENABLE
 #include "exprs/jit/ir_helper.h"
@@ -282,8 +281,38 @@ static ColumnPtr cast_from_variant_fn(ColumnPtr& column) {
 
 template <LogicalType FromType, LogicalType ToType, bool AllowThrowException>
 static ColumnPtr cast_to_variant_fn(ColumnPtr& column) {
-    // TODO: require to implement variant encoding
-    THROW_RUNTIME_ERROR_WITH_TYPE(ToType);
+    if constexpr (FromType != TYPE_JSON) {
+        THROW_RUNTIME_ERROR_WITH_TYPE(ToType);
+    }
+
+    ColumnViewer<TYPE_JSON> viewer(column);
+    ColumnBuilder<TYPE_VARIANT> builder(viewer.size());
+
+    for (int row = 0; row < viewer.size(); ++row) {
+        if (viewer.is_null(row)) {
+            builder.append_null();
+            continue;
+        }
+
+        JsonValue* json = viewer.value(row);
+        if (json == nullptr) {
+            builder.append_null();
+            continue;
+        }
+
+        auto encoded = encode_json_to_variant(*json);
+        if (!encoded.ok()) {
+            VLOG_ROW << "encode json to variant failed: " << encoded.status();
+            if constexpr (AllowThrowException) {
+                THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(FromType, ToType, json->to_string_uncheck());
+            }
+            builder.append_null();
+            continue;
+        }
+        builder.append(std::move(encoded.value()));
+    }
+
+    return builder.build(column->is_constant());
 }
 
 SELF_CAST(TYPE_BOOLEAN);
@@ -300,6 +329,7 @@ UNARY_FN_CAST(TYPE_DATETIME, TYPE_BOOLEAN, TimestampToBoolean);
 UNARY_FN_CAST(TYPE_TIME, TYPE_BOOLEAN, ImplicitToBoolean);
 CUSTOMIZE_FN_CAST(TYPE_JSON, TYPE_BOOLEAN, cast_from_json_fn);
 CUSTOMIZE_FN_CAST(TYPE_VARIANT, TYPE_BOOLEAN, cast_from_variant_fn);
+CUSTOMIZE_FN_CAST(TYPE_JSON, TYPE_VARIANT, cast_to_variant_fn);
 
 template <LogicalType FromType, LogicalType ToType, bool AllowThrowException>
 static ColumnPtr cast_from_string_to_bool_fn(ColumnPtr& column) {
@@ -1590,6 +1620,15 @@ private:
         }                                                                     \
     }
 
+#define CASE_TO_VARIANT(FROM_TYPE, ALLOWTHROWEXCEPTION)                          \
+    case FROM_TYPE: {                                                            \
+        if (ALLOWTHROWEXCEPTION) {                                               \
+            return new VectorizedCastExpr<FROM_TYPE, TYPE_VARIANT, true>(node);  \
+        } else {                                                                 \
+            return new VectorizedCastExpr<FROM_TYPE, TYPE_VARIANT, false>(node); \
+        }                                                                        \
+    }
+
 #define CASE_FROM_VARIANT_TO(TO_TYPE, ALLOWTHROWEXCEPTION)                     \
     case TO_TYPE: {                                                            \
         if (ALLOWTHROWEXCEPTION) {                                             \
@@ -1961,6 +2000,7 @@ Expr* VectorizedCastExprFactory::create_primitive_cast(ObjectPool* pool, const T
                 CASE_FROM_JSON_TO(TYPE_FLOAT, allow_throw_exception);
                 CASE_FROM_JSON_TO(TYPE_DOUBLE, allow_throw_exception);
                 CASE_FROM_JSON_TO(TYPE_JSON, allow_throw_exception);
+                CASE_FROM_JSON_TO(TYPE_VARIANT, allow_throw_exception);
             default:
                 LOG(WARNING) << "Not support cast " << type_to_string(from_type) << " to " << type_to_string(to_type);
                 return nullptr;
@@ -2013,6 +2053,7 @@ Expr* VectorizedCastExprFactory::create_primitive_cast(ObjectPool* pool, const T
         // TODO: Support cast from other types to VARIANT after implementing string -> variant encoding
         if (to_type == TYPE_VARIANT) {
             switch (from_type) {
+                CASE_TO_VARIANT(TYPE_JSON, allow_throw_exception);
             default:
                 LOG(WARNING) << "Not support cast " << type_to_string(from_type) << " to " << type_to_string(to_type);
                 return nullptr;
