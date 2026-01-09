@@ -57,6 +57,7 @@
 #include "exec/schema_scanner/schema_table_privileges_scanner.h"
 #include "exec/schema_scanner/schema_tables_config_scanner.h"
 #include "exec/schema_scanner/schema_tables_scanner.h"
+#include "exec/schema_scanner/schema_tablet_reshard_jobs_scanner.h"
 #include "exec/schema_scanner/schema_task_runs_scanner.h"
 #include "exec/schema_scanner/schema_tasks_scanner.h"
 #include "exec/schema_scanner/schema_temp_tables_scanner.h"
