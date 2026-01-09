@@ -148,7 +148,7 @@ http://<fe_host>:<fe_http_port>/api/<database_name>/<table_name>/_stream_load
 | enable_merge_commit      | 否           | 是否为导入请求启用 Merge Commit。有效值：`true` 或 `false`（默认值）。 |
 | merge_commit_async       | 否           | 服务器返回模式。有效值：<ul><li>`true`：启用异步模式，服务器在接收到数据后立即返回，但不保证导入成功。</li><li>`false`（默认值）：启用同步模式，服务器在合并的事务提交完成后才返回，确保导入成功且数据可见。</li></ul> |
 | merge_commit_interval_ms | 是          | 合并时间窗口的大小。单位：毫秒。Merge Commit 会尝试将时间窗口内接收到的导入请求合并到一个事务中。窗口越大，合并效率越高，但延迟也会增加。 |
-| merge_commit_parallel    | 是          | 每个合并窗口创建的导入计划的并行度。可以根据导入负载调整该值。如果请求数量多，数据量大，可提高该值。并行度受 BE 节点数量限制，计算方式为 `max(merge_commit_parallel, BE 节点数量)`。 |
+| merge_commit_parallel    | 是          | 每个合并窗口创建的导入计划的并行度。可以根据导入负载调整该值。如果请求数量多，数据量大，可提高该值。并行度受 BE 节点数量限制，计算方式为 `min(merge_commit_parallel, BE 节点数量)`。 |
 
 :::note
 
