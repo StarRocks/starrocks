@@ -14,9 +14,7 @@
 
 package com.starrocks.sql;
 
-<<<<<<< HEAD
 import com.starrocks.common.FeConstants;
-=======
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.TableFunctionTable;
@@ -26,18 +24,20 @@ import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
->>>>>>> 14827a423f ([BugFix] Fix NPE in query planning during schema change (backport #66811) (#66828))
 import com.starrocks.sql.analyzer.PlannerMetaLocker;
 import com.starrocks.sql.ast.StatementBase;
-<<<<<<< HEAD
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Test;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
-=======
 import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.ValuesRelation;
+import com.starrocks.sql.ast.SubqueryRelation;
+import com.starrocks.sql.ast.ValuesRelation;
+import com.starrocks.sql.plan.PlanTestBase;
+import com.starrocks.utframe.UtFrameUtils;
+import org.junit.Test;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanFragmentBuilder;
 import com.starrocks.sql.plan.PlanTestBase;
@@ -60,7 +60,6 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
->>>>>>> 14827a423f ([BugFix] Fix NPE in query planning during schema change (backport #66811) (#66828))
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
@@ -498,5 +497,9 @@ public class StatementPlannerTest extends PlanTestBase {
             }
         }
     }
+<<<<<<< HEAD
 >>>>>>> 14827a423f ([BugFix] Fix NPE in query planning during schema change (backport #66811) (#66828))
 }
+=======
+}
+>>>>>>> 6d4986a14f9 (fix bugs)
