@@ -27,9 +27,15 @@ class ChunkIterator;
 
 using ChunkIteratorPtr = std::shared_ptr<ChunkIterator>;
 
+// Output stream for spilling data to disk blocks
+// Each stream writes to a specific block group, which is tagged with a slot_idx
+// to maintain ordering information for parallel flush scenarios.
 class LoadSpillOutputDataStream : public spill::SpillOutputDataStream {
 public:
-    LoadSpillOutputDataStream(LoadSpillBlockManager* block_manager) : _block_manager(block_manager) {}
+    // @param block_group: the target block group to write spilled data into,
+    //                     which carries the slot_idx for ordering
+    LoadSpillOutputDataStream(LoadSpillBlockManager* block_manager, spill::BlockGroup* block_group)
+            : _block_manager(block_manager), _block_group(block_group) {}
 
     Status append(RuntimeState* state, const std::vector<Slice>& data, size_t total_write_size,
                   size_t write_num_rows) override;
@@ -51,6 +57,8 @@ private:
 
 private:
     LoadSpillBlockManager* _block_manager = nullptr;
+    // Target block group for this output stream, tagged with slot_idx for ordering
+    spill::BlockGroup* _block_group = nullptr;
     spill::BlockPtr _block;
     int64_t _append_bytes = 0;
 };
@@ -67,7 +75,7 @@ public:
     LoadChunkSpiller(LoadSpillBlockManager* block_manager, RuntimeProfile* profile);
     ~LoadChunkSpiller() = default;
 
-    StatusOr<size_t> spill(const Chunk& chunk);
+    StatusOr<size_t> spill(const Chunk& chunk, int64_t slot_idx = -1);
 
     // `target_size` controls the maximum amount of data merged per operation,
     // while `memory_usage_per_merge` controls the peak memory usage of each merge.

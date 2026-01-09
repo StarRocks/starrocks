@@ -187,6 +187,7 @@ protected:
     ThreadPool* _flush_pool;
     std::vector<SegmentFileInfo> _segments;
     std::vector<FileInfo> _dels;
+    std::mutex _dels_mutex;
     std::vector<FileInfo> _ssts;
     std::vector<PersistentIndexSstableRangePB> _sst_ranges;
     // lake compaction row mapper file
