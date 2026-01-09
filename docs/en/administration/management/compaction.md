@@ -16,7 +16,7 @@ Each data loading operation in StarRocks generates a new version of data files. 
 
 The *Compaction Score* reflects the merging status of data files in a partition. A higher score indicates lower merging progress, meaning the partition has more unmerged data file versions. FE maintains Compaction Score information for each partition, including the Max Compaction Score (the highest score among all tablets in the partition).
 
-If a partition’s Max Compaction Score is below the FE parameter `lake_compaction_score_selector_min_score` (default: 10), compaction for that partition is considered complete. A Max Compaction Score exceeding 100 indicates an unhealthy compaction state. When the score exceeds the FE parameter `lake_ingest_slowdown_threshold` (default: 100), the system slows down data loading transaction commits for the partition. If it surpasses `lake_compaction_score_upper_bound` (default: 2000), the system loading import transactions for the partition.
+If a partition's Max Compaction Score is below the FE parameter `lake_compaction_score_selector_min_score` (default: 10), compaction for that partition is considered complete. A Max Compaction Score exceeding 100 indicates an unhealthy compaction state. When the score exceeds the FE parameter `lake_ingest_slowdown_threshold` (default: 100), the system slows down data loading transaction commits for the partition. If it surpasses `lake_compaction_score_upper_bound` (default: 2000), the system rejects import transactions for the partition.
 
 ### Calculation Rules
 
@@ -41,9 +41,10 @@ For shared-data clusters, StarRocks introduces a new FE-controlled compaction me
 
 ### View compaction scores
 
-- You can view the compaction scores of partitions in a specific table by using the SHOW PROC statement.
+- You can view the compaction scores of partitions in a specific table by using the SHOW PROC statement. Typically, you only need to focus on the `MaxCS` field. If `MaxCS` is below 10, compaction is considered complete. If `MaxCS` is above 100, the Compaction Score is relatively high. If `MaxCS` exceeds 500, the Compaction Score is very high and manual intervention may be required.
 
   ```Plain
+  SHOW PARTITIONS FROM <table_name>
   SHOW PROC '/dbs/<database_name>/<table_name>/partitions'
   ```
 
@@ -81,11 +82,6 @@ For shared-data clusters, StarRocks introduces a new FE-controlled compaction me
   +--------------+----------------------------+----------------------------+--------------+-----------------+-----------------+----------------------+--------------+---------------+-----------------+-----------------------------------------+---------+-----------------+----------------+---------------------+-----------------------------+--------------+---------+-----------+------------+------------------+----------+--------+--------+-------------------------------------------------------------------+
   ```
 
-You only need to focus on the following two metrics:
-
-- `AvgCS`: The average compaction score of all tablets in the partition.
-- `MaxCS`: The maximum compaction score among all tablets in the partition.
-
 ### View compaction tasks
 
 As new data is loading to the system, FE constantly schedules compaction tasks to be executed on different CN nodes. You can first view the general status of compaction tasks on FE, and then view the execution details of each tasks on CN.
@@ -102,16 +98,13 @@ Example:
 
 ```Plain
 mysql> SHOW PROC '/compactions';
-+---------------------+-------+---------------------+---------------------+---------------------+-------+--------------------------------------------------------------------------------------------------------------------+
-| Partition           | TxnID | StartTime           | CommitTime          | FinishTime          | Error | Profile                                                                                                            |
-+---------------------+-------+---------------------+---------------------+---------------------+-------+--------------------------------------------------------------------------------------------------------------------+
-| ssb.lineorder.43026 | 51053 | 2024-09-24 19:15:16 | NULL                | NULL                | NULL  | NULL                                                                                                               |
-| ssb.lineorder.43027 | 51052 | 2024-09-24 19:15:16 | NULL                | NULL                | NULL  | NULL                                                                                                               |
-| ssb.lineorder.43025 | 51047 | 2024-09-24 19:15:15 | NULL                | NULL                | NULL  | NULL                                                                                                               |
-| ssb.lineorder.43026 | 51046 | 2024-09-24 19:15:04 | 2024-09-24 19:15:06 | 2024-09-24 19:15:06 | NULL  | {"sub_task_count":1,"read_local_sec":0,"read_local_mb":31,"read_remote_sec":0,"read_remote_mb":0,"in_queue_sec":0} |
-| ssb.lineorder.43027 | 51045 | 2024-09-24 19:15:04 | 2024-09-24 19:15:06 | 2024-09-24 19:15:06 | NULL  | {"sub_task_count":1,"read_local_sec":0,"read_local_mb":31,"read_remote_sec":0,"read_remote_mb":0,"in_queue_sec":0} |
-| ssb.lineorder.43029 | 51044 | 2024-09-24 19:15:03 | 2024-09-24 19:15:05 | 2024-09-24 19:15:05 | NULL  | {"sub_task_count":1,"read_local_sec":0,"read_local_mb":31,"read_remote_sec":0,"read_remote_mb":0,"in_queue_sec":0} |
-+---------------------+-------+---------------------+---------------------+---------------------+-------+--------------------------------------------------------------------------------------------------------------------+
++---------------------+-------+---------------------+---------------------+---------------------+-------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| Partition           | TxnID | StartTime           | CommitTime          | FinishTime          | Error | Profile                                                                                                                                                                                                              |
++---------------------+-------+---------------------+---------------------+---------------------+-------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ssb.lineorder.10081 | 15    | 2026-01-10 03:29:07 | 2026-01-10 03:29:11 | 2026-01-10 03:29:12 | NULL  | {"sub_task_count":12,"read_local_sec":0,"read_local_mb":218,"read_remote_sec":0,"read_remote_mb":0,"read_segment_count":120,"write_segment_count":12,"write_segment_mb":219,"write_remote_sec":4,"in_queue_sec":18} |
+| ssb.lineorder.10068 | 16    | 2026-01-10 03:29:07 | 2026-01-10 03:29:13 | 2026-01-10 03:29:14 | NULL  | {"sub_task_count":12,"read_local_sec":0,"read_local_mb":218,"read_remote_sec":0,"read_remote_mb":0,"read_segment_count":120,"write_segment_count":12,"write_segment_mb":218,"write_remote_sec":4,"in_queue_sec":38} |
+| ssb.lineorder.10055 | 20    | 2026-01-10 03:29:11 | 2026-01-10 03:29:15 | 2026-01-10 03:29:17 | NULL  | {"sub_task_count":12,"read_local_sec":0,"read_local_mb":218,"read_remote_sec":0,"read_remote_mb":0,"read_segment_count":120,"write_segment_count":12,"write_segment_mb":218,"write_remote_sec":4,"in_queue_sec":23} |
++---------------------+-------+---------------------+---------------------+---------------------+-------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
 ```
 
 The following fields are returned:
@@ -127,7 +120,11 @@ The following fields are returned:
   - `read_local_sec`: The total time consumption of all sub-tasks on reading data from the local cache. Unit: Seconds.
   - `read_local_mb`: The total size of data read from the local cache by all sub-tasks. Unit: MB.
   - `read_remote_sec`: The total time consumption of all sub-tasks on reading data from the remote storage. Unit: Seconds.
-  - `read_remote_mb`The total size of data read from the remote storage by all sub-tasks. Unit: MB.
+  - `read_remote_mb`: The total size of data read from the remote storage by all sub-tasks. Unit: MB.
+  - `read_segment_count`: The total number of files read by all sub-tasks.
+  - `write_segment_count`: The total number of new files generated by all sub-tasks.
+  - `write_segment_mb`: The total size of new files generated by all sub-tasks. Unit: MB.
+  - `write_remote_sec`: The total time consumption of all sub-tasks on writing data to the remote storage. Unit: Seconds.
   - `in_queue_sec`: The total time of all sub-tasks staying in the queue. Unit: Seconds.
 
 #### View execution details of compaction tasks
@@ -165,7 +162,7 @@ The following fields are returned:
   - `read_local_sec`: The time consumption of the sub-task on reading data from the local cache. Unit: Seconds.
   - `read_local_mb`: The size of data read from the local cache by the sub-task. Unit: MB.
   - `read_remote_sec`: The time consumption of the sub-task on reading data from the remote storage. Unit: Seconds.
-  - `read_remote_mb`The size of data read from the remote storage by the sub-task. Unit: MB.
+  - `read_remote_mb`: The size of data read from the remote storage by the sub-task. Unit: MB.
   - `read_local_count`: The number of times the sub-task reads data from the local cache.
   - `read_remote_count`: The number of times the sub-task reads data from the remote storage.
   - `in_queue_sec`: The time of the sub-task staying in queue. Unit: Seconds.
@@ -248,6 +245,10 @@ WHERE name = "compact_threads";
 - Description: The maximum number of input rowsets allowed in a Primary Key table compaction task in a shared-data cluster. The default value of this parameter is changed from `5` to `1000` since v3.2.4 and v3.1.10, and to `500` since since v3.3.1 and v3.2.9. After the Sized-tiered Compaction policy is enabled for Primary Key tables (by setting `enable_pk_size_tiered_compaction_strategy` to `true`), StarRocks does not need to limit the number of rowsets for each compaction to reduce write amplification. Therefore, the default value of this parameter is increased.
 - Introduced in: v3.1.8, v3.2.3
 
+> **NOTE**
+>
+> In production, it is recommended to set `max_cumulative_compaction_num_singleton_deltas` to `100` to accelerate the compaction tasks and reduce their resource consumption.
+
 ### Manually trigger compaction tasks
 
 ```SQL
@@ -278,7 +279,23 @@ CANCEL COMPACTION WHERE TXN_ID = <TXN_ID>;
 Since Compaction is crucial for query performance, it is recommended to regularly monitor the data merging status of tables and partitions. Here are some best practices and guidelines:
 
 - Try to increase the time interval between loading (avoid scenarios with intervals less than 10 seconds) and increase the batch size per load (avoid batch sizes smaller than 100 rows of data).
-- Adjust the number of parallel compaction worker threads on CN to accelerate task execution. It is recommended to set `compact_threads` to 25% of the BE/CN CPU core count in a production environment. When the cluster is idle (for example, only performing compaction and not handling queries), you can temporarily increase this value to 50%, and revert to 25% after the task is complete.
+- Adjust the number of parallel compaction worker threads on CN to accelerate task execution. It is recommended to set `compact_threads` to 25% of the BE/CN CPU core count in a production environment.
 - Monitor the Compaction task status using `show proc '/compactions'` and `select * from information_schema.be_cloud_native_compactions;`.
 - Monitor the Compaction Score, and configure alerts based on it. StarRocks' built-in Grafana monitoring template includes this metric.
 - Pay attention to the resource consumption during compaction, especially memory usage. The Grafana monitoring template also includes this metric.
+
+## Troubleshooting
+
+### Slow queries
+If slow queries are caused by untimely compaction, you will see in the SQL Profile that `SegmentsReadCount` divided by `TabletCount` within a single Fragment is a large value, such as tens or more.
+
+### High Max Compaction Score in the cluster
+1. Check whether the compaction-related parameters are within reasonable ranges using `admin show frontend config like "%lake_compaction%"` and `select * from information_schema.be_configs where name = "compact_threads"`.
+2. Check if compaction is stuck using `show proc '/compactions'`:
+   * If `CommitTime` remains NULL, check the `be_cloud_native_compactions` system table for the reason why compaction is stuck.
+   * If `FinishTime` remains NULL, search for the publish failure reason in the leader FE log using `TxnID`.
+3. Check if compaction is running slowly using `show proc '/compactions'`:
+   * If `sub_task_count` is too large (check the size of each tablet in this partition using `show partitions`), the table may not be created properly.
+   * If `read_remote_mb` is too large (more than 30% of the total read data), check the disk size on the machine and also check the cache quota through `SHOW BACKENDS` for field DataCacheMetrics.
+   * If `write_remote_sec` is too large (more than 90% of the total compaction time), S3 write may be too slow. This can be verified through shared-data grafana metrics with keywords `single upload latency` and `multi upload latency`.
+   * If `in_queue_sec` is too large (average waiting time per tablet exceeds 60 seconds), the parameter settings may be unreasonable or other running compactions are too slow.
