@@ -1329,7 +1329,7 @@ public class IcebergMetadata implements ConnectorMetadata {
         }
     }
 
-    private void commitWithCleanup(Runnable commitAction, Runnable cleanupAction,
+    private void commitAndInvalidateCache(Runnable commitAction, Runnable invalidateCacheAction,
                                    List<TIcebergDataFile> dataFiles, String dbName, String tableName) {
         try {
             commitAction.run();
@@ -1343,7 +1343,7 @@ public class IcebergMetadata implements ConnectorMetadata {
             LOG.error("Failed to commit iceberg transaction on {}.{}", dbName, tableName, e);
             throw new StarRocksConnectorException(e.getMessage());
         } finally {
-            cleanupAction.run();
+            invalidateCacheAction.run();
         }
     }
 
@@ -1426,7 +1426,7 @@ public class IcebergMetadata implements ConnectorMetadata {
             rowDelta.validateNoConflictingDataFiles();
         }
 
-        commitWithCleanup(() -> {
+        commitAndInvalidateCache(() -> {
             rowDelta.commit();
             transaction.commitTransaction();
         }, () -> invalidateCacheAndRefreshOtherFEs(dbName, tableName), dataFiles, dbName, tableName);
@@ -1475,7 +1475,7 @@ public class IcebergMetadata implements ConnectorMetadata {
             ((RewriteData) batchWrite).setSnapshotId(nativeTbl.currentSnapshot().snapshotId());
         }
 
-        commitWithCleanup(() -> {
+        commitAndInvalidateCache(() -> {
             batchWrite.commit();
             transaction.commitTransaction();
         }, () -> invalidateCacheAndRefreshOtherFEs(dbName, tableName), dataFiles, dbName, tableName);
@@ -1487,12 +1487,11 @@ public class IcebergMetadata implements ConnectorMetadata {
             try {
                 GlobalStateMgr.getCurrentState().refreshOthersFeTable(
                         new TableName(catalogName, dbName, tableName), new ArrayList<>(), false);
-                LOG.info("Finish to refresh others fe iceberg metadata cache on {}.{}.{}", catalogName, dbName, tableName);
             } catch (DdlException e) {
                 LOG.error("Failed to refresh others fe iceberg metadata cache {}.{}.{}", catalogName, dbName, tableName, e);
-                // Do not throw exception here - the commit has already succeeded
-                // Failure to refresh other FE instances should not cause data loss
+                throw new StarRocksConnectorException(e.getMessage());
             }
+            LOG.info("Finish to refresh others fe iceberg metadata cache on {}.{}.{}", catalogName, dbName, tableName);
         });
     }
 
