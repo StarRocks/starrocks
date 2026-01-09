@@ -102,6 +102,19 @@ public class ClusterSnapshot {
         return;
     }
 
+    public ClusterSnapshot copyForPersist() {
+        ClusterSnapshot copy = new ClusterSnapshot();
+        copy.id = id;
+        copy.snapshotName = snapshotName;
+        copy.type = type;
+        copy.storageVolumeName = storageVolumeName;
+        copy.createdTimeMs = createdTimeMs;
+        copy.finishedTimeMs = finishedTimeMs;
+        copy.feJournalId = feJournalId;
+        copy.starMgrJournalId = starMgrJournalId;
+        return copy;
+    }
+
     public TClusterSnapshotsItem getInfo() {
         TClusterSnapshotsItem item = new TClusterSnapshotsItem();
         item.setSnapshot_name(snapshotName);

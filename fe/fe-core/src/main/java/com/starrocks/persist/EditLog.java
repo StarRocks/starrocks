@@ -2204,8 +2204,8 @@ public class EditLog {
         logJsonObject(OperationType.OP_RECOVER_PARTITION_VERSION, info);
     }
 
-    public void logClusterSnapshotLog(ClusterSnapshotLog info) {
-        logJsonObject(OperationType.OP_CLUSTER_SNAPSHOT_LOG, info);
+    public void logClusterSnapshotLog(ClusterSnapshotLog info, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_CLUSTER_SNAPSHOT_LOG, info, walApplier);
     }
 
     public void logCreateSPMBaseline(BaselinePlan.Info info, WALApplier walApplier) {
