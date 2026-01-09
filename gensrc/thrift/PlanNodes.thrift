@@ -284,6 +284,7 @@ struct TBrokerScanRangeParams {
     31: optional i64 schema_sample_file_row_count
     32: optional bool flexible_column_mapping
     33: optional TFileScanType file_scan_type
+    34: optional bool schema_sample_types = true
 }
 
 // Broker scan range
