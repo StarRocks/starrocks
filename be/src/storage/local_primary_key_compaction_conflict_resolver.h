@@ -37,7 +37,7 @@ public:
               _delvecs(delvecs) {}
     ~LocalPrimaryKeyCompactionConflictResolver() {}
 
-    StatusOr<std::string> filename() const override;
+    StatusOr<FileInfo> filename() const override;
     Schema generate_pkey_schema() override;
     Status segment_iterator(
             const std::function<Status(const CompactConflictResolveParams&, const std::vector<ChunkIteratorPtr>&,

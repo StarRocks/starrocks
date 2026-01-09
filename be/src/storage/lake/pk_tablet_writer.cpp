@@ -39,7 +39,7 @@ HorizontalPkTabletWriter::HorizontalPkTabletWriter(TabletManager* tablet_mgr, in
                                         bundle_file_context, global_dicts),
           _rowset_txn_meta(std::make_unique<RowsetTxnMetaPB>()) {
     if (is_compaction) {
-        auto rows_mapper_filename = lake_rows_mapper_filename(tablet_id, txn_id);
+        auto rows_mapper_filename = new_lake_rows_mapper_filename(tablet_mgr, tablet_id, txn_id);
         if (rows_mapper_filename.ok()) {
             _rows_mapper_builder = std::make_unique<RowsMapperBuilder>(rows_mapper_filename.value());
         }
@@ -148,6 +148,7 @@ Status HorizontalPkTabletWriter::flush_segment_writer(SegmentPB* segment) {
 Status HorizontalPkTabletWriter::finish(SegmentPB* segment) {
     if (_rows_mapper_builder != nullptr) {
         RETURN_IF_ERROR(_rows_mapper_builder->finalize());
+        _lcrm_file = _rows_mapper_builder->file_info();
     }
     return HorizontalGeneralTabletWriter::finish(segment);
 }
@@ -171,7 +172,7 @@ VerticalPkTabletWriter::VerticalPkTabletWriter(TabletManager* tablet_mgr, int64_
         : VerticalGeneralTabletWriter(tablet_mgr, tablet_id, std::move(schema), txn_id, max_rows_per_segment,
                                       is_compaction, flush_pool) {
     if (is_compaction) {
-        auto rows_mapper_filename = lake_rows_mapper_filename(tablet_id, txn_id);
+        auto rows_mapper_filename = new_lake_rows_mapper_filename(tablet_mgr, tablet_id, txn_id);
         if (rows_mapper_filename.ok()) {
             _rows_mapper_builder = std::make_unique<RowsMapperBuilder>(rows_mapper_filename.value());
         }
@@ -214,6 +215,7 @@ Status VerticalPkTabletWriter::finish(SegmentPB* segment) {
     _pk_sst_writers.clear();
     if (_rows_mapper_builder != nullptr) {
         RETURN_IF_ERROR(_rows_mapper_builder->finalize());
+        _lcrm_file = _rows_mapper_builder->file_info();
     }
     return VerticalGeneralTabletWriter::finish(segment);
 }
