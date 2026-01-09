@@ -50,6 +50,7 @@ struct WorkGroupMetrics {
     std::unique_ptr<IntGauge> total_queries = nullptr;
     std::unique_ptr<IntGauge> concurrency_overflow_count = nullptr;
     std::unique_ptr<IntGauge> bigquery_count = nullptr;
+    std::unique_ptr<DoubleGauge> mem_pool_use_ratio = nullptr;
 
     std::unique_ptr<DoubleGauge> inuse_cpu_cores = nullptr;
     int64_t timestamp_ns = 0;
@@ -382,6 +383,12 @@ void WorkGroupManager::add_metrics_unlocked(const WorkGroupPtr& wg, UniqueLockTy
         bool bigquery_registered = StarRocksMetrics::instance()->metrics()->register_metric(
                 "resource_group_bigquery_count", MetricLabels().add("name", wg->name()),
                 resource_group_bigquery_count.get());
+        // mem_pool usage ratio
+        auto resource_group_mem_pool_use_ratio = std::make_unique<DoubleGauge>(MetricUnit::PERCENT);
+        bool mem_pool_use_ratio_registered = StarRocksMetrics::instance()->metrics()->register_metric(
+                "resource_group_mem_pool_use_ratio",
+                MetricLabels().add("name", wg->name()).add("mem_pool", wg->mem_pool()),
+                resource_group_mem_pool_use_ratio.get());
 
         unique_lock.lock();
         auto it = _wg_metrics.find(wg->name());
@@ -408,16 +415,27 @@ void WorkGroupManager::add_metrics_unlocked(const WorkGroupPtr& wg, UniqueLockTy
         if (concurrency_registered)
             wg_metrics->concurrency_overflow_count = std::move(resource_group_concurrency_overflow);
         if (bigquery_registered) wg_metrics->bigquery_count = std::move(resource_group_bigquery_count);
+        if (mem_pool_use_ratio_registered)
+            wg_metrics->mem_pool_use_ratio = std::move(resource_group_mem_pool_use_ratio);
     }
     _wg_metrics[wg->name()]->group_unique_id = wg->unique_id();
 }
 
-static double _calculate_ratio(int64_t curr_value, int64_t sum_value) {
+namespace {
+double _calculate_ratio(const int64_t curr_value, const int64_t sum_value) {
     if (sum_value <= 0) {
-        return 0;
+        return 0.0;
     }
-    return double(curr_value) / sum_value;
+    return static_cast<double>(curr_value) / sum_value;
 }
+
+double _calculate_ratio(const std::optional<int64_t>& usage, const std::optional<int64_t>& total_usage) {
+    if (!usage.has_value() || !total_usage.has_value()) {
+        return 0.0;
+    }
+    return _calculate_ratio(*usage, *total_usage);
+}
+} // namespace
 
 void WorkGroupManager::update_metrics_unlocked() {
     int64_t sum_cpu_runtime_ns = 0;
@@ -451,6 +469,8 @@ void WorkGroupManager::update_metrics_unlocked() {
             double scan_use_ratio = _calculate_ratio(wg->scan_sched_entity()->growth_runtime_ns(), sum_scan_runtime_ns);
             double connector_scan_use_ratio = _calculate_ratio(wg->connector_scan_sched_entity()->growth_runtime_ns(),
                                                                sum_connector_scan_runtime_ns);
+            double mem_pool_use_ratio =
+                    _calculate_ratio(wg->parent_memory_usage_bytes(), wg->parent_memory_limit_bytes());
 
             wg_metrics->cpu_limit->set_value(cpu_expected_use_ratio);
             wg_metrics->inuse_cpu_ratio->set_value(cpu_use_ratio);
@@ -463,6 +483,7 @@ void WorkGroupManager::update_metrics_unlocked() {
             wg_metrics->total_queries->set_value(wg->num_total_queries());
             wg_metrics->concurrency_overflow_count->set_value(wg->concurrency_overflow_count());
             wg_metrics->bigquery_count->set_value(wg->bigquery_count());
+            wg_metrics->mem_pool_use_ratio->set_value(mem_pool_use_ratio);
 
             int64_t new_timestamp_ns = MonotonicNanos();
             int64_t new_cpu_runtime_ns = wg->cpu_runtime_ns();
@@ -487,6 +508,7 @@ void WorkGroupManager::update_metrics_unlocked() {
             wg_metrics->concurrency_overflow_count->set_value(0);
             wg_metrics->bigquery_count->set_value(0);
             wg_metrics->inuse_cpu_cores->set_value(0);
+            wg_metrics->mem_pool_use_ratio->set_value(0);
         }
     }
 }
