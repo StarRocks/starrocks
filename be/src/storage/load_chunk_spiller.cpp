@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "storage/lake/spill_mem_table_sink.h"
+#include "storage/load_chunk_spiller.h"
 
 #include "exec/spill/options.h"
 #include "exec/spill/serde.h"
@@ -21,11 +21,11 @@
 #include "runtime/runtime_state.h"
 #include "storage/aggregate_iterator.h"
 #include "storage/chunk_helper.h"
-#include "storage/lake/load_spill_block_manager.h"
-#include "storage/lake/tablet_writer.h"
+#include "storage/load_spill_block_manager.h"
 #include "storage/merge_iterator.h"
+#include "storage/union_iterator.h"
 
-namespace starrocks::lake {
+namespace starrocks {
 
 Status LoadSpillOutputDataStream::append(RuntimeState* state, const std::vector<Slice>& data, size_t total_write_size,
                                          size_t write_num_rows) {
@@ -96,11 +96,8 @@ Status LoadSpillOutputDataStream::_preallocate(size_t block_size) {
     return Status::OK();
 }
 
-SpillMemTableSink::SpillMemTableSink(LoadSpillBlockManager* block_manager, TabletWriter* writer,
-                                     RuntimeProfile* profile) {
-    _block_manager = block_manager;
-    _writer = writer;
-    _profile = profile;
+LoadChunkSpiller::LoadChunkSpiller(LoadSpillBlockManager* block_manager, RuntimeProfile* profile)
+        : _block_manager(block_manager), _profile(profile) {
     if (_profile == nullptr) {
         // use dummy profile
         _dummy_profile = std::make_unique<RuntimeProfile>("dummy");
@@ -108,20 +105,29 @@ SpillMemTableSink::SpillMemTableSink(LoadSpillBlockManager* block_manager, Table
     }
     _runtime_state = std::make_shared<RuntimeState>();
     _spiller_factory = spill::make_spilled_factory();
-    std::string tracker_label = "LoadSpillMerge-" + std::to_string(_block_manager->tablet_id()) + "-" +
-                                std::to_string(_block_manager->txn_id());
-    _merge_mem_tracker = std::make_unique<MemTracker>(MemTrackerType::COMPACTION_TASK, -1, std::move(tracker_label),
-                                                      GlobalEnv::GetInstance()->compaction_mem_tracker());
 }
 
-Status SpillMemTableSink::_prepare(const ChunkPtr& chunk_ptr) {
+StatusOr<size_t> LoadChunkSpiller::spill(const Chunk& chunk) {
+    if (chunk.num_rows() == 0) return 0;
+    // 1. create new block group
+    _block_manager->block_container()->create_block_group();
+    auto output = std::make_shared<LoadSpillOutputDataStream>(_block_manager);
+    // 2. spill
+    RETURN_IF_ERROR(_do_spill(chunk, output));
+    // 3. flush
+    RETURN_IF_ERROR(output->flush());
+    return output->append_bytes();
+}
+
+Status LoadChunkSpiller::_prepare(const ChunkPtr& chunk_ptr) {
     if (_spiller == nullptr) {
         // 1. alloc & prepare spiller
         spill::SpilledOptions options;
         options.encode_level = 7;
+        options.wg = ExecEnv::GetInstance()->workgroup_manager()->get_default_workgroup();
         _spiller = _spiller_factory->create(options);
         RETURN_IF_ERROR(_spiller->prepare(_runtime_state.get()));
-        DCHECK(_profile != nullptr) << "SpillMemTableSink profile is null";
+        DCHECK(_profile != nullptr) << "LoadChunkSpiller profile is null";
         spill::SpillProcessMetrics metrics(_profile, _runtime_state->mutable_total_spill_bytes());
         _spiller->set_metrics(metrics);
         // 2. prepare serde
@@ -133,7 +139,7 @@ Status SpillMemTableSink::_prepare(const ChunkPtr& chunk_ptr) {
     return Status::OK();
 }
 
-Status SpillMemTableSink::_do_spill(const Chunk& chunk, const spill::SpillOutputDataStreamPtr& output) {
+Status LoadChunkSpiller::_do_spill(const Chunk& chunk, const spill::SpillOutputDataStreamPtr& output) {
     // 1. caclulate per row memory usage
     const int64_t per_row_memory_usage = chunk.memory_usage() / chunk.num_rows();
     const int64_t spill_rows = std::min(config::load_spill_max_chunk_bytes / (per_row_memory_usage + 1) + 1,
@@ -153,43 +159,6 @@ Status SpillMemTableSink::_do_spill(const Chunk& chunk, const spill::SpillOutput
     return Status::OK();
 }
 
-Status SpillMemTableSink::flush_chunk(const Chunk& chunk, starrocks::SegmentPB* segment, bool eos,
-                                      int64_t* flush_data_size) {
-    if (eos && _block_manager->block_container()->empty()) {
-        // If there is only one flush, flush it to segment directly
-        RETURN_IF_ERROR(_writer->write(chunk, segment));
-        return _writer->flush(segment);
-    }
-    if (chunk.num_rows() == 0) return Status::OK();
-    // 1. create new block group
-    _block_manager->block_container()->create_block_group();
-    auto output = std::make_shared<LoadSpillOutputDataStream>(_block_manager);
-    // 2. spill
-    RETURN_IF_ERROR(_do_spill(chunk, output));
-    // 3. flush
-    RETURN_IF_ERROR(output->flush());
-    // record append bytes to `flush_data_size`
-    if (flush_data_size != nullptr) {
-        *flush_data_size = output->append_bytes();
-    }
-    return Status::OK();
-}
-
-Status SpillMemTableSink::flush_chunk_with_deletes(const Chunk& upserts, const Column& deletes,
-                                                   starrocks::SegmentPB* segment, bool eos, int64_t* flush_data_size) {
-    if (eos && _block_manager->block_container()->empty()) {
-        // If there is only one flush, flush it to segment directly
-        RETURN_IF_ERROR(_writer->flush_del_file(deletes));
-        RETURN_IF_ERROR(_writer->write(upserts, segment));
-        return _writer->flush(segment);
-    }
-    // 1. flush upsert
-    RETURN_IF_ERROR(flush_chunk(upserts, segment, eos, flush_data_size));
-    // 2. flush deletes
-    RETURN_IF_ERROR(_writer->flush_del_file(deletes));
-    return Status::OK();
-}
-
 class BlockGroupIterator : public ChunkIterator {
 public:
     BlockGroupIterator(Schema schema, spill::Serde& serde, const std::vector<spill::BlockPtr>& blocks)
@@ -205,6 +174,14 @@ public:
             if (!_reader) {
                 _reader = _blocks[_block_idx]->get_reader(_options);
                 RETURN_IF_UNLIKELY(!_reader, Status::InternalError("Failed to get reader"));
+                // Update block count metric
+                auto& metrics = _serde.parent()->metrics();
+                COUNTER_UPDATE(metrics.block_count, 1);
+                if (_blocks[_block_idx]->is_remote()) {
+                    COUNTER_UPDATE(metrics.remote_block_count, 1);
+                } else {
+                    COUNTER_UPDATE(metrics.local_block_count, 1);
+                }
             }
             auto st = _serde.deserialize(_ctx, _reader.get());
             if (st.ok()) {
@@ -231,17 +208,13 @@ private:
     size_t _block_idx = 0;
 };
 
-Status SpillMemTableSink::merge_blocks_to_segments() {
-    TEST_SYNC_POINT_CALLBACK("SpillMemTableSink::merge_blocks_to_segments", this);
-    SCOPED_THREAD_LOCAL_MEM_SETTER(_merge_mem_tracker.get(), false);
+Status LoadChunkSpiller::merge_write(size_t target_size, bool do_sort, bool do_agg,
+                                     std::function<Status(Chunk*)> write_func, std::function<Status()> flush_func) {
     auto& groups = _block_manager->block_container()->block_groups();
     RETURN_IF(groups.empty(), Status::OK());
 
     MonotonicStopWatch timer;
     timer.start();
-    // merge process needs to control _writer's flush behavior manually
-    _writer->set_auto_flush(false);
-    auto char_field_indexes = ChunkHelper::get_char_field_indexes(*_schema);
     size_t total_blocks = 0;
     size_t total_block_bytes = 0;
     size_t total_merges = 0;
@@ -252,10 +225,7 @@ Status SpillMemTableSink::merge_blocks_to_segments() {
     size_t current_input_bytes = 0;
     auto merge_func = [&] {
         total_merges++;
-        // PK shouldn't do agg because pk support order key different from primary key,
-        // in that case, data is sorted by order key and cannot be aggregated by primary key
-        bool do_agg = _schema->keys_type() == KeysType::AGG_KEYS || _schema->keys_type() == KeysType::UNIQUE_KEYS;
-        auto tmp_itr = new_heap_merge_iterator(merge_inputs);
+        auto tmp_itr = do_sort ? new_heap_merge_iterator(merge_inputs) : new_union_iterator(merge_inputs);
         auto merge_itr = do_agg ? new_aggregate_iterator(tmp_itr) : tmp_itr;
         RETURN_IF_ERROR(merge_itr->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS));
         auto chunk_shared_ptr = ChunkHelper::new_chunk(*_schema, config::vector_chunk_size);
@@ -266,28 +236,25 @@ Status SpillMemTableSink::merge_blocks_to_segments() {
             if (st.is_end_of_file()) {
                 break;
             } else if (st.ok()) {
-                ChunkHelper::padding_char_columns(char_field_indexes, *_schema, _writer->tablet_schema(), chunk);
                 total_rows += chunk->num_rows();
                 total_chunk++;
-                RETURN_IF_ERROR(_writer->write(*chunk, nullptr));
+                RETURN_IF_ERROR(write_func(chunk));
             } else {
                 return st;
             }
         }
         merge_itr->close();
-        return _writer->flush();
+        return flush_func();
     };
-<<<<<<< HEAD
     for (size_t i = 0; i < groups.size(); ++i) {
         auto& group = groups[i];
         // We need to stop merging if:
-        // 1. The current input block group size exceed the load_spill_max_merge_bytes,
+        // 1. The current input block group size exceed the target_size,
         //    because we don't want to generate too large segment file.
         // 2. The input chunks memory usage exceed the load_spill_max_merge_bytes,
         //    because we don't want each thread cost too much memory.
-        if (merge_inputs.size() > 0 &&
-            (current_input_bytes + group.data_size() >= config::load_spill_max_merge_bytes ||
-             merge_inputs.size() * config::load_spill_max_chunk_bytes >= config::load_spill_max_merge_bytes)) {
+        if (merge_inputs.size() > 0 && (current_input_bytes + group.data_size() >= target_size ||
+                                        merge_inputs.size() * config::load_spill_max_chunk_bytes >= target_size)) {
             RETURN_IF_ERROR(merge_func());
             merge_inputs.clear();
             current_input_bytes = 0;
@@ -302,27 +269,21 @@ Status SpillMemTableSink::merge_blocks_to_segments() {
     }
     timer.stop();
     auto duration_ms = timer.elapsed_time() / 1000000;
+
     LOG(INFO) << fmt::format(
-            "SpillMemTableSink merge finished, txn:{} tablet:{} blockgroups:{} blocks:{} input_bytes:{} merges:{} "
-            "rows:{} chunks:{} duration:{}ms",
-            _block_manager->txn_id(), _block_manager->tablet_id(), groups.size(), total_blocks, total_block_bytes,
-            total_merges, total_rows, total_chunk, duration_ms);
+            "LoadChunkSpiller merge finished, load_id:{} fragment_instance_id:{} blockgroups:{} blocks:{} "
+            "input_bytes:{} merges:{} rows:{} chunks:{} duration:{}ms",
+            (std::ostringstream() << _block_manager->load_id()).str(),
+            (std::ostringstream() << _block_manager->fragment_instance_id()).str(), groups.size(), total_blocks,
+            total_block_bytes, total_merges, total_rows, total_chunk, duration_ms);
     ADD_COUNTER(_profile, "SpillMergeInputGroups", TUnit::UNIT)->update(groups.size());
     ADD_COUNTER(_profile, "SpillMergeInputBytes", TUnit::BYTES)->update(total_block_bytes);
     ADD_COUNTER(_profile, "SpillMergeCount", TUnit::UNIT)->update(total_merges);
-    ADD_COUNTER(_profile, "SpillMergeDurationNs", TUnit::TIME_NS)->update(duration_ms * 1000000);
     return Status::OK();
-=======
-    auto flush_func = [this]() { return _writer->flush(); };
-
-    SCOPED_TIMER(ADD_TIMER(_load_chunk_spiller->profile(), "SpillMergeTime"));
-    Status st = _load_chunk_spiller->merge_write(config::load_spill_max_merge_bytes, true /* do_sort */, do_agg,
-                                                 write_func, flush_func);
-    LOG_IF(WARNING, !st.ok()) << fmt::format(
-            "SpillMemTableSink merge blocks to segment failed, txn:{} tablet:{} msg:{}", _writer->txn_id(),
-            _writer->tablet_id(), st.message());
-    return st;
->>>>>>> f8ff1bea78 ([Enhancement] Improve the collection and display of load spill metrics in the load profile (backport #67527) (#67636))
 }
 
-} // namespace starrocks::lake
+bool LoadChunkSpiller::empty() {
+    return _block_manager->block_container()->empty();
+}
+
+} // namespace starrocks
