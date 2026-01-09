@@ -142,7 +142,11 @@ Status BitmapIndexIterator::seek_dict_by_ngram(const void* value, roaring::Roari
 
     if (slice_gram_num < gram_num) {
         // _num_bitmap means how many dicts exist. should return all dicts here.
-        roaring->addRange(0, _num_bitmap);
+        rowid_t num_dictionary = _num_bitmap;
+        if (_has_null) {
+            num_dictionary -= 1;
+        }
+        roaring->addRange(0, num_dictionary);
         return Status::OK();
     }
 

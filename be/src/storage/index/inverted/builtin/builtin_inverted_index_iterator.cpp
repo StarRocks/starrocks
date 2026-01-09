@@ -116,7 +116,11 @@ Status BuiltinInvertedIndexIterator::_wildcard_query(const Slice* search_query, 
     }
 
     roaring::Roaring filtered_key_words;
-    filtered_key_words.addRange(0, _bitmap_itr->bitmap_nums());
+    rowid_t dictionary_size = _bitmap_itr->bitmap_nums();
+    if (_bitmap_itr->has_null_bitmap()) {
+        dictionary_size -= 1;
+    }
+    filtered_key_words.addRange(0, dictionary_size);
 
     std::vector<std::pair<Slice, std::vector<size_t>>> keywords;
 
