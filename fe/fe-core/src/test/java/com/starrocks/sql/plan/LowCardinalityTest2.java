@@ -2546,4 +2546,60 @@ public class LowCardinalityTest2 extends PlanTestBase {
                 "  |  pass-through-operands: all\n" +
                 "  |  cardinality: 2", plan);
     }
+
+    @Test
+    public void testUnionWithProjection2() throws Exception {
+        String sql = """
+                WITH TB1 AS (
+                  SELECT
+                     C_USER
+                  FROM
+                    low_card_t1
+                ),
+                TB2 AS (
+                  (
+                    SELECT
+                      C_USER ,
+                      CAST(1 AS BIGINT) AS CI
+                    FROM
+                      TB1
+                  )
+                  UNION ALL
+                  (
+                    SELECT
+                      C_USER,
+                      CAST(2 AS BIGINT) AS CI
+                    FROM
+                      TB1
+                  )
+                )
+                SELECT
+                  C_USER,
+                  CASE CI WHEN  1  THEN C_USER ELSE  NULL  END
+                FROM
+                  TB2
+                """;
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "  Global Dict Exprs:\n" +
+                "    41: DictDefine(39: c_user, [<place-holder>])\n" +
+                "\n" +
+                "  8:Decode\n" +
+                "  |  <dict id 41> : <string id 36>\n" +
+                "  |  cardinality: 2\n" +
+                "  |  \n" +
+                "  7:Project\n" +
+                "  |  output columns:\n" +
+                "  |  38 <-> if[([37: cast, BIGINT, false] = 1, DictDecode([41: c_user, INT, true], " +
+                "[<place-holder>]), NULL); args: BOOLEAN,VARCHAR,VARCHAR; result: VARCHAR(50); args nullable: true;" +
+                " result nullable: true]\n" +
+                "  |  41 <-> [41: c_user, INT, true]\n" +
+                "  |  cardinality: 2\n" +
+                "  |  \n" +
+                "  0:UNION\n" +
+                "  |  output exprs:\n" +
+                "  |      [41, INT, true] | [37, BIGINT, false]\n" +
+                "  |  child exprs:\n" +
+                "  |      [39: c_user, INT, true] | [23: cast, BIGINT, false]\n" +
+                "  |      [40: c_user, INT, true] | [35: cast, BIGINT, false]", plan);
+    }
 }

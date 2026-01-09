@@ -203,8 +203,12 @@ public class DecodeRewriter extends OptExpressionVisitor<OptExpression, ColumnRe
     public OptExpression visitPhysicalUnion(OptExpression optExpression, ColumnRefSet fragmentUseDictExprs) {
         PhysicalUnionOperator unionOp = optExpression.getOp().cast();
         DecodeInfo info = context.operatorDecodeInfo.getOrDefault(unionOp, DecodeInfo.EMPTY);
-        ScalarOperator newPredicate = rewritePredicate(unionOp.getPredicate(), info.inputStringColumns);
-        Projection newProjection = rewriteProjection(unionOp.getProjection(), info.inputStringColumns);
+        ColumnRefSet inputColumns = new ColumnRefSet();
+        inputColumns.union(info.inputStringColumns);
+        unionOp.getOutputColumnRefOp().stream().map(ColumnRefOperator::getId).filter(context.allStringColumns::contains)
+                .forEach(inputColumns::union);
+        ScalarOperator newPredicate = rewritePredicate(unionOp.getPredicate(), inputColumns);
+        Projection newProjection = rewriteProjection(unionOp.getProjection(), inputColumns);
         List<ColumnRefOperator> newColumnRefOp = unionOp.getOutputColumnRefOp().stream().map(
                 c -> context.allStringColumns.contains(c.getId())
                         ? context.stringRefToDictRefMap.getOrDefault(c, c) : c).toList();
