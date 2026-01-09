@@ -472,9 +472,12 @@ std::pair<bool, bool> date::from_string_to_datetime(const char* date_str, size_t
         }
     }
 
-    // If no valid separator or not enough chars for time part, fallback to generic parser
-    // The generic parser can handle interval formats (e.g., YYYYMMDDHHMMSS) and other edge cases
-    if (time_ptr == nullptr || (end - time_ptr) < 8) {
+    // If no valid separator or not enough chars for time part
+    if (time_ptr == nullptr || (end - time_ptr) == 0) {
+        // only date fields return date-only
+        return {true, true};
+    } else if ((end - time_ptr) < 8) {
+        // try to parse with generic parser
         return {from_string(date_str, len, &year, &month, &day, &hour, &minute, &second, &microsecond), false};
     }
 

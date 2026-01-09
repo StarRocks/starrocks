@@ -147,6 +147,17 @@ TEST_F(TimeTypesTest, from_string_to_datetime_edge_cases) {
         EXPECT_EQ(0, res.second);  // Should default to 0
     }
 
+    // Test string with separator but no time characters - should be date-only
+    {
+        const char* date_str = "2023-12-25T";
+        auto [is_valid, is_only_date] = date::from_string_to_datetime(date_str, strlen(date_str), &res);
+        EXPECT_TRUE(is_valid);
+        EXPECT_TRUE(is_only_date);  // No time chars after separator = date-only
+        EXPECT_EQ(2023, res.year);
+        EXPECT_EQ(12, res.month);
+        EXPECT_EQ(25, res.day);
+    }
+
     // Test string with no separator after date - should be rejected or parsed by generic parser
     {
         const char* date_str = "2023-12-25X";
