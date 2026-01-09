@@ -3114,7 +3114,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 }
                 TPartitionMeta partitionMeta = new TPartitionMeta();
                 partitionMeta.setPartition_id(partitionId);
-                partitionMeta.setPartition_name(physicalPartition.getName());
+                partitionMeta.setPartition_name(partition.getName());
                 partitionMeta.setState(partition.getState().name());
                 partitionMeta.setVisible_version(physicalPartition.getVisibleVersion());
                 partitionMeta.setVisible_time(physicalPartition.getVisibleVersionTime());

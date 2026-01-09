@@ -941,9 +941,6 @@ public class RestoreJob extends AbstractJob {
         idToPartition.clear();
         Map<Long, Long> physicalPartitionIdToPartitionId = remoteOlapTbl.getPhysicalPartitionIdToPartitionId();
         physicalPartitionIdToPartitionId.clear();
-        Map<String, Long> physicalPartitionNameToPartitionId = remoteOlapTbl.getPhysicalPartitionNameToPartitionId();
-        physicalPartitionNameToPartitionId.clear();
-
         for (Partition partition : partitions) {
             long newPartitionId = partitionOldIdToNewId.get(partition.getId());
             partition.setIdForRestore(newPartitionId);
@@ -963,7 +960,6 @@ public class RestoreJob extends AbstractJob {
                     partition.addSubPartition(physicalPartition);
                 }
                 physicalPartitionIdToPartitionId.put(physicalPartition.getId(), newPartitionId);
-                physicalPartitionNameToPartitionId.put(physicalPartition.getName(), newPartitionId);
             });
         }
 
