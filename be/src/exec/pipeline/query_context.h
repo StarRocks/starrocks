@@ -76,9 +76,17 @@ public:
     int num_active_fragments() const { return _num_active_fragments.load(); }
     bool has_no_active_instances() { return _num_active_fragments.load() == 0; }
 
+    // Mark that fragment prepare has failed for this query on this BE.
+    void mark_prepare_failed() { _prepare_failed = true; }
+    bool prepare_failed() const { return _prepare_failed; }
+
     void set_delivery_expire_seconds(int expire_seconds) { _delivery_expire_seconds = seconds(expire_seconds); }
     void set_query_expire_seconds(int expire_seconds) { _query_expire_seconds = seconds(expire_seconds); }
     inline int get_query_expire_seconds() const { return _query_expire_seconds.count(); }
+    inline int64_t get_query_remaining_time_ms() const {
+        auto now = duration_cast<milliseconds>(steady_clock::now().time_since_epoch()).count();
+        return now >= _query_deadline ? 0 : (_query_deadline - now);
+    }
     // now time point pass by deadline point.
     bool is_delivery_expired() const {
         auto now = duration_cast<milliseconds>(steady_clock::now().time_since_epoch()).count();
@@ -335,6 +343,7 @@ private:
     std::once_flag _query_trace_init_flag;
     std::shared_ptr<starrocks::debug::QueryTrace> _query_trace;
     std::atomic_bool _is_prepared = false;
+    std::atomic_bool _prepare_failed = false;
     std::atomic_bool _is_cancelled = false;
     std::atomic_bool _cancelled_by_fe = false;
     std::atomic<Status*> _cancelled_status = nullptr;

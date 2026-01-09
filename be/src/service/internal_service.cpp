@@ -322,7 +322,7 @@ void PInternalServiceImplBase<T>::exec_batch_plan_fragments(google::protobuf::Rp
                                                             PExecBatchPlanFragmentsResult* response,
                                                             google::protobuf::Closure* done) {
     auto task = [=]() { this->_exec_batch_plan_fragments(cntl_base, request, response, done); };
-    if (!_exec_env->pipeline_prepare_pool()->try_offer(std::move(task))) {
+    if (!_exec_env->query_rpc_pool()->try_offer(std::move(task))) {
         ClosureGuard closure_guard(done);
         Status::ServiceUnavailable("submit exec_batch_plan_fragments failed").to_protobuf(response->mutable_status());
     }
@@ -385,55 +385,113 @@ void PInternalServiceImplBase<T>::_exec_batch_plan_fragments(google::protobuf::R
         return;
     }
 
+    // prepare_global_state is success when reach here, so we must count down once
+    DeferOp defer([&] {
+        pipeline::QueryContext* query_context =
+                _exec_env->query_context_mgr()->get(common_request.params.query_id).get();
+        if (query_context != nullptr) {
+            query_context->count_down_fragments();
+        }
+    });
+
     // prepare fragment instance in parallel
     std::vector<PromiseStatusSharedPtr> promise_statuses;
     std::vector<std::shared_future<Status>> prepare_futures;
     // must use shared_ptr to avoid uaf
     std::shared_ptr<std::vector<pipeline::FragmentExecutor>> fragment_executors =
             std::make_shared<std::vector<pipeline::FragmentExecutor>>(unique_requests.size());
+
+    struct SharedFinalizeState {
+        ExecEnv* exec_env = nullptr;
+        TUniqueId query_id;
+        std::atomic<size_t> participants{1}; // 1 for main thread + N for successfully submitted workers
+        std::atomic<bool> prepare_failed{false};
+        std::shared_ptr<std::vector<pipeline::FragmentExecutor>> fragment_executors;
+
+        void do_sweep() const {
+            for (size_t i = 0; i < fragment_executors->size(); ++i) {
+                fragment_executors->at(i).clean_up_when_success();
+            }
+        }
+
+        void finalize_on_exit() {
+            if (participants.fetch_sub(1) == 1) {
+                if (prepare_failed.load()) {
+                    do_sweep();
+                }
+            }
+        }
+    };
+
+    auto finalize_state = std::make_shared<SharedFinalizeState>();
+    finalize_state->exec_env = _exec_env;
+    finalize_state->query_id = common_request.params.query_id;
+    finalize_state->fragment_executors = fragment_executors;
+    DeferOp finalize_main([finalize_state] { finalize_state->finalize_on_exit(); });
+
     size_t failed_idx = unique_requests.size();
     bool submitted = true;
     for (int i = 0; i < unique_requests.size(); ++i) {
         PromiseStatusSharedPtr ms = std::make_shared<PromiseStatus>();
-        submitted = _exec_env->pipeline_prepare_pool()->try_offer([ms, i, fragment_executors, t_batch_requests, this] {
-            auto& unique_requests = t_batch_requests->unique_param_per_instance;
-            auto& req = unique_requests[i];
-            auto& fragment_executor = fragment_executors->at(i);
-            ms->set_value(fragment_executor.prepare(_exec_env, req, req));
-        });
+        submitted = _exec_env->fragment_prepare_pool()->try_offer(
+                [ms, i, fragment_executors, t_batch_requests, finalize_state, this] {
+                    struct OnExit {
+                        std::shared_ptr<SharedFinalizeState> state;
+                        ~OnExit() { state->finalize_on_exit(); }
+                    } on_exit{finalize_state};
+
+                    auto& unique_requests = t_batch_requests->unique_param_per_instance;
+                    auto& req = unique_requests[i];
+                    auto& fragment_executor = fragment_executors->at(i);
+                    auto status = fragment_executor.prepare(_exec_env, req, req);
+                    if (status.ok()) {
+                        status = fragment_executor.execute(_exec_env, false);
+                    } else {
+                        status = status.is_duplicate_rpc_invocation() ? Status::OK() : status;
+                    }
+                    ms->set_value(status);
+                });
         if (!submitted) {
             failed_idx = i;
             break;
         }
+        finalize_state->participants.fetch_add(1);
         prepare_futures.emplace_back(ms->get_future().share());
         promise_statuses.emplace_back(std::move(ms));
     }
 
+    auto query_ctx = _exec_env->query_context_mgr()->get(common_request.params.query_id);
+    DCHECK(query_ctx.get() != nullptr);
+
+    int64_t remaining_ms = query_ctx->get_query_remaining_time_ms();
+    auto handle_prepare_failure = [&](std::string_view msg) {
+        status = Status::ServiceUnavailable(std::string(msg));
+        finalize_state->prepare_failed.store(true);
+        query_ctx->mark_prepare_failed();
+        // Mark as confirmed-cancel to make QueryContext removable immediately once all active fragments count down,
+        // instead of going into the second-chance map and delaying resource release.
+        query_ctx->cancel(status, true);
+        status.to_protobuf(response->mutable_status());
+    };
     // if some fragments submitted to prepare, and the following fragment submit failed
-    // wait the former fragments prepared, then clean up the query context
+    // mark as cancelled, and return immediately
     if (failed_idx != unique_requests.size()) {
-        // Drain remaining preparations and release their query context references to avoid leaks when execute() is skipped.
-        auto query_ctx = _exec_env->query_context_mgr()->get(common_request.params.query_id);
-        for (size_t j = 0; j < failed_idx; ++j) {
-            Status prepare_status = prepare_futures[j].get();
-            if (prepare_status.ok() && query_ctx != nullptr) {
-                fragment_executors->at(j)._fail_cleanup(true);
-            }
-        }
-        Status::ServiceUnavailable("submit exec_batch_plan_fragment task failed")
-                .to_protobuf(response->mutable_status());
+        handle_prepare_failure("submit exec_batch_plan_fragment task failed");
         return;
     }
 
     failed_idx = unique_requests.size();
     for (size_t i = 0; i < unique_requests.size(); ++i) {
-        // When a preparation fails, return error immediately. The other unfinished preparation is safe,
-        // since they can use the shared pointer of promise/t_batch_requests/fragment_executors
-        status = prepare_futures[i].get();
-        if (status.ok()) {
-            status = fragment_executors->at(i).execute(_exec_env);
-        } else if (status.is_duplicate_rpc_invocation()) {
-            status = Status::OK();
+        Status status;
+        // when be exited, a submitted task will never do, so we only wait for query timeout
+        if (prepare_futures[i].wait_for(std::chrono::milliseconds(query_ctx->get_query_remaining_time_ms())) ==
+            std::future_status::timeout) {
+            status =
+                    Status::TimedOut(fmt::format("exec_batch_plan_fragments wait fragment prepare timed out, "
+                                                 "query_id={}, query_timeout={}s, idx={}",
+                                                 print_id(common_request.params.query_id), remaining_ms, i));
+        } else {
+            status = prepare_futures[i].get();
         }
         if (!status.ok()) {
             failed_idx = i;
@@ -441,24 +499,16 @@ void PInternalServiceImplBase<T>::_exec_batch_plan_fragments(google::protobuf::R
         }
     }
 
-    // fragment[failed_idx] prpare failed, but fragment[1..failed_idx-1] already executed
-    // only wait fragment[failed_idx+1..., end] prepare finished and clean them
-    // for fragment[1...fragment-1], let FE cancel them
+    // fragment[failed_idx] prpare failed, but fragment[1..failed_idx-1] already prepare success
     if (failed_idx != unique_requests.size()) {
-        // Drain remaining preparations and release their query context references to avoid leaks when execute() is skipped.
-        auto query_ctx = _exec_env->query_context_mgr()->get(common_request.params.query_id);
-        for (size_t j = failed_idx + 1; j < unique_requests.size(); ++j) {
-            Status prepare_status = prepare_futures[j].get();
-            if (prepare_status.ok() && query_ctx != nullptr) {
-                fragment_executors->at(j)._fail_cleanup(true);
-            }
-        }
+        handle_prepare_failure("submit exec_batch_plan_fragment task failed");
+        return;
     }
 
-    // prepare_global_state is success when reach here, so we must count down once
-    pipeline::QueryContext* query_context = _exec_env->query_context_mgr()->get(common_request.params.query_id).get();
-    if (query_context != nullptr) {
-        query_context->count_down_fragments();
+    // submit when all prepare tasks successes
+    for (int i = 0; i < unique_requests.size(); ++i) {
+        auto& fragment_executor = fragment_executors->at(i);
+        Status status = fragment_executor.submit();
     }
 
     status.to_protobuf(response->mutable_status());

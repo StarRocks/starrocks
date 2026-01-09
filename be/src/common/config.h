@@ -980,6 +980,12 @@ CONF_Int64(pipeline_exec_thread_pool_thread_num, "0");
 // * "-n": negative integer, means n times of number of cpu cores.
 CONF_Int64(pipeline_prepare_thread_pool_thread_num, "0");
 CONF_Int64(pipeline_prepare_thread_pool_queue_size, "102400");
+// The number of threads for preparing fragment instances in batch exec_plan RPC, vCPUs by default.
+// *  "n": positive integer, fixed number of threads to n.
+// *  "0": default value, means the same as number of cpu cores.
+// * "-n": negative integer, means n times of number of cpu cores.
+CONF_Int64(fragment_prepare_thread_pool_thread_num, "0");
+CONF_Int64(fragment_prepare_thread_pool_queue_size, "102400");
 // The number of threads for executing sink io task in pipeline engine, vCPUs by default.
 CONF_Int64(pipeline_sink_io_thread_pool_thread_num, "0");
 CONF_Int64(pipeline_sink_io_thread_pool_queue_size, "102400");
