@@ -657,6 +657,7 @@ if [ ${BUILD_BE} -eq 1 ]; then
     cp -r -p ${STARROCKS_HOME}/be/output/conf/hadoop_env.sh ${STARROCKS_OUTPUT}/be/conf/
     cp -r -p ${STARROCKS_HOME}/be/output/conf/log4j2.properties ${STARROCKS_OUTPUT}/be/conf/
     cp -r -p ${STARROCKS_HOME}/be/output/conf/core-site.xml ${STARROCKS_OUTPUT}/be/conf/
+    cp -r -p ${STARROCKS_HOME}/be/output/conf/type_checker_config.xml ${STARROCKS_OUTPUT}/be/conf/
 
     if [ "${BUILD_TYPE}" == "ASAN" ]; then
         cp -r -p ${STARROCKS_HOME}/be/output/conf/asan_suppressions.conf ${STARROCKS_OUTPUT}/be/conf/
