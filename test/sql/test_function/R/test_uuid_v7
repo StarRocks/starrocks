@@ -1,0 +1,30 @@
+-- name: test_uuid_v7
+-- Test UUID v7 basic generation
+36
+1
+-- Test UUID v7 format (8-4-4-4-12 with hyphens)
+1
+-- Test UUID v7 version field
+1
+-- Test UUID v7 variant field (should be 8, 9, a, or b)
+1
+-- Test UUID v7 uniqueness
+1
+-- Test UUID v7 time ordering
+-- Generate UUIDs in sequence, they should be lexicographically ordered or equal
+1
+-- Test UUID v7 numeric
+1
+-- Test UUID v7 numeric uniqueness
+1
+-- Test UUID v7 can be used in table creation
+-- Verify UUIDs were generated
+1	36	7
+2	36	7
+3	36	7
+-- Verify uniqueness in table
+1
+-- Test UUID v7 numeric as default value
+-- Verify numeric UUIDs were generated and are unique
+1
+3

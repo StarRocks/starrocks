@@ -113,7 +113,9 @@ public class DefaultExpr implements GsonPreProcessable, GsonPostProcessable {
                 "current_timestamp\\([0-6]?\\)",
                 "now\\([0-6]?\\)",
                 "uuid\\(\\)",
-                "uuid_numeric\\(\\)"
+                "uuid_numeric\\(\\)",
+                "uuid_v7\\(\\)",
+                "uuid_v7_numeric\\(\\)"
         };
 
         String combinedPattern = String.format("^(%s)$", String.join("|", defaultfunctions));
