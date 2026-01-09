@@ -854,6 +854,9 @@ public class PaimonMetadata implements ConnectorMetadata {
                 commit.truncateTable();
                 LOG.info("Successfully truncated paimon table: {}.{}, user: {}", dbName, tableName, user);
             }
+        } catch (StarRocksConnectorException e) {
+            LOG.error("Failed to truncate paimon table: {}.{}", dbName, tableName, e);
+            throw e;
         } catch (Exception e) {
             LOG.error("Failed to truncate paimon table: {}.{}", dbName, tableName, e);
             throw new StarRocksConnectorException("Failed to truncate paimon table: %s.%s, error: %s",
