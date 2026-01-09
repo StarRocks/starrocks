@@ -85,6 +85,7 @@ Status SpillMemTableSink::merge_blocks_to_segments() {
     };
     auto flush_func = [this]() { return _writer->flush(); };
 
+    SCOPED_TIMER(ADD_TIMER(_load_chunk_spiller->profile(), "SpillMergeTime"));
     Status st = _load_chunk_spiller->merge_write(config::load_spill_max_merge_bytes, true /* do_sort */, do_agg,
                                                  write_func, flush_func);
     LOG_IF(WARNING, !st.ok()) << fmt::format(

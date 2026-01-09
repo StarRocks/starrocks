@@ -174,6 +174,14 @@ public:
             if (!_reader) {
                 _reader = _blocks[_block_idx]->get_reader(_options);
                 RETURN_IF_UNLIKELY(!_reader, Status::InternalError("Failed to get reader"));
+                // Update block count metric
+                auto& metrics = _serde.parent()->metrics();
+                COUNTER_UPDATE(metrics.block_count, 1);
+                if (_blocks[_block_idx]->is_remote()) {
+                    COUNTER_UPDATE(metrics.remote_block_count, 1);
+                } else {
+                    COUNTER_UPDATE(metrics.local_block_count, 1);
+                }
             }
             auto st = _serde.deserialize(_ctx, _reader.get());
             if (st.ok()) {
@@ -271,7 +279,6 @@ Status LoadChunkSpiller::merge_write(size_t target_size, bool do_sort, bool do_a
     ADD_COUNTER(_profile, "SpillMergeInputGroups", TUnit::UNIT)->update(groups.size());
     ADD_COUNTER(_profile, "SpillMergeInputBytes", TUnit::BYTES)->update(total_block_bytes);
     ADD_COUNTER(_profile, "SpillMergeCount", TUnit::UNIT)->update(total_merges);
-    ADD_COUNTER(_profile, "SpillMergeDurationNs", TUnit::TIME_NS)->update(duration_ms * 1000000);
     return Status::OK();
 }
 
