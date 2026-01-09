@@ -87,20 +87,17 @@ if [ $? -ne 0 ]; then
 fi
 
 # enable jemalloc
-JEMALLOC_LIB=$STARROCKS_HOME/lib/libjemalloc.so
-export LD_LIBRARY_PATH=$STARROCKS_HOME/lib:$LD_LIBRARY_PATH
-
 # Set JEMALLOC_CONF environment variable if not already set
 if [[ -z "$JEMALLOC_CONF" ]]; then
     # JEMALLOC enable DEBUG 
     if [ ${RUN_JEMALLOC_DEBUG} -eq 1 ] ; then
-        ln -s -f $STARROCKS_HOME/lib/libjemalloc-dbg.so.2 $JEMALLOC_LIB
+        export LD_LIBRARY_PATH=$STARROCKS_HOME/lib/debug:$STARROCKS_HOME/lib:$LD_LIBRARY_PATH
         export JEMALLOC_CONF="junk:true,tcache:false,prof:true"
     elif [ ${RUN_CHECK_MEM_LEAK} -eq 1 ] ; then
-        ln -s -f $STARROCKS_HOME/lib/libjemalloc.so.2 $JEMALLOC_LIB
+        export LD_LIBRARY_PATH=$STARROCKS_HOME/lib:$LD_LIBRARY_PATH
         export JEMALLOC_CONF="percpu_arena:percpu,oversize_threshold:0,muzzy_decay_ms:5000,dirty_decay_ms:5000,metadata_thp:auto,background_thread:true,prof:true,prof_active:true,prof_leak:true,lg_prof_sample:0,prof_final:true"
     else
-        ln -s -f $STARROCKS_HOME/lib/libjemalloc.so.2 $JEMALLOC_LIB
+        export LD_LIBRARY_PATH=$STARROCKS_HOME/lib:$LD_LIBRARY_PATH
         export JEMALLOC_CONF="percpu_arena:percpu,oversize_threshold:0,muzzy_decay_ms:5000,dirty_decay_ms:5000,metadata_thp:auto,background_thread:true,prof:true,prof_active:false"
     fi
 fi
