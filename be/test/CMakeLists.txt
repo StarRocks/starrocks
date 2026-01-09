@@ -90,7 +90,8 @@ set(EXEC_FILES
         ./exec/schema_fe_tablet_schedules_scanner_test.cpp
         ./exec/schema_materialized_views_scanner_test.cpp
         ./exec/schema_task_runs_scanner_test.cpp
-	    ./exec/schema_scanner/schema_be_tablet_write_log_scanner_test.cpp
+        ./exec/schema_scanner/schema_be_tablet_write_log_scanner_test.cpp
+        ./exec/schema_scanner/schema_scanner_test.cpp
         ./exec/sink/connector_sink_operator_test.cpp
         ./exec/sink/sink_io_buffer_test.cpp
         ./exec/stream/mem_state_table_test.cpp
