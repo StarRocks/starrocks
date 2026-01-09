@@ -20,6 +20,8 @@ StarRocks 提供 Apache Kafka® 连接器 (StarRocks Connector for Apache Kafka�
 
 | Connector | Kafka | StarRocks | Java |
 |-----------|-------|-----------| ---- |
+| 1.0.6     | 3.4+/4.0+   | 2.5 及以上   | 8    |
+| 1.0.5     | 3.4   | 2.5 及以上   | 8    |
 | 1.0.4     | 3.4   | 2.5 及以上   | 8    |
 | 1.0.3     | 3.4   | 2.5 及以上   | 8    |
 
@@ -36,11 +38,11 @@ StarRocks 提供 Apache Kafka® 连接器 (StarRocks Connector for Apache Kafka�
 
 - 自建 Kafka 集群
 
-  下载并解压 [starrocks-kafka-connector-xxx.tar.gz](https://github.com/StarRocks/starrocks-connector-for-kafka/releases)。
+  下载 [starrocks-connector-for-kafka-x.y.z-with-dependencies.jar](https://github.com/StarRocks/starrocks-connector-for-kafka/releases)。
 
 - Confluent Cloud
 
-  Kafka connector 目前尚未上传到 Confluent Hub，您需要下载并解压 [starrocks-kafka-connector-xxx.tar.gz](https://github.com/StarRocks/starrocks-connector-for-kafka/releases) ，打包成 ZIP 文件并上传到 Confluent Cloud。
+  Kafka connector 目前尚未上传到 Confluent Hub，您需要下载 [starrocks-connector-for-kafka-x.y.z-with-dependencies.jar](https://github.com/StarRocks/starrocks-connector-for-kafka/releases) ，打包成 ZIP 文件并上传到 Confluent Cloud。
 
 ### 网络配置
 
@@ -105,7 +107,7 @@ CREATE TABLE test_tbl (id INT, city STRING);
 
 2. 配置并启动 Kafka Connect。
 
-   1. 配置 Kafka Connect。在 **config** 目录中的 `config/connect-standalone.properties` 配置文件中配置如下参数。参数解释，参见 [Running Kafka Connect](https://kafka.apache.org/documentation.html#connect_running)。 注意以下示例中使用 starrocks-kafka-connector 是 `1.0.3` 版本，如果使用更新的版本需要做相应变更。
+   1. 配置 Kafka Connect。在 **config** 目录中的 `config/connect-standalone.properties` 配置文件中配置如下参数。参数解释，参见 [Running Kafka Connect](https://kafka.apache.org/documentation.html#connect_running)。
 
         ```yaml
         # kafka broker 的地址，多个 Broker 之间以英文逗号 (,) 分隔。
@@ -117,14 +119,14 @@ CREATE TABLE test_tbl (id INT, city STRING);
         value.converter=org.apache.kafka.connect.json.JsonConverter
         key.converter.schemas.enable=true
         value.converter.schemas.enable=false
-        # Kafka connector 解压后所在的绝对路径，例如：
-        plugin.path=/home/kafka-connect/starrocks-kafka-connector-1.0.3
+        # starrocks-connector-for-kafka-x.y.z-with-dependencies.jar 所在的绝对路径，例如：
+        plugin.path=/home/kafka-connect/starrocks-kafka-connector
         ```
 
    2. 启动 Kafka Connect。
 
         ```Bash
-        CLASSPATH=/home/kafka-connect/starrocks-kafka-connector-1.0.3/* bin/connect-standalone.sh config/connect-standalone.properties config/connect-starrocks-sink.properties
+        CLASSPATH=/home/kafka-connect/starrocks-kafka-connector/* bin/connect-standalone.sh config/connect-standalone.properties config/connect-starrocks-sink.properties
         ```
 
 #### 通过 Distributed 模式启动 Kafka Connect
@@ -141,14 +143,14 @@ CREATE TABLE test_tbl (id INT, city STRING);
         value.converter=org.apache.kafka.connect.json.JsonConverter
         key.converter.schemas.enable=true
         value.converter.schemas.enable=false
-        # Kafka connector 解压后所在的绝对路径，例如：
-        plugin.path=/home/kafka-connect/starrocks-kafka-connector-1.0.3
+        # starrocks-connector-for-kafka-x.y.z-with-dependencies.jar所在的绝对路径，例如：
+        plugin.path=/home/kafka-connect/starrocks-kafka-connector
         ```
   
    2. 启动 Kafka Connect。
 
         ```BASH
-        CLASSPATH=/home/kafka-connect/starrocks-kafka-connector-1.0.3/* bin/connect-distributed.sh config/connect-distributed.properties
+        CLASSPATH=/home/kafka-connect/starrocks-kafka-connector/* bin/connect-distributed.sh config/connect-distributed.properties
         ```
 
 2. 配置并创建 Kafka connector。注意，在 Distributed 模式下您需要通过 REST API 来配置并创建 Kafka connector。参数和相关说明，参见[参数说明](#参数说明)。
@@ -545,7 +547,7 @@ PROPERTIES (
    ```Bash
    mkdir plugins
    tar -zxvf debezium-debezium-connector-postgresql-2.5.3.zip -C plugins
-   tar -zxvf starrocks-kafka-connector-1.0.3.tar.gz -C plugins
+   mv starrocks-connector-for-kafka-x.y.z-with-dependencies.jar plugins
    ```
 
    该目录为 **config/connect-standalone.properties** 中设置项 `plugin.path` 的值。
@@ -618,8 +620,8 @@ PROPERTIES (
    key.converter.schemas.enable=true
    value.converter.schemas.enable=false
 
-   # 解压后 starrocks-kafka-connector 的绝对路径。示例：
-   plugin.path=/home/kafka-connect/starrocks-kafka-connector-1.0.3
+   # starrocks-connector-for-kafka-x.y.z-with-dependencies.jar 所在的绝对路径。示例：
+   plugin.path=/home/kafka-connect/starrocks-kafka-connector
 
    # 控制 Flush 策略的参数。更多信息，请参阅使用说明部分。
    offset.flush.interval.ms=10000
