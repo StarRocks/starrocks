@@ -17,6 +17,7 @@ package com.starrocks.connector.hive.glue.projection;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
+import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.hive.HiveMetastoreApiConverter;
 import com.starrocks.connector.hive.Partition;
 import com.starrocks.connector.hive.RemoteFileInputFormat;
@@ -101,23 +102,9 @@ public class PartitionProjectionService {
         if (table.getStorageFormat() == null) {
             return RemoteFileInputFormat.PARQUET;
         }
-        switch (table.getStorageFormat()) {
-            case PARQUET:
-                return RemoteFileInputFormat.PARQUET;
-            case ORC:
-                return RemoteFileInputFormat.ORC;
-            case TEXTFILE:
-                return RemoteFileInputFormat.TEXTFILE;
-            case AVRO:
-                return RemoteFileInputFormat.AVRO;
-            case SEQUENCE:
-                return RemoteFileInputFormat.SEQUENCE;
-            case RCBINARY:
-            case RCTEXT:
-                return RemoteFileInputFormat.RCFILE;
-            default:
-                return RemoteFileInputFormat.UNKNOWN;
-        }
+        // Reuse HiveMetastoreApiConverter for consistent format conversion
+        String inputFormatClass = table.getStorageFormat().getInputFormat();
+        return HiveMetastoreApiConverter.toRemoteFileInputFormat(inputFormatClass);
     }
 
     private TextFileFormatDesc getTextFileFormatDesc(HiveTable table) {
@@ -368,33 +355,29 @@ public class PartitionProjectionService {
                                           List<String> partitionColumnNames) {
         if (storageLocationTemplate.isPresent()) {
             // Parse partition values from partition name (format: col1=val1/col2=val2)
-            Map<String, String> partitionValues = parsePartitionName(partitionName);
+            Map<String, String> partitionValues = parsePartitionName(partitionName, partitionColumnNames);
             return expandTemplate(storageLocationTemplate.get(), partitionValues);
         }
 
         // Default: baseLocation/partitionName
-        String location = baseLocation;
-        if (!location.endsWith("/")) {
-            location += "/";
-        }
-        return location + partitionName;
+        return PartitionUtil.getPathWithSlash(baseLocation) + partitionName;
     }
 
     /**
-     * Parses partition name into column-value map.
+     * Parses partition name into column-value map using PartitionUtil for proper unescaping.
      * Input: "region=us/year=2024"
      * Output: {region=us, year=2024}
+     *
+     * @param partitionName the partition name in Hive format (col1=val1/col2=val2)
+     * @param partitionColumnNames ordered list of partition column names
+     * @return map of column name to value
      */
-    private Map<String, String> parsePartitionName(String partitionName) {
+    private Map<String, String> parsePartitionName(String partitionName, List<String> partitionColumnNames) {
+        // Use PartitionUtil.toPartitionValues for proper unescaping of special characters
+        List<String> values = PartitionUtil.toPartitionValues(partitionName);
         Map<String, String> result = new HashMap<>();
-        String[] parts = partitionName.split("/");
-        for (String part : parts) {
-            int eqIndex = part.indexOf('=');
-            if (eqIndex > 0) {
-                String columnName = part.substring(0, eqIndex);
-                String value = part.substring(eqIndex + 1);
-                result.put(columnName, value);
-            }
+        for (int i = 0; i < partitionColumnNames.size() && i < values.size(); i++) {
+            result.put(partitionColumnNames.get(i), values.get(i));
         }
         return result;
     }
