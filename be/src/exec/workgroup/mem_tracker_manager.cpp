@@ -75,8 +75,11 @@ void MemTrackerManager::deregister_workgroup(const std::string& mem_pool) {
 }
 
 std::vector<std::string> MemTrackerManager::list_mem_trackers() const {
-    auto keys_view = std::ranges::views::keys(_shared_mem_trackers);
-    std::vector mem_trackers(keys_view.begin(), keys_view.end());
+    std::vector<std::string> mem_trackers{};
+    mem_trackers.reserve(_shared_mem_trackers.size() + 1);
+    for (const auto& mem_tracker : _shared_mem_trackers) {
+        mem_trackers.push_back(mem_tracker.first);
+    }
     mem_trackers.push_back(WorkGroup::DEFAULT_MEM_POOL);
     return mem_trackers;
 }
