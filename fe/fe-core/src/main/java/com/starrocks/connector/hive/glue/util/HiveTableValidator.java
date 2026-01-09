@@ -66,9 +66,9 @@ public enum HiveTableValidator {
                     String value = entry.getValue();
                     if ((key.equalsIgnoreCase("projection.enabled") || key.equalsIgnoreCase("projection.enable"))
                             && "true".equalsIgnoreCase(value)) {
-                        // Partition projection is now supported - no need to check metastore partitions
-                        // The PartitionProjectionService will dynamically generate partitions based on
-                        // table properties, so empty metastore partitions are expected and valid.
+                        // Tables with partition projection enabled are treated as valid here and do not require
+                        // metastore partition validation, because partitions are dynamically generated from
+                        // table properties, so empty metastore partitions are expected and acceptable.
                         return;
                     }
                 }

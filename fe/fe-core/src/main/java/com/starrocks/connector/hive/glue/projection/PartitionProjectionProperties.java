@@ -76,9 +76,9 @@ public class PartitionProjectionProperties {
             return new PartitionProjectionProperties(false, new HashMap<>(), Optional.empty());
         }
 
-        // Parse storage location template
+        // Parse storage location template (case-insensitive)
         Optional<String> storageTemplate = Optional.ofNullable(
-                tableProperties.get(STORAGE_LOCATION_TEMPLATE));
+                getPropertyCaseInsensitive(tableProperties, STORAGE_LOCATION_TEMPLATE));
 
         // Parse column-specific configurations
         Map<String, ColumnProjectionConfig> columnConfigs = parseColumnConfigs(tableProperties);
@@ -88,31 +88,53 @@ public class PartitionProjectionProperties {
 
     /**
      * Checks if partition projection is enabled in table properties.
+     * This check is case-insensitive for both key and value to match HiveTableValidator behavior.
      */
     public static boolean isProjectionEnabled(Map<String, String> tableProperties) {
         if (tableProperties == null) {
             return false;
         }
-        String enabledValue = tableProperties.get(PROJECTION_ENABLED);
+        // Use case-insensitive lookup to handle keys like "PROJECTION.ENABLED" or "Projection.Enable"
+        String enabledValue = getPropertyCaseInsensitive(tableProperties, PROJECTION_ENABLED);
         if (enabledValue == null) {
             // Fallback to alternative key
-            enabledValue = tableProperties.get(PROJECTION_ENABLE);
+            enabledValue = getPropertyCaseInsensitive(tableProperties, PROJECTION_ENABLE);
         }
         return "true".equalsIgnoreCase(enabledValue);
+    }
+
+    /**
+     * Gets a property value using case-insensitive key matching.
+     */
+    private static String getPropertyCaseInsensitive(Map<String, String> properties, String key) {
+        // First try exact match for performance
+        String value = properties.get(key);
+        if (value != null) {
+            return value;
+        }
+        // Fall back to case-insensitive search
+        for (Map.Entry<String, String> entry : properties.entrySet()) {
+            if (entry.getKey().equalsIgnoreCase(key)) {
+                return entry.getValue();
+            }
+        }
+        return null;
     }
 
     private static Map<String, ColumnProjectionConfig> parseColumnConfigs(Map<String, String> properties) {
         Map<String, ColumnProjectionConfig> configs = new HashMap<>();
 
-        // Find all column names by looking for projection.<column>.type entries
+        // Find all column names by looking for projection.<column>.type entries (case-insensitive)
         for (Map.Entry<String, String> entry : properties.entrySet()) {
             String key = entry.getKey();
-            if (key.startsWith("projection.") && key.endsWith(TYPE_SUFFIX)) {
+            String keyLower = key.toLowerCase();
+            if (keyLower.startsWith("projection.") && keyLower.endsWith(TYPE_SUFFIX)) {
                 // Extract column name: projection.<column>.type
                 String columnName = extractColumnName(key);
-                if (columnName != null) {
+                if (columnName != null && !columnName.equalsIgnoreCase("enabled")
+                        && !columnName.equalsIgnoreCase("enable")) {
                     ColumnProjectionConfig config = parseColumnConfig(columnName, properties);
-                    configs.put(columnName, config);
+                    configs.put(columnName.toLowerCase(), config);
                 }
             }
         }
@@ -121,26 +143,36 @@ public class PartitionProjectionProperties {
     }
 
     private static String extractColumnName(String typeKey) {
-        // Format: projection.<column>.type
+        // Format: projection.<column>.type (case-insensitive)
+        String keyLower = typeKey.toLowerCase();
         String prefix = "projection.";
         String suffix = TYPE_SUFFIX;
-        if (typeKey.startsWith(prefix) && typeKey.endsWith(suffix)) {
+        if (keyLower.startsWith(prefix) && keyLower.endsWith(suffix)) {
             return typeKey.substring(prefix.length(), typeKey.length() - suffix.length());
         }
         return null;
     }
 
     private static ColumnProjectionConfig parseColumnConfig(String columnName, Map<String, String> properties) {
-        String prefix = "projection." + columnName;
-        String typeStr = properties.get(prefix + TYPE_SUFFIX);
+        String prefixLower = "projection." + columnName.toLowerCase();
+
+        // Find type value (case-insensitive key matching)
+        String typeStr = null;
+        for (Map.Entry<String, String> entry : properties.entrySet()) {
+            if (entry.getKey().toLowerCase().equals(prefixLower + TYPE_SUFFIX)) {
+                typeStr = entry.getValue();
+                break;
+            }
+        }
         ProjectionType type = ProjectionType.fromString(typeStr);
 
+        // Collect column properties (case-insensitive key matching)
         Map<String, String> columnProperties = new HashMap<>();
         for (Map.Entry<String, String> entry : properties.entrySet()) {
-            String key = entry.getKey();
-            if (key.startsWith(prefix + ".") && !key.equals(prefix + TYPE_SUFFIX)) {
-                // Extract property name after prefix
-                String propName = key.substring(prefix.length() + 1);
+            String keyLower = entry.getKey().toLowerCase();
+            if (keyLower.startsWith(prefixLower + ".") && !keyLower.equals(prefixLower + TYPE_SUFFIX)) {
+                // Extract property name after prefix (preserve original case for property name)
+                String propName = keyLower.substring(prefixLower.length() + 1);
                 columnProperties.put(propName, entry.getValue());
             }
         }
@@ -162,12 +194,13 @@ public class PartitionProjectionProperties {
 
     /**
      * Gets the projection configuration for a specific column.
+     * Column name lookup is case-insensitive.
      *
      * @param columnName the partition column name
      * @return the column projection config, or null if not found
      */
     public ColumnProjectionConfig getColumnConfig(String columnName) {
-        return columnConfigs.get(columnName);
+        return columnConfigs.get(columnName.toLowerCase());
     }
 
     /**

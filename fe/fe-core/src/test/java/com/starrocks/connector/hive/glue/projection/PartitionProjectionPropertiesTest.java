@@ -153,4 +153,85 @@ public class PartitionProjectionPropertiesTest {
         assertThrows(IllegalArgumentException.class, () ->
                 PartitionProjectionProperties.ProjectionType.fromString(null));
     }
+
+    // ==================== Case-Insensitivity Tests ====================
+
+    @Test
+    public void testCaseInsensitiveProjectionEnabled() {
+        // Test uppercase PROJECTION.ENABLED
+        Map<String, String> properties = new HashMap<>();
+        properties.put("PROJECTION.ENABLED", "TRUE");
+        properties.put("projection.year.type", "integer");
+        properties.put("projection.year.range", "2020,2025");
+
+        assertTrue(PartitionProjectionProperties.isProjectionEnabled(properties));
+
+        PartitionProjectionProperties props = PartitionProjectionProperties.parse(properties);
+        assertTrue(props.isEnabled());
+    }
+
+    @Test
+    public void testCaseInsensitiveProjectionEnable() {
+        // Test mixed case Projection.Enable
+        Map<String, String> properties = new HashMap<>();
+        properties.put("Projection.Enable", "True");
+        properties.put("projection.region.type", "enum");
+        properties.put("projection.region.values", "us,eu");
+
+        assertTrue(PartitionProjectionProperties.isProjectionEnabled(properties));
+
+        PartitionProjectionProperties props = PartitionProjectionProperties.parse(properties);
+        assertTrue(props.isEnabled());
+    }
+
+    @Test
+    public void testCaseInsensitiveColumnConfig() {
+        // Test uppercase column property keys
+        Map<String, String> properties = new HashMap<>();
+        properties.put("projection.enabled", "true");
+        properties.put("PROJECTION.YEAR.TYPE", "integer");
+        properties.put("PROJECTION.YEAR.RANGE", "2020,2025");
+
+        PartitionProjectionProperties props = PartitionProjectionProperties.parse(properties);
+
+        assertTrue(props.isEnabled());
+        assertNotNull(props.getColumnConfig("year"));
+        assertNotNull(props.getColumnConfig("YEAR")); // Case-insensitive lookup
+        assertEquals(PartitionProjectionProperties.ProjectionType.INTEGER,
+                props.getColumnConfig("year").getType());
+    }
+
+    @Test
+    public void testCaseInsensitiveStorageLocationTemplate() {
+        // Test mixed case storage.location.template
+        Map<String, String> properties = new HashMap<>();
+        properties.put("projection.enabled", "true");
+        properties.put("projection.region.type", "enum");
+        properties.put("projection.region.values", "us,eu");
+        properties.put("STORAGE.LOCATION.TEMPLATE", "s3://bucket/data/${region}/");
+
+        PartitionProjectionProperties props = PartitionProjectionProperties.parse(properties);
+
+        assertTrue(props.getStorageLocationTemplate().isPresent());
+        assertEquals("s3://bucket/data/${region}/",
+                props.getStorageLocationTemplate().get());
+    }
+
+    @Test
+    public void testCaseInsensitiveMixedProperties() {
+        // Test all properties with mixed case
+        Map<String, String> properties = new HashMap<>();
+        properties.put("PROJECTION.ENABLED", "TRUE");
+        properties.put("Projection.Region.Type", "ENUM");
+        properties.put("projection.REGION.values", "us,eu");
+        properties.put("Storage.Location.Template", "s3://bucket/${region}/");
+
+        PartitionProjectionProperties props = PartitionProjectionProperties.parse(properties);
+
+        assertTrue(props.isEnabled());
+        assertNotNull(props.getColumnConfig("region"));
+        assertEquals(PartitionProjectionProperties.ProjectionType.ENUM,
+                props.getColumnConfig("region").getType());
+        assertTrue(props.getStorageLocationTemplate().isPresent());
+    }
 }

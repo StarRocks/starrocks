@@ -16,6 +16,7 @@ package com.starrocks.connector.hive.glue.projection;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.hive.Partition;
 import com.starrocks.connector.hive.RemoteFileInputFormat;
 import com.starrocks.connector.hive.TextFileFormatDesc;
@@ -138,16 +139,7 @@ public class PartitionProjection {
      * Builds the Hive-style partition name (e.g., "region=us/year=2024").
      */
     private String buildPartitionName(List<String> values) {
-        StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < partitionColumnNames.size(); i++) {
-            if (i > 0) {
-                sb.append("/");
-            }
-            sb.append(partitionColumnNames.get(i))
-                    .append("=")
-                    .append(values.get(i));
-        }
-        return sb.toString();
+        return PartitionUtil.toHivePartitionName(partitionColumnNames, values);
     }
 
     /**

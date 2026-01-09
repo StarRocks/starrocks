@@ -153,7 +153,7 @@ public class DateProjectionTest {
     @Test
     public void testConstructorWithInvalidFormat() {
         assertThrows(IllegalArgumentException.class, () ->
-                new DateProjection("dt", "2024-01-01,2024-01-31", "invalid-format-zzz",
+                new DateProjection("dt", "2024-01-01,2024-01-31", "invalid{format}",
                         Optional.empty(), Optional.empty()));
     }
 

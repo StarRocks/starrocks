@@ -121,12 +121,15 @@ public class IntegerProjection implements ColumnProjection {
             }
         });
 
-        // Validate that the range won't generate too many values
+        // Validate that the range won't generate too many values.
+        // Note: estimatedCount is an upper-bound estimate. When the range does not align perfectly
+        // with the interval, the actual number of generated values may be smaller.
         long estimatedCount = (rightBound - leftBound) / interval + 1;
         if (estimatedCount > MAX_VALUES) {
             throw new IllegalArgumentException(
                     "Integer projection for column '" + columnName +
-                            "' would generate " + estimatedCount + " values, exceeding limit of " + MAX_VALUES);
+                            "' is estimated to generate up to " + estimatedCount +
+                            " values, exceeding limit of " + MAX_VALUES);
         }
     }
 

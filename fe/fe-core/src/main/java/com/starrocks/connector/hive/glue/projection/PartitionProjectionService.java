@@ -17,6 +17,7 @@ package com.starrocks.connector.hive.glue.projection;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
+import com.starrocks.connector.hive.HiveMetastoreApiConverter;
 import com.starrocks.connector.hive.Partition;
 import com.starrocks.connector.hive.RemoteFileInputFormat;
 import com.starrocks.connector.hive.TextFileFormatDesc;
@@ -125,14 +126,8 @@ public class PartitionProjectionService {
                 table.getStorageFormat() != com.starrocks.connector.hive.HiveStorageFormat.TEXTFILE) {
             return null;
         }
-        // For text format, use default delimiters if not specified
-        Map<String, String> serdeProps = table.getSerdeProperties();
-        String fieldDelimiter = serdeProps.getOrDefault("field.delim", "\001");
-        String lineDelimiter = serdeProps.getOrDefault("line.delim", "\n");
-        String collectionDelimiter = serdeProps.getOrDefault("collection.delim", "\002");
-        String mapKeyDelimiter = serdeProps.getOrDefault("mapkey.delim", "\003");
-
-        return new TextFileFormatDesc(fieldDelimiter, lineDelimiter, collectionDelimiter, mapKeyDelimiter);
+        // Reuse the converter method for consistency with other Hive metadata handling
+        return HiveMetastoreApiConverter.toTextFileFormatDesc(table.getSerdeProperties());
     }
 
     private ColumnProjection createColumnProjection(String columnName,

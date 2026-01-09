@@ -43,7 +43,7 @@ public class MetastoreClientUtilsTest {
     private DefaultAWSGlueMetastore metastore;
 
     @Test
-    public void testGluePartitionProjection() {
+    public void testGluePartitionProjectionTablesAreValid() {
         software.amazon.awssdk.services.glue.model.Table.Builder tableBuilder = 
                 software.amazon.awssdk.services.glue.model.Table.builder();
         tableBuilder
