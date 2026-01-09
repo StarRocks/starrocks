@@ -302,7 +302,7 @@ MySQL クライアント互換性のために使用されます。実際の用�
 
 * **説明**: Hive テーブルまたは Iceberg テーブルにデータを書き込む際、または Files() でデータをエクスポートする際に使用される圧縮アルゴリズムを指定します。このパラメータは、以下の状況でのみ有効になります：
   * Hive テーブルに `compression_codec` プロパティが存在しない場合。
-  * Iceberg テーブルに `compression_codec` および `write.parquet.compression-codec` プロパティが存在しない場合。
+  * Iceberg テーブルに `write.parquet.compression-codec` プロパティが存在しない場合。
   * `INSERT INTO FILES` に対して `compression` プロパティが設定されていない場合。
 * **有効な値**: `uncompressed`, `snappy`, `lz4`, `zstd`, および `gzip`。
 * **デフォルト**: uncompressed

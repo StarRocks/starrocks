@@ -301,7 +301,7 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 
 * 描述：用于指定写入 Hive 表或 Iceberg 表时以及使用 Files() 导出数据时的压缩算法。有效值：`uncompressed`、`snappy`、`lz4`、`zstd`、`gzip`。该参数只在以下情况生效：
   * Hive 表中未指定 `compression_codec` 属性。
-  * Iceberg 表中未包含 `compression_codec` 和 `write.parquet.compression-codec` 属性。
+  * Iceberg 表中未包含`write.parquet.compression-codec` 属性。
   * `INSERT INTO FILES` 时未设置 `compression` 属性。 
 * 默认值：uncompressed
 * 类型：String
