@@ -159,10 +159,8 @@ public:
     void mark_del(const std::chrono::seconds expiration_time) {
         bool expect_false = false;
         if (_is_marked_del.compare_exchange_strong(expect_false, true)) {
-            _vacuum_ttl.store(
-                    duration_cast<vacuum_time_precision>(steady_clock::now().time_since_epoch() + expiration_time)
-                            .count(),
-                    std::memory_order_release);
+            _vacuum_ttl = duration_cast<vacuum_time_precision>(steady_clock::now().time_since_epoch() + expiration_time)
+                            .count();
         }
     }
     // no drivers shall be added to this workgroup
@@ -170,7 +168,7 @@ public:
     // a workgroup should wait several seconds to be cleaned safely.
     bool is_expired() const {
         const auto now = duration_cast<vacuum_time_precision>(steady_clock::now().time_since_epoch()).count();
-        return now > _vacuum_ttl.load(std::memory_order_acquire);
+        return now > _vacuum_ttl;
     }
 
     // return true if current workgroup is removable:
@@ -265,9 +263,8 @@ private:
 
     std::atomic<size_t> _num_running_drivers = 0;
     std::atomic<size_t> _acc_num_drivers = 0;
-    // vacuum_ttl is int64_t instead of chrono::time_point because std::atomic requires a trivially copyable type
     // vacuum_ttl is set to max, as a data race might cause a thread to read `is_marked_del = true` and `vacuum_ttl = 0`
-    std::atomic<int64_t> _vacuum_ttl = std::numeric_limits<int64_t>::max();
+    int64_t _vacuum_ttl = std::numeric_limits<int64_t>::max();
 
     // Metrics of this workgroup
     std::atomic<int64_t> _num_running_queries = 0;
