@@ -3,7 +3,7 @@ description: Kafka Routine Load 使用共享数据存储
 displayed_sidebar: docs
 ---
 
-# 通过 Routine Load 向 StarRocks 存算分离集群 导入 Kafka 数据
+# 通过 Routine Load 向 StarRocks 存算分离集群导入 Kafka 数据
 
 import Clients from '../_assets/quick-start/_clientsCompose.mdx'
 import SQL from '../_assets/quick-start/_SQL.mdx'
