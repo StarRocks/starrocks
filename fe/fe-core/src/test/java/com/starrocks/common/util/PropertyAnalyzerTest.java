@@ -57,4 +57,61 @@ public class PropertyAnalyzerTest {
             Assertions.assertEquals("Cannot parse text to Duration", e.getMessage());
         }
     }
+
+    @Test
+    public void testAnalyzeTableQueryTimeout() throws AnalysisException {
+        int clusterTimeout = 300;
+        
+        // Test 1: properties is null - should return -1 (line 1365)
+        Assertions.assertEquals(-1, PropertyAnalyzer.analyzeTableQueryTimeout(null, clusterTimeout));
+        
+        // Test 2: properties does not contain PROPERTIES_TABLE_QUERY_TIMEOUT - should return -1 (line 1365)
+        Map<String, String> properties1 = new HashMap<>();
+        properties1.put("other_property", "value");
+        Assertions.assertEquals(-1, PropertyAnalyzer.analyzeTableQueryTimeout(properties1, clusterTimeout));
+        
+        // Test 3: valid positive value
+        Map<String, String> properties2 = new HashMap<>();
+        properties2.put(PropertyAnalyzer.PROPERTIES_TABLE_QUERY_TIMEOUT, "120");
+        int result = PropertyAnalyzer.analyzeTableQueryTimeout(properties2, clusterTimeout);
+        Assertions.assertEquals(120, result);
+        // Property should be removed after analysis
+        Assertions.assertFalse(properties2.containsKey(PropertyAnalyzer.PROPERTIES_TABLE_QUERY_TIMEOUT));
+        
+        // Test 4: value is 0 - should throw exception (line 1373)
+        Map<String, String> properties3 = new HashMap<>();
+        properties3.put(PropertyAnalyzer.PROPERTIES_TABLE_QUERY_TIMEOUT, "0");
+        try {
+            PropertyAnalyzer.analyzeTableQueryTimeout(properties3, clusterTimeout);
+            Assertions.fail("Should throw AnalysisException for timeout <= 0");
+        } catch (AnalysisException e) {
+            Assertions.assertTrue(e.getMessage().contains("must be greater than 0"));
+        }
+        
+        // Test 5: value is negative - should throw exception (line 1373)
+        Map<String, String> properties4 = new HashMap<>();
+        properties4.put(PropertyAnalyzer.PROPERTIES_TABLE_QUERY_TIMEOUT, "-10");
+        try {
+            PropertyAnalyzer.analyzeTableQueryTimeout(properties4, clusterTimeout);
+            Assertions.fail("Should throw AnalysisException for timeout <= 0");
+        } catch (AnalysisException e) {
+            Assertions.assertTrue(e.getMessage().contains("must be greater than 0"));
+        }
+        
+        // Test 6: invalid format (not a number) - should throw NumberFormatException wrapped in AnalysisException (line 1376-1377)
+        Map<String, String> properties5 = new HashMap<>();
+        properties5.put(PropertyAnalyzer.PROPERTIES_TABLE_QUERY_TIMEOUT, "invalid_number");
+        try {
+            PropertyAnalyzer.analyzeTableQueryTimeout(properties5, clusterTimeout);
+            Assertions.fail("Should throw AnalysisException for invalid number format");
+        } catch (AnalysisException e) {
+            Assertions.assertTrue(e.getMessage().contains("must be a valid integer"));
+        }
+        
+        // Test 7: value greater than cluster timeout (should be allowed)
+        Map<String, String> properties6 = new HashMap<>();
+        properties6.put(PropertyAnalyzer.PROPERTIES_TABLE_QUERY_TIMEOUT, "600");
+        int result2 = PropertyAnalyzer.analyzeTableQueryTimeout(properties6, clusterTimeout);
+        Assertions.assertEquals(600, result2);
+    }
 }
