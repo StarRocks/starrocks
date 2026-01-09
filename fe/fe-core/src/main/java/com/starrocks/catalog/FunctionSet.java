@@ -1031,6 +1031,11 @@ public class FunctionSet {
         fns.add(fn);
     }
 
+    public boolean isAggregateFunction(String functionName) {
+        List<Function> fns = vectorizedFunctions.getOrDefault(functionName, Collections.EMPTY_LIST);
+        return !fns.isEmpty() && fns.get(0) instanceof AggregateFunction;
+    }
+
     // for vectorized engine
     public void addVectorizedScalarBuiltin(long fid, String fnName, boolean varArgs,
                                            Type retType, Type... args) {
