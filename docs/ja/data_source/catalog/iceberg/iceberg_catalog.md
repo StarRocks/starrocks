@@ -1489,6 +1489,37 @@ ORDER BY (column_name [sort_direction] [nulls_order], ...)
 
 ---
 
+### パーティション Spec の進化（ADD/DROP PARTITION COLUMN）
+
+StarRocks は `ALTER TABLE ... ADD|DROP PARTITION COLUMN` を使用して Iceberg テーブルのパーティション Spec（変換式を含む）を進化させることをサポートします。
+
+#### 構文
+
+```SQL
+ALTER TABLE [catalog.][database.]table_name
+ADD PARTITION COLUMN partition_expr [, partition_expr ...];
+
+ALTER TABLE [catalog.][database.]table_name
+DROP PARTITION COLUMN partition_expr [, partition_expr ...];
+```
+
+`partition_expr` は列名（Identity 変換）または次の変換式のいずれかを指定できます: `year`、`month`、`day`、`hour`、`truncate`、`bucket`。
+
+#### 例
+
+```SQL
+ALTER TABLE test_part_evo
+ADD PARTITION COLUMN dt, truncate(value, 10), bucket(id, 10);
+
+ALTER TABLE test_part_evo
+DROP PARTITION COLUMN dt;
+
+ALTER TABLE test_part_evo
+ADD PARTITION COLUMN month(dt);
+```
+
+---
+
 ### Iceberg テーブルへのデータシンク
 
 StarRocks の内部テーブルと同様に、Iceberg テーブルに対して [INSERT](../../../administration/user_privs/authorization/privilege_item.md#table) 権限を持っている場合、 [INSERT](../../../sql-reference/sql-statements/loading_unloading/INSERT.md) ステートメントを使用して、StarRocks テーブルのデータをその Iceberg テーブルにシンクできます（現在、Parquet 形式の Iceberg テーブルのみがサポートされています）。この機能は v3.1 以降でサポートされています。
