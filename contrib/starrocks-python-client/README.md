@@ -40,10 +40,15 @@ virtualenv <your-env-name>
 
 ### Basic SQLAlchemy Usage
 
-To connect to StarRocks, use a standard SQLAlchemy connection string.
+To connect to StarRocks, use the SQLAlchemy connection string format:
 
 ```ini
 starrocks://<User>:<Password>@<Host>:<Port>/[<Catalog>.]<Database>
+```
+
+Or, for an asynchronous connection, use asyncmy driver:
+```ini
+starrocks+asyncmy://<User>:<Password>@<Host>:<Port>/[<Catalog>.]<Database>
 ```
 
 - **User**: User Name
@@ -65,12 +70,29 @@ from sqlalchemy import create_engine, text
 
 engine = create_engine('starrocks://root@localhost:9030/mydatabase')
 
-# make sure you have create a table `mytable` in `mydatabase`.
+# make sure you have created the table `mytable` in `mydatabase`.
 
 with engine.connect() as connection:
-    rows = connection.execute(text("SELECT * FROM mytable LIMIT 2")).fetchall()
     print("Connection successful!")
+    rows = connection.execute(text("SELECT * FROM mytable LIMIT 2")).fetchall()
     print(rows)
+
+# async version
+import asyncio
+from sqlalchemy.ext.asyncio import create_async_engine
+
+engine = create_async_engine('starrocks+asyncmy://root@localhost:9030/mydatabase')
+
+async def async_query():
+    async with engine.connect() as connection:
+        print("Connection successful!")
+        rows = await connection.execute(text("SELECT * FROM mytable LIMIT 2")).fetchall()
+        print(rows)
+
+    await engine.dispose()
+
+asyncio.run(async_query())
+
 ```
 
 ### Example: Defining a Table (ORM Style)
