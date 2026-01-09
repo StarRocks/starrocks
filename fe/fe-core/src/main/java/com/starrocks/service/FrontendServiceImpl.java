@@ -792,10 +792,14 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     private String getProfileFromOtherFEs(String queryId) {
         NodeMgr nodeMgr = GlobalStateMgr.getCurrentState().getNodeMgr();
         List<Frontend> frontends = nodeMgr.getFrontends(null);
+        Frontend mySelf = nodeMgr.getMySelf();
         
         for (Frontend frontend : frontends) {
             // Skip the current FE since we already checked it
-            if (nodeMgr.getMySelf().getHost().equals(frontend.getHost())) {
+            // Compare by both host and RPC port to correctly identify the current FE
+            boolean isLocalFE = mySelf.getHost().equals(frontend.getHost()) && 
+                                mySelf.getRpcPort() == frontend.getRpcPort();
+            if (isLocalFE) {
                 continue;
             }
             
@@ -844,8 +848,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             profileInfo.setQuery_state(element.infoStrings.get(ProfileManager.QUERY_STATE));
             
             String statement = element.infoStrings.get(ProfileManager.SQL_STATEMENT);
-            if (statement != null && statement.length() > 128) {
-                statement = statement.substring(0, 124) + " ...";
+            if (statement != null && statement.length() > ProfileManager.MAX_STATEMENT_LENGTH) {
+                statement = statement.substring(0, ProfileManager.MAX_STATEMENT_DISPLAY_LENGTH) + " ...";
             }
             profileInfo.setStatement(statement);
             

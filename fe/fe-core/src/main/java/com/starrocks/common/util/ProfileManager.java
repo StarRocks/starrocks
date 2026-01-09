@@ -87,6 +87,10 @@ public class ProfileManager implements MemoryTrackable {
     public static final String LOAD_TYPE_ROUTINE_LOAD = "ROUTINE_LOAD";
 
     private static final int MEMORY_PROFILE_SAMPLES = 10;
+    
+    // Maximum length for SQL statement in profile list display
+    public static final int MAX_STATEMENT_LENGTH = 128;
+    public static final int MAX_STATEMENT_DISPLAY_LENGTH = 124;
 
     public static final ArrayList<String> PROFILE_HEADERS = new ArrayList<>(
             Arrays.asList(QUERY_ID, USER, DEFAULT_DB, SQL_STATEMENT, QUERY_TYPE,
@@ -104,8 +108,8 @@ public class ProfileManager implements MemoryTrackable {
             res.add(infoStrings.get(TOTAL_TIME));
             res.add(infoStrings.get(QUERY_STATE));
             String statement = infoStrings.get(SQL_STATEMENT);
-            if (statement.length() > 128) {
-                statement = statement.substring(0, 124) + " ...";
+            if (statement.length() > MAX_STATEMENT_LENGTH) {
+                statement = statement.substring(0, MAX_STATEMENT_DISPLAY_LENGTH) + " ...";
             }
             res.add(statement);
             return res;

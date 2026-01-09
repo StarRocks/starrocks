@@ -968,10 +968,15 @@ public class ShowExecutor {
 
             NodeMgr nodeMgr = GlobalStateMgr.getCurrentState().getNodeMgr();
             List<Frontend> frontends = nodeMgr.getFrontends(null);
+            Frontend mySelf = nodeMgr.getMySelf();
             
             // Collect profiles from all FEs
             for (Frontend frontend : frontends) {
-                if (nodeMgr.getMySelf().getHost().equals(frontend.getHost())) {
+                // Compare by both host and RPC port to correctly identify the current FE
+                boolean isLocalFE = mySelf.getHost().equals(frontend.getHost()) && 
+                                    mySelf.getRpcPort() == frontend.getRpcPort();
+                
+                if (isLocalFE) {
                     // Get profiles from local FE
                     List<ProfileManager.ProfileElement> profileElements = 
                             ProfileManager.getInstance().getAllProfileElements();
@@ -1013,11 +1018,11 @@ public class ShowExecutor {
                 }
             }
             
-            // Sort by start time (most recent first) and apply limit
-            // Note: Profiles are already in reverse chronological order within each FE
+            // Apply limit if specified
+            // Note: Results are aggregated from multiple FEs and may not be sorted globally by time
             int limit = statement.getLimit();
             if (limit >= 0 && rowSet.size() > limit) {
-                rowSet = rowSet.subList(0, limit);
+                rowSet = Lists.newArrayList(rowSet.subList(0, limit));
             }
 
             return new ShowResultSet(showResultMetaFactory.getMetadata(statement), rowSet);
