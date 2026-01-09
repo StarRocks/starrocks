@@ -257,7 +257,6 @@ public:
         size_t element_size = src_map_column->keys().size();
         // append keys
         dst_map_column->keys_column()->as_mutable_raw_ptr()->append(*src_map_column->keys_column(), 0, element_size);
-        dst_map_column->offsets().append(src_map_column->offsets(), 0, chunk_size);
 
         DCHECK(dst_map_column->values_column()->is_nullable());
 
@@ -273,6 +272,13 @@ public:
             dst_value_data.push_back(value_viewer.value(i));
             nullable_dst_values_column->set_has_null(is_null);
         }
+
+        auto& dst_offsets = dst_map_column->offsets().get_data();
+        for (size_t i = 0; i < chunk_size; ++i) {
+            dst_offsets.push_back(dst_offsets.size() + src_map_column->get_map_size(i));
+        }
+
+        dst_map_column->check_or_die();
     }
 
     std::string get_name() const override { return "sum_map"; }
