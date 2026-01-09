@@ -692,6 +692,7 @@ void WorkGroupManager::change_enable_resource_group_cpu_borrowing(const bool val
 }
 
 void WorkGroupManager::set_workgroup_expiration_time(const std::chrono::seconds value) {
+    std::unique_lock write_lock(_mutex);
     _workgroup_expiration_time = value;
 }
 
