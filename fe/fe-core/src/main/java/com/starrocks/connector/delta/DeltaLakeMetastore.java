@@ -79,7 +79,10 @@ public abstract class DeltaLakeMetastore implements IDeltaLakeMetastore {
 
         this.checkpointCache = CacheBuilder.newBuilder()
                 .expireAfterWrite(properties.getDeltaLakeCheckpointMetaCacheTtlSec(), TimeUnit.SECONDS)
-                .weigher((key, value) -> Math.toIntExact(SizeEstimator.estimate(key) + SizeEstimator.estimate(value)))
+                .weigher((key, value) -> {
+                    long size = SizeEstimator.estimate(key) + SizeEstimator.estimate(value);
+                    return (int) Math.min(size, Integer.MAX_VALUE);
+                })
                 .maximumWeight(checkpointCacheSize)
                 .build(new CacheLoader<>() {
                     @NotNull
@@ -91,8 +94,10 @@ public abstract class DeltaLakeMetastore implements IDeltaLakeMetastore {
 
         this.jsonCache = CacheBuilder.newBuilder()
                 .expireAfterWrite(properties.getDeltaLakeJsonMetaCacheTtlSec(), TimeUnit.SECONDS)
-                .weigher((key, value) ->
-                        Math.toIntExact(SizeEstimator.estimate(key) + SizeEstimator.estimate(value)))
+                .weigher((key, value) -> {
+                    long size = SizeEstimator.estimate(key) + SizeEstimator.estimate(value);
+                    return (int) Math.min(size, Integer.MAX_VALUE);
+                })
                 .maximumWeight(jsonCacheSize)
                 .build(new CacheLoader<>() {
                     @NotNull
