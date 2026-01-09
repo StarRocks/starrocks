@@ -234,6 +234,10 @@ public class OlapTableSink extends DataSink {
         this.isFromOverwrite = isFromOverwrite;
     }
 
+    public TPartialUpdateMode getPartialUpdateMode() {
+        return partialUpdateMode;
+    }
+
     public void complete(String mergeCondition) throws UserException {
         TOlapTableSink tSink = tDataSink.getOlap_table_sink();
         if (mergeCondition != null && !mergeCondition.isEmpty()) {
