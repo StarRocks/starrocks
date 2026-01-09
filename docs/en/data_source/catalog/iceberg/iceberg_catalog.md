@@ -1504,7 +1504,7 @@ ALTER TABLE [catalog.][database.]table_name
 DROP PARTITION COLUMN partition_expr [, partition_expr ...];
 ```
 
-`partition_expr` can be a column name (identity transform) or one of the supported transform expressions, such as `year`, `month`, `day`, `hour`, `truncate`, and `bucket`.
+`partition_expr` can be a column name (identity transform) or one of the supported transform expressions. Supported transform expressions are `year`, `month`, `day`, `hour`, `truncate`, and `bucket`.
 
 #### Examples
 
@@ -1518,6 +1518,7 @@ DROP PARTITION COLUMN dt;
 ALTER TABLE test_part_evo
 ADD PARTITION COLUMN month(dt);
 ```
+
 ---
 
 ### Sink data to an Iceberg table
