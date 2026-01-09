@@ -38,7 +38,9 @@ Hive クラスターでの SQL ワークロードを成功させるためには�
   - Parquet および ORC ファイルは、以下の圧縮形式をサポートしています：NO_COMPRESSION、SNAPPY、LZ4、ZSTD、GZIP。
   - Textfile ファイルは、NO_COMPRESSION 圧縮形式をサポートしています。
 
-  Hive テーブルへのデータのシンクに使用する圧縮アルゴリズムを指定するために、セッション変数 [`connector_sink_compression_codec`](../../sql-reference/System_variable.md#connector_sink_compression_codec) を使用できます。
+  テーブルプロパティ [`compression_codec`](../../data_source/catalog/hive_catalog.md#properties) またはシステム変数 [`connector_sink_compression_codec`](../../sql-reference/System_variable.md#connector_sink_compression_codec) を使用して、Hive テーブルへのデータシンクに使用する圧縮アルゴリズムを指定できます。
+
+  Hive テーブルへの書き込み時、テーブルのプロパティに圧縮コーデックが含まれている場合、StarRocks は書き込みデータの圧縮にそのアルゴリズムを優先的に使用します。そうでない場合、システム変数 `connector_sink_compression_codec` で設定された圧縮アルゴリズムが使用されます。
 
 ## 統合準備
 
@@ -1021,7 +1023,7 @@ PARTITION BY (par_col1[, par_col2...])
 | ----------------- | ------------------------------------------------------------ |
 | location          | 管理テーブルを作成したいファイルパスです。HMS をメタストアとして使用する場合、`location` パラメータを指定する必要はありません。StarRocks は現在の Hive catalog のデフォルトファイルパスにテーブルを作成します。AWS Glue をメタデータサービスとして使用する場合：<ul><li>テーブルを作成したいデータベースに対して `location` パラメータを指定した場合、テーブルに対して `location` パラメータを指定する必要はありません。このように、テーブルは所属するデータベースのファイルパスにデフォルト設定されます。</li><li>テーブルを作成したいデータベースに対して `location` を指定していない場合、テーブルに対して `location` パラメータを指定する必要があります。</li></ul> |
 | file_format       | 管理テーブルのファイル形式です。サポートされているファイル形式は Parquet、ORC、Textfile です。ORC および Textfile 形式は v3.3 以降でサポートされています。 有効な値：`parquet`、`orc`、`textfile`。 デフォルト値：`parquet`。 |
-| compression_codec | 管理テーブルに使用される圧縮アルゴリズムです。このプロパティは v3.2.3 で非推奨となり、そのバージョン以降、Hive テーブルへのデータのシンクに使用される圧縮アルゴリズムはセッション変数 [connector_sink_compression_codec](../../sql-reference/System_variable.md#connector_sink_compression_codec) によって一元的に制御されます。 |
+| compression_codec | 管理テーブルに使用される圧縮アルゴリズムです。                       |
 
 ### 例
 
@@ -1068,7 +1070,7 @@ StarRocks の内部テーブルと同様に、Hive テーブル（管理テー�
 :::note
 
 - [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) および [REVOKE](../../sql-reference/sql-statements/account-management/REVOKE.md) を使用して権限を付与および取り消すことができます。
-- Hive テーブルへのデータのシンクに使用する圧縮アルゴリズムを指定するために、セッション変数 [connector_sink_compression_codec](../../sql-reference/System_variable.md#connector_sink_compression_codec) を使用できます。
+- テーブルプロパティ [`compression_codec`](../../data_source/catalog/hive_catalog.md#properties) またはシステム変数 [`connector_sink_compression_codec`](../../sql-reference/System_variable.md# connector_sink_compression_codec) を使用して、Hive テーブルへのデータシンクに適用する圧縮アルゴリズムを指定できます。StarRocks はテーブルプロパティで指定された圧縮コーデックを優先的に使用します。
 
 :::
 
