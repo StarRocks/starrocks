@@ -421,7 +421,7 @@ Status OlapTableSink::open_wait() {
 }
 
 bool OlapTableSink::is_full() {
-    return _tablet_sink_sender->is_full() || _is_automatic_partition_running.load(std::memory_order_acquire);
+    return _is_automatic_partition_running.load(std::memory_order_acquire) || _tablet_sink_sender->is_full();
 }
 
 Status OlapTableSink::_automatic_create_partition() {
