@@ -337,8 +337,8 @@ public class RestoreJobMaterializedViewTest extends StarRocksTestBase {
                     .getMaterializedIndices(IndexExtState.VISIBLE)) {
                 BackupIndexInfo idxInfo = new BackupIndexInfo();
                 idxInfo.id = index.getId();
-                idxInfo.name = olapTable.getIndexNameByMetaId(index.getId());
-                idxInfo.schemaHash = olapTable.getSchemaHashByIndexMetaId(index.getId());
+                idxInfo.name = olapTable.getIndexNameByMetaId(index.getMetaId());
+                idxInfo.schemaHash = olapTable.getSchemaHashByIndexMetaId(index.getMetaId());
                 partInfo.indexes.put(idxInfo.name, idxInfo);
 
                 for (Tablet tablet : index.getTablets()) {

@@ -49,11 +49,11 @@ public:
 
     virtual Status add(const ChunkPtr& chunk);
 
-    Status finish();
+    virtual Status finish();
 
     void rollback();
 
-    bool is_finished();
+    virtual bool is_finished();
 
     virtual void callback_on_commit(const CommitResult& result) = 0;
 

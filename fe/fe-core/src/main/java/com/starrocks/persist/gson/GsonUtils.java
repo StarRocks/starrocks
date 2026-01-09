@@ -63,7 +63,7 @@ public class GsonUtils {
     private static final GsonBuilder GSON_BUILDER = createGsonBuilder();
 
     private static GsonBuilder createGsonBuilder() {
-        return ExtensionManager.getCompoment(IGsonBuilderFactory.class).create();
+        return ExtensionManager.getComponent(IGsonBuilderFactory.class).create();
     }
 
     // this instance is thread-safe.

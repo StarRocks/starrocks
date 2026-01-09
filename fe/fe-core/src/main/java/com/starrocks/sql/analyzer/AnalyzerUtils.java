@@ -987,11 +987,11 @@ public class AnalyzerUtils {
          */
         class TableIndexId {
             long tableId;
-            long baseIndexId;
+            long baseIndexMetaId;
 
-            public TableIndexId(long tableId, long indexId) {
+            public TableIndexId(long tableId, long indexMetaId) {
                 this.tableId = tableId;
-                this.baseIndexId = indexId;
+                this.baseIndexMetaId = indexMetaId;
             }
 
             @Override
@@ -1003,12 +1003,12 @@ public class AnalyzerUtils {
                     return false;
                 }
                 TableIndexId that = (TableIndexId) o;
-                return tableId == that.tableId && baseIndexId == that.baseIndexId;
+                return tableId == that.tableId && baseIndexMetaId == that.baseIndexMetaId;
             }
 
             @Override
             public int hashCode() {
-                return Objects.hash(tableId, baseIndexId);
+                return Objects.hash(tableId, baseIndexMetaId);
             }
         }
 

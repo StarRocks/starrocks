@@ -224,11 +224,25 @@ public class SplitTabletJob extends TabletReshardJob {
                         for (ReshardingTablet reshardingTablet : reshardingIndex.getReshardingTablets()) {
                             SplittingTablet splittingTablet = reshardingTablet.getSplittingTablet();
                             if (splittingTablet != null) {
-                                for (Long tabletId : splittingTablet.getNewTabletIds()) {
+                                List<Long> newTabletIds = splittingTablet.getNewTabletIds();
+                                for (Long tabletId : newTabletIds) {
                                     TabletRange tabletRange = tabletRanges.get(tabletId);
-                                    Preconditions.checkNotNull(tabletRange,
-                                            "Range of tablet " + tabletId + " not found");
-                                    newIndex.getTablet(tabletId).setRange(tabletRange);
+                                    if (tabletRange != null) {
+                                        Tablet newTablet = newIndex.getTablet(tabletId);
+                                        Preconditions.checkNotNull(newTablet, "Not found tablet " + tabletId);
+                                        newTablet.setRange(tabletRange);
+                                    } else {
+                                        // If splitting tablet failed, will fallback to identical tablet,
+                                        // in this case, BE will only return the range of the first tablet
+                                        List<Long> toRemoveTabletIds = newTabletIds.subList(1, newTabletIds.size());
+                                        Preconditions.checkState(tabletId == toRemoveTabletIds.get(0),
+                                                "Range of tablet " + tabletId + " not found");
+                                        for (long toRemoveTabletId : toRemoveTabletIds) {
+                                            newIndex.removeTablet(toRemoveTabletId);
+                                        }
+                                        splittingTablet.fallbackToIdenticalTablet();
+                                        break;
+                                    }
                                 }
                             }
                         }
@@ -526,7 +540,7 @@ public class SplitTabletJob extends TabletReshardJob {
                 for (ReshardingMaterializedIndex reshardingIndex : reshardingPhysicalPartition
                         .getReshardingIndexes().values()) {
                     MaterializedIndex newIndex = reshardingIndex.getMaterializedIndex();
-                    if (newIndex.getId() == olapTable.getBaseIndexMetaId()) {
+                    if (newIndex.getMetaId() == olapTable.getBaseIndexMetaId()) {
                         physicalPartition.setBaseIndex(newIndex);
                     } else {
                         physicalPartition.createRollupIndex(newIndex);

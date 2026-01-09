@@ -30,7 +30,7 @@ public class ExtensionManager {
         return INSTANCE;
     }
 
-    public static <T> T getCompoment(Class<T> clazz) {
+    public static <T> T getComponent(Class<T> clazz) {
         return getInstance().context.get(clazz);
     }
 

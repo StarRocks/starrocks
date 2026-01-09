@@ -354,3 +354,59 @@ select cast(column_0 as datetime) from (values ("2020-01-01T01:02:03.1234567Z"))
 -- result:
 2020-01-01 01:02:03.123456
 -- !result
+select cast(column_0 as datetime) from (values ("2024-01-01 01:60:00")) as tmp;
+-- result:
+None
+-- !result
+select cast(column_0 as datetime) from (values ("2024-01-01 01:61:00")) as tmp;
+-- result:
+None
+-- !result
+select cast(column_0 as datetime) from (values ("2024-01-01 01:99:00")) as tmp;
+-- result:
+None
+-- !result
+select cast(column_0 as datetime) from (values ("2024-01-01 01:30:60")) as tmp;
+-- result:
+None
+-- !result
+select cast(column_0 as datetime) from (values ("2024-01-01 01:30:61")) as tmp;
+-- result:
+None
+-- !result
+select cast(column_0 as datetime) from (values ("2024-01-01 24:00:00")) as tmp;
+-- result:
+None
+-- !result
+select cast(column_0 as datetime) from (values ("2024-01-01 25:00:00")) as tmp;
+-- result:
+None
+-- !result
+select cast(column_0 as datetime) from (values ("2024-01-01 23:59:59")) as tmp;
+-- result:
+2024-01-01 23:59:59
+-- !result
+select cast(column_0 as datetime) from (values ("2024-01-01 00:00:00")) as tmp;
+-- result:
+2024-01-01 00:00:00
+-- !result
+select cast(column_0 as datetime) from (values ("2024-01-01 01:59:00")) as tmp;
+-- result:
+2024-01-01 01:59:00
+-- !result
+select cast(column_0 as datetime) from (values ("2024-01-01 01:30:59")) as tmp;
+-- result:
+2024-01-01 01:30:59
+-- !result
+select cast(column_0 as datetime) from (values ("2024-01-01T01:61:00")) as tmp;
+-- result:
+None
+-- !result
+select cast(column_0 as datetime) from (values ("2024-01-01T01:61:00Z")) as tmp;
+-- result:
+None
+-- !result
+select cast(column_0 as datetime) from (values ("2024-01-01T24:00:00")) as tmp;
+-- result:
+None
+-- !result

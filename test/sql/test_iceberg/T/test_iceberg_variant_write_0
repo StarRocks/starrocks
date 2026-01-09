@@ -1,0 +1,124 @@
+-- name: test_iceberg_variant_write_0
+
+-- iceberg catalog on hive does not variant yet.
+
+create external catalog iceberg_sql_test_${uuid0}
+PROPERTIES ("type"="iceberg", "iceberg.catalog.type"="hadoop", "iceberg.catalog.warehouse"="oss://${oss_bucket}/test_iceberg_variant_write_0/${uuid0}/warehouse/");
+
+shell: ossutil64 mkdir oss://${oss_bucket}/test_iceberg_variant_write_0/${uuid0}/warehouse/iceberg_variant > /dev/null
+
+use iceberg_sql_test_${uuid0}.iceberg_variant;
+
+CREATE TABLE variant_source (
+    case_id INT,
+    case_label STRING,
+    int_val INT,
+    string_val STRING,
+    float_val DOUBLE,
+    decimal_val DECIMAL(18, 4),
+    struct_val STRUCT<id INT, name STRING, counters MAP<STRING, INT>, status STRING>,
+    json_val STRING,
+    map_val MAP<STRING, STRING>,
+    array_val ARRAY<DOUBLE>,
+    variant_from_int VARIANT,
+    variant_from_string VARIANT,
+    variant_from_float VARIANT,
+    variant_from_decimal VARIANT,
+    variant_from_struct VARIANT,
+    variant_from_json VARIANT,
+    variant_from_map VARIANT,
+    variant_from_array VARIANT,
+    variant_mixed VARIANT,
+    deep_struct_val STRUCT<
+        profile STRUCT<
+            handle STRING,
+            contact STRUCT<
+                emails ARRAY<STRING>,
+                phones ARRAY<STRUCT<channel STRING, number STRING>>
+            >,
+            preferences MAP<STRING, STRUCT<enabled BOOLEAN, path STRING>>
+        >,
+        history ARRAY<STRUCT<ts STRING, status STRING, meta MAP<STRING, STRING>>>
+    >,
+    deep_map_val MAP<
+        STRING,
+        STRUCT<
+            limits MAP<STRING, INT>,
+            routes ARRAY<STRUCT<pattern STRING, methods ARRAY<STRING>>>,
+            metadata STRUCT<label STRING, path STRING>
+        >
+    >,
+    deep_array_val ARRAY<
+        STRUCT<
+            slot INT,
+            nodes ARRAY<
+                STRUCT<
+                    id STRING,
+                    status STRING,
+                    metrics MAP<STRING, DOUBLE>,
+                    transitions ARRAY<STRUCT<state STRING, at STRING>>
+                >
+            >
+        >
+    >,
+    deep_json_val STRING,
+    variant_deep_struct VARIANT,
+    variant_deep_map VARIANT,
+    variant_deep_array VARIANT,
+    variant_deep_json VARIANT
+)
+properties(
+  'format-version' = '3'
+);
+
+CREATE TABLE variant_write_test (
+    case_id INT,
+    variant_from_int VARIANT,
+    variant_from_string VARIANT,
+    variant_from_array VARIANT,
+    variant_mixed VARIANT
+)
+properties(
+  'format-version' = '3'
+);
+
+shell: ossutil64 cp ./sql/test_iceberg/data/variant_query_0/data/00000-0-968ed6e2-3543-431b-ba6c-b41704fb5cd7-0-00001.parquet oss://${oss_bucket}/test_iceberg_variant_write_0/${uuid0}/variant_input/data/00000-0-968ed6e2-3543-431b-ba6c-b41704fb5cd7-0-00001.parquet > /dev/null
+shell: ossutil64 cp ./sql/test_iceberg/data/variant_query_0/data/00001-1-968ed6e2-3543-431b-ba6c-b41704fb5cd7-0-00001.parquet oss://${oss_bucket}/test_iceberg_variant_write_0/${uuid0}/variant_input/data/00001-1-968ed6e2-3543-431b-ba6c-b41704fb5cd7-0-00001.parquet > /dev/null
+shell: ossutil64 cp ./sql/test_iceberg/data/variant_query_0/data/00002-2-968ed6e2-3543-431b-ba6c-b41704fb5cd7-0-00001.parquet oss://${oss_bucket}/test_iceberg_variant_write_0/${uuid0}/variant_input/data/00002-2-968ed6e2-3543-431b-ba6c-b41704fb5cd7-0-00001.parquet > /dev/null
+shell: ossutil64 cp ./sql/test_iceberg/data/variant_query_0/data/00003-3-968ed6e2-3543-431b-ba6c-b41704fb5cd7-0-00001.parquet oss://${oss_bucket}/test_iceberg_variant_write_0/${uuid0}/variant_input/data/00003-3-968ed6e2-3543-431b-ba6c-b41704fb5cd7-0-00001.parquet > /dev/null
+
+alter table variant_source execute add_files(location='oss://${oss_bucket}/test_iceberg_variant_write_0/${uuid0}/variant_input/data/00000-0-968ed6e2-3543-431b-ba6c-b41704fb5cd7-0-00001.parquet', file_format='parquet');
+alter table variant_source execute add_files(location='oss://${oss_bucket}/test_iceberg_variant_write_0/${uuid0}/variant_input/data/00001-1-968ed6e2-3543-431b-ba6c-b41704fb5cd7-0-00001.parquet', file_format='parquet');
+alter table variant_source execute add_files(location='oss://${oss_bucket}/test_iceberg_variant_write_0/${uuid0}/variant_input/data/00002-2-968ed6e2-3543-431b-ba6c-b41704fb5cd7-0-00001.parquet', file_format='parquet');
+alter table variant_source execute add_files(location='oss://${oss_bucket}/test_iceberg_variant_write_0/${uuid0}/variant_input/data/00003-3-968ed6e2-3543-431b-ba6c-b41704fb5cd7-0-00001.parquet', file_format='parquet');
+
+insert into variant_write_test
+select
+    case_id,
+    variant_from_int,
+    variant_from_string,
+    variant_from_array,
+    variant_mixed
+from variant_source;
+
+select 'variant iceberg write round trip' as test_name;
+
+select
+    case_id,
+    get_variant_int(variant_from_int, '$') as v_int,
+    get_variant_string(variant_from_string, '$') as v_str,
+    get_variant_double(variant_from_array, '$[0]') as v_arr0,
+    get_variant_double(variant_from_array, '$[2]') as v_arr2,
+    CAST(variant_query(variant_mixed, '$.thresholds.warn') AS INT) as warn_threshold,
+    CAST(variant_query(variant_mixed, '$.thresholds.critical') AS INT) as critical_threshold,
+    CAST(variant_query(variant_mixed, '$.tags[0]') AS STRING) as first_tag,
+    CAST(variant_query(variant_mixed, '$.tags[1]') AS STRING) as second_tag
+from variant_write_test
+where case_id in (1, 2, 4)
+order by case_id;
+
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_iceberg_variant_write_0/${uuid0}/ > /dev/null
+
+drop table variant_write_test force;
+drop table variant_source force;
+drop catalog iceberg_sql_test_${uuid0};

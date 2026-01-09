@@ -1033,12 +1033,12 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         } else {
             // compare schemaHash
             for (Map.Entry<Long, MaterializedIndexMeta> entry : olapTable.getIndexMetaIdToMeta().entrySet()) {
-                long indexId = entry.getKey();
-                if (!copiedTable.getIndexMetaIdToMeta().containsKey(indexId)) {
+                long indexMetaId = entry.getKey();
+                if (!copiedTable.getIndexMetaIdToMeta().containsKey(indexMetaId)) {
                     metaChanged = true;
                     break;
                 }
-                if (copiedTable.getIndexMetaIdToMeta().get(indexId).getSchemaHash() !=
+                if (copiedTable.getIndexMetaIdToMeta().get(indexMetaId).getSchemaHash() !=
                         entry.getValue().getSchemaHash()) {
                     metaChanged = true;
                     break;
@@ -1375,8 +1375,6 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                 TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
                 PhysicalPartition physicalPartition = partition.getDefaultPhysicalPartition();
                 for (MaterializedIndex index : physicalPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
-                    long indexId = index.getId();
-                    int schemaHash = olapTable.getSchemaHashByIndexMetaId(indexId);
                     TabletMeta tabletMeta = new TabletMeta(info.getDbId(), info.getTableId(), physicalPartition.getId(),
                             index.getId(), info.getDataProperty().getStorageMedium());
                     for (Tablet tablet : index.getTablets()) {
@@ -1600,9 +1598,10 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         // physical partitions in the same logical partition use the same shard_group_id,
         // so that the shards of this logical partition are more evenly distributed.
         long shardGroupId = partition.getDefaultPhysicalPartition().getBaseIndex().getShardGroupId();
-        for (long indexId : olapTable.getIndexMetaIdToMeta().keySet()) {
-            MaterializedIndex rollup = new MaterializedIndex(indexId, MaterializedIndex.IndexState.NORMAL, shardGroupId);
-            indexMap.put(indexId, rollup);
+        for (long indexMetaId : olapTable.getIndexMetaIdToMeta().keySet()) {
+            // initially, index id and index meta id are the same
+            MaterializedIndex rollup = new MaterializedIndex(indexMetaId, MaterializedIndex.IndexState.NORMAL, shardGroupId);
+            indexMap.put(indexMetaId, rollup);
         }
 
         long id = GlobalStateMgr.getCurrentState().getNextId();
@@ -1617,14 +1616,12 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         short replicationNum = partitionInfo.getReplicationNum(partitionId);
         TStorageMedium storageMedium = partitionInfo.getDataProperty(partitionId).getStorageMedium();
         for (Map.Entry<Long, MaterializedIndex> entry : indexMap.entrySet()) {
-            long indexId = entry.getKey();
             MaterializedIndex index = entry.getValue();
-            MaterializedIndexMeta indexMeta = olapTable.getIndexMetaIdToMeta().get(indexId);
             Set<Long> tabletIdSet = new HashSet<>();
 
             // create tablets
             TabletMeta tabletMeta =
-                    new TabletMeta(db.getId(), olapTable.getId(), id, indexId,
+                    new TabletMeta(db.getId(), olapTable.getId(), id, index.getId(),
                             storageMedium, olapTable.isCloudNativeTableOrMaterializedView());
 
             if (olapTable.isCloudNativeTableOrMaterializedView()) {
@@ -1634,7 +1631,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                 createOlapTablets(olapTable, index, Replica.ReplicaState.NORMAL, distributionInfo,
                         physicalPartition.getVisibleVersion(), replicationNum, tabletMeta, tabletIdSet);
             }
-            if (index.getId() != olapTable.getBaseIndexMetaId()) {
+            if (index.getMetaId() != olapTable.getBaseIndexMetaId()) {
                 // add rollup index to partition
                 physicalPartition.createRollupIndex(index);
             }
@@ -1738,8 +1735,6 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                 // add to inverted index
                 TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
                 for (MaterializedIndex index : physicalPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
-                    long indexId = index.getId();
-                    int schemaHash = olapTable.getSchemaHashByIndexMetaId(indexId);
                     TabletMeta tabletMeta = new TabletMeta(info.getDbId(), info.getTableId(),
                             physicalPartition.getId(), index.getId(), olapTable.getPartitionInfo().getDataProperty(
                             info.getPartitionId()).getStorageMedium(), false);
@@ -1773,15 +1768,16 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                               ComputeResource computeResource) throws DdlException {
         PartitionInfo partitionInfo = table.getPartitionInfo();
         Map<Long, MaterializedIndex> indexMap = new HashMap<>();
-        for (long indexId : table.getIndexMetaIdToMeta().keySet()) {
+        for (long indexMetaId : table.getIndexMetaIdToMeta().keySet()) {
             long shardGroupId = PhysicalPartition.INVALID_SHARD_GROUP_ID;
             if (table.isCloudNativeTableOrMaterializedView()) {
                 // create shard group
                 shardGroupId = GlobalStateMgr.getCurrentState().getStarOSAgent().
-                        createShardGroup(db.getId(), table.getId(), partitionId, indexId);
+                        createShardGroup(db.getId(), table.getId(), partitionId, indexMetaId);
             }
-            MaterializedIndex rollup = new MaterializedIndex(indexId, MaterializedIndex.IndexState.NORMAL, shardGroupId);
-            indexMap.put(indexId, rollup);
+            // initially, index id and index meta id are the same
+            MaterializedIndex rollup = new MaterializedIndex(indexMetaId, MaterializedIndex.IndexState.NORMAL, shardGroupId);
+            indexMap.put(indexMetaId, rollup);
         }
 
         Partition logicalPartition = new Partition(
@@ -1807,13 +1803,11 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         short replicationNum = partitionInfo.getReplicationNum(partitionId);
         TStorageMedium storageMedium = partitionInfo.getDataProperty(partitionId).getStorageMedium();
         for (Map.Entry<Long, MaterializedIndex> entry : indexMap.entrySet()) {
-            long indexId = entry.getKey();
             MaterializedIndex index = entry.getValue();
-            MaterializedIndexMeta indexMeta = table.getIndexMetaIdToMeta().get(indexId);
 
             // create tablets
             TabletMeta tabletMeta =
-                    new TabletMeta(db.getId(), table.getId(), physicalPartitionId, indexId,
+                    new TabletMeta(db.getId(), table.getId(), physicalPartitionId, index.getId(),
                             storageMedium, table.isCloudNativeTableOrMaterializedView());
 
             if (table.isCloudNativeTableOrMaterializedView()) {
@@ -1823,7 +1817,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                 createOlapTablets(table, index, Replica.ReplicaState.NORMAL, distributionInfo,
                         physicalPartition.getVisibleVersion(), replicationNum, tabletMeta, tabletIdSet);
             }
-            if (index.getId() != table.getBaseIndexMetaId()) {
+            if (index.getMetaId() != table.getBaseIndexMetaId()) {
                 // add rollup index to partition
                 physicalPartition.createRollupIndex(index);
             } else {
@@ -2046,10 +2040,8 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                             partition.getParentId()).getStorageMedium();
                     for (MaterializedIndex mIndex : partition
                             .getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
-                        long indexId = mIndex.getId();
-                        int schemaHash = olapTable.getSchemaHashByIndexMetaId(indexId);
                         TabletMeta tabletMeta = new TabletMeta(dbId, tableId, physicalPartitionId,
-                                indexId, medium, table.isCloudNativeTableOrMaterializedView());
+                                mIndex.getId(), medium, table.isCloudNativeTableOrMaterializedView());
                         for (Tablet tablet : mIndex.getTablets()) {
                             long tabletId = tablet.getId();
                             invertedIndex.addTablet(tabletId, tabletMeta);
@@ -2215,7 +2207,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                 }
 
                 // create replicas
-                int schemaHash = table.getSchemaHashByIndexMetaId(index.getId());
+                int schemaHash = table.getSchemaHashByIndexMetaId(index.getMetaId());
                 for (long backendId : chosenBackendIds) {
                     long replicaId = getNextId();
                     Replica replica = new Replica(replicaId, backendId, replicaState, version, schemaHash);
@@ -2408,7 +2400,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             // for compatibility
             int schemaHash = info.getSchemaHash();
             if (schemaHash == -1) {
-                schemaHash = olapTable.getSchemaHashByIndexMetaId(info.getIndexId());
+                schemaHash = olapTable.getSchemaHashByIndexMetaId(materializedIndex.getMetaId());
             }
 
             Replica replica = new Replica(info.getReplicaId(), info.getBackendId(), info.getVersion(),
@@ -3103,8 +3095,8 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             materializedView.setPartitionRefTableExprs(Lists.newArrayList(stmt.getPartitionRefTableExpr()));
         }
         // set base index id
-        long baseIndexId = getNextId();
-        materializedView.setBaseIndexMetaId(baseIndexId);
+        long baseIndexMetaId = getNextId();
+        materializedView.setBaseIndexMetaId(baseIndexMetaId);
         // set query output indexes
         materializedView.setQueryOutputIndices(stmt.getQueryOutputIndices());
         // set base index meta
@@ -3112,7 +3104,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         int schemaHash = Util.schemaHash(schemaVersion, baseSchema, null, 0d);
         short shortKeyColumnCount = GlobalStateMgr.calcShortKeyColumnCount(baseSchema, null);
         TStorageType baseIndexStorageType = TStorageType.COLUMN;
-        materializedView.setIndexMeta(baseIndexId, mvName, baseSchema, schemaVersion, schemaHash,
+        materializedView.setIndexMeta(baseIndexMetaId, mvName, baseSchema, schemaVersion, schemaHash,
                 shortKeyColumnCount, baseIndexStorageType, stmt.getKeysType());
 
         // validate hint
@@ -3618,23 +3610,22 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             throw new DdlException("Same rollup name");
         }
 
-        Map<String, Long> indexNameToIdMap = table.getIndexNameToMetaId();
-        if (indexNameToIdMap.get(rollupName) == null) {
+        Map<String, Long> indexNameToMetaId = table.getIndexNameToMetaId();
+        if (indexNameToMetaId.get(rollupName) == null) {
             throw new DdlException("Rollup index[" + rollupName + "] does not exists");
         }
 
         // check if name is already used
-        if (indexNameToIdMap.get(newRollupName) != null) {
+        if (indexNameToMetaId.get(newRollupName) != null) {
             throw new DdlException("Rollup name[" + newRollupName + "] is already used");
         }
 
-
-        long indexId = indexNameToIdMap.get(rollupName);
+        long indexMetaId = indexNameToMetaId.get(rollupName);
         // log
-        TableInfo tableInfo = TableInfo.createForRollupRename(db.getId(), table.getId(), indexId, newRollupName);
+        TableInfo tableInfo = TableInfo.createForRollupRename(db.getId(), table.getId(), indexMetaId, newRollupName);
         GlobalStateMgr.getCurrentState().getEditLog().logRollupRename(tableInfo, wal -> {
-            indexNameToIdMap.remove(rollupName);
-            indexNameToIdMap.put(newRollupName, indexId);
+            indexNameToMetaId.remove(rollupName);
+            indexNameToMetaId.put(newRollupName, indexMetaId);
         });
         LOG.info("rename rollup[{}] to {}", rollupName, newRollupName);
     }
@@ -3642,7 +3633,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
     public void replayRenameRollup(TableInfo tableInfo) {
         long dbId = tableInfo.getDbId();
         long tableId = tableInfo.getTableId();
-        long indexId = tableInfo.getIndexId();
+        long indexMetaId = tableInfo.getIndexMetaId();
         String newRollupName = tableInfo.getNewRollupName();
 
         Database db = getDb(dbId);
@@ -3650,10 +3641,10 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         locker.lockDatabase(db.getId(), LockType.WRITE);
         try {
             OlapTable table = (OlapTable) getTable(db.getId(), tableId);
-            String rollupName = table.getIndexNameByMetaId(indexId);
+            String rollupName = table.getIndexNameByMetaId(indexMetaId);
             Map<String, Long> indexNameToIdMap = table.getIndexNameToMetaId();
             indexNameToIdMap.remove(rollupName);
-            indexNameToIdMap.put(newRollupName, indexId);
+            indexNameToIdMap.put(newRollupName, indexMetaId);
 
             LOG.info("replay rename rollup[{}] to {}", rollupName, newRollupName);
         } finally {
@@ -4640,14 +4631,14 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                 metaChanged = true;
             } else {
                 // compare schemaHash
-                Map<Long, Integer> copiedIndexIdToSchemaHash = copiedTbl.getIndexIdToSchemaHash();
-                for (Map.Entry<Long, Integer> entry : olapTable.getIndexIdToSchemaHash().entrySet()) {
-                    long indexId = entry.getKey();
-                    if (!copiedIndexIdToSchemaHash.containsKey(indexId)) {
+                Map<Long, Integer> copiedIndexMetaIdToSchemaHash = copiedTbl.getIndexMetaIdToSchemaHash();
+                for (Map.Entry<Long, Integer> entry : olapTable.getIndexMetaIdToSchemaHash().entrySet()) {
+                    long indexMetaId = entry.getKey();
+                    if (!copiedIndexMetaIdToSchemaHash.containsKey(indexMetaId)) {
                         metaChanged = true;
                         break;
                     }
-                    if (!copiedIndexIdToSchemaHash.get(indexId).equals(entry.getValue())) {
+                    if (!copiedIndexMetaIdToSchemaHash.get(indexMetaId).equals(entry.getValue())) {
                         metaChanged = true;
                         break;
                     }
@@ -4763,10 +4754,8 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                     for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
                         for (MaterializedIndex mIndex : physicalPartition.getMaterializedIndices(
                                 MaterializedIndex.IndexExtState.ALL)) {
-                            long indexId = mIndex.getId();
-                            int schemaHash = olapTable.getSchemaHashByIndexMetaId(indexId);
                             TabletMeta tabletMeta = new TabletMeta(db.getId(), olapTable.getId(),
-                                    physicalPartition.getId(), indexId, medium,
+                                    physicalPartition.getId(), mIndex.getId(), medium,
                                     olapTable.isCloudNativeTableOrMaterializedView());
                             for (Tablet tablet : mIndex.getTablets()) {
                                 long tabletId = tablet.getId();

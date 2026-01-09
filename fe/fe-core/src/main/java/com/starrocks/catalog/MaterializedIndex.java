@@ -219,11 +219,25 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
         }
     }
 
+    public Tablet removeTablet(long tabletId) {
+        Tablet tablet = idToTablets.remove(tabletId);
+        if (tablet != null) {
+            tablets.remove(tablet);
+            GlobalStateMgr.getCurrentState().getTabletInvertedIndex().deleteTablet(tabletId);
+        }
+        return tablet;
+    }
+
     public void setIdForRestore(long idxId) {
         this.id = idxId;
     }
 
     public long getId() {
+        return id;
+    }
+
+    // TODO(wyb): fix meta id
+    public long getMetaId() {
         return id;
     }
 

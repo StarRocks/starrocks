@@ -686,12 +686,12 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         this(indexMeta.getIndexMetaId(), db.getId(), mvName, indexMeta.getSchema(), indexMeta.getKeysType(),
                 partitionInfo, distributionInfo, refreshScheme);
         Preconditions.checkState(baseTable.getIndexMetaIdByName(mvName) != null);
-        long indexId = indexMeta.getIndexMetaId();
+        long indexMetaId = indexMeta.getIndexMetaId();
         this.state = baseTable.state;
-        this.baseIndexMetaId = indexMeta.getIndexMetaId();
+        this.baseIndexMetaId = indexMetaId;
 
-        this.indexNameToMetaId.put(baseTable.getIndexNameByMetaId(indexId), indexId);
-        this.indexMetaIdToMeta.put(indexId, indexMeta);
+        this.indexNameToMetaId.put(baseTable.getIndexNameByMetaId(indexMetaId), indexMetaId);
+        this.indexMetaIdToMeta.put(indexMetaId, indexMeta);
 
         this.baseTableInfos = Lists.newArrayList();
         this.baseTableInfos.add(

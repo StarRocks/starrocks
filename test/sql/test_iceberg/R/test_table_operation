@@ -33,6 +33,9 @@ insert into iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} selec
 insert into iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} version as of b1 select 5;
 -- result:
 -- !result
+refresh external table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0};
+-- result:
+-- !result
 set @b1_snapshot_id = (select snapshot_id  from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0}$refs where name='b1');
 -- result:
 -- !result
@@ -71,6 +74,9 @@ select * from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} ord
 6
 -- !result
 insert into iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} version as of b2 select 7;
+-- result:
+-- !result
+refresh external table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0};
 -- result:
 -- !result
 set @b2_snapshot_id = (select snapshot_id  from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0}$refs where name='b2');

@@ -24,12 +24,16 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.TableName;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.connector.iceberg.IcebergMetadata;
+import com.starrocks.connector.iceberg.ScalarOperatorToIcebergExpr;
 import com.starrocks.load.Load;
 import com.starrocks.planner.DataSink;
 import com.starrocks.planner.DescriptorTable;
 import com.starrocks.planner.IcebergDeleteSink;
+import com.starrocks.planner.IcebergScanNode;
 import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.PlanFragment;
+import com.starrocks.planner.PlanNode;
 import com.starrocks.planner.SlotDescriptor;
 import com.starrocks.planner.TupleDescriptor;
 import com.starrocks.qe.ConnectContext;
@@ -50,13 +54,16 @@ import com.starrocks.sql.optimizer.base.DistributionSpec;
 import com.starrocks.sql.optimizer.base.HashDistributionDesc;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanFragmentBuilder;
 import com.starrocks.thrift.TResultSinkType;
 import com.starrocks.type.IntegerType;
+import org.apache.iceberg.Schema;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.function.Consumer;
 
@@ -237,6 +244,16 @@ public class DeletePlanner {
                 session.getSessionVariable()
         );
         dataSink.init();
+        // Create IcebergSinkExtra for DELETE operations
+        IcebergMetadata.IcebergSinkExtra icebergSinkExtra = new IcebergMetadata.IcebergSinkExtra();
+        // Build Iceberg filter expression from scan node for conflict detection
+        org.apache.iceberg.expressions.Expression filterExpr = buildIcebergFilterExpr(execPlan);
+        if (filterExpr != null) {
+            icebergSinkExtra.setConflictDetectionFilter(filterExpr);
+        }
+        // Set the sink extra info to be used during commit
+        dataSink.setSinkExtraInfo(icebergSinkExtra);
+
         execPlan.getFragments().get(0).setSink(dataSink);
     }
 
@@ -280,8 +297,9 @@ public class DeletePlanner {
     /**
      * Common pipeline configuration logic for both OLAP and Iceberg sinks.
      * Extracts the shared configuration patterns to reduce duplication.
-     * @param sinkFragment The sink fragment to configure
-     * @param session The connect context
+     *
+     * @param sinkFragment    The sink fragment to configure
+     * @param session         The connect context
      * @param setSinkTypeFlag Consumer to set the sink type flag on the fragment
      */
     private void configureCommonSinkPipeline(
@@ -345,5 +363,36 @@ public class DeletePlanner {
                 DistributionSpec.createHashDistributionSpec(distributionDesc));
 
         return new PhysicalPropertySet(distributionProperty);
+    }
+
+    /**
+     * Build Iceberg filter expression from scan node for conflict detection
+     */
+    private org.apache.iceberg.expressions.Expression buildIcebergFilterExpr(
+            ExecPlan execPlan) {
+        if (execPlan == null || execPlan.getScanNodes() == null) {
+            return null;
+        }
+
+        // Find IcebergScanNode and get its predicate
+        ScalarOperator predicate = null;
+        Schema nativeSchema = null;
+
+        for (PlanNode node : execPlan.getScanNodes()) {
+            if (node instanceof IcebergScanNode scanNode) {
+                predicate = scanNode.getIcebergJobPlanningPredicate();
+                nativeSchema = scanNode.getIcebergTable().getNativeTable().schema();
+                break;
+            }
+        }
+
+        if (predicate == null || nativeSchema == null) {
+            return null;
+        }
+
+        // Convert ScalarOperator to Iceberg Expression
+        ScalarOperatorToIcebergExpr.IcebergContext icebergContext =
+                new ScalarOperatorToIcebergExpr.IcebergContext(nativeSchema.asStruct());
+        return new ScalarOperatorToIcebergExpr().convert(Collections.singletonList(predicate), icebergContext);
     }
 }

@@ -522,12 +522,12 @@ std::pair<bool, bool> date::from_string_to_datetime(const char* date_str, size_t
         // Validate time ranges
         bool time_valid = (hour <= 23 && minute <= 59 && second <= 59);
 
-        // If time parsing failed, return date-only
+        // If time validation failed, fall back to generic parser
         if (!time_valid) {
-            return {true, false};
+            return {from_string(date_str, len, &year, &month, &day, &hour, &minute, &second, &microsecond), false};
         }
     } else {
-        // If validation failed, return date-only
+        // If format validation failed, fall back to generic parser
         return {from_string(date_str, len, &year, &month, &day, &hour, &minute, &second, &microsecond), false};
     }
 
