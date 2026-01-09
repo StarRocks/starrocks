@@ -66,7 +66,7 @@ public class MultiWarehouseExtension implements StarRocksExtension {
 
 ```
 
-After building the extension, place the ${your_extension_name}-ext.jar file into the Config.ext_dir directory (default is FE/lib), and then restart the FE.
+After building the extension, place the `${your_extension_name}-ext.jar` file into the Config.ext_dir directory (default is FE/lib), and then restart the FE.
 
 Example FE log after startup:
 
