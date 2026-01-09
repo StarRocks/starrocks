@@ -86,22 +86,6 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
-# enable jemalloc
-# Set JEMALLOC_CONF environment variable if not already set
-if [[ -z "$JEMALLOC_CONF" ]]; then
-    # JEMALLOC enable DEBUG 
-    if [ ${RUN_JEMALLOC_DEBUG} -eq 1 ] ; then
-        export LD_LIBRARY_PATH=$STARROCKS_HOME/lib/debug:$STARROCKS_HOME/lib:$LD_LIBRARY_PATH
-        export JEMALLOC_CONF="junk:true,tcache:false,prof:true"
-    elif [ ${RUN_CHECK_MEM_LEAK} -eq 1 ] ; then
-        export LD_LIBRARY_PATH=$STARROCKS_HOME/lib:$LD_LIBRARY_PATH
-        export JEMALLOC_CONF="percpu_arena:percpu,oversize_threshold:0,muzzy_decay_ms:5000,dirty_decay_ms:5000,metadata_thp:auto,background_thread:true,prof:true,prof_active:true,prof_leak:true,lg_prof_sample:0,prof_final:true"
-    else
-        export LD_LIBRARY_PATH=$STARROCKS_HOME/lib:$LD_LIBRARY_PATH
-        export JEMALLOC_CONF="percpu_arena:percpu,oversize_threshold:0,muzzy_decay_ms:5000,dirty_decay_ms:5000,metadata_thp:auto,background_thread:true,prof:true,prof_active:false"
-    fi
-fi
-
 # enable coredump when BE build with ASAN
 export ASAN_OPTIONS="abort_on_error=1:disable_coredump=0:unmap_shadow_on_exit=1:detect_stack_use_after_return=1"
 export LSAN_OPTIONS=suppressions=${STARROCKS_HOME}/conf/asan_suppressions.conf
@@ -160,6 +144,24 @@ export CLASSPATH=${STARROCKS_HOME}/lib/jni-packages/starrocks-hadoop-ext.jar:$ST
 
 # ================= native section =====================
 export LD_LIBRARY_PATH=$STARROCKS_HOME/lib/hadoop/native:$LD_LIBRARY_PATH
+
+
+# ================= jemalloc section =====================
+# Enable jemalloc and set JEMALLOC_CONF environment variable if not already set
+# Note: This must come after other LD_LIBRARY_PATH configuration to ensure jemalloc paths take precedence
+if [[ -z "$JEMALLOC_CONF" ]]; then
+    # JEMALLOC enable DEBUG 
+    if [ ${RUN_JEMALLOC_DEBUG} -eq 1 ] ; then
+        export LD_LIBRARY_PATH=$STARROCKS_HOME/lib/debug:$STARROCKS_HOME/lib:$LD_LIBRARY_PATH
+        export JEMALLOC_CONF="junk:true,tcache:false,prof:true"
+    elif [ ${RUN_CHECK_MEM_LEAK} -eq 1 ] ; then
+        export LD_LIBRARY_PATH=$STARROCKS_HOME/lib:$LD_LIBRARY_PATH
+        export JEMALLOC_CONF="percpu_arena:percpu,oversize_threshold:0,muzzy_decay_ms:5000,dirty_decay_ms:5000,metadata_thp:auto,background_thread:true,prof:true,prof_active:true,prof_leak:true,lg_prof_sample:0,prof_final:true"
+    else
+        export LD_LIBRARY_PATH=$STARROCKS_HOME/lib:$LD_LIBRARY_PATH
+        export JEMALLOC_CONF="percpu_arena:percpu,oversize_threshold:0,muzzy_decay_ms:5000,dirty_decay_ms:5000,metadata_thp:auto,background_thread:true,prof:true,prof_active:false"
+    fi
+fi
 
 
 # ====== handle meta_tool sub command before any modification change
