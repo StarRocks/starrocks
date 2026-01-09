@@ -83,6 +83,21 @@ SELECT
 FROM iceberg_catalog.db.table_with_variants;
 ```
 
+### Casting JSON to VARIANT
+
+StarRocks supports casting JSON values to VARIANT. If your input is a STRING, convert it to JSON first.
+
+```SQL
+SELECT
+    CAST(parse_json('{"id": 1, "flags": {"active": true}, "scores": [1.5, null]}') AS VARIANT) AS variant_value;
+```
+
+```SQL
+SELECT
+    CAST(json_col AS VARIANT) AS variant_value
+FROM db.table_with_json;
+```
+
 ### Casting VARIANT Data to SQL Types
 
 You can use the CAST function to convert VARIANT data to standard SQL types:
@@ -158,4 +173,5 @@ When data is read from Parquet files with variant encoding, the following type c
 - VARIANT is supported for reading data from Iceberg tables in Parquet format with variant encoding, and for writing Parquet files using StarRocks file writers (unshredded variant encoding).
 - The size of a VARIANT value is limited to 16 MB.
 - Currently only unshredded variant values are supported for both read and write.
+- Currently, VARIANT can only be created by casting from JSON values (for example, `CAST(parse_json(...) AS VARIANT)`).
 - The maximum depth of nested structures depends on the underlying Parquet file structure.

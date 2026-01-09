@@ -83,6 +83,21 @@ SELECT
 FROM iceberg_catalog.db.table_with_variants;
 ```
 
+### 将 JSON 转换为 VARIANT
+
+StarRocks 支持将 JSON 值转换为 VARIANT。如果输入是 STRING，请先转换为 JSON。
+
+```SQL
+SELECT
+    CAST(parse_json('{"id": 1, "flags": {"active": true}, "scores": [1.5, null]}') AS VARIANT) AS variant_value;
+```
+
+```SQL
+SELECT
+    CAST(json_col AS VARIANT) AS variant_value
+FROM db.table_with_json;
+```
+
 ### 将 VARIANT 数据转换为 SQL 类型
 
 您可以使用 CAST 函数将 VARIANT 数据转换为标准 SQL 类型:
@@ -158,4 +173,5 @@ $.config[\"key\"]        -- Map 风格访问
 - VARIANT 类型支持从带有 variant 编码的 Parquet 格式 Iceberg 表中读取数据，并支持通过 StarRocks 文件写入器写出 Parquet 文件（未分片的 variant 编码）。
 - VARIANT 值的大小限制为 16 MB。
 - 当前仅支持读写未分片的 variant 值。
+- 目前只能通过 JSON 值转换生成 VARIANT（例如 `CAST(parse_json(...) AS VARIANT)`）。
 - 嵌套结构的最大深度取决于底层 Parquet 文件结构。
