@@ -65,7 +65,7 @@ import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.lake.snapshot.ClusterSnapshotJobScheduler;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.OperationType;
-import com.starrocks.persist.TableAddOrDropColumnsInfo;
+import com.starrocks.persist.TableColumnAlterInfo;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockReaderV2;
 import com.starrocks.server.GlobalStateMgr;
@@ -586,9 +586,9 @@ public class SchemaChangeJobV2Test extends DDLTestBase {
         try {
             // restoredHandler can restore state to restoredMetastore
             GlobalStateMgr.getCurrentState().setLocalMetastore(restoredMetastore);
-            TableAddOrDropColumnsInfo alterInfo = (TableAddOrDropColumnsInfo)
-                    UtFrameUtils.PseudoJournalReplayer.replayNextJournal(OperationType.OP_MODIFY_TABLE_ADD_OR_DROP_COLUMNS);
-            restoredHandler.replayModifyTableAddOrDrop(alterInfo);
+            TableColumnAlterInfo alterInfo = (TableColumnAlterInfo)
+                    UtFrameUtils.PseudoJournalReplayer.replayNextJournal(OperationType.OP_FAST_ALTER_TABLE_COLUMNS);
+            restoredHandler.replayFastSchemaEvolutionMetaChange(alterInfo);
         } finally {
             GlobalStateMgr.getCurrentState().setLocalMetastore(originalMetastore);
         }

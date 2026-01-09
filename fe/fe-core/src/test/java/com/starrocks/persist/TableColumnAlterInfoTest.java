@@ -19,10 +19,10 @@ import org.junit.jupiter.api.Test;
 
 import java.util.Collections;
 
-public class TableAddOrDropColumnsInfoTest {
+public class TableColumnAlterInfoTest {
     @Test
     public void test() {
-        TableAddOrDropColumnsInfo info = new TableAddOrDropColumnsInfo(1, 1,
+        TableColumnAlterInfo info = new TableColumnAlterInfo(1, 1,
                 Collections.emptyMap(), Collections.emptyList(), 0, 1, Collections.emptyMap());
 
         Assertions.assertEquals(1, info.getDbId());
@@ -33,7 +33,7 @@ public class TableAddOrDropColumnsInfoTest {
         Assertions.assertEquals(1, info.getTxnId());
         Assertions.assertEquals(0, info.getIndexToNewSchemaId().size());
 
-        TableAddOrDropColumnsInfo info2 = new TableAddOrDropColumnsInfo(1, 1,
+        TableColumnAlterInfo info2 = new TableColumnAlterInfo(1, 1,
                 Collections.emptyMap(), Collections.emptyList(), 0, 1, Collections.emptyMap());
 
         Assertions.assertEquals(info.hashCode(), info2.hashCode());
