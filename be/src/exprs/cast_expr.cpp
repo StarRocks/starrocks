@@ -1621,12 +1621,12 @@ private:
     }
 
 #define CASE_TO_VARIANT(FROM_TYPE, ALLOWTHROWEXCEPTION)                          \
-    case FROM_TYPE: {                                                           \
-        if (ALLOWTHROWEXCEPTION) {                                              \
-            return new VectorizedCastExpr<FROM_TYPE, TYPE_VARIANT, true>(node); \
-        } else {                                                                \
-            return new VectorizedCastExpr<FROM_TYPE, TYPE_VARIANT, false>(node);\
-        }                                                                       \
+    case FROM_TYPE: {                                                            \
+        if (ALLOWTHROWEXCEPTION) {                                               \
+            return new VectorizedCastExpr<FROM_TYPE, TYPE_VARIANT, true>(node);  \
+        } else {                                                                 \
+            return new VectorizedCastExpr<FROM_TYPE, TYPE_VARIANT, false>(node); \
+        }                                                                        \
     }
 
 #define CASE_FROM_VARIANT_TO(TO_TYPE, ALLOWTHROWEXCEPTION)                     \
