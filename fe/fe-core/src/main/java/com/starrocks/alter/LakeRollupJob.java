@@ -279,6 +279,8 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
             span.addEvent("setWaitingTxn");
         }
 
+        // can't add addRollIndexToCatalog into the applier, because of the nextTxnId check.
+        // But addRollIndexToCatalog is addRollIndexToCatalog, so it's ok to readd if Leader transferred.
         persistStateChange(this, JobState.WAITING_TXN);
 
         LOG.info("transfer roll up job {} state to {}, watershed txn_id: {}", jobId, this.jobState,
@@ -397,10 +399,10 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
             }
             this.finishedTimeMs = System.currentTimeMillis();
 
-            persistStateChange(this, JobState.FINISHED_REWRITING);
-
-            // NOTE: !!! below this point, this roll up job must success unless the database or table been dropped. !!!
-            updateNextVersion(table);
+            persistStateChange(this, JobState.FINISHED_REWRITING, () -> {
+                // NOTE: !!! below this point, this roll up job must success unless the database or table been dropped. !!!
+                updateNextVersion(table);
+            });
         }
 
         if (span != null) {
@@ -429,14 +431,13 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
                 return;
             }
 
-            visualiseRollupIndex(table);
-
             this.finishedTimeMs = System.currentTimeMillis();
             // There is no need to set the table state to normal,
             // because it will be set in MaterializedViewHandler `onJobDone`
+
+            persistStateChange(this, JobState.FINISHED, () -> visualiseRollupIndex(table));
         }
 
-        persistStateChange(this, JobState.FINISHED);
         if (span != null) {
             span.end();
         }
@@ -458,21 +459,21 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
             AgentTaskQueue.removeBatchTask(rollupBatchTask, TTaskType.ALTER);
         }
 
-        try (WriteLockedDatabase db = getWriteLockedDatabase(dbId)) {
-            OlapTable table = (db != null) ? db.getTable(tableId) : null;
-            if (table != null) {
-                removeRollupIndex(table);
-            }
-        }
-
         this.errMsg = errMsg;
         this.finishedTimeMs = System.currentTimeMillis();
+        persistStateChange(this, JobState.CANCELLED, () -> {
+            try (WriteLockedDatabase db = getWriteLockedDatabase(dbId)) {
+                OlapTable table = (db != null) ? db.getTable(tableId) : null;
+                if (table != null) {
+                    removeRollupIndex(table);
+                }
+            }
+        });
+
         if (span != null) {
             span.setStatus(StatusCode.ERROR, errMsg);
             span.end();
         }
-
-        persistStateChange(this, JobState.CANCELLED);
         LOG.info("Lake Rollup job canceled, jobId: {}, error: {}", jobId, errMsg);
 
         return true;

@@ -57,6 +57,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import javax.validation.constraints.NotNull;
 
 public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
@@ -187,10 +188,11 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
 
             this.finishedTimeMs = System.currentTimeMillis();
 
-            persistStateChange(this, JobState.FINISHED_REWRITING);
+            persistStateChange(this, JobState.FINISHED_REWRITING, () -> {
+                // NOTE: !!! below this point, this update meta job must success unless the database or table been dropped. !!!
+                updateNextVersion(table);
+            });
 
-            // NOTE: !!! below this point, this update meta job must success unless the database or table been dropped. !!!
-            updateNextVersion(table);
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE);
         }
@@ -227,13 +229,13 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
         Locker locker = new Locker();
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE);
         try {
-            updateCatalog(db, table, false);
             this.finishedTimeMs = System.currentTimeMillis();
-            persistStateChange(this, JobState.FINISHED);
-            // set visible version
-            updateVisibleVersion(table);
-            table.setState(OlapTable.OlapTableState.NORMAL);
-
+            persistStateChange(this, JobState.FINISHED, () -> {
+                updateCatalog(db, table, false);
+                // set visible version
+                updateVisibleVersion(table);
+                table.setState(OlapTable.OlapTableState.NORMAL);
+            });
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE);
         }
@@ -463,6 +465,21 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
             return false;
         }
 
+        if (span != null) {
+            span.setStatus(StatusCode.ERROR, errMsg);
+            span.end();
+        }
+        this.errMsg = errMsg;
+        this.finishedTimeMs = System.currentTimeMillis();
+        AtomicBoolean ret = new AtomicBoolean();
+        persistStateChange(this, JobState.CANCELLED, () -> {
+            // set table state to NORMAL
+            ret.set(restoreTableState());
+        });
+        return ret.get();
+    }
+
+    private boolean restoreTableState() {
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         if (db != null) {
             LakeTable table = (LakeTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
@@ -480,13 +497,6 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
                 }
             }
         }
-        if (span != null) {
-            span.setStatus(StatusCode.ERROR, errMsg);
-            span.end();
-        }
-        this.errMsg = errMsg;
-        this.finishedTimeMs = System.currentTimeMillis();
-        persistStateChange(this, JobState.CANCELLED);
         return true;
     }
 

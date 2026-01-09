@@ -272,7 +272,6 @@ public class MergePartitionJob extends AlterJobV2 implements GsonPostProcessable
 
             List<String> partitionValues = Lists.newArrayList();
             partitionValues.add(range.lowerEndpoint().getKeys().get(0).getStringValue());
-            String targetPartitionKey = partitionValues.get(0);
 
             Partition sourcePartition = olapTable.getPartition(sourcePartitionId);
             if (sourcePartition == null) {
@@ -396,6 +395,8 @@ public class MergePartitionJob extends AlterJobV2 implements GsonPostProcessable
         span.addEvent("setWaitingTxn");
 
         // write edit log
+        // AddPartitions log will be written when creating temp partitions,
+        // so do not need to add createMergedTempPartitionsFromPartitions into applier.
         persistStateChange(this, JobState.WAITING_TXN);
         LOG.info("transfer merge partition job {} state to {}, watershed txn_id: {}", jobId, this.jobState, watershedTxnId);
     }
@@ -615,6 +616,7 @@ public class MergePartitionJob extends AlterJobV2 implements GsonPostProcessable
         this.progress = 100;
         this.finishedTimeMs = System.currentTimeMillis();
 
+        // Replace partition log will be written in onFinished function, so do not need to add onFinished into applier.
         persistStateChange(this, JobState.FINISHED);
         LOG.info("optimize job finished: {}", jobId);
         this.span.end();
@@ -772,12 +774,11 @@ public class MergePartitionJob extends AlterJobV2 implements GsonPostProcessable
         if (jobState.isFinalState()) {
             return false;
         }
-        cancelInternal();
-
         this.errMsg = errMsg;
         this.finishedTimeMs = System.currentTimeMillis();
+        persistStateChange(this, JobState.CANCELLED, this::cancelInternal);
+
         LOG.info("cancel {} job {}, err: {}", this.type, jobId, errMsg);
-        persistStateChange(this, JobState.CANCELLED);
         span.setStatus(StatusCode.ERROR, errMsg);
         span.end();
         return true;

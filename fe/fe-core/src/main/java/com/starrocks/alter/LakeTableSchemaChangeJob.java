@@ -476,6 +476,8 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
             span.addEvent("setWaitingTxn");
         }
 
+        // can't add addRollIndexToCatalog into the applier, because of the nextTxnId check.
+        // But addRollIndexToCatalog is addRollIndexToCatalog, so it's ok to readd if Leader transferred.
         persistStateChange(this, JobState.WAITING_TXN);
 
         LOG.info("transfer schema change job {} state to {}, watershed txn_id: {}", jobId, this.jobState,
@@ -703,10 +705,10 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
             }
             this.finishedTimeMs = System.currentTimeMillis();
 
-            persistStateChange(this, JobState.FINISHED_REWRITING);
-
-            // NOTE: !!! below this point, this schema change job must success unless the database or table been dropped. !!!
-            updateNextVersion(table);
+            persistStateChange(this, JobState.FINISHED_REWRITING, () -> {
+                // NOTE: !!! below this point, this schema change job must success unless the database or table been dropped. !!!
+                updateNextVersion(table);
+            });
         }
 
         if (span != null) {
@@ -730,8 +732,6 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
         }
 
         // Replace the current index with shadow index.
-        Set<String> modifiedColumns;
-        List<MaterializedIndex> droppedIndexes;
         try (WriteLockedDatabase db = getWriteLockedDatabase(dbId)) {
             OlapTable table = (db != null) ? db.getTable(tableId) : null;
             if (table == null) {
@@ -740,15 +740,16 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
             }
             // collect modified columns for inactivating mv
             // Note: should collect before visualiseShadowIndex
-            modifiedColumns = collectModifiedColumnsForRelatedMVs(table);
-            // Below this point, all query and load jobs will use the new schema.
-            droppedIndexes = visualiseShadowIndex(table);
-
-            // inactivate related mv
-            inactiveRelatedMv(modifiedColumns, table);
-            table.onReload();
+            Set<String> modifiedColumns = collectModifiedColumnsForRelatedMVs(table);
             this.finishedTimeMs = System.currentTimeMillis();
-            persistStateChange(this, JobState.FINISHED);
+
+            persistStateChange(this, JobState.FINISHED, () -> {
+                // Below this point, all query and load jobs will use the new schema.
+                visualiseShadowIndex(table);
+                // inactivate related mv
+                inactiveRelatedMv(modifiedColumns, table);
+                table.onReload();
+            });
         }
 
         if (span != null) {
@@ -1129,21 +1130,23 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
             AgentTaskQueue.removeBatchTask(schemaChangeBatchTask, TTaskType.ALTER);
         }
 
-        try (WriteLockedDatabase db = getWriteLockedDatabase(dbId)) {
-            OlapTable table = (db != null) ? db.getTable(tableId) : null;
-            if (table != null) {
-                removeShadowIndex(table);
-            }
-        }
-
         this.errMsg = errMsg;
         this.finishedTimeMs = System.currentTimeMillis();
+
+        persistStateChange(this, JobState.CANCELLED, () -> {
+            try (WriteLockedDatabase db = getWriteLockedDatabase(dbId)) {
+                OlapTable table = (db != null) ? db.getTable(tableId) : null;
+                if (table != null) {
+                    removeShadowIndex(table);
+                }
+            }
+        });
+
         if (span != null) {
             span.setStatus(StatusCode.ERROR, errMsg);
             span.end();
         }
 
-        persistStateChange(this, JobState.CANCELLED);
         LOG.info("Lake schema change job canceled, jobId: {}, error: {}", jobId, errMsg);
 
         return true;

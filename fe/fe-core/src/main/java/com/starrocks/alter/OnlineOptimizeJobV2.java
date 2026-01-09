@@ -212,6 +212,7 @@ public class OnlineOptimizeJobV2 extends AlterJobV2 implements GsonPostProcessab
         span.addEvent("setWaitingTxn");
 
         // write edit log
+        // createAndAddTempPartitionsForTable will write edit log for creating temp partitions, so do not need to apply here.
         persistStateChange(this, JobState.WAITING_TXN);
         LOG.info("transfer optimize job {} state to {}, watershed txn_id: {}", jobId, this.jobState, watershedTxnId);
     }
@@ -422,6 +423,7 @@ public class OnlineOptimizeJobV2 extends AlterJobV2 implements GsonPostProcessab
         this.progress = 100;
         this.finishedTimeMs = System.currentTimeMillis();
 
+        // Replace tmp partitions log with be written in onFinished(), so do not need to apply here.
         persistStateChange(this, JobState.FINISHED);
         LOG.info("optimize job finished: {}", jobId);
         this.span.end();
@@ -516,12 +518,12 @@ public class OnlineOptimizeJobV2 extends AlterJobV2 implements GsonPostProcessab
         if (jobState.isFinalState()) {
             return false;
         }
-        cancelInternal();
 
         this.errMsg = errMsg;
         this.finishedTimeMs = System.currentTimeMillis();
+        persistStateChange(this, JobState.CANCELLED, this::cancelInternal);
+
         LOG.info("cancel {} job {}, err: {}", this.type, jobId, errMsg);
-        persistStateChange(this, JobState.CANCELLED);
         span.setStatus(StatusCode.ERROR, errMsg);
         span.end();
         return true;

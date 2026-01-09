@@ -138,7 +138,4 @@ public class LakeTableAlterMetaJob extends LakeTableAlterMetaJobBase {
         copy.compactionStrategy = this.compactionStrategy;
         return copy;
     }
-
-
-
 }

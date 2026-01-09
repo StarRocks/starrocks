@@ -166,8 +166,4 @@ public abstract class LakeTableSchemaChangeJobBase extends AlterJobV2 {
         AgentTaskQueue.addBatchTask(batchTask);
         AgentTaskExecutor.submit(batchTask);
     }
-
-
-
-
 }

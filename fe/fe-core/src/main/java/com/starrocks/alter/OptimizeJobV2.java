@@ -201,6 +201,7 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
         span.addEvent("setWaitingTxn");
 
         // write edit log
+        // createAndAddTempPartitionsForTable will write edit log for creating temp partitions, so do not need to apply here.
         persistStateChange(this, JobState.WAITING_TXN);
         LOG.info("transfer optimize job {} state to {}, watershed txn_id: {}", jobId, this.jobState, watershedTxnId);
     }
@@ -435,6 +436,7 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
         this.progress = 100;
         this.finishedTimeMs = System.currentTimeMillis();
 
+        // Replace tmp partitions log with be written in onFinished(), so do not need to apply here.
         persistStateChange(this, JobState.FINISHED);
         LOG.info("optimize job finished: {}", jobId);
         this.span.end();
