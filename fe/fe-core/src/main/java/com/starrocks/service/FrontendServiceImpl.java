@@ -150,9 +150,12 @@ import com.starrocks.qe.QueryStatisticsInfo;
 import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.qe.scheduler.slot.LogicalSlot;
 import com.starrocks.qe.scheduler.warehouse.WarehouseQueryQueueMetrics;
+import com.starrocks.rpc.ThriftConnectionPool;
+import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.MetadataMgr;
+import com.starrocks.server.NodeMgr;
 import com.starrocks.server.TemporaryTableMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.arrow.flight.sql.ArrowFlightSqlConnectContext;
@@ -247,6 +250,8 @@ import com.starrocks.thrift.TGetLoadsParams;
 import com.starrocks.thrift.TGetLoadsResult;
 import com.starrocks.thrift.TGetPartitionsMetaRequest;
 import com.starrocks.thrift.TGetPartitionsMetaResponse;
+import com.starrocks.thrift.TGetProfileListRequest;
+import com.starrocks.thrift.TGetProfileListResponse;
 import com.starrocks.thrift.TGetProfileRequest;
 import com.starrocks.thrift.TGetProfileResponse;
 import com.starrocks.thrift.TGetQueryStatisticsRequest;
@@ -255,6 +260,7 @@ import com.starrocks.thrift.TGetRoleEdgesRequest;
 import com.starrocks.thrift.TGetRoleEdgesResponse;
 import com.starrocks.thrift.TGetRoutineLoadJobsResult;
 import com.starrocks.thrift.TGetStreamLoadsResult;
+import com.starrocks.thrift.TProfileInfo;
 import com.starrocks.thrift.TGetTableMetaRequest;
 import com.starrocks.thrift.TGetTableMetaResponse;
 import com.starrocks.thrift.TGetTablePrivsParams;
@@ -770,10 +776,87 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 if (profile != null && !profile.isEmpty()) {
                     result.addToQuery_result(profile);
                 } else {
-                    result.addToQuery_result("");
+                    // Try to get profile from other FEs
+                    String remoteProfile = getProfileFromOtherFEs(queryId);
+                    if (remoteProfile != null && !remoteProfile.isEmpty()) {
+                        result.addToQuery_result(remoteProfile);
+                    } else {
+                        result.addToQuery_result("");
+                    }
                 }
             }
         }
+        return result;
+    }
+
+    private String getProfileFromOtherFEs(String queryId) {
+        NodeMgr nodeMgr = GlobalStateMgr.getCurrentState().getNodeMgr();
+        List<Frontend> frontends = nodeMgr.getFrontends(null);
+        
+        for (Frontend frontend : frontends) {
+            // Skip the current FE since we already checked it
+            if (nodeMgr.getMySelf().getHost().equals(frontend.getHost())) {
+                continue;
+            }
+            
+            try {
+                TGetProfileRequest request = new TGetProfileRequest();
+                List<String> queryIds = Lists.newArrayList(queryId);
+                request.setQuery_id(queryIds);
+                
+                TNetworkAddress thriftAddress = new TNetworkAddress(frontend.getHost(), frontend.getRpcPort());
+                TGetProfileResponse response = ThriftRPCRequestExecutor.call(
+                        ThriftConnectionPool.frontendPool,
+                        thriftAddress,
+                        client -> client.getQueryProfile(request));
+                
+                if (response.isSetQuery_result() && !response.getQuery_result().isEmpty()) {
+                    String profile = response.getQuery_result().get(0);
+                    if (profile != null && !profile.isEmpty()) {
+                        LOG.debug("Found profile for query {} on remote FE {}", queryId, frontend.getHost());
+                        return profile;
+                    }
+                }
+            } catch (TException e) {
+                LOG.warn("Failed to get profile for query {} from FE {}", queryId, frontend.getHost(), e);
+            }
+        }
+        
+        return null;
+    }
+
+    @Override
+    public TGetProfileListResponse getProfileList(TGetProfileListRequest params) throws TException {
+        LOG.debug("get profile list request: {}", params);
+        TGetProfileListResponse result = new TGetProfileListResponse();
+        
+        List<ProfileManager.ProfileElement> profileElements = ProfileManager.getInstance().getAllProfileElements();
+        Collections.reverse(profileElements);
+        
+        int limit = params.isSetLimit() ? params.getLimit() : -1;
+        int count = 0;
+        
+        for (ProfileManager.ProfileElement element : profileElements) {
+            TProfileInfo profileInfo = new TProfileInfo();
+            profileInfo.setQuery_id(element.infoStrings.get(ProfileManager.QUERY_ID));
+            profileInfo.setStart_time(element.infoStrings.get(ProfileManager.START_TIME));
+            profileInfo.setTotal_time(element.infoStrings.get(ProfileManager.TOTAL_TIME));
+            profileInfo.setQuery_state(element.infoStrings.get(ProfileManager.QUERY_STATE));
+            
+            String statement = element.infoStrings.get(ProfileManager.SQL_STATEMENT);
+            if (statement != null && statement.length() > 128) {
+                statement = statement.substring(0, 124) + " ...";
+            }
+            profileInfo.setStatement(statement);
+            
+            result.addToProfile_infos(profileInfo);
+            count++;
+            
+            if (limit >= 0 && count >= limit) {
+                break;
+            }
+        }
+        
         return result;
     }
 

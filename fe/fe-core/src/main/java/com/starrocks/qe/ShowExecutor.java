@@ -262,9 +262,12 @@ import com.starrocks.system.Frontend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TAuthInfo;
 import com.starrocks.thrift.TConnectionInfo;
+import com.starrocks.thrift.TGetProfileListRequest;
+import com.starrocks.thrift.TGetProfileListResponse;
 import com.starrocks.thrift.TListConnectionRequest;
 import com.starrocks.thrift.TListConnectionResponse;
 import com.starrocks.thrift.TNetworkAddress;
+import com.starrocks.thrift.TProfileInfo;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TTableInfo;
 import com.starrocks.transaction.GlobalTransactionMgr;
@@ -963,18 +966,58 @@ public class ShowExecutor {
         public ShowResultSet visitShowProfilelistStatement(ShowProfilelistStmt statement, ConnectContext context) {
             List<List<String>> rowSet = Lists.newArrayList();
 
-            List<ProfileManager.ProfileElement> profileElements = ProfileManager.getInstance().getAllProfileElements();
-            Collections.reverse(profileElements);
-            Iterator<ProfileManager.ProfileElement> iterator = profileElements.iterator();
-            int count = 0;
-            while (iterator.hasNext()) {
-                ProfileManager.ProfileElement element = iterator.next();
-                List<String> row = element.toRow();
-                rowSet.add(row);
-                count++;
-                if (statement.getLimit() >= 0 && count >= statement.getLimit()) {
-                    break;
+            NodeMgr nodeMgr = GlobalStateMgr.getCurrentState().getNodeMgr();
+            List<Frontend> frontends = nodeMgr.getFrontends(null);
+            
+            // Collect profiles from all FEs
+            for (Frontend frontend : frontends) {
+                if (nodeMgr.getMySelf().getHost().equals(frontend.getHost())) {
+                    // Get profiles from local FE
+                    List<ProfileManager.ProfileElement> profileElements = 
+                            ProfileManager.getInstance().getAllProfileElements();
+                    Collections.reverse(profileElements);
+                    for (ProfileManager.ProfileElement element : profileElements) {
+                        List<String> row = element.toRow();
+                        rowSet.add(row);
+                    }
+                } else {
+                    // Get profiles from remote FE
+                    try {
+                        TGetProfileListRequest request = new TGetProfileListRequest();
+                        TAuthInfo tAuthInfo = new TAuthInfo();
+                        tAuthInfo.setCurrent_user_ident(UserIdentityUtils.toThrift(context.getCurrentUserIdentity()));
+                        request.setAuth_info(tAuthInfo);
+                        request.setLimit(-1);  // Get all profiles from remote FE
+
+                        TNetworkAddress thriftAddress = new TNetworkAddress(frontend.getHost(), frontend.getRpcPort());
+                        TGetProfileListResponse response = ThriftRPCRequestExecutor.call(
+                                ThriftConnectionPool.frontendPool,
+                                thriftAddress,
+                                client -> client.getProfileList(request));
+                        
+                        if (response.isSetProfile_infos()) {
+                            for (TProfileInfo profileInfo : response.getProfile_infos()) {
+                                List<String> row = Lists.newArrayList();
+                                row.add(profileInfo.getQuery_id());
+                                row.add(profileInfo.getStart_time());
+                                row.add(profileInfo.getTotal_time());
+                                row.add(profileInfo.getQuery_state());
+                                row.add(profileInfo.getStatement());
+                                rowSet.add(row);
+                            }
+                        }
+                    } catch (TException e) {
+                        //ignore error
+                        LOG.warn("show profilelist exception from FE {}", frontend.getHost(), e);
+                    }
                 }
+            }
+            
+            // Sort by start time (most recent first) and apply limit
+            // Note: Profiles are already in reverse chronological order within each FE
+            int limit = statement.getLimit();
+            if (limit >= 0 && rowSet.size() > limit) {
+                rowSet = rowSet.subList(0, limit);
             }
 
             return new ShowResultSet(showResultMetaFactory.getMetadata(statement), rowSet);

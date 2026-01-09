@@ -1911,6 +1911,24 @@ struct TGetProfileResponse {
     2: optional list<string> query_result
 }
 
+struct TGetProfileListRequest {
+    1: optional TAuthInfo auth_info
+    2: optional i32 limit
+}
+
+struct TProfileInfo {
+    1: optional string query_id
+    2: optional string start_time
+    3: optional string total_time
+    4: optional string query_state
+    5: optional string statement
+}
+
+struct TGetProfileListResponse {
+    1: optional Status.TStatus status
+    2: optional list<TProfileInfo> profile_infos
+}
+
 struct TGetDictQueryParamRequest {
     1: optional string db_name
     2: optional string table_name
@@ -2293,6 +2311,7 @@ service FrontendService {
     TGetStreamLoadsResult getStreamLoads(1:TGetLoadsParams params)
 
     TGetProfileResponse getQueryProfile(1:TGetProfileRequest request)
+    TGetProfileListResponse getProfileList(1:TGetProfileListRequest request)
 
     TDescribeTableResult describeTable(1:TDescribeTableParams params)
     TShowVariableResult showVariables(1:TShowVariableRequest params)
