@@ -215,6 +215,7 @@ import com.starrocks.sql.ast.ShowRunningQueriesStmt;
 import com.starrocks.sql.ast.ShowSmallFilesStmt;
 import com.starrocks.sql.ast.ShowSnapshotStmt;
 import com.starrocks.sql.ast.ShowSqlBlackListStmt;
+import com.starrocks.sql.ast.ShowSqlDigestBlackListStmt;
 import com.starrocks.sql.ast.ShowStmt;
 import com.starrocks.sql.ast.ShowStorageVolumesStmt;
 import com.starrocks.sql.ast.ShowStreamLoadStmt;
@@ -2441,6 +2442,16 @@ public class ShowExecutor {
                 oneSql.add(String.valueOf(entry.id));
                 oneSql.add(entry.pattern.toString());
                 rows.add(oneSql);
+            }
+            return new ShowResultSet(showResultMetaFactory.getMetadata(statement), rows);
+        }
+
+        @Override
+        public ShowResultSet visitShowSqlDigestBlackListStatement(ShowSqlDigestBlackListStmt statement,
+                                                                  ConnectContext context) {
+            List<List<String>> rows = new ArrayList<>();
+            for (String digest : GlobalStateMgr.getCurrentState().getSqlDigestBlackList().getDigests()) {
+                rows.add(List.of(digest));
             }
             return new ShowResultSet(showResultMetaFactory.getMetadata(statement), rows);
         }
