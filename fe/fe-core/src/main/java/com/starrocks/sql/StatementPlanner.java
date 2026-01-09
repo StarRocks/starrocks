@@ -337,7 +337,8 @@ public class StatementPlanner {
                 MVTransformerContext mvTransformerContext = MVTransformerContext.of(session, true);
                 try (Timer ignored = Tracers.watchScope("Transformer")) {
                     // get a logicalPlan without inlining views
-                    TransformerContext transformerContext = new TransformerContext(columnRefFactory, session, mvTransformerContext);
+                    TransformerContext transformerContext = new TransformerContext(
+                            columnRefFactory, session, mvTransformerContext);
                     logicalPlan = new RelationTransformer(transformerContext).transformWithSelectLimit(query);
                 }
 
