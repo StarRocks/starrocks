@@ -16,12 +16,9 @@
 
 #include <utility>
 
-<<<<<<< HEAD
-=======
 #include "common/http/content_type.h"
 #include "csv_escape.h"
 #include "exec/hdfs_scanner/hdfs_scanner_text.h"
->>>>>>> 65972a07f4 ([BugFix] Fix incorrect ContentType metadata for S3 exports (#67553))
 #include "formats/utils.h"
 #include "output_stream_file.h"
 #include "runtime/current_thread.h"
