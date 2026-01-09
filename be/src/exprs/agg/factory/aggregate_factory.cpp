@@ -209,7 +209,12 @@ const AggregateFunction* get_aggregate_function(const std::string& agg_func_name
         }
 
         if (agg_func_name == "array_union_agg" || agg_func_name == "array_unique_agg") {
-            arg_type = arg_type.children[0];
+            // NOTE: Do not assign from `arg_type.children[0]` directly.
+            // `TypeDescriptor::operator=` will destroy `arg_type.children` first, which would also
+            // destroy the RHS object (a child element) and cause heap-use-after-free.
+            DCHECK_GE(arg_type.children.size(), 1);
+            TypeDescriptor child_type = arg_type.children[0];
+            arg_type = std::move(child_type);
         }
         return get_aggregate_function(agg_func_name, arg_type.type, return_type.type, is_result_nullable, binary_type,
                                       func_version);
