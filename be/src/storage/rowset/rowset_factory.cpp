@@ -56,7 +56,10 @@ Status RowsetFactory::create_rowset(const TabletSchemaCSPtr& schema, const std::
         if (data_dir != nullptr) {
             kvstore = data_dir->get_meta();
         } else {
+#ifndef BE_TEST
+            LOG(ERROR) << "DataDir not found for path: " << data_dir_string;
             return Status::InternalError(fmt::format("DataDir not found for path: {}", data_dir_string));
+#endif
         }
     }
     *rowset = Rowset::create(schema, rowset_path, rowset_meta, kvstore);
