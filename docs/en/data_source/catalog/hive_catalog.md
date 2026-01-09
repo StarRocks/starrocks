@@ -38,7 +38,9 @@ To ensure successful SQL workloads on your Hive cluster, your StarRocks cluster 
   - Parquet and ORC files support the following compression formats: NO_COMPRESSION, SNAPPY, LZ4, ZSTD, and GZIP.
   - Textfile files support the NO_COMPRESSION compression format.
 
-  You can use the session variable [`connector_sink_compression_codec`](../../sql-reference/System_variable.md#connector_sink_compression_codec) to specify the compression algorithm used for sinking data to Hive tables.
+  You can use the table property [`compression_codec`](../../data_source/catalog/hive_catalog.md#properties) or the system variable [`connector_sink_compression_codec`](../../sql-reference/System_variable.md#connector_sink_compression_codec) to specify the compression algorithm used for sinking data to Hive tables.
+
+  When writing to a Hive table, if the table's properties include a compression codec, StarRocks will preferentially use that algorithm to compress the written data. Otherwise, it will use the compression algorithm set in the system variable `connector_sink_compression_codec`.
 
 ## Integration preparations
 
@@ -1021,7 +1023,7 @@ The following table describes a few key properties.
 | ----------------- | ------------------------------------------------------------ |
 | location          | The file path in which you want to create the managed table. When you use HMS as metastore, you do not need to specify the `location` parameter, because StarRocks will create the table in the default file path of the current Hive catalog. When you use AWS Glue as metadata service:<ul><li>If you have specified the `location` parameter for the database in which you want to create the table, you do not need to specify the `location` parameter for the table. As such, the table defaults to the file path of the database to which it belongs. </li><li>If you have not specified the `location` for the database in which you want to create the table, you must specify the `location` parameter for the table.</li></ul> |
 | file_format       | The file format of the managed table. Supported file formats are Parquet, ORC, and Textfile. ORC and Textfile formats are supported from v3.3 onwards. Valid values: `parquet`, `orc`, and `textfile`. Default value: `parquet`. |
-| compression_codec | The compression algorithm used for the managed table. This property is deprecated in v3.2.3, since which version the compression algorithm used for sinking data to Hive tables is uniformly controlled by the session variable [connector_sink_compression_codec](../../sql-reference/System_variable.md#connector_sink_compression_codec). |
+| compression_codec | The compression algorithm used for the managed table.        |
 
 ### Examples
 
@@ -1068,7 +1070,7 @@ Note that sinking data to external tables is disabled by default. To sink data t
 :::note
 
 - You can grant and revoke privileges by using [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) and [REVOKE](../../sql-reference/sql-statements/account-management/REVOKE.md).
-- You can use the session variable [connector_sink_compression_codec](../../sql-reference/System_variable.md#connector_sink_compression_codec) to specify the compression algorithm used for sinking data to Hive tables.
+- You can use the table property [`compression_codec`](../../data_source/catalog/hive_catalog.md#properties) or the system variable [`connector_sink_compression_codec`](../../sql-reference/System_variable.md#connector_sink_compression_codec) to specify the compression algorithm used for sinking data to Hive tables. StarRocks will prioritize using the compression codec specified in the table property.
 
 :::
 
