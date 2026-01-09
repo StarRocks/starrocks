@@ -87,6 +87,7 @@ Status AggregateDistinctStreamingSourceOperator::_output_chunk_from_hash_set(Chu
     _aggregator->convert_hash_set_to_chunk(state->chunk_size(), chunk);
 
     if (_aggregator->is_streaming_all_states() && _aggregator->is_ht_eos()) {
+        auto notify = _aggregator->defer_notify_sink();
         if (!_aggregator->is_sink_complete()) {
             RETURN_IF_ERROR(_aggregator->reset_state(state, {}, nullptr, false));
         }
