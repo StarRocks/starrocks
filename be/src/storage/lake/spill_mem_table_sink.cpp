@@ -205,6 +205,14 @@ public:
             if (!_reader) {
                 _reader = _blocks[_block_idx]->get_reader(_options);
                 RETURN_IF_UNLIKELY(!_reader, Status::InternalError("Failed to get reader"));
+                // Update block count metric
+                auto& metrics = _serde.parent()->metrics();
+                COUNTER_UPDATE(metrics.block_count, 1);
+                if (_blocks[_block_idx]->is_remote()) {
+                    COUNTER_UPDATE(metrics.remote_block_count, 1);
+                } else {
+                    COUNTER_UPDATE(metrics.local_block_count, 1);
+                }
             }
             auto st = _serde.deserialize(_ctx, _reader.get());
             if (st.ok()) {
@@ -237,6 +245,7 @@ Status SpillMemTableSink::merge_blocks_to_segments() {
     auto& groups = _block_manager->block_container()->block_groups();
     RETURN_IF(groups.empty(), Status::OK());
 
+    SCOPED_TIMER(ADD_TIMER(_profile, "SpillMergeTime"));
     MonotonicStopWatch timer;
     timer.start();
     // merge process needs to control _writer's flush behavior manually
@@ -266,6 +275,7 @@ Status SpillMemTableSink::merge_blocks_to_segments() {
             if (st.is_end_of_file()) {
                 break;
             } else if (st.ok()) {
+                SCOPED_TIMER(_spiller->metrics().write_io_timer);
                 ChunkHelper::padding_char_columns(char_field_indexes, *_schema, _writer->tablet_schema(), chunk);
                 total_rows += chunk->num_rows();
                 total_chunk++;
@@ -275,9 +285,10 @@ Status SpillMemTableSink::merge_blocks_to_segments() {
             }
         }
         merge_itr->close();
+        SCOPED_TIMER(_spiller->metrics().write_io_timer);
         return _writer->flush();
     };
-<<<<<<< HEAD
+
     for (size_t i = 0; i < groups.size(); ++i) {
         auto& group = groups[i];
         // We need to stop merging if:
@@ -310,19 +321,7 @@ Status SpillMemTableSink::merge_blocks_to_segments() {
     ADD_COUNTER(_profile, "SpillMergeInputGroups", TUnit::UNIT)->update(groups.size());
     ADD_COUNTER(_profile, "SpillMergeInputBytes", TUnit::BYTES)->update(total_block_bytes);
     ADD_COUNTER(_profile, "SpillMergeCount", TUnit::UNIT)->update(total_merges);
-    ADD_COUNTER(_profile, "SpillMergeDurationNs", TUnit::TIME_NS)->update(duration_ms * 1000000);
     return Status::OK();
-=======
-    auto flush_func = [this]() { return _writer->flush(); };
-
-    SCOPED_TIMER(ADD_TIMER(_load_chunk_spiller->profile(), "SpillMergeTime"));
-    Status st = _load_chunk_spiller->merge_write(config::load_spill_max_merge_bytes, true /* do_sort */, do_agg,
-                                                 write_func, flush_func);
-    LOG_IF(WARNING, !st.ok()) << fmt::format(
-            "SpillMemTableSink merge blocks to segment failed, txn:{} tablet:{} msg:{}", _writer->txn_id(),
-            _writer->tablet_id(), st.message());
-    return st;
->>>>>>> f8ff1bea78 ([Enhancement] Improve the collection and display of load spill metrics in the load profile (backport #67527) (#67636))
 }
 
 } // namespace starrocks::lake
