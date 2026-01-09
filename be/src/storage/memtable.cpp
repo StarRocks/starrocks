@@ -325,7 +325,10 @@ Status MemTable::finalize() {
     return Status::OK();
 }
 
-Status MemTable::flush(SegmentPB* seg_info, bool eos, int64_t* flush_data_size) {
+// Flush the memtable data through the configured sink
+// @param slot_idx: slot index from flush token, passed through to the sink to maintain
+//                  flush order when parallel flush is enabled
+Status MemTable::flush(SegmentPB* seg_info, bool eos, int64_t* flush_data_size, int64_t slot_idx) {
     FAIL_POINT_TRIGGER_EXECUTE(load_memtable_flush, MEMTABLE_FLUSH_FP_ACTION(_sink->txn_id(), _sink->tablet_id()));
     if (UNLIKELY(_result_chunk == nullptr)) {
         return Status::OK();
@@ -338,10 +341,12 @@ Status MemTable::flush(SegmentPB* seg_info, bool eos, int64_t* flush_data_size) 
     int64_t duration_ns = 0;
     {
         SCOPED_RAW_TIMER(&duration_ns);
+        // Pass slot_idx to sink for ordering in parallel flush scenarios
         if (_deletes) {
-            RETURN_IF_ERROR(_sink->flush_chunk_with_deletes(*_result_chunk, *_deletes, seg_info, eos, flush_data_size));
+            RETURN_IF_ERROR(_sink->flush_chunk_with_deletes(*_result_chunk, *_deletes, seg_info, eos, flush_data_size,
+                                                            slot_idx));
         } else {
-            RETURN_IF_ERROR(_sink->flush_chunk(*_result_chunk, seg_info, eos, flush_data_size));
+            RETURN_IF_ERROR(_sink->flush_chunk(*_result_chunk, seg_info, eos, flush_data_size, slot_idx));
         }
     }
     auto io_stat = scope.current_scoped_tls_io();
