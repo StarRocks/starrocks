@@ -51,8 +51,7 @@ public class SkewJoinTest extends PlanTestBase {
         connectContext.getGlobalStateMgr().setStatisticStorage(new MockHistogramStatisticStorage(scale));
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
         connectContext.getSessionVariable().setEnableStatsToOptimizeSkewJoin(true);
-        connectContext.getSessionVariable().setEnableOptimizerSkewJoinByQueryRewrite(true);
-        connectContext.getSessionVariable().setEnableOptimizerSkewJoinByBroadCastSkewValues(false);
+        connectContext.getSessionVariable().setEnableOptimizerSkewJoinOptimizeV1(true);
 
         OlapTable t0 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("region");
         setTableStatistics(t0, 5);
@@ -358,7 +357,7 @@ public class SkewJoinTest extends PlanTestBase {
             connectContext.getGlobalStateMgr().setStatisticStorage(emptyStatisticsStorage);
             connectContext.getSessionVariable().setSkewJoinDataSkewThreshold(0.1);
             connectContext.getSessionVariable().setEnableStatsToOptimizeSkewJoin(true);
-            connectContext.getSessionVariable().setEnableOptimizerSkewJoinByQueryRewrite(true);
+            connectContext.getSessionVariable().setEnableOptimizerSkewJoinOptimizeV1(true);
 
             // Important to use a LEFT JOIN here so NULLs are preserved.
             String sql = "select * from t0 left join t1 on t0.v1 = t1.v4";
@@ -405,7 +404,7 @@ public class SkewJoinTest extends PlanTestBase {
             connectContext.getGlobalStateMgr().setStatisticStorage(emptyStatisticsStorage);
             connectContext.getSessionVariable().setSkewJoinDataSkewThreshold(0.1);
             connectContext.getSessionVariable().setEnableStatsToOptimizeSkewJoin(true);
-            connectContext.getSessionVariable().setEnableOptimizerSkewJoinByQueryRewrite(true);
+            connectContext.getSessionVariable().setEnableOptimizerSkewJoinOptimizeV1(true);
 
             // Important to use a LEFT JOIN here so NULLs are preserved.
             String sql = "select * from t0 left join t1 on t0.v1 = t1.v4";
