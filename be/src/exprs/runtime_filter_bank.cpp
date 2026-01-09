@@ -541,6 +541,18 @@ Status RuntimeFilterBuildDescriptor::init(ObjectPool* pool, const TRuntimeFilter
     if (desc.__isset.skew_shuffle_filter_id) {
         _skew_shuffle_filter_id = desc.skew_shuffle_filter_id;
     }
+    if (desc.__isset.is_asc) {
+        _is_asc = desc.is_asc;
+    }
+    if (desc.__isset.is_nulls_first) {
+        _is_nulls_first = desc.is_nulls_first;
+    }
+    if (desc.__isset.limit) {
+        _limit = desc.limit;
+    }
+    if (desc.__isset.filter_type) {
+        _runtime_filter_type = desc.filter_type;
+    }
 
     WithLayoutMixin::init(desc);
     RETURN_IF_ERROR(Expr::create_expr_tree(pool, desc.build_expr, &_build_expr_ctx, state));

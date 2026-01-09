@@ -1753,12 +1753,15 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
         long partitionLimit = 0;
         List<ColumnRefOperator> partitions = Collections.emptyList();
+        boolean isTopNPushDownAgg = false;
         if (node instanceof LogicalTopNOperator) {
             partitionLimit = ((LogicalTopNOperator) node).getPartitionLimit();
             partitions = ((LogicalTopNOperator) node).getPartitionByColumns();
+            isTopNPushDownAgg = ((LogicalTopNOperator) node).isTopNPushDownAgg();
         } else if (node instanceof PhysicalTopNOperator) {
             partitionLimit = ((PhysicalTopNOperator) node).getPartitionLimit();
             partitions = ((PhysicalTopNOperator) node).getPartitionByColumns();
+            isTopNPushDownAgg = ((PhysicalTopNOperator) node).isTopNPushDownAgg();
         }
 
         Statistics.Builder builder = Statistics.builder();
@@ -1781,7 +1784,10 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                                     inputStatistics.getOutputRowCount())));
         }
 
-        if (partitionLimit > 0 && !partitions.isEmpty()
+        if (isTopNPushDownAgg) {
+            // prefer to use the partition limit as output row count
+            builder.setOutputRowCount(1);
+        } else if (partitionLimit > 0 && !partitions.isEmpty()
                 && partitions.stream().map(inputStatistics::getColumnStatistic).noneMatch(ColumnStatistic::isUnknown)) {
             double partitionNums = partitions.stream()
                     .map(inputStatistics::getColumnStatistic)
