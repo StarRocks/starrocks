@@ -68,6 +68,8 @@ public:
 
     SchemaPtr schema() { return _schema; }
 
+    RuntimeProfile* profile() const { return _profile; }
+
 private:
     Status _prepare(const ChunkPtr& chunk_ptr);
 
