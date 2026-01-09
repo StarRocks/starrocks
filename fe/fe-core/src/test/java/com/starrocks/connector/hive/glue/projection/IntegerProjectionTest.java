@@ -209,4 +209,38 @@ public class IntegerProjectionTest {
 
         assertFalse(projection.requiresFilter());
     }
+
+    @Test
+    public void testConstructorWithOverflowRange() {
+        // Range from Long.MIN_VALUE to Long.MAX_VALUE causes arithmetic overflow
+        // when calculating (rightBound - leftBound)
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () ->
+                new IntegerProjection("id", Long.MIN_VALUE + "," + Long.MAX_VALUE,
+                        Optional.empty(), Optional.empty()));
+
+        assertTrue(exception.getMessage().contains("arithmetic overflow"));
+    }
+
+    @Test
+    public void testConstructorWithLargePositiveRange() {
+        // Large positive range that would overflow: 0 to Long.MAX_VALUE
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () ->
+                new IntegerProjection("id", "0," + Long.MAX_VALUE,
+                        Optional.empty(), Optional.empty()));
+
+        // Should fail either due to overflow or exceeding MAX_VALUES
+        assertTrue(exception.getMessage().contains("overflow") ||
+                   exception.getMessage().contains("exceeding limit"));
+    }
+
+    @Test
+    public void testConstructorWithNegativeToPositiveRange() {
+        // Range from negative to positive that causes overflow
+        String range = (Long.MIN_VALUE / 2) + "," + (Long.MAX_VALUE / 2);
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () ->
+                new IntegerProjection("id", range, Optional.empty(), Optional.empty()));
+
+        assertTrue(exception.getMessage().contains("overflow") ||
+                   exception.getMessage().contains("exceeding limit"));
+    }
 }

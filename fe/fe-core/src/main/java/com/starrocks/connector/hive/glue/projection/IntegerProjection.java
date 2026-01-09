@@ -124,12 +124,20 @@ public class IntegerProjection implements ColumnProjection {
         // Validate that the range won't generate too many values.
         // Note: estimatedCount is an upper-bound estimate. When the range does not align perfectly
         // with the interval, the actual number of generated values may be smaller.
-        long estimatedCount = (rightBound - leftBound) / interval + 1;
-        if (estimatedCount > MAX_VALUES) {
+        // Use Math.subtractExact/addExact to detect overflow for extremely large ranges.
+        try {
+            long range = Math.subtractExact(rightBound, leftBound);
+            long estimatedCount = Math.addExact(range / interval, 1);
+            if (estimatedCount > MAX_VALUES) {
+                throw new IllegalArgumentException(
+                        "Integer projection for column '" + columnName +
+                                "' is estimated to generate up to " + estimatedCount +
+                                " values, exceeding limit of " + MAX_VALUES);
+            }
+        } catch (ArithmeticException e) {
             throw new IllegalArgumentException(
                     "Integer projection for column '" + columnName +
-                            "' is estimated to generate up to " + estimatedCount +
-                            " values, exceeding limit of " + MAX_VALUES);
+                            "' has range too large (arithmetic overflow).", e);
         }
     }
 
@@ -152,9 +160,9 @@ public class IntegerProjection implements ColumnProjection {
             return Collections.emptyList();
         }
 
-        // Generate all values in range
+        // Generate all values in range with safety counter to prevent infinite loops
         List<String> result = new ArrayList<>();
-        for (long current = leftBound; current <= rightBound; current += interval) {
+        for (long current = leftBound; current <= rightBound && result.size() < MAX_VALUES; current += interval) {
             result.add(formatValue(current));
         }
         return result;
