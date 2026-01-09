@@ -251,20 +251,27 @@ public:
         DCHECK(!dst->is_nullable());
 
         const auto* src_map_column = down_cast<const MapColumn*>(ColumnHelper::get_data_column(src[0]));
-        const auto* dst_map_column = down_cast<MapColumn*>(ColumnHelper::get_data_column(dst.get()));
+        auto* dst_map_column = down_cast<MapColumn*>(ColumnHelper::get_data_column(dst.get()));
         ColumnViewer<VT> value_viewer(src_map_column->values_column());
 
-        dst_map_column->keys_column()->as_mutable_raw_ptr()->append(*src_map_column->keys_column(), 0, chunk_size);
+        size_t element_size = src_map_column->keys().size();
+        // append keys
+        dst_map_column->keys_column()->as_mutable_raw_ptr()->append(*src_map_column->keys_column(), 0, element_size);
+        dst_map_column->offsets().append(src_map_column->offsets(), 0, chunk_size);
+
         DCHECK(dst_map_column->values_column()->is_nullable());
+
         NullableColumn* nullable_dst_values_column =
-                down_cast<NullableColumn*>(dst_map_column->values_column()->as_mutable_raw_ptr());
+                down_cast<NullableColumn*>(dst_map_column->values_column_raw_ptr());
         auto& null_data = nullable_dst_values_column->null_column_data();
         ValueResultColumnType* dst_values_column =
                 down_cast<ValueResultColumnType*>(nullable_dst_values_column->data_column()->as_mutable_raw_ptr());
         auto& dst_value_data = dst_values_column->get_data();
-        for (size_t i = 0; i < chunk_size; ++i) {
-            null_data.push_back(value_viewer.is_null(i) ? 1 : 0);
+        for (size_t i = 0; i < element_size; ++i) {
+            bool is_null = value_viewer.is_null(i);
+            null_data.push_back(is_null);
             dst_value_data.push_back(value_viewer.value(i));
+            nullable_dst_values_column->set_has_null(is_null);
         }
     }
 
