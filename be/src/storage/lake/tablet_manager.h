@@ -209,7 +209,15 @@ public:
 
     std::string delvec_location(int64_t tablet_id, std::string_view delvec_filename) const;
 
+    // Get the full path for Lake Compaction Rows Mapper file on remote storage
+    // WHY: When parallel pk index execution is enabled, mapper files are stored on
+    // remote storage (S3/HDFS) instead of local disk. This function constructs the
+    // full path using the location provider, enabling distributed access during
+    // compaction conflict resolution across multiple compute nodes.
+    std::string lcrm_location(int64_t tablet_id, std::string_view crm_name) const;
+
     const std::shared_ptr<LocationProvider> location_provider() { return _location_provider; }
+
     std::string sst_location(int64_t tablet_id, std::string_view sst_filename) const;
 
     UpdateManager* update_mgr();
