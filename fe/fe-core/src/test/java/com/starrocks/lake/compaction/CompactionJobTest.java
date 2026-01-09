@@ -33,7 +33,7 @@ public class CompactionJobTest {
     public void testGetResult() {
         Database db = new Database();
         Table table = new Table(Table.TableType.CLOUD_NATIVE);
-        PhysicalPartition partition = new PhysicalPartition(0, "", 1, null);
+        PhysicalPartition partition = new PhysicalPartition(0, 1, null);
         CompactionJob job = new CompactionJob(db, table, partition, 10010, true, null, "");
 
         Assertions.assertTrue(job.getAllowPartialSuccess());
@@ -78,7 +78,7 @@ public class CompactionJobTest {
     public void testBuildTabletCommitInfo() {
         Database db = new Database();
         Table table = new Table(Table.TableType.CLOUD_NATIVE);
-        PhysicalPartition partition = new PhysicalPartition(0, "", 1, null);
+        PhysicalPartition partition = new PhysicalPartition(0, 1, null);
         CompactionJob job = new CompactionJob(db, table, partition, 10010, false, null, "");
         assertDoesNotThrow(() -> {
             job.buildTabletCommitInfo();
@@ -89,7 +89,7 @@ public class CompactionJobTest {
     public void testGetExecutionProfile() {
         Database db = new Database();
         Table table = new Table(Table.TableType.CLOUD_NATIVE);
-        PhysicalPartition partition = new PhysicalPartition(0, "", 1, null);
+        PhysicalPartition partition = new PhysicalPartition(0, 1, null);
         CompactionJob job = new CompactionJob(db, table, partition, 10010, true, null, "");
 
         Assertions.assertTrue(job.getExecutionProfile().isEmpty());
@@ -123,7 +123,7 @@ public class CompactionJobTest {
     public void testSuccessCompactInputFIleSize() {
         Database db = new Database();
         Table table = new Table(Table.TableType.CLOUD_NATIVE);
-        PhysicalPartition partition = new PhysicalPartition(0, "", 1, null);
+        PhysicalPartition partition = new PhysicalPartition(0, 1, null);
         CompactionJob job = new CompactionJob(db, table, partition, 10010, true, null, "");
 
         Assertions.assertTrue(job.getAllowPartialSuccess());

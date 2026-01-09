@@ -557,7 +557,7 @@ public class TabletSchedulerTest {
         Database db = new Database(dbId, "db");
         OlapTable table = new OlapTable(tblId, "table", null, null, null, null);
         MaterializedIndex index = new MaterializedIndex(indexId);
-        PhysicalPartition physicalPartition = new PhysicalPartition(physicalPartitionId, "physical_part", partitionId, index);
+        PhysicalPartition physicalPartition = new PhysicalPartition(physicalPartitionId, partitionId, index);
         Partition partition = new Partition(partitionId, physicalPartitionId, "partition", index, null);
         ColocateTableIndex colocateTableIndex = new ColocateTableIndex();
 
@@ -656,7 +656,7 @@ public class TabletSchedulerTest {
         LocalTablet tablet = new LocalTablet(tabletId, Lists.newArrayList(replica));
         MaterializedIndex index = new MaterializedIndex(indexId);
         index.addTablet(tablet, new TabletMeta(dbId, tblId, physicalPartitionId, indexId, TStorageMedium.HDD));
-        PhysicalPartition physicalPartition = new PhysicalPartition(physicalPartitionId, "physical_part", partitionId, index);
+        PhysicalPartition physicalPartition = new PhysicalPartition(physicalPartitionId, partitionId, index);
 
         new Expectations() {
             {

@@ -129,8 +129,7 @@ public class DiskAndTabletLoadReBalancerTest {
         DistributionInfo distributionInfo = new HashDistributionInfo(6, Lists.newArrayList());
 
         Partition partition = new Partition(partitionId, physicalPartitionId, "partition", materializedIndex, distributionInfo);
-        PhysicalPartition physicalPartition = new PhysicalPartition(physicalPartitionId, "partition", partitionId,
-                materializedIndex);
+        PhysicalPartition physicalPartition = new PhysicalPartition(physicalPartitionId, partitionId, materializedIndex);
         partition.addSubPartition(physicalPartition);
 
         OlapTable table = new OlapTable(tableId, "table", Lists.newArrayList(), KeysType.AGG_KEYS, partitionInfo,
@@ -271,8 +270,7 @@ public class DiskAndTabletLoadReBalancerTest {
         partitionInfo.addPartition(partitionId, dataProperty, (short) 3, null);
         DistributionInfo distributionInfo = new HashDistributionInfo(3, Lists.newArrayList());
         Partition partition = new Partition(partitionId, physicalPartitionId, "partition", materializedIndex, distributionInfo);
-        PhysicalPartition physicalPartition = new PhysicalPartition(physicalPartitionId, "partition", partitionId,
-                materializedIndex);
+        PhysicalPartition physicalPartition = new PhysicalPartition(physicalPartitionId, partitionId, materializedIndex);
         partition.addSubPartition(physicalPartition);
         OlapTable table = new OlapTable(tableId, "table", Lists.newArrayList(), KeysType.AGG_KEYS, partitionInfo,
                 distributionInfo);
@@ -427,13 +425,13 @@ public class DiskAndTabletLoadReBalancerTest {
         DistributionInfo distributionInfo = new HashDistributionInfo(6, Lists.newArrayList());
         Partition partition1 = new Partition(partitionId1, physicalPartitionId1,
                 "partition1", materializedIndex, distributionInfo);
-        PhysicalPartition physicalPartition1 = new PhysicalPartition(physicalPartitionId1, "partition1", partitionId1,
+        PhysicalPartition physicalPartition1 = new PhysicalPartition(physicalPartitionId1, partitionId1,
                 materializedIndex);
         partition1.addSubPartition(physicalPartition1);
 
         Partition partition2 = new Partition(partitionId2, physicalPartitionId2,
                 "partition2", materializedIndex, distributionInfo);
-        PhysicalPartition physicalPartition2 = new PhysicalPartition(physicalPartitionId2, "partition2", partitionId2,
+        PhysicalPartition physicalPartition2 = new PhysicalPartition(physicalPartitionId2, partitionId2,
                 materializedIndex);
         partition2.addSubPartition(physicalPartition2);
 
@@ -605,8 +603,7 @@ public class DiskAndTabletLoadReBalancerTest {
         partitionInfo.addPartition(partitionId, dataProperty, (short) 1, null);
         DistributionInfo distributionInfo = new HashDistributionInfo(6, Lists.newArrayList());
         Partition partition = new Partition(partitionId, physicalPartitionId, "partition", materializedIndex, distributionInfo);
-        PhysicalPartition physicalPartition = new PhysicalPartition(physicalPartitionId, "partition", partitionId,
-                materializedIndex);
+        PhysicalPartition physicalPartition = new PhysicalPartition(physicalPartitionId, partitionId, materializedIndex);
         partition.addSubPartition(physicalPartition);
 
         OlapTable table = new OlapTable(tableId, "table", Lists.newArrayList(), KeysType.AGG_KEYS, partitionInfo,
