@@ -512,23 +512,22 @@ Columns StructColumn::fields() const {
     return columns;
 }
 
-size_t StructColumn::_find_field_idx_by_name(const std::string& field_name) const {
+StatusOr<size_t> StructColumn::_find_field_idx_by_name(const std::string& field_name) const {
     for (size_t i = 0; i < _field_names.size(); i++) {
         if (_field_names[i] == field_name) {
             return i;
         }
     }
-    DCHECK(false) << "Struct subfield name: " << field_name << " not found!";
-    return -1;
+    return Status::InternalError("Struct subfield name: " + field_name + " not found!");
 }
 
-const ColumnPtr& StructColumn::field_column(const std::string& field_name) const {
-    size_t idx = _find_field_idx_by_name(field_name);
+StatusOr<ColumnPtr> StructColumn::field_column(const std::string& field_name) const {
+    ASSIGN_OR_RETURN(size_t idx, _find_field_idx_by_name(field_name));
     return _fields.at(idx);
 }
 
-ColumnPtr& StructColumn::field_column(const std::string& field_name) {
-    size_t idx = _find_field_idx_by_name(field_name);
+StatusOr<ColumnPtr> StructColumn::field_column(const std::string& field_name) {
+    ASSIGN_OR_RETURN(size_t idx, _find_field_idx_by_name(field_name));
     return _fields[idx];
 }
 
