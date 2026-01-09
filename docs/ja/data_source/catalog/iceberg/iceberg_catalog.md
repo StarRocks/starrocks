@@ -1489,9 +1489,9 @@ ORDER BY (column_name [sort_direction] [nulls_order], ...)
 
 ---
 
-### パーティション仕様の進化（ADD/DROP PARTITION COLUMN）
+### パーティション Spec の進化（ADD/DROP PARTITION COLUMN）
 
-StarRocks は `ALTER TABLE ... ADD|DROP PARTITION COLUMN` を使用して Iceberg テーブルのパーティション仕様（変換式を含む）を進化させることをサポートします。
+StarRocks は `ALTER TABLE ... ADD|DROP PARTITION COLUMN` を使用して Iceberg テーブルのパーティション Spec（Transform 式を含む）を進化させることをサポートします。
 
 #### 構文
 
@@ -1503,7 +1503,7 @@ ALTER TABLE [catalog.][database.]table_name
 DROP PARTITION COLUMN partition_expr [, partition_expr ...];
 ```
 
-`partition_expr` は列名（identity 変換）または次の変換式のいずれかを指定できます: `year`、`month`、`day`、`hour`、`truncate`、`bucket`。
+`partition_expr` は列名（Identity Transform）または次の変換式のいずれかを指定できます: `year`、`month`、`day`、`hour`、`truncate`、`bucket`。
 
 #### 例
 
