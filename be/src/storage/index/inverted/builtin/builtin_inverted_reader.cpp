@@ -28,14 +28,19 @@ Status BuiltinInvertedReader::new_iterator(const std::shared_ptr<TabletIndex> in
     RETURN_IF_ERROR(_bitmap_index->new_iterator(index_opt, &iter));
     std::unique_ptr<BitmapIndexIterator> bitmap_itr;
     bitmap_itr.reset(iter);
-    *iterator = new BuiltinInvertedIndexIterator(index_meta, this, bitmap_itr);
+    if (!index_opt.segment_rows.has_value()) {
+        return Status::InvalidArgument(fmt::format("No segment rows specified"));
+    }
+    *iterator =
+            new BuiltinInvertedIndexIterator(index_meta, this, index_opt.stats, bitmap_itr, *index_opt.segment_rows);
     return Status::OK();
 }
 
 Status BuiltinInvertedReader::create(const std::shared_ptr<TabletIndex>& tablet_index, LogicalType field_type,
                                      std::unique_ptr<InvertedReader>* res) {
     if (is_string_type(field_type)) {
-        *res = std::make_unique<BuiltinInvertedReader>(tablet_index->index_id());
+        const auto gram_num = get_gram_num_from_properties(tablet_index->index_properties());
+        *res = std::make_unique<BuiltinInvertedReader>(tablet_index->index_id(), gram_num);
         return Status::OK();
     } else {
         return Status::InvalidArgument(fmt::format("Not supported type {}", field_type));
@@ -47,7 +52,7 @@ Status BuiltinInvertedReader::load(const IndexReadOptions& opt, void* meta) {
         return Status::InvalidArgument("Invalid argument for loading builtin inverted index");
     }
     const BitmapIndexPB bitmap_index_meta = reinterpret_cast<BuiltinInvertedIndexPB*>(meta)->bitmap_index();
-    _bitmap_index = std::make_unique<BitmapIndexReader>();
+    _bitmap_index = std::make_unique<BitmapIndexReader>(_gram_num);
 
     ASSIGN_OR_RETURN(auto first_load, _bitmap_index->load(opt, bitmap_index_meta));
     if (!first_load) {

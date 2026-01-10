@@ -73,6 +73,19 @@ std::string get_parser_string_from_properties(const std::map<std::string, std::s
     return INVERTED_INDEX_PARSER_NONE;
 }
 
+int32_t get_gram_num_from_properties(const std::map<std::string, std::string>& properties) {
+    if (const auto it = properties.find(INVERTED_INDEX_DICT_GRAM_NUM_KEY); it != properties.end()) {
+        const std::string& gram_num = it->second;
+        try {
+            return std::stoi(gram_num);
+        } catch (const std::exception& e) {
+            LOG(WARNING) << "Parsing gram num failed, reason: " << e.what() << ". Using default value -1.";
+            return -1;
+        }
+    }
+    return -1;
+}
+
 bool is_tokenized_from_properties(const std::map<std::string, std::string>& properties) {
     auto tokenized_res = properties.find(INVERTED_INDEX_TOKENIZED_KEY);
     if (tokenized_res != properties.end()) {

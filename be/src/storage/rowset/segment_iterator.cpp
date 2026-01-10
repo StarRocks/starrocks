@@ -3227,6 +3227,7 @@ Status SegmentIterator::_init_inverted_index_iterators() {
         index_opts.lake_io_opts = _opts.lake_io_opts;
         index_opts.read_file = _column_files[cid].get();
         index_opts.stats = _opts.stats;
+        index_opts.segment_rows = num_rows();
 
         if (_inverted_index_ctx->inverted_index_iterators[cid] == nullptr) {
             RETURN_IF_ERROR(_segment->new_inverted_index_iterator(
@@ -3274,6 +3275,9 @@ Status SegmentIterator::_apply_inverted_index() {
                 if (res.ok()) {
                     erased_preds.emplace(pred);
                     erased_pred_col_ids.emplace(cid);
+                } else {
+                    LOG(WARNING) << "Failed to seek inverted index for column " << column_name
+                                 << ", reason: " << res.detailed_message();
                 }
             }
         }
