@@ -622,6 +622,10 @@ public class GlobalStateMgr {
         return compactionMgr;
     }
 
+    public ProcProfileCollector getProcProfileCollector() {
+        return procProfileCollector;
+    }
+
     public CompactionControlScheduler getCompactionControlScheduler() {
         return compactionControlScheduler;
     }

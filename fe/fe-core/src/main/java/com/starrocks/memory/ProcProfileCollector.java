@@ -136,7 +136,7 @@ public class ProcProfileCollector extends FrontendDaemon {
         }
     }
 
-    private void compressFile(String fileName) throws IOException {
+    public void compressFile(String fileName) throws IOException {
         File sourceFile = new File(profileLogDir + "/" + fileName);
         try (FileOutputStream fileOutputStream = new FileOutputStream(profileLogDir + "/" + fileName + ".tar.gz");
                 GzipCompressorOutputStream gzipOutputStream = new GzipCompressorOutputStream(fileOutputStream);

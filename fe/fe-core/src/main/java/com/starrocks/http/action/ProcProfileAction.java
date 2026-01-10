@@ -57,7 +57,7 @@ public class ProcProfileAction extends WebBaseAction {
     public void executeGet(BaseRequest request, BaseResponse response) {
         getPageHeader(request, response.getContent());
 
-        // Add proc profile tabs CSS link in the head section
+        // Add proc profile tabs CSS and JavaScript links in the head section
         // Insert before the closing </head> tag by replacing the body tag opening
         String content = response.getContent().toString();
         int headEndIndex = content.lastIndexOf("</head>");
@@ -67,6 +67,8 @@ public class ProcProfileAction extends WebBaseAction {
             response.getContent()
                     .append("  <link href=\"/static/css?res=proc-profile-tabs.css\" ")
                     .append("rel=\"stylesheet\" media=\"screen\"/>\n");
+            response.getContent()
+                    .append("  <script type=\"text/javascript\" src=\"/static?res=proc-profile-collect.js\"></script>\n");
             response.getContent().append(content.substring(headEndIndex));
         }
 
@@ -114,6 +116,9 @@ public class ProcProfileAction extends WebBaseAction {
     private void addProfileListInfo(StringBuilder buffer, String nodeParam) {
         buffer.append("<h2>Process Profiles</h2>");
         buffer.append("<p>This table lists all available CPU and memory profile files</p>");
+        
+        // Add profile collection form
+        addProfileCollectionForm(buffer, nodeParam);
 
         List<ProfileFileInfo> profileFiles;
         if ("FE".equals(nodeParam)) {
@@ -300,6 +305,37 @@ public class ProcProfileAction extends WebBaseAction {
             buffer.append("</tr>");
         }
         buffer.append("</tbody>");
+    }
+
+    private void addProfileCollectionForm(StringBuilder buffer, String nodeParam) {
+        // Only show collect form for BE nodes, not for FE
+        if ("FE".equals(nodeParam)) {
+            return;
+        }
+        
+        buffer.append("<div style=\"margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 4px; background-color: #f9f9f9;\">");
+        buffer.append("<h3>Collect Profile</h3>");
+        buffer.append("<p>Collect a new profile for a specified duration. The profile will appear in the list below after collection completes.</p>");
+        buffer.append("<form id=\"collectProfileForm\" method=\"POST\" action=\"/proc_profile/collect\">");
+        buffer.append("<input type=\"hidden\" name=\"node\" value=\"").append(nodeParam).append("\">");
+        buffer.append("<div style=\"margin-bottom: 10px;\">");
+        buffer.append("<label for=\"seconds\">Duration (seconds): </label>");
+        buffer.append("<input type=\"number\" id=\"seconds\" name=\"seconds\" value=\"10\" min=\"1\" max=\"3600\" style=\"width: 80px; margin-left: 10px;\">");
+        buffer.append("</div>");
+        buffer.append("<div style=\"margin-bottom: 10px;\">");
+        buffer.append("<label for=\"type\">Profile Type: </label>");
+        buffer.append("<select id=\"type\" name=\"type\" style=\"margin-left: 10px;\">");
+        buffer.append("<option value=\"cpu\">CPU</option>");
+        buffer.append("<option value=\"contention\">Contention</option>");
+        buffer.append("<option value=\"both\" selected>Both</option>");
+        buffer.append("</select>");
+        buffer.append("</div>");
+        buffer.append("<button type=\"submit\" id=\"collectBtn\" style=\"padding: 8px 16px; background-color: #337ab7; color: white; border: none; border-radius: 4px; cursor: pointer;\">");
+        buffer.append("Collect Profile");
+        buffer.append("</button>");
+        buffer.append("<span id=\"collectStatus\" style=\"margin-left: 15px;\"></span>");
+        buffer.append("</form>");
+        buffer.append("</div>");
     }
 
     private static class ProfileFileInfo {
