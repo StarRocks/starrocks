@@ -160,8 +160,8 @@ public:
     const ColumnPtr& get_column_by_idx(size_t idx) const { return _fields[idx]; }
     ColumnPtr& get_column_by_idx(size_t idx) { return _fields[idx]; }
 
-    const ColumnPtr& field_column(const std::string& field_name) const;
-    ColumnPtr& field_column(const std::string& field_name);
+    StatusOr<ColumnPtr> field_column(const std::string& field_name) const;
+    StatusOr<ColumnPtr> field_column(const std::string& field_name);
 
     Column* field_column_raw_ptr(size_t idx) { return _fields[idx].get(); }
     const Column* field_column_raw_ptr(size_t idx) const { return _fields[idx].get(); }
@@ -184,7 +184,7 @@ public:
     }
 
 private:
-    size_t _find_field_idx_by_name(const std::string& field_name) const;
+    StatusOr<size_t> _find_field_idx_by_name(const std::string& field_name) const;
 
     // A collection that contains StructType's subfield column.
     std::vector<Column::WrappedPtr> _fields;
