@@ -72,6 +72,7 @@ public class IcebergRESTCatalog implements IcebergCatalog {
         NONE,
         OAUTH2,
         JWT,
+        GOOGLE,
     }
 
     private static final Logger LOG = LogManager.getLogger(IcebergRESTCatalog.class);
@@ -80,6 +81,18 @@ public class IcebergRESTCatalog implements IcebergCatalog {
     public static final String KEY_NESTED_NAMESPACE_ENABLED = "rest.nested-namespace-enabled";
     public static final String USER_AGENT = "header.User-Agent";
     public static final String KEY_VIEW_ENDPOINTS_ENABLED = "rest.view-endpoints-enabled";
+
+    // FileIO configuration
+    public static final String KEY_IO_IMPL = "io-impl";
+    // Metrics reporting configuration
+    public static final String KEY_METRICS_REPORTING_ENABLED = "rest.metrics.reporting-enabled";
+
+    // Google AuthManager properties (Iceberg 1.10+)
+    public static final String REST_AUTH_TYPE = "rest.auth.type";
+    public static final String AUTH_TYPE_GOOGLE = "google";
+    public static final String GCP_AUTH_CREDENTIALS_PATH = "gcp.auth.credentials-path";
+    public static final String GCP_AUTH_SCOPES = "gcp.auth.scopes";
+    public static final String DEFAULT_GCP_AUTH_SCOPE = "https://www.googleapis.com/auth/cloud-platform";
 
     private String catalogName = null;
     private final Configuration conf;
@@ -101,8 +114,23 @@ public class IcebergRESTCatalog implements IcebergCatalog {
             }
         });
 
-        restCatalogProperties.put(CatalogProperties.FILE_IO_IMPL, IcebergCachingFileIO.class.getName());
-        restCatalogProperties.put(CatalogProperties.METRICS_REPORTER_IMPL, IcebergMetricsReporter.class.getName());
+        // Configure FileIO implementation
+        // Allow users to specify custom io-impl (e.g., org.apache.iceberg.gcp.gcs.GCSFileIO)
+        // Default to IcebergCachingFileIO for caching benefits
+        String ioImpl = restCatalogProperties.get(KEY_IO_IMPL);
+        if (Strings.isNullOrEmpty(ioImpl)) {
+            restCatalogProperties.put(CatalogProperties.FILE_IO_IMPL, IcebergCachingFileIO.class.getName());
+        } else {
+            restCatalogProperties.put(CatalogProperties.FILE_IO_IMPL, ioImpl);
+        }
+
+        // Configure metrics reporting
+        // Allow users to enable/disable metrics reporting via rest.metrics.reporting-enabled
+        boolean metricsReportingEnabled = PropertyUtil.propertyAsBoolean(
+                restCatalogProperties, KEY_METRICS_REPORTING_ENABLED, true);
+        if (metricsReportingEnabled) {
+            restCatalogProperties.put(CatalogProperties.METRICS_REPORTER_IMPL, IcebergMetricsReporter.class.getName());
+        }
 
         boolean enableVendedCredentials =
                 Boolean.parseBoolean(restCatalogProperties.getOrDefault(KEY_VENDED_CREDENTIALS_ENABLED, "true"));
@@ -115,11 +143,24 @@ public class IcebergRESTCatalog implements IcebergCatalog {
 
         nestedNamespaceEnabled = PropertyUtil.propertyAsBoolean(restCatalogProperties, KEY_NESTED_NAMESPACE_ENABLED, false);
         viewEndpointsEnabled = PropertyUtil.propertyAsBoolean(restCatalogProperties, KEY_VIEW_ENDPOINTS_ENABLED, true);
-        // setup oauth2
+
+        // Setup security configuration (OAuth2, JWT, or Google)
         OAuth2SecurityConfig securityConfig = OAuth2SecurityConfigBuilder.build(restCatalogProperties);
         OAuth2SecurityProperties securityProperties = new OAuth2SecurityProperties(securityConfig);
-
         restCatalogProperties.putAll(securityProperties.get());
+
+        // Handle Google AuthManager (Iceberg 1.10+)
+        if (securityConfig.getSecurity() == Security.GOOGLE) {
+            restCatalogProperties.put(REST_AUTH_TYPE, AUTH_TYPE_GOOGLE);
+            // Set GCP credentials path if provided
+            String gcpCredentialsPath = restCatalogProperties.get(GCP_AUTH_CREDENTIALS_PATH);
+            if (!Strings.isNullOrEmpty(gcpCredentialsPath)) {
+                restCatalogProperties.put(GCP_AUTH_CREDENTIALS_PATH, gcpCredentialsPath);
+            }
+            // Set GCP auth scopes (default to cloud-platform scope)
+            String gcpScopes = restCatalogProperties.getOrDefault(GCP_AUTH_SCOPES, DEFAULT_GCP_AUTH_SCOPE);
+            restCatalogProperties.put(GCP_AUTH_SCOPES, gcpScopes);
+        }
 
         try {
             delegate = new RESTSessionCatalog();
