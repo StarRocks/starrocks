@@ -789,6 +789,24 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Description: Specifies the number of milliseconds to wait before starting up a hedged read. For example, you have set this parameter to `30`. In this situation, if a read from a block has not returned within 30 milliseconds, your HDFS client immediately starts up a new read against a different block replica. It is equivalent to the `dfs.client.hedged.read.threshold.millis` parameter in the **hdfs-site.xml** file of your HDFS cluster.
 - Introduced in: v3.0
 
+##### hdfs_client_max_cache_size
+
+- Default: 64
+- Type: Int
+- Unit: -
+- Is mutable: No
+- Description: Maximum number of HDFS client connections cached at StarRocks level. Default caches up to 64 connections, with random replacement when full.
+- Introduced in: v3.0
+
+##### hdfs_client_force_new_instance
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: No
+- Description: Whether to force create a new Hadoop FileSystem instance each time. `true` (default): Creates independent instance each time, safe but may cause thread exhaustion for heavy clients (e.g., Curvine). `false`: Reuses Hadoop's cached FileSystem, more efficient, recommended for Curvine scenarios. Note: Request-level parameter `disable_cache` takes precedence over this global config.
+- Introduced in: -
+
 ##### io_coalesce_adaptive_lazy_active
 
 - Default: true

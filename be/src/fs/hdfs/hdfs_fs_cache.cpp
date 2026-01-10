@@ -23,6 +23,14 @@
 
 namespace starrocks {
 
+bool should_force_new_hdfs_instance(const THdfsProperties* properties) {
+    bool force_new_instance = config::hdfs_client_force_new_instance;
+    if (properties != nullptr && properties->__isset.disable_cache) {
+        force_new_instance = properties->disable_cache;
+    }
+    return force_new_instance;
+}
+
 // Try to get cloud properties from FSOptions, if cloud configuration not existed, return nullptr.
 // TODO(SmithCruise): Should remove when using cpp sdk
 static const std::map<std::string, std::string> get_cloud_properties(const FSOptions& options) {
@@ -51,7 +59,15 @@ static Status create_hdfs_fs_handle(const std::string& namenode, const std::shar
             hdfsBuilderSetUserName(hdfs_builder, properties->hdfs_username.data());
         }
     }
-    hdfsBuilderSetForceNewInstance(hdfs_builder);
+
+    // Determine whether to force new instance and set ownership accordingly.
+    // When force_new_instance=true: create independent instance, we own it and must disconnect on destruction.
+    // When force_new_instance=false: use Hadoop cache, we don't own it and must NOT disconnect.
+    bool force_new_instance = should_force_new_hdfs_instance(properties);
+    hdfs_client->_owns_hdfs_fs = force_new_instance;
+    if (force_new_instance) {
+        hdfsBuilderSetForceNewInstance(hdfs_builder);
+    }
 
     // Insert cloud properties(key-value paired) into Hadoop configuration
     // TODO(SmithCruise): Should remove when using cpp sdk
