@@ -1424,8 +1424,8 @@ public class IcebergMetadata implements ConnectorMetadata {
         commitWithCleanup(() -> {
             rowDelta.commit();
             transaction.commitTransaction();
-            asyncRefreshOthersFeMetadataCache(dbName, tableName);
         }, () -> invalidateCacheAfterCommit(dbName, tableName), dataFiles, dbName, tableName);
+        asyncRefreshOthersFeMetadataCache(dbName, tableName);
     }
 
     private void commitDataOperation(Transaction transaction, org.apache.iceberg.Table nativeTbl,
@@ -1474,8 +1474,8 @@ public class IcebergMetadata implements ConnectorMetadata {
         commitWithCleanup(() -> {
             batchWrite.commit();
             transaction.commitTransaction();
-            asyncRefreshOthersFeMetadataCache(dbName, tableName);
         }, () -> invalidateCacheAfterCommit(dbName, tableName), dataFiles, dbName, tableName);
+        asyncRefreshOthersFeMetadataCache(dbName, tableName);
     }
 
     private void asyncRefreshOthersFeMetadataCache(String dbName, String tableName) {
@@ -1749,3 +1749,4 @@ public class IcebergMetadata implements ConnectorMetadata {
         }
     }
 }
+
