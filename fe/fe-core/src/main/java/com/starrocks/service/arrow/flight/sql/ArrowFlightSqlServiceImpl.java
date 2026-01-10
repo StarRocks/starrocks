@@ -660,7 +660,7 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
             Location endpoint = getFEEndpoint(ctx.getSessionVariable());
             return buildFlightInfo(request, descriptor, schema, endpoint);
         } catch (InvalidConfException e) {
-            throw CallStatus.INVALID_ARGUMENT.withDescription(e.getMessage()).toRuntimeException();
+            throw CallStatus.INTERNAL.withDescription(e.getMessage()).toRuntimeException();
         }
     }
 
@@ -720,18 +720,12 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
         }
     }
 
-    /**
-     * Validates and parses proxy string into Location.
-     */
     private Location getProxyLocation(String arrowFlightProxy) throws InvalidConfException {
         validateProxyFormat(arrowFlightProxy);
         String[] split = arrowFlightProxy.split(":");
         return Location.forGrpcInsecure(split[0], Integer.parseInt(split[1]));
     }
 
-    /**
-     * Gets endpoint for FE-handled queries, respecting proxy settings.
-     */
     protected Location getFEEndpoint(SessionVariable sv) throws InvalidConfException {
         if (sv.isArrowFlightProxyEnabled()) {
             String arrowFlightProxy = sv.getArrowFlightProxy();
@@ -742,9 +736,6 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
         return feEndpoint;
     }
 
-    /**
-     * Gets endpoint and ticket for BE-handled queries, respecting proxy settings.
-     */
     protected Pair<Location, ByteString> getBEEndpoint(SessionVariable sv, TUniqueId queryId,
                                                   ComputeNode worker, TUniqueId rootFragmentInstanceId)
                                                   throws InvalidConfException {

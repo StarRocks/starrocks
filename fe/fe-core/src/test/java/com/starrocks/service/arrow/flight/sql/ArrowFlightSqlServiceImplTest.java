@@ -77,6 +77,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Answers.CALLS_REAL_METHODS;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
@@ -206,6 +207,35 @@ public class ArrowFlightSqlServiceImplTest {
         assertEquals(1, info.getEndpoints().size());
         assertEquals(Location.forGrpcInsecure("proxy.example.com", 9408),
                 info.getEndpoints().get(0).getLocations().get(0));
+    }
+
+    @Test
+    public void testGetFlightInfoCatalogsWithProxyEnabledButEmpty() {
+        SessionVariable mockSv = mock(SessionVariable.class);
+        when(mockContext.getSessionVariable()).thenReturn(mockSv);
+        when(mockSv.isArrowFlightProxyEnabled()).thenReturn(true);
+        when(mockSv.getArrowFlightProxy()).thenReturn("");
+
+        FlightSql.CommandGetCatalogs command = FlightSql.CommandGetCatalogs.newBuilder().build();
+        FlightInfo info = service.getFlightInfoCatalogs(command, mockCallContext, FlightDescriptor.command("".getBytes()));
+
+        assertNotNull(info);
+        assertEquals(1, info.getEndpoints().size());
+        assertEquals(Location.forGrpcInsecure("localhost", 1234),
+                info.getEndpoints().get(0).getLocations().get(0));
+    }
+
+    @Test
+    public void testGetFlightInfoCatalogsWithInvalidProxy() {
+        SessionVariable mockSv = mock(SessionVariable.class);
+        when(mockContext.getSessionVariable()).thenReturn(mockSv);
+        when(mockSv.isArrowFlightProxyEnabled()).thenReturn(true);
+        when(mockSv.getArrowFlightProxy()).thenReturn("invalid-proxy-format");
+
+        FlightSql.CommandGetCatalogs command = FlightSql.CommandGetCatalogs.newBuilder().build();
+        FlightRuntimeException ex = assertThrows(FlightRuntimeException.class, () ->
+                service.getFlightInfoCatalogs(command, mockCallContext, FlightDescriptor.command("".getBytes())));
+        assertTrue(ex.getMessage().contains("Expected format 'hostname:port'"));
     }
 
     @Test
@@ -658,35 +688,29 @@ public class ArrowFlightSqlServiceImplTest {
     public void testGetFEEndpointAllPaths() throws Exception {
         SessionVariable mockSv = mock(SessionVariable.class);
 
-        // Test 1: Proxy disabled - should return internal FE endpoint
         when(mockSv.isArrowFlightProxyEnabled()).thenReturn(false);
         Location result = service.getFEEndpoint(mockSv);
         assertEquals(Location.forGrpcInsecure("localhost", 1234), result);
 
-        // Test 2: Proxy enabled but empty - should return internal FE endpoint
         when(mockSv.isArrowFlightProxyEnabled()).thenReturn(true);
         when(mockSv.getArrowFlightProxy()).thenReturn("");
         result = service.getFEEndpoint(mockSv);
         assertEquals(Location.forGrpcInsecure("localhost", 1234), result);
 
-        // Test 3: Proxy enabled with valid proxy - should return proxy endpoint
         when(mockSv.getArrowFlightProxy()).thenReturn("proxy-host:9408");
         result = service.getFEEndpoint(mockSv);
         assertEquals(Location.forGrpcInsecure("proxy-host", 9408), result);
 
-        // Test 4: Invalid proxy format - should throw exception
         when(mockSv.getArrowFlightProxy()).thenReturn("invalidproxy");
         InvalidConfException ex = assertThrows(InvalidConfException.class, () ->
                 service.getFEEndpoint(mockSv));
         assertEquals("Expected format 'hostname:port', got 'invalidproxy'", ex.getMessage());
 
-        // Test 5: Empty hostname - should throw exception
         when(mockSv.getArrowFlightProxy()).thenReturn(":9408");
         ex = assertThrows(InvalidConfException.class, () ->
                 service.getFEEndpoint(mockSv));
         assertEquals("Hostname cannot be empty, got ':9408'", ex.getMessage());
 
-        // Test 6: Invalid port - should throw exception
         when(mockSv.getArrowFlightProxy()).thenReturn("hostname:abc");
         ex = assertThrows(InvalidConfException.class, () ->
                 service.getFEEndpoint(mockSv));
