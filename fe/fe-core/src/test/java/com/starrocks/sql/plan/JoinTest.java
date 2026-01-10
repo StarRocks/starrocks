@@ -3632,4 +3632,18 @@ public class JoinTest extends PlanTestBase {
                 "  |  offset: 0");
         FeConstants.runningUnitTest = false;
     }
+
+    @Test
+    public void testLeftPredicate() throws Exception {
+        connectContext.getSessionVariable().setCboCTERuseRatio(0);
+        String sql1 = "with tt as (select * from test_all_type_not_null) "
+                + "select t1.* "
+                + "from tt t1 left join "
+                + "     tt t2 on t1.t1c = t2.t1c "
+                + " and t1.t1a between t2.id_datetime and t2.id_date "
+                + "where t1.t1a>=date_add('2026-01-01',-200) and t1.t1a<=date_format(date_add('2026-01-01',0) , '%Y-%m-31');";
+
+        String plan = getFragmentPlan(sql1);
+        assertNotContains(plan, "CAST(29: id_date AS VARCHAR) >= '2025-06-15 00:00:00'");
+    }
 }
