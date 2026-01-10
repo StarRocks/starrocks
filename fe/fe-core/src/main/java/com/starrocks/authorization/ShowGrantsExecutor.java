@@ -26,7 +26,6 @@ import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.sql.ast.GrantPrivilegeStmt;
 import com.starrocks.sql.ast.GrantRevokeClause;
 import com.starrocks.sql.ast.GrantRoleStmt;
 import com.starrocks.sql.ast.GrantType;
@@ -38,6 +37,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 /**
  * Executor for SHOW GRANTS statement.
@@ -141,21 +141,71 @@ public class ShowGrantsExecutor {
                         userOrRoleName.getRoleName() : userOrRoleName.getUser().toString());
                 info.add(catalogName);
 
-                GrantPrivilegeStmt grantPrivilegeStmt = new GrantPrivilegeStmt(new ArrayList<>(), objectType.name(),
-                        userOrRoleName, null, privilegeEntry.isWithGrantOption());
-
-                grantPrivilegeStmt.setObjectType(objectType);
                 ActionSet actionSet = privilegeEntry.getActionSet();
                 List<PrivilegeType> privList = authorizationManager.analyzeActionSet(objectType, actionSet);
-                grantPrivilegeStmt.setPrivilegeTypes(privList);
-                grantPrivilegeStmt.setObjectList(Lists.newArrayList(privilegeEntry.getObject()));
-
-                try {
-                    info.add(AstToSQLBuilder.toSQL(grantPrivilegeStmt));
-                    infos.add(info);
-                } catch (com.starrocks.sql.common.MetaNotFoundException e) {
-                    //Ignore the case of MetaNotFound in the show statement, such as metadata being deleted
+                
+                // Build GRANT statement string manually since we can't use AST anymore
+                StringBuilder sqlBuilder = new StringBuilder("GRANT ");
+                sqlBuilder.append(privList.stream()
+                        .map(p -> p.name().replace("_", " "))
+                        .collect(Collectors.joining(", ")));
+                sqlBuilder.append(" ON ");
+                
+                // Format object type and object name based on object type
+                PEntryObject pEntryObject = privilegeEntry.getObject();
+                if (objectType.equals(ObjectType.SYSTEM)) {
+                    sqlBuilder.append(objectType.name());
+                } else {
+                    // For non-SYSTEM types, format as "ON <objectType> <object>"
+                    // But for TABLE/VIEW/MATERIALIZED_VIEW, when object is "ALL ...", 
+                    // the toString() already includes the full description
+                    String objectStr = pEntryObject != null ? pEntryObject.toString() : "";
+                    if (objectType.equals(ObjectType.TABLE) || objectType.equals(ObjectType.VIEW)
+                            || objectType.equals(ObjectType.MATERIALIZED_VIEW)) {
+                        // For table-like objects, check if it's "ALL ..." format
+                        if (objectStr.startsWith("ALL ")) {
+                            // "ALL TABLES IN ALL DATABASES" or "ALL VIEWS IN ALL DATABASES" etc.
+                            sqlBuilder.append(objectStr);
+                        } else {
+                            // Specific table/view: "ON TABLE db.tbl" or "ON VIEW db.view"
+                            sqlBuilder.append(objectType.name()).append(" ").append(objectStr);
+                        }
+                    } else if (objectType.equals(ObjectType.DATABASE)) {
+                        // For DATABASE, check if it's "ALL DATABASES"
+                        if (objectStr.equals("ALL DATABASES")) {
+                            sqlBuilder.append(objectStr);
+                        } else {
+                            // Specific database: "ON DATABASE db"
+                            sqlBuilder.append(objectType.name()).append(" ").append(objectStr);
+                        }
+                    } else if (objectType.equals(ObjectType.CATALOG)) {
+                        // For CATALOG, check if it's "ALL CATALOGS"
+                        if (objectStr.equals("ALL CATALOGS")) {
+                            sqlBuilder.append(objectStr);
+                        } else {
+                            // Specific catalog: "ON CATALOG catalog_name"
+                            sqlBuilder.append(objectType.name()).append(" ").append(objectStr);
+                        }
+                    } else {
+                        // For other types (FUNCTION, etc.), always include object type
+                        sqlBuilder.append(objectType.name()).append(" ").append(objectStr);
+                    }
                 }
+                
+                sqlBuilder.append(" TO ");
+                // Format user or role correctly
+                if (userOrRoleName.getRoleName() != null) {
+                    sqlBuilder.append("ROLE '").append(userOrRoleName.getRoleName()).append("'");
+                } else {
+                    sqlBuilder.append("USER ").append(userOrRoleName.getUser().toString());
+                }
+                
+                if (privilegeEntry.isWithGrantOption()) {
+                    sqlBuilder.append(" WITH GRANT OPTION");
+                }
+                
+                info.add(sqlBuilder.toString());
+                infos.add(info);
             }
         }
 

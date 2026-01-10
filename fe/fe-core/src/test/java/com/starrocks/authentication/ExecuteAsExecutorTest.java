@@ -199,7 +199,7 @@ public class ExecuteAsExecutorTest {
         GrantPrivilegeStmt grantStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(
                 "GRANT IMPERSONATE ON USER target_user TO ROLE impersonate_role",
                 new ConnectContext());
-        authorizationMgr.grant(grantStmt);
+        authorizationMgr.grant(grantStmt, new ConnectContext());
 
         // Grant role to external group
         GrantRoleStmt grantRoleStmt =
@@ -239,7 +239,7 @@ public class ExecuteAsExecutorTest {
         RevokePrivilegeStmt revokeStmt = (RevokePrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(
                 "REVOKE IMPERSONATE ON USER target_user FROM ROLE impersonate_role",
                 new ConnectContext());
-        authorizationMgr.revoke(revokeStmt);
+        authorizationMgr.revoke(revokeStmt, new ConnectContext());
 
         // Re-authenticate to refresh context
         AuthenticationHandler.authenticate(context, "group_user", "%", MysqlPassword.EMPTY_PASSWORD);
@@ -259,7 +259,7 @@ public class ExecuteAsExecutorTest {
         grantStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(
                 "GRANT IMPERSONATE ON USER target_user TO ROLE impersonate_role",
                 new ConnectContext());
-        authorizationMgr.grant(grantStmt);
+        authorizationMgr.grant(grantStmt, new ConnectContext());
 
         // Re-authenticate to refresh context
         AuthenticationHandler.authenticate(context, "group_user", "%", MysqlPassword.EMPTY_PASSWORD);

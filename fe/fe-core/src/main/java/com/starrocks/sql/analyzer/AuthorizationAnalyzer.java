@@ -56,6 +56,83 @@ public class AuthorizationAnalyzer {
         new AuthorizationAnalyzerVisitor().analyze(statement, session);
     }
 
+    /**
+     * Build object list from statement for grant/revoke operations
+     */
+    public static List<PEntryObject> buildObjectList(BaseGrantRevokePrivilegeStmt stmt, 
+                                                      ObjectType objectType,
+                                                      ConnectContext session) 
+            throws PrivilegeException, AnalysisException {
+        AuthorizationMgr authorizationManager = GlobalStateMgr.getCurrentState().getAuthorizationMgr();
+        List<PEntryObject> objectList = new ArrayList<>();
+        
+        if (objectType.equals(ObjectType.USER)) {
+            List<UserRef> users = analyzeUserPrivTokenStatic(stmt);
+            for (UserRef user : users) {
+                UserIdentity userIdentity = null;
+                if (user != null) {
+                    userIdentity = new UserIdentity(user.getUser(), user.getHost(), user.isDomain());
+                }
+                objectList.add(authorizationManager.generateUserObject(ObjectType.USER, userIdentity));
+            }
+        } else if (objectType.equals(ObjectType.FUNCTION) ||
+                objectType.equals(ObjectType.GLOBAL_FUNCTION)) {
+            List<Pair<Long, Long>> funcPrivTokenList =
+                    analyzeFuncPrivTokenStatic(stmt, objectType, session, authorizationManager);
+            for (Pair<Long, Long> funcPrivToken : funcPrivTokenList) {
+                objectList.add(authorizationManager.generateFunctionObject(objectType,
+                        funcPrivToken.first, funcPrivToken.second));
+            }
+        } else if (objectType.equals(ObjectType.SYSTEM)) {
+            objectList.addAll(Arrays.asList(new PEntryObject[] {null}));
+        } else {
+            List<List<String>> tokens = analyzeTokensStatic(stmt, objectType, session, authorizationManager);
+            for (List<String> token : tokens) {
+                objectList.add(authorizationManager.generateObject(objectType, token));
+            }
+        }
+        
+        return objectList;
+    }
+
+    private static List<UserRef> analyzeUserPrivTokenStatic(BaseGrantRevokePrivilegeStmt stmt) {
+        List<UserRef> userIdentities = new ArrayList<>();
+        if (stmt.isGrantOnALL()) {
+            Preconditions.checkArgument(stmt.getPrivilegeObjectNameTokensList() != null);
+            Preconditions.checkArgument(stmt.getPrivilegeObjectNameTokensList().size() == 1);
+
+            List<String> tokens = stmt.getPrivilegeObjectNameTokensList().get(0);
+            if (tokens.size() != 1) {
+                throw new SemanticException(
+                        "Invalid grant statement with error privilege object " + tokens);
+            }
+            userIdentities.add(null);
+        } else {
+            for (UserRef userRef : stmt.getUserPrivilegeObjectList()) {
+                AuthenticationAnalyzer.analyzeUser(userRef);
+                AuthenticationAnalyzer.checkUserExist(userRef, true);
+                userIdentities.add(userRef);
+            }
+        }
+        return userIdentities;
+    }
+
+    private static List<Pair<Long, Long>> analyzeFuncPrivTokenStatic(
+            BaseGrantRevokePrivilegeStmt stmt, ObjectType objectType,
+            ConnectContext session, AuthorizationMgr authorizationManager)
+            throws AnalysisException {
+        // This will be implemented - copying logic from AuthorizationAnalyzerVisitor
+        return new AuthorizationAnalyzerVisitor().analyzeFuncPrivToken(stmt, objectType, session);
+    }
+
+    private static List<List<String>> analyzeTokensStatic(
+            BaseGrantRevokePrivilegeStmt stmt, ObjectType objectType,
+            ConnectContext session, AuthorizationMgr authorizationManager)
+            throws AnalysisException {
+        // This will be implemented - copying logic from AuthorizationAnalyzerVisitor
+        return new AuthorizationAnalyzerVisitor().analyzeTokens(stmt, objectType, session);
+    }
+
     public static class AuthorizationAnalyzerVisitor implements AstVisitorExtendInterface<Void, ConnectContext> {
         private AuthorizationMgr authorizationManager = null;
 
@@ -128,49 +205,19 @@ public class AuthorizationAnalyzer {
 
             try {
                 ObjectType objectType = analyzeObjectType(stmt.getObjectTypeUnResolved());
-                stmt.setObjectType(objectType);
-
-                List<PEntryObject> objectList = new ArrayList<>();
-                if (objectType.equals(ObjectType.USER)) {
-                    List<UserRef> users = analyzeUserPrivToken(stmt);
-                    for (UserRef user : users) {
-                        UserIdentity userIdentity = null;
-                        if (user != null) {
-                            userIdentity = new UserIdentity(user.getUser(), user.getHost(), user.isDomain());
-                        }
-                        objectList.add(authorizationManager.generateUserObject(ObjectType.USER, userIdentity));
-                    }
-                } else if (objectType.equals(ObjectType.FUNCTION) || objectType.equals(ObjectType.GLOBAL_FUNCTION)) {
-                    List<Pair<Long, Long>> funcPrivTokenList = analyzeFuncPrivToken(stmt, objectType, session);
-                    for (Pair<Long, Long> funcPrivToken : funcPrivTokenList) {
-                        objectList.add(authorizationManager.generateFunctionObject(objectType,
-                                funcPrivToken.first, funcPrivToken.second));
-                    }
-                } else if (objectType.equals(ObjectType.SYSTEM)) {
-                    objectList.addAll(Arrays.asList(new PEntryObject[] {null}));
-                } else {
-                    List<List<String>> tokens = analyzeTokens(stmt, objectType, session);
-                    for (List<String> token : tokens) {
-                        objectList.add(authorizationManager.generateObject(objectType, token));
-                    }
-                }
-
-                stmt.setObjectList(objectList);
+                List<PEntryObject> objectList = buildObjectList(stmt, objectType, session);
 
                 List<PrivilegeType> privilegeTypes = new ArrayList<>();
                 for (String privTypeUnResolved : stmt.getPrivilegeTypeUnResolved()) {
                     if (privTypeUnResolved.equalsIgnoreCase("all")
                             || privTypeUnResolved.equalsIgnoreCase("all privileges")) {
-                        privilegeTypes.addAll(authorizationManager.getAvailablePrivType(stmt.getObjectType()));
+                        privilegeTypes.addAll(authorizationManager.getAvailablePrivType(objectType));
                     } else {
-                        privilegeTypes.add(analyzePrivType(stmt.getObjectType(), privTypeUnResolved));
+                        privilegeTypes.add(analyzePrivType(objectType, privTypeUnResolved));
                     }
                 }
 
-                stmt.setPrivilegeTypes(privilegeTypes);
-
-                authorizationManager.validateGrant(stmt.getObjectType(), stmt.getPrivilegeTypes(),
-                        stmt.getObjectList());
+                authorizationManager.validateGrant(objectType, privilegeTypes, objectList);
             } catch (PrivilegeException | AnalysisException e) {
                 SemanticException exception = new SemanticException(e.getMessage());
                 exception.initCause(e);
