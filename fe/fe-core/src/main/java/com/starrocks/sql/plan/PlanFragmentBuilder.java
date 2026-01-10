@@ -1129,7 +1129,7 @@ public class PlanFragmentBuilder {
         }
 
         private void prepareContextSlots(PhysicalScanOperator node, ExecPlan context, TupleDescriptor tupleDescriptor) {
-            // set slot
+            // set slot for normal scan columns
             for (Map.Entry<ColumnRefOperator, Column> entry : node.getColRefToColumnMetaMap().entrySet()) {
                 SlotDescriptor slotDescriptor =
                         context.getDescTbl().addSlotDescriptor(tupleDescriptor, new SlotId(entry.getKey().getId()));
@@ -1143,6 +1143,57 @@ public class PlanFragmentBuilder {
                 }
                 context.getColRefToExpr().put(entry.getKey(), new SlotRef(entry.getKey().toString(), slotDescriptor));
             }
+
+            // Handle additional transform partition columns that were added by fillTransformPartitionColumns
+            // These columns are in context.getOutputColumns() but not in node.getColRefToColumnMetaMap()
+            Set<ColumnRefOperator> scanColumns = node.getColRefToColumnMetaMap().keySet();
+            for (ColumnRefOperator outputColumn : context.getOutputColumns()) {
+                if (!scanColumns.contains(outputColumn)) {
+                    // This is a generated column (e.g., transform partition column)
+                    // Get its expression from the physical plan's root project operator
+                    Map<ColumnRefOperator, ScalarOperator> projectOperatorMap = getProjectOperatorMap(context);
+                    if (projectOperatorMap != null && projectOperatorMap.containsKey(outputColumn)) {
+                        ScalarOperator expr = projectOperatorMap.get(outputColumn);
+                        // Build the expression and add to colRefToExpr
+                        Expr slotExpr = ScalarOperatorToExpr.buildExecExpression(expr,
+                                new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr(), projectOperatorMap));
+                        context.getColRefToExpr().put(outputColumn, slotExpr);
+
+                        // Also create slot descriptor for this column
+                        SlotDescriptor slotDescriptor =
+                                context.getDescTbl().addSlotDescriptor(tupleDescriptor, new SlotId(outputColumn.getId()));
+                        slotDescriptor.setIsNullable(expr.isNullable());
+                        slotDescriptor.setIsMaterialized(true);
+                        slotDescriptor.setIsOutputColumn(true);
+                        slotDescriptor.setType(expr.getType());
+                        if (expr.getType().isComplexType()) {
+                            slotDescriptor.setOriginType(outputColumn.getType());
+                            slotDescriptor.setType(outputColumn.getType());
+                        }
+                    }
+                }
+            }
+        }
+
+        /**
+         * Get the project operator map from the physical plan root if it's a PhysicalProjectOperator.
+         * This is used to find expressions for generated/transform columns.
+         */
+        private Map<ColumnRefOperator, ScalarOperator> getProjectOperatorMap(ExecPlan context) {
+            if (context.getPhysicalPlan() == null) {
+                return null;
+            }
+
+            Operator op = context.getPhysicalPlan().getOp();
+            if (op instanceof PhysicalProjectOperator) {
+                return ((PhysicalProjectOperator) op).getColumnRefMap();
+            }
+
+            if (op instanceof PhysicalScanOperator && ((PhysicalScanOperator) op).getProjection() != null) {
+                return ((PhysicalScanOperator) op).getProjection().getColumnRefMap();
+            }
+
+            return null;
         }
 
         private void prepareCommonExpr(HDFSScanNodePredicates scanNodePredicates,
@@ -2566,8 +2617,16 @@ public class PlanFragmentBuilder {
             ExchangeNode exchangeNode = new ExchangeNode(context.getNextNodeId(),
                     inputFragment.getPlanRoot(), distribution.getDistributionSpec().getType());
             currentExecGroup.add(exchangeNode, true);
+            Map<ColumnRefOperator, ScalarOperator> projectOperatorMap = null;
+            if (optExpr.inputAt(0).getOp() instanceof PhysicalProjectOperator) {
+                projectOperatorMap = ((PhysicalProjectOperator) optExpr.inputAt(0).getOp()).getColumnRefMap();
+            } else if (optExpr.inputAt(0).getOp() instanceof PhysicalScanOperator
+                    && ((PhysicalScanOperator) optExpr.inputAt(0).getOp()).getProjection() != null) {
+                projectOperatorMap = ((PhysicalScanOperator) optExpr.inputAt(0).getOp()).getProjection().getColumnRefMap();
+            }
+
             DataPartition dataPartition =
-                    translateDistributionToDataPartition(distribution.getDistributionSpec(), context);
+                    translateDistributionToDataPartition(distribution.getDistributionSpec(), context, projectOperatorMap);
             exchangeNode.setDataPartition(dataPartition);
 
             PlanFragment fragment =
@@ -4352,6 +4411,12 @@ public class PlanFragmentBuilder {
 
         private DataPartition translateDistributionToDataPartition(DistributionSpec distributionSpec,
                                                                    ExecPlan context) {
+            return translateDistributionToDataPartition(distributionSpec, context, null);
+        }
+
+        private DataPartition translateDistributionToDataPartition(DistributionSpec distributionSpec,
+                                                                   ExecPlan context,
+                                                                   Map<ColumnRefOperator, ScalarOperator> projectOperatorMap) {
             DataPartition dataPartition;
             if (DistributionSpec.DistributionType.GATHER.equals(distributionSpec.getType())) {
                 dataPartition = DataPartition.UNPARTITIONED;
@@ -4361,10 +4426,19 @@ public class PlanFragmentBuilder {
             } else if (DistributionSpec.DistributionType.SHUFFLE.equals(distributionSpec.getType())) {
                 List<ColumnRefOperator> partitionColumns =
                         getShuffleColumns((HashDistributionSpec) distributionSpec, columnRefFactory);
-                List<Expr> distributeExpressions =
-                        partitionColumns.stream().map(e -> ScalarOperatorToExpr.buildExecExpression(e,
-                                        new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
-                                .collect(Collectors.toList());
+
+                // For Iceberg global shuffle on partition transform expressions, the shuffle keys may refer to
+                // generated/transform columns that are not materialized as SlotRef in colRefToExpr.
+                // Prefer the project map from the Distribution child (passed in), and fall back to the plan root.
+                Map<ColumnRefOperator, ScalarOperator> projectOperatorMapToUse =
+                        projectOperatorMap != null ? projectOperatorMap : getProjectOperatorMap(context);
+                ScalarOperatorToExpr.FormatterContext formatterContext = projectOperatorMapToUse == null ?
+                        new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr()) :
+                        new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr(), projectOperatorMapToUse);
+
+                List<Expr> distributeExpressions = partitionColumns.stream()
+                        .map(e -> ScalarOperatorToExpr.buildExecExpression(e, formatterContext))
+                        .collect(Collectors.toList());
                 dataPartition = DataPartition.hashPartitioned(distributeExpressions);
             } else if (DistributionSpec.DistributionType.ROUND_ROBIN.equals(
                     distributionSpec.getType())) {
