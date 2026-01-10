@@ -93,4 +93,11 @@ public class SessionVariableTest {
         sessionVariable.setEnableInsertPartialUpdate(false);
         Assertions.assertFalse(sessionVariable.isEnableInsertPartialUpdate());
     }
+
+    @Test
+    public void testSkipBlackList() {
+        SessionVariable sessionVariable = new SessionVariable();
+        // Default should be false (blacklist checking is enabled by default)
+        Assertions.assertFalse(sessionVariable.isSkipBlackList());
+    }
 }
