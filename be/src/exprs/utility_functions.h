@@ -70,6 +70,9 @@ public:
 
     // Build an order-preserving composite binary key from heterogeneous arguments
     DEFINE_VECTORIZED_FN(encode_sort_key);
+
+    // Build a Morton(Z-order) encoded binary key from heterogeneous arguments
+    DEFINE_VECTORIZED_FN(encode_zorder_key);
 };
 
 } // namespace starrocks
