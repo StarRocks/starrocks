@@ -90,6 +90,7 @@ import com.starrocks.sql.optimizer.rule.transformation.SkewJoinOptimizeRule;
 import com.starrocks.sql.optimizer.rule.transformation.SplitJoinORToUnionRule;
 import com.starrocks.sql.optimizer.rule.transformation.SplitScanORToUnionRule;
 import com.starrocks.sql.optimizer.rule.transformation.SplitTopNAggregateRule;
+import com.starrocks.sql.optimizer.rule.transformation.TopNAggregatePreFilteringRule;
 import com.starrocks.sql.optimizer.rule.transformation.UnionToValuesRule;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVCompensationPruneUnionRule;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvRewriteStrategy;
@@ -717,6 +718,7 @@ public class QueryOptimizer extends Optimizer {
         scheduler.rewriteOnce(tree, rootTaskContext, SplitScanORToUnionRule.getInstance());
         scheduler.rewriteOnce(tree, rootTaskContext, new PushDownTopNBelowUnionRule());
         scheduler.rewriteOnce(tree, rootTaskContext, new SplitTopNAggregateRule());
+        scheduler.rewriteOnce(tree, rootTaskContext, new TopNAggregatePreFilteringRule());
 
         // rule based materialized view rewrite
         ruleBasedMaterializedViewRewriteStage2(tree, rootTaskContext, requiredColumns);

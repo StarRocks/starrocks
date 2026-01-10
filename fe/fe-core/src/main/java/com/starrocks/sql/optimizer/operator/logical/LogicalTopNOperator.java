@@ -317,5 +317,10 @@ public class LogicalTopNOperator extends LogicalOperator {
             builder.perPipeline = perPipeline;
             return this;
         }
+
+        public LogicalTopNOperator.Builder setTopNPushDownAgg() {
+            builder.setTopNPushDownAgg();
+            return this;
+        }
     }
 }
