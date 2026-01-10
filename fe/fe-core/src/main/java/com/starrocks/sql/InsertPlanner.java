@@ -38,6 +38,8 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
+import com.starrocks.connector.ConnectorMetadatRequestContext;
+import com.starrocks.connector.ConnectorSinkShuffleMode;
 import com.starrocks.load.Load;
 import com.starrocks.planner.BlackHoleTableSink;
 import com.starrocks.planner.DataSink;
@@ -64,15 +66,20 @@ import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.KeysType;
+import com.starrocks.sql.ast.PartitionRef;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectListItem;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.ValuesRelation;
+import com.starrocks.sql.ast.expression.BinaryPredicate;
+import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.ast.expression.CastExpr;
+import com.starrocks.sql.ast.expression.CompoundPredicate;
 import com.starrocks.sql.ast.expression.DefaultValueExpr;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.InPredicate;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.NullLiteral;
 import com.starrocks.sql.ast.expression.SlotRef;
@@ -101,6 +108,7 @@ import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 import com.starrocks.sql.optimizer.rewrite.scalar.FoldConstantsRule;
 import com.starrocks.sql.optimizer.rewrite.scalar.ScalarOperatorRewriteRule;
 import com.starrocks.sql.optimizer.statistics.ColumnDict;
+import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
 import com.starrocks.sql.optimizer.transformer.ExpressionMapping;
 import com.starrocks.sql.optimizer.transformer.LogicalPlan;
@@ -136,6 +144,11 @@ import static com.starrocks.sql.optimizer.rule.mv.MVUtils.MATERIALIZED_VIEW_NAME
 public class InsertPlanner {
     // Only for unit test
     public static boolean enableSingleReplicationShuffle = false;
+    /**
+     * Maximum cap for partition count estimation to avoid overflow.
+     * When actual partition count cannot be determined, estimates are capped at this value.
+     */
+    private static final long PARTITION_ESTIMATE_CAP = 1_000_000_000L;
     private boolean shuffleServiceEnable = false;
     private boolean forceReplicatedStorage = false;
     private boolean useOptimisticLock;
@@ -920,13 +933,29 @@ public class InsertPlanner {
         Table targetTable = insertStmt.getTargetTable();
         if (targetTable instanceof IcebergTable) {
             IcebergTable icebergTable = (IcebergTable) targetTable;
-            if (session.isEnableIcebergSinkGlobalShuffle() && (!icebergTable.getPartitionColumns().isEmpty())) {
-                List<Integer> partitionColumnIDs = icebergTable.partitionColumnIndexes().stream()
-                        .map(x -> outputColumns.get(x).getId()).collect(Collectors.toList());
-                HashDistributionDesc desc = new HashDistributionDesc(partitionColumnIDs,
-                        HashDistributionDesc.SourceType.SHUFFLE_AGG);
-                return new PhysicalPropertySet(DistributionProperty
-                        .createProperty(DistributionSpec.createHashDistributionSpec(desc)));
+            ConnectorSinkShuffleMode shuffleMode = session.getConnectorSinkShuffleMode();
+
+            // For shuffle mode except NEVER, only apply shuffle to partitioned tables
+            if (shuffleMode != ConnectorSinkShuffleMode.NEVER && !icebergTable.getPartitionColumns().isEmpty()) {
+
+                // Handle FORCE mode - always enable global shuffle
+                // We also handle the old session variable `enable_iceberg_sink_global_shuffle` for compatibility.
+                if (shuffleMode == ConnectorSinkShuffleMode.FORCE) {
+                    List<Integer> partitionColumnIDs = icebergTable.partitionColumnIndexes().stream()
+                            .map(x -> outputColumns.get(x).getId()).collect(Collectors.toList());
+                    return createShufflePropertyFromPartitions(partitionColumnIDs);
+                }
+
+                // Handle AUTO mode - use adaptive logic based on partition count and backend count
+                if (shuffleMode == ConnectorSinkShuffleMode.AUTO) {
+                    boolean shouldEnableGlobalShuffle = shouldEnableAdaptiveGlobalShuffle(
+                            insertStmt, icebergTable, session);
+                    if (shouldEnableGlobalShuffle) {
+                        List<Integer> partitionColumnIDs = icebergTable.partitionColumnIndexes().stream()
+                                .map(x -> outputColumns.get(x).getId()).collect(Collectors.toList());
+                        return createShufflePropertyFromPartitions(partitionColumnIDs);
+                    }
+                }
             }
         }
 
@@ -945,10 +974,7 @@ public class InsertPlanner {
                 } else { // use hash shuffle for partitioned table
                     List<Integer> partitionColumnIDs = table.getPartitionColumnIDs().stream()
                             .map(x -> outputColumns.get(x).getId()).collect(Collectors.toList());
-                    HashDistributionDesc desc = new HashDistributionDesc(partitionColumnIDs,
-                            HashDistributionDesc.SourceType.SHUFFLE_AGG);
-                    return new PhysicalPropertySet(DistributionProperty
-                            .createProperty(DistributionSpec.createHashDistributionSpec(desc)));
+                    return createShufflePropertyFromPartitions(partitionColumnIDs);
                 }
             }
 
@@ -999,6 +1025,13 @@ public class InsertPlanner {
 
         shuffleServiceEnable = true;
 
+        return new PhysicalPropertySet(property);
+    }
+
+    private PhysicalPropertySet createShufflePropertyFromPartitions(List<Integer> partitionColumnIDs) {
+        HashDistributionDesc desc = new HashDistributionDesc(partitionColumnIDs, HashDistributionDesc.SourceType.SHUFFLE_AGG);
+        DistributionSpec spec = DistributionSpec.createHashDistributionSpec(desc);
+        DistributionProperty property = DistributionProperty.createProperty(spec);
         return new PhysicalPropertySet(property);
     }
 
@@ -1107,5 +1140,414 @@ public class InsertPlanner {
         }
         checkPartitionInsertValid(targetTable);
         return true;
+    }
+
+    /**
+     * Judge whether adaptive global shuffle should be enabled based on partition count and backend count.
+     *
+     * Decision criteria (configurable via session variables):
+     * 1. Enable when estimated partition count >= backend count * ratio
+     * 2. OR when estimated partition count >= absolute threshold
+     *
+     * @param insertStmt INSERT statement
+     * @param icebergTable target Iceberg table
+     * @param session Session variable
+     * @return whether to enable global shuffle
+     */
+    private boolean shouldEnableAdaptiveGlobalShuffle(InsertStmt insertStmt,
+                                                       IcebergTable icebergTable,
+                                                       SessionVariable session) {
+        // Get the number of alive BE nodes in the cluster
+        int aliveBackendNum = GlobalStateMgr.getCurrentState().getNodeMgr()
+                .getClusterInfo().getAliveBackendNumber();
+
+        if (aliveBackendNum <= 0) {
+            return false;
+        }
+
+        // Estimate the number of partitions that may be involved in this insert
+        long estimatedPartitionCount = estimatePartitionCountForInsert(insertStmt, icebergTable);
+
+        // Get configured thresholds from connector variables
+        long partitionCountThreshold = session.getConnectorSinkShufflePartitionThreshold();
+        double partitionCountNodeRatio = session.getConnectorSinkShufflePartitionNodeRatio();
+
+        // Decision logic:
+        // 1. estimated partitions >= backend count * ratio coefficient
+        // 2. OR estimated partitions >= absolute threshold
+        boolean shouldEnable = estimatedPartitionCount >= (long) (aliveBackendNum * partitionCountNodeRatio)
+                || estimatedPartitionCount >= partitionCountThreshold;
+
+        if (shouldEnable && LOG.isDebugEnabled()) {
+            LOG.debug("Enable adaptive global shuffle for connector table {}.{}: " +
+                            "estimated partitions={}, alive backends={}, threshold={}, ratio={}",
+                    icebergTable.getCatalogDBName(), icebergTable.getCatalogTableName(),
+                    estimatedPartitionCount, aliveBackendNum,
+                    partitionCountThreshold, partitionCountNodeRatio);
+        }
+
+        return shouldEnable;
+    }
+
+    /**
+     * Estimate the number of partitions that may be involved in this INSERT operation.
+     *
+     * @param insertStmt INSERT statement
+     * @param icebergTable target Iceberg table
+     * @return estimated partition count
+     */
+    private long estimatePartitionCountForInsert(InsertStmt insertStmt, IcebergTable icebergTable) {
+        Map<String, Double> partitionNdv = getPartitionColumnNdv(icebergTable);
+        // 1. First try to get current partition count from table metadata
+        try {
+            List<String> partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                    .listPartitionNames(icebergTable.getCatalogName(),
+                            icebergTable.getCatalogDBName(),
+                            icebergTable.getCatalogTableName(),
+                            new ConnectorMetadatRequestContext());
+
+            if (!partitionNames.isEmpty()) {
+                long existingPartitionCount = partitionNames.size();
+
+                // 2. For static partition INSERT, we can know exactly how many partitions to write
+                if (insertStmt.isStaticKeyPartitionInsert()) {
+                    PartitionRef targetPartitionNames = insertStmt.getTargetPartitionNames();
+                    if (targetPartitionNames != null && !targetPartitionNames.getPartitionColNames().isEmpty()) {
+                        // Static partition insert, only writing to one specified partition
+                        return 1;
+                    }
+                }
+
+                // 3. If there's partition predicate filtering, try to estimate involved partitions
+                long filteredEstimate = estimatePartitionsFromPredicates(insertStmt, icebergTable,
+                        existingPartitionCount, partitionNdv);
+                if (filteredEstimate > 0 && filteredEstimate < existingPartitionCount) {
+                    return filteredEstimate;
+                }
+
+                // 4. Default to returning existing partition count (conservative: assume writing to all partitions)
+                return existingPartitionCount;
+            }
+        } catch (Exception e) {
+            LOG.warn("Failed to get partition count for iceberg table {}.{}: {}",
+                    icebergTable.getCatalogDBName(), icebergTable.getCatalogTableName(), e.getMessage());
+        }
+
+        // When partition metadata is unavailable (empty list or exception), fall back to statistics
+        long statsEstimate = estimatePartitionCountFromStatistics(icebergTable, partitionNdv);
+        if (statsEstimate > 0) {
+            // Cap the statistics-based estimate to avoid overly aggressive partition counts
+            // Without existing partition count to bound it, use PARTITION_ESTIMATE_CAP
+            return Math.min(statsEstimate, PARTITION_ESTIMATE_CAP);
+        }
+
+        // When unable to get partition info from any source, return a large default value to enable shuffle
+        return Long.MAX_VALUE;
+    }
+
+    /**
+     * Estimate the number of partitions that may be involved based on query predicates.
+     *
+     * @param insertStmt INSERT statement
+     * @param icebergTable target Iceberg table
+     * @return estimated partition count, -1 means unable to estimate
+     */
+    private long estimatePartitionsFromPredicates(InsertStmt insertStmt, IcebergTable icebergTable,
+                                                 long existingPartitionCount,
+                                                 Map<String, Double> partitionNdv) {
+        QueryRelation queryRelation = insertStmt.getQueryStatement().getQueryRelation();
+
+        // Only support SelectRelation with WHERE clause
+        if (!(queryRelation instanceof SelectRelation)) {
+            return -1;
+        }
+
+        SelectRelation selectRelation = (SelectRelation) queryRelation;
+        if (!selectRelation.hasWhereClause()) {
+            return existingPartitionCount > 0 ? existingPartitionCount : -1;
+        }
+
+        Expr predicate = selectRelation.getPredicate();
+        if (predicate == null) {
+            return existingPartitionCount > 0 ? existingPartitionCount : -1;
+        }
+
+        // Get partition column names (case-insensitive)
+        Set<String> partitionColNames = icebergTable.getPartitionColumns().stream()
+                .map(col -> col.getName().toLowerCase())
+                .collect(Collectors.toSet());
+
+        if (partitionColNames.isEmpty()) {
+            return -1;
+        }
+
+        // Extract partition column predicates and estimate partition count
+        PartitionEstimator estimator = new PartitionEstimator(partitionColNames, partitionNdv, existingPartitionCount);
+        Long estimatedCount = estimator.estimate(predicate);
+        return estimatedCount != null ? estimatedCount : -1;
+    }
+
+    private Map<String, Double> getPartitionColumnNdv(IcebergTable icebergTable) {
+        Map<String, Double> partitionNdv = new HashMap<>();
+        if (icebergTable == null || icebergTable.getPartitionColumns().isEmpty()) {
+            return partitionNdv;
+        }
+
+        try {
+            if (GlobalStateMgr.getCurrentState().getStatisticStorage() == null) {
+                return partitionNdv;
+            }
+            for (Column partitionCol : icebergTable.getPartitionColumns()) {
+                ColumnStatistic statistic = GlobalStateMgr.getCurrentState().getStatisticStorage()
+                        .getColumnStatistic(icebergTable, partitionCol.getName());
+                if (statistic == null || statistic.isUnknown()) {
+                    continue;
+                }
+                double ndv = statistic.getDistinctValuesCount();
+                if (!Double.isNaN(ndv) && ndv > 0) {
+                    partitionNdv.put(partitionCol.getName().toLowerCase(), ndv);
+                }
+            }
+        } catch (Exception e) {
+            LOG.debug("Failed to fetch partition column NDV for iceberg table {}.{}: {}",
+                    icebergTable.getCatalogDBName(), icebergTable.getCatalogTableName(), e.getMessage());
+        }
+        return partitionNdv;
+    }
+
+    /**
+     * Estimate partition count from column NDV statistics.
+     * This is used as a fallback when partition metadata is unavailable.
+     * Returns -1 if unable to estimate (invalid or missing statistics).
+     */
+    private long estimatePartitionCountFromStatistics(IcebergTable icebergTable, Map<String, Double> partitionNdv) {
+        if (partitionNdv == null || partitionNdv.isEmpty()) {
+            return -1;
+        }
+        long estimate = 1;
+        boolean hasValidNdv = false;
+        for (double ndv : partitionNdv.values()) {
+            if (Double.isNaN(ndv) || ndv <= 0) {
+                return -1;  // Any invalid NDV makes the entire estimate unreliable
+            }
+            hasValidNdv = true;
+            estimate = multiplyAndCap(estimate, (long) Math.ceil(ndv));
+        }
+        return hasValidNdv ? estimate : -1;
+    }
+
+    private static long multiplyAndCap(long base, long factor) {
+        if (base == 0 || factor == 0) {
+            return 0;
+        }
+        if (base > PARTITION_ESTIMATE_CAP / factor) {
+            return PARTITION_ESTIMATE_CAP;
+        }
+        return base * factor;
+    }
+
+    /**
+     * Helper class to estimate partition count from predicates on partition columns.
+     *
+     * Algorithm:
+     * 1. Extract all conjunctive predicates (split by AND)
+     * 2. For each predicate that references a partition column:
+     *    - Equality (EQ): count distinct values (typically 1 per column)
+     *    - IN clause: count number of values in list
+     *    - Range predicates: conservatively estimate as -1 (unable to estimate)
+     * 3. Combine estimates: if all partition columns have equality predicates,
+     *    the estimated partitions = product of distinct values
+     */
+    private static class PartitionEstimator {
+        private final Set<String> partitionColNames;
+        private final Map<String, Long> columnDistinctValues;
+        private final Map<String, Double> partitionNdv;
+        private final long existingPartitionCount;
+
+        PartitionEstimator(Set<String> partitionColNames, Map<String, Double> partitionNdv,
+                           long existingPartitionCount) {
+            this.partitionColNames = partitionColNames;
+            this.columnDistinctValues = new HashMap<>();
+            this.partitionNdv = partitionNdv;
+            this.existingPartitionCount = existingPartitionCount;
+        }
+
+        Long estimate(Expr predicate) {
+            // Split compound predicate into conjuncts
+            List<Expr> conjuncts = extractConjuncts(predicate);
+
+            for (Expr conjunct : conjuncts) {
+                if (!processPredicate(conjunct)) {
+                    // If we encounter a predicate we can't handle, return null to indicate
+                    // we cannot reliably estimate
+                    return null;
+                }
+            }
+
+            // If we have equality predicates for all partition columns, return product
+            if (columnDistinctValues.size() == partitionColNames.size()) {
+                long totalPartitions = 1;
+                for (long count : columnDistinctValues.values()) {
+                    totalPartitions = multiplyAndCap(totalPartitions, count);
+                }
+                return capWithExisting(totalPartitions);
+            }
+
+            // Partial match - if we have at least one equality predicate on partition column
+            // we can provide some estimate, but be conservative
+            if (!columnDistinctValues.isEmpty()) {
+                long estimate = columnDistinctValues.values().stream()
+                        .reduce(1L, InsertPlanner::multiplyAndCap);
+                return capWithExisting(estimate);
+            }
+
+            // No predicate-derived estimate; fall back to NDV from statistics if available
+            if (partitionNdv != null && !partitionNdv.isEmpty()) {
+                long estimate = 1;
+                boolean hasNdv = false;
+                for (double ndv : partitionNdv.values()) {
+                    if (Double.isNaN(ndv) || ndv <= 0) {
+                        continue;
+                    }
+                    hasNdv = true;
+                    estimate = multiplyAndCap(estimate, (long) Math.ceil(ndv));
+                }
+                if (hasNdv) {
+                    return capWithExisting(estimate);
+                }
+            }
+
+            return null;
+        }
+
+        private long capWithExisting(long estimate) {
+            if (existingPartitionCount > 0) {
+                return Math.min(estimate, existingPartitionCount);
+            }
+            return estimate;
+        }
+
+        private List<Expr> extractConjuncts(Expr expr) {
+            List<Expr> result = new ArrayList<>();
+            extractConjunctsRecursive(expr, result);
+            return result;
+        }
+
+        private void extractConjunctsRecursive(Expr expr,
+                                               List<Expr> result) {
+            if (expr instanceof CompoundPredicate) {
+                CompoundPredicate compound = (CompoundPredicate) expr;
+                if (compound.getOp() == CompoundPredicate.Operator.AND) {
+                    extractConjunctsRecursive(expr.getChild(0), result);
+                    extractConjunctsRecursive(expr.getChild(1), result);
+                    return;
+                }
+            }
+            result.add(expr);
+        }
+
+        private boolean processPredicate(Expr predicate) {
+            // Handle BinaryPredicate (equality, range comparisons)
+            if (predicate instanceof BinaryPredicate) {
+                return processBinaryPredicate((BinaryPredicate) predicate);
+            }
+
+            // Handle InPredicate
+            if (predicate instanceof InPredicate) {
+                return processInPredicate((InPredicate) predicate);
+            }
+
+            // For other predicate types we can't analyze (like LIKE, range predicates),
+            // return false to indicate we can't reliably estimate
+            return true;
+        }
+
+        private boolean processBinaryPredicate(BinaryPredicate binary) {
+            // Check if this is an equality predicate
+            boolean isEquality = binary.getOp() == BinaryType.EQ;
+            boolean isRange = !isEquality && (
+                    binary.getOp() == BinaryType.LT ||
+                    binary.getOp() == BinaryType.LE ||
+                    binary.getOp() == BinaryType.GT ||
+                    binary.getOp() == BinaryType.GE);
+
+            // Check if one side is a partition column reference
+            SlotRef slotRef = extractSlotRef(binary.getChild(0));
+            if (slotRef == null) {
+                slotRef = extractSlotRef(binary.getChild(1));
+            }
+
+            if (slotRef == null) {
+                return true; // Neither side is a simple column reference
+            }
+
+            String colName = slotRef.getColumnName().toLowerCase();
+            if (!partitionColNames.contains(colName)) {
+                return true; // Not a partition column
+            }
+
+            if (isEquality) {
+                // Equality predicate: typically selects 1 value per column
+                columnDistinctValues.put(colName, 1L);
+            } else if (isRange) {
+                // Range predicate: use NDV statistics to estimate selectivity
+                double ndv = partitionNdv != null && partitionNdv.containsKey(colName)
+                        ? partitionNdv.get(colName) : -1;
+                if (ndv > 0) {
+                    // Estimate using fixed selectivity (10% of partitions)
+                    // Assumes 10% of partitions are selected by range predicates (e.g., dt > '2024-01-01').
+                    // This is conservative; actual selectivity depends on range bounds
+                    long estimated = (long) Math.ceil(ndv * 0.1);
+                    // Ensure at least 1 partition is estimated
+                    columnDistinctValues.put(colName, Math.max(1L, estimated));
+                }
+                // If no NDV statistics available, we can't estimate - leave empty to trigger fallback
+            }
+            return true;
+        }
+
+        private boolean processInPredicate(InPredicate inPred) {
+            // Only handle IN (not NOT IN) with constant values
+            if (inPred.isNotIn()) {
+                return true; // NOT IN doesn't help estimate partition count
+            }
+
+            if (!inPred.isConstantValues()) {
+                return true; // Non-constant values, can't estimate
+            }
+
+            // Check if the left side is a partition column reference
+            SlotRef slotRef = extractSlotRef(inPred.getChild(0));
+            if (slotRef == null) {
+                return true;
+            }
+
+            String colName = slotRef.getColumnName().toLowerCase();
+            if (!partitionColNames.contains(colName)) {
+                return true; // Not a partition column
+            }
+
+            // Count distinct values in IN list
+            long distinctCount = inPred.getInElementNum();
+            columnDistinctValues.put(colName, distinctCount);
+            return true;
+        }
+
+        private SlotRef extractSlotRef(Expr expr) {
+            // Direct SlotRef
+            if (expr instanceof SlotRef) {
+                return (SlotRef) expr;
+            }
+
+            // Unwrap implicit cast
+            if (expr instanceof CastExpr) {
+                CastExpr cast = (CastExpr) expr;
+                if (cast.isImplicit() && cast.getChild(0) instanceof SlotRef) {
+                    return (SlotRef) cast.getChild(0);
+                }
+            }
+
+            return null;
+        }
     }
 }
