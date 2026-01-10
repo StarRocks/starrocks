@@ -95,6 +95,7 @@ public:
     /// A segment may be divided into multiple split to scan concurrently.
     bool is_first_split_of_segment = true;
     SparseRangePtr rowid_range_option = nullptr;
+    SparseRangePtr filtered_scan_range = nullptr;
     std::vector<ShortKeyRangeOptionPtr> short_key_ranges;
 
     RuntimeScanRangePruner runtime_range_pruner;
