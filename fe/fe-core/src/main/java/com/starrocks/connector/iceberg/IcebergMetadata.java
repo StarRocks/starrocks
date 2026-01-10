@@ -1333,6 +1333,8 @@ public class IcebergMetadata implements ConnectorMetadata {
                                    List<TIcebergDataFile> dataFiles, String dbName, String tableName) {
         try {
             commitAction.run();
+            // Only run cache invalidation and async refresh if commit succeeds
+            invalidateCacheAction.run();
         } catch (Exception e) {
             if (!(e instanceof CommitStateUnknownException)) {
                 List<String> toDeleteFiles = dataFiles.stream()
@@ -1342,8 +1344,6 @@ public class IcebergMetadata implements ConnectorMetadata {
             }
             LOG.error("Failed to commit iceberg transaction on {}.{}", dbName, tableName, e);
             throw new StarRocksConnectorException(e.getMessage());
-        } finally {
-            invalidateCacheAction.run();
         }
     }
 
