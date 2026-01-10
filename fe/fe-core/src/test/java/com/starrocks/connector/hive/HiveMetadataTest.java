@@ -48,6 +48,7 @@ import com.starrocks.connector.RemoteFileOperations;
 import com.starrocks.connector.RemotePathKey;
 import com.starrocks.connector.TableVersionRange;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.hive.HivePartitionStats;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.analyzer.AstToStringBuilder;
@@ -722,6 +723,75 @@ public class HiveMetadataTest {
             PartitionUpdate pu2 = new PartitionUpdate("", null, null, null, 1, 1);
             hiveCommitter.prepare(Lists.newArrayList(pu1, pu2));
         });
+    }
+
+    @Test
+    public void testGetRelativePathIfDescendant(@Mocked HiveMetastoreOperations hmsOps,
+                                                @Mocked RemoteFileOperations fileOps,
+                                                @Mocked HiveTable hiveTable) throws Exception {
+        HiveCommitter hiveCommitter = new HiveCommitter(hmsOps, fileOps, Executors.newSingleThreadExecutor(),
+                Executors.newSingleThreadExecutor(), hiveTable, new Path("/tmp/staging"));
+
+        java.lang.reflect.Method method =
+                HiveCommitter.class.getDeclaredMethod("getRelativePathIfDescendant", Path.class, Path.class);
+        method.setAccessible(true);
+
+        Optional<String> relative = (Optional<String>) method.invoke(hiveCommitter,
+                new Path("hdfs://127.0.0.1/base"), new Path("hdfs://127.0.0.1/base/a/b"));
+        Assertions.assertTrue(relative.isPresent());
+        Assertions.assertEquals("a/b", relative.get());
+
+        Optional<String> notDescendant = (Optional<String>) method.invoke(hiveCommitter,
+                new Path("hdfs://127.0.0.1/base"), new Path("hdfs://127.0.0.1/other"));
+        Assertions.assertFalse(notDescendant.isPresent());
+
+        Optional<String> samePath = (Optional<String>) method.invoke(hiveCommitter,
+                new Path("hdfs://127.0.0.1/base"), new Path("hdfs://127.0.0.1/base"));
+        Assertions.assertFalse(samePath.isPresent());
+    }
+
+    @Test
+    public void testPrepareOverwriteTableWithRelativeStaging(@Mocked HiveMetastoreOperations hmsOps,
+                                                             @Mocked RemoteFileOperations fileOps,
+                                                             @Mocked HiveTable hiveTable) throws Exception {
+        ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+        ctx.setQueryId(UUIDUtil.genUUID());
+        ctx.setThreadLocalInfo();
+
+        try {
+            Path targetPath = new Path("hdfs://127.0.0.1:10000/warehouse/table");
+            Path writePath = new Path("hdfs://127.0.0.1:10000/warehouse/table/_staging/abc");
+            PartitionUpdate partitionUpdate = new PartitionUpdate("", writePath, targetPath,
+                    Lists.newArrayList("file"), 1, 1);
+            HiveCommitter hiveCommitter = new HiveCommitter(hmsOps, fileOps, Executors.newSingleThreadExecutor(),
+                    Executors.newSingleThreadExecutor(), hiveTable, new Path("hdfs://127.0.0.1:10000/warehouse/table/_staging"));
+
+            String queryId = ctx.getQueryId().toString();
+            Path oldTableStagingPath = new Path(targetPath.getParent(), "_temp_" + targetPath.getName() + "_" + queryId);
+            Path expectedSource = new Path(oldTableStagingPath, "_staging/abc");
+
+            new Expectations() {
+                {
+                    fileOps.renameDirectory(targetPath, oldTableStagingPath, (Runnable) any);
+                    times = 1;
+                    fileOps.renameDirectory(expectedSource, targetPath, (Runnable) any);
+                    times = 1;
+                    hiveTable.getCatalogDBName();
+                    result = "db";
+                    minTimes = 0;
+                    hiveTable.getCatalogTableName();
+                    result = "table";
+                    minTimes = 0;
+                }
+            };
+
+            java.lang.reflect.Method method = HiveCommitter.class.getDeclaredMethod(
+                    "prepareOverwriteTable", PartitionUpdate.class, HivePartitionStats.class);
+            method.setAccessible(true);
+            method.invoke(hiveCommitter, partitionUpdate, HivePartitionStats.fromCommonStats(1, 1, 1));
+        } finally {
+            ConnectContext.remove();
+        }
     }
 
     @Test
