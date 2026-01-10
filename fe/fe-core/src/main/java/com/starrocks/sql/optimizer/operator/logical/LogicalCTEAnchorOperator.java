@@ -36,6 +36,7 @@ import java.util.Objects;
  * */
 public class LogicalCTEAnchorOperator extends LogicalOperator {
     private int cteId;
+    private boolean isRecursive = false;
 
     public LogicalCTEAnchorOperator(int cteId) {
         super(OperatorType.LOGICAL_CTE_ANCHOR);
@@ -67,6 +68,10 @@ public class LogicalCTEAnchorOperator extends LogicalOperator {
 
     public int getCteId() {
         return cteId;
+    }
+
+    public boolean isRecursive() {
+        return isRecursive;
     }
 
     @Override
@@ -105,6 +110,10 @@ public class LogicalCTEAnchorOperator extends LogicalOperator {
                 '}';
     }
 
+    public static Builder builder() {
+        return new Builder();
+    }
+
     public static class Builder
             extends LogicalOperator.Builder<LogicalCTEAnchorOperator, LogicalCTEAnchorOperator.Builder> {
 
@@ -115,6 +124,11 @@ public class LogicalCTEAnchorOperator extends LogicalOperator {
 
         public LogicalCTEAnchorOperator.Builder setCteId(int cteId) {
             builder.cteId = cteId;
+            return this;
+        }
+
+        public LogicalCTEAnchorOperator.Builder setIsRecursive(boolean isRecursive) {
+            builder.isRecursive = isRecursive;
             return this;
         }
 

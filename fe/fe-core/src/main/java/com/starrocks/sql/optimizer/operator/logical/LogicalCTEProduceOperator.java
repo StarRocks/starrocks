@@ -100,6 +100,10 @@ public class LogicalCTEProduceOperator extends LogicalOperator {
                 '}';
     }
 
+    public static Builder builder() {
+        return new Builder();
+    }
+
     public static class Builder
             extends LogicalOperator.Builder<LogicalCTEProduceOperator, LogicalCTEProduceOperator.Builder> {
         @Override

@@ -41,10 +41,10 @@ public class CTEAnchorImplementationRule extends ImplementationRule {
 
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
-        int cteId = ((LogicalCTEAnchorOperator) input.getOp()).getCteId();
-        int consumeNum = context.getCteContext().getCTEConsumeNum(cteId);
-        PhysicalCTEAnchorOperator anchor =
-                new PhysicalCTEAnchorOperator(cteId, consumeNum, input.getOp().getProjection());
+        LogicalCTEAnchorOperator obj = (LogicalCTEAnchorOperator) input.getOp();
+        int consumeNum = context.getCteContext().getCTEConsumeNum(obj.getCteId());
+        PhysicalCTEAnchorOperator anchor = new PhysicalCTEAnchorOperator(obj.getCteId(), consumeNum,
+                obj.isRecursive(), input.getOp().getProjection());
         return Lists.newArrayList(OptExpression.create(anchor, input.getInputs()));
     }
 }
