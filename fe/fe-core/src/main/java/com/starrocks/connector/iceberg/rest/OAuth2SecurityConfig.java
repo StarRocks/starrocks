@@ -21,6 +21,7 @@ import java.net.URI;
 import java.util.Map;
 import java.util.Optional;
 
+import static com.starrocks.connector.iceberg.rest.IcebergRESTCatalog.Security.GOOGLE;
 import static com.starrocks.connector.iceberg.rest.IcebergRESTCatalog.Security.JWT;
 import static com.starrocks.connector.iceberg.rest.IcebergRESTCatalog.Security.NONE;
 import static com.starrocks.connector.iceberg.rest.IcebergRESTCatalog.Security.OAUTH2;
@@ -139,6 +140,12 @@ class OAuth2SecurityConfigBuilder {
             config.setSecurity(JWT);
         } else if (strSecurity.equalsIgnoreCase(OAUTH2.name())) {
             config = config.setSecurity(OAUTH2);
+        } else if (strSecurity.equalsIgnoreCase(GOOGLE.name())) {
+            // Google AuthManager (Iceberg 1.10+) - uses Google credentials for authentication
+            // No OAuth2 token/credential required as it uses Application Default Credentials (ADC)
+            // or a service account key file specified via gcp.auth.credentials-path
+            config.setSecurity(GOOGLE);
+            return config;
         } else {
             throw new StarRocksConnectorException("Invalid security: %s", strSecurity);
         }
@@ -155,7 +162,7 @@ class OAuth2SecurityConfigBuilder {
             config = config.setServerUri(URI.create(serverUri));
         }
 
-        // check OAuth2SecurityConfig is valid
+        // check OAuth2SecurityConfig is valid (only for OAuth2/JWT, not Google)
         if (!config.credentialOrTokenPresent() || !config.scopePresentOnlyWithCredential()) {
             return new OAuth2SecurityConfig();
         }

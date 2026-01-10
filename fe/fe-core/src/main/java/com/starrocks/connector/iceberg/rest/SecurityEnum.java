@@ -15,5 +15,5 @@
 package com.starrocks.connector.iceberg.rest;
 
 public enum SecurityEnum {
-    NONE, OAUTH2
+    NONE, OAUTH2, GOOGLE
 }

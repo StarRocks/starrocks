@@ -277,7 +277,7 @@ REST catalog 用の `MetastoreParams`:
 
 - `iceberg.catalog.security`
   - 必須: いいえ
-  - 説明: 使用する認証プロトコルのタイプ。デフォルト: `NONE`。有効な値: `OAUTH2` および `JWT`。この項目が `OAUTH2` に設定されている場合、`token` または `credential` のいずれかが必要です。この項目が `JWT` に設定されている場合、ユーザーは `JWT` メソッドを使用して StarRocks クラスターにログインする必要があります。`token` または `credential` を省略することも可能です。その場合、StarRocks はログイン済みユーザーの JWT を使用して Catalog にアクセスします。
+  - 説明: 使用する認証プロトコルのタイプ。デフォルト: `NONE`。有効な値: `OAUTH2`、`JWT`、および `GOOGLE`。この項目が `OAUTH2` に設定されている場合、`token` または `credential` のいずれかが必要です。この項目が `JWT` に設定されている場合、ユーザーは `JWT` メソッドを使用して StarRocks クラスターにログインする必要があります。`token` または `credential` を省略することも可能です。その場合、StarRocks はログイン済みユーザーの JWT を使用して Catalog にアクセスします。この項目が `GOOGLE` に設定されている場合、Iceberg の Google AuthManager（Iceberg 1.10+）を使用して、標準の Google 資格情報（アプリケーションデフォルト認証情報またはサービスアカウントキーファイル）で認証します。
 
 - `iceberg.catalog.oauth2.token`
   - 必須: いいえ
@@ -310,6 +310,22 @@ REST catalog 用の `MetastoreParams`:
 - `iceberg.catalog.rest.view-endpoints-enabled`
   - 必須: いいえ
   - 説明: ビュー関連の操作をサポートするためにビューエンドポイントを有効にするかどうか。`false`に設定すると、`getView`などのビュー操作が無効になります。デフォルト：`true`。
+
+- `iceberg.catalog.gcp.auth.credentials-path`
+  - 必須: いいえ
+  - 説明: Google Cloud サービスアカウント JSON キーファイルへのパス。指定されていない場合、アプリケーションデフォルト認証情報（ADC）が使用されます。`iceberg.catalog.security` が `GOOGLE` に設定されている場合にのみ適用されます。
+
+- `iceberg.catalog.gcp.auth.scopes`
+  - 必須: いいえ
+  - 説明: Google 認証のためにリクエストする OAuth スコープ。デフォルト: `https://www.googleapis.com/auth/cloud-platform`。`iceberg.catalog.security` が `GOOGLE` に設定されている場合にのみ適用されます。
+
+- `iceberg.catalog.io-impl`
+  - 必須: いいえ
+  - 説明: 使用する FileIO 実装クラス。Google Cloud Storage には `org.apache.iceberg.gcp.gcs.GCSFileIO` を使用します。指定されていない場合、StarRocks はデフォルトで内部キャッシング FileIO 実装を使用します。
+
+- `iceberg.catalog.rest.metrics.reporting-enabled`
+  - 必須: いいえ
+  - 説明: Iceberg REST catalog のメトリクスレポートを有効にするかどうか。デフォルト: `true`。
 
 次の例は、Tabular をメタストアとして使用する Iceberg catalog `tabular` を作成します。
 
@@ -382,6 +398,27 @@ SHOW DATABASES FROM r2;
 ```
 
 `<r2_warehouse_name>`,`<r2_api_token>`, および `<r2_catalog_uri>` の値は、 [Cloudflare ダッシュボードの詳細](https://developers.cloudflare.com/r2/data-catalog/get-started/#prerequisites) から取得します。
+
+次の例は、Google 認証を使用して Google BigLake REST Catalog に接続する Iceberg catalog `biglake` を作成します。
+
+```SQL
+CREATE EXTERNAL CATALOG biglake
+PROPERTIES (
+    "type" = "iceberg",
+    "iceberg.catalog.type" = "rest",
+    "iceberg.catalog.uri" = "https://biglake.googleapis.com/iceberg/v1/restcatalog",
+    "iceberg.catalog.warehouse" = "bq://projects/project/locations/us-central1",
+    "iceberg.catalog.nested-namespace-enabled" = "true",
+    "iceberg.catalog.header.x-goog-user-project" = "project",
+    "iceberg.catalog.security" = "google",
+    "iceberg.catalog.rest-metrics-reporting-enabled" = "false",
+    "iceberg.catalog.io-impl" = "org.apache.iceberg.gcp.gcs.GCSFileIO",
+    "iceberg.catalog.vended-credentials-enabled" = "true",
+    "gcp.gcs.use_compute_engine_service_account" = "true"
+);
+```
+
+この構成では、Google のアプリケーションデフォルト認証情報（ADC）を使用します。GKE または Dataproc で実行している場合、認証情報は環境から自動的に取得されます。または、`iceberg.catalog.gcp.auth.credentials-path` を使用してサービスアカウントキーファイルを指定することもできます。
 
 </TabItem>
 
