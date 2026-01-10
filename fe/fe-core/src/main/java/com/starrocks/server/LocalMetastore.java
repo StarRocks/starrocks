@@ -247,6 +247,7 @@ import com.starrocks.sql.optimizer.statistics.IDictManager;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.util.EitherOr;
 import com.starrocks.system.Backend;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.TabletTaskExecutor;
 import com.starrocks.thrift.TGetTasksParams;
@@ -1841,7 +1842,8 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
             final List<Long> computeNodeIds = warehouseManager.getAllComputeNodeIds(computeResource);
             for (long nodeId : computeNodeIds) {
-                if (GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(nodeId).isAlive()) {
+                ComputeNode node = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(nodeId);
+                if (node != null && node.isAlive()) {
                     ++numAliveNodes;
                 }
             }
