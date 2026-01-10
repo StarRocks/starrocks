@@ -89,6 +89,13 @@ public class AlterJobV2HookTest {
         }
 
         @Override
+        public AlterJobV2 copyForPersist() {
+            MockedAlterJobV2 copy = new MockedAlterJobV2(this.type);
+            copyBaseFields(copy);
+            return copy;
+        }
+
+        @Override
         public void write(DataOutput out) throws IOException {
         }
     }

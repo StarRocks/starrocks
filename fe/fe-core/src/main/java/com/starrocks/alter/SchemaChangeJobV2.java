@@ -72,8 +72,6 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
-import com.starrocks.journal.JournalTask;
-import com.starrocks.persist.EditLog;
 import com.starrocks.planner.DescriptorTable;
 import com.starrocks.planner.SlotDescriptor;
 import com.starrocks.planner.TupleDescriptor;
@@ -115,6 +113,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.text.SimpleDateFormat;
+import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
@@ -316,7 +315,8 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
      * clear some date structure in this job to save memory
      * these data structures must not used in getInfo method
      */
-    private void pruneMeta() {
+    @Override
+    public void pruneMeta() {
         physicalPartitionIndexTabletMap.clear();
         physicalPartitionIndexMap.clear();
         indexMetaIdToSchema.clear();
@@ -483,22 +483,21 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.WRITE);
         try {
             Preconditions.checkState(tbl.getState() == OlapTableState.SCHEMA_CHANGE);
-            addShadowIndexToCatalog(tbl);
-            if (disableReplicatedStorageForGIN) {
-                tbl.setEnableReplicatedStorage(false);
-            }
+            final OlapTable finalTbl = tbl;
+            this.watershedTxnId =
+                    GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getTransactionIDGenerator().getNextTransactionId();
+            persistStateChange(this, JobState.WAITING_TXN, () -> {
+                addShadowIndexToCatalog(finalTbl);
+                if (disableReplicatedStorageForGIN) {
+                    finalTbl.setEnableReplicatedStorage(false);
+                }
+            });
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.WRITE);
         }
 
-        this.watershedTxnId =
-                GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getTransactionIDGenerator().getNextTransactionId();
-        this.jobState = JobState.WAITING_TXN;
         span.setAttribute("watershedTxnId", this.watershedTxnId);
         span.addEvent("setWaitingTxn");
-
-        // write edit log
-        GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(this);
         LOG.info("transfer schema change job {} state to {}, watershed txn_id: {}", jobId, this.jobState,
                 watershedTxnId);
     }
@@ -788,9 +787,6 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
          * all tasks are finished. check the integrity.
          * we just check whether all new replicas are healthy.
          */
-        EditLog editLog = GlobalStateMgr.getCurrentState().getEditLog();
-        JournalTask journalTask;
-
         Locker locker = new Locker();
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.WRITE);
         try {
@@ -837,23 +833,18 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                 }
             } // end for partitions
 
+            this.finishedTimeMs = System.currentTimeMillis();
             // all partitions are good
-            onFinished(tbl);
+            persistStateChange(this, JobState.FINISHED, true, () -> onFinished(tbl));
 
             // If schema changes include fields which defined in related mv, set those mv state to inactive.
             AlterMVJobExecutor.inactiveRelatedMaterializedViewsRecursive(tbl, modifiedColumns);
 
             pruneMeta();
             tbl.onReload();
-            this.jobState = JobState.FINISHED;
-            this.finishedTimeMs = System.currentTimeMillis();
-
-            journalTask = editLog.logAlterJobNoWait(this);
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.WRITE);
         }
-
-        EditLog.waitInfinity(journalTask);
 
         LOG.info("schema change job finished: {}", jobId);
         this.span.end();
@@ -1021,13 +1012,13 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
             return false;
         }
 
-        cancelInternal();
-
-        pruneMeta();
         this.errMsg = errMsg;
         this.finishedTimeMs = System.currentTimeMillis();
+
+        persistStateChange(this, JobState.CANCELLED, true, this::cancelInternal);
+
+        pruneMeta();
         LOG.info("cancel {} job {}, err: {}", this.type, jobId, errMsg);
-        GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(this);
         span.setStatus(StatusCode.ERROR, errMsg);
         span.end();
         return true;
@@ -1071,7 +1062,77 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
             }
         }
 
-        jobState = JobState.CANCELLED;
+        // Job state is updated after WAL is persisted.
+    }
+
+    @Override
+    public AlterJobV2 copyForPersist() {
+        SchemaChangeJobV2 copy = new SchemaChangeJobV2();
+        copyBaseFields(copy);
+        if (this.physicalPartitionIndexTabletMap != null) {
+            copy.physicalPartitionIndexTabletMap = HashBasedTable.create();
+            for (Cell<Long, Long, Map<Long, Long>> cell : this.physicalPartitionIndexTabletMap.cellSet()) {
+                Map<Long, Long> tabletMap = Maps.newHashMap();
+                if (cell.getValue() != null) {
+                    tabletMap.putAll(cell.getValue());
+                }
+                copy.physicalPartitionIndexTabletMap.put(cell.getRowKey(), cell.getColumnKey(), tabletMap);
+            }
+        } else {
+            copy.physicalPartitionIndexTabletMap = null;
+        }
+        if (this.physicalPartitionIndexMap != null) {
+            copy.physicalPartitionIndexMap = HashBasedTable.create();
+            copy.physicalPartitionIndexMap.putAll(this.physicalPartitionIndexMap);
+        } else {
+            copy.physicalPartitionIndexMap = null;
+        }
+        if (this.indexIdMap != null) {
+            copy.indexIdMap = Maps.newHashMap();
+            copy.indexIdMap.putAll(this.indexIdMap);
+        } else {
+            copy.indexIdMap = null;
+        }
+        if (this.indexIdToName != null) {
+            copy.indexIdToName = Maps.newHashMap();
+            copy.indexIdToName.putAll(this.indexIdToName);
+        } else {
+            copy.indexIdToName = null;
+        }
+        if (this.indexSchemaMap != null) {
+            copy.indexSchemaMap = Maps.newHashMap();
+            for (Entry<Long, List<Column>> entry : this.indexSchemaMap.entrySet()) {
+                List<Column> columns = entry.getValue();
+                List<Column> columnsCopy = columns == null ? null : new ArrayList<>(columns);
+                copy.indexSchemaMap.put(entry.getKey(), columnsCopy);
+            }
+        } else {
+            copy.indexSchemaMap = null;
+        }
+        if (this.indexSchemaVersionAndHashMap != null) {
+            copy.indexSchemaVersionAndHashMap = Maps.newHashMap();
+            copy.indexSchemaVersionAndHashMap.putAll(this.indexSchemaVersionAndHashMap);
+        } else {
+            copy.indexSchemaVersionAndHashMap = null;
+        }
+        if (this.indexShortKeyMap != null) {
+            copy.indexShortKeyMap = Maps.newHashMap();
+            copy.indexShortKeyMap.putAll(this.indexShortKeyMap);
+        } else {
+            copy.indexShortKeyMap = null;
+        }
+        copy.hasBfChange = this.hasBfChange;
+        copy.bfColumns = this.bfColumns == null ? null : Sets.newHashSet(this.bfColumns);
+        copy.bfFpp = this.bfFpp;
+        copy.indexChange = this.indexChange;
+        copy.indexes = this.indexes == null ? null : new ArrayList<>(this.indexes);
+        copy.watershedTxnId = this.watershedTxnId;
+        copy.startTime = this.startTime;
+        copy.sortKeyIdxes = this.sortKeyIdxes == null ? null : new ArrayList<>(this.sortKeyIdxes);
+        copy.sortKeyUniqueIds = this.sortKeyUniqueIds == null ? null : new ArrayList<>(this.sortKeyUniqueIds);
+        copy.disableReplicatedStorageForGIN = this.disableReplicatedStorageForGIN;
+        copy.historySchema = this.historySchema;
+        return copy;
     }
 
     // Check whether transactions of the given database which txnId is less than 'watershedTxnId' are finished.

@@ -46,10 +46,8 @@ import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.Status;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
-import com.starrocks.journal.JournalTask;
 import com.starrocks.lake.LakeTableHelper;
 import com.starrocks.lake.Utils;
-import com.starrocks.persist.EditLog;
 import com.starrocks.planner.DescriptorTable;
 import com.starrocks.planner.SlotDescriptor;
 import com.starrocks.planner.TupleDescriptor;
@@ -315,16 +313,6 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
     }
 
     @VisibleForTesting
-    public static void writeEditLog(LakeTableSchemaChangeJob job) {
-        GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(job);
-    }
-
-    @VisibleForTesting
-    public static JournalTask writeEditLogAsync(LakeTableSchemaChangeJob job) {
-        return GlobalStateMgr.getCurrentState().getEditLog().logAlterJobNoWait(job);
-    }
-
-    @VisibleForTesting
     public static long getNextTransactionId() {
         return GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getTransactionIDGenerator().getNextTransactionId();
     }
@@ -486,13 +474,14 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
                     "concurrent transaction detected while adding shadow index, please re-run the alter table command");
         }
 
-        jobState = JobState.WAITING_TXN;
         if (span != null) {
             span.setAttribute("watershedTxnId", this.watershedTxnId);
             span.addEvent("setWaitingTxn");
         }
 
-        writeEditLog(this);
+        // can't add addRollIndexToCatalog into the applier, because of the nextTxnId check.
+        // But addRollIndexToCatalog is addRollIndexToCatalog, so it's ok to readd if Leader transferred.
+        persistStateChange(this, JobState.WAITING_TXN);
 
         LOG.info("transfer schema change job {} state to {}, watershed txn_id: {}", jobId, this.jobState,
                 watershedTxnId);
@@ -725,13 +714,12 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
                 commitVersionMap.put(physicalPartitionId, commitVersion);
                 LOG.debug("commit version of partition {} is {}. jobId={}", physicalPartitionId, commitVersion, jobId);
             }
-            this.jobState = JobState.FINISHED_REWRITING;
             this.finishedTimeMs = System.currentTimeMillis();
 
-            writeEditLog(this);
-
-            // NOTE: !!! below this point, this schema change job must success unless the database or table been dropped. !!!
-            updateNextVersion(table);
+            persistStateChange(this, JobState.FINISHED_REWRITING, () -> {
+                // NOTE: !!! below this point, this schema change job must success unless the database or table been dropped. !!!
+                updateNextVersion(table);
+            });
         }
 
         if (span != null) {
@@ -754,10 +742,7 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
             return;
         }
 
-        JournalTask editLogFuture;
         // Replace the current index with shadow index.
-        Set<String> modifiedColumns;
-        List<MaterializedIndex> droppedIndexes;
         try (WriteLockedDatabase db = getWriteLockedDatabase(dbId)) {
             OlapTable table = (db != null) ? db.getTable(tableId) : null;
             if (table == null) {
@@ -766,20 +751,17 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
             }
             // collect modified columns for inactivating mv
             // Note: should collect before visualiseShadowIndex
-            modifiedColumns = collectModifiedColumnsForRelatedMVs(table);
-            // Below this point, all query and load jobs will use the new schema.
-            droppedIndexes = visualiseShadowIndex(table);
-
-            // inactivate related mv
-            inactiveRelatedMv(modifiedColumns, table);
-            table.onReload();
-            this.jobState = JobState.FINISHED;
+            Set<String> modifiedColumns = collectModifiedColumnsForRelatedMVs(table);
             this.finishedTimeMs = System.currentTimeMillis();
 
-            editLogFuture = writeEditLogAsync(this);
+            persistStateChange(this, JobState.FINISHED, () -> {
+                // Below this point, all query and load jobs will use the new schema.
+                visualiseShadowIndex(table);
+                // inactivate related mv
+                inactiveRelatedMv(modifiedColumns, table);
+                table.onReload();
+            });
         }
-
-        EditLog.waitInfinity(editLogFuture);
 
         if (span != null) {
             span.end();
@@ -1161,22 +1143,23 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
             AgentTaskQueue.removeBatchTask(schemaChangeBatchTask, TTaskType.ALTER);
         }
 
-        try (WriteLockedDatabase db = getWriteLockedDatabase(dbId)) {
-            OlapTable table = (db != null) ? db.getTable(tableId) : null;
-            if (table != null) {
-                removeShadowIndex(table);
-            }
-        }
-
-        this.jobState = JobState.CANCELLED;
         this.errMsg = errMsg;
         this.finishedTimeMs = System.currentTimeMillis();
+
+        persistStateChange(this, JobState.CANCELLED, () -> {
+            try (WriteLockedDatabase db = getWriteLockedDatabase(dbId)) {
+                OlapTable table = (db != null) ? db.getTable(tableId) : null;
+                if (table != null) {
+                    removeShadowIndex(table);
+                }
+            }
+        });
+
         if (span != null) {
             span.setStatus(StatusCode.ERROR, errMsg);
             span.end();
         }
 
-        writeEditLog(this);
         LOG.info("Lake schema change job canceled, jobId: {}, error: {}", jobId, errMsg);
 
         return true;
@@ -1187,6 +1170,74 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
             schemaChangeBatchTask = new AgentBatchTask();
         }
         return schemaChangeBatchTask;
+    }
+
+    @Override
+    public AlterJobV2 copyForPersist() {
+        LakeTableSchemaChangeJob copy = new LakeTableSchemaChangeJob();
+        copyBaseFields(copy);
+        copySchemaChangeBaseFields(copy);
+        if (this.physicalPartitionIndexTabletMap != null) {
+            copy.physicalPartitionIndexTabletMap = HashBasedTable.create();
+            for (Table.Cell<Long, Long, Map<Long, Long>> cell : this.physicalPartitionIndexTabletMap.cellSet()) {
+                Map<Long, Long> tabletMap = Maps.newHashMap();
+                if (cell.getValue() != null) {
+                    tabletMap.putAll(cell.getValue());
+                }
+                copy.physicalPartitionIndexTabletMap.put(cell.getRowKey(), cell.getColumnKey(), tabletMap);
+            }
+        } else {
+            copy.physicalPartitionIndexTabletMap = null;
+        }
+        if (this.physicalPartitionIndexMap != null) {
+            copy.physicalPartitionIndexMap = HashBasedTable.create();
+            copy.physicalPartitionIndexMap.putAll(this.physicalPartitionIndexMap);
+        } else {
+            copy.physicalPartitionIndexMap = null;
+        }
+        if (this.indexIdMap != null) {
+            copy.indexIdMap = Maps.newHashMap();
+            copy.indexIdMap.putAll(this.indexIdMap);
+        } else {
+            copy.indexIdMap = null;
+        }
+        if (this.indexIdToName != null) {
+            copy.indexIdToName = Maps.newHashMap();
+            copy.indexIdToName.putAll(this.indexIdToName);
+        } else {
+            copy.indexIdToName = null;
+        }
+        if (this.indexSchemaMap != null) {
+            copy.indexSchemaMap = Maps.newHashMap();
+            for (Map.Entry<Long, List<Column>> entry : this.indexSchemaMap.entrySet()) {
+                List<Column> columns = entry.getValue();
+                List<Column> columnsCopy = columns == null ? null : new ArrayList<>(columns);
+                copy.indexSchemaMap.put(entry.getKey(), columnsCopy);
+            }
+        } else {
+            copy.indexSchemaMap = null;
+        }
+        if (this.indexShortKeyMap != null) {
+            copy.indexShortKeyMap = Maps.newHashMap();
+            copy.indexShortKeyMap.putAll(this.indexShortKeyMap);
+        } else {
+            copy.indexShortKeyMap = null;
+        }
+        copy.hasBfChange = this.hasBfChange;
+        copy.bfColumns = this.bfColumns == null ? null : Sets.newHashSet(this.bfColumns);
+        copy.bfFpp = this.bfFpp;
+        copy.indexChange = this.indexChange;
+        copy.indexes = this.indexes == null ? null : new ArrayList<>(this.indexes);
+        copy.startTime = this.startTime;
+        if (this.commitVersionMap != null) {
+            copy.commitVersionMap = Maps.newHashMap();
+            copy.commitVersionMap.putAll(this.commitVersionMap);
+        } else {
+            copy.commitVersionMap = null;
+        }
+        copy.sortKeyIdxes = this.sortKeyIdxes == null ? null : new ArrayList<>(this.sortKeyIdxes);
+        copy.sortKeyUniqueIds = this.sortKeyUniqueIds == null ? null : new ArrayList<>(this.sortKeyUniqueIds);
+        return copy;
     }
 
     @Override

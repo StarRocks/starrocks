@@ -64,11 +64,13 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
     // Turn on automated snapshot, use stmt for extension in future
     public void setAutomatedSnapshotOn(AdminSetAutomatedSnapshotOnStmt stmt) {
         String storageVolumeName = stmt.getStorageVolumeName();
-        setAutomatedSnapshotOn(storageVolumeName);
 
         ClusterSnapshotLog log = new ClusterSnapshotLog();
         log.setAutomatedSnapshotOn(storageVolumeName);
-        GlobalStateMgr.getCurrentState().getEditLog().logClusterSnapshotLog(log);
+        GlobalStateMgr.getCurrentState().getEditLog().logClusterSnapshotLog(log, wal -> {
+            setAutomatedSnapshotOn(storageVolumeName);
+
+        });
     }
 
     protected void setAutomatedSnapshotOn(String storageVolumeName) {
@@ -87,11 +89,11 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
     public void setAutomatedSnapshotOff(AdminSetAutomatedSnapshotOffStmt stmt) {
         clearFinishedAutomatedClusterSnapshot(null);
 
-        setAutomatedSnapshotOff();
-
         ClusterSnapshotLog log = new ClusterSnapshotLog();
         log.setAutomatedSnapshotOff();
-        GlobalStateMgr.getCurrentState().getEditLog().logClusterSnapshotLog(log);
+        GlobalStateMgr.getCurrentState().getEditLog().logClusterSnapshotLog(log, wal -> {
+            setAutomatedSnapshotOff();
+        });
     }
 
     protected void setAutomatedSnapshotOff() {
@@ -111,15 +113,13 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
             }
 
             if (job.isFinished()) {
-                job.setState(ClusterSnapshotJobState.EXPIRED);
-                job.logJob();
+                ClusterSnapshotJob.persistStateChange(job, ClusterSnapshotJobState.EXPIRED);
             }
 
             try {
                 ClusterSnapshotUtils.clearClusterSnapshotFromRemote(job);
                 if (job.isExpired()) {
-                    job.setState(ClusterSnapshotJobState.DELETED);
-                    job.logJob();
+                    ClusterSnapshotJob.persistStateChange(job, ClusterSnapshotJobState.DELETED);
                 }
             } catch (StarRocksException e) {
                 LOG.warn("Cluster Snapshot delete failed, ", e);
@@ -139,14 +139,15 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
     public ClusterSnapshotJob createAutomatedSnapshotJob() {
         long createTimeMs = System.currentTimeMillis();
         long id = GlobalStateMgr.getCurrentState().getNextId();
-        String snapshotName = AUTOMATED_NAME_PREFIX + String.valueOf(createTimeMs);
+        String snapshotName = AUTOMATED_NAME_PREFIX + createTimeMs;
         ClusterSnapshotJob job = new ClusterSnapshotJob(id, snapshotName, storageVolumeName, createTimeMs);
-        job.logJob();
-
-        addSnapshotJob(job);
+        ClusterSnapshotLog log = new ClusterSnapshotLog();
+        log.setSnapshotJob(job);
+        GlobalStateMgr.getCurrentState().getEditLog().logClusterSnapshotLog(log, wal -> {
+            addSnapshotJob(job);
+        });
 
         LOG.info("Create automated cluster snapshot job successfully, job id: {}, snapshot name: {}", id, snapshotName);
-
         return job;
     }
 
@@ -275,9 +276,8 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
         // editlog for the state transtition after ClusterSnapshotJobState.INITIALIZING
         if (job != null && job.isInitializing()) {
             job.setJournalIds(feJournalId, starMgrJournalId);
-            job.setState(ClusterSnapshotJobState.FINISHED);
             job.setDetailInfo("Finished time was reset after cluster restored");
-            job.logJob();
+            ClusterSnapshotJob.persistStateChange(job, ClusterSnapshotJobState.FINISHED);
         }
     }
 
@@ -287,6 +287,7 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
             lastUnfinishedJob.setErrMsg("Snapshot job has been failed because of FE restart or leader change");
             lastUnfinishedJob.setState(ClusterSnapshotJobState.ERROR);
             lastUnfinishedJob.logJob();
+            ClusterSnapshotJob.persistStateChange(lastUnfinishedJob, ClusterSnapshotJobState.ERROR);
         }
     }
 

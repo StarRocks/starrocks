@@ -251,6 +251,17 @@ public class LakeTableAsyncFastSchemaChangeJob extends LakeTableAlterMetaJobBase
         return disableFastSchemaEvolutionV2;
     }
 
+    @Override
+    public AlterJobV2 copyForPersist() {
+        LakeTableAsyncFastSchemaChangeJob copy = new LakeTableAsyncFastSchemaChangeJob();
+        copyBaseFields(copy);
+        copyAlterMetaBaseFields(copy);
+        copy.schemaInfos = this.schemaInfos == null ? null : new ArrayList<>(this.schemaInfos);
+        copy.disableFastSchemaEvolutionV2 = this.disableFastSchemaEvolutionV2;
+        copy.historySchema = this.historySchema;
+        return copy;
+    }
+
     @SuppressWarnings("rawtypes")
     @Override
     protected void getInfo(List<List<Comparable>> infos) {

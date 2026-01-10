@@ -94,8 +94,6 @@ public abstract class AbstractJob implements Writable {
     // task signature -> <finished num / total num>
     protected Map<Long, Pair<Integer, Integer>> taskProgress = Maps.newConcurrentMap();
 
-    protected boolean isTypeRead = false;
-
     // save err msg of tasks
     @SerializedName(value = "taskErrMsg")
     protected Map<Long, String> taskErrMsg = Maps.newHashMap();
@@ -158,10 +156,6 @@ public abstract class AbstractJob implements Writable {
 
     public long getRepoId() {
         return repoId;
-    }
-
-    public void setTypeRead(boolean isTypeRead) {
-        this.isTypeRead = isTypeRead;
     }
 
     public abstract void run();

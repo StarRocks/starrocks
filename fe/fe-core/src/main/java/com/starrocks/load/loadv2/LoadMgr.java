@@ -528,13 +528,13 @@ public class LoadMgr implements MemoryTrackable {
                         LOG.info("update load job etl status failed. job id: {}", job.getId(), e);
                         job.cancelJobWithoutCheck(new FailMsg(FailMsg.CancelType.ETL_QUALITY_UNSATISFIED,
                                         DataQualityException.QUALITY_FAIL_MSG),
-                                true, true);
+                                true);
                     } catch (TimeoutException e) {
                         // timeout, retry next time
                         LOG.warn("update load job etl status failed. job id: {}", job.getId(), e);
                     } catch (StarRocksException e) {
                         LOG.warn("update load job etl status failed. job id: {}", job.getId(), e);
-                        job.cancelJobWithoutCheck(new FailMsg(CancelType.ETL_RUN_FAIL, e.getMessage()), true, true);
+                        job.cancelJobWithoutCheck(new FailMsg(CancelType.ETL_RUN_FAIL, e.getMessage()), true);
                     } catch (Exception e) {
                         LOG.warn("update load job etl status failed. job id: {}", job.getId(), e);
                     }
@@ -549,7 +549,7 @@ public class LoadMgr implements MemoryTrackable {
                         ((SparkLoadJob) job).updateLoadingStatus();
                     } catch (StarRocksException e) {
                         LOG.warn("update load job loading status failed. job id: {}", job.getId(), e);
-                        job.cancelJobWithoutCheck(new FailMsg(CancelType.LOAD_RUN_FAIL, e.getMessage()), true, true);
+                        job.cancelJobWithoutCheck(new FailMsg(CancelType.LOAD_RUN_FAIL, e.getMessage()), true);
                     } catch (Exception e) {
                         LOG.warn("update load job loading status failed. job id: {}", job.getId(), e);
                     }

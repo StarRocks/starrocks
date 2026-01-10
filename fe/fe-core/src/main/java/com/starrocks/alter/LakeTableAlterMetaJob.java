@@ -126,6 +126,16 @@ public class LakeTableAlterMetaJob extends LakeTableAlterMetaJobBase {
         this.compactionStrategy = other.compactionStrategy;
     }
 
-
-
+    @Override
+    public AlterJobV2 copyForPersist() {
+        LakeTableAlterMetaJob copy = new LakeTableAlterMetaJob();
+        copyBaseFields(copy);
+        copyAlterMetaBaseFields(copy);
+        copy.metaType = this.metaType;
+        copy.metaValue = this.metaValue;
+        copy.persistentIndexType = this.persistentIndexType;
+        copy.enableFileBundling = this.enableFileBundling;
+        copy.compactionStrategy = this.compactionStrategy;
+        return copy;
+    }
 }

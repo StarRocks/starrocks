@@ -66,7 +66,6 @@ import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TTaskType;
 import com.starrocks.transaction.GtidGenerator;
-import mockit.Delegate;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -224,18 +223,6 @@ public class BackupJobPrimaryKeyTest {
                 globalStateMgr.getLocalMetastore().getTable(testDbName, "unknown_tbl");
                 minTimes = 0;
                 result = null;
-            }
-        };
-
-        new Expectations() {
-            {
-                editLog.logBackupJob((BackupJob) any);
-                minTimes = 0;
-                result = new Delegate() {
-                    public void logBackupJob(BackupJob job) {
-                        System.out.println("log backup job: " + job);
-                    }
-                };
             }
         };
 

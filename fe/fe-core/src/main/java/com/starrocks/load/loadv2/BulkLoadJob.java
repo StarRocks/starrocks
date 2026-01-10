@@ -292,8 +292,7 @@ public abstract class BulkLoadJob extends LoadJob {
             boolean needRetry = isRetryable(failMsg);
             if (!needRetry) {
                 // For not retryable failure, cancel job and return
-                unprotectedExecuteCancel(failMsg, true);
-                logFinalOperation();
+                unprotectedExecuteCancel(failMsg, true, true);
                 return;
             }
         } finally {
@@ -341,7 +340,7 @@ public abstract class BulkLoadJob extends LoadJob {
                     .add("msg", "The failure happens in analyze, the load job will be cancelled with error:"
                             + e.getMessage())
                     .build(), e);
-            cancelJobWithoutCheck(new FailMsg(FailMsg.CancelType.LOAD_RUN_FAIL, e.getMessage()), false, true);
+            cancelJobWithoutCheck(new FailMsg(FailMsg.CancelType.LOAD_RUN_FAIL, e.getMessage()), false);
         }
     }
 
