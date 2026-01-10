@@ -267,7 +267,7 @@ static std::string get_timezone_offset_string(const google::LogMessageTime& time
     }
 
     // Slow path: recalculate and update cache
-    char tz_str[7] = "+0000";
+    char tz_str[16] = "+0000";
     int offset_hours = static_cast<int>(offset_seconds / 3600);
     int offset_mins = static_cast<int>((offset_seconds % 3600) / 60);
     if (offset_mins < 0) offset_mins = -offset_mins;
