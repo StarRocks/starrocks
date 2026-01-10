@@ -137,6 +137,22 @@ public final class QeProcessorImpl implements QeProcessor, MemoryTrackable {
         }
     }
 
+    public long runningSlowQueries() {
+        long slowCount = 0;
+        long now = System.currentTimeMillis();
+        for (Map.Entry<TUniqueId, QueryInfo> entry : coordinatorMap.entrySet()) {
+            final QueryInfo info = entry.getValue();
+            final ConnectContext context = info.getConnectContext();
+            if (info.sql == null || context == null) {
+                continue;
+            }
+            if (now - entry.getValue().getStartExecTime() > Config.qe_slow_log_ms) {
+                slowCount ++;
+            }
+        }
+        return slowCount;
+    }
+
     @Override
     public void monitorQuery(TUniqueId queryId, long expireTime) {
         monitorQueryMap.put(queryId, expireTime);
@@ -365,7 +381,7 @@ public final class QeProcessorImpl implements QeProcessor, MemoryTrackable {
 
         private boolean isMVJob = false;
 
-        // from Export, Pull load, Insert 
+        // from Export, Pull load, Insert
         public QueryInfo(Coordinator coord) {
             this(null, null, coord);
         }
