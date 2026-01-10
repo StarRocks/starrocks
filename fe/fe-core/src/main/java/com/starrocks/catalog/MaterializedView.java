@@ -892,6 +892,18 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         return warehouseId;
     }
 
+    /**
+     * Get the warehouse name of the materialized view.
+     */
+    public String getWarehouseName() {
+        Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr()
+                .getWarehouse(warehouseId);
+        if (warehouse != null) {
+            return warehouse.getName();
+        }
+        return WarehouseManager.DEFAULT_WAREHOUSE_NAME;
+    }
+
     public int getMaxMVRewriteStaleness() {
         return maxMVRewriteStaleness;
     }

@@ -83,6 +83,8 @@ public final class MaterializedViewMetricsEntity implements IMaterializedViewMet
 
     // the current materialized view's partition count, 0 if the materialized view is not partitioned
     public GaugeMetric<Integer> counterPartitionCount;
+    // the materialized view's warehouse name
+    public GaugeMetric<String> mvWarehouseName;
 
     // histogram(ms)
     // record the materialized view's refresh job duration only if it's refreshed successfully.
@@ -309,6 +311,31 @@ public final class MaterializedViewMetricsEntity implements IMaterializedViewMet
             }
         };
         metrics.add(counterPartitionCount);
+
+        mvWarehouseName = new GaugeMetric<String>("mv_warehouse_name", MetricUnit.NOUNIT,
+                "the materialized view's warehouse name") {
+            @Override
+            public String getValue() {
+                MaterializedView mv = getMaterializedView();
+                if (mv == null) {
+                    return "";
+                }
+                return mv.getWarehouseName();
+            }
+        };
+        metrics.add(mvWarehouseName);
+    }
+
+    protected MaterializedView getMaterializedView() {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(mvId.getDbId());
+        if (db == null) {
+            return null;
+        }
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), mvId.getId());
+        if (table == null || !table.isMaterializedView()) {
+            return null;
+        }
+        return (MaterializedView) table;
     }
 
     @Override
