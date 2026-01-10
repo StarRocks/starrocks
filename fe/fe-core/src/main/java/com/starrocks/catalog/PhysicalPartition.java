@@ -413,9 +413,14 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
     }
 
     public List<MaterializedIndex> getBaseIndices() {
+        List<Long> indexIds = indexMetaIdToIndexIds.get(baseIndexMetaId);
+        Preconditions.checkState(indexIds != null && !indexIds.isEmpty(),
+                String.format("base index meta id %d not exist or index list is empty", baseIndexMetaId));
         List<MaterializedIndex> indices = Lists.newArrayList();
-        for (Long indexId : indexMetaIdToIndexIds.get(baseIndexMetaId)) {
-            indices.add(idToVisibleIndex.get(indexId));
+        for (Long indexId : indexIds) {
+            MaterializedIndex index = idToVisibleIndex.get(indexId);
+            Preconditions.checkState(index != null, String.format("base index id %d not exist", indexId));
+            indices.add(index);
         }
         return indices;
     }
@@ -441,9 +446,10 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
                 String.format("index id %d already exists", mIndex.getId()));
         Preconditions.checkState(!isBaseIndex || mIndex.getMetaId() == baseIndexMetaId,
                 String.format("index meta id %d not match baseIndexMetaId %d", mIndex.getMetaId(), baseIndexMetaId));
+        Preconditions.checkState(mIndex.getState() == IndexState.NORMAL,
+                String.format("index state %s is not NORMAL", mIndex.getState()));
 
         indexMetaIdToIndexIds.get(mIndex.getMetaId()).add(mIndex.getId());
-        // index state is NORMAL
         idToVisibleIndex.put(mIndex.getId(), mIndex);
     }
 
@@ -653,6 +659,8 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
 
     public boolean hasMaterializedView() {
         List<Long> baseIndexIds = indexMetaIdToIndexIds.get(baseIndexMetaId);
+        Preconditions.checkState(baseIndexIds != null && !baseIndexIds.isEmpty(),
+                String.format("base index meta id %d not exist or index list is empty", baseIndexMetaId));
         Set<Long> visibleIndexIds = Sets.newHashSet(idToVisibleIndex.keySet());
         visibleIndexIds.removeAll(baseIndexIds);
         return !visibleIndexIds.isEmpty();
