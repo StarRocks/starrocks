@@ -20,6 +20,7 @@ import com.starrocks.catalog.TableName;
 import com.starrocks.sql.ast.AddBackendBlackListStmt;
 import com.starrocks.sql.ast.AddComputeNodeBlackListStmt;
 import com.starrocks.sql.ast.AddSqlBlackListStmt;
+import com.starrocks.sql.ast.AdminAlterAutomatedSnapshotIntervalStmt;
 import com.starrocks.sql.ast.AdminCancelRepairTableStmt;
 import com.starrocks.sql.ast.AdminCheckTabletsStmt;
 import com.starrocks.sql.ast.AdminRepairTableStmt;
@@ -1793,7 +1794,13 @@ public class RedirectStatusTest {
 
     @Test
     public void testAdminSetAutomatedSnapshotOnStmtCoverage() {
-        AdminSetAutomatedSnapshotOnStmt stmt = new AdminSetAutomatedSnapshotOnStmt(null);
+        AdminSetAutomatedSnapshotOnStmt stmt = new AdminSetAutomatedSnapshotOnStmt(null, null);
+        Assertions.assertEquals(RedirectStatus.FORWARD_WITH_SYNC, RedirectStatus.getRedirectStatus(stmt));
+    }
+
+    @Test
+    public void testAdminAlterAutomatedSnapshotIntervalStmtCoverage() {
+        AdminAlterAutomatedSnapshotIntervalStmt stmt = new AdminAlterAutomatedSnapshotIntervalStmt(null);
         Assertions.assertEquals(RedirectStatus.FORWARD_WITH_SYNC, RedirectStatus.getRedirectStatus(stmt));
     }
 

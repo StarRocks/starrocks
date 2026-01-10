@@ -129,6 +129,7 @@ statement
     | executeScriptStatement
     | adminSetAutomatedSnapshotOnStatement
     | adminSetAutomatedSnapshotOffStatement
+    | adminAlterAutomatedSnapshotIntervalStatement
 
     // Cluster Management Statement
     | alterSystemStatement
@@ -789,11 +790,15 @@ syncStatement
     ;
 
 adminSetAutomatedSnapshotOnStatement
-    : ADMIN SET AUTOMATED CLUSTER SNAPSHOT ON (STORAGE VOLUME svName=identifier)?
+    : ADMIN SET AUTOMATED CLUSTER SNAPSHOT ON (interval)? (STORAGE VOLUME svName=identifier)?
     ;
 
 adminSetAutomatedSnapshotOffStatement
     : ADMIN SET AUTOMATED CLUSTER SNAPSHOT OFF
+    ;
+
+adminAlterAutomatedSnapshotIntervalStatement
+    : ADMIN ALTER AUTOMATED CLUSTER SNAPSHOT SET interval
     ;
 
 // ------------------------------------------- Cluster Management Statement ---------------------------------------------
