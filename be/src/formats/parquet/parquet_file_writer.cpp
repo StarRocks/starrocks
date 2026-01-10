@@ -28,6 +28,8 @@
 #include <ostream>
 #include <utility>
 
+#include "column/column_helper.h"
+#include "common/http/content_type.h"
 #include "formats/file_writer.h"
 #include "formats/parquet/arrow_memory_pool.h"
 #include "formats/parquet/chunk_writer.h"
@@ -496,7 +498,10 @@ Status ParquetFileWriterFactory::init() {
 }
 
 StatusOr<WriterAndStream> ParquetFileWriterFactory::create(const std::string& path) const {
-    ASSIGN_OR_RETURN(auto file, _fs->new_writable_file(WritableFileOptions{.direct_write = true}, path));
+    ASSIGN_OR_RETURN(auto file, _fs->new_writable_file(WritableFileOptions{.direct_write = true,
+                                                                           .content_type = http::ContentType::PARQUET},
+                                                       path));
+    VLOG(3) << "create parquet file, path=" << path;
     auto rollback_action = [fs = _fs, path = path]() {
         WARN_IF_ERROR(ignore_not_found(fs->delete_file(path)), "fail to delete file");
     };
