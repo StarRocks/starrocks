@@ -92,6 +92,7 @@ ADD_BE_LIB(Formats
         parquet/row_source_reader.cpp
         parquet/parquet_pos_reader.cpp
         disk_range.hpp
+        file_writer.cpp
         )
 
 add_subdirectory(orc/apache-orc)

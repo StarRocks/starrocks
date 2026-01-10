@@ -18,7 +18,7 @@
 
 #include <map>
 
-#include "column/chunk.h"
+#include "column/vectorized_fwd.h"
 #include "common/status.h"
 #include "connector/partition_chunk_writer.h"
 #include "connector/utils.h"
