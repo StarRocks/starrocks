@@ -12,6 +12,8 @@ To use this function, you must enable the profiling feature, that is, set the se
 
 This function is supported from v3.0.
 
+**Starting from v3.5**, `get_query_profile` supports global profile retrieval across all Frontend (FE) nodes in a multi-FE environment. If a profile is not found on the current FE node, the function automatically searches other FE nodes in the cluster.
+
 ## Syntax
 
 ```Haskell
