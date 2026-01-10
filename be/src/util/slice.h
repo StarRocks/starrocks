@@ -186,7 +186,7 @@ public:
         return ((size >= x.size) && memequal(data + (size - x.size), x.size, x.data, x.size));
     }
 
-    Slice tolower(std::string& buf) {
+    Slice tolower(std::string& buf) const {
         // copy this slice into buf
         buf.assign(get_data(), get_size());
         std::transform(buf.begin(), buf.end(), buf.begin(), [](unsigned char c) { return std::tolower(c); });
