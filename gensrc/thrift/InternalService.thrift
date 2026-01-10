@@ -360,13 +360,10 @@ struct TQueryOptions {
   // 0: fnv_hash (default, for backward compatibility)
   // 1: xxh3_hash (faster)
   201: optional i32 exchange_hash_function_version = 0;
-<<<<<<< HEAD
-   // whether enable predicate column late materialization
-  202: optional bool enable_predicate_col_late_materialize;
-  
-=======
 
->>>>>>> fcdb4e8944 ([Feature] Add http_request() function for SQL-based HTTP requests)
+  // whether enable predicate column late materialization
+  202: optional bool enable_predicate_col_late_materialize;
+
   210: optional bool enable_global_late_materialization;
   211: optional bool enable_schedule_log;
 
