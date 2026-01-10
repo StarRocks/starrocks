@@ -1760,6 +1760,34 @@ class StarrocksSQLApiLib(object):
             row_count == 0, f"wait db transaction finish error, timeout {timeout_sec}s, row_count={row_count}"
         )
 
+    def get_running_transaction_count(self, db_name):
+        """
+        Get the number of running transactions in the specified database.
+        :param db_name: database name
+        :return: row count as string (for safe variable substitution in sql test framework)
+        """
+        sql = f"show proc '/transactions/{db_name}/running'"
+        result = self.execute_sql(sql, True)
+        tools.assert_true(result["status"], f"Failed to execute SQL: {result}")
+        row_count = len(result["result"]) if "result" in result and result["result"] is not None else 0
+        return str(row_count)
+
+    def get_single_running_transaction_label(self, db_name):
+        """
+        Get the label of the single running transaction in the specified database.
+        Assert there is exactly one running transaction.
+        :param db_name: database name
+        :return: label string
+        """
+        sql = f"show proc '/transactions/{db_name}/running'"
+        result = self.execute_sql(sql, True)
+        tools.assert_true(result["status"], f"Failed to execute SQL: {result}")
+        tools.assert_true("result" in result, f"Unexpected SQL result: {result}")
+        tools.assert_equal(1, len(result["result"]), f"Expected exactly 1 running transaction, got {len(result['result'])}")
+        row = result["result"][0]
+        tools.assert_true(len(row) > 1, f"Unexpected show proc row format: {row}")
+        return str(row[1])
+
     def get_table_state(self, db_name, table_name):
         """
         Get table state by executing show proc '/dbs/{db_name}' and finding the row by table_name

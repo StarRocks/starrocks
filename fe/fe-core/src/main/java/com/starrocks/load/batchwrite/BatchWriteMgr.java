@@ -69,7 +69,7 @@ public class BatchWriteMgr extends FrontendDaemon {
         this.lock = new ReentrantReadWriteLock();
         this.coordinatorBackendAssigner = new CoordinatorBackendAssignerImpl();
         this.threadPoolExecutor = ThreadPoolManager.newDaemonCacheThreadPool(
-                        Config.merge_commit_executor_threads_num, "batch-write-load", true);
+                        Config.merge_commit_executor_threads_num, "merge-commit", true);
         this.txnStateDispatcher = new TxnStateDispatcher(threadPoolExecutor);
     }
 

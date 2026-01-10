@@ -1,0 +1,43 @@
+-- name: test_merge_commit_cancel
+create database db_${uuid0};
+use db_${uuid0};
+
+CREATE TABLE `t0`
+(
+    `id` int(11) NOT NULL COMMENT "user id",
+    `name` varchar(65533) NULL COMMENT "user name",
+    `score` int(11) NOT NULL COMMENT "user score"
+)
+ENGINE=OLAP
+PRIMARY KEY(`id`)
+DISTRIBUTED BY HASH(`id`)
+PROPERTIES (
+ "replication_num" = "1"
+);
+
+-- 1) Start a merge-commit stream load (async=false, long interval to keep it running)
+shell: curl --location-trusted -u root: -X PUT -H "Expect:100-continue" -H "format:json" -H "enable_merge_commit:true" -H "merge_commit_async:true" -H "merge_commit_interval_ms:600000" -H "merge_commit_parallel:1" -d '{"id":1,"name":"n1","score":1}' ${url}/api/db_${uuid0}/t0/_stream_load
+
+-- 2) Ensure there is exactly one running transaction, then fetch its label
+function: get_running_transaction_count("db_${uuid0}")
+
+[UC]function: label1=get_single_running_transaction_label("db_${uuid0}")
+
+-- 3) Cancel this transaction by label
+shell: curl --location-trusted -u "root:" -X POST "${url}/api/db_${uuid0}/t0/_cancel?label=${label1}"
+
+-- 4) Verify no running transactions
+function: get_running_transaction_count("db_${uuid0}")
+
+-- 5) Start another merge-commit stream load, repeat cancel
+shell: curl --location-trusted -u root: -X PUT -H "Expect:100-continue" -H "format:json" -H "enable_merge_commit:true" -H "merge_commit_async:true" -H "merge_commit_interval_ms:600000" -H "merge_commit_parallel:1" -d '{"id":2,"name":"n2","score":2}' ${url}/api/db_${uuid0}/t0/_stream_load
+
+function: get_running_transaction_count("db_${uuid0}")
+
+[UC]function: label2=get_single_running_transaction_label("db_${uuid0}")
+shell: curl --location-trusted -u "root:" -X POST "${url}/api/db_${uuid0}/t0/_cancel?label=${label2}"
+
+function: get_running_transaction_count("db_${uuid0}")
+
+-- 6) Verify data not loaded
+select count(*) from t0 where id in (1, 2);
