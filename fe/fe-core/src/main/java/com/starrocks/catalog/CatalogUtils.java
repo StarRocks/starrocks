@@ -73,7 +73,8 @@ public class CatalogUtils {
     // check table state
     public static void checkTableState(OlapTable olapTable, String tableName) throws DdlException {
         if (olapTable.getState() != OlapTable.OlapTableState.NORMAL
-                && olapTable.getState() != OlapTable.OlapTableState.OPTIMIZE) {
+                && olapTable.getState() != OlapTable.OlapTableState.OPTIMIZE
+                && olapTable.getState() != OlapTable.OlapTableState.TABLET_RESHARD) {
             throw InvalidOlapTableStateException.of(olapTable.getState(), tableName);
         }
     }
