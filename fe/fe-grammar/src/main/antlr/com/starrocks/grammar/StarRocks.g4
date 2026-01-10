@@ -1537,7 +1537,8 @@ dropFunctionStatement
     ;
 
 createFunctionStatement
-    : CREATE orReplace GLOBAL? functionType=(TABLE | AGGREGATE)? FUNCTION ifNotExists qualifiedName '(' typeList ')' RETURNS returnType=type (properties|inlineProperties)?? inlineFunction?
+    : CREATE orReplace GLOBAL? functionType=(TABLE | AGGREGATE)? FUNCTION ifNotExists qualifiedName '(' typeList ')' RETURNS returnType=type (properties|inlineProperties)?? inlineFunction? #createUdfFunctionStmt
+    | CREATE orReplace GLOBAL? FUNCTION ifNotExists qualifiedName '(' functionArgsList ')' RETURNS expression #createInternalFunctionStmt
     ;
 inlineFunction
     : AS ATTACHMENT
@@ -1545,6 +1546,10 @@ inlineFunction
 
 typeList
     : type?  ( ',' type)* (',' DOTDOTDOT) ?
+    ;
+
+functionArgsList
+    : (identifier type)? (',' identifier type)*
     ;
 
 // ------------------------------------------- Load Statement ----------------------------------------------------------
