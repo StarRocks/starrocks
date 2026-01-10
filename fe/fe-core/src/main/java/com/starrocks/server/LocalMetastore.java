@@ -3876,6 +3876,24 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         });
     }
 
+    private void alterTableQueryTimeout(OlapTable table,
+                                       Map<String, String> properties,
+                                       List<Runnable> appliers) throws DdlException {
+        try {
+            int clusterQueryTimeout = GlobalStateMgr.getCurrentState().getVariableMgr()
+                    .getDefaultSessionVariable().getQueryTimeoutS();
+            int tableQueryTimeout = PropertyAnalyzer.analyzeTableQueryTimeout(properties, clusterQueryTimeout);
+            TableProperty tableProperty = table.getTableProperty();
+            appliers.add(() -> {
+                tableProperty.modifyTableProperties(PropertyAnalyzer.PROPERTIES_TABLE_QUERY_TIMEOUT,
+                        String.valueOf(tableQueryTimeout));
+                table.setTableQueryTimeout(tableQueryTimeout);
+            });
+        } catch (AnalysisException ex) {
+            throw new DdlException(ex.getMessage());
+        }
+    }
+
     public void alterTableProperties(Database db, OlapTable table, Map<String, String> properties)
             throws DdlException {
         Map<String, String> propertiesToPersist = new HashMap<>(properties);
@@ -3909,6 +3927,9 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         }
         if (propertiesToPersist.containsKey(PropertyAnalyzer.PROPERTIES_CLOUD_NATIVE_FAST_SCHEMA_EVOLUTION_V2)) {
             alterCloudNativeFastSchemaEvolutionV2(table, properties, appliers);
+        }
+        if (propertiesToPersist.containsKey(PropertyAnalyzer.PROPERTIES_TABLE_QUERY_TIMEOUT)) {
+            alterTableQueryTimeout(table, properties, appliers);
         }
         if (!properties.isEmpty()) {
             throw new DdlException("Modify failed because unknown properties: " + properties);
