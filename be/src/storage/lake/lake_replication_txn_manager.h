@@ -82,6 +82,8 @@ public:
 private:
     TabletManager* _tablet_manager;
 #ifdef USE_STAROS
+    // Used for non-S3 storage types to construct relative paths
+    // S3 storage type uses full path provided by FE instead
     std::unique_ptr<RemoteStarletLocationProvider> _remote_location_provider;
 #endif
 };

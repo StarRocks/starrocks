@@ -298,6 +298,19 @@ StarOSWorker::build_filesystem_from_shard_info(const ShardInfo& info, const Conf
         return scheme.status();
     }
 
+    // Merge external configuration into localconf.
+    // This allows caller to override specific configuration items.
+    // External conf takes precedence over shard_info conf.
+    for (const auto& [key, value] : conf) {
+        VLOG(3) << "Merging configuration: " << key << " = " << value << ", shard_id: " << info.id
+                << ", scheme: " << *scheme;
+        (*localconf)[key] = value;
+    }
+
+    if (need_enable_cache(info) || fslib::FLAGS_enable_index_cache) {
+        // set environ variable to cachefs directory
+        setenv(fslib::kFslibCacheDir.c_str(), config::starlet_cache_dir.c_str(), 0 /*overwrite*/);
+    }
     return new_shared_filesystem(*scheme, *localconf);
 }
 
