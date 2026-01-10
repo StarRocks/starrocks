@@ -172,13 +172,13 @@ public class PaimonMetadataTest {
         writer.writeInt(1, 5555);
         writer.complete();
         List<DataFileMeta> meta1 = new ArrayList<>();
-        meta1.add(DataFileMeta.create("file1", 100L, 200L, EMPTY_MIN_KEY, EMPTY_MAX_KEY, 
+        meta1.add(DataFileMeta.create("file1", 100L, 200L, EMPTY_MIN_KEY, EMPTY_MAX_KEY,
                 EMPTY_STATS, EMPTY_STATS, 100L, 200L, 1L, DUMMY_LEVEL, 0L, null, null, null, null, null));
-        meta1.add(DataFileMeta.create("file2", 100L, 300L, EMPTY_MIN_KEY, EMPTY_MAX_KEY, 
+        meta1.add(DataFileMeta.create("file2", 100L, 300L, EMPTY_MIN_KEY, EMPTY_MAX_KEY,
                 EMPTY_STATS, EMPTY_STATS, 100L, 300L, 1L, DUMMY_LEVEL, 0L, null, null, null, null, null));
 
         List<DataFileMeta> meta2 = new ArrayList<>();
-        meta2.add(DataFileMeta.create("file3", 100L, 400L, EMPTY_MIN_KEY, EMPTY_MAX_KEY, 
+        meta2.add(DataFileMeta.create("file3", 100L, 400L, EMPTY_MIN_KEY, EMPTY_MAX_KEY,
                 EMPTY_STATS, EMPTY_STATS, 100L, 400L, 1L, DUMMY_LEVEL, 0L, null, null, null, null, null));
         this.splits.add(DataSplit.builder().withSnapshot(1L).withPartition(row1).withBucket(1)
                 .withBucketPath("not used").withDataFiles(meta1).isStreaming(false).build());
@@ -213,6 +213,8 @@ public class PaimonMetadataTest {
                 result = "hdfs://127.0.0.1:10000/paimon";
                 paimonNativeTable.primaryKeys();
                 result = List.of("col2");
+                paimonNativeTable.uuid();
+                result = "fake_uuid";
             }
         };
         com.starrocks.catalog.Table table = metadata.getTable(connectContext, "db1", "tbl1");
@@ -234,7 +236,7 @@ public class PaimonMetadataTest {
         assertEquals(FloatType.DOUBLE, paimonTable.getBaseSchema().get(1).getType());
         org.junit.jupiter.api.Assertions.assertTrue(paimonTable.getBaseSchema().get(1).isAllowNull());
         assertEquals("paimon_catalog", paimonTable.getCatalogName());
-        assertEquals("paimon_catalog.null", paimonTable.getUUID());
+        assertEquals("paimon_catalog.db1.tbl1.fake_uuid", paimonTable.getUUID());
     }
 
     @Test
