@@ -22,9 +22,11 @@
 #include "column/column_helper.h"
 #include "column/map_column.h"
 #include "common/http/content_type.h"
+#include "formats/column_evaluator.h"
 #include "formats/orc/orc_memory_pool.h"
 #include "formats/orc/utils.h"
 #include "formats/utils.h"
+#include "io/async_flush_output_stream.h"
 #include "runtime/current_thread.h"
 #include "util/debug_util.h"
 

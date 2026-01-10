@@ -21,6 +21,7 @@
 #include "exec/olap_scan_prepare.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exprs/jsonpath.h"
+#include "runtime/current_thread.h"
 #include "runtime/global_dict/parser.h"
 #include "storage/chunk_helper.h"
 #include "storage/column_predicate_rewriter.h"

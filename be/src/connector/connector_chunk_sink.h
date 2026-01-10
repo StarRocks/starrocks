@@ -14,11 +14,11 @@
 
 #pragma once
 
-#include <fmt/format.h>
-
 #include <map>
 
-#include "column/chunk.h"
+#include <fmt/format.h>
+
+#include "column/vectorized_fwd.h"
 #include "common/status.h"
 #include "connector/partition_chunk_writer.h"
 #include "connector/utils.h"
