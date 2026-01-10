@@ -58,7 +58,6 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.common.ErrorType.INTERNAL_ERROR;
-import static com.starrocks.sql.common.ErrorType.USER_ERROR;
 
 public class MetaScanNode extends AbstractOlapTableScanNode {
     private static final Logger LOG = LogManager.getLogger(MetaScanNode.class);
@@ -101,7 +100,7 @@ public class MetaScanNode extends AbstractOlapTableScanNode {
         if (RunMode.isSharedDataMode()) {
             List<Long> allTabletIds = Lists.newArrayList();
             for (PhysicalPartition partition : partitions) {
-                List<Tablet> tablets = partition.getBaseIndex().getTablets();
+                List<Tablet> tablets = partition.getLatestBaseIndex().getTablets();
                 for (Tablet tablet : tablets) {
                     allTabletIds.add(tablet.getId());
                 }
@@ -115,7 +114,7 @@ public class MetaScanNode extends AbstractOlapTableScanNode {
         }
 
         for (PhysicalPartition partition : partitions) {
-            MaterializedIndex index = partition.getBaseIndex();
+            MaterializedIndex index = partition.getLatestBaseIndex();
             int schemaHash = olapTable.getSchemaHashByIndexMetaId(index.getMetaId());
             List<Tablet> tablets = index.getTablets();
 

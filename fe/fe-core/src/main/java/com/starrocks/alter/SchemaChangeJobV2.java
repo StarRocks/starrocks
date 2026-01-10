@@ -922,15 +922,10 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                     // because if this alter job is recovered from edit log, index in 'physicalPartitionIndexMap'
                     // is not the same object in globalStateMgr. So modification on that index can not reflect to the index
                     // in globalStateMgr.
-                    MaterializedIndex shadowIdx = physicalPartition.getIndex(shadowIdxMetaId);
+                    MaterializedIndex shadowIdx = physicalPartition.getLatestIndex(shadowIdxMetaId);
                     Preconditions.checkNotNull(shadowIdx, shadowIdxMetaId);
-                    MaterializedIndex droppedIdx = null;
-                    if (originIdxMetaId == physicalPartition.getBaseIndex().getMetaId()) {
-                        droppedIdx = physicalPartition.getBaseIndex();
-                    } else {
-                        droppedIdx = physicalPartition.deleteRollupIndex(originIdxMetaId);
-                    }
-                    Preconditions.checkNotNull(droppedIdx, originIdxMetaId + " vs. " + shadowIdxMetaId);
+                    List<MaterializedIndex> droppedIndices = physicalPartition.deleteMaterializedIndexByMetaId(originIdxMetaId);
+                    Preconditions.checkState(!droppedIndices.isEmpty(), originIdxMetaId + " vs. " + shadowIdxMetaId);
 
                     // Add to TabletInvertedIndex.
                     // Even thought we have added the tablet to TabletInvertedIndex on pending state, but the pending state
@@ -947,12 +942,13 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                         }
                     }
 
-                    physicalPartition.visualiseShadowIndex(
-                            shadowIdxMetaId, originIdxMetaId == physicalPartition.getBaseIndex().getMetaId());
+                    physicalPartition.visualiseShadowIndex(shadowIdx.getId(), originIdxMetaId == tbl.getBaseIndexMetaId());
 
                     // the origin tablet created by old schema can be deleted from FE meta data
-                    for (Tablet originTablet : droppedIdx.getTablets()) {
-                        GlobalStateMgr.getCurrentState().getTabletInvertedIndex().deleteTablet(originTablet.getId());
+                    for (MaterializedIndex droppedIdx : droppedIndices) {
+                        for (Tablet originTablet : droppedIdx.getTablets()) {
+                            GlobalStateMgr.getCurrentState().getTabletInvertedIndex().deleteTablet(originTablet.getId());
+                        }
                     }
                 }
             }
@@ -1055,7 +1051,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                             for (Tablet shadowTablet : shadowIdx.getTablets()) {
                                 invertedIndex.deleteTablet(shadowTablet.getId());
                             }
-                            physicalPartition.deleteRollupIndex(shadowIdx.getMetaId());
+                            physicalPartition.deleteMaterializedIndexByMetaId(shadowIdx.getMetaId());
                         }
                     }
                     for (String shadowIndexName : indexMetaIdToName.values()) {

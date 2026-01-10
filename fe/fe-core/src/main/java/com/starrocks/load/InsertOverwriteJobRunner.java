@@ -20,6 +20,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
@@ -409,7 +410,7 @@ public class InsertOverwriteJobRunner {
                     Partition partition = targetTable.getPartition(pid);
                     if (partition != null) {
                         for (PhysicalPartition subPartition : partition.getSubPartitions()) {
-                            for (MaterializedIndex index : subPartition.getMaterializedIndices(
+                            for (MaterializedIndex index : subPartition.getLatestMaterializedIndices(
                                     MaterializedIndex.IndexExtState.ALL)) {
                                 sourceTablets.addAll(index.getTablets());
                             }
@@ -446,7 +447,7 @@ public class InsertOverwriteJobRunner {
                     Partition partition = targetTable.getPartition(partitionName, true);
                     if (partition != null) {
                         for (MaterializedIndex index : partition.getDefaultPhysicalPartition()
-                                .getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+                                .getLatestMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
                             sourceTablets.addAll(index.getTablets());
                         }
                         targetTable.dropTempPartition(partitionName, true);
@@ -520,7 +521,7 @@ public class InsertOverwriteJobRunner {
             sourcePartitionNames.forEach(name -> {
                 Partition partition = targetTable.getPartition(name);
                 for (PhysicalPartition subPartition : partition.getSubPartitions()) {
-                    for (MaterializedIndex index : subPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+                    for (MaterializedIndex index : subPartition.getLatestMaterializedIndices(IndexExtState.ALL)) {
                         sourceTablets.addAll(index.getTablets());
                     }
                 }

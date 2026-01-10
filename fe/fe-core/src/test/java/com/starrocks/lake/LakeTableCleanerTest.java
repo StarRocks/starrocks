@@ -97,7 +97,7 @@ public class LakeTableCleanerTest {
                 minTimes = 1;
                 maxTimes = 1;
 
-                partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
+                partition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
                 result = Lists.newArrayList(index);
                 minTimes = 1;
                 maxTimes = 1;
@@ -132,7 +132,7 @@ public class LakeTableCleanerTest {
                 minTimes = 1;
                 maxTimes = 1;
 
-                partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
+                partition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
                 result = Lists.newArrayList(index);
                 minTimes = 1;
                 maxTimes = 1;
@@ -169,7 +169,7 @@ public class LakeTableCleanerTest {
                 minTimes = 1;
                 maxTimes = 1;
 
-                partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
+                partition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
                 result = Lists.newArrayList(index);
                 minTimes = 1;
                 maxTimes = 1;
@@ -199,7 +199,7 @@ public class LakeTableCleanerTest {
                 minTimes = 1;
                 maxTimes = 1;
 
-                partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
+                partition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
                 result = Lists.newArrayList(index);
                 minTimes = 1;
                 maxTimes = 1;
@@ -243,7 +243,7 @@ public class LakeTableCleanerTest {
                 minTimes = 1;
                 maxTimes = 1;
 
-                partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
+                partition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
                 result = Lists.newArrayList(index);
                 minTimes = 1;
                 maxTimes = 1;
@@ -278,7 +278,7 @@ public class LakeTableCleanerTest {
                 minTimes = 1;
                 maxTimes = 1;
 
-                partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
+                partition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
                 result = Lists.newArrayList(index);
                 minTimes = 1;
                 maxTimes = 1;

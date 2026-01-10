@@ -2095,7 +2095,7 @@ public class TabletScheduler extends FrontendDaemon {
 
                         for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
                             for (MaterializedIndex idx
-                                    : physicalPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)) {
+                                    : physicalPartition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)) {
                                 if (!idx.isTabletBalanced()) {
                                     mediumBalanceTypes.add(Pair.create(medium, idx.getBalanceType()));
                                 }
