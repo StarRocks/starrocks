@@ -401,22 +401,42 @@ void WorkGroupManager::add_metrics_unlocked(const WorkGroupPtr& wg, UniqueLockTy
             wg_metrics->cpu_runtime_ns = wg->cpu_runtime_ns();
             wg_metrics->inuse_cpu_cores = std::move(inuse_cpu_cores);
         }
-        if (cpu_limit_registered) wg_metrics->cpu_limit = std::move(resource_group_cpu_limit_ratio);
-        if (cpu_ratio_registered) wg_metrics->inuse_cpu_ratio = std::move(resource_group_cpu_use_ratio);
-        if (scan_ratio_registered) wg_metrics->inuse_scan_ratio = std::move(resource_group_scan_use_ratio);
-        if (connector_scan_ratio_registered)
+        if (cpu_limit_registered) {
+            wg_metrics->cpu_limit = std::move(resource_group_cpu_limit_ratio);
+        }
+        if (cpu_ratio_registered) {
+            wg_metrics->inuse_cpu_ratio = std::move(resource_group_cpu_use_ratio);
+        }
+        if (scan_ratio_registered) {
+            wg_metrics->inuse_scan_ratio = std::move(resource_group_scan_use_ratio);
+        }
+        if (connector_scan_ratio_registered) {
             wg_metrics->inuse_connector_scan_ratio = std::move(resource_group_connector_scan_use_ratio);
-        if (mem_limit_registered) wg_metrics->mem_limit = std::move(resource_group_mem_limit_bytes);
-        if (mem_inuse_registered) wg_metrics->inuse_mem_bytes = std::move(resource_group_mem_allocated_bytes);
-        if (mem_connector_scan_registered)
+        }
+        if (mem_limit_registered) {
+            wg_metrics->mem_limit = std::move(resource_group_mem_limit_bytes);
+        }
+        if (mem_inuse_registered) {
+            wg_metrics->inuse_mem_bytes = std::move(resource_group_mem_allocated_bytes);
+        }
+        if (mem_connector_scan_registered) {
             wg_metrics->connector_scan_mem_bytes = std::move(resource_group_connector_scan_bytes);
-        if (running_registered) wg_metrics->running_queries = std::move(resource_group_running_queries);
-        if (total_registered) wg_metrics->total_queries = std::move(resource_group_total_queries);
-        if (concurrency_registered)
+        }
+        if (running_registered) {
+            wg_metrics->running_queries = std::move(resource_group_running_queries);
+        }
+        if (total_registered) {
+            wg_metrics->total_queries = std::move(resource_group_total_queries);
+        }
+        if (concurrency_registered) {
             wg_metrics->concurrency_overflow_count = std::move(resource_group_concurrency_overflow);
-        if (bigquery_registered) wg_metrics->bigquery_count = std::move(resource_group_bigquery_count);
-        if (mem_pool_use_ratio_registered)
+        }
+        if (bigquery_registered) {
+            wg_metrics->bigquery_count = std::move(resource_group_bigquery_count);
+        }
+        if (mem_pool_use_ratio_registered) {
             wg_metrics->mem_pool_use_ratio = std::move(resource_group_mem_pool_use_ratio);
+        }
     }
     _wg_metrics[wg->name()]->group_unique_id = wg->unique_id();
 }
