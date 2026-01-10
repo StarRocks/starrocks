@@ -520,7 +520,8 @@ public class StatementPlanner {
         // 1. explain (exclude explain analyze)
         // 2. insert into files
         // 3. old delete
-        // 4. insert overwrite
+        // 4. insert overwrite (first plan, before handleInsertOverwrite)
+        // 5. txnId already set (e.g., by InsertOverwriteJobRunner for dynamic overwrite re-plan)
         if (stmt.isExplain() && !StatementBase.ExplainLevel.ANALYZE.equals(stmt.getExplainLevel())) {
             return;
         }
@@ -529,6 +530,12 @@ public class StatementPlanner {
                     ((InsertStmt) stmt).useBlackHoleTableAsTargetTable()) {
                 return;
             }
+        }
+        // If txnId is already set, skip creating a new transaction.
+        // This happens when InsertOverwriteJobRunner.executeInsert() re-plans the insertStmt
+        // with txnId already set from prepare() phase.
+        if (stmt.getTxnId() != DmlStmt.INVALID_TXN_ID) {
+            return;
         }
 
         TableRef tableRef = stmt.getTableRef();

@@ -214,4 +214,109 @@ public class InsertOverwriteJobRunnerTest {
         Assertions.assertDoesNotThrow(
                 () -> runner.ensureTempPartitionsVisible(table, Lists.newArrayList(10L)));
     }
+
+    @Test
+    public void testDynamicOverwriteGcAfterFeRestart() {
+        // Test that dynamic overwrite can clean up temp partitions after FE restart
+        // (when insertStmt is null because it's a transient field)
+        // txnId is set in prepare() phase and persisted in log, so after FE restart
+        // we can identify temp partitions by prefix "txn{txnId}_"
+        Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("insert_overwrite_test");
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getFullName(), "t3");
+        Assertions.assertTrue(table instanceof OlapTable);
+        OlapTable olapTable = (OlapTable) table;
+
+        // Create a dynamic overwrite job with empty sourcePartitionIds (simulating dynamic overwrite)
+        InsertOverwriteJob insertOverwriteJob = new InsertOverwriteJob(200L, database.getId(), olapTable.getId(),
+                Lists.newArrayList(), true);
+        Assertions.assertTrue(insertOverwriteJob.isDynamicOverwrite());
+
+        // Set txnId to simulate txnId was set in prepare() and restored from log after FE restart
+        insertOverwriteJob.setTxnId(12345L);
+
+        // Simulate FE restart scenario: insertStmt is null (transient field)
+        InsertOverwriteJobRunner runner = new InsertOverwriteJobRunner(insertOverwriteJob);
+
+        // After fix: txnId is set in prepare() phase, so we can identify temp partitions
+        // with prefix "txn{txnId}_"
+        // Since there are no temp partitions, it should complete without error
+        runner.cancel();
+        Assertions.assertEquals(InsertOverwriteJobState.OVERWRITE_FAILED, insertOverwriteJob.getJobState());
+    }
+
+    @Test
+    public void testDynamicOverwriteReplayStateChange() {
+        // Test that replaying state change for dynamic overwrite works correctly
+        // txnId should be restored from log
+        Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("insert_overwrite_test");
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getFullName(), "t3");
+        Assertions.assertTrue(table instanceof OlapTable);
+        OlapTable olapTable = (OlapTable) table;
+
+        // Create a dynamic overwrite job
+        InsertOverwriteJob insertOverwriteJob = new InsertOverwriteJob(201L, database.getId(), olapTable.getId(),
+                Lists.newArrayList(), true);
+        Assertions.assertTrue(insertOverwriteJob.isDynamicOverwrite());
+
+        // Create state change info for transition to RUNNING state with txnId
+        // (txnId is set in prepare() phase for dynamic overwrite)
+        InsertOverwriteStateChangeInfo stateChangeInfo = new InsertOverwriteStateChangeInfo(201L,
+                InsertOverwriteJobState.OVERWRITE_PENDING, InsertOverwriteJobState.OVERWRITE_RUNNING,
+                Lists.newArrayList(), null, Lists.newArrayList(), 12345L);
+
+        InsertOverwriteJobRunner runner = new InsertOverwriteJobRunner(insertOverwriteJob);
+        runner.replayStateChange(stateChangeInfo);
+
+        Assertions.assertEquals(InsertOverwriteJobState.OVERWRITE_RUNNING, insertOverwriteJob.getJobState());
+        Assertions.assertEquals(12345L, insertOverwriteJob.getTxnId());
+    }
+
+    @Test
+    public void testDynamicOverwriteReplayFailedStateChange() {
+        // Test that replaying OVERWRITE_FAILED state for dynamic overwrite works correctly
+        Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("insert_overwrite_test");
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getFullName(), "t3");
+        Assertions.assertTrue(table instanceof OlapTable);
+        OlapTable olapTable = (OlapTable) table;
+
+        // Create a dynamic overwrite job
+        InsertOverwriteJob insertOverwriteJob = new InsertOverwriteJob(202L, database.getId(), olapTable.getId(),
+                Lists.newArrayList(), true);
+        Assertions.assertTrue(insertOverwriteJob.isDynamicOverwrite());
+
+        // Create state change info for transition to FAILED state with txnId
+        InsertOverwriteStateChangeInfo stateChangeInfo = new InsertOverwriteStateChangeInfo(202L,
+                InsertOverwriteJobState.OVERWRITE_PENDING, InsertOverwriteJobState.OVERWRITE_FAILED,
+                Lists.newArrayList(), null, Lists.newArrayList(), 12345L);
+
+        InsertOverwriteJobRunner runner = new InsertOverwriteJobRunner(insertOverwriteJob);
+        runner.replayStateChange(stateChangeInfo);
+
+        Assertions.assertEquals(InsertOverwriteJobState.OVERWRITE_FAILED, insertOverwriteJob.getJobState());
+        Assertions.assertEquals(12345L, insertOverwriteJob.getTxnId());
+    }
+
+    @Test
+    public void testDynamicOverwriteCancelBeforePrepare() {
+        // Test that cancelling a dynamic overwrite job before prepare() completes
+        // (txnId not set) handles gracefully without assertion error
+        Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("insert_overwrite_test");
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getFullName(), "t3");
+        Assertions.assertTrue(table instanceof OlapTable);
+        OlapTable olapTable = (OlapTable) table;
+
+        // Create a dynamic overwrite job without txnId (simulating job cancelled before prepare())
+        InsertOverwriteJob insertOverwriteJob = new InsertOverwriteJob(203L, database.getId(), olapTable.getId(),
+                Lists.newArrayList(), true);
+        Assertions.assertTrue(insertOverwriteJob.isDynamicOverwrite());
+        Assertions.assertEquals(-1, insertOverwriteJob.getTxnId());
+
+        // Simulate FE restart scenario where job was in PENDING state
+        InsertOverwriteJobRunner runner = new InsertOverwriteJobRunner(insertOverwriteJob);
+
+        // Should complete without assertion error, even though txnId is not set
+        // No temp partitions to clean up since prepare() never completed
+        runner.cancel();
+        Assertions.assertEquals(InsertOverwriteJobState.OVERWRITE_FAILED, insertOverwriteJob.getJobState());
+    }
 }
