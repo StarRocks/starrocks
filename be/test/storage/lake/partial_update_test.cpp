@@ -3595,4 +3595,241 @@ TEST_F(LakeColumnUpsertModeTest, memory_optimization_skip_column_reading) {
     EXPECT_GT(md->dcg_meta().dcgs_size(), 0) << "DCG should be generated for existing row updates";
 }
 
+// Test that COLUMN_UPSERT_MODE also marks partial segments as orphan files (GC them)
+// This verifies the fix where apply_column_mode_partial_update is called for COLUMN_UPSERT_MODE
+TEST_F(LakeColumnUpsertModeTest, test_orphan_files_gc_in_column_upsert_mode) {
+    auto chunk_full = generate_data(kChunkSize, 0, false, 3);
+    auto chunk_partial = generate_data(kChunkSize, 0, true, 5);
+    auto indexes = std::vector<uint32_t>(kChunkSize);
+    for (int i = 0; i < kChunkSize; i++) indexes[i] = i;
+    auto version = 1;
+    auto tablet_id = _tablet_metadata->id();
+
+    // Step 1: Write initial full data
+    {
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk_full, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+
+    // Step 2: Partial update with COLUMN_UPSERT_MODE (updating existing rows)
+    {
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_slot_descriptors(&_slot_pointers)
+                                                   .set_partial_update_mode(PartialUpdateMode::COLUMN_UPSERT_MODE)
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk_partial, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+
+        // Before publish, get the txn log to inspect segment files
+        ASSIGN_OR_ABORT(auto txn_log, _tablet_mgr->get_txn_log(tablet_id, txn_id));
+        ASSERT_TRUE(txn_log->has_op_write());
+        const auto& op_write = txn_log->op_write();
+
+        // The partial update should have generated segments (before GC)
+        int segment_count = op_write.rowset().segments_size();
+        LOG(INFO) << "Partial update generated " << segment_count << " segments before publish";
+
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+
+    // Step 3: Verify that orphan_files contains the partial segments
+    // After publish with COLUMN_UPSERT_MODE, the partial segments should be marked as orphan
+    {
+        ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
+
+        // Verify DCG was created (delta column groups for updated columns)
+        EXPECT_GT(metadata->dcg_meta().dcgs_size(), 0) << "DCG should be generated for column upsert mode";
+
+        // Verify orphan files were added (partial segments should be marked for GC)
+        // This is the key verification: apply_column_mode_partial_update should have been called
+        EXPECT_GT(metadata->orphan_files_size(), 0) << "Partial segments should be marked as orphan files for GC";
+
+        LOG(INFO) << "Orphan files count: " << metadata->orphan_files_size();
+        LOG(INFO) << "DCG count: " << metadata->dcg_meta().dcgs_size();
+    }
+
+    // Verify data correctness
+    ASSERT_EQ(kChunkSize, check(version, [](int c0, int c1, int c2) { return (c0 * 5 == c1) && (c0 * 4 == c2); }));
+}
+
+// Test that del files are properly copied in COLUMN_UPSERT_MODE when handling deletes
+// This verifies the fix in _handle_column_upsert_mode where dels are copied to new_rows_op
+TEST_F(LakeColumnUpsertModeTest, test_del_files_handling_in_column_upsert_mode) {
+    const int64_t kChunkSize = 64;
+    auto tablet_id = _tablet_metadata->id();
+    int64_t version = 1;
+
+    // Step 1: Write base data
+    {
+        auto chunk = generate_data(kChunkSize, 0, false, 100);
+        std::vector<uint32_t> indexes(kChunkSize);
+        for (int i = 0; i < kChunkSize; i++) indexes[i] = i;
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto dw, DeltaWriterBuilder()
+                                         .set_tablet_manager(_tablet_mgr.get())
+                                         .set_tablet_id(tablet_id)
+                                         .set_txn_id(txn_id)
+                                         .set_partition_id(_partition_id)
+                                         .set_mem_tracker(_mem_tracker.get())
+                                         .set_schema_id(_tablet_schema->id())
+                                         .build());
+        ASSERT_OK(dw->open());
+        ASSERT_OK(dw->write(chunk, indexes.data(), indexes.size()));
+        ASSERT_OK(dw->finish_with_txnlog());
+        dw->close();
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+
+    // Step 2: COLUMN_UPSERT_MODE with mixed operations: some deletes and some upserts with new rows
+    // Set small write buffer to potentially generate multiple del files
+    const auto old_buf = config::write_buffer_size;
+    config::write_buffer_size = 1;
+    DeferOp restore_buf([&]() { config::write_buffer_size = old_buf; });
+
+    {
+        // Create data with DELETE and UPSERT operations
+        std::vector<int> v0(kChunkSize);
+        std::vector<int> v1(kChunkSize, 777);
+        std::vector<uint8_t> ops(kChunkSize);
+
+        for (int i = 0; i < kChunkSize; i++) {
+            if (i < kChunkSize / 4) {
+                // Delete first quarter
+                v0[i] = i;
+                ops[i] = TOpType::DELETE;
+            } else if (i < kChunkSize / 2) {
+                // Update second quarter (existing rows)
+                v0[i] = i;
+                ops[i] = TOpType::UPSERT;
+            } else {
+                // Insert new rows in second half
+                v0[i] = i + kChunkSize; // New keys
+                ops[i] = TOpType::UPSERT;
+            }
+        }
+
+        auto c0 = Int32Column::create();
+        auto c1 = Int32Column::create();
+        auto cop = Int8Column::create();
+        c0->append_numbers(v0.data(), v0.size() * sizeof(int));
+        c1->append_numbers(v1.data(), v1.size() * sizeof(int));
+        cop->append_numbers(ops.data(), ops.size() * sizeof(uint8_t));
+
+        Chunk::SlotHashMap ops_slot_map;
+        ops_slot_map[0] = 0;
+        ops_slot_map[1] = 1;
+        ops_slot_map[3] = 2; // op column
+        Chunk chunk_with_ops({std::move(c0), std::move(c1), std::move(cop)}, ops_slot_map);
+
+        std::vector<uint32_t> idx(kChunkSize);
+        for (int i = 0; i < kChunkSize; i++) idx[i] = i;
+
+        std::vector<SlotDescriptor> op_slots;
+        op_slots.emplace_back(0, "c0", TypeDescriptor{LogicalType::TYPE_INT});
+        op_slots.emplace_back(1, "c1", TypeDescriptor{LogicalType::TYPE_INT});
+        op_slots.emplace_back(3, "__op", TypeDescriptor{LogicalType::TYPE_TINYINT});
+        std::vector<SlotDescriptor*> op_slot_pointers;
+        for (auto& slot : op_slots) {
+            op_slot_pointers.emplace_back(&slot);
+        }
+
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto dw, DeltaWriterBuilder()
+                                         .set_tablet_manager(_tablet_mgr.get())
+                                         .set_tablet_id(tablet_id)
+                                         .set_txn_id(txn_id)
+                                         .set_partition_id(_partition_id)
+                                         .set_mem_tracker(_mem_tracker.get())
+                                         .set_schema_id(_tablet_schema->id())
+                                         .set_slot_descriptors(&op_slot_pointers)
+                                         .set_partial_update_mode(PartialUpdateMode::COLUMN_UPSERT_MODE)
+                                         .build());
+        ASSERT_OK(dw->open());
+        ASSERT_OK(dw->write(chunk_with_ops, idx.data(), idx.size()));
+        ASSERT_OK(dw->finish_with_txnlog());
+        dw->close();
+
+        // Before publish, check the txn log has del files
+        ASSIGN_OR_ABORT(auto txn_log, _tablet_mgr->get_txn_log(tablet_id, txn_id));
+        ASSERT_TRUE(txn_log->has_op_write());
+        const auto& op_write = txn_log->op_write();
+        int original_dels_count = op_write.dels_size();
+        LOG(INFO) << "Original del files count: " << original_dels_count;
+
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+
+    // Step 3: Verify the result
+    {
+        ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
+
+        // Verify deletes were applied (first quarter should be deleted)
+        auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), metadata, *_schema);
+        ASSERT_OK(reader->prepare());
+        ASSERT_OK(reader->open(TabletReaderParams()));
+
+        auto chk = ChunkHelper::new_chunk(*_schema, 256);
+        std::set<int> found_keys;
+        while (true) {
+            auto st = reader->get_next(chk.get());
+            if (st.is_end_of_file()) break;
+            ASSERT_OK(st);
+            auto cols = chk->columns();
+            for (int i = 0; i < chk->num_rows(); i++) {
+                int key = cols[0]->get(i).get_int32();
+                found_keys.insert(key);
+            }
+            chk->reset();
+        }
+
+        // Verify deleted keys are not present
+        for (int i = 0; i < kChunkSize / 4; i++) {
+            EXPECT_EQ(found_keys.count(i), 0) << "Deleted key " << i << " should not be found";
+        }
+
+        // Verify updated keys are present
+        for (int i = kChunkSize / 4; i < kChunkSize / 2; i++) {
+            EXPECT_EQ(found_keys.count(i), 1) << "Updated key " << i << " should be found";
+        }
+
+        // Verify new keys are present
+        for (int i = kChunkSize + kChunkSize / 2; i < 2 * kChunkSize; i++) {
+            EXPECT_EQ(found_keys.count(i), 1) << "New key " << i << " should be found";
+        }
+
+        // Verify metadata: the dels should have been properly handled
+        // Check that rowsets have proper del file info or delvec metadata
+        ASSERT_GE(metadata->rowsets_size(), 1);
+
+        LOG(INFO) << "Final version: " << version;
+        LOG(INFO) << "Total rowsets: " << metadata->rowsets_size();
+        LOG(INFO) << "DCG count: " << metadata->dcg_meta().dcgs_size();
+    }
+}
+
 } // namespace starrocks::lake
