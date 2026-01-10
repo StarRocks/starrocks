@@ -803,6 +803,18 @@ public class MergeCommitTask extends AbstractTxnStateChangeCallback implements R
         }
     }
 
+    // ================ methods for testing ================
+
+    @VisibleForTesting
+    public TUniqueId getLoadId() {
+        return loadId;
+    }
+
+    @VisibleForTesting
+    public boolean isPlanDeployed() {
+        return loadTimeTrace.execWaitStartTimeMs.get() > 0;
+    }
+
     /**
      * Statistics about rows/bytes processed by the load execution.
      */

@@ -14,18 +14,28 @@
 
 package com.starrocks.load.batchwrite;
 
+import com.google.common.collect.ImmutableMap;
+import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.load.streamload.StreamLoadHttpHeader;
 import com.starrocks.load.streamload.StreamLoadInfo;
 import com.starrocks.load.streamload.StreamLoadKvParams;
+import com.starrocks.qe.DefaultCoordinator;
+import com.starrocks.qe.QeProcessorImpl;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.ComputeNode;
+import com.starrocks.task.LoadEtlTask;
+import com.starrocks.thrift.FrontendServiceVersion;
+import com.starrocks.thrift.TNetworkAddress;
+import com.starrocks.thrift.TReportExecStatusParams;
+import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
+import com.starrocks.thrift.TTabletFailInfo;
+import com.starrocks.transaction.TransactionStatus;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.mockito.Mockito;
 
 import java.util.Collections;
 import java.util.HashMap;
@@ -146,9 +156,9 @@ public class MergeCommitJobTest extends BatchWriteTestBase {
         assertTrue(result2.isOk());
         assertEquals(label, result2.getValue());
 
-        MergeCommitTask finishedTask = Mockito.mock(MergeCommitTask.class);
-        whenFinishedTask(finishedTask, label, 1L, mergeCommitTask.getBackendIds());
-        load.finish(finishedTask);
+        executor.manualRun(mergeCommitTask);
+
+        assertEquals(TransactionStatus.VISIBLE, getTxnStatus(label));
         assertNull(load.getTask(label));
         assertEquals(0, load.numRunningLoads());
         assertEquals(mergeCommitTask.getBackendIds().size(), txnStateDispatcher.getNumSubmittedTasks());
@@ -188,16 +198,15 @@ public class MergeCommitJobTest extends BatchWriteTestBase {
         expectNodeIds.add(allNodes.get(parallel).getId());
         assertEquals(expectNodeIds, mergeCommitTask2.getBackendIds());
 
-        MergeCommitTask finishedTask1 = Mockito.mock(MergeCommitTask.class);
-        whenFinishedTask(finishedTask1, label1, 1L, mergeCommitTask1.getBackendIds());
-        load.finish(finishedTask1);
+        executor.manualRun(mergeCommitTask1);
+        assertEquals(TransactionStatus.VISIBLE, getTxnStatus(label1));
         assertEquals(mergeCommitTask1.getBackendIds().size(), txnStateDispatcher.getNumSubmittedTasks());
 
-        MergeCommitTask finishedTask2 = Mockito.mock(MergeCommitTask.class);
-        whenFinishedTask(finishedTask2, label2, 2L, mergeCommitTask2.getBackendIds());
-        load.finish(finishedTask2);
+        executor.manualRun(mergeCommitTask2);
+        assertEquals(TransactionStatus.VISIBLE, getTxnStatus(label2));
         assertEquals(mergeCommitTask1.getBackendIds().size() + mergeCommitTask2.getBackendIds().size(),
                 txnStateDispatcher.getNumSubmittedTasks());
+
         assertEquals(0, load.numRunningLoads());
     }
 
@@ -295,11 +304,54 @@ public class MergeCommitJobTest extends BatchWriteTestBase {
 
             pendingRunnable.add(command);
         }
-    }
 
-    private static void whenFinishedTask(MergeCommitTask task, String label, long txnId, Set<Long> backendIds) {
-        Mockito.when(task.getLabel()).thenReturn(label);
-        Mockito.when(task.getTxnId()).thenReturn(txnId);
-        Mockito.when(task.getBackendIds()).thenReturn(backendIds);
+        public void manualRun(Runnable runnable) throws Exception {
+            boolean exist = pendingRunnable.remove(runnable);
+            if (!exist) {
+                return;
+            }
+
+            if (!(runnable instanceof MergeCommitTask mergeCommitTask)) {
+                runnable.run();
+                return;
+            }
+
+            Thread thread = new Thread(mergeCommitTask);
+            thread.start();
+            
+            long endTime = System.currentTimeMillis() + 120000;
+            do {
+                if (System.currentTimeMillis() > endTime) {
+                    throw new Exception("Load executor execute plan timeout");
+                }
+                Thread.sleep(10);
+            } while (!mergeCommitTask.isPlanDeployed());
+
+            DefaultCoordinator coordinator =
+                    (DefaultCoordinator) QeProcessorImpl.INSTANCE.getCoordinator(mergeCommitTask.getLoadId());
+            assertNotNull(coordinator, "Coordinator should be registered");
+            coordinator.getExecutionDAG().getExecutions().forEach(execution -> {
+                int indexInJob = execution.getIndexInJob();
+                TReportExecStatusParams request = new TReportExecStatusParams(FrontendServiceVersion.V1);
+                request.setQuery_id(mergeCommitTask.getLoadId());
+                request.setBackend_num(indexInJob)
+                        .setDone(true)
+                        .setStatus(new TStatus(TStatusCode.OK))
+                        .setFragment_instance_id(execution.getInstanceId());
+                request.setCommitInfos(buildCommitInfos());
+                TTabletFailInfo failInfo = new TTabletFailInfo();
+                request.setFailInfos(Collections.singletonList(failInfo));
+                Map<String, String> currLoadCounters = ImmutableMap.of(
+                        LoadEtlTask.DPP_NORMAL_ALL, String.valueOf(10),
+                        LoadEtlTask.DPP_ABNORMAL_ALL, String.valueOf(0),
+                        LoadJob.UNSELECTED_ROWS, String.valueOf(0),
+                        LoadJob.LOADED_BYTES, String.valueOf(40)
+                );
+                request.setLoad_counters(currLoadCounters);
+                TNetworkAddress beAddr = execution.getAddress();
+                QeProcessorImpl.INSTANCE.reportExecStatus(request, beAddr);
+            });
+            thread.join();
+        }
     }
 }

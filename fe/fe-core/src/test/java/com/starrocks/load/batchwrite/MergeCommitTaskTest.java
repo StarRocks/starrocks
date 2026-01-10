@@ -72,10 +72,9 @@ public class MergeCommitTaskTest extends BatchWriteTestBase {
     private StreamLoadKvParams kvParams;
     private StreamLoadInfo streamLoadInfo;
     private String warehouseName;
-    private Coordinator coordinator;
     private TestMergeCommitTaskCallback loadExecuteCallback;
-
     private Coordinator.Factory coordinatorFactory;
+    private Coordinator coordinator;
 
     @BeforeEach
     public void setup() throws Exception {
@@ -90,8 +89,8 @@ public class MergeCommitTaskTest extends BatchWriteTestBase {
         streamLoadInfo = StreamLoadInfo.fromHttpStreamLoadRequest(null, -1, Optional.empty(), kvParams);
         warehouseName = "default_warehouse";
         loadExecuteCallback = new TestMergeCommitTaskCallback();
-        coordinator = Mockito.mock(Coordinator.class);
         coordinatorFactory = Mockito.mock(Coordinator.Factory.class);
+        coordinator = Mockito.mock(Coordinator.class);
     }
 
     @Test
