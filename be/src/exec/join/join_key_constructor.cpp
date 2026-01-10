@@ -35,7 +35,9 @@ void BuildKeyConstructorForSerialized::build_key(RuntimeState* state, JoinHashTa
 
     for (size_t i = 0; i < table_items->key_columns.size(); i++) {
         if (table_items->join_keys[i].is_null_safe_equal) {
-            data_columns.emplace_back(table_items->key_columns[i]);
+            // Normalize NaN for float/double to ensure NaN == NaN (Iceberg equality delete semantics)
+            auto col = normalize_float_nan(table_items->key_columns[i], table_items->join_keys[i].type->type);
+            data_columns.emplace_back(col);
         } else if (table_items->key_columns[i]->is_nullable()) {
             auto* nullable_column = ColumnHelper::as_raw_column<NullableColumn>(table_items->key_columns[i]);
             data_columns.emplace_back(nullable_column->data_column());
@@ -91,10 +93,10 @@ void ProbeKeyConstructorForSerialized::build_key(const JoinHashTableItems& table
     for (size_t i = 0; i < probe_state->key_columns->size(); i++) {
         auto& key_column = (*probe_state->key_columns)[i];
         if (table_items.join_keys[i].is_null_safe_equal) {
-            // this means build column is a nullable column and join condition is null safe equal
-            // we need convert the probe column to a nullable column when it's a non-nullable column
-            // to align the type between build and probe columns.
-            data_columns.emplace_back(NullableColumn::wrap_if_necessary(key_column));
+            // Normalize NaN for float/double to ensure NaN == NaN (Iceberg equality delete semantics)
+            // Also wrap non-nullable columns in NullableColumn to align with build side.
+            auto col = normalize_float_nan(key_column, table_items.join_keys[i].type->type);
+            data_columns.emplace_back(NullableColumn::wrap_if_necessary(col));
         } else if ((*probe_state->key_columns)[i]->is_nullable()) {
             auto* nullable_column = ColumnHelper::as_raw_column<NullableColumn>(key_column);
             data_columns.emplace_back(nullable_column->data_column());
