@@ -35,6 +35,17 @@ namespace starrocks {
 
 class RuntimeFilterProbeCollector;
 
+enum CacheType { META, PAGE };
+inline static const std::vector<std::string> cache_key_prefix{"ft", "pg"};
+
+// Build a metacache key for file footer caching
+// Format: hash(filename) + "ft" + mtime_or_size
+// - hash(filename): 8 bytes hash of the file path
+// - "ft": 2 bytes footer suffix
+// - mtime_or_size: 4 bytes modification time (if available) or file size
+std::string get_file_cache_key(CacheType type, const std::string& filename, int64_t modification_time,
+                               uint64_t file_size);
+
 struct HdfsSplitContext : public pipeline::ScanSplitContext {
     size_t split_start = 0;
     size_t split_end = 0;

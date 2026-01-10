@@ -22,6 +22,7 @@
 #include "cache/disk_cache/block_cache.h"
 #include "cache/disk_cache/starcache_engine.h"
 #include "cache/disk_cache/test_cache_utils.h"
+#include "cache/mem_cache/lrucache_engine.h"
 #include "column/column_helper.h"
 #include "exec/hdfs_scanner/hdfs_scanner_orc.h"
 #include "exec/hdfs_scanner/hdfs_scanner_parquet.h"
@@ -57,6 +58,7 @@ protected:
     void _create_runtime_state(const std::string& timezone);
     void _create_runtime_profile();
     HdfsScannerParams* _create_param(const std::string& file, THdfsScanRange* range, TupleDescriptor* tuple_desc);
+    DataCacheOptions _mock_datacache_options();
     void build_hive_column_names(HdfsScannerParams* params, const TupleDescriptor* tuple_desc,
                                  bool diff_case_sensitive = false);
 
@@ -135,6 +137,18 @@ HdfsScannerParams* HdfsScannerTest::_create_param(const std::string& file, THdfs
     param->partition_slots = part_slots;
     param->lazy_column_coalesce_counter = lazy_column_coalesce_counter;
     return param;
+}
+
+DataCacheOptions HdfsScannerTest::_mock_datacache_options() {
+    return DataCacheOptions{.enable_datacache = false, // skip data cache, only validate footer cache
+                            .enable_cache_select = false,
+                            .enable_populate_datacache = true,
+                            .enable_datacache_async_populate_mode = true,
+                            .enable_datacache_io_adaptor = true,
+                            .modification_time = 100000,
+                            .datacache_evict_probability = 100,
+                            .datacache_priority = 0,
+                            .datacache_ttl_seconds = 0};
 }
 
 void HdfsScannerTest::build_hive_column_names(HdfsScannerParams* params, const TupleDescriptor* tuple_desc,
@@ -3201,6 +3215,62 @@ TEST_F(HdfsScannerTest, TestParquetLZOFormat) {
     EXPECT_TRUE(status.ok());
     READ_SCANNER_ROWS(scanner, 100000);
     scanner->close();
+}
+
+TEST_F(HdfsScannerTest, TestOrcFooterCache) {
+#ifdef WITH_STARCACHE
+    // Initialize a local cache similar to Parquet test
+    MemCacheOptions options{.mem_space_size = 100 * MB};
+    auto local_cache = std::make_shared<LRUCacheEngine>();
+    ASSERT_OK(local_cache->init(options));
+    auto cache = std::make_shared<StoragePageCache>(local_cache.get());
+
+    auto* range = _create_scan_range(mtypes_orc_file, 0, 0);
+    auto* tuple_desc = _create_tuple_desc(mtypes_orc_descs);
+    auto* param = _create_param(mtypes_orc_file, range, tuple_desc);
+    // partition values for [PART_x, PART_y]
+    std::vector<int64_t> values = {10, 20};
+    extend_partition_values(&_pool, param, values);
+
+    ASSERT_OK(Expr::prepare(param->partition_values, _runtime_state));
+    ASSERT_OK(Expr::open(param->partition_values, _runtime_state));
+
+    param->datacache_options = _mock_datacache_options();
+    param->use_file_metacache = true;
+
+    // first scanner, populate footer cache
+    auto scanner = std::make_shared<HdfsOrcScanner>();
+    Status st = scanner->init(_runtime_state, *param);
+    EXPECT_TRUE(st.ok());
+    ASSERT_EQ(0, scanner->_app_stats.footer_cache_read_count);
+    ASSERT_EQ(0, scanner->_app_stats.footer_cache_write_count);
+    scanner->_cache = cache.get();
+
+    // first open should write cache
+    st = scanner->open(_runtime_state);
+    EXPECT_TRUE(st.ok());
+    ASSERT_EQ(0, scanner->_app_stats.footer_cache_read_count);
+    ASSERT_EQ(1, scanner->_app_stats.footer_cache_write_count);
+    ASSERT_EQ(0, scanner->_app_stats.footer_cache_write_fail_count);
+    ASSERT_LT(0, scanner->_app_stats.footer_cache_write_bytes);
+    scanner->close();
+
+    // second scanner, read footer cache
+    auto new_scanner = std::make_shared<HdfsOrcScanner>();
+    st = new_scanner->init(_runtime_state, *param);
+    EXPECT_TRUE(st.ok());
+    ASSERT_EQ(0, new_scanner->_app_stats.footer_cache_read_count);
+    ASSERT_EQ(0, new_scanner->_app_stats.footer_cache_write_count);
+    new_scanner->_cache = cache.get();
+
+    st = new_scanner->open(_runtime_state);
+    EXPECT_TRUE(st.ok());
+    // second open should read cache
+    ASSERT_EQ(1, new_scanner->_app_stats.footer_cache_read_count);
+    ASSERT_EQ(0, new_scanner->_app_stats.footer_cache_write_count);
+    ASSERT_EQ(0, new_scanner->_app_stats.footer_cache_write_fail_count);
+    new_scanner->close();
+#endif
 }
 
 } // namespace starrocks
