@@ -28,6 +28,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Service for handling Partition Projection in AWS Glue/Athena tables.
@@ -76,6 +78,13 @@ public class PartitionProjectionService {
 
         // Get storage location template
         Optional<String> storageLocationTemplate = projProps.getStorageLocationTemplate();
+
+        // Validate base location when no storage location template is configured
+        if (!storageLocationTemplate.isPresent() && (baseLocation == null || baseLocation.isEmpty())) {
+            throw new IllegalArgumentException(
+                    "Table location is required for partition projection when no storage.location.template is configured. " +
+                    "Please set the table LOCATION or configure 'projection.storage.location.template' property.");
+        }
 
         // Get input format and text file format desc from storage format
         RemoteFileInputFormat inputFormat = getInputFormat(table);
@@ -324,6 +333,13 @@ public class PartitionProjectionService {
         Optional<String> storageLocationTemplate = projProps.getStorageLocationTemplate();
         List<String> partitionColumnNames = table.getPartitionColumnNames();
 
+        // Validate base location when no storage location template is configured
+        if (!storageLocationTemplate.isPresent() && (baseLocation == null || baseLocation.isEmpty())) {
+            throw new IllegalArgumentException(
+                    "Table location is required for partition projection when no storage.location.template is configured. " +
+                    "Please set the table LOCATION or configure 'projection.storage.location.template' property.");
+        }
+
         Map<String, Partition> result = new HashMap<>();
         for (String partitionName : partitionNames) {
             String partitionLocation = buildPartitionLocation(
@@ -385,12 +401,26 @@ public class PartitionProjectionService {
     /**
      * Expands storage location template with partition values.
      * Template format: s3://bucket/data/${region}/${year}/
+     * Note: Template variable matching is case-insensitive to handle AWS Athena's
+     * case-insensitive property handling.
      */
     private String expandTemplate(String template, Map<String, String> partitionValues) {
-        String result = template;
+        // Build lowercase key map for case-insensitive lookup
+        Map<String, String> lowercaseKeyMap = new HashMap<>();
         for (Map.Entry<String, String> entry : partitionValues.entrySet()) {
-            result = result.replace("${" + entry.getKey() + "}", entry.getValue());
+            lowercaseKeyMap.put(entry.getKey().toLowerCase(), entry.getValue());
         }
-        return result;
+
+        // Use regex to replace template variables case-insensitively
+        Pattern pattern = Pattern.compile("\\$\\{([^}]+)\\}");
+        Matcher matcher = pattern.matcher(template);
+        StringBuffer sb = new StringBuffer();
+        while (matcher.find()) {
+            String columnName = matcher.group(1);
+            String value = lowercaseKeyMap.getOrDefault(columnName.toLowerCase(), "");
+            matcher.appendReplacement(sb, Matcher.quoteReplacement(value));
+        }
+        matcher.appendTail(sb);
+        return sb.toString();
     }
 }

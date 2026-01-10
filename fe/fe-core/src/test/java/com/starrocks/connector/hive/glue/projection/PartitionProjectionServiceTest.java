@@ -392,4 +392,83 @@ public class PartitionProjectionServiceTest {
         assertTrue(exception.getMessage().contains("INJECTED"));
         assertTrue(exception.getMessage().contains("user_id"));
     }
+
+    /**
+     * Test for null table location validation: should throw error when no storage template and null location
+     */
+    @Test
+    public void testCreateProjectionWithNullLocationThrowsError() {
+        HiveTable table = createMockHiveTableWithNullLocation(
+                ImmutableMap.of(
+                        "projection.enabled", "true",
+                        "projection.region.type", "enum",
+                        "projection.region.values", "us,eu"
+                ),
+                ImmutableList.of("region")
+        );
+
+        IllegalArgumentException exception = assertThrows(
+                IllegalArgumentException.class,
+                () -> service.createProjection(table)
+        );
+
+        assertTrue(exception.getMessage().contains("Table location is required"));
+    }
+
+    /**
+     * Test for null table location with storage template: should work because template provides the path
+     */
+    @Test
+    public void testCreateProjectionWithNullLocationButWithStorageTemplate() {
+        HiveTable table = createMockHiveTableWithNullLocation(
+                ImmutableMap.of(
+                        "projection.enabled", "true",
+                        "projection.region.type", "enum",
+                        "projection.region.values", "us,eu",
+                        "storage.location.template", "s3://bucket/data/${region}/"
+                ),
+                ImmutableList.of("region")
+        );
+
+        // Should not throw - storage template provides the path
+        PartitionProjection projection = service.createProjection(table);
+        assertNotNull(projection);
+    }
+
+    /**
+     * Test case-insensitive template variable expansion in getProjectedPartitionsFromNames
+     */
+    @Test
+    public void testGetProjectedPartitionsFromNamesWithUppercaseTemplateVariables() {
+        HiveTable table = createMockHiveTable(
+                ImmutableMap.of(
+                        "projection.enabled", "true",
+                        "projection.region.type", "enum",
+                        "projection.region.values", "us,eu",
+                        "projection.year.type", "integer",
+                        "projection.year.range", "2024,2024",
+                        "storage.location.template", "s3://bucket/data/${REGION}/${YEAR}/"
+                ),
+                ImmutableList.of("region", "year")
+        );
+
+        List<String> partitionNames = Arrays.asList("region=us/year=2024");
+        Map<String, Partition> partitions = service.getProjectedPartitionsFromNames(table, partitionNames);
+
+        assertEquals(1, partitions.size());
+        Partition partition = partitions.get("region=us/year=2024");
+        assertNotNull(partition);
+        assertEquals("s3://bucket/data/us/2024/", partition.getFullPath());
+    }
+
+    private HiveTable createMockHiveTableWithNullLocation(Map<String, String> properties,
+                                                           List<String> partitionColumnNames) {
+        HiveTable table = mock(HiveTable.class);
+        when(table.getProperties()).thenReturn(properties);
+        when(table.getPartitionColumnNames()).thenReturn(partitionColumnNames);
+        when(table.getTableLocation()).thenReturn(null);
+        when(table.getStorageFormat()).thenReturn(null);
+        when(table.getSerdeProperties()).thenReturn(ImmutableMap.of());
+        return table;
+    }
 }

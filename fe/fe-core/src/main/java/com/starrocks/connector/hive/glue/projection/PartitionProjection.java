@@ -164,20 +164,22 @@ public class PartitionProjection {
      * Expands a storage location template with partition values.
      *
      * Template format: s3://bucket/data/${region}/${year}/${date}/
+     * Note: Template variable matching is case-insensitive to handle AWS Athena's
+     * case-insensitive property handling.
      */
     private String expandTemplate(String template, List<String> values) {
-        // Build value map
+        // Build value map with lowercase keys for case-insensitive lookup
         Map<String, String> valueMap = new HashMap<>();
         for (int i = 0; i < partitionColumnNames.size(); i++) {
-            valueMap.put(partitionColumnNames.get(i), values.get(i));
+            valueMap.put(partitionColumnNames.get(i).toLowerCase(), values.get(i));
         }
 
-        // Replace template variables
+        // Replace template variables (case-insensitive lookup)
         Matcher matcher = TEMPLATE_PATTERN.matcher(template);
         StringBuffer sb = new StringBuffer();
         while (matcher.find()) {
             String columnName = matcher.group(1);
-            String value = valueMap.getOrDefault(columnName, "");
+            String value = valueMap.getOrDefault(columnName.toLowerCase(), "");
             // Escape special regex characters in replacement
             matcher.appendReplacement(sb, Matcher.quoteReplacement(value));
         }

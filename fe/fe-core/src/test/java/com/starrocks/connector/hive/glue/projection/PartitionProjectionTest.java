@@ -207,4 +207,52 @@ public class PartitionProjectionTest {
 
         assertEquals("s3://bucket/data/region=us", partitions.get("region=us").getFullPath());
     }
+
+    @Test
+    public void testStorageTemplateWithUppercaseVariables() {
+        // Test case-insensitive template expansion: template uses ${REGION} but column is "region"
+        Map<String, ColumnProjection> projections = new HashMap<>();
+        projections.put("region", new EnumProjection("region", "us"));
+        projections.put("year", new IntegerProjection("year", "2024,2024", Optional.empty(), Optional.empty()));
+
+        PartitionProjection projection = new PartitionProjection(
+                "s3://bucket/data",
+                Optional.of("s3://bucket/data/${REGION}/${YEAR}/"),
+                projections,
+                Arrays.asList("region", "year"),
+                RemoteFileInputFormat.PARQUET,
+                null
+        );
+
+        Map<String, Partition> partitions = projection.getProjectedPartitions(new HashMap<>());
+
+        assertEquals(1, partitions.size());
+        Partition partition = partitions.get("region=us/year=2024");
+        assertNotNull(partition);
+        assertEquals("s3://bucket/data/us/2024/", partition.getFullPath());
+    }
+
+    @Test
+    public void testStorageTemplateWithMixedCaseVariables() {
+        // Test case-insensitive template expansion: template uses ${Region} but column is "region"
+        Map<String, ColumnProjection> projections = new HashMap<>();
+        projections.put("region", new EnumProjection("region", "us"));
+        projections.put("year", new IntegerProjection("year", "2024,2024", Optional.empty(), Optional.empty()));
+
+        PartitionProjection projection = new PartitionProjection(
+                "s3://bucket/data",
+                Optional.of("s3://bucket/data/${Region}/${Year}/"),
+                projections,
+                Arrays.asList("region", "year"),
+                RemoteFileInputFormat.PARQUET,
+                null
+        );
+
+        Map<String, Partition> partitions = projection.getProjectedPartitions(new HashMap<>());
+
+        assertEquals(1, partitions.size());
+        Partition partition = partitions.get("region=us/year=2024");
+        assertNotNull(partition);
+        assertEquals("s3://bucket/data/us/2024/", partition.getFullPath());
+    }
 }
