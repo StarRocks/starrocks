@@ -770,6 +770,49 @@ public class PaimonMetadataTest {
                 metadata.getTableStatistics(optimizerContext, paimonTable, colRefToColumnMetaMap,
                         null, null, -1, null);
         assertEquals(tableStatistics.getColumnStatistics().size(), colRefToColumnMetaMap.size());
+
+        // Verify averageRowSize uses avgLen from Paimon statistics
+        com.starrocks.sql.optimizer.statistics.ColumnStatistic userIdStat =
+                tableStatistics.getColumnStatistic(columnRefOperator1);
+        assertEquals(4.0, userIdStat.getAverageRowSize(), 0.001);
+
+        com.starrocks.sql.optimizer.statistics.ColumnStatistic behaviorStat =
+                tableStatistics.getColumnStatistic(columnRefOperator2);
+        assertEquals(2.0, behaviorStat.getAverageRowSize(), 0.001);
+
+        com.starrocks.sql.optimizer.statistics.ColumnStatistic dtStat =
+                tableStatistics.getColumnStatistic(columnRefOperator5);
+        assertEquals(8.0, dtStat.getAverageRowSize(), 0.001);
+
+        com.starrocks.sql.optimizer.statistics.ColumnStatistic acountStat =
+                tableStatistics.getColumnStatistic(columnRefOperator3);
+        assertEquals(8.0, acountStat.getAverageRowSize(), 0.001);
+
+        com.starrocks.sql.optimizer.statistics.ColumnStatistic flagStat =
+                tableStatistics.getColumnStatistic(columnRefOperator4);
+        assertEquals(1.0, flagStat.getAverageRowSize(), 0.001);
+
+        com.starrocks.sql.optimizer.statistics.ColumnStatistic createTimeStat =
+                tableStatistics.getColumnStatistic(columnRefOperator6);
+        assertEquals(8.0, createTimeStat.getAverageRowSize(), 0.001);
+
+        // Verify fallback to ColumnStatistic.unknown() when column is not found in statistics
+        com.starrocks.sql.optimizer.statistics.ColumnStatistic listStat =
+                tableStatistics.getColumnStatistic(columnRefOperator7);
+        // When column is not found, use ColumnStatistic.unknown() which has averageRowSize = 1.0
+        assertEquals(1.0, listStat.getAverageRowSize(), 0.001);
+        // Verify it's UNKNOWN type
+        org.junit.jupiter.api.Assertions.assertTrue(listStat.isUnknown());
+
+        // Verify averageRowSize is at least 1.0
+        for (Map.Entry<ColumnRefOperator, com.starrocks.sql.optimizer.statistics.ColumnStatistic> entry :
+                tableStatistics.getColumnStatistics().entrySet()) {
+            assert entry.getValue().getAverageRowSize() >= 1.0 :
+                    "averageRowSize should be at least 1.0 for column: " + entry.getKey().getName();
+        }
+
+        // Verify row count from mergedRecordCount
+        assertEquals(7.0, tableStatistics.getOutputRowCount(), 0.001);
     }
 
     @Test
