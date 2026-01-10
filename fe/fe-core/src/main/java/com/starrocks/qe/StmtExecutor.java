@@ -288,6 +288,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Queue;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
@@ -710,6 +711,8 @@ public class StmtExecutor {
         context.setCurrentThreadId(Thread.currentThread().getId());
 
         SessionVariable sessionVariableBackup = context.getSessionVariable();
+        // set true to change session variable
+        boolean skipRestore = false;
         // set execution id.
         // For statements other than `cache select`, try to use query id as execution id when execute first time.
         UUID uuid = context.getQueryId();
@@ -921,13 +924,16 @@ public class StmtExecutor {
                     }
                 }
             } else if (parsedStmt instanceof SetStmt) {
+                // set statement will ignore hint.
                 handleSetStmt();
+                skipRestore = context.getState().getStateType().equals(MysqlStateType.OK);
             } else if (parsedStmt instanceof RefreshConnectionsStmt) {
                 handleRefreshConnectionsStmt();
             } else if (parsedStmt instanceof UseDbStmt) {
                 handleUseDbStmt();
             } else if (parsedStmt instanceof SetWarehouseStmt) {
                 handleSetWarehouseStmt();
+                skipRestore = context.getState().getStateType().equals(MysqlStateType.OK);
             } else if (parsedStmt instanceof UseCatalogStmt) {
                 handleUseCatalogStmt();
             } else if (parsedStmt instanceof SetCatalogStmt) {
@@ -1046,7 +1052,9 @@ public class StmtExecutor {
             }
 
             // restore session variable in connect context
-            context.setSessionVariable(sessionVariableBackup);
+            if (!skipRestore) {
+                context.setSessionVariable(sessionVariableBackup);
+            }
 
             if (shouldMarkIdleCheck && originWarehouseId != null) {
                 WarehouseIdleChecker.decreaseRunningSQL(originWarehouseId);
@@ -1102,25 +1110,24 @@ public class StmtExecutor {
             return;
         }
 
-        SessionVariable clonedSessionVariable = null;
+        Map<String, String> hintSvs = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
         for (HintNode hint : parsedStmt.getAllQueryScopeHints()) {
             if (!(hint instanceof SetVarHint)) {
                 continue;
             }
-
-            if (clonedSessionVariable == null) {
-                clonedSessionVariable = (SessionVariable) context.sessionVariable.clone();
-            }
-            for (Map.Entry<String, String> entry : hint.getValue().entrySet()) {
-                GlobalStateMgr.getCurrentState().getVariableMgr().setSystemVariable(clonedSessionVariable,
-                        new SystemVariable(entry.getKey(), new StringLiteral(entry.getValue())), true, context);
-            }
+            hintSvs.putAll(hint.getValue());
         }
 
-        if (clonedSessionVariable == null) {
+        if (hintSvs.isEmpty()) {
             return;
         }
 
+        SessionVariable clonedSessionVariable = context.sessionVariable.clone();
+        // apply warehouse
+        if (hintSvs.containsKey(SessionVariable.WAREHOUSE_NAME)) {
+            context.applyWarehouseSessionVariable(hintSvs.get(SessionVariable.WAREHOUSE_NAME), clonedSessionVariable);
+        }
+        GlobalStateMgr.getCurrentState().getVariableMgr().applySessionVariable(hintSvs, clonedSessionVariable);
         context.setSessionVariable(clonedSessionVariable);
     }
 
@@ -1142,11 +1149,14 @@ public class StmtExecutor {
             for (HintNode hint : parsedStmt.getAllQueryScopeHints()) {
                 if (hint instanceof SetVarHint) {
                     if (clonedSessionVariable == null) {
-                        clonedSessionVariable = (SessionVariable) context.sessionVariable.clone();
+                        clonedSessionVariable = context.sessionVariable.clone();
                     }
                     for (Map.Entry<String, String> entry : hint.getValue().entrySet()) {
+                        if (entry.getKey().equalsIgnoreCase(SessionVariable.WAREHOUSE_NAME)) {
+                            context.applyWarehouseSessionVariable(entry.getValue(), clonedSessionVariable);
+                        }
                         GlobalStateMgr.getCurrentState().getVariableMgr().setSystemVariable(clonedSessionVariable,
-                                new SystemVariable(entry.getKey(), new StringLiteral(entry.getValue())), true, context);
+                                new SystemVariable(entry.getKey(), new StringLiteral(entry.getValue())), true);
                     }
                 }
 

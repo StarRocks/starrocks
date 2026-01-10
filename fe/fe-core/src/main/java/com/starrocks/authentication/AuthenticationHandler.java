@@ -224,7 +224,7 @@ public class AuthenticationHandler {
         // Ephemeral users (from external auth) don't have stored properties
         if (!authenticationResult.authenticatedUser.isEphemeral()) {
             UserProperty userProperty = GlobalStateMgr.getCurrentState().getAuthenticationMgr()
-                    .getUserProperty(authenticationResult.authenticatedUser.getUser());
+                    .getUserProperty(user);
             context.updateByUserProperty(userProperty);
         }
     }

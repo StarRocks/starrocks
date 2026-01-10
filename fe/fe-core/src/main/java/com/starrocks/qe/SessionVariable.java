@@ -6078,9 +6078,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     }
 
     @Override
-    public Object clone() {
+    public SessionVariable clone() {
         try {
-            return super.clone();
+            return (SessionVariable) super.clone();
         } catch (CloneNotSupportedException e) {
             throw new RuntimeException(e);
         }
