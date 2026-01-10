@@ -575,6 +575,9 @@ if [ ${FE_MODULES}x != ""x ]; then
     # clean phase is explicited by `--clean` option, don't bother doing clean again.
     ${MVN_CMD} $addon_mvn_opts package -am -pl ${FE_MODULES} -DskipTests -Dmaven.clean.skip=true -T ${PARALLEL}
     cd ${STARROCKS_HOME}/java-extensions
+    if [ ${CLEAN} -eq 1 ]; then
+        ${MVN_CMD} clean
+    fi
     ${MVN_CMD} $addon_mvn_opts package -am -pl hadoop-ext -DskipTests -T ${PARALLEL}
     cd ${STARROCKS_HOME}
 fi
