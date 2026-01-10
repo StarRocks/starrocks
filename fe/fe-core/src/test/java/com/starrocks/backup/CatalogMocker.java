@@ -494,9 +494,9 @@ public class CatalogMocker {
                             TEST_PARTITION1_NAME, baseIndexP1, distributionInfo4);
 
             PhysicalPartition physicalPartition2 = new PhysicalPartition(
-                        TEST_PARTITION2_ID, "pp2", TEST_PARTITION1_ID, baseIndexP2);
+                        TEST_PARTITION2_ID, TEST_PARTITION1_ID, baseIndexP2);
             PhysicalPartition physicalPartition3 = new PhysicalPartition(
-                        TEST_PARTITION3_ID, "pp3", TEST_PARTITION1_ID, baseIndexP3);
+                        TEST_PARTITION3_ID, TEST_PARTITION1_ID, baseIndexP3);
             partition1.addSubPartition(physicalPartition2);
             partition1.addSubPartition(physicalPartition3);
 
