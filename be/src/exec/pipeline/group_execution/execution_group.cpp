@@ -19,6 +19,7 @@
 #include "common/logging.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/pipeline/pipeline_fwd.h"
+#include "exec/pipeline/query_context.h"
 #include "runtime/current_thread.h"
 #include "util/priority_thread_pool.hpp"
 
@@ -76,16 +77,22 @@ void ExecutionGroup::prepare_active_drivers_parallel(RuntimeState* state,
     auto pipeline_prepare_pool = state->exec_env()->pipeline_prepare_pool();
 
     for_each_active_driver(_pipelines, [&](const DriverPtr& driver) {
-        // since prepare is async, we must hold the runtime state ptr
-        auto runtime_state_holder = driver->fragment_ctx()->runtime_state_ptr();
+        // Hold FragmentContext shared ptr to avoid use-after-free if prepare times out and fragment is cleaned up early.
+        // NOTE: We must not hold DriverPtr here (since operator should deconstruct before operator factory).
+        FragmentContextPtr fragment_ctx_holder = nullptr;
+        if (auto* query_ctx = state->query_ctx(); query_ctx != nullptr) {
+            fragment_ctx_holder = query_ctx->fragment_mgr()->get(driver->fragment_ctx()->fragment_instance_id());
+            DCHECK(fragment_ctx_holder != nullptr);
+        }
+        DriverRawPtr driver_raw = driver.get();
         bool submitted = pipeline_prepare_pool->try_offer(
-                [sync_ctx, &driver, runtime_state_holder = std::move(runtime_state_holder)]() {
-                    auto runtime_state = runtime_state_holder.get();
+                [sync_ctx, driver_raw, fragment_ctx_holder = std::move(fragment_ctx_holder)]() mutable {
+                    auto runtime_state = fragment_ctx_holder->runtime_state();
                     // make sure mem tracker is instance level
                     auto mem_tracker = runtime_state->instance_mem_tracker();
                     SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(mem_tracker);
                     // do the thread-safe prepare operation
-                    Status status = driver->prepare_local_state(runtime_state);
+                    Status status = driver_raw->prepare_local_state(runtime_state);
 
                     if (!status.ok()) {
                         Status* expected = nullptr;
@@ -103,7 +110,7 @@ void ExecutionGroup::prepare_active_drivers_parallel(RuntimeState* state,
                 });
 
         if (!submitted) {
-            Status status = driver->prepare_local_state(state);
+            Status status = driver_raw->prepare_local_state(state);
             if (!status.ok()) {
                 Status* expected = nullptr;
                 Status* new_error = new Status(status);
