@@ -1,0 +1,401 @@
+-- name: test_iceberg_delete_partitioned
+create external catalog iceberg_del_part_${uuid0}
+PROPERTIES ( "type"  =  "iceberg",
+    "iceberg.catalog.type"  =  "hive",
+    "iceberg.catalog.hive.metastore.uris"="${hive_metastore_uris}",
+    "aws.s3.access_key"  =  "${oss_ak}",
+    "aws.s3.secret_key"  =  "${oss_sk}",
+    "aws.s3.endpoint"  =  "${oss_endpoint}" );
+-- result:
+-- !result
+create database iceberg_del_part_${uuid0}.iceberg_delete_db_${uuid0} properties (
+    "location" = "oss://${oss_bucket}/test_iceberg_delete_partitioned/${uuid0}/iceberg_delete_db_${uuid0}"
+);
+-- result:
+-- !result
+create table iceberg_del_part_${uuid0}.iceberg_delete_db_${uuid0}.test_partitioned_date (
+    id INT,
+    name STRING,
+    amount DECIMAL(10,2),
+    date_key DATE
+) 
+PARTITION BY (date_key);
+-- result:
+-- !result
+INSERT INTO iceberg_del_part_${uuid0}.iceberg_delete_db_${uuid0}.test_partitioned_date VALUES
+    (1, 'ProductA', 100.00, '2023-01-01'),
+    (2, 'ProductB', 200.00, '2023-01-02'),
+    (3, 'ProductC', 150.00, '2023-01-01'),
+    (4, 'ProductD', 300.00, '2023-01-03'),
+    (5, 'ProductE', 250.00, '2023-01-02');
+-- result:
+-- !result
+SELECT * FROM iceberg_del_part_${uuid0}.iceberg_delete_db_${uuid0}.test_partitioned_date ORDER BY date_key, id;
+-- result:
+1	ProductA	100.00	2023-01-01
+3	ProductC	150.00	2023-01-01
+2	ProductB	200.00	2023-01-02
+5	ProductE	250.00	2023-01-02
+4	ProductD	300.00	2023-01-03
+-- !result
+DELETE FROM iceberg_del_part_${uuid0}.iceberg_delete_db_${uuid0}.test_partitioned_date WHERE date_key = '2023-01-02';
+-- result:
+-- !result
+SELECT * FROM iceberg_del_part_${uuid0}.iceberg_delete_db_${uuid0}.test_partitioned_date ORDER BY date_key, id;
+-- result:
+1	ProductA	100.00	2023-01-01
+3	ProductC	150.00	2023-01-01
+4	ProductD	300.00	2023-01-03
+-- !result
+create table iceberg_del_part_${uuid0}.iceberg_delete_db_${uuid0}.test_partitioned_datetime (
+    id INT,
+    name STRING,
+    amount DECIMAL(10,2),
+    created_time DATETIME
+) 
+PARTITION BY (created_time);
+-- result:
+-- !result
+INSERT INTO iceberg_del_part_${uuid0}.iceberg_delete_db_${uuid0}.test_partitioned_datetime VALUES
+    (1, 'OrderA', 100.00, '2023-01-01 10:00:00'),
+    (2, 'OrderB', 200.00, '2023-01-01 11:00:00'),
+    (3, 'OrderC', 150.00, '2023-01-02 10:00:00'),
+    (4, 'OrderD', 300.00, '2023-01-02 12:00:00'),
+    (5, 'OrderE', 250.00, '2023-01-03 09:00:00');
+-- result:
+-- !result
+SELECT * FROM iceberg_del_part_${uuid0}.iceberg_delete_db_${uuid0}.test_partitioned_datetime ORDER BY created_time, id;
+-- result:
+1	OrderA	100.00	2023-01-01 10:00:00
+2	OrderB	200.00	2023-01-01 11:00:00
+3	OrderC	150.00	2023-01-02 10:00:00
+4	OrderD	300.00	2023-01-02 12:00:00
+5	OrderE	250.00	2023-01-03 09:00:00
+-- !result
+DELETE FROM iceberg_del_part_${uuid0}.iceberg_delete_db_${uuid0}.test_partitioned_datetime WHERE created_time = '2023-01-02 10:00:00';
+-- result:
+-- !result
+SELECT * FROM iceberg_del_part_${uuid0}.iceberg_delete_db_${uuid0}.test_partitioned_datetime ORDER BY created_time, id;
+-- result:
+1	OrderA	100.00	2023-01-01 10:00:00
+2	OrderB	200.00	2023-01-01 11:00:00
+4	OrderD	300.00	2023-01-02 12:00:00
+5	OrderE	250.00	2023-01-03 09:00:00
+-- !result
+create table iceberg_del_part_${uuid0}.iceberg_delete_db_${uuid0}.test_partitioned_string (
+    id INT,
+    product_name STRING,
+    price DECIMAL(10,2),
+    region VARCHAR(50)
+) 
+PARTITION BY (region);
+-- result:
+-- !result
+INSERT INTO iceberg_del_part_${uuid0}.iceberg_delete_db_${uuid0}.test_partitioned_string VALUES
+    (1, 'ProductA', 100.00, 'North'),
+    (2, 'ProductB', 200.00, 'South'),
+    (3, 'ProductC', 150.00, 'North'),
+    (4, 'ProductD', 300.00, 'East'),
+    (5, 'ProductE', 250.00, 'West');
+-- result:
+-- !result
+SELECT * FROM iceberg_del_part_${uuid0}.iceberg_delete_db_${uuid0}.test_partitioned_string ORDER BY region, id;
+-- result:
+4	ProductD	300.00	East
+1	ProductA	100.00	North
+3	ProductC	150.00	North
+2	ProductB	200.00	South
+5	ProductE	250.00	West
+-- !result
+DELETE FROM iceberg_del_part_${uuid0}.iceberg_delete_db_${uuid0}.test_partitioned_string WHERE region = 'North';
+-- result:
+-- !result
+SELECT * FROM iceberg_del_part_${uuid0}.iceberg_delete_db_${uuid0}.test_partitioned_string ORDER BY region, id;
+-- result:
+4	ProductD	300.00	East
+2	ProductB	200.00	South
+5	ProductE	250.00	West
+-- !result
+create table iceberg_del_part_${uuid0}.iceberg_delete_db_${uuid0}.test_partitioned_numeric (
+    id INT,
+    name STRING,
+    amount DECIMAL(10,2),
+    year_id INT
+) 
+PARTITION BY (year_id);
+-- result:
+-- !result
+INSERT INTO iceberg_del_part_${uuid0}.iceberg_delete_db_${uuid0}.test_partitioned_numeric VALUES
+    (1, 'SaleA', 100.00, 2023),
+    (2, 'SaleB', 200.00, 2024),
+    (3, 'SaleC', 150.00, 2023),
+    (4, 'SaleD', 300.00, 2024),
+    (5, 'SaleE', 250.00, 2025);
+-- result:
+-- !result
+SELECT * FROM iceberg_del_part_${uuid0}.iceberg_delete_db_${uuid0}.test_partitioned_numeric ORDER BY year_id, id;
+-- result:
+1	SaleA	100.00	2023
+3	SaleC	150.00	2023
+2	SaleB	200.00	2024
+4	SaleD	300.00	2024
+5	SaleE	250.00	2025
+-- !result
+DELETE FROM iceberg_del_part_${uuid0}.iceberg_delete_db_${uuid0}.test_partitioned_numeric WHERE year_id = 2023;
+-- result:
+-- !result
+SELECT * FROM iceberg_del_part_${uuid0}.iceberg_delete_db_${uuid0}.test_partitioned_numeric ORDER BY year_id, id;
+-- result:
+2	SaleB	200.00	2024
+4	SaleD	300.00	2024
+5	SaleE	250.00	2025
+-- !result
+create table iceberg_del_part_${uuid0}.iceberg_delete_db_${uuid0}.test_partitioned_multi (
+    id INT,
+    name STRING,
+    amount DECIMAL(10,2),
+    date_key DATE,
+    category STRING
+) 
+PARTITION BY (date_key, category);
+-- result:
+-- !result
+INSERT INTO iceberg_del_part_${uuid0}.iceberg_delete_db_${uuid0}.test_partitioned_multi VALUES
+    (1, 'ProductA', 100.00, '2023-01-01', 'Electronics'),
+    (2, 'ProductB', 200.00, '2023-01-01', 'Clothing'),
+    (3, 'ProductC', 150.00, '2023-01-02', 'Electronics'),
+    (4, 'ProductD', 300.00, '2023-01-02', 'Clothing'),
+    (5, 'ProductE', 250.00, '2023-01-01', 'Electronics');
+-- result:
+-- !result
+SELECT * FROM iceberg_del_part_${uuid0}.iceberg_delete_db_${uuid0}.test_partitioned_multi ORDER BY date_key, category, id;
+-- result:
+2	ProductB	200.00	2023-01-01	Clothing
+1	ProductA	100.00	2023-01-01	Electronics
+5	ProductE	250.00	2023-01-01	Electronics
+4	ProductD	300.00	2023-01-02	Clothing
+3	ProductC	150.00	2023-01-02	Electronics
+-- !result
+DELETE FROM iceberg_del_part_${uuid0}.iceberg_delete_db_${uuid0}.test_partitioned_multi WHERE date_key = '2023-01-01' AND category = 'Electronics';
+-- result:
+-- !result
+SELECT * FROM iceberg_del_part_${uuid0}.iceberg_delete_db_${uuid0}.test_partitioned_multi ORDER BY date_key, category, id;
+-- result:
+2	ProductB	200.00	2023-01-01	Clothing
+4	ProductD	300.00	2023-01-02	Clothing
+3	ProductC	150.00	2023-01-02	Electronics
+-- !result
+create table iceberg_del_part_${uuid0}.iceberg_delete_db_${uuid0}.test_partitioned_num_multi (
+    id INT,
+    name STRING,
+    amount DECIMAL(10,2),
+    year_id INT,
+    month_id INT
+) 
+PARTITION BY (year_id, month_id);
+-- result:
+-- !result
+INSERT INTO iceberg_del_part_${uuid0}.iceberg_delete_db_${uuid0}.test_partitioned_num_multi VALUES
+    (1, 'SaleA', 100.00, 2023, 1),
+    (2, 'SaleB', 200.00, 2023, 1),
+    (3, 'SaleC', 150.00, 2023, 2),
+    (4, 'SaleD', 300.00, 2023, 2),
+    (5, 'SaleE', 250.00, 2024, 1);
+-- result:
+-- !result
+SELECT * FROM iceberg_del_part_${uuid0}.iceberg_delete_db_${uuid0}.test_partitioned_num_multi ORDER BY year_id, month_id, id;
+-- result:
+1	SaleA	100.00	2023	1
+2	SaleB	200.00	2023	1
+3	SaleC	150.00	2023	2
+4	SaleD	300.00	2023	2
+5	SaleE	250.00	2024	1
+-- !result
+DELETE FROM iceberg_del_part_${uuid0}.iceberg_delete_db_${uuid0}.test_partitioned_num_multi WHERE year_id = 2023 AND month_id = 1;
+-- result:
+-- !result
+SELECT * FROM iceberg_del_part_${uuid0}.iceberg_delete_db_${uuid0}.test_partitioned_num_multi ORDER BY year_id, month_id, id;
+-- result:
+3	SaleC	150.00	2023	2
+4	SaleD	300.00	2023	2
+5	SaleE	250.00	2024	1
+-- !result
+create table iceberg_del_part_${uuid0}.iceberg_delete_db_${uuid0}.test_partitioned_complex (
+    id INT,
+    name STRING,
+    amount DECIMAL(10,2),
+    created_date DATE,
+    year_id INT,
+    quarter_id INT,
+    region STRING
+) 
+PARTITION BY (year_id, quarter_id, region);
+-- result:
+-- !result
+INSERT INTO iceberg_del_part_${uuid0}.iceberg_delete_db_${uuid0}.test_partitioned_complex VALUES
+    (1, 'TransA', 100.00, '2023-01-15', 2023, 1, 'North'),
+    (2, 'TransB', 200.00, '2023-01-16', 2023, 1, 'South'),
+    (3, 'TransC', 150.00, '2023-04-15', 2023, 2, 'North'),
+    (4, 'TransD', 300.00, '2023-04-16', 2023, 2, 'South'),
+    (5, 'TransE', 250.00, '2023-02-15', 2023, 1, 'North');
+-- result:
+-- !result
+SELECT * FROM iceberg_del_part_${uuid0}.iceberg_delete_db_${uuid0}.test_partitioned_complex ORDER BY year_id, quarter_id, region, id;
+-- result:
+1	TransA	100.00	2023-01-15	2023	1	North
+5	TransE	250.00	2023-02-15	2023	1	North
+2	TransB	200.00	2023-01-16	2023	1	South
+3	TransC	150.00	2023-04-15	2023	2	North
+4	TransD	300.00	2023-04-16	2023	2	South
+-- !result
+DELETE FROM iceberg_del_part_${uuid0}.iceberg_delete_db_${uuid0}.test_partitioned_complex WHERE year_id = 2023 AND quarter_id = 1 AND region = 'North';
+-- result:
+-- !result
+SELECT * FROM iceberg_del_part_${uuid0}.iceberg_delete_db_${uuid0}.test_partitioned_complex ORDER BY year_id, quarter_id, region, id;
+-- result:
+2	TransB	200.00	2023-01-16	2023	1	South
+3	TransC	150.00	2023-04-15	2023	2	North
+4	TransD	300.00	2023-04-16	2023	2	South
+-- !result
+INSERT INTO iceberg_del_part_${uuid0}.iceberg_delete_db_${uuid0}.test_partitioned_complex VALUES
+    (6, 'TransF', 90.00, '2023-02-20', 2023, 1, 'North'),
+    (7, 'TransG', 350.00, '2023-02-21', 2023, 1, 'West'),
+    (8, 'TransH', 95.00, '2023-03-10', 2023, 1, 'North');
+-- result:
+-- !result
+SELECT * FROM iceberg_del_part_${uuid0}.iceberg_delete_db_${uuid0}.test_partitioned_complex WHERE amount < 100 ORDER BY amount, id;
+-- result:
+6	TransF	90.00	2023-02-20	2023	1	North
+8	TransH	95.00	2023-03-10	2023	1	North
+-- !result
+DELETE FROM iceberg_del_part_${uuid0}.iceberg_delete_db_${uuid0}.test_partitioned_complex WHERE amount < 100;
+-- result:
+-- !result
+SELECT * FROM iceberg_del_part_${uuid0}.iceberg_delete_db_${uuid0}.test_partitioned_complex ORDER BY year_id, quarter_id, region, id;
+-- result:
+2	TransB	200.00	2023-01-16	2023	1	South
+7	TransG	350.00	2023-02-21	2023	1	West
+3	TransC	150.00	2023-04-15	2023	2	North
+4	TransD	300.00	2023-04-16	2023	2	South
+-- !result
+INSERT INTO iceberg_del_part_${uuid0}.iceberg_delete_db_${uuid0}.test_partitioned_complex VALUES
+    (9, 'TransI', 180.00, '2023-05-10', 2023, 1, 'North'),
+    (10, 'TransJ', 220.00, '2023-05-11', 2023, 1, 'West');
+-- result:
+-- !result
+SELECT * FROM iceberg_del_part_${uuid0}.iceberg_delete_db_${uuid0}.test_partitioned_complex WHERE year_id = 2023 AND quarter_id = 1 ORDER BY region, id;
+-- result:
+9	TransI	180.00	2023-05-10	2023	1	North
+2	TransB	200.00	2023-01-16	2023	1	South
+7	TransG	350.00	2023-02-21	2023	1	West
+10	TransJ	220.00	2023-05-11	2023	1	West
+-- !result
+INSERT INTO iceberg_del_part_${uuid0}.iceberg_delete_db_${uuid0}.test_partitioned_complex VALUES
+    (11, 'TransK', 280.00, '2023-06-10', 2023, 2, 'North'),
+    (12, 'TransL', 190.00, '2023-06-11', 2023, 2, 'West');
+-- result:
+-- !result
+DELETE FROM iceberg_del_part_${uuid0}.iceberg_delete_db_${uuid0}.test_partitioned_complex WHERE year_id = 2023 AND quarter_id = 2 AND amount > 200;
+-- result:
+-- !result
+SELECT * FROM iceberg_del_part_${uuid0}.iceberg_delete_db_${uuid0}.test_partitioned_complex ORDER BY year_id, quarter_id, region, id;
+-- result:
+9	TransI	180.00	2023-05-10	2023	1	North
+2	TransB	200.00	2023-01-16	2023	1	South
+7	TransG	350.00	2023-02-21	2023	1	West
+10	TransJ	220.00	2023-05-11	2023	1	West
+3	TransC	150.00	2023-04-15	2023	2	North
+12	TransL	190.00	2023-06-11	2023	2	West
+-- !result
+INSERT INTO iceberg_del_part_${uuid0}.iceberg_delete_db_${uuid0}.test_partitioned_complex VALUES
+    (13, 'TransM', 210.00, '2023-07-10', 2024, 1, 'North'),
+    (14, 'TransN', 230.00, '2023-07-11', 2024, 1, 'West'),
+    (15, 'TransO', 250.00, '2023-07-12', 2024, 1, 'North');
+-- result:
+-- !result
+DELETE FROM iceberg_del_part_${uuid0}.iceberg_delete_db_${uuid0}.test_partitioned_complex WHERE year_id = 2024 AND region IN ('North', 'West');
+-- result:
+-- !result
+SELECT * FROM iceberg_del_part_${uuid0}.iceberg_delete_db_${uuid0}.test_partitioned_complex ORDER BY year_id, quarter_id, region, id;
+-- result:
+9	TransI	180.00	2023-05-10	2023	1	North
+2	TransB	200.00	2023-01-16	2023	1	South
+7	TransG	350.00	2023-02-21	2023	1	West
+10	TransJ	220.00	2023-05-11	2023	1	West
+3	TransC	150.00	2023-04-15	2023	2	North
+12	TransL	190.00	2023-06-11	2023	2	West
+-- !result
+DELETE FROM iceberg_del_part_${uuid0}.iceberg_delete_db_${uuid0}.test_partitioned_complex WHERE year_id = 9999 AND region = 'NonExistent';
+-- result:
+-- !result
+SELECT COUNT(*) FROM iceberg_del_part_${uuid0}.iceberg_delete_db_${uuid0}.test_partitioned_complex;
+-- result:
+6
+-- !result
+create table iceberg_del_part_${uuid0}.iceberg_delete_db_${uuid0}.test_partitioned_with_null (
+    id INT,
+    name STRING,
+    amount DECIMAL(10,2),
+    category STRING
+) 
+PARTITION BY (category);
+-- result:
+-- !result
+INSERT INTO iceberg_del_part_${uuid0}.iceberg_delete_db_${uuid0}.test_partitioned_with_null VALUES
+    (1, 'ItemA', 100.00, 'Electronics'),
+    (2, 'ItemB', 200.00, NULL),
+    (3, 'ItemC', 150.00, 'Clothing');
+-- result:
+-- !result
+SELECT * FROM iceberg_del_part_${uuid0}.iceberg_delete_db_${uuid0}.test_partitioned_with_null ORDER BY id;
+-- result:
+1	ItemA	100.00	Electronics
+2	ItemB	200.00	None
+3	ItemC	150.00	Clothing
+-- !result
+DELETE FROM iceberg_del_part_${uuid0}.iceberg_delete_db_${uuid0}.test_partitioned_with_null WHERE category IS NULL;
+-- result:
+-- !result
+SELECT * FROM iceberg_del_part_${uuid0}.iceberg_delete_db_${uuid0}.test_partitioned_with_null ORDER BY id;
+-- result:
+1	ItemA	100.00	Electronics
+3	ItemC	150.00	Clothing
+-- !result
+drop table iceberg_del_part_${uuid0}.iceberg_delete_db_${uuid0}.test_partitioned_date force;
+-- result:
+-- !result
+drop table iceberg_del_part_${uuid0}.iceberg_delete_db_${uuid0}.test_partitioned_datetime force;
+-- result:
+-- !result
+drop table iceberg_del_part_${uuid0}.iceberg_delete_db_${uuid0}.test_partitioned_string force;
+-- result:
+-- !result
+drop table iceberg_del_part_${uuid0}.iceberg_delete_db_${uuid0}.test_partitioned_numeric force;
+-- result:
+-- !result
+drop table iceberg_del_part_${uuid0}.iceberg_delete_db_${uuid0}.test_partitioned_multi force;
+-- result:
+-- !result
+drop table iceberg_del_part_${uuid0}.iceberg_delete_db_${uuid0}.test_partitioned_num_multi force;
+-- result:
+-- !result
+drop table iceberg_del_part_${uuid0}.iceberg_delete_db_${uuid0}.test_partitioned_complex force;
+-- result:
+-- !result
+drop table iceberg_del_part_${uuid0}.iceberg_delete_db_${uuid0}.test_partitioned_with_null force;
+-- result:
+-- !result
+drop database iceberg_del_part_${uuid0}.iceberg_delete_db_${uuid0};
+-- result:
+-- !result
+set catalog default_catalog;
+-- result:
+-- !result
+drop catalog iceberg_del_part_${uuid0};
+-- result:
+-- !result
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_iceberg_delete_partitioned/${uuid0} >/dev/null || echo "exit 0" >/dev/null
+-- result:
+0
+
+-- !result

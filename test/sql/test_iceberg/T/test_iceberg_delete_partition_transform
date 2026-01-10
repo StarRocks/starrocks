@@ -1,0 +1,297 @@
+-- name: test_iceberg_delete_partition_transform
+
+create external catalog iceberg_del_trf_${uuid0}
+PROPERTIES ( "type"  =  "iceberg",
+    "iceberg.catalog.type"  =  "hive",
+    "iceberg.catalog.hive.metastore.uris"="${hive_metastore_uris}",
+    "aws.s3.access_key"  =  "${oss_ak}",
+    "aws.s3.secret_key"  =  "${oss_sk}",
+    "aws.s3.endpoint"  =  "${oss_endpoint}" );
+
+create database iceberg_del_trf_${uuid0}.iceberg_delete_db_${uuid0} properties (
+    "location" = "oss://${oss_bucket}/test_iceberg_delete_partition_transform/${uuid0}/iceberg_delete_db_${uuid0}"
+);
+
+-- ================================================
+-- SECTION 1: BASIC TRANSFORM PARTITION TESTS
+-- ================================================
+
+-- Test 1.1: Transform partition table - bucket
+create table iceberg_del_trf_${uuid0}.iceberg_delete_db_${uuid0}.test_transform_bucket (
+    id INT,
+    name STRING,
+    amount DECIMAL(10,2),
+    category STRING
+) 
+PARTITION BY bucket(category, 4);
+
+-- Insert test data into bucket transform table
+INSERT INTO iceberg_del_trf_${uuid0}.iceberg_delete_db_${uuid0}.test_transform_bucket VALUES
+    (1, 'ProductA', 100.00, 'Electronics'),
+    (2, 'ProductB', 200.00, 'Clothing'),
+    (3, 'ProductC', 150.00, 'Electronics'),
+    (4, 'ProductD', 300.00, 'Books'),
+    (5, 'ProductE', 250.00, 'Clothing');
+
+-- Verify initial data in bucket transform table
+SELECT * FROM iceberg_del_trf_${uuid0}.iceberg_delete_db_${uuid0}.test_transform_bucket ORDER BY id;
+
+-- Delete from bucket transform table
+DELETE FROM iceberg_del_trf_${uuid0}.iceberg_delete_db_${uuid0}.test_transform_bucket WHERE category = 'Clothing';
+
+-- Verify deletion from bucket transform table
+SELECT * FROM iceberg_del_trf_${uuid0}.iceberg_delete_db_${uuid0}.test_transform_bucket ORDER BY id;
+
+-- Test 1.2: Transform partition table - truncate
+create table iceberg_del_trf_${uuid0}.iceberg_delete_db_${uuid0}.test_transform_truncate (
+    id INT,
+    name STRING,
+    amount DECIMAL(10,2),
+    sku STRING
+) 
+PARTITION BY truncate(sku, 2);
+
+-- Insert test data into truncate transform table
+INSERT INTO iceberg_del_trf_${uuid0}.iceberg_delete_db_${uuid0}.test_transform_truncate VALUES
+    (1, 'ProductA', 100.00, 'SKU001'),
+    (2, 'ProductB', 200.00, 'SKU002'),
+    (3, 'ProductC', 150.00, 'SKU003'),
+    (4, 'ProductD', 300.00, 'SKU004'),
+    (5, 'ProductE', 250.00, 'SKU005');
+
+-- Verify initial data in truncate transform table
+SELECT * FROM iceberg_del_trf_${uuid0}.iceberg_delete_db_${uuid0}.test_transform_truncate ORDER BY id;
+
+-- Delete from truncate transform table
+DELETE FROM iceberg_del_trf_${uuid0}.iceberg_delete_db_${uuid0}.test_transform_truncate WHERE sku LIKE 'SKU00%';
+
+-- Verify deletion from truncate transform table
+SELECT * FROM iceberg_del_trf_${uuid0}.iceberg_delete_db_${uuid0}.test_transform_truncate ORDER BY id;
+
+-- ================================================
+-- SECTION 2: ADVANCED TRANSFORM PARTITION TESTS
+-- ================================================
+
+-- Test 2.1: Transform partition table - year
+create table iceberg_del_trf_${uuid0}.iceberg_delete_db_${uuid0}.test_transform_year (
+    id INT,
+    name STRING,
+    amount DECIMAL(10,2),
+    event_date DATE
+) 
+PARTITION BY year(event_date);
+
+-- Insert test data into year transform table
+INSERT INTO iceberg_del_trf_${uuid0}.iceberg_delete_db_${uuid0}.test_transform_year VALUES
+    (1, 'EventA', 100.00, '2023-01-01'),
+    (2, 'EventB', 200.00, '2023-06-15'),
+    (3, 'EventC', 150.00, '2024-03-10'),
+    (4, 'EventD', 300.00, '2024-12-20'),
+    (5, 'EventE', 250.00, '2023-11-05');
+
+-- Verify initial data in year transform table
+SELECT * FROM iceberg_del_trf_${uuid0}.iceberg_delete_db_${uuid0}.test_transform_year ORDER BY event_date, id;
+
+-- Delete from year transform table
+DELETE FROM iceberg_del_trf_${uuid0}.iceberg_delete_db_${uuid0}.test_transform_year WHERE year(event_date) = 2023;
+
+-- Verify deletion from year transform table
+SELECT * FROM iceberg_del_trf_${uuid0}.iceberg_delete_db_${uuid0}.test_transform_year ORDER BY event_date, id;
+
+-- Test 2.2: Transform partition table - month
+create table iceberg_del_trf_${uuid0}.iceberg_delete_db_${uuid0}.test_transform_month (
+    id INT,
+    name STRING,
+    amount DECIMAL(10,2),
+    order_date DATE
+) 
+PARTITION BY month(order_date);
+
+-- Insert test data into month transform table
+INSERT INTO iceberg_del_trf_${uuid0}.iceberg_delete_db_${uuid0}.test_transform_month VALUES
+    (1, 'OrderA', 100.00, '2023-01-10'),
+    (2, 'OrderB', 200.00, '2023-01-20'),
+    (3, 'OrderC', 150.00, '2023-02-15'),
+    (4, 'OrderD', 300.00, '2023-03-05'),
+    (5, 'OrderE', 250.00, '2023-02-28');
+
+-- Verify initial data in month transform table
+SELECT * FROM iceberg_del_trf_${uuid0}.iceberg_delete_db_${uuid0}.test_transform_month ORDER BY order_date, id;
+
+-- Delete from month transform table
+DELETE FROM iceberg_del_trf_${uuid0}.iceberg_delete_db_${uuid0}.test_transform_month WHERE month(order_date) = 2;
+
+-- Verify deletion from month transform table
+SELECT * FROM iceberg_del_trf_${uuid0}.iceberg_delete_db_${uuid0}.test_transform_month ORDER BY order_date, id;
+
+-- Test 2.3: Transform partition table - day
+create table iceberg_del_trf_${uuid0}.iceberg_delete_db_${uuid0}.test_transform_day (
+    id INT,
+    name STRING,
+    amount DECIMAL(10,2),
+    created_time DATETIME
+) 
+PARTITION BY day(created_time);
+
+-- Insert test data into day transform table
+INSERT INTO iceberg_del_trf_${uuid0}.iceberg_delete_db_${uuid0}.test_transform_day VALUES
+    (1, 'RecordA', 100.00, '2023-01-10 10:00:00'),
+    (2, 'RecordB', 200.00, '2023-01-10 15:30:00'),
+    (3, 'RecordC', 150.00, '2023-01-11 09:15:00'),
+    (4, 'RecordD', 300.00, '2023-01-12 14:45:00'),
+    (5, 'RecordE', 250.00, '2023-01-11 11:20:00');
+
+-- Verify initial data in day transform table
+SELECT * FROM iceberg_del_trf_${uuid0}.iceberg_delete_db_${uuid0}.test_transform_day ORDER BY created_time, id;
+
+-- Delete from day transform table
+DELETE FROM iceberg_del_trf_${uuid0}.iceberg_delete_db_${uuid0}.test_transform_day WHERE day(created_time) = 11;
+
+-- Verify deletion from day transform table
+SELECT * FROM iceberg_del_trf_${uuid0}.iceberg_delete_db_${uuid0}.test_transform_day ORDER BY created_time, id;
+
+-- Test 2.4: Transform partition table - hour
+create table iceberg_del_trf_${uuid0}.iceberg_delete_db_${uuid0}.test_transform_hour (
+    id INT,
+    name STRING,
+    amount DECIMAL(10,2),
+    log_time DATETIME
+) 
+PARTITION BY hour(log_time);
+
+-- Insert test data into hour transform table
+INSERT INTO iceberg_del_trf_${uuid0}.iceberg_delete_db_${uuid0}.test_transform_hour VALUES
+    (1, 'LogA', 10.00, '2023-01-10 10:15:00'),
+    (2, 'LogB', 20.00, '2023-01-10 10:30:00'),
+    (3, 'LogC', 15.00, '2023-01-10 11:45:00'),
+    (4, 'LogD', 30.00, '2023-01-10 12:20:00'),
+    (5, 'LogE', 25.00, '2023-01-10 11:55:00');
+
+-- Verify initial data in hour transform table
+SELECT * FROM iceberg_del_trf_${uuid0}.iceberg_delete_db_${uuid0}.test_transform_hour ORDER BY log_time, id;
+
+-- Delete from hour transform table
+DELETE FROM iceberg_del_trf_${uuid0}.iceberg_delete_db_${uuid0}.test_transform_hour WHERE hour(log_time) = 11;
+
+-- Verify deletion from hour transform table
+SELECT * FROM iceberg_del_trf_${uuid0}.iceberg_delete_db_${uuid0}.test_transform_hour ORDER BY log_time, id;
+
+-- ================================================
+-- SECTION 3: COMPLEX TRANSFORM COMBINATIONS
+-- ================================================
+
+-- Test 3.1: Different date column transforms
+create table iceberg_del_trf_${uuid0}.iceberg_delete_db_${uuid0}.test_transform_year_month (
+    id INT,
+    name STRING,
+    amount DECIMAL(10,2),
+    order_date DATE,
+    ship_date DATE
+) 
+PARTITION BY year(order_date), month(ship_date);
+
+-- Insert test data into year+month transform table
+INSERT INTO iceberg_del_trf_${uuid0}.iceberg_delete_db_${uuid0}.test_transform_year_month VALUES
+    (1, 'TransA', 100.00, '2023-01-15', '2023-01-20'),
+    (2, 'TransB', 200.00, '2023-01-20', '2023-01-25'),
+    (3, 'TransC', 150.00, '2023-02-10', '2023-02-15'),
+    (4, 'TransD', 300.00, '2023-02-25', '2023-03-01'),
+    (5, 'TransE', 250.00, '2024-01-05', '2024-01-10');
+
+-- Verify initial data in year+month transform table
+SELECT * FROM iceberg_del_trf_${uuid0}.iceberg_delete_db_${uuid0}.test_transform_year_month ORDER BY order_date, id;
+
+-- Delete from year+month transform table
+DELETE FROM iceberg_del_trf_${uuid0}.iceberg_delete_db_${uuid0}.test_transform_year_month WHERE year(order_date) = 2023 AND month(ship_date) = 1;
+
+-- Verify deletion from year+month transform table
+SELECT * FROM iceberg_del_trf_${uuid0}.iceberg_delete_db_${uuid0}.test_transform_year_month ORDER BY order_date, id;
+
+-- Test 3.2: Mixed transform types - bucket and truncate
+create table iceberg_del_trf_${uuid0}.iceberg_delete_db_${uuid0}.test_transform_mixed (
+    id INT,
+    name STRING,
+    amount DECIMAL(10,2),
+    category STRING,
+    product_code STRING
+) 
+PARTITION BY bucket(category, 3), truncate(product_code, 3);
+
+-- Insert test data into mixed transform table
+INSERT INTO iceberg_del_trf_${uuid0}.iceberg_delete_db_${uuid0}.test_transform_mixed VALUES
+    (1, 'MixedA', 100.00, 'CategoryA', 'PCODE001'),
+    (2, 'MixedB', 200.00, 'CategoryB', 'PCODE002'),
+    (3, 'MixedC', 150.00, 'CategoryA', 'PCODE003'),
+    (4, 'MixedD', 300.00, 'CategoryC', 'PCODE001'),
+    (5, 'MixedE', 250.00, 'CategoryB', 'PCODE004');
+
+-- Verify initial data in mixed transform table
+SELECT * FROM iceberg_del_trf_${uuid0}.iceberg_delete_db_${uuid0}.test_transform_mixed ORDER BY id;
+
+-- Delete from mixed transform table
+DELETE FROM iceberg_del_trf_${uuid0}.iceberg_delete_db_${uuid0}.test_transform_mixed WHERE category = 'CategoryB';
+
+-- Verify deletion from mixed transform table
+SELECT * FROM iceberg_del_trf_${uuid0}.iceberg_delete_db_${uuid0}.test_transform_mixed ORDER BY id;
+
+-- ================================================
+-- SECTION 4: ADVANCED DELETE OPERATIONS
+-- ================================================
+
+-- Test 4.1: Delete with complex conditions on transformed partitions
+INSERT INTO iceberg_del_trf_${uuid0}.iceberg_delete_db_${uuid0}.test_transform_year_month VALUES
+    (6, 'TransF', 180.00, '2024-01-15', '2024-01-20'),
+    (7, 'TransG', 220.00, '2024-02-10', '2024-02-15'),
+    (8, 'TransH', 190.00, '2024-01-20', '2024-01-25');
+
+-- Test complex delete conditions
+SELECT * FROM iceberg_del_trf_${uuid0}.iceberg_delete_db_${uuid0}.test_transform_year_month WHERE year(order_date) = 2024 ORDER BY order_date;
+
+DELETE FROM iceberg_del_trf_${uuid0}.iceberg_delete_db_${uuid0}.test_transform_year_month WHERE year(order_date) = 2024 AND amount < 200;
+
+SELECT * FROM iceberg_del_trf_${uuid0}.iceberg_delete_db_${uuid0}.test_transform_year_month ORDER BY order_date, id;
+
+-- Test 4.2: Delete with IN clause on transformed partitions
+INSERT INTO iceberg_del_trf_${uuid0}.iceberg_delete_db_${uuid0}.test_transform_year_month VALUES
+    (9, 'TransI', 210.00, '2024-03-01', '2024-03-05'),
+    (10, 'TransJ', 230.00, '2024-03-02', '2024-03-06'),
+    (11, 'TransK', 240.00, '2024-03-03', '2024-03-07');
+
+DELETE FROM iceberg_del_trf_${uuid0}.iceberg_delete_db_${uuid0}.test_transform_year_month WHERE year(order_date) = 2024 AND month(ship_date) = 3 AND id IN (9, 11);
+
+SELECT * FROM iceberg_del_trf_${uuid0}.iceberg_delete_db_${uuid0}.test_transform_year_month ORDER BY order_date, id;
+
+-- Test 4.3: Delete with range conditions on transformed partitions
+INSERT INTO iceberg_del_trf_${uuid0}.iceberg_delete_db_${uuid0}.test_transform_month VALUES
+    (6, 'OrderF', 120.00, '2023-04-10'),
+    (7, 'OrderG', 180.00, '2023-04-15'),
+    (8, 'OrderH', 220.00, '2023-05-05');
+
+DELETE FROM iceberg_del_trf_${uuid0}.iceberg_delete_db_${uuid0}.test_transform_month WHERE month(order_date) BETWEEN 4 AND 5;
+
+SELECT * FROM iceberg_del_trf_${uuid0}.iceberg_delete_db_${uuid0}.test_transform_month ORDER BY order_date, id;
+
+-- Test 4.4: Delete with multiple transforms and complex conditions
+INSERT INTO iceberg_del_trf_${uuid0}.iceberg_delete_db_${uuid0}.test_transform_mixed VALUES
+    (6, 'MixedF', 175.00, 'CategoryA', 'PCODE005'),
+    (7, 'MixedG', 225.00, 'CategoryD', 'PCODE006'),
+    (8, 'MixedH', 185.00, 'CategoryA', 'PCODE007');
+
+DELETE FROM iceberg_del_trf_${uuid0}.iceberg_delete_db_${uuid0}.test_transform_mixed WHERE amount > 180;
+
+SELECT * FROM iceberg_del_trf_${uuid0}.iceberg_delete_db_${uuid0}.test_transform_mixed ORDER BY id;
+
+-- Cleanup
+drop table iceberg_del_trf_${uuid0}.iceberg_delete_db_${uuid0}.test_transform_bucket force;
+drop table iceberg_del_trf_${uuid0}.iceberg_delete_db_${uuid0}.test_transform_truncate force;
+drop table iceberg_del_trf_${uuid0}.iceberg_delete_db_${uuid0}.test_transform_year force;
+drop table iceberg_del_trf_${uuid0}.iceberg_delete_db_${uuid0}.test_transform_month force;
+drop table iceberg_del_trf_${uuid0}.iceberg_delete_db_${uuid0}.test_transform_day force;
+drop table iceberg_del_trf_${uuid0}.iceberg_delete_db_${uuid0}.test_transform_hour force;
+drop table iceberg_del_trf_${uuid0}.iceberg_delete_db_${uuid0}.test_transform_year_month force;
+drop table iceberg_del_trf_${uuid0}.iceberg_delete_db_${uuid0}.test_transform_mixed force;
+drop database iceberg_del_trf_${uuid0}.iceberg_delete_db_${uuid0};
+set catalog default_catalog;
+drop catalog iceberg_del_trf_${uuid0};
+
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_iceberg_delete_partition_transform/${uuid0} >/dev/null || echo "exit 0" >/dev/null
