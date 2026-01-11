@@ -930,7 +930,19 @@ under the License.
                             <goal>prepare-agent</goal>
                         </goals>
                         <configuration>
+<<<<<<< HEAD
                             <propertyName>jacocoArgLine</propertyName>
+=======
+                            <includes>
+                                <include>com/starrocks/**</include>
+                            </includes>
+                            <excludes>
+                                <exclude>com/starrocks/proto/**</exclude>
+                                <exclude>**/*$$JProtoBufClass</exclude>
+                                <exclude>**/*$$JProtoBuf*</exclude>
+                            </excludes>
+                            <append>true</append>
+>>>>>>> eb2efc0aee ([UT] remove incorrect jacoco exclusion (#67731))
                         </configuration>
                     </execution>
                     <execution>
