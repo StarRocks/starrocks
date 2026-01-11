@@ -642,10 +642,9 @@ Status VariantEncoder::encode_column(const ColumnPtr& column, const TypeDescript
     }
 
     if (type.type == TYPE_ARRAY || type.type == TYPE_MAP || type.type == TYPE_STRUCT) {
-        const auto status =
-                Status::NotSupported("CAST to VARIANT from complex type is not supported yet: " + type.debug_string());
         if (allow_throw_exception) {
-            return status;
+            return Status::NotSupported("CAST to VARIANT from complex type is not supported yet: " +
+                                        type.debug_string());
         }
         builder->append_nulls(static_cast<int>(num_rows));
         return Status::OK();
@@ -807,9 +806,8 @@ Status VariantEncoder::encode_column(const ColumnPtr& column, const TypeDescript
                 });
     }
     case TYPE_DECIMAL256: {
-        const auto status = Status::NotSupported("DECIMAL256 is not supported in VARIANT encoding");
         if (allow_throw_exception) {
-            return status;
+            return Status::NotSupported("DECIMAL256 is not supported in VARIANT encoding");
         }
         builder->append_nulls(static_cast<int>(num_rows));
         return Status::OK();
@@ -882,10 +880,8 @@ Status VariantEncoder::encode_column(const ColumnPtr& column, const TypeDescript
                 });
     }
     default: {
-        const auto status =
-                Status::NotSupported("Variant encoding does not support cast from type: " + type.debug_string());
         if (allow_throw_exception) {
-            return status;
+            return Status::NotSupported("Variant encoding does not support cast from type: " + type.debug_string());
         }
         builder->append_nulls(static_cast<int>(num_rows));
         return Status::OK();
