@@ -593,4 +593,145 @@ public class IcebergRESTCatalogTest {
                 "When security=OAUTH2, user's OIDC token should NOT be passed to REST Catalog. " +
                         "Catalog should use its own configured oauth2.credential instead");
     }
+
+    @Test
+    public void testCustomFileIOImplementation(@Mocked RESTSessionCatalog restCatalog) {
+        // Test that custom io-impl is properly set in catalog properties
+        String customIOImpl = "org.apache.iceberg.gcp.gcs.GCSFileIO";
+        Map<String, String> properties = new HashMap<>();
+        properties.put("iceberg.catalog.io-impl", customIOImpl);
+
+        IcebergRESTCatalog catalog = new IcebergRESTCatalog(
+                "test_catalog", new Configuration(), properties);
+
+        // Verify custom io-impl was set in the internal properties
+        Map<String, String> restCatalogProperties = Deencapsulation.getField(catalog, "restCatalogProperties");
+        assertEquals(customIOImpl, restCatalogProperties.get("io-impl"),
+                "Custom io-impl should be set for Iceberg catalog");
+    }
+
+    @Test
+    public void testDefaultFileIOImplementation(@Mocked RESTSessionCatalog restCatalog) {
+        // Test that default IcebergCachingFileIO is used when io-impl is not specified
+        Map<String, String> properties = new HashMap<>();
+
+        IcebergRESTCatalog catalog = new IcebergRESTCatalog(
+                "test_catalog", new Configuration(), properties);
+
+        // Verify default IcebergCachingFileIO was set
+        Map<String, String> restCatalogProperties = Deencapsulation.getField(catalog, "restCatalogProperties");
+        assertEquals("com.starrocks.connector.iceberg.io.IcebergCachingFileIO",
+                restCatalogProperties.get("io-impl"),
+                "Default IcebergCachingFileIO should be used when io-impl is not specified");
+    }
+
+    @Test
+    public void testMetricsReportingDisabled(@Mocked RESTSessionCatalog restCatalog) {
+        // Test that metrics reporting can be disabled via rest.metrics.reporting-enabled property
+        Map<String, String> properties = new HashMap<>();
+        properties.put("iceberg.catalog.rest.metrics.reporting-enabled", "false");
+
+        IcebergRESTCatalog catalog = new IcebergRESTCatalog(
+                "test_catalog", new Configuration(), properties);
+
+        // Verify metrics reporter is NOT set when metrics reporting is disabled
+        Map<String, String> restCatalogProperties = Deencapsulation.getField(catalog, "restCatalogProperties");
+        Assertions.assertNull(restCatalogProperties.get("metrics-reporter-impl"),
+                "Metrics reporter should not be set when metrics reporting is disabled");
+    }
+
+    @Test
+    public void testMetricsReportingEnabled(@Mocked RESTSessionCatalog restCatalog) {
+        // Test that metrics reporting is enabled by default
+        Map<String, String> properties = new HashMap<>();
+
+        IcebergRESTCatalog catalog = new IcebergRESTCatalog(
+                "test_catalog", new Configuration(), properties);
+
+        // Verify metrics reporter is set when metrics reporting is enabled (default)
+        Map<String, String> restCatalogProperties = Deencapsulation.getField(catalog, "restCatalogProperties");
+        assertEquals("com.starrocks.connector.iceberg.cost.IcebergMetricsReporter",
+                restCatalogProperties.get("metrics-reporter-impl"),
+                "Metrics reporter should be set when metrics reporting is enabled");
+    }
+
+    @Test
+    public void testGoogleSecurityConfiguration(@Mocked RESTSessionCatalog restCatalog) {
+        // Test Google security configuration (Iceberg 1.10+ Google AuthManager)
+        Map<String, String> properties = new HashMap<>();
+        properties.put(ICEBERG_CATALOG_SECURITY, "google");
+
+        IcebergRESTCatalog catalog = new IcebergRESTCatalog(
+                "test_catalog", new Configuration(), properties);
+
+        // Verify Google auth type is set
+        Map<String, String> restCatalogProperties = Deencapsulation.getField(catalog, "restCatalogProperties");
+        assertEquals("google", restCatalogProperties.get("rest.auth.type"),
+                "rest.auth.type should be set to 'google' for Google security");
+        // Verify default GCP auth scope is set
+        assertEquals("https://www.googleapis.com/auth/cloud-platform",
+                restCatalogProperties.get("gcp.auth.scopes"),
+                "Default GCP auth scope should be set");
+    }
+
+    @Test
+    public void testGoogleSecurityWithCredentialsPath(@Mocked RESTSessionCatalog restCatalog) {
+        // Test Google security with custom GCP credentials path
+        String credentialsPath = "/path/to/credentials.json";
+        Map<String, String> properties = new HashMap<>();
+        properties.put(ICEBERG_CATALOG_SECURITY, "google");
+        properties.put("iceberg.catalog.gcp.auth.credentials-path", credentialsPath);
+
+        IcebergRESTCatalog catalog = new IcebergRESTCatalog(
+                "test_catalog", new Configuration(), properties);
+
+        // Verify GCP credentials path is set
+        Map<String, String> restCatalogProperties = Deencapsulation.getField(catalog, "restCatalogProperties");
+        assertEquals("google", restCatalogProperties.get("rest.auth.type"),
+                "rest.auth.type should be set to 'google' for Google security");
+        assertEquals(credentialsPath, restCatalogProperties.get("gcp.auth.credentials-path"),
+                "GCP credentials path should be preserved");
+    }
+
+    @Test
+    public void testGoogleSecurityWithCustomScopes(@Mocked RESTSessionCatalog restCatalog) {
+        // Test Google security with custom GCP auth scopes
+        String customScope = "https://www.googleapis.com/auth/bigquery";
+        Map<String, String> properties = new HashMap<>();
+        properties.put(ICEBERG_CATALOG_SECURITY, "google");
+        properties.put("iceberg.catalog.gcp.auth.scopes", customScope);
+
+        IcebergRESTCatalog catalog = new IcebergRESTCatalog(
+                "test_catalog", new Configuration(), properties);
+
+        // Verify custom GCP auth scope is set
+        Map<String, String> restCatalogProperties = Deencapsulation.getField(catalog, "restCatalogProperties");
+        assertEquals("google", restCatalogProperties.get("rest.auth.type"),
+                "rest.auth.type should be set to 'google' for Google security");
+        assertEquals(customScope, restCatalogProperties.get("gcp.auth.scopes"),
+                "Custom GCP auth scope should be set");
+    }
+
+    @Test
+    public void testGoogleSecurityWithAllOptions(@Mocked RESTSessionCatalog restCatalog) {
+        // Test Google security with all GCP options configured
+        String credentialsPath = "/path/to/service-account.json";
+        String customScope = "https://www.googleapis.com/auth/cloud-platform";
+        Map<String, String> properties = new HashMap<>();
+        properties.put(ICEBERG_CATALOG_SECURITY, "GOOGLE");
+        properties.put("iceberg.catalog.gcp.auth.credentials-path", credentialsPath);
+        properties.put("iceberg.catalog.gcp.auth.scopes", customScope);
+
+        IcebergRESTCatalog catalog = new IcebergRESTCatalog(
+                "test_catalog", new Configuration(), properties);
+
+        // Verify all Google security options are correctly set
+        Map<String, String> restCatalogProperties = Deencapsulation.getField(catalog, "restCatalogProperties");
+        assertEquals("google", restCatalogProperties.get("rest.auth.type"),
+                "rest.auth.type should be set to 'google' for Google security");
+        assertEquals(credentialsPath, restCatalogProperties.get("gcp.auth.credentials-path"),
+                "GCP credentials path should be preserved");
+        assertEquals(customScope, restCatalogProperties.get("gcp.auth.scopes"),
+                "GCP auth scope should be set");
+    }
 }
