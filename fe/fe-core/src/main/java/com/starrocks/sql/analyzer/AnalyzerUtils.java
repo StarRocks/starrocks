@@ -1011,7 +1011,10 @@ public class AnalyzerUtils {
                 return null;
             }
             // Continue to visit source tables in SELECT clause
-            return visit(node.getQueryStatement());
+            if (node.getQueryStatement() != null) {
+                return visit(node.getQueryStatement());
+            }
+            return null;
         }
 
         /**
