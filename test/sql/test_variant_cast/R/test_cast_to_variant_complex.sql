@@ -1,13 +1,13 @@
 -- name: test_cast_to_variant_complex
-assert_query_contains("SELECT CAST(ARRAY<int>[1,2,3] AS VARIANT)", "not supported yet");
+SELECT CAST(ARRAY<int>[1,2,3] AS VARIANT);
 -- result:
-E: (1064, "Getting syntax error at line 1, column 0. Detail message: Unexpected input 'assert_query_contains', the most similar input is {'RESTORE', 'SET', 'INSERT', 'CREATE', 'RESUME', '(', ';'}.")
+E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 40. Detail message: CAST to VARIANT from array<int(11)> is not supported yet.')
 -- !result
-assert_query_contains("SELECT CAST(MAP{'a':1} AS VARIANT)", "not supported yet");
+SELECT CAST(MAP{'a':1} AS VARIANT);
 -- result:
-E: (1064, "Getting syntax error at line 1, column 0. Detail message: Unexpected input 'assert_query_contains', the most similar input is {'RESTORE', 'SET', 'INSERT', 'CREATE', 'RESUME', '(', ';'}.")
+E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 33. Detail message: CAST to VARIANT from map<varchar,tinyint(4)> is not supported yet.')
 -- !result
-assert_query_contains("SELECT CAST(STRUCT(1, 'x') AS VARIANT)", "not supported yet");
+SELECT CAST(STRUCT(1, 'x') AS VARIANT);
 -- result:
-E: (1064, "Getting syntax error at line 1, column 0. Detail message: Unexpected input 'assert_query_contains', the most similar input is {'RESTORE', 'SET', 'INSERT', 'CREATE', 'RESUME', '(', ';'}.")
+E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 37. Detail message: CAST to VARIANT from struct<col1 tinyint(4), col2 varchar> is not supported yet.')
 -- !result
