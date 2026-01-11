@@ -19,6 +19,7 @@
 #include "column/column_builder.h"
 #include "exprs/overflow.h"
 #include "runtime/decimalv3.h"
+#include "util/decimal_types.h"
 #include "util/variant.h"
 
 namespace starrocks {
@@ -445,24 +446,39 @@ inline static bool convert_variant_decimal(SrcType src_value, int src_scale, Dst
 template <typename DecimalCppType>
 inline static StatusOr<bool> cast_variant_to_decimal(DecimalCppType* dst_value, const VariantValue& variant,
                                                      int precision, int scale) {
+    if (scale < 0 || precision <= 0 || scale > precision ||
+        scale > decimal_precision_limit<DecimalCppType> || precision > decimal_precision_limit<DecimalCppType>) {
+        return Status::InvalidArgument(fmt::format(
+                "Invalid decimal target precision/scale: precision={}, scale={}, limit={}", precision, scale,
+                decimal_precision_limit<DecimalCppType>));
+    }
     const VariantType type = variant.type();
     bool overflow = false;
 
     switch (type) {
     case VariantType::DECIMAL4: {
         ASSIGN_OR_RETURN(auto src_decimal, variant.get_decimal4());
+        if (src_decimal.scale < 0 || src_decimal.scale > decimal_precision_limit<int32_t>) {
+            return Status::InvalidArgument(fmt::format("Invalid variant decimal4 scale: {}", src_decimal.scale));
+        }
         overflow = convert_variant_decimal<int32_t, DecimalCppType>(src_decimal.value, src_decimal.scale, dst_value,
                                                                     scale);
         break;
     }
     case VariantType::DECIMAL8: {
         ASSIGN_OR_RETURN(auto src_decimal, variant.get_decimal8());
+        if (src_decimal.scale < 0 || src_decimal.scale > decimal_precision_limit<int64_t>) {
+            return Status::InvalidArgument(fmt::format("Invalid variant decimal8 scale: {}", src_decimal.scale));
+        }
         overflow = convert_variant_decimal<int64_t, DecimalCppType>(src_decimal.value, src_decimal.scale, dst_value,
                                                                     scale);
         break;
     }
     case VariantType::DECIMAL16: {
         ASSIGN_OR_RETURN(auto src_decimal, variant.get_decimal16());
+        if (src_decimal.scale < 0 || src_decimal.scale > decimal_precision_limit<int128_t>) {
+            return Status::InvalidArgument(fmt::format("Invalid variant decimal16 scale: {}", src_decimal.scale));
+        }
         overflow = convert_variant_decimal<int128_t, DecimalCppType>(src_decimal.value, src_decimal.scale, dst_value,
                                                                      scale);
         break;

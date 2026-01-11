@@ -41,6 +41,7 @@
 #include "exprs/binary_function.h"
 #include "exprs/column_ref.h"
 #include "exprs/decimal_cast_expr.h"
+#include "util/variant_encoder.h"
 #include "exprs/unary_function.h"
 #include "gutil/casts.h"
 #include "runtime/datetime_value.h"
@@ -300,7 +301,7 @@ static ColumnPtr cast_to_variant_fn(ColumnPtr& column) {
             continue;
         }
 
-        auto encoded = encode_json_to_variant(*json);
+        auto encoded = VariantEncoder::encode_json_to_variant(*json);
         if (!encoded.ok()) {
             VLOG_ROW << "encode json to variant failed: " << encoded.status();
             if constexpr (AllowThrowException) {
@@ -723,6 +724,9 @@ UNARY_FN_CAST(TYPE_TIME, TYPE_DOUBLE, TimeToNumber);
 CUSTOMIZE_FN_CAST(TYPE_VARCHAR, TYPE_DOUBLE, cast_float_from_string_fn);
 CUSTOMIZE_FN_CAST(TYPE_JSON, TYPE_DOUBLE, cast_from_json_fn);
 CUSTOMIZE_FN_CAST(TYPE_VARIANT, TYPE_DOUBLE, cast_from_variant_fn);
+CUSTOMIZE_FN_CAST(TYPE_VARIANT, TYPE_DATE, cast_from_variant_fn);
+CUSTOMIZE_FN_CAST(TYPE_VARIANT, TYPE_DATETIME, cast_from_variant_fn);
+CUSTOMIZE_FN_CAST(TYPE_VARIANT, TYPE_TIME, cast_from_variant_fn);
 
 // decimal
 DEFINE_UNARY_FN_WITH_IMPL(NumberToDecimal, value) {
@@ -1687,6 +1691,20 @@ StatusOr<ColumnPtr> MustNullExpr::evaluate_checked(ExprContext* context, Chunk* 
     return only_null;
 }
 
+StatusOr<ColumnPtr> CastToVariantExpr::evaluate_checked(ExprContext* context, Chunk* ptr) {
+    ASSIGN_OR_RETURN(ColumnPtr column, _children[0]->evaluate_checked(context, ptr));
+    const size_t num_rows = column->size();
+
+    if (num_rows != 0 && ColumnHelper::count_nulls(column) == num_rows) {
+        return ColumnHelper::create_const_null_column(num_rows);
+    }
+
+    ColumnBuilder<TYPE_VARIANT> builder(num_rows);
+    RETURN_IF_ERROR(VariantEncoder::encode_column(column, _from_type, &builder, _allow_throw_exception));
+
+    return builder.build(column->is_constant());
+}
+
 // Check whether JSON can be cast to complex types (ARRAY / MAP / STRUCT)
 inline bool json_to_complex_type(LogicalType from_type, LogicalType to_type) {
     switch (from_type) {
@@ -2041,6 +2059,9 @@ Expr* VectorizedCastExprFactory::create_primitive_cast(ObjectPool* pool, const T
                 CASE_FROM_VARIANT_TO(TYPE_LARGEINT, allow_throw_exception);
                 CASE_FROM_VARIANT_TO(TYPE_FLOAT, allow_throw_exception);
                 CASE_FROM_VARIANT_TO(TYPE_DOUBLE, allow_throw_exception);
+                CASE_FROM_VARIANT_TO(TYPE_DATE, allow_throw_exception);
+                CASE_FROM_VARIANT_TO(TYPE_DATETIME, allow_throw_exception);
+                CASE_FROM_VARIANT_TO(TYPE_TIME, allow_throw_exception);
                 CASE_FROM_VARIANT_TO(TYPE_DECIMAL32, allow_throw_exception);
                 CASE_FROM_VARIANT_TO(TYPE_DECIMAL64, allow_throw_exception);
                 CASE_FROM_VARIANT_TO(TYPE_DECIMAL128, allow_throw_exception);
@@ -2050,14 +2071,12 @@ Expr* VectorizedCastExprFactory::create_primitive_cast(ObjectPool* pool, const T
                 return nullptr;
             }
         }
-        // TODO: Support cast from other types to VARIANT after implementing string -> variant encoding
         if (to_type == TYPE_VARIANT) {
-            switch (from_type) {
-                CASE_TO_VARIANT(TYPE_JSON, allow_throw_exception);
-            default:
-                LOG(WARNING) << "Not support cast " << type_to_string(from_type) << " to " << type_to_string(to_type);
-                return nullptr;
+            TypeDescriptor from_desc(thrift_to_type(node.child_type));
+            if (node.__isset.child_type_desc) {
+                from_desc = TypeDescriptor::from_thrift(node.child_type_desc);
             }
+            return new CastToVariantExpr(node, std::move(from_desc), allow_throw_exception);
         }
     } else if (is_binary_type(to_type)) {
         if (is_string_type(from_type)) {
