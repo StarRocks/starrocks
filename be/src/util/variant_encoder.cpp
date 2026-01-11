@@ -77,19 +77,6 @@ std::string encode_boolean(bool value) {
 
 constexpr uint8_t kCastVariantMetadataVersion = 1;
 
-uint8_t minimal_bytes(uint32_t value) {
-    return minimal_uint_size(value);
-}
-
-void append_uint_le_to_string(std::string& out, uint32_t value, uint8_t bytes) {
-    append_uint_le(&out, value, bytes);
-}
-
-template <typename T>
-void append_le_to_string(std::string& out, T value) {
-    append_little_endian(&out, value);
-}
-
 void append_int128_le(std::string& out, int128_t value) {
     int64_t low = static_cast<int64_t>(value);
     int64_t high = static_cast<int64_t>(value >> 64);
@@ -109,7 +96,7 @@ std::string encode_string_value(const Slice& value) {
         uint8_t header = static_cast<uint8_t>((static_cast<uint8_t>(VariantType::STRING) << 2) |
                                               static_cast<uint8_t>(VariantValue::BasicType::PRIMITIVE));
         out.push_back(static_cast<char>(header));
-        append_uint_le_to_string(out, static_cast<uint32_t>(len), sizeof(uint32_t));
+        append_uint_le(&out, static_cast<uint32_t>(len), sizeof(uint32_t));
         out.append(value.data, len);
     }
     return out;
@@ -125,7 +112,7 @@ StatusOr<std::string> build_array_value(const std::vector<std::string>& elements
         return Status::InvalidArgument("Variant array data size exceeds 4GB");
     }
 
-    const uint8_t offset_size = minimal_bytes(static_cast<uint32_t>(data_size));
+    const uint8_t offset_size = minimal_uint_size(static_cast<uint32_t>(data_size));
     const bool is_large = num_elements > 0xFF;
     const uint8_t num_elements_size = is_large ? 4 : 1;
 
@@ -135,13 +122,13 @@ StatusOr<std::string> build_array_value(const std::vector<std::string>& elements
     std::string out;
     out.reserve(1 + num_elements_size + (num_elements + 1) * offset_size + data_size);
     out.push_back(static_cast<char>(header));
-    append_uint_le_to_string(out, num_elements, num_elements_size);
+    append_uint_le(&out, num_elements, num_elements_size);
 
     uint32_t offset = 0;
-    append_uint_le_to_string(out, offset, offset_size);
+    append_uint_le(&out, offset, offset_size);
     for (const auto& elem : elements) {
         offset += elem.size();
-        append_uint_le_to_string(out, offset, offset_size);
+        append_uint_le(&out, offset, offset_size);
     }
     for (const auto& elem : elements) {
         out.append(elem);
@@ -164,8 +151,8 @@ StatusOr<std::string> build_object_value(const std::vector<uint32_t>& field_ids,
         return Status::InvalidArgument("Variant object data size exceeds 4GB");
     }
 
-    const uint8_t id_size = minimal_bytes(dict_size == 0 ? 0 : dict_size - 1);
-    const uint8_t offset_size = minimal_bytes(static_cast<uint32_t>(data_size));
+    const uint8_t id_size = minimal_uint_size(dict_size == 0 ? 0 : dict_size - 1);
+    const uint8_t offset_size = minimal_uint_size(static_cast<uint32_t>(data_size));
     const bool is_large = num_fields > 0xFF;
     const uint8_t num_elements_size = is_large ? 4 : 1;
 
@@ -176,16 +163,16 @@ StatusOr<std::string> build_object_value(const std::vector<uint32_t>& field_ids,
     std::string out;
     out.reserve(1 + num_elements_size + num_fields * id_size + (num_fields + 1) * offset_size + data_size);
     out.push_back(static_cast<char>(header));
-    append_uint_le_to_string(out, num_fields, num_elements_size);
+    append_uint_le(&out, num_fields, num_elements_size);
     for (uint32_t id : field_ids) {
-        append_uint_le_to_string(out, id, id_size);
+        append_uint_le(&out, id, id_size);
     }
 
     uint32_t offset = 0;
-    append_uint_le_to_string(out, offset, offset_size);
+    append_uint_le(&out, offset, offset_size);
     for (const auto& value : field_values) {
         offset += value.size();
-        append_uint_le_to_string(out, offset, offset_size);
+        append_uint_le(&out, offset, offset_size);
     }
     for (const auto& value : field_values) {
         out.append(value);
@@ -195,12 +182,7 @@ StatusOr<std::string> build_object_value(const std::vector<uint32_t>& field_ids,
 
 class VariantRowValueEncoder {
 public:
-    StatusOr<VariantRowValue> make_variant(const std::string& value) { return _make_variant(value); }
-
-    StatusOr<std::string> encode_json_value(const vpack::Slice& slice) { return _encode_json_value(slice); }
-
-private:
-    StatusOr<VariantRowValue> _make_variant(const std::string& value) {
+    StatusOr<VariantRowValue> make_variant(const std::string& value) {
         std::string metadata = _build_metadata();
         if (metadata.size() + value.size() > VariantRowValue::kMaxVariantSize) {
             return Status::CapacityLimitExceed("Variant value size exceeds 16MB limit");
@@ -208,7 +190,7 @@ private:
         return VariantRowValue(metadata, value);
     }
 
-    StatusOr<std::string> _encode_json_value(const vpack::Slice& slice) {
+    StatusOr<std::string> encode_json_value(const vpack::Slice& slice) {
         if (slice.isNull()) {
             return encode_null_value();
         }
@@ -223,24 +205,24 @@ private:
             if (value >= std::numeric_limits<int8_t>::min() && value <= std::numeric_limits<int8_t>::max()) {
                 uint8_t header = static_cast<uint8_t>(VariantType::INT8) << 2;
                 std::string out(1, static_cast<char>(header));
-                append_le_to_string(out, static_cast<int8_t>(value));
+                append_little_endian(&out, static_cast<int8_t>(value));
                 return out;
             }
             if (value >= std::numeric_limits<int16_t>::min() && value <= std::numeric_limits<int16_t>::max()) {
                 uint8_t header = static_cast<uint8_t>(VariantType::INT16) << 2;
                 std::string out(1, static_cast<char>(header));
-                append_le_to_string(out, static_cast<int16_t>(value));
+                append_little_endian(&out, static_cast<int16_t>(value));
                 return out;
             }
             if (value >= std::numeric_limits<int32_t>::min() && value <= std::numeric_limits<int32_t>::max()) {
                 uint8_t header = static_cast<uint8_t>(VariantType::INT32) << 2;
                 std::string out(1, static_cast<char>(header));
-                append_le_to_string(out, static_cast<int32_t>(value));
+                append_little_endian(&out, static_cast<int32_t>(value));
                 return out;
             }
             uint8_t header = static_cast<uint8_t>(VariantType::INT64) << 2;
             std::string out(1, static_cast<char>(header));
-            append_le_to_string(out, value);
+            append_little_endian(&out, value);
             return out;
         }
         if (slice.isUInt()) {
@@ -248,18 +230,18 @@ private:
             if (value <= static_cast<uint64_t>(std::numeric_limits<int64_t>::max())) {
                 uint8_t header = static_cast<uint8_t>(VariantType::INT64) << 2;
                 std::string out(1, static_cast<char>(header));
-                append_le_to_string(out, static_cast<int64_t>(value));
+                append_little_endian(&out, static_cast<int64_t>(value));
                 return out;
             }
             uint8_t header = static_cast<uint8_t>(VariantType::DOUBLE) << 2;
             std::string out(1, static_cast<char>(header));
-            append_le_to_string(out, static_cast<double>(value));
+            append_little_endian(&out, static_cast<double>(value));
             return out;
         }
         if (slice.isDouble()) {
             uint8_t header = static_cast<uint8_t>(VariantType::DOUBLE) << 2;
             std::string out(1, static_cast<char>(header));
-            append_le_to_string(out, slice.getDouble());
+            append_little_endian(&out, slice.getDouble());
             return out;
         }
         if (slice.isString()) {
@@ -269,7 +251,7 @@ private:
         if (slice.isArray()) {
             std::vector<std::string> elements;
             for (auto it : vpack::ArrayIterator(slice)) {
-                ASSIGN_OR_RETURN(auto value, _encode_json_value(it));
+                ASSIGN_OR_RETURN(auto value, encode_json_value(it));
                 elements.emplace_back(std::move(value));
             }
             return build_array_value(elements);
@@ -283,7 +265,7 @@ private:
                     continue;
                 }
                 uint32_t field_id = _get_or_add_key(key);
-                ASSIGN_OR_RETURN(auto value, _encode_json_value(it.value));
+                ASSIGN_OR_RETURN(auto value, encode_json_value(it.value));
                 field_ids.emplace_back(field_id);
                 field_values.emplace_back(std::move(value));
             }
@@ -293,6 +275,7 @@ private:
         return Status::NotSupported("Unsupported JSON type for VARIANT encoding");
     }
 
+private:
     uint32_t _get_or_add_key(std::string_view key) {
         auto it = _dict_index.find(std::string(key));
         if (it != _dict_index.end()) {
@@ -320,7 +303,7 @@ private:
 
         const uint32_t dict_size = _dict.size();
         const uint32_t max_value = std::max(dict_size, offset);
-        const uint8_t offset_size = minimal_bytes(max_value);
+        const uint8_t offset_size = minimal_uint_size(max_value);
 
         uint8_t header = kCastVariantMetadataVersion & 0b1111;
         header |= static_cast<uint8_t>((offset_size - 1) << 6);
@@ -329,7 +312,7 @@ private:
         out.reserve(1 + offset_size * (_dict.size() + 1) + offset);
         out.push_back(static_cast<char>(header));
         for (uint32_t value : offsets) {
-            append_uint_le_to_string(out, value, offset_size);
+            append_uint_le(&out, value, offset_size);
         }
         for (const auto& key : _dict) {
             out.append(key);
@@ -692,7 +675,7 @@ Status VariantEncoder::encode_column(const ColumnPtr& column, const TypeDescript
                     bool* value_is_null) -> StatusOr<VariantRowValue> {
                     uint8_t header = static_cast<uint8_t>(VariantType::INT8) << 2;
                     std::string out(1, static_cast<char>(header));
-                    append_le_to_string(out, viewer.value(data_row));
+                    append_little_endian(&out, viewer.value(data_row));
                     return encoder.make_variant(out);
                 });
     }
@@ -703,7 +686,7 @@ Status VariantEncoder::encode_column(const ColumnPtr& column, const TypeDescript
                     bool* value_is_null) -> StatusOr<VariantRowValue> {
                     uint8_t header = static_cast<uint8_t>(VariantType::INT16) << 2;
                     std::string out(1, static_cast<char>(header));
-                    append_le_to_string(out, viewer.value(data_row));
+                    append_little_endian(&out, viewer.value(data_row));
                     return encoder.make_variant(out);
                 });
     }
@@ -714,7 +697,7 @@ Status VariantEncoder::encode_column(const ColumnPtr& column, const TypeDescript
                     bool* value_is_null) -> StatusOr<VariantRowValue> {
                     uint8_t header = static_cast<uint8_t>(VariantType::INT32) << 2;
                     std::string out(1, static_cast<char>(header));
-                    append_le_to_string(out, viewer.value(data_row));
+                    append_little_endian(&out, viewer.value(data_row));
                     return encoder.make_variant(out);
                 });
     }
@@ -725,7 +708,7 @@ Status VariantEncoder::encode_column(const ColumnPtr& column, const TypeDescript
                     bool* value_is_null) -> StatusOr<VariantRowValue> {
                     uint8_t header = static_cast<uint8_t>(VariantType::INT64) << 2;
                     std::string out(1, static_cast<char>(header));
-                    append_le_to_string(out, viewer.value(data_row));
+                    append_little_endian(&out, viewer.value(data_row));
                     return encoder.make_variant(out);
                 });
     }
@@ -748,7 +731,7 @@ Status VariantEncoder::encode_column(const ColumnPtr& column, const TypeDescript
                     bool* value_is_null) -> StatusOr<VariantRowValue> {
                     uint8_t header = static_cast<uint8_t>(VariantType::FLOAT) << 2;
                     std::string out(1, static_cast<char>(header));
-                    append_le_to_string(out, viewer.value(data_row));
+                    append_little_endian(&out, viewer.value(data_row));
                     return encoder.make_variant(out);
                 });
     }
@@ -759,7 +742,7 @@ Status VariantEncoder::encode_column(const ColumnPtr& column, const TypeDescript
                     bool* value_is_null) -> StatusOr<VariantRowValue> {
                     uint8_t header = static_cast<uint8_t>(VariantType::DOUBLE) << 2;
                     std::string out(1, static_cast<char>(header));
-                    append_le_to_string(out, viewer.value(data_row));
+                    append_little_endian(&out, viewer.value(data_row));
                     return encoder.make_variant(out);
                 });
     }
@@ -787,7 +770,7 @@ Status VariantEncoder::encode_column(const ColumnPtr& column, const TypeDescript
                     uint8_t header = static_cast<uint8_t>(VariantType::DECIMAL4) << 2;
                     std::string out(1, static_cast<char>(header));
                     out.push_back(static_cast<char>(type.scale));
-                    append_le_to_string(out, viewer.value(data_row));
+                    append_little_endian(&out, viewer.value(data_row));
                     return encoder.make_variant(out);
                 });
     }
@@ -803,7 +786,7 @@ Status VariantEncoder::encode_column(const ColumnPtr& column, const TypeDescript
                     uint8_t header = static_cast<uint8_t>(VariantType::DECIMAL8) << 2;
                     std::string out(1, static_cast<char>(header));
                     out.push_back(static_cast<char>(type.scale));
-                    append_le_to_string(out, viewer.value(data_row));
+                    append_little_endian(&out, viewer.value(data_row));
                     return encoder.make_variant(out);
                 });
     }
@@ -869,7 +852,7 @@ Status VariantEncoder::encode_column(const ColumnPtr& column, const TypeDescript
                     int32_t days = viewer.value(data_row).to_days_since_unix_epoch();
                     uint8_t header = static_cast<uint8_t>(VariantType::DATE) << 2;
                     std::string out(1, static_cast<char>(header));
-                    append_le_to_string(out, days);
+                    append_little_endian(&out, days);
                     return encoder.make_variant(out);
                 });
     }
@@ -881,7 +864,7 @@ Status VariantEncoder::encode_column(const ColumnPtr& column, const TypeDescript
                     int64_t micros = viewer.value(data_row).to_unix_microsecond();
                     uint8_t header = static_cast<uint8_t>(VariantType::TIMESTAMP_NTZ) << 2;
                     std::string out(1, static_cast<char>(header));
-                    append_le_to_string(out, micros);
+                    append_little_endian(&out, micros);
                     return encoder.make_variant(out);
                 });
     }
@@ -894,7 +877,7 @@ Status VariantEncoder::encode_column(const ColumnPtr& column, const TypeDescript
                     int64_t micros = static_cast<int64_t>(seconds * USECS_PER_SEC);
                     uint8_t header = static_cast<uint8_t>(VariantType::TIME_NTZ) << 2;
                     std::string out(1, static_cast<char>(header));
-                    append_le_to_string(out, micros);
+                    append_little_endian(&out, micros);
                     return encoder.make_variant(out);
                 });
     }
