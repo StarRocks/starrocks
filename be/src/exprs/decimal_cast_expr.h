@@ -446,11 +446,11 @@ inline static bool convert_variant_decimal(SrcType src_value, int src_scale, Dst
 template <typename DecimalCppType>
 inline static StatusOr<bool> cast_variant_to_decimal(DecimalCppType* dst_value, const VariantValue& variant,
                                                      int precision, int scale) {
-    if (scale < 0 || precision <= 0 || scale > precision ||
-        scale > decimal_precision_limit<DecimalCppType> || precision > decimal_precision_limit<DecimalCppType>) {
-        return Status::InvalidArgument(fmt::format(
-                "Invalid decimal target precision/scale: precision={}, scale={}, limit={}", precision, scale,
-                decimal_precision_limit<DecimalCppType>));
+    if (scale < 0 || precision <= 0 || scale > precision || scale > decimal_precision_limit<DecimalCppType> ||
+        precision > decimal_precision_limit<DecimalCppType>) {
+        return Status::InvalidArgument(
+                fmt::format("Invalid decimal target precision/scale: precision={}, scale={}, limit={}", precision,
+                            scale, decimal_precision_limit<DecimalCppType>));
     }
     const VariantType type = variant.type();
     bool overflow = false;

@@ -19,8 +19,8 @@
 #include "common/statusor.h"
 #include "runtime/time_types.h"
 #include "types/date_value.h"
-#include "types/timestamp_value.h"
 #include "types/logical_type.h"
+#include "types/timestamp_value.h"
 #include "util/variant.h"
 
 namespace starrocks {
@@ -79,8 +79,7 @@ inline Status cast_variant_to_time(const VariantRowValue& row, const cctz::time_
         tsv.from_unixtime(micros / USECS_PER_SEC, micros % USECS_PER_SEC, zone);
         int hour, minute, second, microsecond;
         tsv.to_time(&hour, &minute, &second, &microsecond);
-        int64_t total_micros = (static_cast<int64_t>(hour) * 3600 + minute * 60 + second) * USECS_PER_SEC +
-                               microsecond;
+        int64_t total_micros = (static_cast<int64_t>(hour) * 3600 + minute * 60 + second) * USECS_PER_SEC + microsecond;
         result.append(static_cast<double>(total_micros) / USECS_PER_SEC);
         return Status::OK();
     }

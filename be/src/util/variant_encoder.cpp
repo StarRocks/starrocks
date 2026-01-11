@@ -677,7 +677,8 @@ Status VariantEncoder::encode_column(const ColumnPtr& column, const TypeDescript
     case TYPE_BOOLEAN: {
         return encode_column_with_viewer<TYPE_BOOLEAN>(
                 column, builder, allow_throw_exception,
-                [&](const auto& viewer, size_t data_row, VariantRowValueEncoder& encoder, bool* value_is_null) -> StatusOr<VariantRowValue> {
+                [&](const auto& viewer, size_t data_row, VariantRowValueEncoder& encoder,
+                    bool* value_is_null) -> StatusOr<VariantRowValue> {
                     bool value = viewer.value(data_row);
                     uint8_t header =
                             static_cast<uint8_t>((value ? VariantType::BOOLEAN_TRUE : VariantType::BOOLEAN_FALSE)) << 2;
@@ -687,7 +688,8 @@ Status VariantEncoder::encode_column(const ColumnPtr& column, const TypeDescript
     case TYPE_TINYINT: {
         return encode_column_with_viewer<TYPE_TINYINT>(
                 column, builder, allow_throw_exception,
-                [&](const auto& viewer, size_t data_row, VariantRowValueEncoder& encoder, bool* value_is_null) -> StatusOr<VariantRowValue> {
+                [&](const auto& viewer, size_t data_row, VariantRowValueEncoder& encoder,
+                    bool* value_is_null) -> StatusOr<VariantRowValue> {
                     uint8_t header = static_cast<uint8_t>(VariantType::INT8) << 2;
                     std::string out(1, static_cast<char>(header));
                     append_le_to_string(out, viewer.value(data_row));
@@ -697,7 +699,8 @@ Status VariantEncoder::encode_column(const ColumnPtr& column, const TypeDescript
     case TYPE_SMALLINT: {
         return encode_column_with_viewer<TYPE_SMALLINT>(
                 column, builder, allow_throw_exception,
-                [&](const auto& viewer, size_t data_row, VariantRowValueEncoder& encoder, bool* value_is_null) -> StatusOr<VariantRowValue> {
+                [&](const auto& viewer, size_t data_row, VariantRowValueEncoder& encoder,
+                    bool* value_is_null) -> StatusOr<VariantRowValue> {
                     uint8_t header = static_cast<uint8_t>(VariantType::INT16) << 2;
                     std::string out(1, static_cast<char>(header));
                     append_le_to_string(out, viewer.value(data_row));
@@ -707,7 +710,8 @@ Status VariantEncoder::encode_column(const ColumnPtr& column, const TypeDescript
     case TYPE_INT: {
         return encode_column_with_viewer<TYPE_INT>(
                 column, builder, allow_throw_exception,
-                [&](const auto& viewer, size_t data_row, VariantRowValueEncoder& encoder, bool* value_is_null) -> StatusOr<VariantRowValue> {
+                [&](const auto& viewer, size_t data_row, VariantRowValueEncoder& encoder,
+                    bool* value_is_null) -> StatusOr<VariantRowValue> {
                     uint8_t header = static_cast<uint8_t>(VariantType::INT32) << 2;
                     std::string out(1, static_cast<char>(header));
                     append_le_to_string(out, viewer.value(data_row));
@@ -717,7 +721,8 @@ Status VariantEncoder::encode_column(const ColumnPtr& column, const TypeDescript
     case TYPE_BIGINT: {
         return encode_column_with_viewer<TYPE_BIGINT>(
                 column, builder, allow_throw_exception,
-                [&](const auto& viewer, size_t data_row, VariantRowValueEncoder& encoder, bool* value_is_null) -> StatusOr<VariantRowValue> {
+                [&](const auto& viewer, size_t data_row, VariantRowValueEncoder& encoder,
+                    bool* value_is_null) -> StatusOr<VariantRowValue> {
                     uint8_t header = static_cast<uint8_t>(VariantType::INT64) << 2;
                     std::string out(1, static_cast<char>(header));
                     append_le_to_string(out, viewer.value(data_row));
@@ -727,7 +732,8 @@ Status VariantEncoder::encode_column(const ColumnPtr& column, const TypeDescript
     case TYPE_LARGEINT: {
         return encode_column_with_viewer<TYPE_LARGEINT>(
                 column, builder, allow_throw_exception,
-                [&](const auto& viewer, size_t data_row, VariantRowValueEncoder& encoder, bool* value_is_null) -> StatusOr<VariantRowValue> {
+                [&](const auto& viewer, size_t data_row, VariantRowValueEncoder& encoder,
+                    bool* value_is_null) -> StatusOr<VariantRowValue> {
                     uint8_t header = static_cast<uint8_t>(VariantType::DECIMAL16) << 2;
                     std::string out(1, static_cast<char>(header));
                     out.push_back(0); // scale
@@ -738,7 +744,8 @@ Status VariantEncoder::encode_column(const ColumnPtr& column, const TypeDescript
     case TYPE_FLOAT: {
         return encode_column_with_viewer<TYPE_FLOAT>(
                 column, builder, allow_throw_exception,
-                [&](const auto& viewer, size_t data_row, VariantRowValueEncoder& encoder, bool* value_is_null) -> StatusOr<VariantRowValue> {
+                [&](const auto& viewer, size_t data_row, VariantRowValueEncoder& encoder,
+                    bool* value_is_null) -> StatusOr<VariantRowValue> {
                     uint8_t header = static_cast<uint8_t>(VariantType::FLOAT) << 2;
                     std::string out(1, static_cast<char>(header));
                     append_le_to_string(out, viewer.value(data_row));
@@ -748,7 +755,8 @@ Status VariantEncoder::encode_column(const ColumnPtr& column, const TypeDescript
     case TYPE_DOUBLE: {
         return encode_column_with_viewer<TYPE_DOUBLE>(
                 column, builder, allow_throw_exception,
-                [&](const auto& viewer, size_t data_row, VariantRowValueEncoder& encoder, bool* value_is_null) -> StatusOr<VariantRowValue> {
+                [&](const auto& viewer, size_t data_row, VariantRowValueEncoder& encoder,
+                    bool* value_is_null) -> StatusOr<VariantRowValue> {
                     uint8_t header = static_cast<uint8_t>(VariantType::DOUBLE) << 2;
                     std::string out(1, static_cast<char>(header));
                     append_le_to_string(out, viewer.value(data_row));
@@ -758,7 +766,8 @@ Status VariantEncoder::encode_column(const ColumnPtr& column, const TypeDescript
     case TYPE_DECIMALV2: {
         return encode_column_with_viewer<TYPE_DECIMALV2>(
                 column, builder, allow_throw_exception,
-                [&](const auto& viewer, size_t data_row, VariantRowValueEncoder& encoder, bool* value_is_null) -> StatusOr<VariantRowValue> {
+                [&](const auto& viewer, size_t data_row, VariantRowValueEncoder& encoder,
+                    bool* value_is_null) -> StatusOr<VariantRowValue> {
                     uint8_t header = static_cast<uint8_t>(VariantType::DECIMAL16) << 2;
                     std::string out(1, static_cast<char>(header));
                     out.push_back(static_cast<char>(DecimalV2Value::SCALE));
@@ -769,7 +778,8 @@ Status VariantEncoder::encode_column(const ColumnPtr& column, const TypeDescript
     case TYPE_DECIMAL32: {
         return encode_column_with_viewer<TYPE_DECIMAL32>(
                 column, builder, allow_throw_exception,
-                [&](const auto& viewer, size_t data_row, VariantRowValueEncoder& encoder, bool* value_is_null) -> StatusOr<VariantRowValue> {
+                [&](const auto& viewer, size_t data_row, VariantRowValueEncoder& encoder,
+                    bool* value_is_null) -> StatusOr<VariantRowValue> {
                     if (type.scale < 0 || type.scale > decimal_precision_limit<int32_t>) {
                         return Status::InvalidArgument(
                                 fmt::format("Invalid decimal32 scale for variant encoding: {}", type.scale));
@@ -784,7 +794,8 @@ Status VariantEncoder::encode_column(const ColumnPtr& column, const TypeDescript
     case TYPE_DECIMAL64: {
         return encode_column_with_viewer<TYPE_DECIMAL64>(
                 column, builder, allow_throw_exception,
-                [&](const auto& viewer, size_t data_row, VariantRowValueEncoder& encoder, bool* value_is_null) -> StatusOr<VariantRowValue> {
+                [&](const auto& viewer, size_t data_row, VariantRowValueEncoder& encoder,
+                    bool* value_is_null) -> StatusOr<VariantRowValue> {
                     if (type.scale < 0 || type.scale > decimal_precision_limit<int64_t>) {
                         return Status::InvalidArgument(
                                 fmt::format("Invalid decimal64 scale for variant encoding: {}", type.scale));
@@ -799,7 +810,8 @@ Status VariantEncoder::encode_column(const ColumnPtr& column, const TypeDescript
     case TYPE_DECIMAL128: {
         return encode_column_with_viewer<TYPE_DECIMAL128>(
                 column, builder, allow_throw_exception,
-                [&](const auto& viewer, size_t data_row, VariantRowValueEncoder& encoder, bool* value_is_null) -> StatusOr<VariantRowValue> {
+                [&](const auto& viewer, size_t data_row, VariantRowValueEncoder& encoder,
+                    bool* value_is_null) -> StatusOr<VariantRowValue> {
                     if (type.scale < 0 || type.scale > decimal_precision_limit<int128_t>) {
                         return Status::InvalidArgument(
                                 fmt::format("Invalid decimal128 scale for variant encoding: {}", type.scale));
@@ -822,22 +834,24 @@ Status VariantEncoder::encode_column(const ColumnPtr& column, const TypeDescript
     case TYPE_CHAR: {
         return encode_column_with_viewer<TYPE_CHAR>(
                 column, builder, allow_throw_exception,
-                [&](const auto& viewer, size_t data_row, VariantRowValueEncoder& encoder, bool* value_is_null) -> StatusOr<VariantRowValue> {
+                [&](const auto& viewer, size_t data_row, VariantRowValueEncoder& encoder,
+                    bool* value_is_null) -> StatusOr<VariantRowValue> {
                     return encoder.make_variant(encode_string_value(viewer.value(data_row)));
                 });
     }
     case TYPE_VARCHAR: {
         return encode_column_with_viewer<TYPE_VARCHAR>(
                 column, builder, allow_throw_exception,
-                [&](const auto& viewer, size_t data_row, VariantRowValueEncoder& encoder, bool* value_is_null) -> StatusOr<VariantRowValue> {
+                [&](const auto& viewer, size_t data_row, VariantRowValueEncoder& encoder,
+                    bool* value_is_null) -> StatusOr<VariantRowValue> {
                     return encoder.make_variant(encode_string_value(viewer.value(data_row)));
                 });
     }
     case TYPE_JSON: {
         return encode_column_with_viewer<TYPE_JSON>(
                 column, builder, allow_throw_exception,
-                [&](const auto& viewer, size_t data_row, VariantRowValueEncoder& encoder, bool* value_is_null)
-                        -> StatusOr<VariantRowValue> {
+                [&](const auto& viewer, size_t data_row, VariantRowValueEncoder& encoder,
+                    bool* value_is_null) -> StatusOr<VariantRowValue> {
                     JsonValue* json = viewer.value(data_row);
                     if (json == nullptr || json->is_null_or_none()) {
                         *value_is_null = true;
@@ -850,7 +864,8 @@ Status VariantEncoder::encode_column(const ColumnPtr& column, const TypeDescript
     case TYPE_DATE: {
         return encode_column_with_viewer<TYPE_DATE>(
                 column, builder, allow_throw_exception,
-                [&](const auto& viewer, size_t data_row, VariantRowValueEncoder& encoder, bool* value_is_null) -> StatusOr<VariantRowValue> {
+                [&](const auto& viewer, size_t data_row, VariantRowValueEncoder& encoder,
+                    bool* value_is_null) -> StatusOr<VariantRowValue> {
                     int32_t days = viewer.value(data_row).to_days_since_unix_epoch();
                     uint8_t header = static_cast<uint8_t>(VariantType::DATE) << 2;
                     std::string out(1, static_cast<char>(header));
@@ -861,7 +876,8 @@ Status VariantEncoder::encode_column(const ColumnPtr& column, const TypeDescript
     case TYPE_DATETIME: {
         return encode_column_with_viewer<TYPE_DATETIME>(
                 column, builder, allow_throw_exception,
-                [&](const auto& viewer, size_t data_row, VariantRowValueEncoder& encoder, bool* value_is_null) -> StatusOr<VariantRowValue> {
+                [&](const auto& viewer, size_t data_row, VariantRowValueEncoder& encoder,
+                    bool* value_is_null) -> StatusOr<VariantRowValue> {
                     int64_t micros = viewer.value(data_row).to_unix_microsecond();
                     uint8_t header = static_cast<uint8_t>(VariantType::TIMESTAMP_NTZ) << 2;
                     std::string out(1, static_cast<char>(header));
@@ -872,7 +888,8 @@ Status VariantEncoder::encode_column(const ColumnPtr& column, const TypeDescript
     case TYPE_TIME: {
         return encode_column_with_viewer<TYPE_TIME>(
                 column, builder, allow_throw_exception,
-                [&](const auto& viewer, size_t data_row, VariantRowValueEncoder& encoder, bool* value_is_null) -> StatusOr<VariantRowValue> {
+                [&](const auto& viewer, size_t data_row, VariantRowValueEncoder& encoder,
+                    bool* value_is_null) -> StatusOr<VariantRowValue> {
                     double seconds = viewer.value(data_row);
                     int64_t micros = static_cast<int64_t>(seconds * USECS_PER_SEC);
                     uint8_t header = static_cast<uint8_t>(VariantType::TIME_NTZ) << 2;
