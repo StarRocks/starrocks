@@ -106,7 +106,7 @@ if [ "$JAVA_HOME" = "" ]; then
     echo "[WARNING] JAVA_HOME env not set. Functions or features that requires jni will not work at all."
     export LD_LIBRARY_PATH=$STARROCKS_HOME/lib:$LD_LIBRARY_PATH
 else
-    export LD_LIBRARY_PATH=$JAVA_HOME/lib/server:$JAVA_HOME/lib:$LD_LIBRARY_PATH
+    export LD_LIBRARY_PATH=$JAVA_HOME/lib/server:$JAVA_HOME/lib:$STARROCKS_HOME/lib:$LD_LIBRARY_PATH
     java_version=$(jdk_version)
     if [[ $java_version -lt 17 ]]; then
         echo "[WARNING] jdk versions lower than 17 are not supported"
@@ -150,9 +150,9 @@ export LD_LIBRARY_PATH=$STARROCKS_HOME/lib/hadoop/native:$LD_LIBRARY_PATH
 # Enable jemalloc and set LD_LIBRARY_PATH based on mode
 # Note: This must come after other LD_LIBRARY_PATH configuration to ensure jemalloc paths take precedence
 if [ ${RUN_JEMALLOC_DEBUG} -eq 1 ] ; then
-    export LD_LIBRARY_PATH=$STARROCKS_HOME/lib/jemalloc-dbg:$STARROCKS_HOME/lib:$LD_LIBRARY_PATH
+    export LD_LIBRARY_PATH=$STARROCKS_HOME/lib/jemalloc-dbg:$LD_LIBRARY_PATH
 else
-    export LD_LIBRARY_PATH=$STARROCKS_HOME/lib/jemalloc:$STARROCKS_HOME/lib:$LD_LIBRARY_PATH
+    export LD_LIBRARY_PATH=$STARROCKS_HOME/lib/jemalloc:$LD_LIBRARY_PATH
 fi
 
 # Set JEMALLOC_CONF environment variable if not already set
