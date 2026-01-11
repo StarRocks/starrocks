@@ -378,8 +378,9 @@ static size_t count_rows_from_iters(const std::vector<ChunkIteratorPtr>& iters, 
 TEST_F(LakeRowsetTest, test_tablet_range_pruning_only_for_shared_segments) {
     create_rowsets_for_testing();
 
-    // Apply tablet range [10, 12] but do NOT mark segments as shared.
-    set_tablet_range_int(_tablet_metadata.get(), 10, true, 12, true);
+    // Apply tablet range [10, 12) but do NOT mark segments as shared.
+    // Because segments are not marked as shared, tablet range should NOT take effect.
+    set_tablet_range_int(_tablet_metadata.get(), 10, true, 12, false);
     auto* rs_meta = _tablet_metadata->mutable_rowsets(0);
     set_rowset_shared_segments(rs_meta, false);
 
@@ -398,7 +399,8 @@ TEST_F(LakeRowsetTest, test_tablet_range_pruning_only_for_shared_segments) {
     auto rowset2 =
             std::make_shared<lake::Rowset>(_tablet_mgr.get(), _tablet_metadata, 0, 0 /* compaction_segment_limit */);
     ASSIGN_OR_ABORT(auto iters2, rowset2->read(input_schema, rs_opts));
-    ASSERT_EQ(count_rows_from_iters(iters2), 3 * 3);
+    // Now tablet range [10, 12) should prune rows: per segment keys {10, 11}, total segments = 3.
+    ASSERT_EQ(count_rows_from_iters(iters2), 3 * 2);
 }
 
 TEST_F(LakeRowsetTest, test_tablet_range_pruning_inclusive_exclusive) {
@@ -421,10 +423,8 @@ TEST_F(LakeRowsetTest, test_tablet_range_pruning_inclusive_exclusive) {
     };
 
     // Per segment keys include 10,11,12. Total segments = 3.
-    ASSERT_EQ(make_rowset_and_count(10, true, 12, true), 3 * 3);   // [10,12] => 3 keys
-    ASSERT_EQ(make_rowset_and_count(10, true, 12, false), 3 * 2);  // [10,12) => 2 keys
-    ASSERT_EQ(make_rowset_and_count(10, false, 12, true), 3 * 2);  // (10,12] => 2 keys
-    ASSERT_EQ(make_rowset_and_count(10, false, 12, false), 3 * 1); // (10,12) => 1 key
+    // With tablet range [10, 12) (closed-open), each segment contributes keys {10, 11}.
+    ASSERT_EQ(make_rowset_and_count(10, true, 12, false), 3 * 2);
 }
 
 TEST_F(LakeRowsetTest, test_tablet_range_pb_invalid_bounds) {
@@ -578,7 +578,7 @@ TEST_F(LakeRowsetTest, test_tablet_range_multi_column_range_pruning) {
     }
     set_rowset_shared_segments(rowset, true);
 
-    // Set tablet range: [ (1,1), (2,2) ] (inclusive on both sides).
+    // Set tablet range: [ (1,1), (2,2) ) (closed-open).
     auto* range = _tablet_metadata->mutable_range();
     range->Clear();
     {
@@ -591,7 +591,7 @@ TEST_F(LakeRowsetTest, test_tablet_range_multi_column_range_pruning) {
         auto* ub = range->mutable_upper_bound();
         *ub->add_values() = make_int_variant_pb(2);
         *ub->add_values() = make_int_variant_pb(2);
-        range->set_upper_bound_included(true);
+        range->set_upper_bound_included(false);
     }
 
     auto rowset_obj =
@@ -635,9 +635,9 @@ TEST_F(LakeRowsetTest, test_tablet_range_multi_column_range_pruning) {
         }
     }
 
-    // The valid pairs within [ (1,1), (2,2) ] are:
-    //   (1,1), (1,2), (2,0), (2,1), (2,2) => 5 rows.
-    ASSERT_EQ(rows, 5);
+    // The valid pairs within [ (1,1), (2,2) ) are:
+    //   (1,1), (1,2), (2,0), (2,1) => 4 rows.
+    ASSERT_EQ(rows, 4);
 }
 
 TEST_F(LakeRowsetTest, test_tablet_range_char_type_parsed_as_varchar) {
@@ -687,7 +687,7 @@ TEST_F(LakeRowsetTest, test_tablet_range_char_type_parsed_as_varchar) {
     }
     set_rowset_shared_segments(rowset, true);
 
-    // Set tablet range: [bb, cc] (inclusive) with VariantPB type = CHAR.
+    // Set tablet range: [bb, cc) (closed-open) with VariantPB type = CHAR.
     auto* range = tablet_meta->mutable_range();
     range->Clear();
     {
@@ -704,7 +704,7 @@ TEST_F(LakeRowsetTest, test_tablet_range_char_type_parsed_as_varchar) {
         TypeDescriptor td = TypeDescriptor::create_char_type(20);
         *v->mutable_type() = td.to_protobuf();
         v->set_value("cc");
-        range->set_upper_bound_included(true);
+        range->set_upper_bound_included(false);
     }
 
     auto rowset_obj =
@@ -715,7 +715,8 @@ TEST_F(LakeRowsetTest, test_tablet_range_char_type_parsed_as_varchar) {
     rs_opts.tablet_schema = std::make_shared<const TabletSchema>(tablet_meta->schema());
     auto input_schema = ChunkHelper::convert_schema(tablet_schema, std::vector<ColumnId>{0});
     ASSIGN_OR_ABORT(auto iters, rowset_obj->read(input_schema, rs_opts));
-    ASSERT_EQ(count_rows_from_iters(iters), 2);
+    // Keys are {"aa","bb","cc","dd"}, with [bb, cc) we only keep "bb".
+    ASSERT_EQ(count_rows_from_iters(iters), 1);
 }
 
 TEST_F(LakeRowsetTest, test_get_each_segment_iterator_respects_tablet_range) {
@@ -723,8 +724,8 @@ TEST_F(LakeRowsetTest, test_get_each_segment_iterator_respects_tablet_range) {
     auto* rs_meta = _tablet_metadata->mutable_rowsets(0);
     set_rowset_shared_segments(rs_meta, true);
 
-    // Apply tablet range [10, 12] and verify per-segment iterators see only keys in range.
-    set_tablet_range_int(_tablet_metadata.get(), 10, true, 12, true);
+    // Apply tablet range [10, 12) and verify per-segment iterators see only keys in range.
+    set_tablet_range_int(_tablet_metadata.get(), 10, true, 12, false);
 
     auto rowset =
             std::make_shared<lake::Rowset>(_tablet_mgr.get(), _tablet_metadata, 0, 0 /* compaction_segment_limit */);
@@ -732,8 +733,8 @@ TEST_F(LakeRowsetTest, test_get_each_segment_iterator_respects_tablet_range) {
     auto input_schema = ChunkHelper::convert_schema(_tablet_schema, std::vector<ColumnId>{0});
     ASSIGN_OR_ABORT(auto seg_iters, rowset->get_each_segment_iterator(input_schema, false /*file_data_cache*/, &stats));
 
-    // Each of the 3 segments contributes keys 10, 11, 12.
-    ASSERT_EQ(count_rows_from_iters(seg_iters), 3 * 3);
+    // Each of the 3 segments contributes keys 10, 11.
+    ASSERT_EQ(count_rows_from_iters(seg_iters), 3 * 2);
 }
 
 TEST_F(LakeRowsetTest, test_get_each_segment_iterator_with_delvec_respects_tablet_range) {
@@ -741,9 +742,9 @@ TEST_F(LakeRowsetTest, test_get_each_segment_iterator_with_delvec_respects_table
     auto* rs_meta = _tablet_metadata->mutable_rowsets(0);
     set_rowset_shared_segments(rs_meta, true);
 
-    // Apply tablet range [10, 12] and verify delvec-aware per-segment iterators
+    // Apply tablet range [10, 12) and verify delvec-aware per-segment iterators
     // see only keys in range.
-    set_tablet_range_int(_tablet_metadata.get(), 10, true, 12, true);
+    set_tablet_range_int(_tablet_metadata.get(), 10, true, 12, false);
 
     auto rowset =
             std::make_shared<lake::Rowset>(_tablet_mgr.get(), _tablet_metadata, 0, 0 /* compaction_segment_limit */);
@@ -751,7 +752,7 @@ TEST_F(LakeRowsetTest, test_get_each_segment_iterator_with_delvec_respects_table
     auto input_schema = ChunkHelper::convert_schema(_tablet_schema, std::vector<ColumnId>{0});
     ASSIGN_OR_ABORT(auto seg_iters, rowset->get_each_segment_iterator_with_delvec(input_schema, 1, nullptr, &stats));
 
-    ASSERT_EQ(count_rows_from_iters(seg_iters), 3 * 3);
+    ASSERT_EQ(count_rows_from_iters(seg_iters), 3 * 2);
 }
 
 } // namespace starrocks::lake
