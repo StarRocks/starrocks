@@ -22,8 +22,8 @@
 #include "butil/time.h"
 #include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
-#include "column/variant_column.h"
 #include "column/type_traits.h"
+#include "column/variant_column.h"
 #include "column/vectorized_fwd.h"
 #include "exprs/exprs_test_helper.h"
 #include "exprs/mock_vectorized_expr.h"
@@ -2573,7 +2573,7 @@ TEST_F(VectorizedCastExprTest, int_cast_to_variant) {
 
     ColumnPtr result = cast_to_variant(TypeDescriptor(TYPE_INT), column);
     auto* data_col = ColumnHelper::get_data_column(result.get());
-    auto* variant_col = down_cast<VariantColumn*>(data_col);
+    auto* variant_col = down_cast<const VariantColumn*>(data_col);
 
     auto json0 = variant_col->get_object(0)->to_json();
     auto json1 = variant_col->get_object(1)->to_json();
