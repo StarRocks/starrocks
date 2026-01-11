@@ -25,6 +25,7 @@
 #include "fs/fs_memory.h"
 #include "testutil/assert.h"
 #include "util/defer_op.h"
+#include "util/priority_thread_pool.hpp"
 
 namespace starrocks::connector {
 namespace {

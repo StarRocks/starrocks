@@ -12,14 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "csv_file_writer.h"
+#include "formats/csv/csv_file_writer.h"
 
 #include <boost/algorithm/string.hpp>
 #include <utility>
 
 #include "common/http/content_type.h"
-#include "csv_escape.h"
 #include "exec/hdfs_scanner/hdfs_scanner_text.h"
+#include "formats/column_evaluator.h"
+#include "formats/csv/csv_escape.h"
 #include "formats/utils.h"
 #include "output_stream_file.h"
 #include "runtime/current_thread.h"

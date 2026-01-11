@@ -12,10 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "async_flush_output_stream.h"
+#include "io/async_flush_output_stream.h"
 
 #include "runtime/current_thread.h"
+#include "runtime/runtime_state.h"
 #include "util/failpoint/fail_point.h"
+#include "util/priority_thread_pool.hpp"
 
 namespace starrocks::io {
 
@@ -33,6 +35,8 @@ int64_t AsyncFlushOutputStream::SliceChunk::append(const uint8_t* data, int64_t 
 AsyncFlushOutputStream::AsyncFlushOutputStream(std::unique_ptr<WritableFile> file, PriorityThreadPool* io_executor,
                                                RuntimeState* runtime_state)
         : _file(std::move(file)), _io_executor(io_executor), _runtime_state(runtime_state) {}
+
+AsyncFlushOutputStream::~AsyncFlushOutputStream() = default;
 
 Status AsyncFlushOutputStream::write(const uint8_t* data, int64_t size) {
     _total_size += size;
@@ -94,6 +98,10 @@ Status AsyncFlushOutputStream::write(const uint8_t* data, int64_t size) {
         enqueue_tasks_and_maybe_submit_task(std::move(to_enqueue_tasks));
     }
     return Status::OK();
+}
+
+const std::string& AsyncFlushOutputStream::filename() const {
+    return _file->filename();
 }
 
 Status AsyncFlushOutputStream::close() {
