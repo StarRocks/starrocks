@@ -504,14 +504,10 @@ Status ParquetFileWriterFactory::init() {
 }
 
 StatusOr<WriterAndStream> ParquetFileWriterFactory::create(const std::string& path) const {
-<<<<<<< HEAD
-    ASSIGN_OR_RETURN(auto file, _fs->new_writable_file(WritableFileOptions{.direct_write = true}, path));
-=======
     ASSIGN_OR_RETURN(auto file, _fs->new_writable_file(WritableFileOptions{.direct_write = true,
                                                                            .content_type = http::ContentType::PARQUET},
                                                        path));
     VLOG(3) << "create parquet file, path=" << path;
->>>>>>> 65972a07f4 ([BugFix] Fix incorrect ContentType metadata for S3 exports (#67553))
     auto rollback_action = [fs = _fs, path = path]() {
         WARN_IF_ERROR(ignore_not_found(fs->delete_file(path)), "fail to delete file");
     };
