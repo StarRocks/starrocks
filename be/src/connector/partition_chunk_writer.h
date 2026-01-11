@@ -14,7 +14,7 @@
 
 #pragma once
 
-#include "column/chunk.h"
+#include "column/vectorized_fwd.h"
 #include "common/status.h"
 #include "connector/utils.h"
 #include "exec/sorting/sorting.h"
