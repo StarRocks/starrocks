@@ -1010,10 +1010,12 @@ public class AnalyzerUtils {
                 tables.put(tableName, targetTable);
                 return null;
             }
+
             // Continue to visit source tables in SELECT clause
             if (node.getQueryStatement() != null) {
                 return visit(node.getQueryStatement());
             }
+
             return null;
         }
 
