@@ -59,12 +59,12 @@ Status JniScanner::do_open(RuntimeState* state) {
 void JniScanner::do_close(RuntimeState* runtime_state) noexcept {
     // Check JNIEnv before calling JVMFunctionHelper::getInstance() to avoid crash
     // when JNI initialization failed (e.g., in do_init or do_open)
-    JNIEnv* env = getJNIEnv();
-    if (env == nullptr) {
+    if (getJNIEnv() == nullptr) {
         // JNI was not initialized, nothing to clean up
         return;
     }
 
+    JNIEnv* env = JVMFunctionHelper::getInstance().getEnv();
     if (_jni_scanner_obj != nullptr) {
         if (_jni_scanner_close != nullptr) {
             env->CallVoidMethod(_jni_scanner_obj, _jni_scanner_close);
