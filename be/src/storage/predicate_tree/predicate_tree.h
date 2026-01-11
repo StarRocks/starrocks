@@ -19,6 +19,7 @@
 #include <vector>
 
 #include "common/overloaded.h"
+#include "column/chunk.h"
 #include "storage/column_predicate.h"
 #include "storage/predicate_tree/predicate_tree_fwd.h"
 
