@@ -242,7 +242,7 @@ public:
             auto dt_col = starrocks::ColumnHelper::cast_to<starrocks::TYPE_DATETIME>(dt_col_ptr);
             int64_t sum = 0;
 
-            auto* timestamp_col = down_cast<TimestampColumn*>(dt_col.get());
+            const auto* timestamp_col = down_cast<const TimestampColumn*>(dt_col.get());
 
             // Read-only benchmark access over TimestampColumn data
             for (int i = 0; i < N; ++i) {

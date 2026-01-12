@@ -17,6 +17,7 @@
 #include <cstdlib>
 #include <random>
 
+#include "cache/block_cache/block_cache.h"
 #include "cache/cache_options.h"
 #include "cache/disk_cache/starcache_engine.h"
 #include "cache/mem_cache/lrucache_engine.h"
@@ -63,6 +64,14 @@ public:
     static void random_insert_multi_threads(benchmark::State* state, StoragePageCache* cache, size_t count,
                                             size_t page_size);
 
+    void prepare_data(BlockCache* cache, int64_t count);
+    void prepare_sequence_data(BlockCache* cache, int64_t count);
+    void random_query(benchmark::State& state, BlockCache* cache, size_t ratio, int64_t iter_count, int64_t count);
+    static void random_query_multi_threads_block(benchmark::State* state, BlockCache* cache, size_t ratio, size_t count,
+                                                 size_t page_size);
+    static void random_insert_multi_threads_block(benchmark::State* state, BlockCache* cache, size_t count,
+                                                  size_t page_size);
+
     void insert_to_cache(benchmark::State& state, CacheType cache_type, int64_t count);
     void random_query(benchmark::State& state, CacheType cache_type, size_t ratio, int64_t iter_count, int64_t count);
     void random_query_multi_threads_test(benchmark::State& state, CacheType cache_type, size_t ratio, int64_t count);
@@ -73,6 +82,7 @@ private:
     size_t _capacity = 100L * 1024 * 1024 * 1024;
     size_t _page_size = 1024;
 
+    std::shared_ptr<BlockCache> _block_cache;
     std::shared_ptr<LRUCacheEngine> _lru_cache;
     std::shared_ptr<StarCacheEngine> _star_cache;
     std::shared_ptr<StoragePageCache> _page_cache;
@@ -135,9 +145,11 @@ void ObjectCacheBench::init_cache(CacheType cache_type) {
         if (!st.ok()) {
             LOG(FATAL) << "init star cache failed: " << st;
         }
-        _page_cache = std::make_shared<StoragePageCache>();
-        // _page_cache->init(_star_cache.get());
-        LOG(WARNING) << "StarCacheEngine integration disabled in benchmark due to API mismatch";
+        BlockCacheOptions block_opt;
+        block_opt.block_size = _page_size;
+        _block_cache = std::make_shared<BlockCache>();
+        _block_cache->init(block_opt, _star_cache, nullptr);
+        LOG(INFO) << "init star cache (block cache) success";
     }
 }
 
@@ -220,7 +232,79 @@ void ObjectCacheBench::random_insert_multi_threads(benchmark::State* state, Stor
             }
         }
     }
+    state->PauseTiming();
+}
 
+void ObjectCacheBench::prepare_sequence_data(BlockCache* cache, int64_t count) {
+    std::vector<uint8_t> buf(_page_size, 1);
+    for (size_t i = 0; i < count; i++) {
+        std::string key = "str:" + std::to_string(rand() % count);
+        Status st = cache->write_buffer(key, 0, _page_size, buf.data());
+        if (!st.ok()) {
+            if (!st.is_already_exist()) {
+                LOG(FATAL) << "write_buffer failed: " << st;
+            }
+        }
+    }
+}
+
+void ObjectCacheBench::prepare_data(BlockCache* cache, int64_t count) {
+    std::vector<uint8_t> buf(_page_size, 1);
+    for (size_t i = 0; i < count; i++) {
+        std::string key = "str:" + std::to_string(rand());
+        Status st = cache->write_buffer(key, 0, _page_size, buf.data());
+        if (!st.ok()) {
+            if (!st.is_already_exist()) {
+                LOG(FATAL) << "write_buffer failed: " << st;
+            }
+        }
+    }
+}
+
+void ObjectCacheBench::random_query(benchmark::State& state, BlockCache* cache, size_t ratio, int64_t iter_count,
+                                    int64_t count) {
+    thread_local std::mt19937 gen(std::random_device{}());
+    thread_local std::uniform_int_distribution<> dis(1, 1073741824);
+    std::vector<char> buf(_page_size);
+
+    LOG(ERROR) << "random query start";
+    for (size_t i = 0; i < iter_count; i++) {
+        std::string key = "str:" + std::to_string(dis(gen) % (count * ratio));
+        (void)cache->read_buffer(key, 0, _page_size, buf.data());
+    }
+    LOG(ERROR) << "random query end";
+}
+
+void ObjectCacheBench::random_query_multi_threads_block(benchmark::State* state, BlockCache* cache, size_t ratio,
+                                                        size_t count, size_t page_size) {
+    state->ResumeTiming();
+    thread_local std::mt19937 gen(std::random_device{}());
+    thread_local std::uniform_int_distribution<> dis(1, 1073741824);
+    std::vector<char> buf(page_size);
+
+    for (size_t i = 0; i < count; i++) {
+        std::string key = "str:" + std::to_string(dis(gen) % (count * ratio));
+        (void)cache->read_buffer(key, 0, page_size, buf.data());
+    }
+    state->PauseTiming();
+}
+
+void ObjectCacheBench::random_insert_multi_threads_block(benchmark::State* state, BlockCache* cache, size_t count,
+                                                         size_t page_size) {
+    state->ResumeTiming();
+    thread_local std::mt19937 gen(std::random_device{}());
+    thread_local std::uniform_int_distribution<> dis(1, 1073741824);
+    std::vector<uint8_t> buf(page_size, 1);
+
+    for (size_t i = 0; i < count; i++) {
+        std::string key = "str:" + std::to_string(dis(gen));
+        Status st = cache->write_buffer(key, 0, page_size, buf.data());
+        if (!st.ok()) {
+            if (!st.is_already_exist()) {
+                LOG(FATAL) << "write_buffer failed: " << st;
+            }
+        }
+    }
     state->PauseTiming();
 }
 
@@ -230,11 +314,20 @@ void ObjectCacheBench::insert_to_cache(benchmark::State& state, CacheType cache_
     init_cache(cache_type);
 
     state.ResumeTiming();
-    prepare_data(_page_cache.get(), count);
+    if (cache_type == CacheType::LRU) {
+        prepare_data(_page_cache.get(), count);
+    } else {
+        prepare_data(_block_cache.get(), count);
+    }
     state.PauseTiming();
 
     int64_t new_mem_usage = CurrentThread::mem_tracker()->consumption();
-    int64_t calc_usage = _page_cache->memory_usage() / 1024 / 1024;
+    int64_t calc_usage = 0;
+    if (cache_type == CacheType::LRU) {
+        calc_usage = _page_cache->memory_usage() / 1024 / 1024;
+    } else {
+        calc_usage = _star_cache->mem_usage() / 1024 / 1024;
+    }
     int64_t real_usage = (new_mem_usage - old_mem_usage) / 1024 / 1024;
 
     LOG(INFO) << "insert: type=" << type_str << ", metric=" << calc_usage << "M, lru=" << real_usage << "M";
@@ -243,10 +336,15 @@ void ObjectCacheBench::insert_to_cache(benchmark::State& state, CacheType cache_
 void ObjectCacheBench::random_query(benchmark::State& state, CacheType cache_type, size_t ratio, int64_t iter_count,
                                     int64_t count) {
     init_cache(cache_type);
-    prepare_sequence_data(_page_cache.get(), count);
-
-    state.ResumeTiming();
-    random_query(state, _page_cache.get(), ratio, iter_count, count);
+    if (cache_type == CacheType::LRU) {
+        prepare_sequence_data(_page_cache.get(), count);
+        state.ResumeTiming();
+        random_query(state, _page_cache.get(), ratio, iter_count, count);
+    } else {
+        prepare_sequence_data(_block_cache.get(), count);
+        state.ResumeTiming();
+        random_query(state, _block_cache.get(), ratio, iter_count, count);
+    }
     state.PauseTiming();
 }
 
@@ -254,18 +352,32 @@ void ObjectCacheBench::random_query_multi_threads_test(benchmark::State& state, 
                                                        int64_t count) {
     state.PauseTiming();
     init_cache(cache_type);
-    prepare_sequence_data(_page_cache.get(), count);
 
     LOG(INFO) << "start random query test";
     std::vector<std::thread> threads;
-    for (size_t i = 0; i < 10; i++) {
-        threads.emplace_back(random_query_multi_threads, &state, _page_cache.get(), ratio, count);
+    if (cache_type == CacheType::LRU) {
+        prepare_sequence_data(_page_cache.get(), count);
+        for (size_t i = 0; i < 10; i++) {
+            threads.emplace_back(random_query_multi_threads, &state, _page_cache.get(), ratio, count);
+        }
+    } else {
+        prepare_sequence_data(_block_cache.get(), count);
+        for (size_t i = 0; i < 10; i++) {
+            threads.emplace_back(random_query_multi_threads_block, &state, _block_cache.get(), ratio, count,
+                                 _page_size);
+        }
     }
+
     for (auto& t : threads) {
         t.join();
     }
-    LOG(INFO) << "end random query test: lookup=" << _page_cache->get_lookup_count()
-              << ", hit=" << _page_cache->get_hit_count();
+
+    if (cache_type == CacheType::LRU) {
+        LOG(INFO) << "end random query test: lookup=" << _page_cache->get_lookup_count()
+                  << ", hit=" << _page_cache->get_hit_count();
+    } else {
+        LOG(INFO) << "end random query test (BlockCache stats not directly available in this bench)";
+    }
 
     threads.clear();
     state.ResumeTiming();
@@ -278,7 +390,11 @@ void ObjectCacheBench::insert_cache_multi_threads_test(benchmark::State& state, 
 
     std::vector<std::thread> threads;
     for (size_t i = 0; i < 5; i++) {
-        threads.emplace_back(random_insert_multi_threads, &state, _page_cache.get(), count, _page_size);
+        if (cache_type == CacheType::LRU) {
+            threads.emplace_back(random_insert_multi_threads, &state, _page_cache.get(), count, _page_size);
+        } else {
+            threads.emplace_back(random_insert_multi_threads_block, &state, _block_cache.get(), count, _page_size);
+        }
     }
     for (auto& t : threads) {
         t.join();
@@ -324,25 +440,23 @@ static void bench_func(benchmark::State& state) {
 static void process_args(benchmark::internal::Benchmark* b) {
     // one thread insert
     b->Args({0, 0, 10000000, 10000000})->Iterations(1);
-    // StarCache (Type 1) tests disabled due to broken integration with StoragePageCache
-    // TODO: Re-enable these tests once StarCacheEngine integration is fixed.
-    // b->Args({1, 0, 10000000, 10000000})->Iterations(1);
+    b->Args({1, 0, 10000000, 10000000})->Iterations(1);
 
     // one thread query, all hit
     b->Args({0, 1, 10000000, 10000000})->Iterations(1);
-    // b->Args({1, 1, 10000000, 10000000})->Iterations(1);
+    b->Args({1, 1, 10000000, 10000000})->Iterations(1);
 
     // one thread query, 50% hit
     b->Args({0, 2, 10000000, 10000000})->Iterations(1);
-    // b->Args({1, 2, 10000000, 10000000})->Iterations(1);
+    b->Args({1, 2, 10000000, 10000000})->Iterations(1);
 
     // multi thread query
     b->Args({0, 3, 10000000, 10000000})->Iterations(1);
-    // b->Args({1, 3, 10000000, 10000000})->Iterations(1);
+    b->Args({1, 3, 10000000, 10000000})->Iterations(1);
 
     // multi thread insert
     b->Args({0, 4, 1000000, 5000000})->Iterations(1);
-    // b->Args({1, 4, 1000000, 5000000})->Iterations(1);
+    b->Args({1, 4, 1000000, 5000000})->Iterations(1);
 }
 
 BENCHMARK(bench_func)->Apply(process_args);
