@@ -807,6 +807,26 @@ public:
         }
         if (rows_num == 0) return;
 
+        // Fast path for exact endpoints to avoid heavy arithmetic (and possible overflow).
+        if (rate_int == InputCppType(0)) {
+            InputCppType junior{}, senior{};
+            std::vector<InputCppType> b;
+            std::vector<int> ls;
+            std::vector<int> mp;
+            kWayMergeSort<LT, InputCppType, false>(st.grid, b, ls, mp, 0, static_cast<int>(k), junior, senior);
+            column->append(junior);
+            return;
+        }
+        if (rate_int == denom_original) {
+            InputCppType junior{}, senior{};
+            std::vector<InputCppType> b;
+            std::vector<int> ls;
+            std::vector<int> mp;
+            kWayMergeSort<LT, InputCppType, true>(st.grid, b, ls, mp, 0, static_cast<int>(k), junior, senior);
+            column->append(senior);
+            return;
+        }
+
         InputCppType u_numer{};
         if (UNLIKELY(mul_overflow(InputCppType(rows_num - 1), rate_int, &u_numer))) {
             double u = (static_cast<double>(rows_num - 1) * static_cast<double>(rate_int)) /
@@ -850,24 +870,9 @@ public:
             }
         }
 
-        size_t goal = reverse ? 0 : index;
-        if (reverse && rate_int != denom_original) {
-            // goal = ceil((rows_num - 2) - u) in integer domain
-            if (rows_num <= 2) {
-                goal = 0;
-            } else {
-                InputCppType rn2_denom{};
-                if (UNLIKELY(mul_overflow(InputCppType(rows_num - 2), denom_original, &rn2_denom))) {
-                    reverse = false;
-                    goal = index;
-                } else if (u_numer >= rn2_denom) {
-                    goal = 0;
-                } else {
-                    InputCppType t = rn2_denom - u_numer;
-                    goal = static_cast<size_t>((t + denom_original - InputCppType(1)) / denom_original);
-                }
-            }
-        }
+        // When reverse is enabled, we need the "distance from the end" instead of index.
+        // For integer a, ceil(a - u) == a - floor(u). Here a == rows_num - 2, floor(u) == index.
+        size_t goal = reverse ? (rows_num - 2 - index) : index;
 
         InputCppType junior{};
         InputCppType senior{};
@@ -878,15 +883,6 @@ public:
             kWayMergeSort<LT, InputCppType, true>(st.grid, b, ls, mp, goal, static_cast<int>(k), junior, senior);
         } else {
             kWayMergeSort<LT, InputCppType, false>(st.grid, b, ls, mp, goal, static_cast<int>(k), junior, senior);
-        }
-
-        if (rate_int == InputCppType(0)) {
-            column->append(junior);
-            return;
-        }
-        if (rate_int == denom_original) {
-            column->append(senior);
-            return;
         }
 
         InputCppType out = interpolate(junior, senior, index, u_numer, denom_original);
