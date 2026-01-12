@@ -1249,6 +1249,10 @@ public interface AstVisitor<R, C> {
         return visitNode(clause, context);
     }
 
+    default R visitAdminAlterAutomatedSnapshotIntervalStatement(AdminAlterAutomatedSnapshotIntervalStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
     default R visitAddColumnClause(AddColumnClause clause, C context) {
         return visitNode(clause, context);
     }

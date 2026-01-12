@@ -19,6 +19,7 @@ import com.starrocks.alter.AlterTest;
 import com.starrocks.alter.MaterializedViewHandler;
 import com.starrocks.alter.SchemaChangeHandler;
 import com.starrocks.alter.SchemaChangeJobV2;
+import com.starrocks.analysis.StringLiteral;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -36,12 +37,18 @@ import com.starrocks.lake.snapshot.ClusterSnapshotJob.ClusterSnapshotJobState;
 import com.starrocks.leader.CheckpointController;
 import com.starrocks.persist.ClusterSnapshotLog;
 import com.starrocks.persist.EditLog;
+import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.StorageVolumeMgr;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
+import com.starrocks.sql.analyzer.ClusterSnapshotAnalyzer;
+import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.AdminAlterAutomatedSnapshotIntervalStmt;
 import com.starrocks.sql.ast.AdminSetAutomatedSnapshotOffStmt;
 import com.starrocks.sql.ast.AdminSetAutomatedSnapshotOnStmt;
+import com.starrocks.sql.ast.IntervalLiteral;
+import com.starrocks.sql.ast.UnitIdentifier;
 import mockit.Delegate;
 import mockit.Expectations;
 import mockit.Mock;
@@ -158,7 +165,7 @@ public class ClusterSnapshotTest {
     private void setAutomatedSnapshotOn(boolean testReplay) {
         if (!testReplay) {
             GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().setAutomatedSnapshotOn(
-                    new AdminSetAutomatedSnapshotOnStmt(storageVolumeName));
+                    new AdminSetAutomatedSnapshotOnStmt(storageVolumeName, null));
         } else {
             GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().setAutomatedSnapshotOn(storageVolumeName);
         }
@@ -195,6 +202,7 @@ public class ClusterSnapshotTest {
         String turnOnSql = "ADMIN SET AUTOMATED CLUSTER SNAPSHOT ON";
         // no sv
         analyzeFail(turnOnSql + " STORAGE VOLUME testSv");
+        analyzeFail(turnOnSql + " INTERVAL 0 SECOND");
 
         analyzeSuccess(turnOnSql);
         setAutomatedSnapshotOn(false);
@@ -207,6 +215,17 @@ public class ClusterSnapshotTest {
         analyzeFail(turnOFFSql);
         setAutomatedSnapshotOn(false);
         analyzeSuccess(turnOFFSql);
+        setAutomatedSnapshotOff(false);
+
+        String turnOnWithIntervalSql = "ADMIN SET AUTOMATED CLUSTER SNAPSHOT ON INTERVAL 10 SECOND";
+        analyzeSuccess(turnOnWithIntervalSql);
+        setAutomatedSnapshotOn(false);
+        setAutomatedSnapshotOff(false);
+
+        String alterIntervalSql = "ADMIN ALTER AUTOMATED CLUSTER SNAPSHOT SET INTERVAL 5 MINUTE";
+        analyzeFail(alterIntervalSql);
+        setAutomatedSnapshotOn(false);
+        analyzeSuccess(alterIntervalSql);
         setAutomatedSnapshotOff(false);
 
         // 2. test getInfo and network utils
@@ -229,10 +248,90 @@ public class ClusterSnapshotTest {
     }
 
     @Test
+    public void testIntervalLiteralConversionInAnalyzer() {
+        setAutomatedSnapshotOff(false);
+        AdminSetAutomatedSnapshotOnStmt onStmt = (AdminSetAutomatedSnapshotOnStmt)
+                AnalyzeTestUtil.analyzeSuccess("ADMIN SET AUTOMATED CLUSTER SNAPSHOT ON INTERVAL 2 MINUTE");
+        Assertions.assertEquals(120, onStmt.getIntervalSeconds());
+
+        setAutomatedSnapshotOn(false);
+        AdminAlterAutomatedSnapshotIntervalStmt alterStmt = (AdminAlterAutomatedSnapshotIntervalStmt)
+                AnalyzeTestUtil.analyzeSuccess("ADMIN ALTER AUTOMATED CLUSTER SNAPSHOT SET INTERVAL 3 HOUR");
+        Assertions.assertEquals(10800, alterStmt.getIntervalSeconds());
+        setAutomatedSnapshotOff(false);
+    }
+
+    @Test
+    public void testAutomatedSnapshotIntervalScheduling() {
+        setAutomatedSnapshotOn(false);
+        long oldValue = Config.automated_cluster_snapshot_interval_seconds;
+        Config.automated_cluster_snapshot_interval_seconds = 30;
+        try {
+            Assertions.assertEquals(30,
+                    GlobalStateMgr.getCurrentState().getClusterSnapshotMgr()
+                            .getEffectiveAutomatedSnapshotIntervalSeconds());
+
+            GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().setAutomatedSnapshotInterval(120);
+            Assertions.assertEquals(120,
+                    GlobalStateMgr.getCurrentState().getClusterSnapshotMgr()
+                            .getEffectiveAutomatedSnapshotIntervalSeconds());
+
+            long now = System.currentTimeMillis();
+            Assertions.assertFalse(GlobalStateMgr.getCurrentState().getClusterSnapshotMgr()
+                    .canScheduleNextJob(now));
+            Assertions.assertTrue(GlobalStateMgr.getCurrentState().getClusterSnapshotMgr()
+                    .canScheduleNextJob(now - 120_000L - 1));
+        } finally {
+            Config.automated_cluster_snapshot_interval_seconds = oldValue;
+            setAutomatedSnapshotOff(false);
+        }
+    }
+
+    @Test
+    public void testAlterIntervalThroughExecutor() throws Exception {
+        setAutomatedSnapshotOn(false);
+        AdminAlterAutomatedSnapshotIntervalStmt stmt = (AdminAlterAutomatedSnapshotIntervalStmt)
+                AnalyzeTestUtil.analyzeSuccess("ADMIN ALTER AUTOMATED CLUSTER SNAPSHOT SET INTERVAL 2 SECOND");
+        DDLStmtExecutor.execute(stmt, AnalyzeTestUtil.getConnectContext());
+        Assertions.assertEquals(2,
+                GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().getAutomatedSnapshotIntervalSeconds());
+        setAutomatedSnapshotOff(false);
+    }
+
+    @Test
+    public void testAlterIntervalAnalyzerValidation() {
+        setAutomatedSnapshotOn(false);
+        AdminAlterAutomatedSnapshotIntervalStmt nullIntervalStmt =
+                new AdminAlterAutomatedSnapshotIntervalStmt(null);
+        Assertions.assertThrows(SemanticException.class,
+                () -> ClusterSnapshotAnalyzer.analyze(nullIntervalStmt, AnalyzeTestUtil.getConnectContext()));
+
+        IntervalLiteral invalidLiteral = new IntervalLiteral(new StringLiteral("x"), new UnitIdentifier("SECOND"));
+        AdminAlterAutomatedSnapshotIntervalStmt invalidIntervalStmt =
+                new AdminAlterAutomatedSnapshotIntervalStmt(invalidLiteral);
+        Assertions.assertThrows(SemanticException.class,
+                () -> ClusterSnapshotAnalyzer.analyze(invalidIntervalStmt, AnalyzeTestUtil.getConnectContext()));
+        setAutomatedSnapshotOff(false);
+    }
+
+    @Test
+    public void testAlterIntervalAnalyzerRunModeValidation() {
+        new MockUp<RunMode>() {
+            @Mock
+            public boolean isSharedDataMode() {
+                return false;
+            }
+        };
+
+        AnalyzeTestUtil.analyzeFail("ADMIN ALTER AUTOMATED CLUSTER SNAPSHOT SET INTERVAL 1 SECOND",
+                "Automated snapshot only support share data mode");
+    }
+
+    @Test
     public void testReplayClusterSnapshotLog() {
         // create atuomated snapshot request log
         ClusterSnapshotLog logCreate = new ClusterSnapshotLog();
-        logCreate.setAutomatedSnapshotOn(storageVolumeName);
+        logCreate.setAutomatedSnapshotOn(storageVolumeName, 0);
         GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().replayLog(logCreate);
         Assertions.assertTrue(GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().isAutomatedSnapshotOn());
 
@@ -241,6 +340,12 @@ public class ClusterSnapshotTest {
         logDrop.setAutomatedSnapshotOff();
         GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().replayLog(logDrop);
         Assertions.assertTrue(!GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().isAutomatedSnapshotOn());
+
+        ClusterSnapshotLog logInterval = new ClusterSnapshotLog();
+        logInterval.setAutomatedSnapshotInterval(120);
+        GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().replayLog(logInterval);
+        Assertions.assertEquals(120,
+                GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().getAutomatedSnapshotIntervalSeconds());
 
         // create snapshot job log
         ClusterSnapshotLog logSnapshotJob = new ClusterSnapshotLog();
