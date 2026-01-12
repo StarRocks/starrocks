@@ -342,7 +342,6 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
 
         private SkewColumnAndValues findSkewColumns(OptExpression input,
                                                     ColumnRefOperator skewColumnRef) {
-            PhysicalHashJoinOperator oldJoinOperator = (PhysicalHashJoinOperator) input.getOp();
             ColumnRefSet leftOutputColumns = input.inputAt(0).getOutputColumns();
             ColumnRefSet rightOutputColumns = input.inputAt(1).getOutputColumns();
             if (leftOutputColumns.contains(skewColumnRef)) {

@@ -35,7 +35,17 @@ public class SkewJoinV2Test extends PlanTestBase {
         String sql = "select v2, v5 from t0 join[skew|t1.v4(1,2)] t1 on v1 = v4 ";
         String sqlPlan = getVerboseExplain(sql);
         System.out.println(sqlPlan);
-        assertCContains(sqlPlan, "Split expr: [4: v4, BIGINT, true] IN (1, 2)");
+        assertCContains(sqlPlan, "  Input Partition: RANDOM\n" +
+                "  SplitCastDataSink:\n" +
+                "  OutPut Partition: HASH_PARTITIONED: 1: v1\n" +
+                "  OutPut Exchange Id: 03\n" +
+                "  Split expr: ([1: v1, BIGINT, true] NOT IN (1, 2)) OR ([1: v1, BIGINT, true] IS NULL)\n" +
+                "  OutPut Partition: UNPARTITIONED\n" +
+                "  OutPut Exchange Id: 07\n" +
+                "  Split expr: [1: v1, BIGINT, true] IN (1, 2)\n" +
+                "\n" +
+                "  1:OlapScanNode\n" +
+                "     table: t0, rollup: t0");
     }
 
     @Test
