@@ -30,6 +30,7 @@ import mockit.Delegate;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.apache.iceberg.BaseTable;
+import org.apache.iceberg.ManifestFile;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Snapshot;
 import org.apache.iceberg.Table;
@@ -40,9 +41,11 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicLong;
@@ -98,8 +101,8 @@ public class CachingIcebergCatalogTest {
     public void testListPartitionNames(@Mocked IcebergCatalog icebergCatalog, @Mocked BaseTable nativeTable) {
         new Expectations() {
             {
-                nativeTable.spec().isUnpartitioned();
-                result = false;
+                icebergCatalog.getTable("db", "test");
+                result = nativeTable;
                 minTimes = 0;
             }
         };
@@ -144,7 +147,8 @@ public class CachingIcebergCatalogTest {
     }
 
     @Test
-    public void testGetTable(@Mocked IcebergCatalog icebergCatalog, @Mocked Table nativeTable) {
+    public void testGetTable(@Mocked IcebergCatalog icebergCatalog) {
+        Table nativeTable = createBaseTableWithManifests(1, 1);
         new Expectations() {
             {
                 icebergCatalog.getTable("test", "table");
@@ -160,8 +164,39 @@ public class CachingIcebergCatalogTest {
         cachingIcebergCatalog.invalidateCache("test", "table");
     }
 
+    private Table createBaseTableWithManifests(int snapshotCount, int manifestCount) {
+        return createBaseTableWithManifests(snapshotCount, manifestCount, null);
+    }
+
+    private Table createBaseTableWithManifests(int snapshotCount, int manifestCount, PartitionSpec spec) {
+        TableOperations ops = Mockito.mock(TableOperations.class);
+        TableMetadata meta = Mockito.mock(TableMetadata.class);
+        Snapshot currentSnapshot = Mockito.mock(Snapshot.class);
+
+        List<Snapshot> snapshots = new ArrayList<>();
+        for (int i = 0; i < snapshotCount; i++) {
+            snapshots.add(Mockito.mock(Snapshot.class));
+        }
+        List<ManifestFile> manifests = new ArrayList<>();
+        for (int i = 0; i < manifestCount; i++) {
+            manifests.add(Mockito.mock(ManifestFile.class));
+        }
+        String uuid = UUID.randomUUID().toString();
+        Mockito.when(ops.current()).thenReturn(meta);
+        Mockito.when(meta.snapshots()).thenReturn(snapshots);
+        Mockito.when(meta.currentSnapshot()).thenReturn(currentSnapshot);
+        Mockito.when(meta.metadataFileLocation()).thenReturn("metadata-" + uuid);
+        Mockito.when(meta.uuid()).thenReturn(uuid);
+        if (spec != null) {
+            Mockito.when(meta.spec()).thenReturn(spec);
+        }
+        Mockito.when(currentSnapshot.allManifests(Mockito.any())).thenReturn(manifests);
+
+        return new BaseTable(ops, "db.tbl");
+    }
+
     @Test
-    public void testInvalidateCache(@Mocked IcebergCatalog icebergCatalog, @Mocked Table nativeTable) {
+    public void testInvalidateCache(@Mocked IcebergCatalog icebergCatalog, @Mocked BaseTable nativeTable) {
         new Expectations() {
             {
                 icebergCatalog.getTable("db1", "tbl1");
@@ -247,6 +282,7 @@ public class CachingIcebergCatalogTest {
         config.put(IcebergCatalogProperties.ICEBERG_TABLE_CACHE_REFRESH_INVERVAL_SEC, "5");
         config.put(IcebergCatalogProperties.ICEBERG_META_CACHE_TTL, "30");
         config.put(IcebergCatalogProperties.ICEBERG_CATALOG_TYPE, "hive");
+        config.put(IcebergCatalogProperties.ICEBERG_TABLE_CACHE_MEMORY_SIZE_RATIO, "1");
         IcebergCatalogProperties icebergProperties = new IcebergCatalogProperties(config);
         ExecutorService exectorCatalog = Executors.newSingleThreadExecutor();
         ExecutorService exector = Executors.newSingleThreadExecutor();
@@ -374,6 +410,7 @@ public class CachingIcebergCatalogTest {
         config.put(IcebergCatalogProperties.ICEBERG_TABLE_CACHE_REFRESH_INVERVAL_SEC, "2");
         config.put(IcebergCatalogProperties.ICEBERG_META_CACHE_TTL, "6");
         config.put(IcebergCatalogProperties.ICEBERG_CATALOG_TYPE, "hive");
+        config.put(IcebergCatalogProperties.ICEBERG_TABLE_CACHE_MEMORY_SIZE_RATIO, "1");
         IcebergCatalogProperties icebergProperties = new IcebergCatalogProperties(config);
         ExecutorService exectorCatalog = Executors.newSingleThreadExecutor();
         ExecutorService exector = Executors.newSingleThreadExecutor();
@@ -445,5 +482,79 @@ public class CachingIcebergCatalogTest {
         Assertions.assertTrue(t4.currentSnapshot().snapshotId() > t3.currentSnapshot().snapshotId());   
         Assertions.assertNotNull(tables.getIfPresent(new IcebergTableName(dbName, tblName)));
     }
-}
 
+    @Test
+    public void testReloadIsAsync(@Mocked IcebergCatalog delegate,
+                                  @Mocked IcebergCatalogProperties props,
+                                  @Mocked ConnectContext ctx) throws Exception {
+        System.out.println("===== test reload async =====");
+        Table nativeTable1 = createBaseTableWithManifests(1, 1);
+        Table nativeTable2 = createBaseTableWithManifests(2, 2);
+        Mockito.when(((BaseTable) nativeTable1).operations().current().metadataFileLocation()).thenReturn("loc1");
+        Mockito.when(((BaseTable) nativeTable2).operations().current().metadataFileLocation()).thenReturn("loc2");
+
+        AtomicLong callCount = new AtomicLong(0);
+
+        new Expectations() {
+            {
+                props.isEnableIcebergMetadataCache();
+                result = true;
+                props.getIcebergMetaCacheTtlSec();
+                result = 60L;
+                props.getIcebergTableCacheRefreshIntervalSec();
+                result = 1L;
+                props.getIcebergTableCacheMemoryUsageRatio();
+                result = 1;
+                props.getIcebergDataFileCacheMemoryUsageRatio();
+                result = 0.0;
+                props.getIcebergDeleteFileCacheMemoryUsageRatio();
+                result = 0.0;
+
+                delegate.getTable("db1", "t1");
+                result = new Delegate<Table>() {
+                    Table capture(String db, String tbl) throws Exception {
+                        if (Thread.currentThread().getName().equals("main")) {
+                            System.out.println("[loader] start Loading iceberg table " + 
+                                    db + "." + tbl + " " + Thread.currentThread().getName());     
+                        } else {
+                            System.out.println("[async reloader] start ReLoading iceberg table " + 
+                                    db + "." + tbl + " " + Thread.currentThread().getName());     
+                        }
+                        long idx = callCount.incrementAndGet();
+                        if (idx == 1) {
+                            return nativeTable1;
+                        }
+                        return nativeTable2;
+                    }
+                };
+            }
+        };
+
+        ExecutorService es = Executors.newSingleThreadExecutor();
+        try {
+            CachingIcebergCatalog catalog =
+                    new CachingIcebergCatalog("iceberg0", delegate, props, es);
+            IcebergTableName key = new IcebergTableName("db1", "t1");
+
+            Table cached = catalog.getTable("db1", "t1");
+            Assertions.assertSame(nativeTable1, cached);
+
+            LoadingCache<IcebergTableName, Table> tableCache = Deencapsulation.getField(catalog, "tables");
+
+            Table t1 = tableCache.get(key);
+            Assertions.assertTrue(callCount.get() == 1);
+            Thread.sleep(1100);
+            Table t2 = tableCache.get(key);
+            Assertions.assertSame(t1, nativeTable1, "table should be same yet");
+            Assertions.assertSame(t1, cached, "table should be same yet");
+            Assertions.assertSame(t1, t2, "table should be same yet");
+            Thread.sleep(300);
+            Assertions.assertTrue(callCount.get() == 2, "all count:" + String.valueOf(callCount.get()));
+            Table t3 = tableCache.get(key);
+            Assertions.assertSame(t3, nativeTable2, "table should be new after reload");
+        } finally {
+            es.shutdownNow();
+            System.out.println("===== test reload async end =====");
+        }
+    }
+}
