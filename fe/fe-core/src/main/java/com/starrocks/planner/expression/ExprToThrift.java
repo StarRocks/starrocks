@@ -541,10 +541,13 @@ public final class ExprToThrift {
         public Void visitCastExpr(CastExpr node, TExprNode msg) {
             msg.node_type = TExprNodeType.CAST_EXPR;
             msg.setOpcode(ExprOpcodeRegistry.getCastOpcode());
-            if (node.getChild(0).getType().isComplexType()) {
-                msg.setChild_type_desc(TypeSerializer.toThrift(node.getChild(0).getType()));
-            } else {
-                msg.setChild_type(TypeSerializer.toThrift(node.getChild(0).getType().getPrimitiveType()));
+            Type childType = node.getChild(0).getType();
+            if (childType.isComplexType() || childType.isDecimalOfAnyVersion() || childType.isChar()
+                    || childType.isVarchar()) {
+                msg.setChild_type_desc(TypeSerializer.toThrift(childType));
+            }
+            if (!childType.isComplexType()) {
+                msg.setChild_type(TypeSerializer.toThrift(childType.getPrimitiveType()));
             }
             return null;
         }

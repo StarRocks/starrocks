@@ -43,6 +43,18 @@ StatusOr<ColumnPtr> VariantFunctions::get_variant_double(FunctionContext* contex
     return _do_variant_query<TYPE_DOUBLE>(context, columns);
 }
 
+StatusOr<ColumnPtr> VariantFunctions::get_variant_date(FunctionContext* context, const Columns& columns) {
+    return _do_variant_query<TYPE_DATE>(context, columns);
+}
+
+StatusOr<ColumnPtr> VariantFunctions::get_variant_datetime(FunctionContext* context, const Columns& columns) {
+    return _do_variant_query<TYPE_DATETIME>(context, columns);
+}
+
+StatusOr<ColumnPtr> VariantFunctions::get_variant_time(FunctionContext* context, const Columns& columns) {
+    return _do_variant_query<TYPE_TIME>(context, columns);
+}
+
 Status VariantFunctions::variant_segments_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
     if (scope != FunctionContext::FRAGMENT_LOCAL) {
         return Status::OK();

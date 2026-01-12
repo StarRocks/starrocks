@@ -121,12 +121,15 @@ public enum PrimitiveType {
             new ImmutableList.Builder<PrimitiveType>()
                     .add(BOOLEAN)
                     .addAll(NUMBER_TYPE_LIST)
+                    .add(DATE)
+                    .add(DATETIME)
+                    .add(TIME)
                     .addAll(STRING_TYPE_LIST)
                     .add(JSON)
                     .build();
 
     public static final ImmutableList<PrimitiveType> VARIANT_INCOMPATIBLE_TYPES =
-            ImmutableList.of(DATE, DATETIME, TIME, HLL, BITMAP, PERCENTILE, FUNCTION, VARBINARY);
+            ImmutableList.of(HLL, BITMAP, PERCENTILE, FUNCTION, VARBINARY);
 
     private static final ImmutableList<PrimitiveType> TIME_TYPE_LIST =
             ImmutableList.of(TIME, DATE, DATETIME);
@@ -204,6 +207,7 @@ public enum PrimitiveType {
         builder.putAll(VARIANT, NULL_TYPE);
         for (PrimitiveType type : VARIANT_COMPATIBLE_TYPE) {
             builder.put(VARIANT, type);
+            builder.put(type, VARIANT);
         }
 
         IMPLICIT_CAST_MAP = builder.build();
