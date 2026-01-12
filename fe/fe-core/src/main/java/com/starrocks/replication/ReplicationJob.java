@@ -842,8 +842,7 @@ public class ReplicationJob implements GsonPostProcessable {
         List<PhysicalPartition> physicalPartitions = partition.getSubPartitions().stream()
                 .sorted((left, right) -> Long.compare(left.getId(), right.getId()))
                 .collect(Collectors.toList());
-        Preconditions.checkState(!physicalPartitions.isEmpty()
-                && physicalPartitions.get(0).getId() == partition.getDefaultPhysicalPartition().getId());
+        Preconditions.checkState(!physicalPartitions.isEmpty());
         return physicalPartitions;
     }
 
