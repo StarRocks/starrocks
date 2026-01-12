@@ -14,7 +14,6 @@
 
 #pragma once
 
-#include "column/chunk.h"
 #include "column/vectorized_fwd.h"
 #include "common/tracer_fwd.h"
 #include "gen_cpp/internal_service.pb.h"

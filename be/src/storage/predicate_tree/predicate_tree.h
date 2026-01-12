@@ -18,6 +18,7 @@
 #include <set>
 #include <vector>
 
+#include "column/chunk.h"
 #include "common/overloaded.h"
 #include "storage/column_predicate.h"
 #include "storage/predicate_tree/predicate_tree_fwd.h"

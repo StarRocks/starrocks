@@ -19,6 +19,7 @@
 #include <set>
 
 #include "column/array_column.h"
+#include "column/chunk.h"
 #include "column/map_column.h"
 #include "common/logging.h"
 

@@ -14,6 +14,8 @@
 
 #include "storage/rowset/segment_group.h"
 
+#include <numeric>
+
 namespace starrocks {
 
 /// ShortKeyIndexGroupIterator
