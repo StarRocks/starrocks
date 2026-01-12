@@ -807,8 +807,9 @@ public class PaimonMetadataTest {
         // Verify averageRowSize is at least 1.0
         for (Map.Entry<ColumnRefOperator, com.starrocks.sql.optimizer.statistics.ColumnStatistic> entry :
                 tableStatistics.getColumnStatistics().entrySet()) {
-            assert entry.getValue().getAverageRowSize() >= 1.0 :
-                    "averageRowSize should be at least 1.0 for column: " + entry.getKey().getName();
+            org.junit.jupiter.api.Assertions.assertTrue(
+                    entry.getValue().getAverageRowSize() >= 1.0,
+                    "averageRowSize should be at least 1.0 for column: " + entry.getKey().getName());
         }
 
         // Verify row count from mergedRecordCount
