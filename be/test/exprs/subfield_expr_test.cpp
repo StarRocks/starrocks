@@ -244,31 +244,31 @@ TEST_F(SubfieldExprTest, get_subfields_with_nested_expr_test) {
     // Test case for issue #67555: ensure get_subfields correctly counts nested subfields
     // When a SubfieldExpr has a child expression (e.g., cast), it should count both
     // the subfield itself and any subfields from children
-    
+
     TypeDescriptor struct_type;
     struct_type.type = LogicalType::TYPE_STRUCT;
     struct_type.field_names.emplace_back("id");
     struct_type.children.emplace_back(LogicalType::TYPE_INT);
     struct_type.field_names.emplace_back("name");
     struct_type.children.emplace_back(LogicalType::TYPE_VARCHAR);
-    
+
     // Create a subfield expression
     std::unique_ptr<Expr> subfield_expr = create_subfield_expr(TypeDescriptor(LogicalType::TYPE_INT), {"id"});
-    
+
     // Create a fake constant expression to act as a child (simulating a cast or other expression)
     auto column = ColumnHelper::create_column(struct_type, false);
     DatumStruct datum_struct;
     datum_struct.push_back(1);
     datum_struct.push_back("test");
     column->append_datum(datum_struct);
-    
+
     subfield_expr->add_child(new_fake_const_expr(std::move(column), struct_type));
-    
+
     // Test get_subfields returns correct count
     std::vector<std::vector<std::string>> subfields;
     int count = subfield_expr->get_subfields(&subfields);
-    
-    // After the fix, this correctly returns 1 (for the subfield itself) + 0 (FakeConstExpr 
+
+    // After the fix, this correctly returns 1 (for the subfield itself) + 0 (FakeConstExpr
     // has no subfields from calling parent's Expr::get_subfields) = 1
     // The fix ensures that when nested expressions like Cast are children, their subfields
     // are properly counted via the recursive parent call
@@ -285,28 +285,26 @@ TEST_F(SubfieldExprTest, get_subfields_nested_subfield_test) {
     outer_struct_type.children.emplace_back(LogicalType::TYPE_STRUCT);
     outer_struct_type.children[0].field_names.emplace_back("value");
     outer_struct_type.children[0].children.emplace_back(LogicalType::TYPE_INT);
-    
+
     // Create nested subfield expressions: outer.inner and then inner.value
-    std::unique_ptr<Expr> inner_subfield = create_subfield_expr(
-        outer_struct_type.children[0], {"inner"});
-    
-    std::unique_ptr<Expr> outer_subfield = create_subfield_expr(
-        TypeDescriptor(LogicalType::TYPE_INT), {"value"});
-    
+    std::unique_ptr<Expr> inner_subfield = create_subfield_expr(outer_struct_type.children[0], {"inner"});
+
+    std::unique_ptr<Expr> outer_subfield = create_subfield_expr(TypeDescriptor(LogicalType::TYPE_INT), {"value"});
+
     auto column = ColumnHelper::create_column(outer_struct_type, false);
     DatumStruct outer_datum;
     DatumStruct inner_datum;
     inner_datum.push_back(42);
     outer_datum.push_back(inner_datum);
     column->append_datum(outer_datum);
-    
+
     inner_subfield->add_child(new_fake_const_expr(std::move(column), outer_struct_type));
     outer_subfield->add_child(inner_subfield.release());
-    
+
     // Test get_subfields with nested subfield expressions
     std::vector<std::vector<std::string>> subfields;
     int count = outer_subfield->get_subfields(&subfields);
-    
+
     // Should return 2: one for outer subfield, one for inner subfield
     // After the fix, this should correctly account for both levels
     EXPECT_EQ(2, count);
