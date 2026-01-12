@@ -3,7 +3,7 @@ displayed_sidebar: docs
 sidebar_position: 0.95
 ---
 
-# View Function
+# SQL Function
 
 Since version 4.1, StarRocks supports creating SQL Functions, allowing users to create functions using SQL expressions.
 
