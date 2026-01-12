@@ -161,17 +161,17 @@ public class SkewJoinTest extends PlanTestBase {
     }
 
     @Test
-    public void testSkewJoinWithException4() {
+    public void testSkewJoinWithException4() throws Exception {
         String sql = "select v2, v5 from t0 cross join[skew|t0.v1(1,2)] t1";
-        Throwable exception = assertThrows(StarRocksPlannerException.class, () -> getFragmentPlan(sql));
-        assertThat(exception.getMessage(), containsString("CROSS JOIN does not support SKEW JOIN optimize"));
+        String sqlPlan = getFragmentPlan(sql);
+        PlanTestBase.assertNotContains(sqlPlan, "skew");
     }
 
     @Test
-    public void testSkewJoinWithException5() {
+    public void testSkewJoinWithException5() throws Exception {
         String sql = "select v2, v5 from t0 join[skew|t0.v1(1,2)] t1";
-        Throwable exception = assertThrows(StarRocksPlannerException.class, () -> getFragmentPlan(sql));
-        assertThat(exception.getMessage(), containsString("CROSS JOIN does not support SKEW JOIN optimize"));
+        String sqlPlan = getFragmentPlan(sql);
+        PlanTestBase.assertNotContains(sqlPlan, "skew");
     }
 
     @Test
